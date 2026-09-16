@@ -192,6 +192,16 @@ const trafficStats = (page) => page.evaluate(() => {
     passWorstMs: s.floorPassWorstMs,
     passTotalMs: s.floorPassTotalMs,
     ribbon: (s.ribbonCounts?.free || 0) + (s.ribbonCounts?.slow || 0) + (s.ribbonCounts?.jam || 0),
+    // The draw-set gate (`trafficDrawSet.js`). `culled` is the whole point of
+    // it — roads inside the fetch box that the camera cannot see — and
+    // `respawns` is the cost: one differential respawn per camera settle that
+    // actually changed the set.
+    drawRoads: s.drawRoads,
+    culled: s.culledRoads,
+    cullPasses: s.cullPasses,
+    cullRespawns: s.cullRespawns,
+    cullPoseSkips: s.cullPoseSkips,
+    cullDeltaSkips: s.cullDeltaSkips,
   };
 });
 
@@ -236,6 +246,7 @@ function report(label, rec, timeline) {
       worstMs: lt.length ? Math.max(...lt.map((e) => e.ms)) : 0,
       tasks: lt.length,
       dots: tl?.stats?.count ?? null,
+      culled: tl?.stats?.culled ?? null,
       waiting: tl?.stats?.floorWaiting ?? null,
       seated: tl?.stats?.floorSeated ?? null,
       loading: tl?.stats?.loading ?? null,
@@ -243,12 +254,12 @@ function report(label, rec, timeline) {
   }
 
   console.log(`\n\x1b[1m── ${label} ────────────────────────────────────────────\x1b[0m`);
-  console.log('  s   blocked  worst  tasks | dots  seated  waiting  loading');
+  console.log('  s   blocked  worst  tasks | dots  culled  seated  waiting  loading');
   for (const r of rows) {
     if (r.blockedMs === 0 && r.dots === (rows[r.s - 1]?.dots ?? null) && r.s > 12 && r.waiting === 0) continue;
     console.log(
       `  ${String(r.s).padStart(2)}  ${String(r.blockedMs).padStart(6)}  ${String(Math.round(r.worstMs)).padStart(5)}  ${String(r.tasks).padStart(5)} | `
-      + `${String(r.dots ?? '-').padStart(4)}  ${String(r.seated ?? '-').padStart(6)}  ${String(r.waiting ?? '-').padStart(7)}  ${r.loading ?? '-'}`,
+      + `${String(r.dots ?? '-').padStart(4)}  ${String(r.culled ?? '-').padStart(6)}  ${String(r.seated ?? '-').padStart(6)}  ${String(r.waiting ?? '-').padStart(7)}  ${r.loading ?? '-'}`,
     );
   }
 

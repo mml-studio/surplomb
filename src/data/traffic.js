@@ -15,6 +15,16 @@ import {
   ROAD_FETCH_TIERS,
 } from './trafficBounds.js';
 import { bootFlightInProgress, whenBootFlightEnds } from '../bootFlight.js';
+import { roadRetryDelayMs, roadRetryExhausted } from './trafficRetrySchedule.js';
+import {
+  TRAFFIC_CULL_MARGIN,
+  cameraCullPose,
+  cullPoseMoved,
+  invalidateRoadCullSphere,
+  selectDrawRoads,
+  shouldRespawnDrawSet,
+  trafficCullingVolume,
+} from './trafficDrawSet.js';
 import { fetchFlowForBounds, getFlowSessionStats, resetFlowTileCache } from './flowTiles.js';
 import { matchFlowToRoads } from './flowMatch.js';
 import {
@@ -100,6 +110,14 @@ const FETCH_DEBOUNCE = 320;
  * never fires on a zoom IN (see `boundsOverlap`, which is asymmetric).
  */
 const FRAME_REALLOCATE_COVERAGE = 0.8;
+/**
+ * @const {number} Settle time before the DRAW set is recomputed without a fetch.
+ *
+ * Longer than FETCH_DEBOUNCE on purpose: a move that earns a fetch gets a fresh
+ * render, and that render culls anyway. The fetch must always win the race, so
+ * a drag never pays for both.
+ */
+const CULL_DEBOUNCE = 400;
 /** @const {number} Meters — vertical offset to keep dots above clamped terrain surface */
 const DOT_HEIGHT_OFFSET = 3.0;
 /**
@@ -584,6 +602,36 @@ let _flowRibbon = 'on';
 let _heatSupported = null;
 /** @type {number} Altitude of the last render, for late-flow heat rebuilds. */
 let _lastRenderAltitude = 0;
+/** @type {Array} Roads the camera can actually see — the subset that gets cars. */
+let _drawRoads = [];
+/** @type {Array} The road list the last render culled, kept for re-culls. */
+let _cullSourceRoads = [];
+/**
+ * @type {?number[]} Dot budgets from the last render, indexed like the source.
+ *
+ * Memoised rather than recomputed: a re-cull changes neither the road list nor
+ * the altitude, so the budgets are identical — and `allocateRoadDotBudgets`
+ * over 1 991 roads costs 0.75–1.07 ms median, 5–6 ms on a GC. Paying that on
+ * every camera settle to obtain the same array would eat the frame time the
+ * cull exists to save.
+ */
+let _lastBudgets = null;
+/** @type {?Object} Camera pose the current draw set was computed for. */
+let _lastCullPose = null;
+/** @type {?ReturnType<typeof setTimeout>} Pending re-cull. */
+let _cullTimeout = null;
+/**
+ * @type {{passes:number, poseSkips:number, deltaSkips:number, respawns:number,
+ *   drawn:number, culled:number, lastMs:number}}
+ *
+ * A PARTITION, not a tally: `poseSkips + deltaSkips + respawns === passes`, so
+ * the two reasons a pass decided to do nothing stay distinguishable and no
+ * ratio built on them can exceed 1. No Cesium point primitive paints in a
+ * headless harness, so the model has to say out loud what it decided.
+ */
+let _cullStats = {
+  passes: 0, poseSkips: 0, deltaSkips: 0, respawns: 0, drawn: 0, culled: 0, lastMs: 0,
+};
 /**
  * The frame the camera is showing right now, in degrees — NOT the box the
  * roads were fetched over. Since `tierFetchBox` the two are different sizes on
@@ -750,8 +798,49 @@ let _fadeScaleFar = 8000;
 let _fadeTransFar = 10000;
 /** @type {Promise<void>|null} Session-cached status check (one fetch per session) */
 let _flowStatusPromise = null;
-/** @type {ReturnType<typeof setInterval>|null} Enable-time retry until the first load commits. */
-let _enableKickTimer = null;
+/** @type {ReturnType<typeof setTimeout>|null} Backing-off kick while the layer holds nothing. */
+let _roadRetryTimer = null;
+/** @type {number} Kicks already spent on the current outage. Handed back by real camera evidence. */
+let _roadRetryAttempts = 0;
+/** @type {number} Epoch ms the next kick is due, 0 when none is armed. Feeds `retryInSec`. */
+let _roadRetryDueAt = 0;
+/** @type {boolean} The budget ran out — the layer has stopped asking, and says so. */
+let _roadRetryGaveUp = false;
+/**
+ * @type {boolean} True only while the kick is calling `onCameraChanged` itself.
+ *
+ * The kick and a real camera move go through the SAME function reference
+ * (`camera.changed`, `watchCameraSettle`, and the kick below), so without this
+ * flag the re-arm inside `onCameraChanged` would fire on the schedule's own
+ * kick and the backoff would never back off.
+ */
+let _kickInFlight = false;
+/** @type {string|null} Road-graph transport failure, surfaced by `getStats()`. */
+let _roadError = null;
+/**
+ * @type {number} Kicks that found a load already in flight and stood down.
+ *
+ * They are NOT charged to the budget — they asked nothing. But they cannot be
+ * free either: `_fetching` can stick (a load superseded by `disable()` returns
+ * through a generation check that never clears it), and an uncharged re-arm on
+ * a stuck flag is the unbounded 1.5 s wake loop this whole change removes. Six
+ * stand-downs buy one charged attempt, so the budget still drains.
+ */
+let _roadRetryDeferrals = 0;
+/**
+ * @type {number} Epoch ms of the last road load that COMPLETED without a
+ * transport error — whether or not it drew anything.
+ *
+ * Deliberately NOT `_lastUpdate`. That one is set only when dots are drawn
+ * (`renderRoadsForAltitude`), and `paint()` skips a road set of length zero, so
+ * a perfectly healthy Overpass response over open water or an unmapped area
+ * painted nothing and never disarmed the old kick — which then went on waking
+ * every 1.5 s for the life of the tab against a feed that was working.
+ *
+ * Read only through {@link roadLoadIsHealthy}: on its own it is a latch, and a
+ * latch is the bug.
+ */
+let _roadFetchSettledAt = 0;
 /** @type {number} 0–100 int — matched roads / roads with any flow candidates */
 let _flowCoveragePct = 0;
 /** @type {Function|null} Development-only camera moveEnd timing disposer. */
@@ -1024,6 +1113,11 @@ function applyRoadFloor(road, heightM, own, surface) {
   road.floorM = heightM;
   road.floorOwn = own;
   road.floorSurface = surface;
+  // Every waypoint just moved in Z, and the frustum gate's sphere was built
+  // from the old ones. Measured over Biarritz, roads seat between 56.1 m and
+  // 109.4 m — enough for a stale sphere to be a wrong answer at the screen
+  // edge. Rebuilt lazily on the next cull, at 2.6 µs.
+  invalidateRoadCullSphere(road);
   return true;
 }
 
@@ -1238,7 +1332,22 @@ function seatRoadFloors() {
     for (const road of pending) {
       road._floorSortD2 = Cesium.Cartesian3.distanceSquared(cameraPos, road.waypoints[0]);
     }
-    pending.sort((a, b) => a._floorSortD2 - b._floorSortD2);
+    // ON SCREEN FIRST, then nearest. The draw-set gate REORDERS this pass; it
+    // must never shrink it. The probe cost is per BATCH (~47 ms fixed +
+    // 3.2 ms/probe), so dropping off-screen roads would not make a pass cheaper
+    // — it would split the same work into more batches and each one would pay
+    // the fixed cost again. What reordering buys is where the correction lands:
+    // the street the reader is looking at seats in the first batch instead of
+    // waiting behind a road behind the camera.
+    const onScreen = _drawRoads.length ? new Set(_drawRoads) : null;
+    pending.sort((a, b) => {
+      if (onScreen) {
+        const da = onScreen.has(a) ? 0 : 1;
+        const db = onScreen.has(b) ? 0 : 1;
+        if (da !== db) return da - db;
+      }
+      return a._floorSortD2 - b._floorSortD2;
+    });
     // The BATCH ends the probing; the clock is only a guard against a surface
     // that behaves unlike the measurement. Roads whose cell has already been
     // read stay free after either runs out, so a pass that can no longer
@@ -2223,6 +2332,121 @@ function clampBounds(bounds, tier) {
   return clampBoundsAroundCenter(bounds, getBoundsCenter(bounds), tier.spanDeg);
 }
 
+/** @const {number} Stand-downs on an in-flight load that buy one charged attempt. */
+const ROAD_RETRY_DEFERRALS_PER_ATTEMPT = 6;
+
+/**
+ * Whether the LAST road load answered cleanly, which is the only thing that
+ * stops the kick.
+ *
+ * Deliberately not a session latch. `_lastUpdate` was one — set the first time
+ * dots were drawn and never cleared — so the old kick disarmed forever after
+ * one good load, and an Overpass outage that started mid-session (fly from
+ * Paris to Lyon while the mirrors are refusing) got no retry and no countdown
+ * at all. A failed load re-arms; a clean one disarms; that is the whole rule.
+ *
+ * @returns {boolean}
+ */
+function roadLoadIsHealthy() {
+  return _roadFetchSettledAt > 0 && !_roadError;
+}
+
+/**
+ * Drop the pending kick; optionally hand the budget back.
+ *
+ * @param {Object} [options]
+ * @param {boolean} [options.resetAttempts=false] Also clear the spent budget
+ *   and the give-up flag.
+ */
+function clearRoadRetry({ resetAttempts = false } = {}) {
+  clearTimeout(_roadRetryTimer);
+  _roadRetryTimer = null;
+  _roadRetryDueAt = 0;
+  if (resetAttempts) {
+    _roadRetryAttempts = 0;
+    _roadRetryDeferrals = 0;
+    _roadRetryGaveUp = false;
+  }
+}
+
+/**
+ * Re-ask the viewport while the layer holds nothing, on a backing-off schedule.
+ *
+ * A `setTimeout` re-armed per step, not a `setInterval`: a fixed interval
+ * cannot carry a variable delay, which is the whole point. See
+ * `trafficRetrySchedule.js` for the numbers and the outage they answer.
+ *
+ * A kick that finds a load already in flight is NOT charged to the budget — it
+ * did not ask anything. It is counted though, and six stand-downs buy one
+ * charged attempt: `_fetching` can stick true forever when a load is superseded
+ * mid-flight, and an uncharged re-arm on a stuck flag is an unbounded loop.
+ *
+ * ABOVE THE BANDS the kick disarms without charging. `onCameraChanged` bails at
+ * `if (!tier)` before any request, so charging there would spend the whole
+ * budget on a camera that never asked anything and then go silent — and silence
+ * is what this change exists to replace. Coming back down fires
+ * `camera.changed` / `moveEnd`, which re-arm with a full budget.
+ */
+function scheduleRoadRetry() {
+  if (!_enabled) return;
+  clearTimeout(_roadRetryTimer);
+  if (roadRetryExhausted(_roadRetryAttempts)) {
+    _roadRetryTimer = null;
+    _roadRetryDueAt = 0;
+    _roadRetryGaveUp = true;
+    return;
+  }
+  const delay = roadRetryDelayMs(_roadRetryAttempts);
+  _roadRetryDueAt = Date.now() + delay;
+  _roadRetryTimer = setTimeout(() => {
+    _roadRetryTimer = null;
+    _roadRetryDueAt = 0;
+    if (!_enabled || roadLoadIsHealthy()) return;
+    // Nothing to ask for up here. Stand down rather than burn the budget on a
+    // camera the layer has deliberately cleared.
+    if (!roadFetchTier(getCameraAltitude())) return;
+    if (_fetching) {
+      _roadRetryDeferrals += 1;
+      if (_roadRetryDeferrals > ROAD_RETRY_DEFERRALS_PER_ATTEMPT) {
+        _roadRetryAttempts += 1;
+        _roadRetryDeferrals = 0;
+      }
+      scheduleRoadRetry();
+      return;
+    }
+    _roadRetryAttempts += 1;
+    _roadRetryDeferrals = 0;
+    _kickInFlight = true;
+    try {
+      onCameraChanged();
+    } finally {
+      _kickInFlight = false;
+    }
+    scheduleRoadRetry();
+  }, delay);
+}
+
+/**
+ * Hand the retry budget back, because the camera brought new evidence.
+ *
+ * Called from `onCameraChanged` AFTER the `roadRefetchNeeded` gate: a pan the
+ * gate refuses costs no request and proves nothing. That gate is why this layer
+ * diverges from `powerGrid.js`, which deliberately keeps its backoff step
+ * across camera moves — power-grid has no such gate, so every pan would reset
+ * it.
+ */
+function resetRoadRetry() {
+  _roadRetryAttempts = 0;
+  _roadRetryDeferrals = 0;
+  _roadRetryGaveUp = false;
+  _roadError = null;
+  // Only arm a schedule that is not already running: a pan must not stack
+  // timers, but a schedule that had given up has to come back. The health test
+  // is re-read here rather than latched, so an outage that starts mid-session
+  // gets the same treatment as one that starts at boot.
+  if (_enabled && !_roadRetryTimer && !roadLoadIsHealthy()) scheduleRoadRetry();
+}
+
 /**
  * Camera-change handler — the main entry point for viewport-driven road loading.
  *
@@ -2275,6 +2499,8 @@ function onCameraChanged() {
   // (cleared here) never reload (H5). Clearing the gate forces a fresh fetch.
   const tier = roadFetchTier(alt);
   if (!tier) {
+    clearTimeout(_cullTimeout);
+    _cullTimeout = null;
     clearDots();
     clearFlowRibbon();
     _lastBounds = null;
@@ -2286,7 +2512,16 @@ function onCameraChanged() {
   }
 
   const bounds = getViewBounds();
-  if (!bounds) return;
+  if (!bounds) {
+    // The camera sees no view rectangle at all — it is looking past the limb,
+    // at the sky. There is nothing to FETCH, but there is very much something
+    // to re-cull: the roads on screen a moment ago are not on screen now, and
+    // returning here without arming the gate would leave them animating behind
+    // the camera for as long as the reader keeps looking up.
+    clearTimeout(_cullTimeout);
+    _cullTimeout = setTimeout(recullDrawSet, CULL_DEBOUNCE);
+    return;
+  }
   // C4 fix: center the fetch box on the camera's look-at ground point (with
   // nadir fallback + a per-band horizon-gaze pull-back), NOT the view
   // rectangle's midpoint — at oblique pitch that midpoint drifts toward the
@@ -2336,19 +2571,43 @@ function onCameraChanged() {
     // scores 1 and costs nothing, and only widening pays.
     if (_roads.length && _pendingViewBox && _lastRenderBox
       && !boundsOverlap(_pendingViewBox, _lastRenderBox, FRAME_REALLOCATE_COVERAGE)) {
+      // A full re-render culls on its way through, so a pending re-cull would
+      // only do the same work twice.
+      clearTimeout(_cullTimeout);
+      _cullTimeout = null;
       clearTimeout(_fetchTimeout);
       _fetchTimeout = setTimeout(
         () => renderRoadsForAltitude(_roads, alt, 'Frame widened'),
         FETCH_DEBOUNCE,
       );
+      return;
     }
+    // THE CAMERA TURNED ON THE SPOT. The roads held are still the right ones —
+    // the gate just said so, and the fetch box must not move — but the SET of
+    // them the camera can see is not. Re-cull, without one extra request, and
+    // without re-drawing the cars that stayed.
+    clearTimeout(_cullTimeout);
+    _cullTimeout = setTimeout(recullDrawSet, CULL_DEBOUNCE);
     return;
   }
+
+  // The camera reached a view this layer has not answered yet, and the gate
+  // above agreed it is worth a request — that is new evidence, and it hands the
+  // retry budget back. Gated on `_kickInFlight` because the kick reaches this
+  // exact line through this exact function, and a schedule that resets itself
+  // never backs off.
+  if (!_kickInFlight) resetRoadRetry();
 
   // Debounce: wait for camera to settle before triggering a fetch. In debug
   // captures the final changed event that arms this exact timeout is its
   // causal anchor; Cesium's later moveEnd notification is diagnostic only.
   const interactionAnchor = TRAFFIC_TIMING_ENABLED ? markTrafficTimingCameraChange() : null;
+  // The render this fetch will produce culls anyway, so a pending re-cull would
+  // do the work twice. It is re-armed rather than dropped: a fetch that FAILS
+  // renders nothing, and the camera would then keep a draw set computed for a
+  // pose it has left.
+  clearTimeout(_cullTimeout);
+  _cullTimeout = null;
   clearTimeout(_fetchTimeout);
   _fetchTimeout = setTimeout(
     () => _loadRoadsForBounds(clamped, alt, interactionAnchor),
@@ -2408,6 +2667,40 @@ export function deriveTrafficFlowError(error) {
 }
 
 /**
+ * Map a failed ROAD-GRAPH fetch onto one short, honest user-facing reason.
+ *
+ * Not the same question as `deriveTrafficFlowError`, and it outranks it: no
+ * road graph means no dots at all, whatever TomTom says. Measured 2026-09-16,
+ * 11:03Z–11:57Z — with Overpass down the layer showed the TomTom ribbon, zero
+ * cars, and a line about a TomTom key. The screen was answering a question
+ * nobody had asked.
+ *
+ * The statuses are the PROXY's, not Overpass's: 429 is the origin's own rate
+ * limit, 503 its concurrency gate, 502 "every mirror refused" — which includes
+ * the 60 s outage cooldown. `fetchRoads` raises `Overpass API returned NNN`, so
+ * the message parse reads that text and not `HTTP NNN`.
+ *
+ * @param {Error|{name?:string, message?:string, status?:number}|null|undefined} error
+ * @returns {string|null} Short reason, or null for an aborted (superseded) fetch.
+ */
+export function deriveRoadGraphError(error) {
+  if (!error || error.name === 'AbortError') return null;
+  const message = String(error.message || error);
+  const status = Number.isFinite(error.status)
+    ? error.status
+    : Number(message.match(/returned (\d{3})/)?.[1]);
+  // Whose 429 this is cannot be known from here, and this file already carries
+  // a field note against guessing: under a retry loop the likeliest author is
+  // OUR origin (its own 90-per-minute limiter, or the 30-per-10-seconds edge
+  // rule), not OpenStreetMap. Name the symptom, pick no side.
+  if (status === 429) return 'Road graph rate limited (HTTP 429)';
+  if (status === 503) return 'Road graph server busy';
+  if (status === 502 || status === 504) return 'Road graph source unreachable (Overpass)';
+  if (Number.isFinite(status)) return `Road graph error (HTTP ${status})`;
+  return 'Road graph unavailable (Overpass)';
+}
+
+/**
  * Derive the layer's honest feed presentation from its live-flow state.
  *
  * The three states a user can be in, and what each must read as:
@@ -2423,6 +2716,9 @@ export function deriveTrafficFlowError(error) {
  * @param {string|null} [input.flowError] - `deriveTrafficFlowError` result, if any.
  * @param {number} [input.coveragePct] - Matched-road coverage, 0–100.
  * @param {boolean} [input.statusUnavailable] - The status probe itself failed.
+ * @param {string|null} [input.roadError] - `deriveRoadGraphError` result, if any.
+ * @param {boolean} [input.roadRetryGaveUp] - The retry budget ran out.
+ * @param {boolean} [input.ribbonPainted] - TomTom flow segments are on screen.
  * @returns {{mode:'live'|'sim', error:string|null, loadingLabel:string}}
  */
 export function trafficFeedPresentation({
@@ -2431,11 +2727,30 @@ export function trafficFeedPresentation({
   flowError = null,
   coveragePct = 0,
   statusUnavailable = false,
+  roadError = null,
+  roadRetryGaveUp = false,
+  ribbonPainted = false,
 } = {}) {
   // `mode` is the CONFIGURED source (live key present vs keyless), not this
   // instant's health — health rides on `error`. The qa-traffic harness pins
   // that meaning.
   const mode = liveMode ? 'live' : 'sim';
+  // HIGHEST PRIORITY, ahead of any flow verdict: without a road graph there are
+  // no cars, and until now the row read as a TomTom problem — or, keyless, as a
+  // cheerful "add TomTom key for live" over an empty city.
+  //
+  // But "nothing on screen" is only true when the RIBBON is not painted either.
+  // The TomTom tiles land in ~200 ms and carry their own geometry, so during the
+  // 2026-09-16 outage the reader saw coloured roads with nobody on them — which
+  // is exactly the state they wrote in to ask about. The line has to name the
+  // cars, not deny the ribbon.
+  if (roadError) {
+    const missing = ribbonPainted ? 'no vehicles, flow ribbon only' : 'no vehicles';
+    const line = roadRetryGaveUp
+      ? `${roadError} — ${missing}, move the camera to retry`
+      : `${roadError} — ${missing}`;
+    return { mode, error: line, loadingLabel: line };
+  }
   if (liveMode && flowError) {
     // One string for both fields. The manager's meta line renders `error` and
     // drops `loadingLabel` in its error branch, so the SIMULATED copy
@@ -2945,6 +3260,24 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
   // drop everything (see `visibleRoadsForAltitude`).
   const filteredRoads = visibleRoadsForAltitude(roads, altitude);
 
+  // THIRD STAGE, and the frame above does not make it redundant.
+  //
+  // `visibleRoadsForAltitude` filters by CLASS and by `_lastRenderBox` — an
+  // axis-aligned lat/lon rectangle. At oblique pitch the view is a trapezoid
+  // stretching toward the horizon, and its bounding RECTANGLE holds a great
+  // deal that the trapezoid does not. Measured 2026-09-16 with that frame
+  // already in place, Paris 800 m / pitch -30: 6 000 dots drawn, 51.8 % of them
+  // off screen. The frustum is the cone itself, and it takes that to 14.2 %.
+  const { draw, keep, culled } = selectDrawRoads(
+    filteredRoads,
+    trafficCullingVolume(_viewer?.camera),
+  );
+  _cullSourceRoads = filteredRoads;
+  _drawRoads = draw;
+  _lastCullPose = cameraCullPose(_viewer?.camera);
+  _cullStats.drawn = draw.length;
+  _cullStats.culled = culled;
+
   // Book the seating loop for the new network. Booked, not run: see
   // `armRoadFloorSeating`.
   restartRoadFloorSeating();
@@ -2979,14 +3312,13 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
     roadCount: roads.length,
     visibleRoadCount: filteredRoads.length,
   }) : null;
+  // The budget is allocated over the WHOLE visible-by-altitude list, before the
+  // cull, and an off-screen road's share is simply not spent. Redirecting it to
+  // the roads on screen would double the cars on every street in view — a
+  // visible regression bought in the name of performance.
   const roadBudgets = allocateRoadDotBudgets(filteredRoads, altitude, MAX_DOTS);
-  for (let i = 0; i < filteredRoads.length; i++) {
-    const road = filteredRoads[i];
-    const budget = roadBudgets[i] || 0;
-    if (budget <= 0) continue;
-    spawnDotsForRoad(road, altitude, budget);
-    if (_dots.length >= MAX_DOTS) break;
-  }
+  _lastBudgets = roadBudgets;
+  spawnDrawSet(filteredRoads, keep, roadBudgets, altitude);
 
   const renderMetrics = state ? {
     renderId,
@@ -3001,7 +3333,7 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
   }
 
   const heatStart = state ? trafficTimingMark(state, 'rebuild-heat-lines-start', renderMetrics) : null;
-  rebuildHeatLines(filteredRoads);
+  rebuildHeatLines(draw);
   if (state) {
     const heatEnd = trafficTimingMark(state, 'rebuild-heat-lines-end', {
       ...renderMetrics,
@@ -3020,6 +3352,122 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
     const renderEnd = trafficTimingMark(state, 'render-return', renderMetrics);
     scheduleTrafficTimingPostRender(state, renderEnd, renderId, renderMetrics);
   }
+}
+
+/**
+ * Spawn dots for the roads the camera can see, skipping the rest.
+ *
+ * @param {Array} roads   Full altitude-visible list; `keep` is aligned on it.
+ * @param {boolean[]} keep Per-index visibility.
+ * @param {number[]} budgets Per-index dot budget.
+ * @param {number} altitude Camera altitude in metres.
+ * @param {?Set} [only] When given, spawn ONLY roads in this set — the
+ *   differential path, where everything else already has its cars.
+ */
+function spawnDrawSet(roads, keep, budgets, altitude, only = null) {
+  for (let i = 0; i < roads.length; i++) {
+    if (keep && !keep[i]) continue;
+    const road = roads[i];
+    if (only && !only.has(road)) continue;
+    const budget = budgets?.[i] || 0;
+    if (budget <= 0) continue;
+    spawnDotsForRoad(road, altitude, budget);
+    if (_dots.length >= MAX_DOTS) return;
+  }
+}
+
+/**
+ * Remove every dot belonging to a set of roads, and nothing else.
+ *
+ * @param {Set} roads Roads whose cars should go.
+ * @returns {number} Dots removed.
+ */
+function removeDotsForRoads(roads) {
+  if (!roads.size || !_dots.length) return 0;
+  const kept = [];
+  let removed = 0;
+  for (const dot of _dots) {
+    if (roads.has(dot.road)) {
+      _pointCollection?.remove(dot.point);
+      _bucketCounts[dot.bucket || 'sim'] = Math.max(0, _bucketCounts[dot.bucket || 'sim'] - 1);
+      removed += 1;
+    } else {
+      kept.push(dot);
+    }
+  }
+  _dots = kept;
+  return removed;
+}
+
+/**
+ * Recompute the draw set for a camera that turned without earning a fetch.
+ *
+ * DIFFERENTIAL, and that is the whole design. `spawnDotsForRoad` draws a random
+ * segment and a random offset for every car it makes, so re-spawning the entire
+ * set would TELEPORT every vehicle on screen and reshuffle the jam platoons —
+ * on every camera settle. Nothing else in this layer does that: waypoints are
+ * mutated rather than replaced, a dot is never moved onto its stop line, and
+ * none of `clearDots`'s callers is a camera move. At 3.5° of axis in a 60°
+ * field the corner that enters is worth ~7 % of the set, so a full respawn
+ * would pay 100 % for 7 %.
+ *
+ * Keeping the cars also keeps the counters they feed: `_closedRoads` and the
+ * session-cumulative `_redCrossings` are reset by `clearDots`, and nothing
+ * here would recompute them.
+ */
+function recullDrawSet() {
+  _cullTimeout = null;
+  if (!_enabled || !_viewer || !_cullSourceRoads.length) return;
+  _cullStats.passes += 1;
+
+  const pose = cameraCullPose(_viewer.camera);
+  if (!cullPoseMoved(_lastCullPose, pose)) {
+    _cullStats.poseSkips += 1;
+    return;
+  }
+
+  const t0 = performance.now();
+  const { draw, keep, culled } = selectDrawRoads(
+    _cullSourceRoads,
+    trafficCullingVolume(_viewer.camera),
+  );
+  const { respawn, entered, left } = shouldRespawnDrawSet(_drawRoads, draw);
+  if (!respawn) {
+    // Deliberately NOT advancing `_lastCullPose`: a pass that applied nothing
+    // must not move the reference it is compared against, or a slow drift would
+    // never accumulate into a re-cull.
+    _cullStats.deltaSkips += 1;
+    return;
+  }
+
+  removeDotsForRoads(new Set(left));
+  if (entered.length) {
+    spawnDrawSet(_cullSourceRoads, keep, _lastBudgets, _lastRenderAltitude, new Set(entered));
+  }
+  _drawRoads = draw;
+  _lastCullPose = pose;
+  _count = _dots.length;
+  _cullStats.respawns += 1;
+  _cullStats.drawn = draw.length;
+  _cullStats.culled = culled;
+  _cullStats.lastMs = performance.now() - t0;
+
+  // Only when a CONGESTED road moved. `rebuildHeatLines` is a no-op under the
+  // shipped jam-viz mode, but under `heatline`/`both` it destroys and rebuilds
+  // two GroundPolylinePrimitives carrying up to 400 GeometryInstances — the
+  // most expensive object in this file — and doing that on every camera settle
+  // would cost more than the cull saves.
+  const congestionMoved = [...entered, ...left].some((road) => {
+    const flow = road.flow;
+    return flow && !flow.closure && flowBucket(flow.level) !== 'free';
+  });
+  if (congestionMoved) rebuildHeatLines(draw);
+
+  // A road that just entered has never been seated. The seating loop is only
+  // re-ARMED here, never restarted: `restartRoadFloorSeating` cancels the timer
+  // in flight and begins a cold pass, which on every rotation would mean no
+  // pass ever converges.
+  if (entered.length) armRoadFloorSeating();
 }
 
 // ─── Development-only causal timing ───────────────────────
@@ -3436,6 +3884,15 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   _lastViewCenter = getBoundsCenter(clamped);
   _lastTierId = tier.id;
   let renderedSomething = false;
+  // Whether the ROAD GRAPH failed in transport, as opposed to "this load drew
+  // nothing". The two are different answers and the retry schedule needs the
+  // first one: an empty-but-healthy response must stop the kick.
+  let roadFetchFailed = false;
+  let lastRoadFailure = null;
+  // A load superseded by a newer one records NOTHING — neither health nor an
+  // error. The `catch` below returns early on an abort, but a `return` still
+  // runs the `finally`, so the flag has to be readable there.
+  let aborted = false;
 
   try {
     let cache = _tileCache.get(cacheKey);
@@ -3538,17 +3995,53 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
     // Settled, not raced: one pass failing must not discard the other, and the
     // rollback in `finally` needs to know whether ANYTHING reached the screen.
     for (const outcome of await Promise.allSettled([majorJob, fullJob].filter(Boolean))) {
-      if (outcome.status === 'rejected' && outcome.reason?.name !== 'AbortError') {
-        console.warn('[Data:Traffic] Fetch error:', outcome.reason?.message || outcome.reason);
+      if (outcome.status === 'rejected') {
+        if (outcome.reason?.name === 'AbortError') {
+          aborted = true;
+        } else {
+          roadFetchFailed = true;
+          lastRoadFailure = outcome.reason;
+          console.warn('[Data:Traffic] Fetch error:', outcome.reason?.message || outcome.reason);
+        }
       }
     }
 
   } catch (e) {
-    if (e?.name === 'AbortError') return;
+    // An abort is a SUPERSEDED load, not a failure: the `return` still runs the
+    // `finally`, so the flag must be set BEFORE it.
+    if (e?.name === 'AbortError') { aborted = true; return; }
+    roadFetchFailed = true;
+    lastRoadFailure = e;
     console.warn('[Data:Traffic] Fetch error:', e);
   } finally {
     if (generation === _loadGeneration) {
       _fetching = false;
+      // Three outcomes, and only the middle one is an error.
+      //
+      // This load runs TWO passes concurrently (major, then the full graph).
+      // One of them failing while the other painted is not an outage — there
+      // are cars on the screen — and reporting it as one turned a keyless-honest
+      // layer into a failed one, which `qa-traffic.mjs` exits non-zero on.
+      //
+      // A load that came back WITHOUT a transport error disarms the kick even
+      // when it painted nothing: an Overpass response carrying zero ways over
+      // open water is a healthy answer, and the old stop condition
+      // (`_lastUpdate`, set only when dots are drawn) never fired on it.
+      if (aborted && !renderedSomething && !roadFetchFailed) {
+        // Superseded: the newer load owns the verdict. Record nothing.
+      } else if (roadFetchFailed && !renderedSomething) {
+        _roadError = deriveRoadGraphError(lastRoadFailure);
+        scheduleRoadRetry();
+        // Nothing rendered, so nothing culled — but the camera has moved. The
+        // roads already held still deserve a draw set for the pose the reader
+        // is actually looking at.
+        clearTimeout(_cullTimeout);
+        _cullTimeout = setTimeout(recullDrawSet, CULL_DEBOUNCE);
+      } else {
+        _roadFetchSettledAt = Date.now();
+        _roadError = null;
+        clearRoadRetry({ resetAttempts: true });
+      }
       // Roll back the bounds commit if this load rendered nothing (e.g. the
       // Overpass fetch failed). Leaving them committed would make the overlap
       // gate skip the retry while the user sits still. Guarded on generation so
@@ -3571,6 +4064,13 @@ function clearDots() {
   removeHeatLines();
   _dots = [];
   _roads = [];
+  _drawRoads = [];
+  _cullSourceRoads = [];
+  _lastBudgets = null;
+  _lastCullPose = null;
+  _cullStats = {
+    passes: 0, poseSkips: 0, deltaSkips: 0, respawns: 0, drawn: 0, culled: 0, lastMs: 0,
+  };
   _count = 0;
   _bucketCounts = { free: 0, slow: 0, jam: 0, sim: 0 };
   _closedRoads = 0;
@@ -3623,6 +4123,11 @@ const trafficLayer = {
     _roads = [];
     _count = 0;
     _lastUpdate = null;
+    // Belt to `disable()`'s braces: an init that follows a destroy must not
+    // leave a kick alive that is bound to the previous viewer.
+    clearRoadRetry({ resetAttempts: true });
+    _roadError = null;
+    _roadFetchSettledAt = 0;
     _lastBounds = null;
     _lastTierId = null;
     _fetching = false;
@@ -3703,18 +4208,19 @@ const trafficLayer = {
     // Boot-order guard (field-test round 1: layer sat empty until the user
     // moved): when the persisted layer state re-enables traffic during the
     // intro flyTo, the initial check bails at high altitude — and a camera
-    // that then parks never re-fires camera.changed. Retry cheaply until the
-    // first load commits, then self-clear. Also acts as a safety kick if a
-    // failed first fetch left the viewport unloaded while parked.
-    clearInterval(_enableKickTimer);
-    _enableKickTimer = setInterval(() => {
-      if (!_enabled || _lastUpdate) {
-        clearInterval(_enableKickTimer);
-        _enableKickTimer = null;
-        return;
-      }
-      if (!_fetching) onCameraChanged();
-    }, 1500);
+    // that then parks never re-fires camera.changed. Also acts as a safety kick
+    // if a failed first fetch left the viewport unloaded while parked.
+    //
+    // It BACKS OFF now, and it gives up (see `trafficRetrySchedule.js`): the
+    // fixed 1.5 s interval this replaced had no stop condition other than "dots
+    // got drawn", so a dead Overpass kept it asking 40 times a minute for as
+    // long as the tab stayed open — which is what kept the 429 alive on
+    // 2026-09-16. Enabling the layer IS the reader asking again, so the budget
+    // starts full.
+    clearRoadRetry({ resetAttempts: true });
+    _roadError = null;
+    _roadFetchSettledAt = 0;
+    scheduleRoadRetry();
   },
 
   /**
@@ -3727,9 +4233,17 @@ const trafficLayer = {
     _enabled = false;
     releaseContinuousRender('traffic');
     clearTimeout(_fetchTimeout);
-    clearInterval(_enableKickTimer);
-    _enableKickTimer = null;
+    clearTimeout(_cullTimeout);
+    _cullTimeout = null;
+    clearRoadRetry({ resetAttempts: true });
+    _roadError = null;
+    _roadFetchSettledAt = 0;
     cancelActiveFetch();
+    // The load being cancelled here returns through a generation check that the
+    // `_loadGeneration++` below has already invalidated, so its `finally` never
+    // clears this flag. Left true, it makes every later kick stand down against
+    // a load that will never land — an unbounded wake loop on a stuck boolean.
+    _fetching = false;
     resetRoadFloors();
     _loadGeneration++;
     clearDots();
@@ -3905,6 +4419,9 @@ const trafficLayer = {
     resetFlowTileCache();
     _count = 0;
     _lastUpdate = null;
+    // The timer itself is already dead — `disable(viewer)` above clears it.
+    _roadError = null;
+    _roadFetchSettledAt = 0;
   },
 
   /**
@@ -3931,6 +4448,10 @@ const trafficLayer = {
       flowError: _flowError,
       coveragePct: _flowCoveragePct,
       statusUnavailable: _flowStatusUnavailable,
+      roadError: _roadError,
+      roadRetryGaveUp: _roadRetryGaveUp,
+      ribbonPainted: (_ribbonCounts.closure + _ribbonCounts.jam
+        + _ribbonCounts.slow + _ribbonCounts.free) > 0,
     });
     return {
       count: _count,
@@ -3939,6 +4460,27 @@ const trafficLayer = {
       mode: feed.mode,
       error: feed.error,
       flowCoveragePct: _flowCoveragePct,
+      // The manager already renders this: it appends
+      // "· nouvelle tentative dans N s" to the error line, the same affordance
+      // `flights.js` and `transitFrance.js` publish. The countdown is what
+      // separates "this layer is retrying" from "this layer is broken".
+      retryInSec: _roadRetryDueAt
+        ? Math.max(1, Math.ceil((_roadRetryDueAt - Date.now()) / 1000))
+        : 0,
+      roadError: _roadError,
+      roadRetryAttempts: _roadRetryAttempts,
+      // No Cesium point primitive paints in a headless harness, so the model
+      // has to say out loud how many roads it decided NOT to draw. The three
+      // pass counters are a PARTITION of `cullPasses`, which is what makes
+      // "the gates are eating the churn" a measurable claim instead of a hope.
+      drawRoads: _drawRoads.length,
+      culledRoads: _cullStats.culled,
+      cullMargin: TRAFFIC_CULL_MARGIN,
+      cullPasses: _cullStats.passes,
+      cullPoseSkips: _cullStats.poseSkips,
+      cullDeltaSkips: _cullStats.deltaSkips,
+      cullRespawns: _cullStats.respawns,
+      cullLastMs: Number(_cullStats.lastMs.toFixed(2)),
       // Tile accounting: `tilesJoined` is the duplicate requests the in-flight
       // table now absorbs instead of issuing, `cooldownMs` what is left of a
       // 429 parking. Both were invisible when they were costing the most.
