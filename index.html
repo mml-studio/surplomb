@@ -1122,7 +1122,6 @@
   -->
   <section id="phone-sheet" hidden data-snap="peek" aria-label="Panneau téléphone">
     <div class="phone-sheet-grip" data-phone-grip role="separator" aria-label="Glissez pour redimensionner le panneau"></div>
-    <div class="phone-sheet-credits" data-phone-credits></div>
     <nav class="phone-sheet-tabs" role="tablist" aria-label="Onglets du panneau">
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-search"
               data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1">Recherche</button>
@@ -1141,6 +1140,11 @@
         <div id="phone-selection"></div>
       </section>
     </div>
+    <!-- LAST, and that is the whole point: the attribution Cesium and Google
+         require is a footer here, not a header. Above the tabs it pushed the
+         four things a reader came for down by three lines of legal text on the
+         first screen they see. See `phone.css` § THE CREDIT FOOTER. -->
+    <div class="phone-sheet-credits" data-phone-credits></div>
   </section>
 
   <div id="scene-runtime"></div>

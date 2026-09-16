@@ -112,7 +112,10 @@ export function initPhoneSheet({ dataManager = null } = {}) {
   const credits = document.getElementById('cesium-credits');
   // Google's and Cesium's terms require the attribution to be visible while
   // their content is. In the sheet it is visible at ALL THREE snaps; left where
-  // it was, the sheet would have covered it at two of them.
+  // it was, the sheet would have covered it at two of them. `[data-phone-credits]`
+  // is the LAST row of the sheet, under the tab panels — a required notice is
+  // not a headline, and above the tabs it cost the reader three wrapped lines
+  // of legal text before the first control. See `phone.css` § THE CREDIT FOOTER.
   if (credits && creditHost) creditHost.appendChild(credits);
 
   // « Tout éteindre » moves out of the top-right corner — the worst place on a

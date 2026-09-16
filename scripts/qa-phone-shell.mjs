@@ -5,8 +5,10 @@
  * WHAT THIS IS FOR. `qa:phone-boot` asks whether the app RECOGNISES a phone and
  * what that recognition buys. This one asks what the recognition LOOKS like:
  * whether the page fits its own screen, whether a finger can hit what is drawn,
- * whether the required attribution is visible at all three sheet heights, and
- * whether the desktop this shell was carved out of is exactly where it was.
+ * whether the required attribution is visible at all three sheet heights,
+ * whether the one control still floating over the map stays on screen in each
+ * of its four states, and whether the desktop this shell was carved out of is
+ * exactly where it was.
  *
  * WHY THE DESKTOP CONTROL IS IN THE SAME RUN (check 8). Every rule in
  * `phone.css` is guarded by `html[data-shell="phone"]`, and a guard is a claim
@@ -228,6 +230,100 @@ const readCredits = () => {
   };
 };
 
+/**
+ * The four states the voice module can be left in, forced from the attribute
+ * the app itself writes.
+ *
+ * No session is opened and none is needed: every failure this check exists for
+ * is a LAYOUT failure, and the layout is driven entirely by `data-status` and
+ * `data-help`. Opening a real session would cost an API key, a microphone
+ * permission no headless browser grants, and a minute a harness does not have.
+ */
+const VOICE_STATES = [
+  { name: 'idle', status: 'idle' },
+  { name: 'help-open', status: 'idle', help: true },
+  { name: 'listening', status: 'listening', transcript: true },
+  { name: 'error', status: 'error' },
+];
+
+const setVoiceState = ({ status, help = false, transcript = false }) => {
+  const root = document.getElementById('gev-voice-control');
+  if (!root) return false;
+  root.dataset.status = status;
+  if (help) root.dataset.help = 'open';
+  else delete root.dataset.help;
+  root.classList.remove('error-dismissed');
+  const tray = root.querySelector('.gev-voice-transcript');
+  if (tray) {
+    tray.hidden = !transcript;
+    const line = tray.querySelector('.gev-voice-transcript-text');
+    if (transcript && line) line.textContent = 'allume le trafic routier et montre-moi les capteurs de qualité de l’air';
+  }
+  return true;
+};
+
+/**
+ * Three questions about the voice module, asked of every visible part of it.
+ *
+ * WHY EACH ONE IS HERE, and none of them is hypothetical:
+ *
+ *   - `outsideOwnBox`: it shipped keeping the desktop dock's grid — a 40 px
+ *     help button in a 12.8 px row — so the `?` and the status word were
+ *     painted eight pixels ABOVE the panel they belong to, on top of whatever
+ *     sat beside them.
+ *   - `offScreen`: the help tray and the error tray hang off `left: 50%` with
+ *     a −50 % translate, which centres them on a module that is flush against
+ *     the right edge of the screen. Measured at 92 px and 99 px past the
+ *     viewport, and the second of those took the DISMISS button with it.
+ *   - `overSheet`: the module is positioned off `--phone-sheet-height`, so
+ *     anything that grows upward is free and anything that grows DOWNWARD ends
+ *     up behind the sheet.
+ *
+ * The three trays are exempt from `outsideOwnBox` by design: they are meant to
+ * float clear of the module. They are not exempt from the other two.
+ */
+const readVoiceModule = () => {
+  const root = document.getElementById('gev-voice-control');
+  if (!root) return { present: false, offScreen: [], outsideOwnBox: [], overSheet: [] };
+  const TRAYS = '.gev-voice-help-tray, .gev-voice-transcript, .gev-voice-error-tray';
+  const box = root.getBoundingClientRect();
+  const sheet = document.getElementById('phone-sheet')?.getBoundingClientRect() ?? null;
+  const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
+    typeof el.className === 'string' && el.className.trim()
+      ? `.${el.className.trim().split(/\s+/)[0]}` : ''}`;
+  const offScreen = [];
+  const outsideOwnBox = [];
+  const overSheet = [];
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    if (Number.parseFloat(style.opacity || '1') < 0.05) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    if (r.left < -0.5 || r.right > window.innerWidth + 0.5
+      || r.top < -0.5 || r.bottom > window.innerHeight + 0.5) {
+      offScreen.push(`${label(el)} ${Math.round(r.left)}…${Math.round(r.right)}`);
+    }
+    if (el !== root && !el.closest(TRAYS)
+      && (r.top < box.top - 1 || r.bottom > box.bottom + 1
+        || r.left < box.left - 1 || r.right > box.right + 1)) {
+      outsideOwnBox.push(label(el));
+    }
+    if (sheet
+      && Math.min(r.bottom, sheet.bottom) - Math.max(r.top, sheet.top) > 1
+      && Math.min(r.right, sheet.right) - Math.max(r.left, sheet.left) > 1) {
+      overSheet.push(label(el));
+    }
+  }
+  const unique = (list) => [...new Set(list)].slice(0, 6);
+  return {
+    present: true,
+    offScreen: unique(offScreen),
+    outsideOwnBox: unique(outsideOwnBox),
+    overSheet: unique(overSheet),
+  };
+};
+
 const readFontSizes = () => {
   const offenders = [];
   for (const el of document.querySelectorAll('input:not([type=range]):not([type=checkbox]):not([type=radio]), select, textarea')) {
@@ -314,6 +410,22 @@ async function runHandset(browser, device, full) {
   const hidden = await page.evaluate(readHidden, ['left-panel-stack', 'right-context-rail', 'intel-hud', 'globe-heading-tape']);
   check(`[${device.name}] the desktop rails and HUD are not drawn`,
     Object.values(hidden).every((display) => display === 'none' || display === 'absent'), hidden);
+
+  // ── The voice module, in each of the four states it can be left in ───────
+  const voice = {};
+  for (const state of VOICE_STATES) {
+    await page.evaluate(setVoiceState, state);
+    await wait(260);
+    voice[state.name] = await page.evaluate(readVoiceModule);
+  }
+  await page.evaluate(setVoiceState, VOICE_STATES[0]);
+  await wait(200);
+  check(`[${device.name}] the voice module and its trays stay on screen, inside their own box, and clear of the sheet`,
+    Object.values(voice).every((state) => state.present
+      && state.offScreen.length === 0
+      && state.outsideOwnBox.length === 0
+      && state.overSheet.length === 0),
+    voice);
 
   if (full) {
     // ── The sheet: three snaps, ascending, each clear of the top bar ────────
