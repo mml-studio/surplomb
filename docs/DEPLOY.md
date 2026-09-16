@@ -487,11 +487,38 @@ so it is the LAST step, not the first. In order:
    against engaged visitors per minute, not against traffic.
 6. **Fix the edge rule** (above), or the first person who shares the link and
    the second person behind the same NAT will both see 429s.
-7. **Then, and only then**, remove `GEV_ACCESS_PASSWORD` from `/opt/gev/.env`
-   and `docker compose up -d`. The server logs
-   `[access-gate] GEV_ACCESS_PASSWORD is unset — this origin is OPEN` on boot,
-   and `/healthz` reports `"gated": false`. Both are how you confirm it, and
-   both are how you notice it happened by accident.
+7. **List every public hostname in `GEV_PUBLIC_HOST` — the password is hiding
+   whether they work.** `vite preview` refuses a `Host` it was not told about,
+   and the access gate's middleware is installed *first*, so a gated origin
+   answers **401 before Vite ever checks the host**. A name missing from
+   `GEV_PUBLIC_HOST` is therefore indistinguishable from a name that works,
+   right up to the moment you open — and then it answers:
+
+   ```
+   HTTP 403  Blocked request. This host ("surplomb.app") is not allowed.
+   ```
+
+   Measured on 2026-09-16: `surplomb.app` had been live on the tunnel for a day
+   and had never once been served. `/healthz` answered `200` the whole time,
+   because it is a middleware and never reaches the host check — so the health
+   route **cannot** tell you about this. Check it while still gated, with the
+   password, against each name:
+
+   ```sh
+   curl -s -o /dev/null -w '%{http_code}\n' -u gev:"$PW" https://<each-host>/
+   ```
+
+   `401` is a bad answer here, not a good one — it means the gate replied and
+   the host question is still open. Send the credentials and require `200`.
+   `GEV_PUBLIC_HOST` is comma-separated, read at startup, and needs only
+   `docker compose up -d` — no rebuild.
+8. **Then, and only then**, remove `GEV_ACCESS_PASSWORD` from `/opt/gev/.env`
+   and `docker compose up -d`. `/healthz` reports `"gated": false`, and the
+   server logs `[access-gate] GEV_ACCESS_PASSWORD is unset — this origin is
+   OPEN` **on the first request through the gate, not at boot** — the warning
+   lives in the middleware behind a once-only flag. An empty log right after a
+   restart means nobody has asked yet, not that the gate is still up; trust
+   `/healthz` for that.
 
 Reversing it is the same two commands with the variable put back, so the risk
 is not the switch — it is how long an unbounded key stays reachable before
