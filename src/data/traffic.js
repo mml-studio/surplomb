@@ -3,11 +3,17 @@ import {
   deriveFetchCenter,
   clampBoundsAroundCenter,
   normalizeFetchBox,
+  tierFetchBox,
+  coordsBounds,
+  boxesIntersect,
+  intersectBoxes,
+  boundsOverlap,
   roadFetchTier,
   roadRefetchNeeded,
   ROAD_ACTIVATION_ALTITUDE_M,
   ROAD_FETCH_TIERS,
 } from './trafficBounds.js';
+import { bootFlightInProgress, whenBootFlightEnds } from '../bootFlight.js';
 import { fetchFlowForBounds, getFlowSessionStats, resetFlowTileCache } from './flowTiles.js';
 import { matchFlowToRoads } from './flowMatch.js';
 import {
@@ -83,6 +89,16 @@ const OVERPASS_URL = '/api/overpass';
 const ACTIVATION_ALTITUDE = ROAD_ACTIVATION_ALTITUDE_M;
 /** @const {number} Milliseconds — debounce delay before fetching after camera settles */
 const FETCH_DEBOUNCE = 320;
+/**
+ * @const {number} How much of the new frame the rendered one must already
+ * cover for the dots to be left alone.
+ *
+ * Only reached when there is nothing to fetch, so what it prices is a respawn
+ * from roads already in memory — no network, no parse. 0.8 fires at about a
+ * 1.12× widening, which is a deliberate zoom-out rather than a wheel tick, and
+ * never fires on a zoom IN (see `boundsOverlap`, which is asymmetric).
+ */
+const FRAME_REALLOCATE_COVERAGE = 0.8;
 /** @const {number} Meters — vertical offset to keep dots above clamped terrain surface */
 const DOT_HEIGHT_OFFSET = 3.0;
 /**
@@ -567,6 +583,37 @@ let _flowRibbon = 'on';
 let _heatSupported = null;
 /** @type {number} Altitude of the last render, for late-flow heat rebuilds. */
 let _lastRenderAltitude = 0;
+/**
+ * The frame the camera is showing right now, in degrees — NOT the box the
+ * roads were fetched over. Since `tierFetchBox` the two are different sizes on
+ * purpose: the fetch box is the band's, fixed, so every reader asks Overpass
+ * the same question; this one is the reader's own window, and it is what the
+ * dot budget, the heat-lines and the seating loop are spent on.
+ *
+ * Written by `onCameraChanged` on every pass (including the ones that skip the
+ * fetch), read by `renderRoadsForAltitude` at the moment it spawns.
+ * @type {?{south:number, west:number, north:number, east:number}}
+ */
+let _pendingViewBox = null;
+/**
+ * Whether this layer has already booked its wake-up at the end of the boot
+ * flight. `onCameraChanged` fires on every frame of a four-second descent and
+ * the enable kick fires every 1.5 s on top: without this the layer would book
+ * the same wake-up a hundred times.
+ * @type {boolean}
+ */
+let _bootFlightHeld = false;
+/**
+ * The frame the dots on screen were actually spawned for.
+ *
+ * Deliberately a SNAPSHOT of `_pendingViewBox` and not the live value: the
+ * seating loop and the late-flow heat rebuild must see the same road set the
+ * dots were made from. A pan too small to earn a re-fetch moves the pending
+ * box and leaves this one alone — otherwise the loop would start seating roads
+ * with no dots and stop seating dots that are on screen.
+ * @type {?{south:number, west:number, north:number, east:number}}
+ */
+let _lastRenderBox = null;
 /**
  * Active post-FX style (StyleManager preset name), synced from
  * `document.documentElement.dataset.gevStyle` at init and the
@@ -2201,6 +2248,27 @@ function clampBounds(bounds, tier) {
  */
 function onCameraChanged() {
   if (!_enabled) return;
+
+  // The app's own descent is an animation, and this layer is the heaviest
+  // thing that can be on screen during it. Measured 2026-09-16
+  // (`scripts/qa-traffic-boot.mjs`): working through the flight took the
+  // arrival from 6.4-6.8 s to 25.5-27.2 s, and spent a 0.30° Overpass box on
+  // the `metro` band the camera crosses for one second on its way down.
+  //
+  // So: nothing until the camera is parked, then everything at once, on the
+  // view the reader will actually be looking at — which is the same view on
+  // every boot and therefore the one cell whose Overpass answer is already
+  // warm. See `bootFlight.js`.
+  if (bootFlightInProgress()) {
+    if (!_bootFlightHeld) {
+      _bootFlightHeld = true;
+      whenBootFlightEnds(() => {
+        _bootFlightHeld = false;
+        if (_enabled) onCameraChanged();
+      });
+    }
+    return;
+  }
   // Whatever this pass decides — a fetch, a skip, or clearing the dots above
   // the bands — it decides it about the view the camera is showing right now.
   // See `cameraSettle.js`: an arrival on any other view has to be re-decided.
@@ -2224,6 +2292,8 @@ function onCameraChanged() {
     _lastBounds = null;
     _lastViewCenter = null;
     _lastTierId = null;
+    _pendingViewBox = null;
+    _lastRenderBox = null;
     return;
   }
 
@@ -2235,14 +2305,26 @@ function onCameraChanged() {
   // horizon. The box SPAN is the band's too: 0.05° at street scale, 0.30° at
   // metro scale, where a 5.5 km box would show a third of the city.
   const fetchCenter = getFetchCenter(tier);
-  // One more step after the clamp, and it is the one the CACHE needs: the box
-  // is put on the band's lattice at the band's full span, so the same street
-  // asks the same question whatever the camera pose and whatever the window
-  // size. See `normalizeFetchBox` for the 65 ms / 46 s the two cases cost.
-  const clamped = normalizeFetchBox(fetchCenter
+  // Two boxes from here on, and they are different sizes on purpose.
+  //
+  // THE FRAME is what the reader's window covers — the view rectangle's span,
+  // capped at the band's, recentred on the look-at point. It decides which
+  // roads get dots, and nothing else. It is exactly the box the layer both
+  // fetched and drew before this split, so the picture is unchanged.
+  const frame = fetchCenter
     ? clampBoundsAroundCenter(bounds, fetchCenter, tier.spanDeg)
-    : clampBounds(bounds, tier), tier);
+    : clampBounds(bounds, tier);
+  // THE FETCH BOX is the band's full span on the band's lattice, which makes
+  // it a function of the cell alone: same question from every camera pose,
+  // every window size, every reader. That is what a proxy cache can answer in
+  // 70 ms instead of 0.6–46 s. See `tierFetchBox` for the measurement that
+  // says the span, not the pose, was the remaining source of fragmentation.
+  const clamped = tierFetchBox(fetchCenter ?? getBoundsCenter(frame), tier)
+    ?? normalizeFetchBox(frame, tier);
   const center = getBoundsCenter(clamped);
+  // Held inside the fetch box: past that edge there are no roads to draw, and
+  // a frame that reached beyond it would read as "the traffic stops here".
+  _pendingViewBox = intersectBoxes(frame, clamped);
 
   // Skip re-fetch when the band, the coverage and the centre all say the held
   // roads are still the answer. See `roadRefetchNeeded` for why the band has
@@ -2253,6 +2335,25 @@ function onCameraChanged() {
     center,
     last: { tierId: _lastTierId, bounds: _lastBounds, center: _lastViewCenter },
   })) {
+    // Nothing to fetch — but the FRAME can still have outgrown the dots.
+    //
+    // A zoom-out used to buy a wider box, which failed the overlap gate above
+    // and re-rendered as a side effect. The box is now the band's, fixed, so
+    // that gate correctly says there is nothing to fetch — and the allocation
+    // would have been left sized for a frame the reader has zoomed past,
+    // leaving a dotless ring around a view whose roads are already in memory.
+    //
+    // `boundsOverlap` is asymmetric on purpose (see it): the question is how
+    // much of the NEW frame the rendered one already covers, so zooming IN
+    // scores 1 and costs nothing, and only widening pays.
+    if (_roads.length && _pendingViewBox && _lastRenderBox
+      && !boundsOverlap(_pendingViewBox, _lastRenderBox, FRAME_REALLOCATE_COVERAGE)) {
+      clearTimeout(_fetchTimeout);
+      _fetchTimeout = setTimeout(
+        () => renderRoadsForAltitude(_roads, alt, 'Frame widened'),
+        FETCH_DEBOUNCE,
+      );
+    }
     return;
   }
 
@@ -2680,16 +2781,60 @@ function recolorDotsInPlace(label) {
 }
 
 /**
- * At high altitude only major roads render — shared by the render pass and
- * the late-flow heat-line rebuild so lines never mark roads without dots.
+ * A road's own bounding box, computed once and kept on the road.
+ *
+ * Memoised because the frame filter below runs on every seating pass, not just
+ * on a render: recomputing a thousand ways' extents a few times a second is
+ * exactly the kind of quiet O(n·m) the seating grid was built to remove.
+ *
+ * @param {{coords:number[][], bbox?:Object}} road - Parsed road (mutated).
+ * @returns {?{south:number, west:number, north:number, east:number}}
+ */
+function roadBounds(road) {
+  if (!road.bbox) road.bbox = coordsBounds(road.coords);
+  return road.bbox;
+}
+
+/**
+ * The roads that get dots: the ones legible at this altitude, inside the frame.
+ *
+ * ── Two filters, and they answer two different questions ──────────────────
+ * The CLASS filter is about legibility: above 5 km a residential street is
+ * sub-pixel, so drawing traffic on it is noise. That one is old.
+ *
+ * The FRAME filter is new, and it is what pays for `tierFetchBox`. The fetch
+ * box is now the band's full span for everybody — that is what gives the
+ * Overpass proxy a key it can answer twice. The box is therefore wider than
+ * most windows, and allocating the 6 000-dot budget over everything it
+ * returned would spread the same dots over roughly twice the streets:
+ * measured at the `qa-traffic-floor` view, 421 roads in frame against 1 003 in
+ * the box. Every street on screen drawn half as busy, to buy a cache hit.
+ *
+ * Filtering here instead closes that, and closes it for all four callers at
+ * once — the render pass, both heat-line rebuilds and the ground-seating loop.
+ * The seating one is the one that was not obvious: a road out of frame was
+ * being bought a `sampleHeight` probe, at 3.2 ms a call on top of a 47 ms
+ * batch, to seat dots nobody can see.
+ *
+ * With no frame recorded the filter is skipped entirely, which is the exact
+ * pre-`tierFetchBox` behaviour — that is the path the unit tests and the
+ * direct `loadRoadsForBounds` callers take.
+ *
  * @param {Array} roads    - Parsed road objects.
  * @param {number} altitude - Camera altitude in meters.
- * @returns {Array} The roads visible at this altitude.
+ * @returns {Array} The roads visible at this altitude, in this frame.
  */
 function visibleRoadsForAltitude(roads, altitude) {
-  return altitude > 5000
-    ? roads.filter(r => r.type === 'motorway' || r.type === 'trunk' || r.type === 'primary')
-    : roads;
+  const majorOnly = altitude > 5000;
+  const frame = _lastRenderBox;
+  if (!majorOnly && !frame) return roads;
+  const out = [];
+  for (const road of roads) {
+    if (majorOnly && road.type !== 'motorway' && road.type !== 'trunk' && road.type !== 'primary') continue;
+    if (frame && !boxesIntersect(roadBounds(road), frame)) continue;
+    out.push(road);
+  }
+  return out;
 }
 
 /** Remove both heat-line ground primitives from the scene. */
@@ -2803,8 +2948,13 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
   clearDots();
   _roads = roads;
   _lastRenderAltitude = altitude;
+  // Freeze the frame the dots are about to be made from. Everything that
+  // revisits this road set later — the seating loop, both heat rebuilds — has
+  // to read the same frame or it will work on a set the screen does not have.
+  _lastRenderBox = _pendingViewBox;
 
-  // At high altitude, drop minor roads to reduce visual noise
+  // At high altitude, drop minor roads to reduce visual noise; out of frame,
+  // drop everything (see `visibleRoadsForAltitude`).
   const filteredRoads = visibleRoadsForAltitude(roads, altitude);
 
   // Book the seating loop for the new network. Booked, not run: see
@@ -3269,9 +3419,12 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
     clearFlowRibbon();
     return;
   }
-  // Idempotent on a box `onCameraChanged` already normalised; it matters for
-  // the callers that reach here with raw bounds (tests, the tier re-decide).
-  const clamped = normalizeFetchBox(clampBounds(bounds, tier), tier);
+  // Idempotent on a box `onCameraChanged` already produced; it matters for the
+  // callers that reach here with raw bounds (tests, the tier re-decide), which
+  // must land on the same cell key as the camera path or they would fetch a
+  // box the cache has never seen.
+  const clamped = tierFetchBox(getBoundsCenter(bounds), tier)
+    ?? normalizeFetchBox(clampBounds(bounds, tier), tier);
 
   // Cache key: fixed-precision bounding-box string for deterministic lookups
   const cacheKey = `${clamped.south.toFixed(4)},${clamped.west.toFixed(4)},${clamped.north.toFixed(4)},${clamped.east.toFixed(4)}`;
@@ -3596,6 +3749,12 @@ const trafficLayer = {
     _lastViewCenter = null;
     _lastBounds = null;
     _lastTierId = null;
+    _pendingViewBox = null;
+    _lastRenderBox = null;
+    // Booked wake-ups survive in `bootFlight.js` and re-check `_enabled`, but
+    // the booking flag must not: a re-enable during the same flight has to be
+    // able to book again.
+    _bootFlightHeld = false;
     // A stale outage from the last session would misreport a fresh enable —
     // the next load re-derives feed health from real evidence.
     _flowError = null;
@@ -3823,6 +3982,12 @@ const trafficLayer = {
       floorWaiting: _floorSeatState.waiting,
       floorCells: _floorCells.size,
       floorBoxM: _boxFloor ? +_boxFloor.m.toFixed(1) : null,
+      // Which surface the current readings were taken against. The layer
+      // re-seats from scratch when this flips, and on the boot path it flips
+      // once — the reader's first touch swaps `ign-ortho` for the
+      // photorealistic mesh under dots already on screen. Without it a harness
+      // can see the re-seat but cannot say what caused it.
+      floorSurface: _floorSurface,
       // What the seating loop is costing the frame, split by where it goes.
       // See `_floorPassCost` — the stutter this layer was reported for lives
       // here, and a total alone cannot say which of the three costs to cut.

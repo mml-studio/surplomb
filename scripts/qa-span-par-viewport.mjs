@@ -50,6 +50,8 @@ import {
   deriveFetchCenter,
   clampBoundsAroundCenter,
   normalizeFetchBox,
+  tierFetchBox,
+  intersectBoxes,
 } from '../src/data/trafficBounds.js';
 
 const argv = process.argv.slice(2);
@@ -235,9 +237,18 @@ const spanOf = (b) => (b ? { lat: b.north - b.south, lon: b.east - b.west } : nu
 /**
  * Recompute the production chain in Node from the camera state.
  *
- * Mirrors `onCameraChanged`: view rectangle → look-at centre → clamp to the
- * band span → snap onto the lattice. Any divergence from the wire is a bug in
- * this harness, not in the app, and is printed as such.
+ * Mirrors `onCameraChanged`, which since the frustum split produces TWO boxes
+ * from one camera state:
+ *
+ *   - the FRAME (`clamped` here): view rectangle → look-at centre → capped at
+ *     the band span. It is the reader's own window and it decides which roads
+ *     get dots. It is window-dependent on purpose.
+ *   - the FETCH BOX (`snapped`): the band's full span on the band's lattice,
+ *     a function of the cell alone. It IS the proxy's cache key, and the
+ *     whole question this harness asks is whether it still carries the window.
+ *
+ * Any divergence from the wire is a bug in this harness, not in the app, and
+ * is printed as such.
  */
 function modelBox(state) {
   const tier = roadFetchTier(state.altitudeM);
@@ -249,8 +260,107 @@ function modelBox(state) {
     hitLon: state.hitLon ?? undefined,
     maxPullKm: tier.pullKm,
   });
-  const clamped = clampBoundsAroundCenter(state.rect, centre, tier.spanDeg);
-  return { tier, centre, raw: state.rect, clamped, snapped: normalizeFetchBox(clamped, tier) };
+  const snapped = tierFetchBox(centre, tier);
+  const frame = intersectBoxes(
+    clampBoundsAroundCenter(state.rect, centre, tier.spanDeg), snapped,
+  );
+  return { tier, centre, raw: state.rect, clamped: frame, snapped };
+}
+
+/**
+ * The chain as it stood before the frustum split, for contrast only.
+ *
+ * The span was the viewport's, rounded onto the lattice — so it moved with the
+ * window AND with every zoom step and pitch change. This is what produced the
+ * five keys the `--real` sweep measured.
+ */
+function legacyBox(state) {
+  const tier = roadFetchTier(state.altitudeM);
+  if (!tier || !state.rect) return null;
+  const centre = deriveFetchCenter({
+    nadirLat: state.nadirLat,
+    nadirLon: state.nadirLon,
+    hitLat: state.hitLat ?? undefined,
+    hitLon: state.hitLon ?? undefined,
+    maxPullKm: tier.pullKm,
+  });
+  return normalizeFetchBox(clampBoundsAroundCenter(state.rect, centre, tier.spanDeg), tier);
+}
+
+/**
+ * Poses a reader actually strikes over one crossroads, inside the street band.
+ *
+ * Deliberately NOT a pan: a pan is meant to change the cell, and a new cell is
+ * a new question that nobody claims is free. What is claimed to be free is
+ * looking at the SAME place harder — leaning in, tilting, turning around it.
+ */
+const POSES = [
+  { label: 'arrivee  900m -35', height: 900, pitch: -35, heading: 0 },
+  { label: 'penche   900m -20', height: 900, pitch: -20, heading: 0 },
+  { label: 'a plat   900m -60', height: 900, pitch: -60, heading: 0 },
+  { label: 'tourne   900m -35', height: 900, pitch: -35, heading: 90 },
+  { label: 'zoom     600m -35', height: 600, pitch: -35, heading: 0 },
+  { label: 'zoom     400m -35', height: 400, pitch: -35, heading: 0 },
+  { label: 'recul   1600m -35', height: 1600, pitch: -35, heading: 0 },
+  { label: 'recul   2600m -35', height: 2600, pitch: -35, heading: 0 },
+];
+
+/**
+ * One boot, one window, many poses over the same crossroads: how many distinct
+ * Overpass questions does that cost?
+ */
+async function runPoseSweep(browser) {
+  const page = await newQaPage(browser);
+  const net = [];
+  page.on('request', (req) => {
+    if (req.url().includes('/api/overpass')) net.push({ body: req.postData() || '' });
+  });
+  await page.setViewport({ width: 1920, height: 993, deviceScaleFactor: 1 });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  for (let i = 0; i < 240; i++) {
+    const ready = await page.evaluate(
+      () => Boolean(window.__godsEyeView?.viewer && window.__godsEyeView?.dataManager)
+    );
+    if (ready) break;
+    await sleep(500);
+  }
+  await waitForSettle(page);
+  const anchor = await page.evaluate(() => {
+    const c = window.__godsEyeView.viewer.camera.positionCartographic;
+    return { lat: (c.latitude * 180) / Math.PI, lon: (c.longitude * 180) / Math.PI };
+  });
+  await page.evaluate(() => window.__godsEyeView.dataManager.setEnabled('traffic', true));
+  await sleep(6000);
+
+  const rows = [];
+  for (const pose of POSES) {
+    net.length = 0;
+    await page.evaluate((p, a) => {
+      const gev = window.__godsEyeView;
+      const ell = gev.viewer.scene.globe.ellipsoid;
+      const d2r = Math.PI / 180;
+      gev.viewer.camera.setView({
+        destination: ell.cartographicToCartesian({
+          longitude: a.lon * d2r, latitude: a.lat * d2r, height: p.height,
+        }),
+        orientation: { heading: p.heading * d2r, pitch: p.pitch * d2r, roll: 0 },
+      });
+    }, pose, anchor);
+    // `setView` raises no `moveEnd`; the layer's own settle watcher is what
+    // re-decides, and the fetch is debounced behind it.
+    await sleep(4000);
+    const state = await readCameraState(page);
+    rows.push({
+      pose,
+      state,
+      requests: net.map((e) => bboxFromBody(e.body)).filter(Boolean),
+      now: state ? tierFetchBox(modelBox(state).centre, roadFetchTier(state.altitudeM)) : null,
+      before: state ? legacyBox(state) : null,
+    });
+    process.stdout.write(`[pose] ${pose.label} … ${net.length} request(s)\n`);
+  }
+  await page.close();
+  return rows;
 }
 
 async function runOne(browser, vp) {
@@ -301,6 +411,41 @@ async function runOne(browser, vp) {
     protocolTimeout: 300000,
     args: ['--no-sandbox', '--enable-unsafe-swiftshader'],
   });
+  // ── Pose sweep: one window, one corner, many ways of looking at it ────────
+  if (argv.includes('--poses')) {
+    let rows = [];
+    try {
+      rows = await runPoseSweep(browser);
+    } finally {
+      await browser.close();
+    }
+    const keyNow = new Set();
+    const keyBefore = new Set();
+    const wireKeysSeen = new Set();
+    let wireRequests = 0;
+    console.log('\n  pose               alt(m)  pitch   requests   fetch box (cache key)');
+    console.log('  ' + '-'.repeat(80));
+    for (const r of rows) {
+      if (r.now) keyNow.add(keyOf(r.now));
+      if (r.before) keyBefore.add(keyOf(r.before));
+      wireRequests += r.requests.length;
+      for (const b of r.requests) wireKeysSeen.add(keyOf(b));
+      console.log(
+        `  ${r.pose.label.padEnd(18)} ${String(Math.round(r.state?.altitudeM ?? 0)).padEnd(7)} `
+        + `${String(Math.round(r.state?.pitchDeg ?? 0)).padEnd(7)} ${String(r.requests.length).padEnd(10)} `
+        + `${keyOf(r.now)}`
+      );
+    }
+    console.log(`\n  VERDICT — ${rows.length} poses over ONE crossroads, inside the street band:`);
+    console.log(`    now    : ${keyNow.size} distinct cache key(s)`);
+    console.log(`    before : ${keyBefore.size} distinct cache key(s) (the pre-split chain, recomputed`);
+    console.log('             from the same camera states — each one a 0.6–46 s cold box)');
+    console.log(`    on the wire: ${wireRequests} Overpass request(s) across ${wireKeysSeen.size} key(s)`);
+    console.log('\n  A pan is excluded on purpose: a new cell is a new question, and nobody');
+    console.log('  claims that one is free. Leaning in on the same corner is what got free.');
+    return;
+  }
+
   const runs = [];
   try {
     for (const vp of VIEWPORTS) {
@@ -321,7 +466,7 @@ async function runOne(browser, vp) {
 
   // ── Report ────────────────────────────────────────────────────────────────
   const ok = runs.filter((r) => r.state && r.model?.snapped);
-  console.log('\n  window          canvas       alt(m)  pitch   raw span (lat x lon)     clamped span        snapped box');
+  console.log('\n  window          canvas       alt(m)  pitch   raw span (lat x lon)     frame span          fetch box (cache key)');
   console.log('  ' + '-'.repeat(116));
   for (const r of runs) {
     if (!r.state) { console.log(`  ${r.vp.label.padEnd(15)} —  ${r.error || 'no state'}`); continue; }
@@ -354,8 +499,15 @@ async function runOne(browser, vp) {
     const k = keyOf(r.wire[0]?.bbox || r.model.snapped);
     wireKeys.set(k, [...(wireKeys.get(k) || []), r.vp.label]);
   }
+  const frameSpans = new Set(ok.map((r) => {
+    const f = spanOf(r.model.clamped);
+    return f ? `${r5(f.lat)} x ${r5(f.lon)}` : 'none';
+  }));
   console.log(`\n  VERDICT — ${wireKeys.size} distinct cache key(s) across ${ok.length} window size(s):`);
   for (const [k, labels] of wireKeys) console.log(`    ${k}  ←  ${labels.join(', ')}`);
+  console.log(`\n  ...backing ${frameSpans.size} distinct FRAME span(s): ${[...frameSpans].join(' | ')}`);
+  console.log('  The frame is meant to differ — it is the window, and it is what keeps the');
+  console.log('  dot budget spent on roads the reader can see. Only the key has to collapse.');
   console.log(
     wireKeys.size === 1
       ? '\n  One key. Warming the default view is ONE scripted visit; every reader hits it.'

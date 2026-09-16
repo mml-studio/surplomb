@@ -6,6 +6,10 @@ import {
   deriveFetchCenter,
   clampBoundsAroundCenter,
   normalizeFetchBox,
+  tierFetchBox,
+  coordsBounds,
+  boxesIntersect,
+  intersectBoxes,
   boundsOverlap,
   planarDistanceKm,
   roadFetchTier,
@@ -404,4 +408,144 @@ test('a band with no lattice is left exactly as it was', () => {
   const box = { south: 1.23456789, north: 1.3, west: 4.5, east: 4.6 };
   assert.equal(normalizeFetchBox(box, { spanDeg: 0.05 }), box);
   assert.equal(normalizeFetchBox(box, null), box);
+});
+
+// ── The fetch box stops carrying the reader's window size ──────────────────
+
+test('every window size on one corner asks the SAME question', () => {
+  // The measurement this closes (`scripts/qa-span-par-viewport.mjs`, eleven
+  // window sizes on the default Paris view): one centre, FIVE spans, because
+  // the span was the viewport's. These are the spans that harness captured.
+  const street = ROAD_FETCH_TIERS[0];
+  const centre = { lat: 48.8655, lon: 2.2841 };
+  const measured = [
+    [0.025, 0.040], [0.035, 0.050], [0.025, 0.035], [0.030, 0.040], [0.030, 0.045],
+  ];
+  const key = (b) => `${b.south},${b.west},${b.north},${b.east}`;
+  const before = new Set();
+  const after = new Set();
+  for (const [latSpan, lonSpan] of measured) {
+    const viewport = {
+      south: centre.lat - latSpan / 2, north: centre.lat + latSpan / 2,
+      west: centre.lon - lonSpan / 2, east: centre.lon + lonSpan / 2,
+    };
+    before.add(key(normalizeFetchBox(
+      clampBoundsAroundCenter(viewport, centre, street.spanDeg), street,
+    )));
+    after.add(key(tierFetchBox(centre, street)));
+  }
+  assert.equal(before.size, 5, 'the harness measured five keys; guard the premise');
+  assert.equal(after.size, 1, 'the fetch box must not depend on the window');
+});
+
+test('the fetch box is the band span, whole, on the band lattice', () => {
+  for (const tier of ROAD_FETCH_TIERS) {
+    const box = tierFetchBox({ lat: 45.7578, lon: 4.8320 }, tier);
+    assert.ok(Math.abs((box.north - box.south) - tier.spanDeg) < 1e-9, `${tier.id} lat span`);
+    assert.ok(Math.abs((box.east - box.west) - tier.spanDeg) < 1e-9, `${tier.id} lon span`);
+    const midLat = (box.north + box.south) / 2;
+    const steps = midLat / tier.snapDeg;
+    assert.ok(Math.abs(steps - Math.round(steps)) < 1e-6, `${tier.id}: centre off the lattice`);
+  }
+});
+
+test('every pose inside one cell gives one box — the whole point', () => {
+  const street = ROAD_FETCH_TIERS[0];
+  const keys = new Set();
+  // A cell is a lattice point plus or minus half a step: sweep the whole of
+  // one, corner to corner, the way a reader nudges the camera around a block.
+  for (let i = 0; i < 12; i++) {
+    const off = (i / 11 - 0.5) * street.snapDeg * 0.98;
+    const lat = 48.865 + off;
+    const lon = 2.285 + off;
+    const box = tierFetchBox({ lat, lon }, street);
+    keys.add(`${box.south},${box.west},${box.north},${box.east}`);
+  }
+  assert.equal(keys.size, 1);
+});
+
+test('the fetch box is idempotent through the load path', () => {
+  // `onCameraChanged` builds it, `loadRoadsForBounds` rebuilds it from the
+  // box's own midpoint. A drift there is a cache miss on every single load.
+  for (const tier of ROAD_FETCH_TIERS) {
+    let box = tierFetchBox({ lat: 43.2965, lon: 5.3698 }, tier);
+    const first = { ...box };
+    for (let i = 0; i < 5; i++) {
+      box = tierFetchBox({
+        lat: (box.north + box.south) / 2,
+        lon: (box.east + box.west) / 2,
+      }, tier);
+    }
+    assert.deepEqual(box, first, tier.id);
+  }
+});
+
+test('a band with no usable span yields no box, never a broken one', () => {
+  assert.equal(tierFetchBox({ lat: 1, lon: 2 }, null), null);
+  assert.equal(tierFetchBox({ lat: 1, lon: 2 }, { spanDeg: 0 }), null);
+  assert.equal(tierFetchBox({ lat: NaN, lon: 2 }, ROAD_FETCH_TIERS[0]), null);
+  assert.equal(tierFetchBox(null, ROAD_FETCH_TIERS[0]), null);
+});
+
+test('the fetch box always contains the point being looked at', () => {
+  // The band span is 10 lattice steps, so half a step of centre snap can never
+  // push the look-at point out. This is the guarantee the frame filter rests
+  // on: a road under the cursor is always in the box that was fetched.
+  for (const tier of ROAD_FETCH_TIERS) {
+    for (let k = 0; k <= 20; k++) {
+      const lat = 48.85 + (k / 20) * tier.snapDeg;
+      const lon = 2.35 + (k / 20) * tier.snapDeg;
+      const box = tierFetchBox({ lat, lon }, tier);
+      assert.ok(lat > box.south && lat < box.north, `${tier.id} lat ${lat}`);
+      assert.ok(lon > box.west && lon < box.east, `${tier.id} lon ${lon}`);
+    }
+  }
+});
+
+// ── The frame filter ───────────────────────────────────────────────────────
+
+test('a way bounds to its own extent, empty lists to nothing', () => {
+  const box = coordsBounds([[2.35, 48.85], [2.30, 48.88], [2.40, 48.82]]);
+  assert.deepEqual(box, { south: 48.82, west: 2.30, north: 48.88, east: 2.40 });
+  assert.equal(coordsBounds([]), null);
+  assert.equal(coordsBounds(null), null);
+});
+
+test('a way is in frame when any part of it is, not only its ends', () => {
+  const frame = { south: 48.86, west: 2.33, north: 48.88, east: 2.36 };
+  // A boulevard that crosses the frame with both endpoints outside it.
+  const crossing = coordsBounds([[2.20, 48.87], [2.50, 48.87]]);
+  assert.ok(boxesIntersect(crossing, frame));
+  // One two cells north: never drawn, never probed.
+  const away = coordsBounds([[2.34, 48.95], [2.35, 48.96]]);
+  assert.ok(!boxesIntersect(away, frame));
+});
+
+test('a way running exactly along the frame edge stays in', () => {
+  // Excluding it would carve a one-pixel class of streets out of the picture
+  // for a reason no reader could name.
+  const frame = { south: 48.86, west: 2.33, north: 48.88, east: 2.36 };
+  assert.ok(boxesIntersect({ south: 48.88, north: 48.90, west: 2.34, east: 2.35 }, frame));
+  assert.ok(!boxesIntersect(null, frame));
+  assert.ok(!boxesIntersect(frame, null));
+});
+
+test('the frame is held inside the fetch box', () => {
+  const street = ROAD_FETCH_TIERS[0];
+  const fetchBox = tierFetchBox({ lat: 48.8655, lon: 2.2841 }, street);
+  // A window wider than the band: the frame may not reach past the roads.
+  const wide = { south: 48.80, north: 48.93, west: 2.20, east: 2.37 };
+  const held = intersectBoxes(wide, fetchBox);
+  assert.deepEqual(held, fetchBox);
+  // A window inside the band keeps its own span — that is the density fix.
+  const narrow = { south: 48.855, north: 48.875, west: 2.275, east: 2.295 };
+  assert.deepEqual(intersectBoxes(narrow, fetchBox), narrow);
+});
+
+test('disjoint frames intersect to nothing, and a missing one passes through', () => {
+  const a = { south: 0, north: 1, west: 0, east: 1 };
+  const b = { south: 5, north: 6, west: 5, east: 6 };
+  assert.equal(intersectBoxes(a, b), null);
+  assert.equal(intersectBoxes(null, b), b);
+  assert.equal(intersectBoxes(a, null), a);
 });
