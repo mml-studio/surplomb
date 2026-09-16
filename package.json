@@ -101,6 +101,7 @@
     "icons:build": "node scripts/app-icons.mjs",
     "qa:phone-boot": "node scripts/qa-phone-boot.mjs",
     "qa:phone-shell": "node scripts/qa-phone-shell.mjs",
+    "qa:phone-touch": "node scripts/qa-phone-touch.mjs",
     "qa:boot-spend": "node scripts/qa-boot-spend.mjs",
     "qa:webfonts": "node scripts/qa-webfonts.mjs",
     "qa:brotli": "node scripts/qa-brotli.mjs",

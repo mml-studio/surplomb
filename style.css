@@ -9851,8 +9851,11 @@ html[data-input="coarse"] .gev-voice-help-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  /* `flex: 0 0 auto` is load-bearing: inside the heading's flex row the button
+     was squeezed to 9 px of its 22, which is a target nothing can hit. */
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
   margin-left: 4px;
   padding: 0;
   font-family: var(--font-mono);

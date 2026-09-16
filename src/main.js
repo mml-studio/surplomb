@@ -59,6 +59,7 @@ import {
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 import { initPhoneSheet } from './phoneSheet.js';
 import { applyTouchCameraProfile } from './touchCamera.js';
+import { getPickDiagnostics } from './data/pickAt.js';
 
 initLogoGaze();
 
@@ -813,6 +814,12 @@ async function init() {
       // the sheet without synthesising a drag — a synthetic gesture on this app
       // is its own experiment, and the harness is testing the layout.
       phoneSheet,
+      // What the next tap will ask the scene for: a 3-pixel square and one
+      // `pick` on a desktop, a 24 CSS-pixel square and a drill on a handset.
+      // No harness can measure this from the outcome — SwiftShader answers
+      // nothing for the bare globe and no Cesium entity paints headless — so
+      // the seam publishes its own numbers instead. See `src/data/pickAt.js`.
+      getPickDiagnostics: () => getPickDiagnostics(viewer.scene),
       // `{losses, plan, reloaded}` — what the tab did when the system took its
       // GPU context away. The only honest counter on a real handset: the
       // Safari inspector cannot show GPU memory, so this is what a device run

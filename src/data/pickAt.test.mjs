@@ -7,6 +7,7 @@ import {
   COARSE_DRILL_LIMIT,
   PICK_SIDE_COARSE_CSS_PX,
   drillPickAt,
+  getPickDiagnostics,
   pickAt,
   pickSideDrawingBufferPx,
 } from './pickAt.js';
@@ -115,6 +116,13 @@ test('a scene or a position that is gone is a miss, never a throw', () => {
 test('the reach is half a HIG target, and the constants say so out loud', () => {
   assert.equal(PICK_SIDE_COARSE_CSS_PX, 24);
   assert.equal(COARSE_DRILL_LIMIT, 3);
+});
+
+test('the seam publishes the numbers a headless harness cannot measure', () => {
+  // SwiftShader answers nothing for the bare globe and no Cesium entity paints
+  // in headless Chromium, so "did the tap select it" is unprovable there.
+  const diagnostics = getPickDiagnostics(makeScene({ ratio: 1 }));
+  assert.deepEqual(diagnostics, { coarse: false, cssPx: 0, sidePx: 3, drillLimit: 1 });
 });
 
 // ── Source ratchet ──────────────────────────────────────────────────────────

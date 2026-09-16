@@ -170,3 +170,24 @@ export function drillPickAt(scene, position, limit = COARSE_DRILL_LIMIT, options
   if (!coarse) return scene.drillPick(position, want) || [];
   return coarseDrill(scene, position, Math.max(want, COARSE_DRILL_LIMIT), options.cssPx ?? PICK_SIDE_COARSE_CSS_PX) || [];
 }
+
+/**
+ * What this session's next pick will actually ask the scene for.
+ *
+ * On the harness facade because no harness can otherwise tell a widened pick
+ * from a narrow one: `scene.pick` answers nothing for the bare globe in
+ * SwiftShader, and no Cesium entity paints in headless Chromium at all, so
+ * "did the tap select the thing" is unprovable there. The numbers are.
+ *
+ * @param {object} scene - Cesium scene.
+ * @returns {{coarse: boolean, cssPx: number, sidePx: number, drillLimit: number}}
+ */
+export function getPickDiagnostics(scene) {
+  const coarse = isCoarseInput();
+  return {
+    coarse,
+    cssPx: coarse ? PICK_SIDE_COARSE_CSS_PX : 0,
+    sidePx: coarse ? pickSideDrawingBufferPx(scene) : 3,
+    drillLimit: coarse ? COARSE_DRILL_LIMIT : 1,
+  };
+}
