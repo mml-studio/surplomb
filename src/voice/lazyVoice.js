@@ -62,7 +62,11 @@ const VOICE_IDLE_TIMEOUT_MS = 4_000;
  * @param {(loaded: {controller: object, annotations: object, sceneDirector: object}) => void} [options.onReady]
  *   Called once, when the stack is up — this is where `main.js` republishes it
  *   on `window.__godsEyeView`.
- * @param {number} [options.idleTimeoutMs]
+ * @param {?number} [options.idleTimeoutMs] `null` declines the idle preload
+ *   entirely — the 360 kB then arrives on the first reach for the microphone
+ *   and never before. That is what a phone gets: on a mobile connection the
+ *   preload is a third of a megabyte spent, during boot, on a feature most
+ *   visits never open. Every trigger still loads it.
  * @returns {{ready: Promise<object>, load: () => Promise<object>, isLoaded: () => boolean}}
  */
 export function installLazyVoice({
@@ -147,7 +151,9 @@ export function installLazyVoice({
   ui.button?.addEventListener('focus', onWarm);
   ui.root?.addEventListener('mouseenter', onWarm);
   window.addEventListener('keydown', onPushToTalkKey, true);
-  cancelIdle = whenIdle(() => { void load().catch(() => {}); }, idleTimeoutMs);
+  if (idleTimeoutMs !== null) {
+    cancelIdle = whenIdle(() => { void load().catch(() => {}); }, idleTimeoutMs);
+  }
 
   return {
     /**

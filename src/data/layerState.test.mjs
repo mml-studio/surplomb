@@ -1816,6 +1816,39 @@ test('every default layer is a registered, non-withdrawn one', () => {
   assert.deepEqual(createSeededLayerState().enabledLayerIds, [...DEFAULT_ENABLED_LAYER_IDS]);
 });
 
+test('the boot defaults are a parameter, so a phone can open with nothing on', async () => {
+  // Traffic ON holds the scene in continuous render for the life of the tab.
+  // That is affordable on a desktop and it is a phone's whole thermal budget,
+  // so `src/ui.js` hands a handset an empty list. Pinned here because the
+  // failure mode is silent: the list would simply be ignored and the phone
+  // would keep booting with a layer on.
+  const coordinator = new LayerStateCoordinator(productionManager({}), shareSink(), {
+    storage: memoryStorage(),
+  });
+  await coordinator.start({ defaultEnabledLayerIds: [] });
+  assert.equal(coordinator.source, 'defaults');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  coordinator.destroy();
+
+  // No option at all is still the product default, on every other device.
+  const desktop = new LayerStateCoordinator(productionManager({}), shareSink(), {
+    storage: memoryStorage(),
+  });
+  await desktop.start();
+  assert.deepEqual(desktop.getDurableState().enabledLayerIds, [...DEFAULT_ENABLED_LAYER_IDS]);
+  desktop.destroy();
+
+  // And a stored session still wins on a phone: the ceiling is on the DEFAULT,
+  // never on what the reader chose.
+  const storage = memoryStorage();
+  storage.setItem(LAYER_STATE_STORAGE_KEY, serializeStoredLayerState({ enabledLayerIds: ['traffic'] }));
+  const returning = new LayerStateCoordinator(productionManager({}), shareSink(), { storage });
+  await returning.start({ defaultEnabledLayerIds: [] });
+  assert.equal(returning.source, 'local');
+  assert.deepEqual(returning.getDurableState().enabledLayerIds, ['traffic']);
+  returning.destroy();
+});
+
 test('the zero state stays zero — it is what a share and a session fall back to', () => {
   assert.deepEqual(createDefaultLayerState().enabledLayerIds, []);
 });

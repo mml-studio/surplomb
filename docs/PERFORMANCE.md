@@ -364,6 +364,69 @@ with **no frame over 100 ms**, with three French layers on. Until one row exists
 here, tasks 2.1 to 2.4 of that plan cannot be validated, and doing them blind
 would repeat the August M5 mistake this page exists to record.
 
+## Téléphone
+
+Ce que le volet A a changé, et ce qu'il reste à mesurer sur du vrai matériel.
+
+### Ce qui est mesuré, et sur quoi
+
+`scripts/qa-phone-boot.mjs` (`npm run qa:phone-boot`) ouvre la page sous
+émulation iPhone 13 — 390×844, DPR 3, `(pointer: coarse)`, `(hover: none)` —
+contre un `npm run preview`. **Il tourne sur SwiftShader** : ses nombres de
+tâches longues se comparent entre deux exécutions de CE harnais, jamais à un
+téléphone. Ce qu'il prouve n'est pas de la vitesse, c'est de la **dépense** :
+
+| Mesuré le 2026-09-16, build `preview`, émulation iPhone 13 | Avant | Après |
+| --- | ---: | ---: |
+| Profil de rendu | `full` / `default` | `lite` / `phone` |
+| Appels `/api` même origine, 20 s, sans toucher à rien | 7 | **2** |
+| Tuiles racine ion achetées au premier tap | 1 | **0** |
+| Caméra garée sous 1 000 m | ≈ 6 s (vol) | **0,5 s** |
+| Couches allumées au boot | `traffic` | **aucune** |
+| Verrous de rendu continu à 20 s | 1 (`traffic`) | **0** |
+| Champ d'étoiles (848 kB) | chargé | **jamais** |
+| Tâches longues / total | — | 1 / 259 ms |
+
+Les deux appels `/api` restants sont `geoid` : celui de Paris, et un second au
+point de caméra par défaut de Cesium (35,15 N / 82,5 O) que le HUD demande
+avant que la caméra ne soit posée. Ce deuxième appel existe aussi sur le bureau
+— il est antérieur à ce travail et n'est pas corrigé ici.
+
+`qa:phone-boot` rend **9/10**. Le contrôle qui échoue est celui des cibles
+tactiles (11 commandes visibles sous 40 px), et c'est voulu : il est le critère
+d'acceptation de la coquille téléphone, qui n'est pas encore écrite.
+
+### Ce qui ne se mesure PAS sans appareil
+
+Temps de frame GPU, mémoire GPU et jetsam, `webglcontextlost` sous pression,
+bridage thermique, latence tactile, la barre d'URL iOS, la gigue 4G, la
+batterie d'une boucle de rendu continue. Pour un A/B « avant », `?perf=full`
+force la construction lourde sur le téléphone lui-même.
+
+Protocole iPhone : Réglages → Safari → Avancé → Inspecteur web, puis Safari
+macOS → Développement → iPhone. Coller `scripts/perf-real-gpu-console.js` (sa
+regex laisse passer « Apple GPU »). L'inspecteur n'expose pas la mémoire GPU ;
+les trois signaux honnêtes sont `__godsEyeView.getContextLossDiagnostics()`, la
+bannière Safari « rechargée car elle utilisait trop de mémoire », et
+Xcode → Devices → Device Logs filtré `JetsamEvent`.
+
+Épreuve mémoire : choisir « Google 3D » **à la main** (un téléphone ne l'adopte
+plus tout seul), deux minutes de pan et de pinch à 300 m sur Paris, puis lire
+`__godsEyeView.tileset.memoryAdjustedScreenSpaceError`. Au-dessus de ~40 à
+l'arrêt, les plafonds de `src/photorealTileset.js` sont trop bas ; un onglet tué
+alors que rien ne bouge, ils sont trop hauts. Android : `chrome://inspect` en
+USB, Performance monitor, `chrome://gpu`.
+
+### Exécutions enregistrées
+
+| Date | Appareil | OS / navigateur | Renderer | Profil / source | Parked / 5 s | Orbit p50 / p90 / p99 | > 33 ms | Contexte perdu | Onglet rechargé |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| — | *aucune exécution* | | | | | | | | |
+
+Tant que cette table est vide, les trois nombres de `src/photorealTileset.js`
+(256 Mo, 128 Mo, SSE 24) restent des hypothèses calibrées sur la documentation
+Cesium, et rien d'autre.
+
 ## What is not established yet
 
 - This report does not establish Windows performance. The procedure that would

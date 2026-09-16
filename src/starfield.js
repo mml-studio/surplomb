@@ -87,10 +87,19 @@ function skyBoxSources() {
  *   frame — so the one that turns the sky on has to ask for the frame that
  *   shows it.
  * @param {number} [options.idleTimeoutMs]
+ * @param {boolean} [options.enabled] False turns `sync()` into a no-op for the
+ *   life of the session. A phone never gets the sky: it is 848 kB over a
+ *   mobile connection and six cube-map faces resident on the GPU, for a
+ *   decoration on a device whose whole screen is the size of one of them, and
+ *   whose failure mode is the tab being killed for memory.
  * @returns {{sync: (stackId: string, opts?: {defer?: boolean}) => void,
  *            isLoaded: () => boolean, destroy: () => void}}
  */
-export function installStarfield(scene, { requestRender = null, idleTimeoutMs = 4000 } = {}) {
+export function installStarfield(scene, {
+  requestRender = null,
+  idleTimeoutMs = 4000,
+  enabled = true,
+} = {}) {
   let cancelPending = null;
   let destroyed = false;
 
@@ -108,7 +117,7 @@ export function installStarfield(scene, { requestRender = null, idleTimeoutMs = 
      * @param {{defer?: boolean}} [opts] `defer` on the boot call only.
      */
     sync(stackId, { defer = false } = {}) {
-      if (destroyed) return;
+      if (destroyed || !enabled) return;
       if (!stackWantsStarfield(stackId)) {
         cancelPending?.();
         cancelPending = null;

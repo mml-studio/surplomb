@@ -98,6 +98,8 @@
     "qa:datasets": "node scripts/qa-datasets.mjs",
     "fonts:build": "node scripts/build-webfonts.mjs",
     "og:build": "node scripts/og-image.mjs",
+    "icons:build": "node scripts/app-icons.mjs",
+    "qa:phone-boot": "node scripts/qa-phone-boot.mjs",
     "qa:boot-spend": "node scripts/qa-boot-spend.mjs",
     "qa:webfonts": "node scripts/qa-webfonts.mjs",
     "qa:brotli": "node scripts/qa-brotli.mjs",

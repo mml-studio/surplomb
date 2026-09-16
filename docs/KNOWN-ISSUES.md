@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: September 9, 2026
+Updated: September 16, 2026
 
 This file tracks active runtime issues only.
 
@@ -89,6 +89,45 @@ Status: Open (accepted 2026-07-08, documented)
 - Full context, improvement ideas, and the verification oracle
   (`scripts/qa-floor-verify.mjs`):
   the height-datum section in `docs/CURRENT-STATE.md`.
+
+---
+
+### Sur téléphone, la coquille est toujours celle du bureau
+Status: Open (connu, borné), mesuré 2026-09-16
+
+Contexte :
+- Le volet « rendu, mémoire, boot, plateforme » a livré la reconnaissance de
+  l'appareil (`src/inputMode.js`) et tout ce qu'un téléphone ne doit plus
+  dépenser. Il n'a **pas** touché au CSS : `style.css` reste une mise en page
+  de bureau et son bloc ≤ 720 px est un layout tablette.
+- `npm run qa:phone-boot` le mesure et le dit : le contrôle « chaque commande
+  visible fait au moins 40 px sur son petit côté » échoue avec **11**
+  contrevenants (le pire : `#gev-voice-tier`, 25×12 px). C'est le critère
+  d'acceptation de la coquille téléphone, pas une surprise.
+
+Ce qui est décidé et hors périmètre, à ne pas rouvrir comme un bug :
+- **Cockpit, scène, radio, calibration CCTV, DISPLAY, presets visuels** seront
+  masqués sur téléphone, pas adaptés.
+- **Une tablette en paysage sous 600 px de hauteur** garde la coquille bureau :
+  le seuil lit `min(innerWidth, innerHeight)` pour qu'une rotation ne
+  reconstruise pas l'interface, et ce cas est le prix de cette stabilité.
+- **Les pliables** ne sont pas gérés : un écran qui change de format en cours
+  de session garde la coquille de son ouverture.
+- **Le tilt à deux doigts** reste le défaut Cesium (le pinch fait zoom ET
+  tangage) tant que le volet tactile n'a pas atterri.
+
+### Une seconde requête `/api/geoid` part avant que la caméra ne soit posée
+Status: Open (mineur, antérieur au travail téléphone), mesuré 2026-09-16
+
+Contexte :
+- Sur **tout** appareil, le premier tic du HUD lit la caméra avant le `setView`
+  d'ouverture et demande `/api/geoid?lat=35.15&lon=-82.5` — la position de
+  départ de Cesium, en Caroline du Nord. La cellule est mise en cache et ne
+  resservira jamais.
+- Coût : un aller-retour `/api` par chargement, sur la connexion où il coûte le
+  plus cher. C'est la moitié du budget d'un boot téléphone (2 appels sur 2).
+- Non corrigé ici : la correction est dans `src/hud.js`, pas dans le périmètre
+  du volet A.
 
 ---
 
