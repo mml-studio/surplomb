@@ -6,6 +6,39 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Changed
+- **L'arrivée sur le globe 3D ressemblait à un rechargement de la page, et le
+  tiroir des fonds annonçait « SATELLITE » pendant qu'on regardait le maillage
+  de Google.** Trois défauts d'une même cause — l'adoption du photoréaliste
+  parle au contrôleur directement, et rien en dehors d'un clic ne suivait.
+
+  **La pastille et le lien de partage suivent maintenant le globe.** Le tiroir
+  écoute `gev:map-stack-changed`, qu'il diffusait déjà pour les couches de
+  données sans jamais s'y abonner lui-même ; et le hash cessait de mentir :
+  un lien copié depuis le maillage disait `map=ign-ortho`, donc il ouvrait sur
+  le satellite chez son destinataire — et chez son auteur au rechargement
+  suivant, le hash périmé l'emportant sur la couche de démarrage.
+
+  **L'achat part au premier geste, plus au premier repos de caméra.** Attendre
+  l'immobilité voulait dire « une fois qu'il a lâché » : le lecteur traînait la
+  vue, lâchait, et le fond qu'il regardait était alors jeté. La main est le même
+  verdict deux à quatre secondes plus tôt, pendant que le mouvement couvre
+  l'arrivée du maillage. Le repos reste la seconde porte, pour la main qui se
+  pose depuis l'orbite — personne n'achète une ville pour regarder un continent.
+
+  **Et la bascule ne laisse plus de trou.** Le maillage se charge *derrière* le
+  fond que le lecteur a sous les yeux (`preloadWhenHidden`, sans quoi un tileset
+  masqué ne demande rien), et les deux surfaces s'échangent en une image. Mesuré
+  en navigateur : 18 tuiles en vol en permanence sous un tileset invisible,
+  drainé à 2,7 s, plafonné à 2,5 s pour ne jamais retenir quelqu'un sur un fond
+  qu'il a demandé à quitter.
+
+  **La seconde visite ne construit qu'une seule carte.** Le verdict survit à
+  l'onglet, donc un lecteur qui a déjà pris le maillage ouvre dessus au lieu de
+  bâtir un fond pour le remplacer. Ça ne coûte pas une tuile racine de plus dans
+  le cas normal — il l'aurait rachetée à son premier geste — mais un revenant
+  qui ouvre et repart sans rien toucher la dépense désormais. Les premières
+  visites et la flotte de harnais ne changent pas. Preuve :
+  `npm run qa:photoreal-handover` (16 vérifications, 2 tuiles racines).
 - **Treize familles d'équipements se distinguaient par la seule couleur, et
   quatre paires sur les quatre-vingt-onze étaient indiscernables.** Mesuré : la
   palette portait quatre paires sous ΔE 20 — `pharmacie`/`banque` à **15,9**,

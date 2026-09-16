@@ -108,6 +108,20 @@ export const MAP_STACKS = [
 
 const DEFAULT_OSM_CREDIT = '© OpenStreetMap contributors';
 
+/**
+ * How long the photoreal mesh may warm up behind the reader's current basemap
+ * before the swap happens anyway. See {@link MapStackController#_waitForPhotorealContent}.
+ *
+ * Two and a half seconds is the ceiling on "the map I asked to leave is still
+ * here", not a load-time estimate: over a city on a working connection the
+ * first traversal settles well inside it, and a connection where it does not
+ * is one where the hole this avoids would have lasted longer than the wait.
+ */
+export const PHOTOREAL_HANDOVER_TIMEOUT_MS = 2500;
+
+/** How often the handover asks for a frame and re-reads `tilesLoaded`. */
+export const PHOTOREAL_HANDOVER_POLL_MS = 100;
+
 /** Longest provider sentence that still belongs in a chip tooltip. */
 const PROVIDER_ERROR_MAX_CHARS = 200;
 
@@ -851,11 +865,79 @@ export class MapStackController {
     throw new Error(this.googleTilesetError);
   }
 
+  /**
+   * Stream the mesh BEHIND the basemap the reader is on, then swap in one frame.
+   *
+   * Without this the handover is a hole: `root.json` resolving is the only
+   * thing the activation waits for, and at that moment the mesh has no
+   * geometry at all — so the imagery is destroyed and the globe hidden while
+   * there is still nothing to put in their place. The reader watches the map
+   * they were looking at vanish, a few seconds of empty space or coarse blobs,
+   * then a city assemble itself. Which is exactly what "it looks like the page
+   * reboots" means, and it is what the first public visit reported.
+   *
+   * `preloadWhenHidden` is the whole trick: a `Cesium3DTileset` with
+   * `show === false` is not traversed and requests nothing, so waiting for it
+   * to warm up while hidden is a deadlock unless this flag is on. It is turned
+   * on for the wait and put back afterwards rather than set in
+   * `photorealTilesetOptions()`, because permanently preloading a hidden
+   * tileset means a reader who switched to OSM keeps paying bandwidth for a
+   * mesh nobody is looking at.
+   *
+   * BOUNDED, because the alternative is a reader stuck on a basemap they asked
+   * to leave: a slow network gets the old behaviour, a hole, after
+   * {@link PHOTOREAL_HANDOVER_TIMEOUT_MS}. And in `requestRenderMode` nothing
+   * traverses without a frame, so the poll asks for one — the mesh cannot warm
+   * up in a scene that has stopped painting.
+   * @param {number|null} gen - The switch generation that owns the scene.
+   * @returns {Promise<void>}
+   */
+  async _waitForPhotorealContent(gen) {
+    const tileset = this.googleTileset;
+    // Duck-typed: a stub tileset in a unit test has no statistics to wait for,
+    // and `tilesLoaded === true` is a globe that has already been looked at
+    // once — switching back to it is instant and must stay instant.
+    if (typeof tileset?.tilesLoaded !== 'boolean' || tileset.tilesLoaded) return;
+
+    const previousPreload = tileset.preloadWhenHidden;
+    tileset.preloadWhenHidden = true;
+    try {
+      await new Promise((resolve) => {
+        let settled = false;
+        let poll = null;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (poll !== null) clearInterval(poll);
+          clearTimeout(guard);
+          resolve();
+        };
+        const guard = setTimeout(finish, PHOTOREAL_HANDOVER_TIMEOUT_MS);
+        poll = setInterval(() => {
+          // A newer switch owns the scene now — stop warming its predecessor.
+          if (gen != null && gen !== this._switchGen) { finish(); return; }
+          if (tileset.tilesLoaded) { finish(); return; }
+          governorRequestRender('photoreal-handover');
+        }, PHOTOREAL_HANDOVER_POLL_MS);
+        governorRequestRender('photoreal-handover');
+      });
+    } finally {
+      tileset.preloadWhenHidden = previousPreload;
+    }
+  }
+
   async _activatePhotoreal(gen) {
     // Before `_removeImageryLayers()`, so a failed purchase costs the reader
     // nothing they were already looking at.
     await this._ensurePhotorealTileset(gen);
     if (gen != null && gen !== this._switchGen) return;
+    // Only a LIVE switch has something worth protecting. A boot activation has
+    // an empty scene behind the loader, so waiting there would buy nothing and
+    // delay the first paint by up to two and a half seconds.
+    if (this._activated) {
+      await this._waitForPhotorealContent(gen);
+      if (gen != null && gen !== this._switchGen) return;
+    }
     this._removeImageryLayers();
     if (this.googleTileset) this.googleTileset.show = true;
     this.viewer.scene.globe.show = false;

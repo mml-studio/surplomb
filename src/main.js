@@ -22,7 +22,12 @@ import { modelAssetUrl } from './data/modelAssets.js';
 import { installLazyVoice } from './voice/lazyVoice.js';
 import { MapStackController } from './mapStackController.js';
 import { describePhotorealFailure, loadPhotorealTileset, photorealDisabled } from './photorealTileset.js';
-import { PHOTOREAL_ADOPTION_STACK, installPhotorealAdoption } from './photorealAdoption.js';
+import {
+  PHOTOREAL_ADOPTION_STACK,
+  installPhotorealAdoption,
+  photorealAlreadyAdopted,
+  rememberPhotorealAdoption,
+} from './photorealAdoption.js';
 import { ignTerrainFlagEnabled } from './data/ignBilTerrain.js';
 import { initLogoGaze } from './logoGaze.js';
 import { installStarfield } from './starfield.js';
@@ -346,10 +351,20 @@ async function init() {
     // `installPhotorealAdoption` swaps in the real thing on the reader's first
     // rest under 25 km. See that file for why the boot flight itself does not
     // count as a reason to buy.
+    //
+    // AND A READER WHO ALREADY HAS THE 3D GLOBE OPENS ON IT. The saving above
+    // is paid for in a visible swap — one basemap built, then thrown away for
+    // another — and there is exactly one way to not show somebody two
+    // basemaps, which is to not build two. A reader who adopted the mesh on an
+    // earlier visit is a reader who will adopt it again on their first touch,
+    // so the root tile is spent either way; opening on it just spends it
+    // without the swap. First visits are unaffected, and so is the harness
+    // fleet, which never adopts anything.
     const defaultStack = canLoadPhotoreal ? PHOTOREAL_ADOPTION_STACK : null;
+    const adoptedBefore = canLoadPhotoreal && photorealAlreadyAdopted();
     const startupStack = photorealOff
       ? 'osm'
-      : (defaultStack || (keylessMode ? 'osm' : 'google-roadmap'));
+      : (adoptedBefore ? 'photoreal' : (defaultStack || (keylessMode ? 'osm' : 'google-roadmap')));
 
     const mapStackController = new MapStackController(viewer, {
       // Deferred rather than loaded: see `loadPhotoreal` above. The controller
@@ -422,12 +437,20 @@ async function init() {
     // descends to 600 m by itself, so it ARMS the watch instead of tripping it
     // — otherwise every page load would buy a root tile five seconds in and
     // the keyless opening above would save nothing. See src/photorealAdoption.js.
-    const photorealAdoption = defaultStack
+    // Not installed for a reader who already has the globe: `startupStack` put
+    // them on it, so there is nothing left to adopt.
+    const photorealAdoption = defaultStack && !adoptedBefore
       ? installPhotorealAdoption(viewer, mapStackController, {
         fromStackId: defaultStack,
-        onAdopt: ({ altitudeM }) => console.info(
-          `[MapStack] Adopting Google 3D Tiles — the reader came to rest at ${Math.round(altitudeM)} m.`,
-        ),
+        onAdopt: ({ altitudeM, reason }) => {
+          // Written here rather than inside the module so the decision to
+          // persist stays visible at the call site, next to the startup stack
+          // it changes on the next visit.
+          rememberPhotorealAdoption();
+          console.info(
+            `[MapStack] Adopting Google 3D Tiles — the reader ${reason === 'input' ? 'took hold of the camera' : 'came to rest'} at ${Math.round(altitudeM)} m.`,
+          );
+        },
       })
       : null;
 

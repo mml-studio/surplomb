@@ -15,6 +15,9 @@ import {
   PHOTOREAL_ADOPTION_ALTITUDE_M,
   PHOTOREAL_ADOPTION_STACK,
   installPhotorealAdoption,
+  photorealAlreadyAdopted,
+  rememberPhotorealAdoption,
+  PHOTOREAL_ADOPTION_STORAGE_KEY,
 } from './photorealAdoption.js';
 
 /** A camera whose rest event and altitude the test drives by hand. */
@@ -184,4 +187,115 @@ test('an unreadable altitude is treated as far away, never as close', async () =
   camera.positionCartographic = { height: 800 };
   await camera.restAt(800);
   assert.deepEqual(controller.asked, ['photoreal']);
+});
+
+/** A canvas whose reader input the test delivers by hand. */
+function fakeCanvas() {
+  const listeners = new Map();
+  return {
+    addEventListener(type, fn) {
+      listeners.set(type, [...(listeners.get(type) || []), fn]);
+    },
+    removeEventListener(type, fn) {
+      const left = (listeners.get(type) || []).filter((f) => f !== fn);
+      if (left.length) listeners.set(type, left);
+      else listeners.delete(type);
+    },
+    boundTypes: () => [...listeners.keys()].sort(),
+    fire(type) {
+      for (const fn of (listeners.get(type) || []).slice()) fn();
+    },
+  };
+}
+
+/** Let an adoption started from a synchronous DOM handler finish. */
+const settle = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+test('the first touch buys, without waiting for the camera to stop', async () => {
+  // THE POINT of the touch gate. Rest means "after they let go", so the swap
+  // landed once the reader was already still and read as the page reloading
+  // itself. The hand is the same verdict, two to four seconds earlier, while
+  // the motion still covers the mesh streaming in.
+  const camera = fakeCamera(600);
+  const controller = fakeController();
+  const canvas = fakeCanvas();
+  const adoption = installPhotorealAdoption({ camera }, controller, { inputTarget: canvas });
+  adoption.arm();
+
+  canvas.fire('wheel');
+  await settle();
+  assert.deepEqual(controller.asked, ['photoreal'], 'no moveEnd was needed');
+  assert.equal(adoption.isSpent(), true);
+  assert.deepEqual(canvas.boundTypes(), [], 'and the canvas is released');
+});
+
+test('a hand on the globe from orbit is not a reason to buy a city', async () => {
+  // The touch gate answers "is this reader engaged", never "is this the right
+  // picture" — that is still the altimeter's job, and a reader who grabs the
+  // camera at 500 km is on their way somewhere, not there.
+  const camera = fakeCamera(500_000);
+  const controller = fakeController();
+  const canvas = fakeCanvas();
+  const adoption = installPhotorealAdoption({ camera }, controller, { inputTarget: canvas });
+  adoption.arm();
+
+  canvas.fire('pointerdown');
+  await settle();
+  assert.deepEqual(controller.asked, [], 'too high to be worth a root tile');
+  assert.equal(adoption.isSpent(), false, 'and the watch is still alive');
+
+  // The rest gate catches them at the bottom of the move they just started.
+  await camera.restAt(700);
+  assert.deepEqual(controller.asked, ['photoreal']);
+});
+
+test('a reader who interrupts the opening flight is not made to wait for a second rest', async () => {
+  // Their touch lands BEFORE `arm()` — it is what cancelled the flight, and
+  // `cancel` is what arms the watch. Without recording it, the swallowed rest
+  // would be the reader's own move and the mesh would wait for another one.
+  const camera = fakeCamera(600);
+  const controller = fakeController();
+  const canvas = fakeCanvas();
+  const adoption = installPhotorealAdoption({ camera }, controller, { inputTarget: canvas });
+
+  canvas.fire('touchstart');
+  await settle();
+  assert.deepEqual(controller.asked, [], 'nothing is bought before the app has finished arriving');
+
+  adoption.arm();
+  await settle();
+  assert.deepEqual(controller.asked, ['photoreal']);
+});
+
+test('a touch is heard on four kinds of hand, and released with the watch', () => {
+  const canvas = fakeCanvas();
+  const adoption = installPhotorealAdoption({ camera: fakeCamera() }, fakeController(), {
+    inputTarget: canvas,
+  });
+  assert.deepEqual(canvas.boundTypes(), ['keydown', 'pointerdown', 'touchstart', 'wheel']);
+  adoption.dispose();
+  assert.deepEqual(canvas.boundTypes(), [], 'a disposed watch holds nothing');
+});
+
+test('the verdict outlives the tab, and a browser that refuses storage still opens', () => {
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, value); },
+  };
+  assert.equal(photorealAlreadyAdopted(storage), false);
+  rememberPhotorealAdoption(storage);
+  assert.equal(photorealAlreadyAdopted(storage), true);
+  assert.equal(store.get(PHOTOREAL_ADOPTION_STORAGE_KEY), '1');
+
+  // Safari private mode and sandboxed iframes THROW on both calls. A basemap
+  // optimisation must never be the thing that stops the app from opening.
+  const hostile = {
+    getItem() { throw new Error('SecurityError'); },
+    setItem() { throw new Error('SecurityError'); },
+  };
+  assert.equal(photorealAlreadyAdopted(hostile), false);
+  assert.doesNotThrow(() => rememberPhotorealAdoption(hostile));
+  assert.equal(photorealAlreadyAdopted(null), false);
+  assert.doesNotThrow(() => rememberPhotorealAdoption(null));
 });

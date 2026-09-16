@@ -40,6 +40,24 @@
  * a pick of `photoreal` itself — retires this for the session: an automatic
  * switch that overrides somebody's choice is a bug, not a feature. So does a
  * refused purchase, which the controller has already greyed the chip for.
+ *
+ * THE SIGNAL IS THE READER'S HAND, NOT THEIR STILLNESS. Waiting for the camera
+ * to come to REST means the swap starts after the reader has finished moving:
+ * they drag, they let go, and only then does a basemap they were looking at
+ * get thrown away and replaced. That reads as the page reloading itself, and
+ * it was the first thing anybody said about the public opening. The first
+ * touch of the canvas is the same verdict — this reader is engaged — arriving
+ * two to four seconds earlier, while the camera is still moving and the mesh
+ * can stream in under cover of the motion. Rest stays as the second gate, for
+ * the reader whose first touch happens from orbit: nobody buys a city mesh to
+ * look at a continent.
+ *
+ * AND IT IS REMEMBERED. The verdict outlives the tab (`localStorage`), so the
+ * second visit opens on the 3D globe directly and builds ONE surface instead
+ * of two. That costs no extra root tile in the normal case — a reader who
+ * adopted once would have bought again on their next first touch anyway — and
+ * it is the only way to make the swap invisible, because the only way to not
+ * see two basemaps is to not build two.
  */
 
 /**
@@ -64,6 +82,63 @@ export const PHOTOREAL_ADOPTION_ALTITUDE_M = 25000;
 export const PHOTOREAL_ADOPTION_STACK = 'ign-ortho';
 
 /**
+ * Where "this reader has already taken the 3D globe" is kept between visits.
+ *
+ * A boolean, deliberately, and not the last active basemap: the double build
+ * this fixes only happens on the photoreal swap, and persisting a preference
+ * for the seven other stacks is a feature nobody asked for that would also
+ * strand a reader on whichever source was slow the day they left.
+ */
+export const PHOTOREAL_ADOPTION_STORAGE_KEY = 'gev.photoreal.adopted';
+
+/**
+ * The DOM events that mean a reader took hold of the globe.
+ *
+ * `pointerdown` covers mouse and pen, `touchstart` the phones that do not
+ * emit pointer events, `wheel` the zoom that never presses a button, and
+ * `keydown` the arrow keys Cesium's own camera controller listens to. Bound
+ * on the Cesium canvas, so the first-run card — a DOM overlay above it — is
+ * dismissed without ever counting as navigation.
+ */
+const READER_INPUT_EVENTS = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
+
+/** `localStorage` that never throws — Safari private mode and iframes both do. */
+function safeStorage(scope = globalThis) {
+  try {
+    // A GETTER, not a property: reading it is what throws SecurityError, so
+    // the access has to happen inside the try. See src/firstRunExperience.js.
+    return scope.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Has this reader already been given the 3D globe on an earlier visit?
+ * @param {{getItem: Function}|null} [storage]
+ * @returns {boolean}
+ */
+export function photorealAlreadyAdopted(storage = safeStorage()) {
+  try {
+    return storage?.getItem(PHOTOREAL_ADOPTION_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record that this reader has the 3D globe, so the next visit opens on it.
+ * Best effort: a browser that refuses storage just gets today's behaviour.
+ * @param {{setItem: Function}|null} [storage]
+ * @returns {void}
+ */
+export function rememberPhotorealAdoption(storage = safeStorage()) {
+  try {
+    storage?.setItem(PHOTOREAL_ADOPTION_STORAGE_KEY, '1');
+  } catch { /* best effort */ }
+}
+
+/**
  * Watch the camera and adopt the 3D globe once, when it is worth it.
  *
  * @param {object} viewer - Cesium viewer.
@@ -73,12 +148,16 @@ export const PHOTOREAL_ADOPTION_STACK = 'ign-ortho';
  * @param {string} [options.fromStackId] - Only adopt while THIS stack is still
  *   the active one. Anything else means the reader has chosen, or another
  *   mechanism has.
- * @param {(info: {altitudeM: number}) => void} [options.onAdopt] - Diagnostics.
+ * @param {EventTarget|null} [options.inputTarget] - Where the reader's hand is
+ *   heard; defaults to the Cesium canvas. `null` disables the touch gate and
+ *   leaves only the rest gate, which is what a headless unit test gets.
+ * @param {(info: {altitudeM: number, reason: string}) => void} [options.onAdopt] - Diagnostics.
  * @returns {{arm: () => void, dispose: () => void, isArmed: () => boolean, isSpent: () => boolean}}
  */
 export function installPhotorealAdoption(viewer, controller, {
   altitudeM = PHOTOREAL_ADOPTION_ALTITUDE_M,
   fromStackId = PHOTOREAL_ADOPTION_STACK,
+  inputTarget = viewer?.scene?.canvas ?? null,
   onAdopt = null,
 } = {}) {
   let armed = false;
@@ -86,15 +165,29 @@ export function installPhotorealAdoption(viewer, controller, {
   let listening = false;
   // See ARMING SWALLOWS ONE REST above.
   let skipNextRest = false;
+  /**
+   * The reader has touched the globe, whether or not the watch was armed when
+   * they did. Recorded rather than acted on, because the touch that INTERRUPTS
+   * the opening flight lands before `arm()` — and that reader is the most
+   * engaged one there is.
+   */
+  let touched = false;
 
   const camera = viewer?.camera;
   if (!camera?.moveEnd) {
     return { arm() {}, dispose() {}, isArmed: () => false, isSpent: () => true };
   }
 
+  const detachInput = () => {
+    if (!inputTarget?.removeEventListener) return;
+    for (const type of READER_INPUT_EVENTS) inputTarget.removeEventListener(type, onInput);
+    inputTarget = null;
+  };
+
   const dispose = () => {
     spent = true;
     armed = false;
+    detachInput();
     if (listening) {
       camera.moveEnd.removeEventListener(onRest);
       listening = false;
@@ -106,13 +199,16 @@ export function installPhotorealAdoption(viewer, controller, {
     return Number.isFinite(height) ? height : Number.POSITIVE_INFINITY;
   }
 
-  async function onRest() {
-    if (!armed || spent) return;
-    if (skipNextRest) {
-      // The app's own arrival. Not a reason to buy anything.
-      skipNextRest = false;
-      return;
-    }
+  /**
+   * Buy the globe, if this is still the moment to.
+   *
+   * Returns without spending when the reader is too high — that is not a
+   * refusal, it is "not yet", and the rest gate will ask again once they have
+   * come down. Every other exit is final.
+   * @param {string} reason - `input` or `rest`, for the diagnostics line.
+   */
+  async function adopt(reason) {
+    if (spent) return;
     // The reader has moved on — to another basemap, or to the 3D globe by
     // hand. Either way this watch has nothing left to decide.
     if (controller.getActiveId() !== fromStackId) {
@@ -131,8 +227,39 @@ export function installPhotorealAdoption(viewer, controller, {
     // Spend BEFORE the await: a second rest arriving while the tileset is in
     // flight must not start a second adoption.
     dispose();
-    onAdopt?.({ altitudeM: height });
+    onAdopt?.({ altitudeM: height, reason });
     await controller.setStack('photoreal');
+  }
+
+  function onInput() {
+    touched = true;
+    // One hand is all the evidence there is to collect; keeping the listeners
+    // alive would run this on every frame of a drag.
+    detachInput();
+    if (!armed || spent) return;
+    // The camera belongs to the reader from here on, so there is no arrival
+    // left to swallow — the next rest is theirs even if the opening flight
+    // never got to announce its own. Matters for the reader who grabs the
+    // globe from orbit: without this their first stop would be skipped and
+    // they would have to come to rest twice.
+    skipNextRest = false;
+    void adopt('input');
+  }
+
+  async function onRest() {
+    if (!armed || spent) return;
+    if (skipNextRest) {
+      // The app's own arrival. Not a reason to buy anything.
+      skipNextRest = false;
+      return;
+    }
+    await adopt('rest');
+  }
+
+  if (inputTarget?.addEventListener) {
+    for (const type of READER_INPUT_EVENTS) {
+      inputTarget.addEventListener(type, onInput, { passive: true });
+    }
   }
 
   return {
@@ -148,6 +275,13 @@ export function installPhotorealAdoption(viewer, controller, {
       if (!listening) {
         camera.moveEnd.addEventListener(onRest);
         listening = true;
+      }
+      if (touched) {
+        // They grabbed the camera during the opening flight — which is how
+        // `cancel` got us here. Their own move is not the app's arrival, so
+        // there is no rest left to swallow.
+        skipNextRest = false;
+        void adopt('input');
       }
     },
     dispose,
