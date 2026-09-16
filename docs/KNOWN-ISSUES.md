@@ -11,6 +11,35 @@ of the public release.
 
 ## Open
 
+### What the phone shell does not carry, and why each one was left out
+Status: Intentional, decided 2026-09-16 with the phone shell (volet C)
+
+The phone shell (`phone.css`, `src/phoneSheet.js`) is a **selection**, not a
+scaled-down desktop. These are the deliberate holes, each with the reason it is
+a hole rather than a bug, so nobody re-opens them by accident:
+
+- **CCTV is hidden entirely.** Its preview frame and its calibration form are
+  one panel (`#cctv-panel`), and showing one without the other is a rewrite of
+  the panel, not a layout rule. A phone reader gets no camera frames.
+- **Cockpit, the scene director, RADIO, DISPLAY, the visual presets, the intel
+  HUD, the heading tape and the safe-frame overlay are hidden.** Every one is an
+  instrument whose value scales with the room it has; a 390 px column spends its
+  room on the globe and the four sheet tabs.
+- **The voice cost-tier chip is hidden.** It is a 25 × 12 px switch beside a
+  dollar estimate — an instrument for whoever is watching the bill. The tier
+  keeps its default; the voice session on iOS is a separate piece of work.
+- **The sheet adopts its four panels once, for the session.** `data-shell` is
+  resolved from `min(innerWidth, innerHeight)` and a rotation cannot change it,
+  so there is no path back to the desktop shell mid-session — and therefore no
+  code defending one.
+- **Foldables are out of scope.** A device that changes its smaller dimension at
+  runtime keeps whichever shell it booted with.
+- **A tablet in landscape under 600 px of height** (a rare, very wide window)
+  reads as a phone. The threshold is one number on purpose; see
+  `src/inputMode.js`.
+
+---
+
 ### The ANFR observatoire CSV published on 2026-09-03 is a header and nothing else
 Status: Open (upstream), measured 2026-09-09
 

@@ -15,9 +15,10 @@
  * page opens with `{ photoreal: true }` deliberately: with the door shut by
  * the harness there would be nothing to prove.
  *
- * CHECK 6 IS EXPECTED TO FAIL until the phone shell lands (volet C). It is
- * written now, red, because it is that work's acceptance criterion and a
- * harness added afterwards would be written to whatever shipped.
+ * CHECK 6 WAS EXPECTED TO FAIL until the phone shell landed (volet C). It was
+ * written first, red, because it was that work's acceptance criterion and a
+ * harness added afterwards would have been written to whatever shipped. It
+ * passes since `phone.css`.
  *
  * Run:  npm run build && npm run preview
  *       node scripts/qa-phone-boot.mjs --url http://localhost:4173
@@ -205,6 +206,12 @@ try {
     for (const el of document.querySelectorAll('button, [role=button], a[href], input[type=range], select')) {
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) continue;
+      // THE ONE EXEMPTION, and it is not ours to take: the attribution links
+      // are Cesium's own markup, sized by `widgets.css`, and Google's and
+      // Cesium's terms require the notice to be shown AS GIVEN. Enlarging them
+      // would be editing a legal notice for ergonomics. `qa:phone-shell` makes
+      // the same exception for the same reason.
+      if (el.closest('#cesium-credits, .cesium-credit-lightbox')) continue;
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none') continue;
       const smallest = Math.min(r.width, r.height);

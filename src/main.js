@@ -57,6 +57,7 @@ import {
   onPerfProfileChange,
 } from './perfProfile.js';
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
+import { initPhoneSheet } from './phoneSheet.js';
 
 initLogoGaze();
 
@@ -690,6 +691,14 @@ async function init() {
     // cockpit already answered this and the ordinary globe view did not.
     installGlobeHeadingTape(viewer);
 
+    // THE PHONE SHELL. Returns null on anything that is not a phone, before
+    // touching the DOM — so on a desktop this line costs one predicate.
+    //
+    // Here, and not earlier, for two reasons: `#cesium-credits` does not exist
+    // until the Viewer is built (it is a constructor argument above), and the
+    // data panel has to have been rendered before « À LA UNE » can reorder it.
+    const phoneSheet = initPhoneSheet({ dataManager });
+
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)
     viewer.trackedEntityChanged.addEventListener(() => {
@@ -793,6 +802,10 @@ async function init() {
       // this instead of inferring the device from a viewport width — which is
       // the one thing that cannot tell a phone from a narrow window.
       getInputModeDiagnostics,
+      // Null off a phone. `snapTo`/`getSnap` are how `qa:phone-shell` drives
+      // the sheet without synthesising a drag — a synthetic gesture on this app
+      // is its own experiment, and the harness is testing the layout.
+      phoneSheet,
       // `{losses, plan, reloaded}` — what the tab did when the system took its
       // GPU context away. The only honest counter on a real handset: the
       // Safari inspector cannot show GPU memory, so this is what a device run

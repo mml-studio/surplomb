@@ -48,6 +48,7 @@
  * payloads. Everything here is a frame, a title and three buttons.
  */
 
+import { isPhoneShell } from '../inputMode.js';
 import {
   attachPanelDrag,
   clearPanelPosition,
@@ -184,20 +185,33 @@ export function mountFicheSheet({ onClose = null } = {}) {
   // iframe a reader scrolls and selects text in, and a drag that started on a
   // paragraph would make the sheet unreadable. `velo-pulse-hud` makes the
   // opposite call for the opposite reason — it has no scrollable body.
-  panel.classList.add('panel-draggable');
-  restorePanelPosition(panel, FICHE_SHEET_ID);
-  const detachDrag = attachPanelDrag(panel, {
-    panelId: FICHE_SHEET_ID,
-    handle: node('[data-fiche-grip]'),
-  });
+  //
+  // NOT ON A PHONE. `panelDrag.js` writes inline `left`/`top` on the element —
+  // and an inline style beats every rule in `phone.css`, including the one that
+  // anchors this sheet to the bottom edge at full height. A restored position
+  // from a desktop session would land it half off a 390 px screen with no way
+  // back except the double-click this shell cannot produce. There is also
+  // nowhere to drag it TO: it already owns the viewport.
+  const phone = isPhoneShell();
+  let detachDrag = null;
+  if (!phone) {
+    panel.classList.add('panel-draggable');
+    restorePanelPosition(panel, FICHE_SHEET_ID);
+    detachDrag = attachPanelDrag(panel, {
+      panelId: FICHE_SHEET_ID,
+      handle: node('[data-fiche-grip]'),
+    });
+  }
   // A panel dragged somewhere unfortunate has to have a way home that does not
   // involve clearing site data.
-  node('[data-fiche-grip]')?.addEventListener('dblclick', () => {
-    clearPanelPosition(FICHE_SHEET_ID);
-    for (const property of ['left', 'top', 'right', 'bottom', 'transform']) {
-      panel.style.removeProperty(property);
-    }
-  });
+  if (!phone) {
+    node('[data-fiche-grip]')?.addEventListener('dblclick', () => {
+      clearPanelPosition(FICHE_SHEET_ID);
+      for (const property of ['left', 'top', 'right', 'bottom', 'transform']) {
+        panel.style.removeProperty(property);
+      }
+    });
+  }
 
   return {
     element: panel,

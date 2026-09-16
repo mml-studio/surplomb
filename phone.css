@@ -1,0 +1,875 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE PHONE SHELL — surplomb on a handset.
+
+   WHY A SECOND STYLESHEET AND NOT A MEDIA QUERY IN `style.css`.
+
+   Two reasons, and the second is the one that decides it.
+
+   1. `style.css` is 12 000 lines of a cockpit built for a mouse. The phone
+      shell is not a variation on it — it HIDES two thirds of it and rebuilds
+      the rest as one bottom sheet. Interleaving that into the file it
+      contradicts would leave every future reader of a desktop rule hunting for
+      the phone rule that undoes it three thousand lines away.
+   2. The gate is `html[data-shell="phone"]`, an ATTRIBUTE, not `max-width`.
+      A desktop window dragged to 500 px is not a phone: it has a cursor, a
+      keyboard, and hover. A phone in landscape IS one at 844 px wide. Only
+      `src/inputMode.js` knows the difference, and it publishes the answer as
+      that attribute before the first paint (the inline script in
+      `index.html`). Everything below reads it and nothing below re-decides it.
+
+   HOW THIS FILE IS ORDERED IN THE BUILD. Vite concatenates every stylesheet
+   linked from `index.html` into the single hashed CSS bundle, in link order.
+   This file is linked immediately after `/style.css`, so at equal specificity
+   it wins — and every rule here is written to at least equal the specificity of
+   the rule it is overriding, guard included. THE WRITING RULE, which matters
+   more than it looks: always re-type the ORIGINAL selector behind the guard
+   (`html[data-shell="phone"] #command-dock #location-search`, never
+   `html[data-shell="phone"] #location-search`). Ids do not stack up on their
+   own, and a rule that loses the id count loses the cascade silently.
+
+   WHAT IS NOT HERE. Nothing gated on `html[data-input="coarse"]`: that is the
+   TABLET-and-phone gate (pick radius, gestures, long-press) and it belongs
+   with the code it changes. This file is only about ROOM.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Page hygiene ─────────────────────────────────────────────────────────────
+   Five browser defaults that are wrong for a full-screen globe, turned off in
+   one block so nobody has to discover them one bug report at a time.
+
+   `overscroll-behavior: none` is the load-bearing one: without it, a downward
+   drag that starts anywhere on the page triggers Chrome Android's
+   pull-to-refresh, and the gesture that orbits the globe reloads the app.
+   `text-size-adjust` stops iOS from inflating text in any element it decides is
+   a "main column" — it picks the sheet, and only sometimes. */
+html[data-shell="phone"],
+html[data-shell="phone"] body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* A long press on a canvas offers "Save image" in iOS Safari. The canvas here
+   is the map, the long press is about to become a selection verb, and the
+   callout would land on top of whatever it selected. */
+html[data-shell="phone"] #cesiumContainer {
+  -webkit-touch-callout: none;
+}
+
+/* `manipulation` = keep panning and pinching, drop double-tap-to-zoom. The
+   300 ms click delay that used to come with it is gone from every modern
+   browser; what is left is a double tap on a control zooming the whole page. */
+html[data-shell="phone"] :is(button, [role="button"], a, label, select, input) {
+  touch-action: manipulation;
+}
+
+/* THE 16 PX RULE, and why it is a list of ids rather than a single `input`.
+
+   iOS Safari zooms the viewport when a focused field's text is under 16 px,
+   and it does not zoom back out. Every field in this app is styled smaller than
+   that — some in rem, some in px, several behind two ids. `:is()` takes the
+   specificity of its STRONGEST argument, so this one rule at (2,2,1) beats
+   `#command-dock #location-search.expanded` at (2,1,0) without repeating the
+   declaration eleven times. The trade is real and accepted: the search field is
+   visibly larger than its neighbours on a phone. A zoomed-in globe nobody can
+   zoom back out of is worse. */
+html[data-shell="phone"] :is(
+  #location-search,
+  #command-dock #location-search,
+  #command-dock #location-search.expanded,
+  .pp-select,
+  #cctv-camera-select,
+  #scene-select,
+  #radio-filter,
+  .cctv-cal-input,
+  .dsp input,
+  .dsp select,
+  .cmp-panel input,
+  .cmp-panel select,
+  .key-setup-rows input
+) {
+  font-size: 16px;
+}
+
+/* ── Hover, on a device with no cursor ───────────────────────────────────────
+   A `:hover` rule on a touchscreen fires on TAP and stays until the reader taps
+   something else — "sticky hover". Five rules in `style.css` use it for real
+   state (a glow, a key badge, a rotation, a transcript reveal), and each would
+   leave one control lit for the rest of the session. Countered here rather than
+   rewritten there: the desktop behaviour is correct and this is not the file
+   that should be changing it. */
+html[data-shell="phone"] .style-btn:hover::before { opacity: 0; }
+html[data-shell="phone"] .style-btn:hover .btn-key { opacity: 0; }
+html[data-shell="phone"] #command-dock .dock-pin-btn:hover img { transform: none; }
+html[data-shell="phone"] #command-dock #gev-voice-button:hover .gev-mic-orbit img { animation: none; }
+html[data-shell="phone"] #gev-voice-control:not([data-status='error']):hover .gev-voice-transcript { opacity: 1; }
+html[data-shell="phone"] #top-center-actions button:hover { transform: none; }
+
+/* ── Horizontal scrollers ────────────────────────────────────────────────────
+   Five rows scroll sideways with no scrollbar (`scrollbar-width: none`), which
+   on a desktop is fine because the hover cursor and the trackpad both reveal
+   the overflow. On a phone there is no such hint: the row simply looks like it
+   ends where the viewport does. A mask fading the last 28 px says "there is
+   more" with no chrome, and proximity snapping stops a flick from leaving a
+   pill half-cut. */
+html[data-shell="phone"] :is(.button-grid, .location-pills, .poi-row-container, #command-dock .location-pills, #command-dock .button-grid, #command-dock .poi-row-container.expanded) {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  scroll-snap-type: x proximity;
+}
+
+/* ═══ THE TOP BAR ═══════════════════════════════════════════════════════════
+   Everything a phone keeps above the globe: a 36 px logo on the left, three
+   44 px actions on the right, and one column of status chips under them. The
+   desktop version of this band holds eleven surfaces across the full width and
+   three of them overlapped each other at 390 px. */
+
+html[data-shell="phone"] #title-bar {
+  top: max(10px, env(safe-area-inset-top));
+  left: 12px;
+}
+
+/* The wordmark, the subtitle and the glow are the brand at 36 px of vertical
+   room they do not have. The LOGO carries the brand at this size; SURPLOMB in
+   16 px letterspaced caps next to it is what pushed the three actions into the
+   status chips. */
+html[data-shell="phone"] #title-bar h1 > span:not(.title-logo),
+html[data-shell="phone"] #title-bar .subtitle,
+html[data-shell="phone"] #title-bar .title-glow {
+  display: none;
+}
+
+html[data-shell="phone"] #title-bar .title-logo {
+  width: 36px;
+}
+
+html[data-shell="phone"] #top-center-actions {
+  top: max(10px, env(safe-area-inset-top));
+  right: 12px;
+  left: auto;
+  transform: none;
+}
+
+/* 44, the Apple HIG floor, not the desktop 36. These three — clear the layers,
+   share, reset the globe — are the only chrome buttons a phone reader ever
+   needs to find without looking, and they sit in the corner a thumb reaches
+   worst, so they get the full target. */
+html[data-shell="phone"] #top-center-actions button {
+  width: 44px;
+  height: 44px;
+}
+
+html[data-shell="phone"] #top-center-actions .material-symbols-outlined {
+  font-size: 22px;
+}
+
+/* THE STATUS COLUMN.
+
+   Three chips — global loading, traffic sync, CCTV sync — are each `position:
+   fixed; left: 50%` at 74/112/146 px on desktop. On a 390 px phone they are
+   three centred bars stacked over the globe, under a title bar that is now on
+   the left, and the first of them lands exactly where the top actions are.
+
+   `#phone-status` wraps them in `index.html`. Off the phone it is
+   `display: contents`, which is not a nicety: a `fixed` child IGNORES a
+   `contents` parent entirely, so the desktop layout is byte-identical to what
+   it was before the wrapper existed. On the phone the wrapper becomes the
+   fixed element and the chips become ordinary static children of a column. */
+#phone-status { display: contents; }
+
+html[data-shell="phone"] #phone-status {
+  display: flex;
+  position: fixed;
+  top: calc(max(10px, env(safe-area-inset-top)) + 54px);
+  right: 12px;
+  left: 12px;
+  z-index: 102;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+html[data-shell="phone"] #phone-status > * {
+  position: static;
+  max-width: 100%;
+  transform: none;
+  font-size: 11px;
+}
+
+/* The two sync chips fade with `opacity` and keep their box; in a column that
+   box is a gap where nothing is. `.visible` is their own state class — the
+   loading status uses the `hidden` attribute instead and is already handled by
+   its own rule, so it is deliberately not in this selector. */
+html[data-shell="phone"] #phone-status > :is(#traffic-sync-chip, #cctv-sync-chip):not(.visible) {
+  display: none;
+}
+
+html[data-shell="phone"] #phone-status > :is(#traffic-sync-chip, #cctv-sync-chip).visible {
+  transform: none;
+}
+
+/* ═══ WHAT A PHONE DOES NOT GET ═════════════════════════════════════════════
+   Hidden, not adapted, and the difference is a product decision rather than a
+   layout one: each of these is an instrument whose value is proportional to the
+   room it has. Cockpit, the visual presets, the scene director, DISPLAY, the
+   heading tape, the intel HUD and the safe-frame overlay are all ways of
+   looking at a big picture. A phone has one 390 px column, and it spends it on
+   the globe and on the four things the sheet holds.
+
+   `#left-panel-stack` and `#right-context-rail` are hidden as CONTAINERS — the
+   four panels that matter are lifted OUT of them by `src/phoneSheet.js` before
+   this rule can reach them, and the containers are then empty rails.
+   `#cctv-panel` is the one genuine casualty: its preview and its calibration
+   form are a single panel, and splitting them is a rewrite rather than a
+   layout. Documented in `docs/KNOWN-ISSUES.md`. */
+html[data-shell="phone"] :is(
+  #style-indicator,
+  #globe-heading-tape,
+  #scene-runtime,
+  #clean-view-exit,
+  #safe-frame-overlay,
+  #intel-hud,
+  #view-switcher,
+  #cockpit-hud,
+  #cockpit-entry,
+  #key-setup-chip,
+  #left-panel-stack,
+  #right-context-rail,
+  #pp-toggles,
+  #cctv-panel,
+  #control-panel,
+  #dataset-plug-panel,
+  #orbit-indicator,
+  .btn-key,
+  .poi-pill-key
+) {
+  display: none;
+}
+
+/* The split-flap readout STAYS — it is the text, not a decoration. What goes is
+   its flip animation: 30 cells animating per update is a paint the phone pays
+   for on a readout it can already read. */
+html[data-shell="phone"] .gev-flap-cell.is-flapping {
+  animation: none;
+}
+
+/* ═══ THE LAYER ROWS ════════════════════════════════════════════════════════
+   The most-used control in the app was 18 × 38 px. Everything here is that one
+   fact and its consequences.
+
+   NOT A SWITCH. `.data-toggle-btn` carries five feed states — loading,
+   degraded, stale, fallback, unavailable — as its LABEL, and `_syncToggleButton`
+   writes them. A toggle switch has room for two states, so replacing the button
+   would have thrown away the four that say why a layer is not showing what it
+   promised. It is the same button, at 64 × 40 with a 20 px radius, and 100 px
+   when it has a feed state to say. */
+html[data-shell="phone"] #phone-sheet .data-toggle-row,
+html[data-shell="phone"] #data-panel .data-toggle-row {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+html[data-shell="phone"] #phone-sheet .data-name,
+html[data-shell="phone"] #data-panel .data-name {
+  font-size: 15px;
+}
+
+html[data-shell="phone"] #phone-sheet .data-toggle-btn,
+html[data-shell="phone"] #data-panel .data-toggle-btn {
+  min-width: 64px;
+  min-height: 40px;
+  padding: 3px 12px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  border-radius: 20px;
+}
+
+html[data-shell="phone"] #phone-sheet .data-toggle-btn:is(.feed-loading, .feed-degraded, .feed-stale, .feed-fallback, .feed-unavailable),
+html[data-shell="phone"] #data-panel .data-toggle-btn:is(.feed-loading, .feed-degraded, .feed-stale, .feed-fallback, .feed-unavailable) {
+  min-width: 100px;
+}
+
+/* The group header is both a landmark and a control in a list two screens long,
+   so it sticks to the top of the scroller it heads. `.phone-sheet-body` is that
+   scroller — which is why the panel's own `overflow` is cleared below: a sticky
+   element sticks to its nearest scrolling ancestor, and two nested scrollers
+   would have it stick to the wrong one. */
+html[data-shell="phone"] #phone-sheet .data-category-header,
+html[data-shell="phone"] #data-panel .data-category-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 44px;
+  font-size: 10px;
+  background: rgba(6, 14, 22, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+html[data-shell="phone"] #phone-sheet .data-toggle-chip,
+html[data-shell="phone"] #data-panel .data-toggle-chip {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 10px;
+}
+
+/* « TOUT ÉTEINDRE », adopted out of the top-right corner.
+
+   It was a 36 px icon-only circle in the hardest corner of the screen for a
+   thumb, next to two buttons it looks nothing like in consequence. As the first
+   row of the tab it acts on it is a full-width labelled control, and the corner
+   is left with two buttons instead of three. */
+html[data-shell="phone"] #phone-sheet #clear-selected-layers {
+  /* Every visual it had came from `#top-center-actions button`, which it is no
+     longer a child of — so without this block it renders as a bare UA button,
+     white, in the middle of a dark sheet. Restated rather than made generic:
+     the desktop rule is about a 44 px circle in a corner and this is a row. */
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+html[data-shell="phone"] #phone-sheet #clear-selected-layers .material-symbols-outlined {
+  font-size: 20px;
+}
+
+html[data-shell="phone"] #phone-sheet .phone-action-label {
+  font-size: 11px;
+  letter-spacing: 1.4px;
+}
+
+/* « LOURD » — a layer that will cost this handset noticeably more than the
+   others. Posted by `src/phoneSheet.js` from a fixed list, because the panel has
+   no per-layer weight to read (`profileCountBudget` is a divisor, not a cost),
+   and shown ONLY here: a desktop does not need the warning. */
+html[data-shell="phone"] .data-scope-chip.is-heavy {
+  border-color: rgba(255, 176, 92, 0.5);
+  background: rgba(255, 176, 92, 0.12);
+  color: rgba(255, 196, 130, 0.95);
+}
+
+/* ═══ THE SHEET ═════════════════════════════════════════════════════════════
+   Four panels that were four fixed cards become four tabs of one bottom sheet
+   at three heights. `src/phoneSheet.js` adopts the panels; this is the shell
+   they land in.
+
+   THE HEIGHT IS A CUSTOM PROPERTY ON `<html>`, written in PIXELS by the JS
+   after every snap and every drag. Four other surfaces — the toast, the zoom
+   prompt, the pulse HUD and the voice dock — sit above the sheet and read it.
+   A percentage would have been wrong for all four the moment the keyboard
+   opened. */
+html[data-shell="phone"] {
+  --phone-sheet-height: 116px;
+  --phone-top-safe: 64px;
+}
+
+html[data-shell="phone"] #phone-sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  height: var(--phone-sheet-height, 116px);
+  max-height: calc(var(--phone-vv-height, 100dvh) - var(--phone-top-safe, 64px));
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid rgba(0, 212, 255, 0.22);
+  border-radius: 16px 16px 0 0;
+  background: rgba(6, 14, 22, 0.94);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.55);
+  color: var(--text-primary);
+  transition: height 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#phone-sheet[hidden] { display: none; }
+
+/* A drag has to track the finger. The transition above is for SNAPS. */
+html[data-shell="phone"] #phone-sheet[data-dragging] { transition: none; }
+
+/* The grip is the drag surface, so it is the one element on the page that opts
+   OUT of browser touch handling: `touch-action: none` is what lets
+   `pointermove` fire for a vertical drag instead of being swallowed by the
+   scroll the browser would otherwise start. */
+html[data-shell="phone"] .phone-sheet-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 28px;
+  touch-action: none;
+  cursor: grab;
+}
+
+html[data-shell="phone"] .phone-sheet-grip::before {
+  content: '';
+  width: 42px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(170, 252, 255, 0.35);
+}
+
+/* THE CREDIT LINE, AND WHY IT IS IN THE SHEET AT ALL.
+
+   Google's and Cesium's terms require the attribution to be VISIBLE while
+   their content is displayed. On desktop it is pinned bottom-left; on a phone
+   the sheet owns the bottom of the screen and would cover it at every snap
+   above `peek`. Adopting it here makes it visible at ALL three.
+
+   `position: static` is doing more work than it looks: six rules in
+   `style.css` set a `bottom` on `#cesium-credits` for six different desktop
+   states, and a static element ignores every one of them without a single
+   `!important`. The clean-view rule that HIDES it still applies, as it should. */
+/* NEITHER `min-height: 0` NOR `overflow: hidden` HERE, and both were tried.
+
+   In a column flex box this row must hold its natural height: the JS measures
+   it to decide how tall `peek` is, so a row that shrinks under pressure feeds
+   the measurement its own shrunken answer and the tab strip never comes back.
+   Clipping is worse than a layout bug — the notice inside is required to be
+   shown in full. What is capped instead is the ion logo, which ships at its
+   natural raster size and is the only part of this block that was ever the
+   wrong scale. */
+html[data-shell="phone"] .phone-sheet-credits {
+  flex: 0 0 auto;
+  padding: 2px 12px;
+}
+
+html[data-shell="phone"] .phone-sheet-credits img {
+  height: 12px;
+  width: auto;
+}
+
+html[data-shell="phone"] .phone-sheet-credits #cesium-credits {
+  position: static;
+  max-width: 100%;
+  white-space: normal;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* THE SECOND HALF OF `position: static`, and the one that is easy to miss.
+   Cesium's own `widgets.css` puts `.cesium-widget-credits` at
+   `position: absolute; bottom: 0`, so making the CONTAINER static is not
+   enough — the credit block escapes it, resolves against the viewport, and
+   lands across whatever the sheet is showing while its own box measures zero
+   pixels tall. Measured exactly that way the first time this shipped. */
+html[data-shell="phone"] .phone-sheet-credits .cesium-widget-credits {
+  position: static;
+  display: block;
+  padding: 0;
+}
+
+html[data-shell="phone"] .phone-sheet-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  touch-action: none;
+}
+
+html[data-shell="phone"] .phone-sheet-tab {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+html[data-shell="phone"] .phone-sheet-tab[aria-selected='true'] {
+  background: rgba(0, 212, 255, 0.12);
+  color: rgba(170, 252, 255, 0.95);
+}
+
+html[data-shell="phone"] .phone-sheet-tab-count {
+  display: block;
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+/* The ONE scroller in the sheet. `overscroll-behavior: contain` stops a flick
+   that reaches the end of this list from scrolling the page behind it — which
+   on this page means starting a pull-to-refresh on the globe. */
+html[data-shell="phone"] .phone-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+}
+
+html[data-shell="phone"] .phone-sheet-panel[hidden] { display: none; }
+
+/* At `peek` the body is not on screen at all — the sheet is a handle, a credit
+   line and four tabs. Hiding it rather than letting it be clipped keeps its
+   contents out of the accessibility tree and off the hit-test surface. */
+html[data-shell="phone"] #phone-sheet[data-snap='peek'] .phone-sheet-body {
+  display: none;
+}
+
+/* ── The adopted panels ──────────────────────────────────────────────────────
+   Each of the four arrives carrying a desktop `position: fixed`, its own
+   backdrop, its own scroller and — for three of them — a `.collapsed` state the
+   sheet has no use for. Flattened here into ordinary content of one scroller. */
+html[data-shell="phone"] #phone-sheet :is(#location-bar, #data-panel, #map-legend, #global-context-panel) {
+  position: static;
+  inset: auto;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+html[data-shell="phone"] #phone-sheet :is(.location-inner, .data-panel-inner, .global-context-panel-inner) {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The collapsed rule at `style.css:7680` hides the toggle list outright. The
+   sheet's Couches tab IS the toggle list, so the class is removed by the JS —
+   and re-asserted here because the panel's own collapse button may put it back
+   and there is no visible header on which to press it again. */
+html[data-shell="phone"] #phone-sheet #data-panel.collapsed .data-toggle-list,
+html[data-shell="phone"] #phone-sheet #data-panel .data-toggle-list {
+  display: flex;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+html[data-shell="phone"] #phone-sheet #map-legend {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+html[data-shell="phone"] #phone-sheet .map-legend-items {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Chrome the sheet replaces: four panel headers that say what the tab already
+   says, a pin button for a panel that cannot be pinned, the location toolbar
+   and mini-status, and the two radio surfaces (out of scope on a phone). */
+html[data-shell="phone"] #phone-sheet :is(
+  .panel-header,
+  .panel-glow,
+  .location-toolbar,
+  .location-mini-status,
+  .dock-pin-btn,
+  .map-legend-header,
+  .panel-collapse-btn,
+  #context-radio-dock,
+  #radio-panel
+) {
+  display: none;
+}
+
+/* An empty Legend tab is the one tab that can be empty by design — no layer
+   with a key is on. It says so rather than showing nothing. */
+html[data-shell="phone"] .phone-sheet-panel[data-phone-tab='legend']:has(#map-legend[hidden])::after {
+  content: 'Aucune couche avec une légende n’est allumée.';
+  display: block;
+  padding: 24px 8px;
+  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Selection cards ─────────────────────────────────────────────────────────
+   What is selected on the globe is painted on a CANVAS, not in the DOM
+   (`src/overlays/worldOverlay.js`), and at a phone's pixel density that card is
+   four lines of 10 px type behind a finger. `onWorldOverlaySelectionChange`
+   mirrors it here, as DOM, at a size a reader does not have to lean into. */
+html[data-shell="phone"] #phone-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+html[data-shell="phone"] .phone-selection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--phone-card-accent, rgba(0, 212, 255, 0.8));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+html[data-shell="phone"] .phone-selection-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+html[data-shell="phone"] .phone-selection-detail {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+html[data-shell="phone"] .phone-selection-empty {
+  padding: 24px 8px;
+  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: center;
+}
+
+html[data-shell="phone"] .phone-selection-dismiss {
+  align-self: flex-end;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* ═══ WHAT FLOATS ABOVE THE SHEET ═══════════════════════════════════════════
+   Four surfaces were anchored to the bottom of the viewport, which is now the
+   sheet. Each reads `--phone-sheet-height` and sits on top of it. */
+
+html[data-shell="phone"] #toast {
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--phone-sheet-height, 116px) + 12px + env(safe-area-inset-bottom));
+  max-width: none;
+  transform: none;
+  white-space: normal;
+  text-align: center;
+}
+
+html[data-shell="phone"] #toast.visible { transform: none; }
+
+html[data-shell="phone"] #zoom-prompt {
+  top: auto;
+  bottom: calc(var(--phone-sheet-height, 116px) + 8px);
+  left: 12px;
+  right: 12px;
+  width: auto;
+  transform: none;
+}
+
+html[data-shell="phone"] .zoom-prompt-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 20px;
+}
+
+html[data-shell="phone"] .velo-pulse-hud {
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--phone-sheet-height, 116px) + 10px);
+  width: auto;
+  max-width: none;
+  transform: none;
+}
+
+/* THE DOCK, REDUCED TO ITS ONE PHONE CONTROL. `#command-dock` is a glass tray
+   holding LOCATION, VISUAL PRESETS and the voice pill. The first is now a sheet
+   tab and the second is hidden, so what is left is the pill — and a tray with a
+   backdrop, a border and a shadow around one button is a frame around nothing.
+   The two `:has()` rules that slide the tray sideways when a tray opens are
+   re-typed here to do nothing, or the pill would drift off screen. */
+html[data-shell="phone"] #command-dock {
+  left: auto;
+  right: 12px;
+  bottom: calc(var(--phone-sheet-height, 116px) + 12px);
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  transform: none;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-shell="phone"] #command-dock:has(#location-bar:not(.collapsed)),
+html[data-shell="phone"] #command-dock:has(#control-panel:not(.collapsed)) {
+  transform: none;
+}
+
+html[data-shell="phone"] #gev-voice-control {
+  right: 0;
+  bottom: 0;
+}
+
+/* ── The voice pill, which is all that is left of the dock ───────────────────
+   Its own chrome was drawn for a cursor: a 72 x 34 button, a 25 x 12 tier chip
+   and a 50 x 19 dismiss. Two of the three grow; the third goes.
+
+   THE TIER CHIP GOES, and that is a product call rather than a layout one.
+   It switches the voice model between two cost tiers, at 25 x 12 px, beside a
+   dollar estimate — an instrument for whoever is watching the bill, not for
+   somebody standing on a street with one hand on their phone. Growing it to
+   44 px would put a cost switch in the largest control of the pill. The tier
+   keeps its default, and the voice session on iOS is volet B's subject.
+   Documented in `docs/KNOWN-ISSUES.md`. */
+html[data-shell="phone"] #command-dock .gev-voice-cost {
+  display: none;
+}
+
+html[data-shell="phone"] #command-dock #gev-voice-button {
+  width: 56px;
+  height: 44px;
+}
+
+html[data-shell="phone"] #command-dock .gev-voice-error-dismiss {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* ═══ THE FICHE, AND THE COMPARABLES PANEL ══════════════════════════════════
+   Two draggable cards sized against a desktop viewport (`min(430px, 42vw)`).
+   On a phone they become full-height sheets of their own, above the phone
+   sheet. `src/data/ficheSheet.js` skips its drag wiring under the phone shell:
+   `panelDrag.js` writes inline `left`/`top`, and an inline style beats every
+   rule below. */
+html[data-shell="phone"] .fiche-sheet,
+html[data-shell="phone"] .cmp-panel {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 160;
+  width: auto;
+  max-width: none;
+  height: calc(var(--phone-vv-height, 100dvh) - var(--phone-top-safe, 64px));
+  max-height: none;
+  border-radius: 16px 16px 0 0;
+}
+
+html[data-shell="phone"] .fiche-sheet-head {
+  min-height: 48px;
+}
+
+html[data-shell="phone"] .fiche-sheet-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 20px;
+}
+
+html[data-shell="phone"] .fiche-sheet-btn {
+  min-height: 40px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* ═══ DIALOGS ═══════════════════════════════════════════════════════════════
+   Three cards are centred with `translate(-50%, -50%)` and sized in rem against
+   a desktop. On a phone a centred modal is a phone-sized card floating in a
+   phone-sized hole; the convention readers already know is a sheet from the
+   bottom. The `.visible` transform has to be re-typed for each, because the
+   base rule and the ≤620 media block both set one. */
+html[data-shell="phone"] :is(#first-run-launcher, #coverage-briefing, #key-setup) {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
+  max-height: calc(100dvh - 56px);
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  transform: none;
+  border-radius: 16px 16px 0 0;
+}
+
+html[data-shell="phone"] :is(#first-run-launcher, #coverage-briefing, #key-setup).visible {
+  transform: none;
+}
+
+/* EXCLUSION, IN CSS, BECAUSE THE JS NEVER PROMISED IT.
+
+   The first-run card and the coverage briefing are two independent surfaces
+   that had no reason to collide while each was a centred card with a different
+   size. Anchored to the same edge they occupy the same pixels. The briefing is
+   about a layer the reader just switched on, so it wins; the launcher, the
+   zoom prompt and the sheet stand down while either is up. */
+html[data-shell="phone"] body:has(#coverage-briefing.visible) #first-run-launcher,
+html[data-shell="phone"] body:has(:is(#first-run-launcher, #coverage-briefing).visible) :is(#zoom-prompt, #phone-sheet) {
+  visibility: hidden;
+}
+
+html[data-shell="phone"] body:has(:is(#first-run-launcher, #coverage-briefing).visible)::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* A 13 px checkbox is not a target. `accent-color` is already on both, so the
+   only thing missing was the size. */
+html[data-shell="phone"] :is(.first-run-suppress, .coverage-briefing-suppress) input {
+  width: 24px;
+  height: 24px;
+}
+
+html[data-shell="phone"] :is(.first-run-choices, .coverage-briefing-choices) button {
+  min-height: 48px;
+}
+
+html[data-shell="phone"] .cctv-lightbox-bar {
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+html[data-shell="phone"] .cctv-lightbox-close {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* The boot screen: a 120 px logo and a 20 px heading were drawn for a desktop
+   viewport and read as a splash page on a phone. */
+html[data-shell="phone"] #loading-screen .loader-logo {
+  width: 72px;
+}
+
+html[data-shell="phone"] #loading-screen h2 {
+  font-size: 14px;
+}
