@@ -1,0 +1,17 @@
+[Unit]
+Description=Surplomb — pay the default view's cold Overpass box so no reader does
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Against the CONTAINER, not the public URL. Cloudflare caps /api at 30
+# requests per 10 s per IP, and there is nothing at the edge this needs to
+# touch: the cache being warmed is the proxy's own disk cache, inside.
+#
+# The host's node, not the container's: the script imports only local modules
+# and no node_modules, so it needs nothing the container has.
+ExecStart=/usr/bin/node /opt/gev/src/scripts/warm-default-view.mjs --url http://localhost:4173
+# A cold Lyon-sized box was measured at 46 s and the script gives each of its
+# two passes 120 s of its own. Five minutes is the point past which something
+# is stuck rather than slow.
+TimeoutStartSec=300

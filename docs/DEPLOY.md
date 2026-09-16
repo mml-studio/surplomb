@@ -80,6 +80,7 @@ that predates the access gate.
 | `/opt/gev/state/selection` | one line: which ref was chosen this tick, and why it was not the other one |
 | `/opt/gev/state/freshness` | `<head> <base> <behind_by>`, the cached verdict for one pair of shas |
 | `/opt/gev/gev-health-probe.sh` | availability probe (copy of `deploy/vps/gev-health-probe.sh`) |
+| `/opt/gev/src/scripts/warm-default-view.mjs` | weekly Overpass pre-warm, run by `gev-warm-view.timer` — ships with the source, nothing to copy |
 | `/opt/gev/state/health.log` | one line per probe, ~7 days |
 
 ### The 2021 carroyage pack
@@ -290,14 +291,51 @@ ssh vps 'systemctl daemon-reload && systemctl enable --now gev-health-probe.time
 ssh vps 'tail -5 /opt/gev/state/health.log'
 ```
 
+### Somebody pays for the first road fetch of the week
+
+A cold Overpass box costs **0.6 to 46 s**; the same query repeated costs
+**52 to 78 ms**, and the proxy holds it on disk for **7 days**. Every visitor
+lands on the same view, so exactly one of them per week pays that cost — with
+nothing on screen while they wait.
+
+`gev-warm-view.timer` makes it be nobody. It runs
+`scripts/warm-default-view.mjs`, which derives the default view's Overpass cell
+and fires the layer's two passes at it, byte for byte.
+
+Three things about it that are not obvious:
+
+- **It runs against `localhost:4173`, not the public URL.** The cache being
+  warmed is the proxy's own, inside the container; and the Cloudflare rule in
+  front of this origin is per source address.
+- **It uses the HOST's node, not the container's.** The script imports only
+  local modules — no `node_modules` — so it needs nothing the container has.
+  (The container's bundled Chrome does not run anyway: `libglib-2.0.so.0`
+  is missing from the slim image.)
+- **It computes the cell instead of observing it**, which would rot silently
+  the day `DEFAULT_CITY_VIEW` moves. `src/defaultView.test.mjs` pins the
+  derivation against the box captured off the wire by
+  `scripts/qa-span-par-viewport.mjs`, so that day fails CI by name instead.
+
+```bash
+scp deploy/vps/gev-warm-view.{service,timer} vps:/etc/systemd/system/
+ssh vps 'systemctl daemon-reload && systemctl enable --now gev-warm-view.timer'
+ssh vps 'systemctl start gev-warm-view.service'    # warm it now, do not wait
+ssh vps 'journalctl -u gev-warm-view -n 20'        # what it asked for, and how long it took
+```
+
+A run that reports `cache=HIT` on its own first request is not a failure —
+somebody warmed the cell before it. A run that reports **0 elements** is: a
+cell that answers fast and draws nothing is worse than a cold one, and the
+script exits non-zero for it.
+
 ### Installing it somewhere else
 
 ```bash
 ssh box 'mkdir -p /opt/gev'
 scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh box:/opt/gev/
-scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} box:/etc/systemd/system/
+scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} box:/etc/systemd/system/
 ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh && chmod 600 /opt/gev/.env'
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer'
 ```
 
 `/opt/gev/.env` needs at least:
