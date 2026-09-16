@@ -1,0 +1,34 @@
+# Surplomb — Overpass egress relay.
+#
+# One Worker, one route, one upstream. It exists because the VPS's only egress
+# address is banned by overpass-api.de; see worker.js and
+# src/data/overpassRelay.js for the measurements and for when to switch it off.
+#
+# Deploy: see README.md. The secret is NOT in this file and must never be.
+
+name = "surplomb-overpass-relay"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# The whole point is a `*.workers.dev` hostname on Cloudflare's network rather
+# than a record on surplomb.app: a custom domain would put the relay behind the
+# same zone rules as the app and buy nothing, and the URL is a secret-gated
+# endpoint, not something a human types.
+workers_dev = true
+
+[observability]
+enabled = true
+
+# A ceiling that survives a regression in the client. The ban was earned by
+# ~4 300 POST/hour from a loop where the browser and the server re-triggered
+# each other (fixed in main@dcb881bb); one honest session measured 26. 60 per
+# minute is ~2.3x the worst legitimate burst this app can produce with its own
+# 2-slot budget, and two orders of magnitude under what caused the ban.
+#
+# `period` accepts only 10 or 60. If a future wrangler rejects this block,
+# delete it — worker.js checks `env.OVERPASS_LIMITER` before using it, so the
+# relay still deploys and still works, just without the second line of defence.
+[[ratelimits]]
+name = "OVERPASS_LIMITER"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

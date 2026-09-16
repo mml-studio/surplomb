@@ -69,6 +69,7 @@ import {
   OSM_CAMERA_QUERY_CAP,
 } from './src/data/osmCameras.js';
 import { createRotationCursor, mirrorProfile } from './src/data/overpassMirrors.js';
+import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import {
   isValidTileCoord as isValidTomTomTile,
   utcDayKey as tomtomUtcDayKey,
@@ -853,6 +854,22 @@ const OVERPASS_UPSTREAMS = [
   // redundancy at all and simply paid the same dead host's ~3 s timeout twice
   // per rotation. Do not re-add it without re-resolving it first.
   'https://overpass.private.coffee/api/interpreter',
+  // LAST RESORT, added 2026-09-16 as an operator's deliberate call — see the
+  // privacy note below, which is the whole reason it took a decision rather
+  // than a commit. It carries the PLANET, which is the bar to clear here:
+  // verified 2026-09-02 on a Toulon bbox (43 ways, the same count FOSSGIS
+  // returns) and 2026-09-16 on the Biarritz seven-class road box from inside
+  // the VPS (1 069 ways, again the exact FOSSGIS count) in 8.6 s. It is also
+  // unreliable — 2 successes in 3 at ~3.7 s that day, a 504 in 641 ms on a
+  // re-probe the same evening — which is precisely why it sits behind every
+  // other host and never in front of one.
+  //
+  // THE PRIVACY COST, stated rather than buried: maps.mail.ru is operated by
+  // VK, and the queries this rotation carries include "where are the military
+  // installations near here" and every bounding box a visitor looks at. It is
+  // reached only after FOSSGIS and private.coffee have both failed, so in
+  // normal operation it sees nothing at all.
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   // DO NOT add a REGIONAL Overpass instance here, however healthy it probes.
   // The rotation accepts the first 200, and a regional instance answers 200
   // with an EMPTY element list for everything outside its extract — which this
@@ -860,11 +877,45 @@ const OVERPASS_UPSTREAMS = [
   // the void and serve it for the 7-to-30-day disk TTL. Measured 2026-09-02,
   // overpass.osm.ch on a Toulon bbox: 200, `elements: []`, in 0.3 s, where
   // overpass-api.de returns 43. It is the fastest mirror in the list and the
-  // most dangerous. maps.mail.ru DOES carry the planet (same 43) and announces
-  // no slot limit, but it is operated by VK, and the queries this rotation
-  // carries include "where are the military installations near here" — so
-  // adding it is an operator's call to make deliberately, not a latency fix.
+  // most dangerous — and it was measured again on 2026-09-16 from the VPS, 200
+  // in 0.1 s with ways=0, at the exact moment every honest host was failing.
 ];
+/**
+ * Where to leave the machine from, when the machine's own address is banned.
+ *
+ * Measured 2026-09-16 from inside the `gev` container: both FOSSGIS facades
+ * REFUSE the TCP connection in under 200 ms on every address, v4 and v6, while
+ * the same query from another network answers 200 in 0.20 s at the same second.
+ * That is a ban on 72.61.194.137 / 2a02:4780:28:f502::1, and the box has no
+ * other address — so no mirror order and no backoff can reach FOSSGIS from
+ * there. `deploy/cloudflare/overpass-relay/` is the other address.
+ *
+ * READ AT REQUEST TIME, not at module load: these are plain runtime variables
+ * in `/opt/gev/.env`, so turning the relay off is a container restart rather
+ * than an image rebuild. Both are required — see `withOverpassRelay`.
+ *
+ * @returns {{endpoint: string|null, token: string|null}}
+ */
+function overpassRelayConfig() {
+  return {
+    endpoint: resolveRelayEndpoint(process.env.GEV_OVERPASS_RELAY_URL),
+    token: String(process.env.GEV_OVERPASS_RELAY_TOKEN ?? '').trim() || null,
+  };
+}
+/**
+ * The rotation list actually in force, relay included when one is configured.
+ *
+ * A FUNCTION rather than a constant, and called from a default parameter so it
+ * is evaluated per request: an operator who edits `/opt/gev/.env` and restarts
+ * gets the new list, and a test that sets the variable gets it without
+ * re-importing a 27 000-line module.
+ *
+ * @returns {string[]}
+ */
+export function overpassUpstreams() {
+  const { endpoint, token } = overpassRelayConfig();
+  return withOverpassRelay(OVERPASS_UPSTREAMS, { url: endpoint, token });
+}
 /**
  * Concurrent upstream Overpass requests, matching what the mirrors grant one IP.
  *
@@ -12322,6 +12373,10 @@ export function overpassAttemptDisposition({ status, rateLimited, runtimeError }
  * @param {number} [maxResponseBytes] Endpoint-specific response cap.
  * @param {object} [deps] Injection seam for tests.
  * @param {Array<string>} [deps.endpoints] Mirrors to try, in order.
+ * @param {{endpoint: string|null, token: string|null}} [deps.relay] Egress relay
+ *   in force. Its `endpoint` is matched against each mirror to decide which one
+ *   gets the shared secret, so a test that injects `endpoints` WITHOUT a
+ *   matching `relay` sends no secret anywhere — which is the safe default.
  * @param {typeof fetch} [deps.fetchImpl] Fetch implementation.
  * @param {Map} [deps.mirrorHealth] Per-mirror memory. Tests MUST pass their own.
  * @param {number} [deps.rotationBudgetMs] Ceiling on one rotation, backoffs included.
@@ -12333,7 +12388,8 @@ export async function fetchOverpassPayload(
   body,
   maxResponseBytes = OVERPASS_MAX_RESPONSE_BYTES,
   {
-    endpoints = OVERPASS_UPSTREAMS,
+    endpoints = overpassUpstreams(),
+    relay = overpassRelayConfig(),
     fetchImpl = fetch,
     sleep = overpassSleep,
     rateLimitBackoffMs = OVERPASS_RATE_LIMIT_BACKOFF_MS,
@@ -12411,10 +12467,15 @@ export async function fetchOverpassPayload(
         try {
           const upstream = await fetchImpl(endpoint, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'User-Agent': OVERPASS_USER_AGENT,
-            },
+            // The shared secret rides ONLY on the relay's own URL, decided by a
+            // tested function rather than by an inline comparison here — sending
+            // it to a public mirror because a string check was sloppy is the one
+            // mistake in this hop that cannot be undone.
+            headers: overpassRequestHeaders(endpoint, {
+              userAgent: OVERPASS_USER_AGENT,
+              relayEndpoint: relay?.endpoint ?? null,
+              relayToken: relay?.token ?? null,
+            }),
             body,
             signal: controller.signal,
           });
@@ -16189,22 +16250,29 @@ async function fetchOsmCameraElements(ql, deadline) {
   // nothing about whether the mirrors above it were rate-limited, refused, or
   // simply never tried because the budget ran out.
   const outcomes = [];
-  for (let index = 0; index < OVERPASS_UPSTREAMS.length; index++) {
-    const endpoint = OVERPASS_UPSTREAMS[index];
+  // Resolved ONCE per probe, not per attempt: the relay is a runtime variable,
+  // and re-reading it mid-rotation could hand two attempts of the same probe two
+  // different mirror lists — which is how an index-based budget share starts
+  // dividing by a length that no longer matches the list it is walking.
+  const endpoints = overpassUpstreams();
+  const relay = overpassRelayConfig();
+  for (let index = 0; index < endpoints.length; index++) {
+    const endpoint = endpoints[index];
     const host = new URL(endpoint).host;
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     const attemptMs = Math.max(
       OSM_CAMERA_MIN_ATTEMPT_MS,
-      Math.floor(remainingMs / (OVERPASS_UPSTREAMS.length - index)),
+      Math.floor(remainingMs / (endpoints.length - index)),
     );
     try {
       const upstream = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': OVERPASS_USER_AGENT,
-        },
+        headers: overpassRequestHeaders(endpoint, {
+          userAgent: OVERPASS_USER_AGENT,
+          relayEndpoint: relay.endpoint,
+          relayToken: relay.token,
+        }),
         body: `data=${encodeURIComponent(ql)}`,
         signal: AbortSignal.timeout(Math.min(remainingMs, attemptMs)),
       });
@@ -16226,7 +16294,7 @@ async function fetchOsmCameraElements(ql, deadline) {
       outcomes.push(`${host}: ${reason}`);
     }
   }
-  const skipped = OVERPASS_UPSTREAMS.length - outcomes.length;
+  const skipped = endpoints.length - outcomes.length;
   throw new Error(
     `no Overpass mirror answered inside the request budget — ${outcomes.join('; ')}`
     + (skipped > 0 ? `; ${skipped} not tried (budget spent)` : ''),
@@ -20369,22 +20437,29 @@ async function writePowerGridDisk(cacheKey, entry) {
  */
 async function fetchPowerGridElements(ql, deadline) {
   const outcomes = [];
-  for (let index = 0; index < OVERPASS_UPSTREAMS.length; index++) {
-    const endpoint = OVERPASS_UPSTREAMS[index];
+  // Resolved ONCE per probe, not per attempt: the relay is a runtime variable,
+  // and re-reading it mid-rotation could hand two attempts of the same probe two
+  // different mirror lists — which is how an index-based budget share starts
+  // dividing by a length that no longer matches the list it is walking.
+  const endpoints = overpassUpstreams();
+  const relay = overpassRelayConfig();
+  for (let index = 0; index < endpoints.length; index++) {
+    const endpoint = endpoints[index];
     const host = new URL(endpoint).host;
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     const attemptMs = Math.max(
       POWER_GRID_MIN_ATTEMPT_MS,
-      Math.floor(remainingMs / (OVERPASS_UPSTREAMS.length - index)),
+      Math.floor(remainingMs / (endpoints.length - index)),
     );
     try {
       const upstream = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': OVERPASS_USER_AGENT,
-        },
+        headers: overpassRequestHeaders(endpoint, {
+          userAgent: OVERPASS_USER_AGENT,
+          relayEndpoint: relay.endpoint,
+          relayToken: relay.token,
+        }),
         body: `data=${encodeURIComponent(ql)}`,
         signal: AbortSignal.timeout(Math.min(remainingMs, attemptMs)),
       });
@@ -20407,7 +20482,7 @@ async function fetchPowerGridElements(ql, deadline) {
       outcomes.push(`${host}: ${reason}`);
     }
   }
-  const skipped = OVERPASS_UPSTREAMS.length - outcomes.length;
+  const skipped = endpoints.length - outcomes.length;
   throw new Error(
     `no Overpass mirror answered inside the request budget — ${outcomes.join('; ')}`
     + (skipped > 0 ? `; ${skipped} not tried (budget spent)` : ''),

@@ -328,6 +328,59 @@ somebody warmed the cell before it. A run that reports **0 elements** is: a
 cell that answers fast and draws nothing is worse than a cold one, and the
 script exits non-zero for it.
 
+### When Overpass stops answering the box altogether
+
+Measured 2026-09-16 from inside the `gev` container, on a Marseille road box:
+
+| hôte | verdict |
+|---|---|
+| `overpass-api.de` | connexion **refusée** en 193 ms |
+| `lz4.overpass-api.de` | connexion **refusée** en 72 ms |
+| `overpass.private.coffee` | 200 en **38,6 s**, données du 2026-07-15 |
+| `maps.mail.ru` | 504 en 641 ms |
+
+**A refusal in under 200 ms on every address of a host is a ban, not an
+outage.** A timeout is a busy server; an immediate RST from all four addresses,
+v4 and v6, five tries out of five, is FOSSGIS declining to talk to this IP —
+the behaviour already recorded in `vite.config.js` ("overpass-api.de does not
+just rate-limit a noisy IP, it stops answering it"). Confirm it in one line, and
+note that a `curl` **from the host** will answer 200 and lie, because the host
+has its own route:
+
+```bash
+ssh vps 'docker exec gev node -e "fetch(\"https://overpass-api.de/api/interpreter\",{method:\"POST\",headers:{\"User-Agent\":\"surplomb/1.0\"},body:\"data=[out:json];out count;\"}).then(r=>console.log(r.status)).catch(e=>console.log(\"REFUSED\",e.message))"'
+```
+
+Why Paris keeps working while Marseille does not: Paris is the default view and
+is in the disk cache; anywhere else has no graph, and the TomTom ribbon carries
+its own geometry so the roads still colour in with nobody driving on them.
+
+Three levers, in the order they were used on 2026-09-16:
+
+1. **Stop earning it.** `main@dcb881bb` took the client from ~4 300 POST/hour to
+   26. Necessary whatever else happens, and it is the evidence an unblock
+   request rests on — but it does not lift a ban already in place.
+2. **Leave by another address.** `deploy/cloudflare/overpass-relay/` is a
+   Cloudflare Worker that forwards to FOSSGIS carrying our real `User-Agent`;
+   set `GEV_OVERPASS_RELAY_URL` and `GEV_OVERPASS_RELAY_TOKEN` in
+   `/opt/gev/.env` and restart the container. Both are **runtime** variables, so
+   no rebuild — unlike `GOOGLE_MAPS_API_KEY` and `CESIUM_ION_TOKEN`. Deploy
+   instructions and the verification probe are in that directory's README.
+3. **Ask for the unblock**, citing `72.61.194.137` and `2a02:4780:28:f502::1`
+   and what changed, then clear the two relay variables. A direct request is one
+   hop cheaper and one dependency lighter.
+
+`maps.mail.ru` is in the rotation as a **last resort** since the same day. It
+carries the planet (1 069 ways on the Biarritz box, the exact FOSSGIS count) and
+is reached only after every other host has failed — but it is operated by VK,
+and the queries this rotation carries include "where are the military
+installations near here". Removing it is one line in `OVERPASS_UPSTREAMS`.
+
+**Never add a regional instance**, however fast it probes. `overpass.osm.ch`
+answered 200 in 0.1 s with `ways=0` at the exact moment every honest host was
+failing, and the proxy cannot tell that from "there is genuinely nothing here" —
+it would cache the void for the 7-to-30-day disk TTL.
+
 ### Installing it somewhere else
 
 ```bash
@@ -377,6 +430,21 @@ Two access paths are wired on the Enerlens box:
 - **Cloudflare tunnel** — `https://gev.enerlens.com`, for devices without
   Tailscale. Add a Cloudflare Access policy on that hostname if you want SSO
   in front of the password.
+
+### Where a visitor's bounding boxes go
+
+Every Overpass-backed layer sends the box the camera is looking at to whichever
+mirror answers first. Three of the four are run by OSM community
+infrastructure; the fourth, `maps.mail.ru`, is operated by VK and is in the
+rotation as a **last resort** — reached only after FOSSGIS and private.coffee
+have both failed, which in normal operation is never. It is listed last in
+`OVERPASS_UPSTREAMS` and removing it is one line. This is written down rather
+than assumed because the queries that rotation carries include "where are the
+military installations near here".
+
+The Cloudflare relay (above) changes the source address those queries appear to
+come from, and nothing else: it forwards our real `User-Agent` and contact URL,
+adds no identity, and caches nothing.
 
 ### Provider Settings is not on the deployment
 
