@@ -1,7 +1,7 @@
 # Relais Overpass (Cloudflare Worker)
 
-Une sortie réseau de secours pour `/api/overpass`, à utiliser **uniquement**
-tant que l'IP du VPS est bannie par `overpass-api.de`.
+Une seconde adresse de sortie pour `/api/overpass`, à utiliser tant que l'IP du
+VPS est en haut de l'étranglement de `overpass-api.de`.
 
 Mesuré le 2026-09-16 depuis le conteneur `gev` :
 
@@ -12,10 +12,23 @@ Mesuré le 2026-09-16 depuis le conteneur `gev` :
 | `overpass.private.coffee` | 200 en **38,6 s**, données du 2026-07-15 |
 | `maps.mail.ru` | 504 en 641 ms |
 
-Un refus TCP sous 200 ms sur toutes les adresses d'un hôte est un
-bannissement, pas une panne : la même requête depuis un Mac sur un autre réseau
-a répondu 200 en 0,20 s à la même seconde. IP bannies : `72.61.194.137` et
-`2a02:4780:28:f502::1`.
+Ça ressemble à un bannissement, et ça n'en est pas un. Re-mesuré à 20:05, 8
+requêtes d'affilée depuis le même conteneur :
+
+```
+504/9458ms  504/7985ms  200/263ms  200/346ms  429/10947ms  429/10205ms  ERR/64ms  ERR/62ms
+```
+
+Lent, puis correct, puis limité, puis **refusé** — en quarante secondes.
+L'étranglement est un escalier qu'on monte en poussant, et il redescend tout
+seul. **Ne jamais diagnostiquer ça en le martelant** : trois adresses de sortie
+ont été poussées jusqu'au refus en un après-midi, par les sondes qui mesuraient
+le problème.
+
+Mesuré le 2026-09-16 à 20:23 : le relais a servi la boîte de Marseille en
+**200 / 3,8 s** (`X-Overpass-Upstream` le nomme) pendant que le direct refusait
+encore. Les adresses de sortie de Cloudflare sont **partagées** : elles se font
+étrangler comme les autres, d'où le plafond de 60 req/min côté Worker.
 
 ## Ce que le relais ne fait pas
 
@@ -35,13 +48,21 @@ cd deploy/cloudflare/overpass-relay
 # 1. Ouvrir le navigateur pour autoriser le compte Cloudflare (une seule fois).
 npx wrangler login
 
-# 2. Poser le secret partagé. Le générer d'abord, et le GARDER :
-#      openssl rand -hex 32
-npx wrangler secret put RELAY_TOKEN
-
-# 3. Publier. La commande imprime l'URL `https://…workers.dev`.
+# 2. Publier D'ABORD. La commande imprime l'URL `https://…workers.dev`.
+#    `wrangler secret put` échoue sur un Worker qui n'existe pas encore
+#    (`script_not_found`), donc cet ordre n'est pas négociable.
 npx wrangler deploy
+
+# 3. Poser le secret partagé. Le générer d'abord, et le GARDER :
+#      openssl rand -hex 32 | tee >(tr -d '\n' | pbcopy)
+#    Poser un secret redéploie le Worker tout seul — rien à relancer.
+npx wrangler secret put RELAY_TOKEN
 ```
+
+**Entre l'étape 2 et l'étape 3 le relais répond 503** à tout le monde, y
+compris à nous : `relayVerdict` distingue « ce relais est mal configuré » (503)
+de « ton jeton est faux » (401), et sans secret côté Worker c'est le premier.
+Ce n'est pas une fenêtre dangereuse — c'est la seule réponse honnête.
 
 Puis sur le VPS, avec l'URL imprimée et le même secret :
 

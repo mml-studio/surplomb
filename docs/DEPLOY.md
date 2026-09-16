@@ -330,56 +330,86 @@ script exits non-zero for it.
 
 ### When Overpass stops answering the box altogether
 
-Measured 2026-09-16 from inside the `gev` container, on a Marseille road box:
+**It is almost never a ban. It is an escalating per-IP throttle, and it
+decays.** That distinction cost an afternoon on 2026-09-16, so it is the first
+thing written here.
 
-| hôte | verdict |
-|---|---|
-| `overpass-api.de` | connexion **refusée** en 193 ms |
-| `lz4.overpass-api.de` | connexion **refusée** en 72 ms |
-| `overpass.private.coffee` | 200 en **38,6 s**, données du 2026-07-15 |
-| `maps.mail.ru` | 504 en 641 ms |
+At 17:20 UTC, from inside the `gev` container, both FOSSGIS facades refused the
+TCP connection in under 200 ms on every address, v4 and v6, five tries out of
+five, while the same query answered 200 in 0.20 s from another network. That
+reads exactly like a permanent IP ban, and it was diagnosed as one. It was not:
+by 19:57 the same host was answering again from the same container, with nothing
+done to it.
 
-**A refusal in under 200 ms on every address of a host is a ban, not an
-outage.** A timeout is a busy server; an immediate RST from all four addresses,
-v4 and v6, five tries out of five, is FOSSGIS declining to talk to this IP —
-the behaviour already recorded in `vite.config.js` ("overpass-api.de does not
-just rate-limit a noisy IP, it stops answering it"). Confirm it in one line, and
-note that a `curl` **from the host** will answer 200 and lie, because the host
-has its own route:
+What it actually is, measured at 20:05 UTC — 8 back-to-back requests from the
+container, same Marseille box, nothing else changed:
 
-```bash
-ssh vps 'docker exec gev node -e "fetch(\"https://overpass-api.de/api/interpreter\",{method:\"POST\",headers:{\"User-Agent\":\"surplomb/1.0\"},body:\"data=[out:json];out count;\"}).then(r=>console.log(r.status)).catch(e=>console.log(\"REFUSED\",e.message))"'
 ```
+504/9458ms  504/7985ms  200/263ms  200/346ms  429/10947ms  429/10205ms  ERR/64ms  ERR/62ms
+```
+
+Slow, then fine, then rate-limited, then **connection refused** — in forty
+seconds. The refusal is the TOP of a ladder you climb by pushing, not a door
+that was locked. Which means:
+
+- **Do not diagnose this by hammering it.** Three separate egress addresses
+  were pushed into refusal in one afternoon, by the probes that were measuring
+  the problem. A probe is load.
+- **A control from another machine is what tells you the difference.** Ours ran
+  `curl` from a laptop, interleaved, at the same second. When the laptop is
+  *also* at 429, the host is not singling you out.
+- Sample sizes of one or two say nothing here — the verdict changes between
+  consecutive requests.
 
 Why Paris keeps working while Marseille does not: Paris is the default view and
 is in the disk cache; anywhere else has no graph, and the TomTom ribbon carries
-its own geometry so the roads still colour in with nobody driving on them.
+its own geometry, so the roads still colour in with nobody driving on them. A
+coloured road with no cars is an Overpass symptom, not a TomTom one.
 
-Three levers, in the order they were used on 2026-09-16:
+Three levers, in the order they were used that day:
 
 1. **Stop earning it.** `main@dcb881bb` took the client from ~4 300 POST/hour to
-   26. Necessary whatever else happens, and it is the evidence an unblock
-   request rests on — but it does not lift a ban already in place.
-2. **Leave by another address.** `deploy/cloudflare/overpass-relay/` is a
-   Cloudflare Worker that forwards to FOSSGIS carrying our real `User-Agent`;
-   set `GEV_OVERPASS_RELAY_URL` and `GEV_OVERPASS_RELAY_TOKEN` in
-   `/opt/gev/.env` and restart the container. Both are **runtime** variables, so
-   no rebuild — unlike `GOOGLE_MAPS_API_KEY` and `CESIUM_ION_TOKEN`. Deploy
-   instructions and the verification probe are in that directory's README.
-3. **Ask for the unblock**, citing `72.61.194.137` and `2a02:4780:28:f502::1`
-   and what changed, then clear the two relay variables. A direct request is one
-   hop cheaper and one dependency lighter.
+   26 — a loop where the browser and the proxy re-triggered each other. This is
+   the one that matters, and it is what makes the rest optional.
+2. **Leave by another address.** `deploy/cloudflare/overpass-relay/` forwards to
+   FOSSGIS from Cloudflare's network; set `GEV_OVERPASS_RELAY_URL` and
+   `GEV_OVERPASS_RELAY_TOKEN` in `/opt/gev/.env` and restart the container. Both
+   are **runtime** variables, so no rebuild — unlike `GOOGLE_MAPS_API_KEY` and
+   `CESIUM_ION_TOKEN`. It works: measured 20:23 UTC, the Marseille box came back
+   200 in 3.8 s and `X-Overpass-Upstream` named the relay.
+3. **Widen the rotation.** `maps.mail.ru` served the Biarritz box the same
+   minute — 200, 1 406 ways, 20 s — after the relay and FOSSGIS had both failed.
 
-`maps.mail.ru` is in the rotation as a **last resort** since the same day. It
-carries the planet (1 069 ways on the Biarritz box, the exact FOSSGIS count) and
-is reached only after every other host has failed — but it is operated by VK,
-and the queries this rotation carries include "where are the military
-installations near here". Removing it is one line in `OVERPASS_UPSTREAMS`.
+There is a **fourth lever that was written and then dropped: asking FOSSGIS to
+unblock us.** Do not send that mail without re-measuring first. There was no
+standing block to lift, and asking for one would have described a problem that
+had already decayed on its own.
+
+**Reading the relay's failures.** A Worker that cannot reach its upstream does
+not throw — Cloudflare hands it a synthetic **521** response, which this proxy
+passes through and scores as `server-error`, parking the relay for 20 s. So a
+521 from the relay means "FOSSGIS refused Cloudflare", not "the relay is
+broken". Cloudflare's egress addresses are shared and get throttled like any
+other; a 521 costs 0.2 s, which is why the relay is cheap to leave in front.
+
+**The VK cost is real, not theoretical.** `maps.mail.ru` is last in the rotation
+and is only reached when everything above it has failed — and on 2026-09-16 that
+happened, so a genuine visitor viewport went to VK. Removing it is one line in
+`OVERPASS_UPSTREAMS`; leaving it is a choice to re-make, not a default.
 
 **Never add a regional instance**, however fast it probes. `overpass.osm.ch`
 answered 200 in 0.1 s with `ways=0` at the exact moment every honest host was
 failing, and the proxy cannot tell that from "there is genuinely nothing here" —
 it would cache the void for the 7-to-30-day disk TTL.
+
+One probe, from the right place, with the right agent string:
+
+```bash
+ssh vps 'docker exec gev node -e "fetch(\"https://overpass-api.de/api/interpreter\",{method:\"POST\",headers:{\"User-Agent\":\"surplomb/1.0\"},body:\"data=[out:json];out count;\"}).then(r=>console.log(r.status)).catch(e=>console.log(\"REFUSED\",e.message))"'
+```
+
+A `curl` **from the host** answers 200 and lies — the host has its own route and
+its own reputation. Test from inside the container, or not at all.
 
 ### Installing it somewhere else
 

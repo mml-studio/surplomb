@@ -9,23 +9,35 @@
  *   overpass.private.coffee  200 in 38 591 ms, data stamped 2026-07-15
  *   maps.mail.ru           504 in 641 ms
  *
- * A refusal in under 200 ms on every address of a host is a ban on our IP, not
- * an outage: from a Mac on another network the same query answered 200 in
- * 0.20 s at the same second. The two banned addresses are 72.61.194.137 and
- * 2a02:4780:28:f502::1, and they are the box's ONLY egress — so no mirror order
- * and no backoff can reach FOSSGIS from there. The one lever left is to leave
- * by a different address.
+ * That reads like a permanent ban on our IP, and it was first diagnosed as one.
+ * It is NOT. Re-measured at 20:05, 8 back-to-back requests from the same
+ * container: `504, 504, 200, 200, 429, 429, refused, refused`. FOSSGIS runs an
+ * ESCALATING per-IP throttle — slow, then rate-limited, then refusing — that
+ * you climb by pushing and that decays on its own within hours. The 17:20
+ * refusal was the top of that ladder, earned by ~4 300 POST/hour from a client
+ * loop (fixed in `main@dcb881bb`, 26/hour after).
+ *
+ * The box has ONE egress address, so while the throttle is at its top there is
+ * no mirror order and no backoff that reaches FOSSGIS from there. Leaving by a
+ * different address is what buys a second chance — not a way around a ban, a
+ * second bucket in the same queue. Measured 2026-09-16 20:23, the relay served
+ * the Marseille box 200 in 3.8 s while the direct path was still refusing.
  *
  * WHAT THIS IS NOT. It is not a way to be harder to identify. The relay carries
  * this app's real `User-Agent` and its contact URL, adds a header naming itself
  * as the relay, and is rate-capped below what one honest client needs — so
  * FOSSGIS can see exactly who is calling and refuse the relay in one rule if
- * they would rather we stayed blocked. The volume that earned the ban
- * (~4 300 POST/hour, client and server re-triggering each other) was fixed in
- * `main@dcb881bb` before this existed; measured after, the same session costs
- * 26. The unblock request goes out on that evidence, and when it lands this
- * relay should be switched off by clearing `GEV_OVERPASS_RELAY_URL` — a direct
- * request is one hop cheaper and one dependency lighter.
+ * they would rather we stayed away. The cap is the point: Cloudflare's egress
+ * addresses are SHARED, so an uncapped relay would spend someone else's
+ * reputation as well as ours.
+ *
+ * WHEN TO SWITCH IT OFF. Clear `GEV_OVERPASS_RELAY_URL` once the direct path
+ * has been answering for a while — a direct request is one hop cheaper and one
+ * dependency lighter. There is no unblock to wait for: nobody banned us, and a
+ * mail asking FOSSGIS to lift a block would describe a problem that decayed on
+ * its own. Leaving the relay in front is cheap rather than free: when its
+ * upstream refuses, Cloudflare answers a synthetic 521 in ~0.2 s, which this
+ * proxy scores as `server-error` and parks for 20 s.
  *
  * WHY A SHARED MODULE RATHER THAN TWO COPIES. Both ends of this hop make the
  * same four decisions — which path, which header, which token, which upstream —
@@ -57,7 +69,7 @@ export const OVERPASS_RELAY_MARK_HEADER = 'x-surplomb-relay';
 /**
  * Where the relay forwards to.
  *
- * ONE upstream, and the one that bans us. A relay that rotated mirrors would
+ * ONE upstream, and the one that throttles us. A relay that rotated mirrors would
  * duplicate `overpassMirrors.js` in a place with no tests and no cache, and it
  * would hide which host actually answered — the server's rotation already owns
  * that decision and needs this hop to be a plain pipe with a known other end.
