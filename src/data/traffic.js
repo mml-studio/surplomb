@@ -4,6 +4,7 @@ import {
   clampBoundsAroundCenter,
   normalizeFetchBox,
   tierFetchBox,
+  buildOverpassQuery,
   coordsBounds,
   boxesIntersect,
   intersectBoxes,
@@ -797,27 +798,14 @@ const _scratchLerp = new Cesium.Cartesian3();
 // ─── Overpass API ──────────────────────────────────────────
 
 /**
- * Build an Overpass QL query string to fetch road ways within a bounding box.
+ * Re-exported from `trafficBounds.js`, which is Cesium-free.
  *
- * The query filters the OSM `highway` tag against an explicit class list,
- * supplied by the caller's altitude band (`trafficBounds.ROAD_FETCH_TIERS`):
- * the whole drivable graph at street scale, the arterials at metro scale. The
- * `out geom qt;` suffix returns inline geometry (lat/lon per node) sorted by
- * quadtile for faster server response.
- *
- * @param {number} south - Southern latitude bound (degrees).
- * @param {number} west  - Western longitude bound (degrees).
- * @param {number} north - Northern latitude bound (degrees).
- * @param {number} east  - Eastern longitude bound (degrees).
- * @param {Object}  [opts]
- * @param {string[]} opts.classes      - OSM highway classes to fetch.
- * @param {number}  [opts.timeoutSec=25] - Overpass server-side timeout.
- * @returns {string} Overpass QL query body.
+ * The query body IS the proxy's cache key, so the pre-warmer has to be able to
+ * produce it byte for byte — and it runs in Node, where this module cannot be
+ * imported at all. Kept exported here so nothing that already reaches for it
+ * has to know it moved.
  */
-export function buildOverpassQuery(south, west, north, east, { classes, timeoutSec = 25 } = {}) {
-  const regex = `^(${(classes || []).join('|')})$`;
-  return `[out:json][timeout:${timeoutSec}];(way["highway"~"${regex}"](${south},${west},${north},${east}););out geom qt;`;
-}
+export { buildOverpassQuery };
 
 /**
  * Fetch road geometries from the Overpass API via the local proxy.
