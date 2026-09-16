@@ -21,6 +21,7 @@ import createViteConfig, {
   readOverpassDisk,
   fetchOverpassPayload,
   resetOverpassMirrorHealth,
+  overpassUpstreams,
   OVERPASS_SLOT_LIMIT,
 } from '../../vite.config.js';
 
@@ -911,11 +912,81 @@ test('the caller that JOINS a failing request gets the same last-good roads as t
       assert.equal(response.body, stale.body);
       assert.equal(response.headers['X-Overpass-Cache'], 'STALE');
     }
-    assert.equal(fetches, 3, 'one shared rotation over the three mirrors, not two');
+    // Counted against the LIST rather than a literal: the claim under test is
+    // "one rotation, not two", and hard-coding its length turns every added
+    // mirror into a red test that says nothing about coalescing.
+    assert.equal(fetches, overpassUpstreams().length, 'one shared rotation over the mirrors, not two');
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), stale, 'the refusal never overwrote the cache');
   } finally {
     release.resolve();
     mock.mock.restore();
     await unlink(file).catch(() => {});
   }
+});
+
+// ─── Egress relay ────────────────────────────────────────────
+// The VPS's only address is banned by overpass-api.de (measured 2026-09-16:
+// connection refused in under 200 ms on every address, v4 and v6, while the
+// same query answered 200 in 0.20 s from another network). These two tests
+// cover the only two ways that fix can go wrong: the relay not being in the
+// list, and the secret leaving for somewhere that is not the relay.
+
+test('the relay is read from the environment at request time, and leads the rotation', () => {
+  const relayUrl = 'https://surplomb-overpass-relay.example.workers.dev';
+  const before = {
+    url: process.env.GEV_OVERPASS_RELAY_URL,
+    token: process.env.GEV_OVERPASS_RELAY_TOKEN,
+  };
+  try {
+    const direct = overpassUpstreams();
+    assert.ok(direct.length >= 3);
+    assert.match(direct[0], /overpass-api\.de/, 'without a relay, FOSSGIS still leads');
+
+    process.env.GEV_OVERPASS_RELAY_URL = relayUrl;
+    process.env.GEV_OVERPASS_RELAY_TOKEN = 'secret';
+    const relayed = overpassUpstreams();
+    assert.equal(relayed[0], `${relayUrl}/api/interpreter`);
+    assert.deepEqual(relayed.slice(1), direct, 'the public mirrors keep their order behind it');
+
+    // Half a configuration is no configuration: a relay with no secret would be
+    // a guaranteed 401 in front of every request.
+    delete process.env.GEV_OVERPASS_RELAY_TOKEN;
+    assert.deepEqual(overpassUpstreams(), direct);
+  } finally {
+    if (before.url === undefined) delete process.env.GEV_OVERPASS_RELAY_URL;
+    else process.env.GEV_OVERPASS_RELAY_URL = before.url;
+    if (before.token === undefined) delete process.env.GEV_OVERPASS_RELAY_TOKEN;
+    else process.env.GEV_OVERPASS_RELAY_TOKEN = before.token;
+  }
+});
+
+test('the relay secret reaches the relay and no public mirror, across a whole rotation', async () => {
+  const relay = 'https://surplomb-overpass-relay.example.workers.dev/api/interpreter';
+  const endpoints = [relay, ...FOUR_MIRRORS];
+  const seen = new Map();
+  const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints,
+    relay: { endpoint: relay, token: 'the-secret' },
+    mirrorHealth: new Map(),
+    outage: { until: 0 },
+    fetchImpl: async (endpoint, init) => {
+      seen.set(endpoint, init.headers);
+      // The relay fails so the rotation carries on to the public mirrors — the
+      // only arrangement where a leak would actually show up.
+      return endpoint === relay
+        ? mirrorResponse(502, '')
+        : mirrorResponse(200, '{"elements":[{"type":"node","id":1}]}');
+    },
+  });
+  assert.equal(payload.status, 200);
+  assert.equal(seen.get(relay)['x-surplomb-relay-token'], 'the-secret');
+  for (const mirror of FOUR_MIRRORS) {
+    if (!seen.has(mirror)) continue;
+    assert.equal(
+      seen.get(mirror)['x-surplomb-relay-token'],
+      undefined,
+      `${mirror} must never receive the relay secret`,
+    );
+  }
+  assert.ok(seen.size >= 2, 'a rotation that stopped at the relay proves nothing');
 });

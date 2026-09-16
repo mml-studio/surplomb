@@ -58,7 +58,29 @@ export const OVERPASS_MIRROR_PROFILES = Object.freeze({
   'overpass-api.de': Object.freeze({ group: 'fossgis', typicalMs: 394 }),
   'lz4.overpass-api.de': Object.freeze({ group: 'fossgis', typicalMs: 13_100 }),
   'overpass.private.coffee': Object.freeze({ group: 'private-coffee', typicalMs: 20_000 }),
+  // Last resort, and the numbers say why it is last rather than why it is here:
+  // 8 600 ms on the Biarritz road box from the VPS on 2026-09-16 (1 069 ways,
+  // the exact FOSSGIS count, so it carries the planet), 2 successes in 3 at
+  // ~3 700 ms that afternoon, and a 504 in 641 ms on a re-probe the same
+  // evening. `typicalMs` records the SUCCESSFUL case, which is the one an
+  // operator reading a parking warning needs to compare against.
+  'maps.mail.ru': Object.freeze({ group: 'vk-maps', typicalMs: 8_600 }),
 });
+
+/**
+ * An egress relay is its OWN machine, and must stay that way.
+ *
+ * `deploy/cloudflare/overpass-relay/` forwards to `overpass-api.de`, so it is
+ * tempting to give it the `fossgis` group. That would be wrong in the one case
+ * the relay exists for: a 429 or a refusal seen THROUGH the relay is a verdict
+ * on Cloudflare's address, not on the VPS's, and merging the groups would let a
+ * direct refusal park the relay — re-creating, in the bookkeeping, exactly the
+ * blackout the relay was added to route around.
+ *
+ * Nothing is declared here because the relay's hostname is chosen at deploy
+ * time (`<name>.<subdomain>.workers.dev`). `mirrorProfile` keys an unknown host
+ * on its own full hostname, which gives the relay a private group for free.
+ */
 
 /**
  * The machine an endpoint sits on, and what it usually costs.
