@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import trafficLayer, {
   deriveTrafficFlowError,
+  dutyCycleDelay,
   trafficFeedPresentation,
 } from './traffic.js';
 import { DataLayerManager, layerFeedState } from './manager.js';
@@ -172,4 +173,35 @@ test('the shipped layer boots keyless-honest before any status check', () => {
   assert.equal(stats.error, null);
   assert.ok(!LIVE_CLAIM.test(stats.loadingLabel), `boot label implies live data: ${stats.loadingLabel}`);
   assert.equal(layerFeedState(stats), 'fallback');
+});
+
+
+// ─── Ground-seating duty cycle ────────────────────────────────────────────
+// The loop that seats roads on the drawn surface buys its readings in
+// batches, and on the photorealistic mesh a batch costs about 120 ms. What
+// keeps that off the frame budget is not the batch — it is the quiet after
+// it. These are the two ends of that rule.
+
+test('a cheap pass keeps the plain tick, so the globe path is unchanged', () => {
+  // `globe.getHeight` costs ~0.02 ms a reading; a pass that spent 1 ms inside
+  // its probes must come straight back, exactly as it did before the duty
+  // cycle existed. Keying this off the WHOLE pass instead of the probes was
+  // measured taking qa-traffic-floor from converging in 7 s to not converging
+  // inside 90 s.
+  assert.equal(dutyCycleDelay(0), 250);
+  assert.equal(dutyCycleDelay(1), 250);
+  assert.equal(dutyCycleDelay(50), 250);
+});
+
+test('an expensive pass is followed by four times its own cost in quiet', () => {
+  // 20 % duty: 120 ms of probes earns 480 ms of silence.
+  assert.equal(dutyCycleDelay(120), 480);
+  assert.equal(dutyCycleDelay(200), 800);
+});
+
+test('the quiet is capped, so one pathological probe cannot park the loop', () => {
+  assert.equal(dutyCycleDelay(5000), 2000);
+  assert.equal(dutyCycleDelay(Number.POSITIVE_INFINITY), 250);
+  assert.equal(dutyCycleDelay(Number.NaN), 250);
+  assert.equal(dutyCycleDelay(-10), 250);
 });

@@ -2,6 +2,7 @@ import * as Cesium from 'cesium';
 import {
   deriveFetchCenter,
   clampBoundsAroundCenter,
+  normalizeFetchBox,
   roadFetchTier,
   roadRefetchNeeded,
   ROAD_ACTIVATION_ALTITUDE_M,
@@ -85,23 +86,105 @@ const FETCH_DEBOUNCE = 320;
 /** @const {number} Meters — vertical offset to keep dots above clamped terrain surface */
 const DOT_HEIGHT_OFFSET = 3.0;
 /**
- * @const {number} `sampleHeight` calls one road-seating pass may spend.
+ * @const {number} `sampleHeight` calls one seating pass spends on the GLOBE.
  *
- * Measured on this view (Biarritz, 1 744 dots in the scene, headless
- * SwiftShader, 2026-09-14): **24.0 ms per call** — four times the 6.28 ms
- * `renderedSurface.js` measured, because a probe is a synchronous offscreen
- * pick and this layer fills the scene with pickable points. 12 × 24 ms is
- * ~290 ms, spent on a settle or a retry tick, never on a frame. The rest of
- * the network borrows from the nearest road that already has its own reading,
- * and the backoff below converges the box in a handful of passes.
+ * ── What a ground probe actually costs, measured ────────────────────────────
+ * `scene.sampleHeight` forces a synchronous offscreen pick render, and the
+ * thing that matters about it is not the per-call price but the SHAPE of the
+ * bill. Measured 2026-09-16 on an M5, `full` profile, Paris at 900 m, the
+ * Google photorealistic mesh drained, 6 000 dots in the scene, fresh
+ * coordinates every call so nothing could be cached — median of six runs, a
+ * frame rendered between each:
+ *
+ *   | calls in one batch |  1   |  2   |  4   |  8   | 12   | 24    | 48    |
+ *   | batch total (ms)   | 50.5 | 55.9 | 63.4 | 81.6 | 94.1 | 117.9 | 200.5 |
+ *   | per call (ms)      | 50.5 | 27.9 | 15.8 | 10.2 |  7.8 |   4.9 |   4.2 |
+ *
+ * That is **~47 ms of fixed cost per BATCH plus ~3.2 ms per call** — the pick
+ * frustum switch and the tileset re-traversal are paid once, whatever the
+ * batch holds. Two consequences, and they point in opposite directions:
+ *
+ *   - spreading probes out is the WORST thing that can be done. A time box
+ *     that cut the batch to one call was measured on 2026-09-16 taking the
+ *     seating loop from 9.8 s to 16.2 s of main thread over the same 40 s.
+ *   - no batch, however small, fits in a frame. Even one call is 50 ms.
+ *
+ * So the lever is not the batch size. It is the NUMBER OF BATCHES, and that is
+ * set by {@link floorCellDeg} — how much ground one reading is allowed to
+ * answer for.
+ *
+ * On the globe a probe is `globe.getHeight`, a CPU lookup into resident
+ * terrain, and none of this applies; 12 is kept there because it is what the
+ * keyless path has always done.
  */
 const FLOOR_SAMPLE_BUDGET = 12;
+/**
+ * @const {number} `sampleHeight` calls one pass spends on the PHOTOREAL mesh.
+ *
+ * Down the flat part of the curve above: 24 calls cost 117.9 ms, 4.9 ms each,
+ * where 12 cost 94.1 ms at 7.8 ms each. Twice the work for a quarter more
+ * time. Past ~24 the marginal gain stops paying for the longer freeze — 48
+ * calls is 200 ms, six dropped frames in one block.
+ */
+const FLOOR_SAMPLE_BUDGET_PHOTOREAL = 24;
+/**
+ * @const {number} Ms one seating pass may hold the main thread.
+ *
+ * NOT the mechanism that sizes a pass — the budgets above do that, because
+ * the cost is per batch and cutting a batch short saves almost nothing. This
+ * is the guard against a surface that behaves unlike the measurement: a probe
+ * that costs ten times what it should still cannot produce the **1 026 ms**
+ * frozen page measured before this work.
+ */
+const FLOOR_PASS_BUDGET_MS = 150;
+/**
+ * @const {number} Probes a pass buys before the clock is allowed to stop it.
+ *
+ * The guard above has to be floored, and the cost curve says exactly where.
+ * Because ~47 ms of every batch is fixed, a batch of one costs 50.5 ms to buy
+ * one reading where a batch of eight costs 81.6 ms to buy eight — so cutting
+ * a batch short does not save the pass, it throws away everything the fixed
+ * cost already bought.
+ *
+ * Measured the hard way on 2026-09-16: with no floor, `qa-traffic-floor` under
+ * headless SwiftShader (where one photoreal probe is ~375 ms, not 5) blew the
+ * 150 ms guard on its FIRST probe every time, bought one reading a pass, and
+ * reached 40 cells in 90 s where the unfixed code reached 226. The controls
+ * failed on convergence, not on accuracy — the layer was doing the right thing
+ * as slowly as it is possible to do it.
+ */
+const FLOOR_MIN_BATCH = 8;
+/**
+ * @const {number} Share of the main thread the seating loop may occupy.
+ *
+ * The batch bounds one pass; this bounds the loop. A 118 ms pass is followed
+ * by ~470 ms of quiet, so the layer converges in a handful of visible hitches
+ * instead of holding a quarter of the wall clock for half a minute — which is
+ * what the reported "hyper saccadé, puis ça se calme au bout de 30 secondes"
+ * was: Chrome's Long Animation Frame attribution put `runRoadFloorSeatingPass`
+ * at **9 843 ms of the first 40 seconds** after the layer was switched on.
+ */
+const FLOOR_DUTY_CYCLE = 0.2;
+/** @const {number} Ms — ceiling on the duty-cycle backoff between passes. */
+const FLOOR_DUTY_MAX_DELAY_MS = 2000;
+/**
+ * @const {number} Cell rings a waiting road will search for a reading to borrow.
+ *
+ * 3 rings is ±3 cells. Beyond that the box-centre reading is as good a guess
+ * as a cell that far away, and the search is what used to be an O(roads²)
+ * scan: `borrowedFloorM` walked EVERY parsed road for EVERY waiting road,
+ * which at Paris's 1 991 roads is ~4 M distance tests a pass — 13 ms measured
+ * for only 561 of them, so ~46 ms once the whole network is waiting. The cell
+ * grid answers the same question in a handful of map lookups, and answers it
+ * better: the nearest CELL beats the nearest road's first vertex.
+ */
+const FLOOR_BORROW_RINGS = 3;
 /**
  * @const {number} Ms between passes that are MAKING PROGRESS.
  *
  * Two cadences, because there are two different waits. Once the mesh is armed
  * every pass converts budget into seated roads, so it should run back-to-back
- * until the box is done — 421 roads at 12 a pass is ~9 s at this tick.
+ * until the box is done.
  */
 const FLOOR_TICK_MS = 250;
 /** @const {number} Ms — first delay while WAITING for the mesh to drain. */
@@ -128,6 +211,30 @@ const FLOOR_RETRY_MAX_MS = 8000;
  * never converging.
  */
 const FLOOR_CELL_DEG = 0.001;
+/**
+ * @const {number} Degrees — the same grain on the PHOTOREALISTIC mesh.
+ *
+ * ~222 m instead of ~111 m, and the reason is arithmetic rather than taste.
+ * A reading on the globe is a free CPU lookup, so the grain can be as fine as
+ * the relief; a reading on the mesh costs a batch (see
+ * {@link FLOOR_SAMPLE_BUDGET_PHOTOREAL}), and the number of BATCHES is what
+ * the reader feels. Measured over Paris at 900 m, 1 991 roads in a 0.05° box:
+ *
+ *   - at 0.001° the box holds ~900 distinct cells — 38 batches of 24, about
+ *     4.5 s of main thread, delivered in 38 hitches;
+ *   - at 0.002° it holds ~225 — 10 batches, about 1.2 s, ten hitches.
+ *
+ * 0.003° was measured too and rejected: it halves the cost again but takes
+ * `qa-traffic-floor`'s median dot-to-mesh gap from 3.3 m to 6.1 m, which is
+ * the guard's whole budget, and its p90 from 8.1 m to 32.8 m.
+ *
+ * What it costs is the relief INSIDE 222 m, which a city street grid keeps
+ * small: the borrow below then interpolates nothing, it simply takes the
+ * nearest cell, so a road is never worse than the ground 222 m from it. The
+ * globe keeps the fine grain, so the keyless path and `qa-traffic-floor` —
+ * which runs on the globe — are untouched by this trade.
+ */
+const FLOOR_CELL_DEG_PHOTOREAL = 0.002;
 /** @const {number} Cells kept before the oldest are dropped (session cache). */
 const FLOOR_CELL_MAX = 4000;
 /** @const {number} Hard cap on total rendered dot primitives for GPU/CPU performance */
@@ -298,6 +405,46 @@ const _floorCells = new Map();
  * @type {{done:boolean, armed:boolean, probes:number, seated:number, waiting:number}}
  */
 let _floorSeatState = { done: true, armed: true, probes: 0, seated: 0, waiting: 0 };
+/**
+ * Where the LAST seating pass spent its milliseconds.
+ *
+ * Measured 2026-09-16 on the photorealistic stack over Paris: the pass blocked
+ * the main thread 100–200 ms every 250 ms for about thirty seconds after the
+ * layer was switched on — 6.6 s of the first 40, by Chrome's own Long
+ * Animation Frame attribution — and that is the reported "hyper saccadé".
+ * Knowing the pass is expensive is not enough to fix it: the probes, the
+ * nearest-seated-road scan and the waypoint rewrite are three different costs
+ * with three different remedies, and only a split says which one to attack.
+ * Four `performance.now()` calls a pass, on a timer that already runs at most
+ * four times a second.
+ * @type {{totalMs:number, probeMs:number, borrowMs:number, applyMs:number,
+ *   reseatMs:number, probes:number, borrowScans:number, applied:number}}
+ */
+let _floorPassCost = {
+  totalMs: 0, probeMs: 0, borrowMs: 0, applyMs: 0, reseatMs: 0,
+  probes: 0, borrowScans: 0, applied: 0,
+};
+/** Peak single-pass block seen since the layer was enabled (ms). */
+let _floorPassWorstMs = 0;
+/** Cumulative main-thread time the seating loop has spent since enable (ms). */
+let _floorPassTotalMs = 0;
+/** Passes run, probes bought, and milliseconds spent inside the probes. */
+let _floorPassCount = 0;
+let _floorProbeCount = 0;
+let _floorProbeMsTotal = 0;
+/** Probes that came back refused (undrained mesh, implausible band). */
+let _floorProbeNulls = 0;
+/**
+ * The last {@link FLOOR_PASS_LOG_MAX} passes, newest last.
+ *
+ * A worst-case alone cannot size a fix: a loop whose passes are 5 ms with one
+ * 1 000 ms outlier and a loop whose passes are all 150 ms look identical from
+ * the maximum, and they want opposite remedies. Polling `getStats` from a
+ * harness undersamples a 250 ms timer, so the shape is kept here instead.
+ * @type {Array<{at:number, totalMs:number, probeMs:number, probes:number}>}
+ */
+const _floorPassLog = [];
+const FLOOR_PASS_LOG_MAX = 200;
 /**
  * Which surface the readings in hand were taken from, `'globe'` or
  * `'photoreal'`.
@@ -870,15 +1017,26 @@ function reseatDotPositions() {
 /**
  * The best floor currently known for a coordinate, without buying a probe.
  *
- * Preference order: the nearest road that already owns a reading, then the
- * box-centre reading, then the ellipsoid. Never a mid-stream sample — that is
- * the defect this whole section exists to remove.
+ * Preference order: the nearest READ CELL within {@link FLOOR_BORROW_RINGS},
+ * then the box-centre reading, then the ellipsoid. Never a mid-stream sample —
+ * that is the defect this whole section exists to remove.
  *
- * Both lenders are gated on the CURRENT fetch box. `_roads` still holds the
- * previous view's network while the new one is being parsed, and an ungated
- * nearest-first search hands a Paris height to a Biarritz street — the same
- * "one bad reading lent to a whole commune" failure `provisionalFloor.js`
- * measured, just over a longer distance.
+ * ── Why the cell grid and not the nearest seated road ──────────────────────
+ * This used to scan every parsed road for every waiting road. At Paris's
+ * 1 991 roads that is ~4 M distance tests a pass, and it was measured at 13 ms
+ * for only 561 of them — so ~46 ms once the whole network is waiting, every
+ * 250 ms, on top of the probes. The cell grid holds exactly the same readings
+ * (every probe is written into it) keyed by ~111 m cell, so the same question
+ * is a handful of map lookups. It is also a better answer: a road's own cell
+ * beats whichever road happens to have the nearest FIRST VERTEX, which for a
+ * long avenue can be a kilometre from the point being asked about.
+ *
+ * The box gate is kept and moved onto the QUERY. `_roads` still holds the
+ * previous view's network while the new one is being parsed, and `_floorCells`
+ * is only cleared when the SURFACE changes — so a coordinate outside the
+ * current fetch box must not be lent anything, or a Paris height reaches a
+ * Biarritz street, the same "one bad reading lent to a whole commune" failure
+ * `provisionalFloor.js` measured.
  *
  * @param {number[]|undefined} coord `[lon, lat]`.
  * @returns {number} Ellipsoidal metres.
@@ -887,19 +1045,30 @@ function borrowedFloorM(coord) {
   const box = _lastBounds;
   const inBox = (lon, lat) => !box
     || (lat >= box.south && lat <= box.north && lon >= box.west && lon <= box.east);
-  let best = (_boxFloor && inBox(_boxFloor.lon, _boxFloor.lat)) ? _boxFloor.m : 0;
-  if (!coord) return best;
-  let bestD2 = Infinity;
-  for (const road of _roads) {
-    if (!roadFloorIsCurrent(road, _floorSurface)) continue;
-    const other = road.coords[0];
-    if (!other || !inBox(other[0], other[1])) continue;
-    const dLon = other[0] - coord[0];
-    const dLat = other[1] - coord[1];
-    const d2 = dLon * dLon + dLat * dLat;
-    if (d2 < bestD2) { bestD2 = d2; best = road.floorM; }
+  const fallback = (_boxFloor && inBox(_boxFloor.lon, _boxFloor.lat)) ? _boxFloor.m : 0;
+  if (!coord || !inBox(coord[0], coord[1])) return fallback;
+  const deg = floorCellDeg();
+  const lat0 = Math.round(coord[1] / deg);
+  const lon0 = Math.round(coord[0] / deg);
+  // Ring by ring outward, nearest first: the road's own cell, then its
+  // neighbours. The first ring that answers wins, so a dense box stops at
+  // radius 0 and only an edge road ever walks out to the limit.
+  for (let r = 0; r <= FLOOR_BORROW_RINGS; r++) {
+    let best = null;
+    let bestD2 = Infinity;
+    for (let dLat = -r; dLat <= r; dLat++) {
+      // Only the ring itself — the interior was searched by the previous r.
+      const lonStep = (Math.abs(dLat) === r) ? 1 : 2 * r;
+      for (let dLon = -r; dLon <= r; dLon += (lonStep || 1)) {
+        const m = _floorCells.get(`${lat0 + dLat},${lon0 + dLon}`);
+        if (m === undefined) continue;
+        const d2 = dLat * dLat + dLon * dLon;
+        if (d2 < bestD2) { bestD2 = d2; best = m; }
+      }
+    }
+    if (best !== null) return best;
   }
-  return best;
+  return fallback;
 }
 
 /**
@@ -936,13 +1105,53 @@ function borrowedFloorM(coord) {
  *   waiting:number}} What the pass found and what it spent.
  */
 function seatRoadFloors() {
+  const t0 = performance.now();
+  let probeMs = 0;
+  let applyMs = 0;
+  let borrowMs = 0;
+  let reseatMs = 0;
+  let borrowScans = 0;
+  let applied = 0;
+  let nulls = 0;
+  /** Close the cost record for this pass, whichever way it returns. */
+  const close = (result) => {
+    const totalMs = performance.now() - t0;
+    _floorPassCost = {
+      totalMs: +totalMs.toFixed(1),
+      probeMs: +probeMs.toFixed(1),
+      borrowMs: +borrowMs.toFixed(1),
+      applyMs: +applyMs.toFixed(1),
+      reseatMs: +reseatMs.toFixed(1),
+      probes: result.probes,
+      nulls,
+      borrowScans,
+      applied,
+    };
+    _floorPassWorstMs = Math.max(_floorPassWorstMs, +totalMs.toFixed(1));
+    _floorPassTotalMs += totalMs;
+    _floorPassCount += 1;
+    _floorProbeCount += result.probes;
+    _floorProbeMsTotal += probeMs;
+    _floorPassLog.push({
+      at: Math.round(performance.now()),
+      totalMs: +totalMs.toFixed(1),
+      probeMs: +probeMs.toFixed(1),
+      probes: result.probes,
+      nulls,
+      armed: result.armed,
+      seated: result.seated,
+      waiting: result.waiting,
+    });
+    if (_floorPassLog.length > FLOOR_PASS_LOG_MAX) _floorPassLog.shift();
+    return result;
+  };
   const scene = _viewer?.scene;
-  if (!scene || !_roads.length) return { done: true, armed: true, probes: 0, seated: 0, waiting: 0 };
+  if (!scene || !_roads.length) return close({ done: true, armed: true, probes: 0, seated: 0, waiting: 0 });
   // The globe stack answers from resident terrain tiles for free; the
   // photorealistic stack has to be armed (drained, under the camera ceiling)
   // before a probe means anything.
   const armed = !photorealSurface(scene) || surfaceSamplingArmed(scene);
-  if (!armed) return { done: false, armed: false, probes: 0, seated: 0, waiting: _roads.length };
+  if (!armed) return close({ done: false, armed: false, probes: 0, seated: 0, waiting: _roads.length });
 
   // A reading only measures the surface that answered it. When the stack
   // switches, the shared caches are worthless and every road needs asking
@@ -956,18 +1165,29 @@ function seatRoadFloors() {
   }
 
   const visible = visibleRoadsForAltitude(_roads, _lastRenderAltitude);
-  if (!visible.length) return { done: true, armed, probes: 0, seated: 0, waiting: 0 };
+  if (!visible.length) return close({ done: true, armed, probes: 0, seated: 0, waiting: 0 });
 
-  let budget = FLOOR_SAMPLE_BUDGET;
+  let budget = surface === 'photoreal' ? FLOOR_SAMPLE_BUDGET_PHOTOREAL : FLOOR_SAMPLE_BUDGET;
   let probes = 0;
+  /** One probe, timed — `sampleHeight` is a synchronous offscreen pick. */
+  const probe = (lonDeg, latDeg) => {
+    const t = performance.now();
+    const m = renderedSurfaceM(scene, Cesium.Math.toRadians(lonDeg), Cesium.Math.toRadians(latDeg));
+    probeMs += performance.now() - t;
+    budget -= 1;
+    probes += 1;
+    // A refused reading still costs a call and still costs the batch. Counted
+    // because "the loop never converges" and "the loop converges slowly" look
+    // identical from the seated count, and only one of them is a bug.
+    if (m === null) { nulls += 1; _floorProbeNulls += 1; }
+    return m;
+  };
 
   // Tier 1 — the box reading, bought once and re-bought when the box moves.
   const center = _lastBounds ? getBoundsCenter(_lastBounds) : null;
   if (center && (!_boxFloor || _boxFloor.lat !== center.lat || _boxFloor.lon !== center.lon)) {
-    const m = renderedSurfaceM(scene, Cesium.Math.toRadians(center.lon), Cesium.Math.toRadians(center.lat));
-    budget -= 1;
-    probes += 1;
-    if (m === null) return { done: false, armed, probes, seated: 0, waiting: visible.length };
+    const m = probe(center.lon, center.lat);
+    if (m === null) return close({ done: false, armed, probes, seated: 0, waiting: visible.length });
     _boxFloor = { lat: center.lat, lon: center.lon, m };
   }
 
@@ -977,41 +1197,65 @@ function seatRoadFloors() {
   let seated = 0;
   let moved = false;
   if (pending.length) {
-    pending.sort((a, b) => (
-      Cesium.Cartesian3.distanceSquared(cameraPos, a.waypoints[0])
-      - Cesium.Cartesian3.distanceSquared(cameraPos, b.waypoints[0])
-    ));
+    // Distance once per road, not twice per comparison: a comparator that
+    // calls `distanceSquared` does it ~2 n log n times, which at 1 991 roads
+    // is 44 000 square roots a pass to answer a question with 1 991 answers.
+    for (const road of pending) {
+      road._floorSortD2 = Cesium.Cartesian3.distanceSquared(cameraPos, road.waypoints[0]);
+    }
+    pending.sort((a, b) => a._floorSortD2 - b._floorSortD2);
+    // The BATCH ends the probing; the clock is only a guard against a surface
+    // that behaves unlike the measurement. Roads whose cell has already been
+    // read stay free after either runs out, so a pass that can no longer
+    // afford a probe still seats every road standing on ground someone else
+    // paid for — which is what makes a coarse grain converge in one sweep.
+    const deadline = t0 + FLOOR_PASS_BUDGET_MS;
+    let spent = false;
     for (const road of pending) {
       const coord = road.coords[0];
       if (!coord) continue;
       const key = floorCellKey(coord[0], coord[1]);
       let m = _floorCells.get(key);
       if (m === undefined) {
-        // Only a probe costs budget — a cell already read is free, which is
-        // what lets a dense box finish at all.
-        if (budget <= 0) break;
-        m = renderedSurfaceM(scene, Cesium.Math.toRadians(coord[0]), Cesium.Math.toRadians(coord[1]));
-        budget -= 1;
-        probes += 1;
+        if (spent) continue;
+        // At least one probe per pass: on a surface where a single call costs
+        // more than the whole box, a pass that bought nothing would loop for
+        // ever and the network would never converge.
+        // Stop only when the batch has paid for its fixed cost AND the clock
+        // has run out. Either test alone is wrong: the count cannot see a
+        // surface ten times slower than the measurement, and the clock alone
+        // cuts batches down to the one size that is never worth buying.
+        if (budget <= 0
+          || (probes >= FLOOR_MIN_BATCH && performance.now() >= deadline)) { spent = true; continue; }
+        m = probe(coord[0], coord[1]);
         if (m === null) continue;
         rememberFloorCell(key, m);
       }
-      if (applyRoadFloor(road, m, true, surface)) moved = true;
+      const tApply = performance.now();
+      if (applyRoadFloor(road, m, true, surface)) { moved = true; applied += 1; }
+      applyMs += performance.now() - tApply;
       seated += 1;
     }
   }
 
   // Everyone still waiting stands on the best reading now available — the
   // nearest finished road, or the box centre.
+  const tBorrow = performance.now();
   let waiting = 0;
   for (const road of visible) {
     if (roadFloorIsCurrent(road, surface)) continue;
     waiting += 1;
-    if (applyRoadFloor(road, borrowedFloorM(road.coords[0]), false, surface)) moved = true;
+    borrowScans += 1;
+    if (applyRoadFloor(road, borrowedFloorM(road.coords[0]), false, surface)) { moved = true; applied += 1; }
   }
+  borrowMs = performance.now() - tBorrow;
   // Dots held at a red light never re-read their waypoints on their own.
-  if (moved) reseatDotPositions();
-  return { done: waiting === 0, armed, probes, seated, waiting };
+  if (moved) {
+    const tReseat = performance.now();
+    reseatDotPositions();
+    reseatMs = performance.now() - tReseat;
+  }
+  return close({ done: waiting === 0, armed, probes, seated, waiting });
 }
 
 /**
@@ -1025,7 +1269,22 @@ function roadFloorIsCurrent(road, surface) {
 
 /** Cell key for a coordinate, at {@link FLOOR_CELL_DEG}. */
 function floorCellKey(lon, lat) {
-  return `${Math.round(lat / FLOOR_CELL_DEG)},${Math.round(lon / FLOOR_CELL_DEG)}`;
+  const deg = floorCellDeg();
+  return `${Math.round(lat / deg)},${Math.round(lon / deg)}`;
+}
+
+/**
+ * The cell grain in force, which depends on what a reading costs.
+ *
+ * Keyed off `_floorSurface` rather than off the scene, so every reader of the
+ * grid — the probe, the borrow, the key — agrees within a pass even if the
+ * stack changes underneath. `seatRoadFloors` clears the grid whenever that
+ * field changes, so a key written at one grain is never read at another.
+ *
+ * @returns {number} Degrees.
+ */
+function floorCellDeg() {
+  return _floorSurface === 'photoreal' ? FLOOR_CELL_DEG_PHOTOREAL : FLOOR_CELL_DEG;
 }
 
 /** Store a cell reading, dropping the oldest once the cache is full. */
@@ -1072,14 +1331,48 @@ function restartRoadFloorSeating() {
 }
 
 /**
+ * How long to wait after a pass that cost `spentMs`, so the seating loop
+ * averages no more than {@link FLOOR_DUTY_CYCLE} of the main thread.
+ *
+ * Never shorter than the tick (a cheap pass keeps today's cadence exactly,
+ * which is what the globe stack does) and never longer than
+ * {@link FLOOR_DUTY_MAX_DELAY_MS} (a pathological probe must not park the loop
+ * for a minute). Exported for the unit test.
+ *
+ * Sized on the PROBE time, not on the whole pass. The rest of a pass — the
+ * borrow scan, the waypoint rewrite, re-projecting the stopped dots — is
+ * bounded work that has to happen once per pass whatever the surface costs,
+ * and throttling on it starves the loop exactly where probes are free. That
+ * was measured, on the globe stack: keying this off the total took
+ * `qa-traffic-floor` from converging in 7 s to not converging inside its 90 s
+ * budget, because a 60 ms pass whose probes cost 1 ms was being told to wait
+ * 240 ms before the next one.
+ *
+ * @param {number} spentMs Milliseconds the pass spent INSIDE its probes.
+ * @returns {number} Delay in ms before the next pass.
+ */
+export function dutyCycleDelay(spentMs) {
+  if (!Number.isFinite(spentMs) || spentMs <= 0) return FLOOR_TICK_MS;
+  const idle = Math.round(spentMs * ((1 / FLOOR_DUTY_CYCLE) - 1));
+  return Math.min(FLOOR_DUTY_MAX_DELAY_MS, Math.max(FLOOR_TICK_MS, idle));
+}
+
+/**
  * Run one seating pass and book the next one.
  *
  * Two cadences, because there are two different waits. A pass that CANNOT
  * sample — the mesh has not drained — backs off by doubling: see
  * {@link FLOOR_RETRY_MAX_MS} for why a fixed interval loses that race. A pass
  * that seated something and still has roads waiting is making steady progress,
- * so it comes straight back at {@link FLOOR_TICK_MS}. Finishing stops the loop
- * and resets the backoff, so the next camera move starts responsive again.
+ * so it comes straight back at {@link FLOOR_TICK_MS} — unless the pass itself
+ * overran its time box, in which case the next one is pushed out far enough to
+ * hold the loop under {@link FLOOR_DUTY_CYCLE}. One probe cannot be
+ * interrupted, so on a surface where a single call costs 84 ms the box alone
+ * would still hand the loop a third of the frame budget; the backoff is what
+ * turns "one pass is short" into "the loop is quiet".
+ *
+ * Finishing stops the loop and resets the backoff, so the next camera move
+ * starts responsive again.
  */
 function runRoadFloorSeatingPass() {
   _floorRetryTimer = null;
@@ -1092,7 +1385,7 @@ function runRoadFloorSeatingPass() {
   }
   if (pass.armed && pass.seated > 0) {
     _floorRetryDelay = FLOOR_RETRY_MIN_MS;
-    armRoadFloorSeating(FLOOR_TICK_MS);
+    armRoadFloorSeating(dutyCycleDelay(_floorPassCost.probeMs));
     return;
   }
   // Armed but seating nothing is not progress, whatever the reason — a globe
@@ -1112,6 +1405,9 @@ function resetRoadFloors() {
   _boxFloor = null;
   _floorSurface = null;
   _floorSeatState = { done: true, armed: true, probes: 0, seated: 0, waiting: 0 };
+  _floorPassWorstMs = 0;
+  _floorPassTotalMs = 0;
+  _floorProbeNulls = 0;
 }
 
 // ─── Road Length Estimation ────────────────────────────────
@@ -1939,9 +2235,13 @@ function onCameraChanged() {
   // horizon. The box SPAN is the band's too: 0.05° at street scale, 0.30° at
   // metro scale, where a 5.5 km box would show a third of the city.
   const fetchCenter = getFetchCenter(tier);
-  const clamped = fetchCenter
+  // One more step after the clamp, and it is the one the CACHE needs: the box
+  // is put on the band's lattice at the band's full span, so the same street
+  // asks the same question whatever the camera pose and whatever the window
+  // size. See `normalizeFetchBox` for the 65 ms / 46 s the two cases cost.
+  const clamped = normalizeFetchBox(fetchCenter
     ? clampBoundsAroundCenter(bounds, fetchCenter, tier.spanDeg)
-    : clampBounds(bounds, tier);
+    : clampBounds(bounds, tier), tier);
   const center = getBoundsCenter(clamped);
 
   // Skip re-fetch when the band, the coverage and the centre all say the held
@@ -2969,7 +3269,9 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
     clearFlowRibbon();
     return;
   }
-  const clamped = clampBounds(bounds, tier);
+  // Idempotent on a box `onCameraChanged` already normalised; it matters for
+  // the callers that reach here with raw bounds (tests, the tier re-decide).
+  const clamped = normalizeFetchBox(clampBounds(bounds, tier), tier);
 
   // Cache key: fixed-precision bounding-box string for deterministic lookups
   const cacheKey = `${clamped.south.toFixed(4)},${clamped.west.toFixed(4)},${clamped.north.toFixed(4)},${clamped.east.toFixed(4)}`;
@@ -3017,50 +3319,88 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
       return;
     }
 
-    // Intermediate path: render cached major roads while fetching the rest
-    if (cache.major) {
-      if (!await applyFlowThenRender(
-        cache.major, clamped, generation, altitude, 'Cache major', tier, trace
-      )) return;
-      renderedSomething = true;
-    } else {
-      // Fetch major roads first (smaller payload, faster response)
-      _activeFetchAbort = new AbortController();
-      console.log(`[Data:Traffic] Fast fetch major roads [${cacheKey}]`);
-      const majorData = await fetchRoads(
-        clamped.south, clamped.west, clamped.north, clamped.east,
-        { classes: tier.classes, pass: 'major', timeoutSec: 12, signal: _activeFetchAbort.signal },
-        trace,
-      );
-      // Discard stale response if a newer load was triggered while waiting
-      if (generation !== _loadGeneration) return;
-      cache.major = _parseRoads(majorData, trace);
-      if (!await applyFlowThenRender(
-        cache.major, clamped, generation, altitude, 'Loaded major', tier, trace
-      )) return;
-      renderedSomething = true;
-    }
+    // ── Both road passes go out TOGETHER ───────────────────────────────
+    // The major pass exists to paint motion early, and running it IN FRONT of
+    // the full graph assumed it was the fast one. Measured 2026-09-16 against
+    // the hosted origin from the VPS, cold boxes, four cities: which of the
+    // two answers first is very close to a coin toss — Strasbourg's arterials
+    // took 13.8 s while its full graph took 0.8 s, Grenoble's 15.8 s against
+    // 7.6 s — because the wait is Overpass's own queue, not the payload (the
+    // full graph is twice the bytes).
+    //
+    // Sequenced, a cold box therefore costs the SUM: Nantes 13.8 + 14.6 =
+    // 28.4 s. Concurrent it costs the slower of the two, and first paint costs
+    // the FASTER: measured concurrent, Rennes 8.2 s wall with dots at 6.8 s,
+    // Montpellier 15.8 s, Grenoble 16.0 s with dots at 7.6 s, Reims 4.7 s with
+    // dots at 0.55 s. The proxy grants two upstream slots, which is exactly
+    // what this spends.
+    _activeFetchAbort = new AbortController();
+    const roadSignal = _activeFetchAbort.signal;
+    // Its own controller so the major pass can be dropped once the full graph
+    // is on screen WITHOUT cancelling the flow fetch, which shares the one
+    // above.
+    const majorAbort = new AbortController();
+    roadSignal.addEventListener('abort', () => majorAbort.abort(), { once: true });
+
+    // Renders are serialised and RANKED. The full graph is a superset of the
+    // major one, so a major pass that lands late must not repaint over it and
+    // take the residential streets back off the screen — and two overlapping
+    // `applyFlowThenRender` calls could otherwise interleave their renders,
+    // since each waits up to FLOW_RENDER_RACE_MS before painting.
+    let paintChain = Promise.resolve();
+    let bestRank = -1;
+    const paint = (roads, label, rank) => {
+      paintChain = paintChain.then(async () => {
+        if (generation !== _loadGeneration) return;
+        if (rank <= bestRank || !Array.isArray(roads) || roads.length === 0) return;
+        if (await applyFlowThenRender(roads, clamped, generation, altitude, label, tier, trace)) {
+          bestRank = rank;
+          renderedSomething = true;
+          // Nothing left for the arterial pass to add.
+          if (rank >= 1) majorAbort.abort();
+        }
+      });
+      return paintChain;
+    };
+
+    const majorJob = cache.major
+      ? paint(cache.major, 'Cache major', 0)
+      : (async () => {
+        console.log(`[Data:Traffic] Fetch major roads [${cacheKey}]`);
+        const data = await fetchRoads(
+          clamped.south, clamped.west, clamped.north, clamped.east,
+          { classes: tier.classes, pass: 'major', timeoutSec: 12, signal: majorAbort.signal },
+          trace,
+        );
+        if (generation !== _loadGeneration) return;
+        cache.major = _parseRoads(data, trace);
+        await paint(cache.major, 'Loaded major', 0);
+      })();
 
     // Above street scale the band publishes no full-graph pass: residential
     // roads are sub-pixel there, and fetching them at a 0.30° box would be a
     // national download to draw nothing legible.
-    if (!tier.fullClasses) return;
+    const fullJob = tier.fullClasses
+      ? (async () => {
+        console.log(`[Data:Traffic] Fetch local roads [${cacheKey}]`);
+        const data = await fetchRoads(
+          clamped.south, clamped.west, clamped.north, clamped.east,
+          { classes: tier.fullClasses, pass: 'full', timeoutSec: 20, signal: roadSignal },
+          trace,
+        );
+        if (generation !== _loadGeneration) return;
+        cache.full = _parseRoads(data, trace);
+        await paint(cache.full, 'Loaded full', 1);
+      })()
+      : null;
 
-    // Detailed pass: fetch the full road graph (tertiary, residential, etc.)
-    _activeFetchAbort = new AbortController();
-    console.log(`[Data:Traffic] Full fetch local roads [${cacheKey}]`);
-    const fullData = await fetchRoads(
-      clamped.south, clamped.west, clamped.north, clamped.east,
-      { classes: tier.fullClasses, pass: 'full', timeoutSec: 20, signal: _activeFetchAbort.signal },
-      trace,
-    );
-    if (generation !== _loadGeneration) return;
-
-    cache.full = _parseRoads(fullData, trace);
-    if (!await applyFlowThenRender(
-      cache.full, clamped, generation, altitude, 'Loaded full', tier, trace
-    )) return;
-    renderedSomething = true;
+    // Settled, not raced: one pass failing must not discard the other, and the
+    // rollback in `finally` needs to know whether ANYTHING reached the screen.
+    for (const outcome of await Promise.allSettled([majorJob, fullJob].filter(Boolean))) {
+      if (outcome.status === 'rejected' && outcome.reason?.name !== 'AbortError') {
+        console.warn('[Data:Traffic] Fetch error:', outcome.reason?.message || outcome.reason);
+      }
+    }
 
   } catch (e) {
     if (e?.name === 'AbortError') return;
@@ -3483,6 +3823,18 @@ const trafficLayer = {
       floorWaiting: _floorSeatState.waiting,
       floorCells: _floorCells.size,
       floorBoxM: _boxFloor ? +_boxFloor.m.toFixed(1) : null,
+      // What the seating loop is costing the frame, split by where it goes.
+      // See `_floorPassCost` — the stutter this layer was reported for lives
+      // here, and a total alone cannot say which of the three costs to cut.
+      floorPass: { ..._floorPassCost },
+      floorPassWorstMs: +_floorPassWorstMs.toFixed(1),
+      floorPassTotalMs: +_floorPassTotalMs.toFixed(1),
+      floorPasses: _floorPassCount,
+      floorProbes: _floorProbeCount,
+      floorProbeMeanMs: _floorProbeCount
+        ? +(_floorProbeMsTotal / _floorProbeCount).toFixed(1)
+        : null,
+      floorProbeNulls: _floorProbeNulls,
       // Signal-clock diagnostics (additive). `signalGreenPhase` is the axis
       // holding the green right now (0 = bearings 0-90 deg, 1 = 90-180), so a
       // harness can assert the alternation the clock exists for without ever
@@ -3521,6 +3873,16 @@ const trafficLayer = {
    *
    * @returns {number[][]}
    */
+  /**
+   * The last 200 ground-seating passes, newest last — `{at, totalMs, probeMs,
+   * probes}`. Polling `getStats` cannot see the shape of a 250 ms timer, and
+   * the shape is what sizes the fix. See `_floorPassLog`.
+   * @returns {Array<{at:number, totalMs:number, probeMs:number, probes:number}>}
+   */
+  __qaFloorPasses() {
+    return _floorPassLog.slice();
+  },
+
   __qaJunctions() {
     const out = [];
     for (const road of _roads) {

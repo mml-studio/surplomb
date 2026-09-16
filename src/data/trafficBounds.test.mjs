@@ -5,6 +5,7 @@ import {
   greatCircleKm,
   deriveFetchCenter,
   clampBoundsAroundCenter,
+  normalizeFetchBox,
   boundsOverlap,
   planarDistanceKm,
   roadFetchTier,
@@ -310,4 +311,97 @@ test('no band asks for more than 8 flow tiles at its own span', async () => {
     );
     assert.ok(tiles.length <= 8, `${tier.id}: ${tiles.length} tiles at z${tier.flowZoom}`);
   }
+});
+
+
+// ─── The Overpass cache key ───────────────────────────────────────────────
+// A cold road fetch against the hosted origin was measured at 0.6 s to 46 s
+// and a repeat of the same query at 65 ms (2026-09-16, from the VPS). Nothing
+// repeated, because the box carried the camera pose AND the reader's window
+// size into the query body. These tests are that gap.
+
+test('two camera poses inside one lattice cell produce one box', () => {
+  const street = ROAD_FETCH_TIERS[0];
+  // Same crossroads, ~80 m apart, same viewport: one box, one cache entry.
+  // (A lattice has boundaries: two poses either side of one do NOT share, and
+  // nothing here pretends otherwise. These sit inside a cell.)
+  const a = normalizeFetchBox({ south: 48.8548, north: 48.8852, west: 2.3485, east: 2.3920 }, street);
+  const b = normalizeFetchBox({ south: 48.8556, north: 48.8860, west: 2.3495, east: 2.3930 }, street);
+  assert.deepEqual(a, b);
+  // And a pan the refetch gate WOULD have honoured — minShiftKm is 350 m,
+  // under the step — still costs no request at all.
+  const panned = normalizeFetchBox({ south: 48.8532, north: 48.8836, west: 2.3475, east: 2.3910 }, street);
+  assert.deepEqual(panned, a);
+});
+
+test('the box is nudged, not resized: rounding to NEAREST keeps the area', () => {
+  // Rounding the span UP — to the band's own span — was measured at 1.9× the
+  // area on this very box, 421 roads becoming 1 003. Nearest costs ~2 %.
+  const street = ROAD_FETCH_TIERS[0];
+  const before = { south: 43.4844, north: 43.5148, west: -1.5709, east: -1.5274 };
+  const after = normalizeFetchBox(before, street);
+  const area = (b) => (b.north - b.south) * (b.east - b.west);
+  const ratio = area(after) / area(before);
+  assert.ok(ratio > 0.9 && ratio < 1.1, `area ratio ${ratio.toFixed(3)}`);
+});
+
+test('a span rounds to the lattice and never to nothing', () => {
+  for (const tier of ROAD_FETCH_TIERS) {
+    for (const want of [tier.snapDeg / 100, tier.snapDeg * 0.4, tier.snapDeg * 3.4, tier.spanDeg]) {
+      const box = normalizeFetchBox({
+        south: 48.85 - want / 2, north: 48.85 + want / 2,
+        west: 2.35 - want / 2, east: 2.35 + want / 2,
+      }, tier);
+      const span = box.north - box.south;
+      assert.ok(span >= tier.snapDeg - 1e-9, `${tier.id}: span ${span} below one step`);
+      const steps = span / tier.snapDeg;
+      assert.ok(Math.abs(steps - Math.round(steps)) < 1e-6, `${tier.id}: span ${span} off the lattice`);
+    }
+  }
+});
+
+test('the near edge never moves in by more than 3/4 of a step', () => {
+  // The number `snapDeg` is sized against: half a step from the centre snap
+  // plus a quarter from the span rounding down. At street scale, 417 m.
+  for (const tier of ROAD_FETCH_TIERS) {
+    for (let k = 0; k <= 20; k++) {
+      const lat = 48.85 + (k / 20) * tier.snapDeg;
+      const lon = 2.35 + (k / 20) * tier.snapDeg;
+      const want = tier.spanDeg * 0.6;
+      const after = normalizeFetchBox({
+        south: lat - want / 2, north: lat + want / 2,
+        west: lon - want / 2, east: lon + want / 2,
+      }, tier);
+      const limit = tier.snapDeg * 0.75 + 1e-9;
+      assert.ok(after.south - (lat - want / 2) <= limit, `${tier.id} south edge`);
+      assert.ok((lat + want / 2) - after.north <= limit, `${tier.id} north edge`);
+      assert.ok(after.west - (lon - want / 2) <= limit, `${tier.id} west edge`);
+      assert.ok((lon + want / 2) - after.east <= limit, `${tier.id} east edge`);
+    }
+  }
+});
+
+test('the box is a stable STRING, not merely an equal number', () => {
+  // The cache key is the query body, so float drift is a cache miss even when
+  // the boxes are arithmetically the same. Five decimals is ~1.1 m.
+  const street = ROAD_FETCH_TIERS[0];
+  const box = normalizeFetchBox({ south: 48.8531, north: 48.8835, west: 2.3489, east: 2.3924 }, street);
+  for (const v of [box.south, box.north, box.west, box.east]) {
+    assert.ok(/^-?\d+(\.\d{1,5})?$/.test(String(v)), `${v} is not a short decimal`);
+  }
+});
+
+test('re-normalising never moves the box — the load path does it twice', () => {
+  for (const tier of ROAD_FETCH_TIERS) {
+    let box = normalizeFetchBox({ south: 43.2711, north: 43.3219, west: 5.3448, east: 5.3948 }, tier);
+    const first = { ...box };
+    for (let i = 0; i < 5; i++) box = normalizeFetchBox(box, tier);
+    assert.deepEqual(box, first, tier.id);
+  }
+});
+
+test('a band with no lattice is left exactly as it was', () => {
+  const box = { south: 1.23456789, north: 1.3, west: 4.5, east: 4.6 };
+  assert.equal(normalizeFetchBox(box, { spanDeg: 0.05 }), box);
+  assert.equal(normalizeFetchBox(box, null), box);
 });
