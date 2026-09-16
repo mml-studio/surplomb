@@ -131,6 +131,42 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     layersPanel.insertBefore(clearBtn, layersPanel.firstChild);
   }
 
+  // ── THE MAP SOURCE, WHICH A PHONE COULD NOT REACH AT ALL ──────────────────
+  //
+  // The eight basemaps — Google 3D, the two Google 2D stacks, Bing, ion, OSM,
+  // and the two IGN France stacks — live in one section of VISUAL PRESETS, and
+  // `phone.css` hides that whole panel. So the single most visible property of
+  // the app, what the ground is made of, had no phone surface: a reader could
+  // see IGN's orthophoto and no way to ask for anything else. Reported that
+  // way, in those words: « je ne sais pas comment changer de maplayer ».
+  //
+  // It lands at the TOP of Couches rather than in a tab of its own, because it
+  // is the same question as the rest of that tab — what is drawn — one layer
+  // further down. Moved, not rebuilt: `ui.js` keeps its `#map-stack-chips`
+  // reference, the `onSelect` handlers ride along on the chips themselves, and
+  // `gev:map-stack-changed` still re-lights the active one.
+  const mapSource = document.querySelector('.map-source-section');
+  if (mapSource && layersPanel) {
+    layersPanel.insertBefore(mapSource, layersPanel.firstChild);
+    // The desktop chrome is English and this sheet is French. `MAP SOURCE`
+    // between « TOUT ÉTEINDRE » and « À LA UNE » is the seam a reader sees
+    // first, and the heading is read by nothing but `aria-labelledby`.
+    const mapSourceLabel = document.getElementById('map-source-label');
+    if (mapSourceLabel) mapSourceLabel.textContent = 'FOND DE CARTE';
+  }
+
+  // ── THE SEARCH FIELD IS THE TAB, so it opens with it ──────────────────────
+  //
+  // On a desktop the field is 0 px wide until the magnifier beside it is
+  // clicked: the dock has no room to keep it open. A tab named RECHERCHE has
+  // nothing but room, and a reader who taps it has already performed the
+  // disclosure — `phone.css` hides the magnifier and stretches the field.
+  const searchField = document.getElementById('location-search');
+  if (searchField) {
+    searchField.classList.add('expanded');
+    searchField.placeholder = 'Rechercher un lieu, une adresse…';
+  }
+
   sheet.hidden = false;
 
   // ── Snaps ─────────────────────────────────────────────────────────────────
