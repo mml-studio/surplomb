@@ -34,7 +34,12 @@ test('other HUD layouts keep collapsed right-rail launchers visible', () => {
 test('desktop Display participates in Tactical exclusivity without changing mobile Display behavior', () => {
   const ui = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
-  assert.match(ui, /const isMobile = window\.matchMedia\('\(max-width: 720px\)'\)\.matches/);
+  // The token is a UNION since the phone shell landed: `max-width: 720px` alone
+  // answers NO for a handset in landscape (844 x 390), which is the one session
+  // that most needs this lane engine to stand down. The ratchet keeps both
+  // halves — dropping the media query would change what a narrow DESKTOP window
+  // gets, and that is the behaviour this test was written to protect.
+  assert.match(ui, /const isMobile = isPhoneShell\(\) \|\| window\.matchMedia\('\(max-width: 720px\)'\)\.matches/);
   assert.match(
     ui,
     /!panel\.classList\.contains\('collapsed'\)\s*\n\s*&& panel\.id !== 'map-legend'\s*\n\s*&& \(!isMobile \|\| panel\.id !== 'pp-toggles'\)/,

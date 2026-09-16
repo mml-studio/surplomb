@@ -497,3 +497,58 @@ sur le SVG cloné : il est hors de l'arbre d'accessibilité. Le `<h1>` contient 
 ailleurs bien « GOD'S EYE VIEW ». Ce qui reste vrai est étroit : toute extraction
 textuelle naïve du titre ramasse du CSS.
 
+
+---
+
+## Lentille téléphone — checklist appareil réel
+
+*Ajoutée le 2026-09-16 avec la coquille téléphone (volet C). Ce n'est pas un
+constat de revue : c'est la **septième lentille**, et la seule qui ne peut pas
+être passée par un agent. Tout ce qui suit a été vérifié en émulation par
+`npm run qa:phone-shell` — et l'émulation ne sait rien de ces huit lignes.*
+
+### Pourquoi une checklist et pas un harnais
+
+Les huit points ci-dessous partagent une propriété : **Chrome headless répond
+correctement à chacun, et un téléphone réel ne répond pas pareil.** La barre
+d'URL de Safari ne se replie pas dans un émulateur, `env(safe-area-inset-*)`
+vaut zéro sans encoche, aucun clavier logiciel ne s'ouvre, et le
+« tirer pour rafraîchir » d'Android n'existe pas sous CDP. Un harnais qui
+prétendrait les couvrir mesurerait sa propre émulation.
+
+### iOS 17, Safari
+
+1. **La barre d'URL qui se replie.** Faire défiler le globe vers le haut : la
+   barre d'URL se rétracte, `100dvh` grandit. Le bas de la feuille doit suivre,
+   pas rester à l'ancienne ligne. *(Ce que l'émulation ne voit pas : elle n'a
+   pas de barre d'URL.)*
+2. **Le clavier sur l'onglet RECHERCHE.** Toucher le champ : la feuille doit
+   monter au cran `full`, le champ rester visible au-dessus du clavier, et la
+   page ne doit **pas** zoomer. Un zoom ici veut dire qu'un champ est repassé
+   sous 16 px.
+3. **L'indicateur d'accueil.** À chaque cran, la dernière ligne de la feuille
+   doit rester au-dessus de la barre blanche du bas.
+4. **L'encoche.** En paysage, ni le logo ni les deux boutons ronds ne doivent
+   passer sous l'encoche.
+5. **Le paysage (844 × 390).** Les quatre onglets doivent être tapables au cran
+   `peek`, et `half` doit valoir 65 % de la hauteur (pas 50 : deux lignes).
+6. **Pincer et tourner** sur le globe, en partant d'un doigt posé sur la
+   poignée : la feuille ne doit pas capturer le geste.
+7. **Appui long sur le canvas** : aucun menu contextuel iOS (« Enregistrer
+   l'image »).
+
+### Android, Chrome
+
+8. **Tirer vers le bas sur le globe** : rien ne doit se recharger
+   (`overscroll-behavior: none`). **Double-taper un bouton** : la page ne doit
+   pas zoomer. **La barre d'état** doit être peinte en `#0a0a0f`, pas en blanc.
+
+### Ce qui est déjà couvert par le harnais, et n'a pas besoin d'un appareil
+
+`npm run qa:phone-shell` couvre, sur iPhone 13 **et** sur un Android de 360 px :
+la largeur du document, les collisions de chrome fixe dans la bande haute, la
+taille des cibles, les 16 px des champs, les rails masqués, les trois crans, la
+ligne de crédits visible et cliquable à chaque cran, un glissement réel sur la
+poignée, le groupe « À LA UNE », les badges « LOURD », et — dans le même run —
+le **contrôle de non-régression du bureau** contre
+`scripts/fixtures/desktop-layout-reference.json`.

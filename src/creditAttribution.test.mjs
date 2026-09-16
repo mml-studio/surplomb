@@ -479,9 +479,16 @@ test('the full-width rail cannot inherit a height that overrides its floor', () 
   // over-constrained. It is safe only because the rail's layout pass switches
   // to a mobile mode at the SAME breakpoint and removes both the class and the
   // custom property. Pin that, or the exemption above is unearned.
+  //
+  // The gate is a UNION since the phone shell landed — `isPhoneShell() ||` in
+  // front of the same media query — so a handset in landscape (844 x 390),
+  // which the media query cannot see, takes the same branch. That only WIDENS
+  // the set of sessions where the class is removed, so the exemption holds.
   const gate = ui.indexOf("window.matchMedia('(max-width: 720px)')");
   assert.ok(gate > 0, 'the rail layout pass no longer keys off (max-width: 720px)');
-  const mobileBranch = ui.slice(gate, ui.indexOf("layoutMode = 'mobile'", gate) + 40);
+  const mobileToken = "layoutMode = isPhoneShell() ? 'phone' : 'mobile'";
+  assert.ok(ui.indexOf(mobileToken, gate) > 0, 'the mobile branch no longer names its layout mode');
+  const mobileBranch = ui.slice(gate, ui.indexOf(mobileToken, gate) + mobileToken.length);
   assert.match(mobileBranch, /stack\.classList\.remove\('layout-focus'\)/);
   assert.match(mobileBranch, /stack\.style\.removeProperty\('--right-stack-max-height'\)/);
 });

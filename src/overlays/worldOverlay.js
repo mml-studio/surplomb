@@ -84,6 +84,11 @@ const PAINT_LANE_INDEX = new Map(WORLD_OVERLAY_PAINT_LANES.map((lane, index) => 
  */
 export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   '#title-bar',
+  // The phone shell's bottom sheet. It owns between 14 % and 92 % of the
+  // viewport depending on its snap, and it is the one occluder here whose box
+  // CHANGES SIZE while nothing else on the page moves — the service caches
+  // rectangles and re-reads them on layout, which a height transition is.
+  '#phone-sheet',
   '#style-indicator',
   '#top-center-actions',
   '#traffic-sync-chip',
@@ -147,6 +152,26 @@ let _accessibilityList = null;
 let _accessibilityStatus = null;
 let _accessibilitySignature = '';
 const _accessibleActivatorByKey = new Map();
+/**
+ * WHAT IS SELECTED, FOR SURFACES THAT ARE NOT THIS CANVAS.
+ *
+ * The selected card is PAINTED, not DOM: there is no element to observe, no
+ * event to listen for, and a reader on a phone gets four lines of 10 px type
+ * behind their own finger. The phone sheet mirrors it as real DOM, and this is
+ * how it hears about it.
+ *
+ * A DIRTY FLAG, NOT A PER-FRAME SCAN. Selection changes when one of four
+ * mutators runs, a few times a minute; the frame loop runs sixty times a
+ * second over every source's entries. Walking `_sources` each frame to discover
+ * a change that four functions already know about would be the single most
+ * expensive thing in this file.
+ */
+/** More cards than this is a list, and a list is not a selection. */
+const SELECTION_MIRROR_MAX = 6;
+let _selectionDirty = false;
+let _selectionSignature = '';
+/** @type {Set<Function>} */
+const _selectionListeners = new Set();
 /** @type {HTMLCanvasElement|null} Host-owned detection blend-isolation surface. */
 let _detectionSurface = null;
 /** @type {CanvasRenderingContext2D|null} */
@@ -968,7 +993,11 @@ export function setOverlayEntries(sourceId, entries, options = {}) {
   for (const entry of normalized) next.set(entry.id, entry);
   for (const entry of source.entries.values()) {
     if (!next.has(entry.id)) _records.delete(entry._overlayKey);
+    // Both sides are checked: a selection that DISAPPEARS is as much a change
+    // as one that arrives, and only the outgoing map still knows about it.
+    markSelectionDirty(entry);
   }
+  for (const entry of normalized) markSelectionDirty(entry);
   source.entries = next;
   rebuildSourceCohorts(source);
   updateEntryDiagnostics();
@@ -984,6 +1013,8 @@ export function upsertOverlayEntry(sourceId, entry) {
   if (_destroyed) return;
   const source = getOrCreateSource(sourceId);
   const normalized = normalizeOverlayEntry(source.id, entry);
+  markSelectionDirty(source.entries.get(normalized.id));
+  markSelectionDirty(normalized);
   source.entries.set(normalized.id, normalized);
   rebuildSourceCohorts(source);
   updateEntryDiagnostics();
@@ -1001,6 +1032,7 @@ export function removeOverlayEntry(sourceId, entryId) {
   const source = _sources.get(assertSourceId(sourceId));
   if (!source) return false;
   const id = String(entryId);
+  markSelectionDirty(source.entries.get(id));
   const removed = source.entries.delete(id);
   if (!removed) return false;
   _records.delete(entryKey(source.id, id));
@@ -1019,7 +1051,10 @@ export function clearOverlaySource(sourceId) {
   if (_destroyed) return false;
   const source = _sources.get(assertSourceId(sourceId));
   if (!source) return false;
-  for (const entry of source.entries.values()) _records.delete(entry._overlayKey);
+  for (const entry of source.entries.values()) {
+    _records.delete(entry._overlayKey);
+    markSelectionDirty(entry);
+  }
   source.entries.clear();
   source.cohortDomainIds.length = 0;
   source.cohortLists.length = 0;
@@ -2226,6 +2261,103 @@ function publishPaintRect(item) {
   if (record.entry.interactive) _hitRects[_hitRectCount++] = rect;
 }
 
+/**
+ * Note that one entry's selected/tracked state may have changed.
+ *
+ * Deliberately not a comparison: an entry that WAS selected and is replaced by
+ * one that is not has changed, and so has the reverse. Either side saying yes
+ * is enough to make the next frame look.
+ *
+ * @param {?object} entry - Normalized entry, or nothing.
+ * @returns {void}
+ */
+function markSelectionDirty(entry) {
+  if (!entry) return;
+  if (entry.selected === true || entry.tracked === true) _selectionDirty = true;
+}
+
+/**
+ * Subscribe to "what is selected on the globe" as a list of plain objects.
+ *
+ * Fires at the end of the frame in which the selection actually changed, with
+ * the tracked entries first — a tracked contact is the one the camera is
+ * following, so it is the one a reader is asking about.
+ *
+ * @param {(items: Array<object>) => void} fn - Called with the current list.
+ * @returns {() => void} Unsubscribe.
+ */
+export function onWorldOverlaySelectionChange(fn) {
+  if (typeof fn !== 'function') return () => {};
+  _selectionListeners.add(fn);
+  // Fired once on subscribe, so a late subscriber (the phone sheet mounts after
+  // the layers do) does not sit empty until the reader taps something else.
+  try {
+    fn(collectSelectionItems());
+  } catch (error) {
+    console.warn('[WorldOverlay] selection listener failed:', error);
+  }
+  return () => { _selectionListeners.delete(fn); };
+}
+
+/** @returns {Array<object>} Tracked first, then selected, both in source order. */
+function collectSelectionItems() {
+  const tracked = [];
+  const selected = [];
+  for (const source of _sourceList) {
+    // `sourceActive`, not `source.options.visible`: a source hidden BY COCKPIT
+    // is not painting, and a mirror of what is painted must agree.
+    if (!sourceActive(source)) continue;
+    for (const entry of source.entries.values()) {
+      if (entry.tracked === true) tracked.push(entry);
+      else if (entry.selected === true) selected.push(entry);
+    }
+  }
+  return [...tracked, ...selected].slice(0, SELECTION_MIRROR_MAX).map((entry) => ({
+    key: entry._overlayKey,
+    source: entry.source,
+    id: entry.id,
+    title: entry.title,
+    details: [...entry.details],
+    accent: entry.accent,
+    tracked: entry.tracked === true,
+    // The SAME closure the painted card runs, handed over as-is: a mirror that
+    // re-implemented "focus this thing" would be a second definition of the
+    // verb, and the two would drift the first time a layer changed its mind.
+    activate: entry.activate,
+  }));
+}
+
+/**
+ * Publish the selection, if it changed, at the end of a frame.
+ *
+ * Signature-diffed exactly like the accessible mirror above, and for the same
+ * reason: a tracked flight re-publishes its entry on every position tick, so
+ * "the selection changed" would otherwise be true sixty times a second while
+ * nothing a reader can see has moved.
+ * @returns {void}
+ */
+function syncSelectionMirror() {
+  if (!_selectionDirty) return;
+  _selectionDirty = false;
+  if (!_selectionListeners.size) {
+    _selectionSignature = '';
+    return;
+  }
+  const items = collectSelectionItems();
+  const signature = items
+    .map((item) => `${item.key}\u0000${item.title}\u0000${item.details.join('\u0002')}`)
+    .join('\u0001');
+  if (signature === _selectionSignature) return;
+  _selectionSignature = signature;
+  for (const listener of _selectionListeners) {
+    try {
+      listener(items);
+    } catch (error) {
+      console.warn('[WorldOverlay] selection listener failed:', error);
+    }
+  }
+}
+
 /** Keep a stable, bounded accessible mirror of currently painted actions. */
 function syncAccessibleActions() {
   if (!_accessibilityList) return;
@@ -2383,6 +2515,7 @@ function paintFrame(keyhole) {
   _diagnostics.paintRectPoolSize = _paintRectPool.length;
   _diagnostics.paintMs = nowMs() - started;
   syncAccessibleActions();
+  syncSelectionMirror();
   _canvasNeedsClear = _paintRectCount > 0
     || activeCustomPaintLaneCount(PAINT_TARGET_SHARED) > 0;
 }
@@ -2435,6 +2568,10 @@ function drawWorldOverlay() {
       _hitRectCount = 0;
       syncAccessibleActions();
     }
+    // Also on the idle path: the frame in which the LAST selected entry is
+    // cleared has no paint work by definition, and a mirror that only updated
+    // on painting frames would keep showing a card for something that is gone.
+    syncSelectionMirror();
     return;
   }
   if (_resizeDirty) ensureCanvasSize();
@@ -2581,6 +2718,9 @@ export function destroyWorldOverlay() {
   _hitRects.length = 0;
   _accessibleActivatorByKey.clear();
   _accessibilitySignature = '';
+  _selectionListeners.clear();
+  _selectionSignature = '';
+  _selectionDirty = false;
   _paintRectByKey.clear();
   _paintCount = 0;
   _paintRectCount = 0;

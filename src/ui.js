@@ -7574,7 +7574,14 @@ export class StyleManager {
         this._syncPanelCollapseButton(panel);
       }
     }
-    const isMobile = window.matchMedia('(max-width: 720px)').matches;
+    // NARROW, OR A PHONE — and the two are not the same question.
+    // `max-width: 720px` alone answers NO for a handset held sideways
+    // (844 × 390), which is exactly the session that most needs this lane
+    // engine to stand down: it has the phone shell, a sheet across the bottom
+    // and no rail to lay out. The union keeps every desktop behaviour the
+    // media query already had and adds the case it could not see. The token
+    // written below distinguishes them for anyone reading the DOM.
+    const isMobile = isPhoneShell() || window.matchMedia('(max-width: 720px)').matches;
     // An OPEN LEGEND is not a disclosure the operator made — it is open because
     // a layer with a key is on, and it ships open. Counting it here would make
     // Tactical exclusivity hide the DISPLAY, CCTV and CONTEXT launchers for
@@ -7600,7 +7607,7 @@ export class StyleManager {
       stack.style.removeProperty('--right-stack-safe-top');
       stack.style.removeProperty('--right-stack-max-height');
       for (const panel of panels) panel.style.removeProperty('--right-panel-allocated-height');
-      stack.dataset.layoutMode = 'mobile';
+      stack.dataset.layoutMode = isPhoneShell() ? 'phone' : 'mobile';
       return;
     }
 
@@ -7910,13 +7917,13 @@ export class StyleManager {
 
     // The existing narrow-screen composition has its own full-width stack.
     // Keep this desktop lane engine from fighting those dedicated rules.
-    if (window.matchMedia('(max-width: 720px)').matches) {
+    if (isPhoneShell() || window.matchMedia('(max-width: 720px)').matches) {
       stack.classList.remove('layout-focus');
       stack.classList.remove('layout-tail');
       stack.style.removeProperty('--left-stack-safe-top');
       stack.style.removeProperty('--left-stack-safe-bottom');
       stack.style.removeProperty('--left-stack-centered-height');
-      stack.dataset.layoutMode = 'mobile';
+      stack.dataset.layoutMode = isPhoneShell() ? 'phone' : 'mobile';
       for (const panel of panels) {
         panel.removeAttribute('aria-hidden');
         panel.style.removeProperty('--left-panel-allocated-height');

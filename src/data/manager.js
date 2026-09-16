@@ -265,6 +265,10 @@ export class DataLayerManager {
     // taxonomy. Null keeps _renderToggles() on the flat list it has always
     // drawn — which is what a bare manager in a unit test gets.
     this._registrationCategories = null;
+    // « À LA UNE » — a synthetic FIRST group, set by the phone shell and by
+    // nothing else. Null on every desktop session, and the grouping below is
+    // byte-identical to what it has always been while it is.
+    this._featuredPanelLayerIds = null;
     this._collapsedCategories = new Set();
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
@@ -2643,6 +2647,29 @@ export class DataLayerManager {
   }
 
   /**
+   * Put a handful of layers in a synthetic group at the TOP of the panel.
+   *
+   * THE ONLY CALLER IS THE PHONE SHELL, and the reason is a number: 59 rows in
+   * seven groups is an inventory, and the first screen of a 390 px phone has
+   * room for eight rows. A reader who has to scroll a taxonomy before they can
+   * switch anything on concludes the app has nothing for them.
+   *
+   * THEY ARE MOVED, NOT COPIED. A duplicated row would draw a second toggle
+   * button for the same layer, and only one of the two would ever be
+   * synchronised — `_syncToggleButton` is closed over one specific element at
+   * build time, so the twin would sit at OFF under a layer that is on.
+   *
+   * @param {string[]|null} ids - Layer ids, in the order they should appear;
+   *   null or empty removes the group.
+   * @returns {void}
+   */
+  setPanelFeaturedLayers(ids) {
+    const list = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id) : [];
+    this._featuredPanelLayerIds = list.length ? list : null;
+    this._renderToggles();
+  }
+
+  /**
    * Project the panel-visible layers into their categories, in category order
    * and — within a group — in taxonomy order rather than registration order.
    *
@@ -2665,12 +2692,36 @@ export class DataLayerManager {
       if (entry.fusedInto) continue;
       buckets.get(entry.category)?.push(layer);
     }
-    return categories.map((category) => ({
+    const groups = categories.map((category) => ({
       id: category.id,
       label: category.label,
       icon: category.icon,
       layers: buckets.get(category.id) || [],
     }));
+    const featuredIds = this._featuredPanelLayerIds;
+    if (!featuredIds) return groups;
+
+    // Order comes from the FEATURED LIST, not from the taxonomy: the list is a
+    // ranking, and re-sorting it into category order would bury the reason it
+    // exists. An id naming a layer that has no row (never registered, fused
+    // into another, opted out) is skipped in silence — the list is a product
+    // decision written by hand, and a phone is not where a typo should become
+    // a missing panel.
+    const featured = [];
+    const claimed = new Set();
+    for (const id of featuredIds) {
+      const layer = byId.get(id);
+      if (!layer?.showInTogglePanel) continue;
+      if (this._registrationTaxonomy?.get(id)?.fusedInto) continue;
+      if (claimed.has(id)) continue;
+      claimed.add(id);
+      featured.push(layer);
+    }
+    if (!featured.length) return groups;
+    for (const group of groups) {
+      group.layers = group.layers.filter((layer) => !claimed.has(layer.id));
+    }
+    return [{ id: 'featured', label: 'À LA UNE', icon: '★', layers: featured }, ...groups];
   }
 
   /**
