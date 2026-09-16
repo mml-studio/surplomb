@@ -130,9 +130,11 @@ Contexte :
   dépenser. Il n'a **pas** touché au CSS : `style.css` reste une mise en page
   de bureau et son bloc ≤ 720 px est un layout tablette.
 - `npm run qa:phone-boot` le mesure et le dit : le contrôle « chaque commande
-  visible fait au moins 40 px sur son petit côté » échoue avec **11**
+  visible fait au moins 40 px sur son petit côté » échoue avec **14**
   contrevenants (le pire : `#gev-voice-tier`, 25×12 px). C'est le critère
-  d'acceptation de la coquille téléphone, pas une surprise.
+  d'acceptation de la coquille téléphone, pas une surprise. Le lot tactile n'en
+  ajoute qu'un, `#locate-me` à 36 px, qui est la taille des trois boutons de sa
+  rangée — tous déjà sur la liste.
 
 Ce qui est décidé et hors périmètre, à ne pas rouvrir comme un bug :
 - **Cockpit, scène, radio, calibration CCTV, DISPLAY, presets visuels** seront

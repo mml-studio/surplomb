@@ -81,6 +81,10 @@ test('"stop following" has a button, it polls only for a finger, and it is clean
   assert.match(ui, /_trackingReleaseTicker = setInterval\(\(\) => this\._syncTrackingReleaseButton\(\), 250\)/);
   assert.match(ui, /clearInterval\(this\._trackingReleaseTicker\)/);
   assert.match(ui, /_releaseFollowCamera\(\{ preserveVesselSelection: false, trackingOrigin: 'user' \}\)/);
+  // `#top-center-actions button { display: flex }` beats the user agent's
+  // `[hidden] { display: none }`, so without this rule both buttons that ship
+  // hidden — the release and "Autour de moi" — were painted anyway, inert.
+  assert.match(css, /#top-center-actions button\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
 });
 
 // ── B6. What was only reachable by hovering ─────────────────────────────────

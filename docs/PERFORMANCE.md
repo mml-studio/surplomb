@@ -393,8 +393,11 @@ avant que la caméra ne soit posée. Ce deuxième appel existe aussi sur le bure
 — il est antérieur à ce travail et n'est pas corrigé ici.
 
 `qa:phone-boot` rend **9/10**. Le contrôle qui échoue est celui des cibles
-tactiles (15 commandes visibles sous 40 px), et c'est voulu : il est le critère
-d'acceptation de la coquille téléphone, qui n'est pas encore écrite.
+tactiles (**14** commandes visibles sous 40 px), et c'est voulu : il est le
+critère d'acceptation de la coquille téléphone, qui n'est pas encore écrite.
+Le lot tactile n'en ajoute qu'une, `#locate-me`, à 36 px — la taille exacte des
+trois boutons qui l'entourent, déjà sur la liste ; les deux commandes qu'il
+crée pour le doigt seul (soumission de recherche, aide vocale) sont à 40.
 
 ### Le tactile, et ce que le doigt coûte ou épargne
 

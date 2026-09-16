@@ -1911,8 +1911,12 @@ html[data-input="coarse"] .search-submit-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  /* 40 px, the floor `qa:phone-boot` measures: a control that exists ONLY for
+     a finger has no excuse to be under it. `flex: 0 0 auto` so the field beside
+     it cannot squeeze it back down. */
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
   margin-left: 4px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2010,6 +2014,15 @@ html[data-input="coarse"] .search-submit-btn .material-symbols-outlined {
   cursor: pointer;
   transition: all var(--transition-fast);
   outline: none;
+}
+
+/* `display: flex` above beats the user agent's `[hidden] { display: none }`,
+   so two buttons that ship hidden — « ne plus suivre », which only exists while
+   something is followed, and « autour de moi », which is withheld where the
+   geolocation API cannot work — were painted anyway, inert, on every device.
+   The attribute has to win here or it means nothing. */
+#top-center-actions button[hidden] {
+  display: none;
 }
 
 #top-center-actions button:hover,

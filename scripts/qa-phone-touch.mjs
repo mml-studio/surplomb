@@ -247,7 +247,10 @@ try {
       poiKeys: document.querySelectorAll('.poi-pill-key').length,
       badgesShown: [...document.querySelectorAll('.poi-pill-key')].some(shown),
       trackingRelease: !!document.getElementById('tracking-release'),
-      trackingReleaseHidden: document.getElementById('tracking-release')?.hidden ?? null,
+      // The ATTRIBUTE is not the answer: `#top-center-actions button` sets
+      // `display: flex`, which beats the user agent's `[hidden]` rule — so a
+      // button that ships hidden was painted anyway, inert, on every device.
+      trackingReleasePainted: shown(document.getElementById('tracking-release')),
       locateShown: shown(document.getElementById('locate-me')),
       voiceHelpShown: shown(document.getElementById('gev-voice-help-btn')),
     };
@@ -268,7 +271,7 @@ try {
       'the search submits, the key badges are gone, and the desktop keeps every one of them',
       controls.form && controls.enterkeyhint === 'search' && controls.submitShown
         && controls.badgesShown === false && controls.trackingRelease
-        && controls.trackingReleaseHidden === true && controls.locateShown
+        && controls.trackingReleasePainted === false && controls.locateShown
         && deskControls.submitShown === false && deskControls.badgesShown === true
         && deskControls.voiceHelpShown === false,
       { phone: controls, desktop: deskControls },

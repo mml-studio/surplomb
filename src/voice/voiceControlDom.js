@@ -42,6 +42,16 @@ export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coars
 }
 
 /**
+ * The markup below is a template literal, so anything interpolated into an
+ * attribute has to survive being read as HTML.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeAttribute(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/**
  * Build (or find) the voice control panel and return its live element handles.
  *
  * @param {{reset?: boolean}} [options] `reset` tears down an existing panel
@@ -49,10 +59,6 @@ export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coars
  *   previous session already abandoned.
  * @returns {object} Named handles onto the panel's parts.
  */
-function escapeAttribute(text) {
-  return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
 export function createVoiceControl({ reset = false } = {}) {
   let root = document.getElementById('gev-voice-control');
   if (root && reset) {

@@ -4343,6 +4343,7 @@ export class StyleManager {
    * @returns {void}
    */
   _initAutoHoverPanel(panelId, { openDelayMs = 850, closeDelayMs = 1000 } = {}) {
+    this._autoHoverOutsideHandlers ||= [];
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
     const disclosure = panelEl.querySelector(`[data-dock-toggle-target="${panelId}"]`);
@@ -4457,10 +4458,16 @@ export class StyleManager {
     // The touchscreen's replacement for `pointerleave`: a finger never leaves,
     // it lands somewhere else. Capture phase so a tap on a control that stops
     // propagation still counts as "the reader is done with this tray".
-    document.addEventListener('pointerdown', (event) => {
+    //
+    // Held for teardown, unlike every listener above it: those are on the panel
+    // and die with the node, this one is on `document` and would outlive the
+    // whole UI — one per auto-hover panel, per instance.
+    const onTouchOutside = (event) => {
       if (event.pointerType !== 'touch' || panelEl.contains(event.target)) return;
       scheduleClose();
-    }, { capture: true, passive: true });
+    };
+    document.addEventListener('pointerdown', onTouchOutside, { capture: true, passive: true });
+    this._autoHoverOutsideHandlers.push(onTouchOutside);
 
     const focusMapSource = () => {
       if (panelId !== 'control-panel') return;
@@ -11313,6 +11320,10 @@ export class StyleManager {
       document.removeEventListener('keydown', this._poiKeydownHandler);
       this._poiKeydownHandler = null;
     }
+    for (const handler of this._autoHoverOutsideHandlers || []) {
+      document.removeEventListener('pointerdown', handler, { capture: true });
+    }
+    this._autoHoverOutsideHandlers = [];
     // Cancel the rAF animation loop and release its governor hold; also stop
     // the traffic-chip ticker the loop no longer carries. (perf wave 2 fix)
     if (this._animFrameId) {
