@@ -101,7 +101,6 @@ export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   '#cesium-credits',
   '.hud-top-left',
   '.hud-top-right',
-  '.hud-bottom-left',
   '.hud-bottom-right',
   '.hud-top-bar',
   '.hud-bottom-bar',

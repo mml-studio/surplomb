@@ -265,9 +265,9 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 #cesium-credits {
   position: fixed;
   /* Bottom-LEFT corner, mirrored from the GEV mic pill (right:36/bottom:36) so the two bottom
-     corners are symmetric; sits below the coordinate HUD (.hud-bottom-left, bottom:180). Was
-     dead-center at the bottom, tucked under the LOCATIONS/STYLE panels. Must stay visible (Google
-     /Cesium attribution ToS). */
+     corners are symmetric. It used to sit below the coordinate HUD; that corner was removed
+     (2026-09-16) and this is the only thing in the corner now. Was dead-center at the bottom,
+     tucked under the LOCATIONS/STYLE panels. Must stay visible (Google/Cesium attribution ToS). */
   bottom: 36px;
   left: 36px;
   z-index: 90;
@@ -4122,8 +4122,7 @@ body.cockpit-mode #intel-hud.active {
   opacity: 0.72;
   visibility: visible;
 }
-body.cockpit-mode #intel-hud .hud-top-left,
-body.cockpit-mode #intel-hud .hud-bottom-left {
+body.cockpit-mode #intel-hud .hud-top-left {
   left: clamp(18px, 3vw, 44px);
   transform: scale(0.78);
   transform-origin: left center;
@@ -4138,7 +4137,6 @@ body.cockpit-mode #intel-hud .hud-top-left,
 body.cockpit-mode #intel-hud .hud-top-right {
   top: clamp(104px, 13vh, 138px);
 }
-body.cockpit-mode #intel-hud .hud-bottom-left,
 body.cockpit-mode #intel-hud .hud-bottom-right {
   bottom: clamp(84px, 11vh, 118px);
 }
@@ -4460,11 +4458,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   right: 36px;
 }
 
-.hud-bottom-left {
-  bottom: 180px;
-  left: 36px;
-}
-
 .hud-bottom-right {
   bottom: 180px;
   right: 36px;
@@ -4652,10 +4645,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   top: 88px;
 }
 
-#intel-hud[data-variant='minimal'] .hud-bottom-left {
-  bottom: 12vh;
-}
-
 #intel-hud[data-variant='minimal'] .hud-bottom-bar {
   display: flex;
   bottom: calc(12vh + 4rem);
@@ -4764,6 +4753,161 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .data-toggle-list::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(0, 212, 255, 0.65), rgba(0, 212, 255, 0.2));
   border-radius: 999px;
+}
+
+/* ── The lit rows, as one strip ───────────────────
+   Switching a layer ON is one click on whatever row is under the cursor;
+   switching the previous one OFF was a hunt through seven collapsible groups
+   for a row whose category the reader had no reason to remember. What is on is
+   a SHORT list by definition, so it fits here — and it is STICKY, because the
+   moment the regret arrives is the moment they have just scrolled somewhere
+   else. Pressing a chip darkens that row.
+
+   The strip scrolls WITH the list rather than sitting above it in the panel
+   header, so `#data-toggles` stays the single element the shells move around
+   (the phone sheet re-parents it, `datasetPlugPanel` measures it). */
+.data-active-strip {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  /* Bleeds to the scroller's edges so rows pass UNDER it, not beside it. */
+  margin: -2px -4px 4px -2px;
+  padding: 6px 6px 7px;
+  border-bottom: 1px solid rgba(126, 176, 204, 0.18);
+  /* Opaque enough to cover a row sliding behind it: the panel's own glass is
+     translucent, and two translucent layers stacked read as a smear. */
+  background: linear-gradient(180deg, rgba(20, 27, 37, 0.97), rgba(20, 27, 37, 0.9));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* `hidden` loses to the `display: flex` above unless it is said here — the
+   attribute only carries `display: none` at author level. */
+.data-active-strip[hidden] {
+  display: none;
+}
+
+.data-active-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.data-active-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+}
+
+.data-active-count {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  padding: 1px 5px;
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 999px;
+  background: var(--accent-dim);
+}
+
+.data-active-clear {
+  margin-left: auto;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.data-active-clear[hidden] {
+  display: none;
+}
+
+.data-active-clear:hover,
+.data-active-clear:focus-visible {
+  color: #ffb0b0;
+  border-color: rgba(255, 122, 122, 0.55);
+  background: rgba(255, 70, 70, 0.1);
+  outline: none;
+}
+
+.data-active-clear:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.data-active-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  /* Ten layers on is four rows of chips; past that the strip would eat the
+     list it is supposed to make reachable. */
+  max-height: 92px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.data-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 6px 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.data-active-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-active-chip-x {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.66;
+}
+
+/* Hover says what the press DOES. A chip that stays cyan under the cursor
+   reads as "select this layer", which is the opposite instruction. */
+.data-active-chip:hover,
+.data-active-chip:focus-visible {
+  color: #ffb0b0;
+  border-color: rgba(255, 122, 122, 0.65);
+  background: rgba(255, 70, 70, 0.12);
+}
+
+.data-active-chip:hover .data-active-chip-x,
+.data-active-chip:focus-visible .data-active-chip-x {
+  opacity: 1;
+}
+
+.data-active-chip:active {
+  transform: translateY(1px);
+}
+
+.data-active-chip:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .data-toggle-row {
@@ -7933,8 +8077,7 @@ body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
     max-width: 112px;
   }
 
-  .hud-top-left,
-  .hud-bottom-left {
+  .hud-top-left {
     left: 16px;
   }
 
@@ -8327,10 +8470,6 @@ body.recording-mode #cesium-credits {
   left: 36px;
 }
 
-#intel-hud[data-variant='minimal'] .hud-bottom-left {
-  bottom: calc(2vh + 7.5rem);
-}
-
 #intel-hud[data-variant='minimal'] .hud-bottom-bar {
   bottom: calc(2vh + 11.5rem);
 }
@@ -8360,10 +8499,6 @@ body.recording-mode #cesium-credits {
 
   body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
     bottom: calc(2vh + 9.5rem);
-  }
-
-  #intel-hud[data-variant='minimal'] .hud-bottom-left {
-    bottom: calc(2vh + 12rem);
   }
 
   #intel-hud[data-variant='minimal'] .hud-bottom-bar {
@@ -8741,10 +8876,6 @@ body.recording-mode #cesium-credits {
 /* Compact dock clearance keeps the reference-like low profile. */
 body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   bottom: calc(2vh + 4.7rem);
-}
-
-#intel-hud[data-variant='minimal'] .hud-bottom-left {
-  bottom: calc(2vh + 5.4rem);
 }
 
 #intel-hud[data-variant='minimal'] .hud-bottom-bar {
@@ -9207,9 +9338,7 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   text-align: left;
 }
 
-#intel-hud[data-variant='tactical'] .hud-bottom-left,
 #intel-hud[data-variant='tactical'] .hud-bottom-right,
-#intel-hud[data-variant='operator'] .hud-bottom-left,
 #intel-hud[data-variant='operator'] .hud-bottom-right {
   bottom: calc(2vh + 6.5rem);
 }
@@ -9217,10 +9346,6 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 #intel-hud[data-variant='operator'] .hud-bottom-bar {
   bottom: calc(2vh + 9.8rem);
   width: min(48vw, 680px);
-}
-
-#intel-hud[data-variant='minimal'] .hud-bottom-left {
-  bottom: calc(2vh + 5.4rem);
 }
 
 #intel-hud[data-variant='minimal'] .hud-bottom-bar {

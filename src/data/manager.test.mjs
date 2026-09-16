@@ -3435,6 +3435,21 @@ function makeGroupedPanel({ storage = makeMemoryStorage() } = {}) {
     container,
     storage,
     sections: () => findAll(container, '.data-category'),
+    strip: () => container.querySelector('.data-active-strip'),
+    // The chip's text lives on a child span — the `×` is a sibling of the
+    // name, so that hover can light it without touching the label.
+    activeNames: () => findAll(container.querySelector('.data-active-strip'), '.data-active-chip')
+      .map((chip) => chip.querySelector('.data-active-chip-name').textContent),
+    // The chip listener is fire-and-forget, exactly like the row's own toggle:
+    // it kicks `_setRowEnabled()` and returns undefined. One turn of the
+    // microtask queue per await is what the fake layers need to settle.
+    pressActive: async (layerId) => {
+      const chip = container
+        .querySelector('.data-active-strip')
+        .querySelector(`[data-active-layer-id="${layerId}"]`);
+      chip.click();
+      for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+    },
     async restore() {
       await mgr.destroyAll();
       if (originalDocument === undefined) delete globalThis.document;
@@ -3542,6 +3557,109 @@ test('group tallies follow live layer state on refresh', async () => {
 
     assert.equal(airSpace.querySelector('.data-category-count').textContent, '1/2 ON');
     assert.ok(airSpace.classList.contains('has-active'));
+  } finally {
+    await panel.restore();
+  }
+});
+
+// ── The strip of lit rows ────────────────────────────────────────────────────
+//
+// Switching a layer ON costs one click on whatever row is under the cursor;
+// switching the PREVIOUS one off used to cost a hunt through the whole
+// taxonomy for a row whose category the reader had no reason to remember. The
+// strip is the answer: what is on is a short list, so it fits above the list
+// and stays reachable while the list scrolls.
+
+test('the strip leads the panel and stays out of the way until something is on', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    assert.equal(panel.container.children[0], panel.strip(), 'the strip must be the first thing in the scroller, so CSS can pin it');
+    assert.equal(panel.strip().hidden, true, 'a panel at rest must look exactly as it did');
+    assert.deepEqual(panel.activeNames(), []);
+
+    await panel.mgr.setEnabled('flights', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+
+    assert.equal(panel.strip().hidden, false);
+    assert.deepEqual(panel.activeNames(), ['Vols en direct'], 'the French label, same as the row');
+    assert.equal(panel.strip().querySelector('.data-active-count').textContent, '1');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a chip darkens its row, and leaves the strip when it does', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    await panel.mgr.setEnabled('flights', true, { origin: 'user' });
+    await panel.mgr.setEnabled('france-energy', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+    assert.deepEqual(panel.activeNames(), ['Vols en direct', 'Mix électrique']);
+
+    await panel.pressActive('flights');
+    panel.mgr._refreshTogglePanel();
+
+    assert.equal(panel.mgr.isEnabled('flights'), false);
+    assert.equal(panel.mgr.isEnabled('france-energy'), true, 'one chip switches off one row');
+    assert.deepEqual(panel.activeNames(), ['Mix électrique']);
+    assert.equal(
+      panel.container.querySelector('[data-layer-id="flights"]').querySelector('.data-toggle-btn').textContent,
+      'OFF',
+      'the row the chip stood for must agree with it',
+    );
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a chip is not addressable as a row, so voice and the phone still find the row', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    await panel.mgr.setEnabled('flights', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+
+    // `#data-toggles [data-layer-id="flights"]` is how the voice surface
+    // scrolls to a row and how the phone shell hangs its LOURD badge. The strip
+    // sits FIRST in the container, so a chip carrying that attribute would be
+    // the first match and would be decorated instead of the row.
+    const found = panel.container.querySelector('[data-layer-id="flights"]');
+    assert.ok(found.className.includes('data-toggle-row'), `first match was ${found.className}`);
+    // `.data-toggle-left` is the node the phone shell appends its badge to, and
+    // the one that carries the `.data-name` the voice surface reads back.
+    assert.ok(found.querySelector('.data-toggle-left'), 'the match must be the row, not a chip standing for it');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the sweep appears from two rows up and takes every lit row down', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    const clear = () => panel.strip().querySelector('.data-active-clear');
+    assert.equal(clear().hidden, true);
+
+    await panel.mgr.setEnabled('flights', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+    assert.equal(clear().hidden, true, 'with one chip a sweep does what the chip beside it does');
+
+    await panel.mgr.setEnabled('france-energy', true, { origin: 'user' });
+    // A coordinator nobody can switch back on from the panel.
+    await panel.mgr.setEnabled('military-awareness', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+    assert.equal(clear().hidden, false);
+    assert.deepEqual(panel.activeNames(), ['Vols en direct', 'Mix électrique'], 'a coordinator has no row, so it has no chip');
+
+    assert.deepEqual(await panel.mgr.turnOffPanelRows(), ['flights', 'france-energy']);
+    panel.mgr._refreshTogglePanel();
+
+    assert.equal(panel.mgr.isEnabled('flights'), false);
+    assert.equal(panel.mgr.isEnabled('france-energy'), false);
+    assert.equal(
+      panel.mgr.isEnabled('military-awareness'),
+      true,
+      'the sweep must not take down what the panel cannot turn back on',
+    );
+    assert.equal(panel.strip().hidden, true);
   } finally {
     await panel.restore();
   }
@@ -4091,6 +4209,34 @@ function makePeerPanel() {
     },
   };
 }
+
+test('a fused subject is ONE chip on the strip, named after its row', async () => {
+  const panel = makePeerPanel();
+  try {
+    // A share link can leave a companion on with its primary off — that row
+    // reads OFF on its own button and still draws. The strip has to name it,
+    // because it is the only surface that says what is currently on.
+    await panel.mgr.setEnabled('anfr-fr', true, { origin: 'programmatic' });
+    panel.mgr._refreshTogglePanel();
+
+    const strip = panel.container.querySelector('.data-active-strip');
+    assert.deepEqual(
+      findAll(strip, '.data-active-chip').map((chip) => chip.dataset.activeLayerId),
+      ['local-datacenters'],
+      'a companion has no row, so it has no chip of its own',
+    );
+    assert.equal(
+      strip.querySelector('.data-active-chip').querySelector('.data-active-chip-name').textContent,
+      'Infrastructure numérique',
+    );
+
+    strip.querySelector('.data-active-chip').click();
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false, 'the chip takes the whole subject down, companions included');
+  } finally {
+    await panel.restore();
+  }
+});
 
 test('a peer row gives its own primary a chip, so the reader can subtract it', async () => {
   const panel = makePeerPanel();

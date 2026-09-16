@@ -2584,6 +2584,10 @@ export class DataLayerManager {
   _renderToggles() {
     if (!this._toggleContainer) return;
     this._toggleContainer.innerHTML = '';
+    // The switched-on rows, pinned to the top of the scroller. Built BEFORE the
+    // list — in both branches — so it is the first thing in the container and
+    // CSS can make it sticky. See `_buildActiveStrip`.
+    this._toggleContainer.appendChild(this._buildActiveStrip());
 
     const categories = this._registrationCategories;
     if (!categories) {
@@ -2644,6 +2648,196 @@ export class DataLayerManager {
       this._syncCategoryHeader(section, group);
       this._toggleContainer.appendChild(section);
     }
+  }
+
+  /**
+   * The strip of currently-lit rows, one chip each, pinned above the list.
+   *
+   * SWITCHING A LAYER ON IS ONE CLICK; SWITCHING THE PREVIOUS ONE OFF WAS A
+   * SEARCH. The panel is 59 rows in seven groups, so the row a reader wants to
+   * darken is almost never the one under their cursor — they had to remember
+   * which group it was filed under and scroll back to it, and the friction fell
+   * entirely on the one action that costs nothing to perform and everything to
+   * find. The strip inverts that: what is ON is a short list by definition, so
+   * it fits above the fold and stays there while the list scrolls under it.
+   *
+   * The chips are built empty and filled by {@link _syncActiveStrip}, which
+   * runs on the ordinary refresh — the strip is a VIEW of layer state, not a
+   * second copy of it, so nothing here has to be told when a row changes.
+   *
+   * @returns {object} The strip element, already wired.
+   */
+  _buildActiveStrip() {
+    const strip = document.createElement('div');
+    strip.className = 'data-active-strip';
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Couches allumées');
+    // Hidden until something is on, so a panel at rest looks exactly as it did.
+    strip.hidden = true;
+
+    const head = document.createElement('div');
+    head.className = 'data-active-head';
+
+    const label = document.createElement('span');
+    label.className = 'data-active-label';
+    label.textContent = 'ACTIVES';
+
+    const count = document.createElement('span');
+    count.className = 'data-active-count';
+    count.textContent = '0';
+
+    const clear = document.createElement('button');
+    clear.className = 'data-active-clear';
+    clear.type = 'button';
+    clear.textContent = 'TOUT ÉTEINDRE';
+    clear.title = 'Éteindre toutes les couches allumées';
+    // Shown from two rows up. With one chip on the strip it would be a second
+    // button that does exactly what the chip beside it does.
+    clear.hidden = true;
+    clear.addEventListener('click', () => {
+      clear.disabled = true;
+      void this.turnOffPanelRows().finally(() => { clear.disabled = false; });
+    });
+
+    head.appendChild(label);
+    head.appendChild(count);
+    head.appendChild(clear);
+
+    const chips = document.createElement('div');
+    chips.className = 'data-active-chips';
+
+    strip.appendChild(head);
+    strip.appendChild(chips);
+    this._syncActiveStrip(strip);
+    return strip;
+  }
+
+  /**
+   * Reconcile the strip against live state: one chip per lit row.
+   *
+   * CHIPS ARE KEPT, NOT REBUILT. This runs on every panel refresh — a stats
+   * tick, a camera settle — and rebuilding would destroy the button under the
+   * reader's cursor several times a second, taking keyboard focus and the
+   * hover state with it.
+   *
+   * NEW CHIPS ARE APPENDED, so the strip reads in the order the reader
+   * switched things on. That is the order the friction is in: the layer they
+   * are about to regret is the one at the LEFT, the one they just added is at
+   * the right.
+   *
+   * @param {object} strip The strip element.
+   * @param {Array<object>} [layers] Pre-computed `getAll()` projection, so the
+   *   ordinary refresh pass does not project the registry a second time.
+   * @returns {void}
+   */
+  _syncActiveStrip(strip, layers) {
+    if (!strip) return;
+    const list = strip.querySelector?.('.data-active-chips');
+    if (!list) return;
+    const active = this._panelRowLayers(layers).filter((layer) => this._rowEnabled(layer.id));
+
+    strip.hidden = active.length === 0;
+    const count = strip.querySelector('.data-active-count');
+    if (count) count.textContent = String(active.length);
+    const clear = strip.querySelector('.data-active-clear');
+    if (clear) clear.hidden = active.length < 2;
+
+    const stale = new Map();
+    for (const node of [...(list.children || [])]) {
+      if (node.dataset?.activeLayerId) stale.set(node.dataset.activeLayerId, node);
+    }
+
+    for (const layer of active) {
+      let chip = stale.get(layer.id);
+      stale.delete(layer.id);
+      if (!chip) {
+        chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'data-active-chip';
+        // NOT `data-layer-id`. That attribute addresses a ROW — the voice
+        // surface scrolls to `#data-toggles [data-layer-id=…]` and the phone
+        // shell hangs a badge off the first match — and a chip carrying it
+        // would be found first and decorated instead of the row.
+        chip.dataset.activeLayerId = layer.id;
+        const name = document.createElement('span');
+        name.className = 'data-active-chip-name';
+        const cross = document.createElement('span');
+        cross.className = 'data-active-chip-x';
+        cross.textContent = '×';
+        cross.setAttribute('aria-hidden', 'true');
+        chip.appendChild(name);
+        chip.appendChild(cross);
+        chip.addEventListener('click', () => { void this._turnRowOff(layer.id, chip); });
+        list.appendChild(chip);
+      }
+      const displayName = this._displayName(layer);
+      const nameEl = chip.querySelector('.data-active-chip-name');
+      if (nameEl && nameEl.textContent !== displayName) nameEl.textContent = displayName;
+      // A row mid-transition cannot be asked to move again; the button that
+      // owns the transition is the one on the row, and this one says so.
+      const transitioning = layer.lifecycleState === 'enabling' || layer.lifecycleState === 'disabling';
+      chip.disabled = transitioning;
+      chip.classList?.toggle?.('transitioning', transitioning);
+      chip.title = `Éteindre — ${displayName}`;
+      chip.setAttribute('aria-label', `Éteindre ${displayName}`);
+    }
+    for (const node of stale.values()) node.remove();
+  }
+
+  /**
+   * Switch one row off from the strip, with the chip as its own busy light.
+   * @param {string} layerId Primary layer id of the row.
+   * @param {?object} chip The chip that was pressed.
+   * @returns {Promise<void>}
+   */
+  async _turnRowOff(layerId, chip) {
+    if (chip) chip.disabled = true;
+    try {
+      await this._setRowEnabled(layerId, false);
+    } catch (error) {
+      console.warn(`[Data] ${layerId} active-chip off error:`, error);
+    } finally {
+      // Unconditional, and it matters on the path where it looks pointless: a
+      // turn-off that SUCCEEDED has already taken this chip off the strip, so
+      // the write lands on a detached node and costs nothing — while a
+      // turn-off that FAILED left the chip in place, and that is the one the
+      // reader has to be able to press again.
+      if (chip) chip.disabled = false;
+    }
+  }
+
+  /**
+   * Switch off every row the panel shows as lit — the strip's "TOUT ÉTEINDRE".
+   *
+   * ROWS, NOT LAYERS. A coordinator with no row of its own is not something
+   * the reader switched on and not something they can switch back on, so a
+   * sweep that took it down would leave the panel unable to undo itself.
+   * Companions travel with their primary through `_setRowEnabled`.
+   *
+   * @returns {Promise<string[]>} The row ids that were asked to go dark.
+   */
+  turnOffPanelRows() {
+    const active = this._panelRowLayers().filter((layer) => this._rowEnabled(layer.id));
+    return Promise.all(active.map((layer) => this._setRowEnabled(layer.id, false)
+      .catch((error) => { console.warn(`[Data] ${layer.id} sweep off error:`, error); })))
+      .then(() => active.map((layer) => layer.id));
+  }
+
+  /**
+   * The layers that own a row in the panel, in `getAll()` order.
+   *
+   * Deliberately NOT `_groupedPanelLayers()`: that one exists to place rows
+   * inside their categories, and the strip has no categories. The two filters
+   * it shares are the ones that decide whether a row exists at all — a module
+   * that opted out, and a companion whose control is a chip on somebody else's
+   * row.
+   *
+   * @param {Array<object>} [layers] Pre-computed `getAll()` projection.
+   * @returns {Array<object>} Row layers, possibly empty.
+   */
+  _panelRowLayers(layers) {
+    return (layers || this.getAll()).filter((layer) => layer.showInTogglePanel
+      && !this._registrationTaxonomy?.get(layer.id)?.fusedInto);
   }
 
   /**
@@ -3414,6 +3608,9 @@ export class DataLayerManager {
         this._composedRowControls(layer, resolved),
       );
     }
+    // Same pass, same `getAll()`: the strip is the only surface that says
+    // WHICH layers are on, so it must never name one the rows below contradict.
+    this._syncActiveStrip(this._toggleContainer.querySelector('.data-active-strip'), layers);
     this._refreshMapLegend(mapLegend);
     // Same pass, same `getAll()`: the card and the rows must never disagree
     // about which layers are waiting for a closer camera.

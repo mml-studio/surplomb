@@ -771,6 +771,14 @@ html[data-shell="phone"] #phone-sheet :is(.context-mode-button, .global-context-
   min-height: 44px;
 }
 
+/* The strip of lit layers is sticky on desktop because the toggle list is its
+   own scroller. In the sheet the list does NOT scroll — the sheet does — so the
+   same rule would pin the strip to the top of the sheet, on top of the tabs. */
+html[data-shell="phone"] #phone-sheet .data-active-strip {
+  position: static;
+  margin: 0 0 6px;
+}
+
 html[data-shell="phone"] #phone-sheet #map-legend {
   border: 0;
   background: none;
