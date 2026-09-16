@@ -6,111 +6,140 @@
  * ── The number this exists for ────────────────────────────────────────────
  * A cold road fetch costs 0.6 to 46 s (measured 2026-09-16 against the hosted
  * origin from the VPS: Lyon 46.4 s, Paris arterials 17.8 s, Marseille 6.1 s,
- * Bordeaux 2.7 s). The same query repeated costs 52 to 78 ms. The proxy's
- * disk cache holds Overpass answers for 7 days.
+ * Bordeaux 2.7 s). The same query repeated costs 52 to 78 ms. The proxy holds
+ * Overpass answers on disk for 7 days.
  *
  * So somebody pays the cold box roughly once a week, and today it is whoever
- * happens to arrive first — on the one view that every single visitor lands
- * on, with nothing on screen while they wait.
+ * happens to arrive first — on the one view every single visitor lands on,
+ * with nothing on screen while they wait.
  *
- * ── Why this is ONE visit and not five ────────────────────────────────────
- * It is only one because the fetch box stopped depending on the reader.
- * `tierFetchBox` puts the box at the band's own span on the band's lattice, so
- * the default Paris view is a single Overpass key —
- * `scripts/qa-span-par-viewport.mjs` measures one key across eleven window
- * sizes, where the previous chain produced five. Before that, warming meant
- * guessing which window sizes to sweep.
+ * ── Why this is ONE request pair and not five ─────────────────────────────
+ * Because the box stopped depending on the reader. `tierFetchBox` puts it at
+ * the band's own span on the band's lattice, so the default view is a single
+ * Overpass key — `scripts/qa-span-par-viewport.mjs` measures one key across
+ * eleven window sizes, where the previous chain produced five.
  *
- * ── Why a browser and not a crafted request ───────────────────────────────
- * The alternative is to compute the query body in Node and POST it. That is
- * faster and it rots silently: the box comes from the camera's look-at point,
- * which comes from the default view's altitude, pitch and heading, and the day
- * any of those changes the warmer keeps warming a cell nobody visits — with
- * nothing to notice, because a warm request looks exactly like a useful one.
- * A real visit cannot drift from the real key, because it IS the reader.
+ * ── Why there is no browser here, and what replaces it ────────────────────
+ * The first version of this drove the real app in headless Chrome, on the
+ * argument that a crafted request rots silently: the box comes from the
+ * camera's look-at point, which comes from the default view's altitude, pitch
+ * and heading, and the day any of those changes a crafted warmer keeps warming
+ * a cell nobody visits — with nothing to notice, because a useless request
+ * looks exactly like a useful one.
  *
- * The traffic layer is on by default (`DEFAULT_ENABLED_LAYER_IDS`), so the
- * visit is bare: no hash, no seeding, nothing to keep in step.
+ * That argument was right about the risk and wrong about the remedy. A browser
+ * on the VPS means a Chrome and its ~150 MB of shared libraries in the image
+ * for a weekly cron — and the container's bundled Chrome does not even start
+ * (`libglib-2.0.so.0: cannot open shared object file`, measured 2026-09-16).
  *
- * ── What it must not do ───────────────────────────────────────────────────
- * Buy a Cesium ion root tile. Photorealistic adoption is metered per reader
- * and this reader is a robot, so it is suppressed — which costs nothing here,
- * since the mesh has no bearing on which Overpass box is asked for.
+ * The rot is prevented where rot belongs: in a test. `defaultViewFetchBox()`
+ * derives the box from `DEFAULT_CITY_VIEW` and the band table, and
+ * `src/defaultView.test.mjs` pins it against the box captured OFF THE WIRE.
+ * Move the default view, change a `snapDeg`, and CI fails by name instead of
+ * a cron quietly warming the wrong cell forever.
  *
- *   node scripts/warm-default-view.mjs --url https://surplomb.app
+ * ── What it asks for ──────────────────────────────────────────────────────
+ * Both passes, exactly as the layer does: the arterials first, then the full
+ * graph, same classes, same server-side timeouts, same form encoding. The
+ * proxy caches on the query BODY, so anything less than byte-identical warms
+ * nothing.
+ *
+ *   node scripts/warm-default-view.mjs --url http://localhost:4173
  *   # crontab: 17 4 * * 1  (weekly, well inside the 7-day TTL)
  *
- * Exits 0 when the view was warmed, 1 when it was not — so a cron mail means
+ * Run it from the VPS against the container, not through the edge: Cloudflare
+ * caps `/api` at 30 requests per 10 s per IP, and there is nothing at the edge
+ * this needs to touch.
+ *
+ * Exits 0 when both passes were served, 1 otherwise — so a cron mail means
  * something.
  */
 
-import puppeteer from 'puppeteer';
-import fs from 'node:fs';
-import { suppressFirstRun, disablePhotoreal } from './lib/qa-first-run.mjs';
+import { buildOverpassQuery } from '../src/data/trafficBounds.js';
+import { defaultViewFetchBox, DEFAULT_CITY_VIEW } from '../src/defaultView.js';
 
 const argv = process.argv.slice(2);
 const getOpt = (name, dflt) => {
   const i = argv.indexOf(name);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt;
 };
-const APP_URL = getOpt('--url', 'http://localhost:4421');
-const BUDGET_MS = Number(getOpt('--budget-ms', 180000));
+const APP_URL = getOpt('--url', 'http://localhost:4173').replace(/\/$/, '');
+const DRY_RUN = argv.includes('--dry-run');
 
-const CHROME_CANDIDATES = [
-  process.env.PUPPETEER_EXECUTABLE_PATH,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  (() => { try { return puppeteer.executablePath(); } catch { return null; } })(),
-].filter(Boolean);
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stamp = () => new Date().toISOString();
+const log = (msg) => console.log(`[warm ${stamp()}] ${msg}`);
+
+/**
+ * The two passes the layer runs, with the timeouts `fetchRoads` gives them.
+ *
+ * Both, and in this order, because both are cached separately and the reader
+ * waits for whichever is slower. Warming only the arterials would leave the
+ * full graph — the one that actually draws the streets — cold.
+ */
+function passesFor(tier) {
+  const passes = [{ name: 'major', classes: tier.classes, timeoutSec: 12 }];
+  if (tier.fullClasses) passes.push({ name: 'full', classes: tier.fullClasses, timeoutSec: 20 });
+  return passes;
+}
 
 (async () => {
-  const exe = CHROME_CANDIDATES.find((c) => { try { return fs.existsSync(c); } catch { return false; } });
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    executablePath: exe || undefined,
-    protocolTimeout: Math.max(BUDGET_MS, 120000),
-    args: ['--no-sandbox', '--enable-unsafe-swiftshader'],
-  });
-  const asked = [];
-  let dots = 0;
-  try {
-    const page = await browser.newPage();
-    await suppressFirstRun(page);
-    await disablePhotoreal(page);
-    page.on('request', (req) => {
-      if (!req.url().includes('/api/overpass')) return;
-      const body = decodeURIComponent(req.postData() || '');
-      const m = body.match(/\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/);
-      asked.push({ at: Date.now(), box: m ? m.slice(1, 5).join(',') : '?' });
-    });
-
-    const t0 = Date.now();
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: BUDGET_MS });
-    // Both passes go out together and the slower one is what the cache needs
-    // held; so the wait is for DOTS, which only exist once a pass has landed
-    // and been parsed — a request having left is not an answer having arrived.
-    while (Date.now() - t0 < BUDGET_MS) {
-      await sleep(1000);
-      dots = await page.evaluate(() => {
-        const e = window.__godsEyeView?.dataManager?.layers?.get('traffic');
-        return e?.module?.getStats?.()?.count ?? 0;
-      }).catch(() => 0);
-      if (dots > 0) break;
-    }
-    // One more breath so the second (full-graph) pass lands in the cache too.
-    if (dots > 0) await sleep(8000);
-    console.log(`[warm ${stamp()}] ${APP_URL} — ${dots} dots after ${Date.now() - t0} ms`);
-    for (const a of asked) console.log(`[warm ${stamp()}]   asked ${a.box} at +${a.at - t0} ms`);
-  } finally {
-    await browser.close();
-  }
-
-  if (dots === 0 || asked.length === 0) {
-    console.error(`[warm ${stamp()}] NOT WARMED — ${dots} dots, ${asked.length} Overpass request(s)`);
+  const { tier, center, box } = defaultViewFetchBox();
+  if (!box) {
+    console.error(`[warm ${stamp()}] no band for the default view — nothing to warm`);
     process.exit(1);
   }
+  const key = `${box.south},${box.west},${box.north},${box.east}`;
+  log(`${DEFAULT_CITY_VIEW.label} @ ${DEFAULT_CITY_VIEW.settleAltitudeM} m — band ${tier.id}, `
+    + `look-at ${center.lat.toFixed(5)},${center.lon.toFixed(5)}`);
+  log(`cell ${key} → ${APP_URL}/api/overpass`);
+
+  let failures = 0;
+  for (const pass of passesFor(tier)) {
+    const query = buildOverpassQuery(box.south, box.west, box.north, box.east, {
+      classes: pass.classes, timeoutSec: pass.timeoutSec,
+    });
+    if (DRY_RUN) {
+      log(`  ${pass.name}: would POST ${query.length} bytes — ${query}`);
+      continue;
+    }
+    const t0 = Date.now();
+    try {
+      const res = await fetch(`${APP_URL}/api/overpass`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        // Generous: a cold Lyon-sized box was measured at 46 s, and a warmer
+        // that gives up early leaves the cell cold AND reports success.
+        signal: AbortSignal.timeout(120000),
+      });
+      const ms = Date.now() - t0;
+      if (!res.ok) {
+        failures += 1;
+        console.error(`[warm ${stamp()}]   ${pass.name}: HTTP ${res.status} after ${ms} ms`);
+        continue;
+      }
+      // `x-overpass-cache` is the proxy's own verdict. HIT on a first run means
+      // somebody warmed it before us, which is fine; MISS is what we came for.
+      const cache = res.headers.get('x-overpass-cache') || 'unknown';
+      const body = await res.json();
+      const ways = Array.isArray(body?.elements) ? body.elements.length : 0;
+      log(`  ${pass.name}: ${ms} ms, cache=${cache}, ${ways} elements`);
+      if (ways === 0) {
+        failures += 1;
+        console.error(`[warm ${stamp()}]   ${pass.name}: served EMPTY — a cached nothing is worse `
+          + 'than a cold box, since it answers fast and draws nothing');
+      }
+    } catch (e) {
+      failures += 1;
+      console.error(`[warm ${stamp()}]   ${pass.name}: ${e.name} — ${e.message}`);
+    }
+  }
+
+  if (DRY_RUN) process.exit(0);
+  if (failures) {
+    console.error(`[warm ${stamp()}] NOT WARMED — ${failures} pass(es) failed`);
+    process.exit(1);
+  }
+  log('warmed');
   process.exit(0);
 })();

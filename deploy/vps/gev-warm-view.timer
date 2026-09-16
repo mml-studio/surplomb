@@ -1,0 +1,18 @@
+[Unit]
+Description=Warm the default view's Overpass cell once a week
+
+[Timer]
+# The proxy holds Overpass answers for 7 DAYS, so this has to land inside that
+# window with room to spare — a run that slips past the TTL warms nothing and
+# leaves the next reader paying 0.6-46 s. Weekly, at an hour nobody is looking.
+OnCalendar=Mon *-*-* 04:17:00
+# The first boot after a deploy is also a cold cache; do not wait until Monday.
+OnBootSec=10min
+# Missed while the machine was off (or the container was rebuilding) is the
+# normal case for a weekly timer, and the run costs two requests.
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

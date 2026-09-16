@@ -510,3 +510,57 @@ export function intersectBoxes(a, b) {
   if (north < south || east < west) return null;
   return { south, west, north, east };
 }
+
+/**
+ * The ground point the camera is looking at, without Cesium.
+ *
+ * `getFetchCenter` gets this from `camera.pickEllipsoid` at the canvas centre —
+ * the ray along the view direction, hitting the ellipsoid. This is the same
+ * question answered on a sphere, for the callers that have no scene to ask:
+ * a warmer, a test, anything that has to know what the app WILL request before
+ * a browser has requested it.
+ *
+ * The approximation is a flat-earth one over the distance involved (600 m of
+ * altitude at a 30° depression is ~1 km of ground), and the answer is then put
+ * on a lattice whose step is 370-555 m. Verified against the wire on
+ * 2026-09-16: the default Paris view derives (48.86500, 2.28447), the app asks
+ * for the cell centred on (48.865, 2.285), and `qa-span-par-viewport` captured
+ * exactly that box on all eleven window sizes.
+ *
+ * A pitch at or above the horizon has no ground point and returns the camera's
+ * own position, which is what `deriveFetchCenter` does with a failed pick.
+ *
+ * @param {{lat:number, lon:number, altitudeM:number, pitchDeg:number, headingDeg:number}} view
+ * @returns {{lat:number, lon:number}} The look-at point in degrees.
+ */
+export function lookAtGroundPoint({ lat, lon, altitudeM, pitchDeg, headingDeg }) {
+  const depression = -pitchDeg;
+  if (!(depression > 0) || !(altitudeM > 0)) return { lat, lon };
+  const groundM = altitudeM / Math.tan(toRad(depression));
+  const bearing = toRad(headingDeg);
+  const dNorthM = groundM * Math.cos(bearing);
+  const dEastM = groundM * Math.sin(bearing);
+  const metresPerDegLat = 111320;
+  const metresPerDegLon = metresPerDegLat * Math.cos(toRad(lat));
+  return {
+    lat: lat + dNorthM / metresPerDegLat,
+    lon: lon + (metresPerDegLon > 0 ? dEastM / metresPerDegLon : 0),
+  };
+}
+
+/**
+ * The Overpass query body for a box and a set of road classes.
+ *
+ * Lives here rather than in `traffic.js` because the body IS the proxy's cache
+ * key, so anything that wants to pre-warm that cache has to be able to produce
+ * it byte for byte — and `traffic.js` cannot be imported outside a browser.
+ * Re-exported from there so its own callers are unchanged.
+ *
+ * @param {number} south @param {number} west @param {number} north @param {number} east
+ * @param {{classes:string[], timeoutSec?:number}} opts
+ * @returns {string}
+ */
+export function buildOverpassQuery(south, west, north, east, { classes, timeoutSec = 25 } = {}) {
+  const regex = `^(${(classes || []).join('|')})$`;
+  return `[out:json][timeout:${timeoutSec}];(way["highway"~"${regex}"](${south},${west},${north},${east}););out geom qt;`;
+}
