@@ -424,10 +424,31 @@ export function pickSpeechVoice(voices, language, { preferredUri = null } = {}) 
  * @param {{userAgent?: string}} [options]
  * @returns {string|null}
  */
+/**
+ * Whether this user agent is iOS, including an iPad pretending to be a Mac.
+ *
+ * iPadOS 13+ reports a desktop Safari string, so the `Macintosh` test has to be
+ * paired with a touch-point count — the same signal `src/inputMode.js` reads,
+ * asked of a string here because this runs against an injected UA in tests.
+ *
+ * @param {string} userAgent
+ * @param {number} [maxTouchPoints]
+ * @returns {boolean}
+ */
+export function isIosUserAgent(userAgent, maxTouchPoints = globalThis.navigator?.maxTouchPoints ?? 0) {
+  const ua = String(userAgent || '');
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  return /Macintosh/.test(ua) && Number(maxTouchPoints) > 1;
+}
+
 export function describeVoiceUpgradeHint(voices, language, { userAgent = '' } = {}) {
   const base = String(language || '').toLowerCase().split('-')[0];
   if (base !== 'fr') return null;
   const ua = String(userAgent || '');
+  // The advice below is a walk through macOS System Settings. Served to an
+  // iPhone it is a set of directions to a place that does not exist — iOS has
+  // no Spoken Content voice download for a web page to point at.
+  if (isIosUserAgent(ua)) return null;
   const isApple = /Macintosh|iPhone|iPad/.test(ua) || /Safari/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua);
   if (!isApple) return null;
   const candidates = (Array.isArray(voices) ? voices : [])
@@ -567,6 +588,18 @@ export class GevBrainVoiceSession {
    */
   async start({ pushToTalk = false } = {}) {
     if (this.active) return;
+    // ── WHY iOS IS REFUSED OUTRIGHT ────────────────────────────────────────
+    // This path drives `SpeechRecognition` with `continuous = true` and
+    // `interimResults = true`. Safari on iOS honours NEITHER: it ends the
+    // session after a single utterance, which sends `onend` into the restart
+    // loop below, which replays the system dictation chime every few seconds
+    // for as long as the mic is on. There is no arrangement of these flags
+    // that makes a keyless session work there, so it says so once instead of
+    // failing loudly and repeatedly.
+    if (isIosUserAgent(this.scope?.navigator?.userAgent)) {
+      this.host.setStatus('error', 'Voix sans clé indisponible sur iOS — utilisez le mode Realtime');
+      return;
+    }
     const Recognition = speechRecognitionConstructor(this.scope);
     if (!Recognition) {
       this.host.setStatus('error', 'This browser has no speech recognition — try Chrome, Edge or Safari');

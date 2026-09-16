@@ -11,7 +11,9 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
-import { createVoiceControl } from './voiceControlDom.js';
+import { createVoiceControl, resolveVoiceControlHint } from './voiceControlDom.js';
+import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
+import { isCoarseInput } from '../inputMode.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -323,6 +325,9 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
   }
   controller.buttonHandler = () => {
     if (shouldIgnoreVoiceButtonClick(controller.spaceKeyHeld)) return;
+    // Synchronous, first: iOS hands over audio output only inside the handler
+    // the finger triggered, and `start()` awaits `getUserMedia` three lines in.
+    primeVoiceMedia();
     if (controller.isActive()) controller.stop();
     else controller.start({ pushToTalk: false });
   };
@@ -459,6 +464,7 @@ export class GevRealtimeController {
     this.shortcutKeyDownHandler = null;
     this.shortcutKeyUpHandler = null;
     this.shortcutBlurHandler = null;
+    this.shortcutPageHideHandler = null;
     this.shortcutVisibilityHandler = null;
     this.status = 'idle';
     // Monotonic generation token. Every start()/stop() bumps it; an in-flight
@@ -662,18 +668,27 @@ export class GevRealtimeController {
       this.setMicrophoneEnabled(!this.pushToTalkMode || this.pushToTalkKeyHeld);
       this.startVoiceVisualizer(localStream);
 
-      document.querySelectorAll('audio[data-gev-realtime-audio="true"]').forEach((el) => el.remove());
-      this.audioEl = document.createElement('audio');
-      this.audioEl.autoplay = true;
-      this.audioEl.dataset.gevRealtimeAudio = 'true';
-      this.audioEl.style.display = 'none';
-      document.body.appendChild(this.audioEl);
+      // The element was taken during the tap, before `await getUserMedia` above
+      // spent the activation. Building one HERE is what made iOS silent.
+      // `primeVoiceMedia` is idempotent; on a desktop this is the first call.
+      this.audioEl = primeVoiceMedia().audioEl;
+      resumeVoiceMedia();
 
       localPc = new RTCPeerConnection();
       this.pc = localPc;
       this.pc.ontrack = (event) => {
         const remoteStream = event.streams[0];
+        if (!this.audioEl) return;
         this.audioEl.srcObject = remoteStream;
+        // `autoplay` alone is a request, not a guarantee: Safari answers it
+        // with a rejected promise nobody was reading, so a session that could
+        // not be heard looked exactly like one that could.
+        void this.audioEl.play?.().catch((err) => {
+          this.debugLog('assistant audio refused playback', { name: err?.name });
+          if (err?.name === 'NotAllowedError') {
+            this.setStatus('listening', 'Touchez le micro pour activer le son');
+          }
+        });
         this.startAssistantVoiceVisualizer(remoteStream);
       };
       this.pc.onconnectionstatechange = () => this.handleConnectionStateChange();
@@ -868,12 +883,36 @@ export class GevRealtimeController {
       this.releasePushToTalkKey();
     };
     this.shortcutVisibilityHandler = () => {
-      if (document.visibilityState === 'hidden') this.shortcutBlurHandler();
+      if (document.visibilityState !== 'hidden') return;
+      this.shortcutBlurHandler();
+      this.suspendVoiceInBackground();
     };
+    // iOS fires `pagehide` — not `visibilitychange` — when it puts a page into
+    // the back/forward cache, and a WebRTC session that survives into that
+    // cache holds the microphone with the app off screen. The orange recording
+    // dot stays lit over whatever the reader opened next.
+    this.shortcutPageHideHandler = () => this.suspendVoiceInBackground();
     document.addEventListener('keydown', this.shortcutKeyDownHandler);
     document.addEventListener('keyup', this.shortcutKeyUpHandler);
     window.addEventListener('blur', this.shortcutBlurHandler);
     document.addEventListener('visibilitychange', this.shortcutVisibilityHandler);
+    window.addEventListener('pagehide', this.shortcutPageHideHandler);
+  }
+
+  /**
+   * End a live session that has gone off screen on a phone.
+   *
+   * Only on a touchscreen: a desktop reader who alt-tabs to read something
+   * mid-conversation expects to come back to it, and the microphone indicator
+   * is right there in the tab strip. On a phone "off screen" means the app is
+   * not running as far as the reader is concerned, while iOS keeps the mic hot
+   * and the token burning.
+   * @returns {void}
+   */
+  suspendVoiceInBackground() {
+    if (!isCoarseInput() || !this.isActive()) return;
+    this.stop();
+    this.setStatus('idle', 'Session vocale interrompue en arrière-plan');
   }
 
   /**
@@ -914,8 +953,12 @@ export class GevRealtimeController {
     const bars = Array.from(this.ui.root.querySelectorAll('.gev-voice-visualizer span'));
     if (!AudioContextClass || !stream || !bars.length) return;
     try {
-      const context = new AudioContextClass();
-      context.resume().catch(() => {});
+      // The context the tap unlocked, not a new one: iOS caps how many a page
+      // may create, so a session that built its own would go silent for good
+      // after a handful of starts.
+      const context = getVoiceAudioContext() || primeVoiceMedia({ AudioContextClass }).audioContext;
+      if (!context) return;
+      context.resume?.().catch?.(() => {});
       const analyser = context.createAnalyser();
       analyser.fftSize = 64;
       analyser.smoothingTimeConstant = 0.72;
@@ -1006,10 +1049,10 @@ export class GevRealtimeController {
     this.visualizerOutputAnalyser = null;
     this.visualizerOutputData = null;
     this.visualizerSpeaker = 'idle';
-    if (this.visualizerAudioContext) {
-      this.visualizerAudioContext.close().catch(() => {});
-      this.visualizerAudioContext = null;
-    }
+    // Disconnected, NOT closed. The context is shared and unlocked; closing it
+    // would spend one of the handful iOS allows and take the next session's
+    // audio with it.
+    this.visualizerAudioContext = null;
     resetVoiceVisualizerBars(this.ui?.root?.querySelectorAll('.gev-voice-visualizer span'));
   }
 
@@ -1089,7 +1132,9 @@ export class GevRealtimeController {
       this.stopVoiceVisualizer();
     }
     if (this.audioEl) {
-      this.audioEl.remove();
+      // Detached, not removed: the element carries the audio grant taken during
+      // the tap, and a new one built next session would not have it.
+      try { this.audioEl.srcObject = null; } catch { /* already gone */ }
       this.audioEl = null;
     }
     this.processedCalls.clear();
@@ -1125,10 +1170,14 @@ export class GevRealtimeController {
       if (this.shortcutVisibilityHandler) {
         document.removeEventListener('visibilitychange', this.shortcutVisibilityHandler);
       }
+      if (this.shortcutPageHideHandler) {
+        window.removeEventListener('pagehide', this.shortcutPageHideHandler);
+      }
       this.shortcutKeyDownHandler = null;
       this.shortcutKeyUpHandler = null;
       this.shortcutBlurHandler = null;
       this.shortcutVisibilityHandler = null;
+      this.shortcutPageHideHandler = null;
     }
     if (removeUi && this.annotationEventUnsubscribe) {
       // Full teardown (re-init path): stop listening to the long-lived annotation
@@ -1750,12 +1799,11 @@ export class GevRealtimeController {
   updateVoiceButtonLabel() {
     if (!this.ui.buttonLabel) return;
     this.ui.buttonLabel.textContent = 'MIC';
-    if (this.ui.helpDetail) {
-      this.ui.helpDetail.textContent = resolveVoiceControlHint(
-        this.pushToTalkMode,
-        this.pushToTalkKeyHeld,
-      );
-    }
+    const hint = resolveVoiceControlHint(this.pushToTalkMode, this.pushToTalkKeyHeld);
+    if (this.ui.helpDetail) this.ui.helpDetail.textContent = hint;
+    // The tray is a hover surface; the aria-label is the only copy a screen
+    // reader ever hears, and it was naming a key phones do not have.
+    this.ui.button?.setAttribute('aria-label', `Voice control — ${hint}`);
   }
 
   /**
@@ -3007,17 +3055,10 @@ export function resolveVoiceVisualizerSpeaker(currentSpeaker, nextSpeaker, keepC
   return nextSpeaker === 'user' || nextSpeaker === 'ai' ? nextSpeaker : 'idle';
 }
 
-/**
- * Resolves the in-app help tray copy for the current push-to-talk state.
- * @param {boolean} pushToTalkMode
- * @param {boolean} pushToTalkKeyHeld
- * @returns {string}
- */
-export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld) {
-  return pushToTalkMode && pushToTalkKeyHeld
-    ? 'Release Space to send'
-    : 'Hold Space to speak · click mic to toggle voice';
-}
+// The in-app help copy is re-exported, not redefined: the same sentence is the
+// mic button's `aria-label`, so it belongs beside the markup that carries it.
+// See `resolveVoiceControlHint` in `./voiceControlDom.js`.
+export { resolveVoiceControlHint };
 
 /**
  * Removes low-level room noise before it can animate the voice meter.

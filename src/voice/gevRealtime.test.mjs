@@ -70,6 +70,21 @@ test('voice control help tray reflects the push-to-talk key state', () => {
   );
 });
 
+test('a phone is never told to hold a key it does not have', () => {
+  // Push-to-talk stays a KEYBOARD verb: on a touchscreen the session is
+  // open-mic with server-side turn detection, which is a toggle. Naming Space
+  // there was the app's only instruction, and it was an instruction to press
+  // something that is not on the screen.
+  const coarse = resolveVoiceControlHint(false, false, true);
+  assert.match(coarse, /Touchez le micro pour parler/);
+  assert.doesNotMatch(coarse, /Space/);
+  // Held or not, push-to-talk or not: there is nothing to hold.
+  assert.equal(resolveVoiceControlHint(true, true, true), coarse);
+  assert.equal(resolveVoiceControlHint(true, false, true), coarse);
+  // Node reports no touch points, so the session default is still the cursor's.
+  assert.equal(resolveVoiceControlHint(false, false), resolveVoiceControlHint(false, false, false));
+});
+
 test('voice visualizer reads assistant output while the assistant is speaking', () => {
   const input = { analyser: { id: 'mic' }, data: new Uint8Array([1]) };
   const output = { analyser: { id: 'speaker' }, data: new Uint8Array([2]) };

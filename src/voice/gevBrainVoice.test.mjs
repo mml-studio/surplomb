@@ -9,6 +9,7 @@ import {
   parseRetryAfterMs,
   parseToolArguments,
   describeVoiceUpgradeHint,
+  isIosUserAgent,
   loadSpeechVoices,
   pickSpeechVoice,
   scoreSpeechVoice,
@@ -626,4 +627,55 @@ test('the operator\'s voice choice is remembered, and a refusing localStorage is
   };
   session.setPreferredVoice('amelie');
   assert.equal(session.preferredVoiceUri, 'amelie');
+});
+
+/* ---------- iOS, where this whole path cannot work ---------- */
+
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const IPAD_DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+const MAC_UA = IPAD_DESKTOP_UA;
+
+test('an iPad claiming to be a Mac is still iOS, and a Mac is not', () => {
+  assert.equal(isIosUserAgent(IPHONE_UA), true);
+  // iPadOS 13+ reports a desktop Safari string; the touch-point count is what
+  // tells the two apart.
+  assert.equal(isIosUserAgent(IPAD_DESKTOP_UA, 5), true);
+  assert.equal(isIosUserAgent(MAC_UA, 0), false);
+  assert.equal(isIosUserAgent('Mozilla/5.0 (X11; Linux x86_64) Chrome/120', 0), false);
+  assert.equal(isIosUserAgent('', 0), false);
+  assert.equal(isIosUserAgent(undefined, undefined), false);
+});
+
+test('the voice-download advice is a walk through macOS, so an iPhone never gets it', () => {
+  const compact = [{ lang: 'fr-FR', name: 'Thomas', localService: true }];
+  assert.equal(describeVoiceUpgradeHint(compact, 'fr-FR', { userAgent: IPHONE_UA }), null);
+  // The same advice still reaches the Mac it was written for.
+  assert.match(
+    String(describeVoiceUpgradeHint(compact, 'fr-FR', { userAgent: MAC_UA })),
+    /System Settings/,
+  );
+});
+
+test('a keyless session on iOS refuses once instead of chiming every few seconds', async () => {
+  // Safari on iOS honours neither `continuous` nor `interimResults`: it ends
+  // after one utterance, the restart loop fires, and the system dictation chime
+  // plays again. Forever.
+  const { session, host } = makeHarness({ replies: [{ choices: [{ message: { content: 'ok' } }] }] });
+  const statuses = [];
+  host.setStatus = (status, detail) => statuses.push([status, detail]);
+  session.scope.navigator = { userAgent: IPHONE_UA };
+  await session.start({ pushToTalk: false });
+  assert.equal(session.isActive(), false, 'nothing was started');
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0][0], 'error');
+  assert.match(statuses[0][1], /iOS/);
+  assert.match(statuses[0][1], /Realtime/, 'the message names the path that does work');
+});
+
+test('a session on anything else still starts', async () => {
+  const { session } = makeHarness({ replies: [{ choices: [{ message: { content: 'ok' } }] }] });
+  session.scope.navigator = { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120' };
+  await session.start({ pushToTalk: false });
+  assert.equal(session.isActive(), true);
+  session.stop();
 });

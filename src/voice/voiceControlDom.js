@@ -17,6 +17,30 @@
  * @module voice/voiceControlDom
  */
 
+import { isCoarseInput } from '../inputMode.js';
+
+/**
+ * What the mic panel tells the reader to do with it.
+ *
+ * It lives HERE, next to the markup, because the same sentence is written in
+ * three places — the button's `aria-label`, the help tray's text, and the
+ * status line — and on a phone all three were wrong: there is no Space key to
+ * hold, so the only instructions the app offers named a key that does not
+ * exist. A touchscreen session is open-mic with server-side turn detection,
+ * which is a toggle, so that is what the words say.
+ *
+ * @param {boolean} pushToTalkMode
+ * @param {boolean} pushToTalkKeyHeld
+ * @param {boolean} [coarse] Defaults to the session's input mode.
+ * @returns {string}
+ */
+export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coarse = isCoarseInput()) {
+  if (coarse) return 'Touchez le micro pour parler · touchez à nouveau pour arrêter';
+  return pushToTalkMode && pushToTalkKeyHeld
+    ? 'Release Space to send'
+    : 'Hold Space to speak · click mic to toggle voice';
+}
+
 /**
  * Build (or find) the voice control panel and return its live element handles.
  *
@@ -25,6 +49,10 @@
  *   previous session already abandoned.
  * @returns {object} Named handles onto the panel's parts.
  */
+function escapeAttribute(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 export function createVoiceControl({ reset = false } = {}) {
   let root = document.getElementById('gev-voice-control');
   if (root && reset) {
@@ -53,7 +81,7 @@ export function createVoiceControl({ reset = false } = {}) {
           <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
         </div>
       </div>
-      <button id="gev-voice-button" type="button" aria-label="Voice control — hold Space to speak; click to toggle voice" aria-describedby="gev-voice-help">
+      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(`Voice control — ${resolveVoiceControlHint(false, false)}`)}" aria-describedby="gev-voice-help">
         <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /></span>
         <span class="gev-mic-label">ON/OFF</span>
       </button>
@@ -65,7 +93,7 @@ export function createVoiceControl({ reset = false } = {}) {
       </div>
       <div id="gev-voice-help" class="gev-voice-help-tray" role="tooltip">
         <span class="gev-voice-help-kicker">VOICE CONTROL</span>
-        <span class="gev-voice-help-detail">Hold Space to speak · click mic to toggle voice</span>
+        <span class="gev-voice-help-detail">${escapeAttribute(resolveVoiceControlHint(false, false))}</span>
         <ul class="gev-voice-help-examples"></ul>
       </div>
       <div class="gev-voice-transcript" hidden>

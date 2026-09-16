@@ -39,6 +39,7 @@
  */
 import { whenIdle } from '../whenIdle.js';
 import { createVoiceControl } from './voiceControlDom.js';
+import { primeVoiceMedia } from './mediaPrime.js';
 
 /**
  * Upper bound on the idle wait. Long enough that a busy boot is never
@@ -131,6 +132,10 @@ export function installLazyVoice({
    * seconds of boot, before idle has fired.
    */
   const onButtonClick = () => {
+    // FIRST LINE, before the await below. iOS grants audio output only inside
+    // the handler the finger triggered; `await import()` spends that grant, and
+    // everything created afterwards plays to nobody. See `./mediaPrime.js`.
+    primeVoiceMedia();
     void load().then(({ controller }) => controller.start({ pushToTalk: false })).catch(() => {});
   };
 
