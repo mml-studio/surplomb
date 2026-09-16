@@ -33,6 +33,7 @@
 
 import { isPhoneShell } from './inputMode.js';
 import { onWorldOverlaySelectionChange } from './overlays/worldOverlay.js';
+import { renderPhoneSelection } from './phoneSelection.js';
 import {
   PHONE_FEATURED_LAYER_IDS,
   PHONE_HEAVY_LAYER_IDS,
@@ -300,54 +301,17 @@ export function initPhoneSheet({ dataManager = null } = {}) {
   }
 
   // ── The selection, mirrored as DOM ────────────────────────────────────────
-  const renderSelection = (items) => {
-    if (!selectionHost) return;
-    selectionHost.replaceChildren();
-    if (!items.length) {
-      const empty = document.createElement('p');
-      empty.className = 'phone-selection-empty';
-      empty.textContent = 'Touchez un objet sur le globe pour le lire ici.';
-      selectionHost.appendChild(empty);
-      return;
-    }
-    for (const item of items) {
-      const activatable = typeof item.activate === 'function';
-      const card = document.createElement(activatable ? 'button' : 'div');
-      card.className = 'phone-selection-card';
-      if (activatable) card.type = 'button';
-      // `setProperty`, never interpolated into markup: the accent is a string a
-      // layer supplied, and this is the one value here that comes from outside.
-      if (typeof item.accent === 'string') card.style.setProperty('--phone-card-accent', item.accent);
-
-      const title = document.createElement('span');
-      title.className = 'phone-selection-title';
-      title.textContent = item.title || item.id;
-      card.appendChild(title);
-
-      for (const line of item.details) {
-        const detail = document.createElement('span');
-        detail.className = 'phone-selection-detail';
-        detail.textContent = line;
-        card.appendChild(detail);
-      }
-      if (activatable) card.addEventListener('click', () => { item.activate(); });
-      selectionHost.appendChild(card);
-    }
-
-    const dismiss = document.createElement('button');
-    dismiss.type = 'button';
-    dismiss.className = 'phone-selection-dismiss';
-    dismiss.setAttribute('aria-label', 'Replier le panneau');
-    dismiss.textContent = '×';
-    // It lowers the SHEET and does not deselect: what is selected belongs to
-    // the layer that selected it, and a mirror that could clear it would be a
-    // second owner of the same state.
-    dismiss.addEventListener('click', () => {
+  //
+  // The cards themselves are built by `src/phoneSelection.js`, which takes its
+  // host as an argument and imports nothing: it is the only part of this shell
+  // that no browser harness can reach, because nothing selects anything under
+  // Puppeteer.
+  const renderSelection = (items) => renderPhoneSelection(selectionHost, items, {
+    onDismiss: () => {
       dismissedSelection = true;
       snapTo('peek');
-    });
-    selectionHost.appendChild(dismiss);
-  };
+    },
+  });
 
   const unsubscribeSelection = onWorldOverlaySelectionChange((items) => {
     renderSelection(items);
