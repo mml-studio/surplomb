@@ -136,6 +136,7 @@ import {
   sitePrimaryFamily,
   tariffMix,
 } from './medecinsFrFeed.js';
+import { pickAt } from './pickAt.js';
 
 export { MEDECINS_FR_LAYER_ID };
 
@@ -1246,7 +1247,7 @@ export function createMedecinsLayer({
     if (_clickHandler) return;
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((movement) => {
-      const picked = viewer.scene.pick(movement.position);
+      const picked = pickAt(viewer.scene, movement.position);
       const id = picked?.id;
       if (typeof id === 'string' && _records.has(id)) { selectSite(id); return; }
       if (_regime === 'national') {

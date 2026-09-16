@@ -151,6 +151,7 @@ import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor
 import { buildDepartementIndex, nearestDepartementWithin } from './franceDepartements.js';
 import { createRetryableLoader } from './retryableLoad.js';
 import { VESSEL_STANDOFF_SCAN_KM, vesselStandoffRangeM } from './vesselStandoff.js';
+import { pickAt } from './pickAt.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -2114,7 +2115,7 @@ function bindVesselInteraction(viewer, handler, keyTarget) {
   state.clickHandler = handler;
   handler.setInputAction((click) => {
     if (!state.enabled) return;
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
     const pickedId = resolvePickId(picked);
     let record = pickedId ? state.vesselMap.get(pickedId) : null;
     const rawId = picked?.id ?? picked?.primitive?.id;

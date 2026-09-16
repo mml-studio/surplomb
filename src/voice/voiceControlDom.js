@@ -17,6 +17,40 @@
  * @module voice/voiceControlDom
  */
 
+import { isCoarseInput } from '../inputMode.js';
+
+/**
+ * What the mic panel tells the reader to do with it.
+ *
+ * It lives HERE, next to the markup, because the same sentence is written in
+ * three places — the button's `aria-label`, the help tray's text, and the
+ * status line — and on a phone all three were wrong: there is no Space key to
+ * hold, so the only instructions the app offers named a key that does not
+ * exist. A touchscreen session is open-mic with server-side turn detection,
+ * which is a toggle, so that is what the words say.
+ *
+ * @param {boolean} pushToTalkMode
+ * @param {boolean} pushToTalkKeyHeld
+ * @param {boolean} [coarse] Defaults to the session's input mode.
+ * @returns {string}
+ */
+export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coarse = isCoarseInput()) {
+  if (coarse) return 'Touchez le micro pour parler · touchez à nouveau pour arrêter';
+  return pushToTalkMode && pushToTalkKeyHeld
+    ? 'Release Space to send'
+    : 'Hold Space to speak · click mic to toggle voice';
+}
+
+/**
+ * The markup below is a template literal, so anything interpolated into an
+ * attribute has to survive being read as HTML.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeAttribute(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 /**
  * Build (or find) the voice control panel and return its live element handles.
  *
@@ -40,12 +74,20 @@ export function createVoiceControl({ reset = false } = {}) {
       <div class="gev-voice-heading">
         <div class="gev-voice-kicker">AI AGENT</div>
         <div id="gev-voice-status">OFF</div>
+        <!--
+          The help tray is the ONLY place that says how the mic is used, and it
+          opens on hover or on a focus ring — neither of which a touchscreen
+          produces. On a phone the feature was documented in a surface nobody
+          could reach. This button is that surface; it is hidden for a cursor,
+          which already gets the tray by pointing at the panel.
+        -->
+        <button id="gev-voice-help-btn" class="gev-voice-help-btn" type="button" aria-label="Aide vocale" aria-expanded="false" aria-controls="gev-voice-help" title="Aide vocale">?</button>
         <div class="gev-voice-cost">
           <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="Voice model tier — applies next session">STD</button>
           <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
         </div>
       </div>
-      <button id="gev-voice-button" type="button" aria-label="Voice control — hold Space to speak; click to toggle voice" aria-describedby="gev-voice-help">
+      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(`Voice control — ${resolveVoiceControlHint(false, false)}`)}" aria-describedby="gev-voice-help">
         <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /></span>
         <span class="gev-mic-label">ON/OFF</span>
       </button>
@@ -57,7 +99,7 @@ export function createVoiceControl({ reset = false } = {}) {
       </div>
       <div id="gev-voice-help" class="gev-voice-help-tray" role="tooltip">
         <span class="gev-voice-help-kicker">VOICE CONTROL</span>
-        <span class="gev-voice-help-detail">Hold Space to speak · click mic to toggle voice</span>
+        <span class="gev-voice-help-detail">${escapeAttribute(resolveVoiceControlHint(false, false))}</span>
         <ul class="gev-voice-help-examples"></ul>
       </div>
       <div class="gev-voice-transcript" hidden>
@@ -116,6 +158,7 @@ export function createVoiceControl({ reset = false } = {}) {
     voiceRow: root.querySelector('.gev-voice-transcript-voice'),
     voicePicker: root.querySelector('.gev-voice-picker'),
     voicePreview: root.querySelector('.gev-voice-preview'),
+    helpButton: root.querySelector('#gev-voice-help-btn'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
   };

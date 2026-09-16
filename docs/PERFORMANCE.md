@@ -392,9 +392,59 @@ point de caméra par défaut de Cesium (35,15 N / 82,5 O) que le HUD demande
 avant que la caméra ne soit posée. Ce deuxième appel existe aussi sur le bureau
 — il est antérieur à ce travail et n'est pas corrigé ici.
 
-`qa:phone-boot` rend **9/10**. Le contrôle qui échoue est celui des cibles
-tactiles (11 commandes visibles sous 40 px), et c'est voulu : il est le critère
-d'acceptation de la coquille téléphone, qui n'est pas encore écrite.
+`qa:phone-boot` rend **10/10** depuis que la coquille du volet C a atterri. Son
+dernier rouge était le contrôle des cibles tactiles — 14 commandes visibles sous
+40 px, dont une seule venait du lot tactile (`#locate-me`, 36 px, la taille
+exacte des trois boutons de sa rangée). `phone.css` les a toutes reprises :
+**0 contrevenant**, et le document ne déborde plus d'un pixel.
+
+### Le tactile, et ce que le doigt coûte ou épargne
+
+`scripts/qa-phone-touch.mjs` (`npm run qa:phone-touch`) ouvre **deux** pages
+sur le même build — un iPhone 13 émulé et un bureau 1440×900 — et asserte les
+deux dans le même contrôle : le chemin grossier gagne, le chemin fin ne bouge
+pas. **11/11** le 2026-09-16. Son coût est nul : photoréel coupé des deux
+côtés, aucune couche allumée, aucun géocodage (le relevé de position est
+injecté par CDP).
+
+| Mesuré le 2026-09-16, émulation iPhone 13 contre bureau 1440×900 | Bureau | Téléphone |
+| --- | ---: | ---: |
+| Portée d'un pick, en pixels CSS | 3 | **24** |
+| Profondeur du drill | 1 | **3** |
+| Côté demandé, en pixels de tampon | 3 | 19 (ratio 0,8 en `lite`) |
+| Voies de tangage liées au pincement | 4 | **0** |
+| `inertiaSpin` / `minimumZoomDistance` | 0,9 / 1 m | **0,7 / 40 m** |
+| Passes de survol CCTV par seconde de pan | ≈ 8 | **0** |
+
+Deux choses valent d'être retenues de ce tableau. Le **côté en pixels de
+tampon** est plus petit que la portée en pixels CSS, et c'est correct :
+`scene.pick(position, w, h)` prend sa taille en pixels du tampon de dessin
+alors que la position est en pixels CSS, et le profil `lite` laisse ce tampon à
+0,8× le canvas. 24 px CSS de portée valent donc 19 px de tampon. Le premier run
+du harnais a échoué sur une assertion qui supposait l'inverse.
+
+Et le **survol CCTV**, coupé au doigt, n'est pas une économie théorique : la
+passe faisait jusqu'à huit `scene.pick` par seconde pendant chaque pan, pour
+convoquer un aperçu qu'un tap remplace en mieux — il ACTIVE la caméra.
+
+### Le bureau, vérifié contre un témoin
+
+Le contrat du lot tactile est que le chemin fin ne bouge pas. Mesuré le
+2026-09-16 sur 1440×900, contre un worktree témoin au commit de base, deux
+exécutions chacun, **après 15 secondes de repos** :
+
+| Rectangle | Témoin | Lot tactile |
+| --- | --- | --- |
+| `#left-panel-stack` | 52, 234, 360×630 | **identique** |
+| `#right-context-rail` | 1058, 234, 330×166 | **identique** |
+| `#command-dock` | 482, 820, 476×62 | **identique** |
+| `#top-center-actions` | 658, 32, 124×36 | 636, 32, **168×36** |
+
+La seule différence est le bouton « Autour de moi », additif et volontairement
+offert au bureau aussi. **Les quinze secondes ne sont pas décoratives** : à six
+secondes le rail droit se lisait 360 px d'un côté et 437 de l'autre, de façon
+reproductible, parce que l'allocateur de hauteur n'avait pas fini — une mesure
+prise là aurait rapporté une régression qui n'existe pas.
 
 ### Ce qui ne se mesure PAS sans appareil
 
@@ -409,6 +459,11 @@ regex laisse passer « Apple GPU »). L'inspecteur n'expose pas la mémoire GPU 
 les trois signaux honnêtes sont `__godsEyeView.getContextLossDiagnostics()`, la
 bannière Safari « rechargée car elle utilisait trop de mémoire », et
 Xcode → Devices → Device Logs filtré `JetsamEvent`.
+
+À quoi s'ajoute, pour le tactile : l'audio qui part vraiment (et dans quel
+haut-parleur), la permission micro qui survit à un `await import()`, le prompt
+de géolocalisation, le menu contextuel iOS sur appui long, et le ressenti du
+pincement. La checklist est dans `docs/KNOWN-ISSUES.md`.
 
 Épreuve mémoire : choisir « Google 3D » **à la main** (un téléphone ne l'adopte
 plus tout seul), deux minutes de pan et de pinch à 300 m sur Paris, puis lire

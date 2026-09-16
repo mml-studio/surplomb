@@ -206,6 +206,7 @@ import {
   fraicheurTreeSize,
   treeCardLines,
 } from './fraicheurTrees.js';
+import { pickAt } from './pickAt.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const FRAICHEUR_FR_LAYER_ID = 'fraicheur-fr';
@@ -1357,7 +1358,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const id = resolveFraicheurPickId(viewer.scene.pick(movement.position));
+    const id = resolveFraicheurPickId(pickAt(viewer.scene, movement.position));
     if (id) {
       selectObject(id);
       return;

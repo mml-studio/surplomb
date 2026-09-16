@@ -10,6 +10,7 @@ import {
   decodeWeekHourParam,
   encodeWeekHourParam,
 } from './data/weekHourCursor.js';
+import { isCoarseInput } from './inputMode.js';
 
 /**
  * Share Links — URL Hash State Management
@@ -186,6 +187,60 @@ export function peekShareMapStack(hash = (typeof window === 'undefined' ? '' : w
   if (normalizeShareLongitude(parseFloat(params.get('lon'))) === null) return null;
   const mapStack = params.get('map');
   return mapStack ? String(mapStack) : null;
+}
+
+/**
+ * Share a URL the way the device expects, and report which way that was.
+ *
+ * ── WHY THE SHEET IS GATED ON A COARSE POINTER ──────────────────────────────
+ * Desktop Chrome and Edge both implement `navigator.share`, and both answer it
+ * with a small window listing applications the reader has never associated with
+ * this browser. "Copy link" is one clipboard write and a toast; replacing it
+ * with a picker on a machine that has a clipboard and a paste shortcut is a
+ * regression. On a phone the opposite holds: the clipboard is real but pasting
+ * into Messages is four taps, and the sheet is one.
+ *
+ * `canShare` is asked because Safari answers `false` for data a sheet cannot
+ * carry, and a `share()` that throws in that case would silently lose the link.
+ *
+ * @param {string} url
+ * @param {object} [options]
+ * @param {Function} [options.share] `navigator.share`, injected for tests.
+ * @param {Function} [options.canShare] `navigator.canShare`, injected.
+ * @param {Function} [options.clipboardWrite] `clipboard.writeText`, injected.
+ * @param {boolean} [options.coarse] Defaults to the session's input mode.
+ * @param {string} [options.title]
+ * @returns {Promise<'shared'|'cancelled'|'copied'|'failed'>}
+ */
+export async function shareOrCopy(url, {
+  share = globalThis.navigator?.share?.bind(globalThis.navigator),
+  canShare = globalThis.navigator?.canShare?.bind(globalThis.navigator),
+  clipboardWrite = globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard),
+  coarse = undefined,
+  title = undefined,
+} = {}) {
+  const useSheet = (coarse === undefined ? isCoarseInput() : !!coarse)
+    && typeof share === 'function'
+    && (typeof canShare !== 'function' || canShare({ url }) !== false);
+  if (useSheet) {
+    try {
+      await share(title ? { title, url } : { url });
+      return 'shared';
+    } catch (error) {
+      // A reader who dismissed the sheet did not fail at anything, and telling
+      // them so with a toast is noise.
+      if (error?.name === 'AbortError') return 'cancelled';
+      // Anything else — no matching target, a sheet that never opened — falls
+      // through to the clipboard rather than losing the link.
+    }
+  }
+  if (typeof clipboardWrite !== 'function') return 'failed';
+  try {
+    await clipboardWrite(url);
+    return 'copied';
+  } catch {
+    return 'failed';
+  }
 }
 
 export class ShareLinkManager {
@@ -558,6 +613,28 @@ export class ShareLinkManager {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Hand the link to the system sheet when there is one, the clipboard when
+   * there is not.
+   *
+   * ── WHY THE URL IS BUILT BEFORE THE FIRST AWAIT ─────────────────────────
+   * `navigator.share()` requires TRANSIENT USER ACTIVATION: the tap that
+   * called it is spent by the first `await`, and a share dispatched afterwards
+   * throws `NotAllowedError`. So the snapshot is assembled synchronously and
+   * only the share itself is awaited.
+   *
+   * @param {{nowMs?: number, title?: string}} [options]
+   * @returns {Promise<'shared'|'cancelled'|'copied'|'failed'>}
+   */
+  async shareLink({ nowMs = Date.now(), title = document?.title } = {}) {
+    const params = this._buildHashParams();
+    if (!params) return 'failed';
+    params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
+    const url = new URL(window.location.href);
+    url.hash = params.toString();
+    return shareOrCopy(url.href, { title });
   }
 
   _scheduleUpdate() {

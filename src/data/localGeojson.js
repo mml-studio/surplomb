@@ -33,6 +33,7 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
+import { pickAt } from './pickAt.js';
 
 const DEFAULT_LABEL_MAX = 900;
 const DEFAULT_LABEL_GRID_PX = 132;
@@ -2123,7 +2124,7 @@ export function createLocalGeoJsonLayer({
           _clickHandler = screenSpaceEventHandlerFactory(viewer.scene.canvas);
           _clickHandler.setInputAction((click) => {
             if (!_enabled) return;
-            const picked = viewer.scene.pick(click.position);
+            const picked = pickAt(viewer.scene, click.position);
 
             if (picked && picked.id && picked.id.__localLayerId === id) {
               selectLocalFeature(viewer, picked.id);

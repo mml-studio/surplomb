@@ -5,7 +5,7 @@ import { noirShader } from './styles/noir.js';
 import { snowShader } from './styles/snow.js';
 import { nightVisionShader } from './styles/surveillance.js';
 import { thermalShader } from './styles/thermal.js';
-import { LOCATIONS, CITY_POIS, GLOBE_VIEW, PILL_CITY_IDS, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
+import { LOCATIONS, CITY_POIS, GLOBE_VIEW, PILL_CITY_IDS, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { cameraViewBox } from './data/viewGate.js';
@@ -123,7 +123,13 @@ import {
   onPerfProfileChange,
   setPerfProfile,
 } from './perfProfile.js';
-import { isPhoneShell } from './inputMode.js';
+import { isCoarseInput, isPhoneShell } from './inputMode.js';
+import {
+  canGeolocate,
+  geolocateErrorMessage,
+  geolocateRangeM,
+  requestCurrentPosition,
+} from './geolocate.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -2482,6 +2488,10 @@ export class StyleManager {
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
+    this._mapStackStatus?.addEventListener('click', () => {
+      const trouble = this._mapStackStatus?.dataset.trouble;
+      if (trouble) this._showToast(trouble, { durationMs: 5000 });
+    });
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
@@ -2865,6 +2875,8 @@ export class StyleManager {
     this._initShareButton();
     this._initClearSelectedLayersButton();
     this._initResetGlobeButton();
+    this._initLocateButton();
+    this._initTrackingReleaseButton();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._applyGlobalPostDefaults();
@@ -3752,6 +3764,12 @@ export class StyleManager {
       const trouble = state.lastError || state.notice || '';
       this._mapStackStatus.classList.toggle('warn', !!trouble);
       this._mapStackStatus.title = trouble || (stack?.label || '');
+      // A tooltip is not a delivery mechanism on a touchscreen: the ONLY place
+      // that says why the map source failed was a `title`, which a finger can
+      // never summon. The cause now rides on the element and a tap reads it out
+      // — the chip already carries the warning colour that invites the tap.
+      if (trouble) this._mapStackStatus.dataset.trouble = trouble;
+      else delete this._mapStackStatus.dataset.trouble;
     }
   }
 
@@ -4325,6 +4343,7 @@ export class StyleManager {
    * @returns {void}
    */
   _initAutoHoverPanel(panelId, { openDelayMs = 850, closeDelayMs = 1000 } = {}) {
+    this._autoHoverOutsideHandlers ||= [];
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
     const disclosure = panelEl.querySelector(`[data-dock-toggle-target="${panelId}"]`);
@@ -4384,11 +4403,16 @@ export class StyleManager {
       document.querySelector(`[data-panel-satellite="${panelId}"]:not([hidden])`)
     );
 
+    // iOS leaves `:hover` LATCHED on whatever was tapped last, until something
+    // else is tapped. The guard below then holds forever and the tray a reader
+    // opened with a tap can never auto-dismiss — so on a touchscreen the hover
+    // test is not asked at all, and the tap-outside listener further down is
+    // what closes the tray instead.
     const scheduleClose = () => {
       clearClose();
       closeTimer = window.setTimeout(() => {
         closeTimer = null;
-        if (panelEl.matches(':hover') || keyboardFocusInside()) return;
+        if ((!isCoarseInput() && panelEl.matches(':hover')) || keyboardFocusInside()) return;
         if (satelliteOpen()) return;
         if (panelEl.classList.contains('dock-pinned')) return;
         if (panelEl.classList.contains('collapsed')) return;
@@ -4430,6 +4454,20 @@ export class StyleManager {
       clearOpen();
       clearClose();
     });
+
+    // The touchscreen's replacement for `pointerleave`: a finger never leaves,
+    // it lands somewhere else. Capture phase so a tap on a control that stops
+    // propagation still counts as "the reader is done with this tray".
+    //
+    // Held for teardown, unlike every listener above it: those are on the panel
+    // and die with the node, this one is on `document` and would outlive the
+    // whole UI — one per auto-hover panel, per instance.
+    const onTouchOutside = (event) => {
+      if (event.pointerType !== 'touch' || panelEl.contains(event.target)) return;
+      scheduleClose();
+    };
+    document.addEventListener('pointerdown', onTouchOutside, { capture: true, passive: true });
+    this._autoHoverOutsideHandlers.push(onTouchOutside);
 
     const focusMapSource = () => {
       if (panelId !== 'control-panel') return;
@@ -10011,52 +10049,67 @@ export class StyleManager {
       }
     });
 
-    // Search submit on Enter
-    this._locationSearch.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
-        const query = this._locationSearch.value.trim();
-        if (!query) return;
-        const generation = this._beginDeferredNavigation('location');
-        if (generation === false) {
-          this._locationSearch.classList.remove('searching');
-          this._locationSearch.blur();
-          return;
-        }
-        this._activeLocationSearchGeneration = generation;
-        this._locationSearch.classList.add('searching');
-        try {
-          const destination = await searchAndFlyTo(this.viewer, query, {
-            beforeFly: () => this._reassertNavigationHandoff(generation),
-          });
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          if (destination?.cancelled) {
-            // Authority changed while the lookup was resolving; remain inert.
-          } else if (destination) {
-            // The ACTIVE STYLE indicator reports the STYLE and nothing else.
-            // Writing the searched city here made the top-right corner read
-            // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
-            // LOCATION panel's own readout, which is updated below.
-            //
-            // Set before _setActiveLocation(null) so its own mini-status
-            // refresh already sees the destination — the readout never blinks
-            // through "Location: --" on the way to the searched place.
-            this._searchedLocationLabel = destination.label || query;
-            this._setActiveLocation(null);
-            this._currentPoi = null;
-            this._collapsePOIRow();
-            this._updateLocationMiniStatus();
-          } else {
-            this._showToast('Location not found');
-          }
-        } catch (err) {
-          console.error('[Search] Geocoding failed:', err);
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          this._showToast('Search failed');
-        } finally {
-          this._settleLocationSearchUi(generation);
-        }
-      }
+    // Search submit: the FORM owns it now, so the soft keyboard's "search" key,
+    // the hardware Enter and the button beside the field are one code path.
+    // Binding `keydown` here as well would fire the lookup twice.
+    this._locationSearchForm = document.getElementById('location-search-form');
+    this._locationSearchForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this._submitLocationSearch();
     });
+  }
+
+  /**
+   * Run whatever is in the location field.
+   *
+   * Extracted from the Enter handler it used to be so that a submit button and
+   * a soft keyboard's own action key reach the same place: on a phone there is
+   * no visible Enter until the field declares `enterkeyhint`, and a reader who
+   * does not find it had no way to search at all.
+   * @returns {Promise<void>}
+   */
+  async _submitLocationSearch() {
+    const query = this._locationSearch.value.trim();
+    if (!query) return;
+    const generation = this._beginDeferredNavigation('location');
+    if (generation === false) {
+      this._locationSearch.classList.remove('searching');
+      this._locationSearch.blur();
+      return;
+    }
+    this._activeLocationSearchGeneration = generation;
+    this._locationSearch.classList.add('searching');
+    try {
+      const destination = await searchAndFlyTo(this.viewer, query, {
+        beforeFly: () => this._reassertNavigationHandoff(generation),
+      });
+      if (this._disposed || generation !== this._navigationGeneration) return;
+      if (destination?.cancelled) {
+        // Authority changed while the lookup was resolving; remain inert.
+      } else if (destination) {
+        // The ACTIVE STYLE indicator reports the STYLE and nothing else.
+        // Writing the searched city here made the top-right corner read
+        // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
+        // LOCATION panel's own readout, which is updated below.
+        //
+        // Set before _setActiveLocation(null) so its own mini-status
+        // refresh already sees the destination — the readout never blinks
+        // through "Location: --" on the way to the searched place.
+        this._searchedLocationLabel = destination.label || query;
+        this._setActiveLocation(null);
+        this._currentPoi = null;
+        this._collapsePOIRow();
+        this._updateLocationMiniStatus();
+      } else {
+        this._showToast('Location not found');
+      }
+    } catch (err) {
+      console.error('[Search] Geocoding failed:', err);
+      if (this._disposed || generation !== this._navigationGeneration) return;
+      this._showToast('Search failed');
+    } finally {
+      this._settleLocationSearchUi(generation);
+    }
   }
 
   /**
@@ -10199,6 +10252,20 @@ export class StyleManager {
       this._poiRow.appendChild(pill);
     });
 
+    // ORBIT had exactly one way in: the `o` key. On a phone that is no way in
+    // at all, and the indicator it lights was `pointer-events: none`, so there
+    // was no way out either. The pill is additive — the key still works.
+    const orbitPill = document.createElement('button');
+    orbitPill.type = 'button';
+    orbitPill.id = 'orbit-toggle';
+    orbitPill.className = 'poi-pill poi-pill-orbit';
+    orbitPill.setAttribute('aria-pressed', String(!!this.orbitController?.active));
+    orbitPill.innerHTML = '<span class="poi-pill-key">O</span><span class="poi-pill-name">ORBITE</span>';
+    orbitPill.addEventListener('click', () => this._toggleOrbit());
+    this._poiRow.appendChild(orbitPill);
+    this._orbitToggle = orbitPill;
+    this._syncOrbitPressed();
+
     // Animate expansion
     requestAnimationFrame(() => {
       this._poiRow.classList.add('expanded');
@@ -10293,7 +10360,17 @@ export class StyleManager {
     this._orbitIndicator = document.createElement('div');
     this._orbitIndicator.id = 'orbit-indicator';
     this._orbitIndicator.innerHTML = '<span class="orbit-icon">&#x21BB;</span> ORBIT';
+    // The indicator is the only thing on screen that says orbit is running, so
+    // it is also where a reader reaches to stop it. It only accepts a pointer
+    // while `.active` (CSS), so it never eats a click on the globe behind it.
+    this._orbitIndicator.addEventListener('click', () => this._stopOrbit());
     document.body.appendChild(this._orbitIndicator);
+  }
+
+  /** Mirror the orbit controller's state onto the pill, when the pill exists. */
+  _syncOrbitPressed() {
+    this._orbitToggle?.setAttribute('aria-pressed', String(!!this.orbitController?.active));
+    this._orbitToggle?.classList.toggle('active', !!this.orbitController?.active);
   }
 
   /**
@@ -10313,6 +10390,7 @@ export class StyleManager {
     });
 
     this._orbitIndicator.classList.toggle('active', isActive);
+    this._syncOrbitPressed();
   }
 
   /**
@@ -10324,6 +10402,112 @@ export class StyleManager {
       this.orbitController.stop();
       this._orbitIndicator.classList.remove('active');
     }
+    this._syncOrbitPressed();
+  }
+
+  /**
+   * "Autour de moi": one fix, one flight, no watch.
+   *
+   * The arrival is deliberately the SAME state the free-text search produces —
+   * a searched label, no active city, no POI — because that is what this is:
+   * a search whose query came from the device instead of the keyboard. Reusing
+   * that path is also what keeps the share link honest; the hash is rewritten
+   * from the camera, so a shared link REVEALS WHERE THE READER WAS. Documented
+   * in `docs/KNOWN-ISSUES.md`.
+   * @returns {void}
+   */
+  _initLocateButton() {
+    this._locateBtn = document.getElementById('locate-me');
+    if (!this._locateBtn) return;
+    if (!canGeolocate()) return;
+    this._locateBtn.hidden = false;
+    this._locateBtn.addEventListener('click', () => { void this._locateMe(); });
+  }
+
+  /** Ask for a fix and fly to it. @returns {Promise<void>} */
+  async _locateMe() {
+    if (this._locatePending) return;
+    this._locatePending = true;
+    this._locateBtn?.setAttribute('aria-busy', 'true');
+    try {
+      const fix = await requestCurrentPosition();
+      if (this._disposed) return;
+      const range = geolocateRangeM(fix.accuracyM);
+      const result = this._flyWithTransition(true, (hooks) => flyToLandmark(
+        this.viewer,
+        fix.lat,
+        fix.lon,
+        {
+          range,
+          pitch: -30,
+          heading: 0,
+          buildingHeight: 0,
+          duration: 3,
+          ...hooks,
+          onComplete: () => {
+            hooks.onComplete?.();
+            // `camera.changed` is quiet until `moveEnd`, and a reader who shares
+            // straight after arriving would otherwise post the previous view.
+            this.shareLinkManager?.flushHash?.();
+          },
+        },
+      ));
+      if (result === false) return;
+      // Exactly the free-text search's landing state.
+      this._searchedLocationLabel = 'Autour de moi';
+      this._setActiveLocation(null);
+      this._currentPoi = null;
+      if (result) this._currentTarget = result.targetPosition;
+      this._collapsePOIRow();
+      this._updateLocationMiniStatus();
+    } catch (error) {
+      if (this._disposed) return;
+      this._showToast(geolocateErrorMessage(error, globalThis.isSecureContext !== false), { durationMs: 4000 });
+    } finally {
+      this._locatePending = false;
+      this._locateBtn?.removeAttribute('aria-busy');
+    }
+  }
+
+  /**
+   * Give "stop following this" a surface, for hands that have no Escape key.
+   *
+   * ── WHY A POLL, AND WHY ONLY ON A TOUCHSCREEN ───────────────────────────
+   * There is no DOM card for a tracked object: the readout is painted onto
+   * `#world-overlay-canvas`, so there is nowhere to hang a close button and
+   * nothing to listen to. Tracking also starts and stops from five owners
+   * (civil flights, military, satellites, launches, AIS) with no shared event.
+   * A 250 ms poll of the three readers is imperceptibly fresh and costs
+   * nothing a reader can measure — and it is not installed at all for a
+   * cursor, which still has Escape and a click in the void.
+   * @returns {void}
+   */
+  _initTrackingReleaseButton() {
+    this._trackingReleaseBtn = document.getElementById('tracking-release');
+    if (!this._trackingReleaseBtn || !isCoarseInput()) return;
+    this._trackingReleaseBtn.addEventListener('click', () => {
+      this._releaseFollowCamera({ preserveVesselSelection: false, trackingOrigin: 'user' });
+      this._syncTrackingReleaseButton();
+    });
+    this._trackingReleaseTicker = setInterval(() => this._syncTrackingReleaseButton(), 250);
+    this._syncTrackingReleaseButton();
+  }
+
+  /** Show the release button exactly while something is being followed. */
+  _syncTrackingReleaseButton() {
+    const button = this._trackingReleaseBtn;
+    if (!button) return;
+    let tracking = false;
+    try {
+      tracking = !!(this.cockpitView?.readAircraftInfo?.()
+        || this.viewer?.trackedEntity
+        || satellitesLayer.getTrackedInfo?.());
+    } catch {
+      tracking = false;
+    }
+    // Change-only DOM writes: this runs four times a second.
+    if (button.hidden === !tracking) return;
+    button.hidden = !tracking;
   }
 
   /** Wire the persistent reset control to the same route used by voice. */
@@ -10486,8 +10670,11 @@ export class StyleManager {
    */
   _initShareButton() {
     this._shareBtn.addEventListener('click', async () => {
-      const success = await this.shareLinkManager.copyLink();
-      this._showToast(success ? 'Link copied!' : 'Copy failed');
+      // `shared` and `cancelled` say nothing a reader needs: the system sheet
+      // already reported itself, and dismissing it is not a failure.
+      const outcome = await this.shareLinkManager.shareLink();
+      if (outcome === 'copied') this._showToast('Link copied!');
+      else if (outcome === 'failed') this._showToast('Copy failed');
     });
   }
 
@@ -11133,6 +11320,10 @@ export class StyleManager {
       document.removeEventListener('keydown', this._poiKeydownHandler);
       this._poiKeydownHandler = null;
     }
+    for (const handler of this._autoHoverOutsideHandlers || []) {
+      document.removeEventListener('pointerdown', handler, { capture: true });
+    }
+    this._autoHoverOutsideHandlers = [];
     // Cancel the rAF animation loop and release its governor hold; also stop
     // the traffic-chip ticker the loop no longer carries. (perf wave 2 fix)
     if (this._animFrameId) {
@@ -11143,6 +11334,10 @@ export class StyleManager {
     if (this._trafficChipTicker) {
       clearInterval(this._trafficChipTicker);
       this._trafficChipTicker = null;
+    }
+    if (this._trackingReleaseTicker) {
+      clearInterval(this._trackingReleaseTicker);
+      this._trackingReleaseTicker = null;
     }
     if (this._loadingFeedbackTicker) {
       clearInterval(this._loadingFeedbackTicker);

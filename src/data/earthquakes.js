@@ -8,6 +8,7 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { isOwnedByOtherLayer, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { drillPickAt } from './pickAt.js';
 
 /**
  * USGS earthquakes — last 24 hours, M2.5+, drawn as a 3D phenomenon.
@@ -1205,7 +1206,7 @@ export function createEarthquakesLayer({
     _clickHandler = screenSpaceEventHandlerFactory(viewer);
     _clickHandler.setInputAction((click) => {
       if (!_enabled) return;
-      const drilled = viewer.scene.drillPick(click.position, DRILL_PICK_LIMIT) || [];
+      const drilled = drillPickAt(viewer.scene, click.position, DRILL_PICK_LIMIT);
       let sawSibling = false;
       for (const hit of drilled) {
         const id = typeof hit?.id === 'string' ? hit.id : hit?.id?.id;

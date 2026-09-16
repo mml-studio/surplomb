@@ -52,6 +52,7 @@ import {
   profileRate,
   profileSpan,
 } from './idfmFrequencyFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Île-de-France Mobilités — ONE layer for the Paris network: what serves this
@@ -1372,7 +1373,7 @@ function installClickHandler(viewer) {
   if (_clickHandler || !viewer?.scene?.canvas) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const { action, id } = clickDecision(viewer.scene.pick(click.position));
+    const { action, id } = clickDecision(pickAt(viewer.scene, click.position));
     if (action === 'select') selectStop(id);
     else if (action === 'close') clearSelection();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);

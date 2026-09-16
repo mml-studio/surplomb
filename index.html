@@ -183,8 +183,30 @@
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
+    <!--
+      « AUTOUR DE MOI ». `navigator.geolocation` n'apparaissait nulle part dans
+      ce dépôt : une visite sans état partagé atterrit sur la tour Eiffel, et
+      pour voir sa propre rue il fallait en connaître le nom et le taper. Le
+      bouton est masqué si l'API n'existe pas ou si la page n'est pas servie en
+      https — un bouton présent qui échoue toujours est pire que pas de bouton.
+      Utile au portable aussi, donc il n'est pas gardé sur le tactile.
+    -->
+    <button id="locate-me" type="button" hidden aria-label="Autour de moi" title="Centrer la carte sur ma position">
+      <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+    </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
+    </button>
+    <!--
+      « NE PLUS SUIVRE » N'AVAIT AUCUNE SURFACE.
+      Lâcher un objet suivi se fait par Échap ou par un clic dans le vide. Le
+      premier n'existe pas au doigt ; le second était cassé (voir B1/B2) et
+      reste hasardeux en ville dense. Il n'existe AUCUNE carte DOM du suivi —
+      la fiche est peinte sur le canvas — donc le bouton vit ici, masqué tant
+      que rien n'est suivi, et visible seulement au doigt.
+    -->
+    <button id="tracking-release" type="button" hidden aria-label="Ne plus suivre" title="Ne plus suivre cet objet">
+      <span class="material-symbols-outlined" aria-hidden="true">close</span>
     </button>
   </nav>
   <!--
@@ -541,7 +563,7 @@
     <div class="compact pp-header-row">
       <span class="pp-header-label">DISPLAY</span>
       <span class="panel-divider" aria-hidden="true"></span>
-      <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel">&#x25C0;</button>
+      <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel" aria-label="Collapse panel">&#x25C0;</button>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD (H)">
@@ -590,7 +612,7 @@
       <div class="param-panel-header">
         <span class="param-panel-title">PARAMETERS</span>
         <span class="param-panel-divider"></span>
-        <button class="panel-collapse-btn" id="param-panel-collapse-btn" data-collapse-target="param-slider-panel" title="Collapse panel">−</button>
+        <button class="panel-collapse-btn" id="param-panel-collapse-btn" data-collapse-target="param-slider-panel" title="Collapse panel" aria-label="Collapse panel">−</button>
       </div>
       <div id="param-sliders"></div>
     </div>
@@ -754,7 +776,7 @@
     <div class="location-inner">
       <div class="location-toolbar">
         <span class="location-toolbar-label"><span class="dock-label-icon dock-label-icon-location" aria-hidden="true"></span>LOCATION</span>
-        <button class="panel-collapse-btn" data-collapse-target="location-bar" title="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="location-bar" title="Collapse panel" aria-label="Collapse panel">+</button>
       </div>
       <div id="location-mini-status" class="location-mini-status" aria-live="polite">
         <div id="location-mini-city" class="location-mini-city">📍 Location: --</div>
@@ -766,12 +788,26 @@
         <div class="location-bar-divider" id="location-bar-divider"></div>
         <div class="location-city-row">
           <div id="location-pills" class="location-pills"></div>
-          <div class="location-search-wrap">
-            <button id="search-toggle" class="search-toggle-btn" title="Search any location">
+          <!--
+            LE CHAMP DE RECHERCHE EST UN FORMULAIRE, ET C'EST UNE AFFAIRE DE CLAVIER.
+            Un `<input>` isolé n'a pas de soumission : la seule façon de lancer
+            une recherche était la touche Entrée, qui n'existe pas sur un clavier
+            logiciel tant que le champ n'annonce pas ce qu'il attend.
+            `type="search"` + `enterkeyhint="search"` transforment la touche de
+            retour d'iOS en « rechercher » ; le bouton à côté est le chemin pour
+            qui ne la trouve pas. `autocapitalize`/`autocorrect` parce qu'un
+            correcteur qui transforme « Créteil » en « Crétin » fait échouer le
+            géocodage sans rien dire.
+          -->
+          <form id="location-search-form" class="location-search-wrap" role="search" action="#">
+            <button id="search-toggle" class="search-toggle-btn" type="button" title="Search any location" aria-label="Search any location">
               <span>&#x1F50E;</span>
             </button>
-            <input type="text" id="location-search" placeholder="Search any location..." autocomplete="off" spellcheck="false" />
-          </div>
+            <input type="search" id="location-search" placeholder="Search any location..." autocomplete="off" spellcheck="false" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" />
+            <button id="location-search-submit" class="search-submit-btn" type="submit" aria-label="Rechercher" title="Rechercher">
+              <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -786,7 +822,7 @@
       <div class="panel-header">
         <span class="panel-title" lang="en">DATA LAYERS</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
     </div>
@@ -799,7 +835,7 @@
       <div class="panel-header">
         <span class="panel-title" lang="en">CCTV</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="cctv-panel" title="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="cctv-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
       </div>
       <div id="cctv-frame-wrap" class="cctv-frame-wrap" role="button" tabindex="0"
            aria-label="Open the camera frame at full resolution" title="Click to view at full resolution">
@@ -857,7 +893,7 @@
       <div class="panel-header">
         <span class="panel-title" lang="en">SCENES</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="scene-panel" title="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="scene-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
       </div>
       <div class="scene-controls">
         <select id="scene-select" aria-label="Scene recipe"></select>
@@ -910,7 +946,7 @@
       <div class="map-legend-header">
         <span class="map-legend-title">LEGEND</span>
         <span class="panel-divider" aria-hidden="true"></span>
-        <button class="panel-collapse-btn map-legend-collapse-btn" data-collapse-target="map-legend" title="Collapse Legend">&#x25B6;</button>
+        <button class="panel-collapse-btn map-legend-collapse-btn" data-collapse-target="map-legend" title="Collapse Legend" aria-label="Collapse Legend">&#x25B6;</button>
       </div>
       <!-- Sensor styles are full-screen post-process passes: they repaint the
            COMPOSED image, thematic layers included. This block is DOM, so it is
@@ -956,7 +992,7 @@
               </label>
             </div>
           </div>
-          <button class="panel-collapse-btn" data-collapse-target="global-context-panel" title="Expand panel">▶</button>
+          <button class="panel-collapse-btn" data-collapse-target="global-context-panel" title="Expand panel" aria-label="Expand panel">▶</button>
         </div>
         <div class="global-context-modes" role="tablist" aria-label="Context mode">
           <button id="global-context-flights-btn" class="context-mode-button" type="button" role="tab" tabindex="0" aria-selected="false" aria-controls="context-flights-view" aria-label="CONTACTS" title="Cycles the nearest contacts of whatever type you select — planes, vessels, installations. Satellites track independently.">

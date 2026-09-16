@@ -5,9 +5,13 @@
 // holding here is the arithmetic that keeps a panel reachable.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+  LONG_PRESS_HOLD_MS,
+  LONG_PRESS_SLOP_PX,
   PANEL_DRAG_INSET_PX,
   attachPanelDrag,
+  bindLongPress,
   clampPanelPosition,
   clearPanelPosition,
   panelPositionStorageKey,
@@ -244,4 +248,136 @@ test('a pointer landing on a control never starts a drag', () => {
     assert.equal(win.listening(), 1);
     dispose();
   });
+});
+
+// ── The second verb, for hands that cannot double-click ─────────────────────
+
+const touch = (type, x, y, pointerType = 'touch') => Object.assign(new Event(type), {
+  clientX: x, clientY: y, button: 0, pointerType, preventDefault() {},
+});
+
+/** Resolve after the long press has had its chance to fire. */
+const settle = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * `withWindow` restores the global in a `finally`, which runs the instant an
+ * async body returns its promise — so a test that awaits needs its own.
+ */
+async function withWindowAsync(body) {
+  const previous = globalThis.window;
+  const stub = stubWindow();
+  globalThis.window = stub;
+  try {
+    return await body(stub);
+  } finally {
+    if (previous === undefined) delete globalThis.window;
+    else globalThis.window = previous;
+  }
+}
+
+test('the published hold and slop are the ones the gesture actually uses', () => {
+  assert.equal(LONG_PRESS_HOLD_MS, 500);
+  assert.equal(LONG_PRESS_SLOP_PX, 8);
+});
+
+test('a finger held still fires once; one that wanders is a drag instead', async () => {
+  await withWindowAsync(async (win) => {
+    const el = stubPanel();
+    let fired = 0;
+    const buzzes = [];
+    const dispose = bindLongPress(el, () => { fired += 1; }, {
+      holdMs: 12,
+      slopPx: LONG_PRESS_SLOP_PX,
+      nav: { vibrate: (ms) => buzzes.push(ms) },
+    });
+
+    el.dispatchEvent(touch('pointerdown', 100, 100));
+    await settle(30);
+    assert.equal(fired, 1);
+    assert.deepEqual(buzzes, [10], 'nothing is visible until the panel jumps');
+    assert.equal(win.listening(), 0, 'a fired press leaves nothing listening');
+
+    // 8 px is inside the slop; 9 px is a drag.
+    el.dispatchEvent(touch('pointerdown', 100, 100));
+    win.dispatchEvent(touch('pointermove', 105, 106));
+    await settle(30);
+    assert.equal(fired, 2, 'a finger rolling inside the slop is still a hold');
+
+    el.dispatchEvent(touch('pointerdown', 100, 100));
+    win.dispatchEvent(touch('pointermove', 109, 100));
+    await settle(30);
+    assert.equal(fired, 2, 'past the slop it is a drag, and drags do not reset');
+
+    // Lifting before the hold completes is a tap, not a verb.
+    el.dispatchEvent(touch('pointerdown', 100, 100));
+    win.dispatchEvent(touch('pointerup', 100, 100));
+    await settle(30);
+    assert.equal(fired, 2);
+
+    dispose();
+    el.dispatchEvent(touch('pointerdown', 100, 100));
+    await settle(30);
+    assert.equal(fired, 2, 'the disposer really disposes');
+    assert.equal(win.listening(), 0);
+  });
+});
+
+test('a mouse keeps the right to hold still over a drag handle', async () => {
+  await withWindowAsync(async () => {
+    const el = stubPanel();
+    let fired = 0;
+    bindLongPress(el, () => { fired += 1; }, { holdMs: 8, nav: {} });
+    el.dispatchEvent(touch('pointerdown', 10, 10, 'mouse'));
+    await settle(25);
+    assert.equal(fired, 0, 'deciding where to drag to must not reset the panel');
+    // A stylus has no double-click either, so it is treated as a finger.
+    el.dispatchEvent(touch('pointerdown', 10, 10, 'pen'));
+    await settle(25);
+    assert.equal(fired, 1);
+  });
+});
+
+test('a reset held on the grip does not write the reset rect straight back', async () => {
+  // THE RACE THIS COVERS. The finger that holds the grip has already started a
+  // drag. Without ending that drag unpersisted, the release measures the panel
+  // AFTER the reset and writes those coordinates into storage — the panel goes
+  // home and the key stays set, so the next session restores the default
+  // position as if a reader had dragged it there.
+  await withWindowAsync(async (win) => {
+    const panel = stubPanel();
+    const storage = fakeStorage();
+    let resets = 0;
+    const dispose = attachPanelDrag(panel, {
+      panelId: 'p',
+      storage,
+      onLongPress: () => { resets += 1; clearPanelPosition('p', storage); },
+    });
+
+    // Seed a dragged position the way a real session would.
+    panel.dispatchEvent(touch('pointerdown', 200, 200));
+    win.dispatchEvent(touch('pointermove', 260, 260));
+    win.dispatchEvent(touch('pointerup', 260, 260));
+    assert.ok(readPanelPosition('p', storage), 'the drag was remembered');
+
+    panel.dispatchEvent(touch('pointerdown', 200, 200));
+    await settle(LONG_PRESS_HOLD_MS + 40);
+    assert.equal(resets, 1);
+    win.dispatchEvent(touch('pointerup', 200, 200));
+    assert.equal(readPanelPosition('p', storage), null, 'the release must not re-save');
+    assert.equal(panel.classList.contains('panel-dragging'), false);
+
+    dispose();
+    assert.equal(win.listening(), 0);
+  });
+});
+
+test('every grab surface refuses the browser’s claim on the gesture', () => {
+  // Without `touch-action: none` the compositor takes the gesture after ~10 px,
+  // fires `pointercancel`, and the panel snaps back mid-drag.
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const block = css.match(/\.panel-drag-handle,[\s\S]{0,240}?\{\s*touch-action:\s*none;\s*\}/);
+  assert.ok(block, 'the shared touch-action rule is gone');
+  for (const selector of ['[data-fiche-grip]', '[data-cmp-grip]', '[data-pulse-grip]', '.velo-pulse-hud.panel-draggable']) {
+    assert.ok(block[0].includes(selector), `${selector} lost its touch-action`);
+  }
 });

@@ -6,7 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DETECTION_LABEL_SOURCE_PREFIX,
+  OVERLAY_LABEL_PAD_COARSE_PX,
   detectionLabelSourceId,
+  overlayLabelPadPx,
   overlayLabelRecordId,
   pickOverlayLabelId,
 } from './overlayLabelPick.js';
@@ -105,4 +107,25 @@ test('detection callouts get one hit-test scope per layer, never one for the lan
     sourceId: detectionLabelSourceId('military'),
     hitTest,
   }), null);
+});
+
+test('a finger buys a label eight pixels of reach, a cursor buys none', () => {
+  assert.equal(overlayLabelPadPx(true), OVERLAY_LABEL_PAD_COARSE_PX);
+  assert.equal(overlayLabelPadPx(false), 0);
+  // Node has no matchMedia and no touch points, so the session default is fine.
+  assert.equal(overlayLabelPadPx(), 0);
+});
+
+test('the pad the caller asked for is the pad the host is asked for', () => {
+  const seen = [];
+  const hitTest = (x, y, options) => {
+    seen.push(options);
+    return { sourceId: 'gas-fr', entryId: 'gas-fr-label:X', entry: {}, rect: {} };
+  };
+  pickOverlayLabelId({ x: 1, y: 2 }, { sourceId: 'gas-fr', prefix: 'gas-fr-label:', hitTest, padPx: 8 });
+  pickOverlayLabelId({ x: 1, y: 2 }, { sourceId: 'gas-fr', prefix: 'gas-fr-label:', hitTest });
+  assert.deepEqual(seen, [
+    { sourceId: 'gas-fr', padPx: 8 },
+    { sourceId: 'gas-fr', padPx: 0 },
+  ]);
 });

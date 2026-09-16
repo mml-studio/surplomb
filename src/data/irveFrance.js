@@ -249,6 +249,7 @@ import {
   MESH_PDC,
 } from './irveMesh.js';
 import { IRVE_MARK_PUNCH_MIN_PX, irveMarkGlyph } from './irveMarkIcons.js';
+import { pickAt } from './pickAt.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const IRVE_FR_LAYER_ID = 'irve-fr';
@@ -1407,7 +1408,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
     if (picked) {
       const primitiveId = picked.primitive?.id;
       if (typeof primitiveId === 'string' && _records.has(primitiveId)) {

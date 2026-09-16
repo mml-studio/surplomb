@@ -79,6 +79,19 @@ html, body {
   left: 0;
 }
 
+/* A press on the globe is a camera gesture, and iOS has two reflexes that read
+   it as something else: the callout menu (Copy / Look Up) on a long press, and
+   the text-selection loupe as soon as the finger drags. Both hijack the touch
+   mid-gesture — the camera stops moving, a system sheet slides up, and the tap
+   that follows is eaten by dismissing it. Gated on `data-input` so a desktop
+   reader keeps every native behaviour on the same canvas. */
+html[data-input="coarse"] #cesiumContainer,
+html[data-input="coarse"] #cesiumContainer canvas {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Unified world-overlay host: detection uses one host-owned blend surface
    beneath the shared text/card canvas; both share one frame path. The root
    holds ONLY the card canvas — it is a stacking context (z-index below), and
@@ -677,6 +690,22 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 
 .panel-drag-handle:active {
   cursor: grabbing;
+}
+
+/* Every grab surface in the app, and the one declaration that makes dragging
+   one with a finger possible at all. Without `touch-action: none` the browser
+   claims the gesture for panning/zooming the page after ~10 px: it fires
+   `pointercancel`, the drag ends mid-flight, and the panel snaps back — which
+   on a phone reads as "panels cannot be moved". It also has to be a CSS rule
+   rather than a `preventDefault()`: the decision is taken by the compositor
+   before the first `pointermove` reaches JavaScript.
+   `velo-pulse-hud` is listed whole because the whole panel is its handle. */
+.panel-drag-handle,
+[data-fiche-grip],
+[data-cmp-grip],
+[data-pulse-grip],
+.velo-pulse-hud.panel-draggable {
+  touch-action: none;
 }
 
 .panel-drag-handle.compact {
@@ -1850,6 +1879,57 @@ body.ui-clean-view #scene-runtime.active {
   background: rgba(0, 212, 255, 0.12);
 }
 
+/* ORBITE reads as a state, not as a destination: a pressed pill, not a place. */
+.poi-pill-orbit[aria-pressed="true"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
+}
+
+.poi-pill-orbit[aria-pressed="true"] .poi-pill-name,
+.poi-pill-orbit[aria-pressed="true"] .poi-pill-key {
+  color: var(--accent);
+}
+
+/* ── Les badges de touche, pour des mains qui n'ont pas de clavier ─────────
+   `Q W E R T`, `1`…`7`, `O` : chacun occupe de la largeur sur la rangée la
+   plus serrée de l'écran pour nommer une touche qui n'existe pas au doigt.
+   Les gestionnaires restent branchés — un clavier Bluetooth marche toujours —
+   seul l'affichage tombe. */
+html[data-input="coarse"] .poi-pill-key,
+html[data-input="coarse"] .btn-key {
+  display: none;
+}
+
+/* Le bouton de soumission n'existe QUE pour le doigt : au curseur, Entrée est
+   là, visible et connue, et un bouton de plus rétrécirait le champ. */
+.search-submit-btn {
+  display: none;
+}
+
+html[data-input="coarse"] .search-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 40 px, the floor `qa:phone-boot` measures: a control that exists ONLY for
+     a finger has no excuse to be under it. `flex: 0 0 auto` so the field beside
+     it cannot squeeze it back down. */
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-left: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+html[data-input="coarse"] .search-submit-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
 /* ── Location Search ─────────────────────────── */
 .location-search-wrap {
   display: flex;
@@ -1934,6 +2014,15 @@ body.ui-clean-view #scene-runtime.active {
   cursor: pointer;
   transition: all var(--transition-fast);
   outline: none;
+}
+
+/* `display: flex` above beats the user agent's `[hidden] { display: none }`,
+   so two buttons that ship hidden — « ne plus suivre », which only exists while
+   something is followed, and « autour de moi », which is withheld where the
+   geolocation API cannot work — were painted anyway, inert, on every device.
+   The attribute has to win here or it means nothing. */
+#top-center-actions button[hidden] {
+  display: none;
 }
 
 #top-center-actions button:hover,
@@ -4260,6 +4349,11 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #orbit-indicator.active {
   opacity: 1;
   visibility: visible;
+  /* The only way out of orbit was the `o` key. While the indicator is up it
+     accepts the pointer and stops the orbit; while it is not, it stays
+     transparent to clicks meant for the globe underneath. */
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .orbit-icon {
@@ -7115,7 +7209,10 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 .cctv-frame-wrap.has-frame:hover .cctv-frame-expand-hint,
-.cctv-frame-wrap.has-frame:focus-visible .cctv-frame-expand-hint {
+.cctv-frame-wrap.has-frame:focus-visible .cctv-frame-expand-hint,
+/* Nothing else says the frame opens. A finger gets no hover, so on a
+   touchscreen the hint is simply on. */
+html[data-input="coarse"] .cctv-frame-wrap.has-frame .cctv-frame-expand-hint {
   opacity: 1;
 }
 
@@ -9750,10 +9847,38 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 }
 
 #gev-voice-control:not([data-status='error']):hover .gev-voice-help-tray,
-#gev-voice-control:not([data-status='error']) #gev-voice-button:focus-visible ~ .gev-voice-help-tray {
+#gev-voice-control:not([data-status='error']) #gev-voice-button:focus-visible ~ .gev-voice-help-tray,
+#gev-voice-control[data-help='open'] .gev-voice-help-tray {
   visibility: visible;
   opacity: 1;
   transform: translate(-50%, 0) scale(1);
+}
+
+/* The tap-to-open twin of the hover above: `?` in the panel heading, for the
+   readers who have no hover and no keyboard focus ring. */
+.gev-voice-help-btn {
+  display: none;
+}
+
+html[data-input="coarse"] .gev-voice-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* `flex: 0 0 auto` is load-bearing: inside the heading's flex row the button
+     was squeezed to 9 px of its 22, which is a target nothing can hit. */
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-left: 4px;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(54, 220, 255, 0.8);
+  background: rgba(54, 220, 255, 0.08);
+  border: 1px solid rgba(54, 220, 255, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
 }
 
 .gev-voice-help-examples {

@@ -66,6 +66,7 @@ import {
 } from './contextStore.js';
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * @module militaryFlights
@@ -3907,7 +3908,7 @@ function _installClickHandler(viewer) {
     // first-person reference. Empty globe clicks are inert until the user
     // exits with C, Escape, or the dedicated button.
     if (document.body.classList.contains('cockpit-mode')) return;
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
 
     if (picked) {
       // Clicking the tracked entity itself -- ignore (don't deselect)

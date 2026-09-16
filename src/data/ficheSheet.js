@@ -100,7 +100,7 @@ export function ficheSheetCoords(point) {
 
 const PANEL_MARKUP = `
   <div class="fiche-sheet-head" data-fiche-grip
-       title="Glissez pour déplacer le panneau · double-clic pour le remettre en place">
+       title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
     <span class="fiche-sheet-grip" aria-hidden="true"></span>
     <span class="fiche-sheet-title">RADIOGRAPHIE D’ADRESSE</span>
     <span class="fiche-sheet-coords" data-fiche-coords></span>
@@ -197,20 +197,22 @@ export function mountFicheSheet({ onClose = null } = {}) {
   if (!phone) {
     panel.classList.add('panel-draggable');
     restorePanelPosition(panel, FICHE_SHEET_ID);
-    detachDrag = attachPanelDrag(panel, {
-      panelId: FICHE_SHEET_ID,
-      handle: node('[data-fiche-grip]'),
-    });
-  }
-  // A panel dragged somewhere unfortunate has to have a way home that does not
-  // involve clearing site data.
-  if (!phone) {
-    node('[data-fiche-grip]')?.addEventListener('dblclick', () => {
+    // A panel dragged somewhere unfortunate has to have a way home that does
+    // not involve clearing site data. Two gestures for the one verb: a cursor
+    // double-clicks the grip, and a coarse pointer that still gets this shell —
+    // a tablet — holds it for half a second, because it has no double-click.
+    const resetPosition = () => {
       clearPanelPosition(FICHE_SHEET_ID);
       for (const property of ['left', 'top', 'right', 'bottom', 'transform']) {
         panel.style.removeProperty(property);
       }
+    };
+    detachDrag = attachPanelDrag(panel, {
+      panelId: FICHE_SHEET_ID,
+      handle: node('[data-fiche-grip]'),
+      onLongPress: resetPosition,
     });
+    node('[data-fiche-grip]')?.addEventListener('dblclick', resetPosition);
   }
 
   return {

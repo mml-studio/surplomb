@@ -103,6 +103,7 @@ import {
 } from './contextStore.js';
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { pickAt } from './pickAt.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -6100,7 +6101,7 @@ function _installClickHandler(viewer) {
     // first-person reference. A globe click must not fall through to the
     // normal empty-space deselection path; cockpit has explicit exit controls.
     if (document.body.classList.contains('cockpit-mode')) return;
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
 
     if (picked) {
       // Clicking the tracked entity itself — ignore (don't deselect)

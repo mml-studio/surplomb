@@ -17,6 +17,7 @@ import {
   GAS_NETWORK_TIERS,
   GAS_PLANT_COLOR,
 } from './gasFranceFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Réseau gaz (FR) — the French gas system as three things at once.
@@ -750,7 +751,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const id = resolveGasPickId(viewer.scene.pick(click.position));
+    const id = resolveGasPickId(pickAt(viewer.scene, click.position));
     if (id) {
       // A pipe card needs an anchor and the stroke has no one position, so the
       // clicked ground point becomes it.

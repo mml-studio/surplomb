@@ -88,6 +88,7 @@ import {
   PE_MODE_SHORT,
   PE_SCALE_LABELS,
 } from './petiteEnfanceFeed.js';
+import { pickAt } from './pickAt.js';
 
 export const PE_FR_LAYER_ID = 'petite-enfance-fr';
 
@@ -629,7 +630,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const picked = viewer.scene.pick(movement.position);
+    const picked = pickAt(viewer.scene, movement.position);
     const id = picked?.id;
     if (typeof id === 'string' && _records.has(id)) {
       selectArea(id);

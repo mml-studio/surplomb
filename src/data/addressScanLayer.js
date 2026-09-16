@@ -10,6 +10,7 @@ import { isWorldPick } from './pickRegistry.js';
 import { renderedSurfaceM, seatEntitiesOnSurface } from './renderedSurface.js';
 import { SCAN_BOUNDARY_KIND } from './scanCells.js';
 import { deriveFetchCenter, greatCircleKm } from './trafficBounds.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Shared shell for the point-centred French address layers.
@@ -859,7 +860,7 @@ export function createAddressScanLayer(config) {
     if (_clickHandler || !viewer?.scene?.canvas) return;
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
-      const picked = viewer.scene.pick(click.position);
+      const picked = pickAt(viewer.scene, click.position);
       // Entity-backed primitives hand back the Entity itself as `picked.id`.
       const pickedId = typeof picked?.id === 'string' ? picked.id : picked?.id?.id;
       const intent = addressScanClickIntent({

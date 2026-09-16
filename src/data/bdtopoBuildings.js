@@ -54,6 +54,7 @@ import {
   rnbBuildingUrl,
   rnbClosestUrl,
 } from './rnbPivot.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Bâti 3D (FR) — every building France has surveyed, at its own altitude.
@@ -1085,7 +1086,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const id = resolveBdtopoPickId(viewer.scene.pick(click.position));
+    const id = resolveBdtopoPickId(pickAt(viewer.scene, click.position));
     if (id) selectObject(id);
     else if (_selectedId) clearSelection();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);

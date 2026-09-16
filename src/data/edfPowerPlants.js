@@ -10,6 +10,7 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import { drillPickAt } from './pickAt.js';
 
 /**
  * Centrales EDF — where France's biggest generating capacity physically is.
@@ -1500,7 +1501,7 @@ export function createEdfPowerPlantsLayer({
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
       if (!_enabled) return;
-      const drilled = viewer.scene.drillPick(click.position, DRILL_PICK_LIMIT) || [];
+      const drilled = drillPickAt(viewer.scene, click.position, DRILL_PICK_LIMIT);
       for (const hit of drilled) {
         const id = typeof hit?.primitive?.id === 'string' ? hit.primitive.id : null;
         if (id && _drawn.has(id)) {

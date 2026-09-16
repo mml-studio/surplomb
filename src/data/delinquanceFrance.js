@@ -49,6 +49,7 @@ import {
   locateDelinquanceDepartement,
   projectDelinquanceNational,
 } from './delinquanceDepartements.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Recorded delinquency in France, drawn with the publisher's own caution.
@@ -1035,7 +1036,7 @@ function installClickHandler(viewer) {
     // case of its own — and the short-circuit that used to sit here is the
     // exact shape that broke four sibling handlers over the photorealistic
     // globe, where `!picked` is never true. See `pickRegistry.isWorldPick`.
-    const picked = viewer.scene.pick(movement.position);
+    const picked = pickAt(viewer.scene, movement.position);
     if (typeof picked?.id === 'string' && _communeRecords.has(picked.id)) {
       selectCommune(picked.id);
       return;

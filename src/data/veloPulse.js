@@ -34,6 +34,7 @@ import {
   valueAtFraction,
   wrapSlot,
 } from './veloPulseFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Pouls vélo — one typical week of cycling in Lyon and in Paris, and the reason
@@ -931,7 +932,7 @@ function installClickHandler(viewer) {
   if (_clickHandler || !viewer?.scene?.canvas) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    pulseClick(viewer.scene.pick(click.position));
+    pulseClick(pickAt(viewer.scene, click.position));
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
 }

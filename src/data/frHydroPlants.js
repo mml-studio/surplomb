@@ -21,6 +21,7 @@ import {
   techBucket,
   undecorateName,
 } from './frHydroFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Centrales hydro — every hydro plant in France's national register, not just
@@ -1274,7 +1275,7 @@ export function createFrHydroPlantsLayer({
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
       if (!_enabled) return;
-      const picked = viewer.scene.pick(click.position);
+      const picked = pickAt(viewer.scene, click.position);
       const id = typeof picked?.primitive?.id === 'string' ? picked.primitive.id : null;
       if (id && _records.has(id)) { selectObject(id); return; }
       // The label plane the depth buffer knows nothing about, resolved after

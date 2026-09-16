@@ -35,6 +35,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { requestWorldFocus } from '../worldFocus.js';
+import { pickAt } from './pickAt.js';
 
 /** Same-origin live-fires proxy (vite.config.js firmsProxy — key stays server-side). */
 const FIRMS_API_URL = '/api/firms';
@@ -984,7 +985,7 @@ export function createFirmsHeatmapLayer({
     if (_clickHandler || !_viewer) return;
     _clickHandler = screenSpaceEventHandlerFactory(_viewer);
     _clickHandler.setInputAction((click) => {
-      const picked = _viewer.scene.pick(click.position);
+      const picked = pickAt(_viewer.scene, click.position);
       const fire = pickedFire(picked);
       if (fire) {
         selectAndFocusFire(fire);

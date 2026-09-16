@@ -188,6 +188,7 @@ import {
   SUP_PLACEMENT_LABELS,
 } from './supFeed.js';
 import { supAdvancedShare } from './supDepartements.js';
+import { pickAt } from './pickAt.js';
 
 export const SUP_FR_LAYER_ID = 'sup-fr';
 
@@ -852,7 +853,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const picked = viewer.scene.pick(movement.position);
+    const picked = pickAt(viewer.scene, movement.position);
     const id = picked?.id;
     if (typeof id === 'string' && _records.has(id)) {
       selectSite(id);

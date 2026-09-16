@@ -61,7 +61,7 @@ const CONFIRM_WINDOW_MS = 4000;
 const TYPES = Object.freeze(['Appartement', 'Maison', 'Terrain', 'Local']);
 
 const PANEL_MARKUP = `
-  <div class="cmp-head" data-cmp-grip title="Glissez pour déplacer le panneau · double-clic pour le remettre en place">
+  <div class="cmp-head" data-cmp-grip title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
     <span class="cmp-grip" aria-hidden="true"></span>
     <span class="cmp-title">DOSSIER · COMPARABLES</span>
     <span class="cmp-count" data-cmp-count></span>
@@ -604,18 +604,21 @@ export function mountComparablesPanel(actions = {}) {
 
   restorePanelPosition(panel, COMPARABLES_PANEL_ID);
   panel.classList.add('panel-draggable');
-  const detachDrag = attachPanelDrag(panel, {
-    panelId: COMPARABLES_PANEL_ID,
-    handle: node('[data-cmp-grip]'),
-  });
   // A panel dragged somewhere unfortunate has to have a way home that does not
-  // involve clearing site data — the same double-click the pulse panel offers.
-  node('[data-cmp-grip]')?.addEventListener('dblclick', () => {
+  // involve clearing site data — the same two gestures the other panels offer:
+  // double-click with a cursor, half a second of hold with a finger.
+  const resetPosition = () => {
     clearPanelPosition(COMPARABLES_PANEL_ID);
     for (const property of ['left', 'top', 'right', 'bottom', 'transform']) {
       panel.style.removeProperty(property);
     }
+  };
+  const detachDrag = attachPanelDrag(panel, {
+    panelId: COMPARABLES_PANEL_ID,
+    handle: node('[data-cmp-grip]'),
+    onLongPress: resetPosition,
   });
+  node('[data-cmp-grip]')?.addEventListener('dblclick', resetPosition);
 
   renderDossier();
   renderPool();

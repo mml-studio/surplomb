@@ -227,6 +227,7 @@ import {
   anfrMeshBudget,
   selectAnfrMesh,
 } from './anfrMesh.js';
+import { pickAt } from './pickAt.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const ANFR_FR_LAYER_ID = 'anfr-fr';
@@ -1810,7 +1811,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const picked = viewer.scene.pick(movement.position);
+    const picked = pickAt(viewer.scene, movement.position);
     const id = picked?.id;
     if (typeof id === 'string' && _records.has(id)) {
       selectSupport(id);
