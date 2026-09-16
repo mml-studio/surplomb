@@ -399,3 +399,114 @@ export function roadRefetchNeeded({ tier, box, center, last }) {
   if (!boundsOverlap(box, last.bounds, ROAD_REFETCH_OVERLAP_THRESHOLD)) return true;
   return planarDistanceKm(center, last.center) >= tier.minShiftKm;
 }
+
+/**
+ * The band's box, at its FULL span, centred on a lattice point.
+ *
+ * ── Why the span stops following the window ───────────────────────────────
+ * {@link normalizeFetchBox} took the camera POSE out of the Overpass cache
+ * key. It could not take the WINDOW SIZE out, because the span it rounds is
+ * the viewport's. Measured 2026-09-16 on the default Paris view
+ * (`scripts/qa-span-par-viewport.mjs`, eleven window sizes, 22 captured
+ * requests): the snapped centre was (48.865, 2.285) on all eleven — perfect —
+ * and the span produced **five different keys**. 1920×1080 and 1920×993, the
+ * same screen with and without a tab bar, landed in two of them. The band's
+ * cap only bit in 2 cases out of 11, so the rest of the time the key was the
+ * reader's chrome height.
+ *
+ * ── Why it is affordable now, and was not before ──────────────────────────
+ * Fixing the span at the band's own was measured and REJECTED on 2026-09-16:
+ * at the `qa-traffic-floor` view it takes the box from 0.0304° × 0.0435° to
+ * 0.05° × 0.05°, and 421 roads became 1 003 while the 6 000-dot cap stayed
+ * put — every street on screen drawn half as busy.
+ *
+ * That rejection was right about the DOTS and wrong about the BOX. The dots
+ * are diluted because {@link module:data/traffic} allocated its budget over
+ * the roads it FETCHED. Allocate over the roads that are in FRAME instead
+ * (see `visibleRoadsForAltitude`) and the two numbers come apart: the box can
+ * be as wide as the cache wants while the picture stays exactly as dense as
+ * the reader's window earns. The extra roads are parsed once per cell and
+ * then answer every pan, zoom and tilt that stays inside it.
+ *
+ * The span is a whole number of lattice steps in every band (0.05/0.005 = 10,
+ * 0.30/0.025 = 12), so the normalisation below only ever moves the centre.
+ *
+ * @param {{lat:number, lon:number}} center Fetch centre in degrees.
+ * @param {{spanDeg:number, snapDeg:number}} tier The band.
+ * @returns {?{south:number, west:number, north:number, east:number}} The box,
+ *   or null when the band carries no usable span.
+ */
+export function tierFetchBox(center, tier) {
+  const span = tier?.spanDeg;
+  if (!Number.isFinite(span) || span <= 0) return null;
+  if (!Number.isFinite(center?.lat) || !Number.isFinite(center?.lon)) return null;
+  return normalizeFetchBox({
+    south: center.lat - span / 2,
+    north: center.lat + span / 2,
+    west: center.lon - span / 2,
+    east: center.lon + span / 2,
+  }, tier);
+}
+
+/**
+ * Bounding box of an OSM way's `[lon, lat]` vertex list.
+ *
+ * @param {number[][]} coords Vertices as `[lon, lat]`.
+ * @returns {?{south:number, west:number, north:number, east:number}} The box,
+ *   or null for an empty list.
+ */
+export function coordsBounds(coords) {
+  if (!Array.isArray(coords) || coords.length === 0) return null;
+  let south = Infinity;
+  let north = -Infinity;
+  let west = Infinity;
+  let east = -Infinity;
+  for (const c of coords) {
+    const lon = c[0];
+    const lat = c[1];
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+    if (lon < west) west = lon;
+    if (lon > east) east = lon;
+  }
+  return { south, west, north, east };
+}
+
+/**
+ * Whether two boxes share any area — touching edges count.
+ *
+ * Touching counts on purpose: a road that runs exactly along the frame edge is
+ * on screen, and the alternative is a one-pixel-wide class of streets that
+ * vanish for no reason a reader could ever name.
+ *
+ * @param {?{south:number, west:number, north:number, east:number}} a
+ * @param {?{south:number, west:number, north:number, east:number}} b
+ * @returns {boolean}
+ */
+export function boxesIntersect(a, b) {
+  if (!a || !b) return false;
+  return a.south <= b.north && a.north >= b.south
+    && a.west <= b.east && a.east >= b.west;
+}
+
+/**
+ * The shared area of two boxes, or null when they are disjoint.
+ *
+ * Used to hold the render frame inside the fetch box: beyond that edge there
+ * are no roads to draw, only a strip the reader would read as "the traffic
+ * stops here".
+ *
+ * @param {{south:number, west:number, north:number, east:number}} a
+ * @param {{south:number, west:number, north:number, east:number}} b
+ * @returns {?{south:number, west:number, north:number, east:number}}
+ */
+export function intersectBoxes(a, b) {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  const south = Math.max(a.south, b.south);
+  const north = Math.min(a.north, b.north);
+  const west = Math.max(a.west, b.west);
+  const east = Math.min(a.east, b.east);
+  if (north < south || east < west) return null;
+  return { south, west, north, east };
+}

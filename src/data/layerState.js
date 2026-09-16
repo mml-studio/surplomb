@@ -37,7 +37,44 @@ export const LAYER_STATE_STORAGE_KEY = 'gev:layer-state:v2';
 export const LAYER_RESTORE_ORIGINS = Object.freeze({
   share: 'share-restore',
   local: 'local-restore',
+  defaults: 'default-restore',
 });
+
+/**
+ * The layers a reader who has never chosen anything arrives with.
+ *
+ * ── Why the globe is not empty any more ───────────────────────────────────
+ * Until now every boot with no share link and no stored session put the
+ * reader on a photographic city with nothing happening on it, and the product
+ * only became itself on their first toggle. The first thing a visitor should
+ * see is the thing they came for: a city that is alive.
+ *
+ * ── Why THIS layer, and only this one ─────────────────────────────────────
+ * Traffic is the only layer that is legible at the altitude the boot flight
+ * lands on, moves on its own so the picture reads as live within a second,
+ * and costs the SAME upstream request however many readers arrive — the
+ * Overpass box is one cache cell for the whole default view
+ * (`tierFetchBox`, and `scripts/qa-span-par-viewport.mjs` measures it at one
+ * key across eleven window sizes), and TomTom's flow tiles are shared behind
+ * a 120 s proxy TTL. A second default layer would be a second cold fetch on a
+ * thread that has just finished landing an animation.
+ *
+ * ── What this cost before it was allowed ──────────────────────────────────
+ * A layer that is on before the reader arrives works THROUGH the boot flight,
+ * and that was measured to take the arrival from 6.4–6.8 s to 25.5–27.2 s
+ * (`scripts/qa-traffic-boot.mjs`). `src/bootFlight.js` is what makes this
+ * affordable: the layer waits out the descent and loads onto the parked view,
+ * which is both the view the reader looks at and the one whose Overpass
+ * answer is already warm. Re-measured with the gate in place, the arrival is
+ * indistinguishable from an empty one.
+ *
+ * ── What it must never override ───────────────────────────────────────────
+ * A default is not a preference. It applies only when there is no share state
+ * AND no stored session, so a reader who switched traffic off keeps it off,
+ * and a share link shows exactly what its sender framed — including a link
+ * with no layers at all. See `start()`.
+ */
+export const DEFAULT_ENABLED_LAYER_IDS = Object.freeze(['traffic']);
 
 const RADIO_FILTER_CODES = Object.freeze({
   all: 'a',
@@ -825,7 +862,16 @@ export function validateLayerStateRegistry(registry = LAYER_STATE_REGISTRY) {
 
 validateLayerStateRegistry();
 
-/** Produce the complete durable default state. */
+/**
+ * Produce the ZERO durable state: every option at its default, nothing on.
+ *
+ * Deliberately not the same thing as {@link createSeededLayerState}. This one
+ * is the empty sheet — what a coordinator holds before `start()` has decided
+ * anything, and what a reader gets when their own stored session or an
+ * incoming share says "nothing". Seeding it here would put the product
+ * defaults into both of those, which are exactly the two cases a default must
+ * not touch.
+ */
 export function createDefaultLayerState() {
   return {
     version: LAYER_STATE_VERSION,
@@ -835,6 +881,22 @@ export function createDefaultLayerState() {
       defaultsForOwner(ownerId),
     ])),
   };
+}
+
+/**
+ * The zero state with the product defaults switched on.
+ *
+ * Reached from one place only — a `start()` that found neither a share nor a
+ * stored session. See {@link DEFAULT_ENABLED_LAYER_IDS}.
+ */
+export function createSeededLayerState() {
+  return normalizeLayerState({
+    ...createDefaultLayerState(),
+    // Through `normalizeLayerState` rather than assigned, so a default naming
+    // a layer that has since been withdrawn or renamed is dropped here instead
+    // of surfacing later as a layer with no control anywhere.
+    enabledLayerIds: [...DEFAULT_ENABLED_LAYER_IDS],
+  });
 }
 
 /** Sanitize and canonicalize an externally supplied layer-state object. */
@@ -1083,11 +1145,31 @@ export class LayerStateCoordinator {
     // through, and before anything reads the state back: a stored session or an
     // old `l=` that still carries one would otherwise restore a layer the panel
     // has no control for. See `DISABLED_LAYER_IDS`.
-    this._durableState = pruneDisabledLayers(selected || createDefaultLayerState());
+    // The product defaults are seeded ONLY for a boot that chose nothing and
+    // was sent nothing. `legacy-share` is excluded with the same reasoning the
+    // branch above uses to refuse it local preferences: a v1 camera/style link
+    // predates layer payloads, so "the sender chose nothing" and "the format
+    // could not carry it" are indistinguishable, and adding a layer to
+    // somebody else's framed view is the mistake either way.
+    const seedDefaults = !selected && this._source === 'defaults';
+    this._durableState = pruneDisabledLayers(
+      selected || (seedDefaults ? createSeededLayerState() : createDefaultLayerState()),
+    );
     this.shareLinkManager?.setLayerStateProvider?.(() => this.getDurableState());
     this.shareLinkManager?.onLayerStateChange?.();
     this._notifyDurableState();
-    if (!selected) return this.restorePromise;
+    if (!selected) {
+      // A seeded default has to be RESTORED, not merely recorded: the durable
+      // state is what the panel and the share link read, and a layer that is
+      // ticked there but never enabled on the manager is the worst of both.
+      if (!seedDefaults || this._durableState.enabledLayerIds.length === 0) {
+        return this.restorePromise;
+      }
+      this.restorePromise = this._restoreSelectedState(
+        LAYER_RESTORE_ORIGINS.defaults, this._durableState.enabledLayerIds,
+      );
+      return this.restorePromise;
+    }
     this.restorePromise = this._restoreSelectedState(
       this._source === 'share' ? LAYER_RESTORE_ORIGINS.share : LAYER_RESTORE_ORIGINS.local,
     );
@@ -1219,14 +1301,29 @@ export class LayerStateCoordinator {
     await (typeof this.restoreGate === 'function' ? this.restoreGate() : this.restoreGate);
   }
 
-  async _restoreSelectedState(origin) {
-    for (const entry of LAYER_STATE_REGISTRY) {
+  /**
+   * Apply a selected durable state to the manager.
+   *
+   * @param {string} origin One of `LAYER_RESTORE_ORIGINS`.
+   * @param {?Array<string>} [only] Restrict the pass to these layer IDs.
+   *   Used by the DEFAULTS origin, and the restriction is the point: a share
+   *   or a stored session is a complete picture and every layer has to be put
+   *   where it says, including the ones it says are off. A product default is
+   *   a nudge on one layer, and sweeping the other fifty-nine to push them
+   *   options nobody asked for would make a first boot do more work than a
+   *   restored one, not less.
+   */
+  async _restoreSelectedState(origin, only = null) {
+    const scope = only
+      ? LAYER_STATE_REGISTRY.filter((entry) => only.includes(entry.id))
+      : LAYER_STATE_REGISTRY;
+    for (const entry of scope) {
       this._restoreControllers.set(entry.id, new AbortController());
     }
     try {
       await this._waitForRestoreGate();
       const enabled = new Set(this._durableState.enabledLayerIds);
-      const settled = await Promise.allSettled(LAYER_STATE_REGISTRY.map(async (entry) => {
+      const settled = await Promise.allSettled(scope.map(async (entry) => {
         const controller = this._restoreControllers.get(entry.id);
         const targetEnabled = enabled.has(entry.id);
         const options = layerOptionsForRestore(this._durableState, entry.id);

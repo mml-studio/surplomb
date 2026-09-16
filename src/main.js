@@ -1,6 +1,7 @@
 import * as Cesium from 'cesium';
 import { StyleManager } from './ui.js';
 import { DEFAULT_CITY_VIEW, flyToDefaultCity } from './camera.js';
+import { beginBootFlight, endBootFlight } from './bootFlight.js';
 import {
   MOVING_RESOLUTION_SCALE,
   getGlobeDetailDiagnostics,
@@ -457,7 +458,16 @@ async function init() {
     // If no share link state, do the default fly-to (Paris)
     if (!styleManager.hasShareState) {
       loaderStatus.textContent = `Flying to ${DEFAULT_CITY_VIEW.label}...`;
-      flyToDefaultCity(viewer, DEFAULT_CITY_VIEW, { onSettled: () => photorealAdoption?.arm() });
+      // Declared BEFORE the flight starts, because a layer restored from the
+      // reader's last session is already asking the altimeter what to fetch.
+      // See `bootFlight.js` for the four-times-slower arrival this avoids.
+      beginBootFlight();
+      flyToDefaultCity(viewer, DEFAULT_CITY_VIEW, {
+        onSettled: () => {
+          endBootFlight();
+          photorealAdoption?.arm();
+        },
+      });
     } else {
       loaderStatus.textContent = 'Restoring shared view...';
       // A shared view IS the reader's choice of where to be, so their own
