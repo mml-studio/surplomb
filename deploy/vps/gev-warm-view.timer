@@ -1,10 +1,12 @@
 [Unit]
-Description=Warm the default view's Overpass cell once a week
+Description=Warm the ten cities' Overpass road cells once a week
 
 [Timer]
-# The proxy holds Overpass answers for 7 DAYS, so this has to land inside that
-# window with room to spare — a run that slips past the TTL warms nothing and
-# leaves the next reader paying 0.6-46 s. Weekly, at an hour nobody is looking.
+# The proxy holds Overpass answers for 30 DAYS, so weekly is now four chances
+# to land inside the window rather than one — which is the point: a single run
+# refused by a throttled upstream no longer leaves a month of cold cells. Still
+# weekly and not daily, because each run is thirty real upstream requests and
+# the host that serves them is free and shared.
 OnCalendar=Mon *-*-* 04:17:00
 # The first boot after a deploy is also a cold cache; do not wait until Monday.
 OnBootSec=10min

@@ -4,7 +4,7 @@
  * WHY THIS IS NOT IN `camera.js`. It used to be, and `camera.js` imports
  * Cesium — so the one constant that describes where every single reader
  * arrives could not be read by anything outside a browser. That is exactly
- * backwards for the thing it is now needed for: `scripts/warm-default-view.mjs`
+ * backwards for the thing it is now needed for: `scripts/warm-road-cells.mjs`
  * has to know what the app WILL request before any browser has requested it.
  *
  * `camera.js` re-exports `DEFAULT_CITY_VIEW`, so nothing that already imports

@@ -13,7 +13,7 @@ import { ROAD_FETCH_TIERS, buildOverpassQuery } from './data/trafficBounds.js';
 const MEASURED_ON_THE_WIRE = '48.84,2.26,48.89,2.31';
 
 test('the derived cell is the one the app was measured asking for', () => {
-  // THE FAILURE THIS CATCHES. `scripts/warm-default-view.mjs` pre-warms a cell
+  // THE FAILURE THIS CATCHES. `scripts/warm-road-cells.mjs` pre-warms a cell
   // it computes rather than a cell it observes, because a browser on the VPS
   // costs an image. Move the default view, or a band's `snapDeg`, and the
   // warmer would keep warming a cell nobody visits — with nothing to notice,
