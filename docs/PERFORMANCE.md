@@ -392,12 +392,11 @@ point de caméra par défaut de Cesium (35,15 N / 82,5 O) que le HUD demande
 avant que la caméra ne soit posée. Ce deuxième appel existe aussi sur le bureau
 — il est antérieur à ce travail et n'est pas corrigé ici.
 
-`qa:phone-boot` rend **9/10**. Le contrôle qui échoue est celui des cibles
-tactiles (**14** commandes visibles sous 40 px), et c'est voulu : il est le
-critère d'acceptation de la coquille téléphone, qui n'est pas encore écrite.
-Le lot tactile n'en ajoute qu'une, `#locate-me`, à 36 px — la taille exacte des
-trois boutons qui l'entourent, déjà sur la liste ; les deux commandes qu'il
-crée pour le doigt seul (soumission de recherche, aide vocale) sont à 40.
+`qa:phone-boot` rend **10/10** depuis que la coquille du volet C a atterri. Son
+dernier rouge était le contrôle des cibles tactiles — 14 commandes visibles sous
+40 px, dont une seule venait du lot tactile (`#locate-me`, 36 px, la taille
+exacte des trois boutons de sa rangée). `phone.css` les a toutes reprises :
+**0 contrevenant**, et le document ne déborde plus d'un pixel.
 
 ### Le tactile, et ce que le doigt coûte ou épargne
 

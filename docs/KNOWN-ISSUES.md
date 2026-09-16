@@ -121,34 +121,18 @@ Status: Open (accepted 2026-07-08, documented)
 
 ---
 
-### Sur téléphone, la coquille est toujours celle du bureau
-Status: Open (connu, borné), mesuré 2026-09-16
+### Le tilt à deux doigts est délié, et c'est une décision
+Status: Intentional, décidé 2026-09-16 avec le volet tactile
 
-Contexte :
-- Le volet « rendu, mémoire, boot, plateforme » a livré la reconnaissance de
-  l'appareil (`src/inputMode.js`) et tout ce qu'un téléphone ne doit plus
-  dépenser. Il n'a **pas** touché au CSS : `style.css` reste une mise en page
-  de bureau et son bloc ≤ 720 px est un layout tablette.
-- `npm run qa:phone-boot` le mesure et le dit : le contrôle « chaque commande
-  visible fait au moins 40 px sur son petit côté » échoue avec **14**
-  contrevenants (le pire : `#gev-voice-tier`, 25×12 px). C'est le critère
-  d'acceptation de la coquille téléphone, pas une surprise. Le lot tactile n'en
-  ajoute qu'un, `#locate-me` à 36 px, qui est la taille des trois boutons de sa
-  rangée — tous déjà sur la liste.
+Le pincement de Cesium fait zoom **et** tangage en même temps, sans zone morte.
+Deux doigts pas tout à fait parallèles font donc pivoter la caméra pendant qu'on
+s'approche d'une rue, et rien dans la coquille téléphone ne permet d'y revenir.
+`src/touchCamera.js` vide `tiltEventTypes` ; le tangage reste accessible par les
+presets de vue, et une ligne le remet si les testeurs le réclament.
 
-Ce qui est décidé et hors périmètre, à ne pas rouvrir comme un bug :
-- **Cockpit, scène, radio, calibration CCTV, DISPLAY, presets visuels** seront
-  masqués sur téléphone, pas adaptés.
-- **Une tablette en paysage sous 600 px de hauteur** garde la coquille bureau :
-  le seuil lit `min(innerWidth, innerHeight)` pour qu'une rotation ne
-  reconstruise pas l'interface, et ce cas est le prix de cette stabilité.
-- **Les pliables** ne sont pas gérés : un écran qui change de format en cours
-  de session garde la coquille de son ouverture.
-- **Le tilt à deux doigts** est délié depuis le volet tactile : le pinch de
-  Cesium fait zoom ET tangage sans zone morte, donc deux doigts pas tout à fait
-  parallèles font pivoter la caméra pendant qu'on s'approche. Le tangage reste
-  accessible par les presets de vue. Une ligne dans `src/touchCamera.js` le
-  remet si les testeurs le réclament.
+Ce que la coquille téléphone ne porte pas — CCTV, cockpit, scène, radio,
+DISPLAY, presets visuels, pliables, tablette en paysage sous 600 px — est listé
+en tête de ce document, avec la raison de chaque trou.
 
 ### Un lien partagé depuis « Autour de moi » révèle où était le lecteur
 Status: Open (par construction), livré 2026-09-16
