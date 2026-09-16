@@ -58,6 +58,7 @@ import {
 } from './perfProfile.js';
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 import { initPhoneSheet } from './phoneSheet.js';
+import { applyTouchCameraProfile } from './touchCamera.js';
 
 initLogoGaze();
 
@@ -209,6 +210,12 @@ async function init() {
     // 2026-08-05 perf investigation as a strict halving of idle burn on
     // 120 Hz hardware; a no-op on 60 Hz displays. (perf item 2)
     viewer.targetFrameRate = 60;
+
+    // Two fingers, once, before anything can track a contact: `trackedCamera`
+    // captures `inertiaZoom` and `minimumZoomDistance` at the first track and
+    // restores what it captured, so this profile has to already be in place.
+    // A no-op for a cursor.
+    applyTouchCameraProfile(viewer.scene);
 
     // The only honest reading of how small this machine is: how long it takes
     // to draw this scene. The verdict arrives ~60 frames from now — too late

@@ -79,6 +79,19 @@ html, body {
   left: 0;
 }
 
+/* A press on the globe is a camera gesture, and iOS has two reflexes that read
+   it as something else: the callout menu (Copy / Look Up) on a long press, and
+   the text-selection loupe as soon as the finger drags. Both hijack the touch
+   mid-gesture — the camera stops moving, a system sheet slides up, and the tap
+   that follows is eaten by dismissing it. Gated on `data-input` so a desktop
+   reader keeps every native behaviour on the same canvas. */
+html[data-input="coarse"] #cesiumContainer,
+html[data-input="coarse"] #cesiumContainer canvas {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Unified world-overlay host: detection uses one host-owned blend surface
    beneath the shared text/card canvas; both share one frame path. The root
    holds ONLY the card canvas — it is a stacking context (z-index below), and
