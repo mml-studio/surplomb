@@ -428,6 +428,25 @@ Et le **survol CCTV**, coupé au doigt, n'est pas une économie théorique : la
 passe faisait jusqu'à huit `scene.pick` par seconde pendant chaque pan, pour
 convoquer un aperçu qu'un tap remplace en mieux — il ACTIVE la caméra.
 
+### Le bureau, vérifié contre un témoin
+
+Le contrat du lot tactile est que le chemin fin ne bouge pas. Mesuré le
+2026-09-16 sur 1440×900, contre un worktree témoin au commit de base, deux
+exécutions chacun, **après 15 secondes de repos** :
+
+| Rectangle | Témoin | Lot tactile |
+| --- | --- | --- |
+| `#left-panel-stack` | 52, 234, 360×630 | **identique** |
+| `#right-context-rail` | 1058, 234, 330×166 | **identique** |
+| `#command-dock` | 482, 820, 476×62 | **identique** |
+| `#top-center-actions` | 658, 32, 124×36 | 636, 32, **168×36** |
+
+La seule différence est le bouton « Autour de moi », additif et volontairement
+offert au bureau aussi. **Les quinze secondes ne sont pas décoratives** : à six
+secondes le rail droit se lisait 360 px d'un côté et 437 de l'autre, de façon
+reproductible, parce que l'allocateur de hauteur n'avait pas fini — une mesure
+prise là aurait rapporté une régression qui n'existe pas.
+
 ### Ce qui ne se mesure PAS sans appareil
 
 Temps de frame GPU, mémoire GPU et jetsam, `webglcontextlost` sous pression,
