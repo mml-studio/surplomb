@@ -477,6 +477,23 @@ VERDICT: the edge rule still covers ALL of /api — a keyless route was
 Run it from the VPS, never from a laptop: the limit is per source address, and
 the laptop shares its address with the owner's browser.
 
+**And "per address" is not one number on a phone.** Two things change when the
+reader is on a mobile network, and they pull in opposite directions:
+
+- **IPv4 / CGNAT.** A mobile subscriber does not have their own public IPv4
+  address; the carrier shares one among thousands. A per-address rule on
+  `/api/*` therefore throttles a whole city block of subscribers because of one
+  of them — and no single reader can tell that from the app being broken.
+- **IPv6.** Cloudflare keys its per-address rules on the `/64` prefix, which on
+  a mobile network is one device. There the rule behaves as written.
+
+Neither is a reason to raise the threshold; both are reasons to keep the rule
+off `/api/*` as a whole and on the five routes that spend a key, where no human
+can reach it. Measured after the phone work of 2026-09-16: a phone boot that
+touches nothing makes **two** same-origin `/api` calls, both `/api/geoid`
+(`npm run qa:phone-boot` prints the list). The "about six" figure above is a
+desktop boot and predates the traffic layer being on by default.
+
 ## Opening the origin to the public
 
 `GEV_ACCESS_PASSWORD` is the only thing between the open internet and a set of

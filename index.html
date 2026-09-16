@@ -2,7 +2,50 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    `viewport-fit=cover` est ce qui rend `env(safe-area-inset-*)` non nul : sans
+    lui, les deux usages qui existent déjà dans `style.css` valent 0 et rien ne
+    protège le bas de l'écran de la barre d'accueil iOS. `interactive-widget`
+    dit au navigateur de RÉDUIRE la zone de mise en page quand le clavier
+    logiciel s'ouvre, au lieu de faire glisser la page sous lui — c'est la
+    différence entre un champ de recherche visible et un champ poussé hors vue.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <!--
+    LE MARQUEUR D'ENTRÉE, POSÉ AVANT LA FEUILLE DE STYLE.
+
+    Deux attributs sur `<html>`, et une seule autorité pour les deux :
+    `data-input` dit s'il y a un curseur, `data-shell` dit s'il y a la place.
+    `src/inputMode.js` porte la même décision, ses commentaires, et le test qui
+    compare CE script à ce module — la duplication est délibérée et surveillée.
+
+    POURQUOI EN LIGNE ET POURQUOI ICI. La règle CSS de la coquille téléphone est
+    `html[data-shell="phone"] …`, sans media query : un attribut posé après le
+    `<link rel="stylesheet">` laisserait le premier rendu se faire en chrome de
+    bureau, puis basculer. Six lignes synchrones avant la feuille de style
+    coûtent moins qu'un flash que personne ne peut plus enlever ensuite.
+
+    `?input=phone|coarse|fine` force la session — jamais persisté, jamais dans
+    un lien de partage : même doctrine que `?perf=`.
+  -->
+  <script>
+    (function () {
+      var forced = new URLSearchParams(location.search).get('input');
+      if (['phone', 'coarse', 'fine'].indexOf(forced) < 0) forced = null;
+      var coarse = forced
+        ? forced !== 'fine'
+        : matchMedia('(pointer: coarse)').matches
+          && matchMedia('(hover: none)').matches
+          && navigator.maxTouchPoints >= 1;
+      var phone = forced
+        ? forced === 'phone'
+        : coarse && Math.min(innerWidth, innerHeight) < 600;
+      var root = document.documentElement;
+      root.setAttribute('data-input', coarse ? 'coarse' : 'fine');
+      if (phone) root.setAttribute('data-shell', 'phone');
+      else root.removeAttribute('data-shell');
+    })();
+  </script>
   <!--
     FENÊTRE DE PRÉ-LANCEMENT — À RETIRER LE 22 SEPTEMBRE 2026.
 
@@ -57,6 +100,28 @@
   <meta name="twitter:description" content="Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct. 56 ne demandent aucune clé." />
   <meta name="twitter:image" content="/og.png" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <!--
+    LE MINIMUM TÉLÉPHONE, ET CE QU'IL NE CONTIENT PAS.
+
+    `theme-color` peint la barre d'état du navigateur au `--bg-dark` de
+    `style.css:7` : sans lui, une bande blanche surmonte un globe noir.
+    `apple-touch-icon` est un PNG et pas le SVG ci-dessus — iOS ignore le SVG
+    et retombe sur une capture de la page, qui est un globe sombre illisible à
+    60 px. `npm run icons:build` regénère les trois tailles.
+
+    IL N'Y A VOLONTAIREMENT PAS DE SERVICE WORKER. Cette application est une
+    console de données vives — 96 réponses `/api` en `no-store` — et le moteur
+    est déjà servi `immutable`. Un SW n'ajouterait rien à mettre en cache, sauf
+    exactement le build périmé que `src/staleBuildRecovery.js` passe son temps
+    à combattre. Conséquence assumée : Chrome Android ne proposera pas
+    l'installation tout seul ; « Ajouter à l'écran d'accueil » fonctionne.
+  -->
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Surplomb" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
   <!--
     Fonts are served from this origin, not from Google. Three render-blocking

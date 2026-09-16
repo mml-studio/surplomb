@@ -888,14 +888,22 @@ export function createDefaultLayerState() {
  *
  * Reached from one place only — a `start()` that found neither a share nor a
  * stored session. See {@link DEFAULT_ENABLED_LAYER_IDS}.
+ *
+ * The list is a PARAMETER, not the constant, because what counts as an
+ * affordable default depends on the machine: a phone is handed `[]`. Doing it
+ * here rather than coupling this file to the render profile keeps the codec a
+ * pure function of its inputs — the caller that knows what device this is
+ * (`src/ui.js`) is the one that decides.
+ *
+ * @param {{enabledLayerIds?: string[]}} [options]
  */
-export function createSeededLayerState() {
+export function createSeededLayerState({ enabledLayerIds = DEFAULT_ENABLED_LAYER_IDS } = {}) {
   return normalizeLayerState({
     ...createDefaultLayerState(),
     // Through `normalizeLayerState` rather than assigned, so a default naming
     // a layer that has since been withdrawn or renamed is dropped here instead
     // of surfacing later as a layer with no control anywhere.
-    enabledLayerIds: [...DEFAULT_ENABLED_LAYER_IDS],
+    enabledLayerIds: [...enabledLayerIds],
   });
 }
 
@@ -1122,7 +1130,18 @@ export class LayerStateCoordinator {
     this.lastRestoreResults = [];
   }
 
-  start({ shareLayerState = null, allowLocalState = true, shareCreatedAtMs = null } = {}) {
+  start({
+    shareLayerState = null,
+    allowLocalState = true,
+    shareCreatedAtMs = null,
+    // What "no choice was made" means on this machine. `src/ui.js` hands a
+    // phone an empty list: traffic ON is a continuous-render hold for as long
+    // as the tab lives (`holdContinuousRender('traffic')`), which is a battery
+    // and a thermal budget a handset does not have to spend on a layer nobody
+    // asked for. A default is not a preference — a stored session or a share
+    // link still restores traffic on any device.
+    defaultEnabledLayerIds = DEFAULT_ENABLED_LAYER_IDS,
+  } = {}) {
     if (this._destroyed) throw new Error('Layer-state coordinator is destroyed');
     let selected = shareLayerState ? normalizeLayerState(shareLayerState) : null;
     if (selected) {
@@ -1153,7 +1172,9 @@ export class LayerStateCoordinator {
     // somebody else's framed view is the mistake either way.
     const seedDefaults = !selected && this._source === 'defaults';
     this._durableState = pruneDisabledLayers(
-      selected || (seedDefaults ? createSeededLayerState() : createDefaultLayerState()),
+      selected || (seedDefaults
+        ? createSeededLayerState({ enabledLayerIds: defaultEnabledLayerIds })
+        : createDefaultLayerState()),
     );
     this.shareLinkManager?.setLayerStateProvider?.(() => this.getDurableState());
     this.shareLinkManager?.onLayerStateChange?.();

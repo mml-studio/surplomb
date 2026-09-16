@@ -52,6 +52,8 @@
  * looked at it on).
  */
 
+import { isPhoneSignals, readInputSignals } from './inputMode.js';
+
 /** The two profiles. Anything else is a bug, not a third mode. */
 export const PERF_PROFILES = Object.freeze(['full', 'lite']);
 
@@ -283,17 +285,26 @@ export function readRendererString(documentRef = globalThis.document) {
 /**
  * Read every static signal at once, so the decision below is a pure function of
  * an object a test can hand it.
+ * The phone signals (`coarsePointer`, `noHover`, `touchPoints`,
+ * `viewportMinPx`, `forcedInput`) come from `src/inputMode.js` rather than
+ * being read again here, because a second copy of "is this a phone" is how the
+ * render profile and the CSS shell end up disagreeing about the same device.
+ *
  * @returns {{cores: ?number, memoryGB: ?number, renderer: string,
- *   reducedMotion: boolean, stored: ?string, measured: ?string, forced: ?string}}
+ *   reducedMotion: boolean, stored: ?string, measured: ?string, forced: ?string,
+ *   coarsePointer: boolean, noHover: boolean, touchPoints: number,
+ *   viewportMinPx: ?number, forcedInput: ?string}}
  */
 export function readPerfSignals({
   nav = globalThis.navigator,
   search = globalThis.location?.search ?? '',
   documentRef = globalThis.document,
+  ...inputOptions
 } = {}) {
   const params = new URLSearchParams(search);
   const asked = String(params.get('perf') || '').trim().toLowerCase();
   return {
+    ...readInputSignals({ nav, search, ...inputOptions }),
     cores: Number.isFinite(nav?.hardwareConcurrency) ? nav.hardwareConcurrency : null,
     memoryGB: Number.isFinite(nav?.deviceMemory) ? nav.deviceMemory : null,
     renderer: readRendererString(documentRef),
@@ -307,8 +318,20 @@ export function readPerfSignals({
 /**
  * The decision, as a pure function of the signals. Order matters and is the
  * order of authority: what the URL says for this session, then what the
- * operator chose, then what this machine was MEASURED at last time, then what
- * it looks like.
+ * operator chose, then WHETHER THIS IS A PHONE, then what this machine was
+ * MEASURED at last time, then what it looks like.
+ *
+ * ── WHY `phone` SITS ABOVE `measured` ───────────────────────────────────────
+ *
+ * A phone in `lite` is a phone that measures WELL: one MSAA sample, no
+ * drawing-buffer copy, a canvas Cesium already renders at 1×. Its p90 lands
+ * under {@link FRAME_P90_FULL_MS}, `observeFrameProfile` writes `full` to
+ * localStorage, and the NEXT visit opens the same handset at MSAA 4 with
+ * `preserveDrawingBuffer` on — on a machine whose constraint was never frame
+ * time, it was memory. The measurement is not wrong; it is answering a
+ * different question than the one that decides a phone. So the phone signal
+ * outranks it, and the two things a PERSON can say — `?perf=full` and the
+ * DISPLAY switch — still outrank the phone.
  *
  * `prefers-reduced-motion` is in the list because the four levers are exactly
  * the motion-cost levers, and someone who has asked their OS for less motion is
@@ -321,6 +344,7 @@ export function readPerfSignals({
 export function decidePerfProfile(signals) {
   if (signals?.forced) return { profile: signals.forced, source: 'url' };
   if (PERF_PROFILES.includes(signals?.stored)) return { profile: signals.stored, source: 'stored' };
+  if (isPhoneSignals(signals)) return { profile: 'lite', source: 'phone' };
   if (PERF_PROFILES.includes(signals?.measured)) return { profile: signals.measured, source: 'measured' };
   if (Number.isFinite(signals?.cores) && signals.cores <= 4) return { profile: 'lite', source: 'cores' };
   if (Number.isFinite(signals?.memoryGB) && signals.memoryGB <= 4) return { profile: 'lite', source: 'memory' };

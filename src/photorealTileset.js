@@ -30,6 +30,8 @@
  * is the keyless build.
  */
 
+import { isPhoneShell } from './inputMode.js';
+
 /**
  * ion asset for Google Photorealistic 3D Tiles. The same id CesiumJS itself
  * falls back to inside `createGooglePhotorealistic3DTileset()` when no Google
@@ -83,16 +85,86 @@ export function photorealDisabled(scope = globalThis) {
 }
 
 /**
+ * The tile cache ceilings, per device class, in bytes.
+ *
+ * ── WHY A PHONE GETS A SIXTH OF THE DESKTOP FIGURE ──────────────────────────
+ *
+ * `cacheBytes` is a SOFT ceiling with a working safety valve: past
+ * `cacheBytes + maximumCacheOverflowBytes`, Cesium multiplies the tileset's
+ * `memoryAdjustedScreenSpaceError` by 1.02 every frame until the cache fits
+ * again (`Cesium3DTileset.js`). So the job here is not to enforce a limit, it
+ * is to hand that valve numbers that sit under the line where the OS kills the
+ * tab instead — and on iOS that line is around 1.2 GB for the whole process,
+ * heap and canvas included, not for the tile cache alone.
+ *
+ * The desktop pair declares 2.5 GB. Cesium's own accounting is an ESTIMATE
+ * that undercounts real residency by roughly half again, so 384 MB of declared
+ * budget is 500-600 MB actually held — which leaves room for the heap, the IGN
+ * imagery underneath and the terrain, and still lands under the line. Small
+ * also means the valve engages EARLY and GENTLY: the picture coarsens a
+ * little, which a reader forgives, instead of the tab disappearing, which they
+ * do not.
+ *
+ * These two numbers and {@link PHONE_MAX_SCREEN_SPACE_ERROR} are calibrated
+ * against Cesium's documentation, not against a handset. Confirm them on a
+ * real device (`docs/PERFORMANCE.md`, section « Téléphone »): a
+ * `memoryAdjustedScreenSpaceError` that sits above ~40 while the camera is
+ * still means they are too low; a tab killed at rest means too high.
+ */
+export const DESKTOP_CACHE_BYTES = 1536 * 1024 * 1024;
+export const DESKTOP_CACHE_OVERFLOW_BYTES = 1024 * 1024 * 1024;
+export const PHONE_CACHE_BYTES = 256 * 1024 * 1024;
+export const PHONE_CACHE_OVERFLOW_BYTES = 128 * 1024 * 1024;
+
+/**
+ * The error tolerance a phone asks the mesh for, in pixels of screen error.
+ *
+ * 16 is Cesium's default and what the desktop keeps. 24 is roughly 44 % fewer
+ * tiles for the same view, and it is invisible where it applies: Cesium renders
+ * the globe at `pixelRatio = 1` by default, so an iPhone's canvas is 390 px
+ * wide and not 1170 — a third of a tile's worth of extra error lands inside one
+ * of its device pixels.
+ */
+export const DESKTOP_MAX_SCREEN_SPACE_ERROR = 16;
+export const PHONE_MAX_SCREEN_SPACE_ERROR = 24;
+
+/**
  * Tileset options, mirroring the ones CesiumJS applies in
  * `createGooglePhotorealistic3DTileset()`. Returned fresh each call because
  * Cesium writes its own defaults into the object it is handed.
+ *
+ * ── WHAT IS DELIBERATELY NOT A PHONE LEVER ──────────────────────────────────
+ *
+ * `enableCollision` stays ON. It is not a memory lever, and turning it off
+ * breaks `Scene.getHeight` — which is what keeps the camera out of the ground,
+ * something a two-finger pinch does far more often than a keyboard ever did —
+ * and every `CLAMP_TO_GROUND` placement in the eleven layers that use one.
+ *
+ * `skipLevelOfDetail` stays off. It is a latency lever, not a memory one at
+ * rest, and it reintroduces exactly the cracks in the mesh that #229 removed.
+ *
+ * `preloadFlightDestinations` goes OFF on a phone, and only there: a `flyTo`
+ * otherwise loads the destination AND the current view at once, which is two
+ * peaks of tile memory stacked on the one device that cannot hold one.
+ *
+ * @param {{phone?: boolean}} [options] - `phone` is injected for tests; the
+ *   default is the session's own answer.
  * @returns {object}
  */
-export function photorealTilesetOptions() {
+export function photorealTilesetOptions({ phone = isPhoneShell() } = {}) {
+  if (!phone) {
+    return {
+      cacheBytes: DESKTOP_CACHE_BYTES,
+      maximumCacheOverflowBytes: DESKTOP_CACHE_OVERFLOW_BYTES,
+      enableCollision: true,
+    };
+  }
   return {
-    cacheBytes: 1536 * 1024 * 1024,
-    maximumCacheOverflowBytes: 1024 * 1024 * 1024,
+    cacheBytes: PHONE_CACHE_BYTES,
+    maximumCacheOverflowBytes: PHONE_CACHE_OVERFLOW_BYTES,
     enableCollision: true,
+    maximumScreenSpaceError: PHONE_MAX_SCREEN_SPACE_ERROR,
+    preloadFlightDestinations: false,
   };
 }
 
@@ -118,12 +190,14 @@ function describe(error) {
  * @param {string} [options.googleApiKey] - Google Maps Platform key, if the build has one.
  * @param {string} [options.ionToken] - Cesium ion access token, if the build has one.
  * @param {(source: string) => void} [options.onAttempt] - Called with `google-key` / `ion` before each try.
+ * @param {boolean} [options.phone] - Which ceilings to build with; injected for tests.
  * @returns {Promise<{tileset: object|null, source: string|null, errors: Array<{source: string, message: string}>}>}
  */
 export async function loadPhotorealTileset(Cesium, {
   googleApiKey = '',
   ionToken = '',
   onAttempt = null,
+  phone = isPhoneShell(),
 } = {}) {
   const attempts = [];
   if (googleApiKey) {
@@ -134,7 +208,7 @@ export async function loadPhotorealTileset(Cesium, {
       // the mercy of a global set elsewhere in boot.
       run: () => Cesium.createGooglePhotorealistic3DTileset(
         { key: googleApiKey, onlyUsingWithGoogleGeocoder: true },
-        photorealTilesetOptions(),
+        photorealTilesetOptions({ phone }),
       ),
     });
   }
@@ -146,7 +220,7 @@ export async function loadPhotorealTileset(Cesium, {
           GOOGLE_PHOTOREAL_ION_ASSET_ID,
           { accessToken: ionToken },
         );
-        return Cesium.Cesium3DTileset.fromUrl(resource, photorealTilesetOptions());
+        return Cesium.Cesium3DTileset.fromUrl(resource, photorealTilesetOptions({ phone }));
       },
     });
   }

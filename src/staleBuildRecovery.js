@@ -53,18 +53,32 @@ export const STALE_BUILD_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 /** Per-tab, so the mark survives the reload it is meant to bound. */
 export const STALE_BUILD_RELOAD_STORAGE_KEY = 'gev:stale-build-reload-at';
 
+/**
+ * The same budget, on its own key, for a lost WebGL context.
+ *
+ * SEPARATE ON PURPOSE. Both recoveries answer the same question — "may this
+ * tab reload itself without being asked?" — with the same loop guard and the
+ * same cooldown, and that is exactly why they must not share a budget: a stale
+ * chunk in the morning would otherwise leave a reader stranded on a dead
+ * canvas in the afternoon, with nothing on screen and no way to know why.
+ * See `src/contextLoss.js`.
+ */
+export const CONTEXT_LOST_RELOAD_STORAGE_KEY = 'gev:context-lost-reload-at';
+
 /** Voice states that mean a live session would be cut by a reload. */
 const VOICE_BUSY_STATUSES = new Set(['connecting', 'listening', 'executing']);
 
 /**
  * Read the last automatic reload mark without trusting the tab's storage.
  * @param {{getItem: Function}|null} storage Session storage, or null.
+ * @param {string} [storageKey] Which budget to read; see
+ *   {@link CONTEXT_LOST_RELOAD_STORAGE_KEY} for why there is more than one.
  * @returns {number|null} Epoch ms of the last reload, or null when unmarked.
  */
-export function readStaleBuildReloadMark(storage) {
+export function readStaleBuildReloadMark(storage, storageKey = STALE_BUILD_RELOAD_STORAGE_KEY) {
   let raw = null;
   try {
-    raw = storage?.getItem?.(STALE_BUILD_RELOAD_STORAGE_KEY) ?? null;
+    raw = storage?.getItem?.(storageKey) ?? null;
   } catch {
     return null;
   }
@@ -78,11 +92,12 @@ export function readStaleBuildReloadMark(storage) {
  * storage loses the loop guard, so such a tab never gets the automatic path.
  * @param {{setItem: Function}|null} storage Session storage, or null.
  * @param {number} nowMs Epoch ms.
+ * @param {string} [storageKey] Which budget to spend.
  * @returns {boolean} True when the mark was written.
  */
-export function rememberStaleBuildReload(storage, nowMs) {
+export function rememberStaleBuildReload(storage, nowMs, storageKey = STALE_BUILD_RELOAD_STORAGE_KEY) {
   try {
-    storage?.setItem?.(STALE_BUILD_RELOAD_STORAGE_KEY, String(Math.floor(nowMs)));
+    storage?.setItem?.(storageKey, String(Math.floor(nowMs)));
     return true;
   } catch {
     return false;
@@ -110,6 +125,7 @@ export function rememberStaleBuildReload(storage, nowMs) {
  * @param {number} input.nowMs Epoch ms.
  * @param {string} [input.visibility] `document.visibilityState`.
  * @param {string|null} [input.voiceStatus] `#gev-voice-control` data-status.
+ * @param {string} [input.storageKey] Which budget to claim.
  * @returns {boolean} True when an automatic reload was claimed.
  */
 export function claimStaleBuildAutoReload({
@@ -117,16 +133,17 @@ export function claimStaleBuildAutoReload({
   nowMs,
   visibility = 'visible',
   voiceStatus = null,
+  storageKey = STALE_BUILD_RELOAD_STORAGE_KEY,
 } = {}) {
   if (visibility !== 'visible') return false;
   if (VOICE_BUSY_STATUSES.has(String(voiceStatus || '').toLowerCase())) return false;
-  const mark = readStaleBuildReloadMark(storage);
+  const mark = readStaleBuildReloadMark(storage, storageKey);
   // A mark in the future is a clock that moved; treat it as spent rather than
   // as permission that lasts until the clock catches up.
   if (mark !== null && (mark > nowMs || nowMs - mark < STALE_BUILD_RELOAD_COOLDOWN_MS)) return false;
   const stamp = Math.floor(nowMs);
-  if (!rememberStaleBuildReload(storage, stamp)) return false;
-  return readStaleBuildReloadMark(storage) === stamp;
+  if (!rememberStaleBuildReload(storage, stamp, storageKey)) return false;
+  return readStaleBuildReloadMark(storage, storageKey) === stamp;
 }
 
 /** Whole seconds still on the clock, never below zero. */

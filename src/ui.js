@@ -28,6 +28,7 @@ import { IntelHUD } from './hud.js';
 import { ShareLinkManager } from './sharelink.js';
 import { setWeekHour } from './data/weekHourCursor.js';
 import {
+  DEFAULT_ENABLED_LAYER_IDS,
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
 } from './data/layerState.js';
@@ -122,6 +123,7 @@ import {
   onPerfProfileChange,
   setPerfProfile,
 } from './perfProfile.js';
+import { isPhoneShell } from './inputMode.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -4786,6 +4788,12 @@ export class StyleManager {
         // Any valid camera/style share isolates recipient-local preferences,
         // including legacy and malformed-v2 layer payloads.
         allowLocalState: !this._initialShareState,
+        // A phone opens with nothing on. Traffic ON holds the scene in
+        // continuous render for the whole life of the tab, which on a handset
+        // is a battery and a thermal budget spent on a layer nobody asked for.
+        // This is the DEFAULT only: a stored session or a share link restores
+        // traffic on any device, because that is a preference and this is not.
+        defaultEnabledLayerIds: isPhoneShell() ? [] : DEFAULT_ENABLED_LAYER_IDS,
       });
       if (this._initialShareSelectionSuperseded) {
         this._layerStateCoordinator.cancelPendingShareTracking(
@@ -10510,6 +10518,22 @@ export class StyleManager {
     if (Number.isFinite(durationMs)) {
       this._toastTimer = setTimeout(() => this._hideToast(), durationMs);
     }
+  }
+
+  /**
+   * The same toast, as a PUBLIC verb.
+   *
+   * `src/contextLoss.js` has to speak to the reader from outside the UI — the
+   * scene it would normally talk through has just stopped existing — and
+   * reaching for `_showToast` from `main.js` would make a private field part
+   * of that feature's contract. One named method instead.
+   *
+   * @param {string} message
+   * @param {{durationMs?: number, action?: ?object, owner?: ?string}} [options]
+   * @returns {void}
+   */
+  showNotice(message, options = {}) {
+    this._showToast(message, options);
   }
 
   _hideToast() {

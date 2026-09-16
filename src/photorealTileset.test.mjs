@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DESKTOP_CACHE_BYTES,
+  DESKTOP_CACHE_OVERFLOW_BYTES,
   GOOGLE_PHOTOREAL_ION_ASSET_ID,
+  PHONE_CACHE_BYTES,
+  PHONE_CACHE_OVERFLOW_BYTES,
+  PHONE_MAX_SCREEN_SPACE_ERROR,
   PHOTOREAL_DISABLE_GLOBAL,
   describePhotorealFailure,
   loadPhotorealTileset,
@@ -162,4 +167,54 @@ test('the window flag disables it without touching the URL', () => {
 test('a scope with no location does not throw', () => {
   assert.equal(photorealDisabled({}), false);
   assert.equal(photorealDisabled(null), false);
+});
+
+test('the desktop options are byte-for-byte what they have always been', () => {
+  // The phone ceilings are a NEW branch, not a rewrite of the old one. A
+  // desktop that started degrading its mesh because a phone needed less memory
+  // would be a regression nobody looked for, so the old object is pinned whole
+  // — including the two options a phone adds and a desktop must not have.
+  assert.deepEqual(photorealTilesetOptions({ phone: false }), {
+    cacheBytes: 1536 * 1024 * 1024,
+    maximumCacheOverflowBytes: 1024 * 1024 * 1024,
+    enableCollision: true,
+  });
+  assert.equal(DESKTOP_CACHE_BYTES, 1536 * 1024 * 1024);
+  assert.equal(DESKTOP_CACHE_OVERFLOW_BYTES, 1024 * 1024 * 1024);
+});
+
+test('a phone declares a sixth of the cache, and keeps its collisions', () => {
+  const options = photorealTilesetOptions({ phone: true });
+  assert.equal(options.cacheBytes, PHONE_CACHE_BYTES);
+  assert.equal(options.maximumCacheOverflowBytes, PHONE_CACHE_OVERFLOW_BYTES);
+  assert.equal(options.maximumScreenSpaceError, PHONE_MAX_SCREEN_SPACE_ERROR);
+  // A `flyTo` that preloaded its destination would hold two views of tiles at
+  // once, on the one device that cannot hold one.
+  assert.equal(options.preloadFlightDestinations, false);
+  // NOT a memory lever, and switching it off would break `Scene.getHeight` —
+  // the camera's floor under a pinch — plus every CLAMP_TO_GROUND placement.
+  assert.equal(options.enableCollision, true);
+  // The declared ceiling plus its overflow has to leave room for the heap, the
+  // imagery under the mesh and the terrain inside a ~1.2 GB process budget.
+  assert.ok(
+    (PHONE_CACHE_BYTES + PHONE_CACHE_OVERFLOW_BYTES) * 1.5 < 800 * 1024 * 1024,
+    'estimated bytes undercount real residency by roughly half again',
+  );
+});
+
+test('both doors build the tileset with the ceilings this session asked for', () => {
+  const doorOptions = async (phone) => {
+    const Cesium = stubCesium({ googleResult: { name: 'google' } });
+    await loadPhotorealTileset(Cesium, { googleApiKey: 'k', phone });
+    const ion = stubCesium({ googleResult: null, ionResult: { name: 'ion' } });
+    await loadPhotorealTileset(ion, { ionToken: 't', phone });
+    return [
+      Cesium.calls.find((c) => c.door === 'google-key').tilesetOptions,
+      ion.calls.find((c) => c.door === 'ion').tilesetOptions,
+    ];
+  };
+  return Promise.all([doorOptions(true), doorOptions(false)]).then(([phone, desktop]) => {
+    for (const options of phone) assert.equal(options.cacheBytes, PHONE_CACHE_BYTES);
+    for (const options of desktop) assert.equal(options.cacheBytes, DESKTOP_CACHE_BYTES);
+  });
 });
