@@ -4195,10 +4195,22 @@ export class StyleManager {
     }
     // The command dock always starts compact; either wing reveals on hover,
     // focus, or click and collapses again after the interaction moves away.
-    this.setPanelCollapsed('control-panel', true, { syncShare: false, persist: false });
-    this.setPanelCollapsed('location-bar', true, { syncShare: false, persist: false });
-    this._initAutoHoverPanel('control-panel', { openDelayMs: 140, closeDelayMs: 420 });
-    this._initAutoHoverPanel('location-bar', { openDelayMs: 140, closeDelayMs: 420 });
+    //
+    // NOT ON A PHONE, and the reason is that the dock no longer exists there.
+    // `initPhoneSheet()` moves LOCATION into the sheet's Recherche tab, where
+    // it is not a tray that opens over a map but the whole content of a tab —
+    // and the auto-disclosure's touchscreen rule is "any pointerdown outside
+    // this panel closes it in 420 ms". Tapping the Recherche tab IS a
+    // pointerdown outside it: the tab opened onto the panel and the timer
+    // emptied it a third of a second later, every time, so the Recherche tab
+    // looked like a feature that had never been built. Measured on
+    // surplomb.app, 2026-09-16.
+    if (!isPhoneShell()) {
+      this.setPanelCollapsed('control-panel', true, { syncShare: false, persist: false });
+      this.setPanelCollapsed('location-bar', true, { syncShare: false, persist: false });
+      this._initAutoHoverPanel('control-panel', { openDelayMs: 140, closeDelayMs: 420 });
+      this._initAutoHoverPanel('location-bar', { openDelayMs: 140, closeDelayMs: 420 });
+    }
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
     this._maybeNotifyLayoutReset();

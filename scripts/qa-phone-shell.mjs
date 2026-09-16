@@ -56,6 +56,22 @@ const TOUCH_TARGET_PX = 44;
 const TOUCH_TARGET_CROWDED_PX = 40;
 /** How much clear air earns that exemption. */
 const TOUCH_NEIGHBOUR_GAP_PX = 8;
+/**
+ * The fewest controls each tab is still itself with.
+ *
+ * A count and not a boolean, because "not empty" is too weak: Recherche with
+ * its city pills gone but the field intact would pass a presence test while
+ * having lost most of what it is. The numbers are floors with room under the
+ * shipped counts (10, 49, 2), not snapshots — a tab that GAINS a control must
+ * not fail a harness.
+ *
+ * Légende is zero on purpose: a key is content, and with no layer lit it is an
+ * empty state with nothing to press. Its height still has to be non-zero.
+ */
+const TAB_CONTROL_FLOORS = Object.freeze({
+  search: 5, layers: 10, legend: 0, selection: 2,
+});
+
 /** The band at the top of the screen where fixed chrome used to collide. */
 const TOP_BAND_PX = 120;
 /** How far a desktop rectangle may move before it is a regression. */
@@ -324,6 +340,56 @@ const readVoiceModule = () => {
   };
 };
 
+/**
+ * What one tab holds, asked of the tab that is currently open.
+ *
+ * WHY A TAB CAN BE EMPTY AND NOBODY NOTICES. The four panels are ADOPTED from
+ * the desktop, where each is a tray that opens and shuts, and `.collapsed` is
+ * implemented as `display: none !important` on the tray's contents. Any path
+ * that puts the class back — the dock's touchscreen auto-dismiss, a reflow, a
+ * share link's `ui=` segment, a restore from storage — empties a tab without
+ * touching the sheet, so every other check in this file still passes. Recherche
+ * shipped that way and was blank on every tap.
+ *
+ * The touch-target scan is repeated PER TAB for the same reason: the run-wide
+ * one reads whatever the sheet opens on, which is Couches, so three of the four
+ * panels' controls had never been measured. It found two at 36 px.
+ */
+const readOpenTab = ({ floor, crowdedFloor, gap }) => {
+  const panel = document.querySelector('.phone-sheet-panel:not([hidden])');
+  if (!panel) return { present: false };
+  const rect = panel.getBoundingClientRect();
+  const boxes = [];
+  for (const el of panel.querySelectorAll('button, [role=button], a[href], input, select, textarea')) {
+    const r = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    if (r.width <= 0 || r.height <= 0) continue;
+    boxes.push({ el, r });
+  }
+  const offenders = [];
+  for (const { el, r } of boxes) {
+    const smallest = Math.min(r.width, r.height);
+    if (smallest >= floor) continue;
+    let nearest = Infinity;
+    for (const other of boxes) {
+      if (other.el === el || other.el.contains(el) || el.contains(other.el)) continue;
+      const dx = Math.max(0, Math.max(r.left - other.r.right, other.r.left - r.right));
+      const dy = Math.max(0, Math.max(r.top - other.r.bottom, other.r.top - r.bottom));
+      nearest = Math.min(nearest, Math.hypot(dx, dy));
+    }
+    if (smallest >= crowdedFloor && nearest >= gap) continue;
+    offenders.push(`${el.id || (typeof el.className === 'string' ? el.className.split(/\s+/)[0] : el.tagName)} ${Math.round(r.width)}x${Math.round(r.height)}`);
+  }
+  return {
+    present: true,
+    id: panel.id,
+    height: Math.round(rect.height),
+    controls: boxes.length,
+    offenders: [...new Set(offenders)].slice(0, 6),
+  };
+};
+
 const readFontSizes = () => {
   const offenders = [];
   for (const el of document.querySelectorAll('input:not([type=range]):not([type=checkbox]):not([type=radio]), select, textarea')) {
@@ -460,6 +526,46 @@ async function runHandset(browser, device, full) {
     }));
     check(`[${device.name}] dragging the grip upward ends on a higher snap (${drag.how})`,
       afterDrag.snap !== 'peek' && afterDrag.height > heights.peek, { ...afterDrag, ...drag });
+
+    // ── Every tab holds something, and everything it holds is reachable ────
+    const tabs = {};
+    await page.evaluate(() => window.__godsEyeView.phoneSheet.snapTo('full'));
+    for (const tab of Object.keys(TAB_CONTROL_FLOORS)) {
+      await page.evaluate((name) => window.__godsEyeView.phoneSheet.selectTab(name), tab);
+      // Long enough to outlive the dock's 420 ms auto-dismiss, which is what
+      // emptied Recherche a third of a second after it opened.
+      await wait(700);
+      tabs[tab] = await page.evaluate(readOpenTab, {
+        floor: TOUCH_TARGET_PX, crowdedFloor: TOUCH_TARGET_CROWDED_PX, gap: TOUCH_NEIGHBOUR_GAP_PX,
+      });
+    }
+    check(`[${device.name}] every tab holds content and every control in it is reachable`,
+      Object.entries(tabs).every(([name, t]) => t.present && t.height > 0
+        && t.controls >= TAB_CONTROL_FLOORS[name] && t.offenders.length === 0), tabs);
+
+    // The map source moved out of a panel a phone never shows; the eight
+    // basemaps are the tab's first block or they are nowhere. Measured with
+    // Couches OPEN — the loop above ends on Sélection, and a hidden panel
+    // reports every height as zero.
+    await page.evaluate(() => window.__godsEyeView.phoneSheet.selectTab('layers'));
+    await wait(400);
+    const mapSource = await page.evaluate(() => {
+      const section = document.querySelector('.map-source-section');
+      if (!section) return { present: false };
+      const layers = document.getElementById('phone-panel-layers');
+      const r = section.getBoundingClientRect();
+      return {
+        present: true,
+        inLayersTab: !!layers && layers.contains(section),
+        first: layers?.firstElementChild === section,
+        chips: section.querySelectorAll('.map-stack-chip').length,
+        active: section.querySelector('.map-stack-chip.active')?.textContent?.trim() ?? null,
+        height: Math.round(r.height),
+      };
+    });
+    check(`[${device.name}] the eight map sources lead the Couches tab`,
+      mapSource.present && mapSource.inLayersTab && mapSource.first
+      && mapSource.chips === 8 && mapSource.height > 0, mapSource);
 
     // ── Evidence for the two tabs a reader actually uses ───────────────────
     await page.evaluate(() => {

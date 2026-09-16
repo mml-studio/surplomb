@@ -591,16 +591,184 @@ html[data-shell="phone"] #phone-sheet :is(.location-inner, .data-panel-inner, .g
   -webkit-backdrop-filter: none;
 }
 
-/* The collapsed rule at `style.css:7680` hides the toggle list outright. The
-   sheet's Couches tab IS the toggle list, so the class is removed by the JS —
-   and re-asserted here because the panel's own collapse button may put it back
-   and there is no visible header on which to press it again. */
+/* ── `.collapsed` CANNOT BE ALLOWED TO REACH A TAB ───────────────────────────
+
+   `.collapsed` means "this panel is a closed tray in a rail or in the dock".
+   Inside the sheet it means nothing, and `style.css` implements it by hiding
+   the panel's content outright — with `!important`, in three of the four
+   cases. `initPhoneSheet()` removes the class once, at adoption; these rules
+   are what makes that stick, because SIX different paths can put it back: the
+   panel's own collapse button (whose header the sheet no longer shows), the
+   layout reflow, a restore from `localStorage`, a share link's `ui=` segment,
+   the cockpit's panel save/restore, and — until the guard in `ui.js` — the
+   dock's touchscreen auto-dismiss.
+
+   A tab that empties itself 420 ms after it is opened is the failure this
+   prevents, and it shipped: Recherche was blank on every tap. */
 html[data-shell="phone"] #phone-sheet #data-panel.collapsed .data-toggle-list,
 html[data-shell="phone"] #phone-sheet #data-panel .data-toggle-list {
   display: flex;
   max-height: none;
   overflow: visible;
   padding-right: 0;
+}
+
+html[data-shell="phone"] #phone-sheet #location-bar.collapsed .location-city-row,
+html[data-shell="phone"] #phone-sheet #location-bar.collapsed .poi-row-container {
+  display: flex !important;
+}
+
+html[data-shell="phone"] #phone-sheet #location-bar.collapsed .location-bar-divider {
+  display: block !important;
+}
+
+/* The mini status is the COLLAPSED tray's one-line summary — a stand-in for
+   the panel it replaces. The sheet shows the panel itself, so the stand-in
+   would be the same place named twice, once in 9 px. */
+html[data-shell="phone"] #phone-sheet #location-bar.collapsed .location-mini-status {
+  display: none;
+}
+
+/* Same guard for the Sélection tab, whose reachable path is a SHARED LINK: the
+   `ui=` segment of a hash carries every panel's collapsed state, so a link
+   copied from a desktop with the context panel shut opened a blank tab on the
+   phone that received it. Two displays, because `style.css` gives these five
+   two different ones and `revert` would hand both back to the UA default. */
+html[data-shell="phone"] #phone-sheet #global-context-panel.collapsed :is(
+  #radio-panel,
+  #military-awareness-panel,
+  .context-mode-view,
+  .context-mode-standby
+) {
+  display: block;
+}
+
+html[data-shell="phone"] #phone-sheet #global-context-panel.collapsed :is(
+  .global-context-actions,
+  .global-context-modes
+) {
+  display: grid;
+}
+
+/* ── THE RECHERCHE TAB ───────────────────────────────────────────────────────
+
+   The dock keeps this row for a cursor and for 370 px of tray: eight city
+   pills scrolling sideways, and a search field 0 px wide behind a 32 px
+   magnifier. A tab named RECHERCHE is a different contract — the reader has
+   already performed the disclosure by opening it — so the row becomes a
+   column: the field first at full width, the shortcuts under it.
+
+   `order: -1` and not a DOM move: `.location-city-row` is the desktop's own
+   grouping and the pills belong inside it. Reordering the markup would drag
+   the dock's layout along for a phone's benefit. */
+html[data-shell="phone"] #phone-sheet .location-city-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+html[data-shell="phone"] #phone-sheet #location-search-form {
+  order: -1;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+
+/* The magnifier is a DISCLOSURE — it toggles the field between 0 and 180 px.
+   With the field permanently open (`phoneSheet.js` adds `.expanded`), the only
+   thing left for it to do is close the field the reader came to type in. */
+html[data-shell="phone"] #phone-sheet #search-toggle {
+  display: none;
+}
+
+html[data-shell="phone"] #phone-sheet #location-search,
+html[data-shell="phone"] #phone-sheet #location-search.expanded {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0 0 14px;
+  /* The width transition is the disclosure's animation. Nothing animates a
+     width here any more, and leaving it armed makes the first paint of the
+     tab a 180 px field growing to fill the row. */
+  transition: none;
+}
+
+html[data-shell="phone"] #phone-sheet .search-submit-btn {
+  width: 44px;
+  height: 44px;
+  margin: 0 2px 0 0;
+}
+
+/* 40 px with the 8 px of air the column gap already provides — the floor
+   `qa:phone-shell` measures. They ship at 28 px, which is a cursor's target. */
+html[data-shell="phone"] #phone-sheet :is(.location-pill, .poi-pill) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+html[data-shell="phone"] #phone-sheet :is(#location-pills, #poi-row) {
+  gap: 8px;
+}
+
+/* ── FOND DE CARTE, adopted to the top of Couches ────────────────────────────
+   The section arrives as the tail of a desktop tray: an 8 px heading, a
+   three-column grid of 9 px chips, a hairline above it. Here it is the first
+   thing in the tab and the chips are targets, so it gets the tab's own type
+   size and a hairline BELOW instead — the rule that separates it from the
+   layer list it frames. Three columns still: « Relief Google » is 13
+   characters and the fourth column would cut it. */
+html[data-shell="phone"] #phone-sheet .map-source-section {
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0 0 12px;
+  border-top: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html[data-shell="phone"] #phone-sheet .map-source-heading {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+}
+
+/* Three, against the two that `style.css` drops to under 620 px. That media
+   query is written for a narrow DESKTOP window, where the tray is still a
+   popover over a map and a tall block of chips would bury it; here the tab
+   scrolls and the row is the first thing in it, so the eight sources cost
+   three rows instead of four — 54 px of the layer list back. */
+html[data-shell="phone"] #phone-sheet .map-stack-chip-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* A column, not a baseline row: the ION badge beside a label is what makes
+   « Bing Aerial ION » wider than a third of a 390 px screen. */
+html[data-shell="phone"] #phone-sheet .map-stack-chip {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  white-space: normal;
+  text-align: center;
+}
+
+/* The Sélection tab's two verbs — CONTACTS and SPACE MISSIONS — ship at a
+   36 px `min-height` in a rail a cursor points at. Found by measuring every
+   tab rather than the one the sheet happens to open on. */
+html[data-shell="phone"] #phone-sheet :is(.context-mode-button, .global-context-actions > button) {
+  min-height: 44px;
 }
 
 html[data-shell="phone"] #phone-sheet #map-legend {
