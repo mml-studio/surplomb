@@ -3,6 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    FENÊTRE DE PRÉ-LANCEMENT — À RETIRER LE 22 SEPTEMBRE 2026.
+
+    L'origine est ouverte depuis le 16/09 mais l'annonce est prévue le 22 : sans
+    cette ligne, un moteur peut indexer une page qui n'a encore été montrée à
+    personne, et la première impression publique devient un résultat de
+    recherche arrivé six jours trop tôt.
+
+    C'est `noindex` et PAS un `robots.txt` avec `Disallow: /`, délibérément. Un
+    Disallow empêche AUSSI les robots sociaux de lire la page, donc la carte de
+    partage — le travail de la PR #223 — ne s'afficherait plus dans les liens
+    envoyés en message privé, qui sont précisément le test de cette semaine.
+    `noindex` laisse lire et interdit seulement de publier au catalogue.
+
+    `fiche.html:6` porte la même ligne, elle, à demeure : la radiographie
+    d'adresse n'a pas vocation à être une porte d'entrée.
+  -->
+  <meta name="robots" content="noindex" />
   <title>Surplomb — La France au rayon X</title>
   <meta name="description" content="Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct. 56 ne demandent aucune clé." />
   <!--

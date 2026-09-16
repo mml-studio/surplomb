@@ -26970,8 +26970,19 @@ function stripCesiumFromDocumentPages() {
 // bundle would make every self-hosted instance advertise ours; with the tag
 // absent, every crawler keeps the URL it actually fetched.
 
-/** Default origin for the social card, overridden by GEV_PUBLIC_ORIGIN. */
-export const SOCIAL_ORIGIN_DEFAULT = 'https://gev.enerlens.com';
+/**
+ * Default origin for the social card, overridden by GEV_PUBLIC_ORIGIN.
+ *
+ * This is the PUBLIC hostname, not the staging one. It read
+ * `https://gev.enerlens.com` until 2026-09-16 — written before the fork was
+ * named, and never revisited when `surplomb.app` became the address people are
+ * given. The consequence was invisible behind the password and would have
+ * shipped on opening day: a link to `surplomb.app` carried a card whose image
+ * lived on the staging hostname, so every share advertised an address nobody
+ * was meant to type, and the preview depended on a host that is allowed to go
+ * away.
+ */
+export const SOCIAL_ORIGIN_DEFAULT = 'https://surplomb.app';
 
 /** The social meta tags whose `content` is made absolute. */
 const SOCIAL_URL_TAGS = Object.freeze(['og:image', 'twitter:image']);

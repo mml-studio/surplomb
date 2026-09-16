@@ -22,6 +22,13 @@ services:
         # what you get, which is correct for a deployment behind a password.
         GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_BROWSER_KEY:-${GOOGLE_MAPS_API_KEY:-}}
         CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
+        # The one absolute URL in the bundle: the social card's image. Unset,
+        # the build uses the public hostname (`SOCIAL_ORIGIN_DEFAULT`), which is
+        # correct here — this box also answers on the staging name, and a card
+        # must name one origin. A self-hosted instance sets this instead of
+        # advertising ours. The `ARG` has existed in the Dockerfile since the
+        # card landed and had no way to be reached from the documented deploy.
+        GEV_PUBLIC_ORIGIN: ${GEV_PUBLIC_ORIGIN:-}
     image: gev:staging
     container_name: gev
     restart: unless-stopped
