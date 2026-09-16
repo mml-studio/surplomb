@@ -44,6 +44,7 @@
  * `sessionStorage` only, so it also survives the `localStorage.clear()` that
  * a couple of harnesses install at document start for their own reasons.
  */
+import { KnownDevices } from 'puppeteer';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -182,6 +183,69 @@ export async function newQaPage(browser, options = {}) {
     );
   }
   return suppressFirstRun(page, options);
+}
+
+/**
+ * The device every phone harness in this repo runs on.
+ *
+ * One handset, named once, so two harnesses can never disagree about what "a
+ * phone" is. 390×844 at DPR 3 is the iPhone 13/14/15 body — the most common
+ * screen this app will meet — and it is also the narrowest case that matters:
+ * anything that fits here fits a 360 px Android.
+ */
+export const PHONE_DEVICE = KnownDevices['iPhone 13'];
+
+/**
+ * `newQaPage()` with a phone in front of it.
+ *
+ * THREE THINGS, AND ALL THREE ARE LOAD-BEARING.
+ *
+ *   1. `page.emulate()` gives the viewport, the device pixel ratio, the touch
+ *      flags and a Safari user agent.
+ *   2. `Emulation.setEmulatedMedia` forces `(pointer: coarse)` and
+ *      `(hover: none)`. Emulated touch alone does NOT imply them — Chrome
+ *      keeps answering `(pointer: fine)` with `hasTouch: true` — and those two
+ *      queries are exactly what `src/inputMode.js` reads. Without this the
+ *      harness would test the desktop app at phone dimensions, which is the
+ *      one failure mode a phone harness must not have.
+ *   3. `?input=phone` on the URL, as the belt to that brace. The override is
+ *      session-only and never persisted, so it costs nothing, and it keeps the
+ *      harness working if a future Chrome changes what CDP emulates. Harnesses
+ *      append it themselves; `phoneUrl()` below is how.
+ *
+ * @param {import('puppeteer').Browser} browser
+ * @param {object} [options] - Same as {@link newQaPage}.
+ * @returns {Promise<import('puppeteer').Page>}
+ */
+export async function newPhoneQaPage(browser, options = {}) {
+  const page = await newQaPage(browser, options);
+  await page.emulate(PHONE_DEVICE);
+  const client = await page.createCDPSession();
+  await client.send('Emulation.setEmulatedMedia', {
+    features: [
+      { name: 'pointer', value: 'coarse' },
+      { name: 'hover', value: 'none' },
+      { name: 'any-pointer', value: 'coarse' },
+      { name: 'any-hover', value: 'none' },
+    ],
+  });
+  return page;
+}
+
+/**
+ * Add `?input=phone` to a harness URL without disturbing its hash.
+ *
+ * The hash is where this app keeps the share state, so a naive
+ * `url + '?input=phone'` would land the query AFTER the `#` and be read by
+ * nobody.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function phoneUrl(url) {
+  const parsed = new URL(url);
+  parsed.searchParams.set('input', 'phone');
+  return parsed.toString();
 }
 
 /**

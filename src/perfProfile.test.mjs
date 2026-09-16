@@ -324,3 +324,93 @@ test('one thinning rule for every layer: 60 % of the count, 1/√0.6 of the pitc
   // A budget of one mark cannot round down to none.
   assert.equal(profileCountBudget(1, true), 1);
 });
+
+/** A phone's three input signals, added to an otherwise healthy machine. */
+function phoneSignals(overrides = {}) {
+  // Deliberately generous everywhere else: 8 cores, 8 GB, an Apple GPU. If the
+  // phone clause were removed, every assertion below would answer `full`.
+  return signals({
+    coarsePointer: true, noHover: true, touchPoints: 1, viewportMinPx: 390, ...overrides,
+  });
+}
+
+test('a phone is recognised by its hands and its size, not by its GPU string', () => {
+  // The hole this closes: iOS Safari publishes neither `deviceMemory` nor an
+  // unmasked renderer, and a recent iPhone reports 6 cores — so every hardware
+  // clause below answered `full` on the one device class that cannot afford it.
+  assert.deepEqual(decidePerfProfile(phoneSignals()), { profile: 'lite', source: 'phone' });
+
+  // Each clause alone is not a phone: a touchscreen laptop keeps its cursor,
+  // an iPad has the room, and a narrow desktop window has neither.
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ noHover: false })), { profile: 'full', source: 'default' },
+  );
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ viewportMinPx: 744 })), { profile: 'full', source: 'default' },
+  );
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ coarsePointer: false, touchPoints: 0 })),
+    { profile: 'full', source: 'default' },
+  );
+});
+
+test('the phone signal outranks a measurement, and yields to a person', () => {
+  // A phone in `lite` measures WELL — one MSAA sample, no buffer copy, a 1×
+  // canvas — so `observeFrameProfile` writes `full`, and without this order the
+  // next visit would open the same handset at MSAA 4 with preserveDrawingBuffer
+  // on. The measurement is not wrong; it answers a question about frame time on
+  // a device whose constraint is memory.
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ measured: 'full' })), { profile: 'lite', source: 'phone' },
+  );
+  // Both things a PERSON can say still win: the URL for this session, the
+  // DISPLAY switch for every session after it.
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ forced: 'full' })), { profile: 'full', source: 'url' },
+  );
+  assert.deepEqual(
+    decidePerfProfile(phoneSignals({ stored: 'full' })), { profile: 'full', source: 'stored' },
+  );
+});
+
+test('readPerfSignals carries the input signals it did not invent', () => {
+  // Read through `src/inputMode.js`, so the render profile and the CSS shell
+  // can never disagree about the same handset.
+  const read = readPerfSignals({
+    nav: { maxTouchPoints: 5, hardwareConcurrency: 6 },
+    matchMediaRef: () => ({ matches: true }),
+    view: { innerWidth: 390, innerHeight: 844 },
+    search: '',
+    documentRef: null,
+  });
+  assert.equal(read.coarsePointer, true);
+  assert.equal(read.noHover, true);
+  assert.equal(read.touchPoints, 5);
+  assert.equal(read.viewportMinPx, 390);
+  assert.equal(read.forcedInput, null);
+  assert.deepEqual(decidePerfProfile(read), { profile: 'lite', source: 'phone' });
+
+  // No navigator, no matchMedia, no window: a plain desktop, never a phone.
+  const bare = readPerfSignals({ nav: {}, matchMediaRef: undefined, view: {}, search: '', documentRef: null });
+  assert.equal(bare.touchPoints, 0);
+  assert.equal(bare.viewportMinPx, null);
+  assert.deepEqual(decidePerfProfile(bare), { profile: 'full', source: 'default' });
+});
+
+test('?input=phone forces the small profile from the URL, and ?input=fine unforces it', () => {
+  // How every phone harness in `scripts/` pins the profile without depending on
+  // the emulation reporting `(hover: none)` through CDP.
+  const forced = readPerfSignals({
+    nav: {}, matchMediaRef: undefined, view: {}, search: '?input=phone', documentRef: null,
+  });
+  assert.deepEqual(decidePerfProfile(forced), { profile: 'lite', source: 'phone' });
+
+  const unforced = readPerfSignals({
+    nav: { maxTouchPoints: 5 },
+    matchMediaRef: () => ({ matches: true }),
+    view: { innerWidth: 390, innerHeight: 844 },
+    search: '?input=fine',
+    documentRef: null,
+  });
+  assert.deepEqual(decidePerfProfile(unforced), { profile: 'full', source: 'default' });
+});

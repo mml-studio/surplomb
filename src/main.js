@@ -40,7 +40,8 @@ import {
   holdContinuousRender,
   releaseContinuousRender,
 } from './renderGovernor.js';
-import { installScopeMask } from './scopeMask.js';
+import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
+import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
@@ -55,6 +56,7 @@ import {
   observeFrameProfile,
   onPerfProfileChange,
 } from './perfProfile.js';
+import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 
 initLogoGaze();
 
@@ -130,6 +132,14 @@ async function init() {
         + 'Google-backed geocoding are unavailable; the globe stacks (OSM, IGN) are not.',
       );
     }
+
+    // What kind of hands this session has, resolved BEFORE the render profile
+    // because the profile asks it a question. The inline script in index.html
+    // has already put the two attributes on <html> — this call re-poses them,
+    // idempotently, for a harness that injected `?input=` after the document
+    // was written, and hands the same answer to every module that asks in JS.
+    // See src/inputMode.js: one predicate, one threshold, two attributes.
+    initInputMode();
 
     // The render profile, resolved HERE and nowhere else. Two of the four fixed
     // render costs are Viewer construction arguments, so a machine that is
@@ -361,8 +371,22 @@ async function init() {
     // so the root tile is spent either way; opening on it just spends it
     // without the swap. First visits are unaffected, and so is the harness
     // fleet, which never adopts anything.
+    //
+    // AND A PHONE NEVER ADOPTS AT ALL. `touchstart` is one of the four events
+    // that count as taking hold of the globe, so on a handset the FIRST TAP
+    // ANYWHERE under 25 km used to buy Google's mesh — the heaviest surface
+    // this app can show — and write the memory that makes every later visit
+    // open straight onto it. That is the sequence that ends with iOS killing
+    // the tab. The chip stays available (`canLoadPhotoreal` is untouched, so
+    // `mapStackController` still offers "Google 3D" and still says why when it
+    // cannot): a reader who deliberately picks the mesh gets it, with the
+    // phone ceilings from `photorealTilesetOptions()`. What is removed is the
+    // path where nobody asked. Deliberately NOT `photorealDisabled`, which
+    // would grey the chip out and make it blame the credentials for a door
+    // this session closed on purpose.
+    const phoneShell = isPhoneShell();
     const defaultStack = canLoadPhotoreal ? PHOTOREAL_ADOPTION_STACK : null;
-    const adoptedBefore = canLoadPhotoreal && photorealAlreadyAdopted();
+    const adoptedBefore = canLoadPhotoreal && !phoneShell && photorealAlreadyAdopted();
     const startupStack = photorealOff
       ? 'osm'
       : (adoptedBefore ? 'photoreal' : (defaultStack || (keylessMode ? 'osm' : 'google-roadmap')));
@@ -418,7 +442,12 @@ async function init() {
     // own boot — see `src/starfield.js`. The boot activation above is silent
     // and emits no event, which is why it is synced here by hand rather than
     // only through the listener below.
-    const starfield = installStarfield(viewer.scene, { requestRender: governorRequestRender });
+    const starfield = installStarfield(viewer.scene, {
+      requestRender: governorRequestRender,
+      // 848 kB of Tycho-2 JPEGs and six cube-map faces resident on the GPU,
+      // for a decoration behind a globe that fills the screen on a handset.
+      enabled: !phoneShell,
+    });
     starfield.sync(mapStackController.getActiveId(), { defer: true });
     window.addEventListener('gev:map-stack-changed', (event) => {
       if (event.detail?.status === 'switching') return;
@@ -439,8 +468,9 @@ async function init() {
     // — otherwise every page load would buy a root tile five seconds in and
     // the keyless opening above would save nothing. See src/photorealAdoption.js.
     // Not installed for a reader who already has the globe: `startupStack` put
-    // them on it, so there is nothing left to adopt.
-    const photorealAdoption = defaultStack && !adoptedBefore
+    // them on it, so there is nothing left to adopt. Nor on a phone, where the
+    // first tap anywhere would trip it — see the block above `defaultStack`.
+    const photorealAdoption = defaultStack && !adoptedBefore && !phoneShell
       ? installPhotorealAdoption(viewer, mapStackController, {
         fromStackId: defaultStack,
         onAdopt: ({ altitudeM, reason }) => {
@@ -457,12 +487,23 @@ async function init() {
 
     // If no share link state, do the default fly-to (Paris)
     if (!styleManager.hasShareState) {
-      loaderStatus.textContent = `Flying to ${DEFAULT_CITY_VIEW.label}...`;
+      // A phone lands instead of flying: the descent is four and a half
+      // seconds of continuous rendering and a whole zoom pyramid of tiles
+      // nobody looks at, over a mobile connection, in front of the first frame
+      // anyone wants. See `flyToDefaultCity`. Nothing else in the sequence
+      // changes — `beginBootFlight()` is simply not declared, and
+      // `whenBootFlightEnds()` runs its waiters immediately, which is exactly
+      // what it already does for a share link and for a second visit.
+      const immediate = phoneShell;
+      loaderStatus.textContent = immediate
+        ? DEFAULT_CITY_VIEW.label
+        : `Flying to ${DEFAULT_CITY_VIEW.label}...`;
       // Declared BEFORE the flight starts, because a layer restored from the
       // reader's last session is already asking the altimeter what to fetch.
       // See `bootFlight.js` for the four-times-slower arrival this avoids.
-      beginBootFlight();
+      if (!immediate) beginBootFlight();
       flyToDefaultCity(viewer, DEFAULT_CITY_VIEW, {
+        immediate,
         onSettled: () => {
           endBootFlight();
           photorealAdoption?.arm();
@@ -546,6 +587,11 @@ async function init() {
       // exist yet — and by the time somebody speaks, it often does.
       getTileset: () => mapStackController.getPhotorealTileset(),
       onReady: (stack) => { voiceStack = stack; publishVoiceStack(); },
+      // No idle preload on a phone: 360 kB fetched during boot, over a mobile
+      // connection, for a feature most visits never open. The panel is still
+      // there and every trigger still loads it — the microphone just pays for
+      // itself when somebody reaches for it.
+      idleTimeoutMs: phoneShell ? null : undefined,
     });
 
     // Keep startup chrome truthful: a share is not restored until camera,
@@ -570,17 +616,31 @@ async function init() {
       setTimeout(revealFirstRun, 900);
     });
 
-    // Provider Settings (the POWER UP chip + dialog). Fire-and-forget: the
-    // module removes its own surface when the dev-server endpoint is absent —
-    // every deployment, and every visitor who is not this machine — so this
-    // costs a built bundle one failed fetch and nothing else.
-    void initKeySetup();
+    // Provider Settings (the POWER UP chip + dialog). DEV ONLY, and it always
+    // was: `/api/setup/status` is installed by `configureServer` alone, so it
+    // does not exist under `vite preview` and has never existed in a
+    // deployment. The module handled that by fetching it anyway and removing
+    // its own surface on the failure — one guaranteed 404 on every production
+    // page load, on the connection where it costs the most. Asking the build
+    // instead costs nothing and drops the module from the bundle.
+    if (import.meta.env.DEV) void initKeySetup();
 
     // Expose for debugging
     // Idle render governor: flips the scene into requestRenderMode whenever
     // nothing animates per frame. Installed AFTER every module above has had
     // its chance to register pre-install holds. (perf wave 2)
     installRenderGovernor(viewer);
+
+    // The system can take the WebGL context back at any moment — iOS under
+    // memory pressure, Android on a backgrounded tab, any driver on a reset.
+    // CesiumJS listens for none of it: the next frame throws and the widget
+    // replaces the globe with its own English "Rendering has stopped" panel,
+    // on a page that is otherwise in French, with no way out but a reload the
+    // reader has to think of. See src/contextLoss.js. Installed after the
+    // governor so the loop it stops is the one that is actually running.
+    const contextLoss = installContextLossRecovery(viewer, {
+      showNotice: (text, options) => styleManager.showNotice(text, options),
+    });
 
     // Coarser imagery/terrain while the camera moves, full detail the moment it
     // settles. The intro fly-to descends through the whole zoom pyramid over
@@ -612,6 +672,19 @@ async function init() {
     // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
     // toggle finds it live.
     installScopeMask(viewer);
+    if (phoneShell) {
+      // A full-screen 2D canvas repainted on every altitude step, over a globe
+      // that already fills a 390 px screen — the vignette it draws reads as a
+      // treatment on a desktop and as a smaller picture on a phone. Off by
+      // default there; the DISPLAY toggle still turns it on, and a share link
+      // or a stored visual state still restores it, because that is a choice
+      // and this is a default. The button has to be told: it ships `active`
+      // in index.html, and nothing else re-reads the mask's own state at boot.
+      setScopeMaskEnabled(false);
+      const scopeBtn = document.getElementById('scope-toggle');
+      scopeBtn?.classList.remove('active');
+      scopeBtn?.setAttribute('aria-pressed', 'false');
+    }
 
     // Where north is, outside the cockpit. See src/globeHeadingTape.js: the
     // cockpit already answered this and the ordinary globe view did not.
@@ -633,6 +706,27 @@ async function init() {
       const hidden = document.hidden;
       viewer.useDefaultRenderLoop = !hidden;
       cockpitCloudEffects?.setSuspended?.(hidden);
+      if (hidden && phoneShell) {
+        // GIVE THE TILES BACK BEFORE THE SYSTEM TAKES THE TAB. A backgrounded
+        // tab on a phone is judged on what it still holds, and the mesh is by
+        // far the largest thing this app holds — so the moment nobody is
+        // looking, release every tile that is not needed for the current view.
+        // `trimLoadedTiles` only marks them: the release happens inside a
+        // traversal, and a scene in requestRenderMode is not traversing. Hence
+        // the explicit synchronous frame, which is the last one this tab draws
+        // before it goes quiet.
+        mapStackController.getPhotorealTileset()?.trimLoadedTiles?.();
+        try {
+          viewer.scene.requestRender();
+          viewer.render();
+        } catch (error) {
+          // A tab can be hidden BECAUSE the system took the GPU context away,
+          // in which case this frame is the one that throws — and a throw
+          // inside a `visibilitychange` handler would take the rest of the
+          // suspension with it. `src/contextLoss.js` owns that case.
+          console.warn('[phone] the background trim could not draw its frame', error);
+        }
+      }
       if (!hidden) {
         if (dataManager._panelRefreshPendingOnVisible) {
           dataManager._panelRefreshPendingOnVisible = false;
@@ -642,6 +736,11 @@ async function init() {
       }
     };
     document.addEventListener('visibilitychange', syncVisibilitySuspension);
+    // Chrome on Android freezes a backgrounded tab without a second
+    // `visibilitychange`, so the trim above would never run on the one path
+    // where it matters most. `pagehide` needs nothing: a tab going into the
+    // bfcache is a tab the browser has already accounted for.
+    document.addEventListener('freeze', syncVisibilitySuspension);
     // Apply the CURRENT state too — bootstrap can complete while the tab is
     // already hidden, and waiting for the next transition would leave the
     // loop burning behind a hidden tab. (perf wave 2 fix)
@@ -689,6 +788,16 @@ async function init() {
       // frames measured — so a harness never has to infer "was this a lite
       // run?" from pixels. (perf plan 2.1)
       getPerfProfileDiagnostics,
+      // Whether this session has a cursor, whether it gets the phone shell,
+      // and the five signals both answers came from. The phone harnesses read
+      // this instead of inferring the device from a viewport width — which is
+      // the one thing that cannot tell a phone from a narrow window.
+      getInputModeDiagnostics,
+      // `{losses, plan, reloaded}` — what the tab did when the system took its
+      // GPU context away. The only honest counter on a real handset: the
+      // Safari inspector cannot show GPU memory, so this is what a device run
+      // reads to tell "the ceilings are too high" from "the network was slow".
+      getContextLossDiagnostics: contextLoss.getDiagnostics,
       // Whether the 848 kB star field has been paid for yet, and on which
       // basemap. `qa:starfield` asserts both halves of the contract.
       starfield,

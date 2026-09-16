@@ -8,6 +8,7 @@ import {
   createS2CloudlessProvider,
   watchTileFailures,
 } from './data/worldImagery.js';
+import { isPhoneShell } from './inputMode.js';
 
 export const MAP_STACKS = [
   {
@@ -1172,7 +1173,12 @@ export class MapStackController {
     if (targetMode === this._terrainMode) return;
     if (enabled) {
       this.viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain({
-        requestVertexNormals: true,
+        // Per-vertex normals cost 30-50 % more bytes per terrain tile, and
+        // this app has no `globe.enableLighting` anywhere in `src/` — so on a
+        // phone they are bandwidth and memory spent on a shading term nothing
+        // reads. The desktop keeps them: they are also what a future lit globe
+        // would need, and there the bytes are affordable.
+        requestVertexNormals: !isPhoneShell(),
       }));
     } else {
       const provider = await this._getKeylessTerrainProvider();
