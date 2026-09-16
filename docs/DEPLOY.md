@@ -453,20 +453,41 @@ so it is the LAST step, not the first. In order:
    Settings → Limits (usage limits); Google Cloud Console → Billing → Budgets
    & alerts, plus per-API quotas under APIs & Services → Quotas; OpenRouter →
    Keys → edit → credit limit. This is the only hard stop in the list.
-3. **Check "per IP" is per IP.** `curl -s https://<host>/healthz` must report
+3. **Split the Google key in two, because one key cannot be both.** The build
+   arg is inlined into a file anyone can read (`Dockerfile:24`, `define` in
+   `vite.config.js`); the same variable is also the runtime key the proxies in
+   `vite.config.js` spend on Places, Street View and the 2D tile session. An
+   HTTP-referrer restriction is the standard guard for the first and is fatal
+   to the second — a server sends no `Referer`, so restricting the one shared
+   key answers 403 to every `/api/google/*` call. Create a second key,
+   referrer-restricted to your hostnames and scoped to **Map Tiles +
+   Geocoding**, and pass it as `GOOGLE_MAPS_BROWSER_KEY`; leave
+   `GOOGLE_MAPS_API_KEY` as runtime env only and restrict it by **IP** to the
+   origin's egress addresses (both v4 and v6 — this box reaches Overpass over
+   v6 only) and to **Places + Street View + Map Tiles**. Verify by reading the
+   built bundle, not the console:
+
+   ```sh
+   ssh vps 'docker exec gev sh -c "grep -rhoE \"AIza[A-Za-z0-9_-]{35}\" /app/dist | sort -u"'
+   ```
+
+   Exactly one key must come back, and it must be the browser one. Changing a
+   build arg needs `docker compose up -d --build --force-recreate`: a plain
+   `up -d` reuses the image and the old key stays in the bundle.
+4. **Check "per IP" is per IP.** `curl -s https://<host>/healthz` must report
    `client` as your own public address, not a Docker or loopback one. On this
    deployment `GEV_TRUSTED_CLIENT_IP_HEADER=cf-connecting-ip` is set and
    verified.
-4. **Know what a visitor costs.** A cold boot spends **nothing**: since the
+5. **Know what a visitor costs.** A cold boot spends **nothing**: since the
    engagement gate in `src/hud.js`, every metered call waits for a real gesture
    — pointer, wheel or key — because the intro fly-to settles on its own and
    used to fire five billable calls at t≈6.3 s before a single click. So the
    unit of cost on a public page is the *engaged* visitor, not the arrival,
    and a page loaded in a loop bills nothing. Size the global caps above
    against engaged visitors per minute, not against traffic.
-5. **Fix the edge rule** (above), or the first person who shares the link and
+6. **Fix the edge rule** (above), or the first person who shares the link and
    the second person behind the same NAT will both see 429s.
-6. **Then, and only then**, remove `GEV_ACCESS_PASSWORD` from `/opt/gev/.env`
+7. **Then, and only then**, remove `GEV_ACCESS_PASSWORD` from `/opt/gev/.env`
    and `docker compose up -d`. The server logs
    `[access-gate] GEV_ACCESS_PASSWORD is unset — this origin is OPEN` on boot,
    and `/healthz` reports `"gated": false`. Both are how you confirm it, and
@@ -474,4 +495,4 @@ so it is the LAST step, not the first. In order:
 
 Reversing it is the same two commands with the variable put back, so the risk
 is not the switch — it is how long an unbounded key stays reachable before
-anyone notices. Steps 1 and 2 are what make that duration not matter.
+anyone notices. Steps 1 to 3 are what make that duration not matter.

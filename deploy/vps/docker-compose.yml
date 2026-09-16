@@ -9,7 +9,18 @@ services:
       args:
         # Inlined into the browser bundle at build time, so they are build
         # args and not only runtime env (see `define` in vite.config.js).
-        GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+        #
+        # The BUILD arg and the RUNTIME env are deliberately two different
+        # Google keys on a public origin. The build arg lands in a file anyone
+        # can read, so it carries a key restricted to this site's referrers
+        # (Map Tiles + Geocoding only). The runtime key stays in `.env`, is
+        # never inlined, and serves the proxies in vite.config.js — Places,
+        # Street View, the 2D tile session. A referrer restriction cannot
+        # protect that one: a server sends no `Referer`, so restricting the
+        # single key would have killed `/api/google/*` instead of guarding it.
+        # Unset `GOOGLE_MAPS_BROWSER_KEY` and the old one-key behaviour is
+        # what you get, which is correct for a deployment behind a password.
+        GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_BROWSER_KEY:-${GOOGLE_MAPS_API_KEY:-}}
         CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
     image: gev:staging
     container_name: gev
