@@ -124,6 +124,17 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
   <!--
+    LA COQUILLE TÉLÉPHONE, LIÉE APRÈS LA FEUILLE QU'ELLE CORRIGE.
+
+    Vite concatène toute feuille liée d'ici dans l'unique CSS haché, DANS
+    L'ORDRE DES `<link>` : ce second fichier est donc ordonné et haché sans une
+    ligne de configuration, et à spécificité égale il gagne. Son garde est
+    `html[data-shell="phone"]`, posé par le script en tête de ce fichier — pas
+    une media query : une fenêtre de bureau rétrécie n'est pas un téléphone, et
+    un téléphone en paysage en est un. Voir l'en-tête de `phone.css`.
+  -->
+  <link rel="stylesheet" href="/phone.css" />
+  <!--
     Fonts are served from this origin, not from Google. Three render-blocking
     stylesheets on two origins the browser had never resolved used to sit in
     front of the first paint, and they pulled 410 kB — 323 kB of it the COMPLETE
@@ -176,17 +187,32 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
-  <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
-    <span id="global-loading-label">LOADING LIVE DATA</span>
-    <span id="global-loading-detail"></span>
-  </div>
-  <div id="traffic-sync-chip" aria-live="polite">
-    <span id="traffic-sync-label">syncing road network</span>
-    <span id="traffic-sync-progress">0%</span>
-  </div>
-  <div id="cctv-sync-chip" aria-live="polite">
-    <span id="cctv-sync-label">loading frames</span>
-    <span id="cctv-sync-progress">0/0</span>
+  <!--
+    LES TROIS PUCES D'ÉTAT, DANS UN SEUL CONTENEUR.
+
+    Chacune est `position: fixed; left: 50%` à 74, 112 et 146 px : sur un écran
+    de 390 px, ce sont trois barres centrées empilées au-dessus du globe, dont
+    la première atterrit exactement sous les actions du coin. Ce conteneur les
+    réunit en UNE colonne sur téléphone.
+
+    Hors téléphone il est `display: contents`, et ce n'est pas une politesse :
+    un enfant `fixed` IGNORE un parent `contents`, donc la mise en page de
+    bureau est identique à l'octet près à ce qu'elle était avant que ce div
+    existe. Voir `phone.css`, section « THE STATUS COLUMN ».
+  -->
+  <div id="phone-status">
+    <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span id="global-loading-label">LOADING LIVE DATA</span>
+      <span id="global-loading-detail"></span>
+    </div>
+    <div id="traffic-sync-chip" aria-live="polite">
+      <span id="traffic-sync-label">syncing road network</span>
+      <span id="traffic-sync-progress">0%</span>
+    </div>
+    <div id="cctv-sync-chip" aria-live="polite">
+      <span id="cctv-sync-label">loading frames</span>
+      <span id="cctv-sync-progress">0/0</span>
+    </div>
   </div>
 
   <!-- Toast notification. The action button is the exception that earns the
@@ -1037,6 +1063,49 @@
       </div>
     </div>
   </aside>
+
+  <!--
+    LA FEUILLE BASSE — la coquille téléphone, en entier.
+
+    HYBRIDE, ET DÉLIBÉRÉMENT. La structure est ici, statique, vide et `hidden` ;
+    `src/phoneSheet.js` y ADOPTE à l'exécution les quatre panneaux qui existent
+    déjà (RECHERCHE, COUCHES, LÉGENDE, CONTEXTE) plus la ligne de crédits, comme
+    `ui.js` portalise déjà `#pp-toggles` dans le rail droit.
+
+    Pourquoi pas du CSS seul : trois de ces panneaux sont `position: fixed` avec
+    leur propre fond, leur propre défileur et leur propre état replié. Aucune
+    règle ne fait d'eux les enfants d'un même défileur à poignée — le bloc
+    ≤ 720 px de `style.css` a essayé, et rend deux demi-écrans de panneaux
+    empilés, c'est-à-dire une tablette.
+
+    Pourquoi pas du JS seul : la coquille doit exister au premier rendu, sinon
+    le bas de l'écran saute au moment où le module arrive.
+
+    `hidden` tombe dans `initPhoneSheet()`, qui rend la main immédiatement si
+    `isPhoneShell()` est faux — sur un bureau ce bloc ne coûte que son parse.
+  -->
+  <section id="phone-sheet" hidden data-snap="peek" aria-label="Panneau téléphone">
+    <div class="phone-sheet-grip" data-phone-grip role="separator" aria-label="Glissez pour redimensionner le panneau"></div>
+    <div class="phone-sheet-credits" data-phone-credits></div>
+    <nav class="phone-sheet-tabs" role="tablist" aria-label="Onglets du panneau">
+      <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-search"
+              data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1">Recherche</button>
+      <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-layers"
+              data-phone-tab-btn="layers" aria-selected="true" aria-controls="phone-panel-layers">Couches</button>
+      <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-legend"
+              data-phone-tab-btn="legend" aria-selected="false" aria-controls="phone-panel-legend" tabindex="-1">Légende</button>
+      <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-selection"
+              data-phone-tab-btn="selection" aria-selected="false" aria-controls="phone-panel-selection" tabindex="-1">Sélection</button>
+    </nav>
+    <div class="phone-sheet-body">
+      <section class="phone-sheet-panel" id="phone-panel-search" data-phone-tab="search" role="tabpanel" aria-labelledby="phone-tab-search" hidden></section>
+      <section class="phone-sheet-panel" id="phone-panel-layers" data-phone-tab="layers" role="tabpanel" aria-labelledby="phone-tab-layers"></section>
+      <section class="phone-sheet-panel" id="phone-panel-legend" data-phone-tab="legend" role="tabpanel" aria-labelledby="phone-tab-legend" hidden></section>
+      <section class="phone-sheet-panel" id="phone-panel-selection" data-phone-tab="selection" role="tabpanel" aria-labelledby="phone-tab-selection" hidden>
+        <div id="phone-selection"></div>
+      </section>
+    </div>
+  </section>
 
   <div id="scene-runtime"></div>
 

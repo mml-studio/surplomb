@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <!--
+    LES POLICES DE L'APPLICATION, SERVIES PAR CETTE ORIGINE.
+
+    Cette feuille déclare `var(--font-mono)` et `var(--font-sans)` depuis le
+    début et ne les a jamais chargées : elle tombait sur la pile système, donc
+    sur Times dans une iframe de la feuille du globe, à côté d'une interface en
+    Inter et JetBrains Mono. Même chemin qu'`index.html:153` — quatre faces et
+    le sous-ensemble d'icônes, depuis cette origine, jamais depuis Google.
+  -->
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <title>Radiographie d'adresse</title>
   <!--
     LA RADIOGRAPHIE D'ADRESSE — une adresse, dix thématiques, une feuille.
@@ -67,7 +77,10 @@
       margin: 0 auto;
       background: var(--paper);
       padding: 2.5rem 2.75rem 3rem;
-      min-height: 100vh;
+      /* `dvh`, pas `vh` : sur iOS Safari `100vh` compte la barre d'URL comme si
+         elle n'existait pas, donc la feuille dépasse toujours d'environ 60 px et
+         la page défile sans avoir rien à montrer. */
+      min-height: 100dvh;
     }
 
     header.masthead { border-bottom: 2px solid var(--ink); padding-bottom: 1rem; }
@@ -83,10 +96,19 @@
     .subline { color: var(--ink-dim); font-size: 0.92rem; margin: 0; }
     .coords { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-faint); }
 
+    /* Cette page vit aussi dans une iframe posée sur le globe. Sans cette ligne,
+       un défilement qui atteint le bas de la feuille se propage au document
+       parent — c'est-à-dire déclenche le « tirer pour rafraîchir » d'Android sur
+       une application qui n'a rien à recharger. */
+    html, body { overscroll-behavior: contain; }
+
     form.lookup { display: flex; gap: 0.5rem; margin: 1.25rem 0 0; }
     form.lookup input {
       flex: 1;
       font: inherit;
+      /* 16 px, et pas `font: inherit` seul : sous 16 px iOS Safari zoome le
+         viewport à la mise au point et ne dézoome jamais. */
+      font-size: 16px;
       padding: 0.5rem 0.7rem;
       border: 1px solid var(--rule);
       border-radius: 6px;
@@ -149,6 +171,11 @@
       border-top: 1px solid var(--rule);
       padding: 0.42rem 0;
       margin: 0;
+      /* Une cellule de grille a `min-width: auto` par défaut, donc elle refuse
+         de descendre sous la largeur de son plus long mot — et « Consommation
+         énergétique primaire » déborde la colonne au lieu de se couper. */
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     dl.rows dt { color: var(--ink-dim); padding-right: 1rem; }
     dl.rows dd { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -177,9 +204,16 @@
     body.embed .sheet { padding: 1.25rem 1.25rem 2rem; min-height: 0; }
     body.embed form.lookup, body.embed .print { display: none; }
 
-    @media (max-width: 40rem) {
+    /* 48rem et non 40. La rupture décidait qu'à 640 px la feuille était encore
+       large ; or la colonne d'étiquettes est un `minmax(9rem, 1fr)` et la
+       valeur de droite un `minmax(6rem, auto)` — soit 15 rem de plancher, plus
+       les marges, avant que quoi que ce soit ne puisse se réduire. Entre 640 et
+       768 px les deux colonnes se serraient jusqu'à ce que les étiquettes
+       débordent. `minmax(0, …)` des deux côtés est ce qui autorise enfin la
+       grille à rétrécir. */
+    @media (max-width: 48rem) {
       .sheet { padding: 1.5rem 1.1rem 2rem; }
-      dl.rows { grid-template-columns: 1fr auto; }
+      dl.rows { grid-template-columns: minmax(0, 1fr) minmax(0, auto); }
     }
 
     @media print {
