@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import trafficLayer, {
+  deriveRoadGraphError,
   deriveTrafficFlowError,
   dutyCycleDelay,
   trafficFeedPresentation,
@@ -145,6 +146,92 @@ test('the rendered steady-state meta line carries the SIMULATED copy', () => {
       })),
     }),
     'DEGRADED · OpenStreetMap · SIMULATED — TomTom daily budget reached',
+  );
+});
+
+test('a superseded road fetch is not an outage either', () => {
+  assert.equal(deriveRoadGraphError({ name: 'AbortError', message: 'aborted' }), null);
+  assert.equal(deriveRoadGraphError(null), null);
+  assert.equal(deriveRoadGraphError(undefined), null);
+});
+
+test('road-graph failures read the proxy status out of fetchRoads own wording', () => {
+  // `fetchRoads` raises `Overpass API returned NNN`, NOT `HTTP NNN` — a parse
+  // borrowed from `deriveTrafficFlowError` would match nothing and every
+  // outage would read as the same generic line.
+  const reason = (message) => deriveRoadGraphError(new Error(message));
+  // Whose 429 it is cannot be known from here: under a retry loop the likeliest
+  // author is our own origin, not OpenStreetMap. It must blame nobody.
+  assert.equal(reason('Overpass API returned 429'), 'Road graph rate limited (HTTP 429)');
+  assert.ok(!/OpenStreetMap|TomTom|Cloudflare/.test(reason('Overpass API returned 429')));
+  assert.equal(reason('Overpass API returned 503'), 'Road graph server busy');
+  assert.equal(reason('Overpass API returned 502'), 'Road graph source unreachable (Overpass)');
+  assert.equal(reason('Overpass API returned 504'), 'Road graph source unreachable (Overpass)');
+  assert.equal(reason('Overpass API returned 418'), 'Road graph error (HTTP 418)');
+  // The shape an aborted-then-rethrown network error actually has.
+  assert.equal(reason('This operation was aborted'), 'Road graph unavailable (Overpass)');
+  assert.equal(deriveRoadGraphError({ status: 502 }), 'Road graph source unreachable (Overpass)');
+});
+
+test('no road graph outranks any flow verdict, keyed or keyless', () => {
+  // 2026-09-16: Overpass was down, the TomTom ribbon still painted, and the row
+  // said "add TomTom key for live" over a city with zero cars in it.
+  const roadDown = 'Road graph source unreachable (Overpass)';
+  for (const feed of [
+    trafficFeedPresentation({ liveMode: false, roadError: roadDown }),
+    trafficFeedPresentation({ liveMode: true, roadError: roadDown }),
+    trafficFeedPresentation({ liveMode: true, flowError: 'TomTom daily budget reached', roadError: roadDown }),
+    trafficFeedPresentation({ liveMode: true, fetching: true, roadError: roadDown }),
+  ]) {
+    assert.ok(feed.error.startsWith(roadDown), feed.error);
+    assert.equal(feed.loadingLabel, feed.error);
+    assert.ok(!/TomTom/.test(feed.error), `flow blamed for a road outage: ${feed.error}`);
+    assert.ok(!LIVE_CLAIM.test(feed.loadingLabel), `outage label implies live data: ${feed.loadingLabel}`);
+  }
+  // `mode` still reports the CONFIGURED source, not this instant's health.
+  assert.equal(trafficFeedPresentation({ liveMode: true, roadError: roadDown }).mode, 'live');
+  assert.equal(trafficFeedPresentation({ liveMode: false, roadError: roadDown }).mode, 'sim');
+});
+
+test('the outage line names the CARS, and does not deny a ribbon that is painted', () => {
+  // The TomTom tiles carry their own geometry and land in ~200 ms, so the
+  // Overpass-down state is coloured roads with nobody on them — which is
+  // precisely what the reader wrote in to ask about. Saying "nothing on screen"
+  // would be false, and saying "TomTom problem" would be false twice.
+  const roadDown = 'Road graph source unreachable (Overpass)';
+  const withRibbon = trafficFeedPresentation({ liveMode: true, roadError: roadDown, ribbonPainted: true });
+  const without = trafficFeedPresentation({ liveMode: true, roadError: roadDown, ribbonPainted: false });
+  assert.match(withRibbon.error, /no vehicles, flow ribbon only/);
+  assert.equal(without.error, `${roadDown} — no vehicles`);
+});
+
+test('a spent retry budget says what brings the layer back', () => {
+  const roadDown = 'Road graph source unreachable (Overpass)';
+  const retrying = trafficFeedPresentation({ liveMode: true, roadError: roadDown });
+  const gaveUp = trafficFeedPresentation({ liveMode: true, roadError: roadDown, roadRetryGaveUp: true });
+  assert.ok(!/move the camera/.test(retrying.error), 'a layer still retrying must not ask for help');
+  assert.match(gaveUp.error, /move the camera to retry/);
+  // Giving up with nothing wrong must stay silent — the flag alone is not an error.
+  assert.equal(trafficFeedPresentation({ liveMode: true, roadRetryGaveUp: true }).error, null);
+});
+
+test('a road outage reads UNAVAILABLE with nothing drawn, DEGRADED once something was', () => {
+  // The chip colour is not a detail: with zero dots and no prior load the layer
+  // IS unavailable, and calling that "degraded" would promise data that is not
+  // there. `layerFeedState` draws the line on prior data, not on the message.
+  const mgr = new DataLayerManager({});
+  const feed = trafficFeedPresentation({
+    liveMode: true,
+    roadError: 'Road graph source unreachable (Overpass)',
+  });
+  assert.equal(layerFeedState({ count: 0, lastUpdate: null, ...feed }), 'unavailable');
+  assert.equal(layerFeedState({ count: 0, lastUpdate: Date.now(), ...feed }), 'degraded');
+  assert.equal(
+    mgr._buildMetaText({
+      source: 'OpenStreetMap',
+      stats: { count: 0, lastUpdate: Date.now(), ...feed, retryInSec: 24 },
+    }),
+    'DEGRADED · OpenStreetMap · Road graph source unreachable (Overpass) — no vehicles · nouvelle tentative dans 24 s',
   );
 });
 

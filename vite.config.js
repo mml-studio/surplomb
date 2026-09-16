@@ -68,6 +68,7 @@ import {
   OSM_CAMERA_MAX_BOX_DEG,
   OSM_CAMERA_QUERY_CAP,
 } from './src/data/osmCameras.js';
+import { createRotationCursor, mirrorProfile } from './src/data/overpassMirrors.js';
 import {
   isValidTileCoord as isValidTomTomTile,
   utcDayKey as tomtomUtcDayKey,
@@ -911,6 +912,39 @@ const OVERPASS_RATE_LIMIT_BACKOFF_MS = Object.freeze([1_500, 4_000]);
 const OVERPASS_OUTAGE_COOLDOWN_MS = 60_000;
 /** @type {{until: number}} Epoch-ms before which no mirror is contacted. */
 const _overpassOutage = { until: 0 };
+/**
+ * Per-mirror health, alongside — not instead of — the global parking above.
+ *
+ * The two cover different outages and neither subsumes the other. The global
+ * one is armed only when NO payload came back from anybody (see the bottom of
+ * `fetchOverpassPayload`), and a 429 DOES come back as a payload — so the
+ * global parking is structurally blind to the exact failure measured on
+ * 2026-09-16, where FOSSGIS refused while `overpass.private.coffee` went on
+ * costing 22 s of timeout on every single request for 54 minutes.
+ *
+ * Shared by both production callers (the generic `/api/overpass` proxy and the
+ * mapped-installations proxy), which is the point: one host's outage is learned
+ * once per server, not once per layer. Tests inject their own Map — a
+ * module-level default that leaked between them would make attempt counts
+ * depend on file order.
+ *
+ * @type {Map<string, {fails:number, until:number, lastOkAt:number, lastLatencyMs:number|null}>}
+ */
+const _overpassMirrorHealth = new Map();
+
+/**
+ * Forget every mirror's health.
+ *
+ * Exported for tests, and not as a convenience: the middleware path calls
+ * `fetchOverpassPayload` with NO injected deps, so it reaches the module-level
+ * map above and parks the three REAL production hosts for twenty seconds of
+ * wall time. A suite that relies on hand-passing a fresh Map at every call site
+ * is one new test away from being order-dependent.
+ */
+export function resetOverpassMirrorHealth() {
+  _overpassMirrorHealth.clear();
+  _overpassOutage.until = 0;
+}
 /** @type {number} Slots currently held by in-flight rotations. */
 let _overpassSlotsInUse = 0;
 /** @type {Array<{settled: boolean, timer: ?ReturnType<typeof setTimeout>, grant: () => boolean}>} */
@@ -1001,8 +1035,41 @@ const OVERPASS_DISK_TTL_MS = 7 * 86_400_000;
 const OVERPASS_BOUNDARY_DISK_TTL_MS = 30 * 86_400_000;
 /** Disk-cache directory for Overpass responses. */
 const OVERPASS_DISK_DIR = path.join(process.cwd(), '.gev-cache', 'overpass');
-/** Per-upstream fetch timeout (ms). */
+/** Per-upstream fetch timeout (ms) — the budget for the FIRST mirror of a pass. */
 const OVERPASS_TIMEOUT_MS = 22000;
+/**
+ * Budget for every mirror AFTER the first one in a pass.
+ *
+ * A fallback mirror is only ever reached because the mirror before it did not
+ * answer, so the caller has already waited once and a shorter leash is the
+ * honest trade. 12 s catches the warm half of the 5–20 s cold window measured
+ * for `overpass.private.coffee` and abandons the cold tail instead of paying
+ * 22 s for nothing — measured 2026-09-16, it had not answered at 30 s either.
+ *
+ * It applies by RANK, not by name: with FOSSGIS parked, private.coffee becomes
+ * rank 0 of its pass and gets the full 22 s.
+ */
+const OVERPASS_FALLBACK_TIMEOUT_MS = 12_000;
+/**
+ * Ceiling on ONE rotation, backoffs included — what the caller actually waits.
+ *
+ * The proxy already refuses to ask a mirror for more than 30 s of server work
+ * (`OVERPASS_MAX_QL_TIMEOUT`), so spending more than 30 s of wall time means
+ * betting on mirrors nobody asked to work that long. Measured 2026-09-16, the
+ * degraded case cost 394 ms + 13.1 s + 22 s per pass and the loop ran three
+ * passes: 112 s per uncached query, nine upstream requests, every one of them
+ * feeding the quota that caused the refusal. Past 30 s the serve-stale path has
+ * a disk entry 7 to 30 days old, which beats another 22 s gamble.
+ */
+const OVERPASS_ROTATION_BUDGET_MS = 30_000;
+/**
+ * Floor below which an attempt is not worth starting.
+ *
+ * Same shape as `OSM_CAMERA_MIN_ATTEMPT_MS` and `POWER_GRID_MIN_ATTEMPT_MS`,
+ * sized lower because this rotation also carries the small road boxes whose
+ * healthy answer is 394 ms — 3 s is 7.6× that.
+ */
+const OVERPASS_MIRROR_MIN_ATTEMPT_MS = 3_000;
 /** Max entries in the Overpass response cache (LRU-like, oldest evicted first). */
 const OVERPASS_CACHE_MAX_ENTRIES = 120;
 /** @type {Map<string,{status:number,body:string,contentType:string,endpoint:string,cachedAt:number}>} */
@@ -12240,11 +12307,26 @@ export function overpassAttemptDisposition({ status, rateLimited, runtimeError }
  * mirror. If all mirrors fail, returns the last rate-limited payload, else the
  * last 4xx payload, else throws the last error.
  *
+ * THREE THINGS BOUND THE COST, and they are separate on purpose:
+ *  - a mirror that keeps failing is PARKED (`overpassMirrors.js`), so its
+ *    timeout is paid once rather than on every request for the length of the
+ *    outage;
+ *  - a rate limit SUPPRESSES ITS WHOLE MACHINE for the rest of that pass,
+ *    because `lz4.overpass-api.de` and `overpass-api.de` are one host and a 429
+ *    is a verdict on our IP — measured 2026-09-16, asking the second facade
+ *    cost 13.1 s to re-learn the first's answer;
+ *  - the rotation carries ONE deadline, so the caller's wait is bounded even
+ *    when every mirror is merely slow.
+ *
  * @param {string} body - URL-encoded Overpass QL query body.
  * @param {number} [maxResponseBytes] Endpoint-specific response cap.
  * @param {object} [deps] Injection seam for tests.
  * @param {Array<string>} [deps.endpoints] Mirrors to try, in order.
  * @param {typeof fetch} [deps.fetchImpl] Fetch implementation.
+ * @param {Map} [deps.mirrorHealth] Per-mirror memory. Tests MUST pass their own.
+ * @param {number} [deps.rotationBudgetMs] Ceiling on one rotation, backoffs included.
+ * @param {number} [deps.mirrorTimeoutMs] Budget for the first attempt of a pass.
+ * @param {number} [deps.fallbackTimeoutMs] Budget for every attempt after it.
  * @returns {Promise<{status:number,body:string,contentType:string,endpoint:string,rateLimited:boolean}>}
  */
 export async function fetchOverpassPayload(
@@ -12258,6 +12340,12 @@ export async function fetchOverpassPayload(
     outage = _overpassOutage,
     now = Date.now,
     outageCooldownMs = OVERPASS_OUTAGE_COOLDOWN_MS,
+    mirrorHealth = _overpassMirrorHealth,
+    rotationBudgetMs = OVERPASS_ROTATION_BUDGET_MS,
+    mirrorTimeoutMs = OVERPASS_TIMEOUT_MS,
+    fallbackTimeoutMs = OVERPASS_FALLBACK_TIMEOUT_MS,
+    minAttemptMs = OVERPASS_MIRROR_MIN_ATTEMPT_MS,
+    setTimeoutImpl = setTimeout,
   } = {},
 ) {
   if (now() < outage.until) {
@@ -12277,15 +12365,48 @@ export async function fetchOverpassPayload(
   // a mirror reported a RATE LIMIT, because that is the one verdict a fresh
   // rotation cannot fix and a short wait can (the mirrors share a per-IP slot
   // budget, so "try the next one" answers the same 429).
+  // Every decision about WHO to ask and FOR HOW LONG lives in the cursor
+  // (`overpassMirrors.js`), where a test reaches it without a server. This loop
+  // owns the socket and nothing else.
+  const cursor = createRotationCursor({
+    endpoints,
+    health: mirrorHealth,
+    now,
+    budgetMs: rotationBudgetMs,
+    timeoutMs: mirrorTimeoutMs,
+    fallbackTimeoutMs,
+    minAttemptMs,
+  });
   for (let attempt = 0; ; attempt += 1) {
     let rateLimitedThisRound = false;
     // False = the queue budget expired; proceed ungated rather than fail, and
     // release nothing on the way out.
     const holdsSlot = await acquireOverpassSlot();
     try {
-      for (const endpoint of endpoints) {
+      // AFTER the slot, deliberately. Waiting in our own queue is not time
+      // spent talking to a mirror, and charging it to the rotation budget turns
+      // a busy local moment into "every mirror is dead" — a 60 s global parking
+      // for every layer, which is the exact failure the queue exists to avoid.
+      cursor.newPass();
+      for (;;) {
+        const turn = cursor.next();
+        if (turn.done) break;
+        const { endpoint, group, timeoutMs: attemptMs } = turn;
+        const startedAt = now();
+        const noteOutcome = (disposition) => {
+          const { parked, entry } = cursor.note(group, disposition, { latencyMs: now() - startedAt });
+          // One line per PARKING, not per skip: an operator needs to know a host
+          // dropped out of the rotation, not that it stayed out.
+          if (parked) {
+            console.warn(
+              `[Overpass Proxy] parking ${group} (${mirrorProfile(endpoint).host}) for `
+              + `${Math.round((entry.until - now()) / 1000)}s after ${entry.fails} `
+              + `consecutive failures (${disposition})`,
+            );
+          }
+        };
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+        const timeoutId = setTimeoutImpl(() => controller.abort(), attemptMs);
 
         try {
           const upstream = await fetchImpl(endpoint, {
@@ -12313,14 +12434,22 @@ export async function fetchOverpassPayload(
           };
 
           const disposition = overpassAttemptDisposition(payload);
+          noteOutcome(disposition);
           if (disposition === 'rate-limited') {
             lastRateLimitPayload = payload;
             rateLimitedThisRound = true;
+            // `note` took the MACHINE out of this pass. Measured 2026-09-16:
+            // asking `lz4.overpass-api.de` after `overpass-api.de` refused cost
+            // 13.1 s to receive the same 429 — and one more request against the
+            // very quota that produced it.
             continue;
           }
           if (disposition === 'runtime-error') {
             sawServerJudgement = true;
             lastError = new Error(`Overpass runtime error (${endpoint})`);
+            // Neither suppressed nor parked: a runtime error is per-QUERY, and
+            // the second FOSSGIS facade is listed adjacent precisely so that
+            // re-asking the same backend is a real retry for it.
             continue;
           }
           if (disposition === 'client-error') {
@@ -12340,6 +12469,10 @@ export async function fetchOverpassPayload(
           return payload;
         } catch (error) {
           lastError = error;
+          // A timeout and a refused connection are the same thing to the
+          // rotation: this host did not answer, and it should stop being asked
+          // for a while.
+          noteOutcome('throw');
         } finally {
           clearTimeout(timeoutId);
         }
@@ -12351,7 +12484,11 @@ export async function fetchOverpassPayload(
     // Hold no slot while waiting — the point of the wait is to let the budget
     // recover, which cannot happen if this rotation is still occupying it.
     if (!rateLimitedThisRound || attempt >= rateLimitBackoffMs.length) break;
-    await sleep(rateLimitBackoffMs[attempt]);
+    // A wait we cannot afford to follow with an attempt is pure added latency:
+    // the budget has to cover the sleep AND leave room for one real try.
+    const backoffMs = rateLimitBackoffMs[attempt];
+    if (!cursor.canAffordBackoff(backoffMs)) break;
+    await sleep(backoffMs);
   }
 
   // Every mirror refused. A rate-limit answer is the most actionable thing the
@@ -12364,7 +12501,13 @@ export async function fetchOverpassPayload(
   // reaches its stale cache, rather than paying the same 45 s of timeouts over.
   // Unless a mirror answered with a runtime error — then the mirrors are alive
   // and only THIS query was too heavy, which is nobody else's problem.
-  if (!sawServerJudgement) outage.until = now() + outageCooldownMs;
+  // Only a rotation that actually ASKED can conclude the world is down. A
+  // rotation that contacted nobody — because the budget was gone, or every
+  // machine was already parked — proves nothing, and arming the global parking
+  // on it would blind every Overpass layer for a minute over our own queue.
+  if (!sawServerJudgement && cursor.startedCount > 0 && !cursor.stoppedOnBudget) {
+    outage.until = now() + outageCooldownMs;
+  }
   if (!lastError) throw new Error('All Overpass upstreams failed');
   // Name the rotation in the message. Callers log what they catch, and the bare
   // cause a dead mirror leaves behind ("This operation was aborted") names no
@@ -12475,7 +12618,17 @@ function overpassProxy() {
             return;
           }
           _overpassConcurrent += 1;
-          const requestPromise = fetchOverpassPayload(safeBody)
+          // BOUNDARY PIVOTS GET A LONGER LEASH, and it is not a preference.
+          // They return multi-MB coastline geometry and take 10-25 s on public
+          // mirrors, and their 30-day disk TTL means each one is fetched
+          // roughly once per machine, EVER. So the serve-stale path that makes
+          // a short budget safe for road boxes does not exist for them: there
+          // is no previous success to fall back on, and cutting the first
+          // attempt short is cutting the only attempt.
+          const boundaryClass = isOverpassBoundaryQuery(cacheKey);
+          const requestPromise = fetchOverpassPayload(safeBody, OVERPASS_MAX_RESPONSE_BYTES, boundaryClass
+            ? { rotationBudgetMs: 60_000, fallbackTimeoutMs: OVERPASS_TIMEOUT_MS }
+            : undefined)
             .then((payload) => {
               // Cache SUCCESS only. The old `< 500` test admitted 4xx, so a
               // front-end refusal (the 406 above) was written to memory AND to

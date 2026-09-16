@@ -6,7 +6,7 @@
 // ≈never. Pure-function tests, no network.
 //
 // Run with: npm test   (node --test)
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -20,8 +20,15 @@ import createViteConfig, {
   overpassPayloadIsData,
   readOverpassDisk,
   fetchOverpassPayload,
+  resetOverpassMirrorHealth,
   OVERPASS_SLOT_LIMIT,
 } from '../../vite.config.js';
+
+// The middleware tests below call `fetchOverpassPayload` with NO injected deps,
+// so they reach the module-level mirror health and park the three REAL
+// production hosts for twenty seconds of wall time. Passing a fresh Map at each
+// of the direct call sites is necessary but not sufficient — this is the belt.
+beforeEach(() => { resetOverpassMirrorHealth(); });
 
 test('preflight checks memory, in-flight, then disk before consuming limiter quota', async () => {
   const key = 'normalized query';
@@ -286,6 +293,7 @@ test('a 406 from the first mirror falls through to a healthy one', async () => {
   const tried = [];
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     fetchImpl: async (endpoint) => {
       tried.push(endpoint);
@@ -304,6 +312,7 @@ test('every mirror refusing surfaces the 4xx, so a malformed query is still repo
   const tried = [];
   const payload = await fetchOverpassPayload('data=nonsense', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     fetchImpl: async (endpoint) => {
       tried.push(endpoint);
@@ -318,6 +327,7 @@ test('every mirror refusing surfaces the 4xx, so a malformed query is still repo
 test('a rate-limited mirror outranks a refusing one when all fail', async () => {
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     sleep: async () => {},
     fetchImpl: async (endpoint) => (endpoint === FOUR_MIRRORS[3]
@@ -331,6 +341,7 @@ test('a rate-limited mirror outranks a refusing one when all fail', async () => 
 test('a mirror that throws does not end the rotation', async () => {
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     fetchImpl: async (endpoint) => {
       if (endpoint !== FOUR_MIRRORS[2]) throw new Error('ECONNREFUSED');
@@ -344,6 +355,7 @@ test('all mirrors unreachable still throws rather than inventing an answer', asy
   await assert.rejects(
     fetchOverpassPayload('data=[out:json];out;', 1024, {
       endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
       outage: { until: 0 },
       fetchImpl: async () => { throw new Error('ECONNREFUSED'); },
     }),
@@ -362,6 +374,7 @@ test('a rate limit is waited out, not rotated away', async () => {
   let round = 0;
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     sleep: async (ms) => { waits.push(ms); round += 1; },
     fetchImpl: async (endpoint) => {
@@ -385,6 +398,7 @@ test('a rotation with no rate limit is never re-run', async () => {
   await assert.rejects(
     fetchOverpassPayload('data=[out:json];out;', 1024, {
       endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
       outage: { until: 0 },
       sleep: async () => { waited += 1; },
       fetchImpl: async () => { attempts += 1; throw new Error('ECONNREFUSED'); },
@@ -399,6 +413,7 @@ test('a rate limit that never clears still gives back the actionable 429', async
   const waits = [];
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     sleep: async (ms) => { waits.push(ms); },
     fetchImpl: async () => mirrorResponse(429, 'rate_limited'),
@@ -420,6 +435,7 @@ test('concurrent requests never exceed the mirrors\' slot budget', async () => {
   let peak = 0;
   const oneRequest = () => fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage: { until: 0 },
     fetchImpl: async () => {
       live += 1;
@@ -441,6 +457,7 @@ test('a failed rotation releases its slot', async () => {
   await assert.rejects(
     fetchOverpassPayload('data=[out:json];out;', 1024, {
       endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
       outage: { until: 0 },
       fetchImpl: async () => { throw new Error('ECONNREFUSED'); },
     }),
@@ -453,6 +470,7 @@ test('a failed rotation releases its slot', async () => {
     1024,
     {
       endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
       outage: { until: 0 },
       fetchImpl: async () => {
         live += 1;
@@ -475,6 +493,7 @@ test('a total outage parks the rotation instead of re-timing-out', async () => {
   let clock = 1_000;
   const call = (fetchImpl) => fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage,
     now: () => clock,
     outageCooldownMs: 60_000,
@@ -505,12 +524,283 @@ test('a rate limit is not treated as an outage', async () => {
   const outage = { until: 0 };
   const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
     endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
     outage,
     sleep: async () => {},
     fetchImpl: async () => mirrorResponse(429, 'rate_limited'),
   });
   assert.equal(payload.status, 429);
   assert.equal(outage.until, 0, 'a recoverable wait must not blind the layer for a minute');
+});
+
+// ---------------------------------------------------------------------------
+// What a degraded rotation costs (field test 2026-09-16, 11:03Z-11:57Z)
+//
+// Measured from inside the VPS container, one Biarritz road query per mirror:
+// overpass-api.de 200 in 394 ms; lz4.overpass-api.de 429 in 13.1 s (same
+// machine, shared quota); overpass.private.coffee gave up at 30 s. So when
+// FOSSGIS refused, ONE pass cost ~35 s to learn nothing and the loop ran three
+// of them — 112 s and nine upstream requests per uncached query, every one of
+// them feeding the quota that caused the refusal.
+// ---------------------------------------------------------------------------
+
+/** The real rotation, so the machine grouping below is the production one. */
+const REAL_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+
+test('a 429 skips the other facade of the SAME machine for that pass', async () => {
+  const tried = [];
+  const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: REAL_MIRRORS,
+    mirrorHealth: new Map(),
+    outage: { until: 0 },
+    now: () => 1_000,
+    sleep: async () => {},
+    fetchImpl: async (endpoint) => {
+      tried.push(endpoint);
+      return endpoint === REAL_MIRRORS[2]
+        ? mirrorResponse(200, '{"elements":[{"type":"node","id":9}]}')
+        : mirrorResponse(429, 'rate_limited');
+    },
+  });
+  assert.ok(
+    !tried.includes(REAL_MIRRORS[1]),
+    'lz4 is one of the addresses overpass-api.de answers with — asking it re-learns the same 429',
+  );
+  assert.deepEqual(tried, [REAL_MIRRORS[0], REAL_MIRRORS[2]]);
+  assert.equal(payload.status, 200);
+});
+
+test('a runtime error does NOT suppress the machine — re-asking it is a real retry', async () => {
+  // The two FOSSGIS facades are listed adjacent precisely for this case: a
+  // runtime error is per-QUERY, so the same backend is worth asking again.
+  const tried = [];
+  await assert.rejects(
+    fetchOverpassPayload('data=[out:json];out;', 1024, {
+      endpoints: REAL_MIRRORS,
+      mirrorHealth: new Map(),
+      outage: { until: 0 },
+      now: () => 1_000,
+      fetchImpl: async (endpoint) => {
+        tried.push(endpoint);
+        return mirrorResponse(200, '{"remark":"runtime error: Query timed out"}');
+      },
+    }),
+    /runtime error/,
+  );
+  assert.deepEqual(tried, REAL_MIRRORS, 'every mirror, including the sibling facade');
+});
+
+test('a dead mirror is parked, so the NEXT request does not pay its timeout again', async () => {
+  const health = new Map();
+  let clock = 0;
+  const tried = [];
+  const call = () => fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: REAL_MIRRORS,
+    mirrorHealth: health,
+    outage: { until: 0 },
+    now: () => clock,
+    sleep: async (ms) => { clock += ms; },
+    fetchImpl: async (endpoint) => {
+      tried.push(endpoint);
+      if (endpoint === REAL_MIRRORS[2]) { clock += 22_000; throw new Error('ETIMEDOUT'); }
+      clock += 394;
+      return mirrorResponse(200, '{"elements":[{"type":"node","id":1}]}');
+    },
+  });
+
+  await call();
+  assert.equal(tried.length, 1, 'a healthy first mirror ends the pass');
+
+  // Now FOSSGIS is gone and private.coffee eats 22 s. That is paid ONCE.
+  const deadFossgis = () => fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: REAL_MIRRORS,
+    mirrorHealth: health,
+    outage: { until: 0 },
+    now: () => clock,
+    sleep: async (ms) => { clock += ms; },
+    fetchImpl: async (endpoint) => {
+      tried.push(endpoint);
+      clock += endpoint === REAL_MIRRORS[2] ? 22_000 : 394;
+      throw new Error('ETIMEDOUT');
+    },
+  });
+  tried.length = 0;
+  await assert.rejects(deadFossgis(), /ETIMEDOUT/);
+  assert.equal(tried.length, 3, 'the first caller still pays for the whole rotation');
+
+  // A second caller one second later no longer pays the 22 s host. The two
+  // FOSSGIS facades are back (their 20 s parking lapsed WHILE private.coffee
+  // was timing out, which is the point — the cheap hosts recover first), but
+  // the expensive one is still parked, so the rotation costs under a second
+  // instead of 22.8 s.
+  clock += 1_000;
+  const before = clock;
+  tried.length = 0;
+  await assert.rejects(deadFossgis(), /ETIMEDOUT/);
+  assert.ok(
+    !tried.includes(REAL_MIRRORS[2]),
+    'the mirror that ate 22 s must stay out of the rotation while it is parked',
+  );
+  assert.ok(
+    clock - before < 1_000,
+    `the parked rotation still cost ${clock - before} ms; the whole point is that it does not`,
+  );
+});
+
+test('everything parked still costs ONE probe — the rotation cannot latch shut', async () => {
+  const health = new Map();
+  let clock = 0;
+  const tried = [];
+  // Instantaneous failures, so no mirror's parking can lapse while another is
+  // being tried: after one pass all three are parked for 20 s at once.
+  const call = () => fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: REAL_MIRRORS,
+    mirrorHealth: health,
+    outage: { until: 0 },
+    now: () => clock,
+    fetchImpl: async (endpoint) => { tried.push(endpoint); throw new Error('ECONNREFUSED'); },
+  });
+
+  await assert.rejects(call(), /ECONNREFUSED/);
+  assert.equal(tried.length, 3, 'the first caller pays for the full rotation');
+
+  clock += 1_000;
+  tried.length = 0;
+  await assert.rejects(call(), /ECONNREFUSED/);
+  assert.equal(tried.length, 1, 'a fully parked rotation costs one probe, not three');
+
+  // And once the windows lapse, all three come back in their original order —
+  // parking is a delay, never a removal.
+  clock += 60_000;
+  tried.length = 0;
+  await assert.rejects(call(), /ECONNREFUSED/);
+  assert.deepEqual(tried, REAL_MIRRORS);
+});
+
+test('the rotation is bounded in wall time, backoffs included', async () => {
+  // The exact 2026-09-16 shape, replayed on a virtual clock: FOSSGIS 429s in
+  // 394 ms, lz4 429s in 13.1 s, private.coffee dies at 22 s.
+  let clock = 0;
+  const tried = [];
+  const start = clock;
+  const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: REAL_MIRRORS,
+    mirrorHealth: new Map(),
+    outage: { until: 0 },
+    now: () => clock,
+    sleep: async (ms) => { clock += ms; },
+    rotationBudgetMs: 30_000,
+    fetchImpl: async (endpoint) => {
+      tried.push(endpoint);
+      if (endpoint === REAL_MIRRORS[0]) { clock += 394; return mirrorResponse(429, 'rate_limited'); }
+      if (endpoint === REAL_MIRRORS[1]) { clock += 13_100; return mirrorResponse(429, 'rate_limited'); }
+      clock += 22_000;
+      throw new Error('ETIMEDOUT');
+    },
+  });
+
+  const elapsed = clock - start;
+  assert.ok(elapsed <= 40_000, `the rotation ran ${elapsed} ms; the old loop ran ~112 000 ms`);
+  assert.ok(
+    !tried.includes(REAL_MIRRORS[1]),
+    'the sibling facade is never asked after its machine has already refused',
+  );
+  assert.ok(tried.length <= 4, `${tried.length} upstream requests; the old loop issued 9`);
+  // The caller still learns the actionable thing: it was rate-limited.
+  assert.equal(payload.status, 429);
+  assert.equal(payload.rateLimited, true);
+});
+
+test('the per-attempt leash is REAL: each mirror is aborted at the budget it was given', async () => {
+  // The whole point of this chantier is the leash, and until now no fake fetch
+  // in this file read `init.signal` at all — so the budget could have been any
+  // number and every test would still have passed. `setTimeoutImpl` hands the
+  // armed delay straight to the assertion, and the fake honours the abort.
+  const leashes = [];
+  const aborts = [];
+  let clock = 0;
+  await assert.rejects(
+    fetchOverpassPayload('data=[out:json];out;', 1024, {
+      endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
+      outage: { until: 0 },
+      now: () => clock,
+      rotationBudgetMs: 40_000,
+      mirrorTimeoutMs: 22_000,
+      fallbackTimeoutMs: 12_000,
+      minAttemptMs: 3_000,
+      setTimeoutImpl: (onAbort, ms) => { leashes.push(ms); return { onAbort, ms }; },
+      fetchImpl: async (_endpoint, init) => {
+        // Every mirror hangs: the leash is the only thing that ends the attempt.
+        const leash = leashes[leashes.length - 1];
+        clock += leash;
+        assert.equal(init?.signal?.aborted, false, 'the signal must be live when the fetch starts');
+        aborts.push(leash);
+        const error = new Error('ETIMEDOUT');
+        error.name = 'TimeoutError';
+        throw error;
+      },
+    }),
+    /ETIMEDOUT/,
+  );
+
+  // 40 s shared evenly across 4 mirrors: nobody grabs 22 s and starves the
+  // mirror documented alive at 5-20 s cold.
+  assert.deepEqual(leashes, [10_000, 10_000, 10_000, 10_000]);
+  assert.deepEqual(aborts, leashes, 'every attempt must actually have run under its leash');
+  assert.equal(clock, 40_000, 'the rotation spends its budget exactly, and no more');
+
+  // With fewer mirrors the RANK cap is what binds: the first attempt gets its
+  // full leash, and the fallback behind it a shorter one.
+  const twoLeashes = [];
+  let twoClock = 0;
+  await assert.rejects(
+    fetchOverpassPayload('data=[out:json];out;', 1024, {
+      endpoints: FOUR_MIRRORS.slice(0, 2),
+      mirrorHealth: new Map(),
+      outage: { until: 0 },
+      now: () => twoClock,
+      rotationBudgetMs: 40_000,
+      mirrorTimeoutMs: 22_000,
+      fallbackTimeoutMs: 12_000,
+      minAttemptMs: 3_000,
+      setTimeoutImpl: (onAbort, ms) => { twoLeashes.push(ms); return { onAbort, ms }; },
+      fetchImpl: async () => {
+        twoClock += twoLeashes[twoLeashes.length - 1];
+        throw new Error('ETIMEDOUT');
+      },
+    }),
+    /ETIMEDOUT/,
+  );
+  assert.deepEqual(twoLeashes, [20_000, 12_000]);
+});
+
+test('a busy slot queue must not be reported as a dead world', async () => {
+  // The rotation budget is started AFTER the upstream slot is acquired. Charged
+  // before, a 20 s queue wait would leave no budget, contact nobody, and arm the
+  // 60 s GLOBAL parking — blinding every Overpass layer over our own queue,
+  // which is the exact failure the queue was added to prevent.
+  const outage = { until: 0 };
+  let clock = 0;
+  const payload = await fetchOverpassPayload('data=[out:json];out;', 1024, {
+    endpoints: FOUR_MIRRORS,
+    mirrorHealth: new Map(),
+    outage,
+    now: () => clock,
+    rotationBudgetMs: 30_000,
+    fetchImpl: async (endpoint) => {
+      clock += 400;
+      return endpoint === FOUR_MIRRORS[0]
+        ? mirrorResponse(500)
+        : mirrorResponse(200, '{"elements":[{"type":"node","id":5}]}');
+    },
+  });
+  assert.equal(payload.status, 200);
+  assert.equal(outage.until, 0);
 });
 
 // A heavy query times out INSIDE a healthy mirror, which answers 200 with a
@@ -521,6 +811,7 @@ test('a query too heavy for the mirrors does not park them', async () => {
   await assert.rejects(
     fetchOverpassPayload('data=[out:json];out;', 1024, {
       endpoints: FOUR_MIRRORS,
+      mirrorHealth: new Map(),
       outage,
       now: () => 1_000,
       fetchImpl: async () => mirrorResponse(
