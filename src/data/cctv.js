@@ -110,6 +110,7 @@ import {
 } from './osmCameras.js';
 import { pickAt } from './pickAt.js';
 import { overlayLabelPadPx } from './overlayLabelPick.js';
+import { isCoarseInput } from '../inputMode.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -3251,6 +3252,11 @@ function pushAmbientCardEntries() {
  * @param {Cesium.Cartesian2} position - Pointer position (CSS px).
  */
 function handleHoverMove(position) {
+  // A finger has no hover. Whatever synthesized this move (a pan, a tap's own
+  // trailing move) is not a reader pointing at a camera, and the tap path
+  // already does strictly more than this preview — it ACTIVATES the camera.
+  // Skipping here spends zero picks per pan instead of eight a second.
+  if (isCoarseInput()) return;
   if (!_enabled || _cameraMoving || _calibrationMode || !position) return;
   if (!_viewer || _viewer.isDestroyed()) return;
   const now = Date.now();

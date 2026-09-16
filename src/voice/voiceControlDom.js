@@ -40,6 +40,14 @@ export function createVoiceControl({ reset = false } = {}) {
       <div class="gev-voice-heading">
         <div class="gev-voice-kicker">AI AGENT</div>
         <div id="gev-voice-status">OFF</div>
+        <!--
+          The help tray is the ONLY place that says how the mic is used, and it
+          opens on hover or on a focus ring — neither of which a touchscreen
+          produces. On a phone the feature was documented in a surface nobody
+          could reach. This button is that surface; it is hidden for a cursor,
+          which already gets the tray by pointing at the panel.
+        -->
+        <button id="gev-voice-help-btn" class="gev-voice-help-btn" type="button" aria-label="Aide vocale" aria-expanded="false" aria-controls="gev-voice-help" title="Aide vocale">?</button>
         <div class="gev-voice-cost">
           <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="Voice model tier — applies next session">STD</button>
           <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
@@ -116,6 +124,7 @@ export function createVoiceControl({ reset = false } = {}) {
     voiceRow: root.querySelector('.gev-voice-transcript-voice'),
     voicePicker: root.querySelector('.gev-voice-picker'),
     voicePreview: root.querySelector('.gev-voice-preview'),
+    helpButton: root.querySelector('#gev-voice-help-btn'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
   };

@@ -2482,6 +2482,10 @@ export class StyleManager {
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
+    this._mapStackStatus?.addEventListener('click', () => {
+      const trouble = this._mapStackStatus?.dataset.trouble;
+      if (trouble) this._showToast(trouble, { durationMs: 5000 });
+    });
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
@@ -2865,6 +2869,7 @@ export class StyleManager {
     this._initShareButton();
     this._initClearSelectedLayersButton();
     this._initResetGlobeButton();
+    this._initTrackingReleaseButton();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._applyGlobalPostDefaults();
@@ -3752,6 +3757,12 @@ export class StyleManager {
       const trouble = state.lastError || state.notice || '';
       this._mapStackStatus.classList.toggle('warn', !!trouble);
       this._mapStackStatus.title = trouble || (stack?.label || '');
+      // A tooltip is not a delivery mechanism on a touchscreen: the ONLY place
+      // that says why the map source failed was a `title`, which a finger can
+      // never summon. The cause now rides on the element and a tap reads it out
+      // — the chip already carries the warning colour that invites the tap.
+      if (trouble) this._mapStackStatus.dataset.trouble = trouble;
+      else delete this._mapStackStatus.dataset.trouble;
     }
   }
 
@@ -10024,52 +10035,67 @@ export class StyleManager {
       }
     });
 
-    // Search submit on Enter
-    this._locationSearch.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
-        const query = this._locationSearch.value.trim();
-        if (!query) return;
-        const generation = this._beginDeferredNavigation('location');
-        if (generation === false) {
-          this._locationSearch.classList.remove('searching');
-          this._locationSearch.blur();
-          return;
-        }
-        this._activeLocationSearchGeneration = generation;
-        this._locationSearch.classList.add('searching');
-        try {
-          const destination = await searchAndFlyTo(this.viewer, query, {
-            beforeFly: () => this._reassertNavigationHandoff(generation),
-          });
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          if (destination?.cancelled) {
-            // Authority changed while the lookup was resolving; remain inert.
-          } else if (destination) {
-            // The ACTIVE STYLE indicator reports the STYLE and nothing else.
-            // Writing the searched city here made the top-right corner read
-            // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
-            // LOCATION panel's own readout, which is updated below.
-            //
-            // Set before _setActiveLocation(null) so its own mini-status
-            // refresh already sees the destination — the readout never blinks
-            // through "Location: --" on the way to the searched place.
-            this._searchedLocationLabel = destination.label || query;
-            this._setActiveLocation(null);
-            this._currentPoi = null;
-            this._collapsePOIRow();
-            this._updateLocationMiniStatus();
-          } else {
-            this._showToast('Location not found');
-          }
-        } catch (err) {
-          console.error('[Search] Geocoding failed:', err);
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          this._showToast('Search failed');
-        } finally {
-          this._settleLocationSearchUi(generation);
-        }
-      }
+    // Search submit: the FORM owns it now, so the soft keyboard's "search" key,
+    // the hardware Enter and the button beside the field are one code path.
+    // Binding `keydown` here as well would fire the lookup twice.
+    this._locationSearchForm = document.getElementById('location-search-form');
+    this._locationSearchForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this._submitLocationSearch();
     });
+  }
+
+  /**
+   * Run whatever is in the location field.
+   *
+   * Extracted from the Enter handler it used to be so that a submit button and
+   * a soft keyboard's own action key reach the same place: on a phone there is
+   * no visible Enter until the field declares `enterkeyhint`, and a reader who
+   * does not find it had no way to search at all.
+   * @returns {Promise<void>}
+   */
+  async _submitLocationSearch() {
+    const query = this._locationSearch.value.trim();
+    if (!query) return;
+    const generation = this._beginDeferredNavigation('location');
+    if (generation === false) {
+      this._locationSearch.classList.remove('searching');
+      this._locationSearch.blur();
+      return;
+    }
+    this._activeLocationSearchGeneration = generation;
+    this._locationSearch.classList.add('searching');
+    try {
+      const destination = await searchAndFlyTo(this.viewer, query, {
+        beforeFly: () => this._reassertNavigationHandoff(generation),
+      });
+      if (this._disposed || generation !== this._navigationGeneration) return;
+      if (destination?.cancelled) {
+        // Authority changed while the lookup was resolving; remain inert.
+      } else if (destination) {
+        // The ACTIVE STYLE indicator reports the STYLE and nothing else.
+        // Writing the searched city here made the top-right corner read
+        // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
+        // LOCATION panel's own readout, which is updated below.
+        //
+        // Set before _setActiveLocation(null) so its own mini-status
+        // refresh already sees the destination — the readout never blinks
+        // through "Location: --" on the way to the searched place.
+        this._searchedLocationLabel = destination.label || query;
+        this._setActiveLocation(null);
+        this._currentPoi = null;
+        this._collapsePOIRow();
+        this._updateLocationMiniStatus();
+      } else {
+        this._showToast('Location not found');
+      }
+    } catch (err) {
+      console.error('[Search] Geocoding failed:', err);
+      if (this._disposed || generation !== this._navigationGeneration) return;
+      this._showToast('Search failed');
+    } finally {
+      this._settleLocationSearchUi(generation);
+    }
   }
 
   /**
@@ -10212,6 +10238,20 @@ export class StyleManager {
       this._poiRow.appendChild(pill);
     });
 
+    // ORBIT had exactly one way in: the `o` key. On a phone that is no way in
+    // at all, and the indicator it lights was `pointer-events: none`, so there
+    // was no way out either. The pill is additive — the key still works.
+    const orbitPill = document.createElement('button');
+    orbitPill.type = 'button';
+    orbitPill.id = 'orbit-toggle';
+    orbitPill.className = 'poi-pill poi-pill-orbit';
+    orbitPill.setAttribute('aria-pressed', String(!!this.orbitController?.active));
+    orbitPill.innerHTML = '<span class="poi-pill-key">O</span><span class="poi-pill-name">ORBITE</span>';
+    orbitPill.addEventListener('click', () => this._toggleOrbit());
+    this._poiRow.appendChild(orbitPill);
+    this._orbitToggle = orbitPill;
+    this._syncOrbitPressed();
+
     // Animate expansion
     requestAnimationFrame(() => {
       this._poiRow.classList.add('expanded');
@@ -10306,7 +10346,17 @@ export class StyleManager {
     this._orbitIndicator = document.createElement('div');
     this._orbitIndicator.id = 'orbit-indicator';
     this._orbitIndicator.innerHTML = '<span class="orbit-icon">&#x21BB;</span> ORBIT';
+    // The indicator is the only thing on screen that says orbit is running, so
+    // it is also where a reader reaches to stop it. It only accepts a pointer
+    // while `.active` (CSS), so it never eats a click on the globe behind it.
+    this._orbitIndicator.addEventListener('click', () => this._stopOrbit());
     document.body.appendChild(this._orbitIndicator);
+  }
+
+  /** Mirror the orbit controller's state onto the pill, when the pill exists. */
+  _syncOrbitPressed() {
+    this._orbitToggle?.setAttribute('aria-pressed', String(!!this.orbitController?.active));
+    this._orbitToggle?.classList.toggle('active', !!this.orbitController?.active);
   }
 
   /**
@@ -10326,6 +10376,7 @@ export class StyleManager {
     });
 
     this._orbitIndicator.classList.toggle('active', isActive);
+    this._syncOrbitPressed();
   }
 
   /**
@@ -10337,6 +10388,48 @@ export class StyleManager {
       this.orbitController.stop();
       this._orbitIndicator.classList.remove('active');
     }
+    this._syncOrbitPressed();
+  }
+
+  /**
+   * Give "stop following this" a surface, for hands that have no Escape key.
+   *
+   * ── WHY A POLL, AND WHY ONLY ON A TOUCHSCREEN ───────────────────────────
+   * There is no DOM card for a tracked object: the readout is painted onto
+   * `#world-overlay-canvas`, so there is nowhere to hang a close button and
+   * nothing to listen to. Tracking also starts and stops from five owners
+   * (civil flights, military, satellites, launches, AIS) with no shared event.
+   * A 250 ms poll of the three readers is imperceptibly fresh and costs
+   * nothing a reader can measure — and it is not installed at all for a
+   * cursor, which still has Escape and a click in the void.
+   * @returns {void}
+   */
+  _initTrackingReleaseButton() {
+    this._trackingReleaseBtn = document.getElementById('tracking-release');
+    if (!this._trackingReleaseBtn || !isCoarseInput()) return;
+    this._trackingReleaseBtn.addEventListener('click', () => {
+      this._releaseFollowCamera({ preserveVesselSelection: false, trackingOrigin: 'user' });
+      this._syncTrackingReleaseButton();
+    });
+    this._trackingReleaseTicker = setInterval(() => this._syncTrackingReleaseButton(), 250);
+    this._syncTrackingReleaseButton();
+  }
+
+  /** Show the release button exactly while something is being followed. */
+  _syncTrackingReleaseButton() {
+    const button = this._trackingReleaseBtn;
+    if (!button) return;
+    let tracking = false;
+    try {
+      tracking = !!(this.cockpitView?.readAircraftInfo?.()
+        || this.viewer?.trackedEntity
+        || satellitesLayer.getTrackedInfo?.());
+    } catch {
+      tracking = false;
+    }
+    // Change-only DOM writes: this runs four times a second.
+    if (button.hidden === !tracking) return;
+    button.hidden = !tracking;
   }
 
   /** Wire the persistent reset control to the same route used by voice. */
@@ -11156,6 +11249,10 @@ export class StyleManager {
     if (this._trafficChipTicker) {
       clearInterval(this._trafficChipTicker);
       this._trafficChipTicker = null;
+    }
+    if (this._trackingReleaseTicker) {
+      clearInterval(this._trackingReleaseTicker);
+      this._trackingReleaseTicker = null;
     }
     if (this._loadingFeedbackTicker) {
       clearInterval(this._loadingFeedbackTicker);

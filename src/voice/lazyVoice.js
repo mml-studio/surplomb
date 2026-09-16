@@ -150,6 +150,11 @@ export function installLazyVoice({
   ui.button?.addEventListener('click', onButtonClick);
   ui.button?.addEventListener('focus', onWarm);
   ui.root?.addEventListener('mouseenter', onWarm);
+  // `mouseenter` is the only warm a pointer had, and a finger never produces
+  // one: on a phone the 360 kB started downloading at the CLICK, so the first
+  // tap on the mic waited for the whole stack. A `pointerdown` on the panel is
+  // the same intent, ~100 ms earlier than the click that follows it.
+  ui.root?.addEventListener('pointerdown', onWarm, { passive: true });
   window.addEventListener('keydown', onPushToTalkKey, true);
   if (idleTimeoutMs !== null) {
     cancelIdle = whenIdle(() => { void load().catch(() => {}); }, idleTimeoutMs);

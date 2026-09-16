@@ -332,6 +332,19 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
   controller.refreshVoiceExamples();
   ui.root.addEventListener('mouseenter', () => controller.refreshVoiceExamples());
   ui.button.addEventListener('focus', () => controller.refreshVoiceExamples());
+  if (ui.helpButton) {
+    // The third way to reach the tray, and the only one a finger has. It is a
+    // LATCH rather than a hover: a tap that opened something has to be able to
+    // close it again.
+    controller.helpHandler = () => {
+      const open = ui.root.dataset.help !== 'open';
+      if (open) ui.root.dataset.help = 'open';
+      else delete ui.root.dataset.help;
+      ui.helpButton.setAttribute('aria-expanded', String(open));
+      if (open) controller.refreshVoiceExamples();
+    };
+    ui.helpButton.addEventListener('click', controller.helpHandler);
+  }
   if (ui.tierButton) {
     controller.tierHandler = () => controller.toggleVoiceTier();
     ui.tierButton.addEventListener('click', controller.tierHandler);

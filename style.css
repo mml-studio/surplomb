@@ -1879,6 +1879,53 @@ body.ui-clean-view #scene-runtime.active {
   background: rgba(0, 212, 255, 0.12);
 }
 
+/* ORBITE reads as a state, not as a destination: a pressed pill, not a place. */
+.poi-pill-orbit[aria-pressed="true"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
+}
+
+.poi-pill-orbit[aria-pressed="true"] .poi-pill-name,
+.poi-pill-orbit[aria-pressed="true"] .poi-pill-key {
+  color: var(--accent);
+}
+
+/* ── Les badges de touche, pour des mains qui n'ont pas de clavier ─────────
+   `Q W E R T`, `1`…`7`, `O` : chacun occupe de la largeur sur la rangée la
+   plus serrée de l'écran pour nommer une touche qui n'existe pas au doigt.
+   Les gestionnaires restent branchés — un clavier Bluetooth marche toujours —
+   seul l'affichage tombe. */
+html[data-input="coarse"] .poi-pill-key,
+html[data-input="coarse"] .btn-key {
+  display: none;
+}
+
+/* Le bouton de soumission n'existe QUE pour le doigt : au curseur, Entrée est
+   là, visible et connue, et un bouton de plus rétrécirait le champ. */
+.search-submit-btn {
+  display: none;
+}
+
+html[data-input="coarse"] .search-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+html[data-input="coarse"] .search-submit-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
 /* ── Location Search ─────────────────────────── */
 .location-search-wrap {
   display: flex;
@@ -4289,6 +4336,11 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #orbit-indicator.active {
   opacity: 1;
   visibility: visible;
+  /* The only way out of orbit was the `o` key. While the indicator is up it
+     accepts the pointer and stops the orbit; while it is not, it stays
+     transparent to clicks meant for the globe underneath. */
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .orbit-icon {
@@ -7144,7 +7196,10 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 .cctv-frame-wrap.has-frame:hover .cctv-frame-expand-hint,
-.cctv-frame-wrap.has-frame:focus-visible .cctv-frame-expand-hint {
+.cctv-frame-wrap.has-frame:focus-visible .cctv-frame-expand-hint,
+/* Nothing else says the frame opens. A finger gets no hover, so on a
+   touchscreen the hint is simply on. */
+html[data-input="coarse"] .cctv-frame-wrap.has-frame .cctv-frame-expand-hint {
   opacity: 1;
 }
 
@@ -9779,10 +9834,35 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 }
 
 #gev-voice-control:not([data-status='error']):hover .gev-voice-help-tray,
-#gev-voice-control:not([data-status='error']) #gev-voice-button:focus-visible ~ .gev-voice-help-tray {
+#gev-voice-control:not([data-status='error']) #gev-voice-button:focus-visible ~ .gev-voice-help-tray,
+#gev-voice-control[data-help='open'] .gev-voice-help-tray {
   visibility: visible;
   opacity: 1;
   transform: translate(-50%, 0) scale(1);
+}
+
+/* The tap-to-open twin of the hover above: `?` in the panel heading, for the
+   readers who have no hover and no keyboard focus ring. */
+.gev-voice-help-btn {
+  display: none;
+}
+
+html[data-input="coarse"] .gev-voice-help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(54, 220, 255, 0.8);
+  background: rgba(54, 220, 255, 0.08);
+  border: 1px solid rgba(54, 220, 255, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
 }
 
 .gev-voice-help-examples {
