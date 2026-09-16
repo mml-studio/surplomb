@@ -744,3 +744,71 @@ test('the session switch beats the loader', async () => {
   await controller.setStack('photoreal');
   assert.equal(calls.length, 0);
 });
+
+test('a live switch keeps the reader on their basemap until the mesh has tiles', async () => {
+  // The public-opening complaint, in one pin: `root.json` resolving is not a
+  // globe. Destroying the imagery at that moment left the reader watching
+  // empty space while the mesh streamed — which reads as the page reloading
+  // itself, not as a better picture arriving.
+  const tiles = { name: 'tiles', show: false, tilesLoaded: false, preloadWhenHidden: false };
+  const { controller, viewer } = lazyController({ tileset: tiles, source: 'ion' });
+  await controller.setStack('osm', { silent: true });
+  assert.equal(viewer.scene.globe.show, true);
+
+  const switching = controller.setStack('photoreal');
+  await new Promise((resolve) => { setTimeout(resolve, 250); });
+  assert.equal(viewer.scene.globe.show, true, 'the map they were looking at is still on screen');
+  assert.equal(tiles.show, false);
+  // Without this a hidden tileset is never traversed, so the wait would be a
+  // deadlock rather than a warm-up.
+  assert.equal(tiles.preloadWhenHidden, true);
+
+  tiles.tilesLoaded = true;
+  await switching;
+  assert.equal(viewer.scene.globe.show, false, 'and the swap happens in one frame');
+  assert.equal(tiles.show, true);
+  assert.equal(tiles.preloadWhenHidden, false, 'the preload is a loan, not a setting');
+});
+
+test('a mesh that never arrives does not strand the reader on the stack they left', async () => {
+  // Bounded on purpose: a slow network gets the old behaviour, which is a
+  // hole, rather than a switch that silently never happens.
+  const tiles = { name: 'tiles', show: false, tilesLoaded: false, preloadWhenHidden: false };
+  const { controller, viewer } = lazyController({ tileset: tiles, source: 'ion' });
+  await controller.setStack('osm', { silent: true });
+
+  await controller.setStack('photoreal');
+  assert.equal(controller.getActiveId(), 'photoreal');
+  assert.equal(viewer.scene.globe.show, false);
+  assert.equal(tiles.show, true);
+  assert.equal(tiles.preloadWhenHidden, false);
+});
+
+test('the boot activation waits for nothing — there is nothing behind it to protect', async () => {
+  const tiles = { name: 'tiles', show: false, tilesLoaded: false, preloadWhenHidden: false };
+  const { controller, viewer } = lazyController({ tileset: tiles, source: 'ion' });
+  let waits = 0;
+  controller._waitForPhotorealContent = async () => { waits += 1; };
+
+  await controller.setStack('photoreal', { silent: true });
+  assert.equal(waits, 0, 'a boot has an empty scene behind the loader, not a basemap');
+  assert.equal(viewer.scene.globe.show, false);
+
+  // …and a switch away and back does wait, because now there IS a picture.
+  await controller.setStack('osm');
+  await controller.setStack('photoreal');
+  assert.equal(waits, 1);
+});
+
+test('a globe that has already been looked at comes back instantly', async () => {
+  // `tilesLoaded` true means the mesh is warm in the cache; making the reader
+  // wait 2.5 s to re-show something already resident would be a regression on
+  // the switch this is supposed to improve.
+  const tiles = { name: 'tiles', show: false, tilesLoaded: true, preloadWhenHidden: false };
+  const { controller, viewer } = lazyController({ tileset: tiles, source: 'ion' });
+  await controller.setStack('osm', { silent: true });
+
+  await controller.setStack('photoreal');
+  assert.equal(viewer.scene.globe.show, false);
+  assert.equal(tiles.preloadWhenHidden, false, 'never touched — the wait returned before the loan');
+});

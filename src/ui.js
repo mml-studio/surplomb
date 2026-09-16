@@ -32,6 +32,7 @@ import {
   LayerStateCoordinator,
 } from './data/layerState.js';
 import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
+import { rememberPhotorealAdoption } from './photorealAdoption.js';
 import {
   PANEL_POSITION_STORAGE_VERSION as PANEL_DRAG_STORAGE_VERSION,
   clampPanelPosition,
@@ -3661,6 +3662,29 @@ export class StyleManager {
       onSelect: (stackId) => { this._setMapStack(stackId); },
     });
 
+    // THE TRAY FOLLOWS THE GLOBE, not the clicks on the tray.
+    //
+    // `_setMapStack` was the only thing that ever re-lit a chip, so any switch
+    // that did not go through a click left the row showing a source that was
+    // no longer on screen. That is not hypothetical: `photorealAdoption` talks
+    // to the controller directly, so the first public visit spent its whole
+    // session looking at Google's 3D mesh under a lit "SATELLITE" chip and a
+    // status badge reading SAT. The controller already broadcasts every change
+    // for the data layers; the tray had simply never listened.
+    // AND SO DOES THE SHARE LINK, for the same reason and with the same bug:
+    // the hash kept saying `map=ign-ortho` after the adoption swapped in the
+    // 3D globe, so a link copied from a mesh arrived on a satellite basemap —
+    // and a reload put the sender back on one too, because the stale hash
+    // outranks the startup stack. Guarded on the tray's own switches, which
+    // claim the restore lane themselves and must not be written twice.
+    window.addEventListener('gev:map-stack-changed', (event) => {
+      if (!event.detail) return;
+      this._renderMapStackState(event.detail);
+      if (event.detail.status !== 'ready' || this._mapStackSwitchInFlight) return;
+      this.shareLinkManager?.claimRestoreLane?.('map');
+      this._syncShareState();
+    });
+
     this._renderMapStackState(this.mapStackController.getState());
   }
 
@@ -3676,11 +3700,28 @@ export class StyleManager {
     if (syncShare) this.shareLinkManager?.claimRestoreLane?.('map');
     const before = this.mapStackController.getActiveId();
     this._renderMapStackState(this.mapStackController.getState('switching'));
-    const state = await this.mapStackController.setStack(stackId);
+    // Tells the `gev:map-stack-changed` listener above that this switch already
+    // has an owner. The controller emits synchronously from inside `setStack`,
+    // so the flag is still raised when the listener runs.
+    this._mapStackSwitchInFlight = true;
+    let state;
+    try {
+      state = await this.mapStackController.setStack(stackId);
+    } finally {
+      this._mapStackSwitchInFlight = false;
+    }
     this._renderMapStackState(state);
 
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
+    }
+    // A deliberate pick of the 3D globe is the same verdict the adoption watch
+    // records by itself — this reader wants the mesh — so the next visit opens
+    // on it instead of building a basemap first and replacing it. Gated on
+    // `syncShare`: a share link that carries `map=photoreal` is the sender's
+    // choice, not this reader's preference.
+    if (syncShare && stackId === 'photoreal' && state?.activeId === 'photoreal') {
+      rememberPhotorealAdoption();
     }
     if (syncShare) this._syncShareState();
   }
