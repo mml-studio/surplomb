@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { DataLayerManager } from './manager.js';
 import {
+  DEFAULT_ENABLED_LAYER_IDS,
   DISABLED_LAYER_IDS,
   LAYER_STATE_REGISTRY,
   LAYER_STATE_STORAGE_KEY,
@@ -10,6 +11,7 @@ import {
   REGISTERED_LAYER_IDS,
   SHARE_TRACKING_RESTORE_POLICIES,
   createDefaultLayerState,
+  createSeededLayerState,
   decodeLayerStateParams,
   encodeLayerStateParams,
   isLayerDisabled,
@@ -370,7 +372,8 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
   assert.equal(coordinator.getDurableState().options.flights.models3d, true);
   assert.equal(coordinator.getDurableState().options.flights.models3dMode, 'proximity');
   assert.deepEqual(paramsCalls, [],
-    'a fresh boot restores nothing — which is exactly why the module initializers below must match');
+    'a fresh boot restores only the product-default layers (see DEFAULT_ENABLED_LAYER_IDS), '
+    + 'which is exactly why the module initializers below must match for every other one');
   coordinator.destroy();
 
   // The other three surfaces, read from source, because each is the literal a
@@ -1748,4 +1751,71 @@ test('a window this build does not offer is dropped, never rounded to a neighbou
       .options['ads-fr'],
     { months: '36' },
   );
+});
+
+// ── The product defaults: on for a reader who chose nothing, and nobody else ──
+
+test('a first boot arrives with the product defaults on', async () => {
+  // The globe used to open with nothing happening on it, and only became the
+  // product on the reader's first toggle. See DEFAULT_ENABLED_LAYER_IDS.
+  const calls = [];
+  const manager = productionManager({});
+  const original = manager.setEnabled?.bind(manager);
+  manager.setEnabled = (id, on, opts) => { calls.push({ id, on }); return original?.(id, on, opts); };
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage: memoryStorage() });
+  await coordinator.start();
+  assert.equal(coordinator.source, 'defaults');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, [...DEFAULT_ENABLED_LAYER_IDS]);
+  assert.ok(DEFAULT_ENABLED_LAYER_IDS.length > 0, 'the defaults list is not empty');
+  coordinator.destroy();
+});
+
+test('a default is not a preference: a stored session wins, including an empty one', async () => {
+  // The reader who switched the default layer OFF is the one this protects.
+  // Their stored state says "nothing on", and it has to keep meaning that.
+  const storage = memoryStorage();
+  storage.setItem(LAYER_STATE_STORAGE_KEY, serializeStoredLayerState({ enabledLayerIds: [] }));
+  const coordinator = new LayerStateCoordinator(productionManager({}), shareSink(), { storage });
+  await coordinator.start();
+  assert.equal(coordinator.source, 'local');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  coordinator.destroy();
+});
+
+test('a share link shows its sender framing, defaults included out', async () => {
+  const coordinator = new LayerStateCoordinator(productionManager({}), shareSink(), {
+    storage: memoryStorage(),
+  });
+  await coordinator.start({ shareLayerState: { enabledLayerIds: ['earthquakes'] } });
+  assert.equal(coordinator.source, 'share');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['earthquakes']);
+  coordinator.destroy();
+});
+
+test('a v1 camera share gets no defaults, for the reason it gets no preferences', async () => {
+  // "The sender chose nothing" and "the format could not carry it" are the
+  // same bytes in a v1 link. Adding a layer to somebody else's framed view is
+  // the same mistake as inheriting an unrelated reader's session.
+  const storage = memoryStorage();
+  storage.setItem(LAYER_STATE_STORAGE_KEY, serializeStoredLayerState({ enabledLayerIds: ['flights'] }));
+  const coordinator = new LayerStateCoordinator(productionManager({}), shareSink(), { storage });
+  await coordinator.start({ allowLocalState: false });
+  assert.equal(coordinator.source, 'legacy-share');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  coordinator.destroy();
+});
+
+test('every default layer is a registered, non-withdrawn one', () => {
+  // A default naming a withdrawn layer would put it on the globe with no
+  // control anywhere to switch it off — the exact failure DISABLED_LAYER_IDS
+  // exists to prevent, arriving through the one door that bypasses it.
+  for (const id of DEFAULT_ENABLED_LAYER_IDS) {
+    assert.ok(REGISTERED_LAYER_IDS.includes(id), `${id} is not registered`);
+    assert.ok(!isLayerDisabled(id), `${id} is withdrawn`);
+  }
+  assert.deepEqual(createSeededLayerState().enabledLayerIds, [...DEFAULT_ENABLED_LAYER_IDS]);
+});
+
+test('the zero state stays zero — it is what a share and a session fall back to', () => {
+  assert.deepEqual(createDefaultLayerState().enabledLayerIds, []);
 });
