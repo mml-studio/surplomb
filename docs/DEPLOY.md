@@ -80,7 +80,7 @@ that predates the access gate.
 | `/opt/gev/state/selection` | one line: which ref was chosen this tick, and why it was not the other one |
 | `/opt/gev/state/freshness` | `<head> <base> <behind_by>`, the cached verdict for one pair of shas |
 | `/opt/gev/gev-health-probe.sh` | availability probe (copy of `deploy/vps/gev-health-probe.sh`) |
-| `/opt/gev/src/scripts/warm-default-view.mjs` | weekly Overpass pre-warm, run by `gev-warm-view.timer` — ships with the source, nothing to copy |
+| `/opt/gev/src/scripts/warm-road-cells.mjs` | weekly Overpass pre-warm for the ten cities, run by `gev-warm-view.timer` — ships with the source, nothing to copy |
 | `/opt/gev/state/health.log` | one line per probe, ~7 days |
 
 ### The 2021 carroyage pack
@@ -291,16 +291,33 @@ ssh vps 'systemctl daemon-reload && systemctl enable --now gev-health-probe.time
 ssh vps 'tail -5 /opt/gev/state/health.log'
 ```
 
-### Somebody pays for the first road fetch of the week
+### Somebody pays for the first road fetch — and on a bad day, nobody gets it
 
 A cold Overpass box costs **0.6 to 46 s**; the same query repeated costs
-**52 to 78 ms**, and the proxy holds it on disk for **7 days**. Every visitor
-lands on the same view, so exactly one of them per week pays that cost — with
-nothing on screen while they wait.
+**52 to 78 ms**, and the proxy holds it on disk for **30 days**. So somebody
+pays the cold price once a month per cell, and until 2026-09-16 that was
+whoever arrived first — with nothing on screen while they waited.
 
-`gev-warm-view.timer` makes it be nobody. It runs
-`scripts/warm-default-view.mjs`, which derives the default view's Overpass cell
-and fires the layer's two passes at it, byte for byte.
+It is worse than a wait when the upstream is refusing. That day, Paris looked
+perfect (default view, permanently warm) while Marseille and Biarritz drew a
+coloured TomTom ribbon with **no vehicles on it**. A warm cache is not a
+speed-up here, it is the difference between degraded and working.
+
+`gev-warm-view.timer` runs `scripts/warm-road-cells.mjs` weekly over **ten
+cities** — Paris, Marseille, Lyon, Toulouse, Nice, Nantes, Montpellier,
+Bordeaux, Lille, Biarritz — firing the layer's own passes at each, byte for
+byte. **Thirty requests, ten seconds apart, and the run gives up after three
+consecutive failures.** That pacing is the design, not a detail: a warmer is
+the most burst-shaped traffic this site produces, and overpass-api.de escalates
+to refusal under a burst (see the next section). A warmer that gets the host to
+stop answering has made things worse.
+
+**One cell per city per band, and one of the two bands is a guess.** The metro
+cell (0.30°, ~33 km) is a certainty — it is wider than any of these cities, so
+any arrival lands in it. The street cell (0.05°, ~5.5 km on a ~555 m lattice)
+depends on where the camera LOOKS, not where it is, so the script warms the
+cell the app's own house framing produces and no more. `src/data/warmCities.js`
+states which is which, and why there is no 3×3 block of neighbours.
 
 Three things about it that are not obvious:
 
@@ -311,10 +328,13 @@ Three things about it that are not obvious:
   local modules — no `node_modules` — so it needs nothing the container has.
   (The container's bundled Chrome does not run anyway: `libglib-2.0.so.0`
   is missing from the slim image.)
-- **It computes the cell instead of observing it**, which would rot silently
-  the day `DEFAULT_CITY_VIEW` moves. `src/defaultView.test.mjs` pins the
-  derivation against the box captured off the wire by
+- **It computes the cells instead of observing them**, which would rot silently
+  the day `DEFAULT_CITY_VIEW` or a `snapDeg` moves. `src/defaultView.test.mjs`
+  pins the derivation against the box captured off the wire by
   `scripts/qa-span-par-viewport.mjs`, so that day fails CI by name instead.
+- **`--only` and `--dry-run` exist so you never have to warm all ten to check
+  one.** `node scripts/warm-road-cells.mjs --dry-run` asks nothing and prints
+  every cell it would fetch; `--only Lyon,Lille` narrows a real run.
 
 ```bash
 scp deploy/vps/gev-warm-view.{service,timer} vps:/etc/systemd/system/

@@ -1071,17 +1071,46 @@ const OVERPASS_USER_AGENT = 'surplomb/1.0 (+https://github.com/mml-studio/surplo
  * every viewport revisit and left nothing to serve when the mirrors 502
  * (field-test 2026-07-17: all three mirrors down during US morning peak =
  * "traffic takes forever to load"). 24 h in memory; the disk layer below
- * keeps 7 days and also survives dev-server restarts.
+ * keeps 30 days and also survives dev-server restarts.
  */
 const OVERPASS_CACHE_MS = 86_400_000;
-/** Disk-cache TTL for Overpass responses (ms) — 7 days. */
-const OVERPASS_DISK_TTL_MS = 7 * 86_400_000;
+/**
+ * Disk-cache TTL for Overpass responses (ms) — 30 days, raised from 7 on
+ * 2026-09-16.
+ *
+ * WHAT IT BUYS. A cold road box costs 0.6 to 46 s and a warm one 52 to 78 ms,
+ * so the TTL sets how often somebody pays the cold price for a given cell:
+ * four times a month at 7 days, once at 30. That is not only latency —
+ * measured 2026-09-16, when overpass-api.de was refusing this address, the
+ * cells that were cached kept working and the cells that were not drew a
+ * coloured TomTom ribbon with no vehicles on it. The cache IS the outage plan.
+ *
+ * WHAT IT COSTS, WHICH IS NOTHING IN DISK. Expired entries were never deleted:
+ * there is no eviction on `OVERPASS_DISK_DIR`, and `readStaleOverpass` reads
+ * with `Infinity` on purpose so an expired file is still the serve-stale
+ * answer. So raising the TTL changes how often a file is REFRESHED, never how
+ * many exist. (Measured that day: 199 files, 193 MB, ~970 kB each. Growth is
+ * unbounded and follows distinct cells ever looked at — 10 000 cells would be
+ * ~9.7 GB against 19 GB free. That wants a size cap eventually; it is not
+ * made worse by this constant.)
+ *
+ * WHAT IT RISKS. A road mapped in OSM today can take a month to appear. Road
+ * geometry is static for months, so that is the cheap side of the trade — but
+ * it is the reason this is 30 days and not a year.
+ */
+const OVERPASS_DISK_TTL_MS = 30 * 86_400_000;
 /**
  * Disk-cache TTL for BOUNDARY-class queries (is_in / admin-relation pivots) — 30
  * days. Admin boundaries change ≈never, and their pivots are the most expensive
  * queries the app issues (multi-MB coastline geometry, 10–25 s on public mirrors —
  * field test 2026-07-23: outline latency + the Sicily miss). Keeping them a month
  * means each boundary is fetched roughly once per machine, ever.
+ *
+ * It now holds the SAME value as the road TTL above, and is deliberately kept
+ * as its own constant rather than collapsed into it: the two have different
+ * reasons to move. The road TTL is bounded by how fast new roads should appear;
+ * this one is bounded by nothing anybody has found yet, and the day the road
+ * TTL comes back down this must not follow it.
  */
 const OVERPASS_BOUNDARY_DISK_TTL_MS = 30 * 86_400_000;
 /** Disk-cache directory for Overpass responses. */
