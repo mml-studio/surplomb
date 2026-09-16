@@ -1974,7 +1974,7 @@ async function main() {
         const recRect = visibleRect('#intel-hud .hud-top-right');
         const creditsRect = visibleRect('#cesium-credits .cesium-credit-textContainer');
       // Left-lane surfaces an expanded Cockpit panel must remain clear of.
-        const passableTops = ['#cockpit-context', '#intel-hud .hud-bottom-left']
+        const passableTops = ['#cockpit-context']
           .map((selector) => visibleRect(selector))
           .filter((rect) => rect && rect.right > dataRect.left && rect.left < dataRect.right)
           .map((rect) => rect.top);

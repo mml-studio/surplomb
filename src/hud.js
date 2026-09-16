@@ -204,6 +204,14 @@ export class IntelHUD {
     this._el = document.getElementById('intel-hud');
     if (!this._el) return;
 
+    // REMOVED (2026-09-16): the bottom-left MGRS / lat-lon corner, which used
+    // to sit here as a fourth `.hud-corner`. Four lines of grid reference over
+    // the bottom-left of the map, where the data-layer panel and the Google /
+    // Cesium credits already are — for a coordinate nobody navigates by: the
+    // CAMERA's position, not the position of anything the reader is looking at
+    // or clicked on. The same three values still print on the bottom bar
+    // (`hud-bottom-line`), which the `operator` and `minimal` variants show, so
+    // `_updateCameraData` still computes them.
     this._el.innerHTML = `
       <div class="hud-top-bar">
         <span class="hud-top-bar-left">TOP SECRET // SI-TK // NOFORN</span>
@@ -230,14 +238,6 @@ export class IntelHUD {
           <div class="hud-orbital hud-simulated">SIM ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
         </div>
         <div class="hud-bracket">┐</div>
-      </div>
-
-      <div class="hud-corner hud-bottom-left">
-        <div class="hud-bracket">└</div>
-        <div class="hud-content">
-          <div id="hud-mgrs">MGRS: ---</div>
-          <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
-        </div>
       </div>
 
       <div class="hud-corner hud-bottom-right">
@@ -363,22 +363,15 @@ export class IntelHUD {
     const lonDMS = this._toDMS(lonDeg, 'lon');
     let mgrsLabel = '---';
 
-    // MGRS
+    // MGRS. `toMGRS` throws on a camera outside the grid's latitude band, and
+    // the readout says `---` there rather than going blank.
     try {
-      const mgrsStr = toMGRS([lonDeg, latDeg], 4); // 4 = 10m precision
       // Format: 18SUJ23370716 → 18S UJ 2337 0716
-      const formatted = this._formatMGRS(mgrsStr);
-      mgrsLabel = formatted;
-      const el = document.getElementById('hud-mgrs');
-      if (el) el.textContent = `MGRS: ${formatted}`;
+      mgrsLabel = this._formatMGRS(toMGRS([lonDeg, latDeg], 4)); // 4 = 10m precision
     } catch {
-      const el = document.getElementById('hud-mgrs');
-      if (el) el.textContent = 'MGRS: ---';
+      mgrsLabel = '---';
     }
 
-    // Lat/Lon DMS
-    const llEl = document.getElementById('hud-latlon');
-    if (llEl) llEl.textContent = `${latDMS} ${lonDMS}`;
     const bottomEl = document.getElementById('hud-bottom-line');
     if (bottomEl) {
       bottomEl.textContent = `MGRS: ${mgrsLabel}  LAT: ${latDMS}  LON: ${lonDMS}`;
