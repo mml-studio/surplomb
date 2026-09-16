@@ -1,13 +1,14 @@
 /**
  * @file Surplomb — Overpass egress relay (Cloudflare Worker).
  *
- * WHY THIS EXISTS. The VPS that serves surplomb.app is banned by
- * overpass-api.de: measured 2026-09-16 from inside the container, both FOSSGIS
- * facades refuse the TCP connection in under 200 ms on every address, v4 and
- * v6, while the same query from another network answers 200 in 0.20 s. The box
- * has one egress address, so the only lever left is to leave by another one.
- * The whole reasoning, and the conditions under which this should be switched
- * OFF again, are in `src/data/overpassRelay.js`.
+ * WHY THIS EXISTS. FOSSGIS runs an escalating per-IP throttle — slow, then 429,
+ * then refusing the TCP connection outright — and on 2026-09-16 the VPS that
+ * serves surplomb.app climbed to the top of it. The box has one egress address,
+ * so while it is up there no mirror order and no backoff reaches FOSSGIS. This
+ * is a second address, i.e. a second chance, not a way around a ban: it was
+ * measured serving the Marseille box 200 in 3.8 s while the direct path was
+ * still refusing. The full reasoning, and when to switch this OFF again, are in
+ * `src/data/overpassRelay.js`.
  *
  * WHAT IT DELIBERATELY DOES NOT DO.
  *  - It does not anonymise us. The upstream request carries this app's real
@@ -71,10 +72,12 @@ export default {
     );
     if (!verdict.ok) return refuse(verdict.status, verdict.reason);
 
-    // A cap that survives a regression in the CLIENT. The ban was earned by
-    // ~4 300 POST/hour from a bug where the browser and the server re-triggered
-    // each other; the fix shipped, and this is what stops the next one from
-    // spending the goodwill of an unblock. One honest session costs 26.
+    // A cap that survives a regression in the CLIENT. The refusal was climbed to
+    // by ~4 300 POST/hour from a bug where the browser and the server
+    // re-triggered each other; the fix shipped, and this is what stops the next
+    // one from climbing it again — on an address Cloudflare SHARES with other
+    // customers, so the reputation spent would not only be ours. One honest
+    // session costs 26.
     if (env.OVERPASS_LIMITER) {
       const { success } = await env.OVERPASS_LIMITER.limit({ key: 'overpass' });
       if (!success) return refuse(429, 'relay-rate-limit');
