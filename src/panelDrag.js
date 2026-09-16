@@ -144,6 +144,91 @@ export function clearPanelPosition(panelId, storage = globalThis.localStorage) {
   }
 }
 
+/** How long a finger must rest before a press becomes a verb, in ms. */
+export const LONG_PRESS_HOLD_MS = 500;
+
+/** How far it may wander first, in pixels, before it is a drag instead. */
+export const LONG_PRESS_SLOP_PX = 8;
+
+/**
+ * A press held still is a second verb — for fingers only.
+ *
+ * ── THE PROBLEM IT SOLVES ───────────────────────────────────────────────────
+ * Three panels here (the fiche sheet, the comparables panel, the pulse HUD) can
+ * be dragged anywhere on screen and remember where they were left. All three
+ * offer exactly one way home: a DOUBLE-CLICK on the grip. A touchscreen has no
+ * double-click — iOS reserves the double tap for zoom and Cesium never
+ * synthesizes `dblclick` from touch — so a panel dragged behind the dock on a
+ * phone stays there for good, across sessions, and the only cure is clearing
+ * site data. A long press is the gesture that already means "the other thing"
+ * on every phone, so it is the one that gets bound.
+ *
+ * ── WHY A MOUSE IS EXCLUDED ─────────────────────────────────────────────────
+ * On a desktop, holding the mouse still on a drag handle for half a second is
+ * something readers do constantly — deciding where to drag to. Firing a reset
+ * on that would be a trap, and the double-click already works there. So
+ * `pointerType === 'mouse'` returns immediately and the desktop path is
+ * untouched; the double-click listeners stay exactly where they were.
+ *
+ * @param {HTMLElement} el Element the press starts on.
+ * @param {() => void} onLongPress Fired once per press, at `holdMs`.
+ * @param {object} [options]
+ * @param {number} [options.holdMs]
+ * @param {number} [options.slopPx]
+ * @param {object} [options.nav] `navigator`, injected for tests.
+ * @returns {() => void} Disposer.
+ */
+export function bindLongPress(el, onLongPress, {
+  holdMs = LONG_PRESS_HOLD_MS,
+  slopPx = LONG_PRESS_SLOP_PX,
+  nav = globalThis.navigator,
+} = {}) {
+  if (!el?.addEventListener || typeof onLongPress !== 'function') return () => {};
+  const target = globalThis.window ?? globalThis;
+  let timer = 0;
+  let origin = null;
+
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = 0;
+    origin = null;
+    target.removeEventListener?.('pointermove', onMove);
+    target.removeEventListener?.('pointerup', cancel);
+    target.removeEventListener?.('pointercancel', cancel);
+  };
+
+  function onMove(event) {
+    if (!origin) return;
+    const dx = Number(event?.clientX) - origin.x;
+    const dy = Number(event?.clientY) - origin.y;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (Math.hypot(dx, dy) > slopPx) cancel();
+  }
+
+  const onPointerDown = (event) => {
+    // A cursor keeps the double-click, and keeps the right to hold still.
+    if (event?.pointerType === 'mouse') return;
+    cancel();
+    origin = { x: Number(event?.clientX) || 0, y: Number(event?.clientY) || 0 };
+    target.addEventListener?.('pointermove', onMove, { passive: true });
+    target.addEventListener?.('pointerup', cancel, { passive: true });
+    target.addEventListener?.('pointercancel', cancel, { passive: true });
+    timer = setTimeout(() => {
+      cancel();
+      // The only feedback available: nothing visual happens until the panel
+      // jumps, and a jump with no warning reads as a bug.
+      try { nav?.vibrate?.(10); } catch { /* a refused buzz is not an error */ }
+      onLongPress();
+    }, holdMs);
+  };
+
+  el.addEventListener('pointerdown', onPointerDown);
+  return () => {
+    cancel();
+    el.removeEventListener('pointerdown', onPointerDown);
+  };
+}
+
 /**
  * Make a panel draggable, and remember where it was left.
  *
@@ -159,6 +244,9 @@ export function clearPanelPosition(panelId, storage = globalThis.localStorage) {
  * @param {string} [options.ignoreSelector] Extra controls that never drag.
  * @param {() => void} [options.onMove] Called on every clamped move.
  * @param {() => void} [options.onEnd] Called once the pointer is released.
+ * @param {() => void} [options.onLongPress] Touch-only second verb on the grip.
+ * @param {HTMLElement} [options.longPressHandle] Where that press must land,
+ *   when the whole panel is the drag surface but only its grip is the verb.
  * @param {Storage} [options.storage]
  * @returns {() => void} Disposer: removes every listener it installed.
  */
@@ -168,6 +256,8 @@ export function attachPanelDrag(panelEl, {
   ignoreSelector = '',
   onMove = null,
   onEnd = null,
+  onLongPress = null,
+  longPressHandle = null,
   storage = globalThis.localStorage,
 } = {}) {
   if (!panelEl?.addEventListener || typeof window === 'undefined') return () => {};
@@ -264,10 +354,22 @@ export function attachPanelDrag(panelEl, {
     place(next.left, next.top);
   };
 
+  // The press that resets the panel is also, until it fires, a drag in
+  // progress: the finger came down on the grip. Ending it WITHOUT persisting is
+  // what stops the release from writing the freshly reset rect straight back
+  // into storage, which would leave the panel home but the key still set.
+  const detachLongPress = onLongPress
+    ? bindLongPress(longPressHandle || grip, () => {
+      activeDrag?.({ persist: false });
+      onLongPress();
+    })
+    : () => {};
+
   grip.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('resize', onResize);
 
   return () => {
+    detachLongPress();
     grip.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('resize', onResize);
     // A layer switched off mid-drag: drop the handlers without saving a

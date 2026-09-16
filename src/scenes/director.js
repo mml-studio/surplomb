@@ -15,6 +15,7 @@
 import * as Cesium from 'cesium';
 import { SCENE_RECIPES } from './recipes.js';
 import { sceneLayerPlan, sceneRequiresContextModeExit } from './scenePolicy.js';
+import { bindLongPress } from '../panelDrag.js';
 
 /** @constant {string} Key code used to abort a running scene */
 const ESCAPE_KEY = 'Escape';
@@ -463,13 +464,17 @@ export class SceneDirector {
         this._selectedShotId = shot.id;
         this._renderShotList();
       });
-      label.addEventListener('dblclick', () => {
+      // Renaming a shot is behind a double-click, which a touchscreen cannot
+      // produce. Same verb, second gesture — a finger holds the label instead.
+      const renameShot = () => {
         const nextTitle = window.prompt('Shot title', shot.title);
         if (!nextTitle) return;
         shot.title = nextTitle.trim() || shot.title;
         this._saveProject();
         this._renderShotList();
-      });
+      };
+      label.addEventListener('dblclick', renameShot);
+      bindLongPress(label, renameShot);
 
       const actions = document.createElement('div');
       actions.className = 'scene-shot-actions';

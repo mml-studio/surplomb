@@ -692,6 +692,22 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   cursor: grabbing;
 }
 
+/* Every grab surface in the app, and the one declaration that makes dragging
+   one with a finger possible at all. Without `touch-action: none` the browser
+   claims the gesture for panning/zooming the page after ~10 px: it fires
+   `pointercancel`, the drag ends mid-flight, and the panel snaps back — which
+   on a phone reads as "panels cannot be moved". It also has to be a CSS rule
+   rather than a `preventDefault()`: the decision is taken by the compositor
+   before the first `pointermove` reaches JavaScript.
+   `velo-pulse-hud` is listed whole because the whole panel is its handle. */
+.panel-drag-handle,
+[data-fiche-grip],
+[data-cmp-grip],
+[data-pulse-grip],
+.velo-pulse-hud.panel-draggable {
+  touch-action: none;
+}
+
 .panel-drag-handle.compact {
   margin-left: auto;
   margin-bottom: 2px;

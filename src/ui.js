@@ -123,7 +123,7 @@ import {
   onPerfProfileChange,
   setPerfProfile,
 } from './perfProfile.js';
-import { isPhoneShell } from './inputMode.js';
+import { isCoarseInput, isPhoneShell } from './inputMode.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -4384,11 +4384,16 @@ export class StyleManager {
       document.querySelector(`[data-panel-satellite="${panelId}"]:not([hidden])`)
     );
 
+    // iOS leaves `:hover` LATCHED on whatever was tapped last, until something
+    // else is tapped. The guard below then holds forever and the tray a reader
+    // opened with a tap can never auto-dismiss — so on a touchscreen the hover
+    // test is not asked at all, and the tap-outside listener further down is
+    // what closes the tray instead.
     const scheduleClose = () => {
       clearClose();
       closeTimer = window.setTimeout(() => {
         closeTimer = null;
-        if (panelEl.matches(':hover') || keyboardFocusInside()) return;
+        if ((!isCoarseInput() && panelEl.matches(':hover')) || keyboardFocusInside()) return;
         if (satelliteOpen()) return;
         if (panelEl.classList.contains('dock-pinned')) return;
         if (panelEl.classList.contains('collapsed')) return;
@@ -4430,6 +4435,14 @@ export class StyleManager {
       clearOpen();
       clearClose();
     });
+
+    // The touchscreen's replacement for `pointerleave`: a finger never leaves,
+    // it lands somewhere else. Capture phase so a tap on a control that stops
+    // propagation still counts as "the reader is done with this tray".
+    document.addEventListener('pointerdown', (event) => {
+      if (event.pointerType !== 'touch' || panelEl.contains(event.target)) return;
+      scheduleClose();
+    }, { capture: true, passive: true });
 
     const focusMapSource = () => {
       if (panelId !== 'control-panel') return;

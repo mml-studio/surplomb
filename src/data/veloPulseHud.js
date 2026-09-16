@@ -220,7 +220,7 @@ function paintSiteLines(list, record, pack, slot) {
 }
 
 const PANEL_MARKUP = `
-  <div class="velo-pulse-hud-head" data-pulse-grip title="Glissez pour déplacer le panneau · double-clic pour le remettre en place">
+  <div class="velo-pulse-hud-head" data-pulse-grip title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
     <span class="velo-pulse-grip" aria-hidden="true"></span>
     <span class="velo-pulse-hud-title">POULS VÉLO · SEMAINE TYPE</span>
     <span class="velo-pulse-hud-window" data-pulse-window></span>
@@ -365,18 +365,24 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
   // would be worse than a panel that does not move at all.
   panel.classList.add('panel-draggable');
   restorePanelPosition(panel, PULSE_HUD_ID);
-  const releaseDrag = attachPanelDrag(panel, {
-    panelId: PULSE_HUD_ID,
-    ignoreSelector: '[data-pulse-strip], .velo-pulse-site-strip',
-  });
   // A panel dragged somewhere unfortunate — behind the dock, off in a corner —
-  // has to have a way home that does not involve clearing site data.
-  node('[data-pulse-grip]').addEventListener('dblclick', () => {
+  // has to have a way home that does not involve clearing site data. A finger
+  // holds the grip for half a second; a cursor double-clicks it.
+  const resetPosition = () => {
     clearPanelPosition(PULSE_HUD_ID);
     for (const property of ['left', 'top', 'right', 'bottom', 'transform']) {
       panel.style.removeProperty(property);
     }
+  };
+  const releaseDrag = attachPanelDrag(panel, {
+    panelId: PULSE_HUD_ID,
+    ignoreSelector: '[data-pulse-strip], .velo-pulse-site-strip',
+    // The whole panel drags; only the grip resets. Holding a finger still
+    // anywhere on a panel a reader is reading must not throw it home.
+    longPressHandle: node('[data-pulse-grip]'),
+    onLongPress: resetPosition,
   });
+  node('[data-pulse-grip]').addEventListener('dblclick', resetPosition);
 
   const paintClock = () => {
     const slot = Math.floor(position);
