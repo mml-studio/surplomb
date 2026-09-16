@@ -142,8 +142,73 @@ Ce qui est décidé et hors périmètre, à ne pas rouvrir comme un bug :
   reconstruise pas l'interface, et ce cas est le prix de cette stabilité.
 - **Les pliables** ne sont pas gérés : un écran qui change de format en cours
   de session garde la coquille de son ouverture.
-- **Le tilt à deux doigts** reste le défaut Cesium (le pinch fait zoom ET
-  tangage) tant que le volet tactile n'a pas atterri.
+- **Le tilt à deux doigts** est délié depuis le volet tactile : le pinch de
+  Cesium fait zoom ET tangage sans zone morte, donc deux doigts pas tout à fait
+  parallèles font pivoter la caméra pendant qu'on s'approche. Le tangage reste
+  accessible par les presets de vue. Une ligne dans `src/touchCamera.js` le
+  remet si les testeurs le réclament.
+
+### Un lien partagé depuis « Autour de moi » révèle où était le lecteur
+Status: Open (par construction), livré 2026-09-16
+
+Contexte :
+- Le bouton « Autour de moi » vole la caméra sur la position de l'appareil,
+  puis `flushHash()` réécrit l'adresse depuis cette caméra — c'est ce qui
+  permet à un rechargement de revenir au même endroit. Conséquence directe :
+  **le lien copié ou partagé ensuite contient la position**, à quelques
+  centaines de mètres près.
+- Ce n'est pas un défaut à corriger en silence : c'est le comportement de
+  n'importe quelle carte, et le lien ne part que si le lecteur le demande.
+  C'est écrit ici pour que personne ne le redécouvre comme une fuite.
+- Aucun `watchPosition` : un seul relevé par appui, jamais de suivi continu.
+
+### Trente-sept couches gardent la tolérance de clic de Cesium sur un doigt
+Status: Open (borné, sûr dans ce sens), mesuré 2026-09-16
+
+Contexte :
+- `ScreenSpaceEventHandler` n'émet `LEFT_CLICK` au relâchement tactile que si
+  la distance en ligne droite depuis le contact initial tient dans
+  `_clickPixelTolerance` (5 px). Un tap tremblant au-delà **n'arrive jamais**
+  jusqu'au comptage de geste.
+- Les trois couches qui passent par `bindTrackingClickGesture` (vols civils,
+  vols militaires, CCTV) montent cette tolérance à 10 px sous pointeur
+  grossier. Les ~37 autres installent leur propre gestionnaire et gardent les
+  5 px : un tap tremblant y est **perdu**.
+- C'est le sens sûr de la panne : rien n'est sélectionné, et surtout rien n'est
+  DÉSÉLECTIONNÉ. Migrer les 37 est un chantier à part.
+
+### Deux choses que le harnais téléphone ne peut pas mesurer
+Status: Open (limite de l'outil), mesuré 2026-09-16
+
+Contexte :
+- **`-webkit-touch-callout`** est une propriété WebKit : Chromium la jette à
+  l'analyse, donc `getComputedStyle` répond `''` quelle que soit la feuille.
+  `qa:phone-touch` mesure la moitié qu'il peut (`user-select: none`) et la
+  déclaration elle-même est épinglée par
+  `src/data/trackingClickGesture.test.mjs`, qui lit `style.css`.
+- **« Le tap a sélectionné la borne »** est improuvable en headless : aucune
+  entité Cesium ne s'y peint et `scene.pick` ne répond rien pour le globe nu
+  sous SwiftShader. Le seam publie donc ses propres nombres
+  (`getPickDiagnostics()`), et la sélection est épinglée par
+  `src/data/pickAt.test.mjs`.
+
+### À vérifier sur un appareil réel avant de considérer le tactile fini
+Status: Open (checklist), ouverte 2026-09-16
+
+Rien de ce qui suit n'est mesurable depuis un Mac. Un iPhone (Safari 17) et un
+Android (Chrome) doivent cocher :
+- la voix **parle**, et dans quel haut-parleur — iOS route souvent l'audio
+  WebRTC vers l'écouteur quand le micro est capté ;
+- le prompt `getUserMedia` apparaît bien après l'`await import()` du chargeur
+  paresseux, et la permission persiste d'une session à l'autre ;
+- la session vocale se coupe quand l'app passe en arrière-plan, et le point
+  d'enregistrement s'éteint avec elle ;
+- un appui long sur le globe ne fait apparaître ni menu contextuel ni loupe ;
+- `(pointer: coarse)` sur un iPad **avec trackpad** répond bien `fine` ;
+- le ressenti du pincement et des inerties (0,7 / 0,7 / 0,6) ;
+- la touche de retour du clavier logiciel affiche bien « rechercher » ;
+- la feuille `navigator.share` s'ouvre et le lien rouvre au même endroit ;
+- le prompt de géolocalisation iOS, et « Autour de moi » qui atterrit.
 
 ### Une seconde requête `/api/geoid` part avant que la caméra ne soit posée
 Status: Open (mineur, antérieur au travail téléphone), mesuré 2026-09-16
