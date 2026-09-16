@@ -50,6 +50,24 @@ const ARTERIAL_CLASSES = Object.freeze(['motorway', 'trunk', 'primary']);
  * the metro band's 0.30° box is 30 — thirty requests, against an edge rule
  * that allows 30 per ten seconds for the whole page, to colour arterials that
  * are a few pixels wide at 20 km up. z10 covers that box in 4.
+ *
+ * `snapDeg` is the lattice the box is finally put on, and it is the only field
+ * here that exists for the CACHE rather than for the picture. See
+ * {@link normalizeFetchBox}: without it the box carries the camera pose and
+ * the reader's window size into the Overpass query, so no two readers and no
+ * two moments ever ask the same question, and a proxy cache that answers a
+ * repeat in 65 ms never gets a repeat to answer.
+ *
+ * A tenth of the band's span, and it is sized against the WORST-CASE INWARD
+ * MOVE of the box's near edge, because the step bounds two errors at once: the
+ * centre can move half a step, and the span can round down by half a step
+ * (a quarter of a step per side). At street scale that is 278 + 139 = **417 m**
+ * out of a ~1 500 m half-box. A coarser 0.01° step doubles it to 694 m, which
+ * is 45 % of the radius the reader is guaranteed around the point they are
+ * looking at — and the symptom of getting that wrong is "there is no traffic
+ * at the edge of the screen", which nobody would ever trace back to a cache
+ * key. It is also comfortably above `minShiftKm`, so a pan the refetch gate
+ * would have honoured now costs nothing at all when it stays inside a cell.
  */
 export const ROAD_FETCH_TIERS = Object.freeze([
   Object.freeze({
@@ -58,6 +76,7 @@ export const ROAD_FETCH_TIERS = Object.freeze([
     spanDeg: 0.05,
     pullKm: 12,
     minShiftKm: 0.35,
+    snapDeg: 0.005,
     flowZoom: 12,
     ribbonMinClass: 0,
     classes: MAJOR_CLASSES,
@@ -69,6 +88,7 @@ export const ROAD_FETCH_TIERS = Object.freeze([
     spanDeg: 0.05,
     pullKm: 12,
     minShiftKm: 0.35,
+    snapDeg: 0.005,
     flowZoom: 12,
     ribbonMinClass: 0,
     classes: MAJOR_CLASSES,
@@ -80,6 +100,7 @@ export const ROAD_FETCH_TIERS = Object.freeze([
     spanDeg: 0.30,
     pullKm: 45,
     minShiftKm: 3,
+    snapDeg: 0.025,
     flowZoom: 10,
     ribbonMinClass: 4,
     classes: ARTERIAL_CLASSES,
@@ -224,6 +245,84 @@ export function clampBoundsAroundCenter(bounds, center, maxSpanDeg = 0.05) {
     north: center.lat + latSpan / 2,
     west: center.lon - lonSpan / 2,
     east: center.lon + lonSpan / 2,
+  };
+}
+
+/**
+ * Put a fetch box on a repeatable footing: the band's full span, centred on a
+ * lattice point.
+ *
+ * ── The cache this exists to make reachable ────────────────────────────────
+ * The Overpass proxy caches a response under the QUERY BODY, and the query
+ * body carries the box. Two things put a different number in it for every
+ * reader, so the cache essentially never answered:
+ *
+ *   1. THE CENTRE. `clampBoundsAroundCenter` centres the box on the camera's
+ *      look-at ground point — a different float for every camera pose that has
+ *      ever existed.
+ *   2. THE SPAN. That function keeps the VIEWPORT's span whenever it is
+ *      smaller than the band's, so the reader's WINDOW SIZE is in the key:
+ *      the same camera pose at 1440p and at 1080p asks two different
+ *      questions.
+ *
+ * Measured 2026-09-16 against the hosted origin from the VPS: a cold road
+ * fetch is **0.6 s to 46 s** (Paris arterials 17.8 s, Lyon 46.4 s, Marseille
+ * 6.1 s, Bordeaux 2.7 s), and the same query repeated is **65 ms**. The whole
+ * gap between those two numbers was unreachable, for everybody, always.
+ *
+ * ── What it costs, and why the span is a LADDER and not a constant ─────────
+ * Snapping the centre costs up to half a lattice step of centring: at the
+ * street band's 0.01° that is 555 m of a 2 750 m half-box, so the point being
+ * looked at is never nearer than 2.2 km to an edge and the roads under it are
+ * always inside.
+ *
+ * ── What it does ──────────────────────────────────────────────────────────
+ * Both the centre and the span go to the NEAREST lattice point. Nearest, not
+ * outward, and that is the whole design: rounding up is what makes this
+ * expensive. Measured at the `qa-traffic-floor` view (Biarritz, 900 m, pitch
+ * −35°, box 0.0304° × 0.0435°), rounding the span UP to the band's own span
+ * lands on 0.05° × 0.05° — **1.9× the area, 421 roads became 1 003 and 1 843
+ * dots became 3 774**. The seating grid grows with the road count, and at a
+ * view where the 6 000-dot cap binds (Paris) the same dots spread over twice
+ * the streets, so every street on screen is drawn half as busy: a visible
+ * regression bought with a cache hit. Rounding to NEAREST at a 0.005° step
+ * gives 0.030° × 0.045° instead — **+2 % of area**, inside the noise.
+ *
+ * Idempotent by construction: a centre and a span already on the lattice round
+ * to themselves, which matters because `loadRoadsForBounds` re-normalises a
+ * box `onCameraChanged` has already normalised.
+ *
+ * A pan smaller than the step produces the SAME box, which the layer's own
+ * tile cache answers with no request at all — the refetch gate's `minShiftKm`
+ * is 350 m at street scale, well under the step. And a warmer can now compute
+ * the key a reader will ask for, which is what makes pre-warming possible.
+ *
+ * Coordinates are rounded to 5 decimals (~1.1 m) so the query string is stable
+ * against floating-point drift: `48.835` and `48.83500000000001` are the same
+ * box and must not be two cache entries.
+ *
+ * @param {{south:number, west:number, north:number, east:number}} box
+ * @param {{spanDeg:number, snapDeg:number}} tier The band. With no `snapDeg`
+ *   the box is returned untouched, so a caller that has no band keeps today's
+ *   behaviour exactly.
+ * @returns {{south:number, west:number, north:number, east:number}}
+ */
+export function normalizeFetchBox(box, tier) {
+  const snapDeg = tier?.snapDeg;
+  if (!Number.isFinite(snapDeg) || snapDeg <= 0) return box;
+  const snapped = (v) => Math.round(v / snapDeg) * snapDeg;
+  // A span is never rounded away to nothing: one step is the floor.
+  const span = (v) => Math.max(snapDeg, snapped(v));
+  const latSpan = span(box.north - box.south);
+  const lonSpan = span(box.east - box.west);
+  const lat = snapped((box.north + box.south) / 2);
+  const lon = snapped((box.east + box.west) / 2);
+  const r = (v) => Number(v.toFixed(5));
+  return {
+    south: r(lat - latSpan / 2),
+    north: r(lat + latSpan / 2),
+    west: r(lon - lonSpan / 2),
+    east: r(lon + lonSpan / 2),
   };
 }
 
