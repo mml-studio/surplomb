@@ -38,6 +38,7 @@ import {
   resolutionForBox,
   resolveMetric,
 } from './filosofiFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Carroyage INSEE — the demand side of a location, drawn as ground you can
@@ -621,7 +622,7 @@ function installClickHandler(viewer) {
   if (_clickHandler || !viewer?.scene?.canvas) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    filosofiClick(viewer.scene.pick(click.position));
+    filosofiClick(pickAt(viewer.scene, click.position));
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
 }

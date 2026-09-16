@@ -6,6 +6,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
+import { pickAt } from './pickAt.js';
 
 // TeleGeography submarine-cable data is bundled for an out-of-the-box
 // experience. IMPORTANT: it is CC BY-NC-SA 3.0 (NonCommercial + ShareAlike),
@@ -917,7 +918,7 @@ export function createTeleGeographySubmarineCableLayer({
     _clickHandler = screenSpaceEventHandlerFactory(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
       if (!_enabled) return;
-      const picked = viewer.scene.pick(click.position);
+      const picked = pickAt(viewer.scene, click.position);
       const record = resolvePickRecord(picked);
       if (record?.reference) {
         flyToReference(viewer, record.reference);

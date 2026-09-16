@@ -34,6 +34,7 @@ import {
   projectEarthDiscToViewport,
 } from '../celestialRing.js';
 import { governorRequestRender } from '../renderGovernor.js';
+import { drillPickAt, pickAt } from './pickAt.js';
 
 const RADIO_PREFIX = 'radio:';
 const DIRECTORY_ENDPOINT = '/api/radio/stations';
@@ -2435,14 +2436,14 @@ function pickedRadioStationAt(position) {
     const stationId = radioStationIdFromPick(picked);
     return stationId && _stationById.has(stationId) ? stationId : null;
   };
-  const primaryPick = scene.pick(position);
+  const primaryPick = pickAt(scene, position);
   const primaryStationId = stationFromPick(primaryPick);
   if (primaryStationId) return primaryStationId;
   const primaryId = resolvePickId(primaryPick);
   if (primaryId && isOwnedByOtherLayer('radio', primaryId)) return null;
 
   if (typeof scene.drillPick === 'function') {
-    const drilled = scene.drillPick(position, 16) || [];
+    const drilled = drillPickAt(scene, position, 16);
     for (const picked of drilled) {
       const stationId = stationFromPick(picked);
       if (stationId) return stationId;

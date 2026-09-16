@@ -74,6 +74,7 @@ import {
 } from './datexRoadStatus.js';
 import { roadStatusCoverageNotice } from './roadStatusCoverage.js';
 import { offScaleGlyph } from './offScaleGlyph.js';
+import { pickAt } from './pickAt.js';
 
 const SEGMENTS_URL = '/api/road-status-fr/segments';
 
@@ -490,7 +491,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
     // A batched GroundPolylinePrimitive reports the GeometryInstance id.
     if (typeof picked?.id === 'string' && _records.has(picked.id)) {
       selectSegment(picked.id);

@@ -203,6 +203,7 @@ import {
   MESH_LON,
   MESH_PUPILS,
 } from './schoolsMesh.js';
+import { pickAt } from './pickAt.js';
 
 export const SCHOOLS_FR_LAYER_ID = 'schools-fr';
 
@@ -1082,7 +1083,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const picked = viewer.scene.pick(movement.position);
+    const picked = pickAt(viewer.scene, movement.position);
     const id = picked?.id;
     if (typeof id === 'string' && _records.has(id)) {
       selectSite(id);

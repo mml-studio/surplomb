@@ -30,6 +30,7 @@ import {
 } from './powerGridFeed.js';
 import { applyViewGate, cameraViewBox } from './viewGate.js';
 import { boxesIntersect, focusedViewBox } from './viewportBox.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Power Grid — the high-voltage network as OpenStreetMap has mapped it, for the
@@ -1154,7 +1155,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const id = resolvePowerPickId(viewer.scene.pick(click.position));
+    const id = resolvePowerPickId(pickAt(viewer.scene, click.position));
     if (id) {
       // A stroke has no single position, so its card is anchored where the user
       // clicked rather than at a midpoint that could be a département away.

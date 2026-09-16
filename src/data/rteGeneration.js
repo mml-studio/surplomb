@@ -20,6 +20,7 @@ import {
   joinGenerationToRegistry,
   rteGenerationClass,
 } from './rteGenerationFeed.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Groupes de prod (FR) — every French power station of 100 MW or more, at the
@@ -812,7 +813,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const id = resolveRtePickId(viewer.scene.pick(click.position));
+    const id = resolveRtePickId(pickAt(viewer.scene, click.position));
     if (id) { selectObject(id); return; }
     // The label plane the depth buffer knows nothing about, resolved after the
     // native pick so a name drawn across a neighbouring site cannot steal it.

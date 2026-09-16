@@ -9,6 +9,7 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { roadEventGlyph, roadEventMaskGlyph } from './roadEventGlyphs.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Événements routiers (FR) — what the road operators themselves have declared.
@@ -898,7 +899,7 @@ export function createRoadEventsFranceLayer({
     if (_clickHandler || !viewer?.scene?.canvas) return;
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
-      const id = resolvePick(viewer.scene.pick(click.position));
+      const id = resolvePick(pickAt(viewer.scene, click.position));
       if (id) { selectEvent(id); return; }
       // The label plane the depth buffer knows nothing about, resolved after
       // the native pick so a title drawn across a neighbouring event cannot

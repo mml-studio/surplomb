@@ -14,6 +14,7 @@ import {
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { SPACE_MISSION_SELECTED_EVENT } from '../contextModePolicy.js';
+import { drillPickAt } from './pickAt.js';
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -3465,7 +3466,7 @@ const rocketLaunchesLayer = {
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((movement) => {
       if (!_enabled || !_dataSource?.show) return;
-      const entity = viewer.scene.drillPick(movement.position, 12)
+      const entity = drillPickAt(viewer.scene, movement.position, 12)
         .map((picked) => picked?.id)
         .find((candidate) => entityLaunchId(candidate));
       // The label plane, which the depth buffer knows nothing about, resolved

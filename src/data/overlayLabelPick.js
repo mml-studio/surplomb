@@ -1,4 +1,24 @@
 import { hitTestWorldOverlay } from '../overlays/worldOverlay.js';
+import { isCoarseInput } from '../inputMode.js';
+
+/**
+ * How far a label's hit rectangle grows for a fingertip, in CSS pixels.
+ *
+ * Deliberately smaller than the 24 px pick square of `src/data/pickAt.js`: a
+ * label is already five to twenty times the area of the dot it names, so it
+ * needs a nudge rather than a radius, and a generous pad would let one name
+ * swallow the tap meant for the station next to it. The pad is applied as a
+ * second pass inside `hitTestWorldOverlay`, so an exact hit always wins.
+ */
+export const OVERLAY_LABEL_PAD_COARSE_PX = 8;
+
+/**
+ * @param {boolean} [coarse] - Defaults to the session's input mode.
+ * @returns {number} Hit-rectangle pad for this session, in CSS pixels.
+ */
+export function overlayLabelPadPx(coarse = isCoarseInput()) {
+  return coarse ? OVERLAY_LABEL_PAD_COARSE_PX : 0;
+}
 
 /**
  * The name on the globe is a click surface, not a caption.
@@ -107,6 +127,8 @@ export function overlayLabelRecordId(entryId, prefix = '') {
  *   layer's current record map.
  * @param {Function} [options.hitTest=hitTestWorldOverlay] Host seam, injected
  *   by tests.
+ * @param {number} [options.padPx] How far the rectangle may grow for a finger;
+ *   defaults to {@link overlayLabelPadPx} for the session's input mode.
  * @returns {?string} Record id under the cursor, or null.
  */
 export function pickOverlayLabelId(position, {
@@ -114,14 +136,16 @@ export function pickOverlayLabelId(position, {
   prefix = '',
   has = null,
   hitTest = hitTestWorldOverlay,
+  padPx = undefined,
 } = {}) {
   if (typeof hitTest !== 'function' || !sourceId) return null;
   const x = Number(position?.x);
   const y = Number(position?.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const pad = padPx === undefined ? overlayLabelPadPx() : Number(padPx) || 0;
   let hit;
   try {
-    hit = hitTest(x, y, { sourceId: String(sourceId) });
+    hit = hitTest(x, y, { sourceId: String(sourceId), padPx: pad });
   } catch {
     // A host mid-teardown must never break click handling for the layer.
     return null;

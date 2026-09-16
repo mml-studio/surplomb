@@ -12,6 +12,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
+import { drillPickAt } from './pickAt.js';
 
 /**
  * Hub'Eau Hydrométrie — France's live river-gauge mesh.
@@ -1551,7 +1552,7 @@ export function createHubeauHydrometryLayer({
     _clickHandler = screenSpaceEventHandlerFactory(viewer);
     _clickHandler.setInputAction((click) => {
       if (!_enabled) return;
-      const drilled = viewer.scene.drillPick(click.position, DRILL_PICK_LIMIT) || [];
+      const drilled = drillPickAt(viewer.scene, click.position, DRILL_PICK_LIMIT);
       for (const hit of drilled) {
         const id = typeof hit?.primitive?.id === 'string' ? hit.primitive.id : null;
         if (id && _drawn.has(id)) {

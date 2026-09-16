@@ -21,6 +21,7 @@ import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
 import { loadMilitaryFrancePack, recordsInBox } from './militaryFrancePack.js';
 import { militarySiteGlyph } from './militarySiteIcons.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { pickAt } from './pickAt.js';
 
 const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
@@ -746,7 +747,7 @@ function installInteraction(viewer) {
   state.clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   state.clickHandler.setInputAction((click) => {
     if (!state.enabled) return;
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
     const id = typeof picked?.id?.id === 'string' ? picked.id.id : null;
     const outcome = installationClickOutcome(id, state.selectedId, state.recordById.has(id));
     if (outcome === 'select') {

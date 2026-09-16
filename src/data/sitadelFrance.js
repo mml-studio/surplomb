@@ -329,6 +329,7 @@ import {
   sitadelPointSize,
   sitadelUnplacedLines,
 } from './sitadelFeed.js';
+import { pickAt } from './pickAt.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const SITADEL_FR_LAYER_ID = 'sitadel-fr';
@@ -1650,7 +1651,7 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((movement) => {
-    const id = resolveSitadelPickId(viewer.scene.pick(movement.position));
+    const id = resolveSitadelPickId(pickAt(viewer.scene, movement.position));
     if (id) {
       selectPermit(id);
       return;

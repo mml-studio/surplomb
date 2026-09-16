@@ -34,6 +34,7 @@ import {
 } from './contextStore.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import { pickAt } from './pickAt.js';
 
 /**
  * Satellite Orbits — Real-time positions via CelesTrak TLE + SGP4 propagation.
@@ -2246,7 +2247,7 @@ function _installClickHandler(viewer) {
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
     if (!_enabled) return;
-    const picked = viewer.scene.pick(click.position);
+    const picked = pickAt(viewer.scene, click.position);
 
     if (picked) {
       // Clicking tracked entity itself — ignore

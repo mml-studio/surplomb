@@ -1787,6 +1787,32 @@ test('a lane publishes its own click surfaces, and an ordinary card still outran
   env.cleanup();
 });
 
+test('a fingertip grows every rectangle, but only after every exact hit has missed', () => {
+  // Two names side by side, 20 px apart. A touch in the gap is 6 px outside the
+  // left one and 14 px outside the right one: with a pad it must resolve the
+  // left. A touch ON the right one must resolve the right one even though the
+  // left one, painted in front, would also answer once padded — that ordering
+  // is the whole reason the pad runs as a second pass.
+  const env = installMockEnvironment({ width: 400, height: 300, dpr: 1 });
+  initWorldOverlay(env.viewer);
+  registerWorldOverlayPaintLane('detection', () => {
+    publishWorldOverlayLaneRect('detect:flights', 'right', { x: 120, y: 30, w: 60, h: 20 });
+    publishWorldOverlayLaneRect('detect:flights', 'left', { x: 40, y: 30, w: 60, h: 20 });
+  }, { id: 'detection', active: true, target: 'detection' });
+  env.postRender.raise();
+
+  assert.equal(hitTestWorldOverlay(106, 40), null, 'without a pad the gap is empty');
+  assert.equal(hitTestWorldOverlay(106, 40, { padPx: 8 }).entryId, 'left');
+  assert.equal(hitTestWorldOverlay(106, 40, { padPx: 4 }), null, 'a pad that does not reach stays a miss');
+  assert.equal(hitTestWorldOverlay(125, 40, { padPx: 8 }).entryId, 'right',
+    'an exact hit outranks a padded hit on the label painted in front of it');
+  assert.equal(hitTestWorldOverlay(40, 22, { padPx: 8 }).entryId, 'left', 'the pad grows vertically too');
+  assert.equal(hitTestWorldOverlay(40, 21, { padPx: 8 }), null);
+  assert.equal(hitTestWorldOverlay(106, 40, { padPx: 8, sourceId: 'detect:military' }), null,
+    'the pad never crosses the source fence');
+  env.cleanup();
+});
+
 test('a lane rectangle lives exactly one frame and cannot be published outside a paint', () => {
   const env = installMockEnvironment({ width: 400, height: 300, dpr: 1 });
   initWorldOverlay(env.viewer);

@@ -1126,19 +1126,44 @@ export function getOverlaySourceEntries(sourceId) {
 
 /**
  * Resolve the topmost interactive world-overlay entry at CSS-pixel coords.
+ *
+ * `padPx` grows every rectangle for a fingertip, and it runs as a SECOND PASS
+ * rather than as a wider test: an exact hit anywhere in the stack outranks a
+ * padded hit on a label painted in front of it. Without that ordering, a name
+ * whose rectangle stops 6 px short of the touch would steal the tap from the
+ * neighbour the finger is literally on top of — which is the failure the pad
+ * was added to fix, reintroduced one label over.
+ *
  * @param {number} x
  * @param {number} y
- * @param {{sourceId?:string,collisionGroup?:string,filter?:Function}} [options]
+ * @param {{sourceId?:string,collisionGroup?:string,filter?:Function,padPx?:number}} [options]
  * @returns {{sourceId:string,entryId:string,entry:WorldOverlayEntry,rect:OverlayRect}|null}
  */
 export function hitTestWorldOverlay(x, y, options = {}) {
   if (_destroyed || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const exact = _hitTestPass(x, y, options, 0);
+  if (exact) return exact;
+  const padPx = Number(options.padPx);
+  if (!Number.isFinite(padPx) || padPx <= 0) return null;
+  return _hitTestPass(x, y, options, padPx);
+}
+
+/**
+ * One front-to-back sweep of the published hit rectangles, grown by `pad`.
+ * @param {number} x
+ * @param {number} y
+ * @param {object} options
+ * @param {number} pad
+ * @returns {?object}
+ */
+function _hitTestPass(x, y, options, pad) {
   for (let i = _hitRectCount - 1; i >= 0; i--) {
     const hit = _hitRects[i];
     if (options.sourceId && hit.sourceId !== options.sourceId) continue;
     if (options.collisionGroup && hit.entry.collisionGroup !== options.collisionGroup) continue;
     if (typeof options.filter === 'function' && !options.filter(hit.entry)) continue;
-    if (x < hit.x || x > hit.x + hit.w || y < hit.y || y > hit.y + hit.h) continue;
+    if (x < hit.x - pad || x > hit.x + hit.w + pad) continue;
+    if (y < hit.y - pad || y > hit.y + hit.h + pad) continue;
     return { sourceId: hit.sourceId, entryId: hit.entryId, entry: hit.entry, rect: hit };
   }
   return null;
