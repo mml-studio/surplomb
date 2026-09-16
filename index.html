@@ -183,6 +183,17 @@
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
+    <!--
+      « AUTOUR DE MOI ». `navigator.geolocation` n'apparaissait nulle part dans
+      ce dépôt : une visite sans état partagé atterrit sur la tour Eiffel, et
+      pour voir sa propre rue il fallait en connaître le nom et le taper. Le
+      bouton est masqué si l'API n'existe pas ou si la page n'est pas servie en
+      https — un bouton présent qui échoue toujours est pire que pas de bouton.
+      Utile au portable aussi, donc il n'est pas gardé sur le tactile.
+    -->
+    <button id="locate-me" type="button" hidden aria-label="Autour de moi" title="Centrer la carte sur ma position">
+      <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+    </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>

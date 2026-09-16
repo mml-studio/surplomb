@@ -5,7 +5,7 @@ import { noirShader } from './styles/noir.js';
 import { snowShader } from './styles/snow.js';
 import { nightVisionShader } from './styles/surveillance.js';
 import { thermalShader } from './styles/thermal.js';
-import { LOCATIONS, CITY_POIS, GLOBE_VIEW, PILL_CITY_IDS, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
+import { LOCATIONS, CITY_POIS, GLOBE_VIEW, PILL_CITY_IDS, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { cameraViewBox } from './data/viewGate.js';
@@ -124,6 +124,12 @@ import {
   setPerfProfile,
 } from './perfProfile.js';
 import { isCoarseInput, isPhoneShell } from './inputMode.js';
+import {
+  canGeolocate,
+  geolocateErrorMessage,
+  geolocateRangeM,
+  requestCurrentPosition,
+} from './geolocate.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -2869,6 +2875,7 @@ export class StyleManager {
     this._initShareButton();
     this._initClearSelectedLayersButton();
     this._initResetGlobeButton();
+    this._initLocateButton();
     this._initTrackingReleaseButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -10392,6 +10399,70 @@ export class StyleManager {
   }
 
   /**
+   * "Autour de moi": one fix, one flight, no watch.
+   *
+   * The arrival is deliberately the SAME state the free-text search produces —
+   * a searched label, no active city, no POI — because that is what this is:
+   * a search whose query came from the device instead of the keyboard. Reusing
+   * that path is also what keeps the share link honest; the hash is rewritten
+   * from the camera, so a shared link REVEALS WHERE THE READER WAS. Documented
+   * in `docs/KNOWN-ISSUES.md`.
+   * @returns {void}
+   */
+  _initLocateButton() {
+    this._locateBtn = document.getElementById('locate-me');
+    if (!this._locateBtn) return;
+    if (!canGeolocate()) return;
+    this._locateBtn.hidden = false;
+    this._locateBtn.addEventListener('click', () => { void this._locateMe(); });
+  }
+
+  /** Ask for a fix and fly to it. @returns {Promise<void>} */
+  async _locateMe() {
+    if (this._locatePending) return;
+    this._locatePending = true;
+    this._locateBtn?.setAttribute('aria-busy', 'true');
+    try {
+      const fix = await requestCurrentPosition();
+      if (this._disposed) return;
+      const range = geolocateRangeM(fix.accuracyM);
+      const result = this._flyWithTransition(true, (hooks) => flyToLandmark(
+        this.viewer,
+        fix.lat,
+        fix.lon,
+        {
+          range,
+          pitch: -30,
+          heading: 0,
+          buildingHeight: 0,
+          duration: 3,
+          ...hooks,
+          onComplete: () => {
+            hooks.onComplete?.();
+            // `camera.changed` is quiet until `moveEnd`, and a reader who shares
+            // straight after arriving would otherwise post the previous view.
+            this.shareLinkManager?.flushHash?.();
+          },
+        },
+      ));
+      if (result === false) return;
+      // Exactly the free-text search's landing state.
+      this._searchedLocationLabel = 'Autour de moi';
+      this._setActiveLocation(null);
+      this._currentPoi = null;
+      if (result) this._currentTarget = result.targetPosition;
+      this._collapsePOIRow();
+      this._updateLocationMiniStatus();
+    } catch (error) {
+      if (this._disposed) return;
+      this._showToast(geolocateErrorMessage(error, globalThis.isSecureContext !== false), { durationMs: 4000 });
+    } finally {
+      this._locatePending = false;
+      this._locateBtn?.removeAttribute('aria-busy');
+    }
+  }
+
+  /**
    * Give "stop following this" a surface, for hands that have no Escape key.
    *
    * ── WHY A POLL, AND WHY ONLY ON A TOUCHSCREEN ───────────────────────────
@@ -10592,8 +10663,11 @@ export class StyleManager {
    */
   _initShareButton() {
     this._shareBtn.addEventListener('click', async () => {
-      const success = await this.shareLinkManager.copyLink();
-      this._showToast(success ? 'Link copied!' : 'Copy failed');
+      // `shared` and `cancelled` say nothing a reader needs: the system sheet
+      // already reported itself, and dismissing it is not a failure.
+      const outcome = await this.shareLinkManager.shareLink();
+      if (outcome === 'copied') this._showToast('Link copied!');
+      else if (outcome === 'failed') this._showToast('Copy failed');
     });
   }
 
