@@ -306,9 +306,19 @@ export class ShareLinkManager {
 
   /**
    * Parse URL hash on page load. Returns parsed state or null.
+   *
+   * `hash` defaults to the live one. The showcase hands over a hash of its own
+   * — the view its picture was showing when « Ouvrir le globe » was pressed —
+   * without ever writing it into the address first (see src/vitrine/handoff.js),
+   * and asks for `cameraDuration: 0`: the camera is already on that view, and
+   * the restore's usual three-second flight would be three seconds of a
+   * zero-length tween holding the render loop open.
+   *
+   * @param {string} [rawHash] - With or without its `#`.
+   * @param {{cameraDuration?: number}} [options]
    */
-  parseInitialHash() {
-    const hash = window.location.hash.slice(1);
+  parseInitialHash(rawHash = window.location.hash, { cameraDuration } = {}) {
+    const hash = String(rawHash || '').replace(/^#/, '');
     if (!hash) return null;
 
     const params = new URLSearchParams(hash);
@@ -395,6 +405,7 @@ export class ShareLinkManager {
       // not an hour. One key for the cursor, not one per layer.
       weekHour: decodeWeekHourParam(params.get(WEEK_HOUR_SHARE_PARAM)),
       sharedAtMs: decodeShareCreatedAtMs(params),
+      cameraDuration: Number.isFinite(cameraDuration) && cameraDuration >= 0 ? cameraDuration : null,
     };
     state.restoreAuthority = {
       visual: this._restoreAuthority.visual,
@@ -436,7 +447,7 @@ export class ShareLinkManager {
       // navigation. A later user or voice command wins over delayed restore.
       this.viewer.camera.flyTo({
         ...view,
-        duration: 3.0,
+        duration: state.cameraDuration ?? 3.0,
         easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
         complete: () => {
           if (

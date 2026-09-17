@@ -189,7 +189,7 @@ test('programmatic Context layer changes cannot bypass explicit expansion policy
 });
 
 test('share startup isolates panel defaults from recipient-local collapse preferences', () => {
-  const parseIndex = ui.indexOf('this._initialShareState = this.shareLinkManager.parseInitialHash();');
+  const parseIndex = ui.indexOf('this._initialShareState = this.shareLinkManager.parseInitialHash(');
   const panelChromeIndex = ui.indexOf('this._initPanelChrome();');
   assert.ok(parseIndex >= 0, 'initial share state must be parsed during UI construction');
   assert.ok(
@@ -197,7 +197,7 @@ test('share startup isolates panel defaults from recipient-local collapse prefer
     'share state must be known before panel chrome can read recipient-local preferences',
   );
   assert.equal(
-    (ui.match(/this\.shareLinkManager\.parseInitialHash\(\)/g) || []).length,
+    (ui.match(/this\.shareLinkManager\.parseInitialHash\(/g) || []).length,
     1,
     'startup must parse the incoming share exactly once',
   );

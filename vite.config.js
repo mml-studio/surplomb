@@ -27247,6 +27247,12 @@ const IMMUTABLE_ASSET_RE = new RegExp(`^/(?:assets|${CESIUM_BASE_DIR_RE}|${MODEL
  * 1 kB and revalidates.
  */
 const IMMUTABLE_FONT_RE = /^\/fonts\/[a-z0-9-]+\.[0-9a-f]{8}\.woff2$/;
+/**
+ * The showcase's pictures and loops, hashed per file by
+ * `scripts/publish-landing-assets.mjs` for the same reason as the fonts: they
+ * live in `public/`, and `index.html` is what maps stable names to them.
+ */
+const IMMUTABLE_LANDING_RE = /^\/landing\/[a-z0-9-]+\.[0-9a-f]{8}\.(?:webp|jpg|png|mp4|webm)$/;
 const JSON_BODY_PATH_RE = /\.geojsonl?$/;
 
 /**
@@ -27268,7 +27274,8 @@ export function staticAssetHeaders(url) {
     // afford that.
     Vary: 'Accept-Encoding',
   };
-  if (IMMUTABLE_ASSET_RE.test(pathname) || IMMUTABLE_FONT_RE.test(pathname)) {
+  if (IMMUTABLE_ASSET_RE.test(pathname) || IMMUTABLE_FONT_RE.test(pathname)
+    || IMMUTABLE_LANDING_RE.test(pathname)) {
     headers['Cache-Control'] = 'public, max-age=31536000, immutable';
   }
   if (JSON_BODY_PATH_RE.test(pathname)) {
@@ -27526,6 +27533,54 @@ function stripCesiumFromDocumentPages() {
         const { html: out, changed } = stripCesiumAssets(html);
         if (!changed) {
           console.warn('[gev-strip-cesium-from-documents] nothing to strip from '
+            + `${ctx?.path} — did vite-plugin-cesium change its injection?`);
+        }
+        return out;
+      },
+    },
+  };
+}
+
+/**
+ * The globe page's Cesium stylesheet, made inert until the cockpit starts.
+ *
+ * `index.html` is two pages now: the showcase a first visitor gets, and the
+ * cockpit (src/vitrine/gate.js decides). The showcase loads no engine at all —
+ * on a phone that is the whole point — yet `vite-plugin-cesium` injects its
+ * widget stylesheet at the top of `<head>`, where it would be one more
+ * render-blocking request in front of the showcase's first paint.
+ *
+ * So on `index.html` the tag keeps its URL in `data-href` and carries no
+ * `rel`, which browsers ignore entirely. `src/boot.js` turns it back into a
+ * stylesheet the moment the cockpit is asked for, and waits for it before the
+ * Viewer is built. A cockpit arrival pays nothing visible for this: the loading
+ * veil (styled by the app's own sheet) covers the page until the globe is up,
+ * and the widget sheet is a few kilobytes racing a megabyte of engine.
+ *
+ * @param {string} html
+ * @returns {{html: string, changed: boolean}}
+ */
+export function deferCesiumWidgets(html) {
+  const source = String(html || '');
+  const out = source.replace(CESIUM_WIDGETS_LINK_RE, (tag) => {
+    const href = /href="([^"]*)"/.exec(tag)?.[1] || '';
+    return `<link data-cesium-widgets data-href="${href}">`;
+  });
+  return { html: out, changed: out !== source };
+}
+
+/** @returns {import('vite').Plugin} */
+function deferCesiumWidgetsOnGlobePage() {
+  return {
+    name: 'gev-defer-cesium-widgets',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const name = String(ctx?.filename || ctx?.path || '').split('/').pop();
+        if (name !== 'index.html' && ctx?.path !== '/') return html;
+        const { html: out, changed } = deferCesiumWidgets(html);
+        if (!changed) {
+          console.warn('[gev-defer-cesium-widgets] no widget stylesheet on '
             + `${ctx?.path} — did vite-plugin-cesium change its injection?`);
         }
         return out;
@@ -28260,6 +28315,7 @@ export default defineConfig(({ mode, command }) => {
       // `stripCesiumFromDocumentPages` for what it bought and what it removed.
       cesium({ cesiumBaseUrl: `${CESIUM_BASE_DIR}/`, rebuildCesium: true }),
       stripCesiumFromDocumentPages(),
+      deferCesiumWidgetsOnGlobePage(),
       absolutizeSocialCardUrls(),
       ...[
       openSkyProxy(),

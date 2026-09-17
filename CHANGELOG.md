@@ -6,6 +6,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Un premier visiteur arrivait sur le cockpit sans un mot d’explication.**
+  La racine sans `#` montre désormais une page d’accueil : « La France au
+  rayon X. », une ligne d’exemples qui change toutes les trois secondes (et le
+  montre : glissement, filet de progression, « 2 / 7 »), six vues à ouvrir, la
+  voix, un champ « une adresse, une ville, ou ma position » et un seul bouton,
+  « Ouvrir le globe ». Derrière la page tourne une boucle enregistrée depuis le
+  globe (photoréel, voitures en mode détection, caméra qui pivote de 8°) :
+  lire la page ne télécharge aucun moteur et n’ouvre aucune session Cesium ion.
+  Sur ordinateur, « Ouvrir le globe » fige la boucle, démarre le globe dessous
+  sur la même prise de vue, et l’image s’efface quand il a dessiné la même
+  scène ; sur téléphone, le cockpit démarre normalement. Un lien de partage
+  (`#…`), `?q=`, `?waitlist=1`, `?welcome=` et tout navigateur qui a déjà
+  ouvert le globe vont droit au cockpit ; `?vitrine=1|0` force l’une ou
+  l’autre porte. Le formulaire marche sans JavaScript (`/?q=Lyon`), et `q`
+  quitte l’adresse dès sa lecture. Qui entre par la page d’accueil ne voit pas
+  la carte de bienvenue. Sur ordinateur, le bouton replié se range dans la
+  bande d’en-tête après 360 px au lieu de flotter sur le contenu. Scripts :
+  `npm run landing:capture`, `npm run landing:assets`, `npm run qa:landing`.
 - **L’éditeur du site butait sur « Essai terminé » comme n’importe quel
   visiteur.** Un pass propriétaire le sort de l’essai : `node
   scripts/owner-pass.mjs`, lancé là où vit `GEV_OWNER_PASS_SECRET`, imprime un

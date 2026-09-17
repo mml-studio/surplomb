@@ -566,9 +566,11 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   }
   assert.doesNotMatch(shell, /lang="/);
 
-  // The two numbers the card states are the ones the page description states.
-  const meta = html.match(/<meta name="description" content="[^"]*?(\d+) couches[^"]*?(\d+) ne demandent aucune clé/);
-  assert.ok(meta, 'the page description no longer states the layer counts');
+  // The two numbers the card states are the ones the share card states. (The
+  // page description is the showcase's since 2026-09-17 and carries no count:
+  // a number is not an argument for its reader.)
+  const meta = html.match(/<meta property="og:description" content="[^"]*?(\d+) couches[^"]*?(\d+) ne demandent aucune clé/);
+  assert.ok(meta, 'the share description no longer states the layer counts');
   const [, total, keyless] = meta;
   assert.ok(visibleText(shell).includes(`${total} couches de données publiques · ${keyless} sans clé`));
   assert.ok(visibleText(c).includes(`${total} couches · ${keyless} sans clé`));

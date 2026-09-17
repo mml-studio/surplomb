@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import {
   MODELS_BASE_DIR,
   acceptsBrotli,
+  deferCesiumWidgets,
   isCesiumFreePage,
   parseGeoidQuery,
   precompressibleAsset,
@@ -70,6 +71,28 @@ test('an unhashed font, and the stylesheet that names them, are not frozen', () 
   for (const p of ['/fonts/fonts.css', '/fonts/inter-latin.woff2', '/fonts/inter.woff2']) {
     assert.equal(staticAssetHeaders(p)['Cache-Control'], undefined, p);
   }
+});
+
+test('the showcase media are frozen only under a hashed name', () => {
+  // `scripts/publish-landing-assets.mjs` hashes each file; index.html maps the
+  // stable names. An unhashed name, or anything that is not media, keeps
+  // revalidating.
+  for (const p of ['/landing/hero-poster-1440.3fa2c1d0.webp', '/landing/hero-desktop.0badc0de.mp4', '/landing/view-01-480.12345678.jpg']) {
+    assert.equal(staticAssetHeaders(p)['Cache-Control'], 'public, max-age=31536000, immutable', p);
+  }
+  for (const p of ['/landing/hero-poster-1440.webp', '/landing/manifest.12345678.json', '/landing/x.1234567.webp']) {
+    assert.equal(staticAssetHeaders(p)['Cache-Control'], undefined, p);
+  }
+});
+
+test('the globe page defers Cesium\'s widget stylesheet; nothing else does', () => {
+  const injected = `<link rel="stylesheet" href="/${CESIUM_DIR}/Widgets/widgets.css">`;
+  const { html, changed } = deferCesiumWidgets(`<head>${injected}<title>x</title></head>`);
+  assert.equal(changed, true);
+  assert.equal(html, `<head><link data-cesium-widgets data-href="/${CESIUM_DIR}/Widgets/widgets.css"><title>x</title></head>`);
+  // A tag with no `rel` is inert: no request before src/boot.js asks for it.
+  assert.doesNotMatch(html, /rel="stylesheet"/);
+  assert.equal(deferCesiumWidgets('<link rel="stylesheet" href="/style.css">').changed, false);
 });
 
 test('the unhashed model path cannot claim immutability', () => {

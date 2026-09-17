@@ -1,6 +1,6 @@
 # Surplomb Current State
 
-Updated: September 8, 2026
+Updated: September 17, 2026
 
 > **2026-09-08 — la boîte à datasets : un jeu de données se branche, il ne se
 > code plus.** Contrat et limites dans `docs/DATASETS.md` ; code dans
@@ -135,6 +135,42 @@ Updated: September 8, 2026
 > embarquée, pas vus à l'écran. C'est la dette la plus importante de ce passage,
 > et la coque AIS — dont le chemin de données vient seulement d'être refermé —
 > est la première chose à regarder.
+
+> **2026-09-17 — the showcase at the bare root** (`src/boot.js` is the page's
+> only entry; `src/vitrine/` owns the rest; markup `#vitrine` in `index.html`,
+> styles `landing.css`; plan `docs/designs/landing/PLAN-EXECUTION.md`).
+>
+> - **Which door.** `src/vitrine/gate.js`, mirrored by an inline script in the
+>   head (run and compared by `gate.test.mjs`): `?vitrine=1|0` forces; the QA
+>   flag `window.__GEV_SKIP_VITRINE__` (set by `newQaPage` unless
+>   `{ vitrine: true }`) → cockpit; a hash containing `=` → cockpit; `?q=`,
+>   `?waitlist=`, `?welcome=` → cockpit; `localStorage['gev:vitrine-seen:v1']`
+>   → cockpit; otherwise the showcase (`html[data-vitrine]`). A cockpit arrival
+>   by share, query or link writes the seen flag; so does « Ouvrir le globe ».
+> - **No engine behind the page.** `src/main.js` no longer starts itself:
+>   `startCockpit(options)` does. On a wide screen the cockpit graph is
+>   imported at idle (evaluated, nothing built); on a phone nothing is fetched
+>   before the press. Cesium's widget stylesheet is inert on `index.html`
+>   (`deferCesiumWidgets`, vite.config.js) until `boot.js` enables it.
+> - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
+>   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
+>   → fallback (reduced motion, Save-Data, 2G, error, 8 s). The camera law it
+>   was filmed with is `src/vitrine/heroLoop.js` (generated).
+> - **The hand-off (≥ 1 001 px).** The press freezes the loop,
+>   `html[data-vitrine="opening"]` shows `#cesiumContainer` under it,
+>   `init({ handoff })` poses the camera from the law at `video.currentTime`,
+>   boots on `photoreal` (the press counts as the adoption), restores the hero
+>   state through a share hash that is never written (`StyleManager`
+>   `initialShare`, zero-length flight), and lifts the frame once the surface
+>   has drained AND the traffic layer has seated its cars (9 s deadline).
+>   `window.__godsEyeView.vitrineHandoff` records it.
+> - **`?q=`** is read once by `src/vitrine/query.js` and removed from the
+>   address; a non-empty query replaces the boot flight with the search box's
+>   own `flyToAddress`; not found → toast, text left in `#location-search`,
+>   ordinary arrival. Showcase arrivals get the first-run SESSION suppression.
+>
+> Acceptance: `npm run qa:landing -- --url <server>` (76 checks on the dev
+> server; the byte budget case only asserts against a build).
 
 > **2026-09-17 — first-run card, three French variants** (`src/firstRunExperience.js`
 > owns the door, `src/firstRunVariants.js` what a choice does,

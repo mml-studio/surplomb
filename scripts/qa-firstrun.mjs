@@ -38,6 +38,7 @@ import {
   QA_WAIT_POLLING_MS,
   disablePhotoreal,
   phoneUrl,
+  skipVitrine,
 } from './lib/qa-first-run.mjs';
 import {
   FIRST_RUN_SESSION_KEY,
@@ -302,6 +303,9 @@ async function launcherPage(browser, { consoleErrors, teeth = TEETH, phone = fal
   // the card appears — but it has no use for the 3D globe, and an ion root
   // tile is billed per boot. See `disablePhotoreal`.
   await disablePhotoreal(page);
+  // The bare root is the showcase for a first visitor; this harness is about
+  // the card the cockpit shows, so it goes straight to the cockpit.
+  await skipVitrine(page);
   if (phone) {
     // `newPhoneQaPage()`'s two load-bearing steps, minus the suppression.
     await page.emulate(PHONE_DEVICE);

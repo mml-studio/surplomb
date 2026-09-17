@@ -24,6 +24,7 @@ import {
   suppressFirstRun,
 } from '../scripts/lib/qa-first-run.mjs';
 import { PHOTOREAL_DISABLE_GLOBAL, photorealDisabled } from './photorealTileset.js';
+import { VITRINE_SKIP_GLOBAL, decideVitrine, readVitrineSignals } from './vitrine/gate.js';
 import { FIRST_RUN_SESSION_KEY, FIRST_RUN_STORAGE_KEY } from './firstRunExperience.js';
 
 /** A directory of throwaway harnesses, so the audit is tested on its own terms. */
@@ -249,4 +250,28 @@ test('the switch survives navigation, because it is not in the URL', async () =>
   await disablePhotoreal(page);
   assert.equal(page.installed.length, 1);
   assert.equal(page.installed[0].arg, PHOTOREAL_DISABLE_GLOBAL);
+});
+
+// ── the showcase ──────────────────────────────────────────────────────────
+// Every harness is a first visitor, and the bare root shows first visitors a
+// scrolling page with no globe. The same install that hides the card sends
+// the fleet to the cockpit — and the app's own gate agrees it should.
+
+test('newQaPage skips the showcase by default, in the same install', async () => {
+  const page = fakePage();
+  await newQaPage(fakeBrowser(page));
+  const { win } = page.run();
+  assert.equal(win[VITRINE_SKIP_GLOBAL], true);
+  assert.equal(page.installed.length, 2, 'no extra script per page');
+  const signals = readVitrineSignals({ location: { search: '', hash: '' }, storage: null, windowRef: win });
+  assert.deepEqual(decideVitrine(signals), { vitrine: false, reason: 'qa' });
+});
+
+test('the showcase harness keeps it', async () => {
+  const page = fakePage();
+  await newQaPage(fakeBrowser(page), { vitrine: true });
+  const { win } = page.run();
+  assert.equal(win[VITRINE_SKIP_GLOBAL], undefined);
+  const signals = readVitrineSignals({ location: { search: '', hash: '' }, storage: null, windowRef: win });
+  assert.equal(decideVitrine(signals).vitrine, true);
 });

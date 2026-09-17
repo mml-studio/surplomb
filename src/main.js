@@ -66,9 +66,9 @@ import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMod
 import { initPhoneSheet } from './phoneSheet.js';
 import { applyTouchCameraProfile } from './touchCamera.js';
 import { getPickDiagnostics } from './data/pickAt.js';
-
-initLogoGaze();
-installIconFontFallback();
+import { rememberFirstRunSessionDismissed } from './firstRunExperience.js';
+import { applyHeroPose, heroOrbit, heroShareHash, orbitHeadingDeg, whenSurfaceSettled } from './vitrine/handoff.js';
+import { takeInitialQuery } from './vitrine/query.js';
 
 /**
  * Extract a human-readable error message from any thrown value.
@@ -100,10 +100,36 @@ function describeError(error) {
  * GOD'S EYE VIEW — Main Entry Point
  * Initializes CesiumJS with Google Photorealistic 3D Tiles,
  * style system, intelligence HUD, location presets, and share links.
+ *
+ * @param {object} [options]
+ * @param {{videoTime: number, query?: string, onReady: Function}|null} [options.handoff]
+ *   The showcase's wide-screen hand-off (src/vitrine/vitrine.js): boot under
+ *   the frozen frame, on the pose it was recorded from, and call `onReady`
+ *   once the globe has drawn that view. Null for every other boot.
+ * @param {boolean} [options.fromVitrine] The reader came through the showcase.
+ * @param {boolean} [options.locate] « Utiliser ma position » was granted on
+ *   the showcase: fly to the reader once the globe is up.
  */
-async function init() {
+async function init({ handoff: requestedHandoff = null, fromVitrine = false, locate = false } = {}) {
   const loadingScreen = document.getElementById('loading-screen');
   const loaderStatus = loadingScreen.querySelector('.loader-status');
+
+  // The showcase's form lands here as `?q=` (typed, or its no-JavaScript
+  // submit). Read once and removed from the address at once, so no later
+  // share-link write can carry it. See src/vitrine/query.js.
+  const initialQuery = requestedHandoff ? (requestedHandoff.query || '') : takeInitialQuery();
+  const orbit = requestedHandoff ? heroOrbit('desktop') : null;
+  // A hand-off without a recorded orbit (landing assets never generated)
+  // degrades to an ordinary boot: the frame could not be matched anyway.
+  const handoff = requestedHandoff && orbit ? requestedHandoff : null;
+  if (requestedHandoff && !handoff) requestedHandoff.onReady?.({ status: 'no-orbit' });
+  // Whoever reaches the cockpit through the showcase has already been shown
+  // what the first-run card says. Session-scoped on purpose: the durable key
+  // means « never again », which only the reader's own close may write.
+  if (fromVitrine || requestedHandoff || initialQuery !== null) rememberFirstRunSessionDismissed();
+  // The picture is the loading screen during a hand-off; the veil must already
+  // be gone when the showcase lifts, or it would flash in between.
+  if (handoff) loadingScreen.classList.add('hidden');
 
   try {
     loaderStatus.textContent = 'Configuring viewer...';
@@ -214,6 +240,20 @@ async function init() {
         },
       },
     });
+
+    // The hand-off pose, set before any stack is activated so the first tiles
+    // requested are the ones under the frozen frame. The same pose travels in
+    // the share hash below, restored with a zero-length flight.
+    const handoffPose = handoff ? applyHeroPose(viewer.camera, orbit, handoff.videoTime) : null;
+    const handoffShare = handoffPose ? { hash: heroShareHash(handoffPose), cameraDuration: 0 } : null;
+    const vitrineHandoff = handoff
+      ? {
+        videoTime: handoff.videoTime,
+        expectedHeadingDeg: orbitHeadingDeg(orbit, handoff.videoTime),
+        pose: handoffPose,
+        result: null,
+      }
+      : null;
 
     // Cap the default render loop at 60 fps. Cesium's loop otherwise runs at
     // the display's refresh rate — 120 Hz on ProMotion panels — doubling GPU
@@ -408,7 +448,10 @@ async function init() {
     // this session closed on purpose.
     const phoneShell = isPhoneShell();
     const defaultStack = canLoadPhotoreal ? PHOTOREAL_ADOPTION_STACK : null;
-    const adoptedBefore = canLoadPhotoreal && !phoneShell && photorealAlreadyAdopted();
+    // A hand-off IS the adoption: the reader pressed « Ouvrir le globe » over
+    // a photoreal picture, and only the photoreal globe draws that picture.
+    const adoptedBefore = canLoadPhotoreal && !phoneShell
+      && (Boolean(handoff) || photorealAlreadyAdopted());
     const startupStack = photorealOff
       ? 'osm'
       : (adoptedBefore ? 'photoreal' : (defaultStack || (keylessMode ? 'osm' : 'google-roadmap')));
@@ -452,11 +495,14 @@ async function init() {
     // falls back to `getActiveId()`, which is `startupStack` already resolved
     // against what this build can show. The share restore's own `setStack()`
     // then short-circuits on the live stack.
-    const requestedStack = peekShareMapStack();
+    const requestedStack = peekShareMapStack(handoffShare?.hash);
     const bootStack = requestedStack && mapStackController.isStackAvailable(requestedStack)
       ? requestedStack
       : mapStackController.getActiveId();
     await mapStackController.setStack(bootStack, { silent: true });
+    // Same bookkeeping as an adoption, so the next visit opens on the globe
+    // this one ended on.
+    if (handoff && mapStackController.getActiveId() === 'photoreal') rememberPhotorealAdoption();
 
     // The star field follows the imagery: it belongs to a photograph of the
     // Earth, not to a drawing of it. Deferred on this first call so a build
@@ -477,7 +523,7 @@ async function init() {
     });
 
     // Initialize the style manager (post-processing, HUD, locations, share links)
-    const styleManager = new StyleManager(viewer, { mapStackController });
+    const styleManager = new StyleManager(viewer, { mapStackController, initialShare: handoffShare });
     // The previous multi-canvas weather compositor remains disabled. Cockpit
     // clouds use a separate, capped low-resolution GPU pass that never attaches
     // Cesium fog or post-process stages and is fully stopped in map mode.
@@ -507,8 +553,69 @@ async function init() {
       })
       : null;
 
-    // If no share link state, do the default fly-to (Paris)
-    if (!styleManager.hasShareState) {
+    // `?q=` with something in it: the destination IS the arrival, so the boot
+    // flight to Paris would only be a detour. The geocoder answers in well
+    // under a second; the same boot-flight bracket holds the layers meanwhile.
+    // Nothing found: the usual toast, the text left in the search field, and
+    // the ordinary arrival.
+    const flyToInitialQuery = async (query, { fallback }) => {
+      const outcome = await styleManager.flyToAddress(query, {
+        onArrival: () => {
+          endBootFlight();
+          photorealAdoption?.arm();
+        },
+      });
+      if (outcome.status === 'flying') return;
+      if (outcome.status === 'cancelled' || outcome.status === 'superseded') {
+        // The reader moved the camera first; their choice stands.
+        endBootFlight();
+        return;
+      }
+      if (outcome.status === 'not-found') styleManager._showToast('Location not found');
+      else if (outcome.status === 'failed') styleManager._showToast('Search failed');
+      const field = document.getElementById('location-search');
+      if (field) field.value = query;
+      fallback();
+    };
+
+    // « Utiliser ma position », granted on the showcase: the same fix comes
+    // back at once (`maximumAge`), and the flight is the cockpit's own.
+    const locateOnArrival = () => {
+      if (locate) void styleManager.locateMe();
+    };
+
+    if (handoff) {
+      loaderStatus.textContent = DEFAULT_CITY_VIEW.label;
+      // The frozen frame lifts once the globe under it has drawn the same view.
+      // …and once the cars the loop shows are on that ground too.
+      const trafficDrawn = () => {
+        const stats = dataManager.layers.get('traffic')?.module?.getStats?.();
+        return Boolean(stats && stats.count > 0 && !stats.loading
+          && (!stats.floorArmed || stats.floorWaiting === 0));
+      };
+      void whenSurfaceSettled(viewer, mapStackController, {
+        requestRender: governorRequestRender,
+        alsoReady: trafficDrawn,
+      })
+        .then((result) => {
+          vitrineHandoff.result = result;
+          handoff.onReady?.(result);
+          if (initialQuery) void flyToInitialQuery(initialQuery, { fallback: () => endBootFlight() });
+          else locateOnArrival();
+        });
+    } else if (!styleManager.hasShareState && initialQuery) {
+      loaderStatus.textContent = initialQuery;
+      beginBootFlight();
+      void flyToInitialQuery(initialQuery, {
+        fallback: () => flyToDefaultCity(viewer, DEFAULT_CITY_VIEW, {
+          onSettled: () => {
+            endBootFlight();
+            photorealAdoption?.arm();
+          },
+        }),
+      });
+    } else if (!styleManager.hasShareState) {
+      // If no share link state, do the default fly-to (Paris)
       // A phone lands instead of flying: the descent is four and a half
       // seconds of continuous rendering and a whole zoom pyramid of tiles
       // nobody looks at, over a mobile connection, in front of the first frame
@@ -529,6 +636,7 @@ async function init() {
         onSettled: () => {
           endBootFlight();
           photorealAdoption?.arm();
+          locateOnArrival();
         },
       });
     } else {
@@ -883,6 +991,10 @@ async function init() {
       // The dataset box: plug / unplug / infer / list, for the QA harness and
       // for anyone driving the app from the console.
       datasets: datasetBox,
+      // Null unless this boot came from the showcase's frozen frame: the video
+      // time, the pose it maps to, and how the wait for the first frame ended.
+      // `qa:landing` reads it to prove the frame and the globe match.
+      vitrineHandoff,
       // Logical model name -> the URL this build serves it from. A harness that
       // wants to load a GLB itself (track-regression's independent capability
       // control) cannot guess the content-hashed directory, and hardcoding
@@ -896,7 +1008,30 @@ async function init() {
     console.error("Surplomb initialization failed:", error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
+    // A hand-off that dies must not leave the reader in front of a frozen
+    // picture: lifting it uncovers the loading screen's error line.
+    if (requestedHandoff) {
+      loadingScreen.classList.remove('hidden');
+      requestedHandoff.onReady?.({ status: 'failed' });
+    }
   }
 }
 
-init();
+let cockpitStarted = null;
+
+/**
+ * Start the cockpit, once per page. The module used to run `init()` on
+ * import; it no longer does, so the showcase can fetch and evaluate this
+ * whole graph at idle (src/vitrine/vitrine.js) and still build nothing until
+ * the reader asks. See src/boot.js.
+ *
+ * @param {Parameters<typeof init>[0]} [options]
+ * @returns {Promise<void>}
+ */
+export function startCockpit(options = {}) {
+  if (cockpitStarted) return cockpitStarted;
+  initLogoGaze();
+  installIconFontFallback();
+  cockpitStarted = init(options);
+  return cockpitStarted;
+}
