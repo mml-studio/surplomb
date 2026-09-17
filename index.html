@@ -236,9 +236,16 @@
   <div id="vitrine" class="landing" data-state="poster">
     <a class="skip" href="#contenu">Aller au contenu</a>
     <div class="world" aria-hidden="true">
+      <!--
+        The poster is frame 0 of the loop. AVIF first: at 2880 px it is a third
+        lighter than the JPEG. The desktop cut is 16:10 and covers the viewport,
+        so a screen narrower than 16:10 is covered by its HEIGHT (`160vh`).
+      -->
       <picture class="world-picture">
-        <source type="image/jpeg" media="(min-aspect-ratio: 1/1)" data-srcset="/landing/hero-poster-1280.17f327ee.jpg 1280w, /landing/hero-poster-1600.a1152e51.jpg 1600w" sizes="100vw" />
-        <img class="world-poster" data-srcset="/landing/hero-poster-phone-780.1f17be4d.jpg 780w" sizes="100vw" data-src="/landing/hero-poster-phone-780.1f17be4d.jpg" alt="" fetchpriority="high" decoding="async" />
+        <source type="image/avif" media="(min-aspect-ratio: 1/1)" data-srcset="/landing/hero-poster-1920.c3f79810.avif 1920w, /landing/hero-poster-2880.4f021ce8.avif 2880w" sizes="(min-aspect-ratio: 16/10) 100vw, 160vh" />
+        <source type="image/jpeg" media="(min-aspect-ratio: 1/1)" data-srcset="/landing/hero-poster-1920.b47cad6d.jpg 1920w, /landing/hero-poster-2880.74c4ce9a.jpg 2880w" sizes="(min-aspect-ratio: 16/10) 100vw, 160vh" />
+        <source type="image/avif" data-srcset="/landing/hero-poster-phone-960.1954a981.avif 960w" sizes="100vw" />
+        <img class="world-poster" data-srcset="/landing/hero-poster-phone-960.47149614.jpg 960w" sizes="100vw" data-src="/landing/hero-poster-phone-960.47149614.jpg" alt="" fetchpriority="high" decoding="async" />
       </picture>
       <script>
         /* vitrine-poster: the hero picture's sources, set only when the showcase owns the page. */
@@ -255,10 +262,9 @@
           if (theme) theme.setAttribute('content', '#F7F4EA');
         })();
       </script>
-      <noscript><img class="world-poster" src="/landing/hero-poster-phone-780.1f17be4d.jpg" alt="" /></noscript>
-      <video class="world-video" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1"
-        data-video-wide="/landing/hero-desktop.bf00841f.mp4"
-        data-video-tall="/landing/hero-phone.0f21e25f.mp4"></video>
+      <noscript><img class="world-poster" src="/landing/hero-poster-phone-960.47149614.jpg" alt="" /></noscript>
+      <!-- The file is chosen in src/vitrine/vitrine.js (definition × codec, src/vitrine/renditions.js). -->
+      <video class="world-video" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1"></video>
     </div>
     <span class="world-credit">Cesium ion · Google Maps</span>
 

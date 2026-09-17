@@ -2,8 +2,8 @@
 /**
  * landing:publish — put the showcase's media where the page can serve them.
  *
- * `scripts/build-landing-assets.mjs` writes stable names (`hero-poster-1440.webp`)
- * into a staging directory. This step:
+ * `scripts/build-landing-assets.mjs` writes stable names (`hero-poster-1920.avif`)
+ * into staging directories. This step:
  *
  *   1. copies each file to `public/landing/<stem>.<sha256:8><ext>` and removes
  *      the previous generation — hashed so `staticAssetHeaders` can promise a
@@ -12,10 +12,17 @@
  *   2. rewrites every `/landing/<stem>[.<hash>]<ext>` reference in `index.html`
  *      to the new name, and FAILS on a reference to a file that was not built —
  *      a missing poster is a green rectangle nobody would report;
- *   3. writes `src/vitrine/heroLoop.js`, the recorded loops and the camera law
- *      each was filmed with, which the hand-off evaluates (src/vitrine/handoff.js).
+ *   3. publishes every loop rendition the manifest lists (definition × codec)
+ *      and writes `src/vitrine/heroLoop.js`: those renditions with their exact
+ *      `codecs=` strings, which src/vitrine/renditions.js chooses between, and
+ *      the camera law each loop was filmed with, which the hand-off evaluates
+ *      (src/vitrine/handoff.js).
  *
- * Usage: node scripts/publish-landing-assets.mjs [--from <dir>] [--check]
+ * `--from` takes several directories, comma-separated, earliest first: the
+ * high-definition loops (`--quality hq`, 2026-09-17) live apart from the
+ * gallery stills, and a name found in an earlier directory wins.
+ *
+ * Usage: node scripts/publish-landing-assets.mjs [--from <dir>[,<dir>…]] [--check]
  */
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -28,7 +35,8 @@ const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
-const FROM = path.resolve(REPO_ROOT, option('--from', '.context/landing-assets/out'));
+const FROM = option('--from', '.context/landing-assets/hq,.context/landing-assets/out')
+  .split(',').filter(Boolean).map((dir) => path.resolve(REPO_ROOT, dir));
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public', 'landing');
 const INDEX_PATH = path.join(REPO_ROOT, 'index.html');
 const LOOP_MODULE = path.join(REPO_ROOT, 'src', 'vitrine', 'heroLoop.js');
@@ -46,8 +54,21 @@ export function hashedName(file, bytes) {
   return `${stem}.${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}${ext}`;
 }
 
-const MEDIA_EXT_RE = /\.(?:webp|jpg|jpeg|png|mp4|webm)$/;
-const REFERENCE_RE = /\/landing\/([a-z0-9-]+?)(?:\.[0-9a-f]{8})?\.(webp|jpg|jpeg|png|mp4|webm)\b/g;
+/**
+ * Rungs the builder makes but the page does not serve. Every loop is ~6 to
+ * 15 MB committed, so a fallback has to have somebody behind it:
+ *
+ *   - `hero-phone-960-h264`: every phone browser left reads AV1 (Chrome,
+ *     Firefox, Samsung Internet) or HEVC (every iPhone and iPad), and a
+ *     browser that reads neither keeps the poster, which is a finished picture.
+ *   - `hero-desktop-1920-hevc`: HEVC is for Safari on an M1/M2 (no AV1); at a
+ *     1920 need it gets the H.264 1920 instead, at the same measured quality
+ *     (VMAF 88.4 against 89.4).
+ */
+const NOT_SERVED = new Set(['hero-phone-960-h264.mp4', 'hero-desktop-1920-hevc.mp4']);
+
+const MEDIA_EXT_RE = /\.(?:avif|webp|jpg|jpeg|png|mp4|webm)$/;
+const REFERENCE_RE = /\/landing\/([a-z0-9-]+?)(?:\.[0-9a-f]{8})?\.(avif|webp|jpg|jpeg|png|mp4|webm)\b/g;
 
 /**
  * Rewrite the references in `html`. Returns the new text and the stems that
@@ -69,25 +90,37 @@ export function rewriteReferences(html, published) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  if (!existsSync(FROM)) throw new Error(`nothing staged in ${FROM} — run scripts/build-landing-assets.mjs first`);
-  const manifest = JSON.parse(readFileSync(path.join(FROM, 'manifest.json'), 'utf8'));
-  // Only what the page names. The builder also writes WebP twins and WebM
-  // loops; measured on these captures, mozjpeg and H.264 came out LIGHTER
-  // (WebP +2 to +15 %, VP9 +6 %), so the markup does not ask for them and
-  // they stay out of the repository.
+  const missingDirs = FROM.filter((dir) => !existsSync(dir));
+  if (missingDirs.length) throw new Error(`nothing staged in ${missingDirs.join(', ')} — run scripts/build-landing-assets.mjs first`);
+  /** Where a staged name lives: the first directory that has it. */
+  const locate = (file) => FROM.map((dir) => path.join(dir, file)).find((full) => existsSync(full)) || null;
+  const manifestPath = locate('manifest.json');
+  if (!manifestPath) throw new Error('no manifest.json in any staging directory');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+  // Only what the page names, plus the loops the manifest lists. The builder
+  // also writes WebP twins and every rung of its encoding ladder; measured on
+  // these captures, mozjpeg beat WebP for the stills, and the ladder is a
+  // decision record, not a delivery.
   const html0 = readFileSync(INDEX_PATH, 'utf8');
   const wanted = new Set([...html0.matchAll(REFERENCE_RE)].map((m) => `${m[1]}.${m[2]}`));
-  const staged = readdirSync(FROM).filter((file) => MEDIA_EXT_RE.test(file) && wanted.has(file));
+  for (const video of Object.values(manifest.videos || {})) {
+    for (const source of video.sources || []) {
+      if (!NOT_SERVED.has(source.file)) wanted.add(source.file);
+    }
+  }
   const published = new Map();
   const payload = [];
-  for (const file of staged) {
-    const bytes = readFileSync(path.join(FROM, file));
+  for (const file of [...wanted].sort()) {
+    const full = locate(file);
+    if (!full) continue; // reported below as missing, if the page names it
+    const bytes = readFileSync(full);
     const hashed = hashedName(file, bytes);
     published.set(file, hashed);
-    payload.push({ file, hashed, bytes: bytes.length });
+    payload.push({ file, full, hashed, bytes: bytes.length });
   }
 
-  const html = readFileSync(INDEX_PATH, 'utf8');
+  const html = html0;
   const { html: nextHtml, missing } = rewriteReferences(html, published);
   if (missing.length) {
     console.error(`index.html references media that were not built:\n  ${missing.join('\n  ')}`);
@@ -96,23 +129,32 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
   const videos = {};
   for (const [kind, video] of Object.entries(manifest.videos || {})) {
-    const url = (name) => (published.has(name) ? `/landing/${published.get(name)}` : null);
-    const base = splitName(video.file).stem;
+    const sources = (video.sources || []).filter((source) => published.has(source.file));
+    if (!sources.length) throw new Error(`the ${kind} loop lists no published file`);
+    const first = sources[0];
     videos[kind] = {
-      mp4: url(`${base}.mp4`),
-      width: video.width,
-      height: video.height,
+      aspect: +(first.width / first.height).toFixed(6),
+      fps: video.fps || first.fps,
       durationS: video.durationS,
-      fps: video.fps,
       orbit: video.orbit,
+      renditions: sources.map((source) => ({
+        src: `/landing/${published.get(source.file)}`,
+        mime: source.mime,
+        codec: source.codec,
+        width: source.width,
+        height: source.height,
+        bytes: source.bytes,
+        bitrateKbps: source.bitrateKbps,
+      })),
     };
   }
   const loopModule = `// GENERATED by \`npm run landing:assets\` (scripts/publish-landing-assets.mjs) from
 // the capture's own record. Do not edit by hand: re-record instead.
 //
-// The recorded hero loops and the camera law each was filmed with, which
-// src/vitrine/handoff.js evaluates at the video's clock.
-export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.capturedAt || null, videos }, null, 2)});
+// The recorded hero loops: every rendition the page may choose between
+// (src/vitrine/renditions.js), and the camera law each loop was filmed with,
+// which src/vitrine/handoff.js evaluates at the video's clock.
+export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.capture?.desktop?.capturedAt || manifest.generatedAt || null, videos }, null, 2)});
 `;
 
   const total = payload.reduce((sum, item) => sum + item.bytes, 0);
@@ -131,7 +173,7 @@ export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.c
   for (const old of readdirSync(PUBLIC_DIR)) {
     if (!keep.has(old)) rmSync(path.join(PUBLIC_DIR, old));
   }
-  for (const item of payload) copyFileSync(path.join(FROM, item.file), path.join(PUBLIC_DIR, item.hashed));
+  for (const item of payload) copyFileSync(item.full, path.join(PUBLIC_DIR, item.hashed));
   writeFileSync(INDEX_PATH, nextHtml);
   writeFileSync(LOOP_MODULE, loopModule);
   console.log('published to public/landing/, index.html and src/vitrine/heroLoop.js rewritten');

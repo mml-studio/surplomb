@@ -77,7 +77,7 @@ test('the showcase media are frozen only under a hashed name', () => {
   // `scripts/publish-landing-assets.mjs` hashes each file; index.html maps the
   // stable names. An unhashed name, or anything that is not media, keeps
   // revalidating.
-  for (const p of ['/landing/hero-poster-1440.3fa2c1d0.webp', '/landing/hero-desktop.0badc0de.mp4', '/landing/view-01-480.12345678.jpg']) {
+  for (const p of ['/landing/hero-poster-1440.3fa2c1d0.webp', '/landing/hero-poster-2880.3fa2c1d0.avif', '/landing/hero-desktop.0badc0de.mp4', '/landing/view-01-480.12345678.jpg']) {
     assert.equal(staticAssetHeaders(p)['Cache-Control'], 'public, max-age=31536000, immutable', p);
   }
   for (const p of ['/landing/hero-poster-1440.webp', '/landing/manifest.12345678.json', '/landing/x.1234567.webp']) {

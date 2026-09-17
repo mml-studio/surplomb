@@ -13,6 +13,8 @@
 
 import { isWideVitrine, markVitrineSeen, VITRINE_ATTRIBUTE } from './gate.js';
 import { createRotation } from './rotation.js';
+import { HERO_LOOP } from './heroLoop.js';
+import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
 import { canGeolocate, geolocateErrorMessage, requestCurrentPosition } from '../geolocate.js';
 
 /** The page's own theme colour, and the cockpit's (index.html). */
@@ -85,7 +87,7 @@ export function initVitrine({
 
   // ── The recorded loop ──────────────────────────────────────────────────
   const video = root.querySelector('.world-video');
-  const loop = { state: 'poster', reason: null, startedAt: null, source: null };
+  const loop = { state: 'poster', reason: null, startedAt: null, source: null, rendition: null };
   const setState = (state, reason) => {
     loop.state = state;
     loop.reason = reason;
@@ -97,7 +99,13 @@ export function initVitrine({
   } else if (!policy.play) {
     setState('fallback', policy.reason);
   } else {
-    const start = () => startLoop({ video, win, loop, setState, listen, onCleanup: (fn) => cleanups.push(fn) });
+    const start = () => {
+      startLoop({ video, win, loop, setState, listen, onCleanup: (fn) => cleanups.push(fn) })
+        .catch((error) => {
+          console.warn('[vitrine] the loop could not start:', error);
+          setState('fallback', 'error');
+        });
+    };
     // After `load`, so the loop never competes with the poster and the type
     // for the first paint.
     if (documentRef.readyState === 'complete') start();
@@ -249,7 +257,6 @@ export function initVitrine({
     setThemeColor(documentRef, THEME_COCKPIT);
     if (video) {
       video.pause?.();
-      for (const source of [...video.querySelectorAll('source')]) source.remove();
       video.removeAttribute('src');
       video.load?.();
     }
@@ -273,21 +280,35 @@ export function initVitrine({
 }
 
 /**
- * Pick the loop that fits this viewport's shape, attach it, and play it.
- * `live` on the first frame actually painted; `fallback` on any failure or
- * after {@link LOOP_START_DEADLINE_MS}.
+ * Pick the loop that fits this screen, attach it, and play it. `live` on the
+ * first frame actually painted; `fallback` on any failure or after
+ * {@link LOOP_START_DEADLINE_MS}.
+ *
+ * Landscape boxes get the desktop cut, portrait ones the phone cut — the
+ * picture is `object-fit: cover`, so the SHAPE decides which crops less. The
+ * file within the cut is src/vitrine/renditions.js's call.
  */
-function startLoop({ video, win, loop, setState, listen, onCleanup }) {
-  const wideShape = win.matchMedia?.('(min-aspect-ratio: 1/1)')?.matches;
-  const list = String(video.dataset[wideShape ? 'videoWide' : 'videoTall'] || '').trim().split(/\s+/).filter(Boolean);
-  const types = { webm: 'video/webm', mp4: 'video/mp4' };
-  const sources = list
-    .map((url) => ({ url, type: types[url.split('.').pop()] }))
-    .filter((source) => source.type && video.canPlayType?.(source.type));
-  if (!sources.length) {
+async function startLoop({ video, win, loop, setState, listen, onCleanup }) {
+  const wideShape = Boolean(win.matchMedia?.('(min-aspect-ratio: 1/1)')?.matches);
+  const cut = HERO_LOOP.videos?.[wideShape ? 'desktop' : 'phone'];
+  const box = video.closest('.world')?.getBoundingClientRect?.();
+  const needed = neededVideoWidth({
+    boxWidth: box?.width || win.innerWidth,
+    boxHeight: box?.height || win.innerHeight,
+    dpr: win.devicePixelRatio,
+    videoAspect: cut?.aspect || (wideShape ? 1.6 : 1170 / 2532),
+  });
+  const probed = await probeRenditions(cut?.renditions, {
+    canPlayType: (mime) => video.canPlayType?.(mime) || '',
+    mediaCapabilities: win.navigator?.mediaCapabilities ?? null,
+    fps: cut?.fps || 30,
+  });
+  const chosen = chooseRendition(probed, needed);
+  if (!chosen) {
     setState('fallback', 'no-playable-source');
     return;
   }
+  loop.rendition = { src: chosen.src, codec: chosen.codec, width: chosen.width, needed };
   const giveUp = (reason) => {
     if (loop.state !== 'poster') return;
     setState('fallback', reason);
@@ -303,20 +324,10 @@ function startLoop({ video, win, loop, setState, listen, onCleanup }) {
       setState('live', 'playing');
     }
   });
-  // Capture phase: a `<source>` error does not bubble. One source failing is
-  // not the loop failing — the browser moves on to the next — so only the
-  // state where none is left counts.
   listen(video, 'error', () => {
-    if (!video.error && video.networkState !== 3 /* NETWORK_NO_SOURCE */) return;
     win.clearTimeout(deadline);
     giveUp('error');
-  }, true);
-  for (const { url, type } of sources) {
-    const node = video.ownerDocument.createElement('source');
-    node.src = url;
-    node.type = type;
-    video.appendChild(node);
-  }
+  });
   // A hidden tab plays for nobody, and neither does a first screen scrolled
   // away on a phone (on a wide screen the picture is fixed, always in view).
   let inView = true;
@@ -335,7 +346,7 @@ function startLoop({ video, win, loop, setState, listen, onCleanup }) {
     onCleanup(() => observer.disconnect());
   }
   video.preload = 'auto';
-  video.load?.();
+  video.src = chosen.src;
   const played = video.play?.();
   played?.catch?.(() => { win.clearTimeout(deadline); giveUp('autoplay-refused'); });
 }

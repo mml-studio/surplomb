@@ -154,8 +154,13 @@ Updated: September 17, 2026
 >   (`deferCesiumWidgets`, vite.config.js) until `boot.js` enables it.
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
->   → fallback (reduced motion, Save-Data, 2G, error, 8 s). The camera law it
->   was filmed with is `src/vitrine/heroLoop.js` (generated).
+>   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop
+>   2880×1800 AV1/HEVC and 1920×1200 AV1/H.264, phone 960×2078 AV1/HEVC, all
+>   30 fps, recorded frame by frame (`capture-landing-hero.mjs --quality hq`).
+>   `src/vitrine/renditions.js` picks the smallest definition covering the
+>   box in DEVICE pixels, then smooth, then hardware (`mediaCapabilities`),
+>   then AV1 > HEVC > H.264. `src/vitrine/heroLoop.js` (generated) lists them
+>   with their `codecs=` strings and the camera law each loop was filmed with.
 > - **The hand-off (≥ 1 001 px).** The press freezes the loop,
 >   `html[data-vitrine="opening"]` shows `#cesiumContainer` under it,
 >   `init({ handoff })` poses the camera from the law at `video.currentTime`,

@@ -6,6 +6,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Sur un écran Retina, le fond de la page d’accueil était pixelisé.** La
+  boucle faisait 1 600 px à 1,4 Mbit/s et s’affichait agrandie près de deux
+  fois. Elle est ré-enregistrée à la définition Retina (2880×1800 sur
+  ordinateur, 960×2078 sur téléphone), tuiles photoréalistes plus fines, image
+  par image, et chaque écran reçoit le fichier qui le couvre sans agrandissement
+  et qu’il décode sans à-coup : AV1 d’abord, HEVC pour Safari sur M1/M2, H.264
+  en dernier recours (`src/vitrine/renditions.js`). Un écran 1080p ne
+  télécharge que la version 1920 (8 Mo) ; un Retina reçoit la 2880 (15 Mo).
+  Posters en AVIF.
 - **Un premier visiteur arrivait sur le cockpit sans un mot d’explication.**
   La racine sans `#` montre désormais une page d’accueil : « La France au
   rayon X. », une ligne d’exemples qui change toutes les trois secondes (et le

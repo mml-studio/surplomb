@@ -126,13 +126,17 @@ const CASES = {
       const s = document.getElementById('vitrine')?.dataset.state;
       return s && s !== 'poster' ? s : null;
     }, { timeout: 12_000 });
-    const hasLoop = await page.evaluate(() => Boolean(document.querySelector('#vitrine .world-video')?.dataset.videoWide));
+    const rendition = await page.evaluate(() => window.__gevVitrine?.getDiagnostics().loop.rendition ?? null);
+    const hasLoop = Boolean(rendition);
     check('desktop: the loop leaves the poster state within 12 s', Boolean(loop), `state=${loop}`);
     if (loop === 'live') {
       const t1 = await page.evaluate(() => document.querySelector('#vitrine .world-video').currentTime);
       await sleep(1500);
       const t2 = await page.evaluate(() => document.querySelector('#vitrine .world-video').currentTime);
       check('desktop: the background moves (the loop plays)', t2 > t1, `${t1.toFixed(2)} → ${t2.toFixed(2)} s`);
+      const played = await page.evaluate(() => window.__gevVitrine.getDiagnostics().loop.rendition);
+      check('desktop: a rendition wide enough for this screen', played && played.width >= played.needed * 0.9,
+        JSON.stringify(played));
     } else {
       check('desktop: the background moves (the loop plays)', false, `state ${loop}, loop wired: ${hasLoop}`);
     }
