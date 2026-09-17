@@ -124,6 +124,12 @@ settled and not applicable because no Google 3D tileset is active.
   headless Chrome here, so counting entities is the only honest assertion, and
   `--shots` captures the legend rail alone rather than a viewport that would
   outlast the protocol timeout under software GL.
+- **The first-run card, in the running app:** `node scripts/qa-firstrun.mjs
+  --url http://localhost:4173` drives the three variants (A address, B tiles,
+  C bubble) section by section; `--teeth`, its negative control, must exit `1`.
+  `node scripts/qa-firstrun-mutations.mjs` reverts each pinned decision and
+  requires the unit suite to go red — it rewrites `vite.config.js`, so not
+  during a live QA session.
 
 ---
 

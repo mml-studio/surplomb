@@ -28,7 +28,7 @@ The highest-leverage places to jump in:
 - **🛰️ Add or improve a data layer.** Each layer is one self-contained module in `src/data/<layer>.js` implementing the layer interface (`init/enable/disable/update/destroy/getStats`, optional `getDetectableObjects`/`getStats`). Use an existing layer as a template.
 - **🎙️ Extend voice control.** Voice tools are declared server-side (`GEV_REALTIME_TOOLS` in `vite.config.js`) and executed client-side (`src/voice/gevActions.js`). Keep the tool surface tight and the responses honest (confirm only what actually happened).
 - **🎨 Add a visual style.** Styles are GLSL post-process shaders in `src/styles/`.
-- **🐛 Fix bugs / improve the first-run experience.** See [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+- **🐛 Fix bugs / improve the first-run experience.** See [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md); the three first-run variants are described in [docs/CURRENT-STATE.md](docs/CURRENT-STATE.md).
 
 ## Finding a French data source (`.mcp.json`)
 
@@ -63,11 +63,12 @@ Layers already fetch the same platform directly: 162 pinned `www.data.gouv.fr/ap
 
 ## QA harnesses (and the welcome card)
 
-Every headless harness is a *fresh browser session*, and the first-run mission
-card ([`src/firstRunExperience.js`](src/firstRunExperience.js)) returns on every
-fresh session by design. Left alone it sits over the globe and swallows the
-clicks, pixels, and focus a harness is trying to measure — the failure usually
-looks like a broken layer, not like a modal.
+Every headless harness is a *fresh browser*, and the first-run card
+([`src/firstRunExperience.js`](src/firstRunExperience.js)) shows once per
+browser by design — so every harness meets it. Left alone it sits over the
+globe and swallows the clicks, pixels, and focus a harness is trying to
+measure — the failure usually looks like a broken layer, not like a modal.
+Variant C's bubble (`#first-run-hint`) is hidden by the same suppression.
 
 So: **open the page with `newQaPage(browser)`**, never `browser.newPage()`.
 
@@ -85,7 +86,9 @@ exemption, because the card is its subject.
 
 **Testing by hand in a real browser?** Open
 `http://localhost:4173/?welcome=0` — same suppression, nothing to click away.
-(`?welcome=1` forces the card back when you do want to see it.)
+(`?welcome=1` forces the card back when you do want to see it, and
+`?welcome=A`, `B` or `C` forces that variant: A asks for an address, B offers
+three questions, C is the bubble on the search field.)
 
 ### The 3D globe costs money per boot
 

@@ -74,7 +74,7 @@ npm install
 npm run dev -- --host localhost --port 4173
 ```
 
-Open **`http://localhost:4173`**. **No key, no `.env`, no signup.** Cold start settles in under two seconds on a recent laptop (median 1.86 s in a point-in-time M5/Chrome capture — [docs/PERFORMANCE.md](docs/PERFORMANCE.md); a comparison baseline, not a hardware requirement). A first-run card offers to stage a mission for you — **Live Contacts**, **Space Missions**, **Environmental** — or leaves you to explore manually.
+Open **`http://localhost:4173`**. **No key, no `.env`, no signup.** Cold start settles in under two seconds on a recent laptop (median 1.86 s in a point-in-time M5/Chrome capture — [docs/PERFORMANCE.md](docs/PERFORMANCE.md); a comparison baseline, not a hardware requirement). A first-visit card asks for an address; sales, building permits and energy ratings (DPE) light up when you land.
 
 Keyless you get the globe on **OSM** worldwide, and over France the **IGN Géoplateforme** basemaps — BD ORTHO® at 20 cm and Plan IGN — plus every 🟢 data layer, which is most of them. Pick a source in the **MAP SOURCE** row of the Visual Presets tray.
 
@@ -88,9 +88,9 @@ The dev server binds to **localhost** — your keys stay on your machine. Sharin
 
 ## 🕐 The First Five Minutes
 
-No account, no signup. The first-run card will offer to stage a mission for you — or run this gauntlet yourself. Somewhere in these five minutes it stops feeling like a demo:
+No account, no signup. The first-visit card asks for an address — or close it and run this gauntlet yourself. Somewhere in these five minutes it stops feeling like a demo:
 
-1. **Light up the sky.** Take the **Live Contacts** mission (or turn on **Flights** yourself) — thousands of live aircraft, gliding on real telemetry, detection mesh already reading the scene. Click one: the camera locks on, a trail draws behind it, and its live telemetry card comes up.
+1. **Light up the sky.** Turn on **Flights** yourself in the layers panel — thousands of live aircraft, gliding on real telemetry, detection mesh already reading the scene. Click one: the camera locks on, a trail draws behind it, and its live telemetry card comes up.
 2. **Take the controls.** Hit **COCKPIT** on your tracked plane and ride it down, switching sensors mid-flight: NVG into Ironbow FLIR.
 
 ![Riding with a live aircraft in cockpit view while switching sensor modes](docs/media/06-cockpit-ar.gif)
