@@ -26,7 +26,7 @@ import { PREMIUM_CROWN_SVG } from './voicePremium.js';
 
 /** Written on submit, so a returning visitor is not asked twice. */
 export const WAITLIST_JOINED_KEY = 'gev:waitlist-joined:v1';
-/** Written when an automatic refusal opened the card, so it does so once per tab. */
+/** Written when the card opened, so an automatic refusal opens it once per tab, and never after a click did. */
 export const WAITLIST_AUTO_SHOWN_KEY = 'gev:waitlist-auto-shown:v1';
 const CARD_ID = 'waitlist-card';
 
@@ -262,7 +262,9 @@ export function initWaitlistCard({
 
   async function open(detail) {
     if (!shouldOpenWaitlist(detail, sessionStore)) return false;
-    if (!detail.explicit) writeFlag(sessionStore, WAITLIST_AUTO_SHOWN_KEY, true);
+    // Whatever opened it, the visitor has read the card: the HUD running out
+    // after the voice card must not open « Essai terminé » on top of it.
+    writeFlag(sessionStore, WAITLIST_AUTO_SHOWN_KEY, true);
     // An automatic refusal never replaces a card the visitor asked for.
     if (root && !detail.explicit) return true;
     if (opening) {

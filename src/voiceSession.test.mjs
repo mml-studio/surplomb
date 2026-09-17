@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { VOICE_SESSION_EVENT, announceVoiceSession, isVoiceSessionOpen } from './voiceSession.js';
 import { GevRealtimeController } from './voice/gevRealtime.js';
+import { WAITLIST_OPEN_EVENT } from './trialRefusal.js';
 
 // `hud.js` names an export of `mgrs` that only its ESM build has, and Node
 // loads the CommonJS one, so no test could import the HUD. The HUD's grid
@@ -92,7 +93,9 @@ function hudForSummaries(t) {
   const calls = [];
   const previousFetch = globalThis.fetch;
   const previousWindow = globalThis.window;
-  globalThis.window = { setTimeout, clearTimeout };
+  const cards = [];
+  globalThis.window = Object.assign(new EventTarget(), { setTimeout, clearTimeout });
+  globalThis.window.addEventListener(WAITLIST_OPEN_EVENT, (event) => cards.push(event.detail.reason));
   let answer = null;
   globalThis.fetch = (url, options) => {
     calls.push({ url, signal: options.signal });
@@ -111,7 +114,9 @@ function hudForSummaries(t) {
     hud,
     shown,
     calls,
+    cards,
     answer: (summary) => answer({ ok: true, status: 200, json: async () => ({ summary }) }),
+    refuse: (quota) => answer({ ok: false, status: 429, json: async () => ({ quota, error: 'Essai' }) }),
     moveTo: (place) => { context = { place }; },
   };
 }
@@ -162,4 +167,26 @@ test('a summary context that resolves after the mic click is not sent', async (t
   await hud._updateSummary(true, true);
   assert.equal(calls.length, 0);
   assert.equal(hud._summaryDirty, true);
+});
+
+test('the try kept for the voice silences the HUD without opening the card', async (t) => {
+  withDocument(t);
+  const reserved = hudForSummaries(t);
+  const kept = reserved.hud._updateSummary(true, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  reserved.refuse('reserved');
+  await kept;
+  assert.equal(reserved.hud._summaryDisabled, true, 'no more asking every 15 s');
+  assert.deepEqual(reserved.cards, [], 'the visitor has not run out of anything they asked for');
+  assert.equal(reserved.shown.at(-1), 'LYON · LOCAL', 'the free local line stays');
+  reserved.moveTo('Marseille');
+  await reserved.hud._updateSummary(true, true);
+  assert.equal(reserved.calls.length, 1);
+
+  const spent = hudForSummaries(t);
+  const last = spent.hud._updateSummary(true, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  spent.refuse('exhausted');
+  await last;
+  assert.deepEqual(spent.cards, ['exhausted']);
 });

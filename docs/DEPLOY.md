@@ -649,8 +649,14 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
 
 - **What is counted.** One HUD summary (`/api/openai/hud-summary`) is one try.
   `/api/google/nearby-places` and `/api/google/text-search` are refused once
-  the trial is spent but do not count themselves. The globe and every keyless
+  the trial is spent but do not count themselves — except while a voice trial
+  has opened, because the voice asks them too. The globe and every keyless
   layer are never gated.
+- **The HUD cannot take the voice's try.** It summarises on its own, about
+  once per 15 s of exploring, which emptied all five tries before a visitor
+  ever touched the mic. Until the voice trial has opened, a summary may not
+  take the last try: it is refused with `quota: "reserved"`, the HUD goes back
+  to its local line, and no card opens.
 - **Voice is one of the tries, and happens once.** Opening the voice trial
   costs one try and gives `GEV_TRIAL_VOICE` spoken requests (default 3), kept
   in a second count of the same cookie so they never come back. A realtime
@@ -669,9 +675,10 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   Not the IP: an office or a mobile carrier puts hundreds of visitors behind
   one. A cleared cookie starts over, which is accepted — the bill is bounded by
   the `*_GLOBAL_PER_MIN` caps and the provider limits, not by this.
-- **What the page sees.** A 429 whose body carries `quota: "exhausted"` or
-  `quota: "voice"`, without `Retry-After`. The HUD stops asking and the
-  waitlist card opens in place (once per tab for the HUD, on every mic click).
+- **What the page sees.** A 429 whose body carries `quota: "exhausted"`,
+  `quota: "reserved"` or `quota: "voice"`, without `Retry-After`. The HUD stops
+  asking; on `exhausted` the waitlist card opens in place (once per tab, and
+  not at all once a mic click has shown it), on every mic click for `voice`.
   `?waitlist=1` opens the card directly — that is the link to post.
 - **Checking it** (from the VPS, so the Cloudflare `/api` rule stays out of it):
 
@@ -681,8 +688,10 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   ```
 
   In a browser: switch to a NVG/FLIR/CRT style (the HUD only shows there),
-  then move the view five times, 15 s apart; the sixth summary opens the card.
-  A private window starts at zero.
+  then move the view five times, 15 s apart; the fifth summary is refused
+  silently and `/api/trial` still says `remaining: 1` — the mic can open its
+  trial. `node scripts/qa-waitlist-card.mjs` checks both sides. A private
+  window starts at zero.
 - **Buttondown side** — done on 2026-09-17: account and newsletter
   `surplomb` (owner: the domain's contact address; password in the macOS
   Keychain under `buttondown.com`), language French, double opt-in on (the

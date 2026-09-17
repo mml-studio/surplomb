@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  composeRouteLabel,
   createAnnotationEngine,
   resolveOutlineWithRetry,
   normalizeTargetKey,
@@ -667,4 +668,13 @@ test('duplicate-replacement: a throw AFTER partial renderer state leaves nothing
   ]);
   assert.equal(retry.drawn, 1);
   assert.equal(live.size, 1, 'the recoloured mark redraws once, with no orphan underneath');
+});
+
+test('a route label reads in French: decimal comma, time, then the mode', () => {
+  assert.equal(composeRouteLabel('Louvre', 1234, 720, 'foot', false), 'Louvre — 1,2 km · 12 min à pied');
+  assert.equal(composeRouteLabel(null, 460, 110, 'bike', false), '460 m · 2 min à vélo');
+  assert.equal(composeRouteLabel('Orly', 18400, 1500, 'car', false), 'Orly — 18 km · 25 min en voiture');
+  // A straight line has no travel time to quote.
+  assert.equal(composeRouteLabel('Gare', 850, null, 'foot', true), 'Gare — 850 m · à vol d’oiseau, sans itinéraire');
+  assert.doesNotMatch(composeRouteLabel('A', 1234, 720, 'car', false), /walk|drive|ride|direct line/);
 });

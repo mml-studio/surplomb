@@ -122,6 +122,7 @@ test('an automatic refusal opens the card once per tab; a click always does', ()
 test('only a 429 carrying a known quota reason is the trial; any other 429 is load', () => {
   assert.equal(trialRefusalFrom(429, { quota: 'exhausted' }), 'exhausted');
   assert.equal(trialRefusalFrom(429, { quota: 'voice', places: [] }), 'voice');
+  assert.equal(trialRefusalFrom(429, { quota: 'reserved' }), 'reserved');
   assert.equal(trialRefusalFrom(429, { error: 'Rate limit exceeded' }), null);
   assert.equal(trialRefusalFrom(429, null), null);
   assert.equal(trialRefusalFrom(200, { quota: 'exhausted' }), null);
@@ -182,4 +183,24 @@ test('a click is never answered with the card an automatic refusal was still loa
   // The other way round, the refusal does not replace the card asked for.
   await card.open({ reason: 'exhausted', explicit: false });
   assert.equal(body[0].dataset.reason, 'voice');
+});
+
+test('once the visitor has seen the card, an automatic refusal does not open it again', async () => {
+  const { doc, body } = cardDocument();
+  const store = new Map();
+  const session = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  const card = initWaitlistCard({
+    documentRef: doc,
+    windowRef: null,
+    fetchImpl: async () => ({ ok: true, json: async () => ({ limit: 5, voice: { limit: 3 } }) }),
+    localStore: null,
+    sessionStore: session,
+  });
+  // The voice trial ends: its card opens, and the visitor closes it.
+  assert.equal(await card.open({ reason: 'voice', explicit: true }), true);
+  card.close();
+  assert.equal(body.length, 0);
+  // The HUD then runs out of the tries the voice left it.
+  assert.equal(await card.open({ reason: 'exhausted' }), false);
+  assert.equal(body.length, 0, 'no « Essai terminé » on top of the voice card');
 });

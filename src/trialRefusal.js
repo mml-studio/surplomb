@@ -8,17 +8,19 @@
  * into their chunk. The card module is loaded by `main.js` on the first event.
  *
  * The server contract lives in `src/trialQuota.js`: a 429 whose body carries
- * `quota: 'exhausted' | 'voice'`. A 429 without it is load — an edge rule or a
- * per-minute cap — and keeps its existing retry behaviour.
+ * `quota: 'exhausted' | 'reserved' | 'voice'`. A 429 without it is load — an
+ * edge rule or a per-minute cap — and keeps its existing retry behaviour.
+ * `reserved` only answers the HUD summary: the try left is the voice's, so the
+ * HUD goes quiet and no card opens.
  */
 
 export const WAITLIST_OPEN_EVENT = 'gev:waitlist-open';
 
-const REASONS = new Set(['exhausted', 'voice']);
+const REASONS = new Set(['exhausted', 'reserved', 'voice']);
 
 /**
  * @param {unknown} value
- * @returns {value is 'exhausted'|'voice'}
+ * @returns {value is 'exhausted'|'reserved'|'voice'}
  */
 export function isTrialRefusalReason(value) {
   return REASONS.has(value);
@@ -27,7 +29,7 @@ export function isTrialRefusalReason(value) {
 /**
  * @param {number} status
  * @param {unknown} body - The parsed JSON body, or null.
- * @returns {'exhausted'|'voice'|null}
+ * @returns {'exhausted'|'reserved'|'voice'|null}
  */
 export function trialRefusalFrom(status, body) {
   if (status !== 429 || !body || typeof body !== 'object') return null;

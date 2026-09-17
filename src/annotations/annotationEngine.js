@@ -1117,22 +1117,24 @@ function greatCircleM(a, b) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+// The label is read on the map by a French visitor, so it is written in
+// French: a decimal comma, and the mode after the time (« 12 min à pied »).
 function formatDistance(m) {
   if (!Number.isFinite(m)) return null;
-  if (m >= 1000) return `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)} km`;
+  if (m >= 1000) return `${(m / 1000).toFixed(m >= 10000 ? 0 : 1).replace('.', ',')} km`;
   return `${Math.round(m / 10) * 10} m`;
 }
 
-function composeRouteLabel(baseLabel, distM, durS, mode, fallback) {
+export function composeRouteLabel(baseLabel, distM, durS, mode, fallback) {
   const dist = formatDistance(distM);
   if (!dist) return baseLabel;
   const min = Number.isFinite(durS) ? Math.max(1, Math.round(durS / 60)) : null;
-  const word = mode === 'car' ? 'drive' : mode === 'bike' ? 'ride' : 'walk';
+  const how = mode === 'car' ? 'en voiture' : mode === 'bike' ? 'à vélo' : 'à pied';
   // Fallback = routing was unavailable, so we drew a straight line: label it as a
-  // direct line with no travel time (never claim an "X min walk" we didn't compute).
+  // direct line with no travel time (never claim an « X min à pied » we didn't compute).
   let metrics;
-  if (fallback) metrics = `${dist} · direct line (no route)`;
-  else metrics = min != null ? `${dist} · ${min} min ${word}` : dist;
+  if (fallback) metrics = `${dist} · à vol d’oiseau, sans itinéraire`;
+  else metrics = min != null ? `${dist} · ${min} min ${how}` : dist;
   return baseLabel ? `${baseLabel} — ${metrics}` : metrics;
 }
 
