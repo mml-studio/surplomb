@@ -641,9 +641,21 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   In a browser: switch to a NVG/FLIR/CRT style (the HUD only shows there),
   then move the view five times, 15 s apart; the sixth summary opens the card.
   A private window starts at zero.
-- **Buttondown side**, once: create the list, keep double opt-in on (the
-  default), and add the metadata fields `usage` and `declencheur` so they
-  show on the subscriber table. The tag is `liste-attente`.
+- **Buttondown side** — done on 2026-09-17: account and newsletter
+  `surplomb` (owner address and password in the macOS Keychain under
+  `buttondown.com`), language French, double opt-in on (the
+  free plan's default: the confirmation mail comes from
+  `surplomb@buttondown.email`), welcome email OFF (the form promises one
+  message at opening and nothing else), and « After confirming » redirects to
+  `https://surplomb.app/`. The subscriber record carries `usage` and
+  `declencheur` as metadata. **The `liste-attente` tag is dropped silently**:
+  tags are a paid feature, the form keeps the input for the day the plan
+  changes. Verified end to end with a `+surplombtest` address (created,
+  confirmed, redirected, then deleted so the count starts at zero).
+- **On this VPS**, `GEV_TRIAL_LIMIT=5`, `GEV_TRIAL_SECRET` and
+  `GEV_WAITLIST_BUTTONDOWN=surplomb` are in `/opt/gev/.env` since
+  2026-09-17 (backup `.env.bak-2026-09-17-trial`). They take effect with the
+  first deploy that carries `src/trialQuota.js`.
 
 ## Opening the origin to the public
 
