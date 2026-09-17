@@ -481,6 +481,17 @@ Two access paths are wired on the Enerlens box:
   the public origin, with no password since 2026-09-16. Add a Cloudflare Access
   policy on a hostname if you want SSO in front of it.
 
+The site answers on two addresses of that one origin: `/` is the showcase and
+`/globe` is the globe (`src/vitrine/gate.js`). **Neither needs any edge, tunnel
+or reverse-proxy rule** — both are `index.html`, served by the SPA fallback
+`vite preview` already has, with the same headers and the same pre-compressed
+body. A deployment that fronts this container with a proxy of its own only has
+to keep passing unknown paths through, as it already does for
+`/mentions-legales`. Adding a *hostname* for the globe instead would break the
+hand-off (an origin change forces a real navigation and a second boot) and pull
+in DNS, tunnel ingress, `GEV_PUBLIC_HOST` and the browser Google key's referrer
+list; the path split needs none of it.
+
 `https://gev.enerlens.com` served the same container until 2026-09-17 and no
 longer exists.
 

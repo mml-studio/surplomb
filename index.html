@@ -55,6 +55,11 @@
     marqueur d'entrée ci-dessus : posé après le `<link rel="stylesheet">`, il
     laisserait peindre une image du cockpit avant la vitrine.
 
+    DEUX ADRESSES, UNE ORIGINE : `/` est celle de la vitrine, `/globe` celle du
+    globe. C'est ce qui rend la bascule invisible — `history.replaceState` peut
+    réécrire un chemin, jamais un hôte — donc « Ouvrir le globe » change
+    l'adresse sous l'image gelée, sans navigation ni second démarrage.
+
     La règle et ses raisons sont dans `src/vitrine/gate.js`, qui porte la même
     décision pour le JavaScript ; `src/vitrine/gate.test.mjs` EXÉCUTE ce script
     sur la même matrice et échoue si les deux copies divergent.
@@ -65,9 +70,11 @@
       var root = document.documentElement;
       var params = new URLSearchParams(location.search);
       var forced = params.get('vitrine');
+      var path = String(location.pathname || '/').replace(/\/+$/, '') || '/';
       var vitrine;
       if (forced === '1') vitrine = true;
       else if (forced === '0') vitrine = false;
+      else if (path === '/globe') vitrine = false;
       else if (window.__GEV_SKIP_VITRINE__ === true) vitrine = false;
       else if (String(location.hash).indexOf('=') >= 0) vitrine = false;
       else if (params.has('q') || params.has('waitlist') || params.has('welcome')) vitrine = false;
@@ -393,7 +400,7 @@
               </a>
               <figcaption>Les bus de Bordeaux, en direct.</figcaption>
             </figure>
-            <a class="waiting" href="/?waitlist=1" data-link="waitlist">Rejoindre la liste d’attente</a>
+            <a class="waiting" href="/globe?waitlist=1" data-link="waitlist">Rejoindre la liste d’attente</a>
           </div>
         </div>
       </section>
@@ -402,7 +409,7 @@
         <p class="footer-copy">Les administrations publient.<br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
         <nav class="footer-links" aria-label="Liens de pied de page">
           <a href="https://github.com/mml-studio/surplomb" data-link="repository">Voir le code</a>
-          <a href="/?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
+          <a href="/globe?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
           <a href="/mentions-legales" data-link="legal">Mentions légales</a>
           <a href="/confidentialite" data-link="privacy">Confidentialité</a>
         </nav>
@@ -410,8 +417,8 @@
       </footer>
     </main>
 
-    <!-- Formulaire natif : sans JavaScript, il ouvre `/?q=…` et le cockpit résout le lieu (src/vitrine/query.js). -->
-    <form class="dock" action="/" method="get" data-action="open-globe" aria-label="Ouvrir le globe sur un lieu">
+    <!-- Formulaire natif : sans JavaScript, il ouvre `/globe?q=…` et le cockpit résout le lieu (src/vitrine/query.js). -->
+    <form class="dock" action="/globe" method="get" data-action="open-globe" aria-label="Ouvrir le globe sur un lieu">
       <div class="entry">
         <div class="field">
           <button class="locate" type="button" data-action="geolocate" disabled aria-label="Utiliser ma position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg></button>

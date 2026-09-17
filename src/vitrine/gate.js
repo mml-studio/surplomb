@@ -1,5 +1,20 @@
 /**
- * Which door the root URL opens: the showcase page, or the cockpit.
+ * Which door an address opens: the showcase page, or the cockpit.
+ *
+ * ── TWO ADDRESSES, ONE ORIGIN ────────────────────────────────────────────────
+ *
+ * `/` is the showcase's address and {@link APP_PATH} is the globe's. They are
+ * two paths of ONE origin, not two hostnames, and that is the whole reason the
+ * hand-off can be invisible: `history.replaceState` may rewrite a path, never a
+ * host. So pressing « Ouvrir le globe » swaps the address under a frozen frame
+ * with no navigation, no reload and no second boot — while a reader who types,
+ * bookmarks or is sent `/globe` still lands straight in the cockpit.
+ *
+ * A subdomain (`app.surplomb.app`) would have forced a real navigation there,
+ * i.e. tearing the page down and booting the engine again in front of the
+ * reader. Same origin also keeps one `localStorage`, one cookie jar, one
+ * referrer restriction on the browser Google key, and one entry in
+ * `GEV_PUBLIC_HOST`.
  *
  * ── THE RULE ─────────────────────────────────────────────────────────────────
  *
@@ -7,6 +22,7 @@
  * link keeps working unchanged. What decides between the two surfaces is the
  * address and one remembered fact:
  *
+ *   - {@link APP_PATH} opens the cockpit — the globe's own address says so;
  *   - a share hash (`#v=2&lat=…`) opens the cockpit — a link somebody sent is a
  *     request for that view, not for a brochure;
  *   - `?q=` (the showcase's own form, empty or not), `?waitlist=1` and any
@@ -46,6 +62,24 @@
  */
 export const VITRINE_SEEN_KEY = 'gev:vitrine-seen:v1';
 
+/**
+ * The globe's own address. Served by `index.html` like every other path — the
+ * SPA fallback of `vite dev` and `vite preview` already answers it with the
+ * same document, the same `Cache-Control` and the same pre-compressed body as
+ * `/` (measured 2026-09-17), so no middleware exists for it and none is needed.
+ */
+export const APP_PATH = '/globe';
+
+/**
+ * Is this the globe's own address? Trailing slashes are the same address; a
+ * link that picked one up on the way must not land on the brochure.
+ * @param {string} [path] - `location.pathname`.
+ * @returns {boolean}
+ */
+export function isAppPath(path) {
+  return (String(path || '').replace(/\/+$/, '') || '/') === APP_PATH;
+}
+
 /** Set on `window` by the QA fleet before any page script runs. */
 export const VITRINE_SKIP_GLOBAL = '__GEV_SKIP_VITRINE__';
 
@@ -62,7 +96,7 @@ export const VITRINE_WIDE_MIN_PX = 1001;
 /**
  * Read everything the decision needs, from injectable globals.
  * @param {object} [options]
- * @returns {{search: string, hash: string, seen: boolean, skip: boolean}}
+ * @returns {{path: string, search: string, hash: string, seen: boolean, skip: boolean}}
  */
 export function readVitrineSignals({
   location = globalThis.location,
@@ -79,6 +113,7 @@ export function readVitrineSignals({
     seen = false;
   }
   return {
+    path: String(location?.pathname || '/'),
     search: String(location?.search || ''),
     hash: String(location?.hash || ''),
     seen,
@@ -90,17 +125,21 @@ export function readVitrineSignals({
  * The decision, as a pure function of the signals.
  *
  * `reason` says why, so the entry script can tell an arrival that should mark
- * the browser as having seen the globe (`share`, `query`, `link`) from one that
- * must leave no trace (`forced`, `qa`).
+ * the browser as having seen the globe (`app-path`, `share`, `query`, `link`)
+ * from one that must leave no trace (`forced`, `qa`).
  *
- * @param {{search?: string, hash?: string, seen?: boolean, skip?: boolean}} signals
- * @returns {{vitrine: boolean, reason: 'forced'|'qa'|'share'|'query'|'link'|'seen'|'first-visit'}}
+ * @param {{path?: string, search?: string, hash?: string, seen?: boolean, skip?: boolean}} signals
+ * @returns {{vitrine: boolean, reason: 'forced'|'app-path'|'qa'|'share'|'query'|'link'|'seen'|'first-visit'}}
  */
-export function decideVitrine({ search = '', hash = '', seen = false, skip = false } = {}) {
+export function decideVitrine({ path = '/', search = '', hash = '', seen = false, skip = false } = {}) {
   const params = new URLSearchParams(search);
   const forced = params.get('vitrine');
   if (forced === '1') return { vitrine: true, reason: 'forced' };
   if (forced === '0') return { vitrine: false, reason: 'forced' };
+  // Below `?vitrine=1` only, so a demo can still show the brochure from the
+  // globe's address; above everything else, because a typed path is the most
+  // explicit thing a reader can say.
+  if (isAppPath(path)) return { vitrine: false, reason: 'app-path' };
   if (skip) return { vitrine: false, reason: 'qa' };
   if (String(hash).indexOf('=') >= 0) return { vitrine: false, reason: 'share' };
   if (params.has('q')) return { vitrine: false, reason: 'query' };
@@ -115,7 +154,7 @@ export function decideVitrine({ search = '', hash = '', seen = false, skip = fal
  * @returns {boolean}
  */
 export function arrivalMarksSeen(decision) {
-  return !decision.vitrine && ['share', 'query', 'link'].includes(decision.reason);
+  return !decision.vitrine && ['app-path', 'share', 'query', 'link'].includes(decision.reason);
 }
 
 /**

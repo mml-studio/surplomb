@@ -6,6 +6,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **La page d’accueil et le globe partagent une seule adresse.** Il y en a deux
+  maintenant : `surplomb.app` pour la page d’accueil, `surplomb.app/globe` pour
+  le globe. On peut taper, mettre en favori ou envoyer l’adresse du globe sans
+  passer par la brochure, et la page d’accueil reste un vrai point d’arrivée.
+  « Ouvrir le globe » fait basculer l’adresse **sur place** : l’image reste
+  gelée, le moteur démarre dessous, rien ne se recharge et le lecteur ne voit
+  aucune transition (`history.replaceState` réécrit un chemin, jamais un hôte —
+  c’est pourquoi ce sont deux chemins d’une même origine et non un
+  sous-domaine). Une application installée depuis le navigateur s’ouvre
+  désormais sur le globe. Les liens de partage déjà envoyés (`surplomb.app/#…`)
+  continuent de marcher tels quels.
 - **Sur un écran Retina, le fond de la page d’accueil était pixelisé.** La
   boucle faisait 1 600 px à 1,4 Mbit/s et s’affichait agrandie près de deux
   fois. Elle est ré-enregistrée à la définition Retina (2880×1800 sur
