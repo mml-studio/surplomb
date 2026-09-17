@@ -324,6 +324,7 @@ export function initFirstRunExperience({
       emit,
       onClose: rememberClosed,
       isBlocked: () => exclusiveSurfaceActive(documentRef),
+      tray: phoneShell ? null : documentRef.getElementById('location-bar'),
       documentRef,
     });
     discardTemplates();

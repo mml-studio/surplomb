@@ -5,6 +5,8 @@ import {
   FIRST_RUN_ADDRESS_BUNDLE,
   FIRST_RUN_ARRIVAL_DEADLINE_MS,
   FIRST_RUN_VARIANTS,
+  mountVariantA,
+  mountVariantB,
   runFirstRunFlight,
   runFirstRunTile,
   tileLayerIds,
@@ -204,7 +206,12 @@ test('a landing reported before the start resolved is kept', async () => {
     onArrival('arrived');
     return { status: 'flying' };
   }, { setLayerEnabled: spy.setLayerEnabled, setTimer: timers.setTimer, clearTimer: timers.clearTimer });
-  assert.deepEqual(await outcome.arrival, { why: 'arrived', failedLayerIds: [] });
+  // Raced, so a lost early landing fails here instead of hanging the suite.
+  const landed = await Promise.race([
+    outcome.arrival,
+    new Promise((resolve) => setTimeout(() => resolve('never landed'), 1000)),
+  ]);
+  assert.deepEqual(landed, { why: 'arrived', failedLayerIds: [] });
   assert.equal(timers.pending.size, 0, 'no deadline armed for a flight that already landed');
 });
 
@@ -303,4 +310,260 @@ test('every event the modules emit is one the contract names', () => {
   assert.ok(seen >= 6, 'the scan must actually find the emits');
   const tiles = source('./firstRunVariants.js');
   assert.match(tiles, /const kind = `tile:\$\{choice\}`;/);
+});
+
+// ── The two card bodies, against a stub card ────────────────────────────────
+
+/** An element double: listeners, dataset, and the few properties A and B touch. */
+function stubElement({ dataset = {}, hidden = false, small = null } = {}) {
+  const listeners = new Map();
+  return {
+    dataset,
+    hidden,
+    value: '',
+    readOnly: false,
+    focused: 0,
+    selected: 0,
+    small,
+    addEventListener(type, handler) { listeners.set(type, [...(listeners.get(type) || []), handler]); },
+    removeEventListener(type, handler) { listeners.set(type, (listeners.get(type) || []).filter((h) => h !== handler)); },
+    listenerCount() { return [...listeners.values()].reduce((sum, list) => sum + list.length, 0); },
+    fire(type, event = {}) {
+      const payload = { preventDefault() {}, stopPropagation() { payload.stopped = true; }, currentTarget: this, ...event };
+      for (const handler of listeners.get(type) || []) handler(payload);
+      return payload;
+    },
+    focus() { this.focused += 1; },
+    select() { this.selected += 1; },
+    querySelector(selector) { return selector === 'small' ? this.small : null; },
+  };
+}
+
+function cardA() {
+  const form = stubElement();
+  const field = stubElement({ dataset: { firstRunAddress: '' } });
+  const locate = stubElement({ dataset: { firstRunChip: 'locate' }, hidden: true });
+  const eiffel = stubElement({ dataset: { firstRunChip: 'Tour Eiffel, Paris' } });
+  const marseille = stubElement({ dataset: { firstRunChip: 'Vieux-Port, Marseille' } });
+  const lookAround = stubElement();
+  const root = {
+    querySelector: (selector) => ({
+      '[data-first-run-form]': form,
+      '[data-first-run-address]': field,
+      '[data-first-run-chip="locate"]': locate,
+      '[data-first-run-look-around]': lookAround,
+    })[selector] || null,
+    querySelectorAll: (selector) => (selector === '[data-first-run-chip]' ? [locate, eiffel, marseille] : []),
+  };
+  return { root, form, field, locate, eiffel, marseille, lookAround };
+}
+
+function cardB() {
+  const choices = ['sales', 'permits', 'live', 'explore'].map((choice) => stubElement({
+    dataset: { firstRunChoice: choice },
+    small: { textContent: `subcopy ${choice}` },
+  }));
+  const root = {
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === '[data-first-run-choice]' ? choices : []),
+  };
+  return { root, choices, byChoice: Object.fromEntries(choices.map((node) => [node.dataset.firstRunChoice, node])) };
+}
+
+/** The ctx the core hands a body, recording everything a body does to it. */
+function stubCtx(root, { phoneShell = false, flight = { status: 'flying', label: 'Marseille' }, layerAnswer = () => true } = {}) {
+  const calls = { events: [], dismissed: [], busy: [], status: [], layers: [], searches: [], locates: [] };
+  let busy = false;
+  let closed = false;
+  let arrival = null;
+  const ctx = {
+    root,
+    phoneShell,
+    styleManager: {
+      flyToAddress: async (query, { onArrival }) => { calls.searches.push(query); arrival = onArrival; return flight; },
+      locateMe: async ({ onArrival, notify }) => { calls.locates.push({ notify }); arrival = onArrival; return flight; },
+    },
+    emit: (event) => calls.events.push(event),
+    setBusy: (next, text) => { busy = next; calls.busy.push([next, text]); },
+    setStatus: (text) => calls.status.push(text),
+    dismiss: (options) => { closed = true; calls.dismissed.push(options); },
+    isBusy: () => busy || closed,
+    isClosed: () => closed,
+    setLayerEnabled: async (layerId) => { calls.layers.push(layerId); return layerAnswer(layerId); },
+  };
+  return { ctx, calls, arrive: (why) => arrival?.(why) };
+}
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('A: Enter searches, closes the card as the flight starts, and reports no text', async () => {
+  const card = cardA();
+  const { ctx, calls } = stubCtx(card.root);
+  const mounted = mountVariantA(ctx);
+  assert.equal(mounted.focusTarget, card.field, 'a desktop gets the caret in the field');
+  card.field.value = '  12 rue de la Paix, Paris  ';
+  card.form.fire('submit');
+  await tick();
+  assert.deepEqual(calls.searches, ['12 rue de la Paix, Paris']);
+  assert.deepEqual(calls.busy[0], [true, 'Recherche de « 12 rue de la Paix, Paris »…']);
+  assert.deepEqual(calls.dismissed, [{ reason: 'choice' }]);
+  assert.deepEqual(calls.events, [{
+    type: 'action', kind: 'address', outcome: 'found', queryLength: 24, layerIds: ['dvf-sales', 'ads-fr', 'dpe-fr'],
+  }]);
+  assert.equal(typeof calls.events[0].queryLength, 'number');
+  assert.ok(!JSON.stringify(calls.events).includes('Paix'), 'the typed text never leaves the card');
+  // Nothing switched on until the camera lands.
+  assert.deepEqual(calls.layers, []);
+  mounted.teardown();
+  assert.equal(card.form.listenerCount() + card.field.listenerCount() + card.lookAround.listenerCount(), 0);
+});
+
+test('A: the bundle follows the landing, even after the card is gone', async () => {
+  const card = cardA();
+  const { ctx, calls, arrive } = stubCtx(card.root);
+  const mounted = mountVariantA(ctx);
+  card.field.value = 'Vieux-Port, Marseille';
+  card.form.fire('submit');
+  await tick();
+  mounted.teardown();
+  arrive('arrived');
+  await tick();
+  assert.deepEqual(calls.layers, ['dvf-sales', 'ads-fr', 'dpe-fr']);
+});
+
+test('A: an unknown place keeps the card open, says so, and selects the text', async () => {
+  const card = cardA();
+  const { ctx, calls } = stubCtx(card.root, { flight: { status: 'not-found' } });
+  mountVariantA(ctx);
+  card.field.value = 'zzqxv';
+  card.form.fire('submit');
+  await tick();
+  assert.deepEqual(calls.dismissed, [], 'not found is not a close');
+  assert.deepEqual(calls.status, ['Introuvable. Essayez une commune ou une adresse plus précise.']);
+  assert.deepEqual(calls.busy.at(-1), [false, undefined]);
+  assert.equal(card.field.focused, 1);
+  assert.equal(card.field.selected, 1);
+  assert.deepEqual(calls.events, [{ type: 'action', kind: 'address', outcome: 'not-found', queryLength: 5 }]);
+  assert.deepEqual(calls.layers, []);
+});
+
+test('A: a failed lookup and a refused one read differently', async () => {
+  for (const [flight, status, outcome] of [
+    [{ status: 'failed' }, ['La recherche a échoué. Réessayez, ou regardez autour d’ici.'], 'not-found'],
+    [{ status: 'refused' }, [], 'cancelled'],
+    [{ status: 'superseded' }, [], 'cancelled'],
+  ]) {
+    const card = cardA();
+    const { ctx, calls } = stubCtx(card.root, { flight });
+    mountVariantA(ctx);
+    card.field.value = 'Lyon';
+    card.form.fire('submit');
+    await tick();
+    assert.deepEqual(calls.status, status, flight.status);
+    assert.equal(calls.events[0].outcome, outcome, flight.status);
+    assert.deepEqual(calls.dismissed, [], flight.status);
+  }
+});
+
+test('A: a chip fills the field and searches; an empty field searches nothing', async () => {
+  const card = cardA();
+  const { ctx, calls } = stubCtx(card.root);
+  mountVariantA(ctx);
+  card.form.fire('submit');
+  await tick();
+  assert.deepEqual(calls.searches, [], 'nothing typed, nothing asked');
+  assert.equal(card.field.focused, 1);
+  card.marseille.fire('click');
+  await tick();
+  assert.equal(card.field.value, 'Vieux-Port, Marseille');
+  assert.deepEqual(calls.searches, ['Vieux-Port, Marseille']);
+  assert.equal(calls.events[0].kind, 'chip');
+  // A second click while the first is running is ignored.
+  card.eiffel.fire('click');
+  await tick();
+  assert.deepEqual(calls.searches, ['Vieux-Port, Marseille']);
+});
+
+test('A: "Autour de moi" writes a refusal into the card, not a toast', async () => {
+  const card = cardA();
+  // Node has no geolocation: the chip stays hidden, and it still works when clicked.
+  assert.equal(card.locate.hidden, true);
+  const { ctx, calls } = stubCtx(card.root, { flight: { status: 'failed', message: 'Position refusée.' } });
+  mountVariantA(ctx);
+  assert.equal(card.locate.hidden, true);
+  card.locate.fire('click');
+  await tick();
+  assert.deepEqual(calls.locates, [{ notify: false }]);
+  assert.deepEqual(calls.busy[0], [true, 'Position en cours…']);
+  assert.deepEqual(calls.status, ['Position refusée.']);
+  assert.deepEqual(calls.events, [{ type: 'action', kind: 'geoloc', outcome: 'not-found' }]);
+});
+
+test('A: looking around closes the card and touches nothing', async () => {
+  const card = cardA();
+  const { ctx, calls } = stubCtx(card.root);
+  mountVariantA(ctx);
+  card.lookAround.fire('click');
+  await tick();
+  assert.deepEqual(calls.events, [{ type: 'action', kind: 'explore', outcome: 'found' }]);
+  assert.deepEqual(calls.dismissed, [{ reason: 'choice' }]);
+  assert.deepEqual(calls.layers, []);
+  assert.deepEqual(calls.searches, []);
+});
+
+test('A: typed keys stop at the field, Escape and Tab do not', () => {
+  const card = cardA();
+  const { ctx } = stubCtx(card.root, { phoneShell: true });
+  const mounted = mountVariantA(ctx);
+  assert.equal(mounted.focusTarget, null, 'no caret, so no keyboard, on a phone');
+  assert.equal(card.field.fire('keydown', { key: 'n' }).stopped, true);
+  assert.equal(card.field.fire('keydown', { key: 'Escape' }).stopped, undefined);
+  assert.equal(card.field.fire('keydown', { key: 'Tab' }).stopped, undefined);
+});
+
+test('B: a tile switches its layers on, closes the card, and names them', async () => {
+  const card = cardB();
+  const { ctx, calls } = stubCtx(card.root);
+  const mounted = mountVariantB(ctx);
+  assert.equal(mounted.focusTarget, card.byChoice.sales);
+  assert.equal(card.byChoice.sales.small.textContent, 'subcopy sales', 'a desktop keeps the parcel promise');
+  card.byChoice.permits.fire('click');
+  await tick();
+  assert.deepEqual(calls.layers, ['ads-fr', 'sitadel-fr']);
+  assert.deepEqual(calls.busy[0], [true, 'Allumage : ce qui se construit…']);
+  assert.deepEqual(calls.events, [{ type: 'action', kind: 'tile:permits', outcome: 'found', layerIds: ['ads-fr', 'sitadel-fr'] }]);
+  assert.deepEqual(calls.dismissed, [{ reason: 'choice' }]);
+  assert.deepEqual(calls.searches, []);
+  mounted.teardown();
+  assert.equal(card.choices.reduce((sum, node) => sum + node.listenerCount(), 0), 0);
+});
+
+test('B: a refused layer keeps the card open and says which', async () => {
+  const card = cardB();
+  const { ctx, calls } = stubCtx(card.root, { layerAnswer: (id) => id !== 'flights' });
+  mountVariantB(ctx);
+  card.byChoice.live.fire('click');
+  await tick();
+  assert.deepEqual(calls.dismissed, []);
+  assert.deepEqual(calls.status, ['Impossible d’allumer flights. Réessayez, ou regardez par vous-même.']);
+  assert.equal(calls.events[0].outcome, 'cancelled');
+  assert.deepEqual(calls.busy.at(-1), [false, undefined]);
+});
+
+test('B: on a phone the sales tile drops the parcel and says so', async () => {
+  const card = cardB();
+  const { ctx, calls } = stubCtx(card.root, { phoneShell: true });
+  mountVariantB(ctx);
+  assert.equal(card.byChoice.sales.small.textContent, 'Ventes DVF, 5 ans');
+  assert.equal(card.byChoice.permits.small.textContent, 'subcopy permits');
+  card.byChoice.sales.fire('click');
+  await tick();
+  assert.deepEqual(calls.layers, ['dvf-sales']);
+  const explore = cardB();
+  const second = stubCtx(explore.root);
+  mountVariantB(second.ctx);
+  explore.byChoice.explore.fire('click');
+  await tick();
+  assert.deepEqual(second.calls.layers, []);
+  assert.deepEqual(second.calls.events, [{ type: 'action', kind: 'tile:explore', outcome: 'found', layerIds: [] }]);
 });

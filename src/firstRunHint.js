@@ -9,7 +9,9 @@
 //     of nothing;
 //   - a screen-claiming surface (cockpit, scene, recording, clean view) closes
 //     it too, and one already up means it never opens — a 12-second bubble has
-//     nothing to wait for.
+//     nothing to wait for;
+//   - so does the tray it points at: on a desktop, hovering LOCATION opens its
+//     popover in exactly the space the bubble occupies.
 //
 // It lives in its own element, `#first-run-hint`, and never in
 // `#first-run-launcher`: on a phone, phone.css hides the whole sheet while the
@@ -37,6 +39,8 @@ const EDGE_PX = 12;
  * @param {(event: object) => void} [input.emit]
  * @param {() => void} [input.onClose]
  * @param {() => boolean} [input.isBlocked] Is a screen-claiming surface up?
+ * @param {Element|null} [input.tray] The collapsible panel the anchor belongs
+ *   to (`#location-bar`); losing `collapsed` means it opened over the bubble.
  * @param {Document} [input.documentRef]
  * @param {object} [input.windowRef]
  * @param {Function} [input.setTimer]
@@ -52,14 +56,16 @@ export function initFirstRunHint({
   emit = () => {},
   onClose = () => {},
   isBlocked = () => false,
+  tray = null,
   documentRef = globalThis.document,
   windowRef = globalThis,
   setTimer = (fn, ms) => globalThis.setTimeout(fn, ms),
   clearTimer = (id) => globalThis.clearTimeout(id),
 } = {}) {
   if (!host || !template?.content) return null;
+  const trayOpen = () => Boolean(tray?.classList && !tray.classList.contains('collapsed'));
   // Nothing written: the visitor never saw it, so the next visit may.
-  if (isBlocked()) return null;
+  if (isBlocked() || trayOpen()) return null;
 
   host.replaceChildren(template.content.cloneNode(true));
   host.dataset.firstRunVariant = 'C';
@@ -95,6 +101,7 @@ export function initFirstRunHint({
   };
   let timer = null;
   let observer = null;
+  let trayObserver = null;
 
   const close = (reason) => {
     if (!open) return;
@@ -102,6 +109,7 @@ export function initFirstRunHint({
     if (timer !== null) clearTimer(timer);
     timer = null;
     observer?.disconnect();
+    trayObserver?.disconnect();
     for (const undo of cleanups.splice(0)) undo();
     try {
       onClose();
@@ -135,6 +143,12 @@ export function initFirstRunHint({
       if (isBlocked()) close('yield');
     });
     observer.observe(documentRef.body, { attributes: true, attributeFilter: ['class'] });
+    if (tray) {
+      trayObserver = new globalThis.MutationObserver(() => {
+        if (trayOpen()) close('yield');
+      });
+      trayObserver.observe(tray, { attributes: true, attributeFilter: ['class'] });
+    }
   }
   timer = setTimer(() => close('timeout'), FIRST_RUN_HINT_TIMEOUT_MS) ?? null;
 

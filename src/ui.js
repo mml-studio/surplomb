@@ -279,6 +279,8 @@ function bindCockpitLayers(dataManager) {
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
+/** Past the LOCATION tray's 180 ms fade-in (`.dock-popover-content`, style.css). */
+const LOCATION_TRAY_FADE_MS = 200;
 /** Map of style name to its GLSL shader module for post-process stages. */
 const STYLES = { retro: retroShader, surveillance: nightVisionShader, thermal: thermalShader, anime: animeShader, noir: noirShader, snow: snowShader };
 /** How each sensor pass is named to a reader when it invalidates the legend. */
@@ -10182,8 +10184,15 @@ export class StyleManager {
    */
   openLocationSearch() {
     this.setPanelCollapsed('location-bar', false, { explicit: true });
-    this._locationSearch?.classList.add('expanded');
-    this._locationSearch?.focus();
+    const field = this._locationSearch;
+    if (!field) return;
+    field.classList.add('expanded');
+    field.focus();
+    // The tray fades in, and `visibility` is still `hidden` at the fade's
+    // first instant: a hidden field refuses focus. Once more when it shows.
+    if (document.activeElement !== field) {
+      window.setTimeout(() => field.focus(), LOCATION_TRAY_FADE_MS);
+    }
   }
 
   /**

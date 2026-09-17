@@ -217,6 +217,39 @@ test('a surface that takes the screen closes it; another class change does not',
   }
 });
 
+test('the LOCATION tray opening where the bubble sits closes it', () => {
+  const saved = globalThis.MutationObserver;
+  const observers = [];
+  globalThis.MutationObserver = class {
+    constructor(callback) { this.callback = callback; this.disconnected = false; observers.push(this); }
+    observe(target, options) { this.target = target; this.options = options; }
+    disconnect() { this.disconnected = true; }
+  };
+  try {
+    const collapsed = new Set(['collapsed']);
+    const tray = { classList: { contains: (name) => collapsed.has(name) } };
+    const world = makeWorld();
+    const hint = initFirstRunHint({ ...world.options, tray });
+    const watcher = observers.find((observer) => observer.target === tray);
+    assert.ok(watcher, 'the tray is watched');
+    assert.deepEqual(watcher.options, { attributes: true, attributeFilter: ['class'] });
+    watcher.callback();
+    assert.equal(hint.isOpen(), true, 'a class change that leaves it collapsed is not an opening');
+    collapsed.delete('collapsed');
+    watcher.callback();
+    assert.equal(hint.isOpen(), false);
+    assert.deepEqual(world.events.at(-1), { type: 'dismiss', via: 'yield' });
+    assert.equal(watcher.disconnected, true);
+
+    // Already open: the bubble would sit on it, so it never opens.
+    const second = makeWorld();
+    assert.equal(initFirstRunHint({ ...second.options, tray }), null);
+    assert.equal(second.calls.closed, 0);
+  } finally {
+    globalThis.MutationObserver = saved;
+  }
+});
+
 test('a resize follows the anchor', () => {
   const rect = { left: 600, top: 700, width: 80, height: 24 };
   const world = makeWorld({ anchorRect: rect });

@@ -64,6 +64,10 @@ test('locateMe reports its landing and only toasts when asked to', () => {
 test('openLocationSearch opens the tray the way a click does, then focuses the field', () => {
   const open = method(/openLocationSearch\(\) \{([\s\S]*?)\n  \}/, 'openLocationSearch');
   assert.match(open, /this\.setPanelCollapsed\('location-bar', false, \{ explicit: true \}\);/);
-  assert.match(open, /_locationSearch\?\.classList\.add\('expanded'\);/);
-  assert.match(open, /_locationSearch\?\.focus\(\);/);
+  assert.match(open, /field\.classList\.add\('expanded'\);/);
+  assert.match(open, /field\.focus\(\);/);
+  // The tray fades in from `visibility: hidden`, which refuses focus at the
+  // fade's first instant: a second attempt once it shows.
+  assert.match(open, /if \(document\.activeElement !== field\) \{\s*window\.setTimeout\(\(\) => field\.focus\(\), LOCATION_TRAY_FADE_MS\);/);
+  assert.match(ui, /const LOCATION_TRAY_FADE_MS = 200;/);
 });

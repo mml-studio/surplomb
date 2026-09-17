@@ -448,6 +448,38 @@ test('no choice writes a preference the visitor did not choose by making it', ()
   }
 });
 
+test('the three variants share one door, and C never becomes the card', () => {
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  const init = module.slice(module.indexOf('export function initFirstRunExperience'));
+  // The policy is asked BEFORE any variant branches, and a "no" removes the
+  // card AND the bubble — which is what makes the QA fleet's seed hide C.
+  const policy = init.indexOf('!shouldShowFirstRun({');
+  const branch = init.indexOf("if (chosen === 'C') {");
+  assert.ok(policy > 0 && branch > policy, 'the show policy must run before the variant branch');
+  assert.match(init, /\}\)\) \{\s*root\.remove\(\);\s*hintHost\?\.remove\(\);\s*discardTemplates\(\);\s*return null;/);
+  // C removes the card outright: phone.css hides the sheet while it is visible.
+  assert.match(init, /if \(chosen === 'C'\) \{\s*root\.remove\(\);/);
+  // The bubble closes on the same surfaces the card yields to.
+  assert.match(init, /isBlocked: \(\) => exclusiveSurfaceActive\(documentRef\),/);
+  // ...and on a desktop, when the LOCATION tray opens where the bubble sits.
+  assert.match(init, /tray: phoneShell \? null : documentRef\.getElementById\('location-bar'\),/);
+});
+
+test('the event contract: a throwing listener is contained, and closes name their reason', () => {
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  const hint = fs.readFileSync(new URL('./firstRunHint.js', import.meta.url), 'utf8');
+  assert.match(module, /try \{\s*onEvent\(event\);\s*\} catch \(error\) \{/);
+  assert.match(module, /emit\(\{ type: 'dismiss', via: reason \}\);/);
+  assert.match(hint, /emit\(\{ type: 'dismiss', via: reason \}\);/);
+  // An impression is a card that was PAINTED: counted where `.visible` lands.
+  assert.match(
+    module,
+    /root\.classList\.add\('visible'\);[\s\S]{0,200}?emit\(\{ type: 'impression', shell \}\);/,
+  );
+  // ESC names itself.
+  assert.match(module, /dismiss\(\{ reason: 'esc' \}\);/);
+});
+
 test('the decision table is written down where the next editor will read it', () => {
   const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
   assert.match(module, /CHOICE → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST/);
@@ -580,7 +612,8 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   assert.match(css, /#first-run-launcher\[hidden\] \{\s*display: none;\s*\}/);
   // Only the mission list may scroll: the heading, checkbox and status line
   // have to stay on screen at every height.
-  assert.match(css, /\.first-run-choices \{[\s\S]*?min-height: 0;[\s\S]*?overflow-y: auto/);
+  // Within ONE block: a lazy match across blocks finds another list's scroll.
+  assert.match(css, /\.first-run-choices \{[^}]*min-height: 0;[^}]*overflow-y: auto/);
 });
 
 test('the launcher keeps focus, restores it, and never disables the focused button', () => {
