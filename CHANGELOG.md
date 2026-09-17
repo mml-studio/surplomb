@@ -6,6 +6,32 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Les trois cartes de bienvenue n’avaient jamais été montrées à de vrais
+  visiteurs : rien ne disait laquelle aide à commencer.** Sur l’instance
+  hébergée, chaque navigateur tire au sort la carte A, B ou C, à parts égales,
+  et garde son tirage treize mois au plus. Il envoie au plus deux rapports par
+  visite : quelle carte, ce qui en a été fait et quand (adresse trouvée ou non,
+  tuile, fermeture et sa cause), puis si le visiteur a ensuite allumé une
+  couche, lancé une recherche ou ouvert la liste d’attente, et la durée de la
+  visite. Jamais le texte tapé (seulement sa longueur, par tranches), ni une
+  position, ni les couches allumées, ni l’adresse IP, ni le navigateur : le
+  serveur recopie chaque rapport champ par champ, jette le reste, et garde un
+  fichier par jour pendant quatre-vingt-dix jours.
+
+  **Le visiteur peut refuser.** Le bouton « Ne pas être mesuré » de
+  `/confidentialite`, ou le signal Global Privacy Control du navigateur : la
+  carte A s’affiche, rien ne part, et le tirage est effacé. La page de
+  confidentialité ne décrit le test que lorsqu’il tourne.
+
+  **Éteint par défaut.** Tout tient à `GEV_FIRST_RUN_AB=A,B,C` : sans cette
+  variable, un clone montre A et ne mesure personne, et la retirer arrête le
+  test dans chaque navigateur dès sa visite suivante. `node
+  scripts/first-run-ab-report.mjs <dossier>` imprime les totaux par variante,
+  leurs intervalles de confiance, la comparaison à A et l’échantillon qui
+  manque, et dit si la règle d’arrêt permet déjà de conclure : une seule
+  lecture, à 200 impressions par variante ou après 21 jours. La page ne lit
+  toujours `/api/trial` qu’une fois : la couronne du micro et la carte
+  partagent la même réponse.
 - **La version hébergée a un essai et une liste d'attente, et rien ne les
   comptait.** Chaque navigateur a cinq essais du confort payant (un résumé HUD
   = un essai ; les lieux proches et la recherche Google s'arrêtent avec lui),

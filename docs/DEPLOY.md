@@ -708,6 +708,90 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   2026-09-17 (backup `.env.bak-2026-09-17-trial`). They take effect with the
   first deploy that carries `src/trialQuota.js`.
 
+### The welcome-card A/B test (« Test A/B de la carte de bienvenue »)
+
+Off unless `GEV_FIRST_RUN_AB` names at least two of the first-run variants
+(`.env.example` documents it and `GEV_FIRST_RUN_AB_DIR`). The variable is read
+per request and is the only switch: it turns on the draw in the browser, the
+`experiments` field of `/api/trial`, the report route, `"abtest": true` on
+`/healthz`, and the paragraphs of `/confidentialite` that describe the test and
+its « Ne pas être mesuré » button. What a report may carry, and what it never
+carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
+
+- **At most two report requests per visit.** They are `/api` calls, and an edge
+  rule of 30 requests per 10 s per address on `/api` (measured on the Enerlens
+  zone, [above](#rate-limits-the-apps-and-anything-in-front-of-it)) blocks
+  every `/api` call for ten seconds once tripped. So nothing is sent per event:
+  one beacon at the first gesture or close, one cumulative beacon when the page
+  is hidden or left. The card reads the same `/api/trial` response as the mic
+  crown, so the test adds no other request. The origin also caps the route at
+  12 reports a minute per address (1 200 overall), 16 KiB a body, and 5 MiB of
+  file a day.
+- **Edge limit on `surplomb.app`.** The probe answered 40 of 40 without a 429
+  on 2026-09-17 (« Correct shape »), but it bursts `/api/voice/config`, not the
+  report route; nothing has been measured against `POST /api/first-run/events`
+  itself. Re-check from the VPS, never from a laptop:
+  `ssh vps /opt/gev/edge-ratelimit-probe.sh --host surplomb.app` (the copy on
+  the box may predate the `surplomb.app` default, so pass `--host`).
+- **Switching it on** (no rebuild; effective with the first deploy that
+  carries `src/firstRunAb.js`):
+
+  ```sh
+  ssh -t vps 'cd /opt/gev && cp .env .env.bak-$(date +%F)-abtest && $EDITOR .env && docker compose up -d'
+  # in .env: GEV_FIRST_RUN_AB=A,B,C
+  ```
+
+- **Checking it:**
+
+  ```sh
+  curl -s https://surplomb.app/api/trial | jq .experiments      # {"firstRun":{"variants":["A","B","C"]}}
+  curl -s https://surplomb.app/healthz | jq .abtest             # true
+  curl -s https://surplomb.app/confidentialite | grep -c 'test A/B'                   # ≥ 1
+  curl -s https://surplomb.app/confidentialite | grep -c 'pas de mesure d’audience'   # 0
+  ```
+
+  Then one report, marked `forced` so the analysis leaves it out, and the line
+  it wrote (the file is named after the UTC day):
+
+  ```sh
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
+    --data '{"v":1,"exp":"first-run","variant":"A","forced":true,"visitorId":"deploycheck00000","sessionId":"deploycheck00001","seq":1,"newVisitor":false,"returnVisit":false,"shell":"desktop","input":"fine","viewport":"l","reducedMotion":false,"bootMs":0,"dwellMs":null,"events":[{"t":0,"type":"impression"}]}' \
+    https://surplomb.app/api/first-run/events                  # 204
+  ssh vps 'docker exec gev tail -n 1 /app/.gev-cache/first-run-ab/events-$(date -u +%F).jsonl'
+  ```
+
+  `404` means the variable did not reach the container (or the live deploy
+  predates the route); `400` means the body did not validate (the answer never
+  says which field, on purpose).
+- **Where the data lives.** `/app/.gev-cache/first-run-ab/events-YYYY-MM-DD.jsonl`,
+  on the `gev-cache` volume a redeploy keeps: one line per report,
+  `{receivedAt, ...record}`, no address, no header. Files older than 90 days
+  are deleted by the server itself, when it starts and every hour after,
+  whether or not the test is on.
+- **Reading it:**
+
+  ```sh
+  ssh vps 'docker exec gev node scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'
+  ```
+
+  Totals per variant, Wilson intervals, a z-test of B and of C against A
+  (Bonferroni, α/2), and the sample still missing (356 impressions per variant
+  to see 10 points from a 30 % baseline at α 0.05, 432 at α 0.025).
+  `--include-forced`, `--since`/`--until YYYY-MM-DD`, `--alpha`, `--delta` and
+  `--json` change the reading. **Read it once**, when every variant has
+  200 unforced impressions or 21 days after the first one, whichever comes
+  first. Adopt B or C only if it beats A on activation with p < 0.025 and is not
+  worse on the closures the visitor did not choose; otherwise A stays. One
+  extension of three weeks at most, then decide.
+- **Rolling back:** remove `GEV_FIRST_RUN_AB` from `/opt/gev/.env`, then
+  `docker compose up -d`. Every browser shows A on its next visit, sends
+  nothing, and deletes its draw; the route answers 404 and the privacy page
+  goes back to « pas de mesure d’audience ». The server keeps sweeping files
+  older than 90 days (at start and hourly, switch or not), so the privacy
+  page's promise holds on its own; once the analysis is written up, delete the
+  rest without waiting:
+  `ssh vps 'docker exec gev rm -rf /app/.gev-cache/first-run-ab'`.
+
 ## Opening the origin to the public
 
 `GEV_ACCESS_PASSWORD` is the only thing between the open internet and a set of

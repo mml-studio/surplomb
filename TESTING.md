@@ -130,6 +130,18 @@ settled and not applicable because no Google 3D tileset is active.
   `node scripts/qa-firstrun-mutations.mjs` reverts each pinned decision and
   requires the unit suite to go red — it rewrites `vite.config.js`, so not
   during a live QA session.
+- **The first-run A/B test, in the running app:** start a server with the
+  switch (`GEV_FIRST_RUN_AB=A,B,C npx vite --port 4193 --strictPort`), then
+  `node scripts/qa-first-run-ab.mjs --url http://localhost:4193` checks the
+  switch, the draw and its persistence, the reports written to the day file
+  (`--dir`, default `.gev-cache/first-run-ab`), the privacy page and the
+  refusal. `--off`, against a server started WITHOUT the variable, checks that
+  nothing is measured.
+- **The A/B report, offline:** `node scripts/first-run-ab-report.mjs <dir>`
+  (`--include-forced`, `--since`/`--until YYYY-MM-DD`, `--alpha`, `--delta`,
+  `--json`) reads the day files and prints totals per variant, the comparison
+  with A and whether the stop rule allows a decision yet. Unit-tested by
+  `node --test scripts/first-run-ab-report.test.mjs`.
 
 ---
 
