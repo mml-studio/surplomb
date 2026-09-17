@@ -394,6 +394,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-context',
   '#cesium-credits .cesium-credit-logoContainer',
   '#cesium-credits .cesium-credit-textContainer',
+  '#cesium-credits .gev-legal-links',
   '#location-bar',
   '#control-panel',
   '#gev-voice-control',
@@ -445,6 +446,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-signal-stream',
   '#cesium-credits .cesium-credit-logoContainer',
   '#cesium-credits .cesium-credit-textContainer',
+  '#cesium-credits .gev-legal-links',
   '#command-dock',
   '#gev-voice-control',
 ].join(', ');

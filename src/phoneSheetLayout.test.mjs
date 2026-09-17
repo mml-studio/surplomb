@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { LAYER_MANIFEST } from './data/layerManifest.js';
 import { fusedIntoFor } from './data/layerFusions.js';
 import {
@@ -84,4 +85,11 @@ test('a layer is never both the first thing offered and a warning', () => {
   for (const id of PHONE_HEAVY_LAYER_IDS) {
     assert.ok(!featured.has(id), `${id} is both featured and heavy`);
   }
+});
+
+test('the peek is re-measured when the credit footer changes size', () => {
+  // Cesium fills the footer after the sheet mounts; a peek measured once left
+  // it hanging under the screen edge (116 px for 147 px of chrome).
+  const source = readFileSync(new URL('./phoneSheet.js', import.meta.url), 'utf8');
+  assert.match(source, /new ResizeObserver\(\(\) => \{\s*if \(!drag\) snapTo\(snap\);\s*\}\);\s*creditObserver\.observe\(creditHost\);/);
 });

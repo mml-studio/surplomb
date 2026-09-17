@@ -113,6 +113,7 @@ import {
   validateKeySetupUpdates,
 } from './src/keySetupCore.mjs';
 import { hardenCredentialFile } from './src/keySetupHardening.mjs';
+import { LEGAL_PAGES, legalNoticeFromEnv, legalPageForUrl, renderLegalPage } from './src/legalNotice.js';
 import { projectVigicruesFeed } from './src/data/vigicruesFeed.js';
 import { projectVigilanceProduct } from './src/data/meteoFranceVigilanceFeed.js';
 import {
@@ -2492,6 +2493,26 @@ const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';
 const REALTIME_DEBUG_LOG_DIR = path.join(__dirname, '.gev-logs');
 const REALTIME_DEBUG_LOG_FILE = path.join(REALTIME_DEBUG_LOG_DIR, 'realtime-conversations.jsonl');
 const REALTIME_DEBUG_LOG_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Whether `/api/realtime/debug-log` may write to disk.
+ *
+ * The record is the full event stream of a voice session — what the assistant
+ * answered, the tools it called and their arguments — which on a developer's
+ * machine is the best debugging aid this app has, and on a public origin is a
+ * transcript of a stranger's conversation. Measured 2026-09-17: the hosted
+ * server accepted it from anyone, with no rate limit, 8 MB per request,
+ * appended to a file that is never rotated, on a disk it shares with the
+ * Enerlens database. So a hosted server keeps nothing unless its operator
+ * asks, for a debugging session, with `GEV_REALTIME_DEBUG_LOG=1`; and the
+ * privacy page (`confidentialite.html`) can say that no conversation is kept.
+ *
+ * @param {{hosted: boolean, env?: Record<string, string|undefined>}} options
+ * @returns {boolean}
+ */
+export function realtimeDebugLogEnabled({ hosted, env = process.env }) {
+  return !hosted || String(env.GEV_REALTIME_DEBUG_LOG || '').trim() === '1';
+}
 
 /**
  * @type {ReturnType<typeof createAisStreamAdapter>|null}
@@ -17767,7 +17788,7 @@ function trackBackfillProxies() {
  * Realtime API over WebRTC with a short-lived secret.
  */
 function openAiRealtimeProxy() {
-  function install(middlewares) {
+  function install(middlewares, { hosted = false } = {}) {
     middlewares.use('/api/openai/hud-summary', async (req, res) => {
       if (req.method !== 'POST') {
         res.statusCode = 405;
@@ -17799,6 +17820,10 @@ function openAiRealtimeProxy() {
           },
           body: JSON.stringify({
             model: process.env.OPENAI_HUD_SUMMARY_MODEL || OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
+            // One stateless answer. The Responses API otherwise keeps the
+            // exchange for 30 days as application state, and nothing here
+            // ever reads it back (confidentialite.html).
+            store: false,
             instructions: [
               "Write one concise intelligence-HUD summary for God's Eye View.",
               'Use only the supplied place, street, nearby-place, and enabled-layer text labels.',
@@ -17830,6 +17855,15 @@ function openAiRealtimeProxy() {
     });
 
     middlewares.use('/api/realtime/debug-log', async (req, res) => {
+      if (!realtimeDebugLogEnabled({ hosted })) {
+        // Drained, not read: the beacon is fired and forgotten, and nothing
+        // it carried is kept.
+        req.resume();
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Realtime debug log is off on this server' }));
+        return;
+      }
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
@@ -17979,7 +18013,7 @@ function openAiRealtimeProxy() {
       install(server.middlewares);
     },
     configurePreviewServer(server) {
-      install(server.middlewares);
+      install(server.middlewares, { hosted: true });
     },
   };
 }
@@ -26833,6 +26867,9 @@ function accessGatePlugin() {
       res.end(JSON.stringify({
         ok: true,
         gated: Boolean(process.env.GEV_ACCESS_PASSWORD),
+        // Whether /mentions-legales names a publisher. A public origin that
+        // answers `false` here is serving a page the law requires, empty.
+        legal: legalNoticeFromEnv(process.env).complete,
         client: clientKeyFor(req),
       }));
     });
@@ -27260,8 +27297,10 @@ function precompressedAssetsPlugin() {
  * it injects its script tag and its widget stylesheet into every HTML entry
  * point in the build. Left alone, a printable sheet would download Cesium
  * before its first line of type.
+ *
+ * The two legal pages (`LEGAL_PAGES`) are documents in the same sense.
  */
-const CESIUM_FREE_PAGES = Object.freeze(['fiche.html']);
+const CESIUM_FREE_PAGES = Object.freeze(['fiche.html', ...Object.values(LEGAL_PAGES)]);
 
 /** Whether this build page is one of them. @param {?string} filename */
 export function isCesiumFreePage(filename) {
@@ -27637,6 +27676,96 @@ function frameGuardPlugin() {
 }
 
 /**
+ * The two legal pages, filled with the deployment's identity per request.
+ *
+ * `mentions-legales.html` and `confidentialite.html` are built like any other
+ * entry, with a visible « non renseigné » where the publisher goes; this
+ * middleware swaps it for `GEV_LEGAL_*` from the environment
+ * (`src/legalNotice.js` says why none of it is committed). It answers the
+ * clean path too, so `/mentions-legales` is the link everywhere.
+ *
+ * Preview reads the BUILT page from `outDir`; dev reads the source and runs it
+ * through `transformIndexHtml` first, so the page renders the same in both.
+ * Either way the body is `no-cache`: the identity is runtime state, and a
+ * shared cache holding yesterday's publisher is exactly the failure this
+ * exists to prevent.
+ *
+ * A public deployment with an incomplete identity says so once in the log —
+ * the pages still answer, showing the fallback and the missing variable names.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function legalPagesPlugin() {
+  const install = (server, { readPage }) => {
+    const env = process.env;
+    const notice = legalNoticeFromEnv(env);
+    if (!notice.complete && String(env.GEV_PUBLIC_HOST || '').trim()) {
+      console.warn(
+        `[legal-pages] this origin is public and its legal notice is incomplete — set ${notice.missing.join(', ')} (docs/DEPLOY.md).`,
+      );
+    }
+    server.middlewares.use(async (req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      const file = legalPageForUrl(req.url);
+      if (!file) return next();
+      try {
+        const html = renderLegalPage(await readPage(file, req.url), process.env);
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(req.method === 'HEAD' ? undefined : html);
+      } catch (error) {
+        next(error);
+      }
+    });
+  };
+  return {
+    name: 'gev-legal-pages',
+    configureServer(server) {
+      install(server, {
+        readPage: async (file, url) => server.transformIndexHtml(
+          url,
+          await fsp.readFile(path.resolve(server.config.root, file), 'utf8'),
+        ),
+      });
+    },
+    configurePreviewServer(server) {
+      const outDir = path.resolve(server.config.root, server.config.build.outDir);
+      install(server, {
+        readPage: (file) => fsp.readFile(path.join(outDir, file), 'utf8'),
+      });
+    },
+  };
+}
+
+/**
+ * Keep every /api/ answer out of search engines.
+ *
+ * DVF sales are published on the condition that a re-user does not let them
+ * be indexed by online search engines (Livre des procédures fiscales,
+ * art. R*112 A-3), and `/api/dvf/*` returns them as plain JSON at a stable,
+ * shareable URL. `fiche.html` already carries `noindex` for the same reason;
+ * this is the same promise for the data behind it, and for every other proxy,
+ * none of which is a page anyone should land on from a search.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function apiNoindexPlugin() {
+  const install = (server) => {
+    server.middlewares.use((req, res, next) => {
+      if (String(req.url || '').startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
+      next();
+    });
+  };
+  return {
+    name: 'gev-api-noindex',
+    configureServer: install,
+    configurePreviewServer: install,
+  };
+}
+
+/**
  * In-app key setup ("POWER UP" panel) — dev-server only.
  *
  * GET  /api/setup/status → which keys are configured, as presence plus a
@@ -27940,6 +28069,10 @@ export default defineConfig(({ mode, command }) => {
       accessGatePlugin(),
       frameGuardPlugin(),
       trialQuotaPlugin(),
+      // Ahead of the static server, which would otherwise hand out the built
+      // legal pages with their « non renseigné » still in place.
+      legalPagesPlugin(),
+      apiNoindexPlugin(),
       staticCachePolicyPlugin(),
       // After the cache policy, so a pre-compressed body inherits the `Vary`
       // and `immutable` headers that pass already set on the same URL.
@@ -28078,6 +28211,11 @@ export default defineConfig(({ mode, command }) => {
         input: {
           index: path.resolve(__dirname, 'index.html'),
           fiche: path.resolve(__dirname, 'fiche.html'),
+          // The legal pages. Built here so they share the fonts and the
+          // hashing; filled per request by `legalPagesPlugin`.
+          ...Object.fromEntries(Object.entries(LEGAL_PAGES).map(
+            ([name, file]) => [name, path.resolve(__dirname, file)],
+          )),
         },
         output: {
           manualChunks(id) {

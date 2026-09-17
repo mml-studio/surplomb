@@ -41,7 +41,7 @@ The data proxies in `vite.config.js` are written so the browser cannot turn the 
 - **Bounded high-risk paths.** Request bodies and high-volume or attacker-influenced upstream responses are capped where that boundary matters; network paths use explicit timeouts or other bounded lifecycles appropriate to the feed.
 - **Sanitized public failures.** Proxy handlers return controlled error messages instead of credentials or raw internal details.
 - **Coalesced OAuth refresh** and cached successful responses only (OpenSky).
-- **Redacted debug logging.** The voice debug log (`.gev-logs/`, gitignored) strips API keys, bearer tokens, client secrets, and image data URLs before writing.
+- **Redacted debug logging, off when hosted.** The voice debug log (`.gev-logs/`, gitignored) strips API keys, bearer tokens, client secrets, and image data URLs before writing. It still holds what the assistant said and did, so `vite preview` refuses to write it unless `GEV_REALTIME_DEBUG_LOG=1`.
 
 ## Network exposure — the operator threat model
 

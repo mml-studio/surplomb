@@ -141,7 +141,7 @@ export function renderWaitlistCard({ reason, trial = {}, joined = false }) {
       <input type="hidden" name="tag" value="liste-attente" />
       <input type="hidden" name="metadata__declencheur" value="${escapeHtml(reason)}" />
       <button type="submit" class="waitlist-submit">Rejoindre la liste d’attente</button>
-      <p class="waitlist-consent">Un email de confirmation part tout de suite, puis nous vous écrivons à l’ouverture, rien d’autre. Adresse conservée chez Buttondown, désinscription en un clic.</p>
+      <p class="waitlist-consent">Un email de confirmation part tout de suite, puis nous vous écrivons à l’ouverture, rien d’autre. Adresse conservée chez Buttondown, désinscription en un clic. <a href="/confidentialite#vos-donnees" target="_blank" rel="noopener">Vos données</a></p>
     </form>
     <div class="waitlist-joined" role="status"${joined ? '' : ' hidden'}>
       <p data-waitlist-joined-text>Vous êtes sur la liste. Si ce n’est pas fait, confirmez depuis l’email reçu.</p>

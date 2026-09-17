@@ -415,6 +415,23 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     cleanups.push(() => ficheObserver.disconnect());
   }
 
+  // ── The footer grows after this runs ──────────────────────────────────────
+  //
+  // `measurePeek` counts the credit footer, but Cesium fills it over its first
+  // frames — imagery credits, then the legal links — so the peek measured at
+  // mount went stale: 116 px for a chrome that had grown to 147, the footer
+  // hanging 32 px under the screen edge and « Data attribution » cut in half
+  // (measured 2026-09-17, 390×844). Re-snapping whenever the footer changes
+  // size keeps the promise above — visible at all three snaps. Never
+  // mid-drag: the finger owns the height until it lets go.
+  if (creditHost && typeof ResizeObserver === 'function') {
+    const creditObserver = new ResizeObserver(() => {
+      if (!drag) snapTo(snap);
+    });
+    creditObserver.observe(creditHost);
+    cleanups.push(() => creditObserver.disconnect());
+  }
+
   syncViewport();
   selectTab('layers');
   snapTo('peek');

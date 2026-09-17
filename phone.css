@@ -505,8 +505,58 @@ html[data-shell="phone"] .phone-sheet-credits #cesium-credits .cesium-credit-exp
    pixels tall. Measured exactly that way the first time this shipped. */
 html[data-shell="phone"] .phone-sheet-credits .cesium-widget-credits {
   position: static;
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 4px;
   padding: 0;
+}
+
+/* TWO LINES, WHATEVER THE CREDITS SAY (2026-09-17). With the legal links added
+   the notice wrapped to four lines at 390 px — a fifth of the resting sheet.
+   Line 1 is the logo and every on-screen credit on ONE line that scrolls
+   sideways under the thumb: nothing is cut, as the note above requires, it is
+   swiped to instead of wrapped. Line 2 is the three links. The break between
+   them is the container's own `::after` at full width, ordered between the
+   two groups — flex has no other way to force a wrap at a chosen child.
+
+   The whole footer is dimmed rather than recoloured, so the logo fades with
+   the words: it is a notice, and the sheet's controls are what the eye is for. */
+html[data-shell="phone"] .phone-sheet-credits {
+  opacity: 0.55;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .cesium-widget-credits::after {
+  content: '';
+  order: 1;
+  flex-basis: 100%;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .cesium-credit-logoContainer {
+  flex: 0 0 auto;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .cesium-credit-textContainer {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .cesium-credit-textContainer::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .cesium-credit-expand-link,
+html[data-shell="phone"] .phone-sheet-credits .gev-legal-links {
+  order: 2;
+  flex: 0 0 auto;
+}
+
+html[data-shell="phone"] .phone-sheet-credits .gev-legal-links::before {
+  content: '• ';
 }
 
 html[data-shell="phone"] .phone-sheet-tabs {
