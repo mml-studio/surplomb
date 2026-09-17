@@ -6,6 +6,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **L’éditeur du site butait sur « Essai terminé » comme n’importe quel
+  visiteur.** Un pass propriétaire le sort de l’essai : `node
+  scripts/owner-pass.mjs`, lancé là où vit `GEV_OWNER_PASS_SECRET`, imprime un
+  lien valable dix minutes et une seule fois ; son bouton pose un cookie signé
+  de 400 jours, valable pour le site et son nom en `www.`. Ce navigateur n’est
+  plus jamais compté ni refusé, ne voit plus la couronne, et ses sessions
+  vocales n’ont plus de limite de demandes ; les plafonds globaux par minute
+  restent. L’adresse IP ne pouvait pas servir : le tailnet et le tunnel
+  arrivent tous deux au conteneur sous la même adresse. Changer le secret
+  révoque tous les pass. **Éteint par défaut** : sans la variable, la route
+  répond 404.
 - **Les trois cartes de bienvenue n’avaient jamais été montrées à de vrais
   visiteurs : rien ne disait laquelle aide à commencer.** Sur l’instance
   hébergée, chaque navigateur tire au sort la carte A, B ou C, à parts égales,

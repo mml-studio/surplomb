@@ -675,6 +675,28 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   Not the IP: an office or a mobile carrier puts hundreds of visitors behind
   one. A cleared cookie starts over, which is accepted — the bill is bounded by
   the `*_GLOBAL_PER_MIN` caps and the provider limits, not by this.
+- **The owner's browser.** With `GEV_OWNER_PASS_SECRET` set (32 characters
+  or more), one browser can step out of the trial for good:
+
+  ```sh
+  ssh vps 'docker exec gev node scripts/owner-pass.mjs'   # https://surplomb.app by default
+  ```
+
+  prints a link that works once and for ten minutes. Opening it shows one
+  button (a chat preview that fetches the link spends nothing); the button
+  writes `gev_owner`, signed, HttpOnly, 400 days, for `surplomb.app` and
+  `www.surplomb.app`, and goes to the globe. That browser is never counted or
+  refused, gets no crown, and its realtime sessions have no turn limit; the
+  `*_GLOBAL_PER_MIN` and per-IP caps still apply. **Not the address:** the
+  tailnet and the tunnel both reach the container as `172.22.0.1` (the
+  bridge gateway — Tailscale masquerades forwarded traffic), so an address
+  rule would exempt every visitor. The secret stays on the VPS; SSH is the
+  only way to a link, and the `vps` alias goes over Tailscale. **Revoke**
+  every pass by replacing the secret and redeploying. `Domain=surplomb.app`
+  also sends the cookie to any future subdomain: do not point one at a third
+  party without narrowing it. The privacy page does
+  not list the cookie: no visitor ever receives it. The redemption is
+  logged as `[trial] owner pass issued`.
 - **What the page sees.** A 429 whose body carries `quota: "exhausted"`,
   `quota: "reserved"` or `quota: "voice"`, without `Retry-After`. The HUD stops
   asking; on `exhausted` the waitlist card opens in place (once per tab, and
