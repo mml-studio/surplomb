@@ -721,7 +721,7 @@ complet de résumé), puis le résumé QUI PART après un geste — sans quoi
 
 Critère de sortie de phase : ≤ 1,8 Mo avant la première tuile, `viewer` ≤ 3,5 s
 à CPU ÷4 / 10 Mbit/s, `npm test` vert, `qa:keyless-boot`, `qa:map-reload`,
-`qa:firstrun` verts.
+`node scripts/qa-firstrun.mjs` verts.
 
 > ✅ **Atteint le 2026-09-09** : `app=` **1,34 Mo [1,34–1,34]** et `viewer`
 > **2 344 ms [2 298–2 826]**, mesurés en A/B alterné contre l'arbre précédent

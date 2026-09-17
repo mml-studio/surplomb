@@ -36,9 +36,15 @@ test('a free-text search records its destination for the LOCATION mini-status', 
   const handler = locationSearchHandler();
   // The destination has to be recorded BEFORE _setActiveLocation(null), whose
   // own refresh would otherwise repaint the readout as "Location: --".
+  // The search lands through the landing state it shares with "Autour de moi"
+  // and the first-run card (`_landOnSearchedLocation`).
   assert.match(
     handler,
-    /this\._searchedLocationLabel = destination\.label[\s\S]{0,120}?this\._setActiveLocation\(null\);/,
+    /const label = destination\.label \|\| query;\s*this\._landOnSearchedLocation\(label\);/,
+  );
+  assert.match(
+    handler,
+    /_landOnSearchedLocation\(label\) \{\s*this\._searchedLocationLabel = label;\s*this\._setActiveLocation\(null\);/,
   );
   assert.match(handler, /this\._updateLocationMiniStatus\(\);/);
 });

@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: September 16, 2026
+Updated: September 17, 2026
 
 This file tracks active runtime issues only.
 
@@ -214,6 +214,26 @@ Contexte :
   plus cher. C'est la moitié du budget d'un boot téléphone (2 appels sur 2).
 - Non corrigé ici : la correction est dans `src/hud.js`, pas dans le périmètre
   du volet A.
+
+### La carte de première visite pilote la recherche du globe, pas la fiche
+Status: Open (décision produit à prendre), constaté 2026-09-17
+
+Contexte :
+- Le champ de la variante A (« Qu’est-ce qui est vrai à cette adresse ? »)
+  vole sur le globe par `styleManager.flyToAddress`, puis allume
+  `dvf-sales`, `ads-fr` et `dpe-fr` à l’arrivée.
+- La radiographie d’adresse — dix thématiques, imprimable — vit dans
+  `fiche.html`. Depuis le globe, sa seule porte est la pastille RADIOGRAPHIE
+  de la ligne « Fiche implantation » (`implantation-fr`,
+  `src/data/ficheSheet.js`) : la carte ne l’allume pas et ne la mentionne pas.
+  `fiche.html?q=` accepterait pourtant le texte tapé tel quel.
+
+Conséquences à l’exécution :
+- Un visiteur qui tape une adresse voit trois couches autour du point, pas la
+  fiche de cette adresse : la question du titre reçoit une réponse en
+  morceaux, sur la carte.
+- Rien ne lui apprend que la fiche existe tant qu’il n’a pas trouvé la ligne
+  « Fiche implantation » dans le panneau des couches.
 
 ---
 

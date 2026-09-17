@@ -1381,15 +1381,44 @@ html[data-shell="phone"] body:has(:is(#first-run-launcher, #coverage-briefing).v
   pointer-events: none;
 }
 
-/* A 13 px checkbox is not a target. `accent-color` is already on both, so the
+/* A 13 px checkbox is not a target. `accent-color` is already on it, so the
    only thing missing was the size. */
-html[data-shell="phone"] :is(.first-run-suppress, .coverage-briefing-suppress) input {
+html[data-shell="phone"] .coverage-briefing-suppress input {
   width: 24px;
   height: 24px;
 }
 
 html[data-shell="phone"] :is(.first-run-choices, .coverage-briefing-choices) button {
   min-height: 48px;
+}
+
+/* THE FIRST-RUN BUBBLE (variant C) sits on the sheet, over its Recherche tab.
+   It is deliberately ABSENT from the two `:is(#zoom-prompt, #phone-sheet)`
+   lists above and below: those hide the sheet, and the sheet is what the
+   bubble points at. Its height comes from the sheet, like #zoom-prompt; its x
+   is written by src/firstRunHint.js from the tab's box. */
+html[data-shell="phone"] #first-run-hint {
+  bottom: calc(var(--phone-sheet-height, 116px) + 10px);
+  width: min(20rem, calc(100vw - 24px));
+}
+
+html[data-shell="phone"] .first-run-hint-body {
+  min-height: 44px;
+}
+
+html[data-shell="phone"] :is(.first-run-chip, .first-run-submit, .first-run-link) {
+  min-height: 44px;
+}
+
+/* 16 px is the size under which iOS zooms the page on focus. */
+html[data-shell="phone"] .first-run-address {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+/* No Escape key on a touchscreen: the footer has nothing to say there. */
+html[data-shell="phone"] #first-run-launcher .first-run-footer {
+  display: none;
 }
 
 /* The waitlist card (src/waitlistCard.js) is the same kind of sheet. It exists

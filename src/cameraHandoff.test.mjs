@@ -243,9 +243,12 @@ test('validated voice camera destinations share the UI navigation authority faca
 });
 
 test('deferred search releases only after its final authority check', () => {
+  // The lookup moved out of the submit handler into `flyToAddress`, which the
+  // search box and the first-run card both call; the handler is a thin caller.
+  assert.match(ui, /async _submitLocationSearch\(\) \{[\s\S]*?this\.flyToAddress\(query, \{ searchField: this\._locationSearch \}\)/);
   const handler = body(
     ui,
-    /async _submitLocationSearch\(\) \{([\s\S]*?)\n  \}/,
+    /async flyToAddress\(input, \{ onArrival = null, searchField = null \} = \{\}\) \{([\s\S]*?)\n  \}/,
     'search handler',
   );
   ordered(handler, [
@@ -346,16 +349,16 @@ test('teardown refuses deferred location work before geocoding begins', () => {
 
   const handler = body(
     ui,
-    /async _submitLocationSearch\(\) \{([\s\S]*?)\n  \}/,
+    /async flyToAddress\(input, \{ onArrival = null, searchField = null \} = \{\}\) \{([\s\S]*?)\n  \}/,
     'search handler',
   );
   ordered(handler, [
     "const generation = this._beginDeferredNavigation('location');",
     'if (generation === false)',
-    'this._locationSearch.blur();',
+    'searchField?.blur();',
     'searchAndFlyTo(this.viewer, query',
   ], 'disposed search refusal');
-  assert.match(handler, /if \(generation === false\) \{[\s\S]*?return;[\s\S]*?\}\s*this\._activeLocationSearchGeneration/);
+  assert.match(handler, /if \(generation === false\) \{[\s\S]*?return \{ status: 'refused' \};[\s\S]*?\}\s*this\._activeLocationSearchGeneration/);
 });
 
 test('refused canned destinations commit no location or POI state', () => {

@@ -1,18 +1,22 @@
 /**
- * The first-run mission launcher, taken out of QA's way — once, for every
- * harness, instead of once per harness.
+ * The first-run experience, taken out of QA's way — once, for every harness,
+ * instead of once per harness.
  *
- * WHY THIS FILE EXISTS. `#first-run-launcher` is a card over the globe that
- * returns EVERY fresh browser session by design — see the SHOW POLICY at the
- * top of `src/firstRunExperience.js`. A headless harness is always a fresh
- * session, so every one of them boots straight into it, and it does three
- * things to a QA run, none of them obvious from the failure:
+ * WHY THIS FILE EXISTS. `#first-run-launcher` is a card over the globe (and
+ * `#first-run-hint`, variant C's bubble, sits on the search field) that shows
+ * ONCE PER BROWSER by design — see the SHOW POLICY at the top of
+ * `src/firstRunExperience.js`. It no longer comes back every session, but a
+ * headless harness is always a brand-new browser with empty storage, so every
+ * one of them still boots straight into it, and it does three things to a QA
+ * run, none of them obvious from the failure:
  *
  *   - it swallows clicks. `document.elementFromPoint` at a feature's own
  *     screen coordinate returns `ASIDE#first-run-launcher`, not the globe, so
- *     a hit-test assertion fails while the feature is drawn perfectly.
+ *     a hit-test assertion fails while the feature is drawn perfectly. The
+ *     bubble eats no click, but the first pointerdown closes it and writes
+ *     the app's keys in the middle of the run.
  *   - it paints over the pixels a legibility or contact-sheet check counts.
- *   - it holds focus, so keyboard assertions read the card's mission tiles.
+ *   - it holds focus, so keyboard assertions read the card's field or tiles.
  *
  * Every new dataset harness used to rediscover this the hard way and then
  * re-invent a dismissal, differently: the durable key in one, the session key
@@ -23,18 +27,21 @@
  * harness cannot forget rather than merely should not.
  *
  * HOW IT SUPPRESSES, AND WHY THAT WAY. It writes the app's own PER-SESSION
- * dismissal key before any page script runs, which is exactly the state the
- * app itself records when a visitor closes the card. The alternatives were
- * each rejected for a reason worth keeping written down:
+ * dismissal key before any page script runs, which is one of the two keys the
+ * app itself records when a visitor closes the card. All three variants (A, B
+ * and C) pass through the same show decision, so this one seed hides the card
+ * AND the bubble. The alternatives were each rejected for a reason worth
+ * keeping written down:
  *
  *   - `?welcome=0` works, but it edits a URL that harnesses assert on and
  *     rebuild (share links, `?map=`, deep links), and it is lost the moment
  *     one navigates somewhere the harness composed itself.
- *   - the DURABLE key (`gev:first-run-mission:v1`) is a stored user
- *     PREFERENCE nobody chose. A harness that reads prefs back — or one
- *     checking that the app writes none it was not given — would be reading
- *     QA's own writes. Available behind `{ durable: true }` for the rare
- *     harness that needs suppression to survive a `sessionStorage.clear()`.
+ *   - the DURABLE key (`gev:first-run-mission:v1`) is stored state no visitor
+ *     produced: the app writes it only when someone closes the card. A harness
+ *     that reads storage back — or one checking that the app writes nothing
+ *     it was not given — would be reading QA's own writes. Available behind
+ *     `{ durable: true }` for the rare harness that needs suppression to
+ *     survive a `sessionStorage.clear()`.
  *   - pressing ESC after boot is too late: by then the card has painted, has
  *     been screenshotted, and has already eaten a click.
  *
@@ -61,8 +68,8 @@ export const FIRST_RUN_LAUNCHER_SELECTOR = '#first-run-launcher';
  *
  * @param {import('puppeteer').Page} page
  * @param {{durable?: boolean}} [options] `durable: true` also writes the
- *   "don't show this again" preference — only for a harness that clears
- *   session storage itself and still needs the card gone.
+ *   durable key every close writes — only for a harness that clears session
+ *   storage itself and still needs the card gone.
  * @returns {Promise<import('puppeteer').Page>} the same page, for chaining.
  */
 export async function suppressFirstRun(page, { durable = false } = {}) {

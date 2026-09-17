@@ -136,140 +136,191 @@ Updated: September 8, 2026
 > et la coque AIS — dont le chemin de données vient seulement d'être refermé —
 > est la première chose à regarder.
 
-> **2026-08-23 — first-run mission launcher** (`src/firstRunExperience.js`,
-> `#first-run-launcher`, styles at the tail of `style.css`). After startup
-> settles, a fresh session gets one card offering **Live Contacts · Space
-> Missions · Environmental · Explore manually**. No layer and no optional API
-> call happens until a tile is clicked. The right-hand DISPLAY rail
-> (`pp-toggles`) now starts **collapsed** on a first run rather than expanded —
-> a stored collapse state still wins, as before.
+> **2026-09-17 — first-run card, three French variants** (`src/firstRunExperience.js`
+> owns the door, `src/firstRunVariants.js` what a choice does,
+> `src/firstRunHint.js` the bubble; `#first-run-launcher`, `#first-run-hint`
+> and three `<template data-first-run-variant>` in `index.html`; styles at the
+> tail of `style.css` and in `phone.css`). It replaces the 2026-08-23 mission
+> launcher, which was upstream's card word for word: English, three tiles out of
+> four leaving France (LIVE CONTACTS, SPACE MISSIONS, ENVIRONMENTAL, plus
+> EXPLORE MANUALLY), a "Don't show this again" box, and a return on every fresh
+> session.
 >
-> **The ENVIRONMENTAL tile is quakes AND fires** — live USGS earthquakes plus
-> NASA FIRMS active fires (`layerIds: ['earthquakes', 'local-firms']`), with the
-> tile subcopy naming both. **The launcher optimizes for the fully configured
-> experience:** it does not trim what it offers down
-> to the lowest-configured install. The mission does not branch on whether a key
-> is present — everyone gets the same tile.
+> **Three variants, one door** (`FIRST_RUN_VARIANT_IDS = ['A', 'B', 'C']`). The
+> aside is a shell — kicker `SURPLOMB · PREMIÈRE VISITE`, footer
+> `Échap pour fermer`, a status line reading
+> `59 couches de données publiques · 56 sans clé` — and the chosen template is
+> cloned into it before the footer.
 >
-> Keyless, the honest surface is the **layer row**, which reads
-> `UNAVAILABLE · NASA FIRMS · LIVE · KEY REQUIRED`, and the earthquakes half
-> still delivers in full. The shared loading reducer now treats an explicitly
-> declared missing optional key as a configured terminal state rather than a
-> failed multi-layer mission, so the global chip completes without showing
-> `LOAD FAILED`. A genuine lifecycle or fetch failure still retains failure
-> priority.
+> - **A « Une adresse » (the default).** « Qu’est-ce qui est vrai à cette
+>   adresse ? », one field, the chips « Autour de moi » (revealed only when
+>   `canGeolocate()`), « Tour Eiffel, Paris » and « Vieux-Port, Marseille », and
+>   the link « Regarder autour d’ici sans rien taper ». Enter calls
+>   `styleManager.flyToAddress(query, { onArrival })`, and the card closes as the
+>   flight STARTS. The bundle (`FIRST_RUN_ADDRESS_BUNDLE`: `dvf-sales`,
+>   `ads-fr`, `dpe-fr`) is switched on exactly ONCE, at the first of
+>   `arrived`, `cancelled` — the visitor chose the layers, not the landing
+>   spot — or `FIRST_RUN_ARRIVAL_DEADLINE_MS` (10 s). Switching them on before
+>   the flight would buy a scan of the place being left. Not found (or a failed
+>   geocoder) keeps the card open, with a sticky status line and the field
+>   selected. The locate chip goes through
+>   `locateMe({ onArrival, notify: false })` and writes a refusal into that
+>   status line rather than a toast behind the card. No autofocus on a phone:
+>   the soft keyboard would cover the sheet.
+> - **B « Trois questions ».** « Par où commencer ? », four tiles, layers only,
+>   no camera call: `sales` → `dvf-sales` + `cadastre-fr` (on a phone
+>   `cadastre-fr` is skipped because it is badged LOURD, and the subcopy becomes
+>   « Ventes DVF, 5 ans »), `permits` → `ads-fr` + `sitadel-fr`, `live` →
+>   `traffic` + `transit-fr` + `flights` (`traffic` is already on at boot;
+>   asking again is idempotent), `explore` → nothing. A refused layer fails the
+>   tile BY NAME and keeps the card open for a retry.
+> - **C « Pas de carte ».** No card: the bubble `#first-run-hint`, « Première
+>   visite ? Tapez une adresse ici. », anchored to the LOCATION label on a
+>   desktop and to the sheet's Recherche tab on a phone. Never a dialog, no
+>   keydown handler — ESC and every hotkey go where they always went. It closes
+>   on the first pointerdown elsewhere, after 12 s
+>   (`FIRST_RUN_HINT_TIMEOUT_MS`), or when an exclusive surface takes the
+>   screen; one already up means it never opens. A click inside opens the
+>   search: `styleManager.openLocationSearch()` on a desktop,
+>   `phoneSheet.selectTab('search')` plus focus on a phone. It is its own
+>   element because `phone.css` hides the whole sheet while the launcher is
+>   visible, and the sheet is what the bubble points at.
 >
-> **Acceptance changed with that ruling (2026-08-23).** `qa-firstrun` no longer
-> asserts "a keyless Environmental never shows a failure chip" — that stopped
-> being a launch requirement when the tile went back to promising both feeds.
-> The Environmental section now **branches on the observed key state** and says
-> which branch it took: KEYED asserts both datasets actually arrive and that no
-> LOAD FAILED banner appears while the mission runs; KEYLESS asserts the
-> layer-row honesty (`KEY REQUIRED`), the quakes half loading, and that the
-> deliberate missing-key state never becomes a global failure.
+> A and B drive eight distinct layers, all already in the shipped
+> `set_layer_visibility` enum (unit pin). The card adds no voice tool, and the
+> `GEV_REALTIME_TOOLS` sha256 pin still guards the schema.
 >
-> **An INFRASTRUCTURE tile is deliberately absent.** It was built, playtested,
-> and cut: one click enabling `local-datacenters` + `local-dams` +
-> `telegeography-submarine-cables` puts ~5,700 entities on a full-earth view and
-> the frame rate goes with them. The layers are unchanged and still reachable by
-> hand and by voice ("infrastructure mode" is still mapped).
+> **Who picks the variant.** `initFirstRunExperience({ styleManager,
+> dataManager, variant = 'A', onEvent = null, phoneSheet = null })`, and
+> `src/main.js` passes `variant: 'A'`. `?welcome=a|b|c`
+> (`forcedFirstRunVariant`, case-insensitive) outranks the caller and replays
+> like `?welcome=1`. Assigning B and C to real visitors on the hosted instance
+> is a separate change (assignment, beacon, privacy page, report); today nothing
+> sends `onEvent` anywhere.
 >
-> **The globe-LOD declutter this note was waiting for has landed (2026-09-09,
-> PLAN-PERFORMANCE.md § 3.1), and so has the half that was still missing.** What
-> the four bundled packs DRAW is bounded — measured on this machine, a
-> full-earth view went from killing the renderer outright to 387 marks, and
-> 120 km over Lyon from 10 178 drawn entities to 234. What they COST TO HOLD has
-> now moved too: **633 → 405 MiB at Lyon (−36 %), 619 → 431 MiB over France
-> (−30 %)**, and the motion p90 with them (483 → 267 ms and 1 200 → 450 ms).
+> **The `onEvent` contract.** `{type: 'impression', shell}` (`desktop` or
+> `phone`); `{type: 'action', kind, outcome, queryLength?, layerIds?}` with
+> `kind` ∈ `address`, `geoloc`, `chip`, `tile:sales`, `tile:permits`,
+> `tile:live`, `tile:explore`, `explore`, `hint-click` and `outcome` ∈
+> `found`, `not-found`, `cancelled`; `{type: 'dismiss', via}` with `via` ∈
+> `esc`, `choice`, `yield`, `timeout`, `click-away`. Never the typed text (its
+> length only), never a latitude or a longitude. A listener that throws is
+> logged and cannot take the card down.
 >
-> Two removals did it, and neither is the primitives migration the note used to
-> promise. Weighed object by object on the airports pack, a drawn feature cost
-> 33.6 KiB: **14.0 KiB of it was the `PropertyBag`** Cesium builds from the
-> GeoJSON — a duplicate of properties the loader had already unwrapped into a
-> plain object — and **7.7 KiB was a `PolylineGraphics` per feature** for a
-> recall stem that the horizon or the budget was about to hide. The bag is
-> released after unwrapping and the stems come from a pool sized to what is on
-> screen. The last third (11.9 → 1.2 KiB per feature) is the primitives
-> migration, and it is still open: it rewrites `qa-airports`, `qa-dams` and
-> `qa-maritime` in full, because all three read `entities.values`.
+> **Revealed once the boot flight has landed.** `src/main.js` still waits for
+> the loading veil (`transitionend`, 900 ms fallback), then calls
+> `whenBootFlightEnds(() => initFirstRunExperience(…))`: the veil lifts 2.5 to
+> 3.5 s before the descent ends, and a card revealed then covered exactly what
+> the boot had just paid for. A phone and a share link do not fly, so the call
+> is immediate there; the wait is bounded by `BOOT_FLIGHT_DEADLINE_MS` (15 s).
+> `?waitlist=1` still takes the card's place.
 >
-> So the tile is a much smaller decision than it was, and still not a free one —
-> re-adding it means accepting ~400 MiB on the machines this app is meant to
-> reach, and that number should be re-measured with `npm run perf:infra` on a
-> real GPU first.
+> **Three public seams on StyleManager** (`src/ui.js`), so the card searches
+> through the dock's own code rather than a copy:
 >
-> **Show policy — it is NOT one-shot.** Precedence, highest first: a share link
-> never sees it → `?welcome=0` suppresses → `?welcome=1` replays (past both
-> suppressions, for demos/support) → the durable
-> `localStorage['gev:first-run-mission:v1'] === 'suppressed'`, written **only**
-> by the "Don't show this again" checkbox → the per-session
-> `sessionStorage['gev:first-run-mission-session:v1'] === 'dismissed'`, written
-> by **every** close path (mission, Explore, ESC). So it returns each fresh
-> browser session until the visitor ticks the box; clearing storage un-ticks it,
-> which is accepted. Both stores fail open — an unreadable store still shows the
-> launcher rather than silently swallowing first launch.
+> - `flyToAddress(query, { onArrival })` → `{status, label?}`, `status` ∈
+>   `flying`, `not-found`, `failed` (the geocoder threw), `refused` (the
+>   navigation gate said no, e.g. Cockpit), `cancelled` (authority moved during
+>   the lookup), `superseded` (a newer navigation owns the camera). It resolves
+>   when the flight STARTS; the landing comes through
+>   `onArrival('arrived' | 'cancelled')`.
+> - `locateMe({ onArrival, notify })` → `flying`, `refused`, or `failed` with the
+>   French `message`; `notify: false` leaves the toast to the caller.
+> - `openLocationSearch()` expands LOCATION and puts the caret in the field.
+>   Desktop only: on a phone the field lives in the sheet's Recherche tab.
 >
-> **What a mission may persist (do not "simplify" this).** Layer enablement is
-> durable in this app (`gev:layer-state:v2`, written by
-> `LayerStateCoordinator._commitExplicit` only for origin `user`/`voice`/`tool`).
-> A mission enables **its own** layers at `origin: 'user'` — durable, exactly as
-> clicking those rows is, because picking the mission *is* that choice. The two
-> Context missions also expand the Context panel, as the visible tabs do; the
-> globe missions open no panel. Everything else is off limits: detection
-> mode/density, `gev:detection-allocation:v1`, 3D models, feather, and above all
-> `_detectionUserOverridden` — setting that flag means "the operator hand-edited
-> detection" and would silently disable the CRT/NVG/FLIR auto-preset contract for
-> the session. The full table is a comment block in the module and is pinned by
-> `src/firstRunExperience.test.mjs`.
+> The dock field and `#locate-me` go through the same seams with unchanged
+> behaviour, and every free-text landing shares `_landOnSearchedLocation(label)`.
 >
-> **Voice is instruction-only.** Both globe missions are expressible with
-> shipped tools (`set_layer_visibility`'s enum already carries
-> `local-datacenters`, `local-dams`, `telegeography-submarine-cables`,
-> `local-firms`, `earthquakes`; `zoom_to_globe` supplies the camera), so the
-> missions themselves add no tool. One instruction paragraph in
-> `vite.config.js` teaches the phrase mapping; deleting it is the complete
-> rollback. (`GEV_REALTIME_TOOLS` is no longer byte-identical to `main` — the
-> layer-vocabulary repair of 2026-09-09 rewrote four enums and added
-> `list_layers`. It is still pinned by sha256 in the unit suite, and every
-> re-freeze since is recorded in `src/firstRunExperience.test.mjs`.)
+> **Show policy — once per browser.** Precedence, highest first: a share link
+> never sees it → `?welcome=0` suppresses → `?welcome=1` or `?welcome=A|B|C`
+> replays (past both suppressions, for demos and support) → the durable
+> `localStorage['gev:first-run-mission:v1'] === 'suppressed'` → the per-session
+> `sessionStorage['gev:first-run-mission-session:v1'] === 'dismissed'`. EVERY
+> close — a choice, ESC, a yield, the bubble's click-away or timeout — writes
+> BOTH keys: the durable one so the next visit starts on the globe, the session
+> one so the tab still holds when a browser refuses `localStorage` (it is also
+> the key the QA fleet seeds). The "Don't show this again" box is gone; nothing
+> needs it. One impression per browser is also what makes the variants
+> comparable. All three variants pass through the same door, so whatever
+> suppresses one suppresses them all, C included. Both stores fail open, and a
+> store is resolved lazily inside a `try` — never as a default parameter,
+> because Safari's private-mode getter throws. Clearing storage brings the card
+> back, which is accepted.
+>
+> **CHOICE → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST** (do not "simplify"
+> this). Layer enablement is durable in this app (`gev:layer-state:v2`, written
+> by `LayerStateCoordinator._commitExplicit` only for origin
+> `user`/`voice`/`tool`). A choice enables **its own** layers at
+> `origin: 'user'` — durable, exactly as clicking those rows is, because making
+> the choice *is* choosing them — and nothing else durable: no panel opens any
+> more (the Context-panel reveal left with the global missions). The camera is
+> touched by A only, through the search seams, and never persisted; B and C
+> never move it. Off limits: detection mode/density,
+> `gev:detection-allocation:v1`, 3D models, feather, and above all
+> `_detectionUserOverridden` — setting that flag means "the operator
+> hand-edited detection" and would silently disable the CRT/NVG/FLIR
+> auto-preset contract for the session. No choice leaves France
+> (`setContextMode`, `resetToGlobeView` and `flyToGlobe` are banned from the
+> three modules). The full table is the comment block under that heading in
+> `src/firstRunExperience.js`, pinned by `src/firstRunExperience.test.mjs`.
 >
 > **ESC arbitration — three rules, do not collapse them into one.** (1) The
-> launcher **yields**: a MutationObserver watches `body` for the surfaces that
-> take the screen (`cockpit-mode`, `scene-playback-mode`, `recording-mode`,
+> card **yields**: a MutationObserver watches `body` for the surfaces that take
+> the screen (`cockpit-mode`, `scene-playback-mode`, `recording-mode`,
 > `ui-clean-view` — `EXCLUSIVE_SURFACE_CLASSES`, kept in step with the CSS hide
-> rule by a unit pin), and session-dismisses rather than contesting the key; if
-> one is already up at init it **waits** instead of appearing over it. (2) A
-> surface can take the screen with **no class to watch** — the Cesium attribution
-> lightbox is full-screen at `z-index: 200` against the card's `175`, which left
-> the launcher measurable (`getClientRects()` non-empty) and buried, so ESC
-> dismissed a card nobody could see and burned the session flag. `isTopmost()`
-> therefore also **hit-tests the card's own centre** with `elementFromPoint`; any
-> overlay, classed or not, disarms the handler. Every inconclusive answer counts
-> as uncovered, so the guard can never be why ESC stops working. (3) A small
-> control that claims only the **key** (a disclosure, a popover) is not something
-> to yield to: whoever handles ESC first calls `preventDefault()` **and**
-> `stopImmediatePropagation()`, and the launcher skips `defaultPrevented` events.
-> `stopPropagation()` alone does **not** stop later listeners on the same
-> `document` — that is exactly how the compact Radio disclosure made one key
-> close the disclosure *and* dismiss the launcher.
+> rule by a unit pin) and closes with `via: 'yield'`, leaving focus to the
+> surface that took over; a yield is a close like any other and writes both
+> keys. If one is already up at init, the card **waits** instead of appearing
+> over it. (2) A surface can take the screen with **no class to watch** — the
+> Cesium attribution lightbox is full-screen at `z-index: 200` against the
+> card's `175` — so `isTopmost()` also **hit-tests the card's own centre** with
+> `elementFromPoint`; any overlay, classed or not, disarms the handler. Every
+> inconclusive answer counts as uncovered, so the guard can never be why ESC
+> stops working. (3) A small control that claims only the **key** (a
+> disclosure, a popover) is not something to yield to: whoever handles ESC
+> first calls `preventDefault()` **and** `stopImmediatePropagation()`, and the
+> card skips `defaultPrevented` events. `stopPropagation()` alone does **not**
+> stop later listeners on the same `document` — that is how the compact Radio
+> disclosure once made one key close the disclosure *and* the card. ESC also
+> works mid-lookup (an exit, not a choice); Tab is confined to the card without
+> claiming `aria-modal`; and A's field keeps every other key away from the
+> app's bare-letter hotkeys. Variant C has none of this machinery: it holds no
+> key, and a surface class simply closes it.
 >
 > **Accepted:** a surface class that never clears means no launcher for that page
 > load, with no timeout. None of the four classes is restored at startup, so an
 > already-blocked init is an error path, while a long recording or clean-view
 > session is ordinary — a "reveal anyway" timer would trade a benign no-show for
 > the card punching through a recording in progress. The no-show is benign: the
-> handler is inert, no session flag is written, the observer still reveals the
-> card if the class clears, and it returns next session either way.
+> handler is inert, neither key is written, the observer still reveals the card
+> if the class clears, and a visit that never saw it still gets it next time.
 >
-> **Blocked storage un-ticks the box.** "Don't show this again" is a claim about
-> the future, so a refused `setItem` reverts the checkbox and says so in the
-> status line instead of showing a saved preference that was never saved.
+> **What left with the upstream card.** The four mission tiles, the checkbox
+> and its "blocked storage un-ticks the box" rule, the Context-panel reveal, the
+> keyed/keyless ENVIRONMENTAL branch of `qa-firstrun`, the INFRASTRUCTURE-tile
+> note (its memory measurements live in `docs/PLAN-PERFORMANCE.md` § 3.1), and
+> the `local_fire_department` glyph (the icon font is down to 27). What stays:
+> the voice shorthands "infrastructure mode" and "environmental mode", one
+> `NAMED VIEWS` instruction paragraph in `vite.config.js` that never depended
+> on the card; the loading reducer's rule that a declared missing optional key
+> is a configured terminal state (`src/loadingFeedback.js`), which still serves
+> the FIRMS row; and the DISPLAY rail (`pp-toggles`) starting **collapsed** on a
+> first run, a stored collapse state still winning.
 >
-> Gates: `node scripts/qa-firstrun.mjs --url <app>` (in-app checks across eight
-> independent sections) plus its `--teeth` negative control, which removes
-> the launcher and requires EVERY launcher-dependent section to go red — it
-> always exits non-zero, `1` meaning the control is healthy and `2` meaning it
-> is not. Plus the unit pins above.
+> Gates: `node scripts/qa-firstrun.mjs --url <app>` — independent sections
+> `show-policy`, `esc-arbitration`, `variant-A-address`, `variant-A-chip`,
+> `variant-A-not-found`, `variant-A-look-around`, `variant-A-locate`,
+> `variant-B-tiles`, `variant-B-phone`, `variant-C`, `variant-C-phone`,
+> `viewports`, `console` (`--only a,b` runs a subset, `--shots` writes the
+> taste-pass captures). The A sections need the keyless geocoder. Its
+> `--teeth` negative control removes the card, the bubble and the templates
+> before the app can use them, and requires EVERY card-dependent section to go
+> red; it always exits non-zero, `1` meaning the control is healthy and `2`
+> meaning it is not. `node scripts/qa-firstrun-mutations.mjs` reverts each pinned decision
+> one at a time and requires `src/firstRunExperience.test.mjs` to go red. Unit
+> pins: `src/firstRunExperience.test.mjs`, `src/firstRunVariants.test.mjs`,
+> `src/firstRunHint.test.mjs`, `src/locationSearchSeams.test.mjs`.
 
 > **2026-08-08 — performance waves 1+2:** the app idles via an explicit render
 > governor (`src/renderGovernor.js` — hold/release from every per-frame
@@ -4332,7 +4383,7 @@ After the initial broadside launch profile, the ascent chase camera stays in a r
 During orbit replay, the camera continues following the selected vehicle but eases its look-at target down toward the vehicle's sub-satellite globe anchor. The range expands when necessary for high-altitude missions, keeping both Earth and the tracked label visible through the full revolution. The active replay clock clamps at the final orbital sample rather than wrapping to ascent progress zero; replay completion therefore leaves the final globe/orbit framing in place and does not return to the launch site.
 
 Reconstructed mission orbits use a small downrange launch-to-insertion arc, so their estimated ground track is not artificially drawn directly over the launch pad in top-down views. The ascent remains connected to the ring at its selected insertion point.
-Collapsed right-rail controls use the same 176 px width as collapsed left-rail controls, while expanded right-side detail panels retain their independent widths. DISPLAY starts expanded only on first run and then respects persistence; DISPLAY may remain open beside CCTV or Context, while CCTV and Context remain mutually exclusive without persisting forced collapses. Selecting a dedicated Context mode opens its right-side surface and clears unrelated layers after first snapshotting their exact state. Final exit restores the original enabled set and changed parameters. Cockpit View hides the right-side CCTV control because CCTV is not part of the cockpit rail. Airborne cockpit altitude uses the tracked aircraft's reported aviation MSL altitude, never the potentially negative Cesium terrain/ellipsoid render height; confirmed grounded contacts display `0 ft` without rewriting that source field. A cold photoreal floor shows `ACQUIRING SURFACE` for at most five seconds, then uses the source target-height fallback instead of freezing the camera indefinitely.
+Collapsed right-rail controls use the same 176 px width as collapsed left-rail controls, while expanded right-side detail panels retain their independent widths. DISPLAY starts collapsed on first run and then respects persistence; DISPLAY may remain open beside CCTV or Context, while CCTV and Context remain mutually exclusive without persisting forced collapses. Selecting a dedicated Context mode opens its right-side surface and clears unrelated layers after first snapshotting their exact state. Final exit restores the original enabled set and changed parameters. Cockpit View hides the right-side CCTV control because CCTV is not part of the cockpit rail. Airborne cockpit altitude uses the tracked aircraft's reported aviation MSL altitude, never the potentially negative Cesium terrain/ellipsoid render height; confirmed grounded contacts display `0 ft` without rewriting that source field. A cold photoreal floor shows `ACQUIRING SURFACE` for at most five seconds, then uses the source target-height fallback instead of freezing the camera indefinitely.
 Replay transport uses one Play/Pause toggle plus Cancel. During ascent only the active thrust ring is visible; stage-recovery handoff uses a pulsing dot.
 
 ## Tooling Snapshot
@@ -4345,11 +4396,13 @@ Replay transport uses one Play/Pause toggle plus Cancel. During ascent only the 
 - `scripts/track-regression.mjs`: headless real-app regression harness for aircraft tracking/model/detection invariants (`npm run test:track`).
 - `scripts/lib/qa-first-run.mjs`: the QA fleet's first-run suppression. Every
   `qa-*.mjs` opens its page with `newQaPage(browser)`, which writes the app's own
-  per-session dismissal before any page script runs, so the mission card never
-  paints over a harness's clicks, pixels, or focus. `npm test` audits the fleet
-  for it (`src/qaFirstRunSuppression.test.mjs`) — a new harness that forgets goes
-  red with the fix in the message. `qa-firstrun.mjs` is the single exemption:
-  the card is what it tests. By hand, `?welcome=0` on the app URL does the same.
+  per-session dismissal before any page script runs, so neither the card nor the
+  bubble ever paints over a harness's clicks, pixels, or focus — the session seed
+  hides every variant, C included, because all three pass through one door.
+  `npm test` audits the fleet for it (`src/qaFirstRunSuppression.test.mjs`) — a
+  new harness that forgets goes red with the fix in the message.
+  `qa-firstrun.mjs` is the single exemption: the card is what it tests. By hand,
+  `?welcome=0` on the app URL does the same.
 - `scripts/qa-map-source-tray.mjs`: browser proof for the four-source Map Source
   tray — presentation, keyboard disclosure, responsive bounds, unpinned
   auto-dismiss, ACQUIRING status, and retired/unknown stack-id restore

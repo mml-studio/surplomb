@@ -138,7 +138,7 @@
     Fonts are served from this origin, not from Google. Three render-blocking
     stylesheets on two origins the browser had never resolved used to sit in
     front of the first paint, and they pulled 410 kB — 323 kB of it the COMPLETE
-    Material Symbols variable font, 4 277 glyphs, for the 28 this interface
+    Material Symbols variable font, 4 277 glyphs, for the 27 this interface
     draws. `npm run fonts:build` regenerates the four faces and the icon subset
     (4 kB); `src/materialSymbolsSubset.test.mjs` fails when a source names a
     glyph the subset does not carry. A fourth link, `Material Icons Round`, was
@@ -1149,58 +1149,85 @@
 
   <div id="scene-runtime"></div>
 
-  <!-- Explicit mission choice on a fresh session. Live feeds are not auto-enabled
-       until the visitor asks; shared links skip this surface entirely. It returns
-       every session until "Don't show this again" is ticked — see
-       src/firstRunExperience.js for the full show policy. -->
+  <!-- First visit. One invitation, once per browser, after the boot flight has
+       landed; shared links skip it entirely. The aside is the SHELL (kicker,
+       footer, status): the body of the variant being shown is cloned into it
+       from one of the templates below, before the footer. Variant C shows no
+       card at all, only the bubble in #first-run-hint. Show policy, variants
+       and event contract: src/firstRunExperience.js. -->
   <aside id="first-run-launcher" role="dialog" aria-labelledby="first-run-title" aria-describedby="first-run-description" hidden>
     <div class="first-run-scanline" aria-hidden="true"></div>
     <header class="first-run-header">
-      <span class="first-run-kicker">MISSION CONTROL · FIRST LAUNCH</span>
+      <span class="first-run-kicker">SURPLOMB · PREMIÈRE VISITE</span>
     </header>
-    <h2 id="first-run-title">Choose your first view</h2>
-    <!-- The card's one persuasive line, final and VERBATIM (2026-08-23)
-         — including the unspaced em dash. The arc it has to carry: this looks
-         like something you should not have access to → the sources are all
-         public → the data is real. Tile subcopy stays purely functional. -->
-    <p id="first-run-description">It feels like a forbidden cockpit—then you realize the sources are public and the data is real.</p>
+    <div class="first-run-footer">
+      <span>Échap pour fermer</span>
+    </div>
+    <!-- Kept out of the footer row: it swaps to progress and errors, and a live
+         region that also holds layout makes the row jump as it speaks. The two
+         numbers are the ones the page description and the README carry. -->
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">59 couches de données publiques · 56 sans clé</p>
+  </aside>
+  <div id="first-run-hint" hidden></div>
+
+  <!-- A · Une adresse. Enter flies to the address; sales, permits and DPE
+       switch on where the camera lands (src/firstRunVariants.js). The field
+       declares what the soft keyboard should offer, like #location-search. -->
+  <template data-first-run-variant="A">
+    <h2 id="first-run-title">Qu’est-ce qui est vrai à cette adresse ?</h2>
+    <p id="first-run-description">Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.</p>
+    <form class="first-run-form" data-first-run-form role="search" action="#">
+      <input id="first-run-address" class="first-run-address" data-first-run-address type="search" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Adresse, commune ou lieu" placeholder="Une adresse, une commune, un lieu…" />
+      <button class="first-run-submit" data-first-run-submit type="submit">Voir</button>
+    </form>
+    <div class="first-run-chips">
+      <span class="first-run-chips-label">Essayer :</span>
+      <!-- Revealed by the module only where geolocation can work (HTTPS). -->
+      <button type="button" class="first-run-chip" data-first-run-chip="locate" hidden><span class="material-symbols-outlined" aria-hidden="true">my_location</span>Autour de moi</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Tour Eiffel, Paris">Tour Eiffel, Paris</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Vieux-Port, Marseille">Vieux-Port, Marseille</button>
+    </div>
+    <button type="button" class="first-run-link" data-first-run-look-around>Regarder autour d’ici sans rien taper<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+  </template>
+
+  <!-- B · Trois questions. A tile switches layers on where the camera already
+       is and never moves it. The marks are typography, not icon glyphs. -->
+  <template data-first-run-variant="B">
+    <h2 id="first-run-title">Par où commencer ?</h2>
+    <p id="first-run-description">Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.</p>
     <div class="first-run-choices">
-      <button type="button" data-first-run-choice="contacts">
-        <span class="material-symbols-outlined" aria-hidden="true">radar</span>
-        <span><strong>LIVE CONTACTS</strong><small>Aircraft, vessels and nearby intelligence</small></span>
+      <button type="button" data-first-run-choice="sales">
+        <span class="first-run-glyph" aria-hidden="true">€</span>
+        <span><strong>Ce que les voisins ont payé</strong><small>Ventes DVF et parcelle exacte, 5 ans</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
-      <button type="button" data-first-run-choice="space-missions">
-        <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
-        <span><strong>SPACE MISSIONS</strong><small>Launches, spacecraft and orbital context</small></span>
+      <button type="button" data-first-run-choice="permits">
+        <span class="first-run-glyph" aria-hidden="true">▲</span>
+        <span><strong>Ce qui se construit</strong><small>Permis accordés, chantiers ouverts (Sitadel)</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
-      <button type="button" data-first-run-choice="environmental">
-        <span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span>
-        <!-- Title text is painted from ENVIRONMENTAL_LABEL_CHOICE at init. -->
-        <!-- Subcopy names BOTH feeds this tile turns on, because the launcher
-             optimizes for the fully configured experience (product decision,
-             2026-08-23) — see the mission table in src/firstRunExperience.js. -->
-        <span><strong data-first-run-environmental-title>ENVIRONMENTAL</strong><small>Live earthquakes and active fires, from USGS and NASA</small></span>
+      <button type="button" data-first-run-choice="live">
+        <span class="first-run-glyph" aria-hidden="true">●</span>
+        <span><strong>Ce qui bouge maintenant</strong><small>Trafic, bus en direct, avions au-dessus</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" class="first-run-explore" data-first-run-choice="explore">
-        <span class="material-symbols-outlined" aria-hidden="true">public</span>
-        <span><strong>EXPLORE MANUALLY</strong><small>Begin with a clean globe</small></span>
+        <span class="first-run-glyph" aria-hidden="true">○</span>
+        <span><strong>Je regarde par moi-même</strong><small>Rester ici, rien d’autre ne s’allume</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
     </div>
-    <div class="first-run-footer">
-      <label class="first-run-suppress">
-        <input type="checkbox" data-first-run-suppress />
-        <span>Don't show this again</span>
-      </label>
-      <span>ESC to dismiss</span>
-    </div>
-    <!-- Kept out of the footer row: it swaps to mission progress and errors, and
-         a live region that also holds layout makes the row jump as it speaks. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the GEV MIC button in the dock lets you talk to the map.</p>
-  </aside>
+  </template>
+
+  <!-- C · Pas de carte. A bubble on the search field (src/firstRunHint.js):
+       never modal, gone at the first click elsewhere or after twelve seconds. -->
+  <template data-first-run-variant="C">
+    <button type="button" class="first-run-hint-body" data-first-run-hint-open>
+      <strong>Première visite ? Tapez une adresse ici.</strong>
+      <span>Ce qui s’est vendu, ce qui se construit, l’école, le risque.</span>
+    </button>
+    <span class="first-run-hint-chip">59 couches · 56 sans clé</span>
+  </template>
 
   <!-- What a territorial layer says before it starts. Opens ONLY when the
        camera is outside that layer's coverage (src/data/layerCoverage.js), so a

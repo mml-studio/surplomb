@@ -86,6 +86,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   a échoué.
 
 ### Changed
+- **La carte de premier lancement était le lanceur de l’amont, mot pour mot :
+  en anglais, avec trois tuiles sur quatre hors de France.** LIVE CONTACTS,
+  SPACE MISSIONS et ENVIRONMENTAL envoyaient le visiteur sur le globe entier,
+  et la carte revenait à chaque session tant que la case « Don't show this
+  again » restait décochée. Elle demande désormais une adresse (variante A, par
+  défaut) : Entrée vole vers le lieu, et les ventes DVF, les permis et les DPE
+  s’allument à l’arrivée. Deux autres variantes s’ouvrent à la main :
+  `?welcome=b` (« Par où commencer ? », trois questions qui allument des
+  couches sans bouger la caméra) et `?welcome=c` (pas de carte, une bulle sur
+  le champ de recherche). La carte n’apparaît qu’une fois le vol d’arrivée
+  posé, et une seule fois par navigateur : toute fermeture vaut pour les
+  visites suivantes, et la case a disparu. `?welcome=1` la rejoue,
+  `?welcome=0` la masque toujours.
 - **`gev.enerlens.com` n'existe plus : `surplomb.app` est la seule adresse
   publique.** Les deux noms servaient le même conteneur, et l'ancien restait
   bridé par la règle Cloudflare de la zone `enerlens.com` (30 requêtes `/api`

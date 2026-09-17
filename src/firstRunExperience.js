@@ -1,122 +1,92 @@
-// First-run mission launcher.
+// First-run card.
 //
 // The map deliberately does not auto-enable live feeds on every visit: doing so
 // would spend optional API quotas, surprise returning operators, and fight share
-// links. A new visitor instead gets one compact, explicit choice after startup.
+// links. A new visitor instead gets one compact, explicit invitation once the
+// boot flight has landed.
 //
-// SHOW POLICY (product decision, 2026-08-23). The launcher is NOT one-shot. A new
-// operator needs the map explained more than once, so it returns every fresh
-// browser session until they say otherwise:
+// THREE VARIANTS, ONE DOOR (2026-09-17). A asks for an address (the default),
+// B offers three questions answered where the camera already is, C shows no
+// card at all — only a bubble on the search field. The card bodies and what a
+// choice does live in src/firstRunVariants.js, the bubble in
+// src/firstRunHint.js. `?welcome=a|b|c` forces one; the caller's `variant`
+// picks otherwise. All three pass through the show policy below, so whatever
+// suppresses one suppresses them all — the QA fleet's session seed included.
+//
+// SHOW POLICY (product decision, 2026-09-17 — replaces "every fresh session
+// until ticked" of 2026-08-23). Once per browser:
 //
 //   - a share link never sees it — its author already chose the experience;
-//   - `?welcome=0` suppresses, `?welcome=1` replays (it outranks BOTH the
-//     session flag and the durable one, so support can always demo it);
-//   - ticking "Don't show this again" writes the DURABLE suppression — that
-//     tick is the only thing that stops it coming back;
-//   - any other close (a mission, Explore manually, ESC) writes only the
-//     SESSION flag, so it stays gone for this tab and returns next session.
+//   - `?welcome=0` suppresses, `?welcome=1` (or `=A|B|C`) replays — it outranks
+//     BOTH the session flag and the durable one, so support can always demo it;
+//   - EVERY close — a choice, Échap, a yield, the bubble's click-away or
+//     timeout — writes BOTH keys: the durable one, so the next visit starts on
+//     the globe, and the session one, which still holds for this tab when a
+//     browser refuses localStorage (and is the key the QA fleet seeds);
+//   - there is no "don't show this again" box any more: nothing needs it.
 //
-// Choosing a mission is deliberately NOT durable suppression: picking a mission
-// is enthusiasm, not "never show me this again".
+// One impression per browser is also what makes the variants comparable: an
+// impression is a visitor.
 
-/** Durable suppression. Written ONLY by the "Don't show this again" checkbox. */
+import { mountVariantA, mountVariantB } from './firstRunVariants.js';
+import { initFirstRunHint } from './firstRunHint.js';
+
+/** Durable suppression. Written by every close since 2026-09-17. */
 export const FIRST_RUN_STORAGE_KEY = 'gev:first-run-mission:v1';
-/** Per-session dismissal. Written by every close path; scoped to sessionStorage. */
+/** Per-session dismissal. Written by every close; scoped to sessionStorage. */
 export const FIRST_RUN_SESSION_KEY = 'gev:first-run-mission-session:v1';
 
-/**
- * Configurable name for the fires/quakes mission. Flip this ONE constant to
- * re-label the tile; the alternates are pre-written so the choice is a taste
- * call at review time, not an edit.
- * @type {'ENVIRONMENTAL'|'EARTH_WATCH'|'ACTIVE_EVENTS'}
- */
-export const ENVIRONMENTAL_LABEL_CHOICE = 'ENVIRONMENTAL';
-
-const ENVIRONMENTAL_LABELS = Object.freeze({
-  ENVIRONMENTAL: Object.freeze({ title: 'ENVIRONMENTAL' }),
-  EARTH_WATCH: Object.freeze({ title: 'EARTH WATCH' }),
-  ACTIVE_EVENTS: Object.freeze({ title: 'ACTIVE EVENTS' }),
-});
+/** The variants, in the order the experiment names them. A is the default. */
+export const FIRST_RUN_VARIANT_IDS = Object.freeze(['A', 'B', 'C']);
 
 /**
- * @param {string} [choice]
- * @returns {{title: string}} The label set the constant above selects.
+ * The variant `?welcome=` forces, if any. Case-insensitive; anything else
+ * (`1`, `0`, absent, unknown) forces nothing.
+ * @param {{search?: string}|null} [location]
+ * @returns {'A'|'B'|'C'|null}
  */
-export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
-  return ENVIRONMENTAL_LABELS[choice] || ENVIRONMENTAL_LABELS.ENVIRONMENTAL;
+export function forcedFirstRunVariant(location = globalThis.location) {
+  const value = (new URLSearchParams(location?.search || '').get('welcome') || '').toUpperCase();
+  return FIRST_RUN_VARIANT_IDS.includes(value) ? value : null;
 }
 
 /*
- * MISSION → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST
+ * CHOICE → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST
  * ─────────────────────────────────────────────────────────────────────────────
- * Product decision: picking a mission carries the same weight as clicking the
- * toggles it represents — durable where those clicks are durable — but it must
- * never write a preference the visitor did not effectively choose by picking it.
- * Layer enablement IS durable in this app (`gev:layer-state:v2`, written by
- * LayerStateCoordinator._commitExplicit only for origin user/voice/tool), so:
+ * Product decision: a choice on the card carries the same weight as clicking
+ * the toggles it represents — durable where those clicks are durable — but it
+ * must never write a preference the visitor did not effectively choose by
+ * making it. Layer enablement IS durable in this app (`gev:layer-state:v2`,
+ * written by LayerStateCoordinator._commitExplicit only for origin
+ * user/voice/tool), so:
  *
- *   TOUCHED, DURABLE      layer enables for the mission's OWN layers, at
+ *   TOUCHED, DURABLE      layer enables for the choice's OWN layers, at
  *                         `origin: 'user'` — identical to clicking those rows.
- *                         Choosing ENVIRONMENTAL *is* choosing those layers.
- *   TOUCHED, DURABLE      the Context panel reveal, but only for the two
- *                         Context missions, exactly as the visible Contacts /
- *                         Space Missions tabs do it. The globe missions open no
- *                         panel at all — nothing there needs explaining, and a
- *                         panel-collapse write is a pref nobody chose.
- *   TOUCHED, SESSION      the camera. Never persisted by anything.
+ *                         A switches its address bundle on where the flight
+ *                         lands; a B tile switches its layers on where the
+ *                         camera already is. Choosing them IS choosing them.
+ *   TOUCHED, DURABLE      nothing else. No panel opens: the card used to reveal
+ *                         the Context panel for two global missions, and those
+ *                         missions are gone.
+ *   TOUCHED, SESSION      the camera — A only, through the search box's own
+ *                         seam (StyleManager.flyToAddress / locateMe). Never
+ *                         persisted by anything. B and C never move it.
  *   NOT TOUCHED           detection mode + density. The reasonable-defaults
- *                         landing owns the DENSE/75 start, and Contacts owns
- *                         detection through contactsDetectionPolicy while it is
- *                         active. A mission has no opinion.
+ *                         landing owns the BALANCED/50 start
+ *                         (FIRST_RUN_DETECTION_PRESET, src/ui.js). A choice
+ *                         has no opinion.
  *   NOT TOUCHED           `_detectionUserOverridden`. Setting it would mean "the
  *                         operator hand-edited detection" and would silently
  *                         kill the CRT/NVG/FLIR auto-preset contract for the
- *                         whole session. Missions run through setContextMode and
- *                         DataManager.setEnabled, neither of which writes it.
+ *                         whole session. Choices run through the search seams
+ *                         and DataManager.setEnabled, neither of which writes it.
  *   NOT TOUCHED           detection allocation (`gev:detection-allocation:v1`),
  *                         3D aircraft models, scope feather. All are defaults or
  *                         separate durable prefs the visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
  *                         `_setModels3dMode`, which default to origin 'user' and
  *                         would persist a 3D choice nobody made.
- *
- * The two Context missions deliberately reuse `styleManager.setContextMode`, the
- * same facade the visible tabs and voice use, so Contacts detection ownership,
- * layer isolation and rollback stay in exactly one place.
  */
-
-/** @type {Readonly<Record<string, object>>} */
-export const FIRST_RUN_MISSIONS = Object.freeze({
-  contacts: Object.freeze({
-    kind: 'context',
-    contextMode: 'contacts',
-    busyText: 'Starting live contacts…',
-  }),
-  'space-missions': Object.freeze({
-    kind: 'context',
-    contextMode: 'space-missions',
-    busyText: 'Opening space missions…',
-  }),
-  environmental: Object.freeze({
-    kind: 'globe',
-    // Live USGS earthquakes AND NASA FIRMS active fires. The launcher optimizes
-    // for the FULLY CONFIGURED experience (product decision, 2026-08-23): the tile
-    // promises both, so it turns on both, and the subcopy in index.html says so.
-    //
-    // Keyless, FIRMS is honest where it counts — its own layer row reads
-    // "UNAVAILABLE · NASA FIRMS · LIVE · KEY REQUIRED", and the quakes half of
-    // the tile still delivers in full. What is NOT honest is the GLOBAL status
-    // chip, which has no key-required terminal state and folds that row into
-    // "LOAD FAILED". That aggregation is the defect, not this preset: fixing it
-    // means a KEY REQUIRED terminal state in src/loadingFeedback.js, a state
-    // machine shared by every layer and not a thing to refactor the night
-    // before a launch. LEDGERED post-launch. Until it lands, keyless visitors
-    // are judged on the layer row, which tells them the truth.
-    layerIds: Object.freeze(['earthquakes', 'local-firms']),
-    busyText: 'Scanning active events…',
-  }),
-  explore: Object.freeze({ kind: 'none' }),
-});
 
 /*
  * STORAGE ACCESS IS LAZY AND GUARDED — NEVER A DEFAULT PARAMETER.
@@ -209,16 +179,17 @@ export function shouldShowFirstRun({
   if (params.get('welcome') === '0') return false;
   // The demo/support escape hatch outranks both suppressions on purpose.
   if (params.get('welcome') === '1') return true;
+  if (FIRST_RUN_VARIANT_IDS.includes((params.get('welcome') || '').toUpperCase())) return true;
   if (readStored('local', storage, FIRST_RUN_STORAGE_KEY) === 'suppressed') return false;
   if (readStored('session', sessionStorageRef, FIRST_RUN_SESSION_KEY) === 'dismissed') return false;
   return true;
 }
 
 /**
- * Write (or clear) the durable "don't show this again" suppression. Storage is
- * best-effort — a blocked store still closes the launcher for this session —
- * but the outcome is RETURNED, because the checkbox that calls this is showing
- * the visitor a claim about the future and must not keep a tick nothing saved.
+ * Write (or clear) the durable suppression. Every close writes it; clearing it
+ * is for support and tests. Storage is best-effort — a blocked store still
+ * closes the card for this session through the session key — and the outcome
+ * is RETURNED, so a caller can tell a saved "once" from a refused one.
  * @param {boolean} suppressed
  * @param {{setItem: Function, removeItem?: Function}|null} [storage]
  * @returns {boolean} true if the durable state now matches what was asked.
@@ -236,45 +207,6 @@ export function setFirstRunSuppressed(suppressed, storage) {
  */
 export function rememberFirstRunSessionDismissed(sessionStorageRef) {
   writeStored('session', sessionStorageRef, FIRST_RUN_SESSION_KEY, 'dismissed');
-}
-
-/**
- * Run a launcher choice against the app's existing internal APIs.
- *
- * A failed mission is NOT closed: the visitor can retry or fall back to manual
- * exploration rather than being stranded on a map they did not ask for.
- *
- * @param {string} choice Key of FIRST_RUN_MISSIONS.
- * @param {object} deps
- * @param {(mode: string) => Promise<object>} deps.setContextMode
- * @param {(layerId: string) => Promise<boolean>} deps.setLayerEnabled
- * @param {() => Promise<any>} deps.flyToGlobe
- * @returns {Promise<{ok: boolean, choice: string, result?: object, failedLayerIds?: string[]}>}
- */
-export async function runFirstRunChoice(choice, { setContextMode, setLayerEnabled, flyToGlobe }) {
-  const mission = FIRST_RUN_MISSIONS[choice];
-  if (!mission) return { ok: false, choice };
-  if (mission.kind === 'none') return { ok: true, choice };
-  if (mission.kind === 'context') {
-    const result = await setContextMode(mission.contextMode);
-    return { ok: Boolean(result?.ok), choice, result };
-  }
-  // Globe missions: start the pull-out and the layer work together so the
-  // camera is already moving while the feeds spin up. The flight is framing,
-  // not the mission — a stalled or superseded flight never fails the tile.
-  const flight = Promise.resolve()
-    .then(() => flyToGlobe())
-    .catch(() => null);
-  const outcomes = await Promise.all(mission.layerIds.map(async (layerId) => {
-    try {
-      return { layerId, ok: (await setLayerEnabled(layerId)) !== false };
-    } catch {
-      return { layerId, ok: false };
-    }
-  }));
-  await flight;
-  const failedLayerIds = outcomes.filter((entry) => !entry.ok).map((entry) => entry.layerId);
-  return { ok: failedLayerIds.length === 0, choice, failedLayerIds };
 }
 
 /**
@@ -301,19 +233,31 @@ export function exclusiveSurfaceActive(documentRef = globalThis.document) {
 }
 
 /**
- * Wire and reveal the mission launcher.
+ * Wire and reveal the first-run experience.
+ *
+ * Called once the boot flight has landed (src/main.js), so the card never
+ * covers the descent the boot just paid for.
+ *
  * @param {object} input
  * @param {object} input.styleManager Initialized StyleManager.
- * @param {object} [input.dataManager] DataManager, for the globe missions' layers.
+ * @param {object} [input.dataManager] DataManager, for the layers a choice switches on.
+ * @param {'A'|'B'|'C'} [input.variant] The assigned variant; `?welcome=` outranks it.
+ * @param {((event: object) => void)|null} [input.onEvent] Receives
+ *   `{type: 'impression', shell}`, `{type: 'action', kind, outcome, queryLength?, layerIds?}`
+ *   and `{type: 'dismiss', via}` — never the typed text, never a coordinate.
+ * @param {{selectTab?: Function}|null} [input.phoneSheet] The phone sheet controller (C opens its Recherche tab).
  * @param {Document} [input.documentRef]
  * @param {Storage} [input.storage]
  * @param {Storage} [input.sessionStorageRef]
  * @param {Location} [input.location]
- * @returns {null|{dismiss: Function}}
+ * @returns {null|{dismiss?: Function, isTopmost?: Function, close?: Function, isOpen?: Function, variant?: string}}
  */
 export function initFirstRunExperience({
   styleManager,
   dataManager = styleManager?._dataManager,
+  variant = 'A',
+  onEvent = null,
+  phoneSheet = null,
   documentRef = globalThis.document,
   storage,
   sessionStorageRef,
@@ -322,29 +266,91 @@ export function initFirstRunExperience({
   const root = documentRef?.getElementById?.('first-run-launcher');
   if (!root || root.dataset.initialized === 'true') return null;
   root.dataset.initialized = 'true';
+  const hintHost = documentRef.getElementById('first-run-hint');
+  const templates = [...documentRef.querySelectorAll('template[data-first-run-variant]')];
+  const templateFor = (id) => templates.find((node) => node.dataset.firstRunVariant === id) || null;
+  const assigned = String(variant || '').toUpperCase();
+  const chosen = forcedFirstRunVariant(location)
+    ?? (FIRST_RUN_VARIANT_IDS.includes(assigned) ? assigned : 'A');
+  const template = templateFor(chosen);
+  const discardTemplates = () => { for (const node of templates) node.remove(); };
 
-  if (!shouldShowFirstRun({
+  // ONE door for all three variants: the same decision removes the card AND
+  // the bubble, which is what makes the QA fleet's session seed hide C too.
+  if (!template || !shouldShowFirstRun({
     hasShareState: styleManager?.hasShareState,
     storage,
     sessionStorageRef,
     location,
   })) {
     root.remove();
+    hintHost?.remove();
+    discardTemplates();
     return null;
   }
 
-  // The tile name is configurable from one constant, so paint it from the
-  // module rather than trusting the markup to have been edited to match.
-  const environmentalTitle = root.querySelector('[data-first-run-environmental-title]');
-  if (environmentalTitle) environmentalTitle.textContent = environmentalLabel().title;
+  // A listener that throws must never take the card down with it.
+  const emit = (event) => {
+    if (typeof onEvent !== 'function') return;
+    try {
+      onEvent(event);
+    } catch (error) {
+      console.warn('[First run] Event listener failed:', error);
+    }
+  };
+  // Read off the root the input-mode module already stamped, rather than
+  // importing it: the shell is decided long before this runs.
+  const phoneShell = documentRef.documentElement?.dataset?.shell === 'phone';
+  const shell = phoneShell ? 'phone' : 'desktop';
+  const rememberClosed = () => {
+    rememberFirstRunSessionDismissed(sessionStorageRef);
+    setFirstRunSuppressed(true, storage);
+  };
+
+  if (chosen === 'C') {
+    root.remove();
+    const hint = initFirstRunHint({
+      host: hintHost,
+      template,
+      anchor: phoneShell
+        ? documentRef.getElementById('phone-tab-search')
+        : documentRef.querySelector('#location-bar .location-toolbar-label'),
+      phoneShell,
+      openSearch: phoneShell
+        ? () => {
+          phoneSheet?.selectTab?.('search');
+          documentRef.getElementById('location-search')?.focus?.({ preventScroll: true });
+        }
+        : () => styleManager?.openLocationSearch?.(),
+      emit,
+      onClose: rememberClosed,
+      isBlocked: () => exclusiveSurfaceActive(documentRef),
+      tray: phoneShell ? null : documentRef.getElementById('location-bar'),
+      documentRef,
+    });
+    discardTemplates();
+    if (!hint) {
+      hintHost?.remove();
+      return null;
+    }
+    return { ...hint, variant: chosen };
+  }
+
+  const footer = root.querySelector('.first-run-footer');
+  root.insertBefore(template.content.cloneNode(true), footer);
+  root.dataset.firstRunVariant = chosen;
+  hintHost?.remove();
+  discardTemplates();
 
   const status = root.querySelector('[data-first-run-status]');
-  const suppressBox = root.querySelector('[data-first-run-suppress]');
-  const buttons = [...root.querySelectorAll('[data-first-run-choice]')];
+  const controls = () => [...root.querySelectorAll(
+    '[data-first-run-choice], [data-first-run-submit], [data-first-run-chip], [data-first-run-look-around]',
+  )];
   const defaultStatus = status?.textContent || '';
   const previouslyFocused = documentRef.activeElement;
   let busy = false;
   let closing = false;
+  let mounted = null;
 
   const focusables = () => [
     ...root.querySelectorAll('button, input, [href], [tabindex]:not([tabindex="-1"])'),
@@ -395,10 +401,12 @@ export function initFirstRunExperience({
     && root.getClientRects().length > 0
     && !coveredByOverlay();
 
-  const dismiss = ({ restoreFocus = true } = {}) => {
+  const dismiss = ({ restoreFocus = true, reason = 'esc' } = {}) => {
     if (closing) return;
     closing = true;
-    rememberFirstRunSessionDismissed(sessionStorageRef);
+    rememberClosed();
+    emit({ type: 'dismiss', via: reason });
+    mounted?.teardown?.();
     root.classList.remove('visible');
     root.setAttribute('aria-hidden', 'true');
     documentRef.removeEventListener('keydown', onKeyDown, true);
@@ -419,76 +427,29 @@ export function initFirstRunExperience({
     }
   };
 
-  const setBusy = (next, choice = '') => {
+  const setBusy = (next, busyText = 'Un instant…') => {
     busy = next;
     root.dataset.state = next ? 'loading' : 'ready';
     root.setAttribute('aria-busy', String(next));
     // aria-disabled, not `disabled`: disabling the focused button drops focus to
-    // <body> mid-flight and strands a keyboard visitor outside the launcher.
-    for (const button of buttons) button.setAttribute('aria-disabled', String(next));
+    // <body> mid-lookup and strands a keyboard visitor outside the launcher.
+    for (const button of controls()) button.setAttribute('aria-disabled', String(next));
+    // Read-only, for the same reason: the field keeps the caret.
+    for (const field of root.querySelectorAll('[data-first-run-address]')) field.readOnly = next;
     if (!status) return;
-    if (next) status.textContent = FIRST_RUN_MISSIONS[choice]?.busyText || 'Working…';
-    else if (status.dataset.sticky !== 'true') status.textContent = defaultStatus;
+    if (next) {
+      delete status.dataset.sticky;
+      status.textContent = busyText;
+    } else if (status.dataset.sticky !== 'true') {
+      status.textContent = defaultStatus;
+    }
   };
 
-  const onChoice = async (event) => {
-    if (busy || closing) return;
-    const choice = event.currentTarget?.dataset?.firstRunChoice;
-    if (!FIRST_RUN_MISSIONS[choice]) return;
-    if (status) delete status.dataset.sticky;
-    setBusy(true, choice);
-    let outcome = null;
-    try {
-      outcome = await runFirstRunChoice(choice, {
-        setContextMode: async (mode) => {
-          const result = await styleManager.setContextMode(mode);
-          if (result?.ok) {
-            // setContextMode is also a voice/internal facade and deliberately
-            // does not decide panel chrome. This first-run click is an explicit
-            // visual choice, so reveal the result exactly as the visible
-            // Contacts / Space Missions tabs do.
-            styleManager.setPanelCollapsed?.('global-context-panel', false, { explicit: true });
-          }
-          return result;
-        },
-        // `origin: 'user'` on purpose: a mission tile is a real person choosing
-        // these layers, so it persists exactly as clicking those rows would.
-        setLayerEnabled: (layerId) => dataManager.setEnabled(layerId, true, { origin: 'user' }),
-        flyToGlobe: () => styleManager.resetToGlobeView(),
-      });
-    } catch (error) {
-      // A thrown mission is a real defect worth seeing in a bug report; the
-      // ordinary "could not enable" path returns ok:false and stays quiet.
-      console.warn('[First run] Mission launch failed:', error);
-    }
-    if (closing) return;
-    if (outcome?.ok) {
-      dismiss();
-      return;
-    }
-    const failed = outcome?.failedLayerIds?.length
-      ? outcome.failedLayerIds
-      : outcome?.result?.failedLayerIds;
-    const detail = Array.isArray(failed) && failed.length ? ` (${failed.join(', ')})` : '';
-    if (status) {
-      status.dataset.sticky = 'true';
-      status.textContent = `Could not open that mission${detail}. Retry or explore manually.`;
-    }
-    setBusy(false);
-  };
-
-  const onSuppressChange = (event) => {
-    const box = event.currentTarget;
-    const wanted = Boolean(box?.checked);
-    if (setFirstRunSuppressed(wanted, storage)) return;
-    // The write is best-effort; the TICK is not. A box left checked after a
-    // refused write tells the visitor "never again" about a launcher that is
-    // already guaranteed to come back next session. Put the box back where the
-    // truth is, and say why rather than leaving a control that undoes itself.
-    if (box) box.checked = !wanted;
+  // A sticky status survives setBusy(false): it is the answer to what was tried.
+  const setStatus = (text) => {
     if (!status) return;
     status.dataset.sticky = 'true';
-    status.textContent = 'This browser is blocking storage, so that could not be saved.';
+    status.textContent = text;
   };
 
   function onKeyDown(event) {
@@ -506,12 +467,12 @@ export function initFirstRunExperience({
     // that never blocks later listeners on the same document.
     if (event.defaultPrevented) return;
     if (event.key === 'Escape') {
-      // ESC is an exit, not a mission: it must work even mid-flight. The
+      // ESC is an exit, not a choice: it must work even mid-lookup. The
       // launcher is the topmost surface while it is up, so it consumes the key
       // rather than also closing a panel the visitor cannot see behind it.
       event.preventDefault();
       event.stopPropagation();
-      dismiss();
+      dismiss({ reason: 'esc' });
       return;
     }
     if (event.key !== 'Tab') return;
@@ -523,7 +484,7 @@ export function initFirstRunExperience({
     const first = order[0];
     const last = order[order.length - 1];
     const active = documentRef.activeElement;
-    // Plain focus(), NOT preventScroll: on a short viewport the mission list
+    // Plain focus(), NOT preventScroll: on a short viewport the tile list
     // scrolls inside the card, and a tile the keyboard just reached has to be
     // brought into view rather than focused somewhere off-screen.
     if (!root.contains(active)) {
@@ -540,15 +501,29 @@ export function initFirstRunExperience({
     }
   }
 
-  for (const button of buttons) button.addEventListener('click', onChoice);
-  suppressBox?.addEventListener('change', onSuppressChange);
+  const ctx = {
+    root,
+    styleManager,
+    phoneShell,
+    emit,
+    setBusy,
+    setStatus,
+    dismiss,
+    isBusy: () => busy || closing,
+    isClosed: () => closing,
+    // `origin: 'user'` on purpose: a choice on the card is a real person
+    // choosing these layers, so it persists exactly as clicking those rows would.
+    setLayerEnabled: (layerId) => dataManager.setEnabled(layerId, true, { origin: 'user' }),
+  };
+  mounted = chosen === 'B' ? mountVariantB(ctx) : mountVariantA(ctx);
+
   // Capture phase: the app binds its own global hotkeys (including bare letters
   // that cycle detection and styles), and the launcher owns the keyboard first.
   documentRef.addEventListener('keydown', onKeyDown, true);
 
   // The scroll fade is an affordance, so it may only appear when the list really
-  // overflows. On a viewport where all five tiles fit, a faded bottom edge would
-  // promise a sixth mission that does not exist.
+  // overflows. On a viewport where all four tiles fit, a faded bottom edge would
+  // promise a fifth one that does not exist.
   const choiceList = root.querySelector('.first-run-choices');
   const syncScrollAffordance = () => {
     if (!choiceList) return;
@@ -565,7 +540,8 @@ export function initFirstRunExperience({
       if (closing) return;
       root.classList.add('visible');
       syncScrollAffordance();
-      buttons[0]?.focus?.({ preventScroll: true });
+      mounted?.focusTarget?.focus?.({ preventScroll: true });
+      emit({ type: 'impression', shell });
     });
   };
 
@@ -600,9 +576,9 @@ export function initFirstRunExperience({
    */
   const yieldToExclusiveSurface = () => {
     if (closing) return;
-    // Session-scoped, like any other dismissal: it returns next session. Focus
-    // stays with whatever just took the screen.
-    dismiss({ restoreFocus: false });
+    // Like any other close, it counts: the visitor saw the card. Focus stays
+    // with whatever just took the screen.
+    dismiss({ restoreFocus: false, reason: 'yield' });
   };
 
   /*
@@ -618,9 +594,9 @@ export function initFirstRunExperience({
    * progress, which is the worse of the two failures.
    *
    * And the no-show IS benign: the card stays hidden, the key handler is inert
-   * (isTopmost() is false), no session flag is written, and the observer is
-   * still watching — so it appears the moment the class clears, and returns next
-   * session regardless. Documented in docs/CURRENT-STATE.md.
+   * (isTopmost() is false), neither key is written, and the observer is still
+   * watching — so it appears the moment the class clears, and a visit that never
+   * saw it still gets it next time. Documented in docs/CURRENT-STATE.md.
    */
   const syncToExclusiveSurfaces = () => {
     if (closing) return;
@@ -643,5 +619,5 @@ export function initFirstRunExperience({
   }
   syncToExclusiveSurfaces();
 
-  return { dismiss, isTopmost };
+  return { dismiss, isTopmost, variant: chosen };
 }
