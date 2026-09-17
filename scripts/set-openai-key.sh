@@ -427,8 +427,8 @@ do_vps=0
 if [ "$WANT_VPS" = 1 ]; then do_vps=1
 elif [ "$WANT_VPS" = 0 ]; then do_vps=0
 else
-  warn "Staging is REACHABLE FROM THE INTERNET (gev.enerlens.com). A key there means anyone"
-  warn "past the Basic-auth prompt can open sessions on your credit — up to ~\$10/hour at the"
+  warn "Staging is PUBLIC (surplomb.app, no password since 2026-09-16). A key there means any"
+  warn "visitor can open sessions on your credit — up to ~\$10/hour at the"
   warn "standard tier. Say no unless you want the hosted demo to talk."
   confirm "  Push to staging $VPS_HOST:$VPS_ROOT/.env and restart (~15 s)?" n && do_vps=1
 fi
@@ -459,7 +459,7 @@ docker compose up -d
 REMOTE
   then
     ok "staging .env updated, container recreated, /api/realtime/token capped at 6 req/min/IP"
-    dim "  check: curl -su gev:<password> https://gev.enerlens.com/api/voice/config"
+    dim "  check: curl -s https://surplomb.app/api/voice/config"
   else
     bad "staging update failed — the previous container is still serving"
   fi

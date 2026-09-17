@@ -37,7 +37,7 @@ VPS_HOST="${GEV_VPS_HOST:-vps}"
 VPS_ROOT="${GEV_VPS_ROOT:-/opt/gev}"
 # Probes carry a Referer because SECURITY.md tells you to restrict the key by
 # HTTP referrer — without one, a correctly restricted key looks broken here.
-PROBE_REFERER="${GEV_PROBE_REFERER:-https://gev.enerlens.com/}"
+PROBE_REFERER="${GEV_PROBE_REFERER:-https://surplomb.app/}"
 VAR=GOOGLE_MAPS_API_KEY
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -264,7 +264,7 @@ fi
 do_vps=0
 if [ "$WANT_VPS" = 1 ]; then do_vps=1
 elif [ "$WANT_VPS" = 0 ]; then do_vps=0
-elif confirm "  Push to staging $VPS_HOST:$VPS_ROOT/.env and rebuild (~3 min, gev.enerlens.com)?" n; then do_vps=1
+elif confirm "  Push to staging $VPS_HOST:$VPS_ROOT/.env and rebuild (~3 min, surplomb.app)?" n; then do_vps=1
 fi
 
 if [ "$do_vps" = 1 ]; then
@@ -288,7 +288,7 @@ REMOTE
   then
     ok "staging .env updated and a rebuild started"
     dim "  follow it:  ssh $VPS_HOST 'journalctl -u gev-deploy -f'"
-    dim "  then check: node scripts/qa-deployment.mjs --url https://gev.enerlens.com/ --auth gev:<password>"
+    dim "  then check: node scripts/qa-deployment.mjs --url https://surplomb.app/"
   else
     bad "staging update failed — the previous container is still serving"
   fi

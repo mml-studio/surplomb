@@ -28,7 +28,7 @@
  *      accelerated" is there. (The snippet re-checks, but check first: if it
  *      is software, nothing below is worth your five minutes.)
  *   2. Open the app with the first-run card suppressed:
- *      https://gev.enerlens.com/?welcome=0   (HTTP Basic: gev / the password)
+ *      https://surplomb.app/?welcome=0
  *   3. Wait for the globe. F12 → Console → paste this file → Enter.
  *   4. It prints two lines and copies a JSON blob to the clipboard. Send that
  *      blob back; it goes verbatim into `docs/PERFORMANCE.md`.

@@ -2,8 +2,8 @@
 #
 # Surplomb — does the edge still rate-limit ALL of /api?
 #
-# The rule in front of gev.enerlens.com is 30 requests per 10 seconds per
-# address on `/api`, blocking for 10 s (measured 2026-09-09). A GEV page makes
+# The rule that stood in front of gev.enerlens.com is 30 requests per 10
+# seconds per address on `/api`, blocking for 10 s (measured 2026-09-09). A GEV page makes
 # about six `/api` calls to boot, so the page never trips it — a QA harness,
 # a couple of tabs reloading, or two people behind one NAT do, and for those
 # ten seconds EVERY `/api` answers 429: the mic reads "Could not reach voice
@@ -23,11 +23,11 @@
 # request reached the origin just as well as a 200 does. Only a 429 with
 # Cloudflare's `error code: 1015` means the edge answered instead.
 #
-#   ./edge-ratelimit-probe.sh                      # gev.enerlens.com, 40 requests
+#   ./edge-ratelimit-probe.sh                      # surplomb.app, 40 requests
 #   ./edge-ratelimit-probe.sh --host h --count 40
 set -uo pipefail
 
-HOST=${GEV_PUBLIC_HOST_PROBE:-gev.enerlens.com}
+HOST=${GEV_PUBLIC_HOST_PROBE:-surplomb.app}
 COUNT=40
 PATH_UNDER_TEST=/api/voice/config
 
