@@ -131,9 +131,13 @@ test('the primer runs before the await on both click paths', () => {
   const buttonHandler = realtime.match(/controller\.buttonHandler = \(\) => \{([\s\S]*?)\n  \};/);
   assert.ok(buttonHandler, 'buttonHandler is gone');
   assert.ok(
-    buttonHandler[1].indexOf('primeVoiceMedia()') < buttonHandler[1].indexOf('controller.start('),
+    buttonHandler[1].indexOf('primeVoiceMedia()') < buttonHandler[1].indexOf('controller.toggleListening('),
     'the grant must be taken before start() awaits getUserMedia',
   );
+  // toggleListening() is what calls start(), and it must do so without an await first.
+  const toggle = realtime.match(/\n  toggleListening\(\) \{([\s\S]*?)\n  \}/);
+  assert.ok(toggle, 'toggleListening is gone');
+  assert.doesNotMatch(toggle[1].slice(0, toggle[1].indexOf('this.start(')), /await/);
 
   // And the session adopts the primed element rather than building one after
   // the await, which is exactly what it used to do.

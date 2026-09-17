@@ -24,6 +24,7 @@ import {
   geoidCell,
 } from './data/geoid.js';
 import { requestWaitlistCard, trialRefusalFrom } from './trialRefusal.js';
+import { VOICE_SESSION_EVENT, isVoiceSessionOpen } from './voiceSession.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -103,6 +104,8 @@ export class IntelHUD {
     // actually done something. See {@link _installEngagementGate}.
     this._userEngaged = false;
     this._onFirstEngagement = null;
+    // No AI summary while a voice session is open. See _handleVoiceSession.
+    this._onVoiceSession = (event) => this._handleVoiceSession(event);
     // ALT readout datum: the camera height Cesium reports is ELLIPSOIDAL, the
     // number a viewer reads is MSL. N comes from `/api/geoid`, one coarse cell
     // at a time, requested on the first telemetry tick of a VISIBLE HUD and
@@ -154,6 +157,7 @@ export class IntelHUD {
     this._buildDOM();
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._installEngagementGate();
+    if (typeof document !== 'undefined') document.addEventListener(VOICE_SESSION_EVENT, this._onVoiceSession);
     this._startTimers();
   }
 
@@ -699,7 +703,7 @@ export class IntelHUD {
     // A server with no OPENAI_API_KEY cannot start answering mid-session — the
     // key is read at boot, so fixing it ends this page anyway. Keep composing
     // the local line instead of asking again. See the catch below.
-    if (this._summaryDisabled) {
+    if (this._summaryDisabled || isVoiceSessionOpen()) {
       this._setSummaryText(fallbackText, animate);
       return;
     }
@@ -733,6 +737,12 @@ export class IntelHUD {
       return;
     }
     if (this._summaryRequest) return;
+    // Building the context awaited the scene; a mic click may have landed.
+    // Left dirty, so the first tick after the session asks.
+    if (isVoiceSessionOpen()) {
+      this._setSummaryText(fallbackText, animate);
+      return;
+    }
 
     if (force) this._setSummaryText(fallbackText, false);
     this._summaryDirty = false;
@@ -825,6 +835,25 @@ export class IntelHUD {
   _markSummaryDirty() {
     this._summaryDirty = true;
     this._summaryRevision++;
+  }
+
+  /**
+   * A voice session opened or closed (src/voiceSession.js).
+   *
+   * On the hosted trial each AI summary spends a try, and the session is
+   * already the try being used — while its commands move the camera, which is
+   * what asks for summaries. So none is asked for while it is open, and the one
+   * in flight is dropped before the session's mint can be overwritten by it.
+   * @param {{detail?: {open?: boolean}}} event
+   */
+  _handleVoiceSession(event) {
+    if (event?.detail?.open) {
+      this._summaryRequest?.abort();
+      return;
+    }
+    // Wherever the session left the camera has not been summarised yet.
+    this._lastSummarySignature = null;
+    this._markSummaryDirty();
   }
 
   // ── Public API ──────────────────────────
@@ -969,6 +998,7 @@ export class IntelHUD {
       this._onFirstEngagement = null;
     }
     this._dataManagerUnsubscribe?.();
+    if (typeof document !== 'undefined') document.removeEventListener(VOICE_SESSION_EVENT, this._onVoiceSession);
     this._summaryRequest?.abort();
   }
 }

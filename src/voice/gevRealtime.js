@@ -11,11 +11,12 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
-import { createVoiceControl, resolveVoiceControlHint } from './voiceControlDom.js';
+import { createVoiceControl, resolveVoiceControlHint, resolveVoiceReadyPrompt } from './voiceControlDom.js';
 import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
 import { isCoarseInput } from '../inputMode.js';
 import { requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
 import { markVoicePremiumSpent } from '../voicePremium.js';
+import { announceVoiceSession } from '../voiceSession.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -23,9 +24,31 @@ const STATUS = {
   idle: 'OFF',
   connecting: 'CONNECTING',
   listening: 'LISTENING',
+  // Shown, never stored: `status` stays 'listening' for an open session, and
+  // paintStatus() names what the microphone is actually doing. See there.
+  answering: 'ANSWERING',
+  ready: 'READY',
   executing: 'EXECUTING',
   error: 'ERROR',
 };
+/** The caption of a live mic when nothing more specific applies. */
+const ASK_PROMPT = 'Question ou commande';
+const RELEASE_SPACE_PROMPT = 'Relâchez Espace pour envoyer';
+/** The dock once the hosted voice trial is spent — the mic's own words (src/voicePremium.js). */
+const TRIAL_SPENT_DETAIL = 'Commandes offertes utilisées';
+/**
+ * How long an ordinary session may sit with the mic shut before it closes.
+ * A click no longer ends a session (it opens the mic for one request), so this
+ * is what releases the microphone and beats the provider's own session expiry,
+ * which otherwise lands on the dock as an ERROR an hour later.
+ */
+export const VOICE_IDLE_CLOSE_MS = 2 * 60_000;
+/**
+ * The same for a trial session, which closing ENDS: the server spent all its
+ * requests when it was minted. Long enough to read the map between questions,
+ * short of the provider's 60-minute limit.
+ */
+export const TRIAL_IDLE_CLOSE_MS = 50 * 60_000;
 /** The tray's fallback second line — see setStatus for when it is replaced. */
 const DEFAULT_VOICE_ERROR_HINT = 'Check microphone permission and network access, then try again.';
 /** Waits one click sits out when a limiter answers the config lookup with a Retry-After. */
@@ -342,8 +365,7 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
     // Synchronous, first: iOS hands over audio output only inside the handler
     // the finger triggered, and `start()` awaits `getUserMedia` three lines in.
     primeVoiceMedia();
-    if (controller.isActive()) controller.stop();
-    else controller.start({ pushToTalk: false });
+    controller.toggleListening();
   };
   ui.button.addEventListener('click', controller.buttonHandler);
   // A new three each time the tray comes up, whether by hover or by keyboard
@@ -492,6 +514,11 @@ export class GevRealtimeController {
     this.shortcutPageHideHandler = null;
     this.shortcutVisibilityHandler = null;
     this.status = 'idle';
+    /** The caption the last setStatus() asked for; paintStatus() decides if it shows. */
+    this.statusDetail = null;
+    /** Whether the microphone is really open: the one thing LISTENING may mean. */
+    this.microphoneLive = false;
+    this.idleCloseTimer = null;
     // Monotonic generation token. Every start()/stop() bumps it; an in-flight
     // start() captures its value and bails after each await if it no longer
     // matches, so a stop() (or a second start()) mid-connect cannot leave an
@@ -511,6 +538,30 @@ export class GevRealtimeController {
 
   isActive() {
     return this.status !== 'idle' && this.status !== 'error';
+  }
+
+  /**
+   * What a click on the mic does.
+   *
+   * One click is one request, like a phone assistant: it opens the microphone,
+   * and the microphone shuts again once the request is taken (see
+   * `input_audio_buffer.committed`). A click on an open mic cancels the listen.
+   * Neither closes the session: on the hosted trial, minting it spent all three
+   * requests, so a closed session is a spent trial — and reconnecting costs a
+   * second or two the operator would hear as lag.
+   * @returns {void}
+   */
+  toggleListening() {
+    if (!this.isActive()) {
+      this.start({ pushToTalk: false });
+      return;
+    }
+    // Nothing to listen with yet: a click here is a change of mind.
+    if (this.status === 'connecting') {
+      this.stop();
+      return;
+    }
+    this.setMicrophoneEnabled(!this.microphoneLive);
   }
 
   /**
@@ -751,10 +802,8 @@ export class GevRealtimeController {
       const dataChannel = this.pc.createDataChannel('oai-events');
       this.dc = dataChannel;
       dataChannel.addEventListener('open', () => {
-        const detail = this.pushToTalkMode
-          ? (this.pushToTalkKeyHeld ? 'Release Space to send' : 'Hold Space to talk')
-          : (this.trialDetail() || 'Ask or command');
-        this.setStatus('listening', detail);
+        // No caption: paintStatus() writes the one that fits the mic's state.
+        this.setStatus('listening');
         this.debugLog('data_channel.open', { connection: this.connectionDiagnostics(dataChannel) });
       });
       dataChannel.addEventListener('message', (event) => this.handleRealtimeEvent(event));
@@ -901,18 +950,15 @@ export class GevRealtimeController {
       this.brainSession?.interruptSpeech?.();
       this.pauseRadioForVoice();
       if (this.pushToTalkKeyHeld) return;
-      // A click-started session is intentionally open-mic. Space only claims an
-      // idle session (or a session it already started) so releasing the key can
-      // never surprise the user by muting a click-started conversation.
-      if (this.isActive() && !this.pushToTalkMode) return;
+      // Space claims any open session, including one a click started: holding
+      // it opens the mic and releasing it shuts the mic. A click no longer
+      // leaves an open mic that a release could surprise (see toggleListening).
+      // A click-started session still connecting already has its listen.
+      if (this.status === 'connecting' && !this.pushToTalkMode) return;
       this.pushToTalkKeyHeld = true;
       this.ui.root.dataset.pushToTalk = 'held';
-      if (this.isActive()) {
-        this.setMicrophoneEnabled(true);
-        if (this.status === 'listening') this.setStatus('listening', 'Release Space to send');
-      } else {
-        this.start({ pushToTalk: true });
-      }
+      if (this.isActive()) this.setMicrophoneEnabled(true);
+      else this.start({ pushToTalk: true });
     };
     this.shortcutKeyUpHandler = (event) => {
       if (!isPushToTalkKey(event)) return;
@@ -963,16 +1009,14 @@ export class GevRealtimeController {
   }
 
   /**
-   * Mutes a keyboard-started microphone while leaving WebRTC alive for the reply.
+   * Mutes the microphone Space opened, leaving WebRTC alive for the reply.
    * @returns {void}
    */
   releasePushToTalkKey() {
     if (!this.pushToTalkKeyHeld) return;
     this.pushToTalkKeyHeld = false;
     delete this.ui.root.dataset.pushToTalk;
-    if (!this.pushToTalkMode) return;
-    this.setMicrophoneEnabled(false);
-    if (this.status === 'listening') this.setStatus('listening', 'Hold Space to talk');
+    if (this.isActive()) this.setMicrophoneEnabled(false);
     else this.updateVoiceButtonLabel();
   }
 
@@ -984,11 +1028,52 @@ export class GevRealtimeController {
   setMicrophoneEnabled(enabled) {
     // A spent trial stays deaf, whatever push-to-talk asks.
     const live = Boolean(enabled) && !this.trialClosing;
+    // The operator just acted on the mic: a caption written for the previous
+    // state ("TOKEN LIMIT…", a transcript) no longer describes this one.
+    // Outside an open session the caption is about the connection, and stays.
+    if (live !== this.microphoneLive && this.status === 'listening') this.statusDetail = null;
+    this.microphoneLive = live;
     if (this.ui?.root) this.ui.root.dataset.microphone = live ? 'active' : 'muted';
+    this.ui?.button?.setAttribute?.('aria-pressed', String(live));
     if (this.brainSession?.isActive()) this.brainSession.setMicrophoneEnabled(live);
     this.stream?.getAudioTracks?.().forEach((track) => {
       track.enabled = live;
     });
+    if (this.ui?.status) this.paintStatus();
+  }
+
+  /**
+   * Shut the mic once a request has been taken, unless Space still holds it.
+   *
+   * This is what makes a click one request: the session stays open for the
+   * answer, but nothing said after the request is heard until the operator
+   * clicks again or holds Space.
+   * @returns {void}
+   */
+  closeMicrophoneAfterRequest() {
+    if (!this.microphoneLive || this.pushToTalkKeyHeld) return;
+    this.setMicrophoneEnabled(false);
+  }
+
+  /**
+   * Repaint after an answer moved on, so ANSWERING turns into READY (or back)
+   * without waiting for the next setStatus. A no-op outside an open session.
+   * @returns {void}
+   */
+  repaintOpenSession() {
+    if (this.status === 'listening' && this.ui?.status) this.paintStatus();
+  }
+
+  /** Whether a request is still being answered, from the operator's side of the dock. */
+  isRequestInFlight() {
+    return Boolean(
+      this.userTurnPending
+      || this.responseActive
+      || this.responseCreatePending
+      || this.assistantAudioPlaying
+      || this.rateLimitRetryTimer
+      || this.brainSession?.busy
+    );
   }
 
   /**
@@ -1204,10 +1289,13 @@ export class GevRealtimeController {
     this.pushToTalkMode = false;
     this.pushToTalkKeyHeld = false;
     this.spaceKeyHeld = false;
+    this.microphoneLive = false;
+    this.clearIdleClose();
     if (this.ui?.root) {
       delete this.ui.root.dataset.pushToTalk;
       delete this.ui.root.dataset.microphone;
     }
+    this.ui?.button?.setAttribute?.('aria-pressed', 'false');
     if (removeUi && this.ui?.button && this.buttonHandler) {
       this.ui.button.removeEventListener('click', this.buttonHandler);
       this.buttonHandler = null;
@@ -1252,9 +1340,10 @@ export class GevRealtimeController {
     }
     if (removeUi && this.ui?.root) {
       this.ui.root.remove();
+      announceVoiceSession(false);
     }
     if (!preserveStatus && !removeUi) {
-      this.setStatus('idle', endedTrial ? 'Essai terminé' : 'Voice off');
+      this.setStatus('idle', endedTrial ? TRIAL_SPENT_DETAIL : 'Voice off');
     }
     this.setRadioVoiceDucking(false);
     if (endedTrial && !removeUi) this.announceTrialEnd();
@@ -1284,8 +1373,8 @@ export class GevRealtimeController {
   trialDetail() {
     const left = this.trialAnswersLeft;
     if (left === null) return null;
-    if (this.trialClosing || left <= 0) return 'Essai terminé';
-    return left === 1 ? 'Essai : dernière demande' : `Essai : ${left} demandes`;
+    if (this.trialClosing || left <= 0) return TRIAL_SPENT_DETAIL;
+    return left === 1 ? 'Dernière commande offerte' : `${left} commandes offertes`;
   }
 
   /**
@@ -1306,12 +1395,13 @@ export class GevRealtimeController {
     if (!isSpokenAnswer(response)) return;
     this.trialAnswersLeft = Math.max(0, this.trialAnswersLeft - 1);
     if (this.trialAnswersLeft > 0) {
-      if (this.status === 'listening' && !this.pushToTalkMode) this.setStatus('listening', this.trialDetail());
+      // paintStatus() reads the count; setStatus also drops a stale caption.
+      if (this.status === 'listening') this.setStatus('listening');
       return;
     }
     this.trialClosing = true;
     this.setMicrophoneEnabled(false);
-    if (this.status === 'listening') this.setStatus('listening', this.trialDetail());
+    if (this.status === 'listening') this.setStatus('listening');
     this.debugLog('trial.closing', { answers: this.trialAnswersTotal });
     this.trialCloseTimer = setTimeout(() => this.closeTrialSession(), TRIAL_CLOSE_FALLBACK_MS);
     if (!this.assistantAudioPlaying) this.scheduleTrialClose();
@@ -1477,12 +1567,19 @@ export class GevRealtimeController {
     // The trial's last answer closes the session on the second one.
     if (payload.type === 'output_audio_buffer.started') {
       this.assistantAudioPlaying = true;
+      this.repaintOpenSession();
       return;
     }
     if (payload.type === 'output_audio_buffer.stopped' || payload.type === 'output_audio_buffer.cleared') {
       this.assistantAudioPlaying = false;
       this.scheduleTrialClose();
+      this.repaintOpenSession();
       return;
+    }
+    // The server took the request. A click was for this one request: from here
+    // the mic is shut until the next click or Space (see toggleListening).
+    if (payload.type === 'input_audio_buffer.committed') {
+      this.closeMicrophoneAfterRequest();
     }
 
     if (payload.type === 'error') {
@@ -1499,7 +1596,7 @@ export class GevRealtimeController {
           eventId: payload.event_id,
           activeResponseMessage: payload.error?.message || null,
         });
-        this.setStatus('listening', 'Ask or command');
+        this.setStatus('listening');
         return;
       }
       // A conversation.item.delete for a stale viewport screenshot can land
@@ -1541,6 +1638,7 @@ export class GevRealtimeController {
       this.setVoiceSpeaker('user');
     }
     this.updateResponseState(payload);
+    this.repaintOpenSession();
     // The spend cap may have just ended the session from inside the usage
     // accounting above. The connection is already closed, so stop here rather
     // than executing tool calls (map side effects) for a session that no longer
@@ -1832,7 +1930,7 @@ export class GevRealtimeController {
         this.pendingRadioPlaybackResult || lastResult,
       ));
     }
-    this.setStatus('listening', 'Ask or command');
+    this.setStatus('listening');
   }
 
   sendToolOutput(callId, result) {
@@ -1909,25 +2007,23 @@ export class GevRealtimeController {
     return sent;
   }
 
+  /**
+   * Set the session's phase, with an optional caption.
+   *
+   * For 'listening', leave the caption out unless it says something the
+   * operator needs (a wait, a transcript): paintStatus() supplies the prompt
+   * that fits whether the mic is open.
+   * @param {'idle'|'connecting'|'listening'|'executing'|'error'} status
+   * @param {string} [detail]
+   */
   setStatus(status, detail) {
     this.status = status;
-    this.ui.root.dataset.status = status;
+    this.statusDetail = detail || null;
     if (status === 'error') this.ui.root.classList.remove('error-dismissed');
-    this.updateVoiceButtonLabel();
-    this.ui.status.textContent = STATUS[status] || STATUS.idle;
-    const resolvedDetail = status === 'listening' && this.pushToTalkMode
-      ? (this.pushToTalkKeyHeld ? 'Release Space to send' : 'Hold Space to talk')
-      : detail;
-    const primaryDetail = status === 'error'
-      ? 'VOICE UNAVAILABLE'
-      : (resolvedDetail || (status === 'idle' ? 'VOICE STANDBY' : 'VOICE ACTIVE'));
-    this.ui.detail.textContent = primaryDetail;
-    this.ui.detail.title = primaryDetail;
-    if (this.ui.errorDetail) {
-      this.ui.errorDetail.textContent = status === 'error'
-        ? (resolvedDetail || 'Voice session could not be started.')
-        : '';
-    }
+    // Before the mint, on purpose: 'connecting' is painted ahead of it, and
+    // the HUD must drop a summary still in flight (src/voiceSession.js).
+    announceVoiceSession(this.isActive());
+    this.paintStatus();
     // The tray's second line is a GUESS ("check microphone permission"), and it
     // was actively wrong for the failures that have nothing to do with the mic
     // — a browser with no speech service, a rate limit in front of the app.
@@ -1944,6 +2040,85 @@ export class GevRealtimeController {
     if (shouldPauseRadioForVoice({ status, pushToTalkKeyHeld: this.pushToTalkKeyHeld })) {
       this.pauseRadioForVoice();
     }
+  }
+
+  /**
+   * Write the dock from the session's phase AND the microphone.
+   *
+   * The dock used to print `status` as it stood, so LISTENING stayed up for as
+   * long as a session was open: under a mic that push-to-talk had muted, and
+   * through the whole answer. An open session is not an open mic. What the
+   * dock names now is what the microphone does:
+   * - LISTENING only while it is open (a click, or Space held);
+   * - ANSWERING while the request it took is still being answered;
+   * - READY once the session only waits for the next click or Space.
+   * `data-status` carries the same word, so the styling follows.
+   * @returns {void}
+   */
+  paintStatus() {
+    const { status } = this;
+    let shown = status;
+    if (status === 'listening' && !this.microphoneLive) {
+      shown = this.isRequestInFlight() ? 'answering' : 'ready';
+    }
+    this.ui.root.dataset.status = shown;
+    this.updateVoiceButtonLabel();
+    this.ui.status.textContent = STATUS[shown] || STATUS.idle;
+    let resolvedDetail = this.statusDetail;
+    if (shown === 'listening') {
+      resolvedDetail = this.pushToTalkKeyHeld
+        ? RELEASE_SPACE_PROMPT
+        : (resolvedDetail || this.trialDetail() || ASK_PROMPT);
+    } else if (status === 'listening') {
+      resolvedDetail = resolvedDetail || this.trialDetail() || resolveVoiceReadyPrompt();
+    }
+    const primaryDetail = status === 'error'
+      ? 'VOICE UNAVAILABLE'
+      : (resolvedDetail || (status === 'idle' ? 'VOICE STANDBY' : 'VOICE ACTIVE'));
+    this.ui.detail.textContent = primaryDetail;
+    this.ui.detail.title = primaryDetail;
+    if (this.ui.errorDetail) {
+      this.ui.errorDetail.textContent = status === 'error'
+        ? (resolvedDetail || 'Voice session could not be started.')
+        : '';
+    }
+    this.syncIdleClose();
+  }
+
+  /**
+   * Arm the idle close while the session is open and the mic shut; drop it the
+   * moment the mic opens or the session leaves 'listening'. Repaints of the
+   * same shut period keep the timer already running.
+   * @returns {void}
+   */
+  syncIdleClose() {
+    const idle = this.status === 'listening' && !this.microphoneLive;
+    if (!idle) {
+      this.clearIdleClose();
+      return;
+    }
+    if (this.idleCloseTimer) return;
+    const delay = this.trialAnswersLeft !== null ? TRIAL_IDLE_CLOSE_MS : VOICE_IDLE_CLOSE_MS;
+    this.idleCloseTimer = setTimeout(() => this.closeIdleSession(), delay);
+    // Never what keeps a test process (or a server-side render) alive.
+    this.idleCloseTimer?.unref?.();
+  }
+
+  clearIdleClose() {
+    if (this.idleCloseTimer) clearTimeout(this.idleCloseTimer);
+    this.idleCloseTimer = null;
+  }
+
+  /** The idle delay ran out: close, unless an answer is still playing. */
+  closeIdleSession() {
+    this.idleCloseTimer = null;
+    if (this.status !== 'listening' || this.microphoneLive) return;
+    if (this.responseActive || this.responseCreatePending || this.assistantAudioPlaying || this.brainSession?.busy) {
+      this.syncIdleClose();
+      return;
+    }
+    this.debugLog('session.idle_close', { trial: this.trialAnswersLeft !== null });
+    this.stop();
   }
 
   /**
@@ -2564,7 +2739,7 @@ export class GevRealtimeController {
             this.setStatus('listening', `TOKEN LIMIT — ANSWERING IN ${Math.ceil(retryMs / 1000)} S`);
             this.armRateLimitRetry(retryMs);
           } else {
-            this.setStatus('listening', 'Ask or command');
+            this.setStatus('listening');
           }
         }
       }

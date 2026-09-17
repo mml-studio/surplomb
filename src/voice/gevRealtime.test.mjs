@@ -59,15 +59,13 @@ test('mic clicks are ignored while Space is physically held', () => {
 });
 
 test('voice control help tray reflects the push-to-talk key state', () => {
-  assert.equal(
-    resolveVoiceControlHint(false, false),
-    'Hold Space to speak · click mic to toggle voice',
-  );
-  assert.equal(resolveVoiceControlHint(true, true), 'Release Space to send');
-  assert.equal(
-    resolveVoiceControlHint(true, false),
-    'Hold Space to speak · click mic to toggle voice',
-  );
+  const atRest = 'Cliquez le micro ou maintenez Espace pour parler';
+  assert.equal(resolveVoiceControlHint(false, false, false), atRest);
+  assert.equal(resolveVoiceControlHint(true, true, false), 'Relâchez Espace pour envoyer');
+  // Space claims a click-started session too, so the held wording follows the key.
+  assert.equal(resolveVoiceControlHint(false, true, false), 'Relâchez Espace pour envoyer');
+  assert.equal(resolveVoiceControlHint(true, false, false), atRest);
+  assert.doesNotMatch(atRest, /toggle/, 'a click is one request, not an on/off switch');
 });
 
 test('a phone is never told to hold a key it does not have', () => {
@@ -3540,7 +3538,9 @@ test('a failure that is not a rate limit keeps the plain recovery caption', asyn
       status_details: { type: 'failed', error: { type: 'server_error', code: 'internal_error', message: 'boom' } },
     },
   }) });
-  assert.equal(ui.detail.textContent, 'Ask or command');
+  // The mic is shut in this harness: the dock says how to reopen it.
+  assert.equal(ui.status.textContent, 'READY');
+  assert.equal(ui.detail.textContent, 'Micro ou Espace pour parler');
   assert.equal(controller.rateLimitRetryTimer, null);
 });
 

@@ -94,12 +94,12 @@ test('three answers, then the mic is shut and the session closes after the audio
   assert.equal(controller.trialAnswersLeft, 3);
   await feed(spoken('r1-confirm'));
   assert.equal(controller.trialAnswersLeft, 2);
-  assert.equal(controller.ui.detail.textContent, 'Essai : 2 demandes');
+  assert.equal(controller.ui.detail.textContent, '2 commandes offertes');
   // The site-wide token limit is a wait, not an answer.
   await feed(failed('r2-limited'));
   assert.equal(controller.trialAnswersLeft, 2);
   await feed(spoken('r2'));
-  assert.equal(controller.ui.detail.textContent, 'Essai : dernière demande');
+  assert.equal(controller.ui.detail.textContent, 'Dernière commande offerte');
 
   await feed({ type: 'output_audio_buffer.started' });
   await feed(spoken('r3'));
@@ -116,7 +116,7 @@ test('three answers, then the mic is shut and the session closes after the audio
   t.mock.timers.tick(TRIAL_AUDIO_TAIL_MS);
   assert.equal(channel.closed, true);
   assert.equal(controller.status, 'idle');
-  assert.equal(controller.ui.detail.textContent, 'Essai terminé');
+  assert.equal(controller.ui.detail.textContent, 'Commandes offertes utilisées');
   await flushMicrotasks();
   assert.deepEqual(cards, [{ reason: 'voice', explicit: true }]);
   assert.equal(controller.trialAnswersLeft, null, 'the next session starts clean');
@@ -143,7 +143,7 @@ test('stopping a trial session by hand still says the voice is premium', async (
   controller.stop();
   await flushMicrotasks();
   assert.deepEqual(cards, [{ reason: 'voice', explicit: true }]);
-  assert.equal(controller.ui.detail.textContent, 'Essai terminé');
+  assert.equal(controller.ui.detail.textContent, 'Commandes offertes utilisées');
 });
 
 test('a trial session that ends on a fault keeps its error, and opens no card', async (t) => {

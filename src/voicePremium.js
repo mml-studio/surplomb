@@ -42,10 +42,11 @@ export const PREMIUM_CROWN_SVG = `<svg class="premium-crown" viewBox="0 -960 960
 export function voicePremiumText(state, turns = 0) {
   if (state === 'trial') {
     const count = Number(turns) > 0 ? Number(turns) : 3;
-    return `Fonction premium · essai gratuit de ${count} demande${count > 1 ? 's' : ''}`;
+    const plural = count > 1 ? 's' : '';
+    return `Fonction premium · ${count} commande${plural} vocale${plural} offerte${plural}`;
   }
-  if (state === 'spent') return 'Fonction premium · essai utilisé';
-  if (state === 'closed') return 'Fonction premium · réservée à l’abonnement';
+  if (state === 'spent') return 'Fonction premium · commandes offertes utilisées';
+  if (state === 'closed') return 'Fonction premium · disponible à l’ouverture';
   return '';
 }
 

@@ -39,13 +39,22 @@ export const WAITLIST_USAGE_CHOICES = Object.freeze([
 ]);
 
 /**
- * What the hosted version adds, named on the card. Everything here exists or
- * is a key away; nothing is a roadmap item.
+ * What the hosted version adds, named on the card. Everything here works
+ * today; nothing is a roadmap item, and nothing waits on a key not yet held.
+ *
+ * The two after the voice are what the voice DOES, because they are the
+ * strongest things the subscription holds (rewritten 2026-09-17): outside the
+ * voice, the code has only the HUD's five-word summary and Google place names.
+ * The price is the `dvf-sales` and `avis-valeur` medians the voice reads out
+ * (`get_entity_context` → `layerSummaries`); the route is `annotate_map`
+ * `type=route`, drawn on the streets with its distance and time. The line it
+ * replaced promised the 2 144 Météo-France stations, which need a contract
+ * that is not signed (`docs/meteofrance-api-access.md`).
  */
 export const WAITLIST_INCLUDES = Object.freeze([
   'La commande vocale',
-  'Les résumés et les lieux proches, sans limite',
-  'Les 2 144 stations Météo-France, pas seulement les 190 en accès libre',
+  'Le prix au m² autour d’ici, en une question',
+  'Le trajet à pied ou à vélo, tracé et minuté',
 ]);
 
 /**
@@ -56,24 +65,26 @@ export const WAITLIST_INCLUDES = Object.freeze([
  * @returns {{title: string, lede: string}}
  */
 export function waitlistCopy(reason, trial = {}) {
-  const open = 'Le globe et toutes les couches restent ouverts, sans limite.';
+  // Two sentences at most: what ran out, and that the map did not.
+  const open = 'Le globe et ses couches restent gratuits.';
   if (reason === 'exhausted') {
     const count = Number(trial.limit) > 0 ? `Vos ${trial.limit} essais` : 'Vos essais';
     return {
       title: 'Essai terminé',
-      lede: `${count} des fonctions premium sont utilisés. ${open}`,
+      lede: `${count} premium sont utilisés. ${open}`,
     };
   }
   if (reason === 'voice') {
     // Said as premium, the way interface software says it, whether the
-    // visitor just used the voice trial or this server offers none.
+    // visitor just used the voice trial or this server offers none. The
+    // trial is counted in commands, the word the mic uses (src/voicePremium.js).
     const turns = Number(trial.voice?.limit) || 0;
     const why = turns > 0
-      ? (turns > 1 ? `Vos ${turns} demandes d’essai sont utilisées.` : 'Votre demande d’essai est utilisée.')
-      : 'Elle arrive avec l’abonnement.';
+      ? (turns > 1 ? `Vos ${turns} commandes vocales offertes sont utilisées.` : 'Votre commande vocale offerte est utilisée.')
+      : 'Elle arrive à l’ouverture.';
     return {
       title: 'La voix est une fonction premium',
-      lede: `${why} Inscrivez-vous pour l’avoir dès l’ouverture. ${open}`,
+      lede: `${why} ${open}`,
     };
   }
   return {
@@ -141,7 +152,7 @@ export function renderWaitlistCard({ reason, trial = {}, joined = false }) {
       <input type="hidden" name="tag" value="liste-attente" />
       <input type="hidden" name="metadata__declencheur" value="${escapeHtml(reason)}" />
       <button type="submit" class="waitlist-submit">Rejoindre la liste d’attente</button>
-      <p class="waitlist-consent">Un email de confirmation part tout de suite, puis nous vous écrivons à l’ouverture, rien d’autre. Adresse conservée chez Buttondown, désinscription en un clic. <a href="/confidentialite#vos-donnees" target="_blank" rel="noopener">Vos données</a></p>
+      <p class="waitlist-consent">Deux emails, rien d’autre. Via Buttondown, désinscription en un clic. <a href="/confidentialite#vos-donnees" target="_blank" rel="noopener">Vos données</a></p>
     </form>
     <div class="waitlist-joined" role="status"${joined ? '' : ' hidden'}>
       <p data-waitlist-joined-text>Vous êtes sur la liste. Si ce n’est pas fait, confirmez depuis l’email reçu.</p>
@@ -196,6 +207,7 @@ export function initWaitlistCard({
 } = {}) {
   let root = null;
   let opening = null;
+  let openingExplicit = false;
   let returnFocus = null;
 
   const onKeydown = (event) => {
@@ -253,7 +265,14 @@ export function initWaitlistCard({
     if (!detail.explicit) writeFlag(sessionStore, WAITLIST_AUTO_SHOWN_KEY, true);
     // An automatic refusal never replaces a card the visitor asked for.
     if (root && !detail.explicit) return true;
-    if (opening) return opening;
+    if (opening) {
+      // A gesture is never answered with the card an automatic refusal was
+      // still loading (the HUD's « essais utilisés » swallowed the voice card
+      // that way): it opens once that one has, and replaces it.
+      if (!detail.explicit || openingExplicit) return opening;
+      return opening.then(() => open(detail));
+    }
+    openingExplicit = Boolean(detail.explicit);
     opening = (async () => {
       const trial = await readTrial();
       const card = documentRef.createElement('aside');

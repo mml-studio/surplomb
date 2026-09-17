@@ -58,10 +58,13 @@ test('the mark follows the trial: open, spent, or never offered', () => {
 });
 
 test('the help tray says what the trial holds', () => {
-  assert.equal(voicePremiumText('trial', 3), 'Fonction premium · essai gratuit de 3 demandes');
-  assert.equal(voicePremiumText('trial', 1), 'Fonction premium · essai gratuit de 1 demande');
-  assert.equal(voicePremiumText('spent', 3), 'Fonction premium · essai utilisé');
-  assert.equal(voicePremiumText('closed'), 'Fonction premium · réservée à l’abonnement');
+  assert.equal(voicePremiumText('trial', 3), 'Fonction premium · 3 commandes vocales offertes');
+  assert.equal(voicePremiumText('trial', 1), 'Fonction premium · 1 commande vocale offerte');
+  assert.equal(voicePremiumText('spent', 3), 'Fonction premium · commandes offertes utilisées');
+  assert.equal(voicePremiumText('closed'), 'Fonction premium · disponible à l’ouverture');
+  for (const state of ['trial', 'spent', 'closed']) {
+    assert.doesNotMatch(voicePremiumText(state, 3), /demande/, 'the word the owner asked to drop (2026-09-17)');
+  }
   assert.equal(voicePremiumText(null), '');
 });
 
@@ -69,12 +72,12 @@ test('the mark lives on <html>, so a rebuilt panel reads it back', () => {
   const doc = fakeDocument();
   applyVoicePremium({ state: 'trial', turns: 3 }, doc);
   assert.deepEqual(doc.documentElement.dataset, { voicePremium: 'trial', voicePremiumTurns: '3' });
-  assert.equal(doc.line.textContent, 'Fonction premium · essai gratuit de 3 demandes');
+  assert.equal(doc.line.textContent, 'Fonction premium · 3 commandes vocales offertes');
   assert.deepEqual(currentVoicePremium(doc), { state: 'trial', turns: 3 });
 
   markVoicePremiumSpent(doc);
   assert.equal(doc.documentElement.dataset.voicePremium, 'spent');
-  assert.equal(doc.line.textContent, 'Fonction premium · essai utilisé');
+  assert.equal(doc.line.textContent, 'Fonction premium · commandes offertes utilisées');
 
   applyVoicePremium(null, doc);
   assert.deepEqual(doc.documentElement.dataset, {});
