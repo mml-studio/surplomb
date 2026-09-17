@@ -47,6 +47,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   état (`store: false`), au lieu de 30 jours par défaut. Enfin, `/api/*` porte
   `X-Robots-Tag: noindex` : les ventes DVF ne doivent pas être indexées.
 
+  **La carte des permis n'affiche plus le nom d'un particulier.** Paris et
+  Nantes Métropole publient chaque demandeur, particuliers compris ; seul le
+  nom d'une entreprise ou d'une administration passe désormais, comme dans
+  Sitadel. Un nom sans forme juridique ni mot d'organisation est masqué : le
+  doute masque. Les éditions de permis en cache disque sont invalidées.
+
   **Sur un téléphone, le pied du panneau dépassait de l'écran.** La hauteur
   repliée était mesurée avant que Cesium ne remplisse les crédits : 116 px pour
   147 px de contenu, « Data attribution » coupé en deux. Elle suit maintenant la

@@ -132,6 +132,7 @@ import { foldToCommune } from './communeCode.js';
 import { ringAreaM2, ringLabelAnchor, sanitisePolygonParts } from './ringGeometry.js';
 import { ARRONDISSEMENT_COMMUNES, parcelParts, sitadelJoinCommune } from './sitadelFeed.js';
 import { ADS_LINEAGE_BASIS, insidePoint, sitadelParcelRefs } from './cadastreLineage.js';
+import { organisationApplicant } from './permitApplicant.js';
 
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
 export const ADS_SOURCE = 'Sitadel — SDES, + portails ADS métropolitains';
@@ -932,7 +933,9 @@ export function normaliseLocalRow(portal, record) {
     startedOn: null,
     completedOn: null,
     depositYear: null,
-    applicant: text(record.demandeur),
+    // A city portal names private applicants too; only an organisation's
+    // name reaches the card (see permitApplicant.js).
+    applicant: organisationApplicant(record.demandeur),
     purpose: plain(record.objet ?? record.details_du_projet) ?? (ADS_KINDS[kind] ?? null),
     address: plain(record.adresse ?? record.adresse_du_terrain),
     postcode: null,
