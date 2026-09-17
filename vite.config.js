@@ -77,6 +77,7 @@ import {
 import {
   consumeTrial,
   describeTrial,
+  handleOwnerPass,
   readTrialState,
   resolveTrialConfig,
   sendTrialRefusal,
@@ -1587,9 +1588,21 @@ function enforceTrial(kind, req, res, extra) {
  * `/api/trial` — the page asks where it stands before opening the waitlist
  * card: how many tries are left, whether voice is in the trial, and the
  * waitlist form's target. Spends nothing, so it is not gated.
+ *
+ * `/api/owner-pass` — redeems a link from `scripts/owner-pass.mjs` into the
+ * cookie that exempts the owner's browser from the trial. A 404 unless
+ * GEV_OWNER_PASS_SECRET is set.
  */
 function trialQuotaPlugin() {
   function install(middlewares) {
+    middlewares.use('/api/owner-pass', (req, res) => {
+      handleOwnerPass(req, res, trialConfig()).catch((error) => {
+        console.warn(`[trial] owner pass failed: ${error?.message || error}`);
+        if (res.headersSent) return;
+        res.statusCode = 500;
+        res.end();
+      });
+    });
     middlewares.use('/api/trial', (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -18139,11 +18152,12 @@ function openAiRealtimeProxy() {
         // OpenAI directly from here on, so the requests cannot be counted one
         // by one. It spends them all, and the page closes the session after
         // the number this header names.
+        // The owner's session is not a trial: no count, no turn limit.
         const trial = trialConfig();
-        if (response.ok && trial.enabled) {
-          const state = readTrialState(req, trial);
-          consumeTrial(req, res, trial, voiceTrialSpend(state, { all: true }));
-          res.setHeader(TRIAL_VOICE_TURNS_HEADER, String(state.voiceRemaining));
+        const trialState = trial.enabled ? readTrialState(req, trial) : null;
+        if (response.ok && trialState && !trialState.owner) {
+          consumeTrial(req, res, trial, voiceTrialSpend(trialState, { all: true }));
+          res.setHeader(TRIAL_VOICE_TURNS_HEADER, String(trialState.voiceRemaining));
         }
         res.statusCode = response.status;
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');

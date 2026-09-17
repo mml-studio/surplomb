@@ -4,15 +4,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  OWNER_LINK_TTL_S,
   TRIAL_COOKIE,
   consumeTrial,
   describeTrial,
+  handleOwnerPass,
+  hasOwnerPass,
+  mintOwnerLink,
+  ownerCookieDomain,
   readCookie,
   readTrialState,
   resolveTrialConfig,
   sendTrialRefusal,
+  signOwnerLink,
+  signOwnerPass,
   signTrialToken,
   trialRefusalReason,
+  verifyOwnerLink,
+  verifyOwnerPass,
   verifyTrialToken,
   voiceReserve,
   voiceTrialSpend,
@@ -182,12 +191,12 @@ test('each consumed try moves the count by one, and a forged cookie is a new bro
     counts.push(readTrialState(requestWith(cookie), on));
   }
   assert.deepEqual(counts, [
-    { used: 1, remaining: 1, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
-    { used: 2, remaining: 0, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
+    { used: 1, remaining: 1, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345', owner: false },
+    { used: 2, remaining: 0, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345', owner: false },
   ]);
   assert.equal(trialRefusalReason('lookup', counts[1], on), 'exhausted');
   assert.deepEqual(readTrialState(requestWith('gev_trial=v2.0.0.fixedid12345.forged'), on),
-    { used: 0, remaining: 2, voiceUsed: 0, voiceRemaining: 3, id: null });
+    { used: 0, remaining: 2, voiceUsed: 0, voiceRemaining: 3, id: null, owner: false });
 });
 
 test('a voice spend moves both counts in one cookie, and keeps the browser id', () => {
@@ -197,7 +206,7 @@ test('a voice spend moves both counts in one cookie, and keeps the browser id', 
   consumeTrial(requestWith(before), res, on, { comfort: 1, voice: 3 });
   const [setCookie] = res.getHeader('Set-Cookie');
   assert.deepEqual(readTrialState(requestWith(setCookie.split(';')[0]), on),
-    { used: 2, remaining: 3, voiceUsed: 3, voiceRemaining: 0, id: 'fixedid12345' });
+    { used: 2, remaining: 3, voiceUsed: 3, voiceRemaining: 0, id: 'fixedid12345', owner: false });
 });
 
 test('the cookie is HttpOnly, Lax, long-lived, and Secure only over HTTPS', () => {
@@ -269,4 +278,175 @@ test('/api/trial reports the state without spending it', () => {
     describeTrial(requestWith(), resolveTrialConfig({}), { variants: ['A', 'B', 'C'] }).experiments,
     { firstRun: { variants: ['A', 'B', 'C'] } },
   );
+});
+
+// ── The owner pass ──────────────────────────────────────────────────────────
+
+const OWNER_SECRET = 'an-owner-secret-that-is-long-enough-to-count';
+const ownerConfig = (env = {}) => config({ GEV_OWNER_PASS_SECRET: OWNER_SECRET, ...env });
+const NOW = 1_800_000_000;
+const PASS_ID = 'owner-pass-id-0001';
+const ownerCookie = (secret = OWNER_SECRET) => `gev_owner=${signOwnerPass({ issuedAt: NOW, id: PASS_ID }, secret)}`;
+
+test('owner passes are off without a trial, and off with a secret short enough to guess', () => {
+  assert.equal(ownerConfig().ownerSecret, OWNER_SECRET);
+  assert.equal(resolveTrialConfig({ GEV_OWNER_PASS_SECRET: OWNER_SECRET }).ownerSecret, null, 'no trial, nothing to step over');
+  const short = ownerConfig({ GEV_OWNER_PASS_SECRET: 'x'.repeat(31) });
+  assert.equal(short.ownerSecret, null);
+  assert.ok(short.warnings.some((w) => w.includes('owner passes are OFF')));
+  assert.equal(config().ownerSecret, null);
+  assert.ok(!config().warnings.some((w) => w.includes('GEV_OWNER_PASS_SECRET')), 'unset is not a mistake');
+  // A pass is worthless where passes are off.
+  assert.equal(hasOwnerPass(requestWith(ownerCookie()), config()), false);
+});
+
+test('a link and a pass are signed apart: neither stands in for the other', () => {
+  const link = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, OWNER_SECRET);
+  const pass = signOwnerPass({ issuedAt: NOW + 60, id: PASS_ID }, OWNER_SECRET);
+  assert.notEqual(link, pass);
+  assert.deepEqual(verifyOwnerLink(link, OWNER_SECRET, NOW), { expiresAt: NOW + 60, nonce: PASS_ID });
+  assert.deepEqual(verifyOwnerPass(pass, OWNER_SECRET), { issuedAt: NOW + 60, id: PASS_ID });
+  assert.equal(verifyOwnerPass(link, OWNER_SECRET), null, 'a link is not a pass');
+  assert.equal(verifyOwnerLink(pass, OWNER_SECRET, NOW), null, 'a pass is not a link');
+  // Nor is a trial cookie, signed with the same primitive.
+  assert.equal(verifyOwnerPass(signTrialToken({ used: 0, id: PASS_ID }, OWNER_SECRET), OWNER_SECRET), null);
+  assert.equal(verifyOwnerPass(pass, 'another-secret-another-secret-another'), null);
+  assert.equal(verifyOwnerPass(pass.replace(`.${NOW + 60}.`, `.${NOW + 61}.`), OWNER_SECRET), null);
+  for (const junk of ['', 'o1', 'o1.1.short.sig', `v2.${NOW}.${PASS_ID}.x`, `${pass}.extra`]) {
+    assert.equal(verifyOwnerPass(junk, OWNER_SECRET), null, junk);
+  }
+});
+
+test('a link lives ten minutes, and cannot claim to live longer', () => {
+  const mint = (expiresAt) => signOwnerLink({ expiresAt, nonce: PASS_ID }, OWNER_SECRET);
+  assert.ok(verifyOwnerLink(mint(NOW + OWNER_LINK_TTL_S), OWNER_SECRET, NOW));
+  assert.ok(verifyOwnerLink(mint(NOW), OWNER_SECRET, NOW), 'still good on its last second');
+  assert.equal(verifyOwnerLink(mint(NOW - 1), OWNER_SECRET, NOW), null, 'expired');
+  assert.equal(verifyOwnerLink(mint(NOW + 30 * 24 * 3600), OWNER_SECRET, NOW), null, 'a month-long link was not minted here');
+
+  const url = new URL(mintOwnerLink('https://surplomb.app/some/path', OWNER_SECRET, { now: NOW, makeNonce: () => PASS_ID }));
+  assert.equal(url.origin + url.pathname, 'https://surplomb.app/api/owner-pass');
+  assert.deepEqual(verifyOwnerLink(url.searchParams.get('t'), OWNER_SECRET, NOW), { expiresAt: NOW + OWNER_LINK_TTL_S, nonce: PASS_ID });
+});
+
+test('the pass covers the site and its www. name, and stays host-only elsewhere', () => {
+  assert.equal(ownerCookieDomain('surplomb.app'), 'surplomb.app');
+  assert.equal(ownerCookieDomain('www.surplomb.app'), 'surplomb.app');
+  assert.equal(ownerCookieDomain('WWW.Surplomb.app:443'), 'surplomb.app');
+  assert.equal(ownerCookieDomain('vps-enerlens.tailc409e8.ts.net:4173'), 'vps-enerlens.tailc409e8.ts.net');
+  for (const host of ['localhost:4173', '127.0.0.1:4173', '100.94.222.110', '[::1]:4173', 'www.app', '', undefined, 'evil.com/x']) {
+    assert.equal(ownerCookieDomain(host), null, String(host));
+  }
+});
+
+test('an owner is never counted and never refused, even over a spent trial cookie', () => {
+  const on = ownerConfig();
+  const spent = `gev_trial=${signTrialToken({ used: 5, voiceUsed: 3, id: 'abcdefgh1234' }, SECRET)}`;
+  const req = requestWith(`${spent}; ${ownerCookie()}`);
+  const state = readTrialState(req, on);
+  assert.equal(state.owner, true);
+  for (const kind of ['summary', 'lookup', 'voice']) {
+    assert.equal(trialRefusalReason(kind, state, on), null, kind);
+  }
+  const res = fakeResponse();
+  consumeTrial(req, res, on, voiceTrialSpend(state, { all: true }));
+  assert.equal(res.getHeader('Set-Cookie'), undefined, 'nothing written');
+  assert.deepEqual(describeTrial(req, on), {
+    enabled: false,
+    owner: true,
+    limit: null,
+    used: null,
+    remaining: null,
+    voice: null,
+    waitlist: on.waitlist,
+    experiments: null,
+  });
+  // A pass outlives nothing: past 400 days the server refuses it too.
+  assert.equal(hasOwnerPass(requestWith(ownerCookie()), on, NOW + 400 * 86400), true);
+  assert.equal(hasOwnerPass(requestWith(ownerCookie()), on, NOW + 400 * 86400 + 1), false);
+  // A pass signed with another secret (a rotated one) is a visitor again.
+  const revoked = requestWith(`${spent}; ${ownerCookie('the-old-secret-the-old-secret-the-old')}`);
+  assert.equal(readTrialState(revoked, on).owner, false);
+  assert.equal(trialRefusalReason('summary', readTrialState(revoked, on), on), 'exhausted');
+});
+
+function ownerRequest({ method = 'GET', url = '/', body = '', headers = {} } = {}) {
+  const chunks = body ? [Buffer.from(body)] : [];
+  return {
+    method,
+    url,
+    headers: { host: 'surplomb.app', ...headers },
+    socket: {},
+    async *[Symbol.asyncIterator]() { yield* chunks; },
+  };
+}
+
+test('the route: 404 where passes are off, one button on GET, one cookie on POST, once', async () => {
+  const off = fakeResponse();
+  await handleOwnerPass(ownerRequest(), off, config());
+  assert.equal(off.statusCode, 404);
+
+  const on = ownerConfig();
+  const redeemed = new Map();
+  const t = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, OWNER_SECRET);
+  const options = { now: NOW, redeemed, makeId: () => 'issued-pass-id-0001' };
+
+  const page = fakeResponse();
+  await handleOwnerPass(ownerRequest({ url: `/?t=${t}` }), page, on, options);
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /<form method="post" action="\/api\/owner-pass">/);
+  assert.ok(page.body.includes(`value="${t}"`));
+  assert.equal(page.getHeader('Set-Cookie'), undefined, 'a preview bot fetching the link spends nothing');
+  assert.equal(page.getHeader('Cache-Control'), 'no-store');
+  assert.equal(page.getHeader('Referrer-Policy'), 'no-referrer');
+
+  const post = fakeResponse();
+  await handleOwnerPass(ownerRequest({
+    method: 'POST',
+    body: `t=${encodeURIComponent(t)}`,
+    headers: { host: 'www.surplomb.app', 'x-forwarded-proto': 'https' },
+  }), post, on, options);
+  assert.equal(post.statusCode, 303);
+  assert.equal(post.getHeader('Location'), '/');
+  const [cookie] = post.getHeader('Set-Cookie');
+  assert.equal(
+    cookie,
+    `gev_owner=${signOwnerPass({ issuedAt: NOW, id: 'issued-pass-id-0001' }, OWNER_SECRET)}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax; Domain=surplomb.app; Secure`,
+  );
+  assert.equal(hasOwnerPass(requestWith(cookie.split(';')[0]), on), true);
+
+  for (const replay of [
+    ownerRequest({ method: 'POST', body: `t=${t}` }),
+    ownerRequest({ url: `/?t=${t}` }),
+  ]) {
+    const res = fakeResponse();
+    await handleOwnerPass(replay, res, on, options);
+    assert.equal(res.statusCode, 410, `${replay.method} after redemption`);
+    assert.equal(res.getHeader('Set-Cookie'), undefined);
+  }
+});
+
+test('the route refuses what was not minted here, and what is too big to be a link', async () => {
+  const on = ownerConfig();
+  const options = { now: NOW, redeemed: new Map() };
+  const refused = async (req) => {
+    const res = fakeResponse();
+    await handleOwnerPass(req, res, on, options);
+    assert.equal(res.getHeader('Set-Cookie'), undefined);
+    return res.statusCode;
+  };
+  const foreign = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, 'someone-elses-secret-someone-elses');
+  const expired = signOwnerLink({ expiresAt: NOW - 1, nonce: PASS_ID }, OWNER_SECRET);
+  const pass = signOwnerPass({ issuedAt: NOW + 60, id: PASS_ID }, OWNER_SECRET);
+  for (const t of [foreign, expired, pass, '', '<script>']) {
+    assert.equal(await refused(ownerRequest({ method: 'POST', body: `t=${encodeURIComponent(t)}` })), 410, t);
+    assert.equal(await refused(ownerRequest({ url: `/?t=${encodeURIComponent(t)}` })), 410, t);
+  }
+  const good = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, OWNER_SECRET);
+  assert.equal(await refused(ownerRequest({ method: 'POST', body: `t=${good}&pad=${'x'.repeat(5000)}` })), 410);
+  assert.equal(await refused(ownerRequest({ method: 'PUT' })), 405);
+  // The oversized body did not spend the link.
+  const res = fakeResponse();
+  await handleOwnerPass(ownerRequest({ method: 'POST', body: `t=${good}` }), res, on, options);
+  assert.equal(res.statusCode, 303);
 });

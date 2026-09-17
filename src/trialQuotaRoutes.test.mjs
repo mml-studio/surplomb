@@ -9,6 +9,7 @@ Object.assign(process.env, {
   GEV_TRIAL_SECRET: 'routes-test-secret-routes-test-secret',
   GEV_TRIAL_VOICE: '',
   GEV_WAITLIST_BUTTONDOWN: 'surplomb',
+  GEV_OWNER_PASS_SECRET: 'routes-owner-secret-routes-owner-secret',
   OPENAI_API_KEY: 'sk-test',
   OPENROUTER_API_KEY: '',
   GOOGLE_MAPS_API_KEY: 'test-google-key',
@@ -22,7 +23,7 @@ Object.assign(process.env, {
 });
 
 const { default: createViteConfig } = await import('../vite.config.js');
-const { signTrialToken } = await import('./trialQuota.js');
+const { mintOwnerLink, signOwnerPass, signTrialToken } = await import('./trialQuota.js');
 
 const routes = new Map();
 for (const plugin of createViteConfig({ mode: 'test' }).plugins.flat()) {
@@ -52,14 +53,16 @@ before(() => {
 });
 after(() => { globalThis.fetch = realFetch; });
 
-async function call(path, { method = 'GET', cookie = '', body = '', url = path } = {}) {
+async function call(path, {
+  method = 'GET', cookie = '', body = '', url = path, contentType = 'application/json', headers: extraHeaders = {},
+} = {}) {
   const handler = routes.get(path);
   assert.ok(handler, `${path} is installed`);
   const chunks = body ? [Buffer.from(body)] : [];
   const req = {
     method,
     url,
-    headers: { ...(cookie ? { cookie } : {}), 'content-type': 'application/json' },
+    headers: { ...(cookie ? { cookie } : {}), 'content-type': contentType, ...extraHeaders },
     socket: { remoteAddress: '203.0.113.7' },
     async *[Symbol.asyncIterator]() { yield* chunks; },
     on(event, listener) {
@@ -78,9 +81,11 @@ async function call(path, { method = 'GET', cookie = '', body = '', url = path }
       end(payload) {
         this.headersSent = true;
         const setCookie = headers.get('set-cookie');
+        const json = String(headers.get('content-type') || '').includes('json');
         resolve({
           status: this.statusCode,
-          body: payload ? JSON.parse(payload) : null,
+          body: payload && json ? JSON.parse(payload) : null,
+          text: payload ? String(payload) : '',
           cookie: setCookie ? setCookie[0].split(';')[0] : null,
           headers,
         });
@@ -207,4 +212,58 @@ test('the text brain counts the voice trial one spoken request at a time', async
   } finally {
     Object.assign(process.env, { GEV_VOICE_PROVIDER: saved.provider, OPENROUTER_API_KEY: saved.key });
   }
+});
+
+const ownerSecret = () => process.env.GEV_OWNER_PASS_SECRET;
+const redeem = (t, host = 'surplomb.app') => call('/api/owner-pass', {
+  method: 'POST',
+  url: '/',
+  body: `t=${encodeURIComponent(t)}`,
+  contentType: 'application/x-www-form-urlencoded',
+  headers: { host, 'x-forwarded-proto': 'https' },
+});
+
+test('the owner\'s browser: one link, then every keyed route open and nothing counted', async () => {
+  const t = new URL(mintOwnerLink('https://surplomb.app', ownerSecret())).searchParams.get('t');
+  const page = await call('/api/owner-pass', { url: `/?t=${encodeURIComponent(t)}`, headers: { host: 'surplomb.app' } });
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Activer sur ce navigateur/);
+  assert.equal(page.cookie, null, 'the page itself spends nothing');
+
+  const redeemed = await redeem(t, 'www.surplomb.app');
+  assert.equal(redeemed.status, 303);
+  assert.equal(redeemed.headers.get('location'), '/');
+  assert.match(redeemed.headers.get('set-cookie')[0], /^gev_owner=o1\..*; HttpOnly; SameSite=Lax; Domain=surplomb\.app; Secure$/);
+  assert.equal((await redeem(t)).status, 410, 'a link works once');
+
+  // Over a trial that is spent to the last request.
+  const spent = `gev_trial=${signTrialToken({ used: 2, voiceUsed: 3, id: 'spentowner01' }, process.env.GEV_TRIAL_SECRET)}`;
+  const cookie = `${spent}; ${redeemed.cookie}`;
+  for (let i = 0; i < 4; i += 1) {
+    const answered = await summary(cookie);
+    assert.equal(answered.status, 200, `summary ${i + 1}`);
+    assert.equal(answered.cookie, null, 'never counted');
+  }
+  assert.equal((await nearby(cookie)).status, 200);
+  const minted = await token(cookie);
+  assert.equal(minted.status, 200);
+  assert.equal(minted.cookie, null);
+  assert.equal(minted.headers.get('x-gev-trial-voice-turns'), undefined, 'no turn limit: the page keeps the session open');
+  assert.equal((await call('/api/voice/config', { cookie })).body.waitlist, null);
+  const trial = await call('/api/trial', { cookie });
+  assert.equal(trial.body.enabled, false, 'no crown, no count');
+  assert.equal(trial.body.owner, true);
+
+  // The same trial cookie without the pass is refused as before.
+  assert.equal((await summary(spent)).body.quota, 'exhausted');
+});
+
+test('a pass or a link from another secret is nobody\'s', async () => {
+  const foreignPass = `gev_owner=${signOwnerPass({ issuedAt: 1, id: 'foreign-pass-0001' }, 'not-this-servers-secret-not-this-one')}`;
+  const spent = `gev_trial=${signTrialToken({ used: 2, voiceUsed: 3, id: 'spentowner02' }, process.env.GEV_TRIAL_SECRET)}`;
+  assert.equal((await summary(`${spent}; ${foreignPass}`)).body.quota, 'exhausted');
+  const foreignLink = new URL(mintOwnerLink('https://surplomb.app', 'not-this-servers-secret-not-this-one')).searchParams.get('t');
+  const refused = await redeem(foreignLink);
+  assert.equal(refused.status, 410);
+  assert.equal(refused.cookie, null);
 });

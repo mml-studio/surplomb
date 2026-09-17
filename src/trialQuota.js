@@ -42,6 +42,16 @@
  * voice trial has opened, a summary may not take the last try (`reserved`,
  * which the page answers by going quiet, not with the card).
  *
+ * THE OWNER IS NOT A VISITOR. The person who runs the instance needs the
+ * comfort routes without a count. The address cannot say who that is: the
+ * tailnet and the Cloudflare tunnel both reach the container from the Docker
+ * bridge gateway (measured 2026-09-17: `172.22.0.1` for both), so an address
+ * rule would be a rule for everybody. The owner holds a second signed cookie,
+ * `gev_owner`, obtained through a single-use link that only someone with
+ * `GEV_OWNER_PASS_SECRET` can mint (`scripts/owner-pass.mjs`, run over SSH).
+ * A browser holding it is never counted and never refused; the global
+ * `*_GLOBAL_PER_MIN` caps still apply. Rotating the secret revokes every pass.
+ *
  * OFF BY DEFAULT. With `GEV_TRIAL_LIMIT` unset, every function here is a
  * no-op: a clone running on its own keys owes nobody a waitlist.
  */
@@ -60,6 +70,14 @@ export const TRIAL_VOICE_TURNS_DEFAULT = 3;
 const TRIAL_VOICE_TURNS_MAX = 20;
 /** Header naming how many requests a minted trial session may answer. */
 export const TRIAL_VOICE_TURNS_HEADER = 'X-GEV-Trial-Voice-Turns';
+
+export const OWNER_COOKIE = 'gev_owner';
+const OWNER_VERSION = 'o1';
+/** How long a minted owner link can be redeemed. */
+export const OWNER_LINK_TTL_S = 10 * 60;
+/** A short owner secret is a bypass anyone can brute-force: refused, not warned about. */
+const MIN_OWNER_SECRET_LENGTH = 32;
+const OWNER_BODY_MAX_BYTES = 4096;
 
 /**
  * `GEV_TRIAL_VOICE`: how many spoken requests the voice trial allows.
@@ -89,6 +107,7 @@ function resolveVoiceTurns(raw, warnings) {
  *   enabled: boolean,
  *   limit: number,
  *   secret: string|null,
+ *   ownerSecret: string|null,
  *   voiceTurns: number,
  *   warnings: string[],
  *   waitlist: {action: string}|null,
@@ -111,6 +130,15 @@ export function resolveTrialConfig(env = {}, makeSecret = () => randomBytes(32).
     }
   }
 
+  // Only meaningful while there is a trial to step over.
+  let ownerSecret = null;
+  const rawOwnerSecret = String(env.GEV_OWNER_PASS_SECRET || '').trim();
+  if (limit && rawOwnerSecret.length >= MIN_OWNER_SECRET_LENGTH) {
+    ownerSecret = rawOwnerSecret;
+  } else if (limit && rawOwnerSecret) {
+    warnings.push(`GEV_OWNER_PASS_SECRET is shorter than ${MIN_OWNER_SECRET_LENGTH} characters — owner passes are OFF. Generate one with \`openssl rand -base64 48\`.`);
+  }
+
   const username = String(env.GEV_WAITLIST_BUTTONDOWN || '').trim();
   let waitlist = null;
   if (username && BUTTONDOWN_USERNAME_RE.test(username)) {
@@ -122,7 +150,7 @@ export function resolveTrialConfig(env = {}, makeSecret = () => randomBytes(32).
     warnings.push('GEV_TRIAL_LIMIT is set but GEV_WAITLIST_BUTTONDOWN is not — the trial-ended card will have no form, and nobody can join the waitlist.');
   }
 
-  return { enabled: Boolean(limit), limit, secret, voiceTurns, warnings, waitlist };
+  return { enabled: Boolean(limit), limit, secret, ownerSecret, voiceTurns, warnings, waitlist };
 }
 
 function sign(payload, secret) {
@@ -199,11 +227,14 @@ function appendSetCookie(res, cookie) {
  *
  * @param {import('http').IncomingMessage} req
  * @param {ReturnType<typeof resolveTrialConfig>} config
- * @returns {{used: number, remaining: number, voiceUsed: number, voiceRemaining: number, id: string|null}}
+ * @returns {{used: number, remaining: number, voiceUsed: number, voiceRemaining: number, id: string|null, owner: boolean}}
  */
 export function readTrialState(req, config) {
   if (!config.enabled) {
-    return { used: 0, remaining: Infinity, voiceUsed: 0, voiceRemaining: Infinity, id: null };
+    return { used: 0, remaining: Infinity, voiceUsed: 0, voiceRemaining: Infinity, id: null, owner: false };
+  }
+  if (hasOwnerPass(req, config)) {
+    return { used: 0, remaining: Infinity, voiceUsed: 0, voiceRemaining: Infinity, id: null, owner: true };
   }
   const token = readCookie(req.headers?.cookie, TRIAL_COOKIE);
   const state = token ? verifyTrialToken(token, config.secret) : null;
@@ -215,6 +246,7 @@ export function readTrialState(req, config) {
     voiceUsed,
     voiceRemaining: Math.max(0, config.voiceTurns - voiceUsed),
     id: state?.id ?? null,
+    owner: false,
   };
 }
 
@@ -311,6 +343,7 @@ export function consumeTrial(
 ) {
   if (!config.enabled || res.headersSent) return;
   const state = readTrialState(req, config);
+  if (state.owner) return;
   const token = signTrialToken({
     used: state.used + count(comfort),
     voiceUsed: state.voiceUsed + count(voice),
@@ -351,6 +384,20 @@ export function voiceTrialSpend(state, { all = false } = {}) {
  */
 export function describeTrial(req, config, experiments = null) {
   const state = readTrialState(req, config);
+  if (state.owner) {
+    // No trial for this browser: the page shows no crown and no count, as on
+    // an instance without one. `owner` is what tells the two apart.
+    return {
+      enabled: false,
+      owner: true,
+      limit: null,
+      used: null,
+      remaining: null,
+      voice: null,
+      waitlist: config.waitlist,
+      experiments: experiments ? { firstRun: experiments } : null,
+    };
+  }
   return {
     enabled: config.enabled,
     limit: config.enabled ? config.limit : null,
@@ -365,4 +412,255 @@ export function describeTrial(req, config, experiments = null) {
     // (src/firstRunAb.js). Null on a clone, and on a host that runs none.
     experiments: experiments ? { firstRun: experiments } : null,
   };
+}
+
+// ── The owner pass ────────────────────────────────────────────────────────
+//
+// Two tokens, both HMAC'd with GEV_OWNER_PASS_SECRET under a different label
+// so one can never stand in for the other:
+//
+//  - the LINK, `o1.<expires>.<nonce>.<sig>`, lives ten minutes, is redeemed
+//    once, and is minted only where the secret is (scripts/owner-pass.mjs);
+//  - the PASS, `o1.<issued>.<id>.<sig>`, is the cookie the link turns into.
+//
+// Redeeming is a POST behind a one-button page: a link pasted into a chat is
+// fetched by its preview bot, and a GET that spent the link would hand the
+// owner an « already used » page. « Once » is kept in memory: a restart inside
+// the ten minutes makes an already redeemed link usable again, which is why
+// the link is short-lived and printed only in the owner's terminal.
+
+const OWNER_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
+/** Tolerance on a link's expiry, for a mint on a machine whose clock is ahead. */
+const OWNER_CLOCK_SLACK_S = 60;
+const OWNER_REFUSAL = 'Lien expiré, déjà utilisé ou invalide.';
+
+/** Nonces already redeemed, until they expire. Only signed links get in. */
+const redeemedOwnerNonces = new Map();
+
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+function ownerSign(label, payload, secret) {
+  return sign(`${label}:${payload}`, secret);
+}
+
+function ownerSignatureMatches(label, payload, signature, secret) {
+  const expected = Buffer.from(ownerSign(label, payload, secret));
+  const given = Buffer.from(String(signature));
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+/** Split `o1.<seconds>.<id>.<sig>`, or null when it is not one. */
+function parseOwnerToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 4 || parts[0] !== OWNER_VERSION) return null;
+  const [, secondsText, id, signature] = parts;
+  if (!/^\d{1,12}$/.test(secondsText) || !OWNER_ID_RE.test(id)) return null;
+  return { payload: `${OWNER_VERSION}.${secondsText}.${id}`, seconds: Number(secondsText), id, signature };
+}
+
+/**
+ * @param {{expiresAt: number, nonce: string}} link - `expiresAt` in Unix seconds.
+ * @param {string} secret
+ * @returns {string}
+ */
+export function signOwnerLink({ expiresAt, nonce }, secret) {
+  const payload = `${OWNER_VERSION}.${count(expiresAt)}.${nonce}`;
+  return `${payload}.${ownerSign('owner-link', payload, secret)}`;
+}
+
+/**
+ * A link that is well formed, signed here, and not expired — whether it was
+ * already redeemed is the route's business.
+ *
+ * @param {string} token
+ * @param {string} secret
+ * @param {number} [now] - Unix seconds.
+ * @returns {{expiresAt: number, nonce: string}|null}
+ */
+export function verifyOwnerLink(token, secret, now = nowSeconds()) {
+  const parsed = parseOwnerToken(token);
+  if (!parsed || !ownerSignatureMatches('owner-link', parsed.payload, parsed.signature, secret)) return null;
+  if (parsed.seconds < now || parsed.seconds > now + OWNER_LINK_TTL_S + OWNER_CLOCK_SLACK_S) return null;
+  return { expiresAt: parsed.seconds, nonce: parsed.id };
+}
+
+/**
+ * @param {{issuedAt: number, id: string}} pass - `issuedAt` in Unix seconds.
+ * @param {string} secret
+ * @returns {string}
+ */
+export function signOwnerPass({ issuedAt, id }, secret) {
+  const payload = `${OWNER_VERSION}.${count(issuedAt)}.${id}`;
+  return `${payload}.${ownerSign('owner-pass', payload, secret)}`;
+}
+
+/**
+ * @param {string} token
+ * @param {string} secret
+ * @returns {{issuedAt: number, id: string}|null}
+ */
+export function verifyOwnerPass(token, secret) {
+  const parsed = parseOwnerToken(token);
+  if (!parsed || !ownerSignatureMatches('owner-pass', parsed.payload, parsed.signature, secret)) return null;
+  return { issuedAt: parsed.seconds, id: parsed.id };
+}
+
+/**
+ * Whether this request carries a valid owner pass. Always false when the
+ * instance has no trial or no owner secret. A pass older than the cookie's
+ * own lifetime is refused here too: a value copied out of a browser does not
+ * outlive the cookie it came from.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {ReturnType<typeof resolveTrialConfig>} config
+ * @param {number} [now] - Unix seconds.
+ */
+export function hasOwnerPass(req, config, now = nowSeconds()) {
+  if (!config.enabled || !config.ownerSecret) return false;
+  const token = readCookie(req.headers?.cookie, OWNER_COOKIE);
+  const pass = token ? verifyOwnerPass(token, config.ownerSecret) : null;
+  return Boolean(pass && now - pass.issuedAt <= COOKIE_MAX_AGE_S);
+}
+
+/**
+ * The single-use link that turns a browser into the owner's.
+ *
+ * @param {string} origin - Where the owner browses, e.g. `https://surplomb.app`.
+ * @param {string} secret - GEV_OWNER_PASS_SECRET.
+ * @param {{now?: number, makeNonce?: () => string}} [options]
+ * @returns {string}
+ */
+export function mintOwnerLink(origin, secret, {
+  now = nowSeconds(),
+  makeNonce = () => randomBytes(18).toString('base64url'),
+} = {}) {
+  const url = new URL('/api/owner-pass', origin);
+  url.searchParams.set('t', signOwnerLink({ expiresAt: now + OWNER_LINK_TTL_S, nonce: makeNonce() }, secret));
+  return url.href;
+}
+
+/**
+ * The `Domain` a pass is written for: the site without its `www.`, so one
+ * pass covers both names. Null (a host-only cookie) for an address,
+ * `localhost`, or anything that is not a plain host name.
+ *
+ * @param {string|undefined} hostHeader
+ * @returns {string|null}
+ */
+export function ownerCookieDomain(hostHeader) {
+  const host = String(hostHeader || '').trim().toLowerCase().replace(/:\d+$/, '');
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) || /^[\d.]+$/.test(host)) return null;
+  const site = host.startsWith('www.') ? host.slice(4) : host;
+  return site.includes('.') ? site : null;
+}
+
+function ownerPage(res, status, body) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(`<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pass propriétaire</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; background: #0b1418; color: #e6f1f3; }
+  button { font: inherit; padding: .6rem 1rem; border: 0; border-radius: 6px; background: #00d8ff; color: #001018; cursor: pointer; }
+</style>
+<h1>Pass propriétaire</h1>
+${body}
+</html>
+`);
+}
+
+async function readFormToken(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > OWNER_BODY_MAX_BYTES) return null;
+    chunks.push(chunk);
+  }
+  return new URLSearchParams(Buffer.concat(chunks).toString('utf8')).get('t');
+}
+
+/**
+ * `/api/owner-pass`. GET shows the link's one button, POST redeems it: the
+ * pass is written and the browser goes to the globe. A 404 where owner
+ * passes are off, so a clone does not even advertise the route.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {ReturnType<typeof resolveTrialConfig>} config
+ * @param {{now?: number, redeemed?: Map<string, number>, makeId?: () => string}} [options]
+ * @returns {Promise<void>}
+ */
+export async function handleOwnerPass(req, res, config, {
+  now = nowSeconds(),
+  redeemed = redeemedOwnerNonces,
+  makeId = () => randomBytes(18).toString('base64url'),
+} = {}) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  if (!config.enabled || !config.ownerSecret) {
+    res.statusCode = 404;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Not found' }));
+    return;
+  }
+  const secret = config.ownerSecret;
+  const usable = (token) => {
+    const link = verifyOwnerLink(token, secret, now);
+    return link && !redeemed.has(link.nonce) ? link : null;
+  };
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    const token = new URL(req.url || '/', 'http://owner.invalid').searchParams.get('t');
+    if (!usable(token)) {
+      ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
+      return;
+    }
+    ownerPage(res, 200, `<p>Ce navigateur n’aura plus de limite d’essais sur ce site. Le lien ne sert qu’une fois et expire dix minutes après sa création.</p>
+<form method="post" action="/api/owner-pass">
+  <input type="hidden" name="t" value="${token}">
+  <button type="submit">Activer sur ce navigateur</button>
+</form>`);
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.statusCode = 405;
+    res.setHeader('Allow', 'GET, HEAD, POST');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Method not allowed' }));
+    return;
+  }
+
+  const link = usable(await readFormToken(req).catch(() => null));
+  if (!link) {
+    console.warn('[trial] owner link refused');
+    ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
+    return;
+  }
+  for (const [nonce, expiresAt] of redeemed) {
+    if (expiresAt < now) redeemed.delete(nonce);
+  }
+  redeemed.set(link.nonce, link.expiresAt);
+
+  const domain = ownerCookieDomain(req.headers?.host);
+  const attributes = [
+    `${OWNER_COOKIE}=${signOwnerPass({ issuedAt: now, id: makeId() }, secret)}`,
+    'Path=/',
+    `Max-Age=${COOKIE_MAX_AGE_S}`,
+    'HttpOnly',
+    'SameSite=Lax',
+  ];
+  if (domain) attributes.push(`Domain=${domain}`);
+  if (requestIsHttps(req)) attributes.push('Secure');
+  appendSetCookie(res, attributes.join('; '));
+  console.info(`[trial] owner pass issued for ${domain || 'this host'}`);
+  res.statusCode = 303;
+  res.setHeader('Location', '/');
+  res.end();
 }
