@@ -1,7 +1,7 @@
 import * as Cesium from 'cesium';
 import { StyleManager } from './ui.js';
 import { DEFAULT_CITY_VIEW, flyToDefaultCity } from './camera.js';
-import { beginBootFlight, endBootFlight } from './bootFlight.js';
+import { beginBootFlight, endBootFlight, whenBootFlightEnds } from './bootFlight.js';
 import {
   MOVING_RESOLUTION_SCALE,
   getGlobeDetailDiagnostics,
@@ -631,10 +631,19 @@ async function init() {
           requestWaitlistCard({ reason: 'direct', explicit: true });
           return;
         }
-        // dataManager is passed explicitly: the globe missions enable bundled
-        // keyless layers through it, and reaching for styleManager._dataManager
-        // would make a private field part of this feature's contract.
-        initFirstRunExperience({ styleManager, dataManager });
+        // After the boot flight has LANDED, not when the veil lifts: the veil
+        // lifts 2.5 to 3.5 s before the descent ends, and a card revealed then
+        // covers exactly what the boot just paid for. Immediate on a phone and
+        // on a share link, which do not fly; bounded by BOOT_FLIGHT_DEADLINE_MS.
+        //
+        // dataManager is passed explicitly: a choice switches layers on through
+        // it, and reaching for styleManager._dataManager would make a private
+        // field part of this feature's contract. `phoneSheet` is the sheet
+        // controller built further down (variant C opens its Recherche tab);
+        // this callback runs long after that line.
+        whenBootFlightEnds(() => {
+          initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });
+        });
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
       setTimeout(revealFirstRun, 900);
