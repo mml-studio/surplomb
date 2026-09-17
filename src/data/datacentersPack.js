@@ -561,9 +561,8 @@ export const DATACENTER_POINTLESS_PX = 9;
  * rather than as a silent change of what the map says.
  *
  * `label` and `blurb` are NOT rendered anywhere, and that is a change: they were
- * the legend's until the key folded these four classes into the three lines of
- * {@link DATACENTER_LEGEND_ROWS} (the reason is documented there). What they are
- * now is this file's own record of what each class IS — the measurement behind
+ * the legend's, and the layer prints no key at all now. What they are is this
+ * file's own record of what each class IS — the measurement behind
  * "a fence is not a hall" (medians 31 204 m² against 5 008 m²), and behind "no
  * default height is invented" (63 % of the pack publishes none). They are
  * reachable through {@link datacenterSurfaceInfo}, which is a seam with no
@@ -639,110 +638,6 @@ export function datacenterSurface(tags, areaM2) {
 }
 
 /**
- * THE THREE LINES THE KEY PRINTS, and why they are three where the map draws
- * four signs.
- *
- * The house rule for `#map-legend` (PR #138) is that the key carries the COLOUR
- * channel and not the FORM channel: a shape is what a reader decodes WITHOUT a
- * key — a footprint clamped to the ground IS ground, a box in relief IS a
- * volume — so a line that only names a shape spends panel height re-stating
- * what the map already said. A form earns a line only when it is decoded WRONG
- * unaided, which is the hollow ring's case and only its case.
- *
- * Applied here that removes four of the seven rows this key used to print:
- *
- *   `volume` and `slab` MERGE. They are one colour (cyan) and one subject —
- *   the building — separated by whether OSM published a height. « Emprise
- *   extrudée à sa hauteur publiée, ou building:levels × 5 m » is a sentence
- *   about the OSM schema, not about what is under the reader's cursor, and the
- *   relief is self-evident on a 3D globe.
- *
- *   THE THREE AREA MARKS GO. `≥ 10 ha` / `≥ 1 ha` / `≥ 1 000 m²` were a SIZE
- *   scale drawn in one flat graphite, i.e. a second list re-printing the same
- *   objects by their extent, and the extent is drawn in world units — a reader
- *   compares two footprints to each other the way they compare two buildings.
- *   `local-airports` next door made exactly this cut, and `sizeFootprintGlyph`
- *   was deleted from `sizeLegendGlyphs.js` by the same PR.
- *
- * What survives is what no shape says: cyan is the BUILDING, slate is the
- * FENCE around it, and a hollow ring is "we know where, we do not know how
- * big". Each line names its class once and carries the class's own mark, which
- * is the nuance the rule allows — the swatch IS the map's glyph.
- *
- * `surfaces` is which of the four render classes a line counts.
- */
-export const DATACENTER_LEGEND_ROWS = Object.freeze([
-  Object.freeze({
-    key: 'building',
-    surfaces: Object.freeze(['volume', 'slab']),
-    label: 'Le bâtiment',
-    color: DATACENTER_HALL_COLOR,
-    blurb: 'Dessiné à son emprise réelle, sur le terrain : il rapetisse avec la '
-      + 'distance comme le hall qu’il est. En relief quand sa hauteur est connue.',
-  }),
-  Object.freeze({
-    key: 'site',
-    surfaces: Object.freeze(['site']),
-    label: 'L’enceinte du site',
-    color: DATACENTER_SITE_COLOR,
-    blurb: 'Le terrain clôturé autour, pas le hall : un campus fait six fois la '
-      + 'surface d’un bâtiment. Jamais mis en relief.',
-  }),
-  Object.freeze({
-    key: 'point',
-    surfaces: Object.freeze(['point']),
-    label: 'Emplacement seul',
-    color: DATACENTER_HALL_COLOR,
-    blurb: 'La position est connue, l’emprise n’a jamais été relevée. Un anneau '
-      + 'creux, parce qu’« inconnu » ne doit pas se lire « petit ».',
-  }),
-]);
-
-/* ── Legend glyphs ─────────────────────────────────────────────────────────
- * Masked by the panel (see manager.js), so the fill colour written here is
- * discarded and the row's `color` is what shows. Only the SHAPE survives —
- * which is the point: this legend's channels are form and size, not hue.
- */
-
-const _b64 = (value) => (typeof btoa === 'function'
-  ? btoa(value)
-  : Buffer.from(value, 'utf8').toString('base64'));
-
-const GLYPH_BOX = 16;
-/** @type {Map<string,string>} shape key → data URI. */
-const _glyphCache = new Map();
-
-function glyph(key, body) {
-  const cached = _glyphCache.get(key);
-  if (cached) return cached;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${GLYPH_BOX} ${GLYPH_BOX}">`
-    + `${body}</svg>`;
-  const uri = `data:image/svg+xml;base64,${_b64(svg)}`;
-  _glyphCache.set(key, uri);
-  return uri;
-}
-
-/** A footprint seen flat. The relief of an extruded hall needs no key. */
-const SLAB_GLYPH = glyph('slab', '<path d="M2 8L8 4.5L14 8L8 11.5Z" fill="#000"/>');
-/** The same outline, hollow — a fence encloses, it does not occupy. */
-const SITE_GLYPH = glyph('site',
-  '<path d="M2 8L8 4.5L14 8L8 11.5Z" fill="none" stroke="#000" stroke-width="1.6"/>');
-/** A ring — nothing measured to be inside it. */
-const RING_GLYPH = glyph('ring',
-  '<circle cx="8" cy="8" r="4.6" fill="none" stroke="#000" stroke-width="1.8"/>');
-
-/**
- * One glyph per LEGEND ROW (not per render class): the merged building line
- * takes the flat footprint, which is the mark 2 739 of its 3 200 members
- * actually draw, and relief is left to speak for itself on the globe.
- */
-const SURFACE_GLYPHS = Object.freeze({
-  building: SLAB_GLYPH,
-  site: SITE_GLYPH,
-  point: RING_GLYPH,
-});
-
-/**
  * The render contract this pack hands `createLocalGeoJsonLayer` — one object
  * per feature, resolved once at load, in the shape documented there.
  *
@@ -758,8 +653,7 @@ export function datacenterRenderSpec(props, { areaM2 = 0 } = {}) {
   const isSite = surface === 'site';
   return {
     // The SURFACE alone. It used to be `surface|areaBand`, because the key was
-    // folded twice — once per sign, once per size mark — and the size marks are
-    // gone (see DATACENTER_LEGEND_ROWS).
+    // folded twice — once per sign, once per size mark — and the key is gone.
     key: surface,
     pixelSize: surface === 'point' ? DATACENTER_POINTLESS_PX : DATACENTER_ANCHOR_PX,
     // A1: no emprise published is a HOLLOW mark, never a small filled one.
@@ -784,58 +678,6 @@ export function datacenterRenderSpec(props, { areaM2 = 0 } = {}) {
     fillAlpha: DATACENTER_FILL_ALPHA,
     extrudedHeightM: height ? height.heightM : null,
   };
-}
-
-/**
- * Build the map key from a live tally keyed by `datacenterRenderSpec`.
- *
- * THREE rows at most, one per line of {@link DATACENTER_LEGEND_ROWS}, and a row
- * with nothing drawn behind it is not printed — a key is a legend for the marks
- * ON SCREEN, never a catalogue of the pack.
- *
- * Counts are what is DRAWN, and `masqué` is the difference: a footprint culled
- * by distance still sits in the tally's `total` and has left the screen, and a
- * reader who watched ten sites disappear on a zoom-out is owed the word.
- *
- * @param {Map<string,{total:number, visible:number}>|object} tally
- * @returns {Array<{label:string,color:string,glyph:string,blurb:string,count:number}>}
- */
-export function datacenterSurfaceLegend(tally) {
-  const entries = tally instanceof Map ? [...tally] : Object.entries(tally || {});
-  const bySurface = new Map();
-  for (const [key, bucket] of entries) {
-    if (!bucket?.total) continue;
-    const surface = String(key);
-    const seen = bySurface.get(surface) || { total: 0, visible: 0 };
-    seen.total += bucket.total;
-    seen.visible += bucket.visible ?? bucket.total;
-    bySurface.set(surface, seen);
-  }
-
-  const legend = [];
-  for (const row of DATACENTER_LEGEND_ROWS) {
-    let total = 0;
-    let visible = 0;
-    for (const surface of row.surfaces) {
-      const bucket = bySurface.get(surface);
-      if (!bucket) continue;
-      total += bucket.total;
-      visible += bucket.visible;
-    }
-    if (!total) continue;
-    const hidden = total - visible;
-    legend.push({
-      label: row.label,
-      color: row.color,
-      // The line's own mark, tinted by the manager to the line's colour. Not a
-      // second FORM list — the class is named once and both its channels ride
-      // that one line. See the note in DATACENTER_LEGEND_ROWS.
-      glyph: SURFACE_GLYPHS[row.key],
-      blurb: hidden > 0 ? `${row.blurb} — ${hidden} masqué${hidden > 1 ? 's' : ''}` : row.blurb,
-      count: visible,
-    });
-  }
-  return legend;
 }
 
 /** The surface entry behind one key, for callers that need its wording. */

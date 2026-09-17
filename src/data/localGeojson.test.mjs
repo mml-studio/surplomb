@@ -346,40 +346,38 @@ test('an UNGRADED, UNMEASURED local pack exposes no row controls at all', async 
   // The manager decides whether to build a row's control strip by testing for
   // this method. Defining it unconditionally would give ports and airports an
   // empty strip. `local-ports` is the case: no groups, no size channel.
-  const layer = createLocalGeoJsonLayer({
-    id: 'local-ports',
-    url: '/none.geojsonl',
-    name: 'Ungraded',
-    color: '#ffb14e',
-  });
-  assert.equal(typeof layer.getRowControls, 'undefined');
-  assert.equal(typeof layer.setParams, 'undefined');
-  assert.equal(typeof layer.setRowControlsListener, 'undefined');
+  // `local-datacenters` is the other: it draws three signs and prints no key.
+  for (const id of ['local-ports', 'local-datacenters']) {
+    const layer = createLocalGeoJsonLayer({
+      id,
+      url: '/none.geojsonl',
+      name: 'Ungraded',
+      color: '#ffb14e',
+    });
+    assert.equal(typeof layer.getRowControls, 'undefined', id);
+    assert.equal(typeof layer.setParams, 'undefined', id);
+    assert.equal(typeof layer.setRowControlsListener, 'undefined', id);
+  }
 });
 
 test('a MEASURED pack gets a control strip for its size legend alone', () => {
   // D1: a size channel without a printed scale is unreadable, so a pack that
-  // spends one qualifies for the strip even with no chips to put in it. Both
-  // bundled ids resolve their renderer from PACK_RENDERERS with nothing
-  // passed by the wiring file.
-  for (const id of ['local-datacenters', 'local-dams']) {
-    const layer = createLocalGeoJsonLayer({
-      id, url: '/none.geojsonl', name: id, color: '#00ffff',
-    });
-    assert.equal(typeof layer.getRowControls, 'function', id);
-    // Nothing loaded yet, so there is nothing to promise: an empty tally must
-    // produce no rows rather than rows counting zero.
-    assert.equal(layer.getRowControls(), null, id);
-  }
+  // spends one qualifies for the strip even with no chips to put in it. The
+  // bundled id resolves its renderer from PACK_RENDERERS with nothing passed
+  // by the wiring file.
+  const dams = createLocalGeoJsonLayer({
+    id: 'local-dams', url: '/none.geojsonl', name: 'Dams', color: '#00ffff',
+  });
+  assert.equal(typeof dams.getRowControls, 'function');
+  // Nothing loaded yet, so there is nothing to promise: an empty tally must
+  // produce no rows rather than rows counting zero.
+  assert.equal(dams.getRowControls(), null);
 
   // A legend is not a chip row: `setParams` is the manager's whole
   // runtime-parameter surface (share links and the voice tools reach for it),
   // so a pack with a scale to print and nothing to filter must not grow one.
-  const datacenters = createLocalGeoJsonLayer({
-    id: 'local-datacenters', url: '/none.geojsonl', name: 'DC', color: '#00ffff',
-  });
-  assert.equal(typeof datacenters.setParams, 'undefined');
-  assert.equal(typeof datacenters.setRowControlsListener, 'undefined');
+  assert.equal(typeof dams.setParams, 'undefined');
+  assert.equal(typeof dams.setRowControlsListener, 'undefined');
 });
 
 test('local infrastructure card copy uses the validated source fields', () => {
@@ -1655,16 +1653,8 @@ test('the datacenter pack draws three different footprints without being wired t
         assert.equal(valueOf(entity.point.color).alpha, 1);
       }
 
-      // …and the key names the two COLOURS on screen and stops there. The hall
-      // and the extruded hall are one line — same hue, same subject, and relief
-      // is decoded off the globe — and the three area marks are gone with the
-      // rest of the size ladder.
-      const legend = harness.layer.getRowControls().legend;
-      assert.deepEqual(legend.map((row) => row.label), ['Le bâtiment', 'L’enceinte du site']);
-      const byLabel = new Map(legend.map((row) => [row.label, row]));
-      assert.equal(byLabel.get('Le bâtiment').count, 2, 'the volume and the slab are one line');
-      assert.equal(byLabel.get('L’enceinte du site').count, 1);
-      assert.equal(byLabel.has('Emplacement seul'), false, 'no row for a class with no members');
+      // …and the row prints no key: no chips, no legend, so no control strip.
+      assert.equal(harness.layer.getRowControls, undefined);
     } finally {
       await harness.layer.destroy?.(harness.viewer);
       harness.cleanup();

@@ -10,7 +10,6 @@ import {
 import {
   datacenterCardDetails,
   datacenterRenderSpec,
-  datacenterSurfaceLegend,
   geometryAreaM2,
 } from './datacentersPack.js';
 import {
@@ -390,9 +389,11 @@ const PACK_RENDERERS = Object.freeze({
   'local-airports': Object.freeze({
     featureRender: (properties) => airportRenderSpec(properties),
   }),
+  // No `renderLegend` either: the data-centre row prints no key. Its three
+  // lines (hall, fence, hollow ring) took a panel for marks the card already
+  // names on a click.
   'local-datacenters': Object.freeze({
     featureRender: datacenterRenderSpec,
-    renderLegend: datacenterSurfaceLegend,
   }),
   'local-dams': Object.freeze({
     featureRender: (properties) => damRenderSpec(properties),
