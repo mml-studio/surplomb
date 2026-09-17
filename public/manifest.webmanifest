@@ -4,7 +4,7 @@
   "description": "Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct.",
   "lang": "fr",
   "dir": "ltr",
-  "start_url": "/",
+  "start_url": "/globe",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

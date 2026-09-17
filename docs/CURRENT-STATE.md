@@ -136,17 +136,30 @@ Updated: September 17, 2026
 > et la coque AIS — dont le chemin de données vient seulement d'être refermé —
 > est la première chose à regarder.
 
-> **2026-09-17 — the showcase at the bare root** (`src/boot.js` is the page's
-> only entry; `src/vitrine/` owns the rest; markup `#vitrine` in `index.html`,
-> styles `landing.css`; plan `docs/designs/landing/PLAN-EXECUTION.md`).
+> **2026-09-17 — the showcase at `/`, the globe at `/globe`** (`src/boot.js` is
+> the page's only entry; `src/vitrine/` owns the rest; markup `#vitrine` in
+> `index.html`, styles `landing.css`; plan
+> `docs/designs/landing/PLAN-EXECUTION.md`).
 >
+> - **Two addresses, one origin.** `/` is the showcase's, `APP_PATH` (`/globe`,
+>   `src/vitrine/gate.js`) is the globe's. Both are `index.html`: the SPA
+>   fallback of `vite dev` and `vite preview` answers every path with it, with
+>   the same `Cache-Control` and the same pre-compressed body (measured
+>   2026-09-17), so there is no middleware and none is needed. One origin and
+>   not a subdomain is what makes the swap invisible — `history.replaceState`
+>   rewrites a path, never a host — and it keeps one `localStorage`, one cookie
+>   jar, one referrer restriction on the browser Google key and one entry in
+>   `GEV_PUBLIC_HOST`. `public/manifest.webmanifest` starts on `/globe`, scope
+>   `/`.
 > - **Which door.** `src/vitrine/gate.js`, mirrored by an inline script in the
->   head (run and compared by `gate.test.mjs`): `?vitrine=1|0` forces; the QA
->   flag `window.__GEV_SKIP_VITRINE__` (set by `newQaPage` unless
+>   head (run and compared by `gate.test.mjs` over 960 cases): `?vitrine=1|0`
+>   forces; `/globe` (trailing slashes ignored) → cockpit; the QA flag
+>   `window.__GEV_SKIP_VITRINE__` (set by `newQaPage` unless
 >   `{ vitrine: true }`) → cockpit; a hash containing `=` → cockpit; `?q=`,
 >   `?waitlist=`, `?welcome=` → cockpit; `localStorage['gev:vitrine-seen:v1']`
 >   → cockpit; otherwise the showcase (`html[data-vitrine]`). A cockpit arrival
->   by share, query or link writes the seen flag; so does « Ouvrir le globe ».
+>   by path, share, query or link writes the seen flag; so does
+>   « Ouvrir le globe ».
 > - **No engine behind the page.** `src/main.js` no longer starts itself:
 >   `startCockpit(options)` does. On a wide screen the cockpit graph is
 >   imported at idle (evaluated, nothing built); on a phone nothing is fetched
@@ -161,8 +174,10 @@ Updated: September 17, 2026
 >   box in DEVICE pixels, then smooth, then hardware (`mediaCapabilities`),
 >   then AV1 > HEVC > H.264. `src/vitrine/heroLoop.js` (generated) lists them
 >   with their `codecs=` strings and the camera law each loop was filmed with.
-> - **The hand-off (≥ 1 001 px).** The press freezes the loop,
->   `html[data-vitrine="opening"]` shows `#cesiumContainer` under it,
+> - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
+>   `replaceState` — no navigation, no reload, the same document throughout
+>   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the
+>   loop, `html[data-vitrine="opening"]` shows `#cesiumContainer` under it,
 >   `init({ handoff })` poses the camera from the law at `video.currentTime`,
 >   boots on `photoreal` (the press counts as the adoption), restores the hero
 >   state through a share hash that is never written (`StyleManager`
@@ -174,8 +189,9 @@ Updated: September 17, 2026
 >   own `flyToAddress`; not found → toast, text left in `#location-search`,
 >   ordinary arrival. Showcase arrivals get the first-run SESSION suppression.
 >
-> Acceptance: `npm run qa:landing -- --url <server>` (76 checks on the dev
-> server; the byte budget case only asserts against a build).
+> Acceptance: `npm run qa:landing -- --url <server>` (83 checks against a
+> build, 2026-09-17; the byte budget case only asserts against one). Case
+> `adresses` covers the second URL, case `handoff` the in-place swap.
 
 > **2026-09-17 — first-run card, three French variants** (`src/firstRunExperience.js`
 > owns the door, `src/firstRunVariants.js` what a choice does,

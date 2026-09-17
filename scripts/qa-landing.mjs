@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * qa:landing — the showcase at the bare root, and its door to the globe.
+ * qa:landing — the showcase at `/`, and its door to the globe at `/globe`.
  *
  * The acceptance list of docs/designs/landing/PLAN-EXECUTION.md § 4, adapted to
  * the recorded-loop background decided on 2026-09-17 (no engine behind the
@@ -454,6 +454,9 @@ const CASES = {
       state: document.getElementById('vitrine').dataset.state,
       t: document.querySelector('#vitrine .world-video')?.currentTime ?? 0,
     }));
+    // A value that only survives if the document was never replaced: the
+    // address must move from `/` to `/globe` WITHOUT a navigation.
+    await page.evaluate(() => { window.__qaSameDocument = 'yes'; });
     await page.evaluate(() => document.querySelector('#vitrine form.dock').requestSubmit());
     const opening = await waitFor(page, () => document.documentElement.getAttribute('data-vitrine') === 'opening' || null, { timeout: 5000 });
     check('hand-off: the frame freezes and the page steps aside', Boolean(opening));
@@ -482,13 +485,49 @@ const CASES = {
       overflow: getComputedStyle(document.body).overflow,
       theme: document.querySelector('meta[name="theme-color"]').content,
       hash: location.hash.slice(0, 20),
+      path: location.pathname,
+      sameDocument: window.__qaSameDocument === 'yes',
     }));
     check('hand-off: the document is the cockpit again', cockpit.scrollY === 0 && cockpit.overflow === 'hidden' && cockpit.theme === '#0a0a0f',
       JSON.stringify(cockpit));
+    check('hand-off: the address became /globe, in the same document',
+      cockpit.path === '/globe' && cockpit.sameDocument, `${cockpit.path} — same document: ${cockpit.sameDocument}`);
     check('hand-off: the loop was live before the press', before.state === 'live', before.state);
     const engineBeforeLoad = requests.filter((r) => ENGINE_RE.test(r.url));
     check('hand-off: the engine was fetched (idle prefetch or press)', engineBeforeLoad.length > 0);
     await shot(page, 'handoff-after');
+    await page.close();
+  },
+
+  async adresses() {
+    // The second URL. A browser that has never met this site, sent straight to
+    // the globe's own address: no brochure, no redirect, the cockpit.
+    const page = await freshPage();
+    await page.goto(`${BASE}/globe`, { waitUntil: 'load', timeout: 90_000 });
+    const arrival = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-vitrine'),
+      vitrine: Boolean(document.getElementById('vitrine')
+        && getComputedStyle(document.getElementById('vitrine')).display !== 'none'
+        && document.getElementById('vitrine').getBoundingClientRect().height > 0),
+      path: location.pathname,
+      loading: Boolean(document.getElementById('loading-screen')),
+    }));
+    check('/globe: the globe\'s own address opens the cockpit',
+      arrival.attr === null && !arrival.vitrine && arrival.path === '/globe', JSON.stringify(arrival));
+    const viewer = await waitFor(page, () => Boolean(window.__godsEyeView?.viewer), { timeout: 90_000 });
+    check('/globe: a Viewer is built there', Boolean(viewer));
+    // And a trailing slash is the same address, not the brochure.
+    const slash = await freshPage();
+    await slash.goto(`${BASE}/globe/`, { waitUntil: 'load', timeout: 90_000 });
+    const slashAttr = await slash.evaluate(() => document.documentElement.getAttribute('data-vitrine'));
+    check('/globe/: a trailing slash is the same address', slashAttr === null, String(slashAttr));
+    await slash.close();
+    // `?vitrine=1` still shows the brochure from there — the demo switch.
+    const demo = await freshPage();
+    await demo.goto(`${BASE}/globe?vitrine=1`, { waitUntil: 'load', timeout: 90_000 });
+    const demoAttr = await demo.evaluate(() => document.documentElement.getAttribute('data-vitrine'));
+    check('/globe?vitrine=1: the brochure can still be forced', demoAttr === '', String(demoAttr));
+    await demo.close();
     await page.close();
   },
 

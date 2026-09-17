@@ -1,4 +1,4 @@
-// The showcase gate: which door the bare root opens.
+// The showcase gate: which door each of the two addresses opens.
 //
 // Two copies of one decision, on purpose (see src/vitrine/gate.js): the inline
 // head script in index.html paints the right surface first, this module
@@ -8,11 +8,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  APP_PATH,
   VITRINE_SEEN_KEY,
   VITRINE_SKIP_GLOBAL,
   applyVitrineDecision,
   arrivalMarksSeen,
   decideVitrine,
+  isAppPath,
   isVitrineActive,
   markVitrineSeen,
   readVitrineSignals,
@@ -20,15 +22,18 @@ import {
 
 const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 
-/** Every address shape the root meets, crossed with the two remembered facts. */
+/** Every address shape the two doors meet, crossed with the remembered facts. */
+const PATHS = ['/', '/globe', '/globe/', '/globes'];
 const SEARCHES = ['', '?q=Lyon', '?q=', '?waitlist=1', '?welcome=0', '?welcome=b', '?vitrine=1', '?vitrine=0', '?input=phone', '?perf=lite'];
 const HASHES = ['', '#v=2&lat=48.8&lon=2.3', '#haut', '#contenu', '#lat=1&lon=2', '#'];
 
 function* matrix() {
-  for (const search of SEARCHES) {
-    for (const hash of HASHES) {
-      for (const seen of [false, true]) {
-        for (const skip of [false, true]) yield { search, hash, seen, skip };
+  for (const path of PATHS) {
+    for (const search of SEARCHES) {
+      for (const hash of HASHES) {
+        for (const seen of [false, true]) {
+          for (const skip of [false, true]) yield { path, search, hash, seen, skip };
+        }
       }
     }
   }
@@ -56,12 +61,29 @@ test('the rule, case by case', () => {
   assert.equal(door({ search: '?vitrine=0' }), 'cockpit:forced');
   // Unrelated parameters change nothing.
   assert.equal(door({ search: '?input=phone' }), 'vitrine:first-visit');
+
+  // The globe's own address, the second of the two URLs. It outranks the
+  // remembered fact and the QA flag, and a trailing slash is the same address.
+  assert.equal(door({ path: APP_PATH }), 'cockpit:app-path');
+  assert.equal(door({ path: '/globe/' }), 'cockpit:app-path');
+  assert.equal(door({ path: APP_PATH, seen: false, skip: true }), 'cockpit:app-path');
+  assert.equal(door({ path: APP_PATH, hash: '#v=2&lat=1&lon=2' }), 'cockpit:app-path');
+  // `?vitrine=1` still outranks it: a demo may show the brochure from there.
+  assert.equal(door({ path: APP_PATH, search: '?vitrine=1' }), 'vitrine:forced');
+  // Nothing else is the globe's address — the SPA fallback answers every path
+  // with this document, and only `/globe` means the cockpit.
+  assert.equal(door({ path: '/globes' }), 'vitrine:first-visit');
+  assert.equal(door({ path: '/mentions-legales' }), 'vitrine:first-visit');
+  assert.equal(isAppPath('/globe//'), true);
+  assert.equal(isAppPath(''), false);
 });
 
 test('only a real arrival marks the browser as having met the globe', () => {
   assert.equal(arrivalMarksSeen(decideVitrine({ hash: '#v=2&lat=1&lon=2' })), true);
   assert.equal(arrivalMarksSeen(decideVitrine({ search: '?q=Lyon' })), true);
   assert.equal(arrivalMarksSeen(decideVitrine({ search: '?waitlist=1' })), true);
+  // Landing on the globe's own address IS meeting the globe.
+  assert.equal(arrivalMarksSeen(decideVitrine({ path: APP_PATH })), true);
   // A QA run, a forced demo and a returning reader leave nothing behind.
   assert.equal(arrivalMarksSeen(decideVitrine({ skip: true })), false);
   assert.equal(arrivalMarksSeen(decideVitrine({ search: '?vitrine=0' })), false);
@@ -73,6 +95,9 @@ test('the memory is read and written best-effort', () => {
   const map = new Map();
   const store = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
   assert.equal(readVitrineSignals({ location: { search: '', hash: '' }, storage: store, windowRef: {} }).seen, false);
+  assert.equal(readVitrineSignals({ location: { pathname: APP_PATH }, storage: store, windowRef: {} }).path, APP_PATH);
+  // A location without a pathname reads as the root, never as the app.
+  assert.equal(readVitrineSignals({ location: {}, storage: store, windowRef: {} }).path, '/');
   assert.equal(markVitrineSeen(store), true);
   assert.equal(map.get(VITRINE_SEEN_KEY), '1');
   assert.equal(readVitrineSignals({ location: {}, storage: store, windowRef: {} }).seen, true);
@@ -114,7 +139,7 @@ test('the inline head script answers exactly what the module answers', () => {
       ...(signals.skip ? { [VITRINE_SKIP_GLOBAL]: true } : {}),
     };
     run(
-      { search: signals.search, hash: signals.hash },
+      { pathname: signals.path, search: signals.search, hash: signals.hash },
       windowRef,
       { documentElement: { setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k) } },
     );
@@ -122,18 +147,22 @@ test('the inline head script answers exactly what the module answers', () => {
     assert.equal(attrs.has('data-vitrine'), expected, `inline gate disagrees for ${JSON.stringify(signals)}`);
     // The module's reader, fed the same globals, sees the same signals.
     assert.deepEqual(
-      readVitrineSignals({ location: { search: signals.search, hash: signals.hash }, windowRef }),
+      readVitrineSignals({
+        location: { pathname: signals.path, search: signals.search, hash: signals.hash },
+        windowRef,
+      }),
       signals,
     );
     cases += 1;
   }
-  assert.equal(cases, SEARCHES.length * HASHES.length * 4);
+  assert.equal(cases, PATHS.length * SEARCHES.length * HASHES.length * 4);
 });
 
 test('the inline copy uses the module constants, not look-alikes', () => {
   const body = inlineGateScript();
   assert.ok(body.includes(`'${VITRINE_SEEN_KEY}'`), 'storage key drifted');
   assert.ok(body.includes(`window.${VITRINE_SKIP_GLOBAL}`), 'QA flag drifted');
+  assert.ok(body.includes(`'${APP_PATH}'`), 'the app path drifted');
 });
 
 test('the gate runs before the stylesheets that read it, and a thrown storage is a first visit', () => {

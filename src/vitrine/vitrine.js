@@ -11,7 +11,7 @@
  * @module vitrine/vitrine
  */
 
-import { isWideVitrine, markVitrineSeen, VITRINE_ATTRIBUTE } from './gate.js';
+import { APP_PATH, isWideVitrine, markVitrineSeen, VITRINE_ATTRIBUTE } from './gate.js';
 import { createRotation } from './rotation.js';
 import { HERO_LOOP } from './heroLoop.js';
 import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
@@ -174,7 +174,9 @@ export function initVitrine({
 
   // An example or a gallery view is a same-document link (`/#v=2&…`): the
   // hash changes and nothing reloads. That IS a request for the cockpit, with
-  // the share restore reading the new hash.
+  // the share restore reading the new hash. They point at `/` and not at
+  // `/globe` on purpose — the same path is what makes them same-document; the
+  // address is moved to `/globe` a line later, by `rewriteAddress`.
   listen(win, 'hashchange', () => {
     if (String(win.location.hash).indexOf('=') < 0) return;
     void open({ viaHash: true });
@@ -354,12 +356,26 @@ async function startLoop({ video, win, loop, setState, listen, onCleanup }) {
 const wide = (win) => isWideVitrine(win.matchMedia?.bind(win));
 
 /**
- * Drop `?vitrine=` and set (or drop) `?q=`, keeping everything else.
+ * Move the address to the globe's own, in place: `/` → {@link APP_PATH}. Drop
+ * `?vitrine=`, set (or drop) `?q=`, keep everything else.
+ *
+ * This is the whole « two URLs » mechanism. The reader is reading `/`, presses
+ * the button, and the address becomes `/globe` with no navigation —
+ * `replaceState` rewrites a path without unloading anything, so the frozen
+ * frame, the booting engine and the fade all survive it. A different HOST could
+ * not have been written this way, which is why the split is two paths of one
+ * origin (src/vitrine/gate.js).
+ *
+ * `replaceState` and not `pushState`: the showcase's DOM is removed by
+ * `close()` a moment later, so a Back button that returned to `/` in this same
+ * document would have nothing left to show.
+ *
  * @param {Window} win
  * @param {{query?: string}} options
  */
 function rewriteAddress(win, { query = '' } = {}) {
   const url = new URL(win.location.href);
+  url.pathname = APP_PATH;
   url.searchParams.delete('vitrine');
   if (query) url.searchParams.set('q', query);
   else url.searchParams.delete('q');

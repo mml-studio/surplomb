@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APP_PATH } from './vitrine/gate.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
@@ -65,7 +66,11 @@ test('index.html links a manifest and an apple-touch-icon that exist', () => {
 test('the manifest installs as this app, in French, standalone', () => {
   assert.equal(manifest.display, 'standalone');
   assert.equal(manifest.lang, 'fr');
-  assert.equal(manifest.start_url, '/');
+  // An installed app opens the globe, not the brochure: `/globe` is the
+  // cockpit's own address (src/vitrine/gate.js). `scope` stays `/`, so the
+  // showcase and the legal pages open inside the installed window.
+  assert.equal(manifest.start_url, APP_PATH);
+  assert.equal(manifest.scope, '/');
   assert.match(manifest.short_name, /Surplomb/);
   // Home screens truncate around 12 characters; the long name is for the
   // install prompt and the app list, not the icon label.
