@@ -72,8 +72,9 @@ export function forcedFirstRunVariant(location = globalThis.location) {
  *                         seam (StyleManager.flyToAddress / locateMe). Never
  *                         persisted by anything. B and C never move it.
  *   NOT TOUCHED           detection mode + density. The reasonable-defaults
- *                         landing owns the DENSE/75 start. A choice has no
- *                         opinion.
+ *                         landing owns the BALANCED/50 start
+ *                         (FIRST_RUN_DETECTION_PRESET, src/ui.js). A choice
+ *                         has no opinion.
  *   NOT TOUCHED           `_detectionUserOverridden`. Setting it would mean "the
  *                         operator hand-edited detection" and would silently
  *                         kill the CRT/NVG/FLIR auto-preset contract for the
