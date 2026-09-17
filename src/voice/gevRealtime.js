@@ -14,6 +14,7 @@ import {
 import { createVoiceControl, resolveVoiceControlHint } from './voiceControlDom.js';
 import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
 import { isCoarseInput } from '../inputMode.js';
+import { requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -569,6 +570,13 @@ export class GevRealtimeController {
     // The 'connecting' a wait painted is this attempt's own; any other active
     // status is a second click that landed while the lookup ran.
     if (!waited && this.isActive()) return;
+    if (voiceConfig.waitlist) {
+      // The hosted trial keeps voice out (src/trialQuota.js). The mic opens
+      // the waitlist card instead of asking for a microphone it cannot use.
+      if (waited) this.setStatus('idle');
+      requestWaitlistCard({ reason: voiceConfig.waitlist, explicit: true });
+      return;
+    }
     if (voiceConfig.provider === 'openrouter') {
       // Browser ears, browser mouth, OpenRouter brain. Nothing below this line
       // runs: there is no peer connection, no ephemeral token and no audio
@@ -766,6 +774,12 @@ export class GevRealtimeController {
       // would clobber the live session's status (H7).
       if (epoch !== this.startEpoch) {
         releaseStartResources({ localStream, localPc });
+        return;
+      }
+      if (error?.trialRefusal) {
+        // Not a fault: the trial ended while the config said it was open.
+        this.stop();
+        requestWaitlistCard({ reason: error.trialRefusal, explicit: true });
         return;
       }
       const diagnostics = this.connectionDiagnostics();
@@ -2875,6 +2889,10 @@ async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
     || data?.session?.model
     || null;
   const servedTier = response.headers?.get?.('X-GEV-Voice-Tier') || null;
+  const trialRefusal = trialRefusalFrom(response.status, data);
+  if (trialRefusal) {
+    throw Object.assign(new Error(data.error || 'Trial over'), { trialRefusal });
+  }
   if (!response.ok) {
     // OpenAI error bodies are objects ({error:{message,type,...}}); only the
     // key-absent server case is a bare string. Render either without the

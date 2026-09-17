@@ -6,6 +6,7 @@ import {
   isContextRecordActive,
 } from '../data/contextStore.js';
 import { CCTV_FOCUS_RESULT } from '../cctvFocusRequest.js';
+import { trialRefusalFrom } from '../trialRefusal.js';
 import { contextModeWord } from '../contextModePolicy.js';
 import { ANALYST_LAYERS, ANALYST_RECORD_CAP, createAnalystEngine } from '../data/analystEngine.js';
 import { layerFeedState } from '../data/manager.js';
@@ -715,6 +716,8 @@ const reverseGeocodeCache = new Map();
 const reverseGeocodeInFlight = new Map();
 const nearbyPlacesCache = new Map();
 const nearbyPlacesInFlight = new Map();
+/** Set once `/api/google/nearby-places` answers with the hosted trial's refusal. */
+let nearbyPlacesTrialOver = false;
 const VISIBLE_ENTITY_SHORTLIST = 64;
 /**
  * How many records one layer contributes to a proximity scan.
@@ -4105,6 +4108,8 @@ async function fetchNearbyPlaces(latitude, longitude, cameraHeightM) {
     nearbyPlacesCache.set(cacheKey, []);
     return [];
   }
+  // The hosted trial refused once; it will refuse every other place too.
+  if (nearbyPlacesTrialOver) return [];
 
   const request = (async () => {
     try {
@@ -4115,6 +4120,9 @@ async function fetchNearbyPlaces(latitude, longitude, cameraHeightM) {
       });
       const response = await fetchWithTimeout(`/api/google/nearby-places?${params}`, {}, 5000);
       const data = await response.json().catch(() => null);
+      // No card from here: the HUD summary is refused by the same trial and
+      // is the one that says so.
+      if (trialRefusalFrom(response.status, data)) nearbyPlacesTrialOver = true;
       const places = response.ok && Array.isArray(data?.places)
       ? data.places.filter((place) => place?.name).slice(0, 12)
         : [];

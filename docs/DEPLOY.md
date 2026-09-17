@@ -612,6 +612,39 @@ touches nothing makes **two** same-origin `/api` calls, both `/api/geoid`
 (`npm run qa:phone-boot` prints the list). The "about six" figure above is a
 desktop boot and predates the traffic layer being on by default.
 
+## The hosted trial and the waitlist
+
+Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
+`GEV_WAITLIST_*` variables are documented in
+`.env.example` and read at startup (`docker compose up -d`, no rebuild).
+
+- **What is counted.** One HUD summary (`/api/openai/hud-summary`) is one try.
+  `/api/google/nearby-places` and `/api/google/text-search` are refused once
+  the trial is spent but do not count themselves. Voice
+  (`/api/realtime/token`, `/api/voice/brain`) is refused outright unless
+  `GEV_TRIAL_VOICE=trial`. The globe and every keyless layer are never gated.
+- **Where the count lives.** A signed cookie, `gev_trial`, HttpOnly, 400 days.
+  Not the IP: an office or a mobile carrier puts hundreds of visitors behind
+  one. A cleared cookie starts over, which is accepted — the bill is bounded by
+  the `*_GLOBAL_PER_MIN` caps and the provider limits, not by this.
+- **What the page sees.** A 429 whose body carries `quota: "exhausted"` or
+  `quota: "voice"`, without `Retry-After`. The HUD stops asking and the
+  waitlist card opens in place (once per tab for the HUD, on every mic click).
+  `?waitlist=1` opens the card directly — that is the link to post.
+- **Checking it** (from the VPS, so the Cloudflare `/api` rule stays out of it):
+
+  ```sh
+  curl -s localhost:4173/api/trial                    # enabled, limit, waitlist target
+  curl -s localhost:4173/api/voice/config | grep -o '"waitlist":[^,}]*'
+  ```
+
+  In a browser: switch to a NVG/FLIR/CRT style (the HUD only shows there),
+  then move the view five times, 15 s apart; the sixth summary opens the card.
+  A private window starts at zero.
+- **Buttondown side**, once: create the list, keep double opt-in on (the
+  default), and add the metadata fields `usage` and `declencheur` so they
+  show on the subscriber table. The tag is `liste-attente`.
+
 ## Opening the origin to the public
 
 `GEV_ACCESS_PASSWORD` is the only thing between the open internet and a set of

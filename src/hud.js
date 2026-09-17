@@ -23,6 +23,7 @@ import {
   fetchGeoidHeight,
   geoidCell,
 } from './data/geoid.js';
+import { requestWaitlistCard, trialRefusalFrom } from './trialRefusal.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -89,7 +90,8 @@ export class IntelHUD {
     // What the readout currently shows, so an identical line is not retyped.
     this._summaryText = null;
     this._summaryRevision = 0;
-    // Latches once the endpoint reports a missing key; see SUMMARY_UNCONFIGURED_RE.
+    // Latches once the endpoint reports a missing key (SUMMARY_UNCONFIGURED_RE)
+    // or the end of this browser's hosted trial (src/trialQuota.js).
     this._summaryDisabled = false;
     // One-shot guards so the very first summary lands immediately instead of
     // waiting for the 15s interval tick: B) swap the "Awaiting telemetry..."
@@ -746,6 +748,14 @@ export class IntelHUD {
         signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
+      if (trialRefusalFrom(response.status, data)) {
+        // The trial is spent for this browser, and asking again every 15 s
+        // cannot change that. The local line stays; the card says why.
+        this._summaryDisabled = true;
+        this._setSummaryText(fallbackText, animate);
+        requestWaitlistCard({ reason: 'exhausted' });
+        return;
+      }
       if (!response.ok || !data?.summary) {
         throw new Error(data?.error || `HTTP ${response.status}`);
       }

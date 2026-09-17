@@ -5,6 +5,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Added
+- **La version hébergée a un essai et une liste d'attente, et rien ne les
+  comptait.** Chaque navigateur a cinq essais du confort payant (un résumé HUD
+  = un essai ; les lieux proches et la recherche Google s'arrêtent avec lui),
+  comptés dans un cookie signé plutôt que par adresse IP, qu'un bureau ou un
+  opérateur mobile partage entre des centaines de visiteurs. Au-delà, la carte
+  « Essai terminé » s'ouvre sur le globe — jamais une redirection, qui perdrait
+  la vue et le lien de partage — avec le formulaire Buttondown dedans et une
+  question sur l'usage. Pas de prix sur la carte : il viendra sur la page de
+  paiement.
+  La voix est hors essai : le compte qui la paie ne tient que quelques réponses
+  par minute pour tout le site, donc le micro ouvre la carte directement.
+  `?waitlist=1` ouvre la carte sans détour. Tout est éteint tant que
+  `GEV_TRIAL_LIMIT` n'est pas posé : un clone sur ses propres clés n'a aucune
+  liste d'attente.
+
 ### Changed
 - **L'arrivée sur le globe 3D ressemblait à un rechargement de la page, et le
   tiroir des fonds annonçait « SATELLITE » pendant qu'on regardait le maillage

@@ -44,6 +44,7 @@ import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
 import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { WAITLIST_OPEN_EVENT, requestWaitlistCard } from './trialRefusal.js';
 import { initKeySetup } from './keySetup.js';
 import {
   LITE_GLOBE_SSE,
@@ -616,6 +617,12 @@ async function init() {
       const revealFirstRun = () => {
         if (firstRunRevealed) return;
         firstRunRevealed = true;
+        // `?waitlist=1` is the link the launch post points at: the waitlist
+        // card takes the first-run launcher's place rather than stacking on it.
+        if (new URLSearchParams(window.location.search).get('waitlist') === '1') {
+          requestWaitlistCard({ reason: 'direct', explicit: true });
+          return;
+        }
         // dataManager is passed explicitly: the globe missions enable bundled
         // keyless layers through it, and reaching for styleManager._dataManager
         // would make a private field part of this feature's contract.
@@ -623,6 +630,22 @@ async function init() {
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
       setTimeout(revealFirstRun, 900);
+    });
+
+    // The hosted trial's waitlist card (src/waitlistCard.js). Loaded on the
+    // first request for it — the HUD, the voice dock or `?waitlist=1` — so a
+    // visit that never meets the trial never downloads it.
+    let waitlistCard = null;
+    window.addEventListener(WAITLIST_OPEN_EVENT, (event) => {
+      waitlistCard ??= import('./waitlistCard.js')
+        .then(({ initWaitlistCard }) => initWaitlistCard())
+        .catch((error) => {
+          waitlistCard = null;
+          throw error;
+        });
+      waitlistCard
+        .then((card) => card.open(event.detail || {}))
+        .catch((error) => console.warn('[waitlist] card unavailable:', error));
     });
 
     // Provider Settings (the POWER UP chip + dialog). DEV ONLY, and it always

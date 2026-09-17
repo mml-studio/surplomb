@@ -10569,6 +10569,307 @@ body.scene-playback-mode #first-run-launcher {
   .first-run-choices { scroll-behavior: auto; }
 }
 
+/* ── Waitlist card (hosted trial) ─────────────────────────────────
+   Built by src/waitlistCard.js when the trial refuses a keyed route or the
+   mic is clicked while voice is out of the trial. Same glass as the first-run
+   launcher, one step above it (185), below the toast and attribution (200).
+   Non-modal: the globe stays usable behind it. */
+#waitlist-card {
+  position: fixed;
+  z-index: 185;
+  top: 50%;
+  left: 50%;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  padding: 1.05rem 1.15rem 1.1rem;
+  overflow: hidden;
+  color: var(--text-primary);
+  background:
+    linear-gradient(145deg, rgba(10, 27, 37, 0.97), rgba(7, 13, 22, 0.95)),
+    rgba(7, 17, 25, 0.96);
+  border: 1px solid rgba(54, 220, 255, 0.42);
+  border-radius: 0.65rem;
+  box-shadow:
+    0 1.4rem 4.5rem rgba(0, 0, 0, 0.72),
+    0 0 2.5rem rgba(0, 212, 255, 0.09),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(28px) saturate(1.25);
+  -webkit-backdrop-filter: blur(28px) saturate(1.25);
+  transform: translate(-50%, -50%);
+  animation: waitlist-card-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes waitlist-card-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 0.8rem)) scale(0.985); }
+}
+
+/* `hidden` must win over the author `display` rules below. */
+#waitlist-card [hidden] { display: none !important; }
+
+.waitlist-scanline {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(54, 220, 255, 0.8), transparent);
+  box-shadow: 0 0 1rem rgba(54, 220, 255, 0.45);
+  pointer-events: none;
+}
+
+.waitlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1rem;
+  text-transform: uppercase;
+}
+
+.waitlist-kicker { color: rgba(54, 220, 255, 0.86); }
+
+.waitlist-close {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  margin: -0.5rem -0.6rem -0.5rem 0;
+  color: rgba(215, 231, 235, 0.7);
+  font-size: 1.3rem;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.waitlist-close:hover,
+.waitlist-close:focus-visible {
+  color: #fff;
+  border-color: rgba(54, 220, 255, 0.5);
+  outline: none;
+}
+
+#waitlist-card h2 {
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+  font-weight: 500;
+  letter-spacing: -0.04rem;
+}
+
+#waitlist-lede {
+  margin-top: 0.35rem;
+  color: rgba(215, 231, 235, 0.72);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* The part that scrolls on a short viewport; the title and the close button
+   stay put. */
+.waitlist-body {
+  min-height: 0;
+  margin-top: 0.85rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(54, 220, 255, 0.45) transparent;
+}
+
+.waitlist-includes-title,
+.waitlist-usage legend,
+.waitlist-field > span {
+  color: rgba(171, 210, 220, 0.7);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08rem;
+  text-transform: uppercase;
+}
+
+.waitlist-includes {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.waitlist-includes li {
+  position: relative;
+  padding-left: 1rem;
+}
+
+.waitlist-includes li::before {
+  content: '';
+  position: absolute;
+  top: 0.5em;
+  left: 0.2rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  background: #36dcff;
+  border-radius: 50%;
+}
+
+.waitlist-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.waitlist-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* 1rem keeps iOS Safari from zooming the page when the field takes focus. */
+.waitlist-field input {
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.7rem;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(100, 200, 220, 0.3);
+  border-radius: 0.42rem;
+}
+
+.waitlist-field input:focus-visible {
+  border-color: rgba(54, 220, 255, 0.85);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(54, 220, 255, 0.2);
+}
+
+.waitlist-usage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.waitlist-usage legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+}
+
+.waitlist-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.4rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  background: rgba(29, 69, 81, 0.18);
+  border: 1px solid rgba(100, 200, 220, 0.18);
+  border-radius: 0.42rem;
+  cursor: pointer;
+}
+
+.waitlist-choice:hover,
+.waitlist-choice:has(input:focus-visible) {
+  border-color: rgba(54, 220, 255, 0.62);
+}
+
+.waitlist-choice:has(input:checked) {
+  background: rgba(25, 151, 178, 0.2);
+  border-color: rgba(54, 220, 255, 0.75);
+}
+
+.waitlist-choice input {
+  flex: none;
+  margin: 0;
+  accent-color: #36dcff;
+}
+
+.waitlist-submit,
+.waitlist-again {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04rem;
+  border-radius: 0.42rem;
+  cursor: pointer;
+}
+
+.waitlist-submit {
+  color: #03141b;
+  background: #36dcff;
+  border: 1px solid #36dcff;
+}
+
+.waitlist-submit:hover,
+.waitlist-submit:focus-visible {
+  background: #7ae9ff;
+  outline: none;
+}
+
+.waitlist-again {
+  margin-top: 0.5rem;
+  color: rgba(215, 231, 235, 0.85);
+  background: transparent;
+  border: 1px solid rgba(100, 200, 220, 0.3);
+}
+
+.waitlist-consent,
+.waitlist-unavailable,
+.waitlist-joined p {
+  color: rgba(199, 225, 231, 0.62);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.waitlist-joined {
+  margin-top: 0.85rem;
+}
+
+.waitlist-joined p,
+.waitlist-unavailable {
+  margin-top: 0.85rem;
+  color: rgba(215, 231, 235, 0.82);
+  font-size: 0.78rem;
+}
+
+.waitlist-joined p { margin-top: 0; }
+
+/* Same arbitration as the first-run launcher: a surface that claims the
+   screen (a recording, the cockpit, a scene) must not carry this card. */
+body.ui-clean-view #waitlist-card,
+body.recording-mode #waitlist-card,
+body.cockpit-mode #waitlist-card,
+body.scene-playback-mode #waitlist-card {
+  display: none;
+}
+
+@media (max-width: 620px) {
+  #waitlist-card {
+    top: auto;
+    bottom: 5.8rem;
+    max-height: calc(100dvh - 7rem);
+    padding: 0.9rem;
+    transform: translate(-50%, 0);
+    animation-name: waitlist-card-in-phone;
+  }
+  .waitlist-usage { grid-template-columns: 1fr; }
+}
+
+@keyframes waitlist-card-in-phone {
+  from { opacity: 0; transform: translate(-50%, 0.8rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #waitlist-card { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════
    DOSSIER COMPARABLES — the one panel where a reader types
    ═══════════════════════════════════════════════
