@@ -25,14 +25,33 @@
  * `enableLook` goes too: it is bound to middle-drag and CTRL+drag, neither of
  * which a touchscreen can produce, and leaving it on costs a branch per frame.
  *
- * ── THE INERTIAS, AND WHY LOWER ─────────────────────────────────────────────
+ * ── THE PINCH, AND WHY THREE TIMES FASTER ───────────────────────────────────
+ *
+ * Cesium moves the camera by `zoomFactor × distance × Δ / canvasHeight`, where
+ * Δ is the change in finger spacing MULTIPLIED BY 0.25 (ScreenSpaceEventHandler
+ * scales the pinch before anyone sees it). Integrated over a gesture, the
+ * camera distance is divided by exp(zoomFactor × 0.25 × Δspacing / height).
+ * With Cesium's 5, on an 800 px tall phone, spreading two fingers from 150 to
+ * 300 px brings the camera 1.26× closer. A map app brings it 2× closer — the
+ * spacing doubled — and that gap is the owner's field report of 2026-09-17:
+ * three or four pinches to do what one does anywhere else.
+ * `TOUCH_ZOOM_FACTOR` closes it: 15 makes that same pinch 2.0× (see the
+ * constant for the arithmetic). The wheel is not affected: this profile is
+ * never applied to a session with a cursor.
+ *
+ * ── THE INERTIAS ────────────────────────────────────────────────────────────
  *
  * Cesium damps 0.9 / 0.9 / 0.8, tuned so a flick of a mouse keeps gliding.
- * A finger that has lifted off the glass is a finger that has STOPPED, and the
- * globe continuing without it reads as the app fighting the reader — the same
- * complaint that makes momentum scrolling feel wrong when it overshoots. 0.7 /
- * 0.7 / 0.6 keeps enough glide to feel alive and lands roughly where the finger
- * left.
+ * Zoom is damped harder (0.6): a pinch that keeps going after the fingers
+ * stopped overshoots the street the reader was aiming at.
+ *
+ * Spin is the one that carries a one-finger PAN in 3D (`update3D` routes the
+ * drag through `spin3D`, and `inertiaTranslate` only serves 2D and Columbus
+ * view). Cesium replays it only after a THROW — a press released within
+ * 0.4 s — so it never moves a finger that dragged and stopped. It was 0.7,
+ * which carries a throw for 0.13 s (glide = speed / ((1 − k) × 25)): a flick
+ * that barely travels, and the second half of the same field report. 0.85
+ * carries it 0.27 s, the distance a map app's fling covers.
  *
  * ── WHY THIS IS CALLED ONCE, AT BOOT, AND NEVER AGAIN ───────────────────────
  *
@@ -69,7 +88,19 @@ export const TOUCH_MIN_ZOOM_DISTANCE_M = 40;
 export const TOUCH_MAX_ZOOM_DISTANCE_M = GLOBE_VIEW.heightM * 1.5;
 
 /** Damping factors, lower than Cesium's mouse-tuned defaults. */
-export const TOUCH_INERTIA = Object.freeze({ spin: 0.7, translate: 0.7, zoom: 0.6 });
+export const TOUCH_INERTIA = Object.freeze({ spin: 0.85, translate: 0.7, zoom: 0.6 });
+
+/**
+ * Pinch speed, three times Cesium's 5.
+ *
+ * Solved for "a pinch that doubles the finger spacing halves the distance",
+ * at the spacing a thumb and finger actually use (150 → 300 px) on an 800 px
+ * tall canvas: ln 2 × 800 / (0.25 × 150) = 14.8. The rule is only exact at
+ * that spacing — Cesium reads the CHANGE in spacing, not its ratio — so a
+ * wider pinch runs a little ahead of a map app and a tighter one a little
+ * behind.
+ */
+export const TOUCH_ZOOM_FACTOR = 15;
 
 /**
  * Apply the touch camera profile. A no-op for a cursor, by design.
@@ -95,6 +126,7 @@ export function applyTouchCameraProfile(scene, options = {}) {
   controller.inertiaSpin = TOUCH_INERTIA.spin;
   controller.inertiaTranslate = TOUCH_INERTIA.translate;
   controller.inertiaZoom = TOUCH_INERTIA.zoom;
+  controller.zoomFactor = TOUCH_ZOOM_FACTOR;
   controller.minimumZoomDistance = TOUCH_MIN_ZOOM_DISTANCE_M;
   controller.maximumZoomDistance = TOUCH_MAX_ZOOM_DISTANCE_M;
   return true;

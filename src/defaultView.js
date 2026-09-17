@@ -21,6 +21,12 @@ import { roadFetchTier, lookAtGroundPoint, tierFetchBox } from './data/trafficBo
  * `approachAltitudeM` is also the height `photorealAdoption.js` treats as
  * "arrived over a city" and the one `groundHeight` stops paying for terrain
  * samples at; changing it moves three things, not one.
+ *
+ * A phone lands at the same point and height but straight down, north up
+ * (`src/topDownView.js`), so it looks at the point itself rather than a
+ * kilometre north-west of it. The cell below is the desktop's: a phone boots
+ * with no layer on, and one that restored the traffic layer asks for a cell
+ * the warmer does not pay for.
  */
 export const DEFAULT_CITY_VIEW = Object.freeze({
   label: 'Paris',

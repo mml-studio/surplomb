@@ -59,6 +59,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   taille du pied.
 
 ### Fixed
+- **Sur téléphone, le globe s'ouvrait incliné à -30°, et un pincement zoomait à
+  peine.** Le haut d'un écran portrait n'était que de l'horizon, avec les noms
+  de rue écrasés, et rien ne permettait de redresser la vue : le tangage à deux
+  doigts est délié exprès. Un téléphone arrive maintenant à la verticale, nord
+  en haut, comme une application de cartes : au démarrage (au-dessus de la tour
+  Eiffel et non plus un kilomètre au nord-ouest), sur « Autour de moi » (600 m
+  au lieu de 1 200 m, la hauteur du démarrage), sur un lieu, une recherche, un
+  feu ou un navire cliqué. Un lien partagé garde l'angle de son auteur. Le
+  pincement est trois fois plus rapide : écarter les doigts de 150 à 300 px
+  rapproche la caméra 1,84 fois au lieu de 1,23 (mesuré,
+  `npm run qa:phone-top-down`), et un lancer du doigt glisse 0,27 s au lieu de
+  0,13 s. Ordinateur et tablette ne changent pas.
 - **Le HUD vidait l'essai avant que le visiteur touche au micro.** Il demande
   un résumé à chaque nouvelle vue, et chaque résumé coûte un essai : environ
   75 s d'exploration épuisaient les cinq, et le micro ouvrait « Essai terminé »

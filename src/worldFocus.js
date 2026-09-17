@@ -3,6 +3,7 @@
  */
 import * as Cesium from 'cesium';
 import { VESSEL_STANDOFF } from './data/vesselStandoff.js';
+import { TOP_DOWN_VIEW, prefersTopDownView } from './topDownView.js';
 
 export const WORLD_FOCUS_REQUEST_EVENT = 'gev:world-request-focus';
 export const WORLD_CLICK_FOCUS_DURATION_SEC = 1.9;
@@ -89,12 +90,25 @@ export function routeWorldFocusRequest(event, runExplicitFocus, fly) {
   return runExplicitFocus(detail, () => fly(detail));
 }
 
-/** Fly to a world target after ownership has been released. */
-export function flyToWorldTarget(viewer, target = {}) {
+/**
+ * Fly to a world target after ownership has been released.
+ *
+ * The current heading is kept, so the world does not spin under the reader;
+ * on a phone the pitch is straight down and north up (`src/topDownView.js`).
+ * @param {Cesium.Viewer} viewer
+ * @param {object} [target]
+ * @param {{topDown?: boolean}} [options] - Override the session's answer.
+ * @returns {boolean} Whether a flight was started.
+ */
+export function flyToWorldTarget(viewer, target = {}, { topDown = undefined } = {}) {
   const camera = viewer?.camera;
   const framing = WORLD_FOCUS_FRAMING[target.kind];
   if (!camera || !framing || !isValidWorldFocusTarget(target)) return false;
-  const heading = Number.isFinite(camera.heading) ? camera.heading : 0;
+  const straightDown = topDown ?? prefersTopDownView();
+  const heading = straightDown
+    ? Cesium.Math.toRadians(TOP_DOWN_VIEW.headingDeg)
+    : (Number.isFinite(camera.heading) ? camera.heading : 0);
+  const pitchDeg = straightDown ? TOP_DOWN_VIEW.pitchDeg : framing.pitchDeg;
   const duration = target.durationSec > 0
     ? target.durationSec
     : WORLD_CLICK_FOCUS_DURATION_SEC;
@@ -104,7 +118,7 @@ export function flyToWorldTarget(viewer, target = {}) {
     {
       offset: new Cesium.HeadingPitchRange(
         heading,
-        Cesium.Math.toRadians(framing.pitchDeg),
+        Cesium.Math.toRadians(pitchDeg),
         resolveFocusRangeM(target, framing),
       ),
       duration,

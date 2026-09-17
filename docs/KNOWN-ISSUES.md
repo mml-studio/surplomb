@@ -130,6 +130,12 @@ s'approche d'une rue, et rien dans la coquille téléphone ne permet d'y revenir
 `src/touchCamera.js` vide `tiltEventTypes` ; le tangage reste accessible par les
 presets de vue, et une ligne le remet si les testeurs le réclament.
 
+Conséquence, depuis le 2026-09-17 : l'angle d'arrivée est celui que le lecteur
+garde. Un téléphone arrive donc toujours à la verticale, nord en haut
+(`src/topDownView.js`) — démarrage, « Autour de moi », lieux, recherche, feu ou
+navire cliqué. Deux exceptions : un lien partagé restaure l'angle de son auteur,
+et le travelling d'itinéraire comme l'orbite gardent le leur.
+
 Ce que la coquille téléphone ne porte pas — CCTV, cockpit, scène, radio,
 DISPLAY, presets visuels, pliables, tablette en paysage sous 600 px — est listé
 en tête de ce document, avec la raison de chaque trou.
@@ -191,7 +197,7 @@ Android (Chrome) doivent cocher :
   d'enregistrement s'éteint avec elle ;
 - un appui long sur le globe ne fait apparaître ni menu contextuel ni loupe ;
 - `(pointer: coarse)` sur un iPad **avec trackpad** répond bien `fine` ;
-- le ressenti du pincement et des inerties (0,7 / 0,7 / 0,6) ;
+- le ressenti du pincement (`zoomFactor` 15) et des inerties (0,85 / 0,7 / 0,6) ;
 - la touche de retour du clavier logiciel affiche bien « rechercher » ;
 - la feuille `navigator.share` s'ouvre et le lien rouvre au même endroit ;
 - le prompt de géolocalisation iOS, et « Autour de moi » qui atterrit.

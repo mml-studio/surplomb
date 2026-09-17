@@ -183,7 +183,7 @@ try {
   check(
     'pinch zooms without pitching on a handset, and the desktop controller is untouched',
     phoneCam.tiltCount === 0 && phoneCam.zoomCount === 1 && phoneCam.enableLook === false
-      && phoneCam.inertiaSpin === 0.7 && phoneCam.minimumZoomDistance === 40
+      && phoneCam.inertiaSpin === 0.85 && phoneCam.minimumZoomDistance === 40
       && deskCam.tiltCount > 0 && deskCam.enableLook === true
       && deskCam.inertiaSpin === 0.9 && deskCam.minimumZoomDistance === 1,
     { phone: phoneCam, desktop: deskCam },

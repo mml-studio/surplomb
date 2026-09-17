@@ -10451,6 +10451,8 @@ export class StyleManager {
         fix.lon,
         {
           range,
+          // The desktop angle. A phone flies straight down whatever this says,
+          // and `geolocateRangeM` shortens its range to match (topDownView.js).
           pitch: -30,
           heading: 0,
           buildingHeight: 0,
