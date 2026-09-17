@@ -20,10 +20,16 @@
  * performance claim (three render-blocking round trips on two unresolved
  * origins) and a privacy one (CJUE, 2022) at the same time.
  *
+ * And the case where the font is REFUSED: Firefox Focus's « Bloquer les
+ * polices web », or any content blocker that lists fonts. On 2026-09-17 that
+ * drew `my_locatpublic` across the three round buttons of an iPhone. A phone
+ * page with every font request aborted must show symbols instead
+ * (src/iconFontFallback.js), never a name.
+ *
  * Usage: node scripts/qa-webfonts.mjs [--url http://127.0.0.1:4179]
  */
 import puppeteer from 'puppeteer';
-import { newQaPage } from './lib/qa-first-run.mjs';
+import { newPhoneQaPage, newQaPage, phoneUrl } from './lib/qa-first-run.mjs';
 
 const argv = process.argv.slice(2);
 const url = argv.includes('--url') ? argv[argv.indexOf('--url') + 1] : 'http://127.0.0.1:4179';
@@ -97,6 +103,67 @@ try {
     glyphs.wide.length === 0,
     glyphs.wide.length ? glyphs.wide : { checked: glyphs.measured.length },
   );
+  const standInsDrawn = await page.evaluate(() => document.documentElement.getAttribute('data-icon-font'));
+  check('with the font served, no stand-in is drawn', standInsDrawn === null, { standInsDrawn });
+  await page.close();
+
+  // ── The font refused ─────────────────────────────────────────────────────
+  const phone = await newPhoneQaPage(browser);
+  await phone.setRequestInterception(true);
+  phone.on('request', (req) => {
+    if (req.resourceType() === 'font') req.abort('blockedbyclient');
+    else req.continue();
+  });
+  await phone.goto(phoneUrl(url), { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  const deadline = Date.now() + 30_000;
+  let marked = null;
+  while (Date.now() < deadline) {
+    marked = await phone.evaluate(() => document.documentElement.getAttribute('data-icon-font'));
+    if (marked) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  check('a refused icon font is noticed', marked === 'missing', { marked });
+
+  const refused = await phone.evaluate(() => {
+    const icons = [...document.querySelectorAll('.material-symbols-outlined')];
+    const words = icons
+      .map((node) => (node.textContent || '').trim())
+      .filter((text) => /^[a-z0-9_]+$/.test(text));
+    const corner = [...document.querySelectorAll('#top-center-actions button:not([hidden]) .material-symbols-outlined')]
+      .map((node) => {
+        const icon = node.getBoundingClientRect();
+        const button = node.closest('button').getBoundingClientRect();
+        return {
+          text: node.textContent,
+          name: node.getAttribute('data-icon-name'),
+          width: Math.round(icon.width),
+          fits: icon.left >= button.left - 0.5 && icon.right <= button.right + 0.5,
+        };
+      });
+    return { icons: icons.length, words: [...new Set(words)], corner };
+  });
+  check(
+    'no icon draws its own name',
+    refused.icons >= 10 && refused.words.length === 0,
+    { icons: refused.icons, words: refused.words },
+  );
+  check(
+    'the corner buttons hold a symbol inside their circle',
+    refused.corner.length >= 1 && refused.corner.every((icon) => icon.fits && icon.name),
+    refused.corner,
+  );
+
+  // The cockpit toggles write names long after boot; they must be converted.
+  const rewritten = await phone.evaluate(async () => {
+    const node = document.querySelector('#reset-globe-view .material-symbols-outlined');
+    const before = node.textContent;
+    node.textContent = 'close';
+    await new Promise((r) => setTimeout(r, 50));
+    const after = node.textContent;
+    node.textContent = before;
+    return after;
+  });
+  check('a name written after boot becomes a symbol too', rewritten === '✕', { rewritten });
 } finally {
   await browser.close();
 }

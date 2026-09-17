@@ -70,6 +70,19 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The icon font was refused (Firefox Focus « Bloquer les polices web ») or
+   never arrived: src/iconFontFallback.js has put a Unicode symbol in each
+   icon, and the system draws it. Without this the symbol would ask the
+   missing face first and fall through to the serif. */
+html[data-icon-font="missing"] .material-symbols-outlined {
+  font-family: system-ui, -apple-system, 'Apple Symbols', 'Segoe UI Symbol', sans-serif;
+  font-feature-settings: normal;
+  -webkit-font-feature-settings: normal;
+  font-variation-settings: normal;
+  min-width: 1em;
+  text-align: center;
+}
+
 /* ── Cesium Container ─────────────────────────── */
 #cesiumContainer {
   width: 100%;
