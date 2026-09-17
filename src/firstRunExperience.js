@@ -36,6 +36,13 @@ export const FIRST_RUN_STORAGE_KEY = 'gev:first-run-mission:v1';
 /** Per-session dismissal. Written by every close; scoped to sessionStorage. */
 export const FIRST_RUN_SESSION_KEY = 'gev:first-run-mission-session:v1';
 
+/**
+ * This browser's A/B draw (src/firstRunAb.js): `{variant, assignedAt,
+ * visitorId}` as JSON. Written only while the hosted experiment runs, and
+ * removed on the first boot after it stops.
+ */
+export const FIRST_RUN_VARIANT_KEY = 'gev:first-run-variant:v1';
+
 /** The variants, in the order the experiment names them. A is the default. */
 export const FIRST_RUN_VARIANT_IDS = Object.freeze(['A', 'B', 'C']);
 
@@ -198,6 +205,45 @@ export function setFirstRunSuppressed(suppressed, storage) {
   return suppressed
     ? writeStored('local', storage, FIRST_RUN_STORAGE_KEY, 'suppressed')
     : removeStored('local', storage, FIRST_RUN_STORAGE_KEY);
+}
+
+/**
+ * Has a close already been recorded durably in this browser? A returning
+ * visitor, as far as the card is concerned.
+ * @param {{getItem: Function}|null} [storage]
+ * @returns {boolean}
+ */
+export function isFirstRunSuppressed(storage) {
+  return readStored('local', storage, FIRST_RUN_STORAGE_KEY) === 'suppressed';
+}
+
+/**
+ * The stored A/B draw, raw (the caller parses and validates it).
+ * @param {{getItem: Function}|null} [storage]
+ * @returns {string|null}
+ */
+export function readFirstRunVariantRecord(storage) {
+  return readStored('local', storage, FIRST_RUN_VARIANT_KEY);
+}
+
+/**
+ * Store the A/B draw. Best-effort, and REPORTED: a draw that cannot be kept
+ * would be re-rolled on every visit, so the caller stops measuring instead.
+ * @param {string} text
+ * @param {{setItem: Function}|null} [storage]
+ * @returns {boolean}
+ */
+export function writeFirstRunVariantRecord(text, storage) {
+  return writeStored('local', storage, FIRST_RUN_VARIANT_KEY, text);
+}
+
+/**
+ * Forget the A/B draw — the rollback path when the experiment is switched off.
+ * @param {{removeItem: Function}|null} [storage]
+ * @returns {boolean}
+ */
+export function clearFirstRunVariantRecord(storage) {
+  return removeStored('local', storage, FIRST_RUN_VARIANT_KEY);
 }
 
 /**
