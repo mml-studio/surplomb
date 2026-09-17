@@ -24,15 +24,19 @@
  */
 
 /**
- * Each field, the variable that carries it, and whether the page is lawful
- * without it. `registration` is optional because an individual who is not
- * registered with the RCS or the RM has no number to show.
+ * Each field, the variable that carries it, and whether the page renders as
+ * complete without it. `registration` is optional because an individual who
+ * is not registered with the RCS or the RM has no number to show.
+ *
+ * `phone` is optional by the operator's choice, NOT by the law: art. 1-1 I
+ * asks a publisher for one. Left out, the row is simply absent — the page
+ * does not pretend otherwise, and `docs/DEPLOY.md` says what it costs.
  */
 export const LEGAL_FIELDS = Object.freeze([
   Object.freeze({ key: 'publisher', env: 'GEV_LEGAL_PUBLISHER', required: true }),
   Object.freeze({ key: 'registration', env: 'GEV_LEGAL_REGISTRATION', required: false }),
   Object.freeze({ key: 'address', env: 'GEV_LEGAL_ADDRESS', required: true }),
-  Object.freeze({ key: 'phone', env: 'GEV_LEGAL_PHONE', required: true }),
+  Object.freeze({ key: 'phone', env: 'GEV_LEGAL_PHONE', required: false }),
   Object.freeze({ key: 'email', env: 'GEV_LEGAL_EMAIL', required: true }),
   Object.freeze({ key: 'director', env: 'GEV_LEGAL_DIRECTOR', required: true }),
   Object.freeze({ key: 'hosting', env: 'GEV_LEGAL_HOSTING', required: true }),
@@ -123,7 +127,7 @@ export function renderLegalBlocks(notice) {
     row('Éditeur', escapeHtml(notice.publisher)),
     notice.registration ? row('Immatriculation', escapeHtml(notice.registration)) : '',
     row('Adresse', escapeHtml(notice.address)),
-    row('Téléphone', telLink(notice.phone)),
+    notice.phone ? row('Téléphone', telLink(notice.phone)) : '',
     row('Courriel', mailLink(notice.email)),
     row('Directeur de la publication', escapeHtml(notice.director)),
   ].join('');

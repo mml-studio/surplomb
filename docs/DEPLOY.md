@@ -806,7 +806,7 @@ public and forkable (`src/legalNotice.js` says why). It comes from `.env`:
 GEV_LEGAL_PUBLISHER=<legal name, form and share capital, or a person's name>
 GEV_LEGAL_REGISTRATION=<RCS / SIREN line — optional for an unregistered individual>
 GEV_LEGAL_ADDRESS=<registered office, or home address for an individual>
-GEV_LEGAL_PHONE=<phone>
+GEV_LEGAL_PHONE=<phone — optional here, required by the law>
 GEV_LEGAL_EMAIL=<contact address — also the one for GDPR requests>
 GEV_LEGAL_DIRECTOR=<publication director>
 GEV_LEGAL_HOSTING=<host, address, phone> | <each other storage provider>
@@ -832,6 +832,10 @@ ssh -t vps 'cd /opt/gev && cp .env .env.bak-$(date +%F)-legal && $EDITOR .env &&
 curl -s https://surplomb.app/healthz          # "legal": true
 curl -s https://surplomb.app/mentions-legales | grep -c 'class="missing'   # 0
 ```
+
+`GEV_LEGAL_PHONE` is the one field the page renders without although the
+law asks for it (art. 1-1 I): leaving it out is an operator's decision, taken
+for this box on 2026-09-17, and the row simply does not appear.
 
 `"legal": false` means at least one required variable is empty; the page
 itself lists which, and a public origin (`GEV_PUBLIC_HOST` set) logs

@@ -29,8 +29,10 @@ test('an instance that sets nothing is incomplete, and says which variables', ()
     notice.missing,
     LEGAL_FIELDS.filter((f) => f.required).map((f) => f.env),
   );
-  // An unregistered individual has no number to show; the page is lawful without it.
+  // An unregistered individual has no number to show; the phone is the
+  // operator's call. Neither holds the page back.
   assert.ok(!notice.missing.includes('GEV_LEGAL_REGISTRATION'));
+  assert.ok(!notice.missing.includes('GEV_LEGAL_PHONE'));
 });
 
 test('a full identity is complete, and the providers split on the pipe only', () => {
@@ -53,6 +55,17 @@ test('a configured page carries the identity and no fallback', () => {
   assert.doesNotMatch(html, /<!--\/?gev:/, 'every marker is consumed');
 });
 
+test('an instance may leave the phone out, and the row goes with it', () => {
+  const { GEV_LEGAL_PHONE, ...noPhone } = FULL_ENV;
+  const notice = legalNoticeFromEnv(noPhone);
+  assert.equal(notice.complete, true);
+  const html = renderLegalPage(page('mentions-legales.html'), noPhone);
+  assert.doesNotMatch(html, /Téléphone/);
+  assert.doesNotMatch(html, /tel:/);
+  assert.match(html, /Exemple SAS/);
+  assert.doesNotMatch(html, /class="missing/);
+});
+
 test('the environment is text, never markup', () => {
   const html = renderLegalPage(page('mentions-legales.html'), {
     ...FULL_ENV,
@@ -65,10 +78,10 @@ test('the environment is text, never markup', () => {
 });
 
 test('an incomplete identity keeps the fallback visible and names what is missing', () => {
-  const { GEV_LEGAL_PHONE, ...partial } = FULL_ENV;
+  const { GEV_LEGAL_ADDRESS, ...partial } = FULL_ENV;
   const html = renderLegalPage(page('mentions-legales.html'), partial);
   assert.match(html, /Cette instance n’a pas renseigné son éditeur/);
-  assert.match(html, /Variables manquantes : <code>GEV_LEGAL_PHONE<\/code>/);
+  assert.match(html, /Variables manquantes : <code>GEV_LEGAL_ADDRESS<\/code>/);
   // Half an identity must not look like a finished one.
   assert.doesNotMatch(html, /Exemple SAS/);
 });
