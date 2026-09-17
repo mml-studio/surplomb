@@ -44,7 +44,8 @@ import {
 import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
 import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
-import { initFirstRunExperience } from './firstRunExperience.js';
+import { startFirstRunExperience } from './firstRunBoot.js';
+import { trialProbe } from './trialProbe.js';
 import { WAITLIST_OPEN_EVENT, requestWaitlistCard } from './trialRefusal.js';
 import { loadVoicePremium, markVoicePremiumSpent } from './voicePremium.js';
 import { whenIdle } from './whenIdle.js';
@@ -104,6 +105,11 @@ async function init() {
 
   try {
     loaderStatus.textContent = 'Configuring viewer...';
+
+    // The page's one `/api/trial` read, started now: the voice crown needs it
+    // at idle, and the first-run card needs it before it shows anything (it
+    // says whether the hosted A/B test runs). See src/trialProbe.js.
+    void trialProbe.read();
 
     // Set Cesium Ion token for World Terrain
     const cesiumToken = import.meta.env.CESIUM_ION_TOKEN;
@@ -610,7 +616,7 @@ async function init() {
     // The crown on the mic, where voice is sold (src/voicePremium.js): one
     // small request once the boot burst has drained — nobody is waiting on it,
     // and a phone gets it too, since its voice stack loads only on a tap.
-    whenIdle(() => { void loadVoicePremium(); }, 4_000);
+    whenIdle(() => { void loadVoicePremium({ probe: trialProbe }); }, 4_000);
 
     // Keep startup chrome truthful: a share is not restored until camera,
     // visual/map/panel lanes, and every requested layer have terminated.
@@ -640,9 +646,10 @@ async function init() {
         // it, and reaching for styleManager._dataManager would make a private
         // field part of this feature's contract. `phoneSheet` is the sheet
         // controller built further down (variant C opens its Recherche tab);
-        // this callback runs long after that line.
+        // this callback runs long after that line. Which variant, and whether
+        // it is measured, is src/firstRunBoot.js's call.
         whenBootFlightEnds(() => {
-          initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });
+          void startFirstRunExperience({ styleManager, dataManager, phoneSheet, probe: trialProbe });
         });
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
