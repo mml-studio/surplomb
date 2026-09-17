@@ -692,7 +692,9 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   bridge gateway — Tailscale masquerades forwarded traffic), so an address
   rule would exempt every visitor. The secret stays on the VPS; SSH is the
   only way to a link, and the `vps` alias goes over Tailscale. **Revoke**
-  every pass by replacing the secret and redeploying. The privacy page does
+  every pass by replacing the secret and redeploying. `Domain=surplomb.app`
+  also sends the cookie to any future subdomain: do not point one at a third
+  party without narrowing it. The privacy page does
   not list the cookie: no visitor ever receives it. The redemption is
   logged as `[trial] owner pass issued`.
 - **What the page sees.** A 429 whose body carries `quota: "exhausted"`,

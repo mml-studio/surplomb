@@ -389,7 +389,7 @@ test('the route: 404 where passes are off, one button on GET, one cookie on POST
   const on = ownerConfig();
   const redeemed = new Map();
   const t = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, OWNER_SECRET);
-  const options = { now: NOW, redeemed, makeId: () => 'issued-pass-id-0001' };
+  const options = { clock: () => NOW, redeemed, makeId: () => 'issued-pass-id-0001' };
 
   const page = fakeResponse();
   await handleOwnerPass(ownerRequest({ url: `/?t=${t}` }), page, on, options);
@@ -428,7 +428,7 @@ test('the route: 404 where passes are off, one button on GET, one cookie on POST
 
 test('the route refuses what was not minted here, and what is too big to be a link', async () => {
   const on = ownerConfig();
-  const options = { now: NOW, redeemed: new Map() };
+  const options = { clock: () => NOW, redeemed: new Map() };
   const refused = async (req) => {
     const res = fakeResponse();
     await handleOwnerPass(req, res, on, options);
@@ -449,4 +449,31 @@ test('the route refuses what was not minted here, and what is too big to be a li
   const res = fakeResponse();
   await handleOwnerPass(ownerRequest({ method: 'POST', body: `t=${good}` }), res, on, options);
   assert.equal(res.statusCode, 303);
+});
+
+test('a POST is judged when its body has arrived, not when it opened', async () => {
+  const on = ownerConfig();
+  const redeemed = new Map();
+  let now = NOW;
+  const options = { clock: () => now, redeemed, makeId: () => 'issued-pass-id-0002' };
+  const t = signOwnerLink({ expiresAt: NOW + 60, nonce: PASS_ID }, OWNER_SECRET);
+
+  // The owner redeems the link; a later redemption prunes it once expired.
+  const owner = fakeResponse();
+  await handleOwnerPass(ownerRequest({ method: 'POST', body: `t=${t}` }), owner, on, options);
+  assert.equal(owner.statusCode, 303);
+
+  // A copy of the link whose body trickles in past the expiry.
+  const held = ownerRequest({ method: 'POST' });
+  held[Symbol.asyncIterator] = async function* trickle() {
+    now = NOW + 120;
+    const later = signOwnerLink({ expiresAt: now + 60, nonce: 'another-nonce-0001' }, OWNER_SECRET);
+    await handleOwnerPass(ownerRequest({ method: 'POST', body: `t=${later}` }), fakeResponse(), on, options);
+    assert.equal(redeemed.has(PASS_ID), false, 'the expired nonce was pruned');
+    yield Buffer.from(`t=${t}`);
+  };
+  const res = fakeResponse();
+  await handleOwnerPass(held, res, on, options);
+  assert.equal(res.statusCode, 410);
+  assert.equal(res.getHeader('Set-Cookie'), undefined);
 });

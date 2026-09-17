@@ -592,11 +592,12 @@ async function readFormToken(req) {
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {ReturnType<typeof resolveTrialConfig>} config
- * @param {{now?: number, redeemed?: Map<string, number>, makeId?: () => string}} [options]
+ * @param {{clock?: () => number, redeemed?: Map<string, number>, makeId?: () => string}} [options]
+ *   `clock` gives Unix seconds.
  * @returns {Promise<void>}
  */
 export async function handleOwnerPass(req, res, config, {
-  now = nowSeconds(),
+  clock = nowSeconds,
   redeemed = redeemedOwnerNonces,
   makeId = () => randomBytes(18).toString('base64url'),
 } = {}) {
@@ -610,14 +611,14 @@ export async function handleOwnerPass(req, res, config, {
     return;
   }
   const secret = config.ownerSecret;
-  const usable = (token) => {
+  const usable = (token, now) => {
     const link = verifyOwnerLink(token, secret, now);
     return link && !redeemed.has(link.nonce) ? link : null;
   };
 
   if (req.method === 'GET' || req.method === 'HEAD') {
     const token = new URL(req.url || '/', 'http://owner.invalid').searchParams.get('t');
-    if (!usable(token)) {
+    if (!usable(token, clock())) {
       ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
       return;
     }
@@ -637,7 +638,12 @@ export async function handleOwnerPass(req, res, config, {
     return;
   }
 
-  const link = usable(await readFormToken(req).catch(() => null));
+  const token = await readFormToken(req).catch(() => null);
+  // The time is read AFTER the body: a POST held open past the link's expiry
+  // would otherwise be judged at its start, against a used-list that has
+  // since forgotten the link.
+  const now = clock();
+  const link = usable(token, now);
   if (!link) {
     console.warn('[trial] owner link refused');
     ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
