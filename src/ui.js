@@ -2343,7 +2343,7 @@ export class StyleManager {
    * @param {Cesium.Viewer} viewer - The CesiumJS viewer instance.
    * @param {object} [options]
    */
-  constructor(viewer, { mapStackController = null } = {}) {
+  constructor(viewer, { mapStackController = null, initialShare = null } = {}) {
     this.viewer = viewer;
     this.mapStackController = mapStackController;
     this.stages = {};
@@ -2827,7 +2827,13 @@ export class StyleManager {
     // Parse before panel chrome initializes so every valid share URL starts
     // from deterministic markup defaults instead of recipient-local panel
     // preferences. Encoded panel fields are applied after all panels exist.
-    this._initialShareState = this.shareLinkManager.parseInitialHash();
+    // `initialShare` is the showcase's hand-off (src/vitrine/handoff.js): a
+    // share hash that was never in the address. Everything else reads the live
+    // one, exactly as before.
+    this._initialShareState = this.shareLinkManager.parseInitialHash(
+      initialShare?.hash ?? window.location.hash,
+      initialShare ?? {},
+    );
 
     this._detectionBtn = document.getElementById('detection-toggle');
     this._models3dBtn = document.getElementById('models3d-toggle');

@@ -24,6 +24,26 @@
       "bytes": 40480
     },
     {
+      "role": "manrope-latin-ext",
+      "file": "manrope-latin-ext.ce093b34.woff2",
+      "bytes": 15240
+    },
+    {
+      "role": "manrope-latin",
+      "file": "manrope-latin.e310b55a.woff2",
+      "bytes": 24576
+    },
+    {
+      "role": "dm-sans-latin-ext",
+      "file": "dm-sans-latin-ext.219b02c7.woff2",
+      "bytes": 18192
+    },
+    {
+      "role": "dm-sans-latin",
+      "file": "dm-sans-latin.468d56b6.woff2",
+      "bytes": 36980
+    },
+    {
       "role": "icons",
       "file": "material-symbols-outlined-subset.4c3b7bc1.woff2",
       "bytes": 3840

@@ -57,6 +57,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FIRST_RUN_SESSION_KEY, FIRST_RUN_STORAGE_KEY } from '../../src/firstRunExperience.js';
 import { PHOTOREAL_DISABLE_GLOBAL } from '../../src/photorealTileset.js';
+import { VITRINE_SKIP_GLOBAL } from '../../src/vitrine/gate.js';
 
 const SCRIPTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -66,13 +67,20 @@ export const FIRST_RUN_LAUNCHER_SELECTOR = '#first-run-launcher';
 /**
  * Install the suppression on a page, for this navigation and every one after.
  *
+ * It also takes the SHOWCASE out of the way (the page a first visitor gets at
+ * the bare root, src/vitrine/gate.js): every harness is a first visitor, and
+ * without this each one that opens `/` would land on a scrolling brochure with
+ * no globe behind it. Same window-flag mechanism as the photoreal switch, and
+ * in the same install, so the fleet pays one script per page as before.
+ * `vitrine: true` keeps the showcase — for the harness whose subject it is.
+ *
  * @param {import('puppeteer').Page} page
- * @param {{durable?: boolean}} [options] `durable: true` also writes the
- *   durable key every close writes — only for a harness that clears session
- *   storage itself and still needs the card gone.
+ * @param {{durable?: boolean, vitrine?: boolean}} [options] `durable: true`
+ *   also writes the durable key every close writes — only for a harness that
+ *   clears session storage itself and still needs the card gone.
  * @returns {Promise<import('puppeteer').Page>} the same page, for chaining.
  */
-export async function suppressFirstRun(page, { durable = false } = {}) {
+export async function suppressFirstRun(page, { durable = false, vitrine = false } = {}) {
   await page.evaluateOnNewDocument((keys) => {
     // Storage can be blocked (private mode, hardened profiles). A harness that
     // cannot write it will simply see the card, which the launcher probe below
@@ -81,7 +89,25 @@ export async function suppressFirstRun(page, { durable = false } = {}) {
     if (keys.durable) {
       try { window.localStorage.setItem(keys.durable, 'suppressed'); } catch { /* no storage */ }
     }
-  }, { session: FIRST_RUN_SESSION_KEY, durable: durable ? FIRST_RUN_STORAGE_KEY : null });
+    if (keys.skipVitrine) window[keys.skipVitrine] = true;
+  }, {
+    session: FIRST_RUN_SESSION_KEY,
+    durable: durable ? FIRST_RUN_STORAGE_KEY : null,
+    skipVitrine: vitrine ? null : VITRINE_SKIP_GLOBAL,
+  });
+  return page;
+}
+
+/**
+ * Open the cockpit at the bare root on a page that does NOT get the first-run
+ * suppression (`scripts/qa-firstrun.mjs`, whose subject is the card).
+ * @param {import('puppeteer').Page} page
+ * @returns {Promise<import('puppeteer').Page>}
+ */
+export async function skipVitrine(page) {
+  await page.evaluateOnNewDocument((flag) => {
+    window[flag] = true;
+  }, VITRINE_SKIP_GLOBAL);
   return page;
 }
 
@@ -167,9 +193,10 @@ export const QA_WAIT_POLLING_MS = 50;
  * measures something against Google's 3D surface.
  *
  * @param {import('puppeteer').Browser} browser
- * @param {{durable?: boolean, photoreal?: boolean}} [options] `durable` is
- *   passed to {@link suppressFirstRun}; `photoreal: true` opts this run back
- *   into the 3D globe, at the cost of one billed ion root tile.
+ * @param {{durable?: boolean, photoreal?: boolean, vitrine?: boolean}} [options]
+ *   `durable` and `vitrine` are passed to {@link suppressFirstRun};
+ *   `photoreal: true` opts this run back into the 3D globe, at the cost of one
+ *   billed ion root tile.
  * @returns {Promise<import('puppeteer').Page>}
  */
 export async function newQaPage(browser, options = {}) {

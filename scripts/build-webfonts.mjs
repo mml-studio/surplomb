@@ -65,6 +65,10 @@ const CODEPOINTS_URL = 'https://raw.githubusercontent.com/google/material-design
 const FAMILIES = [
   { slug: 'inter', query: 'family=Inter:wght@300..600' },
   { slug: 'jetbrains-mono', query: 'family=JetBrains+Mono:wght@300..700' },
+  // The showcase's two faces (landing.css): the designer's, not the cockpit's.
+  // Variable on Google, so one range is one file per block.
+  { slug: 'manrope', query: 'family=Manrope:wght@500..800' },
+  { slug: 'dm-sans', query: 'family=DM+Sans:wght@400..700' },
 ];
 
 /**
@@ -223,12 +227,39 @@ writeFileSync(CSS_PATH, `${out.css.join('\n\n')}\n`);
 // behind it. Their names carry a content hash, so the markup cannot be written
 // by hand — this rewrites it, between markers, and
 // `src/materialSymbolsSubset.test.mjs` fails if the two ever disagree.
-const PRELOAD_ROLES = ['inter-latin', 'jetbrains-mono-latin'];
-const preloads = PRELOAD_ROLES.map((role) => {
+//
+// TWO SURFACES, TWO PAIRS. `index.html` is the showcase for a first visitor
+// and the cockpit for everyone else (src/vitrine/gate.js), and a preload of
+// the other surface's type is ~90 kB spent before the first paint. So the
+// block is a script that reads the `data-vitrine` the gate script has already
+// put on `<html>` (it runs earlier in the head) and inserts the right pair —
+// still ahead of the stylesheet, still at preload priority.
+const PRELOAD_ROLES = Object.freeze({
+  cockpit: ['inter-latin', 'jetbrains-mono-latin'],
+  vitrine: ['manrope-latin', 'dm-sans-latin'],
+});
+const preloadHrefs = (roles) => roles.map((role) => {
   const face = out.files.find((f) => f.role === role);
   if (!face) throw new Error(`no face built for preload role ${role}`);
-  return `  <link rel="preload" href="/fonts/${face.file}" as="font" type="font/woff2" crossorigin />`;
-}).join('\n');
+  return `'/fonts/${face.file}'`;
+}).join(', ');
+const preloads = `  <script>
+    /* fonts:preload — the two faces the first screen of THIS surface sets text in. */
+    (function () {
+      var faces = document.documentElement.hasAttribute('data-vitrine')
+        ? [${preloadHrefs(PRELOAD_ROLES.vitrine)}]
+        : [${preloadHrefs(PRELOAD_ROLES.cockpit)}];
+      for (var i = 0; i < faces.length; i += 1) {
+        var link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'font';
+        link.type = 'font/woff2';
+        link.crossOrigin = 'anonymous';
+        link.href = faces[i];
+        document.head.appendChild(link);
+      }
+    })();
+  </script>`;
 const INDEX_PATH = path.join(REPO_ROOT, 'index.html');
 const html = readFileSync(INDEX_PATH, 'utf8');
 const MARKERS = /( *<!-- fonts:build preload -->\n)[\s\S]*?( *<!-- \/fonts:build preload -->)/;

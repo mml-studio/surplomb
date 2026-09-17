@@ -92,6 +92,7 @@
 
 import fs from 'node:fs';
 import puppeteer from 'puppeteer';
+import { skipVitrine } from './lib/qa-first-run.mjs';
 import { classifyAircraft, CLASS_SCALE_3D, CLASS_MODEL_REAL } from '../src/data/aircraftClass.js';
 import { ensureGeoidReady, geoidHeight } from '../src/data/geoid.js';
 
@@ -249,6 +250,8 @@ async function main() {
 
   try {
     const page = await browser.newPage();
+    // Every run is a first visitor, and the bare root shows them the showcase.
+    await skipVitrine(page);
     await page.setViewport({ width: 1280, height: 800 });
     await page.setRequestInterception(true);
     page.on('request', (request) => {

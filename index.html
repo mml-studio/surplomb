@@ -47,6 +47,40 @@
     })();
   </script>
   <!--
+    LA VITRINE OU LE COCKPIT, DÉCIDÉ AVANT LA FEUILLE DE STYLE.
+
+    `data-vitrine` sur `<html>` dit que la page d'accueil occupe l'écran : le
+    document défile, le chrome du cockpit est masqué, rien du moteur n'est
+    chargé tant que « Ouvrir le globe » n'est pas touché. Même raison que le
+    marqueur d'entrée ci-dessus : posé après le `<link rel="stylesheet">`, il
+    laisserait peindre une image du cockpit avant la vitrine.
+
+    La règle et ses raisons sont dans `src/vitrine/gate.js`, qui porte la même
+    décision pour le JavaScript ; `src/vitrine/gate.test.mjs` EXÉCUTE ce script
+    sur la même matrice et échoue si les deux copies divergent.
+  -->
+  <script>
+    /* vitrine-gate */
+    (function () {
+      var root = document.documentElement;
+      var params = new URLSearchParams(location.search);
+      var forced = params.get('vitrine');
+      var vitrine;
+      if (forced === '1') vitrine = true;
+      else if (forced === '0') vitrine = false;
+      else if (window.__GEV_SKIP_VITRINE__ === true) vitrine = false;
+      else if (String(location.hash).indexOf('=') >= 0) vitrine = false;
+      else if (params.has('q') || params.has('waitlist') || params.has('welcome')) vitrine = false;
+      else {
+        var seen = false;
+        try { seen = window.localStorage.getItem('gev:vitrine-seen:v1') === '1'; } catch (e) { seen = false; }
+        vitrine = !seen;
+      }
+      if (vitrine) root.setAttribute('data-vitrine', '');
+      else root.removeAttribute('data-vitrine');
+    })();
+  </script>
+  <!--
     FENÊTRE DE PRÉ-LANCEMENT — À RETIRER LE 22 SEPTEMBRE 2026.
 
     L'origine est ouverte depuis le 16/09 mais l'annonce est prévue le 22 : sans
@@ -64,8 +98,13 @@
     d'adresse n'a pas vocation à être une porte d'entrée.
   -->
   <meta name="robots" content="noindex" />
-  <title>Surplomb — La France au rayon X</title>
-  <meta name="description" content="Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct. 56 ne demandent aucune clé." />
+  <!--
+    Le titre et la description sont ceux de la VITRINE : c'est la page que lit
+    un moteur (il arrive sans `#`, en premier visiteur). Les balises de la
+    carte de partage, plus bas, sont inchangées.
+  -->
+  <title>Surplomb — La France au rayon X.</title>
+  <meta name="description" content="Tout ce que vous n’auriez jamais pensé à chercher. Ouvrez le globe de la France, sans compte ni installation." />
   <!--
     LA CARTE DE PARTAGE.
 
@@ -135,6 +174,12 @@
   -->
   <link rel="stylesheet" href="/phone.css" />
   <!--
+    LA VITRINE. Même mécanique que `phone.css` : concaténée dans l'unique CSS
+    haché, après les deux autres. Chaque règle est gardée par `#vitrine` ou par
+    `html[data-vitrine]`, donc elle ne touche jamais le cockpit.
+  -->
+  <link rel="stylesheet" href="/landing.css" />
+  <!--
     Fonts are served from this origin, not from Google. Three render-blocking
     stylesheets on two origins the browser had never resolved used to sit in
     front of the first paint, and they pulled 410 kB — 323 kB of it the COMPLETE
@@ -147,13 +192,231 @@
     anything (CJUE, 2022) is the other half of the reason.
   -->
   <!-- fonts:build preload -->
-  <link rel="preload" href="/fonts/inter-latin.c9407645.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/jetbrains-mono-latin.1e06740a.woff2" as="font" type="font/woff2" crossorigin />
+  <script>
+    /* fonts:preload — the two faces the first screen of THIS surface sets text in. */
+    (function () {
+      var faces = document.documentElement.hasAttribute('data-vitrine')
+        ? ['/fonts/manrope-latin.e310b55a.woff2', '/fonts/dm-sans-latin.468d56b6.woff2']
+        : ['/fonts/inter-latin.c9407645.woff2', '/fonts/jetbrains-mono-latin.1e06740a.woff2'];
+      for (var i = 0; i < faces.length; i += 1) {
+        var link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'font';
+        link.type = 'font/woff2';
+        link.crossOrigin = 'anonymous';
+        link.href = faces[i];
+        document.head.appendChild(link);
+      }
+    })();
+  </script>
   <!-- /fonts:build preload -->
   <link rel="stylesheet" href="/fonts/fonts.css" />
 </head>
 <body>
   <div id="cesiumContainer"></div>
+  <!--
+    LA VITRINE — la page d'accueil de surplomb.app, posée dans le document du
+    globe (règle du `#` : `src/vitrine/gate.js`).
+
+    Contrat de dessin : la maquette « Grand angle » (phase 2) et sa spec,
+    `docs/designs/landing/PLAN-EXECUTION.md`. Le fond est une BOUCLE ENREGISTRÉE
+    depuis l'application (photoréel, trafic en détection) : aucun moteur ne
+    tourne derrière la page et aucune session Cesium ion n'est ouverte avant
+    « Ouvrir le globe » (décision de Memel du 2026-09-17).
+
+    Les images du fond n'ont pas de `src` dans le balisage : un `<img>` sous un
+    `display: none` se télécharge quand même, et le cockpit n'a pas à payer le
+    poster. Le petit script qui suit le `<picture>` les pose en mode vitrine
+    seulement. Les vignettes, elles, sont `loading="lazy"` : jamais rendues,
+    jamais demandées.
+
+    `npm run landing:assets` réécrit les chemins `/landing/…` avec l'empreinte
+    de leur contenu (`scripts/build-landing-assets.mjs`).
+  -->
+  <div id="vitrine" class="landing" data-state="poster">
+    <a class="skip" href="#contenu">Aller au contenu</a>
+    <div class="world" aria-hidden="true">
+      <picture class="world-picture">
+        <source type="image/jpeg" media="(min-aspect-ratio: 1/1)" data-srcset="/landing/hero-poster-1280.17f327ee.jpg 1280w, /landing/hero-poster-1600.a1152e51.jpg 1600w" sizes="100vw" />
+        <img class="world-poster" data-srcset="/landing/hero-poster-phone-780.1f17be4d.jpg 780w" sizes="100vw" data-src="/landing/hero-poster-phone-780.1f17be4d.jpg" alt="" fetchpriority="high" decoding="async" />
+      </picture>
+      <script>
+        /* vitrine-poster: the hero picture's sources, set only when the showcase owns the page. */
+        (function () {
+          var root = document.documentElement;
+          if (!root.hasAttribute('data-vitrine')) return;
+          var picture = document.currentScript && document.currentScript.previousElementSibling;
+          if (!picture) return;
+          var nodes = picture.querySelectorAll('[data-srcset]');
+          for (var i = 0; i < nodes.length; i += 1) nodes[i].setAttribute('srcset', nodes[i].getAttribute('data-srcset'));
+          var img = picture.querySelector('img[data-src]');
+          if (img) img.setAttribute('src', img.getAttribute('data-src'));
+          var theme = document.querySelector('meta[name="theme-color"]');
+          if (theme) theme.setAttribute('content', '#F7F4EA');
+        })();
+      </script>
+      <noscript><img class="world-poster" src="/landing/hero-poster-phone-780.1f17be4d.jpg" alt="" /></noscript>
+      <video class="world-video" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1"
+        data-video-wide="/landing/hero-desktop.bf00841f.mp4"
+        data-video-tall="/landing/hero-phone.0f21e25f.mp4"></video>
+    </div>
+    <span class="world-credit">Cesium ion · Google Maps</span>
+
+    <header class="top" id="haut">
+      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut">surplomb</a>
+      <span class="top-slot" aria-hidden="true"></span>
+      <p class="slogan">Aucun<br />angle mort.</p>
+    </header>
+
+    <section class="hero" aria-labelledby="vitrine-title">
+      <div class="hero-copy">
+        <h1 id="vitrine-title">La France<br />au rayon X.</h1>
+        <p class="intro">Tout ce que vous n’auriez jamais pensé à chercher.</p>
+      </div>
+      <p class="hero-place"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>Paris · le trafic, rue par rue</p>
+      <span class="image-credit">Cesium ion · Google Maps</span>
+    </section>
+
+    <main class="content" id="contenu">
+      <section class="panel discover" aria-labelledby="discover-title">
+        <h2 class="section-title" id="discover-title">Tout commence<br />par un lieu.</h2>
+        <p class="public-copy">Les administrations publient.<br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+        <ul class="examples" data-live="examples" aria-label="Des vues à explorer">
+          <li><a href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd" data-example="0">Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=46.6&amp;lon=2.4&amp;alt=1400000&amp;heading=0&amp;pitch=-90&amp;l=2.3" data-example="1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" data-example="2">Le bus qui arrive, en direct.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8" data-example="3">Les voitures qui roulent en ce moment, rue par rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=k" data-example="4">La trottinette libre la plus proche.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <!-- En réserve : le rendu des permis est en correction. Hors du HTML visible, JavaScript ou non. -->
+          <li hidden data-pending="permis"><a href="/#v=2&amp;lat=43.6047&amp;lon=1.4442&amp;alt=2500&amp;heading=30&amp;pitch=-50&amp;l=sd.5" data-example="5">Les permis de construire accordés dans la rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=49.0097&amp;lon=2.5479&amp;alt=9000&amp;heading=20&amp;pitch=-45&amp;l=f.t" data-example="6">L’avion qui passe au-dessus, et d’où il vient.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd.gr" data-example="7">Le risque d’inondation sous le trottoir.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+        </ul>
+        <div class="examples-progress" hidden aria-hidden="true"><span></span></div>
+        <div class="example-controls" hidden>
+          <button class="text-button" type="button" data-examples-pause aria-pressed="false">Mettre en pause</button>
+          <button class="text-button" type="button" data-examples-next>Autre exemple <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <span class="example-index" data-examples-index></span>
+        </div>
+      </section>
+
+      <!-- Aucun chiffre de démonstration : le groupe et ses entrées restent masqués tant qu'aucune valeur positive n'est reçue (PR 2). -->
+      <section class="panel counter-panel" data-live="counters" hidden aria-labelledby="counter-title">
+        <h2 class="section-title" id="counter-title">En ce moment<br />au-dessus de la France</h2>
+        <dl>
+          <div class="counter" data-value="" hidden><dt>Avions</dt><dd data-live="counter:avions"></dd></div>
+          <div class="counter" data-value="" hidden><dt>Navires</dt><dd data-live="counter:navires"></dd></div>
+          <div class="counter" data-value="" hidden><dt>Bus et trams</dt><dd data-live="counter:bus"></dd></div>
+          <div class="counter" data-value="" hidden><dt>Stations météo qui émettent</dt><dd data-live="counter:meteo"></dd></div>
+        </dl>
+      </section>
+
+      <section class="panel gallery" aria-labelledby="gallery-title">
+        <h2 class="section-title" id="gallery-title">Choisissez une vue.</h2>
+        <div class="gallery-grid">
+          <a class="view" data-view="01" href="/#v=2&amp;lat=49.0097&amp;lon=2.5479&amp;alt=9000&amp;heading=20&amp;pitch=-45&amp;l=f.t">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-01-480.8b416624.jpg" srcset="/landing/view-01-480.8b416624.jpg 480w, /landing/view-01-960.89dc71e0.jpg 960w, /landing/view-01-1440.de35a789.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Roissy et les avions en approche</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+          <a class="view" data-view="02" href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-02-480.9b559a8b.jpg" srcset="/landing/view-02-480.9b559a8b.jpg 480w, /landing/view-02-960.74abd082.jpg 960w, /landing/view-02-1440.1d8378ff.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Une parcelle vendue à Lyon, et son prix</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+          <a class="view" data-view="03" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-03-480.824ae88d.jpg" srcset="/landing/view-03-480.824ae88d.jpg 480w, /landing/view-03-960.314b2ccf.jpg 960w, /landing/view-03-1440.b8752a25.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Les voitures en direct dans les rues, avec les bouchons</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+          <a class="view" data-view="04" href="/#v=2&amp;lat=46.6&amp;lon=2.4&amp;alt=1400000&amp;heading=0&amp;pitch=-90&amp;l=2.3">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-04-480.aa5fc1a5.jpg" srcset="/landing/view-04-480.aa5fc1a5.jpg 480w, /landing/view-04-960.c705eec6.jpg 960w, /landing/view-04-1440.819d874d.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Le réseau électrique et ce qu’il produit</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+          <a class="view" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-05-480.99890e1f.jpg" srcset="/landing/view-05-480.99890e1f.jpg 480w, /landing/view-05-960.f99f429c.jpg 960w, /landing/view-05-1440.032e63d8.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Les bus de Bordeaux, en direct</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+          <a class="view" data-view="06" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=k">
+            <figure>
+              <div class="view-image">
+                <img src="/landing/view-06-480.3b28b9e3.jpg" srcset="/landing/view-06-480.3b28b9e3.jpg 480w, /landing/view-06-960.cba6a80b.jpg 960w, /landing/view-06-1440.c617fbfe.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les vélos et trottinettes partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </div>
+              <figcaption><span>Les vélos et trottinettes partagés de Paris</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
+            </figure>
+          </a>
+        </div>
+      </section>
+
+      <section class="panel voice" data-live="voice" aria-labelledby="voice-title">
+        <div class="voice-heading"><h2 id="voice-title">Parlez au<br />globe.</h2><span class="premium">premium</span></div>
+        <div class="voice-layout">
+          <picture>
+            <source type="image/webp" srcset="/landing/micro-768.a739f771.webp 768w, /landing/micro-1448.fa608558.webp 1448w" sizes="(min-width: 1001px) 580px, (min-width: 700px) 620px, 100vw" />
+            <img class="microphone" src="/landing/micro-768.a739f771.webp" alt="Microphone en verre traversé par un ruban corail" width="1448" height="1086" loading="lazy" decoding="async" />
+          </picture>
+          <div class="voice-body">
+            <blockquote>« Montre-moi les bus autour de la gare Saint-Jean. »</blockquote>
+            <figure class="voice-answer">
+              <a class="bus" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" aria-label="Voir les bus de Bordeaux dans le globe">
+                <img src="/landing/voice-bus-600.8b084353.jpg" srcset="/landing/voice-bus-600.8b084353.jpg 600w, /landing/voice-bus-1200.968e34a3.jpg 1200w" sizes="(min-width: 1001px) 520px, 100vw" alt="Les bus autour de la gare Saint-Jean à Bordeaux" loading="lazy" decoding="async" />
+                <span class="image-credit">Cesium ion · Google Maps</span>
+              </a>
+              <figcaption>Les bus de Bordeaux, en direct.</figcaption>
+            </figure>
+            <a class="waiting" href="/?waitlist=1" data-link="waitlist">Rejoindre la liste d’attente</a>
+          </div>
+        </div>
+      </section>
+
+      <footer class="panel footer">
+        <p class="footer-copy">Les administrations publient.<br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+        <nav class="footer-links" aria-label="Liens de pied de page">
+          <a href="https://github.com/mml-studio/surplomb" data-link="repository">Voir le code</a>
+          <a href="/?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
+          <a href="/mentions-legales" data-link="legal">Mentions légales</a>
+          <a href="/confidentialite" data-link="privacy">Confidentialité</a>
+        </nav>
+        <div class="footer-brand"><a class="brand" href="#haut" aria-label="Surplomb, retour en haut">surplomb</a><p class="slogan">Aucun<br />angle mort.</p></div>
+      </footer>
+    </main>
+
+    <!-- Formulaire natif : sans JavaScript, il ouvre `/?q=…` et le cockpit résout le lieu (src/vitrine/query.js). -->
+    <form class="dock" action="/" method="get" data-action="open-globe" aria-label="Ouvrir le globe sur un lieu">
+      <div class="entry">
+        <div class="field">
+          <button class="locate" type="button" data-action="geolocate" disabled aria-label="Utiliser ma position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <label for="vitrine-place" class="sr-only">une adresse, une ville, ou ma position</label>
+          <input id="vitrine-place" name="q" type="search" placeholder="une adresse, une ville, ou ma position" autocomplete="off" enterkeyhint="go" />
+        </div>
+        <button class="primary" type="submit"><span data-primary-label>Ouvrir le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <p class="note" data-dock-note role="status" aria-live="polite">Sans compte. Sans installation.</p>
+    </form>
+  </div>
   <div id="world-overlay-root" aria-hidden="true">
     <canvas id="world-overlay-canvas"></canvas>
   </div>
@@ -1308,6 +1571,11 @@
     </div>
   </div>
 
-  <script type="module" src="/src/main.js"></script>
+  <!--
+    L'ENTRÉE EST UN AIGUILLAGE, PAS LE COCKPIT. `src/boot.js` pèse quelques
+    kilo-octets et décide : la vitrine (sans un octet de Cesium), ou le cockpit
+    (`src/main.js`, importé à la demande). Voir l'en-tête de `src/boot.js`.
+  -->
+  <script type="module" src="/src/boot.js"></script>
 </body>
 </html>

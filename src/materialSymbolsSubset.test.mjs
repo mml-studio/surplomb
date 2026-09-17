@@ -112,19 +112,43 @@ test('every committed face is named after its own bytes, and referenced', () => 
   }
 });
 
-test('index.html preloads the two faces the first screen sets text in', () => {
+test('index.html preloads the two faces the first screen of each surface sets text in', () => {
   // Written by `npm run fonts:build`, between markers, because the names carry
   // a hash. A preload naming a face that no longer exists is a wasted request
-  // AND a missed one.
+  // AND a missed one. The page is two surfaces (src/vitrine/gate.js), so the
+  // block is a script that picks a pair: it is RUN here for both.
   const html = readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
-  for (const role of ['inter-latin', 'jetbrains-mono-latin']) {
-    const face = manifest.files.find((f) => f.role === role);
-    assert.ok(face, `no face built for ${role}`);
-    assert.ok(
-      html.includes(`<link rel="preload" href="/fonts/${face.file}"`),
-      `index.html does not preload ${face.file} — run \`npm run fonts:build\``,
-    );
+  const block = html.match(/<!-- fonts:build preload -->\s*<script>([\s\S]*?)<\/script>\s*<!-- \/fonts:build preload -->/);
+  assert.ok(block, 'the fonts:build preload block is gone — run `npm run fonts:build`');
+  const preloadedFor = (vitrine) => {
+    const links = [];
+    const documentRef = {
+      documentElement: { hasAttribute: (name) => vitrine && name === 'data-vitrine' },
+      createElement: () => ({}),
+      head: { appendChild: (link) => links.push(link) },
+    };
+    new Function('document', block[1])(documentRef);
+    for (const link of links) {
+      assert.equal(link.rel, 'preload');
+      assert.equal(link.as, 'font');
+      assert.equal(link.crossOrigin, 'anonymous', 'a font preload without CORS is fetched twice');
+    }
+    return links.map((link) => link.href);
+  };
+  const roles = {
+    cockpit: ['inter-latin', 'jetbrains-mono-latin'],
+    vitrine: ['manrope-latin', 'dm-sans-latin'],
+  };
+  for (const [surface, wanted] of Object.entries(roles)) {
+    const hrefs = preloadedFor(surface === 'vitrine');
+    assert.deepEqual(hrefs, wanted.map((role) => {
+      const face = manifest.files.find((f) => f.role === role);
+      assert.ok(face, `no face built for ${role}`);
+      return `/fonts/${face.file}`;
+    }), `${surface} preloads the wrong faces — run \`npm run fonts:build\``);
   }
+  // The block reads the gate's attribute, so it must come after the gate.
+  assert.ok(html.indexOf('/* vitrine-gate */') < html.indexOf('<!-- fonts:build preload -->'));
 });
 
 test('no page loads fonts from Google any more', () => {
