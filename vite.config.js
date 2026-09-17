@@ -24651,8 +24651,10 @@ function adsFranceProxy() {
   const ADS_GEOCODE_TIMEOUT_MS = 60_000;
   /** A commune's worth of permits, not a département's. */
   const ADS_GEOCODE_MAX_ROWS = 4_000;
-  /** Bumped whenever an edition's SHAPE changes; see `loadEdition`. */
-  const ADS_EDITION_SCHEMA = 2;
+  /** Bumped whenever an edition's SHAPE changes; see `loadEdition`. 3: the
+   *  city portals' private applicants are no longer kept (permitApplicant.js),
+   *  so an edition written before cannot be served. */
+  const ADS_EDITION_SCHEMA = 3;
 
   // --- Cadastre, and what a permit's parcel became -------------------------
   /**
