@@ -816,8 +816,13 @@ For this box the providers are Hostinger (the VPS: HOSTINGER INTERNATIONAL
 LIMITED, 61 Lordou Vironos Street, 6023 Larnaca, Cyprus), Cloudflare (the
 tunnel and the edge: Cloudflare, Inc., 101 Townsend St, San Francisco, CA
 94107, USA) and, once the waitlist is on, Buttondown (Buttondown, LLC, 406 W
-Franklin St. #201, Richmond, VA 23221, USA). Hostinger publishes no phone
-number in its terms; the law asks for one, so get it from their support.
+Franklin St., Suite 201, Richmond, VA 23221, USA). Hostinger publishes no
+phone number in its terms; the law asks for one, so get it from their support.
+
+**No ` #` in a value.** Compose reads an unquoted ` #` as the start of a
+comment, so « 406 W Franklin St. #201 » reaches the page as « 406 W Franklin
+St. » — which is how the first preview of this page looked. Write « Suite
+201 », or quote the whole value.
 
 The values are read **per request**, never built into the bundle, so the
 manoeuvre is an edit and a recreate — no rebuild:
