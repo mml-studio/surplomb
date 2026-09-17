@@ -22,6 +22,7 @@ Object.assign(process.env, {
 });
 
 const { default: createViteConfig } = await import('../vite.config.js');
+const { signTrialToken } = await import('./trialQuota.js');
 
 const routes = new Map();
 for (const plugin of createViteConfig({ mode: 'test' }).plugins.flat()) {
@@ -90,39 +91,44 @@ async function call(path, { method = 'GET', cookie = '', body = '', url = path }
 }
 
 const summary = (cookie) => call('/api/openai/hud-summary', { method: 'POST', cookie, body: '{}' });
+const nearby = (cookie) => call('/api/google/nearby-places', { cookie, url: '/api/google/nearby-places?lat=48.86&lon=2.34' });
 
-test('two HUD summaries per browser, then the trial refusal — and nothing is spent on the third', async () => {
+test('the HUD takes every try but the voice’s, then goes quiet — and nothing is spent on the refusal', async () => {
   const first = await summary('');
   assert.equal(first.status, 200);
   assert.equal(first.body.summary, 'Louvre rive droite Paris centre');
-  const second = await summary(first.cookie);
-  assert.equal(second.status, 200);
   const spentBefore = upstreamCalls;
-  const third = await summary(second.cookie);
-  assert.equal(third.status, 429);
-  assert.equal(third.body.quota, 'exhausted');
-  assert.equal(third.headers.get('retry-after'), undefined);
+  const second = await summary(first.cookie);
+  assert.equal(second.status, 429);
+  assert.equal(second.body.quota, 'reserved', 'not the card: the visitor still has the voice');
+  assert.equal(second.headers.get('retry-after'), undefined);
+  assert.equal(second.cookie, null);
   assert.equal(upstreamCalls, spentBefore, 'a refused try never reaches OpenAI');
 
-  // Nearby places and text search share the verdict, with their own contract.
-  for (const path of ['/api/google/nearby-places', '/api/google/text-search']) {
-    const refused = await call(path, { cookie: second.cookie, url: `${path}?lat=48.86&lon=2.34&q=louvre` });
-    assert.equal(refused.status, 429, path);
-    assert.deepEqual(refused.body.places, [], path);
-    assert.equal(refused.body.quota, 'exhausted', path);
-  }
-
-  const trial = await call('/api/trial', { cookie: second.cookie });
-  assert.equal(trial.body.remaining, 0);
+  const trial = await call('/api/trial', { cookie: first.cookie });
+  assert.equal(trial.body.remaining, 1);
   assert.equal(trial.body.waitlist.action, 'https://buttondown.com/api/emails/embed-subscribe/surplomb');
+  assert.equal((await call('/api/voice/config', { cookie: first.cookie })).body.waitlist, null);
 
   const freshBrowser = await summary('');
   assert.equal(freshBrowser.status, 200, 'another browser starts at zero');
 });
 
+test('a spent trial refuses the place lookups too, with their own contract', async () => {
+  const spent = `gev_trial=${signTrialToken({ used: 2, voiceUsed: 0, id: 'spentbrowser1' }, process.env.GEV_TRIAL_SECRET)}`;
+  const refused = await summary(spent);
+  assert.equal(refused.body.quota, 'exhausted');
+  for (const path of ['/api/google/nearby-places', '/api/google/text-search']) {
+    const lookup = await call(path, { cookie: spent, url: `${path}?lat=48.86&lon=2.34&q=louvre` });
+    assert.equal(lookup.status, 429, path);
+    assert.deepEqual(lookup.body.places, [], path);
+    assert.equal(lookup.body.quota, 'exhausted', path);
+  }
+});
+
 test('nearby places are gated but not counted: the summary is the try', async () => {
   const first = await summary('');
-  const places = await call('/api/google/nearby-places', { cookie: first.cookie, url: '/api/google/nearby-places?lat=48.86&lon=2.34' });
+  const places = await nearby(first.cookie);
   assert.equal(places.status, 200);
   assert.equal(places.cookie, null, 'no new count written');
 });
@@ -155,13 +161,19 @@ test('a realtime session is the whole voice trial: three requests, one try, once
   assert.equal((await summary(minted.cookie)).status, 200);
 });
 
-test('a browser that spent every try on summaries cannot open the voice trial', async () => {
+test('a browser that explored first still opens the voice trial, and the voice keeps its place names', async () => {
   const first = await summary('');
-  const second = await summary(first.cookie);
-  assert.equal((await call('/api/voice/config', { cookie: second.cookie })).body.waitlist, 'exhausted');
-  const refused = await token(second.cookie);
-  assert.equal(refused.status, 429);
-  assert.equal(refused.body.quota, 'exhausted');
+  const reserved = await summary(first.cookie);
+  assert.equal(reserved.body.quota, 'reserved');
+  const minted = await token(first.cookie);
+  assert.equal(minted.status, 200, 'the last try was kept for the voice');
+  const trial = await call('/api/trial', { cookie: minted.cookie });
+  assert.equal(trial.body.remaining, 0);
+
+  // Every try is spent now, but the session is running and asks place names.
+  assert.equal((await nearby(minted.cookie)).status, 200);
+  // The HUD, once the session closes, has nothing left.
+  assert.equal((await summary(minted.cookie)).body.quota, 'exhausted');
 });
 
 test('the text brain counts the voice trial one spoken request at a time', async () => {

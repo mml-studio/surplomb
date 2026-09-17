@@ -758,12 +758,15 @@ export class IntelHUD {
         signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
-      if (trialRefusalFrom(response.status, data)) {
+      const refusal = trialRefusalFrom(response.status, data);
+      if (refusal) {
         // The trial is spent for this browser, and asking again every 15 s
-        // cannot change that. The local line stays; the card says why.
+        // cannot change that. The local line stays; the card says why —
+        // unless the try left is the voice's (`reserved`): the visitor has not
+        // run out of anything they asked for, so nothing opens.
         this._summaryDisabled = true;
         this._setSummaryText(fallbackText, animate);
-        requestWaitlistCard({ reason: 'exhausted' });
+        if (refusal !== 'reserved') requestWaitlistCard({ reason: 'exhausted' });
         return;
       }
       if (!response.ok || !data?.summary) {

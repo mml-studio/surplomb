@@ -20,8 +20,10 @@
  *   3. Once the voice trial is spent, a mic click opens the premium card
  *      (reason `voice`) instead of a session — the dock is not left in
  *      CONNECTING or ERROR.
- *   4. The HUD, once its trial is spent, stops asking and opens the card
- *      WITHOUT taking focus. This spends `GEV_TRIAL_LIMIT` real HUD summaries.
+ *   4. On a new browser, the HUD stops one try short and opens NOTHING: that
+ *      try is the voice's. Once the voice trial has opened, the HUD spends
+ *      the rest, stops asking and opens the card WITHOUT taking focus. This
+ *      spends `2 × GEV_TRIAL_LIMIT - 1` real HUD summaries.
  *   5. On a phone the card is a bottom sheet, full width, and the sheet behind
  *      it stands down.
  *
@@ -197,7 +199,7 @@ async function micSpent(browser) {
     trial.voice ? JSON.stringify(trial.voice) : 'no voice field — wrong GEV_TRIAL_SECRET?');
   const badge = await waitFor(page, readBadge, null, { timeoutMs: 90_000 });
   record('the crown stays, and the tray says the trial is used', badge?.display === 'grid'
-    && badge.help === 'Fonction premium · essai utilisé', badge?.help);
+    && badge.help === 'Fonction premium · commandes offertes utilisées', badge?.help);
   const button = await waitFor(page, () => Boolean(document.getElementById('gev-voice-button')), null, { timeoutMs: 90_000 });
   if (!button) return page.close();
   await page.evaluate(() => document.getElementById('gev-voice-button').click());
@@ -210,31 +212,76 @@ async function micSpent(browser) {
   await page.close();
 }
 
-async function hudExhausted(browser) {
-  console.log('\nHUD summary past the trial (spends GEV_TRIAL_LIMIT summaries)');
-  const page = await newQaPage(browser);
-  await page.setViewport({ width: 1440, height: 900 });
-  await page.goto(`${APP_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  const ready = await waitFor(page, () => Boolean(window.__godsEyeView?.styleManager?.hud), null, { timeoutMs: 90_000 });
-  record('the HUD exists', Boolean(ready));
-  if (!ready) return page.close();
-  const trial = await page.evaluate(async () => (await fetch('/api/trial')).json());
-  record('the server has the trial on', trial.enabled === true, JSON.stringify(trial));
-  if (!trial.enabled) return page.close();
-
-  const outcome = await page.evaluate(async (limit) => {
+async function spendHudSummaries(page, times) {
+  return page.evaluate(async (count) => {
     const hud = window.__godsEyeView.styleManager.hud;
     window.dispatchEvent(new PointerEvent('pointerdown'));
     hud.onStyleChange('surveillance');
     const lines = [];
-    for (let i = 0; i <= limit + 1; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       hud._updateCameraData?.();
       // eslint-disable-next-line no-await-in-loop
       await hud._updateSummary(false, true);
       lines.push({ disabled: hud._summaryDisabled, card: Boolean(document.getElementById('waitlist-card')) });
     }
     return lines;
-  }, trial.remaining);
+  }, times);
+}
+
+async function hudOnTrial(browser, { cookie = null } = {}) {
+  const page = await newQaPage(browser);
+  await page.setViewport({ width: 1440, height: 900 });
+  // The pages share one cookie jar: the spent voice trial signed above would
+  // otherwise make this « new browser » one that already tried the voice.
+  await page.deleteCookie({ name: TRIAL_COOKIE, url: APP_URL });
+  if (cookie) await page.setCookie({ name: TRIAL_COOKIE, value: cookie, url: APP_URL, httpOnly: true, sameSite: 'Lax' });
+  await page.goto(`${APP_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  const ready = await waitFor(page, () => Boolean(window.__godsEyeView?.styleManager?.hud), null, { timeoutMs: 90_000 });
+  record('the HUD exists', Boolean(ready));
+  if (!ready) {
+    await page.close();
+    return null;
+  }
+  const trial = await page.evaluate(async () => (await fetch('/api/trial')).json());
+  record('the server has the trial on', trial.enabled === true, JSON.stringify(trial));
+  if (!trial.enabled) {
+    await page.close();
+    return null;
+  }
+  return { page, trial };
+}
+
+async function hudKeepsVoiceTry(browser) {
+  console.log('\nHUD summaries on a new browser (spends GEV_TRIAL_LIMIT - 1 summaries)');
+  const opened = await hudOnTrial(browser);
+  if (!opened) return;
+  const { page, trial } = opened;
+  const outcome = await spendHudSummaries(page, trial.remaining + 1);
+  record('the HUD latches off one try short', outcome.at(-1).disabled === true, JSON.stringify(outcome));
+  const after = await page.evaluate(async () => ({
+    trial: await (await fetch('/api/trial', { cache: 'no-store' })).json(),
+    voice: await (await fetch('/api/voice/config', { cache: 'no-store' })).json(),
+  }));
+  record('the last try is left for the voice', after.trial.remaining === 1 && after.voice.waitlist === null,
+    JSON.stringify({ remaining: after.trial.remaining, waitlist: after.voice.waitlist }));
+  await sleep(1500);
+  record('no card opens: the visitor has not tried the voice yet', !(await page.evaluate(readCard)));
+  await page.close();
+}
+
+async function hudExhausted(browser) {
+  console.log('\nHUD summary past the trial, voice already tried (spends GEV_TRIAL_LIMIT summaries)');
+  const secret = process.env.GEV_TRIAL_SECRET;
+  if (!secret) {
+    record('GEV_TRIAL_SECRET is exported for this script too', false, 'it signs the voice-opened cookie');
+    return;
+  }
+  const opened = await hudOnTrial(browser, {
+    cookie: signTrialToken({ used: 0, voiceUsed: 20, id: 'qa-voice-opened' }, secret),
+  });
+  if (!opened) return;
+  const { page, trial } = opened;
+  const outcome = await spendHudSummaries(page, trial.remaining + 2);
   const card = await waitFor(page, readCard, null, { timeoutMs: 10_000 });
   record('the HUD latches off once refused', outcome.at(-1).disabled === true, JSON.stringify(outcome));
   record('the card opens with the exhausted variant', card?.reason === 'exhausted' && card.title === 'Essai terminé', card?.title);
@@ -268,7 +315,10 @@ try {
   await directLink(browser);
   await micFresh(browser);
   await micSpent(browser);
-  if (!SKIP_HUD) await hudExhausted(browser);
+  if (!SKIP_HUD) {
+    await hudKeepsVoiceTry(browser);
+    await hudExhausted(browser);
+  }
   await phone(browser);
 } finally {
   await browser.close();

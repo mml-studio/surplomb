@@ -14,6 +14,7 @@ import {
   signTrialToken,
   trialRefusalReason,
   verifyTrialToken,
+  voiceReserve,
   voiceTrialSpend,
 } from './trialQuota.js';
 
@@ -47,7 +48,7 @@ test('the trial is OFF unless a limit is set — an open-source clone owes nobod
   for (const value of [undefined, '', '0', '-3', 'five']) {
     const off = resolveTrialConfig({ GEV_TRIAL_LIMIT: value, GEV_TRIAL_SECRET: SECRET });
     assert.equal(off.enabled, false, `GEV_TRIAL_LIMIT=${value}`);
-    assert.equal(trialRefusalReason('comfort', { remaining: 0 }, off), null);
+    assert.equal(trialRefusalReason('summary', { remaining: 0 }, off), null);
     assert.equal(trialRefusalReason('voice', { remaining: 0 }, off), null, 'voice stays open too');
   }
   const res = fakeResponse();
@@ -99,16 +100,45 @@ test('voice is one of the five tries, and happens once: 3 requests, not 5 × 3',
   assert.equal(trialRefusalReason('voice', fresh, on), null);
   // Its requests are spent: refused, however many comfort tries are left.
   assert.equal(trialRefusalReason('voice', { remaining: 4, voiceUsed: 3, voiceRemaining: 0 }, on), 'voice');
-  // Every try went on summaries first: the voice trial cannot open.
+  // Every try is gone (another way than summaries, which keep one back): the
+  // voice trial cannot open.
   assert.equal(trialRefusalReason('voice', { remaining: 0, voiceUsed: 0, voiceRemaining: 3 }, on), 'exhausted');
   // A trial already opened (the brain path counts one request at a time) has
   // paid its try; the comfort count running out meanwhile does not end it.
   assert.equal(trialRefusalReason('voice', { remaining: 0, voiceUsed: 1, voiceRemaining: 2 }, on), null);
-  // And the comfort routes never look at the voice count.
-  assert.equal(trialRefusalReason('comfort', { remaining: 4, voiceUsed: 3, voiceRemaining: 0 }, on), null);
+  // And a summary never looks at the spent voice count.
+  assert.equal(trialRefusalReason('summary', { remaining: 4, voiceUsed: 3, voiceRemaining: 0 }, on), null);
 
   const closed = config({ GEV_TRIAL_VOICE: '0' });
   assert.equal(trialRefusalReason('voice', { remaining: 5, voiceUsed: 0, voiceRemaining: 0 }, closed), 'voice');
+});
+
+test('the HUD cannot spend the try the voice trial opens with', () => {
+  const on = config();
+  const unopened = (remaining) => ({ remaining, voiceUsed: 0, voiceRemaining: 3 });
+  assert.equal(trialRefusalReason('summary', unopened(2), on), null);
+  assert.equal(trialRefusalReason('summary', unopened(1), on), 'reserved');
+  // Nearby places are not counted, so the reserve does not stop them.
+  assert.equal(trialRefusalReason('lookup', unopened(1), on), null);
+  // The try is still there for the voice.
+  assert.equal(trialRefusalReason('voice', unopened(1), on), null);
+  // Once the voice trial has opened, the summaries may have what is left.
+  assert.equal(trialRefusalReason('summary', { remaining: 1, voiceUsed: 3, voiceRemaining: 0 }, on), null);
+  assert.equal(trialRefusalReason('summary', { remaining: 0, voiceUsed: 3, voiceRemaining: 0 }, on), 'exhausted');
+  // Voice out of the trial: nothing to keep back.
+  const closed = config({ GEV_TRIAL_VOICE: '0' });
+  assert.equal(trialRefusalReason('summary', { remaining: 1, voiceUsed: 0, voiceRemaining: 0 }, closed), null);
+  assert.equal(voiceReserve({ voiceUsed: 0 }, closed), 0);
+  assert.equal(voiceReserve({ voiceUsed: 0 }, on), 1);
+});
+
+test('place lookups stay open while a voice trial runs, even on its last try', () => {
+  const on = config();
+  // Opening the voice took the last try; its commands still need place names.
+  assert.equal(trialRefusalReason('lookup', { remaining: 0, voiceUsed: 3, voiceRemaining: 0 }, on), null);
+  assert.equal(trialRefusalReason('lookup', { remaining: 0, voiceUsed: 0, voiceRemaining: 3 }, on), 'exhausted');
+  const closed = config({ GEV_TRIAL_VOICE: '0' });
+  assert.equal(trialRefusalReason('lookup', { remaining: 0, voiceUsed: 0, voiceRemaining: 0 }, closed), 'exhausted');
 });
 
 test('opening the voice trial costs one try; the requests after it cost none', () => {
@@ -155,7 +185,7 @@ test('each consumed try moves the count by one, and a forged cookie is a new bro
     { used: 1, remaining: 1, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
     { used: 2, remaining: 0, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
   ]);
-  assert.equal(trialRefusalReason('comfort', counts[1], on), 'exhausted');
+  assert.equal(trialRefusalReason('lookup', counts[1], on), 'exhausted');
   assert.deepEqual(readTrialState(requestWith('gev_trial=v2.0.0.fixedid12345.forged'), on),
     { used: 0, remaining: 2, voiceUsed: 0, voiceRemaining: 3, id: null });
 });

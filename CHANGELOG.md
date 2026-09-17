@@ -52,6 +52,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   147 px de contenu, « Data attribution » coupé en deux. Elle suit maintenant la
   taille du pied.
 
+### Fixed
+- **Le HUD vidait l'essai avant que le visiteur touche au micro.** Il demande
+  un résumé à chaque nouvelle vue, et chaque résumé coûte un essai : environ
+  75 s d'exploration épuisaient les cinq, et le micro ouvrait « Essai terminé »
+  sur une voix jamais essayée. Tant que l'essai de la voix n'a pas commencé, le
+  HUD ne peut plus prendre le dernier essai : le serveur le refuse
+  (`quota: "reserved"`), le HUD revient à sa ligne locale, et aucune carte ne
+  s'ouvre. Les recherches de lieux Google restent permises pendant l'essai
+  vocal, qui prend souvent ce dernier essai et a besoin des noms de lieux. Et
+  une fois la carte vue, le HUD ne la rouvre plus par-dessus.
+- **Le trajet tracé par la voix s'étiquetait en anglais : « 1.2 km · 12 min
+  walk ».** Il affiche maintenant « 1,2 km · 12 min à pied » (à vélo, en
+  voiture), et « à vol d'oiseau, sans itinéraire » quand le calcul d'itinéraire
+  a échoué.
+
 ### Changed
 - **`gev.enerlens.com` n'existe plus : `surplomb.app` est la seule adresse
   publique.** Les deux noms servaient le même conteneur, et l'ancien restait

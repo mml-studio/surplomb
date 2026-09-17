@@ -1564,7 +1564,7 @@ function trialConfig() {
  * own spoken requests are. See src/trialQuota.js. A no-op returning
  * `true` when GEV_TRIAL_LIMIT is unset, which is the open-source default.
  *
- * @param {'comfort'|'voice'} kind
+ * @param {'summary'|'lookup'|'voice'} kind
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {object} [extra] - The route's own error-body contract.
@@ -17797,7 +17797,7 @@ function openAiRealtimeProxy() {
         return;
       }
 
-      if (!enforceTrial('comfort', req, res)) return;
+      if (!enforceTrial('summary', req, res)) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_OPENAI_PER_MIN). No-op when unset.
       if (!enforceOptInRateLimit(openAiRateLimiter(), req, res)) return;
 
@@ -18271,8 +18271,8 @@ function googlePlacesContextProxy() {
       }
 
       // Gated by the trial, but not counted: these names feed the HUD summary,
-      // and the summary is the try the visitor sees.
-      if (!enforceTrial('comfort', req, res, { places: [] })) return;
+      // and the summary is the try the visitor sees. The voice asks them too.
+      if (!enforceTrial('lookup', req, res, { places: [] })) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
       // Inlined (not the shared helper) so the 429 body keeps this endpoint's
       // `places: []` contract that the client expects on every error response.
@@ -18389,7 +18389,7 @@ function googlePlacesContextProxy() {
 
       // Gated, not counted: the search box asks this only as a silent recovery
       // when the geocode lands far away, and the geocode still answers.
-      if (!enforceTrial('comfort', req, res, { places: [] })) return;
+      if (!enforceTrial('lookup', req, res, { places: [] })) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
       // Inlined (like nearby-places) so the 429 body keeps the `places: []`
       // contract the client expects on every error response.

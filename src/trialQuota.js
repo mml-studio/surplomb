@@ -35,6 +35,13 @@
  * of them at once and tells the page how many requests the session may answer
  * (`X-GEV-Trial-Voice-Turns`); the page closes it after that many.
  *
+ * THE HUD CANNOT TAKE THE VOICE'S TRY. The HUD asks a summary on its own,
+ * whenever the view changes — about one try every 15 s of exploring. Left
+ * alone, it emptied all five before the visitor ever touched the mic, and the
+ * card said « Essai terminé » about a voice nobody had tried. So until the
+ * voice trial has opened, a summary may not take the last try (`reserved`,
+ * which the page answers by going quiet, not with the card).
+ *
  * OFF BY DEFAULT. With `GEV_TRIAL_LIMIT` unset, every function here is a
  * no-op: a clone running on its own keys owes nobody a waitlist.
  */
@@ -212,25 +219,47 @@ export function readTrialState(req, config) {
 }
 
 /**
+ * How many tries a HUD summary must leave: the one that opens the voice trial,
+ * until it has opened.
+ *
+ * @param {{voiceUsed?: number}} state
+ * @param {ReturnType<typeof resolveTrialConfig>} config
+ * @returns {0|1}
+ */
+export function voiceReserve(state, config) {
+  return config.voiceTurns > 0 && !(state.voiceUsed > 0) ? 1 : 0;
+}
+
+/**
  * Why this visitor may not use a route of this kind, or null.
  *
- * - `comfort` (HUD summary, nearby places, text search) is refused once the
- *   trial is spent.
+ * - `summary` (the HUD's, counted) is refused once the trial is spent, and
+ *   `reserved` when the only try left is the voice's (`voiceReserve`).
+ * - `lookup` (nearby places, text search: gated, not counted) is refused once
+ *   the trial is spent — unless a voice trial has opened, because the voice
+ *   asks the same names while it runs, and opening it may have taken the last
+ *   try.
  * - `voice` is refused once its own requests are spent (at once when
- *   `GEV_TRIAL_VOICE=0`), and, before it ever started, once the comfort tries
- *   are gone — the voice trial is one of them.
+ *   `GEV_TRIAL_VOICE=0`), and, before it ever started, once the tries are
+ *   gone — the voice trial is one of them.
  *
- * @param {'comfort'|'voice'} kind
+ * @param {'summary'|'lookup'|'voice'} kind
  * @param {{remaining: number, voiceUsed?: number, voiceRemaining?: number}} state
  * @param {ReturnType<typeof resolveTrialConfig>} config
- * @returns {'exhausted'|'voice'|null}
+ * @returns {'exhausted'|'reserved'|'voice'|null}
  */
 export function trialRefusalReason(kind, state, config) {
   if (!config.enabled) return null;
-  if (kind === 'voice' && !(state.voiceRemaining > 0)) return 'voice';
-  // A voice trial already under way has paid its try; only opening one costs.
-  if (kind === 'voice' && state.voiceUsed > 0) return null;
-  return state.remaining > 0 ? null : 'exhausted';
+  if (kind === 'voice') {
+    if (!(state.voiceRemaining > 0)) return 'voice';
+    // A voice trial already under way has paid its try; only opening one costs.
+    if (state.voiceUsed > 0) return null;
+    return state.remaining > 0 ? null : 'exhausted';
+  }
+  if (kind === 'lookup' && state.voiceUsed > 0) return null;
+  if (!(state.remaining > 0)) return 'exhausted';
+  if (kind === 'summary' && state.remaining <= voiceReserve(state, config)) return 'reserved';
+  return null;
 }
 
 /**
@@ -239,7 +268,7 @@ export function trialRefusalReason(kind, state, config) {
  * trial and not load. No `Retry-After`: waiting does not help.
  *
  * @param {import('http').ServerResponse} res
- * @param {'exhausted'|'voice'} reason
+ * @param {'exhausted'|'reserved'|'voice'} reason
  * @param {ReturnType<typeof resolveTrialConfig>} config
  * @param {object} [extra] - A route's own error contract (`places: []`).
  */
@@ -249,11 +278,13 @@ export function sendTrialRefusal(res, reason, config, extra = {}) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify({
     ...extra,
-    error: reason !== 'voice'
+    error: reason === 'exhausted'
       ? 'Essai terminé'
-      : config.voiceTurns > 0
-        ? 'Essai de la voix terminé'
-        : 'La voix n’est pas incluse dans l’essai',
+      : reason === 'reserved'
+        ? 'Le dernier essai est gardé pour la voix'
+        : config.voiceTurns > 0
+          ? 'Essai de la voix terminé'
+          : 'La voix n’est pas incluse dans l’essai',
     quota: reason,
     limit: config.limit,
   }));
