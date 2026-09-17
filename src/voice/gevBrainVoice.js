@@ -612,7 +612,8 @@ export class GevBrainVoiceSession {
     }
     this.active = true;
     this.busy = false;
-    this.micEnabled = !pushToTalk;
+    // Space may still be down: the key that started the session is holding it.
+    this.micEnabled = !pushToTalk || Boolean(this.host.pushToTalkKeyHeld);
     this.messages = [];
     this.costUsd = 0;
     this.turnId += 1;
@@ -637,7 +638,9 @@ export class GevBrainVoiceSession {
       this.host.setStatus('error', `Microphone could not start: ${error?.message || error}`);
       return;
     }
-    this.host.setStatus('listening', pushToTalk ? 'Hold Space to talk' : this.readyDetail());
+    // The host paints LISTENING only for an open mic, so it has to know.
+    this.host.setMicrophoneEnabled?.(this.micEnabled);
+    this.host.setStatus('listening', this.micEnabled ? this.readyDetail() : undefined);
     // Not awaited: the mic is live now, and the first confirmation is seconds
     // away. Chrome's list arrives on `voiceschanged` and will be there by then.
     void this.refreshVoices();
@@ -752,14 +755,17 @@ export class GevBrainVoiceSession {
       if (result.isFinal) finalText += transcript;
       else interim += transcript;
     }
-    if (interim.trim() && !this.busy && !this.speaking) {
+    if (interim.trim() && this.micEnabled && !this.busy && !this.speaking) {
       this.host.setStatus('listening', interim.trim().slice(0, 90));
       this.host.setHeardText?.(interim.trim(), { interim: true });
     }
     const spoken = finalText.trim();
     if (!spoken) return;
-    if (!this.micEnabled) return; // push-to-talk key is up: heard, but not sent.
+    if (!this.micEnabled) return; // the mic is shut: heard, but not sent.
     if (this.busy) return;
+    // One click, one request: the host shuts the ears until the next click or
+    // Space, as the realtime path does once the server takes a request.
+    this.host.closeMicrophoneAfterRequest?.();
     this.runTurn(spoken);
   }
 
@@ -822,13 +828,13 @@ export class GevBrainVoiceSession {
 
         const step = nextBrainStep(reply.message);
         if (step.action === 'empty') {
-          this.host.setStatus('listening', this.readyDetail());
+          this.host.setStatus('listening');
           return;
         }
         if (step.action === 'speak') {
           this.messages.push({ role: 'assistant', content: step.text });
           await this.speak(step.text, isCurrent);
-          if (isCurrent()) this.host.setStatus('listening', this.readyDetail());
+          if (isCurrent()) this.host.setStatus('listening');
           return;
         }
 
@@ -848,9 +854,13 @@ export class GevBrainVoiceSession {
         }
       }
       // Rounds exhausted: the tools ran, so say so rather than going silent.
-      if (isCurrent()) this.host.setStatus('listening', this.readyDetail());
+      if (isCurrent()) this.host.setStatus('listening');
     } finally {
-      if (this.turnId === turnId) this.busy = false;
+      if (this.turnId === turnId) {
+        this.busy = false;
+        // The dock said ANSWERING while `busy`; nothing else repaints it.
+        this.host.repaintOpenSession?.();
+      }
     }
   }
 

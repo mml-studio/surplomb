@@ -92,7 +92,7 @@ test('a hidden tab and a live voice turn both withhold the automatic reload', ()
     claimStaleBuildAutoReload({ storage: fakeStorage(), nowMs, visibility: 'hidden' }),
     false,
   );
-  for (const voiceStatus of ['connecting', 'listening', 'executing', 'LISTENING']) {
+  for (const voiceStatus of ['connecting', 'listening', 'answering', 'ready', 'executing', 'LISTENING']) {
     assert.equal(
       claimStaleBuildAutoReload({ storage: fakeStorage(), nowMs, voiceStatus }),
       false,

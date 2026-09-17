@@ -9818,7 +9818,7 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 #command-dock #gev-voice-button:hover .gev-mic-orbit,
 #command-dock #gev-voice-control:is(
   [data-status='connecting'],
-  [data-status='listening']:not([data-microphone='muted']),
+  [data-status='listening'],
   [data-status='executing']
 ) .gev-mic-orbit {
   background: rgba(0, 212, 255, 0.06);
@@ -9829,7 +9829,7 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 #command-dock #gev-voice-button:hover .gev-mic-orbit img,
 #command-dock #gev-voice-control:is(
   [data-status='connecting'],
-  [data-status='listening']:not([data-microphone='muted']),
+  [data-status='listening'],
   [data-status='executing']
 ) .gev-mic-orbit img {
   filter: none;

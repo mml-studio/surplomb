@@ -206,7 +206,7 @@ async function micSpent(browser) {
     card ? card.title : 'no card');
   record('the card has no price either', card && !card.mentionsPrice);
   const status = await page.evaluate(() => document.getElementById('gev-voice-control')?.dataset.status || 'idle');
-  record('the dock is not left connecting or in error', !['connecting', 'error', 'listening'].includes(status), status);
+  record('the dock is not left connecting or in error', !['connecting', 'error', 'listening', 'answering', 'ready'].includes(status), status);
   await page.close();
 }
 

@@ -66,7 +66,9 @@ export const STALE_BUILD_RELOAD_STORAGE_KEY = 'gev:stale-build-reload-at';
 export const CONTEXT_LOST_RELOAD_STORAGE_KEY = 'gev:context-lost-reload-at';
 
 /** Voice states that mean a live session would be cut by a reload. */
-const VOICE_BUSY_STATUSES = new Set(['connecting', 'listening', 'executing']);
+// 'ready' and 'answering' are an open session with the mic shut: a reload
+// drops it just the same, and on the hosted trial a dropped session is spent.
+const VOICE_BUSY_STATUSES = new Set(['connecting', 'listening', 'answering', 'ready', 'executing']);
 
 /**
  * Read the last automatic reload mark without trusting the tab's storage.

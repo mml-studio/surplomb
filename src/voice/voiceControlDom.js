@@ -27,19 +27,30 @@ import { PREMIUM_CROWN_SVG, currentVoicePremium, voicePremiumText } from '../voi
  * three places — the button's `aria-label`, the help tray's text, and the
  * status line — and on a phone all three were wrong: there is no Space key to
  * hold, so the only instructions the app offers named a key that does not
- * exist. A touchscreen session is open-mic with server-side turn detection,
- * which is a toggle, so that is what the words say.
+ * exist. A tap opens the mic for one request, and the mic shuts itself once
+ * the request is taken, so that is what the words say.
  *
- * @param {boolean} pushToTalkMode
+ * @param {boolean} pushToTalkMode - Kept for callers; Space now claims any session.
  * @param {boolean} pushToTalkKeyHeld
  * @param {boolean} [coarse] Defaults to the session's input mode.
  * @returns {string}
  */
 export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coarse = isCoarseInput()) {
-  if (coarse) return 'Touchez le micro pour parler · touchez à nouveau pour arrêter';
-  return pushToTalkMode && pushToTalkKeyHeld
-    ? 'Release Space to send'
-    : 'Hold Space to speak · click mic to toggle voice';
+  if (coarse) return 'Touchez le micro pour parler · il se referme seul';
+  return pushToTalkKeyHeld
+    ? 'Relâchez Espace pour envoyer'
+    : 'Cliquez le micro ou maintenez Espace pour parler';
+}
+
+/**
+ * The dock's caption while a session is open and the mic is shut: how to
+ * open it again. Short, because the dock line holds about thirty characters.
+ *
+ * @param {boolean} [coarse] Defaults to the session's input mode.
+ * @returns {string}
+ */
+export function resolveVoiceReadyPrompt(coarse = isCoarseInput()) {
+  return coarse ? 'Touchez le micro pour parler' : 'Micro ou Espace pour parler';
 }
 
 /**
