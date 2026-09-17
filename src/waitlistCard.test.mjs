@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   WAITLIST_AUTO_SHOWN_KEY,
   WAITLIST_USAGE_CHOICES,
+  initWaitlistCard,
   renderWaitlistCard,
   shouldOpenWaitlist,
   waitlistCopy,
@@ -123,4 +124,49 @@ test('asking for the card is an event on the window, and a no-op without one', (
   requestWaitlistCard({ reason: 'voice', explicit: true }, target);
   assert.deepEqual(seen, [{ reason: 'voice', explicit: true }]);
   assert.doesNotThrow(() => requestWaitlistCard({ reason: 'voice' }, undefined));
+});
+
+function cardDocument() {
+  const body = [];
+  const element = () => ({
+    dataset: {},
+    attributes: {},
+    innerHTML: '',
+    setAttribute(name, value) { this.attributes[name] = value; },
+    querySelector: () => null,
+    remove() { body.splice(body.indexOf(this), 1); },
+  });
+  const doc = new EventTarget();
+  Object.assign(doc, {
+    activeElement: null,
+    body: { appendChild: (node) => body.push(node) },
+    createElement: element,
+  });
+  return { doc, body };
+}
+
+test('a click is never answered with the card an automatic refusal was still loading', async () => {
+  const { doc, body } = cardDocument();
+  let release;
+  const slowTrial = new Promise((resolve) => { release = resolve; });
+  const store = new Map();
+  const session = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  const card = initWaitlistCard({
+    documentRef: doc,
+    windowRef: null,
+    fetchImpl: () => slowTrial,
+    localStore: null,
+    sessionStore: session,
+  });
+  // The HUD's refusal starts loading the card; the voice trial ends meanwhile.
+  const automatic = card.open({ reason: 'exhausted' });
+  const clicked = card.open({ reason: 'voice', explicit: true });
+  release({ ok: true, json: async () => ({ limit: 5, voice: { limit: 3 } }) });
+  await Promise.all([automatic, clicked]);
+  assert.equal(body.length, 1, 'one card on screen');
+  assert.equal(body[0].dataset.reason, 'voice');
+
+  // The other way round, the refusal does not replace the card asked for.
+  await card.open({ reason: 'exhausted', explicit: false });
+  assert.equal(body[0].dataset.reason, 'voice');
 });

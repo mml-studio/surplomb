@@ -196,6 +196,7 @@ export function initWaitlistCard({
 } = {}) {
   let root = null;
   let opening = null;
+  let openingExplicit = false;
   let returnFocus = null;
 
   const onKeydown = (event) => {
@@ -253,7 +254,14 @@ export function initWaitlistCard({
     if (!detail.explicit) writeFlag(sessionStore, WAITLIST_AUTO_SHOWN_KEY, true);
     // An automatic refusal never replaces a card the visitor asked for.
     if (root && !detail.explicit) return true;
-    if (opening) return opening;
+    if (opening) {
+      // A gesture is never answered with the card an automatic refusal was
+      // still loading (the HUD's « essais utilisés » swallowed the voice card
+      // that way): it opens once that one has, and replaces it.
+      if (!detail.explicit || openingExplicit) return opening;
+      return opening.then(() => open(detail));
+    }
+    openingExplicit = Boolean(detail.explicit);
     opening = (async () => {
       const trial = await readTrial();
       const card = documentRef.createElement('aside');

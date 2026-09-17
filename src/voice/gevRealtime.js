@@ -16,6 +16,7 @@ import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './media
 import { isCoarseInput } from '../inputMode.js';
 import { requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
 import { markVoicePremiumSpent } from '../voicePremium.js';
+import { announceVoiceSession } from '../voiceSession.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -1337,6 +1338,7 @@ export class GevRealtimeController {
     }
     if (removeUi && this.ui?.root) {
       this.ui.root.remove();
+      announceVoiceSession(false);
     }
     if (!preserveStatus && !removeUi) {
       this.setStatus('idle', endedTrial ? 'Essai terminé' : 'Voice off');
@@ -2016,6 +2018,9 @@ export class GevRealtimeController {
     this.status = status;
     this.statusDetail = detail || null;
     if (status === 'error') this.ui.root.classList.remove('error-dismissed');
+    // Before the mint, on purpose: 'connecting' is painted ahead of it, and
+    // the HUD must drop a summary still in flight (src/voiceSession.js).
+    announceVoiceSession(this.isActive());
     this.paintStatus();
     // The tray's second line is a GUESS ("check microphone permission"), and it
     // was actively wrong for the failures that have nothing to do with the mic
