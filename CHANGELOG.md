@@ -96,6 +96,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   taille du pied.
 
 ### Fixed
+- **Quand le navigateur refusait les polices, les boutons ronds affichaient
+  « my_locatpublic ».** Firefox Focus, réglage « Bloquer les polices web »,
+  sur iPhone : la police des icônes n'arrivait pas, et chaque icône écrivait
+  son nom en toutes lettres, qui débordait de son bouton. La page le détecte
+  maintenant et met un symbole du système à la place de chaque icône (⌖, 🌐,
+  ✕, ‹…) ; si la police arrive en retard, les vraies icônes reviennent.
+  `npm run qa:webfonts` le vérifie avec toutes les polices bloquées.
 - **Sur téléphone, le globe s'ouvrait incliné à -30°, et un pincement zoomait à
   peine.** Le haut d'un écran portrait n'était que de l'horizon, avec les noms
   de rue écrasés, et rien ne permettait de redresser la vue : le tangage à deux

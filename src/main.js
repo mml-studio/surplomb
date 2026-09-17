@@ -32,6 +32,7 @@ import {
 } from './photorealAdoption.js';
 import { ignTerrainFlagEnabled } from './data/ignBilTerrain.js';
 import { initLogoGaze } from './logoGaze.js';
+import { installIconFontFallback } from './iconFontFallback.js';
 import { installStarfield } from './starfield.js';
 import { initCockpitCloudEffects } from './cockpitCloudEffects.js';
 import {
@@ -67,6 +68,7 @@ import { applyTouchCameraProfile } from './touchCamera.js';
 import { getPickDiagnostics } from './data/pickAt.js';
 
 initLogoGaze();
+installIconFontFallback();
 
 /**
  * Extract a human-readable error message from any thrown value.
