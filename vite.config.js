@@ -76,6 +76,8 @@ import {
   resolveTrialConfig,
   sendTrialRefusal,
   trialRefusalReason,
+  TRIAL_VOICE_TURNS_HEADER,
+  voiceTrialSpend,
 } from './src/trialQuota.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import {
@@ -1557,8 +1559,8 @@ function trialConfig() {
 }
 
 /**
- * Refuse a keyed route once this browser's trial is spent, or outright for
- * voice while it is out of the trial. See src/trialQuota.js. A no-op returning
+ * Refuse a keyed route once this browser's trial is spent — for voice, once its
+ * own spoken requests are. See src/trialQuota.js. A no-op returning
  * `true` when GEV_TRIAL_LIMIT is unset, which is the open-source default.
  *
  * @param {'comfort'|'voice'} kind
@@ -17941,8 +17943,16 @@ function openAiRealtimeProxy() {
           body: JSON.stringify(sessionConfig),
         });
         const body = await response.text();
-        // A minted session is one try (only reachable with GEV_TRIAL_VOICE=trial).
-        if (response.ok) consumeTrial(req, res, trialConfig());
+        // A minted session is the whole voice trial: the browser talks to
+        // OpenAI directly from here on, so the requests cannot be counted one
+        // by one. It spends them all, and the page closes the session after
+        // the number this header names.
+        const trial = trialConfig();
+        if (response.ok && trial.enabled) {
+          const state = readTrialState(req, trial);
+          consumeTrial(req, res, trial, voiceTrialSpend(state, { all: true }));
+          res.setHeader(TRIAL_VOICE_TURNS_HEADER, String(state.voiceRemaining));
+        }
         res.statusCode = response.status;
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
         // Which tier/model this secret was actually minted for. The upstream
@@ -18041,9 +18051,10 @@ function voiceBrainProxy() {
           openai: Boolean(process.env.OPENAI_API_KEY),
           openrouter: Boolean(process.env.OPENROUTER_API_KEY),
         },
-        // `voice` or `exhausted` when this browser may not open a session —
-        // the mic then opens the waitlist card instead of asking for the
-        // microphone. Null on an instance without GEV_TRIAL_LIMIT.
+        // `voice` (its trial is spent) or `exhausted` (every try is) when this
+        // browser may not open a session — the mic then opens the waitlist
+        // card instead of asking for the microphone. Null on an instance
+        // without GEV_TRIAL_LIMIT.
         waitlist: trialRefusalReason('voice', readTrialState(req, trialConfig()), trialConfig()),
       }));
     });
@@ -18056,7 +18067,6 @@ function voiceBrainProxy() {
         res.end(JSON.stringify(body));
       };
       if (req.method !== 'POST') return json(405, { error: 'Method not allowed' });
-      if (!enforceTrial('voice', req, res)) return;
       if (!enforceOptInRateLimit(voiceBrainRateLimiter(), req, res)) return;
 
       const { provider, reason } = currentVoiceProvider();
@@ -18072,6 +18082,13 @@ function voiceBrainProxy() {
       }
       const sanitized = sanitizeBrainMessages(payload?.messages, BRAIN_RELAY_LIMITS);
       if (!sanitized.ok) return json(400, { error: sanitized.error });
+      // Checked once the body says what this round is: the tool rounds that
+      // finish a request are part of it, so the voice trial's last request is
+      // still answered after it has been counted. A tool round nobody paid
+      // for — no trial ever opened — is refused like a new request.
+      const opensRequest = sanitized.messages.at(-1)?.role === 'user';
+      const trialState = readTrialState(req, trialConfig());
+      if ((opensRequest || !trialState.voiceUsed) && !enforceTrial('voice', req, res)) return;
 
       const language = normalizeVoiceLanguage(process.env.GEV_VOICE_LANGUAGE);
       const languageLines = voiceLanguageInstruction(language);
@@ -18127,9 +18144,10 @@ function voiceBrainProxy() {
         }
         const message = data?.choices?.[0]?.message || null;
         if (!message) return json(502, { error: 'The brain returned no message' });
-        // One spoken request is one try, however many tool rounds it takes:
-        // only the round that opens a turn ends on the visitor's own words.
-        if (sanitized.messages.at(-1)?.role === 'user') consumeTrial(req, res, trialConfig());
+        // One spoken request is one request of the voice trial, however many
+        // tool rounds it takes: only the round that opens a turn ends on the
+        // visitor's own words. The first one also takes one of the tries.
+        if (opensRequest) consumeTrial(req, res, trialConfig(), voiceTrialSpend(trialState));
         return json(200, {
           message,
           model: data?.model || model,

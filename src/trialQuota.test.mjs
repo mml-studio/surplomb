@@ -14,6 +14,7 @@ import {
   signTrialToken,
   trialRefusalReason,
   verifyTrialToken,
+  voiceTrialSpend,
 } from './trialQuota.js';
 
 const SECRET = 'a-test-secret-that-is-long-enough';
@@ -78,25 +79,59 @@ test('the waitlist target is built from a Buttondown username, never from a URL'
   assert.ok(hostile.warnings.some((w) => /not a Buttondown username/.test(w)));
 });
 
-test('voice is out of the trial unless GEV_TRIAL_VOICE=trial', () => {
-  const on = config();
-  assert.equal(on.voice, 'waitlist');
-  assert.equal(trialRefusalReason('voice', { remaining: 5 }, on), 'voice');
-  const counted = config({ GEV_TRIAL_VOICE: 'TRIAL' });
-  assert.equal(trialRefusalReason('voice', { remaining: 5 }, counted), null);
-  assert.equal(trialRefusalReason('voice', { remaining: 0 }, counted), 'exhausted');
+test('the voice trial is three spoken requests unless GEV_TRIAL_VOICE says otherwise', () => {
+  assert.equal(config().voiceTurns, 3);
+  assert.equal(config({ GEV_TRIAL_VOICE: '5' }).voiceTurns, 5);
+  assert.equal(config({ GEV_TRIAL_VOICE: '500' }).voiceTurns, 20, 'a trial, not a subscription');
+  for (const out of ['0', 'waitlist', 'OFF']) {
+    assert.equal(config({ GEV_TRIAL_VOICE: out }).voiceTurns, 0, out);
+  }
+  // The first spelling of this variable was `trial`; it is not a number.
+  const typo = config({ GEV_TRIAL_VOICE: 'trial' });
+  assert.equal(typo.voiceTurns, 3);
+  assert.ok(typo.warnings.some((w) => /not a number of spoken requests/.test(w)));
+  assert.equal(resolveTrialConfig({ GEV_TRIAL_VOICE: '3' }).voiceTurns, 0, 'nothing when the trial is off');
 });
 
-test('a token verifies only with its own secret and its own count', () => {
-  const token = signTrialToken({ used: 3, id: 'abcdefgh1234' }, SECRET);
-  assert.deepEqual(verifyTrialToken(token, SECRET), { used: 3, id: 'abcdefgh1234' });
+test('voice is one of the five tries, and happens once: 3 requests, not 5 × 3', () => {
+  const on = config();
+  const fresh = { remaining: 5, voiceUsed: 0, voiceRemaining: 3 };
+  assert.equal(trialRefusalReason('voice', fresh, on), null);
+  // Its requests are spent: refused, however many comfort tries are left.
+  assert.equal(trialRefusalReason('voice', { remaining: 4, voiceUsed: 3, voiceRemaining: 0 }, on), 'voice');
+  // Every try went on summaries first: the voice trial cannot open.
+  assert.equal(trialRefusalReason('voice', { remaining: 0, voiceUsed: 0, voiceRemaining: 3 }, on), 'exhausted');
+  // A trial already opened (the brain path counts one request at a time) has
+  // paid its try; the comfort count running out meanwhile does not end it.
+  assert.equal(trialRefusalReason('voice', { remaining: 0, voiceUsed: 1, voiceRemaining: 2 }, on), null);
+  // And the comfort routes never look at the voice count.
+  assert.equal(trialRefusalReason('comfort', { remaining: 4, voiceUsed: 3, voiceRemaining: 0 }, on), null);
+
+  const closed = config({ GEV_TRIAL_VOICE: '0' });
+  assert.equal(trialRefusalReason('voice', { remaining: 5, voiceUsed: 0, voiceRemaining: 0 }, closed), 'voice');
+});
+
+test('opening the voice trial costs one try; the requests after it cost none', () => {
+  assert.deepEqual(voiceTrialSpend({ voiceUsed: 0, voiceRemaining: 3 }), { comfort: 1, voice: 1 });
+  assert.deepEqual(voiceTrialSpend({ voiceUsed: 1, voiceRemaining: 2 }), { comfort: 0, voice: 1 });
+  // Minting a realtime session spends every request at once.
+  assert.deepEqual(voiceTrialSpend({ voiceUsed: 0, voiceRemaining: 3 }, { all: true }), { comfort: 1, voice: 3 });
+});
+
+test('a token verifies only with its own secret and its own counts', () => {
+  const token = signTrialToken({ used: 3, voiceUsed: 2, id: 'abcdefgh1234' }, SECRET);
+  assert.deepEqual(verifyTrialToken(token, SECRET), { used: 3, voiceUsed: 2, id: 'abcdefgh1234' });
   assert.equal(verifyTrialToken(token, `${SECRET}-rotated`), null);
-  // Editing the count down is the whole attack; the signature must catch it.
-  const [v, , id, sig] = token.split('.');
-  assert.equal(verifyTrialToken([v, '0', id, sig].join('.'), SECRET), null);
-  for (const junk of ['', 'v1', 'v2.1.abcdefgh.x', 'v1.x.abcdefgh.sig', 'v1.1.a.sig', `${token}.extra`]) {
+  // Editing a count down is the whole attack; the signature must catch it.
+  const [v, used, voice, id, sig] = token.split('.');
+  assert.equal(verifyTrialToken([v, '0', voice, id, sig].join('.'), SECRET), null);
+  assert.equal(verifyTrialToken([v, used, '0', id, sig].join('.'), SECRET), null);
+  for (const junk of ['', 'v2', 'v1.1.abcdefgh.x', 'v2.x.0.abcdefgh.sig', 'v2.1.x.abcdefgh.sig', 'v2.1.0.a.sig', `${token}.extra`]) {
     assert.equal(verifyTrialToken(junk, SECRET), null, junk);
   }
+  // The first format carried no voice count; it reads as a new browser.
+  const legacy = 'v1.3.abcdefgh1234.sig';
+  assert.equal(verifyTrialToken(legacy, SECRET), null);
 });
 
 test('the cookie is read by name, not by substring', () => {
@@ -111,18 +146,28 @@ test('each consumed try moves the count by one, and a forged cookie is a new bro
   const counts = [];
   for (let i = 0; i < 2; i += 1) {
     const res = fakeResponse();
-    consumeTrial(requestWith(cookie), res, on, () => 'fixedid12345');
+    consumeTrial(requestWith(cookie), res, on, undefined, () => 'fixedid12345');
     const [setCookie] = res.getHeader('Set-Cookie');
     cookie = setCookie.split(';')[0];
     counts.push(readTrialState(requestWith(cookie), on));
   }
   assert.deepEqual(counts, [
-    { used: 1, remaining: 1, id: 'fixedid12345' },
-    { used: 2, remaining: 0, id: 'fixedid12345' },
+    { used: 1, remaining: 1, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
+    { used: 2, remaining: 0, voiceUsed: 0, voiceRemaining: 3, id: 'fixedid12345' },
   ]);
   assert.equal(trialRefusalReason('comfort', counts[1], on), 'exhausted');
-  assert.deepEqual(readTrialState(requestWith('gev_trial=v1.0.fixedid12345.forged'), on),
-    { used: 0, remaining: 2, id: null });
+  assert.deepEqual(readTrialState(requestWith('gev_trial=v2.0.0.fixedid12345.forged'), on),
+    { used: 0, remaining: 2, voiceUsed: 0, voiceRemaining: 3, id: null });
+});
+
+test('a voice spend moves both counts in one cookie, and keeps the browser id', () => {
+  const on = config();
+  const res = fakeResponse();
+  const before = `gev_trial=${signTrialToken({ used: 1, id: 'fixedid12345' }, SECRET)}`;
+  consumeTrial(requestWith(before), res, on, { comfort: 1, voice: 3 });
+  const [setCookie] = res.getHeader('Set-Cookie');
+  assert.deepEqual(readTrialState(requestWith(setCookie.split(';')[0]), on),
+    { used: 2, remaining: 3, voiceUsed: 3, voiceRemaining: 0, id: 'fixedid12345' });
 });
 
 test('the cookie is HttpOnly, Lax, long-lived, and Secure only over HTTPS', () => {
@@ -130,7 +175,7 @@ test('the cookie is HttpOnly, Lax, long-lived, and Secure only over HTTPS', () =
   const plain = fakeResponse();
   consumeTrial(requestWith(), plain, on);
   const [cookie] = plain.getHeader('Set-Cookie');
-  assert.match(cookie, /^gev_trial=v1\.1\./);
+  assert.match(cookie, /^gev_trial=v2\.1\.0\./);
   assert.match(cookie, /; Path=\//);
   assert.match(cookie, /; HttpOnly/);
   assert.match(cookie, /; SameSite=Lax/);
@@ -150,6 +195,15 @@ test('a cookie set by another middleware survives ours', () => {
   assert.equal(cookies[0], 'session=1');
 });
 
+test('the voice refusal says whether the trial was used or never offered', () => {
+  const used = fakeResponse();
+  sendTrialRefusal(used, 'voice', config());
+  assert.equal(JSON.parse(used.body).error, 'Essai de la voix terminé');
+  const never = fakeResponse();
+  sendTrialRefusal(never, 'voice', config({ GEV_TRIAL_VOICE: '0' }));
+  assert.equal(JSON.parse(never.body).error, 'La voix n’est pas incluse dans l’essai');
+});
+
 test('the refusal is a 429 the page can tell from load: a quota field and no Retry-After', () => {
   const res = fakeResponse();
   sendTrialRefusal(res, 'exhausted', config(), { places: [] });
@@ -161,13 +215,13 @@ test('the refusal is a 429 the page can tell from load: a quota field and no Ret
 
 test('/api/trial reports the state without spending it', () => {
   const on = config();
-  const cookie = `gev_trial=${signTrialToken({ used: 4, id: 'abcdefgh1234' }, SECRET)}`;
+  const cookie = `gev_trial=${signTrialToken({ used: 4, voiceUsed: 3, id: 'abcdefgh1234' }, SECRET)}`;
   assert.deepEqual(describeTrial(requestWith(cookie), on), {
     enabled: true,
     limit: 5,
     used: 4,
     remaining: 1,
-    voice: 'waitlist',
+    voice: { limit: 3, used: 3, remaining: 0 },
     waitlist: on.waitlist,
   });
   assert.deepEqual(describeTrial(requestWith(), resolveTrialConfig({})), {
@@ -175,7 +229,7 @@ test('/api/trial reports the state without spending it', () => {
     limit: null,
     used: null,
     remaining: null,
-    voice: 'open',
+    voice: null,
     waitlist: null,
   });
 });

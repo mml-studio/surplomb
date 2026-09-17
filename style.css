@@ -12525,3 +12525,65 @@ body.scene-playback-mode #zoom-prompt {
     animation-name: none;
   }
 }
+
+/* ── Premium mark on the mic (hosted trial) ───────────────────────
+   src/voicePremium.js sets `data-voice-premium` on <html> where voice is
+   sold. A gold disc with Material's crown punched in dark, on the ring's
+   upper-right: the convention interface software uses for a paid tool.
+   Gold and not the amber of the warning chips; the crown is what tells them
+   apart at 15 px. Chosen on a contact sheet at 18/15/13/11 px. */
+#gev-voice-control .gev-mic-orbit {
+  position: relative;
+}
+
+#gev-voice-control .gev-premium-badge {
+  display: none;
+}
+
+html[data-voice-premium] #gev-voice-control .gev-premium-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #ffd873, #e0a526);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #0d141c, 0 0 6px rgba(255, 200, 70, 0.35);
+  pointer-events: none;
+}
+
+html[data-voice-premium] #gev-voice-control .gev-premium-badge .premium-crown {
+  width: 11px;
+  height: 11px;
+  fill: #231500;
+}
+
+#gev-voice-control .gev-voice-help-premium {
+  color: #ffd35e;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.06rem;
+  text-transform: uppercase;
+}
+
+#gev-voice-control .gev-voice-help-premium:empty {
+  display: none;
+}
+
+/* The card that the crown leads to wears it in its heading. */
+.waitlist-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.waitlist-kicker .premium-crown {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  fill: #ffd35e;
+}

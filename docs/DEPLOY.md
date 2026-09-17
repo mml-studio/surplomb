@@ -620,9 +620,22 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
 
 - **What is counted.** One HUD summary (`/api/openai/hud-summary`) is one try.
   `/api/google/nearby-places` and `/api/google/text-search` are refused once
-  the trial is spent but do not count themselves. Voice
-  (`/api/realtime/token`, `/api/voice/brain`) is refused outright unless
-  `GEV_TRIAL_VOICE=trial`. The globe and every keyless layer are never gated.
+  the trial is spent but do not count themselves. The globe and every keyless
+  layer are never gated.
+- **Voice is one of the tries, and happens once.** Opening the voice trial
+  costs one try and gives `GEV_TRIAL_VOICE` spoken requests (default 3), kept
+  in a second count of the same cookie so they never come back. A realtime
+  session (`/api/realtime/token`) spends all of them when it is minted — the
+  browser talks to OpenAI directly after that — and answers with
+  `X-GEV-Trial-Voice-Turns`; the page mutes the mic after that many answers,
+  lets the last one play, closes the session and opens the premium card. The
+  text brain (`/api/voice/brain`) counts them one spoken request at a time.
+  The page asks for the microphone BEFORE minting, so a refused permission
+  spends nothing. The session limit is enforced by the page: an edited client
+  can keep talking, like a cleared cookie can start over — the bill is still
+  bounded by the caps below and the OpenAI account.
+- **The crown.** Where the trial is on, the mic wears a gold crown and its
+  help tray says what the trial holds (`/api/trial`, read once after boot).
 - **Where the count lives.** A signed cookie, `gev_trial`, HttpOnly, 400 days.
   Not the IP: an office or a mobile carrier puts hundreds of visitors behind
   one. A cleared cookie starts over, which is accepted — the bill is bounded by

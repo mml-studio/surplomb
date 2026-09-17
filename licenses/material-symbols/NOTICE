@@ -201,3 +201,29 @@ copied unmodified from google/material-design-icons, used to tell an icon name
 from an ordinary English word.
 
 Apache-2.0 §4 is satisfied by this notice travelling with the file.
+
+─────────────────────────────────────────────────────────────────────────────
+
+THIRD USE, ADDED 2026-09-17: THE PREMIUM MARK ON THE MICROPHONE.
+
+`src/voicePremium.js` draws one glyph, `crown`, from Material Symbols OUTLINED
+(not Rounded, unlike the map packs above), filled, weight 400:
+
+Source: https://github.com/google/material-design-icons
+        symbols/web/crown/materialsymbolsoutlined/crown_fill1_24px.svg
+        retrieved 2026-09-17.
+
+It marks the hosted voice agent as a premium feature, as interface software
+commonly does with a small tinted badge on the tool. Chosen on a contact sheet
+of eight glyphs rendered at 18 / 15 / 13 / 11 px on the real mic button:
+`workspace_premium` and `award_star` do not resolve below 15 px, `diamond`
+reads as a heart there, and `lock` tells a visitor who still has a trial that
+the feature is closed.
+
+It is inline SVG and not a glyph of the subsetted font above because that
+font is served with the FILL axis pinned at 0, and the outlined crown thins
+to a wire at 11 px on a 15 px disc.
+
+WHAT WAS CHANGED. Nothing. The single `d` string is vendored verbatim, with
+Material's own `0 -960 960 960` viewBox. The gold disc behind it is this
+project's CSS and carries no claim under this notice.

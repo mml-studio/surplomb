@@ -22,6 +22,8 @@
  * for `?waitlist=1`, so it costs nothing to a visit that never meets it.
  */
 
+import { PREMIUM_CROWN_SVG } from './voicePremium.js';
+
 /** Written on submit, so a returning visitor is not asked twice. */
 export const WAITLIST_JOINED_KEY = 'gev:waitlist-joined:v1';
 /** Written when an automatic refusal opened the card, so it does so once per tab. */
@@ -50,7 +52,7 @@ export const WAITLIST_INCLUDES = Object.freeze([
  * Title and opening line for each way into the card.
  *
  * @param {'exhausted'|'voice'|'direct'} reason
- * @param {{limit?: number|null}} [trial]
+ * @param {{limit?: number|null, voice?: {limit?: number}|null}} [trial] - The `/api/trial` body.
  * @returns {{title: string, lede: string}}
  */
 export function waitlistCopy(reason, trial = {}) {
@@ -59,13 +61,19 @@ export function waitlistCopy(reason, trial = {}) {
     const count = Number(trial.limit) > 0 ? `Vos ${trial.limit} essais` : 'Vos essais';
     return {
       title: 'Essai terminé',
-      lede: `${count} des résumés et des lieux proches sont utilisés. ${open}`,
+      lede: `${count} des fonctions premium sont utilisés. ${open}`,
     };
   }
   if (reason === 'voice') {
+    // Said as premium, the way interface software says it, whether the
+    // visitor just used the voice trial or this server offers none.
+    const turns = Number(trial.voice?.limit) || 0;
+    const why = turns > 0
+      ? (turns > 1 ? `Vos ${turns} demandes d’essai sont utilisées.` : 'Votre demande d’essai est utilisée.')
+      : 'Elle arrive avec l’abonnement.';
     return {
-      title: 'La voix arrive à l’ouverture',
-      lede: `La commande vocale n’est pas dans l’essai : aujourd’hui elle ne tient que quelques échanges par minute pour tout le site. ${open}`,
+      title: 'La voix est une fonction premium',
+      lede: `${why} Inscrivez-vous pour l’avoir dès l’ouverture. ${open}`,
     };
   }
   return {
@@ -144,7 +152,7 @@ export function renderWaitlistCard({ reason, trial = {}, joined = false }) {
   return `
     <div class="waitlist-scanline" aria-hidden="true"></div>
     <header class="waitlist-header">
-      <span class="waitlist-kicker">SURPLOMB · PREMIUM</span>
+      <span class="waitlist-kicker">${PREMIUM_CROWN_SVG}SURPLOMB · PREMIUM</span>
       <button type="button" class="waitlist-close" data-waitlist-close aria-label="Fermer">×</button>
     </header>
     <h2 id="waitlist-title">${escapeHtml(title)}</h2>

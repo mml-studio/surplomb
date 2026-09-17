@@ -45,6 +45,8 @@ import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { WAITLIST_OPEN_EVENT, requestWaitlistCard } from './trialRefusal.js';
+import { loadVoicePremium, markVoicePremiumSpent } from './voicePremium.js';
+import { whenIdle } from './whenIdle.js';
 import { initKeySetup } from './keySetup.js';
 import {
   LITE_GLOBE_SSE,
@@ -603,6 +605,10 @@ async function init() {
       // itself when somebody reaches for it.
       idleTimeoutMs: phoneShell ? null : undefined,
     });
+    // The crown on the mic, where voice is sold (src/voicePremium.js): one
+    // small request once the boot burst has drained — nobody is waiting on it,
+    // and a phone gets it too, since its voice stack loads only on a tap.
+    whenIdle(() => { void loadVoicePremium(); }, 4_000);
 
     // Keep startup chrome truthful: a share is not restored until camera,
     // visual/map/panel lanes, and every requested layer have terminated.
@@ -637,6 +643,8 @@ async function init() {
     // visit that never meets the trial never downloads it.
     let waitlistCard = null;
     window.addEventListener(WAITLIST_OPEN_EVENT, (event) => {
+      // Any trial refusal means the voice trial cannot open any more either.
+      if (event.detail?.reason === 'voice' || event.detail?.reason === 'exhausted') markVoicePremiumSpent();
       waitlistCard ??= import('./waitlistCard.js')
         .then(({ initWaitlistCard }) => initWaitlistCard())
         .catch((error) => {

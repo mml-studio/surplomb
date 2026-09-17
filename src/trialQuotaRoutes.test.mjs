@@ -9,7 +9,6 @@ Object.assign(process.env, {
   GEV_TRIAL_SECRET: 'routes-test-secret-routes-test-secret',
   GEV_TRIAL_VOICE: '',
   GEV_WAITLIST_BUTTONDOWN: 'surplomb',
-  GEV_WAITLIST_PRICE: '',
   OPENAI_API_KEY: 'sk-test',
   OPENROUTER_API_KEY: '',
   GOOGLE_MAPS_API_KEY: 'test-google-key',
@@ -39,9 +38,14 @@ const realFetch = globalThis.fetch;
 before(() => {
   globalThis.fetch = async (url) => {
     upstreamCalls += 1;
-    const body = String(url).includes('/v1/responses')
+    const target = String(url);
+    const body = target.includes('/v1/responses')
       ? { output_text: 'Louvre rive droite Paris centre' }
-      : { places: [] };
+      : target.includes('/realtime/client_secrets')
+        ? { value: 'ek_test', session: { model: 'gpt-realtime-2' } }
+        : target.includes('openrouter.ai')
+          ? { choices: [{ message: { role: 'assistant', content: 'C’est fait.' } }], usage: {} }
+          : { places: [] };
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   };
 });
@@ -123,18 +127,72 @@ test('nearby places are gated but not counted: the summary is the try', async ()
   assert.equal(places.cookie, null, 'no new count written');
 });
 
-test('voice is out of the trial: the config says so and both voice routes refuse', async () => {
+const token = (cookie) => call('/api/realtime/token', { cookie });
+
+test('a realtime session is the whole voice trial: three requests, one try, once', async () => {
   const config = await call('/api/voice/config');
   assert.equal(config.status, 200);
   assert.equal(config.body.provider, 'openai');
-  assert.equal(config.body.waitlist, 'voice');
+  assert.equal(config.body.waitlist, null, 'a new browser may try the voice');
 
+  const minted = await token('');
+  assert.equal(minted.status, 200);
+  assert.equal(minted.headers.get('x-gev-trial-voice-turns'), '3', 'the page closes the session after three');
+  const trial = await call('/api/trial', { cookie: minted.cookie });
+  assert.deepEqual(trial.body.voice, { limit: 3, used: 3, remaining: 0 });
+  assert.equal(trial.body.remaining, 1, 'the voice trial took one of the two tries');
+
+  // A second session is the premium card, not three more requests.
   const spentBefore = upstreamCalls;
-  const token = await call('/api/realtime/token');
-  assert.equal(token.status, 429);
-  assert.equal(token.body.quota, 'voice');
-  const brain = await call('/api/voice/brain', { method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: 'zoom' }] }) });
-  assert.equal(brain.status, 429);
-  assert.equal(brain.body.quota, 'voice');
-  assert.equal(upstreamCalls, spentBefore);
+  const again = await token(minted.cookie);
+  assert.equal(again.status, 429);
+  assert.equal(again.body.quota, 'voice');
+  assert.equal(again.body.error, 'Essai de la voix terminé');
+  assert.equal(upstreamCalls, spentBefore, 'a refused session never reaches OpenAI');
+  assert.equal((await call('/api/voice/config', { cookie: minted.cookie })).body.waitlist, 'voice');
+
+  // The try that remains still buys a summary.
+  assert.equal((await summary(minted.cookie)).status, 200);
+});
+
+test('a browser that spent every try on summaries cannot open the voice trial', async () => {
+  const first = await summary('');
+  const second = await summary(first.cookie);
+  assert.equal((await call('/api/voice/config', { cookie: second.cookie })).body.waitlist, 'exhausted');
+  const refused = await token(second.cookie);
+  assert.equal(refused.status, 429);
+  assert.equal(refused.body.quota, 'exhausted');
+});
+
+test('the text brain counts the voice trial one spoken request at a time', async () => {
+  const saved = { provider: process.env.GEV_VOICE_PROVIDER, key: process.env.OPENROUTER_API_KEY };
+  Object.assign(process.env, { GEV_VOICE_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'or-test' });
+  try {
+    const turn = (cookie, messages) => call('/api/voice/brain', {
+      method: 'POST', cookie, body: JSON.stringify({ messages }),
+    });
+    const spoken = [{ role: 'user', content: 'zoom sur Lyon' }];
+    let cookie = '';
+    for (let request = 1; request <= 3; request += 1) {
+      const answered = await turn(cookie, spoken);
+      assert.equal(answered.status, 200, `request ${request}`);
+      cookie = answered.cookie;
+      // A tool round inside the same request costs nothing more.
+      const toolRound = await turn(cookie, [
+        ...spoken,
+        { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'fly_to_location', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 'c1', content: '{"ok":true}' },
+      ]);
+      assert.equal(toolRound.status, 200);
+      assert.equal(toolRound.cookie, null, `no count on the tool round of request ${request}`);
+    }
+    const trial = await call('/api/trial', { cookie });
+    assert.deepEqual(trial.body.voice, { limit: 3, used: 3, remaining: 0 });
+    assert.equal(trial.body.used, 1, 'three requests, one try');
+    const fourth = await turn(cookie, spoken);
+    assert.equal(fourth.status, 429);
+    assert.equal(fourth.body.quota, 'voice');
+  } finally {
+    Object.assign(process.env, { GEV_VOICE_PROVIDER: saved.provider, OPENROUTER_API_KEY: saved.key });
+  }
 });

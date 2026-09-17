@@ -15,6 +15,7 @@ import { createVoiceControl, resolveVoiceControlHint } from './voiceControlDom.j
 import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
 import { isCoarseInput } from '../inputMode.js';
 import { requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
+import { markVoicePremiumSpent } from '../voicePremium.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -29,6 +30,18 @@ const STATUS = {
 const DEFAULT_VOICE_ERROR_HINT = 'Check microphone permission and network access, then try again.';
 /** Waits one click sits out when a limiter answers the config lookup with a Retry-After. */
 const VOICE_CONFIG_RETRY_LIMIT = 2;
+/** Names how many requests a minted trial session may answer (src/trialQuota.js). */
+const TRIAL_VOICE_TURNS_HEADER = 'X-GEV-Trial-Voice-Turns';
+/**
+ * After the trial's last answer: how long past the end of its audio the
+ * session stays open, so the jitter buffer plays the last syllable.
+ */
+export const TRIAL_AUDIO_TAIL_MS = 800;
+/**
+ * Upper bound on waiting for that audio to end. `output_audio_buffer.stopped`
+ * is what normally closes the session; this is for a server that never says.
+ */
+export const TRIAL_CLOSE_FALLBACK_MS = 30_000;
 // OpenAI's per-minute TOKEN budget, and what this build costs against it.
 //
 // A Realtime response re-sends the whole session prefix every time — the
@@ -434,6 +447,17 @@ export class GevRealtimeController {
       limits: this.voiceLimits,
     });
     this.costCapStopped = false;
+    /**
+     * The hosted voice trial, when this session is one: spoken answers it may
+     * still give. Null for an ordinary session. See recordTrialAnswer.
+     */
+    this.trialAnswersLeft = null;
+    this.trialAnswersTotal = 0;
+    /** Set after the trial's last answer: the mic is shut, the audio finishing. */
+    this.trialClosing = false;
+    this.trialCloseTimer = null;
+    /** Between `output_audio_buffer.started` and `.stopped`. */
+    this.assistantAudioPlaying = false;
     this.radioControlUnsubscribe = this.radioLayer?.subscribePlaybackControls?.((control) => {
       const event = typeof control === 'string'
         ? { action: control, origin: 'user' }
@@ -571,8 +595,8 @@ export class GevRealtimeController {
     // status is a second click that landed while the lookup ran.
     if (!waited && this.isActive()) return;
     if (voiceConfig.waitlist) {
-      // The hosted trial keeps voice out (src/trialQuota.js). The mic opens
-      // the waitlist card instead of asking for a microphone it cannot use.
+      // This browser's voice trial is spent, or every try is (src/trialQuota.js).
+      // The mic opens the card instead of asking for a microphone it cannot use.
       if (waited) this.setStatus('idle');
       requestWaitlistCard({ reason: voiceConfig.waitlist, explicit: true });
       return;
@@ -637,9 +661,27 @@ export class GevRealtimeController {
     let localStream = null;
     let localPc = null;
     try {
+      // The microphone BEFORE the session. On the hosted origin a minted
+      // session is the whole voice trial (src/trialQuota.js): asking for the
+      // mic after it spent the trial of anyone who hesitated at the permission
+      // prompt, or refused it, without a word having been said.
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
+      if (this.abandonStart(epoch, { localStream, localPc })) return;
+      this.stream = localStream;
+      this.setMicrophoneEnabled(!this.pushToTalkMode || this.pushToTalkKeyHeld);
+      this.startVoiceVisualizer(localStream);
+
       const minted = await fetchRealtimeToken(this.voiceTier);
       const token = minted.token;
       if (this.abandonStart(epoch, { localStream, localPc })) return;
+      this.beginTrialSession(minted.trialTurns);
       // Bind the session meter to the model actually served. An env override
       // (OPENAI_REALTIME_MODEL[_MINI]) can point a tier at a different model,
       // and pricing by the tier we asked for would then under-meter and let the
@@ -662,19 +704,8 @@ export class GevRealtimeController {
         servedModel: minted.model || null,
         servedTier: minted.tier || null,
         ratesRecognized: costState.ratesRecognized,
+        trialTurns: minted.trialTurns,
       });
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      });
-      if (this.abandonStart(epoch, { localStream, localPc })) return;
-      this.stream = localStream;
-      this.setMicrophoneEnabled(!this.pushToTalkMode || this.pushToTalkKeyHeld);
-      this.startVoiceVisualizer(localStream);
 
       // The element was taken during the tap, before `await getUserMedia` above
       // spent the activation. Building one HERE is what made iOS silent.
@@ -722,7 +753,7 @@ export class GevRealtimeController {
       dataChannel.addEventListener('open', () => {
         const detail = this.pushToTalkMode
           ? (this.pushToTalkKeyHeld ? 'Release Space to send' : 'Hold Space to talk')
-          : 'Ask or command';
+          : (this.trialDetail() || 'Ask or command');
         this.setStatus('listening', detail);
         this.debugLog('data_channel.open', { connection: this.connectionDiagnostics(dataChannel) });
       });
@@ -778,6 +809,8 @@ export class GevRealtimeController {
       }
       if (error?.trialRefusal) {
         // Not a fault: the trial ended while the config said it was open.
+        // Forget that config, so the next click opens the card without the mic.
+        this.voiceConfigPromise = null;
         this.stop();
         requestWaitlistCard({ reason: error.trialRefusal, explicit: true });
         return;
@@ -949,10 +982,12 @@ export class GevRealtimeController {
    * @returns {void}
    */
   setMicrophoneEnabled(enabled) {
-    if (this.ui?.root) this.ui.root.dataset.microphone = enabled ? 'active' : 'muted';
-    if (this.brainSession?.isActive()) this.brainSession.setMicrophoneEnabled(enabled);
+    // A spent trial stays deaf, whatever push-to-talk asks.
+    const live = Boolean(enabled) && !this.trialClosing;
+    if (this.ui?.root) this.ui.root.dataset.microphone = live ? 'active' : 'muted';
+    if (this.brainSession?.isActive()) this.brainSession.setMicrophoneEnabled(live);
     this.stream?.getAudioTracks?.().forEach((track) => {
-      track.enabled = Boolean(enabled);
+      track.enabled = live;
     });
   }
 
@@ -1081,6 +1116,10 @@ export class GevRealtimeController {
 
   stop(options = {}) {
     const { removeUi = false, preserveStatus = false, preserveRadioPlayback = false } = options;
+    // Whatever ends a trial session ends the trial: the server spent it when
+    // the session was minted.
+    const endedTrial = this.trialAnswersLeft !== null;
+    this.clearTrialSession();
     // The text-brain session owns no WebRTC state, so it is stopped here and
     // the cleanup below runs harmlessly over its null peer connection.
     if (this.brainSession?.isActive()) this.brainSession.stop();
@@ -1215,9 +1254,97 @@ export class GevRealtimeController {
       this.ui.root.remove();
     }
     if (!preserveStatus && !removeUi) {
-      this.setStatus('idle', 'Voice off');
+      this.setStatus('idle', endedTrial ? 'Essai terminé' : 'Voice off');
     }
     this.setRadioVoiceDucking(false);
+    if (endedTrial && !removeUi) this.announceTrialEnd();
+  }
+
+  /**
+   * Arm the hosted trial's limit on a freshly minted session.
+   * @param {number|null} turns - From the token response; null when no trial.
+   */
+  beginTrialSession(turns) {
+    this.clearTrialSession();
+    if (!Number.isFinite(turns) || turns <= 0) return;
+    this.trialAnswersLeft = turns;
+    this.trialAnswersTotal = turns;
+  }
+
+  clearTrialSession() {
+    if (this.trialCloseTimer) clearTimeout(this.trialCloseTimer);
+    this.trialCloseTimer = null;
+    this.trialAnswersLeft = null;
+    this.trialAnswersTotal = 0;
+    this.trialClosing = false;
+    this.assistantAudioPlaying = false;
+  }
+
+  /** The dock line for a trial session, or null for an ordinary one. */
+  trialDetail() {
+    const left = this.trialAnswersLeft;
+    if (left === null) return null;
+    if (this.trialClosing || left <= 0) return 'Essai terminé';
+    return left === 1 ? 'Essai : dernière demande' : `Essai : ${left} demandes`;
+  }
+
+  /**
+   * Count one answer against the trial, and shut the session after the last.
+   *
+   * An answer is a completed response that speaks and calls nothing: a
+   * command is one tool-calling response and then its spoken confirmation,
+   * and only the confirmation ends the visitor's request. Failed responses
+   * (the site-wide token limit) are not answers and cost nothing.
+   *
+   * After the last one the mic is muted at once — a fourth question must not
+   * start — and the session closes when the answer's audio has played.
+   *
+   * @param {object|undefined} response - `response.done`'s response.
+   */
+  recordTrialAnswer(response) {
+    if (this.trialAnswersLeft === null || this.trialClosing) return;
+    if (!isSpokenAnswer(response)) return;
+    this.trialAnswersLeft = Math.max(0, this.trialAnswersLeft - 1);
+    if (this.trialAnswersLeft > 0) {
+      if (this.status === 'listening' && !this.pushToTalkMode) this.setStatus('listening', this.trialDetail());
+      return;
+    }
+    this.trialClosing = true;
+    this.setMicrophoneEnabled(false);
+    if (this.status === 'listening') this.setStatus('listening', this.trialDetail());
+    this.debugLog('trial.closing', { answers: this.trialAnswersTotal });
+    this.trialCloseTimer = setTimeout(() => this.closeTrialSession(), TRIAL_CLOSE_FALLBACK_MS);
+    if (!this.assistantAudioPlaying) this.scheduleTrialClose();
+  }
+
+  /** The last answer's audio has ended (or never started): close shortly. */
+  scheduleTrialClose() {
+    if (!this.trialClosing) return;
+    if (this.trialCloseTimer) clearTimeout(this.trialCloseTimer);
+    this.trialCloseTimer = setTimeout(() => this.closeTrialSession(), TRIAL_AUDIO_TAIL_MS);
+  }
+
+  closeTrialSession() {
+    if (!this.trialClosing) return;
+    // stop() sees the trial and opens the card.
+    this.stop();
+  }
+
+  /**
+   * Tell the visitor the voice is premium, now that their trial is spent.
+   * Deferred one tick: a session that ended on a FAULT keeps its own message
+   * (reportError runs right after stop()), and the next mic click still opens
+   * the card from the server's refusal.
+   */
+  announceTrialEnd() {
+    // The cached config still says the trial is open; the next click must ask
+    // again, or it lights the microphone before the server refuses the session.
+    this.voiceConfigPromise = null;
+    markVoicePremiumSpent();
+    queueMicrotask(() => {
+      if (this.status === 'error') return;
+      requestWaitlistCard({ reason: 'voice', explicit: true });
+    });
   }
 
   /**
@@ -1246,6 +1373,7 @@ export class GevRealtimeController {
     }
     const cleanText = String(text || '').trim();
     if (!cleanText) return;
+    if (this.trialClosing) throw new Error('The voice trial is over');
     this.cancelRadioHandoff({ abortTools: true });
     this.supersedeActiveResponseForUserTurn();
     const itemEvent = {
@@ -1342,6 +1470,18 @@ export class GevRealtimeController {
     // the only warning before the wall — see RATE_LIMIT_TOKENS_PER_TURN_FALLBACK.
     if (payload.type === 'rate_limits.updated') {
       this.recordRateLimits(payload.rate_limits);
+      return;
+    }
+
+    // WebRTC only: the server's own word on when the answer's audio plays.
+    // The trial's last answer closes the session on the second one.
+    if (payload.type === 'output_audio_buffer.started') {
+      this.assistantAudioPlaying = true;
+      return;
+    }
+    if (payload.type === 'output_audio_buffer.stopped' || payload.type === 'output_audio_buffer.cleared') {
+      this.assistantAudioPlaying = false;
+      this.scheduleTrialClose();
       return;
     }
 
@@ -2391,6 +2531,7 @@ export class GevRealtimeController {
       // usage, and this runs before the radio-handoff early-return upstream, so
       // no billed response escapes the meter.
       this.recordUsage(payload.response?.usage);
+      this.recordTrialAnswer(payload.response);
       const responseStatus = payload.response?.status;
       // The data-channel completion can arrive before WebRTC has drained its
       // final audio packets. Return the UI styling to idle now, but keep the
@@ -2427,7 +2568,7 @@ export class GevRealtimeController {
           }
         }
       }
-      if (!this.pendingRadioPlaybackResult) {
+      if (!this.pendingRadioPlaybackResult && !this.trialClosing) {
         // A typed command deferred behind this response is the operator's own
         // turn — answer it before any tool-result follow-up.
         if (this.pendingUserTextResponse) this.requestUserTextResponse();
@@ -2904,7 +3045,35 @@ async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
   }
   const token = data?.value || data?.client_secret?.value || data?.client_secret;
   if (!token) throw new Error('Realtime token response did not include a client secret');
-  return { token, model: servedModel, tier: servedTier };
+  return { token, model: servedModel, tier: servedTier, trialTurns: readTrialTurns(response.headers) };
+}
+
+/**
+ * How many requests a minted session may answer, or null when it is not a
+ * trial (no header: a clone, or an instance without GEV_TRIAL_LIMIT).
+ *
+ * @param {{get?: (name: string) => string|null}|undefined} headers
+ * @returns {number|null}
+ */
+export function readTrialTurns(headers) {
+  const raw = headers?.get?.(TRIAL_VOICE_TURNS_HEADER);
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const turns = Number(raw);
+  return Number.isInteger(turns) && turns >= 0 ? turns : null;
+}
+
+/**
+ * Whether a finished response is an ANSWER: it completed, it spoke, and it
+ * called no tool (a tool call is followed by the response that confirms it).
+ *
+ * @param {object|undefined} response
+ * @returns {boolean}
+ */
+export function isSpokenAnswer(response) {
+  if (response?.status !== 'completed') return false;
+  const output = Array.isArray(response.output) ? response.output : [];
+  return output.some((item) => item?.type === 'message')
+    && !output.some((item) => item?.type === 'function_call');
 }
 
 function extractFunctionCalls(event) {

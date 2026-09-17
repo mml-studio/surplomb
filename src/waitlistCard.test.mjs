@@ -30,6 +30,11 @@ test('the form posts to Buttondown in a new tab, with the fields its embed endpo
   assert.deepEqual(attr(html, 'metadata__declencheur'), ['exhausted']);
 });
 
+test('the card is headed premium, with the same crown as the mic', () => {
+  const html = renderWaitlistCard({ reason: 'voice', trial });
+  assert.match(html, /<span class="waitlist-kicker"><svg class="premium-crown"[^>]*aria-hidden="true"/);
+});
+
 test('no price on the card: it belongs on the payment page (decision of 2026-09-17)', () => {
   for (const reason of ['exhausted', 'voice', 'direct']) {
     const html = renderWaitlistCard({ reason, trial });
@@ -72,7 +77,16 @@ test('each way in has its own title, and none promises a closed globe', () => {
   assert.equal(waitlistCopy('exhausted', { limit: 5 }).title, 'Essai terminé');
   assert.match(waitlistCopy('exhausted', { limit: 5 }).lede, /^Vos 5 essais/);
   assert.match(waitlistCopy('exhausted', {}).lede, /^Vos essais/);
-  assert.equal(waitlistCopy('voice').title, 'La voix arrive à l’ouverture');
+  assert.match(waitlistCopy('exhausted', { limit: 5 }).lede, /fonctions premium/, 'the voice trial is one of the tries');
+  // Voice is premium whichever way the visitor met the refusal.
+  const used = waitlistCopy('voice', { limit: 5, voice: { limit: 3, used: 3, remaining: 0 } });
+  assert.equal(used.title, 'La voix est une fonction premium');
+  assert.match(used.lede, /^Vos 3 demandes d’essai sont utilisées\. Inscrivez-vous/);
+  assert.match(waitlistCopy('voice', { voice: { limit: 1 } }).lede, /^Votre demande d’essai est utilisée\./);
+  const never = waitlistCopy('voice', { limit: 5, voice: { limit: 0 } });
+  assert.equal(never.title, 'La voix est une fonction premium');
+  assert.match(never.lede, /^Elle arrive avec l’abonnement\./);
+  assert.match(waitlistCopy('voice').lede, /^Elle arrive/, 'a card opened before /api/trial answered');
   assert.equal(waitlistCopy('direct').title, 'Liste d’attente');
   for (const reason of ['exhausted', 'voice']) {
     assert.match(waitlistCopy(reason, { limit: 5 }).lede, /restent ouverts, sans limite/);

@@ -3,19 +3,26 @@
  * QA the hosted trial's waitlist card, in a real browser, against a server
  * started WITH the trial on:
  *
- *   GEV_TRIAL_LIMIT=2 GEV_TRIAL_SECRET=… GEV_WAITLIST_BUTTONDOWN=<user> \
- *     npx vite preview --port 4391
+ *   export GEV_TRIAL_SECRET=…
+ *   GEV_TRIAL_LIMIT=2 GEV_WAITLIST_BUTTONDOWN=<user> npx vite preview --port 4391
  *   node scripts/qa-waitlist-card.mjs --url http://localhost:4391
+ *
+ * The secret is read by BOTH: this script signs a cookie whose voice trial is
+ * already spent, which a real browser could only get by paying for a session.
  *
  * What the unit tests cannot see:
  *
  *   1. `?waitlist=1` opens the card in place of the first-run launcher, with
  *      the Buttondown form, no price, and the caret in the email field.
- *   2. A mic click opens the card (reason `voice`) instead of a session — the
- *      dock is not left in CONNECTING or ERROR.
- *   3. The HUD, once its trial is spent, stops asking and opens the card
+ *   2. The mic wears the premium crown, its help tray says what the trial
+ *      holds, and a REFUSED microphone never mints a session — the one voice
+ *      trial is not spent on a permission prompt.
+ *   3. Once the voice trial is spent, a mic click opens the premium card
+ *      (reason `voice`) instead of a session — the dock is not left in
+ *      CONNECTING or ERROR.
+ *   4. The HUD, once its trial is spent, stops asking and opens the card
  *      WITHOUT taking focus. This spends `GEV_TRIAL_LIMIT` real HUD summaries.
- *   4. On a phone the card is a bottom sheet, full width, and the sheet behind
+ *   5. On a phone the card is a bottom sheet, full width, and the sheet behind
  *      it stands down.
  *
  * Usage: node scripts/qa-waitlist-card.mjs [--url http://localhost:4391] [--headful] [--skip-hud]
@@ -23,6 +30,7 @@
 
 import puppeteer from 'puppeteer';
 import { newPhoneQaPage, newQaPage, phoneUrl } from './lib/qa-first-run.mjs';
+import { TRIAL_COOKIE, signTrialToken } from '../src/trialQuota.js';
 
 const args = process.argv.slice(2);
 const getOpt = (flag, fallback) => {
@@ -111,17 +119,92 @@ async function directLink(browser) {
   await page.close();
 }
 
-async function micClick(browser) {
-  console.log('\nmic click (desktop, voice out of the trial)');
+/** The crown on the mic and the words under it. */
+const readBadge = () => {
+  const badge = document.querySelector('#gev-voice-control .gev-premium-badge');
+  if (!badge || !document.documentElement.dataset.voicePremium) return null;
+  const box = badge.getBoundingClientRect();
+  return {
+    state: document.documentElement.dataset.voicePremium,
+    display: getComputedStyle(badge).display,
+    width: box.width,
+    height: box.height,
+    background: getComputedStyle(badge).backgroundImage,
+    help: document.querySelector('#gev-voice-control .gev-voice-help-premium')?.textContent || '',
+  };
+};
+
+async function micFresh(browser) {
+  console.log('\nmic (desktop, a new browser): the crown, and a refused microphone');
   const page = await newQaPage(browser);
   await page.setViewport({ width: 1440, height: 900 });
+  const minted = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/realtime/token')) minted.push(request.url());
+  });
   await page.goto(`${APP_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  const badge = await waitFor(page, readBadge, null, { timeoutMs: 90_000 });
+  record('the mic wears the crown', badge?.display === 'grid' && Math.round(badge.width) === 15
+    && /gradient/.test(badge.background), JSON.stringify(badge));
+  record('its help tray says what the trial holds', /^Fonction premium · essai gratuit de \d+ demandes?$/.test(badge?.help || ''),
+    badge?.help);
+  if (!badge) return page.close();
+
+  // The visitor refuses the microphone: the session must not be minted,
+  // or their one voice trial is gone without a word said.
+  await page.evaluate(() => {
+    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+    document.getElementById('gev-voice-button').click();
+  });
+  // `idle` is also where the dock starts, so only the refusal's own error
+  // proves the click reached the microphone at all.
+  const settled = await waitFor(page, () => (
+    document.getElementById('gev-voice-control')?.dataset.status === 'error'
+      ? document.getElementById('gev-voice-error-detail')?.textContent || 'error'
+      : null
+  ), null, { timeoutMs: 30_000 });
+  record('the refusal reaches the dock', Boolean(settled), String(settled));
+  await sleep(1500);
+  record('a refused microphone never mints a session', Boolean(settled) && minted.length === 0,
+    `${minted.length} token request(s)`);
+  const trial = await page.evaluate(async () => (await fetch('/api/trial', { cache: 'no-store' })).json());
+  record('the voice trial is still whole', trial.voice?.remaining > 0 && trial.voice.remaining === trial.voice.limit,
+    JSON.stringify(trial.voice));
+  record('no card for a refused microphone', !(await page.evaluate(readCard)));
+  await page.close();
+}
+
+async function micSpent(browser) {
+  console.log('\nmic click (desktop, voice trial already used)');
+  const secret = process.env.GEV_TRIAL_SECRET;
+  if (!secret) {
+    record('GEV_TRIAL_SECRET is exported for this script too', false, 'it signs the spent cookie');
+    return;
+  }
+  const page = await newQaPage(browser);
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.setCookie({
+    name: TRIAL_COOKIE,
+    // 20 is the most requests a voice trial can be configured with.
+    value: signTrialToken({ used: 1, voiceUsed: 20, id: 'qa-voice-spent' }, secret),
+    url: APP_URL,
+    httpOnly: true,
+    sameSite: 'Lax',
+  });
+  await page.goto(`${APP_URL}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  const trial = await page.evaluate(async () => (await fetch('/api/trial', { cache: 'no-store' })).json());
+  record('the server reads the spent cookie', trial.voice?.remaining === 0,
+    trial.voice ? JSON.stringify(trial.voice) : 'no voice field — wrong GEV_TRIAL_SECRET?');
+  const badge = await waitFor(page, readBadge, null, { timeoutMs: 90_000 });
+  record('the crown stays, and the tray says the trial is used', badge?.display === 'grid'
+    && badge.help === 'Fonction premium · essai utilisé', badge?.help);
   const button = await waitFor(page, () => Boolean(document.getElementById('gev-voice-button')), null, { timeoutMs: 90_000 });
-  record('the voice dock is mounted', Boolean(button));
   if (!button) return page.close();
   await page.evaluate(() => document.getElementById('gev-voice-button').click());
   const card = await waitFor(page, readCard, null, { timeoutMs: 15_000 });
-  record('the mic opens the card', card?.reason === 'voice', card ? card.title : 'no card');
+  record('the mic opens the premium card', card?.reason === 'voice' && card.title === 'La voix est une fonction premium',
+    card ? card.title : 'no card');
+  record('the card has no price either', card && !card.mentionsPrice);
   const status = await page.evaluate(() => document.getElementById('gev-voice-control')?.dataset.status || 'idle');
   record('the dock is not left connecting or in error', !['connecting', 'error', 'listening'].includes(status), status);
   await page.close();
@@ -183,7 +266,8 @@ const browser = await puppeteer.launch({
 });
 try {
   await directLink(browser);
-  await micClick(browser);
+  await micFresh(browser);
+  await micSpent(browser);
   if (!SKIP_HUD) await hudExhausted(browser);
   await phone(browser);
 } finally {
