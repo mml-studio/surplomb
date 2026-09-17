@@ -152,14 +152,18 @@ Updated: September 17, 2026
 >   `GEV_PUBLIC_HOST`. `public/manifest.webmanifest` starts on `/globe`, scope
 >   `/`.
 > - **Which door.** `src/vitrine/gate.js`, mirrored by an inline script in the
->   head (run and compared by `gate.test.mjs` over 960 cases): `?vitrine=1|0`
+>   head (run and compared by `gate.test.mjs` over 480 cases): `?vitrine=1|0`
 >   forces; `/globe` (trailing slashes ignored) → cockpit; the QA flag
 >   `window.__GEV_SKIP_VITRINE__` (set by `newQaPage` unless
 >   `{ vitrine: true }`) → cockpit; a hash containing `=` → cockpit; `?q=`,
->   `?waitlist=`, `?welcome=` → cockpit; `localStorage['gev:vitrine-seen:v1']`
->   → cockpit; otherwise the showcase (`html[data-vitrine]`). A cockpit arrival
->   by path, share, query or link writes the seen flag; so does
->   « Ouvrir le globe ».
+>   `?waitlist=`, `?welcome=` → cockpit; otherwise the showcase
+>   (`html[data-vitrine]`). **A pure function of the address**: no storage is
+>   read, and nothing is written on any arrival.
+> - **There is no « already seen » memory** (`gev:vitrine-seen:v1`, #257,
+>   retired by #260). It sent every later visit to `/` into the cockpit, which
+>   made the home page unreachable at its own URL once a browser had opened the
+>   globe. `/globe` replaced its purpose. `forgetVitrineSeen()` (called once by
+>   `src/boot.js`) deletes the stale key from browsers that met #257 or #258.
 > - **No engine behind the page.** `src/main.js` no longer starts itself:
 >   `startCockpit(options)` does. On a wide screen the cockpit graph is
 >   imported at idle (evaluated, nothing built); on a phone nothing is fetched
@@ -189,9 +193,10 @@ Updated: September 17, 2026
 >   own `flyToAddress`; not found → toast, text left in `#location-search`,
 >   ordinary arrival. Showcase arrivals get the first-run SESSION suppression.
 >
-> Acceptance: `npm run qa:landing -- --url <server>` (83 checks against a
+> Acceptance: `npm run qa:landing -- --url <server>` (86 checks against a
 > build, 2026-09-17; the byte budget case only asserts against one). Case
-> `adresses` covers the second URL, case `handoff` the in-place swap.
+> `adresses` covers the second URL, `handoff` the in-place swap, and `retour`
+> the way back — open the globe for real, return to `/`, read the home page.
 
 > **2026-09-17 — first-run card, three French variants** (`src/firstRunExperience.js`
 > owns the door, `src/firstRunVariants.js` what a choice does,

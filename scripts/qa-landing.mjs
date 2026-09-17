@@ -157,7 +157,7 @@ const CASES = {
       seen: localStorage.getItem('gev:vitrine-seen:v1'),
     }));
     check('share link: the cockpit, direct', Boolean(viewer) && !state.attr && state.vitrine === 'none', JSON.stringify(state));
-    check('share link: the browser now counts as having met the globe', state.seen === '1');
+    check('share link: nothing is written down — `/` stays the home page', state.seen === null, String(state.seen));
     await page.close();
   },
 
@@ -185,17 +185,47 @@ const CASES = {
       firstRun: sessionStorage.getItem('gev:first-run-mission-session:v1'),
     }));
     check('phone: « Ouvrir le globe » boots the cockpit', Boolean(viewer) && !after.attr && !after.vitrine, JSON.stringify(after));
-    check('phone: opening remembers the reader, and spares them the first-run card', after.seen === '1' && after.firstRun === 'dismissed');
+    check('phone: opening spares the reader the first-run card, and remembers nothing',
+      after.firstRun === 'dismissed' && after.seen === null, JSON.stringify(after));
     await page.close();
   },
 
-  async seen() {
+  async retour() {
+    // The way back. Before #260 a browser that had once opened the globe could
+    // never reach the home page again, whatever address it typed: a stored flag
+    // outranked `/`. Open the globe for real, then go back to `/` in the SAME
+    // browser — same `localStorage`, same cookies — and read the home page.
     const page = await freshPage();
-    await page.evaluateOnNewDocument(() => { localStorage.setItem('gev:vitrine-seen:v1', '1'); });
-    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+    await waitFor(page, () => (window.__gevVitrine ? true : null));
+    await page.evaluate(() => document.querySelector('#vitrine form.dock').requestSubmit());
     const viewer = await waitFor(page, () => Boolean(window.__godsEyeView?.viewer), { timeout: 90_000 });
-    const attr = await page.evaluate(() => document.documentElement.hasAttribute('data-vitrine'));
-    check('returning reader: the bare root opens the cockpit', Boolean(viewer) && !attr);
+    const opened = await page.evaluate(() => location.pathname);
+    check('retour: the globe was really opened first', Boolean(viewer) && opened === '/globe', opened);
+
+    await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+    const back = await page.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-vitrine'),
+      vitrine: Boolean(document.getElementById('vitrine')
+        && getComputedStyle(document.getElementById('vitrine')).display !== 'none'),
+      viewer: Boolean(window.__godsEyeView),
+      stale: localStorage.getItem('gev:vitrine-seen:v1'),
+    }));
+    check('retour: `/` is the home page again, after the globe has been opened',
+      back.attr === '' && back.vitrine && !back.viewer, JSON.stringify(back));
+    check('retour: the retired « already seen » key is not left behind', back.stale === null, String(back.stale));
+
+    // And a browser carrying the old key from #257/#258 is not stuck either.
+    const legacy = await freshPage();
+    await legacy.evaluateOnNewDocument(() => { localStorage.setItem('gev:vitrine-seen:v1', '1'); });
+    await legacy.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+    const migrated = await legacy.evaluate(() => ({
+      attr: document.documentElement.getAttribute('data-vitrine'),
+      stale: localStorage.getItem('gev:vitrine-seen:v1'),
+    }));
+    check('retour: a browser carrying the old flag gets the home page, and the flag is cleared',
+      migrated.attr === '' && migrated.stale === null, JSON.stringify(migrated));
+    await legacy.close();
     await page.close();
   },
 
