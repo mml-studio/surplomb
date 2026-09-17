@@ -5,6 +5,29 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Added
+- **La version hébergée a un essai et une liste d'attente, et rien ne les
+  comptait.** Chaque navigateur a cinq essais du confort payant (un résumé HUD
+  = un essai ; les lieux proches et la recherche Google s'arrêtent avec lui),
+  comptés dans un cookie signé plutôt que par adresse IP, qu'un bureau ou un
+  opérateur mobile partage entre des centaines de visiteurs. Au-delà, la carte
+  « Essai terminé » s'ouvre sur le globe — jamais une redirection, qui perdrait
+  la vue et le lien de partage — avec le formulaire Buttondown dedans et une
+  question sur l'usage. Pas de prix sur la carte : il viendra sur la page de
+  paiement.
+  `?waitlist=1` ouvre la carte sans détour. Tout est éteint tant que
+  `GEV_TRIAL_LIMIT` n'est pas posé : un clone sur ses propres clés n'a aucune
+  liste d'attente.
+- **La voix n'avait pas d'essai : le micro ouvrait la carte liste d'attente
+  sans qu'on ait jamais entendu l'agent.** Un navigateur peut maintenant lui
+  faire trois demandes vocales, une seule fois : l'essai de la voix compte pour
+  un des cinq essais et ne se renouvelle pas. Après la troisième réponse, le
+  micro se coupe, la réponse finit de se lire, la session se ferme et la carte
+  dit « La voix est une fonction premium ». Le micro porte une couronne dorée
+  là où la voix est vendue, et son aide dit ce que l'essai contient. La
+  permission du micro est demandée avant d'ouvrir la session : un refus ne
+  coûte plus l'essai.
+
 ### Changed
 - **L'arrivée sur le globe 3D ressemblait à un rechargement de la page, et le
   tiroir des fonds annonçait « SATELLITE » pendant qu'on regardait le maillage

@@ -69,6 +69,16 @@ import {
   OSM_CAMERA_QUERY_CAP,
 } from './src/data/osmCameras.js';
 import { createRotationCursor, mirrorProfile } from './src/data/overpassMirrors.js';
+import {
+  consumeTrial,
+  describeTrial,
+  readTrialState,
+  resolveTrialConfig,
+  sendTrialRefusal,
+  trialRefusalReason,
+  TRIAL_VOICE_TURNS_HEADER,
+  voiceTrialSpend,
+} from './src/trialQuota.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import {
   isValidTileCoord as isValidTomTomTile,
@@ -1534,6 +1544,67 @@ function enforceOptInRateLimit(limiter, req, res) {
   res.setHeader('Retry-After', '5');
   res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
   return false;
+}
+
+// Built lazily for the same reason as the limiters above: `.env` lands in
+// process.env after this module is imported. Cached, because a missing
+// GEV_TRIAL_SECRET is replaced by a random one that must hold for the process.
+let _trialConfig;
+function trialConfig() {
+  if (_trialConfig === undefined) {
+    _trialConfig = resolveTrialConfig(process.env);
+    for (const warning of _trialConfig.warnings) console.warn(`[trial] ${warning}`);
+  }
+  return _trialConfig;
+}
+
+/**
+ * Refuse a keyed route once this browser's trial is spent — for voice, once its
+ * own spoken requests are. See src/trialQuota.js. A no-op returning
+ * `true` when GEV_TRIAL_LIMIT is unset, which is the open-source default.
+ *
+ * @param {'comfort'|'voice'} kind
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {object} [extra] - The route's own error-body contract.
+ * @returns {boolean} True if the request may proceed; false if a 429 was sent.
+ */
+function enforceTrial(kind, req, res, extra) {
+  const config = trialConfig();
+  const reason = trialRefusalReason(kind, readTrialState(req, config), config);
+  if (!reason) return true;
+  sendTrialRefusal(res, reason, config, extra);
+  return false;
+}
+
+/**
+ * `/api/trial` — the page asks where it stands before opening the waitlist
+ * card: how many tries are left, whether voice is in the trial, and the
+ * waitlist form's target. Spends nothing, so it is not gated.
+ */
+function trialQuotaPlugin() {
+  function install(middlewares) {
+    middlewares.use('/api/trial', (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.statusCode = 405;
+        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        return;
+      }
+      res.statusCode = 200;
+      res.end(JSON.stringify(describeTrial(req, trialConfig())));
+    });
+  }
+  return {
+    name: 'trial-quota',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
 }
 
 /**
@@ -17705,6 +17776,7 @@ function openAiRealtimeProxy() {
         return;
       }
 
+      if (!enforceTrial('comfort', req, res)) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_OPENAI_PER_MIN). No-op when unset.
       if (!enforceOptInRateLimit(openAiRateLimiter(), req, res)) return;
 
@@ -17741,6 +17813,8 @@ function openAiRealtimeProxy() {
         });
         const data = await response.json().catch(() => ({}));
         const summary = toFiveWordHudSummary(extractOpenAiResponseText(data));
+        // One summary on screen is one try; a failed call is not.
+        if (response.ok && summary) consumeTrial(req, res, trialConfig());
         res.statusCode = response.ok && summary ? 200 : response.status || 502;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
@@ -17788,6 +17862,7 @@ function openAiRealtimeProxy() {
         return;
       }
 
+      if (!enforceTrial('voice', req, res)) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_OPENAI_PER_MIN). No-op when unset.
       if (!enforceOptInRateLimit(openAiRateLimiter(), req, res)) return;
 
@@ -17868,6 +17943,16 @@ function openAiRealtimeProxy() {
           body: JSON.stringify(sessionConfig),
         });
         const body = await response.text();
+        // A minted session is the whole voice trial: the browser talks to
+        // OpenAI directly from here on, so the requests cannot be counted one
+        // by one. It spends them all, and the page closes the session after
+        // the number this header names.
+        const trial = trialConfig();
+        if (response.ok && trial.enabled) {
+          const state = readTrialState(req, trial);
+          consumeTrial(req, res, trial, voiceTrialSpend(state, { all: true }));
+          res.setHeader(TRIAL_VOICE_TURNS_HEADER, String(state.voiceRemaining));
+        }
         res.statusCode = response.status;
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
         // Which tier/model this secret was actually minted for. The upstream
@@ -17966,6 +18051,11 @@ function voiceBrainProxy() {
           openai: Boolean(process.env.OPENAI_API_KEY),
           openrouter: Boolean(process.env.OPENROUTER_API_KEY),
         },
+        // `voice` (its trial is spent) or `exhausted` (every try is) when this
+        // browser may not open a session — the mic then opens the waitlist
+        // card instead of asking for the microphone. Null on an instance
+        // without GEV_TRIAL_LIMIT.
+        waitlist: trialRefusalReason('voice', readTrialState(req, trialConfig()), trialConfig()),
       }));
     });
 
@@ -17992,6 +18082,13 @@ function voiceBrainProxy() {
       }
       const sanitized = sanitizeBrainMessages(payload?.messages, BRAIN_RELAY_LIMITS);
       if (!sanitized.ok) return json(400, { error: sanitized.error });
+      // Checked once the body says what this round is: the tool rounds that
+      // finish a request are part of it, so the voice trial's last request is
+      // still answered after it has been counted. A tool round nobody paid
+      // for — no trial ever opened — is refused like a new request.
+      const opensRequest = sanitized.messages.at(-1)?.role === 'user';
+      const trialState = readTrialState(req, trialConfig());
+      if ((opensRequest || !trialState.voiceUsed) && !enforceTrial('voice', req, res)) return;
 
       const language = normalizeVoiceLanguage(process.env.GEV_VOICE_LANGUAGE);
       const languageLines = voiceLanguageInstruction(language);
@@ -18047,6 +18144,10 @@ function voiceBrainProxy() {
         }
         const message = data?.choices?.[0]?.message || null;
         if (!message) return json(502, { error: 'The brain returned no message' });
+        // One spoken request is one request of the voice trial, however many
+        // tool rounds it takes: only the round that opens a turn ends on the
+        // visitor's own words. The first one also takes one of the tries.
+        if (opensRequest) consumeTrial(req, res, trialConfig(), voiceTrialSpend(trialState));
         return json(200, {
           message,
           model: data?.model || model,
@@ -18135,6 +18236,9 @@ function googlePlacesContextProxy() {
         return;
       }
 
+      // Gated by the trial, but not counted: these names feed the HUD summary,
+      // and the summary is the try the visitor sees.
+      if (!enforceTrial('comfort', req, res, { places: [] })) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
       // Inlined (not the shared helper) so the 429 body keeps this endpoint's
       // `places: []` contract that the client expects on every error response.
@@ -18249,6 +18353,9 @@ function googlePlacesContextProxy() {
         return;
       }
 
+      // Gated, not counted: the search box asks this only as a silent recovery
+      // when the geocode lands far away, and the geocode still answers.
+      if (!enforceTrial('comfort', req, res, { places: [] })) return;
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
       // Inlined (like nearby-places) so the 429 body keeps the `places: []`
       // contract the client expects on every error response.
@@ -27832,6 +27939,7 @@ export default defineConfig(({ mode, command }) => {
       // First in the list so the gate's middleware lands ahead of every proxy.
       accessGatePlugin(),
       frameGuardPlugin(),
+      trialQuotaPlugin(),
       staticCachePolicyPlugin(),
       // After the cache policy, so a pre-compressed body inherits the `Vary`
       // and `immutable` headers that pass already set on the same URL.

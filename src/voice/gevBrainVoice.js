@@ -18,6 +18,8 @@
  * working when the brain is a model somebody else self-hosts.
  */
 
+import { isTrialRefusalReason, requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
+
 /** Where the operator's chosen synthesis voice is remembered between sessions. */
 const VOICE_URI_STORAGE_KEY = 'gev.voice.speechVoiceUri';
 
@@ -162,6 +164,7 @@ export async function fetchVoiceConfig(fetchImpl = defaultFetch) {
     model: null,
     maxRounds: DEFAULT_MAX_ROUNDS,
     configured: { openai: false, openrouter: false },
+    waitlist: null,
   });
   let response;
   try {
@@ -185,6 +188,8 @@ export async function fetchVoiceConfig(fetchImpl = defaultFetch) {
       model: typeof data?.model === 'string' ? data.model : null,
       maxRounds: Number(data?.maxRounds) > 0 ? Math.min(8, Number(data.maxRounds)) : DEFAULT_MAX_ROUNDS,
       configured: data?.configured && typeof data.configured === 'object' ? data.configured : { openai: false, openrouter: false },
+      // The hosted trial's verdict for this browser (src/trialQuota.js).
+      waitlist: isTrialRefusalReason(data?.waitlist) ? data.waitlist : null,
       retryAfterMs: null,
       hint: null,
     };
@@ -804,6 +809,11 @@ export class GevBrainVoiceSession {
         const reply = await this.relay();
         if (!isCurrent()) return;
         if (!reply.ok) {
+          if (reply.trialRefusal) {
+            this.stop();
+            requestWaitlistCard({ reason: reply.trialRefusal, explicit: true });
+            return;
+          }
           this.host.setStatus('error', reply.error);
           return;
         }
@@ -910,6 +920,9 @@ export class GevBrainVoiceSession {
         });
         const data = await response.json().catch(() => null);
         if (response.ok) return { ok: true, message: data?.message || null, usage: data?.usage || null };
+        // The hosted trial's refusal is not load: waiting will not lift it.
+        const trialRefusal = trialRefusalFrom(response.status, data);
+        if (trialRefusal) return { ok: false, error: data.error, trialRefusal };
         // A 429 says how long to wait, whichever limiter sent it — the in-app
         // throttle or a rule at the edge. One spoken request is worth one
         // wait: obey it and ask once more before the turn is declared lost.

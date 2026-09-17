@@ -612,6 +612,64 @@ touches nothing makes **two** same-origin `/api` calls, both `/api/geoid`
 (`npm run qa:phone-boot` prints the list). The "about six" figure above is a
 desktop boot and predates the traffic layer being on by default.
 
+## The hosted trial and the waitlist
+
+Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
+`GEV_WAITLIST_*` variables are documented in
+`.env.example` and read at startup (`docker compose up -d`, no rebuild).
+
+- **What is counted.** One HUD summary (`/api/openai/hud-summary`) is one try.
+  `/api/google/nearby-places` and `/api/google/text-search` are refused once
+  the trial is spent but do not count themselves. The globe and every keyless
+  layer are never gated.
+- **Voice is one of the tries, and happens once.** Opening the voice trial
+  costs one try and gives `GEV_TRIAL_VOICE` spoken requests (default 3), kept
+  in a second count of the same cookie so they never come back. A realtime
+  session (`/api/realtime/token`) spends all of them when it is minted — the
+  browser talks to OpenAI directly after that — and answers with
+  `X-GEV-Trial-Voice-Turns`; the page mutes the mic after that many answers,
+  lets the last one play, closes the session and opens the premium card. The
+  text brain (`/api/voice/brain`) counts them one spoken request at a time.
+  The page asks for the microphone BEFORE minting, so a refused permission
+  spends nothing. The session limit is enforced by the page: an edited client
+  can keep talking, like a cleared cookie can start over — the bill is still
+  bounded by the caps below and the OpenAI account.
+- **The crown.** Where the trial is on, the mic wears a gold crown and its
+  help tray says what the trial holds (`/api/trial`, read once after boot).
+- **Where the count lives.** A signed cookie, `gev_trial`, HttpOnly, 400 days.
+  Not the IP: an office or a mobile carrier puts hundreds of visitors behind
+  one. A cleared cookie starts over, which is accepted — the bill is bounded by
+  the `*_GLOBAL_PER_MIN` caps and the provider limits, not by this.
+- **What the page sees.** A 429 whose body carries `quota: "exhausted"` or
+  `quota: "voice"`, without `Retry-After`. The HUD stops asking and the
+  waitlist card opens in place (once per tab for the HUD, on every mic click).
+  `?waitlist=1` opens the card directly — that is the link to post.
+- **Checking it** (from the VPS, so the Cloudflare `/api` rule stays out of it):
+
+  ```sh
+  curl -s localhost:4173/api/trial                    # enabled, limit, waitlist target
+  curl -s localhost:4173/api/voice/config | grep -o '"waitlist":[^,}]*'
+  ```
+
+  In a browser: switch to a NVG/FLIR/CRT style (the HUD only shows there),
+  then move the view five times, 15 s apart; the sixth summary opens the card.
+  A private window starts at zero.
+- **Buttondown side** — done on 2026-09-17: account and newsletter
+  `surplomb` (owner: the domain's contact address; password in the macOS
+  Keychain under `buttondown.com`), language French, double opt-in on (the
+  free plan's default: the confirmation mail comes from
+  `surplomb@buttondown.email`), welcome email OFF (the form promises one
+  message at opening and nothing else), and « After confirming » redirects to
+  `https://surplomb.app/`. The subscriber record carries `usage` and
+  `declencheur` as metadata, and the form sets the `liste-attente` tag
+  (Buttondown's new-subscriber notification lists it; only creating tags
+  from the dashboard is a paid feature). Verified end to end with a `+surplombtest` address (created,
+  confirmed, redirected, then deleted so the count starts at zero).
+- **On this VPS**, `GEV_TRIAL_LIMIT=5`, `GEV_TRIAL_SECRET` and
+  `GEV_WAITLIST_BUTTONDOWN=surplomb` are in `/opt/gev/.env` since
+  2026-09-17 (backup `.env.bak-2026-09-17-trial`). They take effect with the
+  first deploy that carries `src/trialQuota.js`.
+
 ## Opening the origin to the public
 
 `GEV_ACCESS_PASSWORD` is the only thing between the open internet and a set of

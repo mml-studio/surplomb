@@ -1342,6 +1342,37 @@ html[data-shell="phone"] :is(.first-run-choices, .coverage-briefing-choices) but
   min-height: 48px;
 }
 
+/* The waitlist card (src/waitlistCard.js) is the same kind of sheet. It exists
+   in the DOM only while open, so `:has(#waitlist-card)` is its `.visible`. */
+html[data-shell="phone"] #waitlist-card {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-height: calc(100dvh - 56px);
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  transform: none;
+  border-radius: 16px 16px 0 0;
+  animation-name: waitlist-sheet-in;
+}
+
+@keyframes waitlist-sheet-in {
+  from { transform: translateY(1.5rem); opacity: 0; }
+}
+
+html[data-shell="phone"] body:has(#waitlist-card) :is(#zoom-prompt, #phone-sheet, #first-run-launcher) {
+  visibility: hidden;
+}
+
+html[data-shell="phone"] #waitlist-card :is(.waitlist-close, .waitlist-choice) {
+  min-height: 44px;
+}
+
+html[data-shell="phone"] #waitlist-card .waitlist-close {
+  min-width: 44px;
+}
+
 html[data-shell="phone"] .cctv-lightbox-bar {
   padding-top: max(10px, env(safe-area-inset-top));
 }

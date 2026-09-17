@@ -18,6 +18,7 @@
  */
 
 import { isCoarseInput } from '../inputMode.js';
+import { PREMIUM_CROWN_SVG, currentVoicePremium, voicePremiumText } from '../voicePremium.js';
 
 /**
  * What the mic panel tells the reader to do with it.
@@ -66,6 +67,8 @@ export function createVoiceControl({ reset = false } = {}) {
     root = null;
   }
   if (!root) {
+    // Rebuilt by the controller after boot: carry the premium words over.
+    const premium = currentVoicePremium(document);
     root = document.createElement('div');
     root.id = 'gev-voice-control';
     root.dataset.status = 'idle';
@@ -88,7 +91,9 @@ export function createVoiceControl({ reset = false } = {}) {
         </div>
       </div>
       <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(`Voice control — ${resolveVoiceControlHint(false, false)}`)}" aria-describedby="gev-voice-help">
-        <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /></span>
+        <!-- The crown sits on the ring, which is the one shape every layout
+             keeps; shown only where voice is sold (src/voicePremium.js). -->
+        <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /><span class="gev-premium-badge">${PREMIUM_CROWN_SVG}</span></span>
         <span class="gev-mic-label">ON/OFF</span>
       </button>
       <div class="gev-voice-visualizer" aria-hidden="true">
@@ -100,6 +105,7 @@ export function createVoiceControl({ reset = false } = {}) {
       <div id="gev-voice-help" class="gev-voice-help-tray" role="tooltip">
         <span class="gev-voice-help-kicker">VOICE CONTROL</span>
         <span class="gev-voice-help-detail">${escapeAttribute(resolveVoiceControlHint(false, false))}</span>
+        <span class="gev-voice-help-premium">${escapeAttribute(voicePremiumText(premium?.state, premium?.turns))}</span>
         <ul class="gev-voice-help-examples"></ul>
       </div>
       <div class="gev-voice-transcript" hidden>
