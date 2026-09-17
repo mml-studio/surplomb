@@ -115,6 +115,25 @@ test('the boot lookup marks the mic, and swallows every failure', async () => {
   }
 });
 
+test('with the shared probe, the lookup makes no request of its own', async () => {
+  const { createTrialProbe } = await import('./trialProbe.js');
+  let requests = 0;
+  const probe = createTrialProbe({
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(JSON.stringify(trialBody()), { status: 200 });
+    },
+  });
+  const doc = fakeDocument();
+  await probe.read();
+  const refused = async () => { throw new Error('must not fetch'); };
+  assert.deepEqual(await loadVoicePremium({ fetchImpl: refused, doc, probe }), { state: 'trial', turns: 3 });
+  assert.equal(requests, 1);
+  const silent = fakeDocument();
+  assert.equal(await loadVoicePremium({ fetchImpl: refused, doc: silent, probe: { read: async () => null } }), null);
+  assert.deepEqual(silent.documentElement.dataset, {});
+});
+
 test('a trial spent before the lookup answered is not re-opened by it', async () => {
   const doc = fakeDocument();
   applyVoicePremium({ state: 'spent', turns: 3 }, doc);

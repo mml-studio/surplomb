@@ -576,11 +576,13 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   const startup = main.slice(main.indexOf('void Promise.all(['), main.indexOf('// Expose for debugging'));
   assert.match(startup, /styleManager\.initialRestorePromise/);
   const veil = startup.indexOf("loadingScreen.classList.add('hidden')");
-  assert.ok(veil >= 0 && veil < startup.indexOf('initFirstRunExperience'));
-  assert.match(startup, /initFirstRunExperience\(\{\s*styleManager,\s*dataManager,\s*variant:/);
+  assert.ok(veil >= 0 && veil < startup.indexOf('startFirstRunExperience'));
   // Revealed once the boot flight has LANDED — inside the reveal, never in the
-  // Promise.all above, which is what lifts the loading veil.
-  assert.match(startup, /whenBootFlightEnds\(\(\) => \{\s*initFirstRunExperience\(/);
+  // Promise.all above, which is what lifts the loading veil. The variant and
+  // its measurement are src/firstRunBoot.js's, which hands the card both.
+  assert.match(startup, /whenBootFlightEnds\(\(\) => \{\s*void startFirstRunExperience\(\{\s*styleManager,\s*dataManager,\s*phoneSheet,\s*probe: trialProbe \}\);/);
+  const boot = fs.readFileSync(new URL('./firstRunBoot.js', import.meta.url), 'utf8');
+  assert.match(boot, /init\(\{\s*styleManager,\s*dataManager,\s*variant: assignment\.variant,\s*onEvent: telemetry\.record,/);
   assert.ok(startup.indexOf('whenBootFlightEnds(') > veil);
   assert.doesNotMatch(
     main.slice(main.indexOf('void Promise.all(['), main.indexOf(']).finally(')),

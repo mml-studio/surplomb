@@ -70,6 +70,11 @@ import {
 } from './src/data/osmCameras.js';
 import { createRotationCursor, mirrorProfile } from './src/data/overpassMirrors.js';
 import {
+  FIRST_RUN_MAX_EVENTS,
+  firstRunExperimentFromEnv,
+  sanitizeFirstRunReport,
+} from './src/firstRunAb.js';
+import {
   consumeTrial,
   describeTrial,
   readTrialState,
@@ -1594,11 +1599,164 @@ function trialQuotaPlugin() {
         return;
       }
       res.statusCode = 200;
-      res.end(JSON.stringify(describeTrial(req, trialConfig())));
+      // The A/B switch is read per request, never cached: the variable IS the
+      // switch, and removing it must stop the test on the next boot of every
+      // browser (src/firstRunAb.js).
+      res.end(JSON.stringify(describeTrial(req, trialConfig(), firstRunExperimentFromEnv(process.env))));
     });
   }
   return {
     name: 'trial-quota',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
+}
+
+// ── The first-run card's A/B test: where its reports land ──────────────────
+//
+// `POST /api/first-run/events`, fed by src/firstRunTelemetry.js: at most two
+// beacons per visit. Off — a 404 that reads nothing — unless GEV_FIRST_RUN_AB
+// names at least two variants, on the dev server as on the hosted one.
+//
+// WHAT IT KEEPS, AND WHAT IT NEVER READS. Each report is rebuilt field by field
+// by `sanitizeFirstRunReport` and appended to one JSONL file per UTC day, with
+// the time it was received. The handler reads no header — no user agent, no
+// cookie, no referrer — and the caller's address only feeds the in-memory rate
+// limiter, never the file. Anything that does not validate is refused without
+// being echoed or written.
+//
+// WHERE, AND FOR HOW LONG. Under `.gev-cache/` because it is the one volume a
+// redeploy keeps (`deploy/vps/docker-compose.yml`); `.gev-logs/` dies with the
+// container. Files older than ninety days are swept hourly, and a day stops
+// accepting writes at 5 MiB, so a flood costs at most 450 MiB of shared disk.
+// `GEV_FIRST_RUN_AB_DIR` moves it (the route test does).
+const FIRST_RUN_AB_MAX_BYTES = 16 * 1024;
+const FIRST_RUN_AB_DAY_MAX_BYTES = 5 * 1024 * 1024;
+const FIRST_RUN_AB_RETENTION_DAYS = 90;
+const FIRST_RUN_AB_SWEEP_MS = 60 * 60 * 1000;
+const FIRST_RUN_AB_FILE_RE = /^events-(\d{4}-\d{2}-\d{2})\.jsonl$/;
+/** Two beacons a visit; twelve a minute per address leaves room for reloads. */
+const _firstRunAbRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 12, globalMax: 1_200 });
+let _firstRunAbLastSweep = 0;
+
+/** Read at request time, like every GEV_* variable (see the limiters above). */
+function firstRunAbDir() {
+  return process.env.GEV_FIRST_RUN_AB_DIR || path.join(process.cwd(), '.gev-cache', 'first-run-ab');
+}
+
+/**
+ * Delete the day files that have left the retention window. Only names this
+ * route writes are ever considered: a sweep that deletes what it does not
+ * recognise is a sweep that one day deletes something else.
+ * @param {string} dir
+ * @param {number} now
+ * @returns {string[]} The names deleted.
+ */
+export function sweepFirstRunAbDir(dir, now = Date.now()) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  // Day keys are `YYYY-MM-DD`: a plain string compare, as in the chronicle's
+  // own sweep (`expiredChronicleDays`, src/data/chronicle.js).
+  const floor = new Date(now - FIRST_RUN_AB_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const expired = names
+    .filter((name) => (FIRST_RUN_AB_FILE_RE.exec(name)?.[1] ?? floor) < floor)
+    .sort();
+  const deleted = [];
+  for (const name of expired) {
+    try {
+      fs.unlinkSync(path.join(dir, name));
+      deleted.push(name);
+    } catch { /* already gone */ }
+  }
+  return deleted;
+}
+
+function firstRunAbPlugin() {
+  const reply = (res, status, body = null) => {
+    res.statusCode = status;
+    res.setHeader('Cache-Control', 'no-store');
+    if (body === null) {
+      res.end();
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  function install(middlewares) {
+    // The ninety days are a promise on /confidentialite, and they must hold
+    // after the test is switched off too — when no report arrives any more to
+    // trigger the sweep below. So: once at start, then hourly, whatever the
+    // variable says. `unref` keeps a test process free to exit.
+    sweepFirstRunAbDir(firstRunAbDir());
+    const sweeper = setInterval(() => sweepFirstRunAbDir(firstRunAbDir()), FIRST_RUN_AB_SWEEP_MS);
+    sweeper.unref?.();
+    middlewares.use('/api/first-run/events', async (req, res) => {
+      const experiment = firstRunExperimentFromEnv(process.env);
+      if (!experiment) {
+        // Drained, not read.
+        req.resume?.();
+        reply(res, 404, { error: 'No first-run test on this server' });
+        return;
+      }
+      if (req.method !== 'POST') {
+        req.resume?.();
+        reply(res, 405, { error: 'Method not allowed' });
+        return;
+      }
+      if (!_firstRunAbRateLimiter(clientKey(req))) {
+        req.resume?.();
+        res.setHeader('Retry-After', '60');
+        reply(res, 429, { error: 'Rate limit exceeded' });
+        return;
+      }
+      let parsed;
+      try {
+        const body = await readRequestBodyCapped(req, FIRST_RUN_AB_MAX_BYTES);
+        parsed = JSON.parse(body.toString('utf8') || 'null');
+      } catch {
+        reply(res, 400, { error: 'Unreadable report' });
+        return;
+      }
+      const result = sanitizeFirstRunReport(parsed, {
+        variants: experiment.variants,
+        maxEvents: FIRST_RUN_MAX_EVENTS,
+      });
+      if (!result.ok) {
+        reply(res, 400, { error: 'Invalid report' });
+        return;
+      }
+      try {
+        const dir = firstRunAbDir();
+        const now = Date.now();
+        fs.mkdirSync(dir, { recursive: true });
+        if (now - _firstRunAbLastSweep > FIRST_RUN_AB_SWEEP_MS) {
+          _firstRunAbLastSweep = now;
+          sweepFirstRunAbDir(dir, now);
+        }
+        const receivedAt = new Date(now).toISOString().slice(0, 19) + 'Z';
+        const file = path.join(dir, `events-${receivedAt.slice(0, 10)}.jsonl`);
+        let size = 0;
+        try { size = fs.statSync(file).size; } catch { /* first report of the day */ }
+        if (size < FIRST_RUN_AB_DAY_MAX_BYTES) {
+          fs.appendFileSync(file, `${JSON.stringify({ receivedAt, ...result.record })}\n`);
+        }
+        reply(res, 204);
+      } catch (error) {
+        console.warn('[first-run-ab] could not write a report:', error?.message || error);
+        reply(res, 500, { error: 'Report not stored' });
+      }
+    });
+  }
+  return {
+    name: 'first-run-ab',
     configureServer(server) {
       install(server.middlewares);
     },
@@ -26872,6 +27030,8 @@ function accessGatePlugin() {
         // Whether /mentions-legales names a publisher. A public origin that
         // answers `false` here is serving a page the law requires, empty.
         legal: legalNoticeFromEnv(process.env).complete,
+        // Whether the first-run A/B test is collecting (GEV_FIRST_RUN_AB).
+        abtest: Boolean(firstRunExperimentFromEnv(process.env)),
         client: clientKeyFor(req),
       }));
     });
@@ -28071,6 +28231,7 @@ export default defineConfig(({ mode, command }) => {
       accessGatePlugin(),
       frameGuardPlugin(),
       trialQuotaPlugin(),
+      firstRunAbPlugin(),
       // Ahead of the static server, which would otherwise hand out the built
       // legal pages with their « non renseigné » still in place.
       legalPagesPlugin(),

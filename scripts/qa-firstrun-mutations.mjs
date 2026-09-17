@@ -43,6 +43,7 @@ const FILES = {
   phone: path.join(ROOT, 'phone.css'),
   vite: path.join(ROOT, 'vite.config.js'),
   main: path.join(ROOT, 'src', 'main.js'),
+  boot: path.join(ROOT, 'src', 'firstRunBoot.js'),
   ui: path.join(ROOT, 'src', 'ui.js'),
   docs: path.join(ROOT, 'docs', 'CURRENT-STATE.md'),
 };
@@ -811,13 +812,13 @@ const MUTATIONS = [
     defect: 'the card is revealed before the loading cover yields',
     file: 'main',
     from: "      loadingScreen.classList.add('hidden');",
-    to: "      initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });\n      loadingScreen.classList.add('hidden');",
+    to: "      void startFirstRunExperience({ styleManager, dataManager, phoneSheet, probe: trialProbe });\n      loadingScreen.classList.add('hidden');",
   },
   {
     defect: 'the card is revealed mid-descent, over the boot flight',
     file: 'main',
-    from: "        whenBootFlightEnds(() => {\n          initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });\n        });",
-    to: "        initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });",
+    from: "        whenBootFlightEnds(() => {\n          void startFirstRunExperience({ styleManager, dataManager, phoneSheet, probe: trialProbe });\n        });",
+    to: "        void startFirstRunExperience({ styleManager, dataManager, phoneSheet, probe: trialProbe });",
   },
   {
     defect: 'the loading veil waits for the boot flight',
@@ -827,9 +828,9 @@ const MUTATIONS = [
   },
   {
     defect: 'the card loses its DataManager and cannot switch a layer on',
-    file: 'main',
-    from: "initFirstRunExperience({ styleManager, dataManager, variant: 'A', phoneSheet });",
-    to: "initFirstRunExperience({ styleManager, variant: 'A', phoneSheet });",
+    file: 'boot',
+    from: '    styleManager,\n    dataManager,\n    variant: assignment.variant,',
+    to: '    styleManager,\n    variant: assignment.variant,',
   },
 
   // ── Voice: schema must not drift ──────────────────────────────────────────

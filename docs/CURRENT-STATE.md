@@ -195,8 +195,8 @@ Updated: September 8, 2026
 > `src/main.js` passes `variant: 'A'`. `?welcome=a|b|c`
 > (`forcedFirstRunVariant`, case-insensitive) outranks the caller and replays
 > like `?welcome=1`. Assigning B and C to real visitors on the hosted instance
-> is a separate change (assignment, beacon, privacy page, report); today nothing
-> sends `onEvent` anywhere.
+> is a separate change (assignment, beacon, privacy page, report); for where
+> `onEvent` goes now, see « 2026-09-17 — first-run A/B test » below.
 >
 > **The `onEvent` contract.** `{type: 'impression', shell}` (`desktop` or
 > `phone`); `{type: 'action', kind, outcome, queryLength?, layerIds?}` with
@@ -321,6 +321,143 @@ Updated: September 8, 2026
 > one at a time and requires `src/firstRunExperience.test.mjs` to go red. Unit
 > pins: `src/firstRunExperience.test.mjs`, `src/firstRunVariants.test.mjs`,
 > `src/firstRunHint.test.mjs`, `src/locationSearchSeams.test.mjs`.
+
+> **2026-09-17 — first-run A/B test** (`src/firstRunAb.js` owns the switch, the
+> draw and the report schema; `src/firstRunTelemetry.js` what is sent and when;
+> `src/firstRunBoot.js` the wiring; `src/firstRunOptOut.js` and
+> `src/firstRunOptOutPage.js` the refusal; `src/trialProbe.js` the shared
+> `/api/trial` read; the `first-run-ab` plugin in `vite.config.js` the sink;
+> `scripts/first-run-ab-report.mjs` the reading). The three variants of the
+> block above are drawn for real visitors on the hosted instance, and nowhere
+> else.
+>
+> **One switch, read per request.** `GEV_FIRST_RUN_AB=A,B,C` (case and spaces
+> forgiven, unknown letters and repeats dropped; fewer than two distinct
+> variants is no test), through `firstRunExperimentFromEnv`, the one reader
+> shared by `/api/trial`, the report route, `/healthz` (`abtest`) and the
+> privacy page. Absent: every visitor gets A, nothing is sent, the route answers
+> 404, and a browser that drew a variant while the test ran deletes its draw on
+> its next boot. Rollback is removing the variable.
+>
+> **The draw is client-side**, so that `/` stays a static, cacheable page and
+> removing the variable removes everything. `assignFirstRunVariant`, in order:
+> (1) `?welcome=a|b|c` forces that card and leaves the stored draw alone; it is
+> measured only while the test runs, flagged `forced: true`, and the report
+> leaves those out unless `--include-forced`. (2) No test, or a refusal: A,
+> unmeasured, draw deleted. (2b) No ANSWER — `/api/trial` failed, was
+> throttled or came late: unmeasured, and the stored draw is kept and still
+> shown; reading "no answer" as "no test" would erase it and re-roll the
+> visitor, mixing the groups. (3) A draw that cannot be stored: A, unmeasured — it
+> would be re-rolled on every visit. (4) Otherwise the stored draw, or a new one
+> in equal shares. `localStorage['gev:first-run-variant:v1']` holds
+> `{variant, assignedAt, visitorId}`, the id being 16 random base-36
+> characters. A draw older than 395 days (13 months, the CNIL ceiling for an
+> audience-measurement identifier), dated more than five minutes ahead, or
+> naming a variant the test no longer runs is replaced. A draw younger than
+> 30 minutes marks the report `newVisitor`.
+>
+> **The refusal**, which the CNIL audience-measurement exemption requires: the
+> « Ne pas être mesuré » button on `/confidentialite`
+> (`localStorage['gev:first-run-optout:v1'] = 'refused'`, the button flips it
+> back), or the Global Privacy Control signal, which needs no click and hides
+> the button. Either one means A, nothing sent and the draw deleted, from the
+> next boot. The privacy page loads `src/firstRunOptOutPage.js` and nothing of
+> the globe.
+>
+> **One `/api/trial` read per page.** `trialProbe.read()` starts at the top of
+> `init()` in `src/main.js`; the mic crown (`loadVoicePremium({ probe })`, at
+> idle) and the card share its promise, which never rejects (a failure reads as
+> `null`). The card waits at most `FIRST_RUN_PROBE_BUDGET_MS` (1 500 ms,
+> `probe.within()`) once the boot flight has landed; past that, unmeasured,
+> with the stored card if there is one (case 2b above) — a slow probe never
+> deletes a draw. The waitlist card keeps its own fresh read: it opens after the
+> trial has moved. `describeTrial(req, config, experiments)` adds
+> `experiments: { firstRun: { variants } } | null` to the response.
+>
+> **The wiring.** `src/main.js` no longer passes `variant: 'A'`; the reveal is
+> `whenBootFlightEnds(() => { void startFirstRunExperience({ styleManager,
+> dataManager, phoneSheet, probe: trialProbe }); })`. `startFirstRunExperience`
+> (`src/firstRunBoot.js`) waits for the probe, draws, and hands
+> `initFirstRunExperience` the variant and `onEvent: telemetry.record`. When no
+> card opens, it arms a `returnVisit: true` report only for a returning visitor:
+> test on, not forced, no share state, no `?welcome=0`, and the durable close
+> key already written.
+>
+> **What a report is** (schema v1, `FIRST_RUN_REPORT_FIELDS`): `v`, `exp`
+> (`first-run`), `variant`, `forced`, `visitorId`, `sessionId` (random per page,
+> never stored), `seq`, `newVisitor`, `returnVisit`, `shell` (`phone` or
+> `desktop`), `input` (`coarse` or `fine`), `viewport` (`xs` to `xl`, from the
+> smaller side), `reducedMotion`, `bootMs` (rounded to 100 ms), `dwellMs`
+> (seq 2 only) and at most 64 `events`, each with `t` in milliseconds since the
+> impression: `impression`; `action` with `kind`, `outcome` and `qLen` (the
+> typed length in the buckets `0`, `1-3`, `4-10`, `11-30`, `31+`); `dismiss`
+> with `via`; `milestone` with `kind` ∈ `layer`, `search`, `waitlist`.
+> **Never** the typed text, a position, a layer id, the IP, a header (user
+> agent, referrer, cookie), the URL, the language or the time zone.
+> `sanitizeFirstRunReport` REBUILDS every record field by field, copies no
+> unknown key, and rejects the whole report on any value outside its list; an
+> unforced variant must be one the test runs, and a report that is not a return
+> visit must carry an impression.
+>
+> **Two beacons a visit, at most.** The edge in front of the origin counts
+> `/api` calls per address (30 per 10 s measured on the Enerlens zone,
+> `docs/DEPLOY.md`), so nothing is sent per event. Seq 1 goes at the first
+> action or close, one tick later so that a found address carries both; seq 2
+> at `visibilitychange → hidden` or `pagehide`, cumulative, with `dwellMs`. The
+> report keeps the highest seq per session. A milestone counts only after the
+> card has closed, once per kind, and a layer the card itself switched on (its
+> `layerIds`) is not the visitor's: `layer` is a user-origin visibility request,
+> `search` a non-empty submit of `#location-search-form` (capture phase, the
+> text never read beyond its emptiness), `waitlist` the `WAITLIST_OPEN_EVENT`. A
+> returning visitor sends one seq 2 with no event. Transport: `sendBeacon`, then
+> `fetch` with `keepalive` and `credentials: 'omit'`; a lost beacon is lost, and
+> the report prints the seq 2 coverage.
+>
+> **The sink.** `POST /api/first-run/events` (`firstRunAbPlugin`, dev server and
+> `vite preview`): 404 without the variable (body drained, not read), 405 off
+> POST, 429 past 12 a minute per address or 1 200 overall (in memory), body
+> capped at 16 KiB, 400 without echo when invalid, 204 when stored. It reads no
+> header; the address only feeds the limiter. Each record is appended as
+> `{receivedAt, ...record}` to `.gev-cache/first-run-ab/events-YYYY-MM-DD.jsonl`
+> (UTC day; `GEV_FIRST_RUN_AB_DIR` moves it), on the volume a redeploy keeps. A
+> day stops taking lines at 5 MiB. Files older than 90 days are swept when the
+> server starts and every hour after, whether or not the test is on — the
+> privacy page's ninety days must hold after it is switched off too — and only
+> names the route writes are ever considered.
+>
+> **The privacy page follows the switch.** `CONDITIONAL_SECTIONS` in
+> `src/legalNotice.js` gains `abtest` and `noabtest`. With the test on,
+> `/confidentialite` describes the draw, every field of a report, what is never
+> sent, the 13-month and 90-day retentions, the legal basis and the refusal
+> button; with it off, it keeps « pas de mesure d’audience ».
+>
+> **The reading.** `node scripts/first-run-ab-report.mjs <dir>
+> [--include-forced] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--alpha]
+> [--delta] [--json]` folds the lines into sessions and prints totals per
+> variant, never one session: activation with its Wilson 95 % interval, actions
+> and closures, time to the first gesture, return after ≥ 24 h, dwell, seq 2
+> coverage; then z-tests of B and of C against A (Bonferroni, α/2) and the
+> sample still missing (356 per variant to see 10 points from 0.30 at α 0.05,
+> 432 at α 0.025). **Activation** is a found `address`, `geoloc`, `chip` or tile
+> other than `tile:explore`, or a `layer` or `search` milestone after the close.
+> **Stop rule**: read ONCE, at ≥ 200 unforced impressions per variant or
+> 21 days after the first, whichever comes first; adopt B or C only if it beats
+> A on activation with p < 0.025 and is not worse on the closures the visitor
+> did not choose (`esc`, `click-away`, `timeout`); one extension of three weeks
+> at most. On the VPS: `ssh vps 'docker exec gev node
+> scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'`. A product
+> analytics tool (PostHog) is deferred, decided 2026-09-17
+> (`docs/KNOWN-ISSUES.md`).
+>
+> Gates: `src/firstRunAb.test.mjs`, `src/firstRunAbRoutes.test.mjs`,
+> `src/firstRunTelemetry.test.mjs`, `src/firstRunBoot.test.mjs`,
+> `src/firstRunOptOut.test.mjs`, `src/trialProbe.test.mjs`,
+> `scripts/first-run-ab-report.test.mjs`. In a browser (harness still being
+> written), `node scripts/qa-first-run-ab.mjs --url <app>` against a server
+> started with `GEV_FIRST_RUN_AB=A,B,C` checks the switch, the draw and its
+> persistence, the reports written to the day file, the privacy page and the
+> refusal; `--off`, against a server without the variable, checks that nothing
+> is measured.
 
 > **2026-08-08 — performance waves 1+2:** the app idles via an explicit render
 > governor (`src/renderGovernor.js` — hold/release from every per-frame

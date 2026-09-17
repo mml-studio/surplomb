@@ -31,7 +31,15 @@
     <section>
       <h2>En bref</h2>
       <ul>
+        <!--gev:if:noabtest-->
         <li>Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi.</li>
+        <!--/gev:if:noabtest-->
+        <!--gev:if:abtest-->
+        <li>Pas de compte, pas de publicité, pas de cookie de suivi. Une seule
+          mesure : quelle carte de bienvenue vous a été montrée, et ce que vous en
+          avez fait, sous un identifiant aléatoire propre à ce navigateur, sans
+          votre adresse IP, sans ce que vous avez tapé.</li>
+        <!--/gev:if:abtest-->
         <li>La carte décrit des lieux avec des données publiques. Elle ne suit personne.</li>
         <li>Ce que vous tapez ou dites sert à vous répondre. Surplomb ne le conserve pas.</li>
         <!--gev:if:waitlist-->
@@ -152,7 +160,8 @@
             <td>Vos réglages (couches, panneaux, carte de bienvenue), une mesure
               de la puissance de votre machine, les dernières erreurs de la voix,
               et ce que vous saisissez vous-même (comparables, scènes). Rien de
-              cela ne quitte votre navigateur.</td>
+              cela ne quitte votre navigateur<!--gev:if:abtest-->, sauf la version
+              de la carte de bienvenue et son identifiant, décrits ci-dessous<!--/gev:if:abtest-->.</td>
             <td>Jusqu’à ce que vous l’effaciez dans les réglages du navigateur.</td>
           </tr>
           <!--gev:if:trial-->
@@ -165,6 +174,38 @@
             <td>400 jours, ou jusqu’à ce que vous l’effaciez.</td>
           </tr>
           <!--/gev:if:trial-->
+          <!--gev:if:abtest-->
+          <tr>
+            <td>Carte de bienvenue (test A/B)</td>
+            <td>Votre navigateur tire au sort la carte de bienvenue qu’il vous
+              montre, et garde la version tirée, la date du tirage et un
+              identifiant aléatoire propre à ce navigateur. Il envoie à notre
+              serveur au plus deux rapports par visite, l’un quand la carte se
+              ferme ou que vous y faites un geste, l’autre quand vous quittez la
+              page : la version, et si le lien l’imposait ; cet identifiant, un
+              identifiant de visite oublié quand la page se ferme, et si c’est
+              votre première visite ; vos gestes sur la carte (recherche,
+              localisation, pastille, tuile ou bulle cliquée, avec leur issue ;
+              fermeture, avec sa cause), datés depuis son affichage ; si vous avez
+              ensuite allumé une couche (sans dire laquelle)<!--gev:if:waitlist-->, ouvert
+              la liste d’attente<!--/gev:if:waitlist--> ou lancé une recherche ; la
+              longueur de ce que vous avez tapé, par tranches ; téléphone ou
+              ordinateur, souris ou écran tactile, une tranche de taille d’écran,
+              votre préférence pour les animations réduites ; la durée du
+              démarrage et celle de la visite. Si vous revenez et ne voyez plus la
+              carte, un seul rapport part, sans geste. Jamais ce que vous tapez,
+              votre position ni le lieu où vous allez, les couches allumées,
+              votre adresse IP, votre navigateur, la page d’où vous venez ni
+              celle où vous êtes, votre langue, votre fuseau horaire ou la taille
+              exacte de votre écran : notre serveur recopie chaque rapport champ
+              par champ et jette le reste. Nous n’en lisons que des totaux par
+              version, jamais une visite après l’autre<!--gev:if:trial-->, et ne
+              les rapprochons jamais du cookie <code>gev_trial</code><!--/gev:if:trial-->.</td>
+            <td>L’identifiant : utilisé treize mois au plus, puis remplacé ;
+              effacé de votre navigateur à votre première visite après la fin du
+              test. Les rapports : quatre-vingt-dix jours sur notre serveur.</td>
+          </tr>
+          <!--/gev:if:abtest-->
           <!--gev:if:waitlist-->
           <tr>
             <td>Liste d’attente</td>
@@ -191,6 +232,20 @@
         <li>La voix : la demande que vous faites en l’activant.</li>
         <li>Le résumé de la vue : l’intérêt légitime de nommer ce que vous
           regardez. Il ne part qu’après votre premier geste sur la page.</li>
+        <!--gev:if:abtest-->
+        <li>Le test A/B de la carte de bienvenue : l’intérêt légitime de savoir
+          quelle carte aide le mieux à commencer. C’est une mesure d’audience
+          dispensée de consentement (article 82 de la loi Informatique et
+          Libertés, lignes directrices de la CNIL) : pour ce seul site, lue en
+          totaux, sans recoupement avec d’autres données<!--gev:if:trial-->, pas même
+          le cookie d’essai<!--/gev:if:trial-->. Vous pouvez la refuser :
+          <button type="button" class="optout" data-first-run-optout>Ne pas être mesuré</button>
+          <span data-first-run-optout-status role="status"></span>
+          Le choix est gardé dans ce navigateur ; à la visite suivante, la carte
+          par défaut s’affiche, rien n’est envoyé et le tirage est effacé. Un
+          navigateur qui envoie le signal Global Privacy Control n’est jamais
+          mesuré.</li>
+        <!--/gev:if:abtest-->
         <!--gev:if:waitlist-->
         <li>La liste d’attente : votre consentement, confirmé par courriel,
           retirable à tout moment.</li>
@@ -220,5 +275,6 @@
       <a href="/">Retour au globe</a> · <a href="/mentions-legales">Mentions légales</a>
     </footer>
   </main>
+  <script type="module" src="/src/firstRunOptOutPage.js"></script>
 </body>
 </html>

@@ -23,6 +23,8 @@
  * container is enough — no rebuild.
  */
 
+import { firstRunExperimentFromEnv } from './firstRunAb.js';
+
 /**
  * Each field, the variable that carries it, and whether the page renders as
  * complete without it. `registration` is optional because an individual who
@@ -61,6 +63,11 @@ export const CONDITIONAL_SECTIONS = Object.freeze({
   // one is no trial, and so no cookie.
   trial: (env) => Number(env?.GEV_TRIAL_LIMIT) >= 1,
   waitlist: (env) => Boolean(String(env?.GEV_WAITLIST_BUTTONDOWN || '').trim()),
+  // The welcome-card test, through the one reader of `GEV_FIRST_RUN_AB`
+  // (src/firstRunAb.js): fewer than two variants is no test, and so nothing
+  // measured. `noabtest` keeps the sentence the page says when nothing is.
+  abtest: (env) => Boolean(firstRunExperimentFromEnv(env || {})),
+  noabtest: (env) => !Boolean(firstRunExperimentFromEnv(env || {})),
 });
 
 /** One line of env text, trimmed; newlines folded so a value cannot open a new element. */

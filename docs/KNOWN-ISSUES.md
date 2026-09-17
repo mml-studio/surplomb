@@ -235,6 +235,41 @@ Conséquences à l’exécution :
 - Rien ne lui apprend que la fiche existe tant qu’il n’a pas trouvé la ligne
   « Fiche implantation » dans le panneau des couches.
 
+### Le test A/B de la carte de bienvenue se lit à la main dans un JSONL : pas d’outil d’analyse produit
+Status: Open (backlog), décidé 2026-09-17
+
+Contexte :
+- La carte de premier lancement se teste en A/B/C sur surplomb.app dès que
+  `GEV_FIRST_RUN_AB=A,B,C` est posé (éteint par défaut). Le puits est
+  volontairement minimal : `POST /api/first-run/events` (`vite.config.js`,
+  `firstRunAbPlugin`) ajoute une ligne par rapport dans
+  `.gev-cache/first-run-ab/events-YYYY-MM-DD.jsonl`, et
+  `scripts/first-run-ab-report.mjs` imprime les totaux par variante, les
+  intervalles de Wilson, un test z contre A, la taille d’échantillon manquante
+  et la règle d’arrêt. Rien d’autre.
+- Décision du mainteneur (2026-09-17) : PostHog viendra plus tard. Ne pas
+  l’intégrer dans la PR du test.
+
+Conséquences à l’exécution :
+- Pas d’entonnoir entre jours au-delà du couple impression / visite de
+  retour ; pas de tableau de bord, pas d’alerte : lire le résultat demande un
+  `ssh` et un `docker exec`. Une variante qui s’effondre un mardi n’est vue
+  que quand quelqu’un regarde.
+- Ajouter une mesure demande quatre modifications : le client
+  (`src/firstRunTelemetry.js`), le validateur du serveur
+  (`sanitizeFirstRunReport`, `src/firstRunAb.js`), le rapport, et
+  `confidentialite.html`, qui énumère chaque champ envoyé.
+- Ce que PostHog remplacerait : `src/firstRunTelemetry.js`, la route et son
+  validateur, le rapport et son test. `src/firstRunAb.js` (tirage, TTL de
+  13 mois) reste : le tirage doit rester côté client pour que `/` reste une
+  page statique et cacheable.
+- Condition pour garder la dispense de consentement (art. 82 LIL, mesure
+  d’audience) : PostHog EU Cloud (Francfort), mode sans cookie
+  (`persistence: 'memory'`, pas d’autocapture, pas de session replay), sans
+  recoupement avec le cookie `gev_trial`, et le refus déjà en place
+  (`src/firstRunOptOut.js`) branché dessus. Sinon, bandeau de consentement.
+  `/confidentialite` devra nommer PostHog comme sous-traitant, dans la même PR.
+
 ---
 
 ## Closed / Intentional (for clarity)

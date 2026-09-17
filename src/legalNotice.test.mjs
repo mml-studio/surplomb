@@ -150,3 +150,30 @@ test('the trial cookie is disclosed only where a trial runs', () => {
   assert.doesNotMatch(renderLegalPage(html, { ...FULL_ENV, GEV_TRIAL_LIMIT: '0' }), /gev_trial/);
   assert.match(renderLegalPage(html, { ...FULL_ENV, GEV_TRIAL_LIMIT: '5' }), /gev_trial/);
 });
+
+test('the welcome-card test is disclosed only where it runs', () => {
+  const html = page('confidentialite.html');
+  assert.match(html, /<!--gev:if:abtest-->/);
+  assert.match(html, /<!--gev:if:noabtest-->/);
+  const noMeasure = /Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi\./;
+  // Fewer than two variants is no test: the page says what it said before.
+  for (const env of [FULL_ENV, { ...FULL_ENV, GEV_FIRST_RUN_AB: 'A' }, { ...FULL_ENV, GEV_FIRST_RUN_AB: '' }]) {
+    const off = renderLegalPage(html, env);
+    assert.doesNotMatch(off, /test A\/B/, `GEV_FIRST_RUN_AB=${env.GEV_FIRST_RUN_AB}`);
+    assert.doesNotMatch(off, /identifiant aléatoire propre/);
+    assert.doesNotMatch(off, /quitte votre navigateur,/);
+    assert.match(off, noMeasure);
+    assert.doesNotMatch(off, /<!--\/?gev:/);
+  }
+  for (const trial of [{}, { GEV_TRIAL_LIMIT: '5' }]) {
+    const on = renderLegalPage(html, { ...FULL_ENV, ...trial, GEV_FIRST_RUN_AB: 'A,B,C' });
+    assert.match(on, /test A\/B/);
+    assert.match(on, /treize mois/);
+    assert.match(on, /quatre-vingt-dix jours/);
+    assert.match(on, /Rien de\s+cela ne quitte votre navigateur, sauf la version/);
+    assert.doesNotMatch(on, noMeasure, 'a measured page must not say it measures nothing');
+    assert.doesNotMatch(on, /<!--\/?gev:/);
+    // The no-cross-referencing promise names the trial cookie only where one exists.
+    assert.equal(/gev_trial/.test(on), Boolean(trial.GEV_TRIAL_LIMIT));
+  }
+});

@@ -119,17 +119,28 @@ export function markVoicePremiumSpent(doc = globalThis.document) {
  * Ask the server once, at boot, and mark the mic. Silent on any failure: a
  * missing crown costs nothing, a thrown error at boot would.
  *
- * @param {{fetchImpl?: typeof fetch, doc?: Document}} [options]
+ * With `probe` (src/trialProbe.js), the page's one shared `/api/trial` read is
+ * used instead of a request of its own.
+ *
+ * @param {{fetchImpl?: typeof fetch, doc?: Document, probe?: {read: () => Promise<object|null>}|null}} [options]
  * @returns {Promise<{state: VoicePremiumState, turns: number}|null>}
  */
 export async function loadVoicePremium({
   fetchImpl = globalThis.fetch?.bind(globalThis),
   doc = globalThis.document,
+  probe = null,
 } = {}) {
   try {
-    const response = await fetchImpl('/api/trial', { cache: 'no-store', headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-    const mark = voicePremiumFromTrial(await response.json());
+    let body;
+    if (probe) {
+      body = await probe.read();
+      if (!body) return null;
+    } else {
+      const response = await fetchImpl('/api/trial', { cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+      body = await response.json();
+    }
+    const mark = voicePremiumFromTrial(body);
     // A session that already spent the trial in the meantime wins.
     if (mark && currentVoicePremium(doc)?.state === 'spent') return currentVoicePremium(doc);
     applyVoicePremium(mark, doc);
