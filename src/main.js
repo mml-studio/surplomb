@@ -19,6 +19,7 @@ import { LAYER_CATEGORIES, LAYER_TAXONOMY } from './data/layerTaxonomy.js';
 import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
 import { registerDataCredits } from './data/dataCredits.js';
+import { installLegalLinks } from './legalLinks.js';
 import { modelAssetUrl } from './data/modelAssets.js';
 import { installLazyVoice } from './voice/lazyVoice.js';
 import { MapStackController } from './mapStackController.js';
@@ -233,6 +234,7 @@ async function init() {
     // expandable bottom-left credit lightbox (showOnScreen=false), so they never
     // clutter the on-globe attribution line.
     registerDataCredits(viewer);
+    installLegalLinks(document.getElementById('cesium-credits'));
 
     // Hide Cesium's default globe — Google Photorealistic 3D Tiles provide their own
     // globe at all LODs (street level → orbital). The default globe's 2D imagery

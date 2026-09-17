@@ -291,6 +291,13 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 #cesium-credits .cesium-credit-expand-link {
   color: rgba(232, 234, 237, 0.7);
 }
+/* The legal links (`src/legalLinks.js`) take a line of their own, under the
+   attribution. On the same line they ran past the `max-width` that keeps this
+   block clear of the command dock — `nowrap` overflows rather than wraps — and
+   « Confidentialité » sat under LOCATION at 1440 px (measured 2026-09-17). */
+#cesium-credits .gev-legal-links {
+  display: block;
+}
 
 /* Cesium's stock attribution lightbox grows with every registered data source.
    Keep the title and close affordance fixed while the complete, unabridged
@@ -10826,6 +10833,11 @@ body.scene-playback-mode #first-run-launcher {
   color: rgba(199, 225, 231, 0.62);
   font-size: 0.66rem;
   line-height: 1.45;
+}
+
+.waitlist-consent a {
+  color: inherit;
+  text-underline-offset: 2px;
 }
 
 .waitlist-joined {

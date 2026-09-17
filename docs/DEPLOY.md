@@ -754,3 +754,62 @@ so it is the LAST step, not the first. In order:
 Reversing it is the same two commands with the variable put back, so the risk
 is not the switch — it is how long an unbounded key stays reachable before
 anyone notices. Steps 1 to 3 are what make that duration not matter.
+
+### The legal pages
+
+A site published in France must name its publisher, their address and phone
+number, the publication director and every provider that hosts or stores what
+it processes (LCEN, art. 1-1), and must tell visitors what it does with their
+data (GDPR, art. 13). `/mentions-legales` and `/confidentialite` do both. The
+text is in the repository; **the identity is not**, because the repository is
+public and forkable (`src/legalNotice.js` says why). It comes from `.env`:
+
+```sh
+GEV_LEGAL_PUBLISHER=<legal name, form and share capital, or a person's name>
+GEV_LEGAL_REGISTRATION=<RCS / SIREN line — optional for an unregistered individual>
+GEV_LEGAL_ADDRESS=<registered office, or home address for an individual>
+GEV_LEGAL_PHONE=<phone>
+GEV_LEGAL_EMAIL=<contact address — also the one for GDPR requests>
+GEV_LEGAL_DIRECTOR=<publication director>
+GEV_LEGAL_HOSTING=<host, address, phone> | <each other storage provider>
+```
+
+For this box the providers are Hostinger (the VPS: HOSTINGER INTERNATIONAL
+LIMITED, 61 Lordou Vironos Street, 6023 Larnaca, Cyprus), Cloudflare (the
+tunnel and the edge: Cloudflare, Inc., 101 Townsend St, San Francisco, CA
+94107, USA) and, once the waitlist is on, Buttondown (Buttondown, LLC, 406 W
+Franklin St. #201, Richmond, VA 23221, USA). Hostinger publishes no phone
+number in its terms; the law asks for one, so get it from their support.
+
+The values are read **per request**, never built into the bundle, so the
+manoeuvre is an edit and a recreate — no rebuild:
+
+```sh
+ssh -t vps 'cd /opt/gev && cp .env .env.bak-$(date +%F)-legal && $EDITOR .env && docker compose up -d'
+curl -s https://surplomb.app/healthz          # "legal": true
+curl -s https://surplomb.app/mentions-legales | grep -c 'class="missing'   # 0
+```
+
+`"legal": false` means at least one required variable is empty; the page
+itself lists which, and a public origin (`GEV_PUBLIC_HOST` set) logs
+`[legal-pages] … incomplete` at boot. Unset, both pages still answer — with a
+visible « non renseigné » where the publisher goes, never a blank.
+
+The privacy page shows the trial-cookie row only when `GEV_TRIAL_LIMIT` is at
+least 1, and the waitlist rows only when `GEV_WAITLIST_BUTTONDOWN` is set: an
+instance never lists a processor it does not use. Every other sentence on it is
+a statement about the code, so **a PR that adds a cookie, a log, a stored
+field or a provider the browser calls changes `confidentialite.html` too**.
+
+Two server behaviours exist so that page can be true, and a hosted server
+keeps them on by default:
+
+- **No voice transcript on disk.** `/api/realtime/debug-log` answers 404 under
+  `vite preview` unless `GEV_REALTIME_DEBUG_LOG=1`. Set it for a debugging
+  session, then remove it; the file is `.gev-logs/realtime-conversations.jsonl`
+  inside the container.
+- **No search-engine indexing of `/api/*`** (`X-Robots-Tag: noindex`), and
+  `fiche.html` keeps its `noindex` for good: DVF sales are published on the
+  condition that they are not indexed (Livre des procédures fiscales,
+  art. R*112 A-3). The launch-day removal of `noindex` concerns `index.html`
+  only.

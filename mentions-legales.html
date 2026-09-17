@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    `noindex` À DEMEURE, comme `fiche.html` : une page légale n'est pas une
+    porte d'entrée. Le retrait du 22 septembre ne concerne que `index.html`.
+  -->
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/src/legalPages.css">
+  <title>Mentions légales — Surplomb</title>
+  <!--
+    MENTIONS LÉGALES — ce que la loi pour la confiance dans l'économie
+    numérique (LCEN, art. 1-1) exige d'un site publié en France.
+
+    L'IDENTITÉ N'EST PAS ICI. Les régions balisées `gev:legal:*` sont
+    remplacées à chaque requête par `legalPagesPlugin` (vite.config.js) avec
+    les variables `GEV_LEGAL_*` de l'instance ; voir `src/legalNotice.js` pour
+    la raison, et `docs/DEPLOY.md` pour les valeurs. Ce qui reste entre les
+    marqueurs est le repli, affiché tel quel si rien ne le remplace.
+  -->
+</head>
+<body>
+  <main class="sheet">
+    <header class="masthead">
+      <p class="eyebrow"><a href="/">Surplomb</a> · Mentions légales</p>
+      <h1>Mentions légales</h1>
+      <p class="subline">Mise à jour le 17 septembre 2026.</p>
+    </header>
+
+    <section>
+      <h2>Éditeur</h2>
+      <!--gev:legal:publisher-->
+      <p class="missing">Cette instance n’a pas renseigné son éditeur. Un site
+        publié en France doit le faire (LCEN, art. 1-1).</p>
+      <!--/gev:legal:publisher-->
+    </section>
+
+    <section>
+      <h2>Hébergement et stockage</h2>
+      <p>Le site est hébergé, et les données qu’il traite sont stockées, par :</p>
+      <!--gev:legal:hosting-->
+      <p class="missing">Hébergeur non renseigné.</p>
+      <!--/gev:legal:hosting-->
+    </section>
+
+    <section>
+      <h2>Ce que le site affiche</h2>
+      <p>Surplomb affiche des données publiques publiées par leurs producteurs :
+        administrations, collectivités, opérateurs et projets ouverts. Chaque
+        source garde sa licence. La liste complète est dans le panneau
+        « Data attribution » du globe et dans
+        <a href="https://github.com/mml-studio/surplomb/blob/main/DATA_SOURCES.md">DATA_SOURCES.md</a>.</p>
+      <p>Surplomb n’est l’auteur d’aucune de ces données. Une erreur se corrige
+        chez le producteur de la donnée ; nous la retirons ou la signalons
+        dès qu’on nous la montre.</p>
+      <p>Les informations sont données à titre indicatif. Elles ne remplacent
+        pas un document officiel : état des risques, diagnostic, acte notarié,
+        avis d’imposition.</p>
+      <p>Ce que la carte montre, ce qu’elle ne montre pas, et ce que le site sait
+        de vous : <a href="/confidentialite">page confidentialité</a>.</p>
+    </section>
+
+    <section>
+      <h2>Code source</h2>
+      <p>Le code du site est libre, sous licence MIT :
+        <a href="https://github.com/mml-studio/surplomb">github.com/mml-studio/surplomb</a>.
+        Il est dérivé de
+        <a href="https://github.com/bilawalsidhu/gods-eye-view">God’s Eye View</a>,
+        de Bilawal Sidhu, lui aussi sous licence MIT.</p>
+      <p>Les marques et logos des services cités (Google, Cesium, IGN et les
+        autres) appartiennent à leurs titulaires.</p>
+    </section>
+
+    <section>
+      <h2>Signalement et droit de réponse</h2>
+      <p>Pour signaler une donnée erronée ou un contenu illicite, ou pour exercer
+        un droit de réponse, écrivez à l’adresse de l’éditeur indiquée plus haut.</p>
+    </section>
+
+    <footer class="colophon">
+      <a href="/">Retour au globe</a> · <a href="/confidentialite">Confidentialité</a>
+    </footer>
+  </main>
+</body>
+</html>

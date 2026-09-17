@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- `noindex` À DEMEURE, comme `fiche.html` et `mentions-legales.html`. -->
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/src/legalPages.css">
+  <title>Ce que Surplomb montre, et ce qu’il ne montre pas</title>
+  <!--
+    CONFIDENTIALITÉ — l'information que le RGPD (art. 13 et 14) doit aux
+    visiteurs, et la réponse à la question qu'une carte de données publiques
+    pose d'abord : est-ce qu'elle montre des gens ?
+
+    CHAQUE PHRASE EST UN CONSTAT SUR LE CODE, relevé le 17/09/2026. Qui change
+    un flux (un cookie, un journal, un fournisseur appelé depuis le
+    navigateur) change cette page dans la même PR. Les régions balisées
+    `gev:if:*` n'apparaissent que si l'instance a allumé la fonction, et
+    `gev:legal:controller` reçoit l'éditeur (voir `src/legalNotice.js`).
+  -->
+</head>
+<body>
+  <main class="sheet">
+    <header class="masthead">
+      <p class="eyebrow"><a href="/">Surplomb</a> · Confidentialité</p>
+      <h1>Ce que Surplomb montre, et ce qu’il ne montre pas</h1>
+      <p class="subline">Mise à jour le 17 septembre 2026.</p>
+    </header>
+
+    <section>
+      <h2>En bref</h2>
+      <ul>
+        <li>Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi.</li>
+        <li>La carte décrit des lieux avec des données publiques. Elle ne suit personne.</li>
+        <li>Ce que vous tapez ou dites sert à vous répondre. Surplomb ne le conserve pas.</li>
+        <!--gev:if:waitlist-->
+        <li>Si vous laissez votre courriel, il sert à une seule chose : vous prévenir de l’ouverture de l’offre payante.</li>
+        <!--/gev:if:waitlist-->
+      </ul>
+    </section>
+
+    <section>
+      <h2>Ce que la carte montre</h2>
+      <p>Des lieux, et ce que les administrations et les projets ouverts publient
+        à leur sujet : ventes immobilières, diagnostics énergétiques, permis de
+        construire, risques, écoles, équipements, réseaux, transports, trafic
+        aérien et maritime. Chaque donnée vient de son producteur, sous sa
+        licence.</p>
+      <p>Des personnes n’apparaissent que là où le producteur les publie lui-même :</p>
+      <ul>
+        <li><strong>Médecins</strong> : nom, spécialité et secteur de
+          conventionnement, tels que l’Assurance maladie les publie dans
+          l’Annuaire santé. Une correction se demande à l’Assurance maladie.</li>
+        <li><strong>Permis de construire à Paris et dans la métropole de
+          Bordeaux</strong> : le nom du demandeur tel que la collectivité le
+          publie. C’est parfois un particulier.</li>
+        <li><strong>Caméras publiques</strong> : l’image en direct que
+          l’exploitant met en ligne. Des passants peuvent y apparaître, à la
+          résolution de la caméra. Surplomb n’archive aucune image.</li>
+        <li><strong>Navires et avions</strong> : le nom du navire, le type et
+          l’immatriculation de l’avion, tels qu’ils les émettent. Jamais le
+          propriétaire.</li>
+      </ul>
+      <p>Pour qu’un nom n’apparaisse plus sur Surplomb, écrivez à l’adresse
+        indiquée plus bas.</p>
+    </section>
+
+    <section>
+      <h2>Ce que la carte ne montre pas</h2>
+      <ul>
+        <li><strong>Aucun acheteur ni vendeur.</strong> Les ventes (DVF) ne
+          contiennent aucun nom, et Surplomb ne cherche pas à retrouver qui a
+          acheté : les conditions de publication de DVF l’interdisent.</li>
+        <li><strong>Aucune vente dans les moteurs de recherche.</strong> La fiche
+          d’adresse et les réponses de l’API sont exclues de l’indexation, comme
+          ces mêmes conditions l’exigent.</li>
+        <li><strong>Aucun propriétaire.</strong> Le fichier des propriétaires
+          particuliers n’est pas public, et Surplomb n’en a aucune copie.</li>
+        <li><strong>Aucun revenu ni aucune infraction individuels.</strong>
+          Revenus et délinquance n’existent ici qu’en agrégats (carreaux de
+          200 m, communes), avec le secret statistique de l’INSEE et du SSMSI.</li>
+        <li><strong>Personne n’est suivi.</strong> Surplomb ne reçoit aucune
+          donnée de téléphone, ne lit aucune plaque et ne reconnaît aucun
+          visage.</li>
+      </ul>
+    </section>
+
+    <section id="vos-donnees">
+      <h2>Ce que le site sait de vous</h2>
+      <table class="flows">
+        <thead>
+          <tr><th>Donnée</th><th>Où elle va</th><th>Combien de temps</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Adresse IP</td>
+            <td>Cloudflare, qui protège le site, puis notre serveur, qui s’en sert
+              pour limiter les abus.</td>
+            <td>En mémoire vive seulement ; jamais écrite par le site.</td>
+          </tr>
+          <tr>
+            <td>Zone regardée</td>
+            <td>Votre navigateur demande les fonds de carte et le relief
+              directement à leurs fournisseurs (IGN, OpenStreetMap, Esri, EOX,
+              Google, Cesium, Re:Earth). Il demande les données à notre serveur,
+              sauf quelques sources publiques qu’il interroge lui-même (Base
+              Adresse Nationale, RNB, Hub’Eau, USGS, data.gouv.fr). Tous voient
+              votre adresse IP et la zone.</td>
+            <td>Notre serveur garde les réponses publiques en cache, jamais qui
+              les a demandées.</td>
+          </tr>
+          <tr>
+            <td>Recherche d’adresse ou de lieu</td>
+            <td>Le service qui répond : Base Adresse Nationale, Géoplateforme de
+              l’IGN, OpenStreetMap (Nominatim) ou Google.</td>
+            <td>Six heures au plus en mémoire vive, pour éviter de redemander.</td>
+          </tr>
+          <tr>
+            <td>Voix</td>
+            <td>Le son de votre micro part directement de votre navigateur vers
+              OpenAI (États-Unis), avec une image de la vue affichée, le temps de
+              la conversation. Notre serveur ne reçoit pas le son.</td>
+            <td>Surplomb ne conserve pas la conversation. OpenAI la garde jusqu’à
+              30 jours pour détecter les abus, et ne s’en sert pas pour entraîner
+              ses modèles.</td>
+          </tr>
+          <tr>
+            <td>Résumé de la vue</td>
+            <td>Les noms des lieux affichés et des couches allumées partent chez
+              OpenAI, sans coordonnées. Les coordonnées de la vue partent chez
+              Google pour nommer le lieu et trouver ce qu’il y a autour.</td>
+            <td>Rien chez nous. OpenAI : jusqu’à 30 jours, pour la détection
+              d’abus.</td>
+          </tr>
+          <tr>
+            <td>Position (« Autour de moi »)</td>
+            <td>Demandée par votre navigateur, seulement si vous cliquez. Elle
+              déplace la caméra et n’est envoyée à aucun serveur telle quelle.</td>
+            <td>Le temps du déplacement.</td>
+          </tr>
+          <tr>
+            <td>Lien de partage</td>
+            <td>La position de la caméra est écrite dans l’adresse de la page,
+              après le <code>#</code>, qui n’est jamais envoyé à un serveur. Qui
+              reçoit le lien voit ce que vous regardiez.</td>
+            <td>Tant que le lien existe.</td>
+          </tr>
+          <tr>
+            <td>Stockage local du navigateur</td>
+            <td>Vos réglages (couches, panneaux, carte de bienvenue), une mesure
+              de la puissance de votre machine, les dernières erreurs de la voix,
+              et ce que vous saisissez vous-même (comparables, scènes). Rien de
+              cela ne quitte votre navigateur.</td>
+            <td>Jusqu’à ce que vous l’effaciez dans les réglages du navigateur.</td>
+          </tr>
+          <!--gev:if:trial-->
+          <tr>
+            <td>Cookie <code>gev_trial</code></td>
+            <td>Compte vos essais des fonctions premium (résumés, voix). Il porte
+              un compteur et un identifiant aléatoire, signés ; notre serveur ne
+              garde rien. Il sert à limiter l’accès gratuit à un échantillon,
+              ce qui le dispense de consentement.</td>
+            <td>400 jours, ou jusqu’à ce que vous l’effaciez.</td>
+          </tr>
+          <!--/gev:if:trial-->
+          <!--gev:if:waitlist-->
+          <tr>
+            <td>Liste d’attente</td>
+            <td>Votre courriel, votre réponse à la question sur votre usage, et ce
+              qui a ouvert le formulaire. Stockés chez Buttondown (États-Unis),
+              après une confirmation par courriel. Ils servent à vous prévenir de
+              l’ouverture de l’offre payante, rien d’autre. Votre navigateur
+              retient que vous êtes inscrit, pour ne plus vous le proposer.</td>
+            <td>Jusqu’à votre désinscription, en un clic depuis chaque courriel,
+              et au plus trois ans après notre dernier contact.</td>
+          </tr>
+          <!--/gev:if:waitlist-->
+        </tbody>
+      </table>
+      <p>Les radios se lisent directement chez la station, qui voit votre
+        adresse IP.</p>
+    </section>
+
+    <section>
+      <h2>Pourquoi, et sur quelle base</h2>
+      <ul>
+        <li>Afficher la carte, répondre à une recherche, limiter les abus :
+          l’intérêt légitime de faire fonctionner le service que vous ouvrez.</li>
+        <li>La voix : la demande que vous faites en l’activant.</li>
+        <li>Le résumé de la vue : l’intérêt légitime de nommer ce que vous
+          regardez. Il ne part qu’après votre premier geste sur la page.</li>
+        <!--gev:if:waitlist-->
+        <li>La liste d’attente : votre consentement, confirmé par courriel,
+          retirable à tout moment.</li>
+        <!--/gev:if:waitlist-->
+      </ul>
+      <p>OpenAI, Google, Cloudflare<!--gev:if:waitlist--> et Buttondown<!--/gev:if:waitlist-->
+        sont des entreprises américaines. Ces transferts s’appuient sur les
+        garanties qu’elles proposent : le cadre de protection des données
+        UE–États-Unis ou les clauses contractuelles types de la Commission
+        européenne.</p>
+    </section>
+
+    <section>
+      <h2>Vos droits</h2>
+      <!--gev:legal:controller-->
+      <p class="missing">Cette instance n’a pas renseigné son responsable du
+        traitement.</p>
+      <!--/gev:legal:controller-->
+      <p>Vous pouvez demander l’accès à vos données, leur rectification, leur
+        effacement ou leur portabilité, et vous opposer à un traitement ou en
+        demander la limitation. Réponse sous un mois.</p>
+      <p>En cas de désaccord, vous pouvez saisir la CNIL :
+        <a href="https://www.cnil.fr/fr/plaintes">cnil.fr/fr/plaintes</a>.</p>
+    </section>
+
+    <footer class="colophon">
+      <a href="/">Retour au globe</a> · <a href="/mentions-legales">Mentions légales</a>
+    </footer>
+  </main>
+</body>
+</html>

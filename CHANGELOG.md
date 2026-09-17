@@ -27,6 +27,30 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   là où la voix est vendue, et son aide dit ce que l'essai contient. La
   permission du micro est demandée avant d'ouvrir la session : un refus ne
   coûte plus l'essai.
+- **Le site était ouvert sans mentions légales ni page sur les données
+  personnelles.** `/mentions-legales` nomme l'éditeur, le directeur de la
+  publication et les hébergeurs ; `/confidentialite` dit ce que la carte montre,
+  ce qu'elle ne montre pas, et ce que le site sait du visiteur, flux par flux.
+  Les deux liens ferment la ligne de crédits du globe, sur une ligne à eux.
+
+  **L'identité n'est pas dans le dépôt.** Elle vient des variables
+  `GEV_LEGAL_*` de l'instance, lues à chaque requête : un fork ne republie pas
+  l'éditeur d'un autre, et une adresse postale n'entre pas dans un historique
+  public. Sans elles, les pages affichent « non renseigné » et `/healthz`
+  répond `"legal": false`.
+
+  **Deux comportements du serveur ont changé pour que la page dise vrai.** Le
+  journal de débogage de la voix n'écrit plus rien sur une instance hébergée
+  (`GEV_REALTIME_DEBUG_LOG=1` pour le rallumer) : il acceptait de n'importe
+  qui, sans plafond de débit, 8 Mo par requête, la transcription des réponses
+  de l'assistant. Et le résumé de la vue demande à OpenAI de ne garder aucun
+  état (`store: false`), au lieu de 30 jours par défaut. Enfin, `/api/*` porte
+  `X-Robots-Tag: noindex` : les ventes DVF ne doivent pas être indexées.
+
+  **Sur un téléphone, le pied du panneau dépassait de l'écran.** La hauteur
+  repliée était mesurée avant que Cesium ne remplisse les crédits : 116 px pour
+  147 px de contenu, « Data attribution » coupé en deux. Elle suit maintenant la
+  taille du pied.
 
 ### Changed
 - **L'arrivée sur le globe 3D ressemblait à un rechargement de la page, et le
