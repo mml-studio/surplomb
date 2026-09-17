@@ -1,13 +1,14 @@
 /**
  * The page's entry: a switch, not the cockpit.
  *
- * `index.html` serves two surfaces (src/vitrine/gate.js says which): the
- * showcase a first visitor reads, and the cockpit everyone else lands in. This
+ * `index.html` serves two surfaces at two addresses (src/vitrine/gate.js says
+ * which): the showcase at `/`, the cockpit at `/globe` and on any errand. This
  * module is the only script the page loads by itself, and it is small on
  * purpose — the showcase must reach its first paint, and a phone must be able
  * to read the whole page, without a byte of Cesium.
  *
- *   - cockpit arrival → `src/main.js` is imported and started at once;
+ *   - cockpit arrival (`/globe`, a share hash, `?q=`…) → `src/main.js` is
+ *     imported and started at once;
  *   - showcase arrival → `src/vitrine/vitrine.js` wires the page, and the
  *     cockpit is imported only when « Ouvrir le globe » is pressed (on a wide
  *     screen it is also fetched at idle, so the press is quick).
@@ -20,14 +21,17 @@
 
 import {
   applyVitrineDecision,
-  arrivalMarksSeen,
   decideVitrine,
-  markVitrineSeen,
+  forgetVitrineSeen,
   readVitrineSignals,
 } from './vitrine/gate.js';
 
 const decision = decideVitrine(readVitrineSignals());
 applyVitrineDecision(decision);
+// A browser that met #257 or #258 carries the retired « already seen » key.
+// Nothing reads it since the globe got its own address; drop it rather than
+// leave a dead entry behind.
+forgetVitrineSeen();
 
 let cockpitModule = null;
 
@@ -95,10 +99,9 @@ if (decision.vitrine) {
     .then(({ initVitrine }) => initVitrine({ loadCockpit, openCockpit, onCockpitError: reportBootFailure }))
     .catch((error) => {
       // The showcase still works without its script: the form is a native GET
-      // to `/?q=`, and every example is a plain link.
+      // to `/globe?q=`, and every example is a plain link.
       console.error('[boot] the showcase script could not load:', error);
     });
 } else {
-  if (arrivalMarksSeen(decision)) markVitrineSeen();
   openCockpit().catch(reportBootFailure);
 }

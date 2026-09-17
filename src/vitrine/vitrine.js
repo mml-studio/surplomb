@@ -11,7 +11,7 @@
  * @module vitrine/vitrine
  */
 
-import { APP_PATH, isWideVitrine, markVitrineSeen, VITRINE_ATTRIBUTE } from './gate.js';
+import { APP_PATH, isWideVitrine, VITRINE_ATTRIBUTE } from './gate.js';
 import { createRotation } from './rotation.js';
 import { HERO_LOOP } from './heroLoop.js';
 import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
@@ -206,7 +206,6 @@ export function initVitrine({
     opening = true;
     form?.setAttribute('aria-busy', 'true');
     if (label) label.textContent = 'Ouverture du globe…';
-    markVitrineSeen();
     // `?vitrine=1` forces this page for a demo; once the globe is open it must
     // leave the address, or every share link taken from here would send its
     // recipients to the showcase. The typed text travels as `?q=` on the paths

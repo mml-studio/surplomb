@@ -60,6 +60,11 @@
     réécrire un chemin, jamais un hôte — donc « Ouvrir le globe » change
     l'adresse sous l'image gelée, sans navigation ni second démarrage.
 
+    `/` montre la page d'accueil À CHAQUE FOIS, à tout le monde. Le drapeau
+    « déjà venu » a été retiré : il rendait la page d'accueil inatteignable dès
+    qu'un navigateur avait ouvert le globe une fois, quelle que soit l'adresse
+    tapée. La décision ne lit plus rien du stockage.
+
     La règle et ses raisons sont dans `src/vitrine/gate.js`, qui porte la même
     décision pour le JavaScript ; `src/vitrine/gate.test.mjs` EXÉCUTE ce script
     sur la même matrice et échoue si les deux copies divergent.
@@ -78,11 +83,7 @@
       else if (window.__GEV_SKIP_VITRINE__ === true) vitrine = false;
       else if (String(location.hash).indexOf('=') >= 0) vitrine = false;
       else if (params.has('q') || params.has('waitlist') || params.has('welcome')) vitrine = false;
-      else {
-        var seen = false;
-        try { seen = window.localStorage.getItem('gev:vitrine-seen:v1') === '1'; } catch (e) { seen = false; }
-        vitrine = !seen;
-      }
+      else vitrine = true;
       if (vitrine) root.setAttribute('data-vitrine', '');
       else root.removeAttribute('data-vitrine');
     })();

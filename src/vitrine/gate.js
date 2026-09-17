@@ -28,8 +28,23 @@
  *   - `?q=` (the showcase's own form, empty or not), `?waitlist=1` and any
  *     `?welcome=` open the cockpit — each of them names something that lives
  *     there;
- *   - a browser that has already opened the globe opens the cockpit;
- *   - everything else, i.e. a first visit to the bare root, gets the showcase.
+ *   - everything else, i.e. `/` without an errand, gets the showcase. Every
+ *     time, for everybody.
+ *
+ * ── WHY NO « ALREADY SEEN » MEMORY ───────────────────────────────────────────
+ *
+ * There was one (`gev:vitrine-seen:v1`, #257): once a browser had opened the
+ * globe, `/` gave it the cockpit forever. It existed because ONE address had to
+ * serve two surfaces, and it was a trap — a reader who had seen the globe could
+ * no longer reach the home page at its own URL, whatever they typed. The
+ * address bar said `/` and showed something else.
+ *
+ * The second address removed the reason for it: `/globe` is where a returning
+ * reader goes, by bookmark, by installed app (`start_url`) or by typing it. So
+ * the memory is gone rather than merely overridable — the decision is a pure
+ * function of the address now, which is also why nothing here writes to storage
+ * any more. {@link forgetVitrineSeen} clears the stale key left in browsers
+ * that met the old build.
  *
  * `?vitrine=1` and `?vitrine=0` force either door for the session and are never
  * persisted (same doctrine as `?input=` and `?perf=`). The QA fleet skips the
@@ -56,11 +71,10 @@
  */
 
 /**
- * Remembered once the cockpit has opened in this browser. A display setting,
- * not a tracker: it never leaves the browser, and clearing it only brings the
- * showcase back.
+ * The key the retired « already seen » memory used (#257–#259). Kept only so
+ * {@link forgetVitrineSeen} can delete it; nothing reads it.
  */
-export const VITRINE_SEEN_KEY = 'gev:vitrine-seen:v1';
+export const RETIRED_SEEN_KEY = 'gev:vitrine-seen:v1';
 
 /**
  * The globe's own address. Served by `index.html` like every other path — the
@@ -94,29 +108,20 @@ export const VITRINE_ATTRIBUTE = 'data-vitrine';
 export const VITRINE_WIDE_MIN_PX = 1001;
 
 /**
- * Read everything the decision needs, from injectable globals.
+ * Read everything the decision needs, from injectable globals. The address and
+ * one window flag — no storage is touched, so Safari's private mode and a
+ * hardened profile have nothing to throw about.
  * @param {object} [options]
- * @returns {{path: string, search: string, hash: string, seen: boolean, skip: boolean}}
+ * @returns {{path: string, search: string, hash: string, skip: boolean}}
  */
 export function readVitrineSignals({
   location = globalThis.location,
-  storage,
   windowRef = globalThis,
 } = {}) {
-  let seen = false;
-  try {
-    const store = storage === undefined ? windowRef?.localStorage : storage;
-    seen = store?.getItem?.(VITRINE_SEEN_KEY) === '1';
-  } catch {
-    // Safari private mode and hardened profiles throw on access: an unreadable
-    // memory is a first visit.
-    seen = false;
-  }
   return {
     path: String(location?.pathname || '/'),
     search: String(location?.search || ''),
     hash: String(location?.hash || ''),
-    seen,
     skip: windowRef?.[VITRINE_SKIP_GLOBAL] === true,
   };
 }
@@ -124,14 +129,13 @@ export function readVitrineSignals({
 /**
  * The decision, as a pure function of the signals.
  *
- * `reason` says why, so the entry script can tell an arrival that should mark
- * the browser as having seen the globe (`app-path`, `share`, `query`, `link`)
- * from one that must leave no trace (`forced`, `qa`).
+ * `reason` says why — it is read by the harnesses and printed in diagnostics;
+ * nothing acts on it any more, since no arrival writes anything down.
  *
- * @param {{path?: string, search?: string, hash?: string, seen?: boolean, skip?: boolean}} signals
- * @returns {{vitrine: boolean, reason: 'forced'|'app-path'|'qa'|'share'|'query'|'link'|'seen'|'first-visit'}}
+ * @param {{path?: string, search?: string, hash?: string, skip?: boolean}} signals
+ * @returns {{vitrine: boolean, reason: 'forced'|'app-path'|'qa'|'share'|'query'|'link'|'home'}}
  */
-export function decideVitrine({ path = '/', search = '', hash = '', seen = false, skip = false } = {}) {
+export function decideVitrine({ path = '/', search = '', hash = '', skip = false } = {}) {
   const params = new URLSearchParams(search);
   const forced = params.get('vitrine');
   if (forced === '1') return { vitrine: true, reason: 'forced' };
@@ -144,29 +148,22 @@ export function decideVitrine({ path = '/', search = '', hash = '', seen = false
   if (String(hash).indexOf('=') >= 0) return { vitrine: false, reason: 'share' };
   if (params.has('q')) return { vitrine: false, reason: 'query' };
   if (params.has('waitlist') || params.has('welcome')) return { vitrine: false, reason: 'link' };
-  if (seen) return { vitrine: false, reason: 'seen' };
-  return { vitrine: true, reason: 'first-visit' };
+  return { vitrine: true, reason: 'home' };
 }
 
 /**
- * Does this arrival mean the reader has now met the globe?
- * @param {{vitrine: boolean, reason: string}} decision
- * @returns {boolean}
+ * Delete the retired « already seen » key. A browser that met #257 or #258
+ * carries it; nothing reads it any more, and leaving a dead entry in a reader's
+ * storage is the kind of thing `confidentialite.html` promises not to do.
+ * Best-effort, called once per boot.
+ * @param {{removeItem: Function}|null} [storage]
+ * @returns {boolean} whether the key was removed.
  */
-export function arrivalMarksSeen(decision) {
-  return !decision.vitrine && ['app-path', 'share', 'query', 'link'].includes(decision.reason);
-}
-
-/**
- * Remember that this browser has opened the globe. Best-effort.
- * @param {{setItem: Function}|null} [storage]
- * @returns {boolean} whether the value landed.
- */
-export function markVitrineSeen(storage) {
+export function forgetVitrineSeen(storage) {
   try {
     const store = storage === undefined ? globalThis.localStorage : storage;
-    if (typeof store?.setItem !== 'function') return false;
-    store.setItem(VITRINE_SEEN_KEY, '1');
+    if (typeof store?.removeItem !== 'function') return false;
+    store.removeItem(RETIRED_SEEN_KEY);
     return true;
   } catch {
     return false;

@@ -5,6 +5,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Fixed
+- **Une fois le globe ouvert, la page d’accueil devenait inatteignable.** Le
+  navigateur retenait « déjà venu » (`gev:vitrine-seen:v1`) et `surplomb.app`
+  renvoyait au globe pour toujours, quelle que soit l’adresse tapée : la barre
+  d’adresse disait `/` et montrait autre chose. Ce drapeau est retiré. `/` est
+  la page d’accueil **à chaque fois, pour tout le monde** ; `/globe` reste
+  l’adresse du globe, pour le favori, l’application installée ou la saisie
+  directe. La porte ne lit plus rien du stockage — c’est une fonction de
+  l’adresse seule — et la clé laissée par l’ancienne version est effacée au
+  démarrage suivant.
+
 ### Added
 - **La page d’accueil et le globe partagent une seule adresse.** Il y en a deux
   maintenant : `surplomb.app` pour la page d’accueil, `surplomb.app/globe` pour
