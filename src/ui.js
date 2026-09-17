@@ -10077,51 +10077,113 @@ export class StyleManager {
    * Extracted from the Enter handler it used to be so that a submit button and
    * a soft keyboard's own action key reach the same place: on a phone there is
    * no visible Enter until the field declares `enterkeyhint`, and a reader who
-   * does not find it had no way to search at all.
+   * does not find it had no way to search at all. The lookup itself lives in
+   * `flyToAddress`, so the first-run card searches through the same code.
    * @returns {Promise<void>}
    */
   async _submitLocationSearch() {
     const query = this._locationSearch.value.trim();
     if (!query) return;
+    const outcome = await this.flyToAddress(query, { searchField: this._locationSearch });
+    if (outcome.status === 'not-found') this._showToast('Location not found');
+    else if (outcome.status === 'failed') this._showToast('Search failed');
+  }
+
+  /**
+   * Geocode free text and fly there — the search box's whole path, callable
+   * without the search box (the first-run card is the second caller).
+   *
+   * Resolves when the flight STARTS, not when it lands: `searchAndFlyTo`
+   * returns as soon as the camera is handed its destination. The landing is
+   * reported through `onArrival('arrived' | 'cancelled')`, which a caller that
+   * waits for the camera (to switch layers on where it lands) listens to.
+   *
+   * Statuses: `flying` (a destination was found and the flight started),
+   * `not-found`, `failed` (the geocoder threw), `cancelled` (authority moved
+   * while the lookup ran — stay inert), `refused` (the navigation gate said no
+   * before any lookup, e.g. Cockpit), `superseded` (a newer navigation owns the
+   * camera now). Only `not-found` and `failed` are worth telling the reader.
+   *
+   * @param {string} input
+   * @param {object} [options]
+   * @param {(why: 'arrived'|'cancelled') => void} [options.onArrival]
+   * @param {HTMLInputElement|null} [options.searchField] The dock field, when
+   *   it is the one asking: it carries the `searching` state for the lookup.
+   * @returns {Promise<{status: string, label?: string}>}
+   */
+  async flyToAddress(input, { onArrival = null, searchField = null } = {}) {
+    const query = String(input ?? '').trim();
+    if (!query) return { status: 'not-found' };
     const generation = this._beginDeferredNavigation('location');
     if (generation === false) {
-      this._locationSearch.classList.remove('searching');
-      this._locationSearch.blur();
-      return;
+      searchField?.classList.remove('searching');
+      searchField?.blur();
+      return { status: 'refused' };
     }
     this._activeLocationSearchGeneration = generation;
-    this._locationSearch.classList.add('searching');
+    searchField?.classList.add('searching');
     try {
       const destination = await searchAndFlyTo(this.viewer, query, {
         beforeFly: () => this._reassertNavigationHandoff(generation),
+        onComplete: () => {
+          // `camera.changed` is quiet until `moveEnd`, and a reader who shares
+          // straight after arriving would otherwise post the previous view.
+          this.shareLinkManager?.flushHash?.();
+          onArrival?.('arrived');
+        },
+        onCancel: () => onArrival?.('cancelled'),
       });
-      if (this._disposed || generation !== this._navigationGeneration) return;
+      if (this._disposed || generation !== this._navigationGeneration) return { status: 'superseded' };
       if (destination?.cancelled) {
         // Authority changed while the lookup was resolving; remain inert.
-      } else if (destination) {
-        // The ACTIVE STYLE indicator reports the STYLE and nothing else.
-        // Writing the searched city here made the top-right corner read
-        // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
-        // LOCATION panel's own readout, which is updated below.
-        //
-        // Set before _setActiveLocation(null) so its own mini-status
-        // refresh already sees the destination — the readout never blinks
-        // through "Location: --" on the way to the searched place.
-        this._searchedLocationLabel = destination.label || query;
-        this._setActiveLocation(null);
-        this._currentPoi = null;
-        this._collapsePOIRow();
-        this._updateLocationMiniStatus();
-      } else {
-        this._showToast('Location not found');
+        return { status: 'cancelled' };
       }
+      if (!destination) return { status: 'not-found' };
+      // The ACTIVE STYLE indicator reports the STYLE and nothing else.
+      // Writing the searched city there made the top-right corner read
+      // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
+      // LOCATION panel's own readout.
+      const label = destination.label || query;
+      this._landOnSearchedLocation(label);
+      return { status: 'flying', label };
     } catch (err) {
       console.error('[Search] Geocoding failed:', err);
-      if (this._disposed || generation !== this._navigationGeneration) return;
-      this._showToast('Search failed');
+      if (this._disposed || generation !== this._navigationGeneration) return { status: 'superseded' };
+      return { status: 'failed' };
     } finally {
       this._settleLocationSearchUi(generation);
     }
+  }
+
+  /**
+   * The landing state every free-text destination shares — a typed search,
+   * "Autour de moi", the first-run card: a searched label, no active city,
+   * no POI.
+   *
+   * The label is set BEFORE _setActiveLocation(null) so its own mini-status
+   * refresh already sees the destination — the readout never blinks through
+   * "Location: --" on the way to the searched place.
+   * @param {string} label
+   * @returns {void}
+   */
+  _landOnSearchedLocation(label) {
+    this._searchedLocationLabel = label;
+    this._setActiveLocation(null);
+    this._currentPoi = null;
+    this._collapsePOIRow();
+    this._updateLocationMiniStatus();
+  }
+
+  /**
+   * Open the LOCATION search and put the caret in it, exactly as the LOCATION
+   * disclosure and the magnifier do together. Desktop only: on a phone the
+   * field lives in the sheet's Recherche tab, which its own controller opens.
+   * @returns {void}
+   */
+  openLocationSearch() {
+    this.setPanelCollapsed('location-bar', false, { explicit: true });
+    this._locationSearch?.classList.add('expanded');
+    this._locationSearch?.focus();
   }
 
   /**
@@ -10436,14 +10498,31 @@ export class StyleManager {
     this._locateBtn.addEventListener('click', () => { void this._locateMe(); });
   }
 
-  /** Ask for a fix and fly to it. @returns {Promise<void>} */
+  /** The "Autour de moi" button: a fix, a flight, a toast on failure. */
   async _locateMe() {
-    if (this._locatePending) return;
+    await this.locateMe();
+  }
+
+  /**
+   * Ask for one fix and fly to it.
+   *
+   * Like `flyToAddress`, this resolves when the flight STARTS and reports the
+   * landing through `onArrival('arrived' | 'cancelled')`. `notify: false` is
+   * for a caller that shows the refusal itself (the first-run card writes it
+   * into its own status line instead of a toast behind it).
+   *
+   * @param {object} [options]
+   * @param {(why: 'arrived'|'cancelled') => void} [options.onArrival]
+   * @param {boolean} [options.notify]
+   * @returns {Promise<{status: 'flying'|'refused'|'failed', message?: string}>}
+   */
+  async locateMe({ onArrival = null, notify = true } = {}) {
+    if (this._locatePending) return { status: 'refused' };
     this._locatePending = true;
     this._locateBtn?.setAttribute('aria-busy', 'true');
     try {
       const fix = await requestCurrentPosition();
-      if (this._disposed) return;
+      if (this._disposed) return { status: 'refused' };
       const range = geolocateRangeM(fix.accuracyM);
       const result = this._flyWithTransition(true, (hooks) => flyToLandmark(
         this.viewer,
@@ -10463,20 +10542,21 @@ export class StyleManager {
             // `camera.changed` is quiet until `moveEnd`, and a reader who shares
             // straight after arriving would otherwise post the previous view.
             this.shareLinkManager?.flushHash?.();
+            onArrival?.('arrived');
           },
+          onCancel: () => onArrival?.('cancelled'),
         },
       ));
-      if (result === false) return;
+      if (result === false) return { status: 'refused' };
       // Exactly the free-text search's landing state.
-      this._searchedLocationLabel = 'Autour de moi';
-      this._setActiveLocation(null);
-      this._currentPoi = null;
       if (result) this._currentTarget = result.targetPosition;
-      this._collapsePOIRow();
-      this._updateLocationMiniStatus();
+      this._landOnSearchedLocation('Autour de moi');
+      return { status: 'flying' };
     } catch (error) {
-      if (this._disposed) return;
-      this._showToast(geolocateErrorMessage(error, globalThis.isSecureContext !== false), { durationMs: 4000 });
+      if (this._disposed) return { status: 'refused' };
+      const message = geolocateErrorMessage(error, globalThis.isSecureContext !== false);
+      if (notify) this._showToast(message, { durationMs: 4000 });
+      return { status: 'failed', message };
     } finally {
       this._locatePending = false;
       this._locateBtn?.removeAttribute('aria-busy');

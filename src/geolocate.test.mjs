@@ -101,7 +101,8 @@ test('the flight reuses the search landing state, and closes the address gap', (
   assert.match(ui, /_initLocateButton\(\)/);
   assert.match(ui, /if \(!canGeolocate\(\)\) return;/);
   // Same landing state as a free-text search: that is what this is.
-  assert.match(ui, /this\._searchedLocationLabel = 'Autour de moi';/);
+  assert.match(ui, /this\._landOnSearchedLocation\('Autour de moi'\);/);
+  assert.match(ui, /_landOnSearchedLocation\(label\) \{\s*this\._searchedLocationLabel = label;/);
   // `camera.changed` is quiet until `moveEnd`; without the flush a reader who
   // shares straight after arriving posts the PREVIOUS view.
   assert.match(ui, /shareLinkManager\?\.flushHash\?\.\(\)/);
