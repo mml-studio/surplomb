@@ -27252,7 +27252,7 @@ const IMMUTABLE_FONT_RE = /^\/fonts\/[a-z0-9-]+\.[0-9a-f]{8}\.woff2$/;
  * `scripts/publish-landing-assets.mjs` for the same reason as the fonts: they
  * live in `public/`, and `index.html` is what maps stable names to them.
  */
-const IMMUTABLE_LANDING_RE = /^\/landing\/[a-z0-9-]+\.[0-9a-f]{8}\.(?:webp|jpg|png|mp4|webm)$/;
+const IMMUTABLE_LANDING_RE = /^\/landing\/[a-z0-9-]+\.[0-9a-f]{8}\.(?:avif|webp|jpg|png|mp4|webm)$/;
 const JSON_BODY_PATH_RE = /\.geojsonl?$/;
 
 /**

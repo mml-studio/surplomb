@@ -6,6 +6,7 @@
  *     node scripts/capture-landing-hero.mjs --only phone     # 1 ion session
  *     node scripts/capture-landing-hero.mjs --rehearsal      # OSM globe, 0 ion session
  *     node scripts/capture-landing-hero.mjs --assemble-only  # rebuild the loops from saved frames, 0 session
+ *     node scripts/capture-landing-hero.mjs --quality hq     # Retina-grade loops, see HQ below
  *
  * WHY A RECORDING AND NOT THE LIVE GLOBE. Every boot of the photoreal globe is
  * one billed Cesium ion session, and a landing page is the one surface whose
@@ -36,6 +37,19 @@
  * BUDGET. One fresh browser per device, and each boot with the photoreal
  * globe costs one ion session: 2 for a full run. No loop, no retry; a failed
  * run says why and stops. `--assemble-only` rebuilds from disk for free.
+ *
+ * HQ (`--quality hq`, 2026-09-17). The standard loop, 1600 px at 1.4 Mbit/s,
+ * is enlarged ×1.9 and visibly blocky on a Retina laptop. HQ captures at the
+ * size the page is actually drawn: 1440×900 CSS at DPR 2 (2880×1800) and
+ * 390×844 at DPR 3 (1170×2532), lossless PNG frames, a finer mesh (tile error
+ * 8 instead of 16) and MSAA. No machine renders and screencasts that in real
+ * time at 30 frames a second, so HQ records in SLOW MOTION: the page's clock
+ * (performance.now, Date, timers, rAF timestamps) is slowed k times for the
+ * recorded period, Cesium is capped at 30 frames of PAGE time, and each frame
+ * is placed on the timeline by the orbit phase that was rendered into it. The
+ * vehicles, the detection animation and the orbit all run on that clock, so
+ * the result plays back at 30 regular frames a second whatever the real
+ * frame rate was. A 5 s real-time trial runs first and picks k.
  *
  * PITFALLS THIS SCRIPT IS SHAPED AROUND (see the QA memory notes):
  *   - `page.click()` and a parked-scene `page.screenshot()` hang: nothing here
@@ -96,6 +110,29 @@ const DESKTOP_MIN_FPS = 24;
 const PHONE_SIZE = Object.freeze({ cssWidth: 390, cssHeight: 844, dpr: 2 });
 
 /**
+ * The HQ capture. 16:10 on the desktop rather than 16:9: a laptop viewport
+ * crops less of it. DPR 2 rather than 2880 CSS pixels: the VEH labels keep
+ * the size they have in the app on a Retina screen, and come out sharp.
+ */
+const HQ = Object.freeze({
+  out: '.context/landing-assets/hq/raw',
+  desktop: { cssWidth: 1440, cssHeight: 900, dpr: 2, window: '1600,1000' },
+  phone: { cssWidth: 390, cssHeight: 844, dpr: 3, window: '600,1000' },
+  // Finer than the desktop's 16. Measured drain at 8: see the capture report.
+  tileSse: 8,
+  // The default 1.5 GB evicts tiles mid-orbit at this error; eviction is a
+  // tile reloading, and a reloading tile is a flicker in the loop.
+  cacheBytes: 3 * 1024 ** 3,
+  cacheOverflowBytes: 1024 ** 3,
+  format: 'png',
+  // Page frames per second while slowed down: one render per output frame.
+  slowTargetFps: 30,
+  trialS: 5,
+  // A real-time recording is only kept if the trial meets all three.
+  realtime: { minFps: 30, maxP90Ms: 45, maxGapMs: 100 },
+});
+
+/**
  * Everything but the globe goes. `visibility` rather than `display` so no
  * panel collapses and nothing downstream re-lays itself out around the change
  * — and applied to descendants too, because a child that sets
@@ -130,11 +167,16 @@ function parseCli(argv) {
       rehearsal: { type: 'boolean', default: false },
       'assemble-only': { type: 'boolean', default: false },
       settle: { type: 'string', default: '12' },
+      quality: { type: 'string', default: 'standard' },
+      format: { type: 'string' },
+      slow: { type: 'string', default: 'auto' },
     },
   });
+  const hq = values.quality === 'hq';
+  if (!hq && values.quality !== 'standard') throw new Error('--quality must be standard or hq');
   const rehearsal = values.rehearsal;
   const out = path.resolve(ROOT, values.out
-    || (rehearsal ? '.context/landing-assets/rehearsal' : '.context/landing-assets/raw'));
+    || (rehearsal ? `.context/landing-assets/rehearsal${hq ? '-hq' : ''}` : (hq ? HQ.out : '.context/landing-assets/raw')));
   const devices = values.only ? [values.only] : ['desktop', 'phone'];
   for (const device of devices) {
     if (device !== 'desktop' && device !== 'phone') throw new Error(`--only: unknown device "${device}"`);
@@ -153,6 +195,9 @@ function parseCli(argv) {
     rehearsal,
     assembleOnly: values['assemble-only'],
     settleMs: Number(values.settle) * 1000,
+    hq,
+    format: values.format || (hq ? HQ.format : 'jpeg'),
+    slow: values.slow === 'auto' ? null : Number(values.slow),
   };
 }
 
@@ -162,6 +207,117 @@ function parseCli(argv) {
 // the instances the viewer already holds.
 
 /* eslint-disable no-undef */
+
+/**
+ * A slowable page clock, installed before any app script runs.
+ *
+ * Page time = v0 + (real - r0) / k. `performance.now`, `Date` (now and the
+ * no-argument constructor), the rAF timestamp and timer delays all follow it,
+ * because those are the clocks the vehicles (`Date.now`), the detection
+ * overlay (`performance.now`) and Cesium's frame cap (the rAF timestamp) read.
+ * Intervals are re-armed on every rate change, so a 60 s refresh stays 60 s of
+ * page time. Workers keep real time; nothing they do is animated.
+ *
+ * FRAME PACING. Slowed down, the page would still run its rAF callbacks at
+ * the screen's 60 Hz: the overlays repaint on every one of them, and the
+ * screencast spent its PNG encodes on those overlay-only frames while real
+ * renders went uncaptured (50 of 509 missed at ×6, measured 2026-09-17). With
+ * `pacingMs`, all rAF callbacks run together once per `pacingMs` of page time,
+ * stamped exactly on that grid — one composited frame per output frame.
+ */
+function pageInstallClock() {
+  const perf = window.performance;
+  const realPerfNow = perf.now.bind(perf);
+  const RealDate = window.Date;
+  const realDateNow = RealDate.now.bind(RealDate);
+  const realRaf = window.requestAnimationFrame.bind(window);
+  const realSetTimeout = window.setTimeout.bind(window);
+  const realSetInterval = window.setInterval.bind(window);
+  const realClearInterval = window.clearInterval.bind(window);
+  const epochOffset = realDateNow() - realPerfNow();
+  let k = 1;
+  let r0 = realPerfNow();
+  let v0 = r0;
+  const toVirtual = (real) => v0 + (real - r0) / k;
+  const vperf = () => toVirtual(realPerfNow());
+  const vdate = () => vperf() + epochOffset;
+  Object.defineProperty(perf, 'now', { value: vperf, configurable: true, writable: true });
+  function VDate(...args) {
+    if (!new.target) return new RealDate(vdate()).toString();
+    return args.length ? new RealDate(...args) : new RealDate(vdate());
+  }
+  VDate.prototype = RealDate.prototype;
+  VDate.now = vdate;
+  VDate.parse = RealDate.parse;
+  VDate.UTC = RealDate.UTC;
+  window.Date = VDate;
+  let pacingMs = 0;
+  let lastStamp = null;
+  let scheduled = false;
+  let nextFrameId = 1;
+  const queue = new Map();
+  const flush = (real) => {
+    scheduled = false;
+    let stamp = toVirtual(real);
+    if (pacingMs > 0 && lastStamp !== null) {
+      if (stamp - lastStamp < pacingMs) {
+        scheduled = true;
+        realRaf(flush);
+        return;
+      }
+      stamp = lastStamp + pacingMs * Math.floor((stamp - lastStamp) / pacingMs);
+    }
+    lastStamp = stamp;
+    const callbacks = [...queue.values()];
+    queue.clear();
+    for (const callback of callbacks) {
+      try { callback(stamp); } catch (error) { realSetTimeout(() => { throw error; }, 0); }
+    }
+  };
+  window.requestAnimationFrame = (callback) => {
+    const id = nextFrameId++;
+    queue.set(id, callback);
+    if (!scheduled) {
+      scheduled = true;
+      realRaf(flush);
+    }
+    return id;
+  };
+  window.cancelAnimationFrame = (id) => { queue.delete(id); };
+  window.setTimeout = (fn, delay = 0, ...args) => realSetTimeout(fn, Number(delay || 0) * k, ...args);
+  const intervals = new Map();
+  let nextInterval = 1;
+  const arm = (entry) => { entry.realId = realSetInterval(entry.fn, entry.delay * k, ...entry.args); };
+  window.setInterval = (fn, delay = 0, ...args) => {
+    const id = nextInterval++;
+    const entry = { fn, delay: Number(delay || 0), args, realId: null };
+    arm(entry);
+    intervals.set(id, entry);
+    return id;
+  };
+  window.clearInterval = (id) => {
+    const entry = intervals.get(id);
+    if (!entry) return;
+    realClearInterval(entry.realId);
+    intervals.delete(id);
+  };
+  window.__landingClock = {
+    get rate() { return k; },
+    setRate(rate, { pacing = 0 } = {}) {
+      const real = realPerfNow();
+      v0 = toVirtual(real);
+      r0 = real;
+      k = rate;
+      pacingMs = pacing;
+      for (const entry of intervals.values()) {
+        realClearInterval(entry.realId);
+        arm(entry);
+      }
+    },
+    realEpochNow: () => realPerfNow() + epochOffset,
+  };
+}
+
 function pageReadState(expectedLayers) {
   const g = window.__godsEyeView;
   const viewer = g.viewer;
@@ -230,6 +386,8 @@ function pageReadState(expectedLayers) {
       return !!node && getComputedStyle(node).display !== 'none';
     })(),
     perf: g.getPerfProfileDiagnostics?.()?.profile ?? null,
+    msaaSamples: viewer.scene.msaaSamples,
+    tilesetCacheBytes: tileset?.cacheBytes ?? null,
     governor: g.getRenderGovernorDiagnostics?.()?.mode ?? null,
   };
 }
@@ -350,34 +508,58 @@ function pageInstallOrbit(orbit) {
   const headingAtAmplitude = deg(camera.heading);
   apply(0);
 
+  const clock = window.__landingClock || null;
+  // Real wall-clock time: the screencast stamps frames with it, whatever the
+  // page clock is doing.
+  const realEpoch = () => (clock ? clock.realEpochNow() : performance.timeOrigin + performance.now());
   const state = {
     running: false,
     done: false,
     lastS: null,
     renders: [],
     ticks: 0,
-    startEpochMs: null,
+    slow: 1,
+    switchRealEpochMs: null,
   };
+  // [real epoch ms, phase rendered, tiles settled] per rendered frame.
   const removeLog = scene.postRender.addEventListener(() => {
-    if (state.running) state.renders.push([performance.timeOrigin + performance.now(), state.lastS]);
+    if (state.running) {
+      const tileset = g.tileset;
+      state.renders.push([realEpoch(), state.lastS, tileset ? (tileset.tilesLoaded ? 1 : 0) : 1]);
+    }
   });
-  state.start = (sFrom, sTo) => {
+  const restoreClock = () => {
+    if (clock && clock.rate !== 1) clock.setRate(1);
+  };
+  /**
+   * Run the law from phase `sFrom` to `sTo`. With `slow > 1`, the page clock
+   * is slowed from phase `switchAtS` on and frames are paced at `targetFps`
+   * per second of page time.
+   */
+  state.start = (sFrom, sTo, { slow = 1, switchAtS = sFrom, targetFps = 30 } = {}) => {
     state.running = true;
     state.done = false;
     state.renders = [];
     state.ticks = 0;
+    state.slow = 1;
+    state.switchRealEpochMs = null;
     let t0 = null;
     const tick = (now) => {
       if (!state.running) return;
-      if (t0 === null) {
-        t0 = now;
-        state.startEpochMs = performance.timeOrigin + now;
-      }
+      if (t0 === null) t0 = now;
       const s = sFrom + (now - t0) / 1000;
       if (s > sTo) {
         state.running = false;
         state.done = true;
+        restoreClock();
         return;
+      }
+      if (slow > 1 && state.slow === 1 && s >= switchAtS && clock) {
+        // Cesium's own 60 fps cap stays: the paced grid is coarser, so every
+        // paced frame renders.
+        clock.setRate(slow, { pacing: 1000 / targetFps });
+        state.slow = slow;
+        state.switchRealEpochMs = realEpoch();
       }
       apply(law(s));
       state.lastS = s;
@@ -389,6 +571,7 @@ function pageInstallOrbit(orbit) {
   };
   state.stop = () => {
     state.running = false;
+    restoreClock();
     apply(0);
     scene.requestRender();
   };
@@ -455,7 +638,7 @@ async function waitForState(page, label, predicate, { holdMs = 0, timeoutMs = 12
  * written — an unacknowledged frame throttles the next one, and the disk
  * write is the slow half.
  */
-async function startScreencast(page, { dir, maxWidth, maxHeight }) {
+async function startScreencast(page, { dir, maxWidth, maxHeight, format = 'jpeg' }) {
   const client = await page.createCDPSession();
   const frames = [];
   const writes = [];
@@ -465,12 +648,18 @@ async function startScreencast(page, { dir, maxWidth, maxHeight }) {
   client.on('Page.screencastFrame', (event) => {
     client.send('Page.screencastFrameAck', { sessionId: event.sessionId }).catch(() => {});
     if (!recording) return;
-    const file = dir ? `f${String(index).padStart(5, '0')}.jpg` : null;
+    const file = dir ? `f${String(index).padStart(5, '0')}.${format === 'png' ? 'png' : 'jpg'}` : null;
     index++;
-    frames.push({ file, ts: event.metadata.timestamp, deviceWidth: event.metadata.deviceWidth });
+    frames.push({ file, ts: event.metadata.timestamp, deviceWidth: event.metadata.deviceWidth, recvMs: Date.now() });
     if (file) writes.push(writeFile(path.join(dir, file), Buffer.from(event.data, 'base64')));
   });
-  await client.send('Page.startScreencast', { format: 'jpeg', quality: 90, maxWidth, maxHeight, everyNthFrame: 1 });
+  await client.send('Page.startScreencast', {
+    format: format === 'png' ? 'png' : 'jpeg',
+    ...(format === 'png' ? {} : { quality: format === 'jpeg100' ? 100 : 90 }),
+    maxWidth,
+    maxHeight,
+    everyNthFrame: 1,
+  });
   return {
     frames,
     async stop() {
@@ -499,11 +688,11 @@ function frameStats(timestampsS) {
   };
 }
 
-async function runOrbit(page, sFrom, sTo) {
-  await page.evaluate((a, b) => window.__landingHero.start(a, b), sFrom, sTo);
+async function runOrbit(page, sFrom, sTo, orbitOptions = {}) {
+  await page.evaluate((a, b, o) => window.__landingHero.start(a, b, o), sFrom, sTo, orbitOptions);
   await page.waitForFunction(() => window.__landingHero.done, {
-    polling: 250,
-    timeout: (sTo - sFrom) * 1000 + 60_000,
+    polling: 500,
+    timeout: (sTo - sFrom) * 1000 * (orbitOptions.slow || 1) + 120_000,
   });
 }
 
@@ -526,7 +715,8 @@ function ffmpeg(args) {
  * cadence and is off by at most the swap jitter (±10 ms, 0.015° of heading at
  * the orbit's fastest).
  */
-function phaseFrames(frames, renders) {
+function phaseFrames(frames, renders, { slow = 1, switchRealEpochMs = null } = {}) {
+  if (slow > 1) return phaseFramesSlow(frames, renders, switchRealEpochMs);
   const offsets = [];
   let r = 0;
   for (const frame of frames) {
@@ -551,13 +741,58 @@ function phaseFrames(frames, renders) {
 }
 
 /**
+ * Slow-motion placement. Renders are 1/(30·k) s of real time apart — far
+ * more than the swap jitter — so each frame belongs unambiguously to the last
+ * render before it, and takes that render's EXACT phase. Only the first frame
+ * of each render is kept: later deliveries of the same render are the
+ * compositor repainting an overlay, not new content.
+ */
+function phaseFramesSlow(frames, renders, switchRealEpochMs) {
+  const placed = [];
+  const lags = [];
+  let r = 0;
+  let lastRender = -1;
+  for (const frame of frames) {
+    const swapMs = frame.ts * 1000;
+    if (!frame.file || swapMs < switchRealEpochMs) continue;
+    while (r + 1 < renders.length && renders[r + 1][0] <= swapMs) r++;
+    const render = renders[r];
+    if (!render || render[0] > swapMs || render[1] === null || render[0] < switchRealEpochMs) continue;
+    if (r === lastRender) continue;
+    lastRender = r;
+    lags.push(swapMs - render[0]);
+    placed.push({ ...frame, s: render[1], tilesSettled: render[2] ?? 1 });
+  }
+  if (!placed.length) throw new Error('no slow-motion frame could be matched to a render');
+  // Renders the screencast never delivered: each one is a repeated frame.
+  const rendered = renders.filter((x) => x[0] >= switchRealEpochMs && x[1] !== null).length;
+  const sorted = [...lags].sort((a, b) => a - b);
+  return {
+    frames: placed,
+    matchSpreadMs: { p10: sorted[Math.floor(sorted.length * 0.1)], p90: sorted[Math.floor(sorted.length * 0.9)] },
+    matched: placed.length,
+    rendersMissed: rendered - placed.length,
+  };
+}
+
+/** Frame cadence on the PAGE clock: what playback will show. */
+function phaseStats(frames) {
+  const s = frames.map((f) => f.s);
+  const stats = frameStats(s);
+  return { ...stats, tilesUnsettled: frames.filter((f) => f.tilesSettled === 0).length };
+}
+
+/**
  * Build the seamless loop: R[0, T] with its last `crossfadeS` blended into
  * R[-crossfadeS, 0]. Output is constant 30 fps, exactly `periodS` long.
  */
 function assembleLoop({ name, out, orbit }) {
   const framesDir = path.join(out, `${name}-frames`);
   const meta = JSON.parse(readFileSync(path.join(out, `${name}-frames.json`), 'utf8'));
-  const { frames } = phaseFrames(meta.frames, meta.renders);
+  const phased = phaseFrames(meta.frames, meta.renders, meta);
+  const { frames } = phased;
+  const lossless = meta.master === 'lossless';
+  const pngInput = frames[0].file.endsWith('.png');
   const d = orbit.crossfadeS;
   const T = orbit.periodS;
   const w0 = -d;
@@ -585,17 +820,21 @@ function assembleLoop({ name, out, orbit }) {
   // matrix, tagged, with the sRGB transfer the pixels actually carry — an
   // untagged or full-range stream is decoded differently by Safari and Chrome,
   // and the poster (a PNG cut from the video) would no longer match it.
+  // PNG frames are plain sRGB RGB: only the output side of the matrix applies.
+  const toYuv = pngInput
+    ? 'scale=out_range=tv:out_color_matrix=bt709:flags=lanczos+accurate_rnd+full_chroma_int'
+    : 'scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709';
   const graph = [
-    `[0:v]fps=${fps},scale=in_range=pc:out_range=tv:in_color_matrix=bt601:out_color_matrix=bt709,`
-      + 'format=yuv420p,split=2[a][b]',
+    `[0:v]fps=${fps},${toYuv},format=yuv420p,split=2[a][b]`,
     `[a]trim=start=${d}:end=${d + T},setpts=PTS-STARTPTS[A]`,
     `[b]trim=start=0:end=${d},setpts=PTS-STARTPTS[P]`,
     `[A][P]xfade=transition=fade:duration=${d}:offset=${T - d},format=yuv420p,${COLOUR_PARAMS}[v]`,
   ].join(';');
-  // Near-lossless intermediate: the web encodes are cut from this, and the
-  // posters are cut from those.
+  // The web encodes are cut from this, and the posters from those. HQ keeps
+  // it LOSSLESS: it is also the reference every VMAF score is measured against.
+  const quality = lossless ? ['-qp', '0', '-preset', 'veryfast'] : ['-crf', '8', '-preset', 'medium'];
   ffmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-filter_complex', graph, '-map', '[v]',
-    '-an', '-c:v', 'libx264', '-preset', 'medium', '-crf', '8', '-pix_fmt', 'yuv420p', '-r', String(fps),
+    '-an', '-c:v', 'libx264', ...quality, '-pix_fmt', 'yuv420p', '-r', String(fps),
     ...COLOUR_TAGS, master]);
 
   // Eyes on the seam: the loop's first frame, its last, and the middle of the fade.
@@ -610,7 +849,7 @@ function assembleLoop({ name, out, orbit }) {
   const probe = spawnSync('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v:0',
     '-show_entries', 'stream=width,height,nb_read_frames,r_frame_rate:format=duration', '-of', 'json', master], { encoding: 'utf8' });
   const info = JSON.parse(probe.stdout);
-  const inWindowStats = frameStats(inWindow.map((f) => f.ts));
+  const inWindowStats = meta.slow > 1 ? phaseStats(inWindow) : frameStats(inWindow.map((f) => f.ts));
   // The source frame the loop opens on: the build step compares its poster to
   // it, which is the only check that the colour conversion did not shift.
   const t0Frame = inWindow.reduce((best, f) => (Math.abs(f.s) < Math.abs(best.s) ? f : best));
@@ -623,22 +862,27 @@ function assembleLoop({ name, out, orbit }) {
     sourceFramesInWindow: inWindow.length,
     sourceFpsInWindow: inWindowStats.fps,
     sourceGapMs: inWindowStats.gapMs,
-    phaseMatchSpreadMs: phaseFrames(meta.frames, meta.renders).matchSpreadMs,
+    sourceClock: meta.slow > 1 ? `page time (slow motion ×${meta.slow})` : 'real time',
+    tilesUnsettledFrames: inWindowStats.tilesUnsettled ?? null,
+    gapsOver100ms: inWindowStats.gapsOver100ms,
+    rendersMissed: phased.rendersMissed ?? null,
+    phaseMatchSpreadMs: phased.matchSpreadMs,
     t0SourceFrame: { file: path.relative(ROOT, path.join(framesDir, t0Frame.file)), s: Number(t0Frame.s.toFixed(4)) },
     checks: Object.fromEntries(Object.keys(checks).map((k) => [k, path.relative(ROOT, path.join(out, `${name}-check-${k}.png`))])),
   };
 }
 
 async function captureDevice(device, options) {
-  const { origin, out, rehearsal, settleMs } = options;
+  const { origin, out, rehearsal, settleMs, hq, format } = options;
   const name = `hero-${device}`;
+  const hqSpec = hq ? HQ[device] : null;
   // The screencast captures at the WINDOW's device scale, not the emulated
   // one: an emulated DPR 2 on a DPR 1 window yields 390×844 frames. Measured
   // 2026-09-17: only a forced window scale of 2, with a window larger than the
   // emulated viewport, gives 780×1688.
-  const windowArgs = device === 'phone'
-    ? ['--force-device-scale-factor=2', '--window-size=1200,2000']
-    : [];
+  let windowArgs = [];
+  if (hq) windowArgs = [`--force-device-scale-factor=${hqSpec.dpr}`, `--window-size=${hqSpec.window}`];
+  else if (device === 'phone') windowArgs = ['--force-device-scale-factor=2', '--window-size=1200,2000'];
   const browser = await puppeteer.launch({
     headless: 'new',
     executablePath: CHROME,
@@ -656,23 +900,28 @@ async function captureDevice(device, options) {
     let size;
     if (device === 'phone') {
       page = await newPhoneQaPage(browser, qaOptions);
-      // iPhone 13 emulation brings DPR 3; the brief asks for 2 (780×1688).
-      await page.setViewport({ width: PHONE_SIZE.cssWidth, height: PHONE_SIZE.cssHeight,
-        deviceScaleFactor: PHONE_SIZE.dpr, isMobile: true, hasTouch: true });
+      // iPhone 13 emulation brings DPR 3; the standard loop asks for 2 (780×1688).
+      const phone = hq ? hqSpec : PHONE_SIZE;
+      await page.setViewport({ width: phone.cssWidth, height: phone.cssHeight,
+        deviceScaleFactor: phone.dpr, isMobile: true, hasTouch: true });
       url = phoneUrl(url);
-      size = { ...PHONE_SIZE };
+      size = { cssWidth: phone.cssWidth, cssHeight: phone.cssHeight, dpr: phone.dpr };
     } else {
       page = await newQaPage(browser, qaOptions);
-      size = { ...(options.size || DESKTOP_SIZES[0]), dpr: 1 };
-      await page.setViewport({ width: size.cssWidth, height: size.cssHeight, deviceScaleFactor: 1 });
+      size = hq
+        ? { cssWidth: hqSpec.cssWidth, cssHeight: hqSpec.cssHeight, dpr: hqSpec.dpr }
+        : { ...(options.size || DESKTOP_SIZES[0]), dpr: 1 };
+      await page.setViewport({ width: size.cssWidth, height: size.cssHeight, deviceScaleFactor: size.dpr });
     }
+    // Before the app's first script: every clock it reads must be the slowable one.
+    if (hq) await page.evaluateOnNewDocument(pageInstallClock);
     await page.bringToFront();
     log(`${name}: ${rehearsal ? 'REHEARSAL (no ion session)' : 'photoreal — 1 ion session'} ${url}`);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
     await page.addStyleTag({ content: MASK_CSS });
     await page.waitForFunction(() => !!window.__godsEyeView?.viewer, { timeout: 120_000 });
 
-    if (device === 'phone') {
+    if (device === 'phone' || hq) {
       // A phone renders the globe at CSS resolution (Cesium's default) and asks
       // the mesh for coarser tiles. That is the right trade on a handset and
       // the wrong one for a video that is watched, not flown: render at the
@@ -688,17 +937,24 @@ async function captureDevice(device, options) {
     log(`${name}: pose restored`, booted.camera);
     if (!rehearsal) {
       await waitForState(page, 'photoreal stack', (s) => s.activeStack === 'photoreal' && s.photorealReady, { timeoutMs: 90_000 });
-      if (device === 'phone') {
-        await page.evaluate(() => {
+      if (device === 'phone' || hq) {
+        await page.evaluate((tiles) => {
           const g = window.__godsEyeView;
-          g.tileset.maximumScreenSpaceError = 16;
+          g.tileset.maximumScreenSpaceError = tiles.sse;
+          if (tiles.cacheBytes) {
+            g.tileset.cacheBytes = tiles.cacheBytes;
+            g.tileset.maximumCacheOverflowBytes = tiles.cacheOverflowBytes;
+          }
           g.requestRender?.('landing-capture');
-        });
+        }, hq
+          ? { sse: HQ.tileSse, cacheBytes: HQ.cacheBytes, cacheOverflowBytes: HQ.cacheOverflowBytes }
+          : { sse: 16 });
       }
     }
     await waitForState(page, 'layers', (s) => s.layersMatch, { timeoutMs: 60_000 });
-    await waitForState(page, 'tiles drained (held 3 s)', (s) => s.tilesLoaded, { holdMs: 3000, timeoutMs: 180_000 });
-    log(`${name}: tiles drained after ${((Date.now() - started) / 1000).toFixed(1)} s`);
+    await waitForState(page, 'tiles drained (held 3 s)', (s) => s.tilesLoaded, { holdMs: 3000, timeoutMs: 300_000 });
+    const drainedAfterS = Number(((Date.now() - started) / 1000).toFixed(1));
+    log(`${name}: tiles drained after ${drainedAfterS} s`);
     const traffic = await waitForState(page, 'traffic', (s) => s.traffic && s.traffic.count > 0 && !s.traffic.loading
       && (!s.traffic.floorArmed || s.traffic.floorWaiting === 0), { timeoutMs: 120_000, everyMs: 500 })
       .catch((error) => { log(`${name}: WARN ${error.message.slice(0, 300)}`); return null; });
@@ -711,7 +967,32 @@ async function captureDevice(device, options) {
     log(`${name}: lookAt equivalence`, orbitMeta.lookAtCheck);
 
     let sizeTrial = null;
-    if (device === 'desktop' && !options.size) {
+    let realtimeTrial = null;
+    let slow = 1;
+    if (hq) {
+      // Can this machine record the HQ size in real time? Five seconds of the
+      // real orbit, at the real size and format, answers it.
+      const trial = await startScreencast(page, {
+        dir: null, maxWidth: size.cssWidth * size.dpr, maxHeight: size.cssHeight * size.dpr, format,
+      });
+      await runOrbit(page, -ORBIT.periodS, -ORBIT.periodS + HQ.trialS);
+      const trialFrames = await trial.stop();
+      await page.evaluate(() => window.__landingHero.stop());
+      realtimeTrial = { size: `${size.cssWidth * size.dpr}x${size.cssHeight * size.dpr}`, format,
+        ...frameStats(trialFrames.slice(2).map((f) => f.ts)) };
+      const { minFps, maxP90Ms, maxGapMs } = HQ.realtime;
+      realtimeTrial.meetsRealtime = realtimeTrial.fps >= minFps && realtimeTrial.gapMs.p90 < maxP90Ms
+        && realtimeTrial.gapMs.max < maxGapMs;
+      // Slow enough that the screencast delivers every render with room to
+      // spare: renders arrive every k/30 s of real time, and each one costs a
+      // render, a PNG encode, a 10 MB transfer and a write. A quarter of the
+      // real-time trial rate held with no miss at ×10 (2026-09-17).
+      slow = options.slow ?? (realtimeTrial.meetsRealtime ? 1
+        : Math.min(24, Math.max(2, Math.ceil(HQ.slowTargetFps / (0.25 * Math.max(realtimeTrial.fps, 0.5))))));
+      log(`${name}: real-time trial`, realtimeTrial, `→ slow motion ×${slow}`);
+      await waitForState(page, 'tiles drained after trial', (s) => s.tilesLoaded, { holdMs: 3000, timeoutMs: 180_000 });
+    }
+    if (device === 'desktop' && !options.size && !hq) {
       // Measure the screencast at 1920×1080 on a slice of the real orbit.
       const trial = await startScreencast(page, { dir: null, maxWidth: 1920, maxHeight: 1080 });
       await runOrbit(page, -ORBIT.periodS, -ORBIT.periodS + 6);
@@ -742,15 +1023,22 @@ async function captureDevice(device, options) {
       dir: framesDir,
       maxWidth: size.cssWidth * size.dpr,
       maxHeight: size.cssHeight * size.dpr,
+      format,
     });
     await sleep(500);
-    // One full period of pre-roll, the recorded period, and a short tail.
-    await runOrbit(page, -ORBIT.periodS, ORBIT.periodS + 0.5);
+    // One full period of pre-roll, the recorded period, and a short tail. In
+    // slow motion the pre-roll runs in real time — it only streams tiles —
+    // and the clock slows one second before the cross-fade material starts.
+    const recordStarted = Date.now();
+    await runOrbit(page, -ORBIT.periodS, ORBIT.periodS + 0.5,
+      slow > 1 ? { slow, switchAtS: -ORBIT.crossfadeS - 1, targetFps: HQ.slowTargetFps } : {});
+    const recordS = Math.round((Date.now() - recordStarted) / 1000);
     const frames = await cast.stop();
     const renderLog = await page.evaluate(() => ({
       renders: window.__landingHero.renders,
       ticks: window.__landingHero.ticks,
-      startEpochMs: window.__landingHero.startEpochMs,
+      slow: window.__landingHero.slow,
+      switchRealEpochMs: window.__landingHero.switchRealEpochMs,
     }));
     await page.evaluate(() => window.__landingHero.stop());
     const after = await readState(page);
@@ -758,7 +1046,13 @@ async function captureDevice(device, options) {
     const recordedStats = frameStats(frames.map((f) => f.ts));
     const renderStats = frameStats(renderLog.renders.map(([ms]) => ms / 1000));
     log(`${name}: screencast`, recordedStats, `renders ${renderStats.fps} fps, rAF ticks ${renderLog.ticks}`);
-    writeFileSync(path.join(out, `${name}-frames.json`), JSON.stringify({ frames, renders: renderLog.renders }));
+    writeFileSync(path.join(out, `${name}-frames.json`), JSON.stringify({
+      frames,
+      renders: renderLog.renders,
+      slow: renderLog.slow,
+      switchRealEpochMs: renderLog.switchRealEpochMs,
+      master: hq ? 'lossless' : 'crf8',
+    }));
 
     const firstFrame = frames.find((f) => f.file);
     return {
@@ -789,6 +1083,14 @@ async function captureDevice(device, options) {
       calloutCanvas: after.calloutCanvas,
       postProcessEnabled: before.postProcessEnabled,
       sizeTrial,
+      quality: hq ? 'hq' : 'standard',
+      format,
+      realtimeTrial,
+      slowMotion: renderLog.slow,
+      recordRealS: recordS,
+      drainedAfterS,
+      msaaSamples: before.msaaSamples,
+      tilesetCacheBytes: before.tilesetCacheBytes,
       screencast: recordedStats,
       renders: renderStats,
       orbit: {
