@@ -39,7 +39,8 @@ test('the card is headed premium, with the same crown as the mic', () => {
 test('no price on the card: it belongs on the payment page (decision of 2026-09-17)', () => {
   for (const reason of ['exhausted', 'voice', 'direct']) {
     const html = renderWaitlistCard({ reason, trial });
-    assert.doesNotMatch(html, /€|prix|waitlist-price/i, reason);
+    // « Le prix au m² » in the list is the property's, not the subscription's.
+    assert.doesNotMatch(html, /€|TTC|par mois|\/\s*mois|waitlist-price|tarif|prix (de|du|à) l’abonnement/i, reason);
   }
 });
 
@@ -78,20 +79,32 @@ test('each way in has its own title, and none promises a closed globe', () => {
   assert.equal(waitlistCopy('exhausted', { limit: 5 }).title, 'Essai terminé');
   assert.match(waitlistCopy('exhausted', { limit: 5 }).lede, /^Vos 5 essais/);
   assert.match(waitlistCopy('exhausted', {}).lede, /^Vos essais/);
-  assert.match(waitlistCopy('exhausted', { limit: 5 }).lede, /fonctions premium/, 'the voice trial is one of the tries');
+  assert.match(waitlistCopy('exhausted', { limit: 5 }).lede, /^Vos 5 essais premium sont utilisés\./, 'the voice trial is one of the tries');
   // Voice is premium whichever way the visitor met the refusal.
   const used = waitlistCopy('voice', { limit: 5, voice: { limit: 3, used: 3, remaining: 0 } });
   assert.equal(used.title, 'La voix est une fonction premium');
-  assert.match(used.lede, /^Vos 3 demandes d’essai sont utilisées\. Inscrivez-vous/);
-  assert.match(waitlistCopy('voice', { voice: { limit: 1 } }).lede, /^Votre demande d’essai est utilisée\./);
+  assert.equal(used.lede, 'Vos 3 commandes vocales offertes sont utilisées. Le globe et ses couches restent gratuits.');
+  assert.match(waitlistCopy('voice', { voice: { limit: 1 } }).lede, /^Votre commande vocale offerte est utilisée\./);
   const never = waitlistCopy('voice', { limit: 5, voice: { limit: 0 } });
   assert.equal(never.title, 'La voix est une fonction premium');
-  assert.match(never.lede, /^Elle arrive avec l’abonnement\./);
+  assert.match(never.lede, /^Elle arrive à l’ouverture\./, 'no subscription exists yet to arrive with');
   assert.match(waitlistCopy('voice').lede, /^Elle arrive/, 'a card opened before /api/trial answered');
   assert.equal(waitlistCopy('direct').title, 'Liste d’attente');
   for (const reason of ['exhausted', 'voice']) {
-    assert.match(waitlistCopy(reason, { limit: 5 }).lede, /restent ouverts, sans limite/);
+    const { lede } = waitlistCopy(reason, { limit: 5, voice: { limit: 3 } });
+    assert.match(lede, /Le globe et ses couches restent gratuits\.$/);
+    // Rewritten short on 2026-09-17, and without the word the owner dropped.
+    assert.ok(lede.length <= 100, `${reason}: ${lede.length} characters`);
+    assert.doesNotMatch(lede, /demande/);
   }
+});
+
+test('the premium list names only what works today', () => {
+  const html = renderWaitlistCard({ reason: 'voice', trial });
+  assert.match(html, /<li>La commande vocale<\/li>/);
+  // The Météo-France network needs a contract that is not signed.
+  assert.doesNotMatch(html, /Météo-France|2 144/);
+  assert.match(html, /Deux emails, rien d’autre\. Via Buttondown, désinscription en un clic\./);
 });
 
 test('an automatic refusal opens the card once per tab; a click always does', () => {

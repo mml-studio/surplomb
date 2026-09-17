@@ -146,7 +146,7 @@ async function micFresh(browser) {
   const badge = await waitFor(page, readBadge, null, { timeoutMs: 90_000 });
   record('the mic wears the crown', badge?.display === 'grid' && Math.round(badge.width) === 15
     && /gradient/.test(badge.background), JSON.stringify(badge));
-  record('its help tray says what the trial holds', /^Fonction premium · essai gratuit de \d+ demandes?$/.test(badge?.help || ''),
+  record('its help tray says what the trial holds', /^Fonction premium · \d+ commandes? vocales? offertes?$/.test(badge?.help || ''),
     badge?.help);
   if (!badge) return page.close();
 

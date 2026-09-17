@@ -101,11 +101,11 @@ test('a click on an idle dock starts a session; a click while connecting cancels
 
 test('the dock names the trial while the mic is shut, and never says LISTENING', async (t) => {
   const { controller, ui, feed, shown } = listeningController(t, { trialTurns: 3 });
-  assert.equal(ui.detail.textContent, 'Essai : 3 demandes');
+  assert.equal(ui.detail.textContent, '3 commandes offertes');
   await feed('input_audio_buffer.committed');
   await feed('response.done', spokenAnswer);
   assert.deepEqual(shown(), ['READY', 'ready']);
-  assert.equal(ui.detail.textContent, 'Essai : 2 demandes');
+  assert.equal(ui.detail.textContent, '2 commandes offertes');
   assert.equal(controller.microphoneLive, false);
 });
 

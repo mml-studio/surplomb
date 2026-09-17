@@ -34,6 +34,8 @@ const STATUS = {
 /** The caption of a live mic when nothing more specific applies. */
 const ASK_PROMPT = 'Question ou commande';
 const RELEASE_SPACE_PROMPT = 'Relâchez Espace pour envoyer';
+/** The dock once the hosted voice trial is spent — the mic's own words (src/voicePremium.js). */
+const TRIAL_SPENT_DETAIL = 'Commandes offertes utilisées';
 /**
  * How long an ordinary session may sit with the mic shut before it closes.
  * A click no longer ends a session (it opens the mic for one request), so this
@@ -1341,7 +1343,7 @@ export class GevRealtimeController {
       announceVoiceSession(false);
     }
     if (!preserveStatus && !removeUi) {
-      this.setStatus('idle', endedTrial ? 'Essai terminé' : 'Voice off');
+      this.setStatus('idle', endedTrial ? TRIAL_SPENT_DETAIL : 'Voice off');
     }
     this.setRadioVoiceDucking(false);
     if (endedTrial && !removeUi) this.announceTrialEnd();
@@ -1371,8 +1373,8 @@ export class GevRealtimeController {
   trialDetail() {
     const left = this.trialAnswersLeft;
     if (left === null) return null;
-    if (this.trialClosing || left <= 0) return 'Essai terminé';
-    return left === 1 ? 'Essai : dernière demande' : `Essai : ${left} demandes`;
+    if (this.trialClosing || left <= 0) return TRIAL_SPENT_DETAIL;
+    return left === 1 ? 'Dernière commande offerte' : `${left} commandes offertes`;
   }
 
   /**
