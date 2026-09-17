@@ -3,18 +3,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {
-  ENVIRONMENTAL_LABEL_CHOICE,
   EXCLUSIVE_SURFACE_CLASSES,
-  FIRST_RUN_MISSIONS,
   FIRST_RUN_SESSION_KEY,
   FIRST_RUN_STORAGE_KEY,
-  environmentalLabel,
+  FIRST_RUN_VARIANT_IDS,
   exclusiveSurfaceActive,
+  forcedFirstRunVariant,
   rememberFirstRunSessionDismissed,
-  runFirstRunChoice,
   setFirstRunSuppressed,
   shouldShowFirstRun,
 } from './firstRunExperience.js';
+import { variantLayerIds } from './firstRunVariants.js';
+
+const FIRST_RUN_MODULES = ['./firstRunExperience.js', './firstRunVariants.js', './firstRunHint.js'];
 
 function memoryStorage(key, value = null) {
   const values = new Map(value == null ? [] : [[key, value]]);
@@ -34,52 +35,68 @@ const fresh = () => ({
 
 // ── Show policy ──────────────────────────────────────────────────────────────
 
-test('a fresh session receives the launcher, and keeps receiving it', () => {
+test('a fresh browser receives it once', () => {
   assert.equal(shouldShowFirstRun(fresh()), true);
-  // Not one-shot: a previous session's completion does not suppress a new one.
-  const returning = fresh();
-  returning.sessionStorageRef = memoryStorage(FIRST_RUN_SESSION_KEY);
-  assert.equal(shouldShowFirstRun(returning), true);
-});
-
-test('dismissal is session-scoped; only the checkbox suppresses durably', () => {
-  const session = memoryStorage(FIRST_RUN_SESSION_KEY);
-  const storage = memoryStorage(FIRST_RUN_STORAGE_KEY);
-
-  rememberFirstRunSessionDismissed(session);
-  assert.equal(session.read(), 'dismissed');
-  // Gone for THIS session...
-  assert.equal(shouldShowFirstRun({ storage, sessionStorageRef: session, location: { search: '' } }), false);
-  // ...and back in the next one, because sessionStorage did not survive it.
-  assert.equal(shouldShowFirstRun({
-    storage,
+  // Once per browser (2026-09-17): a close in an earlier session wrote the
+  // durable key, so a new session with an empty sessionStorage stays quiet.
+  const returning = {
+    storage: memoryStorage(FIRST_RUN_STORAGE_KEY, 'suppressed'),
     sessionStorageRef: memoryStorage(FIRST_RUN_SESSION_KEY),
     location: { search: '' },
-  }), true);
-  // Session dismissal must never have written the durable key.
-  assert.equal(storage.read(), null);
+  };
+  assert.equal(shouldShowFirstRun(returning), false);
 });
 
-test('the checkbox writes and clears durable suppression, and a storage reset undoes it', () => {
+test('any close writes BOTH keys; a refused durable write still leaves the session key', () => {
+  const session = memoryStorage(FIRST_RUN_SESSION_KEY);
   const storage = memoryStorage(FIRST_RUN_STORAGE_KEY);
-  setFirstRunSuppressed(true, storage);
+  rememberFirstRunSessionDismissed(session);
+  assert.equal(setFirstRunSuppressed(true, storage), true);
+  assert.equal(session.read(), 'dismissed');
   assert.equal(storage.read(), 'suppressed');
+  // Gone for this session, and for the next one.
+  assert.equal(shouldShowFirstRun({ storage, sessionStorageRef: session, location: { search: '' } }), false);
   assert.equal(shouldShowFirstRun({
     storage,
     sessionStorageRef: memoryStorage(FIRST_RUN_SESSION_KEY),
     location: { search: '' },
   }), false);
 
-  // Unticking before dismissing takes the suppression back.
-  setFirstRunSuppressed(false, storage);
-  assert.equal(storage.read(), null);
+  // A browser that refuses localStorage: the durable write fails, and the
+  // session key is what keeps the card from coming back on the next reload.
+  const refusing = {
+    getItem: () => null,
+    setItem: () => { throw new Error('blocked'); },
+    removeItem: () => { throw new Error('blocked'); },
+  };
+  const tab = memoryStorage(FIRST_RUN_SESSION_KEY);
+  rememberFirstRunSessionDismissed(tab);
+  assert.equal(setFirstRunSuppressed(true, refusing), false);
+  assert.equal(shouldShowFirstRun({ storage: refusing, sessionStorageRef: tab, location: { search: '' } }), false);
+
+  // Every close path in the module writes both, through one helper.
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  assert.match(
+    module,
+    /const rememberClosed = \(\) => \{\s*rememberFirstRunSessionDismissed\(sessionStorageRef\);\s*setFirstRunSuppressed\(true, storage\);\s*\};/,
+  );
+  const dismiss = module.slice(module.indexOf('const dismiss = ({'), module.indexOf('const setBusy = ('));
+  assert.match(dismiss, /rememberClosed\(\);/, 'a card close must write both keys');
+  assert.match(module, /onClose: rememberClosed,/, 'a bubble close must write both keys');
+});
+
+test('a storage reset shows it again — an accepted, documented cost', () => {
+  const storage = memoryStorage(FIRST_RUN_STORAGE_KEY);
+  setFirstRunSuppressed(true, storage);
   assert.equal(shouldShowFirstRun({
     storage,
     sessionStorageRef: memoryStorage(FIRST_RUN_SESSION_KEY),
     location: { search: '' },
-  }), true);
-
-  // A cleared/hard-reset profile shows it again — an accepted, documented cost.
+  }), false);
+  // Clearing it (support, tests) brings it back.
+  assert.equal(setFirstRunSuppressed(false, storage), true);
+  assert.equal(storage.read(), null);
+  // A cleared/hard-reset profile is a new browser as far as the card knows.
   setFirstRunSuppressed(true, storage);
   assert.equal(shouldShowFirstRun({
     storage: memoryStorage(FIRST_RUN_STORAGE_KEY),
@@ -101,6 +118,33 @@ test('welcome params work in both directions and outrank both suppressions', () 
   assert.equal(shouldShowFirstRun({
     hasShareState: true, ...fresh(), location: { search: '?welcome=1' },
   }), false);
+  // Naming a variant is a replay too, whatever the case.
+  for (const search of ['?welcome=B', '?welcome=b', '?welcome=C', '?welcome=a']) {
+    assert.equal(shouldShowFirstRun({
+      storage: suppressed, sessionStorageRef: dismissed, location: { search },
+    }), true, search);
+    assert.equal(shouldShowFirstRun({
+      hasShareState: true, ...fresh(), location: { search },
+    }), false, `a share link outranks ${search}`);
+  }
+  assert.equal(shouldShowFirstRun({
+    storage: suppressed, sessionStorageRef: dismissed, location: { search: '?welcome=D' },
+  }), false, 'an unknown variant replays nothing');
+});
+
+test('?welcome= forces a variant, and only a known one', () => {
+  assert.deepEqual([...FIRST_RUN_VARIANT_IDS], ['A', 'B', 'C']);
+  assert.equal(forcedFirstRunVariant({ search: '?welcome=b' }), 'B');
+  assert.equal(forcedFirstRunVariant({ search: '?welcome=C' }), 'C');
+  assert.equal(forcedFirstRunVariant({ search: '?x=1&welcome=a' }), 'A');
+  for (const search of ['', '?welcome=1', '?welcome=0', '?welcome=D', '?welcome=AB', '?other=B']) {
+    assert.equal(forcedFirstRunVariant({ search }), null, search);
+  }
+  assert.equal(forcedFirstRunVariant(null), null);
+  // The forced variant outranks the assigned one, and an unknown assignment
+  // falls back to A rather than to nothing.
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  assert.match(module, /const chosen = forcedFirstRunVariant\(location\)\s*\?\? \(FIRST_RUN_VARIANT_IDS\.includes\(assigned\) \? assigned : 'A'\);/);
 });
 
 test('a share link never sees the launcher — its author already chose the view', () => {
@@ -284,12 +328,9 @@ test('one ESC does one thing — the radio disclosure stops the launcher outrigh
   );
 });
 
-test('a refused write takes the tick back instead of promising "never again"', () => {
-  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-
-  // The write stays best-effort; the OUTCOME is now reported, because a box left
-  // ticked after a refused write tells the visitor the launcher is gone for good
-  // while it is already guaranteed to return next session.
+test('the durable write reports whether it landed', () => {
+  // The write stays best-effort; the OUTCOME is reported, so a caller can tell
+  // a saved "once" from a refused one.
   const blocked = {
     getItem: () => null,
     setItem: () => { throw new Error('blocked'); },
@@ -300,20 +341,16 @@ test('a refused write takes the tick back instead of promising "never again"', (
   // No storage area at all is a refusal too — nothing was persisted either way.
   assert.equal(setFirstRunSuppressed(true, null), false);
   assert.equal(setFirstRunSuppressed(false, null), false);
-  // ...and a working store still reports success, or the checkbox would revert
-  // on every tick and the pin above would be measuring nothing.
+  // ...and a working store still reports success.
   const working = memoryStorage(FIRST_RUN_STORAGE_KEY);
   assert.equal(setFirstRunSuppressed(true, working), true);
   assert.equal(working.read(), 'suppressed');
   assert.equal(setFirstRunSuppressed(false, working), true);
   assert.equal(working.read(), null);
 
-  const handler = module.slice(
-    module.indexOf('const onSuppressChange = (event) => {'),
-    module.indexOf('function onKeyDown(event) {'),
-  );
-  assert.match(handler, /if \(setFirstRunSuppressed\(wanted, storage\)\) return;/);
-  assert.match(handler, /box\.checked = !wanted;/, 'a refused write must revert the tick');
+  // The checkbox that needed the answer is gone (once per browser).
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(module, /onSuppressChange|data-first-run-suppress/);
 });
 
 test('a surface class that never clears is an ACCEPTED no-show, not a timer', () => {
@@ -363,8 +400,8 @@ test('the launcher yields on engage and waits when a surface is already up', () 
     module,
     /if \(revealed && blocked\) yieldToExclusiveSurface\(\);\s*\n\s*else if \(!revealed && !blocked\) reveal\(\);/,
   );
-  // Yielding is session-scoped and must not steal focus from the new surface.
-  assert.match(module, /dismiss\(\{ restoreFocus: false \}\)/);
+  // A yield is a close like any other, and must not steal focus from the new surface.
+  assert.match(module, /dismiss\(\{ restoreFocus: false, reason: 'yield' \}\)/);
   // A cheap attribute watch, not a per-frame poll — the render governor must
   // not see a new hold because of onboarding chrome.
   assert.match(module, /attributes: true, attributeFilter: \['class'\]/);
@@ -372,170 +409,48 @@ test('the launcher yields on engage and waits when a surface is already up', () 
   assert.doesNotMatch(module, /setInterval|requestAnimationFrame\(function poll/);
 });
 
-// ── Per-mission behavior ─────────────────────────────────────────────────────
+// ── Defaults interplay: what a choice is allowed to persist ─────────────────
 
-function missionSpy({ contextOk = true, layerResult = () => true, globe = async () => ({ ok: true }) } = {}) {
-  const calls = { contextModes: [], layerIds: [], globeFlights: 0 };
-  return {
-    calls,
-    deps: {
-      setContextMode: async (mode) => {
-        calls.contextModes.push(mode);
-        return contextOk ? { ok: true, mode } : { ok: false, failedLayerIds: ['rocket-launches'] };
-      },
-      setLayerEnabled: async (layerId) => {
-        calls.layerIds.push(layerId);
-        return layerResult(layerId);
-      },
-      flyToGlobe: async () => {
-        calls.globeFlights += 1;
-        return globe();
-      },
-    },
-  };
-}
+test('no choice writes a preference the visitor did not choose by making it', () => {
+  const core = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  const code = core.slice(core.indexOf('export function shouldShowFirstRun'));
 
-test('the menu is the four owner-ordered missions', () => {
-  // INFRASTRUCTURE was removed after the field tested it: enabling all
-  // three bundled layers at once put ~5,700 entities on a full-earth view and
-  // tanked the frame rate. The layers stay reachable by hand and by voice; what
-  // went is the one-click globe-scale dump. Restoring the tile needs the
-  // globe-LOD declutter first.
-  assert.deepEqual(Object.keys(FIRST_RUN_MISSIONS), [
-    'contacts', 'space-missions', 'environmental', 'explore',
-  ]);
-  assert.equal(FIRST_RUN_MISSIONS.infrastructure, undefined,
-    'the infrastructure mission must be gone, not dormant');
-});
-
-test('Live Contacts and Space Missions go through the one setContextMode facade', async () => {
-  for (const [choice, mode] of [['contacts', 'contacts'], ['space-missions', 'space-missions']]) {
-    const spy = missionSpy();
-    const outcome = await runFirstRunChoice(choice, spy.deps);
-    assert.equal(outcome.ok, true);
-    assert.deepEqual(spy.calls.contextModes, [mode]);
-    // A Context mission owns no layers and no camera of its own — the facade does.
-    assert.deepEqual(spy.calls.layerIds, []);
-    assert.equal(spy.calls.globeFlights, 0);
-  }
-});
-
-test('Environmental enables BOTH its feeds and pulls out to the globe', async () => {
-  const spy = missionSpy();
-  const outcome = await runFirstRunChoice('environmental', spy.deps);
-  assert.equal(outcome.ok, true);
-  assert.deepEqual(spy.calls.layerIds, ['earthquakes', 'local-firms']);
-  assert.equal(spy.calls.globeFlights, 1);
-});
-
-test('the tile is the FULLY CONFIGURED experience: quakes and fires together', () => {
-  // Product decision, 2026-08-23: the launcher optimizes for the configured app, so
-  // ENVIRONMENTAL means live USGS earthquakes AND NASA FIRMS active fires.
-  const environmental = FIRST_RUN_MISSIONS.environmental;
-  assert.deepEqual(environmental.layerIds, ['earthquakes', 'local-firms']);
-
-  // Keyless, the honest surface is the LAYER ROW ("KEY REQUIRED"), which the
-  // FIRMS layer already reports. The misleading part is the GLOBAL chip folding
-  // that row into LOAD FAILED — a defect in the shared state machine, ledgered
-  // post-launch, and the note must stay where the next editor will read it
-  // rather than being re-discovered as a launcher bug.
-  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  const table = module.slice(module.indexOf('  environmental: Object.freeze({'), module.indexOf('  explore:'));
-  assert.match(table, /KEY REQUIRED/);
-  assert.match(table, /src\/loadingFeedback\.js/);
-  assert.match(table, /LEDGERED post-launch/);
-});
-
-test('every visitor gets the same tile — there is no degraded keyless variant', async () => {
-  // The mission does not branch on configuration: it asks for both layers for
-  // everyone, and a keyless FIRMS reports its own state at its own row rather
-  // than changing what the tile does.
-  const spy = missionSpy({ layerResult: () => true });
-  const outcome = await runFirstRunChoice('environmental', spy.deps);
-  assert.equal(outcome.ok, true);
-  assert.deepEqual(outcome.failedLayerIds, []);
-  assert.deepEqual(spy.calls.layerIds, ['earthquakes', 'local-firms']);
-  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(
-    module.slice(module.indexOf('export async function runFirstRunChoice')),
-    /FIRMS_MAP_KEY|hasKey|keyless\s*\?/,
-    'the mission must not fork on whether a key is configured',
-  );
-});
-
-test('a refused layer fails the mission by name, and a stalled flight never does', async () => {
-  const refused = missionSpy({ layerResult: (id) => id !== 'earthquakes' });
-  const outcome = await runFirstRunChoice('environmental', refused.deps);
-  assert.equal(outcome.ok, false);
-  assert.deepEqual(outcome.failedLayerIds, ['earthquakes']);
-
-  // The globe flight is framing. A cancelled or throwing flight is not a failure.
-  const flightDown = missionSpy({ globe: () => { throw new Error('cancelled'); } });
-  assert.equal((await runFirstRunChoice('environmental', flightDown.deps)).ok, true);
-});
-
-test('Explore manually touches nothing at all, and an unknown choice is inert', async () => {
-  const spy = missionSpy();
-  assert.equal((await runFirstRunChoice('explore', spy.deps)).ok, true);
-  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], globeFlights: 0 });
-  assert.equal((await runFirstRunChoice('nope', spy.deps)).ok, false);
-  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], globeFlights: 0 });
-});
-
-test('a failed Context mission reports the layers the facade named', async () => {
-  const spy = missionSpy({ contextOk: false });
-  const outcome = await runFirstRunChoice('space-missions', spy.deps);
-  assert.equal(outcome.ok, false);
-  assert.deepEqual(outcome.result.failedLayerIds, ['rocket-launches']);
-});
-
-test('the fires/quakes tile name is switchable from one constant', () => {
-  assert.equal(environmentalLabel('ENVIRONMENTAL').title, 'ENVIRONMENTAL');
-  assert.equal(environmentalLabel('EARTH_WATCH').title, 'EARTH WATCH');
-  assert.equal(environmentalLabel('ACTIVE_EVENTS').title, 'ACTIVE EVENTS');
-  assert.equal(environmentalLabel('nonsense').title, 'ENVIRONMENTAL');
-  assert.equal(environmentalLabel().title, environmentalLabel(ENVIRONMENTAL_LABEL_CHOICE).title);
-});
-
-// ── Defaults interplay: what a mission is allowed to persist ─────────────────
-
-test('no mission writes a preference the visitor did not choose by picking it', () => {
-  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  const code = module.slice(module.indexOf('export function shouldShowFirstRun'));
-
-  // Layer enables ARE durable in this app and a mission tile IS that choice, so
-  // they run at the same origin a click on those rows uses.
+  // Layer enables ARE durable in this app and a choice IS that choice, so they
+  // run at the same origin a click on those rows uses — and only here.
   assert.match(code, /setEnabled\(layerId, true, \{ origin: 'user' \}\)/);
 
-  // Detection is owned by the reasonable-defaults landing and, while Contacts is
-  // active, by contactsDetectionPolicy. A mission has no opinion on any of it.
-  for (const forbidden of [
-    '_detectionUserOverridden',
-    '_setDetectionMode',
-    '_applyDetectionPreset',
-    '_setDetectionAllocation',
-    'setDetectionTuning',
-    // 3D models and feather default to origin 'user' and would persist a choice
-    // nobody made by picking a mission.
-    '_setModels3dEnabled',
-    '_setModels3dMode',
-    '_setModels3dParams',
-    'setFeather',
-  ]) {
-    assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
+  for (const file of FIRST_RUN_MODULES) {
+    // Code only: the decision table itself names what is NOT touched.
+    const source = fs.readFileSync(new URL(file, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    // Detection is owned by the reasonable-defaults landing. A choice has no
+    // opinion on any of it.
+    for (const forbidden of [
+      '_detectionUserOverridden',
+      '_setDetectionMode',
+      '_applyDetectionPreset',
+      '_setDetectionAllocation',
+      'setDetectionTuning',
+      // 3D models and feather default to origin 'user' and would persist a
+      // choice nobody made.
+      '_setModels3dEnabled',
+      '_setModels3dMode',
+      '_setModels3dParams',
+      'setFeather',
+    ]) {
+      assert.doesNotMatch(source, new RegExp(forbidden), `${file} must never touch ${forbidden}`);
+    }
+    // The global missions are gone, and with them every panel write and every
+    // pull-out to the whole Earth.
+    assert.equal((source.match(/setPanelCollapsed/g) || []).length, 0, `${file} opens no panel`);
+    assert.doesNotMatch(source, /setContextMode|resetToGlobeView|flyToGlobe/, `${file} leaves France`);
   }
-
-  // The only durable panel write is the Context reveal, and only on the Context
-  // missions — the globe missions open no panel at all.
-  const panelWrites = code.match(/setPanelCollapsed/g) || [];
-  assert.equal(panelWrites.length, 1, 'exactly one panel reveal, on the Context path');
-  const contextPath = code.slice(code.indexOf('setContextMode: async (mode)'), code.indexOf('setLayerEnabled:'));
-  assert.match(contextPath, /result\?\.ok[\s\S]*?setPanelCollapsed\?\.\('global-context-panel', false, \{ explicit: true \}\)/);
 });
 
 test('the decision table is written down where the next editor will read it', () => {
   const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  assert.match(module, /MISSION → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST/);
+  assert.match(module, /CHOICE → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST/);
   for (const row of ['TOUCHED, DURABLE', 'TOUCHED, SESSION', 'NOT TOUCHED']) {
     assert.ok(module.includes(row), `decision table is missing its "${row}" rows`);
   }
@@ -544,43 +459,103 @@ test('the decision table is written down where the next editor will read it', ()
 
 // ── Markup, startup ordering, accessibility ─────────────────────────────────
 
+/** The markup of one variant template, or the static shell. */
+function templateOf(html, variant) {
+  const start = html.indexOf(`<template data-first-run-variant="${variant}">`);
+  assert.ok(start > 0, `template ${variant} is gone`);
+  return html.slice(start, html.indexOf('</template>', start));
+}
+
+/** What a reader sees: markup without comments or tags. */
+function visibleText(markup) {
+  return markup.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ');
+}
+
 test('markup, startup ordering and accessibility remain pinned', () => {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const main = fs.readFileSync(new URL('./main.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 
   assert.match(html, /id="first-run-launcher" role="dialog"[^>]*aria-labelledby="first-run-title"[^>]*hidden/);
-  assert.equal((html.match(/data-first-run-choice=/g) || []).length, 4);
   assert.match(html, /data-first-run-status[^>]*role="status"[^>]*aria-live="polite"/);
-  assert.match(html, /<input type="checkbox" data-first-run-suppress \/>/);
-  assert.match(html, /<strong data-first-run-environmental-title>/);
-  // Subcopy must name BOTH feeds the tile turns on — a tile that promised only
-  // half of what it does is the defect this replaced. Only the VISIBLE <small>
-  // text counts; the comment beside it naturally says the words too.
-  const envTile = html.slice(html.indexOf('data-first-run-choice="environmental"'));
-  const visible = envTile.slice(envTile.indexOf('<small>'), envTile.indexOf('</small>'));
-  assert.match(visible, /earthquakes/i);
-  assert.match(visible, /fires?/i, 'the tile must promise the fires it enables');
+  // Once per browser: the checkbox is gone, and so is every tile of the old
+  // global missions.
+  assert.doesNotMatch(html, /data-first-run-suppress/);
+  assert.doesNotMatch(html, /data-first-run-environmental-title|forbidden cockpit/);
+  assert.doesNotMatch(html, /data-first-run-choice="(contacts|space-missions|environmental|infrastructure)"/);
 
-  // The card's one persuasive line is OWNER-AUTHORED and pinned verbatim,
-  // unspaced em dash included. This is copy, not prose to be improved in a
-  // passing edit — changing it needs the owner, not a nicer-sounding rewrite.
-  assert.ok(
-    html.includes('<p id="first-run-description">It feels like a forbidden cockpit'
-      + '—then you realize the sources are public and the data is real.</p>'),
-    'the final first-run line must ship exactly as written',
-  );
+  const shellStart = html.indexOf('<aside id="first-run-launcher"');
+  const shell = html.slice(shellStart, html.indexOf('</aside>', shellStart));
+  const a = templateOf(html, 'A');
+  const b = templateOf(html, 'B');
+  const c = templateOf(html, 'C');
 
-  // Menu order is the owner's, read straight off the markup.
-  const order = [...html.matchAll(/data-first-run-choice="([a-z-]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(order, ['contacts', 'space-missions', 'environmental', 'explore']);
-  assert.doesNotMatch(html, /data-first-run-choice="infrastructure"/,
-    'the removed tile must leave no markup behind');
+  // B: exactly four tiles, in this order. A and C have none.
+  assert.equal((b.match(/data-first-run-choice=/g) || []).length, 4);
+  assert.equal((a.match(/data-first-run-choice=/g) || []).length, 0);
+  assert.equal((c.match(/data-first-run-choice=/g) || []).length, 0);
+  const order = [...b.matchAll(/data-first-run-choice="([a-z-]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(order, ['sales', 'permits', 'live', 'explore']);
+
+  // A: one field that tells the soft keyboard what it wants, one submit, the
+  // three chips, and the way out.
+  const field = a.match(/<input[^>]*data-first-run-address[^>]*>/);
+  assert.ok(field, 'the address field is gone');
+  for (const attribute of ['type="search"', 'enterkeyhint="search"', 'inputmode="search"', 'autocapitalize="off"', 'autocorrect="off"']) {
+    assert.ok(field[0].includes(attribute), `the address field lost ${attribute}`);
+  }
+  assert.match(field[0], /aria-label="[^"]+"/);
+  assert.match(a, /<form[^>]*data-first-run-form/);
+  assert.match(a, /data-first-run-submit type="submit"/);
+  assert.match(a, /data-first-run-chip="locate" hidden/, 'geolocation is offered only once the module knows it can work');
+  assert.match(a, /data-first-run-chip="Tour Eiffel, Paris"/);
+  assert.match(a, /data-first-run-chip="Vieux-Port, Marseille"/);
+  assert.match(a, /data-first-run-look-around/);
+  for (const template of [a, b]) {
+    assert.match(template, /<h2 id="first-run-title">/);
+    assert.match(template, /<p id="first-run-description">/);
+  }
+
+  // C: its own element, never the card.
+  assert.match(html, /<div id="first-run-hint" hidden><\/div>/);
+  assert.match(c, /data-first-run-hint-open/);
+  assert.match(visibleText(c), /Première visite \? Tapez une adresse ici\./);
+
+  // French typography, as on every other French surface: a curly apostrophe,
+  // no non-breaking spaces in the markup, and a plain space before ? : ;
+  for (const [name, markup] of [['shell', shell], ['A', a], ['B', b], ['C', c]]) {
+    const text = visibleText(markup);
+    assert.doesNotMatch(text, /[A-Za-zÀ-ÿ]'[A-Za-zÀ-ÿ]/, `${name} uses a straight apostrophe`);
+    assert.doesNotMatch(markup, /[\u00a0\u202f]/, `${name} carries a non-breaking space`);
+    for (const match of text.matchAll(/[?:;]/g)) {
+      assert.equal(text[match.index - 1], ' ', `${name}: "${text.slice(match.index - 12, match.index + 1)}" needs a space before its mark`);
+    }
+    assert.doesNotMatch(markup, /lang="en"/, `${name} is French`);
+  }
+  assert.doesNotMatch(shell, /lang="/);
+
+  // The two numbers the card states are the ones the page description states.
+  const meta = html.match(/<meta name="description" content="[^"]*?(\d+) couches[^"]*?(\d+) ne demandent aucune clé/);
+  assert.ok(meta, 'the page description no longer states the layer counts');
+  const [, total, keyless] = meta;
+  assert.ok(visibleText(shell).includes(`${total} couches de données publiques · ${keyless} sans clé`));
+  assert.ok(visibleText(c).includes(`${total} couches · ${keyless} sans clé`));
 
   const startup = main.slice(main.indexOf('void Promise.all(['), main.indexOf('// Expose for debugging'));
   assert.match(startup, /styleManager\.initialRestorePromise/);
-  assert.ok(startup.indexOf("loadingScreen.classList.add('hidden')") < startup.indexOf('initFirstRunExperience'));
-  assert.match(startup, /initFirstRunExperience\(\{ styleManager, dataManager \}\)/);
+  const veil = startup.indexOf("loadingScreen.classList.add('hidden')");
+  assert.ok(veil >= 0 && veil < startup.indexOf('initFirstRunExperience'));
+  assert.match(startup, /initFirstRunExperience\(\{\s*styleManager,\s*dataManager,\s*variant:/);
+  // Revealed once the boot flight has LANDED — inside the reveal, never in the
+  // Promise.all above, which is what lifts the loading veil.
+  assert.match(startup, /whenBootFlightEnds\(\(\) => \{\s*initFirstRunExperience\(/);
+  assert.ok(startup.indexOf('whenBootFlightEnds(') > veil);
+  assert.doesNotMatch(
+    main.slice(main.indexOf('void Promise.all(['), main.indexOf(']).finally(')),
+    /whenBootFlightEnds/,
+    'the veil must not wait for the flight',
+  );
+  assert.match(main, /import \{[^}]*\bwhenBootFlightEnds\b[^}]*\} from '\.\/bootFlight\.js';/);
 
   assert.match(css, /body\.ui-clean-view #first-run-launcher/);
   assert.match(css, /body\.recording-mode #first-run-launcher/);
@@ -753,12 +728,12 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   assert.ok(paragraph.includes('set_layer_visibility'));
 });
 
-test('every layer a mission drives is already in the shipped set_layer_visibility enum', () => {
+test('every layer a choice drives is already in the shipped set_layer_visibility enum', () => {
   const src = fs.readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
   const tool = src.slice(src.indexOf("name: 'set_layer_visibility'"), src.indexOf("name: 'show_data_layers_menu'"));
-  const missionLayerIds = Object.values(FIRST_RUN_MISSIONS).flatMap((mission) => mission.layerIds || []);
-  assert.ok(missionLayerIds.length > 0);
-  for (const layerId of missionLayerIds) {
+  const choiceLayerIds = [...new Set([...variantLayerIds('A'), ...variantLayerIds('B')])];
+  assert.equal(choiceLayerIds.length, 8);
+  for (const layerId of choiceLayerIds) {
     assert.ok(tool.includes(`'${layerId}'`), `${layerId} must already be an allowed enum value`);
   }
 });
