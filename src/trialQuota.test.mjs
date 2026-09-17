@@ -253,6 +253,7 @@ test('/api/trial reports the state without spending it', () => {
     remaining: 1,
     voice: { limit: 3, used: 3, remaining: 0 },
     waitlist: on.waitlist,
+    experiments: null,
   });
   assert.deepEqual(describeTrial(requestWith(), resolveTrialConfig({})), {
     enabled: false,
@@ -261,5 +262,11 @@ test('/api/trial reports the state without spending it', () => {
     remaining: null,
     voice: null,
     waitlist: null,
+    experiments: null,
   });
+  // The first-run A/B switch travels on the same probe, and spends nothing.
+  assert.deepEqual(
+    describeTrial(requestWith(), resolveTrialConfig({}), { variants: ['A', 'B', 'C'] }).experiments,
+    { firstRun: { variants: ['A', 'B', 'C'] } },
+  );
 });

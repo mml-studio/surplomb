@@ -349,7 +349,7 @@ export function voiceTrialSpend(state, { all = false } = {}) {
  * @param {import('http').IncomingMessage} req
  * @param {ReturnType<typeof resolveTrialConfig>} config
  */
-export function describeTrial(req, config) {
+export function describeTrial(req, config, experiments = null) {
   const state = readTrialState(req, config);
   return {
     enabled: config.enabled,
@@ -361,5 +361,8 @@ export function describeTrial(req, config) {
       ? { limit: config.voiceTurns, used: state.voiceUsed, remaining: state.voiceRemaining }
       : null,
     waitlist: config.waitlist,
+    // The hosted A/B tests the page must know about before it shows anything
+    // (src/firstRunAb.js). Null on a clone, and on a host that runs none.
+    experiments: experiments ? { firstRun: experiments } : null,
   };
 }
