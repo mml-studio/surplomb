@@ -5,6 +5,7 @@ import * as Cesium from 'cesium';
 // existing caller imports it from.
 export { DEFAULT_CITY_VIEW } from './defaultView.js';
 import { DEFAULT_CITY_VIEW } from './defaultView.js';
+import { framingAngles } from './topDownView.js';
 
 /**
  * Set the camera on the default city at load with a cinematic fly-in.
@@ -18,6 +19,12 @@ import { DEFAULT_CITY_VIEW } from './defaultView.js';
  * look at, paid for over a mobile connection, before the first frame anyone
  * wants — so a phone lands on the final pose directly.
  *
+ * ── ON A PHONE, STRAIGHT DOWN ───────────────────────────────────────────────
+ *
+ * The settled pose goes through `framingAngles`, so a phone lands north-up at
+ * -90° over the default point instead of looking a kilometre north-west of it
+ * at -30°. See `src/topDownView.js`.
+ *
  * `onSettled` still fires, on a macrotask rather than synchronously: every
  * caller treats it as "the opening move is finished, the reader's own
  * navigation starts now", and a callback that ran before `flyToDefaultCity`
@@ -26,18 +33,20 @@ import { DEFAULT_CITY_VIEW } from './defaultView.js';
  *
  * @param {Cesium.Viewer} viewer
  * @param {object} [view] Override target, same shape as DEFAULT_CITY_VIEW.
- * @param {{onSettled?: ?Function, immediate?: boolean}} [options]
+ * @param {{onSettled?: ?Function, immediate?: boolean, topDown?: boolean}} [options]
  */
 export function flyToDefaultCity(viewer, view = DEFAULT_CITY_VIEW, {
   onSettled = null,
   immediate = false,
+  topDown = undefined,
 } = {}) {
+  const settled = framingAngles(view, { topDown });
   if (immediate) {
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(view.lon, view.lat, view.settleAltitudeM),
       orientation: {
-        heading: Cesium.Math.toRadians(view.headingDeg),
-        pitch: Cesium.Math.toRadians(view.pitchDeg),
+        heading: Cesium.Math.toRadians(settled.headingDeg),
+        pitch: Cesium.Math.toRadians(settled.pitchDeg),
         roll: 0.0,
       },
     });
@@ -60,8 +69,8 @@ export function flyToDefaultCity(viewer, view = DEFAULT_CITY_VIEW, {
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(view.lon, view.lat, view.settleAltitudeM),
       orientation: {
-        heading: Cesium.Math.toRadians(view.headingDeg),
-        pitch: Cesium.Math.toRadians(view.pitchDeg),
+        heading: Cesium.Math.toRadians(settled.headingDeg),
+        pitch: Cesium.Math.toRadians(settled.pitchDeg),
         roll: 0.0,
       },
       duration: 4.0,

@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { DEFAULT_CITY_VIEW } from './defaultView.js';
 import {
   GEOLOCATE_OPTIONS,
   GEOLOCATE_RANGE_M,
+  GEOLOCATE_TOP_DOWN_RANGE_M,
   canGeolocate,
   geolocateErrorMessage,
   geolocateRangeM,
@@ -31,6 +33,17 @@ test('a vague fix is framed wide enough to contain the truth', () => {
   assert.equal(geolocateRangeM(Number.NaN), GEOLOCATE_RANGE_M);
   assert.equal(geolocateRangeM(-4), GEOLOCATE_RANGE_M);
   assert.equal(geolocateRangeM(undefined), GEOLOCATE_RANGE_M);
+});
+
+test('straight down, the fix lands at the opening shot\'s height', () => {
+  // Range is height when the camera looks straight down, so a phone keeping
+  // 1 200 m would arrive twice as high as its own opening shot.
+  assert.equal(GEOLOCATE_TOP_DOWN_RANGE_M, DEFAULT_CITY_VIEW.settleAltitudeM);
+  assert.equal(geolocateRangeM(30, { topDown: true }), GEOLOCATE_TOP_DOWN_RANGE_M);
+  assert.equal(geolocateRangeM(Number.NaN, { topDown: true }), GEOLOCATE_TOP_DOWN_RANGE_M);
+  // The accuracy rule still wins over the base.
+  assert.equal(geolocateRangeM(500, { topDown: true }), 1000);
+  assert.equal(geolocateRangeM(30, { topDown: false }), GEOLOCATE_RANGE_M);
 });
 
 test('every refusal names the next move', () => {

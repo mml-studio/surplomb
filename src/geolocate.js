@@ -34,6 +34,9 @@
  * @module geolocate
  */
 
+import { DEFAULT_CITY_VIEW } from './defaultView.js';
+import { prefersTopDownView } from './topDownView.js';
+
 /**
  * The fix request, frozen so it reads the same everywhere.
  *
@@ -57,14 +60,26 @@ export const GEOLOCATE_OPTIONS = Object.freeze({
 export const GEOLOCATE_RANGE_M = 1200;
 
 /**
+ * The same rule, straight down: range IS height, so the opening shot's height
+ * is the range. On a 390 px portrait screen that is about 320 m of street
+ * across, which is where a map app lands its own "my location" (zoom 17 at
+ * Paris's latitude, 0.79 m per CSS pixel). 1 200 m straight down would be
+ * twice as high as the phone's own opening shot.
+ */
+export const GEOLOCATE_TOP_DOWN_RANGE_M = DEFAULT_CITY_VIEW.settleAltitudeM;
+
+/**
  * Widen the frame until the reported accuracy fits inside it.
  * @param {number} accuracyM - `coords.accuracy`, in metres.
+ * @param {{topDown?: boolean}} [options] - Whether the flight looks straight
+ *   down; the session's answer by default (see `src/topDownView.js`).
  * @returns {number} Camera range in metres.
  */
-export function geolocateRangeM(accuracyM) {
+export function geolocateRangeM(accuracyM, { topDown = prefersTopDownView() } = {}) {
+  const base = topDown ? GEOLOCATE_TOP_DOWN_RANGE_M : GEOLOCATE_RANGE_M;
   const accuracy = Number(accuracyM);
-  if (!Number.isFinite(accuracy) || accuracy <= 0) return GEOLOCATE_RANGE_M;
-  return Math.max(GEOLOCATE_RANGE_M, accuracy * 2);
+  if (!Number.isFinite(accuracy) || accuracy <= 0) return base;
+  return Math.max(base, accuracy * 2);
 }
 
 /**

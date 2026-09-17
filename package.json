@@ -102,6 +102,7 @@
     "qa:phone-boot": "node scripts/qa-phone-boot.mjs",
     "qa:phone-shell": "node scripts/qa-phone-shell.mjs",
     "qa:phone-touch": "node scripts/qa-phone-touch.mjs",
+    "qa:phone-top-down": "node scripts/qa-phone-top-down.mjs",
     "qa:boot-spend": "node scripts/qa-boot-spend.mjs",
     "qa:webfonts": "node scripts/qa-webfonts.mjs",
     "qa:brotli": "node scripts/qa-brotli.mjs",

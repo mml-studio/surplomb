@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { keylessGeocode } from './data/keylessGeocode.js';
+import { framingAngles } from './topDownView.js';
 
 /**
  * Points of Interest per city.
@@ -309,13 +310,17 @@ export const LOCATIONS = Object.entries(CITY_POIS).map(([id, city]) => ({
  * @param {number} options.buildingHeight - Estimated landmark center height above ground (default 30)
  * @param {number} options.groundElevation - Fallback ground elevation when terrain isn't loaded (default 0)
  * @param {number} options.duration - Flight duration in seconds (default 3.0)
+ * @param {boolean} [options.topDown] - Fly straight down, north up, whatever
+ *   `pitch` and `heading` say. Defaults to the session's answer: a phone does
+ *   (see `src/topDownView.js`). `range` is kept, so the scale at the centre of
+ *   the screen is the one the framing was tuned for.
  * @returns {{ targetPosition: Cesium.Cartesian3 }} The computed target for orbit use
  */
 export function flyToLandmark(viewer, lat, lon, options = {}) {
   const {
     range = 500,
-    pitch = -30,
-    heading = 0,
+    pitch: tunedPitch = -30,
+    heading: tunedHeading = 0,
     buildingHeight = 30,
     groundElevation = 0,
     duration = 3.0,
@@ -323,7 +328,12 @@ export function flyToLandmark(viewer, lat, lon, options = {}) {
     onComplete = null,
     onCancel = null,
     buildingBounds = null,
+    topDown = undefined,
   } = options;
+  const { pitchDeg: pitch, headingDeg: heading } = framingAngles(
+    { pitchDeg: tunedPitch, headingDeg: tunedHeading },
+    { topDown },
+  );
 
   // Sample terrain height (sync — uses loaded tiles; 0 if globe/terrain not ready)
   const targetCartographic = Cesium.Cartographic.fromDegrees(lon, lat);

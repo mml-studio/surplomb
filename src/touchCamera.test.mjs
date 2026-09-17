@@ -7,6 +7,7 @@ import {
   TOUCH_INERTIA,
   TOUCH_MAX_ZOOM_DISTANCE_M,
   TOUCH_MIN_ZOOM_DISTANCE_M,
+  TOUCH_ZOOM_FACTOR,
   applyTouchCameraProfile,
 } from './touchCamera.js';
 
@@ -19,6 +20,7 @@ function defaultController() {
     inertiaSpin: 0.9,
     inertiaTranslate: 0.9,
     inertiaZoom: 0.8,
+    zoomFactor: 5,
     minimumZoomDistance: 1,
     maximumZoomDistance: Number.POSITIVE_INFINITY,
   };
@@ -43,7 +45,25 @@ test('a finger session unbinds tilt, binds zoom to pinch alone, and damps sooner
   assert.equal(c.inertiaSpin, TOUCH_INERTIA.spin);
   assert.equal(c.inertiaTranslate, TOUCH_INERTIA.translate);
   assert.equal(c.inertiaZoom, TOUCH_INERTIA.zoom);
-  assert.ok(c.inertiaSpin < 0.9 && c.inertiaZoom < 0.8, 'a lifted finger has stopped');
+  assert.ok(c.inertiaZoom < 0.8, 'a pinch stops where the fingers stopped');
+  assert.equal(c.zoomFactor, TOUCH_ZOOM_FACTOR);
+});
+
+test('a pinch that doubles the finger spacing halves the distance', () => {
+  // Cesium: distance /= exp(zoomFactor × 0.25 × Δspacing / canvasHeight).
+  // 150 → 300 px on an 800 px canvas, the pinch a thumb and finger make.
+  const closer = (factor) => Math.exp(factor * 0.25 * 150 / 800);
+  assert.ok(Math.abs(closer(TOUCH_ZOOM_FACTOR) - 2) < 0.05, `×${closer(TOUCH_ZOOM_FACTOR).toFixed(2)}`);
+  assert.ok(closer(5) < 1.3, 'Cesium\'s own factor needed three pinches for this');
+});
+
+test('a throw pans about as far as a map app flings', () => {
+  // Cesium replays a throw with exp(-(1 - k) × 25 × t): the glide lasts
+  // 1 / ((1 - k) × 25) seconds of the release speed.
+  const glideS = (k) => 1 / ((1 - k) * 25);
+  assert.ok(glideS(TOUCH_INERTIA.spin) > 0.25 && glideS(TOUCH_INERTIA.spin) < 0.3,
+    `${glideS(TOUCH_INERTIA.spin).toFixed(2)} s`);
+  assert.ok(TOUCH_INERTIA.spin < 0.9, 'still shorter than the mouse-tuned default');
 });
 
 test('the pinch cannot end inside a building, nor past the globe', () => {
