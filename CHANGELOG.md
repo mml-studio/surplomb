@@ -53,6 +53,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   taille du pied.
 
 ### Changed
+- **`gev.enerlens.com` n'existe plus : `surplomb.app` est la seule adresse
+  publique.** Les deux noms servaient le même conteneur, et l'ancien restait
+  bridé par la règle Cloudflare de la zone `enerlens.com` (30 requêtes `/api`
+  par 10 s, sans filtre d'hôte). L'enregistrement DNS, la ligne du tunnel et
+  l'entrée de `GEV_PUBLIC_HOST` sont retirés. Les valeurs par défaut qui le
+  visaient encore passent à `surplomb.app` : la sonde de la règle
+  (`edge-ratelimit-probe.sh`), le référent de sonde de `set-google-key.sh` et
+  les exemples des scripts et de la documentation. La règle, elle, reste : elle
+  protège aussi l'API Enerlens. `docs/DEPLOY.md` décrit maintenant comment
+  retirer un nom.
 - **L'arrivée sur le globe 3D ressemblait à un rechargement de la page, et le
   tiroir des fonds annonçait « SATELLITE » pendant qu'on regardait le maillage
   de Google.** Trois défauts d'une même cause — l'adoption du photoréaliste

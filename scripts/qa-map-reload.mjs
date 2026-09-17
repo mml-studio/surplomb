@@ -31,7 +31,7 @@
  *     configured, not broken, and is reported as N/A.
  *
  * Usage: node scripts/qa-map-reload.mjs [--url http://localhost:4216]
- *        node scripts/qa-map-reload.mjs --url https://gev.enerlens.com --map ign-plan
+ *        node scripts/qa-map-reload.mjs --url https://surplomb.app --map ign-plan
  */
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';

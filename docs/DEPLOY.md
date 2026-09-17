@@ -28,7 +28,7 @@ GitHub (public repo)
 /opt/gev/gev-deploy.sh  ──build──▶  docker compose  ──▶  gev container :4173
                                                             ↑            ↑
                                               cloudflared tunnel     tailnet
-                                              gev.enerlens.com    100.x.x.x:4173
+                                              surplomb.app        100.x.x.x:4173
 ```
 
 ### What the URL is allowed to show
@@ -207,7 +207,7 @@ draws, layer proxies answer from that origin — rather than by trusting a
 `200` from `/healthz`:
 
 ```bash
-node scripts/qa-deployment.mjs --url https://gev.enerlens.com/ --auth gev:<password>
+node scripts/qa-deployment.mjs --url https://surplomb.app/
 ```
 
 ### The VPS compose file does not update itself
@@ -477,9 +477,38 @@ Two access paths are wired on the Enerlens box:
 
 - **Tailnet** — `http://vps-enerlens.tailc409e8.ts.net:4173`. Nothing public;
   the port is only bound on loopback and the Tailscale address.
-- **Cloudflare tunnel** — `https://gev.enerlens.com`, for devices without
-  Tailscale. Add a Cloudflare Access policy on that hostname if you want SSO
-  in front of the password.
+- **Cloudflare tunnel** — `https://surplomb.app` and `https://www.surplomb.app`,
+  the public origin, with no password since 2026-09-16. Add a Cloudflare Access
+  policy on a hostname if you want SSO in front of it.
+
+`https://gev.enerlens.com` served the same container until 2026-09-17 and no
+longer exists.
+
+### Retiring a hostname
+
+A hostname appears in six places. Deleting its DNS record is what makes it
+unreachable. The other five steps stop the configuration from naming a host
+that no longer resolves:
+
+1. **DNS** — delete the record in its Cloudflare zone. The name stops resolving
+   at once.
+2. **Tunnel ingress** — remove its `hostname:`/`service:` pair from
+   `/etc/cloudflared/config.yml`, validate with
+   `cloudflared tunnel --config <file> ingress validate`, then
+   `systemctl restart cloudflared`. **The tunnel is shared with the Enerlens
+   production hostnames**: the restart cuts them for a few seconds, and
+   deleting the tunnel would take them down. `ssh vps` goes through Tailscale,
+   not the tunnel, so the session survives the restart.
+3. **`GEV_PUBLIC_HOST`** and **`OPENROUTER_SITE_URL`** in `/opt/gev/.env`, then
+   `rm -f /opt/gev/state/deployed && systemctl start gev-deploy.service`. Check
+   it with `curl -H 'Host: <old-name>' http://127.0.0.1:4173/`, which must now
+   answer `403`.
+4. **Key restrictions** — the browser Google key's HTTP referrers and the
+   Cesium ion token's allowed URLs.
+5. **Script defaults** — `grep -rn '<old-name>' deploy scripts docs`.
+6. **Edge rules** — read the expression before deleting one. The
+   `enerlens.com` zone's `/api/` rule has no host filter and also covers the
+   Enerlens API, so it stays after `gev.enerlens.com` is gone.
 
 ### Where a visitor's bounding boxes go
 
@@ -509,7 +538,7 @@ Two more layers hold even if that ever changed. The admission gate refuses any
 request carrying a proxy header, which is every request that arrives through
 the Cloudflare tunnel (`cf-connecting-ip`) or the nginx front — the very header
 `GEV_TRUSTED_CLIENT_IP_HEADER` exists to read. And it refuses a `Host` that is
-not a local name, which `gev.enerlens.com` is not.
+not a local name, which `surplomb.app` is not.
 
 Prove it after a deploy, from the VPS:
 
@@ -585,7 +614,7 @@ throttle, plus `/` as a control; it spends no key and reads no secret, since a
 401 from the Basic gate proves the origin answered just as well as a 200 does.
 
 ```
-$ ssh vps /opt/gev/edge-ratelimit-probe.sh          # 2026-09-09
+$ ssh vps /opt/gev/edge-ratelimit-probe.sh --host gev.enerlens.com   # 2026-09-09
   GET /                    40 requests, no 429
   GET /api/voice/config    FIRST 429 at request 31 (~2s)  retry-after=10  error code: 1015
 VERDICT: the edge rule still covers ALL of /api — a keyless route was

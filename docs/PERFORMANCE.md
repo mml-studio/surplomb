@@ -347,7 +347,7 @@ proposes to cut are invisible there by construction:
 
 So the measurement is made by hand, once, by somebody holding such a machine.
 `scripts/perf-real-gpu-console.js` is that measurement: paste it into the
-DevTools console on `https://gev.enerlens.com/?welcome=0`, wait five minutes,
+DevTools console on `https://surplomb.app/?welcome=0`, wait five minutes,
 send back the one JSON line it copies to the clipboard. It refuses to report on
 a software renderer — a run on SwiftShader is not a failed run, it is a
 meaningless one — and it copies the parked/orbit method of `perf-boot-probe.mjs`

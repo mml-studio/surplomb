@@ -23,11 +23,11 @@
  *
  * ── WHY IT MUST RUN ON THE VPS, NOT ON THE MAC ──────────────────────────────
  *
- * `gev.enerlens.com` is behind a Cloudflare rule capping `/api` at 30 req/10 s
- * per IP, and the Mac shares its IP with the person reading this. Fifty
- * visitors from here measure Cloudflare's patience, not the server's. Run it
- * on the box, against `127.0.0.1`, where the tunnel and the rule are both out
- * of the path. See `docs/PLAN-PERFORMANCE.md` § phase 0.4.
+ * The public hostname sits behind Cloudflare, and the Mac shares its IP with
+ * the person reading this. `gev.enerlens.com`, retired on 2026-09-17, capped
+ * `/api` at 30 req/10 s per IP. Fifty visitors from here measure the edge, not
+ * the server. Run it on the box, against `127.0.0.1`, where the tunnel and
+ * the edge are both out of the path. See `docs/PLAN-PERFORMANCE.md` § phase 0.4.
  *
  * Usage:
  *   node scripts/perf-origin-bench.mjs --url http://127.0.0.1:4173
