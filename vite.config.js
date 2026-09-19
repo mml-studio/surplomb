@@ -36,6 +36,9 @@
  *      keeps (GTFS-RT, QualiCharge dynamic, DATEX II, AIS over the France box,
  *      Vigicrues), folds them into a typical week and holds thirty days of raw
  *      ticks. Four of the five ride on fetches the proxies above already make.
+ *  26. The pulse — `/api/pulse`, the home page's four live figures, counted
+ *      from the OpenSky, AISStream, GTFS-RT and SYNOP caches above. It fetches
+ *      nothing: a figure whose cache is cold is null, and the page hides it.
  *
  * Also exposes Cesium and Google 3D Tiles API keys to the
  * client via `import.meta.env.*` defines.
@@ -640,6 +643,16 @@ import {
   PAN_MAX_VEHICLES,
 } from './src/data/panFeeds.js';
 import { partitionFeedsByHealth } from './src/data/panFeedHealth.js';
+import {
+  PULSE_CACHE_MS,
+  PULSE_WHY,
+  countAircraftOverFrance,
+  countReportingStations,
+  countTransitFleet,
+  countVesselsInFrenchWaters,
+  createFranceTerritory,
+  finalizePulse,
+} from './src/data/pulse.js';
 import { mergeDuplicateRuns } from './src/data/transitFleetMerge.js';
 import { resolveVehicleKind } from './src/data/transitVehicleKind.js';
 import {
@@ -4208,6 +4221,14 @@ function meteoFranceVigilanceProxy() {
  *
  * @returns {import('vite').Plugin}
  */
+/**
+ * What the SYNOP proxy holds in memory, for `/api/pulse`. Replaced by each
+ * `meteoStationsProxy()` so it always reads the live closure; null until the
+ * layer has been asked for once (the pulse never fills it).
+ * @type {() => ?{at:number, newest:?string, observations:object}}
+ */
+let _meteoStationsSnapshot = () => null;
+
 function meteoStationsProxy() {
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
   const CACHE_PATH = path.join(CACHE_DIR, 'meteo-stations-synop.json');
@@ -4224,6 +4245,7 @@ function meteoStationsProxy() {
 
   /** @type {?{at:number, newest:?string, rows:number, observations:object}} */
   let mem = null;
+  _meteoStationsSnapshot = () => mem;
   let diskChecked = false;
   /** @type {?Promise<?object>} */
   let inflight = null;
@@ -25993,6 +26015,126 @@ function geoidProxyPlugin() {
 }
 
 // ---------------------------------------------------------------------------
+// The home page's live figures — counted from the caches above, never fetched
+// ---------------------------------------------------------------------------
+const FRANCE_DEPARTEMENTS_PATH = path.join(
+  __dirname, 'src', 'data', 'local_data', 'france_departements', 'departements.geojson',
+);
+/** The outlines, indexed once; `false` when the file could not be read. */
+let _pulseTerritory = null;
+/** The last counting pass: `{at, readings}`. */
+let _pulseReadings = null;
+/** The aircraft figure, kept against the exact OpenSky body it was counted on. */
+let _pulseAircraft = { body: null, reading: null };
+let _pulseWarned = false;
+
+function pulseTerritory() {
+  if (_pulseTerritory === null) {
+    try {
+      _pulseTerritory = createFranceTerritory(
+        JSON.parse(fs.readFileSync(FRANCE_DEPARTEMENTS_PATH, 'utf8')),
+      ) || false;
+    } catch (error) {
+      console.warn('[pulse] département outlines unreadable:', error?.message || error);
+      _pulseTerritory = false;
+    }
+  }
+  return _pulseTerritory || null;
+}
+
+/**
+ * One counting pass over what the server already holds. Reads module state
+ * only: no upstream request, no socket, no disk beyond the outlines read once.
+ * @param {number} now
+ * @returns {Record<string, object>}
+ */
+function countPulse(now) {
+  const territory = pulseTerritory();
+
+  // The worldwide OpenSky snapshot, whoever asked for it last. Parsed once per
+  // body: a 3 MB parse per minute is nothing, per request it would be.
+  let avions = { value: null, why: PULSE_WHY.cold };
+  if (_openskyCacheBody && _openskyCacheStatus === 200) {
+    if (_pulseAircraft.body !== _openskyCacheBody) {
+      _pulseAircraft = {
+        body: _openskyCacheBody,
+        reading: countAircraftOverFrance(_openskyCacheBody, territory),
+      };
+    }
+    avions = _pulseAircraft.reading;
+  }
+
+  // The vessel map the watchdog keeps filling. Read, never `ensure`d: the
+  // socket is the watchdog's business, and a request here must not be the one
+  // that opens it.
+  const feed = aisStreamStatusSnapshot();
+  const navires = feed.status === 'missing-key'
+    ? { value: null, why: PULSE_WHY.cold }
+    : countVesselsInFrenchWaters(_aisStreamVessels.values(), territory, { now, live: feed.status === 'live' });
+
+  const bus = _panIndex
+    ? countTransitFleet(partitionFeedsByHealth(_panIndex.feeds).selectable, _panFeedCache, { now })
+    : { value: null, why: PULSE_WHY.cold };
+
+  const meteo = countReportingStations(_meteoStationsSnapshot());
+
+  return { avions, navires, bus, meteo };
+}
+
+/**
+ * Vite plugin: `GET /api/pulse` — the four figures of « En ce moment au-dessus
+ * de la France », for the home page. Contract and rules: `src/data/pulse.js`.
+ *
+ * Costs nothing upstream by construction: it reads the OpenSky, AISStream,
+ * GTFS-RT and SYNOP caches the proxies above fill for readers of the globe,
+ * and a figure whose cache is cold is `null`. One counting pass per
+ * {@link PULSE_CACHE_MS} however many visitors arrive; the ten-minute age rule
+ * is re-applied at every answer so the cache never outlives it.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function pulseProxy() {
+  function install(middlewares) {
+    middlewares.use('/api/pulse', (req, res) => {
+      const pathname = String(req.url || '/').split('?')[0];
+      if (pathname !== '/' && pathname !== '') {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: `unknown route ${pathname}` }));
+        return;
+      }
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, { Allow: 'GET, HEAD', 'Cache-Control': 'no-store' });
+        res.end();
+        return;
+      }
+      const now = Date.now();
+      try {
+        if (!_pulseReadings || now - _pulseReadings.at >= PULSE_CACHE_MS) {
+          _pulseReadings = { at: now, readings: countPulse(now) };
+        }
+        const body = JSON.stringify(finalizePulse(_pulseReadings.readings, { now, countedAt: _pulseReadings.at }));
+        // `no-store`: the age rule is decided here, at the moment of answering;
+        // a copy kept by a browser or an edge would outlive it.
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(req.method === 'HEAD' ? undefined : body);
+      } catch (error) {
+        if (!_pulseWarned) {
+          _pulseWarned = true;
+          console.warn('[pulse] counting failed:', error?.message || error);
+        }
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'pulse unavailable' }));
+      }
+    });
+  }
+  return {
+    name: 'pulse',
+    configureServer(server) { install(server.middlewares); },
+    configurePreviewServer(server) { install(server.middlewares); },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The chronicle — recording the five feeds that keep no past
 // ---------------------------------------------------------------------------
 /**
@@ -28381,6 +28523,7 @@ export default defineConfig(({ mode, command }) => {
       idfmProxy(),
       geoidProxyPlugin(),
       datasetRelayProxy(),
+      pulseProxy(),
       // Last, so its `httpServer.close` teardown is registered after every
       // proxy that feeds it has installed its own.
       chronicleProxy(),

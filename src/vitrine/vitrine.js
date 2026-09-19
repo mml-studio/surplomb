@@ -3,10 +3,11 @@
  * the dock, and the door to the globe.
  *
  * Loaded by `src/boot.js` only when `html[data-vitrine]` is set, and free of
- * Cesium by construction (its imports are `gate.js`, `rotation.js` and
- * `../geolocate.js`, whose own graph is two small modules). Everything here
- * works on top of a page that is already readable without it: the form is a
- * native GET to `/?q=`, the examples are links, the list is a list.
+ * Cesium by construction (its imports are `gate.js`, `rotation.js`,
+ * `counters.js` and `../geolocate.js`, whose own graph is two small modules).
+ * Everything here works on top of a page that is already readable without it:
+ * the form is a native GET to `/?q=`, the examples are links, the list is a
+ * list, and the live figures stay hidden until an answer backs them.
  *
  * @module vitrine/vitrine
  */
@@ -15,6 +16,7 @@ import { APP_PATH, isWideVitrine, VITRINE_ATTRIBUTE } from './gate.js';
 import { createRotation } from './rotation.js';
 import { HERO_LOOP } from './heroLoop.js';
 import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
+import { scheduleCounters } from './counters.js';
 import { canGeolocate, geolocateErrorMessage, requestCurrentPosition } from '../geolocate.js';
 
 /** The page's own theme colour, and the cockpit's (index.html). */
@@ -111,6 +113,16 @@ export function initVitrine({
     if (documentRef.readyState === 'complete') start();
     else listen(win, 'load', start, { once: true });
   }
+
+  // ── The live figures ───────────────────────────────────────────────────
+  // One request to /api/pulse, after `load` and at idle; the group stays
+  // hidden unless the answer backs at least one figure (src/vitrine/counters.js).
+  const counters = scheduleCounters({
+    panel: root.querySelector('[data-live="counters"]'),
+    win,
+    documentRef,
+  });
+  cleanups.push(() => counters.cancel());
 
   // « Image fixe » (maquette 2 bis): the reader stops the city moving. The
   // loop is PAUSED on the frame being shown rather than hidden: hiding it would
@@ -286,6 +298,7 @@ export function initVitrine({
       policy,
       opening,
       rotation: rotation?.getDiagnostics() ?? null,
+      counters: counters.getState(),
     }),
   };
   win.__gevVitrine = api;

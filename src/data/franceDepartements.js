@@ -220,8 +220,13 @@ function degreeScale(lat) {
   return { kx: 111.320 * Math.cos((lat * Math.PI) / 180), ky: 110.574 };
 }
 
-/** Distance in km from a point to one great-circle-ish segment. */
-function segmentDistanceKm(lat, lon, a, b) {
+/**
+ * Distance in km from a point to one great-circle-ish segment.
+ *
+ * Exported for `pulse.js`, which measures the territorial sea off these same
+ * outlines. Flat-earth over one segment: fine to a few tens of km.
+ */
+export function segmentDistanceKm(lat, lon, a, b) {
   const { kx, ky } = degreeScale(lat);
   const px = (lon - a[0]) * kx;
   const py = (lat - a[1]) * ky;

@@ -201,9 +201,24 @@ Updated: September 17, 2026
 >   address; a non-empty query replaces the boot flight with the search box's
 >   own `flyToAddress`; not found → toast, text left in `#location-search`,
 >   ordinary arrival. Showcase arrivals get the first-run SESSION suppression.
+> - **The live figures** (« En ce moment au-dessus de la France »). One
+>   `GET /api/pulse` after `load`, at idle (`src/vitrine/counters.js`); the
+>   group and each entry ship `hidden` and only a positive integer no older
+>   than 10 min is revealed, and taken down again when it passes 10 min on
+>   screen — any failure leaves everything hidden, silently.
+>   The server (`pulseProxy`, vite.config.js; rules in `src/data/pulse.js`)
+>   counts from caches it already holds and fetches nothing: aircraft over
+>   French LAND from the OpenSky snapshot (warm only while a reader has the
+>   flights layer on), vessels within the 12-mile territorial sea from the
+>   AISStream map (warm whenever the key is set and the feed is live — 97.8 %
+>   of 10-min windows from 2026-09-12 to 09-19), buses only when EVERY
+>   network of the GTFS-RT index was heard in the window (never so far: 0.5 %
+>   of windows had even one network, two at a time), weather stations from the
+>   SYNOP archive (daily, 11 to 35 h old: never fresh). One counting pass a
+>   minute; `why` names the reason for each null.
 >
-> Acceptance: `npm run qa:landing -- --url <server>` (86 checks against a
-> build, 2026-09-17; the byte budget case only asserts against one). Case
+> Acceptance: `npm run qa:landing -- --url <server>` (105 checks against a
+> build, 2026-09-19; the byte budget case only asserts against one). Case
 > `adresses` covers the second URL, `handoff` the in-place swap, and `retour`
 > the way back — open the globe for real, return to `/`, read the home page.
 
