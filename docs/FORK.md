@@ -102,7 +102,7 @@ French is the default locale and English the second. Upstream is English-only
 None of the four has a counterpart here: the structures they describe were
 written after the fork point. Where the same concern lives:
 
-**[`docs/APPLICATION.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/main/docs/APPLICATION.md)**
+**[`docs/APPLICATION.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/0d41b6be5490db1f10a171f238be75db4d4ec3b4/docs/APPLICATION.md)**
 (`createApplication`, constructors, `defer`/`signal` ownership)
 - No application export and no teardown. `src/boot.js` imports `src/main.js`,
   which constructs the viewer, `StyleManager` (`src/ui.js`),
@@ -113,7 +113,7 @@ written after the fork point. Where the same concern lives:
   `gevActions.js`); `/api/realtime/token` and `/api/voice/*` are in
   `vite.config.js`; the key is OpenAI or OpenRouter (#111).
 
-**[`docs/CODE-BOUNDARIES.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/main/docs/CODE-BOUNDARIES.md)**
+**[`docs/CODE-BOUNDARIES.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/0d41b6be5490db1f10a171f238be75db4d4ec3b4/docs/CODE-BOUNDARIES.md)**
 (Prettier scope, component owners, `npm run check:boundaries`, package exports)
 - No formatter and no package exports; style is by convention
   ([CONTRIBUTING.md](../CONTRIBUTING.md#coding-style)).
@@ -124,7 +124,7 @@ written after the fork point. Where the same concern lives:
   `npm run perf:graph` reads the entry chunk from Rollup's module graph.
 - Server providers: `vite.config.js` (section 2). Layer owners: `src/data/<layer>.js`.
 
-**[`docs/INFRASTRUCTURE-LAYERS.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/main/docs/INFRASTRUCTURE-LAYERS.md)**
+**[`docs/INFRASTRUCTURE-LAYERS.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/0d41b6be5490db1f10a171f238be75db4d4ec3b4/docs/INFRASTRUCTURE-LAYERS.md)**
 (`createInfrastructureLayers` for datacenters and dams)
 - `src/data/localGeojson.js` (2,787 lines, 892 at the fork point) is still the
   one `createLocalGeoJsonLayer` factory, used by `src/data/localLayers.js` for
@@ -134,7 +134,7 @@ written after the fork point. Where the same concern lives:
   re-extracted from OpenStreetMap (#29, #41, #182); datacenters hold 4,638
   (4,351 upstream), with DCWatch power figures for French sites (#197).
 
-**[`docs/MAINTAINER_WORKFLOW.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/main/docs/MAINTAINER_WORKFLOW.md)**
+**[`docs/MAINTAINER_WORKFLOW.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/0d41b6be5490db1f10a171f238be75db4d4ec3b4/docs/MAINTAINER_WORKFLOW.md)**
 (acceptance gates for community PRs)
 - One owner opens and merges every PR (269 merged, all from `mml-studio`).
   259 of the 268 commits carry a `Co-Authored-By: Claude` trailer: the code is
