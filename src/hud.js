@@ -1,11 +1,18 @@
 /**
  * @module hud
- * @description Intelligence HUD Overlay — NRO/NGA Satellite Aesthetic.
+ * @description Camera HUD overlay — measured readouts only.
  *
- * Renders authentic reconnaissance metadata over the Cesium canvas:
- * classification banners, live MGRS/lat-lon coordinates, sensor metrics
- * (off-nadir angle), timestamps, and simulated mission dressing — all updating in
- * real-time at configurable cadences.
+ * Renders what the camera can actually say over the Cesium canvas: live
+ * MGRS/lat-lon coordinates, sensor metrics (off-nadir angle), MSL altitude,
+ * sun elevation, the UTC clock, and a rolling semantic summary — all updating
+ * in real time at configurable cadences.
+ *
+ * NO SET DRESSING (Surplomb identity, 2026-09-19). The upstream HUD dressed
+ * the view as a reconnaissance satellite: a classification banner, a blinking
+ * recording dot, and invented mission, sensor, orbit, pass and band
+ * identifiers (flagged as simulated since CARTOGRAPHIE A1). Surplomb shows what the
+ * State publishes, never a surveillance fiction, so all of it is gone; what
+ * remains is measured.
  *
  * The HUD auto-activates when a military-style shader (NVG, FLIR, CRT) is
  * selected and supports three layout variants: tactical, operator, minimal.
@@ -31,7 +38,9 @@ const HUD_COLORS = {
   surveillance: { main: 'rgba(51, 255, 51, 0.8)',  glow: 'rgba(51, 255, 51, 0.5)',  border: 'rgba(51, 255, 51, 0.2)' },
   thermal:      { main: 'rgba(255, 255, 255, 0.7)', glow: 'rgba(255, 255, 255, 0.4)', border: 'rgba(255, 255, 255, 0.15)' },
   retro:        { main: 'rgba(255, 170, 0, 0.8)',   glow: 'rgba(255, 170, 0, 0.5)',   border: 'rgba(255, 170, 0, 0.2)' },
-  _default:     { main: 'rgba(0, 255, 255, 0.6)',   glow: 'rgba(0, 255, 255, 0.4)',   border: 'rgba(0, 255, 255, 0.15)' },
+  // The Belvédère ivory, not the upstream cyan: the HUD's normal voice is the
+  // chrome's. The three sensor modes above keep their own simulation colours.
+  _default:     { main: 'rgba(247, 244, 234, 0.78)', glow: 'rgba(0, 0, 0, 0.55)',     border: 'rgba(247, 244, 234, 0.16)' },
 };
 
 /** Shader modes that automatically show the HUD overlay. */
@@ -59,9 +68,8 @@ const NEARBY_POINTS = Object.values(CITY_POIS)
 /**
  * Full-screen intelligence HUD overlay rendered on top of the Cesium canvas.
  *
- * Displays classification banners, MGRS/lat-lon readouts, sensor metrics
- * (off-nadir angle), sun elevation, simulated orbital dressing, and a
- * rolling semantic summary line. All values derive from the live camera
+ * Displays MGRS/lat-lon readouts, sensor metrics (off-nadir angle), sun
+ * elevation, the UTC clock, and a rolling semantic summary line. All values derive from the live camera
  * position and update on independent timer cadences.
  */
 export class IntelHUD {
@@ -76,9 +84,7 @@ export class IntelHUD {
     this._currentStyle = 'normal';
     this._el = null;
     this._variant = 'tactical';
-    this._recBlinkState = true;
     this._updateInterval = null;
-    this._recBlinkInterval = null;
     this._timestampInterval = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
@@ -141,19 +147,6 @@ export class IntelHUD {
       }
     };
 
-    // Session-consistent pseudorandom identifiers (generated once at
-    // construction). These are SET DRESSING — no such mission, sensor, orbit
-    // or pass exists. They used to render in the same font, colour and weight
-    // as the MGRS, latitude and longitude two corners away, which ARE real; a
-    // reader had no way to tell the invented half of the HUD from the measured
-    // half (CARTOGRAPHIE A1). They keep their place in the cockpit fiction and
-    // gain the `.hud-simulated` treatment plus a `SIM` prefix, which costs the
-    // atmosphere nothing and costs the lie everything.
-    this._missionId = `KH11-${4000 + Math.floor(Math.random() * 200)}`;
-    this._sensorId = `OPS-${4100 + Math.floor(Math.random() * 100)}`;
-    this._orbitNum = 47000 + Math.floor(Math.random() * 1000);
-    this._passNum = 100 + Math.floor(Math.random() * 200);
-
     this._buildDOM();
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._installEngagementGate();
@@ -203,8 +196,8 @@ export class IntelHUD {
 
   /**
    * Construct the HUD DOM structure inside the existing `#intel-hud` element.
-   * Populates corner brackets, classification banners, sensor readouts,
-   * edge metadata strips, and the bottom summary bar.
+   * Populates corner brackets, sensor readouts, edge metadata strips, and the
+   * bottom summary bar.
    */
   _buildDOM() {
     this._el = document.getElementById('intel-hud');
@@ -219,17 +212,9 @@ export class IntelHUD {
     // (`hud-bottom-line`), which the `operator` and `minimal` variants show, so
     // `_updateCameraData` still computes them.
     this._el.innerHTML = `
-      <div class="hud-top-bar">
-        <span class="hud-top-bar-left">TOP SECRET // SI-TK // NOFORN</span>
-        <span class="hud-top-bar-center hud-simulated">SIM ${this._missionId}</span>
-        <span class="hud-top-bar-right">PAGE 1/1</span>
-      </div>
-
       <div class="hud-corner hud-top-left">
         <div class="hud-bracket">┌</div>
         <div class="hud-content">
-          <div class="hud-classification">TOP SECRET // SI-TK // NOFORN</div>
-          <div class="hud-system hud-simulated">SIM ${this._missionId}  ${this._sensorId}</div>
           <div class="hud-mode" id="hud-mode">NORMAL</div>
           <div class="hud-summary-wrap">
             <div class="hud-summary-label">SUMMARY</div>
@@ -240,8 +225,7 @@ export class IntelHUD {
 
       <div class="hud-corner hud-top-right">
         <div class="hud-content" style="text-align:right">
-          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
-          <div class="hud-orbital hud-simulated">SIM ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
+          <div class="hud-clock"><span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
         </div>
         <div class="hud-bracket">┐</div>
       </div>
@@ -259,12 +243,6 @@ export class IntelHUD {
         <div id="hud-ona">ONA: --°</div>
       </div>
 
-      <div class="hud-edge hud-right-edge hud-simulated">
-        <div>SIM BAND: PAN</div>
-        <div>BITS: 11</div>
-        <div>LVL: 1A</div>
-      </div>
-
       <div class="hud-bottom-bar">
         <span id="hud-bottom-line">LAT: --  LON: --  MGRS: ---</span>
       </div>
@@ -273,8 +251,8 @@ export class IntelHUD {
   }
 
   /**
-   * Start all periodic update timers (timestamp, REC blink, camera
-   * telemetry, semantic summary). Timers run independently at different
+   * Start all periodic update timers (timestamp, camera telemetry, semantic
+   * summary). Timers run independently at different
    * cadences and are cleaned up in {@link destroy}.
    */
   _startTimers() {
@@ -283,13 +261,6 @@ export class IntelHUD {
       const el = document.getElementById('hud-timestamp');
       if (el) el.textContent = this._formatUTC();
     }, 1000);
-
-    // REC blink — every 800ms
-    this._recBlinkInterval = setInterval(() => {
-      this._recBlinkState = !this._recBlinkState;
-      const dot = document.getElementById('hud-rec-dot');
-      if (dot) dot.style.visibility = this._recBlinkState ? 'visible' : 'hidden';
-    }, 800);
 
     // Camera-derived data — 4 updates/second (250ms)
     this._updateInterval = setInterval(() => {
@@ -989,7 +960,6 @@ export class IntelHUD {
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
     clearInterval(this._updateInterval);
-    clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);
     clearInterval(this._summaryInterval);
     clearInterval(this._summaryTypingInterval);

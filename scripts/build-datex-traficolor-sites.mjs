@@ -138,7 +138,7 @@ import { readZipMember } from './lib/remoteZip.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'config', 'datex_traficolor_sites.json');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 /** Five decimals is ~1.1 m of longitude in France — finer than the source. */
 const COORD_PRECISION = 5;
 /**

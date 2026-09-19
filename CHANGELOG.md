@@ -5,6 +5,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Changed
+- **Le globe portait encore l’identité de God’s Eye View.** L’œil cyan qui
+  suivait le curseur, le mot en capitales espacées, les panneaux bleu nuit,
+  la police machine à écrire et un bandeau « TOP SECRET » : tout venait du
+  projet d’origine. Le globe (`/globe`) prend l’identité « Belvédère » de la
+  page d’accueil : le symbole à deux plans et son soleil abricot devant
+  « surplomb », sur la barre de titre et l’écran de chargement ; des panneaux
+  vert nuit, un texte ivoire, un seul accent abricot ; DM Sans partout, avec
+  des chiffres alignés. Le HUD ne montre plus que ce qu’il mesure : le
+  bandeau de classification, le point « REC » et les identifiants de mission
+  inventés sont retirés. La carte de partage (`og.png`), les pages légales et
+  la radiographie d’adresse passent aux mêmes couleurs. Les cartes dessinées
+  sur le globe gardent leurs couleurs de données (civil, militaire, trafic).
+
 ### Added
 - **La page d’accueil n’avait ni marque, ni fin.** Elle prend l’identité
   « Belvédère » : le symbole à deux plans et son point abricot, devant le mot

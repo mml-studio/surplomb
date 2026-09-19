@@ -3,8 +3,8 @@
 //
 // THE MARK IS THE « BELVÉDÈRE » ICON (identity validated 2026-09-18):
 // `public/icon.svg`, the ivory-and-apricot symbol on the brand green, which is
-// also the tab icon. `public/logo.svg` — the cockpit's eye — is no longer the
-// app's icon.
+// also the tab icon, and the mark inlined in the cockpit's title bar and boot
+// screen (index.html). The old eye (`public/logo.svg`) is gone.
 //
 // WHY THESE ARE RENDERED AND NOT THE SVG. Every home screen this targets
 // wants a PNG, and iOS in particular ignores an SVG `apple-touch-icon`

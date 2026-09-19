@@ -136,7 +136,7 @@ test('index.html preloads the two faces the first screen of each surface sets te
     return links.map((link) => link.href);
   };
   const roles = {
-    cockpit: ['inter-latin', 'jetbrains-mono-latin'],
+    cockpit: ['manrope-latin', 'dm-sans-latin'],
     vitrine: ['manrope-latin', 'dm-sans-latin'],
   };
   for (const [surface, wanted] of Object.entries(roles)) {

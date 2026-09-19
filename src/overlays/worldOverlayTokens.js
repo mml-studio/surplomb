@@ -8,14 +8,16 @@
 
 /** Shared visual tokens used by every world-overlay source. */
 export const WORLD_OVERLAY_STYLE = Object.freeze({
-  background: 'rgba(4, 12, 16, 0.82)',
-  selectedBackground: 'rgba(5, 18, 24, 0.94)',
-  border: 'rgba(190, 232, 242, 0.18)',
-  selectedBorder: 'rgba(107, 232, 255, 0.72)',
-  title: 'rgba(232, 240, 244, 0.96)',
-  detail: 'rgba(147, 161, 173, 0.92)',
-  leader: 'rgba(147, 213, 228, 0.58)',
-  accent: '#6be8ff',
+  // Belvédère (2026-09-19): night-green plates, ivory type, apricot accent —
+  // the chrome's palette (style.css :root), at the old luminances.
+  background: 'rgba(7, 14, 12, 0.82)',
+  selectedBackground: 'rgba(10, 20, 17, 0.94)',
+  border: 'rgba(247, 244, 234, 0.18)',
+  selectedBorder: 'rgba(247, 171, 124, 0.72)',
+  title: 'rgba(247, 244, 234, 0.96)',
+  detail: 'rgba(196, 190, 176, 0.92)',
+  leader: 'rgba(251, 214, 190, 0.58)',
+  accent: '#f7ab7c',
   fontLabel: '500 10px "JetBrains Mono", monospace',
   fontTrack: '600 10px "JetBrains Mono", monospace',
   fontTitle: '600 12px "JetBrains Mono", monospace',
@@ -53,11 +55,11 @@ export const CCTV_THUMBNAIL_STYLE = Object.freeze({
   titleHeight: 13,
   titleChars: 15,
   background: WORLD_OVERLAY_STYLE.background,
-  titleColor: 'rgba(210, 236, 244, 0.95)',
+  titleColor: 'rgba(247, 244, 234, 0.95)',
   titleFont: '600 10px "JetBrains Mono", monospace',
-  accent: 'rgb(107, 232, 255)',
-  leader: 'rgba(107, 232, 255, 0.6)',
-  rule: 'rgba(107, 232, 255, 0.95)',
+  accent: 'rgb(247, 171, 124)',
+  leader: 'rgba(247, 171, 124, 0.6)',
+  rule: 'rgba(247, 171, 124, 0.95)',
   ruleHeight: 2,
   radius: 4,
 });
@@ -173,14 +175,18 @@ export const DETECTION_THEME_MAP = Object.freeze({
       veh_jam: '#ff4538', veh_slow: '#ffc24a', veh_free: '#2ecc71', veh_nodata: '#d8d8d8',
     },
   },
+  // The normal style's chrome follows the Belvédère palette; its TIERS below
+  // are data colours (civil / military / traffic state) and stay as they are —
+  // apricot next to the military amber would blur the one distinction a tier
+  // exists to make.
   _default: {
-    line: 'rgba(0, 244, 255, 0.9)',
-    label: 'rgba(200, 250, 255, 0.97)',
-    labelBg: 'rgba(2, 18, 26, 0.66)',
-    calloutPlate: 'rgba(2, 18, 26, 0.46)',
-    calloutPlateSpace: 'rgba(2, 18, 26, 0.54)',
-    glow: 'rgba(0, 244, 255, 0.4)',
-    dim: 'rgba(150, 200, 215, 0.66)',
+    line: 'rgba(247, 244, 234, 0.88)',
+    label: 'rgba(247, 244, 234, 0.97)',
+    labelBg: 'rgba(7, 16, 13, 0.66)',
+    calloutPlate: 'rgba(7, 16, 13, 0.46)',
+    calloutPlateSpace: 'rgba(7, 16, 13, 0.54)',
+    glow: 'rgba(247, 244, 234, 0.32)',
+    dim: 'rgba(214, 208, 192, 0.66)',
     cardBorder: 'rgba(255, 255, 255, 0.12)',
     blend: 'screen',
     filter: 'contrast(1.05) saturate(1.05)',

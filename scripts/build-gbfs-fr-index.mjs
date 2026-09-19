@@ -50,7 +50,7 @@ import {
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'config', 'gbfs_fr_systems.json');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 const MAX_BODY_BYTES = 24 * 1024 * 1024;
 
 /** Publisher host of a resolved feed URL, or null when it cannot be parsed. */

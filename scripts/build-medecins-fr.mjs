@@ -148,7 +148,7 @@ import {
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'src', 'data', 'local_data', 'medecins_fr', 'medecins.json');
 const CACHE_DIR = path.join(ROOT, '.gev-cache', 'medecins-fr');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 
 const DATAGOUV_DATASET = 'https://www.data.gouv.fr/api/1/datasets/annuaire-sante-ameli/';
 const DATAGOUV_APL = 'https://www.data.gouv.fr/api/1/datasets/accessibilite-potentielle-localisee-apl-aux-professionnels-de-sante/';

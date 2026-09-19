@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌐 Surplomb
+<img src="public/icon.svg" width="88" height="88" alt="" />
+
+# Surplomb
 
 ### La France au rayon X. Tout ce que vous n'auriez jamais pensé à chercher.
 
@@ -10,7 +12,9 @@
 
 *Aucun angle mort.*
 
-![Orbital HUD, a tracked live globe, FLIR terrain — then OPEN SOURCED](docs/media/hero-open-source-reveal.gif)
+![Paris en 3D photoréaliste, le trafic en direct rue par rue : ce que montre surplomb.app](public/landing/hero-poster-1920.b47cad6d.jpg)
+
+<sub>Imagerie : Google, via Cesium ion.</sub>
 
 Maintenu par **[Melvyn Raymond](https://melvynraymond.com/)**.
 

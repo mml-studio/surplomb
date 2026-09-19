@@ -1,20 +1,25 @@
 // Build the social share card — `public/og.png`, 1200×630.
 //
-// WHY THIS IS RENDERED AND NOT DRAWN BY HAND. The card has to carry the
-// wordmark exactly as the app draws it: JetBrains Mono 600 at 8 px of tracking,
-// with the cyan glow. Hand-authoring that in SVG means re-deriving glyph
-// metrics and re-tuning the blur every time `style.css` moves. Chrome already
-// owns both, so the card is a real page screenshotted at the card's size, and
-// the tokens below are copied from `:root` rather than invented.
+// THE CARD CARRIES THE « BELVÉDÈRE » MARK (2026-09-19), exactly as the home
+// page and the cockpit draw it: the symbol (two ivory planes, the apricot
+// sun) and « surplomb » in Manrope 800, on the brand green. The symbol is the
+// SAME SVG as `public/icon.svg`, read from it rather than redrawn, so the tab,
+// the home-screen icon and the card can never drift apart.
+//
+// WHY THIS IS RENDERED AND NOT DRAWN BY HAND. Chrome already owns the glyph
+// metrics of both faces, so the card is a real page screenshotted at the
+// card's size.
 //
 // THE FONTS ARE INLINED AS DATA URLS, not linked. A `file://` page cannot fetch
-// `/fonts/inter-latin.woff2`, and a page pointed at the dev server would make
-// this script depend on a running server to produce a static asset. Inlining
-// the two subsets the card actually uses keeps it a pure function of the repo.
+// `/fonts/manrope-latin.….woff2`, and a page pointed at the dev server would
+// make this script depend on a running server to produce a static asset.
+// Inlining the subsets the card actually uses keeps it a pure function of the
+// repo. They are found by PREFIX, because `npm run fonts:build` re-hashes the
+// file names.
 //
 //     npm run og:build
 //
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
@@ -25,9 +30,9 @@ const OUT = path.join(ROOT, 'public', 'og.png');
 /** The card's copy, in one place so a rewrite is a one-line diff. */
 export const CARD = Object.freeze({
   hook: 'La France au rayon X.',
-  sub: 'Tout ce que vous n\u2019auriez jamais pensé à chercher.',
-  proof: '59 COUCHES PUBLIQUES · 56 SANS CLÉ · OPEN SOURCE',
-  slogan: 'AUCUN ANGLE MORT',
+  sub: 'Tout ce que vous n’auriez jamais pensé à chercher.',
+  site: 'surplomb.app',
+  slogan: 'Aucun angle mort.',
 });
 
 async function dataUrl(rel, mime) {
@@ -35,49 +40,58 @@ async function dataUrl(rel, mime) {
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
+/** The hashed latin subset of a family built by `npm run fonts:build`. */
+async function fontFile(prefix) {
+  const names = await readdir(path.join(ROOT, 'public', 'fonts'));
+  const hit = names.find((name) => name.startsWith(`${prefix}.`) && name.endsWith('.woff2'));
+  if (!hit) throw new Error(`[og] no public/fonts/${prefix}.*.woff2 — run npm run fonts:build`);
+  return `public/fonts/${hit}`;
+}
+
+/** The symbol of `public/icon.svg`, without its green plate. */
+async function symbolSvg() {
+  const icon = await readFile(path.join(ROOT, 'public', 'icon.svg'), 'utf8');
+  const group = icon.match(/<g transform="[^"]*">([\s\S]*?)<\/g>\s*<\/svg>/);
+  if (!group) throw new Error('[og] public/icon.svg no longer has the expected <g transform> wrapper');
+  return `<svg viewBox="0 0 360 320" xmlns="http://www.w3.org/2000/svg">${group[1]}</svg>`;
+}
+
 async function cardHtml() {
-  const [inter, mono, logo] = await Promise.all([
-    dataUrl('public/fonts/inter-latin.c9407645.woff2', 'font/woff2'),
-    dataUrl('public/fonts/jetbrains-mono-latin.1e06740a.woff2', 'font/woff2'),
-    dataUrl('public/logo.svg', 'image/svg+xml'),
+  const [manrope, dmSans, symbol] = await Promise.all([
+    fontFile('manrope-latin').then((rel) => dataUrl(rel, 'font/woff2')),
+    fontFile('dm-sans-latin').then((rel) => dataUrl(rel, 'font/woff2')),
+    symbolSvg(),
   ]);
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-@font-face { font-family: 'Inter'; font-weight: 300 600; src: url('${inter}') format('woff2'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 300 700; src: url('${mono}') format('woff2'); }
-/* Copied from :root in style.css — keep in step when the tokens move. */
-:root { --bg-dark:#0a0a0f; --accent:#00d4ff; --accent-glow:rgba(0,212,255,0.4);
-        --text-primary:#e8eaed; --text-secondary:rgba(232,234,237,0.68);
-        --glass-border:rgba(126,176,204,0.28); }
+@font-face { font-family: 'Manrope'; font-weight: 500 800; src: url('${manrope}') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-weight: 400 700; src: url('${dmSans}') format('woff2'); }
+/* The Belvédère tokens — the same three as landing.css and style.css :root. */
+:root { --green:#24473C; --ivory:#F7F4EA; --apricot:#F7AB7C; }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { width:1200px; height:630px; background:var(--bg-dark); overflow:hidden;
-       font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }
-/* The globe's own light: one off-centre cyan bloom, nothing else. */
+body { width:1200px; height:630px; background:var(--green); overflow:hidden; color:var(--ivory);
+       font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+/* A low sun behind the words: one warm bloom, nothing else. */
 .bloom { position:absolute; inset:0;
-  background: radial-gradient(900px 620px at 88% 12%, rgba(0,212,255,0.16), transparent 62%),
-              radial-gradient(700px 500px at 8% 96%, rgba(0,212,255,0.07), transparent 60%); }
-.frame { position:absolute; inset:28px; border:1px solid var(--glass-border); border-radius:16px; }
-.card { position:absolute; inset:28px; padding:64px 72px; display:flex; flex-direction:column;
+  background: radial-gradient(760px 520px at 92% 0%, rgba(247,171,124,0.20), transparent 64%),
+              radial-gradient(900px 600px at 0% 100%, rgba(0,0,0,0.22), transparent 62%); }
+.card { position:absolute; inset:0; padding:76px 96px 70px; display:flex; flex-direction:column;
         justify-content:space-between; }
-.brand { display:flex; align-items:center; gap:16px;
-  font-family:'JetBrains Mono',monospace; font-weight:600; font-size:34px; letter-spacing:8px;
-  color:var(--text-primary); text-shadow:0 0 30px var(--accent-glow); }
-.brand img { width:44px; height:44px; }
-.brand .accent { color:var(--accent); font-weight:300; }
-.hook { font-size:82px; font-weight:600; line-height:1.03; letter-spacing:-2px;
-        color:var(--text-primary); }
-.sub { margin-top:22px; font-size:38px; font-weight:300; line-height:1.25;
-       color:var(--text-secondary); max-width:960px; }
+.brand { display:flex; align-items:center; gap:18px;
+  font-family:'Manrope',sans-serif; font-weight:800; font-size:44px; letter-spacing:-0.5px; }
+.brand svg { width:56px; height:auto; color:var(--ivory); }
+.hook { font-family:'Manrope',sans-serif; font-size:88px; font-weight:800; line-height:1.02;
+        letter-spacing:-2.5px; }
+.sub { margin-top:22px; font-size:38px; font-weight:400; line-height:1.25; opacity:0.82; max-width:960px; }
 .foot { display:flex; align-items:baseline; justify-content:space-between; gap:64px;
-        font-family:'JetBrains Mono',monospace; font-size:18px; letter-spacing:3px;
-        white-space:nowrap; }
-.foot .proof { color:var(--text-secondary); }
-.foot .slogan { color:var(--accent); text-shadow:0 0 22px var(--accent-glow); }
+        font-size:26px; font-weight:500; white-space:nowrap; }
+.foot .site { opacity:0.72; }
+.foot .slogan { color:var(--apricot); font-family:'Manrope',sans-serif; font-weight:800; }
 </style></head><body>
-<div class="bloom"></div><div class="frame"></div>
+<div class="bloom"></div>
 <div class="card">
-  <div class="brand"><img src="${logo}" alt=""><span>SUR<span class="accent">PLOMB</span></span></div>
+  <div class="brand">${symbol.replace('<svg ', '<svg aria-hidden="true" ')}<span>surplomb</span></div>
   <div><div class="hook">${CARD.hook}</div><div class="sub">${CARD.sub}</div></div>
-  <div class="foot"><span class="proof">${CARD.proof}</span><span class="slogan">${CARD.slogan}</span></div>
+  <div class="foot"><span class="site">${CARD.site}</span><span class="slogan">${CARD.slogan}</span></div>
 </div></body></html>`;
 }
 
@@ -90,11 +104,11 @@ try {
   // A missing face falls back to Helvetica without a word of warning, and the
   // card still looks plausible — so assert both are really in use.
   const faces = await page.evaluate(() => [
-    document.fonts.check('600 82px Inter'),
-    document.fonts.check('600 18px "JetBrains Mono"'),
+    document.fonts.check('800 88px Manrope'),
+    document.fonts.check('400 38px "DM Sans"'),
   ]);
   if (!faces[0] || !faces[1]) {
-    throw new Error(`[og] font fallback: Inter=${faces[0]} JetBrainsMono=${faces[1]}`);
+    throw new Error(`[og] font fallback: Manrope=${faces[0]} DMSans=${faces[1]}`);
   }
   const png = await page.screenshot({ type: 'png' });
   await writeFile(OUT, png);

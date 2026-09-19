@@ -93,7 +93,7 @@ import {
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'src', 'data', 'local_data', 'rte_production_units', 'units.json');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 
 const ODRE_BASE = 'https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets';
 const GEO_API = 'https://geo.api.gouv.fr/communes';

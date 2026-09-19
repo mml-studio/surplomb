@@ -66,11 +66,14 @@ try {
 
   const loaded = await page.evaluate(() => ({
     icons: document.fonts.check('24px "Material Symbols Outlined"'),
-    sans: document.fonts.check('16px "Inter"'),
-    mono: document.fonts.check('16px "JetBrains Mono"'),
+    // The cockpit's chrome faces since the Belvédère identity (2026-09-19):
+    // DM Sans for text, Manrope for the mark. JetBrains Mono is only a canvas
+    // face now and loads when a card is first drawn, not at boot.
+    sans: document.fonts.check('16px "DM Sans"'),
+    brand: document.fonts.check('800 16px "Manrope"'),
     faces: [...document.fonts].map((f) => `${f.family} ${f.status}`),
   }));
-  check('all three families are loaded from this origin', loaded.icons && loaded.sans && loaded.mono, loaded);
+  check('all three families are loaded from this origin', loaded.icons && loaded.sans && loaded.brand, loaded);
 
   // Every symbols span on the page, measured where it sits. Hidden panels are
   // included on purpose — the cockpit and the CCTV lightbox are exactly where
