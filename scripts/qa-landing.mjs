@@ -685,25 +685,37 @@ const CASES = {
   },
 
   async weight() {
+    // Criterion 9, as the plan words it: what the FIRST SCREEN needs — the
+    // document, the stylesheet, the fonts, the poster, the entry script. The
+    // gallery below is `loading="lazy"`, but Chrome fetches lazy images that
+    // sit within ~1 250 px of the viewport straight away, and on a slow origin
+    // they finish before `load`: counting them made the same page read 389 kB
+    // locally and 852 kB in production. They are reported, and bounded, apart.
     const phone = await freshPage({ phone: true });
     const client = await phone.createCDPSession();
     await client.send('Network.enable');
     const sizes = new Map();
-    const urls = new Map();
-    client.on('Network.requestWillBeSent', (e) => urls.set(e.requestId, e.request.url));
+    const meta = new Map();
+    client.on('Network.requestWillBeSent', (e) => meta.set(e.requestId, { url: e.request.url, type: e.type }));
     client.on('Network.loadingFinished', (e) => sizes.set(e.requestId, e.encodedDataLength));
     await phone.goto(phoneUrl(`${BASE}/`), { waitUntil: 'load' });
-    const firstScreen = [...sizes.entries()]
-      .map(([id, bytes]) => ({ url: urls.get(id) || '', bytes }))
-      .filter(({ url }) => !/\.(?:mp4|webm)(?:\?|$)/.test(url));
-    const dev = firstScreen.some(({ url }) => url.includes('/@vite/client'));
-    const total = firstScreen.reduce((sum, { bytes }) => sum + bytes, 0);
-    const top = firstScreen.sort((a, b) => b.bytes - a.bytes).slice(0, 5)
+    await sleep(1500);
+    const fetched = [...sizes.entries()].map(([id, bytes]) => ({ ...(meta.get(id) || { url: '' }), bytes }));
+    const dev = fetched.some(({ url }) => url.includes('/@vite/client'));
+    const kB = (list) => Math.round(list.reduce((sum, { bytes }) => sum + bytes, 0) / 1024);
+    const firstScreen = fetched.filter(({ url, type }) => type === 'Document' || type === 'Stylesheet'
+      || type === 'Font' || type === 'Script' || /\/landing\/hero-poster-/.test(url));
+    const gallery = fetched.filter(({ url }) => /\/landing\/view-\d\d-/.test(url));
+    const top = [...firstScreen].sort((a, b) => b.bytes - a.bytes).slice(0, 5)
       .map(({ url, bytes }) => `${url.replace(BASE, '')} ${Math.round(bytes / 1024)} kB`);
     if (dev) {
-      console.log(`  \x1b[2m   weight skipped on the dev server (${Math.round(total / 1024)} kB unbundled)\x1b[0m`);
+      console.log(`  \x1b[2m   weight skipped on the dev server (${kB(fetched)} kB unbundled)\x1b[0m`);
     } else {
-      check('weight: phone first screen under 400 kB on the wire', total < 400 * 1024, `${Math.round(total / 1024)} kB — ${top.join(', ')}`);
+      check('weight: phone first screen (document, CSS, fonts, poster, entry) under 400 kB on the wire',
+        kB(firstScreen) < 400, `${kB(firstScreen)} kB — ${top.join(', ')}`);
+      // What a phone pays early for thumbnails it cannot see yet: never a 1440.
+      check('weight: no 1440 px thumbnail on a phone', !gallery.some(({ url }) => /-1440\./.test(url)),
+        `${kB(gallery)} kB early: ${gallery.map(({ url }) => url.split('/').pop()).join(', ') || 'none'}`);
     }
     await phone.close();
   },
