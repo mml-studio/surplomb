@@ -27,7 +27,7 @@ import { drillPickAt } from './pickAt.js';
  *
  * Until this rewrite the layer drew one CLAMP_TO_GROUND ellipse per event of
  * radius `2^magnitude × 1000` metres, tinted red / orange / yellow by depth
- * band. Two faults, both named in `docs/REPRESENTATION.md`:
+ * band. Two faults, both named in the representation audit (#78):
  *
  * (1) THE RADIUS MEASURED NOTHING. `2^M × 1000 m` is not the rupture area, not
  *     the felt radius, not an isoseismal, not a ShakeMap contour. It is a

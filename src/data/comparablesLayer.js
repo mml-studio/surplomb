@@ -22,7 +22,7 @@ import {
 /**
  * Comparables — the dossier a valuation note is written from, and the map of it.
  *
- * WHY THIS LAYER EXISTS AT ALL. `docs/CITYSCAN.md` took the competitor apart
+ * WHY THIS LAYER EXISTS AT ALL. The Cityscan teardown (#99) took the competitor apart
  * and found that the one module we had nothing for — comparables — is not a
  * data problem. Their own public translation file names its source:
  * « Sélection de votre conseiller(ère) parmi les portails d'annonces ». There

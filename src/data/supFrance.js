@@ -132,7 +132,7 @@
  *   label left at the base would be occluded by the very prism it names.
  *
  * ── Not in this pass ────────────────────────────────────────────────────────
- * `REPRESENTATION.md` proposes a Dorling cartogram for this layer, and it is
+ * The representation audit (#78) proposes a Dorling cartogram for this layer, and it is
  * the dataset in the repo where an anamorphosis is most justified: 2.96 M
  * students in ~30 cities is a distribution the map of France is a poor support
  * for. That is a different piece of work — it replaces the geometry, where

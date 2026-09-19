@@ -1,6 +1,6 @@
 // The building as a pivot: what a click on a volume can say about its ground.
 //
-// `docs/PLAN-CROISEMENTS.md` recorded this as blocked because "les trois
+// The cross-referencing audit (#128) recorded this as blocked because "les trois
 // tirages sont des requêtes réseau déclenchées par une carte, ce que le dépôt
 // ne fait nulle part aujourd'hui". Two halves of that were wrong — the pattern
 // exists (`cadastreParcels.selectParcel`, and this very layer's RNB lookup),

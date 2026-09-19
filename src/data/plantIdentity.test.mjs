@@ -1,7 +1,7 @@
 // Une centrale, une marque — the keys, and the ones that were refused.
 //
 // Three registers hold 56 of the same French power stations and drew them two
-// and three times over. `docs/PLAN-CROISEMENTS.md` called the fix "une colonne
+// and three times over. The cross-referencing audit (#128) called the fix "une colonne
 // vertébrale à écrire (choisir quelle source fait foi pour la position,
 // laquelle pour la puissance)". The position question was already answered, by
 // this repository's own build script, and recorded in the pack: these tests

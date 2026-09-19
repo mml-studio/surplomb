@@ -11,8 +11,8 @@ import { greatCircleKm } from './trafficBounds.js';
  * square metre per comparable, a median, a spread, and the gap between what is
  * asked and what is paid.
  *
- * WHY A HUMAN SELECTION IS THE PRODUCT AND NOT A SHORTCUT. `docs/CITYSCAN.md`
- * records the finding this module is built on: Cityscan's own public
+ * WHY A HUMAN SELECTION IS THE PRODUCT AND NOT A SHORTCUT. The Cityscan
+ * teardown (#99) records the finding this module is built on: Cityscan's own public
  * translation file names the source of its comparables, and it is
  * « Sélection de votre conseiller(ère) parmi les portails d'annonces ». Their
  * comparables module holds no listing database. It holds a screen where the

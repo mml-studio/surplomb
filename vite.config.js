@@ -1489,7 +1489,7 @@ const _routeRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 60, globalMax
  * stops one visitor, or one runaway test harness, from spending the account.
  * Against a public page it is close to worthless — a caller with a hundred
  * addresses has a hundred buckets — and its implied global backstop is 20×
- * the per-IP cap, so the 20/min that reads as prudent on `gev.enerlens.com` is
+ * the per-IP cap, so the 20/min that reads as prudent on the staging origin is
  * really an authorisation to bill 400 OpenAI calls a minute.
  *
  * The global one is therefore the ceiling that matters the moment the Basic
@@ -2686,8 +2686,8 @@ const REALTIME_DEBUG_LOG_MAX_BYTES = 8 * 1024 * 1024;
  * machine is the best debugging aid this app has, and on a public origin is a
  * transcript of a stranger's conversation. Measured 2026-09-17: the hosted
  * server accepted it from anyone, with no rate limit, 8 MB per request,
- * appended to a file that is never rotated, on a disk it shares with the
- * Enerlens database. So a hosted server keeps nothing unless its operator
+ * appended to a file that is never rotated, on a disk it shares with a
+ * production database. So a hosted server keeps nothing unless its operator
  * asks, for a debugging session, with `GEV_REALTIME_DEBUG_LOG=1`; and the
  * privacy page (`confidentialite.html`) can say that no conversation is kept.
  *
@@ -4790,7 +4790,7 @@ const IRVE_NATIONAL_CACHE_PATH = path.join(IRVE_DISK_DIR, 'departements.json');
 const IRVE_NATIONAL_CACHE_VERSION = 4;
 
 // ---------------------------------------------------------------------------
-// LIVE AVAILABILITY (2026-09-09). The join `docs/PLAN-CROISEMENTS.md` recorded
+// LIVE AVAILABILITY (2026-09-09). The join the cross-referencing audit (#128) recorded
 // as blocked, and the two halves of the block.
 //
 // QualiCharge says what every French charge point is DOING and publishes no
@@ -27338,7 +27338,7 @@ const CESIUM_BASE_DIR_RE = CESIUM_BASE_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'
  *
  * `vite preview` serves every file with a hardcoded `Cache-Control: no-cache`
  * (it hands sirv `dev: true`). Behind the Cloudflare tunnel that is not a
- * nuance — measured on gev.enerlens.com, every asset comes back
+ * nuance — measured on the staging origin, every asset comes back
  * `cf-cache-status: BYPASS`, so the edge stores nothing and each cold visitor
  * drags 5.06 MB over 28 requests out of the Paris origin no matter where in
  * the world they are. A returning visitor is fine either way (their disk cache
@@ -27750,7 +27750,7 @@ function deferCesiumWidgetsOnGlobePage() {
  * Default origin for the social card, overridden by GEV_PUBLIC_ORIGIN.
  *
  * This is the PUBLIC hostname, not the staging one. It read
- * `https://gev.enerlens.com` until 2026-09-16 — written before the fork was
+ * the staging hostname until 2026-09-16 — written before the fork was
  * named, and never revisited when `surplomb.app` became the address people are
  * given. The consequence was invisible behind the password and would have
  * shipped on opening day: a link to `surplomb.app` carried a card whose image

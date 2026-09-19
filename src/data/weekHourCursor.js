@@ -24,7 +24,7 @@
  *
  * ── What the audit thought the obstacle was, and what it actually is ────────
  *
- * `docs/PLAN-CROISEMENTS.md` recorded this as blocked on the share grammar:
+ * The cross-referencing audit (#128) recorded this as blocked on the share grammar:
  * *"les trois encodent aujourd'hui leur heure séparément et des liens déjà
  * envoyés en dépendent"*. That turned out to be false, and checking it is what
  * made the module small. In `layerState.js`, `comptages-fr` (`cr`) and

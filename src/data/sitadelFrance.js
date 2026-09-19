@@ -173,7 +173,7 @@
  *
  * A fixed-height ghost volume was the other candidate and was rejected: any
  * constant height is a number on the very scale the file did not publish, which
- * is A1 in three dimensions — the same mistake `REPRESENTATION.md` refuses to
+ * is A1 in three dimensions — the same mistake the representation audit (#78) refuses to
  * make with the GPU's non-existent constructible envelope.
  *
  * Measured on the Nantes pack shipped as fixtures — 9 placed permits over 14

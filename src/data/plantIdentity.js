@@ -18,7 +18,7 @@
  *   **55 hydro plants are an RTE unit**, and 43 of those chain on to an EDF
  *   site as well — Grand-Maison is drawn three times.
  *
- * `docs/PLAN-CROISEMENTS.md` recorded the deduplication as owed and called it
+ * The cross-referencing audit (#128) recorded the deduplication as owed and called it
  * "une colonne vertébrale à écrire (choisir quelle source fait foi pour la
  * position, laquelle pour la puissance)". The spine turned out to be already
  * built, and by the repository's own build scripts.

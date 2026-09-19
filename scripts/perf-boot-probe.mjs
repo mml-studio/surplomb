@@ -24,7 +24,7 @@
  * comparable BETWEEN RUNS OF THIS PROBE and nothing else — they are not what a
  * UHD 620 will show. The fixed GPU costs (MSAA, post-processing,
  * `preserveDrawingBuffer`) are invisible here by construction; they need real
- * hardware. See `docs/PLAN-PERFORMANCE.md` § phase 0.3.
+ * hardware. See phase 0.3 of the performance plan (#115).
  *
  * ── WHY THE RENDER MEASUREMENTS PARK THE CAMERA FIRST ───────────────────────
  *

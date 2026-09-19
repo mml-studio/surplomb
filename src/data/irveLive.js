@@ -12,7 +12,7 @@
  * It fed the chronicle and nothing else. `irveFrance.js` draws the sites and
  * says out loud, three times over, that it is not an availability feed.
  *
- * The two could not meet, and `docs/PLAN-CROISEMENTS.md` recorded exactly why:
+ * The two could not meet, and the cross-referencing audit (#128) recorded exactly why:
  * QualiCharge is keyed on `id_pdc_itinerance` and publishes **no coordinate at
  * all** (its file is four state columns and a timestamp), while the IRVE
  * layer's viewport query GROUPS its rows to be affordable — 4 017 charge points

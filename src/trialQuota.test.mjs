@@ -333,7 +333,7 @@ test('the pass covers the site and its www. name, and stays host-only elsewhere'
   assert.equal(ownerCookieDomain('surplomb.app'), 'surplomb.app');
   assert.equal(ownerCookieDomain('www.surplomb.app'), 'surplomb.app');
   assert.equal(ownerCookieDomain('WWW.Surplomb.app:443'), 'surplomb.app');
-  assert.equal(ownerCookieDomain('vps-enerlens.tailc409e8.ts.net:4173'), 'vps-enerlens.tailc409e8.ts.net');
+  assert.equal(ownerCookieDomain('box.tail0000.ts.net:4173'), 'box.tail0000.ts.net');
   for (const host of ['localhost:4173', '127.0.0.1:4173', '100.94.222.110', '[::1]:4173', 'www.app', '', undefined, 'evil.com/x']) {
     assert.equal(ownerCookieDomain(host), null, String(host));
   }

@@ -1,7 +1,7 @@
 // Which ref the staging URL is allowed to show.
 //
 // The deploy agent is a shell script on a box nobody looks at, and its one
-// decision — "what does gev.enerlens.com serve right now?" — failed silently on
+// decision — "what does the staging URL serve right now?" — failed silently on
 // 2026-09-10: PR #155 was cut at #152, so #153 and #154 were merged into main
 // and stayed off the URL, with the container happily rebuilt and healthy. No
 // runtime test can see that, because every artefact involved is correct; only

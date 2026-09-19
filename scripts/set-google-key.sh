@@ -4,13 +4,17 @@
 #
 # WHY THIS EXISTS. A Google key is needed in more than one place and none of
 # them announce that they are stale: a workspace with an old key does not fail,
-# it renders a plausible half-empty globe. The three places are
+# it renders a plausible half-empty globe. The places are
 #
-#   1. the SEED .env at the repository root — every NEW Conductor workspace is
-#      copied from it, so a key that is only in a workspace dies with it;
+#   1. a SEED .env that new checkouts are copied from — opt-in, with
+#      GEV_SEED_ENV=<file>. A key that is only in a checkout dies with it;
 #   2. this checkout's own .env — what `npm run dev` reads right now;
 #   3. /opt/gev/.env on the staging box — inlined into the bundle at BUILD
 #      time (the `define` block in vite.config.js), so staging must rebuild.
+#
+# With GEV_WORKSPACES_DIR=<dir> set, the .env of every other checkout one
+# level under <dir> is offered too: a tool that copies .env when it creates a
+# checkout (Conductor does) leaves each one already on disk with the old key.
 #
 # And a key can be wrong in four different ways that look identical from the
 # app (a greyed-out "Google 3D" chip): invalid, billing disabled, restricted to
@@ -23,7 +27,8 @@
 #   scripts/set-google-key.sh                 # prompt, probe, then ask per target
 #   scripts/set-google-key.sh AIza…           # same, key given on the command line
 #   scripts/set-google-key.sh --check         # probe only, write nothing
-#   scripts/set-google-key.sh --yes           # no prompts: seed + this checkout
+#   scripts/set-google-key.sh --yes           # no prompts: this checkout (+ seed if set)
+#   scripts/set-google-key.sh --yes --all-workspaces   # …and every checkout under GEV_WORKSPACES_DIR
 #   scripts/set-google-key.sh --yes --vps     # …and rebuild staging
 #   echo AIza… | scripts/set-google-key.sh -y # piped
 #
@@ -31,8 +36,9 @@
 # backed up next to itself first.
 set -euo pipefail
 
-SEED_ENV="${GEV_SEED_ENV:-$HOME/conductor/repos/gods-eye-view/.env}"
-WORKSPACES_DIR="${GEV_WORKSPACES_DIR:-$HOME/conductor/workspaces/gods-eye-view}"
+# Both opt-in: a plain clone has no seed and no sibling checkouts to update.
+SEED_ENV="${GEV_SEED_ENV:-}"
+WORKSPACES_DIR="${GEV_WORKSPACES_DIR:-}"
 VPS_HOST="${GEV_VPS_HOST:-vps}"
 VPS_ROOT="${GEV_VPS_ROOT:-/opt/gev}"
 # Probes carry a Referer because SECURITY.md tells you to restrict the key by
@@ -213,8 +219,10 @@ confirm() { # question, default(y/n)
 echo
 bold "Installing"
 
-# 4a. the seed .env — the only copy new workspaces inherit.
-if [ -f "$SEED_ENV" ] || [ -d "$(dirname "$SEED_ENV")" ]; then
+# 4a. the seed .env — the only copy new checkouts inherit. Opt-in.
+if [ -z "$SEED_ENV" ]; then
+  dim "  (no seed .env — set GEV_SEED_ENV=<file> to keep one)"
+elif [ -f "$SEED_ENV" ] || [ -d "$(dirname "$SEED_ENV")" ]; then
   if confirm "  Write the seed $SEED_ENV (every NEW workspace inherits it)?" y; then
     put_env_var "$SEED_ENV"
     ok "seed updated — backup at $(basename "$SEED_ENV").bak-$STAMP"
@@ -233,9 +241,13 @@ if [ "$LOCAL_ENV" != "$SEED_ENV" ]; then
   fi
 fi
 
-# 4c. the other existing workspaces. Conductor copies .env at CREATION time
-# only, so every workspace already on disk still holds the old key.
-if [ -d "$WORKSPACES_DIR" ]; then
+# 4c. the other existing checkouts, opt-in. A tool that copies .env at
+# CREATION time only leaves every checkout already on disk with the old key.
+if [ -z "$WORKSPACES_DIR" ]; then
+  if [ "$WANT_WORKSPACES" = 1 ]; then
+    warn "--all-workspaces needs GEV_WORKSPACES_DIR=<dir> — skipped"
+  fi
+elif [ -d "$WORKSPACES_DIR" ]; then
   others=()
   while IFS= read -r env_file; do
     [ "$env_file" = "$LOCAL_ENV" ] && continue

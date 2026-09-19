@@ -3,7 +3,7 @@
  *
  * The box could already turn a pasted address into a layer. What it could not
  * do is answer "est-ce qu'on a les défibrillateurs ?", and that turned out to
- * be the hard half. Measured on six subjects (docs/DEMANDER-UNE-DONNEE.md):
+ * be the hard half. Measured on six subjects (#113):
  * taking the platform's first hit draws the right thing about half the time.
  * The other half is a dataset whose files all 404, a table with no column
  * saying where a row is, or — worst, because it looks like a success — one

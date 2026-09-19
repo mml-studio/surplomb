@@ -2,7 +2,7 @@
 // downloaded.
 //
 // This is the half of the GTFS-RT chiffrage that nothing else can catch: every
-// storage figure in `docs/CHRONIQUE-GTFS-RT.md` is a measured rate multiplied
+// storage figure in the GTFS-RT cost estimate (#97) is a measured rate multiplied
 // by what this function returns, so a wrong service day is a wrong year, and it
 // would be wrong quietly — the tables would still add up.
 import test from 'node:test';

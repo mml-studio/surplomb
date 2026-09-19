@@ -2,7 +2,7 @@
 /**
  * perf-infra-lod — the bench phase 3.1 asks for, and did not have.
  *
- * `docs/PLAN-PERFORMANCE.md` § phase 3.1 names one measurement and one target:
+ * Phase 3.1 of the performance plan (#115) names one measurement and one target:
  * "tas et p90 avec les quatre packs sur Terre entière, CPU ÷4 puis machine de
  * référence. Cible : tas −60 %, p90 ≤ 33 ms." Nothing in `scripts/` produced
  * either number — `qa-overlay-baseline.mjs` measures two of the four packs, on

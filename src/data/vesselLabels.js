@@ -29,7 +29,7 @@
  * So **four contacts in five publish no hull**, and any design that gives them
  * a default size would be inventing the size of 82 % of the map. That is the
  * aircraft defect this repo has just finished correcting ("97 % de la flotte
- * visible portait une silhouette inventée", docs/PLAN-CARTOGRAPHIE.md § 1.4),
+ * visible portait une silhouette inventée", cartography plan § 1.4, #78),
  * and it is not worth repeating at sea.
  *
  * Length distribution over the measured hulls (m):
@@ -516,7 +516,7 @@ const HULL_BOW_TAPER = 0.20;
  * hull is a smear and the chevron is the honest mark; below it the hull is the
  * measurement and the chevron becomes the contact marker on top of it.
  *
- * REPRESENTATION.md proposed "~10 km" by eye. The arithmetic says 15.6 km for
+ * The representation audit (#78) proposed "~10 km" by eye. The arithmetic says 15.6 km for
  * a 200 m ship, and it is worth saying out loud what that hides: a 30 m fishing
  * boat only reaches 10 px at 2.3 km. There is no single altitude at which every
  * hull becomes legible, which is why the chevron never leaves.

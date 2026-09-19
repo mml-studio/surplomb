@@ -1041,7 +1041,7 @@ let _enrichAmbientRefillAnchorMs = 0;
 // a fresh session held no routes at all and `flights/boundFor` — the join that
 // makes an airport card say "1 en approche — TVF57PQ" — answered 0/0 for every
 // field on Earth until a reader happened to track a plane into that airport.
-// `docs/PLAN-CROISEMENTS.md` recorded widening it as blocked on exactly one
+// The cross-referencing audit (#128) recorded widening it as blocked on exactly one
 // thing: doing it inside the TYPE bucket would spend a budget sized against a
 // different demand, and invalidate the measurement that fixed it.
 //

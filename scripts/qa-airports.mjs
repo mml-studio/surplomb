@@ -458,7 +458,7 @@ async function main() {
     //
     // The FLOOR used to be 20 and is now Roissy's own five, because the number
     // it was calibrated against described a bug. Before the frustum gate
-    // (PLAN-PERFORMANCE.md § 3.1) the layer dealt pool lines to every field the
+    // (#131) the layer dealt pool lines to every field the
     // HORIZON allowed, so at 12 km over Roissy the batch carried segments for
     // airports on the other side of Europe; measured on this framing it now
     // holds 8, all of them on screen. "More than twenty" was never the claim —

@@ -191,7 +191,7 @@ const ID_LIKE = /(^|_)(id|gid|uuid|siren|siret|code|url|lien|link|photo|geom|wkt
 /*
  * ── WHAT A PROGRESS LINE IS ALLOWED TO SAY ────────────────────────────────
  *
- * Measured 2026-09-09 (docs/DEMANDER-UNE-DONNEE.md), extrapolating the time
+ * Measured 2026-09-09 (#113), extrapolating the time
  * left from the pages already received in the SAME load:
  *
  *   150 pages (33,4 s) — after 10 % : +11 % · after 20 % : +9 % · 50 % : +7 %

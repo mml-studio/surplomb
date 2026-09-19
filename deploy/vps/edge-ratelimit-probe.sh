@@ -2,7 +2,7 @@
 #
 # Surplomb — does the edge still rate-limit ALL of /api?
 #
-# The rule that stood in front of gev.enerlens.com is 30 requests per 10
+# The rule that stood in front of the former staging hostname is 30 requests per 10
 # seconds per address on `/api`, blocking for 10 s (measured 2026-09-09). A GEV page makes
 # about six `/api` calls to boot, so the page never trips it — a QA harness,
 # a couple of tabs reloading, or two people behind one NAT do, and for those

@@ -5,11 +5,12 @@
 # WHY THIS EXISTS. Two reasons, and the second is the one that bites.
 #
 #   1. The key is needed in more than one place and none of them announce that
-#      they are missing: the SEED .env at the repository root (every NEW
-#      Conductor workspace is copied from it, so a key that is only in a
-#      workspace dies with it), this checkout's own .env (what `npm run dev`
-#      reads), the other workspaces already on disk (copies, not links), and
-#      /opt/gev/.env on the staging box.
+#      they are missing: this checkout's own .env (what `npm run dev` reads),
+#      /opt/gev/.env on the staging box, and — opt-in, for a machine that
+#      keeps several checkouts — a SEED .env that new checkouts are copied
+#      from (GEV_SEED_ENV=<file>; a key that is only in a checkout dies with
+#      it) and the other checkouts already on disk, one level under
+#      GEV_WORKSPACES_DIR=<dir> (copies, not links).
 #
 #   2. On THIS fork, OPENAI_API_KEY alone changes nothing. Our .env pins
 #      GEV_VOICE_PROVIDER=openrouter, and resolveVoiceProvider() honours a
@@ -39,8 +40,8 @@
 # Usage
 #   scripts/set-openai-key.sh                  # prompt, probe, then ask per target
 #   scripts/set-openai-key.sh --check          # probe only, write nothing (exit 0 = mic works)
-#   scripts/set-openai-key.sh --yes            # no prompts: seed + this checkout
-#   scripts/set-openai-key.sh --yes --all-workspaces
+#   scripts/set-openai-key.sh --yes            # no prompts: this checkout (+ seed if set)
+#   scripts/set-openai-key.sh --yes --all-workspaces   # …and every checkout under GEV_WORKSPACES_DIR
 #   scripts/set-openai-key.sh --yes --vps      # …and staging (public! see below)
 #   scripts/set-openai-key.sh --provider auto  # or: openai (default), keep
 #   scripts/set-openai-key.sh --no-spend       # free probes only
@@ -50,8 +51,9 @@
 # prompt does not. Prefer the prompt.
 set -euo pipefail
 
-SEED_ENV="${GEV_SEED_ENV:-$HOME/conductor/repos/gods-eye-view/.env}"
-WORKSPACES_DIR="${GEV_WORKSPACES_DIR:-$HOME/conductor/workspaces/gods-eye-view}"
+# Both opt-in: a plain clone has no seed and no sibling checkouts to update.
+SEED_ENV="${GEV_SEED_ENV:-}"
+WORKSPACES_DIR="${GEV_WORKSPACES_DIR:-}"
 VPS_HOST="${GEV_VPS_HOST:-vps}"
 VPS_ROOT="${GEV_VPS_ROOT:-/opt/gev}"
 TIMEOUT="${GEV_PROBE_TIMEOUT:-25}"
@@ -371,8 +373,10 @@ else
   dim  "  Without the second one a key changes nothing — see the header of this script."
 fi
 
-# 5a. the seed .env — the only copy new workspaces inherit.
-if [ -f "$SEED_ENV" ] || [ -d "$(dirname "$SEED_ENV")" ]; then
+# 5a. the seed .env — the only copy new checkouts inherit. Opt-in.
+if [ -z "$SEED_ENV" ]; then
+  dim "  (no seed .env — set GEV_SEED_ENV=<file> to keep one)"
+elif [ -f "$SEED_ENV" ] || [ -d "$(dirname "$SEED_ENV")" ]; then
   if confirm "  Write the seed $SEED_ENV (every NEW workspace inherits it)?" y; then
     if install_into "$SEED_ENV"; then
       ok "seed updated — backup at $(basename "$SEED_ENV").bak-$STAMP"
@@ -393,9 +397,14 @@ if [ "$LOCAL_ENV" != "$SEED_ENV" ]; then
   fi
 fi
 
-# 5c. the other existing workspaces. Conductor copies .env at CREATION time
-# only, so every workspace already on disk still holds the old value.
-if [ -d "$WORKSPACES_DIR" ]; then
+# 5c. the other existing checkouts, opt-in. A tool that copies .env at
+# CREATION time only (Conductor does) leaves every checkout already on disk
+# with the old value.
+if [ -z "$WORKSPACES_DIR" ]; then
+  if [ "$WANT_WORKSPACES" = 1 ]; then
+    warn "--all-workspaces needs GEV_WORKSPACES_DIR=<dir> — skipped"
+  fi
+elif [ -d "$WORKSPACES_DIR" ]; then
   others=()
   while IFS= read -r env_file; do
     [ "$env_file" = "$LOCAL_ENV" ] && continue

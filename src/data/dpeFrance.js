@@ -84,7 +84,7 @@ import { governorRequestRender } from '../renderGovernor.js';
  * diagnostics: a site with no shape keeps its badge and its card, and the row
  * prints how many of the addresses got an outline.
  *
- * ── The volumes carry the letter now (REPRESENTATION, piste 1) ──────────────
+ * ── The volumes carry the letter now (representation audit, track 1, #78) ───
  *
  * `bdtopoBuildings.js` extrudes the BD TOPO footprints of the viewport, and
  * until now this layer drew a badge floating ABOVE the roof it was talking

@@ -3,7 +3,7 @@
  *
  * WHAT THIS IS. Given a point, a dwelling type and a surface, this module reads
  * the DVF editions already in hand and answers what that dwelling is worth,
- * with the interval it is worth it inside. `docs/CITYSCAN.md` puts the
+ * with the interval it is worth it inside. The Cityscan teardown (#99) puts the
  * estimator at the top of palier 2 and says why: of the eleven data routes
  * behind `app.cityscan.fr`, not one carries a source we do not already have —
  * their own translation file credits *« Source : Algorithme »* for exactly one

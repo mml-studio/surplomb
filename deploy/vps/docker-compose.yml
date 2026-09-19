@@ -1,4 +1,4 @@
-# Surplomb — staging on the Enerlens VPS.
+# Surplomb — the staging stack, on a VPS it shares with a production database.
 #
 # Installed at /opt/gev/docker-compose.yml. The checkout it builds lives at
 # /opt/gev/src and is moved around by gev-deploy.sh; this file never changes.
@@ -55,7 +55,7 @@ services:
       # and names `npm run amenities:pack` instead of taking the site down.
       # See docs/DEPLOY.md for how the pack gets onto the volume.
       GEV_AMENITIES_INPROCESS_BUILD: ${GEV_AMENITIES_INPROCESS_BUILD:-0}
-    # Bounds, because this box is shared with the Enerlens production database.
+    # Bounds, because this box is shared with a production database.
     #
     # Measured 2026-09-09: the container idles at ~197 MiB and ~2% CPU with NO
     # limit of any kind, on a host with 427 MB free, 4.6 GB available and
@@ -68,7 +68,7 @@ services:
     #    are how Docker says "and don't start using any".
     #  - cpus is a CEILING (CFS quota), not a reservation: it caps a runaway.
     #  - cpu_shares is the WEIGHT under contention, and it is the half of this
-    #    that protects Enerlens. Default is 1024; at 512 GEV yields the core to
+    #    that protects the neighbors. Default is 1024; at 512 GEV yields the core to
     #    the database when both want it, while still burning up to 1.5 vCPU
     #    whenever the box is otherwise idle.
     mem_limit: 1g

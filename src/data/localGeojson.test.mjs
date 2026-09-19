@@ -1981,7 +1981,7 @@ test('the footprint floor thins by SIZE, which is the honest order for a ground 
   assert.equal(localFootprintFitsScreen(NaN, metresPerPixel), false);
 });
 
-// ── The globe-LOD budget and the frustum gate (PLAN-PERFORMANCE.md § 3.1) ──
+// ── The globe-LOD budget and the frustum gate (performance plan 3.1, #131) ──
 
 /** A record shaped exactly as the walk builds them, for the pure rules. */
 function lodRecord(id, priority, screen, { lon = 0, lat = 0, extentRadiusM = 0 } = {}) {

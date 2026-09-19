@@ -81,7 +81,7 @@ import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
  * gets its own legend row, because A1 does not admit an unmarked fallback even
  * for a state the test says cannot happen.
  *
- * ── THE VOLUMES (piste 1 de docs/REPRESENTATION.md) ────────────────────────
+ * ── THE VOLUMES (track 1 of the representation audit, #78) ─────────────────
  *
  * The layer registers a building theme (`buildingTheme.js`, precedence 20) so
  * that when Bâti 3D is on, the BD TOPO volumes carry this same ratio and the

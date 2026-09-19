@@ -4,8 +4,8 @@
  *
  * ── THE PREMISE THIS FILE CORRECTS ──────────────────────────────────────────
  *
- * `perf-boot-probe.mjs`, `perf-real-gpu-console.js` and § 0 of
- * `docs/PLAN-PERFORMANCE.md` all say the same thing: headless Chromium renders
+ * `perf-boot-probe.mjs`, `perf-real-gpu-console.js` and phase 0 of
+ * the performance plan (#115) all say the same thing: headless Chromium renders
  * through SwiftShader, in software, so the fixed GPU costs (MSAA, the sharpen
  * pass, `preserveDrawingBuffer`, render resolution) are invisible in the lab
  * and phase 2 cannot start without borrowed hardware.
