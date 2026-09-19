@@ -1,4 +1,4 @@
-# Réseau électrique national (France)
+# National power grid (France)
 
 `national.json` is what the **Power Grid** layer draws above 120 km, and under
 the viewport answer below it: every high-voltage route (`power=line`,

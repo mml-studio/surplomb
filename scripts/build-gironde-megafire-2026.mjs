@@ -443,9 +443,9 @@ async function main() {
     const fronts = linesToDegrees(lines);
     const flames = pointsToDegrees(points);
     log(`  ${step.product.padEnd(12)} ${String(thinned.rings.length).padStart(4)} polys `
-      + `${String(thinned.vertices).padStart(6)} sommets | ${thinned.keptHa.toFixed(0)} ha dessinés `
-      + `/ ${thinned.rawHa.toFixed(0)} ha bruts / ${step.burntHa} ha publiés `
-      + `| ${fronts.length} fronts, ${flames.length} flammes`);
+      + `${String(thinned.vertices).padStart(6)} vertices | ${thinned.keptHa.toFixed(0)} ha drawn `
+      + `/ ${thinned.rawHa.toFixed(0)} ha raw / ${step.burntHa} ha published `
+      + `| ${fronts.length} fronts, ${flames.length} flames`);
     steps.push({
       id: step.id,
       product: step.product,
@@ -542,41 +542,40 @@ function writeReadme(event, hotspots) {
   const peak = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
   const maxFrp = hotspots.reduce((max, row) => Math.max(max, row.frp), 0);
   const lines = [
-    '# Mégafeu de Gironde — 22 juillet au 1ᵉʳ août 2026',
+    '# Gironde megafire — Jul 22 to Aug 1, 2026',
     '',
-    'Pack figé pour la couche `gironde-megafire-2026`. Reconstruit par',
-    '`node scripts/build-gironde-megafire-2026.mjs` (voir l\'en-tête du script pour',
-    'les sources et la raison pour laquelle rien n\'est relu à l\'exécution).',
+    'Frozen pack for the `gironde-megafire-2026` layer. Rebuilt by',
+    '`node scripts/build-gironde-megafire-2026.mjs` (see the script\'s header for',
+    'the sources and for why nothing is re-read at runtime).',
     '',
-    `Construit le ${event.builtAt}.`,
+    `Built on ${event.builtAt}.`,
     '',
-    '## Ce que le pack contient',
+    '## What the pack contains',
     '',
-    '| Fichier | Contenu |',
+    '| File | Contents |',
     '| --- | --- |',
-    '| `event.json` | Les cinq périmètres Copernicus datés, leurs fronts et leurs flammes, le périmètre final EFFIS, et les statistiques publiées par Copernicus pour chaque produit. |',
-    '| `hotspots.json` | Les détections NASA FIRMS de la fenêtre, en minutes depuis son ouverture. |',
+    '| `event.json` | The five dated Copernicus perimeters, their fire fronts and active flames, the final EFFIS perimeter, and the statistics Copernicus published for each product. |',
+    '| `hotspots.json` | The NASA FIRMS detections inside the window, in minutes since it opened. |',
     '',
-    '## Les cinq images',
+    '## The five images',
     '',
-    '| Acquisition (UTC) | Produit | Capteur | Surface brûlée publiée | Polygones dessinés |',
+    '| Acquisition (UTC) | Product | Sensor | Published burnt area | Polygons drawn |',
     '| --- | --- | --- | ---: | ---: |',
     ...event.steps.map((step) => `| ${step.acq.replace('T', ' ').replace(':00Z', '')} | `
-      + `${step.product} | ${step.sensor} | ${step.burntHa.toLocaleString('fr-FR')} ha | `
+      + `${step.product} | ${step.sensor} | ${step.burntHa.toLocaleString('en-US')} ha | `
       + `${step.rings.length} |`),
     '',
-    'La colonne « surface brûlée publiée » est celle de Copernicus, jamais recalculée',
-    'à partir du dessin. `measuredHa` (géométrie brute) et `drawnHa` (après',
-    'simplification) sont conservés dans `event.json` pour que l\'écart reste',
-    'mesurable.',
+    'The “published burnt area” column is Copernicus\'s own, never recomputed from',
+    'the drawing. `measuredHa` (raw geometry) and `drawnHa` (after simplification)',
+    'are kept in `event.json` so that the gap stays measurable.',
     '',
-    '## Les points chauds',
+    '## The hotspots',
     '',
-    `${hotspots.length.toLocaleString('fr-FR')} détections retenues dans la fenêtre, `
-      + `dont ${peak[1].toLocaleString('fr-FR')} le ${peak[0]} — le jour le plus actif.`,
-    `Puissance radiative maximale sur un pixel : ${maxFrp.toLocaleString('fr-FR')} MW.`,
+    `${hotspots.length.toLocaleString('en-US')} detections kept inside the window, `
+      + `${peak[1].toLocaleString('en-US')} of them on ${peak[0]} — the busiest day.`,
+    `Peak radiative power on a single pixel: ${maxFrp.toLocaleString('en-US')} MW.`,
     '',
-    '## Crédits',
+    '## Credits',
     '',
     ...event.credits.map((credit) => `- **${credit.source}** — ${credit.credit}  `
       + `\n  ${credit.licence} · <${credit.url}>`),

@@ -92,8 +92,8 @@ layer draws the station once and lists its groups on the card.
 
 - **ODRÉ**, *Registre national des installations de production et de stockage
   d'électricité* (edition of 30/06/2026) — Licence Ouverte 2.0.
-- **EDF Open Data**, localisation of EDF SA's nuclear, hydraulic and
-  thermal-à-flamme stations — Licence Ouverte 2.0. Read from the portal's
+- **EDF Open Data**, locations of EDF SA's nuclear, hydro and fossil-fired
+  (*thermique à flamme*) stations — Licence Ouverte 2.0. Read from the portal's
   native data-fair routes: opendata.edf.fr has migrated to Koumoul and the
   `/api/v1/datasets` route most links still point at answers the SPA's HTML
   404.

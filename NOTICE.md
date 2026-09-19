@@ -24,7 +24,7 @@ remain subject to their own licenses and terms. Notably:
   - Basemap thumbnails (public/basemaps/): one tile each over the Île de
     la Cité, cropped and re-encoded. `ign-ortho.webp` and `ign-plan.webp` are
     IGN Géoplateforme imagery (ORTHOIMAGERY.ORTHOPHOTOS, PLANIGNV2) under
-    Licence Ouverte 2.0 — « © IGN ». `osm.webp` is an OpenStreetMap Carto tile,
+    Licence Ouverte 2.0 — “© IGN”. `osm.webp` is an OpenStreetMap Carto tile,
     © OpenStreetMap contributors, data ODbL 1.0, cartography CC BY-SA 2.0.
 
 Live sources (Google Maps, OpenSky, adsb.lol, AISStream, CelesTrak, USGS,
@@ -40,8 +40,8 @@ remove any dataset whose terms don't fit your use.
 
 The French practitioner records drawn by the `medecins-fr` layer come from the
 **Annuaire santé** published by the CNAM under Licence Ouverte 2.0. They are
-PROFESSIONAL contact details that the code de la santé publique (art. L. 1461-2)
-requires to be published for this use — name, speciality, practice address and
+PROFESSIONAL contact details that the French Public Health Code (*code de la
+santé publique*, art. L. 1461-2) requires to be published for this use — name, speciality, practice address and
 RPPS number of a practising professional, never a patient record. This project
 redistributes them unmodified and holds no rectification channel of its own: a
 practitioner who wants an entry corrected or withdrawn must go to the CNAM,

@@ -19,7 +19,7 @@ npm run qa:power-grid-coverage:lines      # route corridors, a long Overpass swe
 
 **It never republishes the reference data.** RTE withdrew the GPS coordinates
 of the public transmission network in 2025 "pour des raisons de sécurité
-publique", and this project respects that: the app serves OSM, and the archived
+publique" (for reasons of public security), and this project respects that: the app serves OSM, and the archived
 files exist here only as a ruler. `reference.mjs` downloads them into the
 gitignored `.gev-cache/grid-audit/`, and nothing from them reaches `src/`, the
 proxy, or the browser.
@@ -29,16 +29,17 @@ copies distributed under it:
 
 | | source | what |
 |---|---|---|
-| Routes | the State's own geo-ide mirror (DDTM de l'Eure), still served | 13,287 aerial + underground tronçons, 30 June 2023, Lambert-93 |
+| Routes | the State's own geo-ide mirror (DDTM de l'Eure), still served | 13,287 overhead + underground segments (*tronçons*), 30 June 2023, Lambert-93 |
 | Substations | Internet Archive capture of the ODRÉ export endpoint | 5,003 sites with coordinates, 27 June 2023 |
 
-The `_027` in the shapefile layer name is the publishing département, **not** a
-clip: the file spans lon −3.85 → 8.36, lat 42.1 → 50.9 — France Métropolitaine
-entire.
+The `_027` in the shapefile layer name is the publishing department, **not** a
+clip: the file spans lon −3.85 → 8.36, lat 42.1 → 50.9 — the whole of mainland
+France.
 
 ## Results, run of 2026-08-28
 
-Reference: 4,067 in-service *postes de transformation* at ≥ 50 kV. Subject: OSM
+Reference: 4,067 in-service transformer substations (*postes de
+transformation*) at ≥ 50 kV. Subject: OSM
 today, queried uncapped (176,514 `power=substation` in France).
 
 | radius | OSM has a substation | …carrying ≥ 50 kV |
@@ -58,7 +59,8 @@ floor, and **11 are genuinely absent** — 0.27 %.
 ## Two traps this had to survive
 
 **The reference is contaminated.** RTE's export is titled "Sites électriques
-RTE **et points de piquage**": 816 of its 5,003 records are tap-offs carried on
+RTE **et points de piquage**" (RTE electrical sites **and tap-off points**):
+816 of its 5,003 records are tap-offs carried on
 a pylon, not substation yards. OSM does not tag those `power=substation` and is
 right not to. Counting them cost 5 points of apparent coverage before
 `fonction_du_poste` was used to separate them; they are now reported apart,

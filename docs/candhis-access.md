@@ -21,16 +21,18 @@ the rest) are **not** in the NDBC report either — checked directly.
 
 ## The source: CANDHIS (Cerema)
 
-*Observatoire côtier national de mesure in situ des états de mer* — about forty
-real-time houlographes, métropole and outre-mer, run by the Cerema with the
-DIRMs, Haropa Port, EDF, the Dreals and the port authorities.
+*Observatoire côtier national de mesure in situ des états de mer* (national
+coastal observatory for in-situ sea-state measurement) — about forty real-time
+wave buoys (*houlographes*), in mainland France and overseas, run by the Cerema
+with the DIRMs (interregional sea directorates), Haropa Port, EDF, the DREALs
+(regional environment directorates) and the port authorities.
 
 - **Licence: Licence Ouverte Etalab v2.0.** Free reuse including commercial,
   subject to naming the source and the date of last update. The wording the
-  Cerema asks for is in `01_Utilisation.fr.pdf`: at minimum *« Candhis »*, ideally
-  the partner organisations of the campaign — e.g. *« SMBS-GLP et Cerema —
+  Cerema asks for is in `01_Utilisation.fr.pdf`: at minimum *“Candhis”*, ideally
+  the partner organisations of the campaign — e.g. *“SMBS-GLP et Cerema —
   Données originales téléchargées sur https://candhis.cerema.fr/, mise à jour du
-  … »*. The station list is separately published on data.gouv.fr under `lov2`.
+  …”* (original data downloaded from …, updated on …). The station list is separately published on data.gouv.fr under `lov2`.
 - **API: `https://candhis.cerema.fr/API/v1/`**, REST, JSON, **GET only**.
   Auth is an `Authorization: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` header. There
   is a daily request quota (HTTP 429) and IP banning (HTTP 423).
@@ -38,13 +40,13 @@ DIRMs, Haropa Port, EDF, the Dreals and the port authorities.
 
 | Endpoint | What it returns |
 |---|---|
-| `getCampListe.php?type=N` | every campaign of one houlographe type |
+| `getCampListe.php?type=N` | every campaign of one buoy type |
 | `getCampInfos.php?camp=ccccc` | name, latitude, longitude, depth, directional flag, sensor model |
-| `getCampZone.php?zone=Zxx` | campaigns in a zone (Z01 métropole … Z05 Antilles/Guyane/SPM, Z06 Réunion/Mayotte) |
+| `getCampZone.php?zone=Zxx` | campaigns in a zone (Z01 mainland France … Z05 Antilles/Guyane/SPM, Z06 Réunion/Mayotte) |
 | `getCampTR.php?camp=…&dateDeb=…` | real-time series for one campaign |
 | **`getCampListeTR.php?type=N`** | **the latest hourly reading for the WHOLE network of one sensor type, in one call** |
 
-`getCampListeTR` is the shape this app wants: one request per houlographe type
+`getCampListeTR` is the shape this app wants: one request per buoy type
 (0 non-directional H13, 1 directional Hm0, 2 directional H13) covers the network,
 exactly as `/api/ndbc` covers NDBC with one fetch.
 
@@ -63,8 +65,14 @@ CANDHIS publishes metres, same as NDBC.
 
 ## The one action that unblocks it
 
-Send this to **candhis@cerema.fr**. The three fields are the ones the API manual
-requires; the domain and structure values must be chosen from its own lists.
+Send this to **candhis@cerema.fr**, in French. The three fields are the ones
+the API manual requires; the domain and structure values must be chosen from
+its own lists. In English, it asks for a v1 API key to show the sea state the
+network measures on an open globe of French public data, gives the three fields
+(name, activity domain “data atlas”, structure type “individual”), and commits
+to one hourly `getCampListeTR.php` call per buoy type, cached server-side, with
+“Candhis” and the update date shown beside every reading, as Licence Ouverte
+v2.0 requires.
 
 > Objet : Demande de clé d'accès à l'API Candhis
 >
