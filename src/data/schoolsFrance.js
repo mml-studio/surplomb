@@ -49,7 +49,7 @@
  * the same legend". The reasoning was sound and the question was wrong: it
  * compared count-fill against density-fill — one channel, two candidates, one
  * loser — and painting a raw count as a colour fill is the fault the corpus
- * names in capitals (CARTOGRAPHIE B1). On a globe there is a second channel
+ * names in capitals (CARTOGRAPHY B1). On a globe there is a second channel
  * and it was empty. The answer is both, on two channels:
  *
  *   HEIGHT  the establishment count, linearly, from a common datum

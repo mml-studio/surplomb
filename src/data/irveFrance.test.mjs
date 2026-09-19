@@ -832,7 +832,7 @@ test('the class breaks are a frozen geometric ladder, not quantiles of a payload
   // the defect this removes.
   assert.deepEqual([...IRVE_DENSITY_BREAKS], [100, 250, 500, 1000, 2500]);
   assert.deepEqual([...IRVE_PRISM_SCALE.ratioBreaks], [...IRVE_DENSITY_BREAKS]);
-  // Six classes, which is CARTOGRAPHIE B3's ceiling and not one more.
+  // Six classes, which is CARTOGRAPHY B3's ceiling and not one more.
   assert.equal(IRVE_PRISM_SCALE.ratioColors.length, 6);
   // Boundaries are inclusive at the top of a class, so a value ON a break can
   // never fall between two colours.

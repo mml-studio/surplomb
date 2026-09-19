@@ -2962,7 +2962,7 @@ test('a legend entry that declares a glyph is masked to that shape, keeping its 
 });
 
 test('the on-map legend is the only mount point, populated without opening the panel', async () => {
-  // CARTOGRAPHIE. The panel legend was not wrong, its PLACEMENT was:
+  // CARTOGRAPHY. The panel legend was not wrong, its PLACEMENT was:
   // `#data-panel` ships collapsed and the collapsed rule hides the toggle
   // list, and a share link deliberately ignores the recipient's stored panel
   // preference. So the key exists where the map itself shows it — and only

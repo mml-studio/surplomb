@@ -8,7 +8,7 @@
  * `sup-fr`, `schools-fr` and `amenities-fr` — and three of them left when they
  * stopped being flat fills. A prism's body carries a CONSTANT alpha
  * (`choroplethPrism.js`, `PRISM_BODY_ALPHA`) precisely so that alpha encodes
- * nothing at all (CARTOGRAPHIE A3); a descending ladder there would put a
+ * nothing at all (CARTOGRAPHY A3); a descending ladder there would put a
  * second, contradictory reading on a volume already seen through another
  * volume. The measurements below are still the reason this ladder is shaped
  * the way it is, and they still hold for the layers that do paint a flat fill
@@ -33,7 +33,7 @@
  * is arithmetic, not palette. The darkest swatch was the most transparent, so
  * on a light background it was the one the ground washed out most, while the
  * lightest swatch was the most opaque and stayed light. `sup-fr` and
- * `amenities-fr` failed the same way (CARTOGRAPHIE B3: six declared classes
+ * `amenities-fr` failed the same way (CARTOGRAPHY B3: six declared classes
  * must be six PERCEIVED classes).
  *
  * ── The fix ─────────────────────────────────────────────────────────────────

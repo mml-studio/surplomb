@@ -37,7 +37,7 @@
  * `localGeojson` and the four consumers of this module. The sentence above is
  * kept in the past tense because it is the argument for this file existing, not
  * a live census — `docs/REPRESENTATION.md` holds the current one.)
- * CARTOGRAPHIE B2 already prescribes the fix and nobody had read it as one:
+ * CARTOGRAPHY B2 already prescribes the fix and nobody had read it as one:
  *
  *   « Le quantitatif doit migrer sur un canal orthogonal à la profondeur :
  *     anneau de rayon fixe en pixels, valeur/luminance, ou HAUTEUR
@@ -221,7 +221,7 @@
  *
  * ② THE BATCHED-GROUNDPRIMITIVE COLOUR BUG DOES NOT FOLLOW US. A batched
  *   `GroundPrimitive` colours each instance by its bounding RECTANGLE, not by
- *   its polygon — documented in CARTOGRAPHIE and paid for by this repo already.
+ *   its polygon — documented in CARTOGRAPHY and paid for by this repo already.
  *   An extruded polygon classifies nothing, has its own geometry, and takes
  *   per-instance colour exactly. Going 3D REMOVES this constraint instead of
  *   inheriting it.
@@ -234,7 +234,7 @@
  * ④ THE PRISM IS AN OBLIQUE SIGN. At nadir a vertical extrusion projects to
  *   nearly nothing but parallax, so the height is unreadable straight down. The
  *   fallback is not a failure: the colour is still exact at nadir, because hue
- *   is the one variable perspective does not distort (CARTOGRAPHIE F4). A layer
+ *   is the one variable perspective does not distort (CARTOGRAPHY F4). A layer
  *   that wants the height read should say so — the same way `cctv.js` earns its
  *   oblique frusta.
  *

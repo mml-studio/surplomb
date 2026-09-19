@@ -14,7 +14,7 @@
  * Multiplied together, they are not recoverable. A faint sprite could be a
  * contact whose position is minutes old, or one near the horizon, or one the
  * camera is not following — three different statements sharing one variable
- * (CARTOGRAPHIE A3: one visual variable, one fact).
+ * (CARTOGRAPHY A3: one visual variable, one fact).
  *
  * Alpha keeps DEPTH, which is what a reader already reads it as on a globe.
  * Freshness moves to the sprite's own colour.

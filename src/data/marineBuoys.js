@@ -89,7 +89,7 @@ import { ensureGeoidReady, geoidHeight } from './geoid.js';
  * so the factor is a READING SCALE rather than a measurement, and it is
  * LINEAR, so a stem twice as tall is twice the swell.
  *
- * THE FACTOR IS ON THE GLOBE; THE ARGUMENT FOR IT IS HERE. `CARTOGRAPHIE.md`
+ * THE FACTOR IS ON THE GLOBE; THE ARGUMENT FOR IT IS HERE. `CARTOGRAPHY.md`
  * F7(a) is P0 and requires the REGISTER to be named in the legend in full
  * words, so the stem row reads "Échelle de lecture, pas une hauteur réelle :
  * 1 m de houle dessine 10 km de tige" — fourteen words. What went is the
@@ -750,7 +750,7 @@ export function seaStateBandLabel(index) {
  *
  * ── ONE ROW KEEPS A `blurb`, AND IT IS NOT OPTIONAL ────────────────────────
  *
- * `CARTOGRAPHIE.md` F7(a), P0: a vertical length belongs to one of four
+ * `CARTOGRAPHY.md` F7(a), P0: a vertical length belongs to one of four
  * REGISTERS, nothing on screen distinguishes them, and the register is to be
  * named "in full words, in the module header AND in the legend" — the document
  * says "ÉCHELLE DE LECTURE" and "hauteur réelle" must never be left to be

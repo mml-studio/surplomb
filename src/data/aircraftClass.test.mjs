@@ -45,7 +45,7 @@ test('ADS-B emitter string categories', () => {
 
 test('typeCode outranks category; nothing exploitable → unknown, never airliner', () => {
   assert.equal(classifyAircraft({ typeCode: 'F18', category: 6 }), 'fastjet');
-  // CARTOGRAPHIE A1: `/states/all` carries no type code and OpenSky's live
+  // CARTOGRAPHY A1: `/states/all` carries no type code and OpenSky's live
   // category is 0/"no info" for ~94% of contacts, so this is the INITIAL state
   // of most of the fleet, not an edge case. It must not claim a narrow-body.
   assert.equal(classifyAircraft({}), 'unknown');

@@ -221,7 +221,7 @@ const BODIES = {
     <circle cx="28" cy="21" r="5.2" fill="#ffffff"/>
     <circle cx="0" cy="6" r="3.6" fill="#ffffff" fill-opacity="0.82"/>`,
 
-  // ── Unclassified contact (CARTOGRAPHIE A1, 2026-09-02). A contact whose
+  // ── Unclassified contact (CARTOGRAPHY A1, 2026-09-02). A contact whose
   //    type OpenSky has not reported and whose enrichment has not landed used
   //    to wear the AIRLINER planform at scale 1.0 — the map stating a
   //    narrow-body it had never measured, and doing so for most of a dense
@@ -292,7 +292,7 @@ export function classLegendGlyph(kind) {
 export function aircraftIcon(kind, px = FLEET_RASTER_PX) {
   // An unrecognised kind falls back to the UNCLASSIFIED dart, never to the
   // airliner planform — a glyph nobody can read as a measurement is the right
-  // answer to "I don't know what this is" (CARTOGRAPHIE A1).
+  // answer to "I don't know what this is" (CARTOGRAPHY A1).
   const k = BODIES[kind] ? kind : 'unknown';
   const key = `${k}@${px}`;
   let uri = _iconCache.get(key);

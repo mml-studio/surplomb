@@ -1951,7 +1951,7 @@ function _fleetTick() {
     );
     const isCockpitNear = _cockpitContactMode && _cockpitNearContacts.has(icao24);
     // Mirror of flights.js: freshness is a COLOUR wash, not an alpha, so the
-    // one alpha this billboard has left means depth (CARTOGRAPHIE A3).
+    // one alpha this billboard has left means depth (CARTOGRAPHY A3).
     const coasting = Boolean(_missingPolls.get(icao24));
     const treatment = applyAircraftBillboardTreatment({
       billboard: bb,

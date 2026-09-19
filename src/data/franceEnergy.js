@@ -72,7 +72,7 @@ import {
  * ── Why the flat fill had to go, and what replaced which channel ────────────
  *
  * This layer used to paint the régions in two flat colours whose ALPHA ramped
- * with |balance| / load. That is the fault CARTOGRAPHIE B1 names in capitals:
+ * with |balance| / load. That is the fault CARTOGRAPHY B1 names in capitals:
  * `ech_physiques` is an ABSOLUTE quantity in megawatts, and « Représentation
  * d'une variable quantitative absolue en aplats de couleur — NOP !!!! ». A
  * colour fill can carry a rate; it cannot carry 7 781 MW.

@@ -41,7 +41,7 @@ import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
  *
  * Until 2026-09-03 each sale was coloured against the median of the sales
  * inside the scan radius — the median of whatever the camera was pointing at.
- * `docs/CARTOGRAPHIE.md` C1 forbids exactly that, and the fixture shows why it
+ * `docs/CARTOGRAPHY.md` C1 forbids exactly that, and the fixture shows why it
  * is not a theoretical objection: inside ONE arrondissement the local median is
  * 8 857 €/m² from avenue de France and 12 406 €/m² from rue de Tolbiac 1.5 km
  * away, a 40 % swing with no row of data changed. Worse, both the cheapest
@@ -152,7 +152,7 @@ export const DVF_LAYER_ID = 'dvf-sales';
  * within 300 m of that point, over five editions: zero houses.
  *
  * Two ways to fix that. Label the chips harder, or make them true. This is
- * the second, and `docs/CARTOGRAPHIE.md` G1 is the reason it is not a
+ * the second, and `docs/CARTOGRAPHY.md` G1 is the reason it is not a
  * judgement call — « le filtre est le maillon manquant », named as the most
  * valuable missing component of the whole application. A reader who
  * spontaneously reaches for a control that is not there has said which

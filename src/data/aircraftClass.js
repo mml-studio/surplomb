@@ -107,7 +107,7 @@ export function classifyAircraft({ typeCode, category } = {}) {
   if (Number.isFinite(category) && OPENSKY_CATEGORY[category]) return OPENSKY_CATEGORY[category];
   const cat = String(category || '').trim().toUpperCase();
   if (EMITTER_CATEGORY[cat]) return EMITTER_CATEGORY[cat];
-  // NEITHER a type code NOR an exploitable category (CARTOGRAPHIE A1).
+  // NEITHER a type code NOR an exploitable category (CARTOGRAPHY A1).
   //
   // This used to return 'airliner', with CLASS_SCALE_2D 1.0 — the exact middle
   // of the size ramp and the canonical planform "everything else reads

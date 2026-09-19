@@ -1299,7 +1299,7 @@ function ensureCityPoints(cityId, stationMap) {
     //
     // `pixelSize` is the capacity channel here (`capacityToPixelSize`), so a
     // distance term on the same channel makes size mean two things at once and
-    // the reader cannot separate them (CARTOGRAPHIE B2). The old
+    // the reader cannot separate them (CARTOGRAPHY B2). The old
     // `scaleByDistance` NearFarScalar(200, 1.35, 130000, 0.4) spanned a factor
     // of 3.4 — wider than the whole capacity ramp — so a five-dock station at
     // the cursor outdrew an eighty-dock station across town: the size ordering

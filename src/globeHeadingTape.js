@@ -8,7 +8,7 @@
  * carries a compass tape and a heading readout — but both live inside
  * `#cockpit-*` markup and exist only in cockpit view. Outside it, in an
  * application whose camera rotates on drag, nothing on screen said where north
- * was (CARTOGRAPHIE: state the frame the reader is in).
+ * was (CARTOGRAPHY: state the frame the reader is in).
  *
  * This is the rare correction where the spectacle and the cartography ask for
  * exactly the same object: a heading tape is both the instrument the 3D view

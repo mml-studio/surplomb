@@ -14,7 +14,7 @@
  * and the buildings in ONE geometry. There is no flag that classifies only the
  * ground: the fill climbs the façades, where the tileset's own baked shading
  * darkens it. Six declared bands stop being six perceived bands
- * (CARTOGRAPHIE B3) on every vertical surface in the frame.
+ * (CARTOGRAPHY B3) on every vertical surface in the frame.
  *
  * Cesium cannot split that drape, so the map says it instead of pretending.
  * The alternative — forcing the camera to nadir, or unloading the tileset when

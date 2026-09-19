@@ -2173,7 +2173,7 @@ const satellitesLayer = {
         // Aircraft and vessel trails are the past, drawn in the same idiom —
         // a coloured polyline behind a moving symbol — so without this row a
         // reader has no way to know that two graphically identical lines point
-        // in opposite temporal directions (CARTOGRAPHIE E3).
+        // in opposite temporal directions (CARTOGRAPHY E3).
         ...(_params.showOrbits && _orbitPaths.size
           ? [{
             label: 'Orbit ahead (prediction)',

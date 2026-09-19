@@ -890,7 +890,7 @@ const aisLiveVesselsLayer = {
       // The gap between what the feed handed over and what could be drawn,
       // as the one-line `coverage` string the manager prints under the row.
       // Both numbers were already published and read by nobody, so the map
-      // silently dropped rows it had received (CARTOGRAPHIE A5/H1).
+      // silently dropped rows it had received (CARTOGRAPHY A5/H1).
       coverage: aisAcceptanceCoverage(state.rawRowCount, state.acceptedRowCount),
       // Same chip affordance the flights layer uses: when the server is
       // backing off, say how long until the next attempt instead of leaving
@@ -2671,7 +2671,7 @@ function formatHeading(heading) {
  *
  * A missing or unparseable timestamp used to print "POS: LIVE" — the ABSENCE
  * of an instant rendered as the claim of maximum freshness, in the slot whose
- * whole job is to date the fix (CARTOGRAPHIE A1/E3). AIS position reports do
+ * whole job is to date the fix (CARTOGRAPHY A1/E3). AIS position reports do
  * arrive without a usable UTC field; the honest answer is that we do not know
  * when this one was taken.
  * @param {{lastPositionUtc?: string|number}} record Vessel record.

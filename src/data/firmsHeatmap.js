@@ -1419,7 +1419,7 @@ function cellIntersectsBounds(cell, gridDegrees, bounds) {
 /**
  * Cell heat, expressed PER UNIT AREA rather than per cell.
  *
- * Two defects fixed here at once (CARTOGRAPHIE C1 and the equal-area rule).
+ * Two defects fixed here at once (CARTOGRAPHY C1 and the equal-area rule).
  *
  * 1. AREA. The grid is cut in DEGREES, so a 2° cell at 60°N covers half the
  *    ground of a 2° cell on the equator. `intensity`, `count` and `night` are

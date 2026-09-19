@@ -251,7 +251,7 @@ test('a value above the frozen domain is clipped, and the clip is declared (A5)'
 // ---------------------------------------------------------------------------
 
 test('a département’s height does not depend on the other départements', () => {
-  // The test CARTOGRAPHIE C1 prescribes, run on the data instead of the camera:
+  // The test CARTOGRAPHY C1 prescribes, run on the data instead of the camera:
   // widen the sample until it contains an extreme, and the first row must not
   // move. `franceDepartements.countBins()` — what these layers use today —
   // fails this by construction.

@@ -15,7 +15,7 @@
  * screen; 400 vessel fixes span a few kilometres and the trail fits inside the
  * chevron. A reader comparing the two sees a plane with a long past and a ship
  * that looks as though it has just appeared — when both have been tracked for
- * exactly as long (CARTOGRAPHIE E: a temporal encoding must mean the same
+ * exactly as long (CARTOGRAPHY E: a temporal encoding must mean the same
  * thing for every subject that carries it).
  *
  * ── The rule ────────────────────────────────────────────────────────────────

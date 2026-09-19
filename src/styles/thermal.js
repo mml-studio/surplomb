@@ -108,7 +108,7 @@ export const thermalShader = {
     }
 
     // Render a character (digit, '.', or one of the 'rEL' letters) at position.
-    // The '°' glyph was REMOVED (CARTOGRAPHIE A1): the readout it terminated
+    // The '°' glyph was REMOVED (CARTOGRAPHY A1): the readout it terminated
     // is a relative scene index, not a temperature, so the degree sign was the
     // one mark on it that asserted a physical quantity.
     float renderChar(vec2 p, int ch) {
@@ -272,7 +272,7 @@ export const thermalShader = {
       // type as the frame counter. Nothing in this pipeline measures radiance
       // — there is no thermal band anywhere in the imagery — so no number here
       // can be a temperature. The code comment said "simulated"; the screen
-      // did not (CARTOGRAPHIE A1). The digits stay, the claim goes: rEL 0.62
+      // did not (CARTOGRAPHY A1). The digits stay, the claim goes: rEL 0.62
       // is exactly what the shader knows, a dimensionless 0-1 scene index.
       float centerLuma = dot(texture(colorTexture, vec2(0.5)).rgb, vec3(0.299, 0.587, 0.114));
       float relIndex = clamp(centerLuma, 0.0, 0.999);
@@ -332,7 +332,7 @@ export const thermalShader = {
       // greyscale unconditionally, which meant that under the ironbow palette
       // the picture ran black-purple-magenta-red-orange-white while its own
       // key ran black-to-white: the key stopped decoding the map
-      // (CARTOGRAPHIE, the swatch IS the datum). It now follows the same
+      // (CARTOGRAPHY, the swatch IS the datum). It now follows the same
       // mix(mono, iron, palette) the image does, from the same ironbow().
       float bar = scaleBar(hudUV);
       if (bar > 0.0) {

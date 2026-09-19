@@ -445,7 +445,7 @@ export function pulsePhrase(slot, curve) {
  * 27 · 50 · 67 · 80 · 58. The busiest band was darker than the one below it, so
  * the order died the moment the hue was taken away — a colour-blind reader, a
  * greyscale print, a washed-out screen — and no opacity setting removed the
- * inversion, because the defect was in the ramp (CARTOGRAPHIE B4).
+ * inversion, because the defect was in the ramp (CARTOGRAPHY B4).
  *
  * The obvious repair — climb all the way, ending on a pale mint — fixed the
  * ordering and broke something worse: measured against the basemap it is drawn

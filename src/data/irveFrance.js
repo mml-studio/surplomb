@@ -88,7 +88,7 @@
  *     94 · 1 · 0 · 0 · 0 · 1. The GEOMETRIC ladder below, over the same
  *     numbers, gives 11 · 27 · 28 · 19 · 7 · 4 — every class inhabited, and
  *     the top one holding exactly the four inner-Paris départements.
- *   · An absolute count was never allowed on a fill at all (CARTOGRAPHIE B1).
+ *   · An absolute count was never allowed on a fill at all (CARTOGRAPHY B1).
  *     The alternative the old header weighed — count fill against rate fill —
  *     had one channel and two candidates. A globe has two channels.
  *
@@ -121,7 +121,7 @@
  *
  * THE COLOUR LADDER IS GEOMETRIC AND FROZEN: 100 / 250 / 500 / 1 000 / 2 500
  * charge points per 1 000 km², i.e. steps of ×2.5, ×2, ×2, ×2.5, which is what
- * a 2 254 : 1 range needs. Six classes, because CARTOGRAPHIE B3 puts the
+ * a 2 254 : 1 range needs. Six classes, because CARTOGRAPHY B3 puts the
  * perceptible ceiling at six to seven AFTER compositing, and the geometric
  * ladder is preferred to quantiles for the C1 reason: quantiles are a property
  * of the sample and would have to be recomputed — the same département would

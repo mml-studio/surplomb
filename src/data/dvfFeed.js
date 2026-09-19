@@ -46,7 +46,7 @@
  * 40 % swing with not one row of data changed. Worse, at both of those points
  * the priciest and the cheapest sale of the sample each came out *exactly at
  * the median*, painted "average", because a median of one is that one. That is
- * the C1 violation in `docs/CARTOGRAPHIE.md`: the classification was derived
+ * the C1 violation in `docs/CARTOGRAPHY.md`: the classification was derived
  * from the visible sample.
  *
  * The ratio is still the right question — an absolute €/m² ramp paints all of

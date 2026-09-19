@@ -148,8 +148,9 @@ const ROW_REFRESH_MS = 900;
  *
  * IT USED TO CARRY THE VALUE TWICE. The alpha ran 0.50 → 0.90 with the share,
  * on top of a colour that already carried the share — the same number on two
- * channels (CARTOGRAPHIE A3, "un canal, une information"). What that bought was
- * a hot blob at 90 % opacity: **10 % of the map survived underneath it**, so
+ * channels (CARTOGRAPHY A3, "one channel, one piece of information"). What
+ * that bought was a hot blob at 90 % opacity: **10 % of the map survived
+ * underneath it**, so
  * the layer erased the city exactly where it had something to say about it, and
  * a reader could no longer tell which street a dock was on.
  *
@@ -192,7 +193,7 @@ const BLOB_SPRITE_SPREAD = 2.3;
  * factor that depends on the camera's distance meant two identical docks drew
  * at different sizes in one oblique frame — the far one up to 4.5× the near one
  * — while the panel underneath claimed "la surface, c'est la quantité mesurée"
- * (CARTOGRAPHIE B2: on a globe the screen-size channel is already taken by
+ * (CARTOGRAPHY B2: on a globe the screen-size channel is already taken by
  * depth). `bikeshare.js` had the same line removed for the same reason.
  *
  * What replaces it is honesty about the range instead of a correction to the

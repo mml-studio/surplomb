@@ -2,9 +2,9 @@
 //
 // Two things are pinned here.
 //
-// 1. THE C1 CONFORMITY TEST, written verbatim in docs/CARTOGRAPHIE.md: "cadrer
-//    une zone, capturer ; élargir le cadrage pour faire entrer des valeurs
-//    extrêmes ; la zone initiale a-t-elle changé de couleur ?" It must answer
+// 1. THE C1 CONFORMITY TEST, written in docs/CARTOGRAPHY.md: "Frame an area,
+//    capture. Widen the framing to bring in extreme values from another
+//    continent. Did the initial area change color?" It must answer
 //    no. Until 2026-09-03 it answered yes, and the fixture below reproduces the
 //    old behaviour before proving the new one.
 //

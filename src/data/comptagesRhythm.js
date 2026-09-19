@@ -34,7 +34,7 @@
  * Until 2026-09-03 the hue AND the stroke width both carried the same number —
  * the arc's mean weekday hour — and the header said so out loud: *"WIDTH
  * repeats the same band, because a hue is not readable in a hairline"*. Two
- * channels, one information, which is the defect rule A3 of `CARTOGRAPHIE.md`
+ * channels, one information, which is the defect rule A3 of `CARTOGRAPHY.md`
  * names. The redundancy also cost the only channel this layer had left, on a
  * pack that holds 2 977 arcs x 168 hours and painted exactly one of them.
  *

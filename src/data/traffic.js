@@ -4651,7 +4651,7 @@ const trafficLayer = {
    * coloured ones. The distinction was documented in the code
    * (`colored = real, white = simulation`) and reachable only by calling a
    * method from the console — so the most truthful version of this layer
-   * existed and no user could ask for it (CARTOGRAPHIE A1).
+   * existed and no user could ask for it (CARTOGRAPHY A1).
    *
    * Counts describe WHAT IS ON SCREEN rather than what was fetched — the
    * per-bucket rendered-dot tally normally, and the ribbon's when there are no
