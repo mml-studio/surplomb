@@ -59,7 +59,7 @@
  * Second, the count was never allowed on a fill at all. It is an ABSOLUTE, and
  * the corpus names painting one in flat colour « l'une des erreurs
  * sémiologiques les plus courantes que l'on peut rencontrer sur le géoweb »
- * (CARTOGRAPHIE B1). The right answer was never one of the two variables — it
+ * (CARTOGRAPHY B1). The right answer was never one of the two variables — it
  * was both, on two channels, which a globe has and a sheet of paper does not.
  * See `choroplethPrism.js` for the shared grammar and its calibration, and
  * `irveFrance.js` for this layer's frozen scale.

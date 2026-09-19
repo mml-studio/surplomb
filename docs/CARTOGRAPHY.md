@@ -1,602 +1,606 @@
-# Doctrine cartographique de Surplomb
+# Surplomb's cartographic doctrine
 
-*D'après le corpus pédagogique de Boris Mericskay, confronté à ce qu'est réellement GEV : un globe 3D temps réel.*
-
----
-
-## Pourquoi ce document
-
-Boris Mericskay est maître de conférences en géographie et géomatique à l'Université Rennes 2, co-responsable du master de géomatique SIGAT, membre de l'UMR ESO. Il coordonne au sein du GdR MAGIS l'action de recherche « (Carto)graphies et (Géo)visualisations de données ». Son travail porte exactement sur l'objet que GEV est devenu : la cartographie en ligne, la géovisualisation de données massives, et le régime de représentation propre au Géoweb.
-
-Ce document extrait de son enseignement ce qui tient pour GEV, après l'avoir passé au filtre de trois critiques : celle d'un moteur 3D temps réel, celle de l'état de l'art 2026, celle du produit et de son public. **Ce n'est pas un résumé de Mericskay.** Une règle qui n'a pas survécu à la critique est reléguée en fin de document, avec sa raison.
-
-Chaque règle porte un **test de conformité** : on doit pouvoir regarder une couche de GEV et répondre oui ou non.
-
-### Ce qui a été réellement lu
-
-27 sources accessibles sur 28. Le détail figure en [bibliographie](#bibliographie). L'essentiel :
-
-- **`CM_SemiologieGraphique_2020.pdf`** — 116 diapositives, lues intégralement, y compris les diapositives-images rendues en PNG jusqu'à 260 dpi pour vérifier les verbatims.
-- **`Intro_Dataviz.pdf`** (101 dia.), **`geoviz2018.pdf`**, **`Spatiotemporel.pdf`**, **`AnalysespatialeM1.pdf`**, **`Leaflet.pdf`**, **`Cours_MapboxGL.pdf`**, **`Intro_Overpass.pdf`**, **`OverpassTurbo_SOTM_2022.pdf`**.
-- **« La géovisualisation de données massives sur le Web »**, *Mappemonde* 131, 2021 — l'article le plus directement pertinent pour GEV.
-- **« La cartographie à l'heure du Géoweb »** (HAL, halshs-01468314).
-- **`Communication cartographique`** (ISTE, 2022), qu'il coordonne — avant-propos et introduction lus intégralement.
-- Ses deux tutoriels **Geotribu** sur MapLibre et les tuiles vectorielles.
-
-Une seule source est restée fermée : l'index du répertoire `Cours/` du master SIGAT (403), ce qui n'a coûté aucun support — tous ont été atteints par leur URL directe.
+*Drawn from Boris Mericskay's teaching material, tested against what GEV really is: a real-time 3D globe.*
 
 ---
 
-## Le cadre : règles et séduction
+## Why this document
 
-Mericskay ouvre l'ouvrage qu'il coordonne sur la question qui est exactement celle de GEV — le chapitre 1 s'intitule « Les facettes du cartographe : une communication entre **règles et séduction** ». Il ne tranche pas en faveur des règles.
+Boris Mericskay is a senior lecturer (*maître de conférences*) in geography and geomatics at Université Rennes 2, co-director of the SIGAT master's program in geomatics, and a member of the UMR ESO research unit. Within the GdR MAGIS research network he coordinates the research action “(Carto)graphies et (Géo)visualisations de données” ((carto)graphies and (geo)visualizations of data). His work is about exactly the object GEV has become: web mapping, the geovisualization of massive data, and the regime of representation specific to the Geoweb.
 
-> « une carte, quels que soient son support, sa forme, son concepteur ou son contexte d'utilisation, répond toujours au même objectif : simplifier la réalité pour transmettre une information, communiquer un message. »
+This document extracts from his teaching what holds for GEV, after putting it through three critiques: that of a real-time 3D engine, that of the 2026 state of the art, and that of the product and its audience. **It is not a summary of Mericskay.** A rule that did not survive the critique is moved to the end of the document, with its reason.
+
+Every rule carries a **conformance test**: one must be able to look at a GEV layer and answer yes or no.
+
+### What was actually read
+
+27 of 28 sources were reachable. The details are in the [bibliography](#bibliography). The essentials:
+
+- **`CM_SemiologieGraphique_2020.pdf`** — 116 slides, read in full, including the image-only slides, rendered to PNG at up to 260 dpi to check the quotations word for word.
+- **`Intro_Dataviz.pdf`** (101 slides), **`geoviz2018.pdf`**, **`Spatiotemporel.pdf`**, **`AnalysespatialeM1.pdf`**, **`Leaflet.pdf`**, **`Cours_MapboxGL.pdf`**, **`Intro_Overpass.pdf`**, **`OverpassTurbo_SOTM_2022.pdf`**.
+- **“La géovisualisation de données massives sur le Web”** (geovisualizing massive data on the Web), *Mappemonde* 131, 2021 — the article most directly relevant to GEV.
+- **“La cartographie à l'heure du Géoweb”** (cartography in the age of the Geoweb) (HAL, halshs-01468314).
+- **`Communication cartographique`** (ISTE, 2022), which he edited — foreword and introduction read in full.
+- His two **Geotribu** tutorials on MapLibre and vector tiles.
+
+Only one source stayed closed: the index of the SIGAT master's `Cours/` directory (403), which cost no material — every course was reached by its direct URL.
+
+Quotations from these French sources are given here in English translation; the originals are behind the links in the bibliography. Quotations that were in English to begin with are left as written.
+
+---
+
+## The frame: rules and seduction
+
+Mericskay opens the book he edited on the question that is exactly GEV's — chapter 1 is titled “Les facettes du cartographe : une communication entre **règles et séduction**” (the cartographer's facets: communication between **rules and seduction**). He does not settle it in favor of the rules.
+
+> “A map, whatever its medium, its form, its designer or the context in which it is used, always serves the same purpose: to simplify reality in order to convey information, to communicate a message.”
 > — Mericskay, *Communication cartographique*, introduction, 2022
 
-Sa conclusion sur le Géoweb est encore plus nette, et elle vaut absolution pour le parti pris de GEV :
+His conclusion on the Geoweb is sharper still, and it absolves GEV's stance:
 
-> « Un vaste chantier s'ouvre ainsi aux "professionnels" de la carte, **non pas pour en garder le contrôle**, mais surtout pour que la carte sur Internet conserve ses spécificités et une certaine rigueur. »
-> — « La cartographie à l'heure du Géoweb »
+> “A vast undertaking thus opens up for map ‘professionals’, **not in order to keep control of it**, but above all so that the map on the Internet keeps its specific character and a certain rigor.”
+> — “La cartographie à l'heure du Géoweb”
 
-Le spectacle n'est donc pas disqualifiant. Ce qui est disqualifiant, c'est le diagnostic qu'il porte sur les « nouveaux cartographes » — et GEV doit se demander s'il en est :
+Spectacle, then, does not disqualify. What disqualifies is his diagnosis of the “new cartographers” — and GEV has to ask itself whether it is one of them:
 
-> « Pas de culture de la "carte" et de ses "règles" de constructions • **Peu de recul sur les données (qualité, MAJ, intégrité, exhaustivité,…)** • Emphase sur le visuel, le design, le graphisme »
+> “No culture of the ‘map’ and of its construction ‘rules’ • **Little critical distance from the data (quality, updates, integrity, completeness…)** • Emphasis on the visual, on design, on graphics”
 
-Et sa charge sur la dérive :
+And his charge against the drift:
 
-> « Les cartes en ligne sont, en effet, très axées autour de la Dataviz, où l'objectif est de proposer des visualisations esthétiques et séduisantes, **souvent au détriment des "règles conventionnelles" de la cartographie thématique**. »
+> “Online maps are indeed heavily centered on dataviz, where the aim is to offer aesthetic and attractive visualizations, **often at the expense of the ‘conventional rules’ of thematic cartography**.”
 
-Enfin, la phrase qui désigne GEV sans le savoir — écrite en 2016, elle décrit le produit :
+Finally, the sentence that describes GEV without knowing it — written in 2016, it describes the product:
 
-> « **Le véritable défi sémiotique du géoweb réside dans les modalités de représentations graphiques de nouvelles formes de données numériques en temps réel** relatives par exemple à la mobilité, aux réseaux sociaux ou aux mesures provenant des capteurs connectés toujours plus nombreux. Pour le moment les solutions en ligne réutilisent pour beaucoup les moyens graphiques existants en essayant de les transposer à ces nouvelles données. »
+> “**The real semiotic challenge of the Geoweb lies in how to represent graphically new forms of real-time digital data** relating, for example, to mobility, to social networks or to measurements from ever more numerous connected sensors. For now, online solutions largely reuse existing graphic means, trying to transpose them onto these new data.”
 
-ADS-B, AIS, TLE, USGS, FIRMS, DATEX2, GBFS, GTFS-RT, Météo-France, CANDHIS : GEV est le cas d'espèce. Mericskay dit que recycler les signes statiques sur ces flux est un échec — et que le chantier est ouvert.
+ADS-B, AIS, TLE, USGS, FIRMS, DATEX2, GBFS, GTFS-RT, Météo-France, CANDHIS: GEV is the case in point. Mericskay says that recycling static signs onto these feeds is a failure — and that the work is still open.
 
-### Un point que le corpus ne peut pas voir
+### One thing the corpus cannot see
 
-Mericskay écrit pour une carte 2D : cadrage fixe, échelle unique, projection déclarée, population entière visible, temps figé, pas d'axe Z, pas de budget par image. GEV est l'inverse terme à terme. **Presque toutes ses règles restent vraies dans leur intention et fausses dans leur forme.** La barre d'échelle, le blanc pour la donnée manquante, les cercles proportionnels, le cluster à rayon écran, les 2 images par seconde : appliqués à la lettre, ils produiraient des cartes fausses sur un globe qui saccade.
+Mericskay writes for a 2D map: fixed framing, a single scale, a declared projection, the whole population visible, frozen time, no Z axis, no per-frame budget. GEV is the opposite on every count. **Almost all of his rules stay true in their intent and false in their form.** The scale bar, white for missing data, proportional circles, screen-radius clustering, 2 frames per second: applied to the letter, they would produce false maps on a globe that stutters.
 
-D'où la structure de ce document : **fondement** (ce que dit le corpus) puis **transposition** (ce que la règle devient ici).
-
----
-
-## A. Honnêteté — le socle non négociable
-
-> Une violation de cette section trompe l'utilisateur. Elle est traitée comme un bug, pas comme un arbitrage de design.
-
-### A1 · Jamais le même signe pour une valeur mesurée et une valeur par défaut — **P0**
-
-**Fondement.** Le corpus l'exige à propos de la donnée manquante (« L'absence d'information est indiquée dans la légende et représentée en blanc sur la carte »), et à propos du recul sur les données : intégrité et exhaustivité.
-
-**Transposition.** Sur GEV la question n'est pas la case vide d'un tableau, c'est la valeur de repli injectée pour que le rendu ne casse pas. Toute constante de secours qui atteint l'écran doit être marquée — glyphe fantôme, contour pointillé, mention explicite — ou ne pas atteindre l'écran du tout.
-
-**Test.** Pour chaque champ affiché dans une fiche ou porté par une variable visuelle : existe-t-il une valeur de repli dans le code ? Si oui, un utilisateur peut-il distinguer les deux cas à l'écran ?
-
-### A2 · L'âge de la mesure est une variable visuelle — **P0**
-
-**Fondement.** C'est la demande explicite de Mericskay : concevoir « de nouveaux systèmes de signes adaptés à la fois aux informations à représenter, **à leurs temporalités**, aux publics visés comme aux dispositifs mobilisés ».
-
-**Transposition.** Un mobile dont la dernière mesure réelle date de 90 s continue de glisser à 60 fps par navigation à l'estime : le rendu fabrique de la donnée 59 images sur 60. L'ancienneté doit être portée par le signe lui-même — alpha décroissant, traînée qui s'estompe, contour pointillé au-delà d'un seuil, puis purge — et **pas seulement par un badge textuel dans un panneau**. C'est l'encodage le moins coûteux qui soit s'il passe par l'attribut couleur déjà présent dans le batch.
-
-**Test.** Sur une couche mobile, un objet vu il y a 5 s et un objet vu il y a 3 min sont-ils graphiquement différents sans ouvrir de panneau ?
-
-### A3 · Un canal, une information — **P0**
-
-**Fondement.** « Ce langage doit être clair et cohérent : évite l'excès de redondance, la surcharge… »
-
-**Transposition.** Si l'opacité porte à la fois la fraîcheur et la distance au limbe, le lecteur ne peut plus lire ni l'une ni l'autre : un objet lointain et un objet périmé atterrissent au même alpha. Chaque variable visuelle porte une information et une seule ; si deux informations doivent coexister, il faut deux canaux orthogonaux.
-
-**Test.** Pour chaque couche, lister les variables visuelles utilisées et l'information portée par chacune. Une variable qui apparaît deux fois est un défaut.
-
-### A4 · Le vide a trois causes, et elles ne se ressemblent pas — **P0**
-
-**Fondement.** Absent du corpus, qui n'a ni profondeur ni budget de rendu — c'est un angle mort identifié par la critique.
-
-**Transposition.** Une zone sans symboles sur GEV peut signifier : (a) pas de donnée publiée, (b) donnée écrêtée par un plafond d'affichage, (c) objet occulté par le terrain ou le bâti. Ces trois vides sont aujourd'hui indiscernables. Le badge source/fraîcheur ne couvre aucun des trois.
-
-**Test.** Face à une zone vide, l'interface permet-elle de trancher entre les trois causes ?
-
-### A5 · Tout écrêtage se déclare — **P1**
-
-**Fondement.** « Malgré un rendu visuel efficace, cette forme de généralisation des données est cependant **à utiliser avec prudence** dans la mesure où le processus de transformation graphique sous-jacent est davantage esthétique que rigoureux. » Échantillonner, clusteriser, faire une heatmap sont des **actes cartographiques**, pas des optimisations.
-
-**Transposition.** Toute couche plafonnée affiche `n affichés / N connus` et le critère de sélection (les plus récents ? les plus proches ? les plus intenses ?).
-
-*Le dépôt tient déjà cette règle par endroits* : `src/data/amenitiesFrance.js:165-171` documente que le plafond de 12 000 ne mord pas en production, que la charge utile arrive triée famille-la-plus-rare-d'abord, et que « whatever is dropped is counted and printed under the toggle ». C'est le patron à généraliser.
-
-**Test.** Pour chaque constante de type `MAX_RENDERED_*` / `*_CAP` / budget de maille : l'utilisateur voit-il le compte écrêté et le critère ?
-
-### A6 · Le fond de plan est une couche, pas un décor — **P1**
-
-**Fondement.** C'est une critique frontale de Mericskay : l'espace géographique se réduit sur le Géoweb à « **un simple fond de carte, un support neutre** ». Le fond n'est jamais neutre.
-
-**Transposition.** BD ORTHO a un millésime, les 3D Tiles ont une provenance et une date de campagne, le photoréalisme suggère une fraîcheur que l'imagerie n'a pas. Le bandeau source/fraîcheur affiché par couche doit couvrir aussi le fond.
-
-**Test.** L'utilisateur peut-il savoir de quand date l'image qu'il regarde ?
+Hence the structure of this document: **basis** (what the corpus says), then **transposition** (what the rule becomes here).
 
 ---
 
-## B. Sémiologie graphique
+## A. Honesty — the non-negotiable foundation
 
-### B1 · Absolu → taille. Relatif → valeur. Jamais d'aplat sur un effectif brut — **P0**
+> A violation in this section misleads the user. It is treated as a bug, not as a design trade-off.
 
-**Fondement.** C'est la règle la plus martelée du corpus, énoncée deux fois dans le cours et reprise dans l'article :
+### A1 · Never the same sign for a measured value and a default value — **P0**
 
-> « La seule variable possible pour une donnée quantitative absolue c'est la taille. »
-> « Une donnée continue absolue est le nombre total d'observations sur un territoire donné (pop, effectif, nombres de quelque chose) ◦ Pour la représenter, on privilégiera une variation de taille. / Une donnée continue relative est le rapport d'une donnée absolue dans un référentiel (densité, taux,…) ◦ On privilégiera une variation de couleurs (dégradé) »
-> « Représentation d'une variable quantitative absolue en aplats de couleur — **NOP !!!!** »
-> « **L'une des erreurs sémiologiques les plus courantes que l'on peut rencontrer sur le géoweb** se trouve au niveau de la représentation de données quantitatives absolues sous forme d'aplats de couleurs. »
+**Basis.** The corpus demands it for missing data (“The absence of information is indicated in the legend and shown in white on the map”), and for critical distance from the data: integrity and completeness.
 
-**Transposition.** C'est le geste de **normalisation** qui autorise la choroplèthe, pas l'inverse. La règle se câble comme un garde-fou : chaque couche quantitative déclare son unité, `ratio` (taux, densité, prix au m², part) ou `count` (nombre de bornes, de médecins, de mutations). `count` interdit l'aplat.
+**Transposition.** On GEV the question is not the empty cell of a table; it is the fallback value injected so that rendering does not break. Any fallback constant that reaches the screen must be marked — ghost glyph, dashed outline, explicit mention — or not reach the screen at all.
 
-**Nuance de la critique produit** : peindre un effectif brut *peut* se défendre quand la question de l'utilisateur est « où y en a-t-il beaucoup », à condition que ce soit **écrit sur la carte**. Ce qui est indéfendable, c'est de le faire silencieusement.
+**Test.** For every field shown on a card or carried by a visual variable: is there a fallback value in the code? If so, can a user tell the two cases apart on screen?
 
-**Test.** Pour chaque `GroundPrimitive` ou polygone rempli par une valeur : la valeur classée est-elle un rapport ? Sinon, la légende dit-elle explicitement qu'il s'agit d'un effectif et que l'aire de la maille n'est pas neutralisée ?
+### A2 · The age of the measurement is a visual variable — **P0**
 
-### B2 · Sur un globe, la taille écran est déjà prise par la profondeur — **P0**
+**Basis.** This is Mericskay's explicit demand: design “new sign systems suited at once to the information to be represented, **to its temporalities**, to the intended audiences and to the devices used”.
 
-**Fondement.** Le corpus prescrit le cercle proportionnel. Bertin n'a pas d'axe Z.
+**Transposition.** A moving object whose last real measurement is 90 s old keeps gliding at 60 fps by dead reckoning: rendering manufactures data in 59 frames out of 60. Age must be carried by the sign itself — decreasing alpha, a trail that fades, a dashed outline past a threshold, then removal — and **not only by a text badge in a panel**. It is the cheapest encoding there is if it goes through the color attribute already present in the batch.
 
-**Transposition.** Un billboard subit déjà un facteur ~1/z. Câbler « rayon ∝ magnitude » par-dessus multiplie les deux : un séisme M7 lointain devient plus petit qu'un M3 proche — l'inversion exacte du message, **avec une légende qui affirme le contraire**. C'est pire que la punaise indifférenciée, parce que ça donne au lecteur une raison de croire ce qu'il voit.
+**Test.** On a moving layer, are an object seen 5 s ago and an object seen 3 min ago graphically different without opening a panel?
 
-Le quantitatif doit migrer sur un canal **orthogonal à la profondeur** : anneau de rayon fixe en pixels superposé au glyphe, valeur/luminance, ou hauteur d'extrusion lue contre un guide vertical. Si le rayon écran est utilisé, il doit être calculé en pixels constants (indépendant de `scaleByDistance`), pas en unités monde.
+### A3 · One channel, one piece of information — **P0**
 
-**Test.** Placer deux objets de valeurs très différentes à des distances très différentes. La hiérarchie visuelle correspond-elle à la hiérarchie des valeurs ?
+**Basis.** “This language must be clear and consistent: avoid excessive redundancy, overload…”
 
-### B3 · Six paliers déclarés ne font pas six paliers perçus — **P1**
+**Transposition.** If opacity carries both freshness and distance to the limb, the reader can read neither: a distant object and a stale object land on the same alpha. Every visual variable carries one piece of information and only one; if two must coexist, they need two orthogonal channels.
 
-**Fondement.** Le seuil chiffré le plus dur du corpus :
+**Test.** For each layer, list the visual variables used and the information each one carries. A variable that appears twice is a defect.
 
-> « Le nombre de paliers différentiables est de 6 à 7 valeurs de gris **y compris le blanc et le noir**. »
+### A4 · Emptiness has three causes, and they do not look alike — **P0**
 
-**Transposition.** Sur GEV la couleur perçue est le résultat d'une chaîne : alpha blendé sur une orthophoto texturée — donc la même classe rend différemment sur un toit blanc et sur une forêt —, puis le HDR, puis le post-process capteur, puis le gamma de l'écran. Compter six bandes parce que le cours dit six et se croire conforme est une erreur.
+**Basis.** Absent from the corpus, which has neither depth nor a rendering budget — a blind spot identified by the critique.
 
-Deux corollaires opérationnels : ne pas compter sur l'alpha seul sous une couche zonale (poser un fond opaque désaturé, ou encoder par isolignes / motif) ; et valider le nombre de paliers en **mesurant** l'écart perceptuel des couleurs compositées sur un jeu de fonds témoins — c'est automatisable.
+**Transposition.** An area with no symbols on GEV can mean: (a) no data published, (b) data capped by a display ceiling, (c) objects hidden by terrain or buildings. These three voids are indistinguishable today. The source/freshness badge covers none of them.
 
-**Test.** Rendu hors écran sur trois fonds contrastés (eau, forêt, urbain clair) : deux classes adjacentes restent-elles séparables ? Deux classes distantes restent-elles ordonnées ?
+**Test.** Facing an empty area, does the interface let one decide between the three causes?
 
-### B4 · La teinte n'ordonne pas, mais elle porte des codes — **P1**
+### A5 · Every cap is declared — **P1**
 
-**Fondement.**
-> « La variation de couleur est uniquement différenciatrice, elle est utilisée pour représenter des caractères qualitatifs […] **L'œil ne peut pas établir d'ordre !** »
-> « Mais renvoi à des codes couleur familiers ! » (occupation du sol : rouge = artificialisé, jaune = terres arables, vert = forêt, bleu = eau)
-> « Mélange de la variation couleur = incompréhension »
+**Basis.** “Despite an effective visual rendering, this form of data generalization should nevertheless be **used with caution**, insofar as the underlying graphic transformation is more aesthetic than rigorous.” Sampling, clustering and making a heatmap are **cartographic acts**, not optimizations.
 
-**Transposition.** Une échelle ordonnée doit varier en **valeur** (clarté), pas seulement en teinte. Quand un code culturel existe et qu'il est fort — vert/ambre/rouge pour la congestion routière, l'échelle Météo-France — il prime sur la pureté bertinienne, à condition de rester dans un seul registre.
+**Transposition.** Every capped layer shows `n shown / N known` and the selection criterion (most recent? nearest? most intense?).
 
-Ajout de l'état de l'art : la recommandation contemporaine (Jégou, webinaire AR9 #16, juin 2024) est d'**adapter la luminosité du gradient à la progression de la donnée** plutôt que de reprendre un préréglage. « La donnée est plus lisible quand le gradient lui est adapté. »
+*The repository already keeps this rule in places*: `src/data/amenitiesFrance.js:165-171` documents that the 12,000 ceiling does not bite in production, that the payload arrives sorted rarest-family-first, and that “whatever is dropped is counted and printed under the toggle”. That is the pattern to generalize.
 
-**Test.** Convertir la rampe en niveaux de gris. L'ordre survit-il ? Simuler une deutéranopie. L'ordre survit-il ?
+**Test.** For every constant of the `MAX_RENDERED_*` / `*_CAP` / grid-budget kind: does the user see the capped count and the criterion?
 
-> **Amendement du 2026-09-14 — une rampe ordonnée en clarté a un problème de PLANCHER, et le test ci-dessus ne le voit pas.** Une échelle qui varie en valeur a, par définition, un bas sombre. Sur un fond photographique, ce bas disparaît — et les deux tests de la règle le déclarent conforme, parce qu'ils mesurent l'ORDRE et jamais la VISIBILITÉ.
->
-> Mesuré sur `irve-fr` : la rampe livrée le 2026-09-10 courait de L\* 30,6 à 83,0, écarts de 10 à 18, ordre intact en gris et en deutéranopie — et un lecteur a dit que les pastilles étaient trop sombres pour se repérer. Il avait raison, et le chiffre qui le prouve n'est pas dans la rampe mais dans la donnée : les deux barreaux du bas (`lente` 6,7 % et `normale` 39,3 %) font **46 % des sites d'une ville française**. Une pastille sombre dans un jonc sombre sur une orthophoto est une tache sombre, quelle que soit sa teinte.
->
-> **Règle.** Sur fond photographique, une rampe ordonnée dépense son ordre dans la MOITIÉ CLAIRE. Entre L\* ≈ 54 — le plus sombre qui se lise encore sur un fond sombre — et L\* ≈ 91 — le plus clair avant le blanc — il reste 37 points : pour cinq classes cela fait des écarts de 9,2 au lieu de 13, ce qui est plus serré et suffisant. Le gain se mesure des deux côtés : plancher remonté de 23,5 L\*, et séparation compositée passée de ΔE 21,4 à **35,5**. Le coût est un plafond de classes plus bas qu'on ne croit — B3 disait déjà six à sept, la moitié claire en autorise cinq confortablement.
->
-> **Test ajouté.** Le barreau le plus sombre de la rampe est-il au-dessus de L\* 52 ? Et la classe la plus fréquente de la donnée tombe-t-elle sur un barreau clair ou sur le bas de l'échelle ?
+### A6 · The basemap is a layer, not scenery — **P1**
 
-### B5 · Forme et taille ne mentent pas sur un type inconnu — **P0**
+**Basis.** This is one of Mericskay's head-on critiques: on the Geoweb, geographic space shrinks to “**a mere basemap, a neutral backdrop**”. The basemap is never neutral.
 
-**Fondement.** « La forme : qualitatif seulement, 5 à 7 formes maximum. »
+**Transposition.** BD ORTHO has a vintage, 3D Tiles have a provenance and a capture date, and photorealism suggests a freshness the imagery does not have. The source/freshness strip shown per layer must cover the basemap too.
 
-**Transposition.** Cas d'école dans GEV : une silhouette d'aéronef et une échelle de taille encodent une classe. Quand le classificateur retombe sur une valeur par défaut faute de code type, le glyphe **affirme** un type qui n'a pas été mesuré. C'est A1 appliqué à la forme. Il faut une silhouette « inconnu » et une échelle neutre.
-
-**Test.** Le jeu de formes contient-il un signe explicite pour « non classé » ?
+**Test.** Can the user know when the image they are looking at was taken?
 
 ---
 
-## C. Discrétisation, maille et méthode
+## B. Graphic semiology
 
-### C1 · Discrétiser le phénomène, pas l'échantillon — **P0**
+### B1 · Absolute → size. Relative → value. Never a fill on a raw count — **P0**
 
-**Fondement.**
-> « Le choix du mode de discrétisation est un problème délicat puisqu'il **détermine l'aspect de la carte et conditionne son interprétation**. »
-> « Une discrétisation est satisfaisante lorsqu'elle permet la création de classes homogènes et distinctes entre elles. »
-> « Nécessaire d'être à même d'expliquer les choix opérés. »
+**Basis.** This is the rule the corpus hammers hardest, stated twice in the course and repeated in the article:
 
-**Transposition — c'est la règle que la 2D ne pouvait pas formuler.** Le corpus discrétise une série close et immobile. GEV discrétise des flux dont la population change à chaque poll et un cadrage qui change à chaque frame. Discrétiser « la série » revient alors à faire dépendre la couleur d'un objet de la présence d'autres objets dans le champ : la même cellule change de couleur quand la caméra bouge, sans qu'aucune donnée n'ait changé.
+> “The only possible variable for absolute quantitative data is size.”
+> “Absolute continuous data is the total number of observations in a given area (population, headcount, number of something) ◦ To represent it, prefer a variation in size. / Relative continuous data is the ratio of an absolute figure to a reference (density, rate,…) ◦ Prefer a variation in color (gradient)”
+> “An absolute quantitative variable shown as color fills — **NOPE!!!!**”
+> “**One of the most common semiological errors to be found on the Geoweb** is the representation of absolute quantitative data as color fills.”
 
-**La règle correcte en temps réel : seuils de domaine constants**, exprimés dans l'unité du phénomène (magnitude, FRP en MW, nœuds, €/m² nationaux), gelés, publiés dans le panneau, **jamais recalculés depuis l'échantillon visible ni depuis le cadrage**.
+**Transposition.** It is the act of **normalization** that licenses the choropleth, not the other way round. The rule is wired as a guard: every quantitative layer declares its unit, `ratio` (rate, density, price per m², share) or `count` (number of charge points, of doctors, of sales). `count` forbids the fill.
 
-**Test.** Cadrer une zone, capturer. Élargir le cadrage pour faire entrer des valeurs extrêmes d'un autre continent. La zone initiale a-t-elle changé de couleur ?
+**Nuance from the product critique**: painting a raw count *can* be defended when the user's question is “where is there a lot of it”, provided this is **written on the map**. What cannot be defended is doing it silently.
 
-### C2 · La maille est une hypothèse de lecture, pas un fait — **P1**
+**Test.** For every `GroundPrimitive` or polygon filled by a value: is the classified value a ratio? If not, does the legend say explicitly that it is a count and that the area of the spatial unit is not neutralized?
 
-**Fondement.** Le MAUP, auquel le cours consacre une section entière avant tout exercice :
+### B2 · On a globe, screen size is already taken by depth — **P0**
 
-> « Un problème d'agrégation spatiale (MAUP) est une source de biais statistique qui peut **affecter radicalement** les résultats […] Les sommaires résultants (ex. totaux, taux, proportions) sont influencés par le choix des limites du secteur. »
-> « Une limite administrative correspond rarement à une discontinuité spatiale. »
+**Basis.** The corpus prescribes the proportional circle. Bertin has no Z axis.
 
-**Transposition.** Une même couche vue en commune puis en département n'est pas la même carte. Le panneau doit nommer la maille active et, quand deux régimes coexistent, dire que le classement changerait avec un autre découpage.
+**Transposition.** A billboard already undergoes a ~1/z factor. Wiring “radius ∝ magnitude” on top multiplies the two: a distant M7 earthquake becomes smaller than a nearby M3 — the exact inversion of the message, **with a legend that claims the opposite**. That is worse than the undifferentiated pin, because it gives the reader a reason to believe what they see.
 
-**Test.** Le panneau nomme-t-il la maille ? La légende dit-elle de quoi elle compte les unités ?
+Quantity has to move to a channel **orthogonal to depth**: a ring of fixed pixel radius over the glyph, value/luminance, or an extrusion height read against a vertical guide. If screen radius is used, it must be computed in constant pixels (independent of `scaleByDistance`), not in world units.
 
-### C3 · Sur une sphère, une maille en degrés n'est pas équi-aire — **P1**
+**Test.** Place two objects of very different values at very different distances. Does the visual hierarchy match the hierarchy of values?
 
-**Fondement.** « La taille de la maille est LA question du carroyage » ; le corpus condamne la maille non métrique.
+### B3 · Six declared classes do not make six perceived classes — **P1**
 
-**Transposition.** Sa correction — mailler en mètres — n'est pas transposable telle quelle : il n'existe aucun pavage régulier lat/lon équi-aire, et la correction par `cos(lat)` laisse dégénérer les cellules polaires. Sur un globe : pavage quasi-équi-aire (H3, S2, HEALPix), ou à défaut **l'aire réelle de la cellule au dénominateur** et fusion au-delà de 60°.
+**Basis.** The hardest numeric threshold in the corpus:
 
-Sans quoi, à comptage égal, les hautes latitudes sont peintes deux fois plus dense qu'à l'équateur — un artefact de maillage qui, sur une couche d'anomalies thermiques, produit un résultat géopolitiquement chargé.
+> “The number of distinguishable steps is 6 to 7 gray values, **white and black included**.”
 
-**Test.** Deux cellules à comptage identique, l'une à l'équateur l'autre à 60° : rendent-elles la même couleur ? Si oui, c'est un défaut.
+**Transposition.** On GEV the perceived color is the end of a chain: alpha blended over a textured orthophoto — so the same class renders differently over a white roof and over a forest —, then HDR, then the sensor post-process, then the screen's gamma. Counting six bands because the course says six, and believing oneself compliant, is a mistake.
 
-### C4 · Un taux ne s'agrège pas comme un effectif — **P1**
+Two operational corollaries: do not rely on alpha alone under an areal layer (lay down a desaturated opaque background, or encode with isolines / patterns); and validate the number of classes by **measuring** the perceptual gap between composited colors over a set of reference backgrounds — this can be automated.
 
-**Fondement.** « Ne jamais sommer une valeur relative. » « Un taux se calcule comme un rapport de sommes dédoublonnées, jamais comme une moyenne de taux. » « Après une jointure spatiale par distance ou tampon, le GROUP BY n'est pas optionnel. »
+**Test.** Offscreen render over three contrasting backgrounds (water, forest, light urban): do two adjacent classes stay separable? Do two distant classes stay ordered?
 
-**Test.** Toute remontée commune → département recalcule-t-elle le numérateur et le dénominateur séparément ?
+### B4 · Hue does not order, but it carries codes — **P1**
+
+**Basis.**
+> “Color variation is only differentiating; it is used to represent qualitative characteristics […] **The eye cannot establish an order!**”
+> “But it refers to familiar color codes!” (land cover: red = built-up, yellow = arable land, green = forest, blue = water)
+> “Mixed color variation = incomprehension”
+
+**Transposition.** An ordered scale must vary in **value** (lightness), not only in hue. When a cultural code exists and is strong — green/amber/red for road congestion, the Météo-France scale — it takes precedence over Bertinian purity, provided it stays within a single register.
+
+Addition from the state of the art: the current recommendation (Jégou, AR9 webinar #16, June 2024) is to **fit the gradient's lightness to the progression of the data** rather than take a preset. “Data is more legible when the gradient is fitted to it.”
+
+**Test.** Convert the ramp to grayscale. Does the order survive? Simulate deuteranopia. Does the order survive?
+
+> **Amendment of 2026-09-14 — a ramp ordered by lightness has a FLOOR problem, and the test above does not see it.** A scale that varies in value has, by definition, a dark bottom. On a photographic background that bottom disappears — and both of the rule's tests declare it compliant, because they measure ORDER and never VISIBILITY.
+>
+> Measured on `irve-fr`: the ramp shipped on 2026-09-10 ran from L\* 30.6 to 83.0, steps of 10 to 18, order intact in grayscale and under deuteranopia — and a reader said the dots were too dark to find one's way by. They were right, and the number that proves it is not in the ramp but in the data: the two bottom rungs (`lente` 6.7% and `normale` 39.3%) make up **46% of the sites of a French city**. A dark dot in a dark ring on an orthophoto is a dark smudge, whatever its hue.
+>
+> **Rule.** On a photographic background, an ordered ramp spends its order in the LIGHT HALF. Between L\* ≈ 54 — the darkest that still reads on a dark background — and L\* ≈ 91 — the lightest before white — 37 points remain: for five classes that means steps of 9.2 instead of 13, which is tighter and sufficient. The gain shows on both sides: floor raised by 23.5 L\*, and composited separation up from ΔE 21.4 to **35.5**. The cost is a class ceiling lower than one thinks — B3 already said six to seven; the light half allows five comfortably.
+>
+> **Added test.** Is the ramp's darkest rung above L\* 52? And does the most frequent class in the data fall on a light rung or at the bottom of the scale?
+
+### B5 · Shape and size do not lie about an unknown type — **P0**
+
+**Basis.** “Shape: qualitative only, 5 to 7 shapes at most.”
+
+**Transposition.** A textbook case in GEV: an aircraft silhouette and a size scale encode a class. When the classifier falls back to a default for lack of a type code, the glyph **asserts** a type that was never measured. That is A1 applied to shape. It needs an “unknown” silhouette and a neutral scale.
+
+**Test.** Does the shape set contain an explicit sign for “unclassified”?
 
 ---
 
-## D. Légende
+## C. Classification, spatial units and method
 
-### D1 · Là où la couleur porte une valeur, la légende est obligatoire — et visible avec la carte — **P0**
+### C1 · Classify the phenomenon, not the sample — **P0**
 
-**Fondement.** Mericskay constate que la fenêtre contextuelle a remplacé la légende, et pose une exception nette :
+**Basis.**
+> “The choice of classification method is a delicate problem, since it **determines how the map looks and conditions how it is interpreted**.”
+> “A classification is satisfactory when it creates classes that are homogeneous and distinct from one another.”
+> “One must be able to explain the choices made.”
 
-> « Les légendes sont toutefois **encore nécessaires** et présentes dans certains cas, à l'image des cartes choroplèthes où l'information relative à la variation de valeur sera lisible sur la carte pour donner un sens à l'information représentée. »
+**Transposition — this is the rule 2D could not state.** The corpus classifies a closed, still series. GEV classifies feeds whose population changes with every poll, in a framing that changes with every frame. Classifying “the series” then makes an object's color depend on which other objects are in the field of view: the same cell changes color when the camera moves, although no data changed.
 
-Et parmi les sept mauvaises pratiques listées : ne jamais écrire le mot « légende ».
+**The correct real-time rule: constant domain thresholds**, expressed in the phenomenon's unit (magnitude, FRP in MW, knots, national €/m²), frozen, published in the panel, **never recomputed from the visible sample or from the framing**.
 
-**Transposition.** Le tout-popup est défendable pour les vols, les navires, les caméras — objets nominaux qu'on interroge un par un. Il est fautif dès qu'une couleur code une valeur. Et une légende repliée dans un panneau qui recouvre la carte n'est pas une légende : c'est une dette d'interface.
+**Test.** Frame an area, capture. Widen the framing to bring in extreme values from another continent. Did the initial area change color?
 
-**Test.** Sans ouvrir aucun panneau, l'utilisateur peut-il traduire une couleur en valeur ?
+### C2 · The spatial unit is a reading hypothesis, not a fact — **P1**
 
-### D2 · Légende à deux étages sur un cadrage mobile — **P1**
+**Basis.** The MAUP, to which the course devotes a whole section before any exercise:
 
-**Fondement.** Les cinq règles positives du cours : bornes arrondies et faciles à lire, **valeurs minimale et maximale de la série toujours indiquées**, clefs de lecture, valeurs statistiques significatives, absence de donnée annoncée.
+> “A spatial aggregation problem (MAUP) is a source of statistical bias that can **radically affect** results […] The resulting summaries (e.g. totals, rates, proportions) are influenced by the choice of zone boundaries.”
+> “An administrative boundary rarely corresponds to a spatial discontinuity.”
 
-**Transposition.** La règle du min/max « de la série » n'a plus de référent unique quand le lecteur voit une sous-population qui change à chaque mouvement de caméra. Afficher les extrema mondiaux à côté d'une vue de la Gironde est trompeur ; afficher ceux de la vue rend deux captures non comparables et **casse la reproductibilité du lien de partage**.
+**Transposition.** The same layer seen by municipality and then by department is not the same map. The panel must name the active spatial unit and, when two regimes coexist, say that the ranking would change with a different zoning.
 
-D'où deux étages : une **échelle absolue gelée** par couche (bornes de domaine publiées, jamais dérivées de la vue), sur laquelle se superpose un **histogramme mobile** de la sous-population visible avec un compteur `n visibles / N connus`.
+**Test.** Does the panel name the spatial unit? Does the legend say what units it counts?
 
-**Test.** Deux utilisateurs ouvrant le même lien de partage lisent-ils la même légende ?
+### C3 · On a sphere, a grid in degrees is not equal-area — **P1**
 
-### D3 · L'absence de donnée se code par un motif, pas par une teinte — **P1**
+**Basis.** “The cell size is THE question of gridding”; the corpus condemns non-metric grids.
 
-**Fondement.** « L'absence d'information est indiquée dans la légende et **représentée en blanc** sur la carte. »
+**Transposition.** Its fix — grid in meters — does not transpose as such: there is no regular equal-area lat/lon tiling, and the `cos(lat)` correction lets polar cells degenerate. On a globe: a quasi-equal-area tiling (H3, S2, HEALPix), or failing that **the cell's true area as the denominator**, with cells merged beyond 60°.
 
-**Transposition — la règle du blanc est inapplicable ici et la suivre serait dangereux.** Sur un globe photoréaliste il n'existe pas de fond neutre : le blanc est une couleur du monde (toitures, neige, nuage) et le vide, c'est de l'orthophoto. Pire, sur une rampe conçue pour fond sombre, le blanc se lit comme la classe **haute** — GEV afficherait « valeur maximale » là où il n'a aucune donnée.
+Otherwise, at equal counts, high latitudes are painted twice as dense as the equator — a gridding artifact that, on a thermal-anomaly layer, produces a geopolitically loaded result.
 
-Le motif géométrique (hachures, grille) est la bonne réponse, et il a un second avantage : **un motif survit au NVG et au FLIR, une teinte est détruite**.
+**Test.** Two cells with identical counts, one at the equator, the other at 60°: do they render the same color? If yes, that is a defect.
 
-**Test.** Sur une couche zonale, la maille sans donnée est-elle distinguable de la classe la plus haute ? Et le reste-t-elle sous chaque mode capteur ?
+### C4 · A rate does not aggregate like a count — **P1**
+
+**Basis.** “Never sum a relative value.” “A rate is computed as a ratio of deduplicated sums, never as an average of rates.” “After a spatial join by distance or buffer, the GROUP BY is not optional.”
+
+**Test.** Does every roll-up from municipality to department recompute the numerator and the denominator separately?
 
 ---
 
-## E. Temps
+## D. Legend
 
-### E1 · L'instant représenté s'affiche sur la carte — **P0**
+### D1 · Where color carries a value, the legend is mandatory — and visible with the map — **P0**
 
-**Fondement.** Deux fois dans le support spatio-temporel : « Display frame start time on map », « Ajouter l'heure sur chaque carte ». Une carte animée sans date affichée n'est pas interprétable.
+**Basis.** Mericskay observes that the popup has replaced the legend, and states a clear exception:
 
-**Transposition.** L'affichage doit porter l'instant **représenté par les données**, pas l'heure locale du client ni un « il y a N secondes » indifférencié. Deux conséquences : chaque fiche d'entité porte l'horodatage de la mesure ; et le lien de partage sérialise l'instant, sans quoi il rejoue la même vue avec d'autres données.
+> “Legends are nevertheless **still necessary** and present in some cases, such as choropleth maps, where the information about the variation in value has to be legible on the map to give meaning to the information represented.”
 
-**Test.** Une capture d'écran de GEV suffit-elle à savoir de quand datent les données qu'elle montre ?
+And among the seven bad practices he lists: never writing the word “legend”.
 
-> **Amendement du 2026-09-14 — l'horloge d'une couche peut vivre sur la fiche, à condition d'y être PAR OBJET.** La clé d'`irve-fr` portait la phrase de provenance et le dernier dépôt opérateur de la vue. Mesuré dans Chrome sur une vue de ville : 13 lignes, 301 mots, **717 px de contenu dans une fenêtre de 355 px** — le lecteur en voyait la moitié, et la dernière phrase jamais. Le lecteur de cette clé cherche une borne où se brancher ; la date du fichier est la question d'un auteur.
+**Transposition.** Popup-only is defensible for flights, ships, cameras — nominal objects one queries one at a time. It is at fault as soon as a color encodes a value. And a legend folded into a panel that covers the map is not a legend: it is interface debt.
+
+**Test.** Without opening any panel, can the user translate a color into a value?
+
+### D2 · A two-tier legend on a moving frame — **P1**
+
+**Basis.** The course's five positive rules: rounded class limits that are easy to read, **the series' minimum and maximum values always shown**, reading keys, significant statistical values, missing data announced.
+
+**Transposition.** The min/max rule “of the series” no longer has a single referent when the reader sees a sub-population that changes with every camera move. Showing world extremes next to a view of Gironde is misleading; showing those of the view makes two captures non-comparable and **breaks the reproducibility of the share link**.
+
+Hence two tiers: a **frozen absolute scale** per layer (published domain limits, never derived from the view), overlaid with a **moving histogram** of the visible sub-population and an `n visible / N known` counter.
+
+**Test.** Do two users opening the same share link read the same legend?
+
+### D3 · Missing data is coded by a pattern, not a hue — **P1**
+
+**Basis.** “The absence of information is indicated in the legend and **shown in white** on the map.”
+
+**Transposition — the white rule cannot apply here, and following it would be dangerous.** On a photorealistic globe there is no neutral background: white is a color of the world (roofs, snow, cloud) and emptiness is orthophoto. Worse, on a ramp designed for a dark background, white reads as the **top** class — GEV would display “maximum value” where it has no data at all.
+
+A geometric pattern (hatching, grid) is the right answer, and it has a second advantage: **a pattern survives NVG and FLIR; a hue is destroyed**.
+
+**Test.** On an areal layer, can a unit with no data be told apart from the top class? And does that stay true under every sensor mode?
+
+---
+
+## E. Time
+
+### E1 · The instant represented is displayed on the map — **P0**
+
+**Basis.** Twice in the spatio-temporal course: “Display frame start time on map”, “Add the time on each map”. An animated map with no date shown cannot be interpreted.
+
+**Transposition.** The display must carry the instant **represented by the data**, not the client's local time nor an undifferentiated “N seconds ago”. Two consequences: every entity card carries the timestamp of the measurement; and the share link serializes the instant, otherwise it replays the same view with other data.
+
+**Test.** Is a screenshot of GEV enough to know when the data it shows dates from?
+
+> **Amendment of 2026-09-14 — a layer's clock can live on the card, provided it is there PER OBJECT.** The `irve-fr` key carried the provenance sentence and the latest operator upload in the view. Measured in Chrome on a city view: 13 lines, 301 words, **717 px of content in a 355 px window** — the reader saw half of it, and never the last sentence. The reader of that key is looking for a charger to plug into; the file date is an author's question.
 >
-> L'horloge est donc descendue sur la **fiche**, et elle y est **par site** (`🗓 déclaré 15/11/2025 → 30/07/2026`) au lieu d'être le maximum de la vue. Ce n'est pas un affaiblissement de E1, c'est l'inverse : un dixième de ce registre n'a pas bougé depuis 2023, et « le dépôt le plus récent de la vue » ne disait rien de la station que le lecteur venait de cliquer — il fallait même un garde-fou contre les 56 lignes sur 227 007 datées du 30/12/2026 pour qu'il veuille dire quelque chose.
+> So the clock moved down to the **card**, and it is there **per site** (`🗓 déclaré 15/11/2025 → 30/07/2026`, declared Nov 15, 2025 → Jul 30, 2026) instead of being the view's maximum. This does not weaken E1; it does the opposite: a tenth of this register has not moved since 2023, and “the most recent upload in the view” said nothing about the station the reader had just clicked — it even needed a guard against the 56 rows out of 227,007 dated Dec 30, 2026 before it meant anything.
 >
-> **La condition, et elle est stricte.** Une horloge de vue peut quitter la carte si (1) chaque objet porte la sienne sur sa fiche, (2) l'éditeur est nommé dans la surface d'attribution (`dataCredits.js`), et (3) la donnée est un **inventaire**, pas un flux. Un flux — vols, navires, GTFS-RT — n'a pas le droit à cette sortie : sa fraîcheur EST la donnée, et une capture sans elle est ininterprétable. Le test de E1 devient : *une capture suffit-elle, ou un clic suffit-il, à savoir de quand datent les données ?* — et pour un flux, la réponse doit rester « une capture ».
+> **The condition, and it is strict.** A view clock may leave the map if (1) every object carries its own on its card, (2) the publisher is named in the attribution surface (`dataCredits.js`), and (3) the data is an **inventory**, not a feed. A feed — flights, ships, GTFS-RT — is not entitled to this exit: its freshness IS the data, and a capture without it cannot be interpreted. E1's test becomes: *is a capture enough, or is a click enough, to know when the data dates from?* — and for a feed the answer must remain “a capture”.
 
-### E2 · Trois concepts temporels, trois traitements — **P1**
+### E2 · Three temporal concepts, three treatments — **P1**
 
-**Fondement.** « Événement : représente un instant bien précis sur la ligne du temps. Intervalle temporel : de modélisation / représentation. Période : représente un ensemble d'intervalles. » Et la distinction de base : « une donnée spatio-temporelle est une donnée spatiale dont la **forme et/ou la position** varie(nt) au cours du temps ».
+**Basis.** “Event: represents a precise instant on the timeline. Time interval: of modeling / representation. Period: represents a set of intervals.” And the basic distinction: “spatio-temporal data is spatial data whose **shape and/or position** changes over time”.
 
-**Transposition.** GEV mélange deux régimes sans le dire. **Position mobile** : vols, navires, satellites, GTFS-RT. **Position fixe, attribut variable** : stations de vélos, segments routiers, stations météo, bouées, caméras. Une traînée derrière un billboard a du sens pour un A320 ; elle n'en a aucun pour une station Vélib'. Ces deux familles ne doivent pas partager le même traitement d'animation.
+**Transposition.** GEV mixes two regimes without saying so. **Moving position**: flights, ships, satellites, GTFS-RT. **Fixed position, changing attribute**: bike-share stations, road segments, weather stations, buoys, cameras. A trail behind a billboard makes sense for an A320; it makes none for a Vélib' station. These two families must not share the same animation treatment.
 
-**Test.** Le registre de couches déclare-t-il, à côté de la source et de la fraîcheur, le régime temporel (événement / intervalle / période) et le régime de variation (position / attribut) ?
+**Test.** Does the layer registry declare, next to source and freshness, the temporal regime (event / interval / period) and the variation regime (position / attribute)?
 
-### E3 · La fenêtre temporelle est un paramètre nommé, calibré en longueur d'écran — **P1**
+### E3 · The time window is a named parameter, calibrated in screen length — **P1**
 
-**Fondement.** Le paramètre central du support n'est ni la vitesse ni la date, c'est la **« durée d'une carte »** : la largeur de la fenêtre dont les entités sont affichées ensemble. Réglée à 1 minute pour une trace GPS de randonnée, 30 à 60 minutes pour la criminalité sur une journée.
+**Basis.** The course's central parameter is neither speed nor date; it is the **“duration of a map”**: the width of the window whose entities are shown together. Set to 1 minute for a hiking GPS track, 30 to 60 minutes for crime over a day.
 
-**Transposition.** La persistance des traces doit être exposée comme un réglage, pas enfouie dans un module. Et la valeur doit différer par couche selon la vitesse du mobile : un avion à 250 m/s traverse une fenêtre d'une minute en 15 km, un cargo à 10 nœuds en 300 m. **Régler la fenêtre pour que la trace fasse une longueur d'écran comparable entre couches, pas une durée identique.**
+**Transposition.** Trail persistence must be exposed as a setting, not buried in a module. And the value must differ per layer according to how fast the objects move: an aircraft at 250 m/s crosses a one-minute window in 15 km, a freighter at 10 knots in 300 m. **Set the window so that the trail has a comparable screen length across layers, not an identical duration.**
 
-**Test.** Les traînées des différentes couches mobiles ont-elles des longueurs comparables à l'écran ?
+**Test.** Do the trails of the different moving layers have comparable lengths on screen?
 
-### E4 · Trois horloges, à ne pas confondre — **P1**
+### E4 · Three clocks, not to be confused — **P1**
 
-**Fondement.** Le corpus chiffre la cadence : « Montrer une carte chaque 500 millisecondes », « configurer la durée d'affichage de chaque carte (0,5 ou 1 seconde) ». Soit 1 à 2 images par seconde — très loin des 24 du cinéma. La lenteur est délibérée : chaque état doit être lisible avant d'être remplacé.
+**Basis.** The corpus puts a number on the pace: “Show one map every 500 milliseconds”, “set how long each map is displayed (0.5 or 1 second)”. That is 1 to 2 frames per second — very far from cinema's 24. The slowness is deliberate: every state must be readable before it is replaced.
 
-**Transposition.** La 2D pouvait confondre les cadences parce qu'elle n'avait qu'une horloge. Un globe en a trois, indépendantes :
+**Transposition.** 2D could conflate cadences because it had only one clock. A globe has three, independent of one another:
 
-| Horloge | Contrainte | Ordre de grandeur |
+| Clock | Constraint | Order of magnitude |
 |---|---|---|
-| **Rendu** | la caméra et l'interaction | 60 fps, sous peine de saccade |
-| **Donnée** | le poll amont | de quelques secondes à 10 minutes |
-| **Lecture** | le pas d'un timelapse | **1 à 2 pas/s — le chiffre du corpus s'applique ici, et seulement ici** |
+| **Rendering** | the camera and interaction | 60 fps, or it stutters |
+| **Data** | the upstream poll | from a few seconds to 10 minutes |
+| **Playback** | the step of a timelapse | **1 to 2 steps/s — the corpus's figure applies here, and only here** |
 
-Appliquer « 2 images/s » au rendu casse la caméra. L'appliquer aux données casse le timelapse.
+Applying “2 frames/s” to rendering breaks the camera. Applying it to the data breaks the timelapse.
 
-Et la question que le corpus ne pose pas : **entre deux mesures, que fait le rendu à 60 fps ?** Il extrapole. Voir A2.
+And the question the corpus does not ask: **between two measurements, what does 60 fps rendering do?** It extrapolates. See A2.
 
-**Test.** Un futur mode timelapse tourne-t-il à 1–2 pas par seconde, et non « le plus fluide possible » ?
+**Test.** Does a future timelapse mode run at 1–2 steps per second, and not “as smooth as possible”?
 
 ---
 
-## F. Ce que le globe change — la section que le corpus ne peut pas écrire
+## F. What the globe changes — the section the corpus cannot write
 
-### F1 · Politique d'occultation déclarée par couche — **P0**
+### F1 · An occlusion policy declared per layer — **P0**
 
-**Fondement.** Absent du corpus : une carte 2D n'a pas de profondeur. Mais le corpus pose le problème dont c'est la version 3D :
+**Basis.** Absent from the corpus: a 2D map has no depth. But the corpus states the problem this is the 3D version of:
 
-> « Certains éléments de la carte peuvent être obstrués par des entités extrudées, limitant ainsi une lecture complète des données. […] Un trop grand nombre d'unités extrudées conduit à produire une image très fragmentée. »
+> “Some elements of the map may be obstructed by extruded features, which limits a complete reading of the data. […] Too many extruded units end up producing a very fragmented image.”
 
-**Transposition.** Sur GEV l'occultant n'est pas la donnée, c'est **la ville** — le bâti photoréaliste. La question « qu'est-ce qui cache quoi » domine la lisibilité d'un globe, et elle est aujourd'hui tranchée par défaut dans un sens qui produit une image de rayons X qu'aucun capteur ne produit.
+**Transposition.** On GEV the occluder is not the data; it is **the city** — the photorealistic buildings. The question “what hides what” dominates a globe's legibility, and today it is settled by default in a direction that produces an X-ray image no sensor produces.
 
-Trois régimes, à déclarer par couche :
-- **(a) occulté** — l'objet est dans le monde, test de profondeur actif ;
-- **(b) occulté par le terrain, pas par le bâti** — test d'horizon ellipsoïdal plus échantillon de terrain ;
-- **(c) toujours visible, mais marqué comme deviné** — fantôme, contour pointillé, alpha réduit.
+Three regimes, to be declared per layer:
+- **(a) occluded** — the object is in the world, depth test on;
+- **(b) occluded by terrain, not by buildings** — ellipsoidal horizon test plus a terrain sample;
+- **(c) always visible, but marked as guessed** — ghost, dashed outline, reduced alpha.
 
-**Jamais le même signe pour « je vois » et « je devine ».**
+**Never the same sign for “I see” and “I guess”.**
 
-**Test.** Se placer au sol dans une ville. Combien de symboles traversent les immeubles sans être marqués ?
+**Test.** Stand at ground level in a city. How many symbols show through buildings without being marked?
 
-### F2 · Ancrer la mesure, ne pas poser une barre d'échelle — **P0**
+### F2 · Anchor the measurement; do not lay down a scale bar — **P0**
 
-**Fondement.** La critique de Mericskay, écrite en 2016, décrit GEV par avance :
+**Basis.** Mericskay's critique, written in 2016, describes GEV in advance:
 
-> « [le WebGL] va permettre plus de souplesse au niveau par exemple du changement de l'orientation de la carte comme son inclinaison, autorisant ainsi de nouvelles manières de représenter le monde **en s'affranchissant de la classique vue de dessus en deux dimensions orientée nord**. »
+> “[WebGL] will allow more flexibility, for example in changing the orientation of the map, such as its tilt, thereby allowing new ways of representing the world **free from the classic two-dimensional, north-up top-down view**.”
 
-Il note que l'orientation nord n'est jamais indiquée et que l'échelle, quand elle existe, est réduite à sa forme graphique, abandonnant son aspect numérique « pourtant fondamental ».
+He notes that north orientation is never indicated, and that scale, when present, is reduced to its graphic form, abandoning its numeric side, “fundamental though it is”.
 
-**Transposition — et c'est là qu'il faut désobéir à la lettre du corpus.** Une barre d'échelle suppose un rapport pixel/mètre constant sur toute la feuille. En perspective, ce rapport varie continûment **dans une même image** : à 45° de tangage, le sol au bas de l'écran est à environ dix fois la résolution du sol près de l'horizon. Une barre unique serait fausse partout sauf sur une ligne — et fausse **silencieusement**. Un utilisateur qui mesure l'écartement de deux avions se tromperait d'un facteur 3 à 10 sans jamais le savoir, et sa capture d'écran deviendrait une mesure fausse et citable.
+**Transposition — and this is where the letter of the corpus has to be disobeyed.** A scale bar assumes a constant pixel-to-meter ratio across the whole sheet. In perspective that ratio varies continuously **within a single image**: at 45° of pitch, the ground at the bottom of the screen is at roughly ten times the ground resolution near the horizon. A single bar would be wrong everywhere but along one line — and wrong **silently**. A user measuring the separation of two aircraft would be off by a factor of 3 to 10 without ever knowing it, and their screenshot would become a false, quotable measurement.
 
-La règle correcte est **d'ancrer la mesure** : emprise au sol sous le réticule, altitude caméra, cap — recalculés par image, et explicitement invalidés quand le rayon caméra rase l'horizon.
+The correct rule is to **anchor the measurement**: ground footprint under the reticle, camera altitude, heading — recomputed every frame, and explicitly invalidated when the camera ray grazes the horizon.
 
-**Test.** L'utilisateur dispose-t-il d'une référence métrique dont la validité est garantie au point où il regarde ?
+**Test.** Does the user have a metric reference whose validity is guaranteed at the point they are looking at?
 
-### F3 · Restituer le cap — **P1**
+### F3 · Restore the heading — **P1**
 
-**Fondement.** Même passage : l'orientation nord est implicite et jamais indiquée.
+**Basis.** Same passage: north orientation is implicit and never shown.
 
-**Transposition.** Dans un HUD militaire, une bande de cap et une échelle liée à l'altitude ne sont pas de la décoration cockpit : ce sont **les deux éléments d'habillage que la 3D détruit et qu'il faut restituer**. C'est le cas rare où le spectacle et la géomatique demandent exactement la même chose.
+**Transposition.** In a military HUD, a heading tape and an altitude-linked scale are not cockpit decoration: they are **the two pieces of map furniture that 3D destroys and that must be restored**. It is the rare case where spectacle and geomatics ask for exactly the same thing.
 
-**Test.** Hors mode cockpit, l'utilisateur sait-il où est le nord ?
+**Test.** Outside cockpit mode, does the user know where north is?
 
-### F4 · Une choroplèthe n'est pas une couche, c'est un mode de scène — **P1**
+### F4 · A choropleth is not a layer; it is a scene mode — **P1**
 
-**Fondement.** « Fond de carte sobre obligatoire sous une animation. » « Avant d'afficher de la 3D, on déblaie le fond de carte. »
+**Basis.** “A plain basemap is mandatory under an animation.” “Before showing 3D, clear the basemap.”
 
-**Transposition — version corrigée après vérification.** Une première rédaction de cette règle affirmait qu'un aplat zonal vu en perspective devient incomparable parce que sa surface apparente décroît en 1/z². **C'est faux, et il faut le dire.** La variable visuelle d'une choroplèthe est la **teinte de remplissage**, et la perspective ne la déforme pas : deux départements ont exactement la même couleur en haut et en bas du cadre. Ce qui varie est leur **aire apparente**, et dans une choroplèthe l'aire ne porte aucune donnée. La valeur décodée est intacte ; seul le poids visuel change, ce qui est un effet de saillance connu et non une erreur de lecture.
+**Transposition — corrected version, after checking.** A first draft of this rule asserted that an areal fill seen in perspective becomes incomparable because its apparent area shrinks as 1/z². **That is false, and it has to be said.** A choropleth's visual variable is the **fill hue**, and perspective does not distort it: two departments have exactly the same color at the top and at the bottom of the frame. What varies is their **apparent area**, and in a choropleth area carries no data. The decoded value is intact; only the visual weight changes, which is a known salience effect and not a reading error.
 
-Le défaut réel est plus étroit et bien plus grave : **la teinte thématique est drapée sur les façades**. Quand la pile photoréaliste est active, la classification bascule en `CESIUM_3D_TILE`, et l'aplat monte sur les immeubles. Là, l'ombrage du bâti module effectivement la couleur perçue — donc la valeur lue. C'est le compositing de la règle B3, appliqué à une surface verticale que personne n'a prévue.
+The real defect is narrower and much more serious: **the thematic hue is draped over façades**. When the photorealistic stack is on, classification switches to `CESIUM_3D_TILE`, and the fill climbs up the buildings. There, building shading really does modulate the perceived color — and therefore the value read. It is B3's compositing, applied to a vertical surface nobody planned for.
 
-La bonne réponse n'est donc pas de détourner la caméra — geste intrusif qui coûte plus d'immersion qu'il ne corrige — mais de **ne pas draper une couche thématique sur du bâti**, et d'épingler `verticalExaggeration = 1` pendant qu'une couche zonale est active, ce que personne ne garantit aujourd'hui.
+The right answer is therefore not to turn the camera away — an intrusive move that costs more immersion than it corrects — but to **not drape a thematic layer over buildings**, and to pin `verticalExaggeration = 1` while an areal layer is on, which nothing guarantees today.
 
-**Test.** Sur une couche zonale, la teinte monte-t-elle sur les façades quand la pile photoréaliste est active ?
+**Test.** On an areal layer, does the hue climb up façades when the photorealistic stack is on?
 
-### F5 · Les shaders capteur s'arrêtent avant les couches où la couleur est la donnée — **P0**
+### F5 · Sensor shaders stop before the layers where color is the data — **P0**
 
-**Fondement.** « Un rendu esthétique séduisant au détriment des règles conventionnelles. »
+**Basis.** “An attractive aesthetic rendering at the expense of conventional rules.”
 
-**Transposition.** Un post-process plein écran s'applique à l'image composée : il repeint donc aussi les choroplèthes, les rampes et les glyphes. Sous FLIR ou NVG, la légende affichée **n'est plus une clé de décodage valide** — l'application affiche une donnée fausse tout en revendiquant la véracité de ses sources.
+**Transposition.** A full-screen post-process applies to the composited image, so it also repaints choropleths, ramps and glyphs. Under FLIR or NVG, the legend on screen **is no longer a valid decoding key** — the application displays false data while claiming the truthfulness of its sources.
 
-Cela impose un ordre de passes explicite : les couches thématiques se composent **après** le filtre capteur. À défaut, le mode capteur désactive les couches où la couleur porte la valeur, et le dit.
+This requires an explicit pass order: thematic layers are composited **after** the sensor filter. Failing that, sensor mode turns off the layers where color carries the value, and says so.
 
-**Test.** Activer FLIR sur une couche zonale colorée. La légende reste-t-elle exacte ?
+**Test.** Turn on FLIR over a colored areal layer. Is the legend still exact?
 
-### F6 · Aucune couche ne s'affiche à toutes les altitudes — **P1**
+### F6 · No layer is displayed at every altitude — **P1**
 
-**Fondement.** Dans tous ses démonstrateurs, aucune symbologie n'est une valeur fixe : rayon, largeur, opacité sont des paires (zoom, valeur) — rayon de cercle 2 px au zoom 13 → 60 px au zoom 22 ; chaque couche a son `minzoom`/`maxzoom` (cadastre 16-19, limites communales maxzoom 14). Et sa critique :
+**Basis.** In all his demonstrators, no symbology is a fixed value: radius, width and opacity are (zoom, value) pairs — circle radius 2 px at zoom 13 → 60 px at zoom 22; every layer has its `minzoom`/`maxzoom` (cadastre 16-19, municipal boundaries maxzoom 14). And his critique:
 
-> « dans de nombreuses applications, la symbologie est seulement paramétrée à un unique niveau de zoom, ce qui peut venir poser des problèmes de représentation si l'usager change d'échelle. »
+> “in many applications, symbology is set for a single zoom level only, which can cause representation problems if the user changes scale.”
 
-**Transposition.** Une caméra 3D continue **aggrave** le problème : il n'existe aucun palier où calibrer la symbologie. Le gouverneur de détail existant définit une politique de charge GPU ; il faut la même chose pour la **charge sémiologique** — seuils d'entrée et de sortie déclarés par couche dans le registre, pas déduits du hasard.
+**Transposition.** A continuous 3D camera **worsens** the problem: there is no step at which to calibrate symbology. The existing detail governor defines a GPU-load policy; the same is needed for **semiological load** — entry and exit thresholds declared per layer in the registry, not left to chance.
 
-**Test.** Chaque couche déclare-t-elle une plage d'altitude d'affichage ?
+**Test.** Does every layer declare a display altitude range?
 
-### F7 · Une hauteur déclare son registre et son domaine — **P0** *(ajouté par le chantier « Représentation », 2026-09-03)*
+### F7 · A height declares its register and its domain — **P0** *(added by the “Representation” workstream, 2026-09-03)*
 
-> **Amendement.** Cette règle n'était pas dans la rédaction initiale du document. Elle a été écrite après coup, parce que l'application de la piste 1 de [`REPRESENTATION.md`](./REPRESENTATION.md) a mis **dix couches** sur l'axe Z là où il n'y en avait qu'une, et a créé une ambiguïté que B2 ne couvre pas : B2 dit *où* mettre le quantitatif, pas *comment lire deux longueurs verticales qui ne parlent pas la même langue*.
+> **Amendment.** This rule was not in the document's first draft. It was written afterwards, because applying track 1 of the representation audit (#78) put **ten layers** on the Z axis where there had been one, and created an ambiguity B2 does not cover: B2 says *where* to put quantity, not *how to read two vertical lengths that do not speak the same language*.
 
-**Fondement.** Aucun. Le corpus n'a pas d'axe Z : il ne peut pas poser la question. C'est la règle la plus « native globe » du document, et elle vient d'une mesure, pas d'une lecture.
+**Basis.** None. The corpus has no Z axis: it cannot ask the question. This is the most “globe-native” rule in the document, and it comes from a measurement, not from a reading.
 
-**Transposition.** Une longueur verticale sur GEV appartient à l'un de **trois registres**, et rien à l'écran ne les distingue :
+**Transposition.** A vertical length on GEV belongs to one of **three registers**, and nothing on screen tells them apart:
 
-| Registre | Ce que la longueur vaut | Couches |
+| Register | What the length is worth | Layers |
 |---|---|---|
-| **(1) Hauteur du monde** | 1 m dessiné = 1 m mesuré, à sa place | `bdtopo-buildings` (volumes BD TOPO), `anfr-fr` (fût du support), `local-datacenters` (halls extrudés), `ais-live-vessels` (coque au bau et à la longueur hors-tout) |
-| **(2) Longueur vraie, position conventionnelle** | la longueur est la mesure à 1:1, mais elle n'est **pas** là où est le phénomène | `earthquakes` — la profondeur focale, dressée **au-dessus** du sol parce qu'un globe opaque ne sait pas dessiner sous lui-même sans mentir |
-| **(3) Hauteur d'échelle** | la longueur est une **convention publiée** : un facteur, ou un domaine gelé | `marine-buoys` (×10 000 : 1 m de houle = 10 km), les quatre prismes départementaux/régionaux `irve-fr`, `schools-fr`, `sup-fr`, `france-energy` (domaine gelé → 4 km … 120 km), `sitadel-fr` (1 logement = 1 m, plafond 200 m) |
+| **(1) World height** | 1 m drawn = 1 m measured, in its place | `bdtopo-buildings` (BD TOPO volumes), `anfr-fr` (antenna mast), `local-datacenters` (extruded halls), `ais-live-vessels` (hull at beam and length overall) |
+| **(2) True length, conventional position** | the length is the measurement at 1:1, but it is **not** where the phenomenon is | `earthquakes` — focal depth, raised **above** the ground because an opaque globe cannot draw beneath itself without lying |
+| **(3) Scale height** | the length is a **published convention**: a factor, or a frozen domain | `marine-buoys` (×10,000: 1 m of swell = 10 km), the four department/region prisms `irve-fr`, `schools-fr`, `sup-fr`, `france-energy` (frozen domain → 4 km … 120 km), `sitadel-fr` (1 dwelling = 1 m, ceiling 200 m) |
 
-**Trois obligations.**
+**Three obligations.**
 
-- **a) Le registre est nommé** — dans l'en-tête du module *et* dans la légende, en toutes lettres. « ÉCHELLE DE LECTURE » et « hauteur réelle » ne sont pas la même phrase et ne doivent jamais être devinées.
-- **b) Deux registres ne se recouvrent pas en amplitude au même endroit.** C'est ce qui rend l'ambiguïté matériellement impossible plutôt que seulement déconseillée. Mesuré : la plus haute hauteur du monde en France est le mont Blanc à 4 810 m, le plus haut mât ANFR 343,3 m, un immeuble BD TOPO en ville ≤ ~200 m ; les prismes commencent à 4 km et les tiges de houle à 2 km. Aucune hauteur du monde ne peut atteindre un registre (3), et c'est l'argument — déjà écrit dans `choroplethPrism.js` sans être nommé comme une règle — qui autorise 120 km : *« 25× le plus haut relief de France, ce qui interdit de confondre un volume thématique avec du terrain »*.
-- **c) Un domaine de hauteur n'est comparable qu'à l'intérieur de sa couche.** Deux couches ne partagent une règle verticale que si elles partagent une **unité**. Tant qu'elles n'en partagent pas, chacune écrit dans sa légende que son sommet ne mesure qu'elle.
+- **a) The register is named** — in the module header *and* in the legend, in plain words. *ÉCHELLE DE LECTURE* (READING SCALE) and *hauteur réelle* (true height) are not the same phrase and must never be left to guesswork.
+- **b) Two registers do not overlap in amplitude at the same place.** This is what makes the ambiguity materially impossible rather than merely discouraged. Measured: the highest world height in France is Mont Blanc at 4,810 m, the tallest ANFR mast 343.3 m, a BD TOPO building in a city ≤ ~200 m; the prisms start at 4 km and the swell stems at 2 km. No world height can reach a register (3), and that is the argument — already written in `choroplethPrism.js` without being named as a rule — that licenses 120 km: *“25× the highest ground in France means no reader can mistake a thematic volume for terrain”*.
+- **c) A height domain is comparable only within its own layer.** Two layers share a vertical rule only if they share a **unit**. As long as they do not, each writes in its legend that its peak measures only itself.
 
-**Le cas limite qui définit la règle, et qui est admis.** `sitadel-fr` extrude un permis à raison d'**1 mètre par logement autorisé**, plafond 200 m — c'est-à-dire exactement dans la plage des volumes BD TOPO réels, et son en-tête dit que c'est délibéré : *« l'unité est choisie pour que la colonne se lise contre la ville où elle se dresse »*. Une colonne de 27 m à côté d'un immeuble de 27 m est deux fois la même longueur et deux fois autre chose. C'est toléré parce que l'obligation (a) est tenue — la légende dit `Hauteur = logements autorisés · 1 logement = 1 m` — mais c'est la seule couche du dépôt où la lecture repose sur la légende seule, et pas sur la géométrie.
+**The edge case that defines the rule, and is accepted.** `sitadel-fr` extrudes a permit at **1 meter per authorized dwelling**, ceiling 200 m — that is, squarely within the range of real BD TOPO volumes, and its header says this is deliberate: *“The unit is chosen so the column can be read against the city it stands in”*. A 27 m column next to a 27 m building is twice the same length and twice something else. It is tolerated because obligation (a) is met — the legend says `Hauteur = logements autorisés · 1 logement = 1 m` (Height = authorized dwellings · 1 dwelling = 1 m) — but it is the only layer in the repository where reading rests on the legend alone, and not on the geometry.
 
-> **Amendement du 2026-09-14 — une hauteur d'échelle ne se pose pas sur une base variable.** `sitadel-fr` extrudait la **parcelle** par le nombre de logements. Un prisme est un volume et un volume est base × hauteur : l'encre à l'écran était donc le compte de logements **multiplié par la taille du terrain**, que le registre ne prétend pas mesurer. Mesuré sur les parcelles réellement extrudées : base p50 403 m² / max 40 400 m² à Paris, p50 395 m² / max 153 173 m² à Nantes (**388× la médiane**), p50 637 m² / max 24 955 m² à Ustaritz. Deux permis d'un logement dessinaient des masses dans un rapport de 388, et la plus grosse marque de Nantes pesait **25 426 754 m³** pour un seul dossier. Le signalement venait d'Ustaritz : 45 logements sur trois parcelles jointives, 404 000 m³ d'orange opaque au-dessus d'un village de maisons de 8 m. La hauteur est désormais portée par une **colonne de 12 m de côté par dossier**, plantée sur l'ancre du permis ; la parcelle garde son aplat, sa bordure et sa fiche. Le volume redevient proportionnel au seul compte — l'option (b) « normaliser la base » de `choroplethPrism.js`, que ce module écarte pour les départements parce que là-bas le polygone *est* la carte, et qui est ici gratuite puisque le polygone reste dessiné sous la marque.
+> **Amendment of 2026-09-14 — a scale height is not set on a variable base.** `sitadel-fr` extruded the **parcel** by the number of dwellings. A prism is a volume and a volume is base × height: the ink on screen was therefore the dwelling count **multiplied by the size of the plot**, which the register does not claim to measure. Measured on the parcels actually extruded: base p50 403 m² / max 40,400 m² in Paris, p50 395 m² / max 153,173 m² in Nantes (**388× the median**), p50 637 m² / max 24,955 m² in Ustaritz. Two one-dwelling permits drew masses in a ratio of 388, and the biggest mark in Nantes weighed **25,426,754 m³** for a single application. The report came from Ustaritz: 45 dwellings on three adjoining parcels, 404,000 m³ of opaque orange above a village of 8 m houses. Height is now carried by a **column 12 m on a side per application**, planted on the permit's anchor; the parcel keeps its fill, its outline and its card. Volume is again proportional to the count alone — option (b), “normalize the base”, of `choroplethPrism.js`, which that module rules out for departments because there the polygon *is* the map, and which costs nothing here since the polygon stays drawn under the mark.
 
-**Ce que la règle interdit dès demain.** La piste 1 de `REPRESENTATION.md` propose une **tige d'altitude** pour les vols. Une tige d'altitude est du registre (1) et occupe 0–13 km ; la règle de profondeur des séismes est du registre (2) et occupe 1–700 km, avec **la même forme, le même pied au sol et la même verticale**. Sous 13 km les deux sont indiscernables. La tige d'altitude ne peut donc pas être livrée avec le même signe que la tige de séisme : il faut deux signes, ou une seule des deux.
+**What the rule forbids from tomorrow.** Track 1 of the representation audit (#78) proposes an **altitude stem** for flights. An altitude stem belongs to register (1) and spans 0–13 km; the earthquake depth rule belongs to register (2) and spans 1–700 km, with **the same shape, the same foot on the ground and the same vertical**. Below 13 km the two are indistinguishable. The altitude stem therefore cannot ship with the same sign as the earthquake stem: it needs two signs, or only one of the two.
 
-> **Amendement du 2026-09-07 — il y avait un quatrième registre, et il était déjà à l'écran.** Le tableau ci-dessus ne compte que les hauteurs *thématiques*. Or les quatre couches locales groupées (`local-airports`, `local-ports`, `local-dams`, `local-datacenters`) tiennent leur pastille au bout d'une **tige de rappel** à hauteur d'écran constante — 65 px — ce qui fait de sa hauteur en mètres une fonction de la distance caméra : `0,0695 × d`. Soit 695 m à 10 km, 3 475 m à 50 km, 13 900 m à 200 km. C'est un quatrième registre, *« longueur d'écran, hauteur incidente »*, qui ne mesure rien du tout et n'a jamais été déclaré.
+> **Amendment of 2026-09-07 — there was a fourth register, and it was already on screen.** The table above counts only *thematic* heights. Yet the four grouped local layers (`local-airports`, `local-ports`, `local-dams`, `local-datacenters`) hold their dot at the end of a **leader stem** of constant screen height — 65 px — which makes its height in meters a function of camera distance: `0.0695 × d`. That is 695 m at 10 km, 3,475 m at 50 km, 13,900 m at 200 km. It is a fourth register, *“screen length, incidental height”*, which measures nothing at all and was never declared.
 >
-> Il est inoffensif au-dessus d'un barrage. Au-dessus d'un **aéroport** il ne l'est pas : les couches de vols dessinent des aéronefs à leur altitude réelle au-dessus des mêmes pistes, donc la pastille flottait au FL114 au milieu du trafic en approche et au FL228 au-dessus. Deux longueurs verticales, deux registres, une seule colonne de pixels — exactement l'obligation (b), et pas hypothétique cette fois. Corrigé en plafonnant la tige **en mètres** sur cette couche seule (`stemMaxHeightM: 150`, sous les 300 m du tour de piste) plutôt qu'en retirant le dispositif, qui garde son utilité de près.
+> It is harmless above a dam. Above an **airport** it is not: the flight layers draw aircraft at their real altitude above the same runways, so the dot floated at FL114 in the middle of approach traffic and at FL228 above it. Two vertical lengths, two registers, one column of pixels — exactly obligation (b), and not hypothetical this time. Fixed by capping the stem **in meters** on that layer alone (`stemMaxHeightM: 150`, below the 300 m traffic pattern) rather than removing the device, which stays useful up close.
 >
-> La leçon générale : **une longueur d'écran devient une longueur de monde dès qu'un objet mesuré partage sa verticale.** Les trois autres couches n'ont pas ce voisin ; le jour où elles l'auront, le plafond est déjà une option de couche.
+> The general lesson: **a screen length becomes a world length as soon as a measured object shares its vertical.** The other three layers have no such neighbor; the day they do, the cap is already a layer option.
 
-> **Amendement du 2026-09-10 — `irve-fr` porte désormais une donnée sur le registre (4), et le déclare.** Le faisceau de la couche IRVE était du registre (4) sans le dire, et il ne mesurait rien : sa longueur était le NOMBRE DE MARQUEURS à l'écran, donc 960 faisceaux de 55,8 px identiques sur une vue du Pays basque. Il porte maintenant les **points de charge du site**, en racine carrée sur un domaine gelé de 24 (98,1 % des sites), et la légende écrit la phrase que l'obligation (a) réclame : « Échelle d'écran gelée, en racine carrée — 24 points de charge remplissent la hauteur ». Deux conséquences à retenir pour la suite :
+> **Amendment of 2026-09-10 — `irve-fr` now carries data on register (4), and declares it.** The IRVE layer's beam was register (4) without saying so, and it measured nothing: its length was the NUMBER OF MARKERS on screen, hence 960 identical 55.8 px beams on a view of the Pays basque. It now carries the **site's charge points**, square-rooted over a frozen domain of 24 (98.1% of sites), and the legend writes the sentence obligation (a) calls for: *Échelle d'écran gelée, en racine carrée — 24 points de charge remplissent la hauteur* (frozen screen scale, square root — 24 charge points fill the height). Two consequences to keep in mind:
 >
-> - **Une longueur d'écran doit être corrigée du tangage, sinon la règle publiée est fausse dès qu'on incline.** Un faisceau est vertical dans le MONDE : sa longueur à l'écran vaut `L · cos(tangage)` — 87 % à −30° (la vue d'ouverture), 50 % à −60°, **zéro au nadir**, où une verticale se projette en un point. La correction `1/cos` est bornée à −70° et la légende cesse de promettre une règle au-delà. Les quatre couches à tige de rappel ont le même défaut, non corrigé.
-> - **Le plafond en mètres du registre (4) est ce qui l'empêche d'envahir le registre (3).** À 1 400 km de caméra, 64 px valent **129 km** de faisceau — au-dessus du sommet de 120 km des prismes gelés, qui peuvent être allumés en même temps. Le plafond de 40 km d'`irve-fr` est donc structurel et non cosmétique, et c'est lui qui interdit d'étendre la hauteur-quantité au maillage : un agrégat de cellule y serait écrêté avant d'être lisible.
+> - **A screen length must be corrected for pitch, otherwise the published rule is wrong as soon as the view tilts.** A beam is vertical in the WORLD: its screen length is `L · cos(pitch)` — 87% at −30° (the opening view), 50% at −60°, **zero at nadir**, where a vertical projects to a point. The `1/cos` correction is capped at −70°, and past that the legend stops promising a rule. The four leader-stem layers have the same defect, uncorrected.
+> - **Register (4)'s cap in meters is what keeps it from invading register (3).** At a camera distance of 1,400 km, 64 px are worth **129 km** of beam — above the 120 km top of the frozen prisms, which can be on at the same time. `irve-fr`'s 40 km cap is therefore structural, not cosmetic, and it is what rules out extending height-as-quantity to the grid: a cell aggregate would be capped there before it could be read.
 
-> **Amendement du 2026-09-14 — une hauteur ne peut pas porter la LISIBILITÉ, et c'est une propriété géométrique.** B2 dit que sur un globe la taille écran est déjà prise par la profondeur, donc que le quantitatif va sur la verticale. Le corollaire n'était écrit nulle part : **la verticale, elle, est prise par le tangage.** Un faisceau vertical monde se projette en `L · cos(tangage)`, donc **en un point au nadir** — et le nadir est l'attitude la plus courante de lecture d'une carte.
+> **Amendment of 2026-09-14 — a height cannot carry LEGIBILITY, and that is a geometric property.** B2 says that on a globe screen size is already taken by depth, so quantity goes on the vertical. The corollary was written nowhere: **the vertical, in turn, is taken by pitch.** A world-vertical beam projects to `L · cos(pitch)`, so **to a point at nadir** — and nadir is the most common attitude for reading a map.
 >
-> Le cas qui l'a établi : `irve-fr` avait déplacé son effectif du diamètre vers le faisceau (2026-09-10) et, dans la foulée, figé la pastille à 7 px puisque « le faisceau fait voir ». Mesuré sur Bordeaux à 12 653 m, à la verticale : **318 marques introuvables**, et le plus court faisceau à l'écran faisait **1,1 px**. Les faisceaux survivent sur les BORDS du cadre, où la verticale locale s'écarte de l'axe de visée, et meurent au MILIEU, là où l'œil se pose. La preuve du défaut a été donnée par le lecteur de la façon la plus économique possible : l'auteur lui-même n'a pas su retrouver les marques dans sa capture.
+> The case that established it: `irve-fr` had moved its count from the diameter to the beam (2026-09-10) and, in the same stroke, frozen the dot at 7 px since “the beam makes it visible”. Measured over Bordeaux at 12,653 m, looking straight down: **318 marks nobody could find**, and the shortest beam on screen was **1.1 px**. Beams survive at the EDGES of the frame, where the local vertical departs from the line of sight, and die in the MIDDLE, where the eye lands. The proof of the defect came from the reader in the most economical way possible: the author could not find the marks in their own screenshot.
 >
-> **Règle.** Un canal de hauteur est un canal de QUANTITÉ et jamais un canal de PRÉSENCE. La marque doit rester trouvable à plat, sans son faisceau, à toutes les attitudes de caméra — ce qui renvoie à la règle déjà établie ailleurs dans le dépôt (`militarySiteIcons.js`, `plantFiliereIcons.js`) : **les marques de LIEUX portent une pastille**, une silhouette nue étant introuvable sous 18 px sur une orthophoto. Et la taille de cette pastille se tient à un budget d'encre en AIRE, pas en effectif : une règle linéaire en nombre déborde au milieu de la plage, là où vivent la plupart des vues (mesuré : 602 marques couvraient 28,1 % du cadre ; à budget d'aire, 15,6 %).
+> **Rule.** A height channel is a QUANTITY channel and never a PRESENCE channel. The mark must stay findable flat, without its beam, at every camera attitude — which points back to the rule already established elsewhere in the repository (`militarySiteIcons.js`, `plantFiliereIcons.js`): **marks of PLACES carry a dot**, since a bare silhouette cannot be found below 18 px on an orthophoto. And that dot's size keeps to an ink budget in AREA, not in count: a rule linear in count overflows in the middle of the range, where most views live (measured: 602 marks covered 28.1% of the frame; with an area budget, 15.6%).
 
-> **Amendement du 2026-09-10 — G1 a un deuxième cas, G2 en a deux implémentations, G3 est réglé sur `irve-fr`.**
+> **Amendment of 2026-09-10 — G1 has a second case, G2 has two implementations, G3 is settled on `irve-fr`.**
 >
-> - **G1.** Quatre pastilles de plancher de puissance (`TOUT · > 22 · > 50 · > 150 kW`) sur la couche IRVE, exprimées aux **bornes de l'échelle de bandes elle-même** et non en nombres ronds : « ≥ 22 kW » serait indécidable, un point à 11 kW étant `normale`, dont le plafond EST 22.
-> - **G2.** Les deux régimes de la couche appliquent le filtre différemment, et c'est argumenté plutôt que subi. Le régime exact bascule un `filteredOut` et **ne touche jamais la collection** ; `sweepBeams` reste le seul écrivain de `show`, ce qui est exactement le corollaire d'architecture de la règle. Le maillage **repique**, parce que le plancher change quel site représente une cellule et ce que la cellule totalise — mesuré à **1 à 12 ms** sur les 40 028 tuples nationaux, contre une pose de caméra qui repique déjà derrière 450 ms d'anti-rebond.
-> - **G3.** Le maillage IRVE agrège désormais sur un **carroyage verrouillé sur le monde** (`floor(lat/pas)`), à pas gelé par palier de zoom et en quadtree, donc un changement de palier subdivise au lieu de rebattre. Mesuré sur une vue France panée de 0,05° : **179 marques sur 1 100 survivaient**, contre **1 050 sur 1 057** aujourd'hui. Le test de la règle — orbiter sans changer d'altitude et regarder si les compteurs bougent — passe.
+> - **G1.** Four power-floor chips (`TOUT · > 22 · > 50 · > 150 kW`, *TOUT* = ALL) on the IRVE layer, set at the **limits of the band scale itself** rather than at round numbers: “≥ 22 kW” would be undecidable, since a point at 11 kW is `normale`, whose ceiling IS 22.
+> - **G2.** The layer's two regimes apply the filter differently, and this is argued rather than suffered. The exact regime toggles a `filteredOut` flag and **never touches the collection**; `sweepBeams` remains the only writer of `show`, which is exactly the rule's architectural corollary. The grid **re-picks**, because the floor changes which site represents a cell and what the cell totals — measured at **1 to 12 ms** on the 40,028 national tuples, against a camera pose that already re-picks behind a 450 ms debounce.
+> - **G3.** The IRVE grid now aggregates on a **world-locked grid** (`floor(lat/step)`), with a step frozen per zoom level and nested as a quadtree, so a change of level subdivides instead of reshuffling. Measured on a France view panned by 0.05°: **179 marks out of 1,100 survived**, against **1,050 out of 1,057** today. The rule's test — orbit without changing altitude and see whether the counters move — passes.
 
-> **Amendement du 2026-09-14 — l'obligation (a) est satisfaite par la FICHE quand la règle de lecture y côtoie le chiffre qu'elle décode.** La clé d'`irve-fr` déclarait son registre en 68 mots, puis le graduait avec quatre échelons **cotés en pixels** (« 64 px de haut »). C'est la formulation la plus coûteuse possible d'une règle qui n'intéresse que le lecteur qui a déjà remarqué un faisceau — et ce lecteur-là clique dessus. La phrase est donc sur la fiche, à côté du nombre exact de points de charge : *« ▮ Le trait mesure les points de charge (24 au maximum) »*, et *« au-delà de 24, il plafonne »* quand le site dépasse le domaine, ce qui règle A5 au même endroit et sur le seul objet concerné.
+> **Amendment of 2026-09-14 — obligation (a) is met by the CARD when the reading rule sits next to the number it decodes.** The `irve-fr` key declared its register in 68 words, then graduated it with four steps **dimensioned in pixels** (*64 px de haut*, 64 px tall). That is the costliest possible phrasing of a rule that interests only the reader who has already noticed a beam — and that reader clicks on it. So the sentence is on the card, next to the exact number of charge points: *▮ Le trait mesure les points de charge (24 au maximum)* (▮ the bar measures charge points, 24 at most), and *au-delà de 24, il plafonne* (beyond 24, it caps) when the site exceeds the domain, which settles A5 in the same place and on the only object concerned.
 >
-> **Ce que l'amendement ne permet pas.** Déplacer la déclaration sur la fiche n'est légitime que si la fiche porte aussi **la valeur** : c'est la juxtaposition qui enseigne la règle, pas la phrase seule. Une hauteur dont la fiche ne publie pas le chiffre garde sa déclaration dans la légende, sans quoi il n'existe plus aucune surface où la longueur redevient un nombre.
+> **What the amendment does not allow.** Moving the declaration to the card is legitimate only if the card also carries **the value**: it is the juxtaposition that teaches the rule, not the sentence alone. A height whose card does not publish the number keeps its declaration in the legend; otherwise no surface is left where the length becomes a number again.
 
-**Test.** ① La légende dit-elle — ou la fiche de l'objet dit-elle, à côté de la valeur — si la longueur est une mesure ou une convention, et avec quel facteur ? ② Deux couches à hauteur allumées ensemble : un lecteur peut-il croire que deux sommets à la même altitude disent la même chose ?
+**Test.** ① Does the legend — or the object's card, next to the value — say whether the length is a measurement or a convention, and with what factor? ② Two height layers on together: can a reader believe that two peaks at the same altitude say the same thing?
 
-**État au 2026-09-03 : ② échoue.** `irve-fr` et `france-energy` ont des règles de hauteur **pixel pour pixel identiques** — même `domainMax` (12 000), même mode (linéaire), mêmes graduations (10 000 / 5 000 / 1 000), mêmes barres de légende — pour des points de charge d'un côté et des mégawatts de l'autre. Et `irve-fr`, `schools-fr` et `sup-fr` extrudent **les mêmes 96 polygones depuis la même base ellipsoïdale** : deux d'entre elles allumées ensemble donnent deux volumes translucides coïncidents (α composité 0,86 dans le recouvrement), sans qu'aucune légende ne dise que les deux sommets ne se comparent pas.
+**Status on 2026-09-03: ② fails.** `irve-fr` and `france-energy` have height rules that are **identical pixel for pixel** — same `domainMax` (12,000), same mode (linear), same graduations (10,000 / 5,000 / 1,000), same legend bars — for charge points on one side and megawatts on the other. And `irve-fr`, `schools-fr` and `sup-fr` extrude **the same 96 polygons from the same ellipsoidal base**: two of them on together give two coincident translucent volumes (composited α 0.86 in the overlap), and no legend says that the two peaks do not compare.
 
 ---
 
 ## G. Interaction
 
-### G1 · Le mantra de Shneiderman, et le maillon manquant — **P1**
+### G1 · Shneiderman's mantra, and the missing link — **P1**
 
-**Fondement.** C'est la seule règle citée dans deux supports différents, ce qui en fait l'axe prescriptif du corpus. Mericskay ne se contente pas de la citer, il la traduit en composants :
+**Basis.** It is the only rule cited in two different courses, which makes it the corpus's prescriptive axis. Mericskay does not merely cite it; he translates it into components:
 
-> « **Overview** : vue d'ensemble des données / **Zoom & filter** : changer d'échelle, filtrer les données / **Details on demand** : fenêtre d'information contextuelle »
-> « The purpose of visualization is **insight, not pictures**. »
+> “**Overview**: an overall view of the data / **Zoom & filter**: change scale, filter the data / **Details on demand**: contextual information window”
+> “The purpose of visualization is **insight, not pictures**.”
 
-**Transposition.** GEV a l'overview, le zoom et les details on demand. **Le filtre est le maillon manquant** — et c'est le composant le plus rentable que le corpus désigne.
+**Transposition.** GEV has the overview, the zoom and the details on demand. **The filter is the missing link** — and it is the most profitable component the corpus points to.
 
-**Test.** L'utilisateur peut-il réduire une couche à un sous-ensemble sans la couper ?
+**Test.** Can the user reduce a layer to a subset without turning it off?
 
-### G2 · Un filtre ne détruit jamais le batch — **P0** *(condition de faisabilité de G1)*
+### G2 · A filter never destroys the batch — **P0** *(feasibility condition for G1)*
 
-**Fondement.** Le corpus prescrit « filtrer côté client sur une source déjà chargée », parce qu'il pense en MapLibre où `setFilter` est consommé par le shader.
+**Basis.** The corpus prescribes “filter client-side on a source that is already loaded”, because it thinks in MapLibre, where `setFilter` is consumed by the shader.
 
-**Transposition.** Le danger est réel mais il ne se trouve pas là où on l'attend, et il faut nommer le bon coupable — vérifié dans la source de Cesium embarquée :
+**Transposition.** The danger is real, but it is not where one expects it, and the right culprit has to be named — checked in the bundled Cesium source:
 
-- **`show` est sûr.** `EntityCluster.removePoint` met la primitive **en réserve** (`point.show = false`, index empilé dans `_unusedPointIndices`) sans jamais appeler `remove` — `node_modules/cesium/Build/CesiumUnminified/index.js:151282-151293`. Et sur une géométrie statique, un changement d'`isShowing` devient une écriture d'attribut `show` **par instance**. Le batch survit.
-- **`removeAll()` est le destructeur.** Il pose `this._createVertexArray = true` — `index.js:149904-149910` — donc reconstruit le tableau de sommets à la frame suivante.
+- **`show` is safe.** `EntityCluster.removePoint` puts the primitive **in reserve** (`point.show = false`, index pushed onto `_unusedPointIndices`) without ever calling `remove` — `node_modules/cesium/Build/CesiumUnminified/index.js:151282-151293`. And on static geometry, a change of `isShowing` becomes a **per-instance** write of the `show` attribute. The batch survives.
+- **`removeAll()` is the destroyer.** It sets `this._createVertexArray = true` — `index.js:149904-149910` — and so rebuilds the vertex array on the next frame.
 
-La règle est donc : **un filtre ne rappelle jamais `removeAll()` puis ne reconstruit la collection.** Il bascule `show`, écrit un attribut par instance, ou passe par `translucencyByDistance`. Une couche qui vide et repeuple sa collection à chaque cran de filtre fige le globe **pendant exactement le geste que le filtre est censé rendre fluide**.
+The rule is therefore: **a filter never calls `removeAll()` and then rebuilds the collection.** It toggles `show`, writes a per-instance attribute, or goes through `translucencyByDistance`. A layer that empties and refills its collection at every notch of the filter freezes the globe **during exactly the gesture the filter is meant to make smooth**.
 
-Corollaire d'architecture, appris du dépôt lui-même : sur un globe, le filtre et l'occultation sont deux raisons distinctes de ne pas être visible, et elles ne peuvent pas partager le même champ. Deux écrivains sur `show` se battent, et un symbole filtré réapparaît au prochain mouvement de caméra. Il faut un état intermédiaire (`filteredOut`) et un seul écrivain final.
+Architectural corollary, learned from the repository itself: on a globe, filtering and occlusion are two distinct reasons for not being visible, and they cannot share the same field. Two writers on `show` fight, and a filtered symbol reappears at the next camera move. An intermediate state (`filteredOut`) and a single final writer are needed.
 
-**Test.** Le filtre tient-il 60 fps pendant qu'on tire le curseur ? Et : le chemin de filtre appelle-t-il `removeAll()` ?
+**Test.** Does the filter hold 60 fps while the slider is dragged? And: does the filter path call `removeAll()`?
 
-### G3 · Agréger en espace monde, pas en espace écran — **P1**
+### G3 · Aggregate in world space, not in screen space — **P1**
 
-**Fondement.** Le corpus enseigne le cluster à rayon écran (« curseur d'agrégation moins / plus »).
+**Basis.** The corpus teaches screen-radius clustering (“aggregation slider, less / more”).
 
-**Transposition.** Un cluster à rayon écran se recompose à chaque image de rotation : le nombre affiché dans une pastille change pendant que la caméra tourne, **sans qu'aucun objet n'ait bougé**. Un agrégat instable est une donnée fausse. Le corpus ne peut pas voir ce problème parce qu'une carte 2D a des niveaux de zoom discrets et une caméra qui ne tourne pas.
+**Transposition.** A screen-radius cluster recomposes on every frame of a rotation: the number shown in a badge changes while the camera turns, **although no object moved**. An unstable aggregate is false data. The corpus cannot see this problem because a 2D map has discrete zoom levels and a camera that does not rotate.
 
-Agréger sur un pavage **stable en espace monde**, avec hystérésis sur les bandes d'altitude et fondu croisé sur une bande de recouvrement plutôt qu'une bascule franche.
+Aggregate on a tiling that is **stable in world space**, with hysteresis on the altitude bands and a crossfade over an overlap band rather than a hard switch.
 
-**Test.** Faire une orbite caméra sans changer d'altitude. Les compteurs d'agrégat bougent-ils ?
+**Test.** Orbit the camera without changing altitude. Do the aggregate counters move?
 
-### G4 · Choisir cluster, carroyage ou heatmap selon ce qu'on doit pouvoir faire — **P1**
+### G4 · Choose cluster, grid or heatmap according to what one must be able to do — **P1**
 
-**Fondement.** Le tableau comparatif à neuf critères de l'article *Mappemonde*, qui est la grille de décision la plus dure du corpus. Le **carroyage** gagne sur le paramétrage, la pondération, l'agrégation statistique, la quantification et la lecture des structures. Le **cluster** est le seul à permettre la visualisation individuelle. La **heatmap** perd sur presque tout : ni paramétrage, ni agrégation statistique, ni quantification, ni individu, ni symbologie, ni interaction.
+**Basis.** The nine-criterion comparison table of the *Mappemonde* article, which is the corpus's hardest decision grid. The **grid** wins on parameterization, weighting, statistical aggregation, quantification and reading structures. The **cluster** is the only one that shows individuals. The **heatmap** loses on almost everything: no parameterization, no statistical aggregation, no quantification, no individual, no symbology, no interaction.
 
-> « Malgré un rendu visuel efficace, cette forme de généralisation des données est cependant à utiliser avec prudence. »
+> “Despite an effective visual rendering, this form of data generalization should nevertheless be used with caution.”
 
-**Transposition.** La heatmap est donc le pire choix dès lors qu'on veut cliquer une entité pour ouvrir sa fiche. Les seules candidates légitimes sont les couches où GEV n'offre **aucune** interaction par entité. Et une heatmap doit toujours déclarer son rayon et sa méthode — sinon c'est de la décoration.
+**Transposition.** The heatmap is therefore the worst choice as soon as one wants to click an entity to open its card. The only legitimate candidates are layers where GEV offers **no** per-entity interaction. And a heatmap must always declare its radius and its method — otherwise it is decoration.
 
-**Test.** Pour chaque couche agrégée : le mode retenu permet-il ce que l'interface propose ?
-
----
-
-## H. Données
-
-### H1 · Savoir ce que la donnée ne contient pas — **P0**
-
-**Fondement.** Le quatrième critère est le plus exigeant du corpus : « qualité, MAJ, intégrité, **exhaustivité** ».
-
-**Transposition.** L'affichage source/fraîcheur, déjà présent, ne dit rien de la complétude. Or la couverture ADS-B n'est pas exhaustive, l'AIS ne voit que les navires coopératifs, et une constellation FIRMS amputée ne couvre pas la même surface. **Afficher explicitement l'incomplétude d'une couche est ce qui sépare la géovisualisation de la fiction visuelle.**
-
-**Test.** Chaque couche déclare-t-elle son domaine de couverture et ses angles morts connus ?
-
-### H2 · Contrôler une donnée contributive avant de l'utiliser — **P1**
-
-**Fondement.** Le support Overpass est entièrement construit là-dessus : compter les tags avant d'extraire (`out count`), cartographier la complétude au lieu de la supposer en stylant selon l'attribut renseigné, requêter la fraîcheur (`newer:`, `changed:`), comparer OSM à une donnée de référence sur une emprise témoin. Et : « La folksonomie est une classification par des non-spécialistes — et elle bouge. »
-
-**Test.** Pour chaque couche OSM, l'attribut porteur est-il vérifié en taux de remplissage, et ce taux est-il visible ?
-
-### H3 · La frontière GeoJSON / tuiles se situe entre 20 000 et 30 000 entités — **P1**
-
-**Fondement.** Seuils mesurables dans ses propres réalisations : il charge sans complexe un GeoJSON de 19 428 bâtiments (12,3 Mo) pour l'extrusion 3D, protégé par un `minZoom` de 14,5 ; et 31 409 mutations DVF (7,1 Mo) pour le clustering. Dès l'échelle d'une ville entière (359 884 parcelles à Paris), il bascule sur des tuiles vectorielles hébergées.
-
-Les ordres de grandeur qu'il cite comme tenus en production sont très au-dessus : 90 millions de parcelles cadastrales et 15 millions de transactions DVF chez Etalab, 45 millions de bâtiments BD TOPO, 70 millions d'objets 3D pour le géoportail suisse.
-
-**Transposition.** GEV opère plusieurs ordres de grandeur sous ces seuils, ce qui **valide** le rendu côté client — et rend indéfendable de charger un référentiel national par la même voie. Sous ~30 000 entités, un GeoJSON borné en altitude suffit ; au-delà, tuiles vectorielles ou 3D Tiles.
-
-**Test.** Chaque couche statique connaît-elle sa volumétrie maximale et le mode de transport correspondant ?
+**Test.** For each aggregated layer: does the chosen mode allow what the interface offers?
 
 ---
 
-## Tensions irréductibles
+## H. Data
 
-Ces conflits n'ont pas de solution, seulement un arbitrage. Il vaut mieux qu'il soit écrit.
+### H1 · Know what the data does not contain — **P0**
 
-| Tension | Position académique | Position produit | Arbitrage retenu |
+**Basis.** The fourth criterion is the corpus's most demanding: “quality, updates, integrity, **completeness**”.
+
+**Transposition.** The source/freshness display, already present, says nothing about completeness. Yet ADS-B coverage is not exhaustive, AIS sees only cooperative ships, and a FIRMS constellation missing a satellite does not cover the same area. **Showing a layer's incompleteness explicitly is what separates geovisualization from visual fiction.**
+
+**Test.** Does every layer declare its coverage domain and its known blind spots?
+
+### H2 · Check crowdsourced data before using it — **P1**
+
+**Basis.** The Overpass course is built entirely on this: count tags before extracting (`out count`), map completeness instead of assuming it by styling on whether the attribute is filled in, query freshness (`newer:`, `changed:`), compare OSM with reference data over a test area. And: “A folksonomy is a classification by non-specialists — and it moves.”
+
+**Test.** For each OSM layer, is the attribute the layer relies on checked for fill rate, and is that rate visible?
+
+### H3 · The GeoJSON / tiles boundary lies between 20,000 and 30,000 features — **P1**
+
+**Basis.** Measurable thresholds in his own work: he loads without a second thought a GeoJSON of 19,428 buildings (12.3 MB) for 3D extrusion, protected by a `minZoom` of 14.5; and 31,409 DVF sales (7.1 MB) for clustering. At the scale of a whole city (359,884 parcels in Paris), he switches to hosted vector tiles.
+
+The orders of magnitude he cites as running in production are far above that: 90 million cadastral parcels and 15 million DVF transactions at Etalab, 45 million BD TOPO buildings, 70 million 3D objects for the Swiss geoportal.
+
+**Transposition.** GEV operates several orders of magnitude below these thresholds, which **validates** client-side rendering — and makes it indefensible to load a national reference dataset the same way. Below ~30,000 features, an altitude-bounded GeoJSON is enough; beyond that, vector tiles or 3D Tiles.
+
+**Test.** Does every static layer know its maximum volume and the transport mode that goes with it?
+
+---
+
+## Irreducible tensions
+
+These conflicts have no solution, only a trade-off. Better that it be written down.
+
+| Tension | Academic position | Product position | Trade-off chosen |
 |---|---|---|---|
-| **Densité contre lisibilité** | Le semis saturé ne dit plus rien, il faut agréger | La saturation *est* le message : « le monde est déjà en train d'émettre » | Garder le semis comme vue d'entrée, offrir l'agrégat comme mode d'analyse. Ne jamais afficher les deux. |
-| **Légende contre immersion** | Obligatoire dès qu'une couleur code une valeur | Une légende permanente casse le cockpit | Légende montée **uniquement** pour les couches déclarant une échelle de valeurs, et repliable — jamais absente. |
-| **Spectacle contre mesure** | Le critère de succès ne peut pas être la séduction | La sidération est la porte d'entrée | Le spectacle a droit de cité **partout où il ne fabrique pas de chiffre**. Un shader qui stylise : oui. Un shader qui affiche une température en degrés : non. |
-| **Fluidité contre lenteur délibérée** | 1 à 2 images/s, chaque état lisible | 60 fps ou l'immersion tombe | Trois horloges séparées (E4). La lenteur s'applique au timelapse, jamais au rendu. |
-| **Rigueur contre budget d'image** | Le corpus ignore le coût du rendu | Chaque prescription a un prix mesurable | La sémiologie est une **optimisation sous contrainte**, pas une hiérarchie de règles. Chaque couche déclare son budget et choisit son style dessous. |
+| **Density vs legibility** | A saturated point scatter no longer says anything; aggregate | Saturation *is* the message: “the world is already broadcasting” | Keep the scatter as the entry view, offer the aggregate as an analysis mode. Never show both. |
+| **Legend vs immersion** | Mandatory as soon as a color encodes a value | A permanent legend breaks the cockpit | A legend is mounted **only** for layers that declare a value scale, and it is collapsible — never absent. |
+| **Spectacle vs measurement** | The success criterion cannot be seduction | Awe is the way in | Spectacle is welcome **wherever it does not manufacture a number**. A shader that stylizes: yes. A shader that shows a temperature in degrees: no. |
+| **Smoothness vs deliberate slowness** | 1 to 2 frames/s, every state readable | 60 fps or immersion collapses | Three separate clocks (E4). Slowness applies to the timelapse, never to rendering. |
+| **Rigor vs frame budget** | The corpus ignores rendering cost | Every prescription has a measurable price | Semiology is **optimization under constraint**, not a hierarchy of rules. Every layer declares its budget and picks its style within it. |
 
 ---
 
-## Ce qu'on ne reprend pas, et pourquoi
+## What we do not take, and why
 
-| Élément du corpus | Raison |
+| Element of the corpus | Reason |
 |---|---|
-| **La barre d'échelle graphique** | Fausse silencieusement en perspective. Remplacée par F2. |
-| **Le blanc pour la donnée manquante** | Pas de fond neutre sur un globe photoréaliste ; sur rampe sombre le blanc se lit comme la classe haute. Remplacé par un motif (D3). |
-| **Le cercle proportionnel en unités monde** | Le canal taille est déjà pris par la profondeur. Remplacé par un canal orthogonal (B2). |
-| **`EntityCluster` de Cesium et le cluster à rayon écran** | Instable en rotation, et incompatible avec les collections batchées des couches denses. Remplacé par G3. |
-| **~~« Filtrer = basculer `show` détruit le batch »~~** | *Correction : c'était une erreur de ce document, pas du corpus.* Vérification faite dans la source Cesium embarquée, `show` préserve le batch ; le destructeur est `removeAll()`. Voir G2, réécrit. |
-| **« 2 images par seconde » appliqué au rendu** | Confusion de trois horloges distinctes. Cadré par E4. |
-| **« Fond sobre sous une animation »** | Le fond est de la géométrie, pas une image. Remplacé par F4. |
-| **La maille métrique régulière** | Aucun pavage lat/lon équi-aire n'existe. Remplacé par C3. |
-| **Le min/max « de la série »** | Pas de référent unique sur un cadrage mobile. Remplacé par la légende à deux étages (D2). |
-| **Les six paliers comme cible** | Six déclarés ≠ six perçus après compositing. Devient une mesure, pas une constante (B3). |
+| **The graphic scale bar** | Silently wrong in perspective. Replaced by F2. |
+| **White for missing data** | No neutral background on a photorealistic globe; on a dark ramp white reads as the top class. Replaced by a pattern (D3). |
+| **The proportional circle in world units** | The size channel is already taken by depth. Replaced by an orthogonal channel (B2). |
+| **Cesium's `EntityCluster` and screen-radius clustering** | Unstable under rotation, and incompatible with the batched collections of dense layers. Replaced by G3. |
+| **~~“Filtering = toggling `show` destroys the batch”~~** | *Correction: this was an error in this document, not in the corpus.* Checked in the bundled Cesium source: `show` preserves the batch; the destroyer is `removeAll()`. See G2, rewritten. |
+| **“2 frames per second” applied to rendering** | A confusion of three distinct clocks. Framed by E4. |
+| **“A plain basemap under an animation”** | The basemap is geometry, not an image. Replaced by F4. |
+| **The regular metric grid** | No equal-area lat/lon tiling exists. Replaced by C3. |
+| **The min/max “of the series”** | No single referent on a moving frame. Replaced by the two-tier legend (D2). |
+| **Six classes as a target** | Six declared ≠ six perceived after compositing. Becomes a measurement, not a constant (B3). |
 
 ---
 
-## Bibliographie
+## Bibliography
 
-### Ouvrage
-- **Mericskay, B. (coord.), *Communication cartographique : Sémiologie graphique, sémiotique et géovisualisation*, ISTE Éditions, 2022, 264 p.** — Il en signe l'introduction et le chapitre 6, « Repenser la cartographie sur le Géoweb : principes, outils et modes de représentation ». [Avant-propos et introduction en libre accès](https://www.istegroup.com/wp-content/uploads/2019/11/091_Communication-cartographique_avnat-propos-et-introduction.pdf) · [notice HAL](https://hal.science/hal-03901325/) · [chapitre 6 en anglais, Wiley](https://onlinelibrary.wiley.com/doi/10.1002/9781394265022.ch6) *(non lu — 403)*
+French titles are kept as published, with an English gloss in parentheses.
+
+### Book
+- **Mericskay, B. (ed.), *Communication cartographique : Sémiologie graphique, sémiotique et géovisualisation*, ISTE Éditions, 2022, 264 p.** — He wrote its introduction and chapter 6, “Repenser la cartographie sur le Géoweb : principes, outils et modes de représentation” (rethinking cartography on the Geoweb: principles, tools and modes of representation). [Foreword and introduction, open access](https://www.istegroup.com/wp-content/uploads/2019/11/091_Communication-cartographique_avnat-propos-et-introduction.pdf) · [HAL record](https://hal.science/hal-03901325/) · [chapter 6 in English, Wiley](https://onlinelibrary.wiley.com/doi/10.1002/9781394265022.ch6) *(not read — 403)*
 
 ### Articles
-- [« La géovisualisation de données massives sur le Web : entre avancées technologiques et évolutions cartographiques »](https://journals.openedition.org/mappemonde/5595?lang=fr), *Mappemonde* 131, 2021.
-- [« La cartographie à l'heure du Géoweb : retour sur les nouveaux modes de représentation spatiale des données numériques »](https://shs.hal.science/halshs-01468314v1), HAL-SHS.
-- [« Visualiser les données spatiales sur le Web »](https://medium.com/@BorisMericskay/visualiser-les-donn%C3%A9es-spatiales-sur-le-web-f983e9e147d0), Medium.
-- CV HAL complet : [cv.hal.science/boris-mericskay-r2](https://cv.hal.science/boris-mericskay-r2) — 78 documents, 90 % en accès ouvert. ORCID 0000-0002-4613-1597.
+- [“La géovisualisation de données massives sur le Web : entre avancées technologiques et évolutions cartographiques”](https://journals.openedition.org/mappemonde/5595?lang=fr) (geovisualizing massive data on the Web: between technological advances and cartographic change), *Mappemonde* 131, 2021.
+- [“La cartographie à l'heure du Géoweb : retour sur les nouveaux modes de représentation spatiale des données numériques”](https://shs.hal.science/halshs-01468314v1) (cartography in the age of the Geoweb: a look back at the new modes of spatial representation of digital data), HAL-SHS.
+- [“Visualiser les données spatiales sur le Web”](https://medium.com/@BorisMericskay/visualiser-les-donn%C3%A9es-spatiales-sur-le-web-f983e9e147d0) (visualizing spatial data on the Web), Medium.
+- Full HAL CV: [cv.hal.science/boris-mericskay-r2](https://cv.hal.science/boris-mericskay-r2) — 78 documents, 90% open access. ORCID 0000-0002-4613-1597.
 
-### Supports de cours — master SIGAT, Université Rennes 2
-Répertoire : `https://sites-formations.univ-rennes2.fr/mastersigat/Cours/`
-- [`CM_SemiologieGraphique_2020.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/CM_SemiologieGraphique_2020.pdf) — 116 dia., licence CC BY-SA
-- [`Intro_Dataviz.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Intro_Dataviz.pdf) — 101 dia.
+### Course material — SIGAT master's program, Université Rennes 2
+Directory: `https://sites-formations.univ-rennes2.fr/mastersigat/Cours/`
+- [`CM_SemiologieGraphique_2020.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/CM_SemiologieGraphique_2020.pdf) — 116 slides, CC BY-SA license
+- [`Intro_Dataviz.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Intro_Dataviz.pdf) — 101 slides
 - [`geoviz2018.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/geoviz2018.pdf) · [`Spatiotemporel.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Spatiotemporel.pdf) · [`AnalysespatialeM1.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/AnalysespatialeM1.pdf)
 - [`Leaflet.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Leaflet.pdf) · [`Cours_MapboxGL.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Cours_MapboxGL.pdf)
 - [`Intro_Overpass.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/Intro_Overpass.pdf) · [`OverpassTurbo_SOTM_2022.pdf`](https://sites-formations.univ-rennes2.fr/mastersigat/Cours/OverpassTurbo_SOTM_2022.pdf)
-- Index des supports : [bmericskay.github.io/portfolio/cours.html](https://bmericskay.github.io/portfolio/cours.html)
+- Index of the course material: [bmericskay.github.io/portfolio/cours.html](https://bmericskay.github.io/portfolio/cours.html)
 
-### Conférences
-- [CartoStats](https://cartosta.sciencesconf.org/data/pages/CartoStats_B_Mericskay.pdf) — « (géo)Visualisation de données statistiques sur le Web »
-- [GeoViz](https://geoviz.sciencesconf.org/data/pages/Visualisation_de_donnees_spatiales_sur_le_Web.pdf) — « Géovisualisation de données sur le Web »
-- [FOSS4G-fr 2016](https://osgeo-fr.github.io/presentations_foss4gfr/2016/J1/Foss4G_Communication-enseignement-BMericskay.pdf) — « Enseigner la géomatique à l'université »
+### Talks
+- [CartoStats](https://cartosta.sciencesconf.org/data/pages/CartoStats_B_Mericskay.pdf) — “(géo)Visualisation de données statistiques sur le Web” ((geo)visualization of statistical data on the Web)
+- [GeoViz](https://geoviz.sciencesconf.org/data/pages/Visualisation_de_donnees_spatiales_sur_le_Web.pdf) — “Géovisualisation de données sur le Web” (geovisualization of data on the Web)
+- [FOSS4G-fr 2016](https://osgeo-fr.github.io/presentations_foss4gfr/2016/J1/Foss4G_Communication-enseignement-BMericskay.pdf) — “Enseigner la géomatique à l'université” (teaching geomatics at university)
 
-### Tutoriels
-- [« Faire de la cartographie thématique sur le Web avec MapLibreGL »](https://geotribu.fr/articles/2021/2021-04-20_maplibre_site_ressource/), Geotribu, 2021.
-- [« Faire une carte en ligne (tuiles vectorielles + WebGL) 100 % libre »](https://geotribu.fr/articles/2021/2021-02-23_carte_ligne_libre/), Geotribu, 2021.
+### Tutorials
+- [“Faire de la cartographie thématique sur le Web avec MapLibreGL”](https://geotribu.fr/articles/2021/2021-04-20_maplibre_site_ressource/) (thematic web mapping with MapLibreGL), Geotribu, 2021.
+- [“Faire une carte en ligne (tuiles vectorielles + WebGL) 100 % libre”](https://geotribu.fr/articles/2021/2021-02-23_carte_ligne_libre/) (making a 100% free and open web map: vector tiles + WebGL), Geotribu, 2021.
 
-### Webinaires « Carte blanche » — GdR MAGIS, action de recherche AR9 qu'il co-anime
-Index : [magisar9.github.io/webinaires](https://magisar9.github.io/webinaires/) — mensuel, 30 min d'exposé filmé plus 30 min de discussion, diapositives publiées.
-- **#22** (21 janv. 2026) — Trémélo & Zanin, *La sémiologie graphique est-elle obsolète ?* — enquête 2024
-- **#23** (12 févr. 2026) — Thollot, *micmap : géovisualisation 3D stylisée* — rendu expressif appliqué à la carte 3D
-- **#28** (8 juil. 2026) — Pillot, *Cartographier l'incertitude* — quatre sources d'incertitude, score de confiance composite ([audio](https://pod.unistra.fr/video/63277-cartographier-lincertitude/))
-- **#16** (25 juin 2024) — Jégou, *Des cartes et des couleurs : enquête sur les gradients* — adapter la luminosité du gradient à la progression de la donnée ([préprint](https://hal.science/hal-04270875))
-- **#4** (avr. 2023) — Douet, *na.rm=TRUE — requête, interactivité et gestion des données manquantes*
-- **#8** (oct. 2023) — Gaffuri, *Gridviz : cartographie en ligne de données carroyées*
+### “Carte blanche” webinars — GdR MAGIS, research action AR9, which he co-leads
+Index: [magisar9.github.io/webinaires](https://magisar9.github.io/webinaires/) — monthly, a 30 min filmed talk plus 30 min of discussion, slides published.
+- **#22** (Jan 21, 2026) — Trémélo & Zanin, “La sémiologie graphique est-elle obsolète ?” (is graphic semiology obsolete?) — 2024 survey
+- **#23** (Feb 12, 2026) — Thollot, “micmap : géovisualisation 3D stylisée” (micmap: stylized 3D geovisualization) — expressive rendering applied to the 3D map
+- **#28** (Jul 8, 2026) — Pillot, “Cartographier l'incertitude” (mapping uncertainty) — four sources of uncertainty, a composite confidence score ([audio](https://pod.unistra.fr/video/63277-cartographier-lincertitude/))
+- **#16** (Jun 25, 2024) — Jégou, “Des cartes et des couleurs : enquête sur les gradients” (maps and colors: an inquiry into gradients) — fit the gradient's lightness to the progression of the data ([preprint](https://hal.science/hal-04270875))
+- **#4** (Apr 2023) — Douet, “na.rm=TRUE — requête, interactivité et gestion des données manquantes” (querying, interactivity and handling missing data)
+- **#8** (Oct 2023) — Gaffuri, “Gridviz : cartographie en ligne de données carroyées” (Gridviz: web mapping of gridded data)
 
 ### Code
 - [github.com/bmericskay](https://github.com/bmericskay) · [gitlab.huma-num.fr/bmericskay](https://gitlab.huma-num.fr/bmericskay) · [portfolio](https://bmericskay.github.io/portfolio/)

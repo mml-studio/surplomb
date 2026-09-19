@@ -66,7 +66,7 @@ function cellWith(n, latCell, { maxFrp = 20 } = {}) {
 }
 
 test('a degree cell near the pole is not painted hotter for covering less ground', () => {
-  // CARTOGRAPHIE, equal-area rule. `count`/`intensity`/`night` are extensive —
+  // CARTOGRAPHY, equal-area rule. `count`/`intensity`/`night` are extensive —
   // they scale with the ground the cell covers — and a 1° cell at 60°N covers
   // half the land of one on the equator. Equal counts must NOT read equal.
   const equator = heatScore(cellWith(50, 0), 1);

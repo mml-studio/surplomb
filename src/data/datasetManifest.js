@@ -65,7 +65,7 @@ export const DATASET_COVERAGES = Object.freeze(['global', 'fr', 'us', 'cities'])
 export const DATASET_CADENCES = Object.freeze(['live', 'periodic', 'static']);
 
 /**
- * Feature ceiling, in the doctrine's own words (CARTOGRAPHIE H3): the
+ * Feature ceiling, in the doctrine's own words (CARTOGRAPHY H3): the
  * GeoJSON / tiles frontier sits between 20 000 and 30 000 entities. A manifest
  * may ask for fewer, never for more — above this the answer is vector tiles,
  * which is a different transport and not something a manifest can declare.

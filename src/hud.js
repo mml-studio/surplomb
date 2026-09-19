@@ -10,7 +10,7 @@
  * NO SET DRESSING (Surplomb identity, 2026-09-19). The upstream HUD dressed
  * the view as a reconnaissance satellite: a classification banner, a blinking
  * recording dot, and invented mission, sensor, orbit, pass and band
- * identifiers (flagged as simulated since CARTOGRAPHIE A1). Surplomb shows what the
+ * identifiers (flagged as simulated since CARTOGRAPHY A1). Surplomb shows what the
  * State publishes, never a surveillance fiction, so all of it is gone; what
  * remains is measured.
  *
@@ -354,7 +354,7 @@ export class IntelHUD {
       bottomEl.textContent = `MGRS: ${mgrsLabel}  LAT: ${latDMS}  LON: ${lonDMS}`;
     }
 
-    // REMOVED (CARTOGRAPHIE F2, 2026-09-02): GSD and its derived NIIRS.
+    // REMOVED (CARTOGRAPHY F2, 2026-09-02): GSD and its derived NIIRS.
     //
     // The readout was `altM * 0.000375` — a magic constant independent of the
     // field of view, of the canvas height and of the pitch — printed to two

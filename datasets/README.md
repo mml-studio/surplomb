@@ -1,19 +1,20 @@
-# `datasets/` — les manifestes livrés
+# `datasets/` — the shipped manifests
 
-Un fichier JSON par jeu de données, nommé d'après son `id`. Au build, chaque
-manifeste devient une couche du panneau (`ds-<id>`) : groupe, ligne de source,
-crédit, carte et légende sont dérivés du fichier. Le contrat complet est dans
+One JSON file per dataset, named after its `id`. At build time each manifest
+becomes a panel layer (`ds-<id>`): group, source line, credit, card and legend
+are derived from the file. The full contract is in
 [`docs/DATASETS.md`](../docs/DATASETS.md).
 
-Pour en produire un depuis une adresse :
+To produce one from an address:
 
 ```
-npm run dataset:manifest -- <page data.gouv.fr | ressource | portail Opendatasoft | WFS | .geojson | .csv>
+npm run dataset:manifest -- <data.gouv.fr page | resource | Opendatasoft portal | WFS | .geojson | .csv>
 ```
 
-`src/data/datasetsCatalog.test.mjs` refuse tout manifeste qui ne valide pas,
-qui nomme un groupe inconnu, ou dont le nom de fichier ne suit pas l'`id`.
+`src/data/datasetsCatalog.test.mjs` rejects any manifest that does not
+validate, that names an unknown group, or whose file name does not match its
+`id`.
 
-La licence d'un manifeste est **lue** sur la plateforme et **confirmée** sur
-la page du jeu avant d'être livrée — jamais sur la foi d'une réponse d'API ou
-de MCP.
+A manifest's license is **read** on the platform and **confirmed** on the
+dataset's page before it ships — never on the strength of an API or MCP
+answer.

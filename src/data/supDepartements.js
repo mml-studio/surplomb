@@ -37,7 +37,7 @@
  * every département's card beside it, so the two are never read as each other.
  *
  * ── What the COLOUR carries: a rate this file can actually compute ──────────
- * The prism needs a ratio for its hue (CARTOGRAPHIE B1), and the ratio a
+ * The prism needs a ratio for its hue (CARTOGRAPHY B1), and the ratio a
  * reader would want first — students per 1 000 INHABITANTS — is not derivable
  * here: no population figure reaches this module, and inventing one from
  * another layer's feed would be a source, not an arithmetic. Two candidates

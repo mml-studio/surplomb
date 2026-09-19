@@ -217,7 +217,7 @@ import { drillPickAt } from './pickAt.js';
  * gives it: THREE QUARTERS OF IT WAS SCROLLED OUT OF SIGHT of the map it
  * exists to key. It is now 215 px, so on that feed it fits without scrolling
  * at all — 31 lines and 375 words become 11 and 93. The split runs along the
- * line CARTOGRAPHIE D1 draws:
+ * line CARTOGRAPHY D1 draws:
  *
  *   · THE KEY answers « what does this colour mean », because that is the one
  *     question no shape answers by itself, and it publishes the DOMAIN of the

@@ -229,7 +229,7 @@ test('the sensor model keeps the ellipsoidal height it was tuned against', () =>
 });
 
 test('no invented ground sample distance is printed beside the real coordinates', () => {
-  // CARTOGRAPHIE F2. `altM * 0.000375` ignored the field of view, the canvas
+  // CARTOGRAPHY F2. `altM * 0.000375` ignored the field of view, the canvas
   // height and the pitch, then printed to two decimals under the label "GSD",
   // one line above the true MSL altitude and one below the authentic MGRS. At
   // the opening pitch of -30 deg the true metres-per-pixel varies ~10x across
@@ -243,7 +243,7 @@ test('no invented ground sample distance is printed beside the real coordinates'
 });
 
 test('the HUD prints no invented reconnaissance set dressing', () => {
-  // CARTOGRAPHIE A1 first set the invented mission identifiers apart from the
+  // CARTOGRAPHY A1 first set the invented mission identifiers apart from the
   // measured readouts (a `SIM` prefix, a dimmer voice). The Surplomb identity
   // (2026-09-19) removes them outright: the product shows what the State
   // publishes, never a surveillance fiction. Only instruments remain.

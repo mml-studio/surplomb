@@ -1477,7 +1477,7 @@ test('frameRefreshMsFor: an absurd declared cadence cannot freeze a feed', () =>
 });
 
 test('an unsurveyed camera bearing is a distinct sign, not the same cone', () => {
-  // CARTOGRAPHIE A1. `osmCameras.js` computes headingConfidence carefully —
+  // CARTOGRAPHY A1. `osmCameras.js` computes headingConfidence carefully —
   // a multi-valued "270;170" is demoted to `medium` because one frustum cannot
   // show two facings — and `low` means NEITHER direction tag resolved, so the
   // azimuth drawn is `headingFromId()`, a hash of the identifier. Until this

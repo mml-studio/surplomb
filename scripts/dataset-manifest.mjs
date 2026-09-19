@@ -46,30 +46,30 @@ const manifest = { ...result.manifest };
 const id = option('--id');
 if (id) {
   if (!DATASET_ID_PATTERN.test(id)) {
-    console.error(`--id « ${id} » : minuscules, chiffres et tirets, 2 à 63 caractères`);
+    console.error(`--id "${id}": lowercase letters, digits and hyphens, 2 to 63 characters`);
     process.exit(2);
   }
   manifest.id = id;
 }
 
-console.error(`Plateforme : ${result.platform}`);
+console.error(`Platform: ${result.platform}`);
 if (Array.isArray(result.resources) && result.resources.length > 1) {
-  console.error(`Ressources (${result.resources.length}) — --resource <uuid> pour en choisir une autre :`);
+  console.error(`Resources (${result.resources.length}) — --resource <uuid> to pick another one:`);
   for (const resource of result.resources) {
     const mark = resource.id === manifest.source?.resourceId ? '→' : ' ';
     console.error(`  ${mark} ${resource.id}  ${resource.format || '?'}  ${resource.title || ''}`);
   }
 }
 if (Array.isArray(result.columns) && result.columns.length) {
-  console.error(`Colonnes (${result.columns.length}) : ${result.columns.join(', ')}`);
+  console.error(`Columns (${result.columns.length}): ${result.columns.join(', ')}`);
 }
-for (const note of result.notes || []) console.error(`Note : ${note}`);
+for (const note of result.notes || []) console.error(`Note: ${note}`);
 
 const faults = datasetManifestFaults(manifest);
 if (faults.length) {
-  console.error('\nLe brouillon ne valide pas encore :');
+  console.error('\nThe draft does not validate yet:');
   for (const fault of faults) console.error(`  · ${fault}`);
-  console.error('\nBrouillon :');
+  console.error('\nDraft:');
   console.log(JSON.stringify(stripNulls(manifest), null, 2));
   process.exit(1);
 }
@@ -82,11 +82,11 @@ if (flag('--dry')) {
   console.log(text);
 } else {
   if (existsSync(out) && !flag('--force')) {
-    console.error(`\n${path.relative(REPO_ROOT, out)} existe déjà — --force pour l'écraser.`);
+    console.error(`\n${path.relative(REPO_ROOT, out)} already exists — --force to overwrite it.`);
     process.exit(1);
   }
   await mkdir(path.dirname(out), { recursive: true });
   await writeFile(out, text, 'utf8');
-  console.error(`\nÉcrit : ${path.relative(REPO_ROOT, out)}`);
+  console.error(`\nWritten: ${path.relative(REPO_ROOT, out)}`);
 }
-console.error(`\nLicence lue : « ${normalized.attribution.licence} » — à confirmer sur ${normalized.attribution.url || 'la page du jeu'} avant de livrer.`);
+console.error(`\nLicense read: "${normalized.attribution.licence}" — confirm it on ${normalized.attribution.url || 'the dataset page'} before shipping.`);

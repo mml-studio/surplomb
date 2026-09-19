@@ -3081,7 +3081,7 @@ function _fleetTick() {
     const liveColor = _cockpitContactMode && !isCockpitNear
       ? (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)
       : _fleetBillboardColor(icao24);
-    // FRESHNESS MOVES OFF ALPHA (CARTOGRAPHIE A3). `baseAlpha` used to carry
+    // FRESHNESS MOVES OFF ALPHA (CARTOGRAPHY A3). `baseAlpha` used to carry
     // `_missingPolls ? 0.45 : 1`, multiplied into the same alpha as the limb
     // recession and the focus de-emphasis — three facts, one variable, none of
     // them recoverable. A coasting contact now stays fully opaque and washes
@@ -3763,7 +3763,7 @@ export function _setFlightTrackingRefreshOutcomeForTest({
 /**
  * Format a contact's altitude for a readout, or say it was never reported.
  *
- * CARTOGRAPHIE A1 (the map may not state what nobody measured). A contact with
+ * CARTOGRAPHY A1 (the map may not state what nobody measured). A contact with
  * no barometric report still carries the 10 km airborne default in `altitude`,
  * because the RENDER path has to place the sprite somewhere — but printing that
  * number gave "FL328", a flight level nobody measured, set in the same type,
@@ -4854,7 +4854,7 @@ const flightsLayer = {
         // surface when parked. `Cartesian3.fromDegrees` gets renderAltitudeM,
         // never `alt` directly.
         const alt = stickyNumber(baro_alt, prevMeta?.altitude, onGround ? 0 : 10000);
-        // Honesty gate (CARTOGRAPHIE A1). `alt` above keeps the 10 km airborne
+        // Honesty gate (CARTOGRAPHY A1). `alt` above keeps the 10 km airborne
         // default because the RENDER path needs a height to place the sprite —
         // but that number was invented here, not measured, and printing it as
         // "FL328" states a flight level nobody reported. Velocity on the same

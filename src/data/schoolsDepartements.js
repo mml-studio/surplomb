@@ -57,7 +57,7 @@
  * This header used to argue which single variable the national FILL was binned
  * on, and answered "the number of ESTABLISHMENTS, not pupils, because the
  * layer draws establishments". The premise was the defect: painting a raw
- * count as a colour fill is the fault CARTOGRAPHIE B1 names in capitals, and
+ * count as a colour fill is the fault CARTOGRAPHY B1 names in capitals, and
  * the question "count or density?" only exists while there is one channel to
  * put them on. `schoolsFrance.js` now draws a PRISM, so both travel:
  *

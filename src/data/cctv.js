@@ -322,7 +322,7 @@ const ACTIVE_COVERAGE_EDGE_DEPTHFAIL = Cesium.Color.fromCssColorString('#8dff87'
 const ACTIVE_COVERAGE_CENTER_DEPTHFAIL = Cesium.Color.fromCssColorString('#d7ff8d').withAlpha(0.26);
 const PLANE_OUTLINE_COLOR = Cesium.Color.fromCssColorString('#6be8ff').withAlpha(0.55);
 
-// ── Heading provenance on the map (CARTOGRAPHIE A1) ──────────────────────────
+// ── Heading provenance on the map (CARTOGRAPHY A1) ──────────────────────────
 // `headingConfidence` was computed with care — `osmCameras.js` demotes a
 // multi-valued `camera:direction` ("270;170", live-sampled in central Paris)
 // to `medium` because one frustum cannot show two facings — and then read by

@@ -3831,7 +3831,7 @@ export class DataLayerManager {
    * `{color, glyph, label, count, blurb, heading}` entries each enabled layer
    * publishes through `getRowControls()`.
    *
-   * WHY HERE AND NOWHERE ELSE (CARTOGRAPHIE, "a map without a key is a
+   * WHY HERE AND NOWHERE ELSE (CARTOGRAPHY, "a map without a key is a
    * picture"). The entries used to render in the layer row as well, inside
    * `#data-panel`, which ships `collapsed` — and the collapsed rule hides
    * `.data-toggle-list` outright, so no legend was visible in the default
@@ -4271,7 +4271,7 @@ export class DataLayerManager {
       }
       return `${stateLabel} · ${source} · ${presentedError}`;
     }
-    // WHAT THE AGE MEANS (CARTOGRAPHIE E2). The registry has always carried a
+    // WHAT THE AGE MEANS (CARTOGRAPHY E2). The registry has always carried a
     // `cadence` facet — `live` / `periodic` / `static` — validated at boot
     // (`layerTaxonomy.js` throws on an invalid one) and displayed nowhere. The
     // cost of that silence is concentrated on `static`: a pack bundled in the
@@ -4286,7 +4286,7 @@ export class DataLayerManager {
         ? `${cadence === 'live' ? 'flux · ' : ''}${this._timeAgo(stats.lastUpdate)}`
         : 'jamais');
     // COVERAGE — the boundary of what the layer could have drawn at all
-    // (CARTOGRAPHIE H1: a map states the edge of its own data). Three layers
+    // (CARTOGRAPHY H1: a map states the edge of its own data). Three layers
     // publish it — "533 of 892 measuring sea", "RRN non concédé", "couverture
     // mondiale" — and it was only ever read in the `fallback` branch
     // below, which none of them reach. `marineBuoys.js` even asserts in a

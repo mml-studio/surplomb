@@ -113,7 +113,7 @@ const TYPE_STYLES = [
  *
  * This used to be `#39d5ff` / `57, 213, 255`: byte-for-byte the CARGO colour.
  * A ship that had declared nothing was drawn as a container ship, in a palette
- * where the reader's only cue is hue (CARTOGRAPHIE A1). The replacement is
+ * where the reader's only cue is hue (CARTOGRAPHY A1). The replacement is
  * deliberately OFF the family ramp — a desaturated slate among saturated hues
  * — so "no family" reads as its own state rather than as membership in
  * whichever family happened to be the default.

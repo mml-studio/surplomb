@@ -1629,7 +1629,7 @@ class CockpitViewController {
       if (label) label.textContent = formatSpeedRulerTick(tick.valueKt);
     });
     // An unreported altitude reads `-----` on the tape rather than the 10 km
-    // airborne default the render path uses to place the sprite (CARTOGRAPHIE
+    // airborne default the render path uses to place the sprite (CARTOGRAPHY
     // A1). The instrument already has a no-data state; it just was never
     // reached, because the fabricated value is a finite number.
     const altitudeFt = info.altitudeMeasured === false

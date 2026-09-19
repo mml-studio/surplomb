@@ -12,8 +12,8 @@
 // and fails if any pair of neighbouring bands inverts or gets too close. It is
 // the same method `choroplethAlpha.test.mjs` uses on the French choropleths.
 //
-// CARTOGRAPHIE B3 ("six paliers déclarés ne font pas six paliers perçus") and
-// B4 ("convertir la rampe en niveaux de gris — l'ordre survit-il ?").
+// CARTOGRAPHY B3 ("six declared classes do not make six perceived classes")
+// and B4 ("convert the ramp to grayscale — does the order survive?").
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

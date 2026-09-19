@@ -1,89 +1,88 @@
-# La boîte à datasets — brancher n'importe quel jeu de données
+# The dataset box — plug in any dataset
 
-Mis à jour : 8 septembre 2026.
+Updated: Sep 8, 2026.
 
-Ce document dit comment un jeu de données entre dans Surplomb sans
-écrire de couche, ce qu'il reçoit en entrant, et ce qu'il ne reçoit pas.
-Il est le contrat ; le code est dans `src/data/dataset*.js`.
+This document says how a dataset gets into Surplomb without anyone writing a
+layer, what it receives on the way in, and what it does not. It is the
+contract; the code is in `src/data/dataset*.js`.
 
-## Pourquoi
+## Why
 
-Avant ce chantier, ajouter une couche coûtait **17 à 23 fichiers** — mesuré
-sur `medecins-fr`, `petite-enfance-fr` et `meteo-stations-fr` : un module de
-2 000 lignes, un flux, un plugin de proxy de 300 lignes, un jeton de partage,
-une ligne de taxonomie, un crédit, un alias vocal, deux tables du README, un
-harnais QA. Onze de ces fichiers ne servaient qu'à **énoncer un fait** sur le
-jeu : d'où il vient, dans quel groupe il s'affiche, qui le publie, sous quelle
-licence. Un manifeste énonce ces faits une fois, en JSON, et la boîte en
-dérive toutes les entrées de registre.
+Before this work, adding a layer cost **17 to 23 files** — measured on
+`medecins-fr`, `petite-enfance-fr` and `meteo-stations-fr`: a 2,000-line
+module, a feed, a 300-line proxy plugin, a share token, a taxonomy row, a
+credit, a voice alias, two README tables, a QA harness. Eleven of those files
+did nothing but **state a fact** about the dataset: where it comes from, which
+group it shows in, who publishes it, under which license. A manifest states
+those facts once, in JSON, and the box derives every registry entry from it.
 
-Le fossé n'était pas la donnée — les plateformes françaises répondent en CORS
-ouvert, mesuré le 2026-09-08 : data.gouv.fr (API tabulaire, métadonnées,
-redirection `r/<uuid>`, hôte statique), la Géoplateforme IGN (WFS) et les
-portails Opendatasoft envoient tous `access-control-allow-origin: *`. Le
-fossé était la **plomberie**. La boîte est cette plomberie, écrite une fois.
+The gap was not the data — French platforms answer with open CORS, measured on
+2026-09-08: data.gouv.fr (tabular API, metadata, `r/<uuid>` redirect, static
+host), the IGN Géoplateforme (WFS) and Opendatasoft portals all send
+`access-control-allow-origin: *`. The gap was the **plumbing**. The box is that
+plumbing, written once.
 
-## Trois façons de brancher un jeu
+## Three ways to plug in a dataset
 
-### 1. Dans l'application — un sujet, ou une adresse
+### 1. In the app — a subject, or an address
 
-Sous la liste des couches, **＋ BRANCHER UN JEU DE DONNÉES**. Un seul champ
-prend les deux, et le bouton dit lequel il a lu : **CHERCHER** pour des mots,
-**ANALYSER** pour une adresse.
+Under the layer list, *＋ BRANCHER UN JEU DE DONNÉES* (＋ PLUG IN A DATASET). A
+single field takes both, and the button says which one it read: *CHERCHER*
+(SEARCH) for words, *ANALYSER* (ANALYZE) for an address.
 
-La boîte est l'invitée du panneau, pas sa locataire : au repos elle tient sur
-une ligne, un clic n'ouvre que le champ, et elle ne prend de la place aux
-couches qu'à partir du moment où il y a quelque chose à lire — une sélection à
-l'écran, ou un brouillon en main. Même là, la liste garde deux lignes et la
-boîte fait défiler le reste. La refermer rend tout, et ne perd rien : le
-brouillon et la sélection sont encore là au retour.
+The box is the panel's guest, not its tenant: at rest it fits on one line, a
+click opens only the field, and it takes room from the layers only once there
+is something to read — a shortlist on screen, or a draft in hand. Even then,
+the list keeps two rows and the box scrolls the rest. Closing it gives
+everything back and loses nothing: the draft and the shortlist are still there
+when it reopens.
 
-Un sujet — « défibrillateurs » — ouvre la **sélection**. Les cinq premiers
-résultats de data.gouv.fr sont lus d'un coup, seuls ceux dont un brouillon
-valide sont proposés, et chacun porte quatre faits lus sur la plateforme :
-combien d'objets, qui publie, quelle fraîcheur, quelle licence. Ce qui a été
-écarté est dit avec la raison en une phrase — « fichiers introuvables »,
-« aucune colonne de position ». Rien n'est présélectionné : mesuré sur six
-sujets, le premier résultat de la plateforme est le bon une fois sur deux, et
-ses erreurs ressemblent à des succès (dix-neuf points d'un département là où
-une base nationale de 186 118 était visée). C'est un arbitrage que seul le
-lecteur peut faire, alors il le fait — `docs/DEMANDER-UNE-DONNEE.md` mesure ce
-que cette sélection coûte et ce que le retour visuel a le droit d'afficher
-pendant le chargement.
+A subject — *défibrillateurs* (defibrillators) — opens the **shortlist**. The
+first five data.gouv.fr results are read at once, only those that yield a
+valid draft are offered, and each carries four facts read from the platform:
+how many features, who publishes, how fresh, which license. What was set aside
+is stated with its reason in a few words — *fichiers introuvables* (files not
+found), *aucune colonne de position* (no position column). Nothing is
+preselected: measured on six subjects, the platform's first result is the right
+one half the time, and its mistakes look like successes (nineteen points from
+one department where a national base of 186,118 was the target). This is a
+call only the reader can make, so the reader makes it — the pull request that
+built the box (#113) measured what this shortlist costs and what the visual
+feedback is allowed to show while it loads.
 
-Une adresse collée saute la sélection et va droit au brouillon. La boîte lit ce que la plateforme
-publie sur elle-même — titre, éditeur, licence, colonnes, un échantillon —,
-devine comment une ligne se place, et montre le brouillon : nom, couleur,
-ressource retenue (quand il y en a plusieurs), colonnes de position (avec la
-raison de la supposition), et les notes qu'un lecteur attentif doit voir. Rien
-n'est dessiné avant BRANCHER.
+A pasted address skips the shortlist and goes straight to the draft. The box
+reads what the platform publishes about itself — title, publisher, license,
+columns, a sample —, guesses how a row is placed, and shows the draft: name,
+color, chosen resource (when there are several), position columns (with the
+reason for the guess), and the notes an attentive reader must see. Nothing is
+drawn before *BRANCHER* (PLUG IN).
 
-Adresses reconnues :
+Recognized addresses:
 
-| Ce qu'on colle | Ce que la boîte fait |
+| What you paste | What the box does |
 |---|---|
-| Page d'un jeu data.gouv.fr (`/datasets/<slug>/`) | choisit la ressource la plus lisible (GeoJSON, puis CSV, puis WFS), lit son profil sur l'API tabulaire |
-| Ressource data.gouv.fr (`/datasets/r/<uuid>`, `#/resources/<uuid>`, un UUID nu) | la même chose, pour cette ressource |
-| Page d'un jeu Opendatasoft (`/explore/dataset/<id>/`) | lit les métadonnées du portail, trouve le champ géographique |
-| Un GetFeature WFS avec `typeNames=` | une couche WFS chargée pour la vue |
-| Un `.geojson`, `.geojsonl`, `.csv` nu | le fichier, l'éditeur et la licence restant à compléter |
+| A data.gouv.fr dataset page (`/datasets/<slug>/`) | picks the most readable resource (GeoJSON, then CSV, then WFS), reads its profile from the tabular API |
+| A data.gouv.fr resource (`/datasets/r/<uuid>`, `#/resources/<uuid>`, a bare UUID) | the same, for that resource |
+| An Opendatasoft dataset page (`/explore/dataset/<id>/`) | reads the portal's metadata, finds the geographic field |
+| A WFS GetFeature with `typeNames=` | a WFS layer loaded for the view |
+| A bare `.geojson`, `.geojsonl`, `.csv` | the file, with publisher and license left to fill in |
 
-Le jeu branché est retenu **dans ce navigateur** (`localStorage`), avec son
-état allumé/éteint. Le bouton ⧉ copie son manifeste : c'est le fichier à
-déposer dans `datasets/` pour qu'il soit livré à tout le monde.
+The plugged dataset is remembered **in this browser** (`localStorage`), with
+its on/off state. The ⧉ button copies its manifest: that is the file to drop
+into `datasets/` so that it ships to everyone.
 
-### 2. Dans le dépôt — un fichier JSON
+### 2. In the repository — one JSON file
 
-Un fichier `datasets/<id>.json` suffit. Au prochain build, la couche est sur
-le panneau, dans son groupe, avec sa ligne de source, son crédit dans la
-fenêtre d'attribution, sa carte et sa légende. Le test
-`src/data/datasetsCatalog.test.mjs` refuse tout manifeste qui ne valide pas —
-la même discipline que les registres du cœur, où une couche sans catégorie
-est une panne au démarrage.
+A `datasets/<id>.json` file is enough. At the next build the layer is on the
+panel, in its group, with its source line, its credit in the attribution
+window, its card and its legend. The test
+`src/data/datasetsCatalog.test.mjs` rejects any manifest that does not
+validate — the same discipline as the core registries, where a layer without a
+category is a boot failure.
 
-Un exemple est livré : les défibrillateurs GeoDAE (data.gouv.fr, API
-tabulaire, chargés pour la vue). Il ne prend pas de ligne dans le panneau —
-son bloc `fusion` le pose comme une puce de « Santé & secours » :
+One example ships: the GeoDAE defibrillators (data.gouv.fr, tabular API,
+loaded for the view). It does not take a row in the panel — its `fusion` block
+sets it as a chip of *Santé & secours* (Health & emergency services):
 
 ```json
 "fusion": {
@@ -93,89 +92,89 @@ son bloc `fusion` le pose comme une puce de « Santé & secours » :
 }
 ```
 
-`into` est l'identifiant d'une couche du cœur, qui doit exister et ne pas être
-elle-même une puce ; sinon le branchement est refusé au lieu de poser une
-couche que rien ne commande. `chip` fait 24 caractères au plus, et `optIn`
-(facultatif) laisse la puce éteinte quand la ligne s'allume.
+`into` is the id of a core layer, which must exist and must not itself be a
+chip; otherwise the plug is refused, instead of laying down a layer nothing
+controls. `chip` is 24 characters at most, and `optIn` (optional) leaves the
+chip off when the row is turned on.
 
-**Un manifeste n'est pas livré pour ce qu'une couche dessine déjà.** Les
-emprises d'aérodromes de la BD TOPO ont eu le leur, et il a été retiré : la
-couche Aéroports embarque 418 de ces emprises, jointes à OurAirports sur le
-code OACI, et deux lignes dans la même liste pour le même sujet demandent au
-lecteur d'arbitrer un recouvrement qu'il n'a pas les moyens de voir. Ce que la
-jointure laisse dehors est écrit dans `src/data/airportsPack.js` — les 704
-héliports de la BD TOPO (hôpitaux, casernes, gendarmeries) et les 30 contours,
-surtout militaires, qu'aucun terrain du paquet ne réclame — et cela reste
-branchable en une adresse : `BDTOPO_V3:aerodrome` sur
-`https://data.geopf.fr/wfs/ows`, collé dans ＋ BRANCHER UN JEU DE DONNÉES.
+**A manifest is not shipped for what a layer already draws.** The BD TOPO
+aerodrome footprints had one, and it was withdrawn: the Airports layer embeds
+418 of those footprints, joined to OurAirports on the ICAO code, and two rows
+in the same list for the same subject ask the reader to settle an overlap they
+have no way of seeing. What the join leaves out is written in
+`src/data/airportsPack.js` — the 704 BD TOPO heliports (hospitals, fire
+stations, gendarmeries) and the 30 outlines, mostly military, that no airfield
+in the pack claims — and it stays pluggable with one address:
+`BDTOPO_V3:aerodrome` on `https://data.geopf.fr/wfs/ows`, pasted into
+*＋ BRANCHER UN JEU DE DONNÉES* (＋ PLUG IN A DATASET).
 
-### 3. En ligne de commande — depuis une recherche MCP
+### 3. From the command line — after an MCP search
 
-`.mcp.json` enregistre le serveur MCP officiel de data.gouv.fr pour
-l'assistant qui accompagne un contributeur. Le chemin complet :
+`.mcp.json` registers the official data.gouv.fr MCP server for the assistant
+that works alongside a contributor. The full path:
 
 ```
-search_datasets("défibrillateurs")        ← MCP : trouver le jeu
-list_dataset_resources("61556e1e…")       ← MCP : voir ses ressources
+search_datasets("défibrillateurs")        ← MCP: find the dataset
+list_dataset_resources("61556e1e…")       ← MCP: see its resources
 npm run dataset:manifest -- https://www.data.gouv.fr/datasets/geodae-base-nationale-des-defibrillateurs/
 ```
 
-Le script lit la même API REST que le MCP enveloppe, écrit
-`datasets/<id>.json`, imprime les colonnes, les notes, et rappelle que la
-licence lue doit être confirmée sur la page du jeu. `--dry` imprime sans
-écrire ; `--resource <uuid>` choisit une ressource ; `--id` renomme.
+The script reads the same REST API the MCP server wraps, writes
+`datasets/<id>.json`, prints the columns and the notes, and reminds you that
+the license it read must be confirmed on the dataset's page. `--dry` prints
+without writing; `--resource <uuid>` picks a resource; `--id` renames.
 
-Le MCP reste hors du produit — son preflight CORS répond 403, ses réponses
-sont de la prose, data.gouv.fr le qualifie d'expérimental. Il sert à trouver ;
-la boîte sert à brancher.
+The MCP server stays out of the product — its CORS preflight answers 403, its
+answers are prose, and data.gouv.fr calls it experimental. It is for finding;
+the box is for plugging in.
 
-## Le manifeste
+## The manifest
 
 ```jsonc
 {
-  "id": "defibrillateurs-geodae",          // minuscules, chiffres, tirets — devient la couche ds-<id>
-  "label": "Défibrillateurs (GeoDAE)",     // le nom du panneau
-  "name": "Defibrillators GeoDAE",         // facultatif : nom canonique (voix, contexte LLM)
-  "icon": "♥", "color": "#ff5c7a",         // facultatifs ; la couleur est tirée d'une palette stable sinon
-  "category": "built-environment",         // facultatif : un des huit groupes, sinon « JEUX BRANCHÉS »
-  "coverage": "fr",                        // global | fr | us | cities → la pastille de portée
-  "cadence": "periodic",                   // live | periodic | static → la formule de fraîcheur
+  "id": "defibrillateurs-geodae",          // lowercase, digits, hyphens — becomes the layer ds-<id>
+  "label": "Défibrillateurs (GeoDAE)",     // the panel name
+  "name": "Defibrillators GeoDAE",         // optional: canonical name (voice, LLM context)
+  "icon": "♥", "color": "#ff5c7a",         // optional; otherwise the color is drawn from a stable palette
+  "category": "built-environment",         // optional: one of the eight groups, otherwise “JEUX BRANCHÉS” (PLUGGED DATASETS)
+  "coverage": "fr",                        // global | fr | us | cities → the coverage badge
+  "cadence": "periodic",                   // live | periodic | static → the freshness wording
   "source": {
     "kind": "datagouv",                    // geojson | geojsonl | csv | datagouv | wfs | opendatasoft
-    "resourceId": "edb6a9e1-…",            // datagouv ; sinon "url" (+ "typeName" WFS, "dataset" ODS)
+    "resourceId": "edb6a9e1-…",            // datagouv; otherwise "url" (+ "typeName" WFS, "dataset" ODS)
     "scope": "viewport",                   // all | viewport (datagouv lon/lat, wfs, opendatasoft)
-    "maxFeatures": 4000,                   // plafond, ≤ 30 000 (H3) — déclaré sur la ligne (A5)
-    "maxSpanDeg": 1.5                      // au-delà, rien n'est demandé : « rapprochez-vous » (F6)
+    "maxFeatures": 4000,                   // cap, ≤ 30,000 (H3) — declared on the row (A5)
+    "maxSpanDeg": 1.5                      // beyond this, nothing is requested: “rapprochez-vous” (move closer) (F6)
   },
   "geometry": { "lon": "c_long_coor1", "lat": "c_lat_coor1" },
-  //  ou { "point": "coordonneesXY" }     une cellule : [lon,lat] JSON, "lat, lon" ODS, {lon,lat}
-  //  ou { "wkt": "geom" }                POINT (x y)
-  //  ou { "x": "x", "y": "y", "crs": "EPSG:2154" }   Lambert-93, reprojeté
-  //  ou { "geojson": "geometry" }        une géométrie GeoJSON dans la cellule
-  //  (inutile pour geojson, geojsonl, wfs, opendatasoft : la géométrie est native)
+  //  or { "point": "coordonneesXY" }     one cell: [lon,lat] JSON, "lat, lon" ODS, {lon,lat}
+  //  or { "wkt": "geom" }                POINT (x y)
+  //  or { "x": "x", "y": "y", "crs": "EPSG:2154" }   Lambert-93, reprojected
+  //  or { "geojson": "geometry" }        a GeoJSON geometry in the cell
+  //  (not needed for geojson, geojsonl, wfs, opendatasoft: the geometry is native)
   "feature": {
-    "title": ["c_nom", "c_adr_voie"],      // le premier champ non vide fait le titre
-    "ambient": "label",                    // facultatif : "card" (titre + détail) ou "label" (titre seul,
-                                           //   détail au clic). Omis, la couche décide : au-delà de 160
-                                           //   objets chargés, une carte par objet est impossible de
-                                           //   toute façon — voir « Ce qui flotte à côté d'une marque »
-    "blank": ["non renseigné"],            // facultatif : les écritures qui veulent dire « je ne sais pas ».
-                                           //   Une ligne qui ne dirait que ça n'est pas écrite du tout
+    "title": ["c_nom", "c_adr_voie"],      // the first non-empty field makes the title
+    "ambient": "label",                    // optional: "card" (title + detail) or "label" (title only,
+                                           //   detail on click). Omitted, the layer decides: beyond 160
+                                           //   loaded features, one card per feature is impossible
+                                           //   anyway — see “What floats next to a mark”
+    "blank": ["non renseigné"],            // optional: the spellings that mean “I don't know”.
+                                           //   A row that would say only that is not written at all
     "details": [
       { "field": "c_com_nom", "label": "Commune" },
       { "field": "puissance", "unit": "kW" },
-      { "field": "c_disp_j", "label": "Jours", "format": "days" },   // "list" : littéral {a,b} Postgres
-                                                                    // "days" : + runs compactés en lun–ven
+      { "field": "c_disp_j", "label": "Jours", "format": "days" },   // "list": Postgres {a,b} literal
+                                                                    // "days": + runs compacted into lun–ven (Mon–Fri)
       { "field": "c_etat_fonct", "label": "État",
-        "omitWhen": ["En fonctionnement"] }  // la valeur majoritaire se tait, l'exception s'écrit
+        "omitWhen": ["En fonctionnement"] }  // the majority value stays silent, the exception is written
     ],
-    "group": {                             // facultatif : une couleur par valeur d'un champ…
+    "group": {                             // optional: one color per value of a field…
       "field": "c_acc",
       "styles": { "Extérieur": { "color": "#ff5c7a" }, "Intérieur": { "color": "#ffb3c0" } },
       "other": { "color": "#9aa7bd", "label": "Accès non renseigné" }
     },
-    // …ou, quand la distinction que cherche le lecteur tient dans PLUSIEURS
-    // colonnes, une liste ordonnée de règles, la première qui matche gagne :
+    // …or, when the distinction the reader is after spans SEVERAL
+    // columns, an ordered list of rules, where the first match wins:
     // "group": {
     //   "rules": [
     //     { "key": "h24", "label": "Accessible 24 h/24", "color": "#5ce6a8",
@@ -185,133 +184,130 @@ la boîte sert à brancher.
     //   ],
     //   "other": { "color": "#7d8aa0", "label": "Accès restreint" }
     // },
-    "filters": [                           // facultatif : les puces de la ligne. Rien n'est déchargé —
-                                           //   les marques des groupes non nommés sont masquées, et
-                                           //   l'effectif comme la légende continuent de tout compter
-      { "id": "tous", "label": "Tous" },   //   une puce sans "groups" est le retour à « tout » (obligatoire)
+    "filters": [                           // optional: the row's chips. Nothing is unloaded —
+                                           //   marks of unnamed groups are hidden, and
+                                           //   both the count and the legend keep counting everything
+      { "id": "tous", "label": "Tous" },   //   a chip without "groups" is the way back to “all” (required)
       { "id": "dehors", "label": "Extérieur", "groups": ["Extérieur"] }
-    ]                                      //   les "groups" sont les clés du "group" ci-dessus : une valeur
-                                           //   de "styles", une "key" de "rules", ou "__other__"
+    ]                                      //   "groups" are keys of the "group" above: a value
+                                           //   of "styles", a "key" of "rules", or "__other__"
   },
-  "attribution": {                         // obligatoire — un jeu sans éditeur ni licence ne s'affiche pas
+  "attribution": {                         // required — a dataset without publisher and license is not shown
     "publisher": "Atlasanté — GeoDAE",
     "licence": "Licence Ouverte 2.0",
     "url": "https://www.data.gouv.fr/datasets/geodae-base-nationale-des-defibrillateurs/",
-    "text": "Défibrillateurs : GeoDAE — Atlasanté (Licence Ouverte 2.0)"   // la ligne de crédit
+    "text": "Défibrillateurs : GeoDAE — Atlasanté (Licence Ouverte 2.0)"   // the credit line
   }
 }
 ```
 
-`datasetManifestFaults()` liste **toutes** les fautes d'un manifeste ;
-`normalizeDatasetManifest()` pose les défauts et gèle le résultat. Un
-manifeste normalisé revalide tel quel : c'est ce qui permet le stockage et
-l'export.
+`datasetManifestFaults()` lists **every** fault in a manifest;
+`normalizeDatasetManifest()` fills in the defaults and freezes the result. A
+normalized manifest revalidates as is: that is what makes storage and export
+possible.
 
-## Ce qu'un jeu reçoit en entrant
+## What a dataset receives on the way in
 
-Le chargeur GeoJSON local (`localGeojson.js`), celui des aéroports, des
-barrages, des ports et des datacenters : les tiges de rappel, les cartes
-ambiantes arbitrées à l'écran, l'occultation à l'horizon, l'échantillonnage du
-sol, le clic qui sélectionne et cadre. Trois crochets l'ouvrent sans qu'il
-apprenne quoi que ce soit des plateformes : `loadFeatures` (d'où viennent les
-objets), `cardCopy` (ce que dit une carte) et `invalidate` (oublier pour
-recharger).
+The local GeoJSON loader (`localGeojson.js`), the one behind airports, dams,
+ports and data centers: leader stems, ambient cards arbitrated on screen,
+occlusion at the horizon, ground sampling, the click that selects and frames.
+Three hooks open it up without it learning anything about the platforms:
+`loadFeatures` (where the features come from), `cardCopy` (what a card says)
+and `invalidate` (forget, so as to reload).
 
-### Ce qui flotte à côté d'une marque
+### What floats next to a mark
 
-L'hôte partagé matérialise au plus **160 entrées ambiantes par source**
-(`LOCAL_OVERLAY_COHORT_LIMIT`). Un jeu plus gros que ça ne peut donc PAS
-montrer une carte par objet : ce qu'il montre est un échantillon de lui-même,
-dessiné à pleine hauteur de carte, par-dessus la carte. Mesuré sur GeoDAE
-au-dessus de Lyon : 1 176 objets dans la vue, ~25 cartes à l'écran de sept
-lignes chacune, plus de 60 % du viewport couvert par un échantillon de 2 %.
+The shared host materializes at most **160 ambient entries per source**
+(`LOCAL_OVERLAY_COHORT_LIMIT`). A dataset bigger than that therefore CANNOT
+show one card per feature: what it shows is a sample of itself, drawn at full
+card height, on top of the map. Measured on GeoDAE above Lyon: 1,176 features
+in view, ~25 cards of seven lines each on screen, more than 60% of the viewport
+covered by a 2% sample.
 
-Au-delà de ce seuil la boîte passe donc en `label` : le **titre seul** flotte,
-et le détail attend le clic — qui ouvre la fiche de contexte avec la ligne
-entière, pas seulement les champs déclarés. Rien n'est perdu, tout est déplacé
-d'un cran. La tige de rappel est plafonnée à 18 m dans ce régime, pour la même
-raison qu'elle l'est à 150 m au-dessus d'un aéroport : elle lève la marque
-au-dessus du maillage photoréaliste sans devenir, à mille exemplaires, une
-hachure sur la ville.
+Beyond that threshold the box therefore switches to `label`: the **title
+alone** floats, and the detail waits for the click — which opens the context
+card with the whole row, not just the declared fields. Nothing is lost;
+everything moves one step back. The leader stem is capped at 18 m in this
+regime, for the same reason it is capped at 150 m above an airport: it lifts
+the mark above the photorealistic mesh without turning, in a thousand copies,
+into hatching over the city.
 
-`feature.ambient` tranche dans les deux sens quand l'auteur sait mieux.
+`feature.ambient` overrides the choice either way when the author knows better.
 
-Et ce que la doctrine (`docs/CARTOGRAPHIE.md`) exige d'une couche :
+And what the doctrine (`docs/CARTOGRAPHY.md`) requires of a layer:
 
-| Règle | Ce que la boîte fait |
+| Rule | What the box does |
 |---|---|
-| A5 · tout écrêtage se déclare | la ligne de la couche dit « 4 000 affichés sur 186 137 — plafond 4 000, premières lignes » |
-| D1 · légende obligatoire là où la couleur porte une valeur | une entrée par groupe avec son effectif, ou un aplat unique nommé |
-| E2 · le régime temporel est déclaré | `cadence` dans le manifeste → « instantané figé » / âge / flux |
-| F6 · aucune couche à toutes les altitudes | `maxSpanDeg` : au-delà, la ligne dit « rapprochez-vous » comme une consigne, pas une panne |
-| H1 · la frontière de la donnée est dite | « n dans la vue », « n objets, jeu entier », « n sans position », « via relais » |
-| H3 · 20 000–30 000 objets, la frontière GeoJSON/tuiles | `maxFeatures` plafonné à 30 000 |
-| A1 · jamais le même signe pour mesuré et supposé | une géométrie devinée est annoncée comme telle dans le brouillon, avant tout dessin |
+| A5 · every cap is declared | the layer's row says *4 000 affichés sur 186 137 — plafond 4 000, premières lignes* (4,000 shown of 186,137 — cap 4,000, first rows) |
+| D1 · a legend is mandatory where color carries a value | one entry per group with its count, or a single named flat color |
+| E2 · the temporal regime is declared | `cadence` in the manifest → *instantané figé* (frozen snapshot) / age / feed |
+| F6 · no layer at every altitude | `maxSpanDeg`: beyond it, the row says *rapprochez-vous* (move closer) as an instruction, not a failure |
+| H1 · the edge of the data is stated | *n dans la vue* (n in view), *n objets, jeu entier* (n features, whole dataset), *n sans position* (n without position), *via relais* (via relay) |
+| H3 · 20,000–30,000 features, the GeoJSON/tiles boundary | `maxFeatures` capped at 30,000 |
+| A1 · never the same sign for measured and assumed | a guessed geometry is announced as such in the draft, before anything is drawn |
 
-## Chargé pour la vue
+## Loaded for the view
 
-Une source `scope: "viewport"` est demandée pour le rectangle que la caméra
-regarde, élargi de 20 % pour qu'un frémissement ne recharge pas, et
-redemandée quand la vue sort de cette boîte — ou quand la réponse précédente
-était écrêtée et que le lecteur s'est rapproché de moitié. Trois plateformes
-savent répondre à une emprise :
+A `scope: "viewport"` source is requested for the rectangle the camera is
+looking at, widened by 20% so that a small jitter does not reload it, and
+requested again when the view leaves that box — or when the previous answer
+was capped and the reader has moved in by half. Three platforms can answer to
+a bounding box:
 
-- **data.gouv.fr** — l'API tabulaire, par pages de 200 lignes typées, avec
-  `<colonne>__greater` / `__less` sur les colonnes de position. Le fichier
-  IRVE fait 161 Mo ; la vue de Paris en demande 11 633 lignes. Une ressource
-  jamais indexée retombe sur le fichier brut, sous un plafond de 24 Mo.
-- **WFS** — `bbox=…,CRS:84`. `CRS:84` et non `EPSG:4326` : sur la
-  Géoplateforme, une emprise lat/lon renvoie zéro objet là où lon/lat en
-  renvoie quatre — mesuré.
-- **Opendatasoft** — `where=in_bbox(champ, lat1, lon1, lat2, lon2)` sur
-  l'export GeoJSON.
+- **data.gouv.fr** — the tabular API, in pages of 200 typed rows, with
+  `<column>__greater` / `__less` on the position columns. The IRVE file is
+  161 MB; the Paris view asks for 11,633 rows of it. A resource that was never
+  indexed falls back to the raw file, under a 24 MB cap.
+- **WFS** — `bbox=…,CRS:84`. `CRS:84` and not `EPSG:4326`: on the
+  Géoplateforme, a lat/lon bounding box returns zero features where lon/lat
+  returns four — measured.
+- **Opendatasoft** — `where=in_bbox(field, lat1, lon1, lat2, lon2)` on the
+  GeoJSON export.
 
-## Le relais `/api/plug`
+## The `/api/plug` relay
 
-Le navigateur parle directement aux plateformes. Le relais est le repli pour
-celles qui refusent un en-tête `Origin` — l'INSEE répond 403 — et n'est
-tenté qu'après un échec direct de la forme d'un échec CORS. Il est étroit par
-construction : GET, https, hôtes sur liste blanche (`data.gouv.fr`,
-`geopf.fr`, `ign.fr`, `opendatasoft.com`, `insee.fr`… — extensible par
-`GEV_PLUG_HOSTS`), redirections suivies à la main et re-vérifiées, corps
-plafonné à 24 Mo, aucun en-tête du client transmis, cache disque d'une heure
-servi périmé une semaine en cas de panne amont, derrière la même porte
-d'accès que toute route.
+The browser talks to the platforms directly. The relay is the fallback for
+those that refuse an `Origin` header — INSEE answers 403 — and it is tried only
+after a direct failure shaped like a CORS failure. It is narrow by
+construction: GET, https, allowlisted hosts (`data.gouv.fr`, `geopf.fr`,
+`ign.fr`, `opendatasoft.com`, `insee.fr`… — extensible through
+`GEV_PLUG_HOSTS`), redirects followed by hand and re-checked, body capped at
+24 MB, no client header forwarded, a one-hour disk cache served stale for a
+week when upstream is down, behind the same access gate as every other route.
 
-## Ce qu'un jeu branché ne reçoit pas — et pourquoi
+## What a plugged dataset does not receive — and why
 
-- **Un jeton de lien de partage.** Le registre des jetons ne nomme que des
-  couches que le code connaît ; un lien qui dirait « charge cette URL » ferait
-  aller chercher à une autre machine ce que la première a tapé. Ce qui voyage
-  est le manifeste, comme fichier.
-- **Une place dans l'énumération vocale.** Elle est figée par un test (sha256
-  sur l'outil). Mais l'exécuteur accepte tout identifiant enregistré : « allume
-  ds-defibrillateurs-geodae » marche dès que la ligne existe.
-- **Une choroplèthe, un prisme, un maillage.** La boîte dessine des points,
-  des lignes et des polygones à leur place. Un jeu qui demande une
-  discrétisation, un rapport à une population ou une extrusion est une couche,
-  et se construit sur `choroplethPrism.js`, `franceDepartements.js`,
-  `geoMeshThinning.js` comme les autres.
-- **Une ligne dans la fiche d'adresse.** La radiographie enchaîne des routes,
-  pas des couches ; son crochet (`{id, label, question, needs, project}`) est
-  le prochain chantier, pas celui-ci.
+- **A share-link token.** The token registry names only layers the code
+  knows; a link that said “load this URL” would make another machine fetch
+  whatever the first one typed. What travels is the manifest, as a file.
+- **A place in the voice enumeration.** It is pinned by a test (sha256 over
+  the tool). But the executor accepts any registered id: *allume
+  ds-defibrillateurs-geodae* (turn on ds-defibrillateurs-geodae) works as soon
+  as the row exists.
+- **A choropleth, a prism, a grid.** The box draws points, lines and polygons
+  where they are. A dataset that needs classification, a ratio to a population
+  or an extrusion is a layer, and is built on `choroplethPrism.js`,
+  `franceDepartements.js`, `geoMeshThinning.js` like the others.
+- **A row in the address card.** The Address X-ray chains routes, not layers;
+  its hook (`{id, label, question, needs, project}`) is the next workstream,
+  not this one.
 
-## Combien de temps ça prend
+## How long it takes
 
-Mesuré, banc par banc, dans `docs/DEMANDER-UNE-DONNEE.md` : de la recherche aux
-premières marques, la machine met **1,7 s au médian** et jusqu'à 33 s au
-plafond de 30 000 objets — et cette page dit aussi ce qu'un indicateur de
-progression a le droit d'afficher pendant ce temps, et ce qu'il n'a pas le
-droit d'inventer.
+Measured bench by bench in #113: from the search to the first marks, the
+machine takes **1.7 s at the median** and up to 33 s at the 30,000-feature
+cap — and the same measurement settled what a progress indicator is allowed to
+show during that time, and what it is not allowed to invent. The benches are
+the `measure:plug` commands below.
 
-## Vérifier
+## Verify
 
 ```
-npm test                                       # une soixantaine de tests sur la boîte, dont chaque manifeste livré
-npm run qa:datasets -- --url http://localhost:4173          # le catalogue, l'inférence, plug/unplug, le formulaire, la persistance
-npm run qa:datasets -- --url http://localhost:4173 --deep   # + le chargement réel d'un jeu data.gouv.fr branché par le formulaire, par l'API tabulaire (16 contrôles)
-# --shots pour les captures (lentes sous SwiftShader), --gpu pour passer par Metal
+npm test                                       # about sixty tests on the box, including every shipped manifest
+npm run qa:datasets -- --url http://localhost:4173          # the catalog, inference, plug/unplug, the form, persistence
+npm run qa:datasets -- --url http://localhost:4173 --deep   # + actually loading a data.gouv.fr dataset plugged in through the form, via the tabular API (16 checks)
+# --shots for screenshots (slow under SwiftShader), --gpu to go through Metal
 
-npm run measure:plug -- --verify 5                          # ce que la chaîne coûte, plateforme par plateforme
-npm run measure:plug:render -- --url http://localhost:4415 --gpu   # la même chaîne dans la page, jusqu'à la première image
+npm run measure:plug -- --verify 5                          # what the chain costs, platform by platform
+npm run measure:plug:render -- --url http://localhost:4415 --gpu   # the same chain in the page, up to the first frame
 ```

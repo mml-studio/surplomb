@@ -218,7 +218,7 @@
  * carries no `classificationType`, and it is not draped on anything. It is
  * opaque geometry in the world, depth-tested against the photoreal mesh — so a
  * 12 m column behind a 30 m tileset building is HIDDEN by it instead of painted
- * on it (CARTOGRAPHIE F1(a), F4). The colour a reader decodes off a column is
+ * on it (CARTOGRAPHY F1(a), F4). The colour a reader decodes off a column is
  * the colour that was declared, on every stack. Going 3D removes the constraint
  * rather than adding one; the batched-`GroundPrimitive`-colours-by-bounding-
  * rectangle trap does not exist here either, because per-instance colour on a
