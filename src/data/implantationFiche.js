@@ -545,9 +545,9 @@ export function ficheLines(fiche) {
       + ` tirés au sort dans la population (${BAREME_SAMPLE.measuredAt})`
       + `, à ±${BAREME_SAMPLE.marginPt} points de centile près`);
   }
-  // Price is the only indicator whose scale does not cover the sample: one
-  // ring in three has no comparable sale within its 300 m, and those rings are
-  // rural. The price rank is therefore read on a partial France, more urban
+  // Price is the only indicator whose scale does not cover the sample: 151 of
+  // the 1,200 rings (one in eight, `BAREME_FR.prixM2.measured`) have no
+  // comparable sale within their 300 m, and those rings are rural. The price rank is therefore read on a partial France, more urban
   // than the country, which the card says instead of leaving it to be guessed.
   const price = ranked.find((score) => score.id === 'prixM2');
   const priceCoverage = BAREME_FR.prixM2 && BAREME_SAMPLE.rings
