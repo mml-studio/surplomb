@@ -169,6 +169,14 @@ Updated: September 17, 2026
 >   imported at idle (evaluated, nothing built); on a phone nothing is fetched
 >   before the press. Cesium's widget stylesheet is inert on `index.html`
 >   (`deferCesiumWidgets`, vite.config.js) until `boot.js` enables it.
+> - **Identity and the 2 bis markup** (Codex « Belvédère », 2026-09-19): the
+>   symbol is inline SVG (`.brand-symbol`, planes in `currentColor`) before the
+>   word, in `.top` and `.closing-brand`; `public/icon.svg` is the tab icon and
+>   the source of `npm run icons:build` (all four PNG icons, on `#24473C`). The
+>   loop is `position: fixed` behind the whole page on EVERY width; « Image
+>   fixe » (`#vitrine-still`, shown only in `data-state="live"`) pauses it on
+>   the current frame. The page ends on `.footer-ending`: the city with two
+>   opaque blocks. The cockpit's own title bar still shows `public/logo.svg`.
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
 >   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop

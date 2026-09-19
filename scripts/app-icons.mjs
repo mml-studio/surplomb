@@ -1,13 +1,17 @@
 // Build the home-screen icons — `public/apple-touch-icon.png` and the three
 // manifest sizes.
 //
-// WHY THESE ARE RENDERED AND NOT THE SVG. `public/logo.svg` is 775×520 with a
-// transparent background, and every home screen this targets wants a SQUARE
-// with an OPAQUE one. iOS in particular ignores an SVG `apple-touch-icon`
-// outright and falls back to a screenshot of the page, which on this app is a
-// dark rectangle nobody can identify at 60 px. So the logo is letterboxed onto
-// the app's own `--bg-dark`, at each size, by the browser that already knows
-// how to rasterise it.
+// THE MARK IS THE « BELVÉDÈRE » ICON (identity validated 2026-09-18):
+// `public/icon.svg`, the ivory-and-apricot symbol on the brand green, which is
+// also the tab icon. `public/logo.svg` — the cockpit's eye — is no longer the
+// app's icon.
+//
+// WHY THESE ARE RENDERED AND NOT THE SVG. Every home screen this targets
+// wants a PNG, and iOS in particular ignores an SVG `apple-touch-icon`
+// outright and falls back to a screenshot of the page. So the icon is drawn
+// full-bleed onto its own green, at each size, by the browser that already
+// knows how to rasterise it. The SVG's rounded corners sit on the same green,
+// so the launcher's own mask is the only shape anyone sees.
 //
 // THE MASKABLE ONE IS NOT A COPY. Android crops a maskable icon to whatever
 // shape the launcher uses — circle, squircle, teardrop — and only the middle
@@ -23,8 +27,8 @@ import puppeteer from 'puppeteer';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Copied from `:root` in style.css — the same token `theme-color` carries. */
-const BACKGROUND = '#0a0a0f';
+/** The brand green (`--green` in landing.css), `public/icon.svg`'s own plate. */
+const BACKGROUND = '#24473C';
 
 /**
  * Every icon this app ships, and who asks for it.
@@ -37,10 +41,12 @@ const BACKGROUND = '#0a0a0f';
 // list a test can check is the one in `public/manifest.webmanifest`, and
 // `src/webManifest.test.mjs` checks it against the files on disk.
 const APP_ICONS = Object.freeze([
-  { file: 'apple-touch-icon.png', size: 180, markShare: 0.76 },
-  { file: 'icon-192.png', size: 192, markShare: 0.76 },
-  { file: 'icon-512.png', size: 512, markShare: 0.76 },
-  { file: 'icon-512-maskable.png', size: 512, markShare: 0.6 },
+  { file: 'apple-touch-icon.png', size: 180, markShare: 1 },
+  { file: 'icon-192.png', size: 192, markShare: 1 },
+  { file: 'icon-512.png', size: 512, markShare: 1 },
+  // The symbol spans ~76 % of icon.svg; at 72 % of that its corners stay
+  // inside the 80 % circle Android guarantees to keep.
+  { file: 'icon-512-maskable.png', size: 512, markShare: 0.72 },
 ]);
 
 async function iconHtml(size, markShare, logo) {
@@ -48,15 +54,12 @@ async function iconHtml(size, markShare, logo) {
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:${size}px; height:${size}px; background:${BACKGROUND}; overflow:hidden; }
 .plate { width:${size}px; height:${size}px; display:flex; align-items:center; justify-content:center;
-  background:
-    radial-gradient(${size * 0.9}px ${size * 0.9}px at 78% 16%, rgba(0,212,255,0.20), transparent 64%),
-    ${BACKGROUND}; }
-.plate img { width:${Math.round(size * markShare)}px; height:auto;
-  filter: drop-shadow(0 0 ${Math.round(size * 0.06)}px rgba(0,212,255,0.45)); }
+  background: ${BACKGROUND}; }
+.plate img { width:${Math.round(size * markShare)}px; height:auto; }
 </style></head><body><div class="plate"><img src="${logo}" alt=""></div></body></html>`;
 }
 
-const logoSvg = await readFile(path.join(ROOT, 'public', 'logo.svg'));
+const logoSvg = await readFile(path.join(ROOT, 'public', 'icon.svg'));
 const logo = `data:image/svg+xml;base64,${logoSvg.toString('base64')}`;
 
 // `headless: 'shell'`, and not the default. In Chrome's new headless mode a

@@ -5,6 +5,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Added
+- **La page d’accueil n’avait ni marque, ni fin.** Elle prend l’identité
+  « Belvédère » : le symbole à deux plans et son point abricot, devant le mot
+  « surplomb », dans l’en-tête et en clôture ; la même icône dans l’onglet, sur
+  l’écran d’accueil iOS et dans l’application installée. La page finit
+  désormais sur la ville, avec la marque et « Aucun angle mort. » en deux grands
+  blocs. La boucle du fond reste derrière toute la page sur téléphone aussi, et
+  une case « Image fixe » l’arrête sur l’image en cours. Sur ordinateur, le
+  slogan de l’en-tête tient sur une ligne, derrière un filet.
+
 ### Fixed
 - **Une fois le globe ouvert, la page d’accueil devenait inatteignable.** Le
   navigateur retenait « déjà venu » (`gev:vitrine-seen:v1`) et `surplomb.app`

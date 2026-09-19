@@ -87,7 +87,7 @@ export function initVitrine({
 
   // ── The recorded loop ──────────────────────────────────────────────────
   const video = root.querySelector('.world-video');
-  const loop = { state: 'poster', reason: null, startedAt: null, source: null, rendition: null };
+  const loop = { state: 'poster', reason: null, startedAt: null, source: null, rendition: null, still: false, sync: null };
   const setState = (state, reason) => {
     loop.state = state;
     loop.reason = reason;
@@ -110,6 +110,18 @@ export function initVitrine({
     // for the first paint.
     if (documentRef.readyState === 'complete') start();
     else listen(win, 'load', start, { once: true });
+  }
+
+  // « Image fixe » (maquette 2 bis): the reader stops the city moving. The
+  // loop is PAUSED on the frame being shown rather than hidden: hiding it would
+  // uncover the poster, which is frame 0, and the picture would jump. The box
+  // is only on screen while the loop plays (landing.css).
+  const stillBox = root.querySelector('#vitrine-still');
+  if (stillBox) {
+    listen(stillBox, 'change', () => {
+      loop.still = stillBox.checked;
+      loop.sync?.();
+    });
   }
 
   // ── The dock ───────────────────────────────────────────────────────────
@@ -270,7 +282,7 @@ export function initVitrine({
     rotation,
     getDiagnostics: () => ({
       state: root.dataset.state,
-      loop: { ...loop, currentTime: video?.currentTime ?? null, paused: video?.paused ?? null },
+      loop: { ...loop, sync: undefined, currentTime: video?.currentTime ?? null, paused: video?.paused ?? null },
       policy,
       opening,
       rotation: rotation?.getDiagnostics() ?? null,
@@ -323,29 +335,25 @@ async function startLoop({ video, win, loop, setState, listen, onCleanup }) {
       loop.startedAt = Math.round(win.performance?.now?.() ?? 0);
       loop.source = video.currentSrc || null;
       setState('live', 'playing');
+      // Ticked before the loop was ready: honour it on the first frame.
+      if (loop.still) video.pause?.();
     }
   });
   listen(video, 'error', () => {
     win.clearTimeout(deadline);
     giveUp('error');
   });
-  // A hidden tab plays for nobody, and neither does a first screen scrolled
-  // away on a phone (on a wide screen the picture is fixed, always in view).
-  let inView = true;
+  // A hidden tab plays for nobody, and « Image fixe » means stop. (The
+  // picture is fixed behind the whole page on every screen since the 2 bis, so
+  // it is never scrolled out of view.)
   const sync = () => {
     if (loop.state !== 'live') return;
-    if (video.ownerDocument.hidden || !inView) video.pause?.();
+    if (video.ownerDocument.hidden || loop.still) video.pause?.();
     else void video.play?.()?.catch?.(() => {});
   };
+  loop.sync = sync;
+  onCleanup(() => { loop.sync = null; });
   listen(video.ownerDocument, 'visibilitychange', sync);
-  if (typeof win.IntersectionObserver === 'function') {
-    const observer = new win.IntersectionObserver((entries) => {
-      inView = entries.some((entry) => entry.isIntersecting);
-      sync();
-    });
-    observer.observe(video);
-    onCleanup(() => observer.disconnect());
-  }
   video.preload = 'auto';
   video.src = chosen.src;
   const played = video.play?.();

@@ -146,7 +146,7 @@
   <meta name="twitter:title" content="Surplomb — La France au rayon X" />
   <meta name="twitter:description" content="Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct. 56 ne demandent aucune clé." />
   <meta name="twitter:image" content="/og.png" />
-  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <!--
     LE MINIMUM TÉLÉPHONE, ET CE QU'IL NE CONTIENT PAS.
 
@@ -276,25 +276,33 @@
     </div>
     <span class="world-credit">Cesium ion · Google Maps</span>
 
+    <!--
+      L'identité « Belvédère » (validée le 2026-09-18) : le symbole à deux plans
+      et son point abricot, puis le mot. En ligne plutôt qu'en fichier : 600
+      octets, aucune requête, et les deux plans prennent la couleur du texte.
+    -->
     <header class="top" id="haut">
-      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut">surplomb</a>
-      <span class="top-slot" aria-hidden="true"></span>
-      <p class="slogan">Aucun<br />angle mort.</p>
+      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word">surplomb</span></a>
+      <div class="top-right"><p class="slogan">Aucun <br />angle mort.</p></div>
     </header>
 
     <section class="hero" aria-labelledby="vitrine-title">
       <div class="hero-copy">
-        <h1 id="vitrine-title">La France<br />au rayon X.</h1>
+        <h1 id="vitrine-title">La France <br />au rayon X.</h1>
         <p class="intro">Tout ce que vous n’auriez jamais pensé à chercher.</p>
       </div>
-      <p class="hero-place"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>Paris · le trafic, rue par rue</p>
+      <div class="hero-location">
+        <p class="hero-place"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>Paris · le trafic, rue par rue</p>
+        <!-- Arrête la boucle sur l'image en cours (src/vitrine/vitrine.js). Absente tant que rien ne joue. -->
+        <label class="motion-control"><input id="vitrine-still" type="checkbox" />Image fixe</label>
+      </div>
       <span class="image-credit">Cesium ion · Google Maps</span>
     </section>
 
     <main class="content" id="contenu">
       <section class="panel discover" aria-labelledby="discover-title">
-        <h2 class="section-title" id="discover-title">Tout commence<br />par un lieu.</h2>
-        <p class="public-copy">Les administrations publient.<br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+        <h2 class="section-title" id="discover-title">Tout commence <br />par un lieu.</h2>
+        <p class="public-copy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
         <ul class="examples" data-live="examples" aria-label="Des vues à explorer">
           <li><a href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd" data-example="0">Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
           <li><a href="/#v=2&amp;lat=46.6&amp;lon=2.4&amp;alt=1400000&amp;heading=0&amp;pitch=-90&amp;l=2.3" data-example="1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
@@ -316,7 +324,7 @@
 
       <!-- Aucun chiffre de démonstration : le groupe et ses entrées restent masqués tant qu'aucune valeur positive n'est reçue (PR 2). -->
       <section class="panel counter-panel" data-live="counters" hidden aria-labelledby="counter-title">
-        <h2 class="section-title" id="counter-title">En ce moment<br />au-dessus de la France</h2>
+        <h2 class="section-title" id="counter-title">En ce moment <br />au-dessus de la France</h2>
         <dl>
           <div class="counter" data-value="" hidden><dt>Avions</dt><dd data-live="counter:avions"></dd></div>
           <div class="counter" data-value="" hidden><dt>Navires</dt><dd data-live="counter:navires"></dd></div>
@@ -330,7 +338,7 @@
         <div class="gallery-grid">
           <a class="view" data-view="01" href="/#v=2&amp;lat=49.0097&amp;lon=2.5479&amp;alt=9000&amp;heading=20&amp;pitch=-45&amp;l=f.t">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:01">
                 <img src="/landing/view-01-480.8b416624.jpg" srcset="/landing/view-01-480.8b416624.jpg 480w, /landing/view-01-960.89dc71e0.jpg 960w, /landing/view-01-1440.de35a789.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -339,7 +347,7 @@
           </a>
           <a class="view" data-view="02" href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:02">
                 <img src="/landing/view-02-480.9b559a8b.jpg" srcset="/landing/view-02-480.9b559a8b.jpg 480w, /landing/view-02-960.74abd082.jpg 960w, /landing/view-02-1440.1d8378ff.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -348,7 +356,7 @@
           </a>
           <a class="view" data-view="03" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:03">
                 <img src="/landing/view-03-480.824ae88d.jpg" srcset="/landing/view-03-480.824ae88d.jpg 480w, /landing/view-03-960.314b2ccf.jpg 960w, /landing/view-03-1440.b8752a25.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -357,7 +365,7 @@
           </a>
           <a class="view" data-view="04" href="/#v=2&amp;lat=46.6&amp;lon=2.4&amp;alt=1400000&amp;heading=0&amp;pitch=-90&amp;l=2.3">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:04">
                 <img src="/landing/view-04-480.aa5fc1a5.jpg" srcset="/landing/view-04-480.aa5fc1a5.jpg 480w, /landing/view-04-960.c705eec6.jpg 960w, /landing/view-04-1440.819d874d.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -366,7 +374,7 @@
           </a>
           <a class="view" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:05">
                 <img src="/landing/view-05-480.99890e1f.jpg" srcset="/landing/view-05-480.99890e1f.jpg 480w, /landing/view-05-960.f99f429c.jpg 960w, /landing/view-05-1440.032e63d8.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -375,7 +383,7 @@
           </a>
           <a class="view" data-view="06" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=k">
             <figure>
-              <div class="view-image">
+              <div class="view-image" data-media="view:06">
                 <img src="/landing/view-06-480.3b28b9e3.jpg" srcset="/landing/view-06-480.3b28b9e3.jpg 480w, /landing/view-06-960.cba6a80b.jpg 960w, /landing/view-06-1440.c617fbfe.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), (min-width: 700px) calc((100vw - 230px) / 2), calc(100vw - 44px)" alt="Les vélos et trottinettes partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
@@ -386,7 +394,7 @@
       </section>
 
       <section class="panel voice" data-live="voice" aria-labelledby="voice-title">
-        <div class="voice-heading"><h2 id="voice-title">Parlez au<br />globe.</h2><span class="premium">premium</span></div>
+        <div class="voice-heading"><h2 id="voice-title">Parlez au <br />globe.</h2><span class="premium">premium</span></div>
         <div class="voice-layout">
           <picture>
             <source type="image/webp" srcset="/landing/micro-768.a739f771.webp 768w, /landing/micro-1448.fa608558.webp 1448w" sizes="(min-width: 1001px) 580px, (min-width: 700px) 620px, 100vw" />
@@ -395,7 +403,7 @@
           <div class="voice-body">
             <blockquote>« Montre-moi les bus autour de la gare Saint-Jean. »</blockquote>
             <figure class="voice-answer">
-              <a class="bus" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" aria-label="Voir les bus de Bordeaux dans le globe">
+              <a class="bus" data-media="voice-response" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" aria-label="Voir les bus de Bordeaux dans le globe">
                 <img src="/landing/voice-bus-600.8b084353.jpg" srcset="/landing/voice-bus-600.8b084353.jpg 600w, /landing/voice-bus-1200.968e34a3.jpg 1200w" sizes="(min-width: 1001px) 520px, 100vw" alt="Les bus autour de la gare Saint-Jean à Bordeaux" loading="lazy" decoding="async" />
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </a>
@@ -406,15 +414,21 @@
         </div>
       </section>
 
+      <!-- La fin de la page : la vue réelle, et la marque en deux blocs opaques par-dessus. -->
       <footer class="panel footer">
-        <p class="footer-copy">Les administrations publient.<br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
-        <nav class="footer-links" aria-label="Liens de pied de page">
-          <a href="https://github.com/mml-studio/surplomb" data-link="repository">Voir le code</a>
-          <a href="/globe?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
-          <a href="/mentions-legales" data-link="legal">Mentions légales</a>
-          <a href="/confidentialite" data-link="privacy">Confidentialité</a>
-        </nav>
-        <div class="footer-brand"><a class="brand" href="#haut" aria-label="Surplomb, retour en haut">surplomb</a><p class="slogan">Aucun<br />angle mort.</p></div>
+        <div class="footer-info">
+          <p class="footer-copy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+          <nav class="footer-links" aria-label="Liens de pied de page">
+            <a href="https://github.com/mml-studio/surplomb" data-link="repository" aria-label="Voir le code open source">Voir le code</a>
+            <a href="/globe?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
+            <a href="/mentions-legales" data-link="legal">Mentions légales</a>
+            <a href="/confidentialite" data-link="privacy">Confidentialité</a>
+          </nav>
+        </div>
+        <div class="footer-ending">
+          <a class="closing-brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word">surplomb</span></a>
+          <p class="closing-slogan">Aucun <br />angle mort.</p>
+        </div>
       </footer>
     </main>
 
