@@ -46,6 +46,7 @@ import { installCameraNoiseFloor } from './cameraNoiseFloor.js';
 import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
 import { startFirstRunExperience } from './firstRunBoot.js';
+import { stopLoaderSun } from './loaderSun.js';
 import { trialProbe } from './trialProbe.js';
 import { WAITLIST_OPEN_EVENT, requestWaitlistCard } from './trialRefusal.js';
 import { loadVoicePremium, markVoicePremiumSpent } from './voicePremium.js';
@@ -1015,8 +1016,9 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     publishVoiceStack();
   } catch (error) {
     console.error("Surplomb initialization failed:", error);
+    stopLoaderSun();
     loaderStatus.textContent = `Error: ${describeError(error)}`;
-    loaderStatus.style.color = '#ff4444';
+    loaderStatus.style.color = '#ffb4a8'; // 6:1 on the veil's green; see src/boot.js
     // A hand-off that dies must not leave the reader in front of a frozen
     // picture: lifting it uncovers the loading screen's error line.
     if (requestedHandoff) {

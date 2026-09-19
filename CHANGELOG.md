@@ -18,6 +18,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **L’écran de chargement s’anime aux couleurs de Surplomb.** Sur le vert de
+  la marque, le soleil du logo quitte sa place et fait sa course au-dessus de
+  la terrasse ; la terrasse jette son ombre sur le sol, plus longue quand le
+  soleil est bas. La souris le prend en main (le doigt, tant qu’il glisse),
+  comme l’œil de God’s Eye View suivait le curseur ; immobile trois secondes,
+  il reprend sa course. Quand le globe est prêt, il se repose dans le logo,
+  à l’aplomb de la terrasse, et l’ombre disparaît : « aucun angle mort ». Avec
+  « réduire les animations », le logo reste fixe. Animation écrite par ChatGPT
+  sur notre brief.
 - **Sur téléphone, le haut de l’écran ressemble à Google Maps.** La recherche
   est une barre en haut, à côté du logo : on tape dedans, les villes et les
   repères s’ouvrent dessous, et la carte revient dès qu’on lance une recherche.

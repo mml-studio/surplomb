@@ -927,7 +927,9 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--bg-dark);
+  /* The mark's own ground, as on the app icon: the sun's shadow was drawn
+     for it. */
+  background: var(--brand-green);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -946,23 +948,21 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 
 .loader-logo {
   display: block;
-  width: 84px;
-  height: auto;
+  width: 132px;
+  aspect-ratio: 360 / 390;
   margin: 0 auto 20px;
   color: var(--brand-ivory);
+  pointer-events: none;
 }
 
-/* Only the sun moves: it rises a little and settles, like the morning over
-   the planes. The planes stay still — the mark must not wobble. */
-.loader-logo circle {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: brand-sun 2.4s cubic-bezier(.45, 0, .2, 1) infinite;
-}
-
-@keyframes brand-sun {
-  0%, 100% { transform: translateY(8%); opacity: 0.78; }
-  50% { transform: translateY(-8%); opacity: 1; }
+/* The sun is driven by src/loaderSun.js, frame by frame: no CSS animation
+   here, it would override the script's transform. Without the script, or
+   under reduced motion, the veil shows the mark as drawn. */
+.loader-logo > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 .loader-content h2 {
@@ -974,22 +974,14 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   margin-bottom: 14px;
 }
 
+/* Still: the sun already says the page is working, and one moving thing is
+   enough. 72 % ivory keeps 13 px readable on the green (4.5:1 needs more
+   than --text-dim's 52 %). */
 .loader-status {
   font-family: var(--font-sans);
   font-size: 13px;
   letter-spacing: 0.01em;
-  color: var(--text-dim);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .loader-logo circle,
-  .loader-status { animation: none; }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  color: rgba(247, 244, 234, 0.72);
 }
 
 /* ── Post-Processing Toggles ─────────────────── */
