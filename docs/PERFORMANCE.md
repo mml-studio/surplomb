@@ -11,7 +11,7 @@ untested systems. The original capture artifacts are not included, so those
 sections record results rather than defining a runnable benchmark.
 
 *Small-laptop lab profile*, *Origin capacity* and *Reference machine* are the
-**small-laptop campaign** of `docs/PLAN-PERFORMANCE.md` (phase 0), added
+**small-laptop campaign** of the performance plan (phase 0, #124), added
 9 September 2026: a throttled lab profile, the origin under a crowd, and the one
 measurement that still needs real hardware. Each is runnable —
 `npm run perf:boot`, `perf:warm`, `perf:layers`, `perf:origin` — and each says
@@ -188,7 +188,7 @@ that second run is not usable (the Mac was at load 22.5) and is not reproduced
 here. Nothing else in this section moves with that change.
 
 Method: `npm run perf:boot` against `npm run build` + `vite preview` on the
-development Mac. The profile is the one `docs/PLAN-PERFORMANCE.md` § 0 defines: **CPU ÷4,
+development Mac. The profile is the one phase 0 of the performance plan defines (#124): **CPU ÷4,
 10 Mbit/s / 60 ms, 1366×768, cache disabled**, median of five with `[min–max]`.
 
 These are CPU milliseconds. Headless Chromium renders in software, so the frame
@@ -329,7 +329,7 @@ measuring, which pushes the reported latency up rather than down.
 
 The M5 numbers above hide every cost that decides whether this application is
 usable for the reader it is built for: an elected official, a town hall officer,
-a local journalist, on a 2018-2020 laptop. `docs/PLAN-PERFORMANCE.md` defines
+a local journalist, on a 2018-2020 laptop. The performance plan (#115) defines
 that machine as 2 cores, **Intel UHD 620 integrated graphics**, 8 GB, 1366×768,
 Chrome, a domestic or 4G line.
 
@@ -359,128 +359,130 @@ exactly, so the two columns stay comparable.
 | --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: |
 | — | *no run yet* | | | | | | | |
 
-Targets, from `docs/PLAN-PERFORMANCE.md` § 2: parked **0**, orbit **p90 ≤ 33 ms**
+Targets, from phase 2 of the performance plan (#126): parked **0**, orbit **p90 ≤ 33 ms**
 with **no frame over 100 ms**, with three French layers on. Until one row exists
 here, tasks 2.1 to 2.4 of that plan cannot be validated, and doing them blind
 would repeat the August M5 mistake this page exists to record.
 
-## Téléphone
+## Phone
 
-Ce que le volet A a changé, et ce qu'il reste à mesurer sur du vrai matériel.
+What part A of the phone work changed, and what is left to measure on real
+hardware.
 
-### Ce qui est mesuré, et sur quoi
+### What is measured, and on what
 
-`scripts/qa-phone-boot.mjs` (`npm run qa:phone-boot`) ouvre la page sous
-émulation iPhone 13 — 390×844, DPR 3, `(pointer: coarse)`, `(hover: none)` —
-contre un `npm run preview`. **Il tourne sur SwiftShader** : ses nombres de
-tâches longues se comparent entre deux exécutions de CE harnais, jamais à un
-téléphone. Ce qu'il prouve n'est pas de la vitesse, c'est de la **dépense** :
+`scripts/qa-phone-boot.mjs` (`npm run qa:phone-boot`) opens the page under
+iPhone 13 emulation — 390×844, DPR 3, `(pointer: coarse)`, `(hover: none)` —
+against `npm run preview`. **It runs on SwiftShader**: its long-task numbers
+compare between two runs of THIS harness, never with a phone. What it proves
+is not speed, it is **spending**:
 
-| Mesuré le 2026-09-16, build `preview`, émulation iPhone 13 | Avant | Après |
+| Measured 2026-09-16, `preview` build, iPhone 13 emulation | Before | After |
 | --- | ---: | ---: |
-| Profil de rendu | `full` / `default` | `lite` / `phone` |
-| Appels `/api` même origine, 20 s, sans toucher à rien | 7 | **2** |
-| Tuiles racine ion achetées au premier tap | 1 | **0** |
-| Caméra garée sous 1 000 m | ≈ 6 s (vol) | **0,5 s** |
-| Couches allumées au boot | `traffic` | **aucune** |
-| Verrous de rendu continu à 20 s | 1 (`traffic`) | **0** |
-| Champ d'étoiles (848 kB) | chargé | **jamais** |
-| Tâches longues / total | — | 1 / 259 ms |
+| Render profile | `full` / `default` | `lite` / `phone` |
+| Same-origin `/api` calls, 20 s, nothing touched | 7 | **2** |
+| ion root tiles bought on the first tap | 1 | **0** |
+| Camera parked below 1,000 m | ≈ 6 s (flight) | **0.5 s** |
+| Layers on at boot | `traffic` | **none** |
+| Continuous-render holds at 20 s | 1 (`traffic`) | **0** |
+| Starfield (848 kB) | loaded | **never** |
+| Long tasks / total | — | 1 / 259 ms |
 
-Les deux appels `/api` restants sont `geoid` : celui de Paris, et un second au
-point de caméra par défaut de Cesium (35,15 N / 82,5 O) que le HUD demande
-avant que la caméra ne soit posée. Ce deuxième appel existe aussi sur le bureau
-— il est antérieur à ce travail et n'est pas corrigé ici.
+The two remaining `/api` calls are `geoid`: the one for Paris, and a second at
+Cesium's default camera point (35.15 N / 82.5 W) that the HUD requests before
+the camera is set. That second call exists on desktop too — it predates this
+work and is not fixed here.
 
-`qa:phone-boot` rend **10/10** depuis que la coquille du volet C a atterri. Son
-dernier rouge était le contrôle des cibles tactiles — 14 commandes visibles sous
-40 px, dont une seule venait du lot tactile (`#locate-me`, 36 px, la taille
-exacte des trois boutons de sa rangée). `phone.css` les a toutes reprises :
-**0 contrevenant**, et le document ne déborde plus d'un pixel.
+`qa:phone-boot` returns **10/10** since the part C shell landed. Its last red
+was the touch-target check — 14 visible controls under 40 px, of which only
+one came from the touch batch (`#locate-me`, 36 px, the exact size of the three
+buttons in its row). `phone.css` resized them all: **0 offenders**, and the
+document no longer overflows by a single pixel.
 
-### Le tactile, et ce que le doigt coûte ou épargne
+### Touch, and what a finger costs or saves
 
-`scripts/qa-phone-touch.mjs` (`npm run qa:phone-touch`) ouvre **deux** pages
-sur le même build — un iPhone 13 émulé et un bureau 1440×900 — et asserte les
-deux dans le même contrôle : le chemin grossier gagne, le chemin fin ne bouge
-pas. **11/11** le 2026-09-16. Son coût est nul : photoréel coupé des deux
-côtés, aucune couche allumée, aucun géocodage (le relevé de position est
-injecté par CDP).
+`scripts/qa-phone-touch.mjs` (`npm run qa:phone-touch`) opens **two** pages on
+the same build — an emulated iPhone 13 and a 1440×900 desktop — and asserts
+both in the same check: the coarse path gains, the fine path does not move.
+**11/11** on 2026-09-16. It costs nothing: photorealistic 3D off on both sides,
+no layer on, no geocoding (the position fix is injected through CDP).
 
-| Mesuré le 2026-09-16, émulation iPhone 13 contre bureau 1440×900 | Bureau | Téléphone |
+| Measured 2026-09-16, iPhone 13 emulation against a 1440×900 desktop | Desktop | Phone |
 | --- | ---: | ---: |
-| Portée d'un pick, en pixels CSS | 3 | **24** |
-| Profondeur du drill | 1 | **3** |
-| Côté demandé, en pixels de tampon | 3 | 19 (ratio 0,8 en `lite`) |
-| Voies de tangage liées au pincement | 4 | **0** |
-| `inertiaSpin` / `minimumZoomDistance` | 0,9 / 1 m | **0,7 / 40 m** |
-| Passes de survol CCTV par seconde de pan | ≈ 8 | **0** |
+| Reach of a pick, in CSS pixels | 3 | **24** |
+| Drill depth | 1 | **3** |
+| Requested side, in buffer pixels | 3 | 19 (ratio 0.8 under `lite`) |
+| Tilt paths bound to the pinch | 4 | **0** |
+| `inertiaSpin` / `minimumZoomDistance` | 0.9 / 1 m | **0.7 / 40 m** |
+| CCTV hover passes per second of pan | ≈ 8 | **0** |
 
-Deux choses valent d'être retenues de ce tableau. Le **côté en pixels de
-tampon** est plus petit que la portée en pixels CSS, et c'est correct :
-`scene.pick(position, w, h)` prend sa taille en pixels du tampon de dessin
-alors que la position est en pixels CSS, et le profil `lite` laisse ce tampon à
-0,8× le canvas. 24 px CSS de portée valent donc 19 px de tampon. Le premier run
-du harnais a échoué sur une assertion qui supposait l'inverse.
+Two things in this table are worth remembering. The **side in buffer pixels**
+is smaller than the reach in CSS pixels, and that is correct:
+`scene.pick(position, w, h)` takes its size in drawing-buffer pixels while the
+position is in CSS pixels, and the `lite` profile leaves that buffer at 0.8×
+the canvas. 24 CSS px of reach are therefore 19 buffer px. The harness's first
+run failed on an assertion that assumed the opposite.
 
-Et le **survol CCTV**, coupé au doigt, n'est pas une économie théorique : la
-passe faisait jusqu'à huit `scene.pick` par seconde pendant chaque pan, pour
-convoquer un aperçu qu'un tap remplace en mieux — il ACTIVE la caméra.
+And the **CCTV hover**, switched off under a finger, is not a theoretical
+saving: the pass ran up to eight `scene.pick` a second during every pan, to
+summon a preview that a tap replaces for the better — a tap ACTIVATES the
+camera.
 
-### Le bureau, vérifié contre un témoin
+### The desktop, checked against a control
 
-Le contrat du lot tactile est que le chemin fin ne bouge pas. Mesuré le
-2026-09-16 sur 1440×900, contre un worktree témoin au commit de base, deux
-exécutions chacun, **après 15 secondes de repos** :
+The touch batch's contract is that the fine path does not move. Measured on
+2026-09-16 at 1440×900, against a control worktree at the base commit, two runs
+each, **after 15 seconds at rest**:
 
-| Rectangle | Témoin | Lot tactile |
+| Rectangle | Control | Touch batch |
 | --- | --- | --- |
-| `#left-panel-stack` | 52, 234, 360×630 | **identique** |
-| `#right-context-rail` | 1058, 234, 330×166 | **identique** |
-| `#command-dock` | 482, 820, 476×62 | **identique** |
+| `#left-panel-stack` | 52, 234, 360×630 | **identical** |
+| `#right-context-rail` | 1058, 234, 330×166 | **identical** |
+| `#command-dock` | 482, 820, 476×62 | **identical** |
 | `#top-center-actions` | 658, 32, 124×36 | 636, 32, **168×36** |
 
-La seule différence est le bouton « Autour de moi », additif et volontairement
-offert au bureau aussi. **Les quinze secondes ne sont pas décoratives** : à six
-secondes le rail droit se lisait 360 px d'un côté et 437 de l'autre, de façon
-reproductible, parce que l'allocateur de hauteur n'avait pas fini — une mesure
-prise là aurait rapporté une régression qui n'existe pas.
+The only difference is the *Autour de moi* (Around me) button, additive and
+deliberately offered on desktop too. **The fifteen seconds are not
+decoration**: at six seconds the right rail read 360 px on one side and 437 on
+the other, reproducibly, because the height allocator had not finished — a
+measurement taken then would have reported a regression that does not exist.
 
-### Ce qui ne se mesure PAS sans appareil
+### What CANNOT be measured without a device
 
-Temps de frame GPU, mémoire GPU et jetsam, `webglcontextlost` sous pression,
-bridage thermique, latence tactile, la barre d'URL iOS, la gigue 4G, la
-batterie d'une boucle de rendu continue. Pour un A/B « avant », `?perf=full`
-force la construction lourde sur le téléphone lui-même.
+GPU frame time, GPU memory and jetsam, `webglcontextlost` under pressure,
+thermal throttling, touch latency, the iOS URL bar, 4G jitter, the battery
+cost of a continuous render loop. For a "before" A/B, `?perf=full` forces the
+heavy build on the phone itself.
 
-Protocole iPhone : Réglages → Safari → Avancé → Inspecteur web, puis Safari
-macOS → Développement → iPhone. Coller `scripts/perf-real-gpu-console.js` (sa
-regex laisse passer « Apple GPU »). L'inspecteur n'expose pas la mémoire GPU ;
-les trois signaux honnêtes sont `__godsEyeView.getContextLossDiagnostics()`, la
-bannière Safari « rechargée car elle utilisait trop de mémoire », et
-Xcode → Devices → Device Logs filtré `JetsamEvent`.
+iPhone protocol: Settings → Safari → Advanced → Web Inspector, then Safari on
+macOS → Develop → iPhone. Paste `scripts/perf-real-gpu-console.js` (its regex
+lets "Apple GPU" through). The inspector does not expose GPU memory; the three
+honest signals are `__godsEyeView.getContextLossDiagnostics()`, the Safari
+banner *rechargée car elle utilisait trop de mémoire* (“reloaded because it
+was using too much memory”), and Xcode → Devices → Device Logs filtered on
+`JetsamEvent`.
 
-À quoi s'ajoute, pour le tactile : l'audio qui part vraiment (et dans quel
-haut-parleur), la permission micro qui survit à un `await import()`, le prompt
-de géolocalisation, le menu contextuel iOS sur appui long, et le ressenti du
-pincement. La checklist est dans `docs/KNOWN-ISSUES.md`.
+Touch adds to this: audio that really plays (and through which speaker), the
+microphone permission surviving an `await import()`, the geolocation prompt,
+the iOS context menu on a long press, and the feel of the pinch. The checklist
+is in `docs/KNOWN-ISSUES.md`.
 
-Épreuve mémoire : choisir « Google 3D » **à la main** (un téléphone ne l'adopte
-plus tout seul), deux minutes de pan et de pinch à 300 m sur Paris, puis lire
-`__godsEyeView.tileset.memoryAdjustedScreenSpaceError`. Au-dessus de ~40 à
-l'arrêt, les plafonds de `src/photorealTileset.js` sont trop bas ; un onglet tué
-alors que rien ne bouge, ils sont trop hauts. Android : `chrome://inspect` en
-USB, Performance monitor, `chrome://gpu`.
+Memory test: pick "Google 3D" **by hand** (a phone no longer adopts it on its
+own), two minutes of panning and pinching at 300 m over Paris, then read
+`__godsEyeView.tileset.memoryAdjustedScreenSpaceError`. Above ~40 at rest, the
+ceilings in `src/photorealTileset.js` are too low; a tab killed while nothing
+moves, they are too high. Android: `chrome://inspect` over USB, Performance
+monitor, `chrome://gpu`.
 
-### Exécutions enregistrées
+### Recorded phone runs
 
-| Date | Appareil | OS / navigateur | Renderer | Profil / source | Parked / 5 s | Orbit p50 / p90 / p99 | > 33 ms | Contexte perdu | Onglet rechargé |
+| Date | Device | OS / browser | Renderer | Profile / source | Parked / 5 s | Orbit p50 / p90 / p99 | > 33 ms | Context lost | Tab reloaded |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| — | *aucune exécution* | | | | | | | | |
+| — | *no run yet* | | | | | | | | |
 
-Tant que cette table est vide, les trois nombres de `src/photorealTileset.js`
-(256 Mo, 128 Mo, SSE 24) restent des hypothèses calibrées sur la documentation
-Cesium, et rien d'autre.
+As long as this table is empty, the three numbers in `src/photorealTileset.js`
+(256 MB, 128 MB, SSE 24) remain assumptions calibrated on Cesium's
+documentation, and nothing more.
 
 ## What is not established yet
 

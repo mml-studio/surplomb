@@ -107,7 +107,7 @@ export function photorealDisabled(scope = globalThis) {
  *
  * These two numbers and {@link PHONE_MAX_SCREEN_SPACE_ERROR} are calibrated
  * against Cesium's documentation, not against a handset. Confirm them on a
- * real device (`docs/PERFORMANCE.md`, section « Téléphone »): a
+ * real device (`docs/PERFORMANCE.md`, section "Phone"): a
  * `memoryAdjustedScreenSpaceError` that sits above ~40 while the camera is
  * still means they are too low; a tab killed at rest means too high.
  */
