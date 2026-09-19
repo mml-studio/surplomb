@@ -32,6 +32,25 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   change pas.
 
 ### Changed
+- **Les six vues de la page d’accueil et la réponse vocale étaient des images
+  fixes.** Ce sont maintenant des boucles de 6 s enregistrées depuis
+  l’application, interface du cockpit comprise : les voitures en détection à
+  Paris, les bus de Bordeaux (accélérés ×5, avec la fiche d’une ligne), un
+  avion en approche à Roissy, la fiche d’une vente et son prix à Lyon, les
+  lignes et les centrales de la vallée du Rhône, les vélos et trottinettes de
+  Paris (une petite orbite là où rien ne bouge seul). Une vignette pèse 26 à
+  300 Ko en AV1 selon l’écran (650 Ko au plus en H.264 de repli, 930 Ko au
+  plus en 1 440 px) et ne se télécharge qu’à l’approche ; hors écran, onglet masqué ou « Image fixe » cochée, elle
+  s’arrête ; mouvement réduit, économie de données, 2G ou échec : l’image
+  fixe, qui est désormais la première trame de la boucle. Les liens des vues
+  01, 02 et 04 (et des exemples qui les ouvrent) cadrent ce qu’ils promettent :
+  Roissy et son approche, une vente sous 600 m, le réseau sous 120 km.
+- **La boucle de fond de la page d’accueil répétait une image sur six** (un
+  à-coup à 25 i/s) : l’assemblage réglait les trames sur la cadence par défaut
+  du démultiplexeur. Réassemblée depuis les mêmes trames, sans nouvelle
+  session ; les fichiers servis sont jusqu’à 10 % plus légers et un peu plus
+  nets.
+  L’image de tête du README est une boucle GIF du même enregistrement.
 - **Le réseau électrique mettait longtemps à s’afficher, et rien du tout
   au-dessus de 120 km.** Chaque tracé venait d’une requête Overpass en direct :
   4 à 21 s pour une vue jamais demandée, et aucune vue nationale possible (la

@@ -2072,6 +2072,22 @@ const transitFranceLayer = {
     return stats;
   },
 
+  /**
+   * Open a vehicle's card without a click — the same selection a click makes
+   * (the glyph turns, the card follows it, the run is drawn), so there is one
+   * selected state and not two. The address layers call this `selectCard`
+   * too (src/data/addressScanLayer.js). Used by the landing page's recording
+   * (scripts/capture-landing-gallery.mjs), which films a bus with its card.
+   *
+   * @param {string} id A vehicle's render id — its billboard's `id`.
+   * @returns {boolean} True when that vehicle is on the globe and now selected.
+   */
+  selectCard(id) {
+    if (!_records.has(id)) return false;
+    selectVehicle(id);
+    return _selectedId === id;
+  },
+
   /** Feed provenance for the attribution popover and the analyst surfaces. */
   getFeedSummaries() {
     return _feedSummaries.map((feed) => ({ ...feed }));

@@ -207,6 +207,19 @@ Updated: September 19, 2026
 >   box in DEVICE pixels, then smooth, then hardware (`mediaCapabilities`),
 >   then AV1 > HEVC > H.264. `src/vitrine/heroLoop.js` (generated) lists them
 >   with their `codecs=` strings and the camera law each loop was filmed with.
+> - **The gallery moves** (PR 3, 2026-09-19): the six views and the voice
+>   answer are recorded loops too (`npm run landing:gallery:capture` then
+>   `landing:gallery:build`: 6 s, cockpit interface kept, fixed camera where
+>   the data move, a 2–3° orbit where they do not, the Bordeaux buses ×5;
+>   the sale card of view 02 and a bus card on 05 are opened through the
+>   layers' `selectCard`). 480/960/1440 (600/1200 for the voice band) in AV1
+>   + H.264 (1440 AV1 only), the stills are frame 0 of each loop.
+>   `src/vitrine/gallery.js` — itself fetched only as the gallery nears the
+>   screen — fetches a box's loop half a screen ahead, plays it on screen,
+>   pauses it off screen, and obeys the hero's policy and « Image fixe ».
+>   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
+>   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
+>   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the

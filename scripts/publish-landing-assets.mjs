@@ -16,11 +16,18 @@
  *      and writes `src/vitrine/heroLoop.js`: those renditions with their exact
  *      `codecs=` strings, which src/vitrine/renditions.js chooses between, and
  *      the camera law each loop was filmed with, which the hand-off evaluates
- *      (src/vitrine/handoff.js).
+ *      (src/vitrine/handoff.js);
+ *   4. does the same for the gallery's loops (six views and the voice answer,
+ *      `scripts/build-landing-gallery.mjs`) into `src/vitrine/galleryLoops.js`,
+ *      which src/vitrine/gallery.js reads.
  *
  * `--from` takes several directories, comma-separated, earliest first: the
- * high-definition loops (`--quality hq`, 2026-09-17) live apart from the
- * gallery stills, and a name found in an earlier directory wins.
+ * gallery's loops and the stills cut from them, the high-definition hero
+ * loops (`--quality hq`, 2026-09-17), then the stills of the design pack. A
+ * name found in an earlier directory wins, and each directory's
+ * `manifest.json` contributes what it describes. A default directory that
+ * does not exist is skipped (nothing recorded yet); one named on the command
+ * line must exist.
  *
  * Usage: node scripts/publish-landing-assets.mjs [--from <dir>[,<dir>…]] [--check]
  */
@@ -35,11 +42,14 @@ const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
-const FROM = option('--from', '.context/landing-assets/hq,.context/landing-assets/out')
+const DEFAULT_FROM = '.context/landing-assets/galerie/out,.context/landing-assets/hq,.context/landing-assets/out';
+const FROM_GIVEN = args.includes('--from');
+const FROM = option('--from', DEFAULT_FROM)
   .split(',').filter(Boolean).map((dir) => path.resolve(REPO_ROOT, dir));
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public', 'landing');
 const INDEX_PATH = path.join(REPO_ROOT, 'index.html');
 const LOOP_MODULE = path.join(REPO_ROOT, 'src', 'vitrine', 'heroLoop.js');
+const GALLERY_MODULE = path.join(REPO_ROOT, 'src', 'vitrine', 'galleryLoops.js');
 const checkOnly = args.includes('--check');
 
 /** `hero-poster-1440.webp` → `{stem, ext}`. */
@@ -89,14 +99,73 @@ export function rewriteReferences(html, published) {
   return { html: out, missing: [...missing].sort() };
 }
 
+/**
+ * The staging directories' manifests, merged: the first directory that
+ * describes a hero cut or a gallery loop wins it, as the first that holds a
+ * file wins the file.
+ * @param {Array<object>} manifests earliest first
+ */
+export function mergeManifests(manifests) {
+  const merged = { videos: {}, gallery: {}, capturedAt: null, galleryCapturedAt: null };
+  for (const manifest of manifests) {
+    for (const [kind, video] of Object.entries(manifest?.videos || {})) {
+      if (!merged.videos[kind]) merged.videos[kind] = video;
+    }
+    if (manifest?.videos && !merged.capturedAt) {
+      merged.capturedAt = manifest.capture?.desktop?.capturedAt || manifest.generatedAt || null;
+    }
+    for (const [key, loop] of Object.entries(manifest?.gallery || {})) {
+      if (!merged.gallery[key]) merged.gallery[key] = loop;
+    }
+    if (manifest?.gallery && !merged.galleryCapturedAt) {
+      merged.galleryCapturedAt = manifest.capture?.capturedAt || manifest.generatedAt || null;
+    }
+  }
+  return merged;
+}
+
+/**
+ * The gallery loops as the page reads them: every published rendition, with
+ * its `codecs=` string, under the `data-media` key of the box it plays in.
+ * @param {object} gallery merged manifest `gallery`
+ * @param {Map<string, string>} published stable name → hashed name
+ */
+export function galleryModuleData(gallery, published) {
+  const loops = {};
+  for (const [key, loop] of Object.entries(gallery || {})) {
+    const sources = (loop.sources || []).filter((source) => published.has(source.file));
+    if (!sources.length) continue;
+    loops[key] = {
+      aspect: loop.aspect,
+      fps: loop.fps,
+      durationS: loop.durationS,
+      renditions: sources.map((source) => ({
+        src: `/landing/${published.get(source.file)}`,
+        mime: source.mime,
+        codec: source.codec,
+        width: source.width,
+        height: source.height,
+        bytes: source.bytes,
+        bitrateKbps: source.bitrateKbps,
+      })),
+    };
+  }
+  return loops;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const missingDirs = FROM.filter((dir) => !existsSync(dir));
-  if (missingDirs.length) throw new Error(`nothing staged in ${missingDirs.join(', ')} — run scripts/build-landing-assets.mjs first`);
+  if (missingDirs.length && (FROM_GIVEN || missingDirs.length === FROM.length)) {
+    throw new Error(`nothing staged in ${missingDirs.join(', ')} — run scripts/build-landing-assets.mjs first`);
+  }
+  for (const dir of missingDirs) console.log(`  (skipped ${path.relative(REPO_ROOT, dir)}: nothing staged)`);
+  const dirs = FROM.filter((dir) => existsSync(dir));
   /** Where a staged name lives: the first directory that has it. */
-  const locate = (file) => FROM.map((dir) => path.join(dir, file)).find((full) => existsSync(full)) || null;
-  const manifestPath = locate('manifest.json');
-  if (!manifestPath) throw new Error('no manifest.json in any staging directory');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const locate = (file) => dirs.map((dir) => path.join(dir, file)).find((full) => existsSync(full)) || null;
+  const manifests = dirs.map((dir) => path.join(dir, 'manifest.json')).filter((file) => existsSync(file))
+    .map((file) => JSON.parse(readFileSync(file, 'utf8')));
+  if (!manifests.length) throw new Error('no manifest.json in any staging directory');
+  const manifest = mergeManifests(manifests);
 
   // Only what the page names, plus the loops the manifest lists. The builder
   // also writes WebP twins and every rung of its encoding ladder; measured on
@@ -106,6 +175,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const wanted = new Set([...html0.matchAll(REFERENCE_RE)].map((m) => `${m[1]}.${m[2]}`));
   for (const video of Object.values(manifest.videos || {})) {
     for (const source of video.sources || []) {
+      if (!NOT_SERVED.has(source.file)) wanted.add(source.file);
+    }
+  }
+  for (const loop of Object.values(manifest.gallery || {})) {
+    for (const source of loop.sources || []) {
       if (!NOT_SERVED.has(source.file)) wanted.add(source.file);
     }
   }
@@ -154,7 +228,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 // The recorded hero loops: every rendition the page may choose between
 // (src/vitrine/renditions.js), and the camera law each loop was filmed with,
 // which src/vitrine/handoff.js evaluates at the video's clock.
-export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.capture?.desktop?.capturedAt || manifest.generatedAt || null, videos }, null, 2)});
+export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.capturedAt, videos }, null, 2)});
+`;
+  const galleryModule = `// GENERATED by \`npm run landing:assets\` (scripts/publish-landing-assets.mjs) from
+// the gallery capture's own record. Do not edit by hand: re-record instead.
+//
+// The gallery's recorded loops, keyed by the \`data-media\` of the box each one
+// plays in (index.html): every rendition the page may choose between
+// (src/vitrine/renditions.js). A box with no entry keeps its still.
+export const GALLERY_LOOPS = Object.freeze(${JSON.stringify({ capturedAt: manifest.galleryCapturedAt, loops: galleryModuleData(manifest.gallery, published) }, null, 2)});
 `;
 
   const total = payload.reduce((sum, item) => sum + item.bytes, 0);
@@ -176,5 +258,6 @@ export const HERO_LOOP = Object.freeze(${JSON.stringify({ capturedAt: manifest.c
   for (const item of payload) copyFileSync(item.full, path.join(PUBLIC_DIR, item.hashed));
   writeFileSync(INDEX_PATH, nextHtml);
   writeFileSync(LOOP_MODULE, loopModule);
-  console.log('published to public/landing/, index.html and src/vitrine/heroLoop.js rewritten');
+  writeFileSync(GALLERY_MODULE, galleryModule);
+  console.log('published to public/landing/; index.html, src/vitrine/heroLoop.js and src/vitrine/galleryLoops.js rewritten');
 }

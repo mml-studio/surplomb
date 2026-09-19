@@ -24,40 +24,40 @@ export const HERO_LOOP = Object.freeze({
       },
       "renditions": [
         {
-          "src": "/landing/hero-desktop-2880-av1.ccee3faa.mp4",
+          "src": "/landing/hero-desktop-2880-av1.b8811f4c.mp4",
           "mime": "video/mp4; codecs=\"av01.0.12M.08\"",
           "codec": "av1",
           "width": 2880,
           "height": 1800,
-          "bytes": 15166856,
-          "bitrateKbps": 6741
+          "bytes": 13934293,
+          "bitrateKbps": 6193
         },
         {
-          "src": "/landing/hero-desktop-2880-hevc.4a936c94.mp4",
+          "src": "/landing/hero-desktop-2880-hevc.21bc091c.mp4",
           "mime": "video/mp4; codecs=\"hvc1.1.6.L150.90\"",
           "codec": "hevc",
           "width": 2880,
           "height": 1800,
-          "bytes": 14372555,
-          "bitrateKbps": 6388
+          "bytes": 13023483,
+          "bitrateKbps": 5788
         },
         {
-          "src": "/landing/hero-desktop-1920-av1.412872cf.mp4",
+          "src": "/landing/hero-desktop-1920-av1.472dca66.mp4",
           "mime": "video/mp4; codecs=\"av01.0.08M.08\"",
           "codec": "av1",
           "width": 1920,
           "height": 1200,
-          "bytes": 8189946,
-          "bitrateKbps": 3640
+          "bytes": 7556857,
+          "bitrateKbps": 3359
         },
         {
-          "src": "/landing/hero-desktop-1920-h264.72f096f3.mp4",
+          "src": "/landing/hero-desktop-1920-h264.f3001358.mp4",
           "mime": "video/mp4; codecs=\"avc1.640032\"",
           "codec": "h264",
           "width": 1920,
           "height": 1200,
-          "bytes": 11436798,
-          "bitrateKbps": 5083
+          "bytes": 11427022,
+          "bitrateKbps": 5079
         }
       ]
     },
@@ -78,22 +78,22 @@ export const HERO_LOOP = Object.freeze({
       },
       "renditions": [
         {
-          "src": "/landing/hero-phone-960-av1.ae2752c0.mp4",
+          "src": "/landing/hero-phone-960-av1.a43a8bfd.mp4",
           "mime": "video/mp4; codecs=\"av01.0.08M.08\"",
           "codec": "av1",
           "width": 960,
           "height": 2078,
-          "bytes": 5966311,
-          "bitrateKbps": 2652
+          "bytes": 5472563,
+          "bitrateKbps": 2432
         },
         {
-          "src": "/landing/hero-phone-960-hevc.b9ab65cb.mp4",
+          "src": "/landing/hero-phone-960-hevc.c683043a.mp4",
           "mime": "video/mp4; codecs=\"hvc1.1.6.L120.90\"",
           "codec": "hevc",
           "width": 960,
           "height": 2078,
-          "bytes": 5883802,
-          "bitrateKbps": 2615
+          "bytes": 5319289,
+          "bitrateKbps": 2364
         }
       ]
     }

@@ -252,6 +252,25 @@ test('selecting and clearing drives the real host seam and restores the glyph', 
   assert.equal(record.billboard.color.toCssHexString(), vehicleKindColor('bus'));
 });
 
+test('selectCard opens the card a click would, and refuses a vehicle that is not drawn', () => {
+  const record = makeRecord();
+  const calls = [];
+  const host = {
+    setEntries: (sourceId, entries) => calls.push(['set', sourceId, entries]),
+    setVisible: () => {},
+    clearSource: (sourceId) => calls.push(['clear', sourceId]),
+  };
+  _setTransitStateForTest({ viewer: viewerWithView(null), record, overlayHost: host });
+  assert.equal(transitFranceLayer.selectCard('no-such-vehicle'), false);
+  assert.equal(calls.length, 0);
+  assert.equal(transitFranceLayer.selectCard(record.id), true);
+  const set = calls.find((call) => call[0] === 'set');
+  assert.equal(set[1], TRANSIT_FR_OVERLAY_SOURCE_ID);
+  assert.equal(set[2][0].id, record.id);
+  assert.equal(record.billboard.color.toCssHexString(), '#00ffff');
+  _clearTransitSelectionForTest();
+});
+
 test('the row legend counts vehicle classes, and names the ones it could not resolve', () => {
   // A Bordeaux viewport: buses, trams, a river shuttle — and a contact from a
   // network whose route ids resolve to nothing.

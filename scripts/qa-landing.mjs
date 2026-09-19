@@ -73,6 +73,8 @@ function watchRequests(page) {
 
 const ENGINE_RE = /\/(?:src\/main\.js|src\/ui\.js|node_modules\/\.vite\/deps\/cesium\.js|assets\/(?:cesium-engine|main)-[^/]*\.js|cesium-[\d.]+\/(?:Cesium\.js|Workers\/))/;
 const ION_RE = /api\.cesium\.com|assets\.ion\.cesium\.com|tile\.googleapis\.com/;
+/** A gallery loop (src/vitrine/galleryLoops.js): six views and the voice answer. */
+const GALLERY_LOOP_RE = /\/landing\/(?:view-\d\d|voice-bus)-\d+-(?:av1|hevc|h264)\.[0-9a-f]{8}\.mp4/;
 
 let browser;
 /**
@@ -788,6 +790,129 @@ const CASES = {
     await reduced.close();
   },
 
+  async gallery() {
+    // The six views and the voice answer move — recorded loops over their
+    // stills (src/vitrine/gallery.js). Nothing is fetched until a box nears
+    // the screen, nothing plays off screen, and « Image fixe » stops them.
+    const page = await freshPage();
+    const requests = watchRequests(page);
+    await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+    await waitFor(page, () => (window.__gevVitrine ? true : null));
+    await sleep(2500);
+    const early = requests.filter((r) => GALLERY_LOOP_RE.test(r.url) || /\/(?:assets\/gallery-[^/]*|src\/vitrine\/gallery)\.js/.test(r.url));
+    check('gallery: neither a loop nor its code fetched while the reader is at the top', early.length === 0,
+      early.map((r) => r.url.split('/').pop()).join(', '));
+    await page.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const available = await waitFor(page, () => window.__gevVitrine.getDiagnostics().gallery.available || null, { timeout: 5000 });
+    if (!available) {
+      console.log('  \x1b[2m   gallery: no loop published (src/vitrine/galleryLoops.js is empty) — stills only\x1b[0m');
+      check('gallery: with no loop published, no video is added', await page.evaluate(() => !document.querySelector('#vitrine .loop-video')));
+      await page.close();
+      return;
+    }
+    const diag = () => page.evaluate(() => window.__gevVitrine.getDiagnostics().gallery.items);
+    const videos = () => page.evaluate(() => [...document.querySelectorAll('#vitrine .loop-video')].map((v) => ({
+      media: v.parentElement.dataset.media, paused: v.paused, t: v.currentTime, muted: v.muted, loop: v.loop,
+      inline: v.hasAttribute('playsinline'), poster: Boolean(v.poster), opacity: Number(getComputedStyle(v).opacity),
+    })));
+    const live = await waitFor(page, () => {
+      const items = window.__gevVitrine.getDiagnostics().gallery.items;
+      const on = Object.entries(items).filter(([, item]) => item.state === 'live' && item.visible).map(([key]) => key);
+      return on.length >= 2 ? on : null;
+    }, { timeout: 20_000 });
+    check('gallery: the thumbnails on screen play', Boolean(live), JSON.stringify(live ?? await diag()));
+    if (!live) { await page.close(); return; }
+    const first = (await videos()).find((v) => v.media === live[0]);
+    await sleep(1200);
+    const later = (await videos()).find((v) => v.media === live[0]);
+    check('gallery: the picture moves (currentTime advances)', later.t > first.t + 0.5, `${first.t.toFixed(2)} → ${later.t.toFixed(2)} s`);
+    const shown = (await videos()).filter((v) => live.includes(v.media));
+    check('gallery: muted, looping, inline, the still as poster, faded in',
+      shown.every((v) => v.muted && v.loop && v.inline && v.poster && v.opacity > 0.95), JSON.stringify(shown));
+    const items = await diag();
+    const renditions = live.map((key) => items[key].rendition);
+    check('gallery: each box gets a rendition that covers it', renditions.every((r) => r && r.width >= r.needed * 0.9),
+      JSON.stringify(renditions));
+    const notNear = Object.entries(items).filter(([, item]) => !item.near && item.state !== 'still');
+    check('gallery: a box far from the screen is not fetched', notNear.length === 0, notNear.map(([k]) => k).join(', '));
+
+    // « Image fixe »: everything stops where it is, and starts again.
+    await page.evaluate(() => document.querySelector('#vitrine-still').click());
+    await sleep(400);
+    const frozenA = await videos();
+    await sleep(1000);
+    // Every loop stops; the ones that were playing stay on screen, where they stopped.
+    const frozenB = await videos();
+    const wasLive = frozenB.filter((v) => live.includes(v.media));
+    check('gallery: « Image fixe » stops every loop on the frame shown',
+      frozenB.every((v) => v.paused) && wasLive.every((v) => v.opacity > 0.95)
+        && frozenB.every((v, i) => Math.abs(v.t - frozenA[i].t) < 0.05),
+      JSON.stringify(frozenB.map((v) => [v.media, v.paused, v.t.toFixed(2)])));
+    await page.evaluate(() => document.querySelector('#vitrine-still').click());
+    await sleep(1200);
+    const resumed = (await videos()).filter((v) => live.includes(v.media));
+    check('gallery: unticked, the loops on screen move again', resumed.every((v) => !v.paused), JSON.stringify(resumed.map((v) => [v.media, v.paused])));
+
+    // Off screen: paused.
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await sleep(1000);
+    const away = await videos();
+    check('gallery: scrolled away, every loop is paused', away.every((v) => v.paused), JSON.stringify(away.map((v) => [v.media, v.paused])));
+    await page.close();
+
+    // Reduced motion, data saver, and a download that fails: stills only.
+    const stillsOnly = async (label, { reducedMotion = false, saveData = false, failLoops = false } = {}) => {
+      const other = await freshPage({ reducedMotion });
+      if (saveData) {
+        await other.evaluateOnNewDocument(() => {
+          Object.defineProperty(Navigator.prototype, 'connection', { configurable: true, get: () => ({ saveData: true, effectiveType: '4g' }) });
+        });
+      }
+      if (failLoops) {
+        await other.setRequestInterception(true);
+        other.on('request', (request) => (GALLERY_LOOP_RE.test(request.url()) ? request.abort() : request.continue()));
+      }
+      const seen = watchRequests(other);
+      await other.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+      await waitFor(other, () => (window.__gevVitrine ? true : null));
+      await other.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+      await sleep(3500);
+      const state = await other.evaluate(() => ({
+        videos: document.querySelectorAll('#vitrine .loop-video').length,
+        stills: [...document.querySelectorAll('#vitrine .view-image img')].filter((img) => img.getBoundingClientRect().bottom > 0
+          && img.getBoundingClientRect().top < innerHeight).map((img) => img.complete && img.naturalWidth > 0),
+        states: Object.values(window.__gevVitrine.getDiagnostics().gallery.items || {}).map((item) => item.state),
+      }));
+      const fetched = seen.filter((r) => GALLERY_LOOP_RE.test(r.url));
+      if (failLoops) {
+        check(`gallery: ${label} — the still stays, the video goes`,
+          state.videos === 0 && state.stills.length > 0 && state.stills.every(Boolean) && state.states.includes('fallback'),
+          JSON.stringify(state));
+      } else {
+        check(`gallery: ${label} — stills only, no loop fetched`,
+          state.videos === 0 && fetched.length === 0 && state.stills.every(Boolean), JSON.stringify({ ...state, fetched: fetched.length }));
+      }
+      await other.close();
+    };
+    await stillsOnly('reduced motion', { reducedMotion: true });
+    await stillsOnly('data saver', { saveData: true });
+    await stillsOnly('a loop that fails to download', { failLoops: true });
+
+    // A phone: the loop plays, and never at the desktop's 1440.
+    const phone = await freshPage({ phone: true });
+    await phone.goto(phoneUrl(`${BASE}/`), { waitUntil: 'load', timeout: 90_000 });
+    await waitFor(phone, () => (window.__gevVitrine ? true : null));
+    await phone.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const phoneLive = await waitFor(phone, () => {
+      const entries = Object.values(window.__gevVitrine.getDiagnostics().gallery.items || {});
+      const on = entries.filter((item) => item.state === 'live');
+      return on.length ? on.map((item) => item.rendition) : null;
+    }, { timeout: 20_000 });
+    check('gallery: a phone plays the view on screen, at most 960 px wide', Boolean(phoneLive)
+      && phoneLive.every((r) => r.width <= 960), JSON.stringify(phoneLive));
+    await phone.close();
+  },
+
   async example() {
     const page = await freshPage();
     await page.goto(`${BASE}/`, { waitUntil: 'load' });
@@ -795,7 +920,7 @@ const CASES = {
     await page.evaluate(() => document.querySelector('#vitrine .examples li[data-active] a').click());
     const viewer = await waitFor(page, () => Boolean(window.__godsEyeView?.viewer), { timeout: 90_000 });
     const hash = await page.evaluate(() => location.hash);
-    check('an example link opens the cockpit on its view', Boolean(viewer) && hash.includes('lat=45.76'), hash.slice(0, 40));
+    check('an example link opens the cockpit on its view', Boolean(viewer) && hash.includes('lat=45.758'), hash.slice(0, 40));
     await page.close();
   },
 
@@ -820,7 +945,7 @@ const CASES = {
     const kB = (list) => Math.round(list.reduce((sum, { bytes }) => sum + bytes, 0) / 1024);
     const firstScreen = fetched.filter(({ url, type }) => type === 'Document' || type === 'Stylesheet'
       || type === 'Font' || type === 'Script' || /\/landing\/hero-poster-/.test(url));
-    const gallery = fetched.filter(({ url }) => /\/landing\/view-\d\d-/.test(url));
+    const gallery = fetched.filter(({ url }) => /\/landing\/view-\d\d-\d+\.[0-9a-f]{8}\.jpg/.test(url));
     const top = [...firstScreen].sort((a, b) => b.bytes - a.bytes).slice(0, 5)
       .map(({ url, bytes }) => `${url.replace(BASE, '')} ${Math.round(bytes / 1024)} kB`);
     if (dev) {
@@ -832,6 +957,11 @@ const CASES = {
       check('weight: no 1440 px thumbnail on a phone', !gallery.some(({ url }) => /-1440\./.test(url)),
         `${kB(gallery)} kB early: ${gallery.map(({ url }) => url.split('/').pop()).join(', ') || 'none'}`);
     }
+    // The gallery's loops wait for the reader to scroll to them, dev server or
+    // not. Counted on REQUESTS: a video still downloading has not finished.
+    const loops = [...meta.values()].filter(({ url }) => GALLERY_LOOP_RE.test(url));
+    check('weight: no gallery loop requested on the phone\'s first screen', loops.length === 0,
+      loops.map(({ url }) => url.split('/').pop()).join(', '));
     await phone.close();
   },
 };
