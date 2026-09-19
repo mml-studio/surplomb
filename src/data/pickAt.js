@@ -8,9 +8,10 @@
  * default picking rectangle is **3 × 3 pixels of the DRAWING BUFFER**
  * (`computePickingDrawingBufferRectangle`), and `transformWindowToDrawingBuffer`
  * scales the CSS position by `drawingBufferWidth / canvas.clientWidth`. On a
- * phone that ratio is 1 (Cesium renders at 1× by design — see
- * `useBrowserRecommendedResolution`), so 3 buffer pixels ARE 3 CSS pixels, and
- * the governor's `resolutionScale` shrinks them further while the camera moves.
+ * phone that ratio was 1 when this was measured (Cesium renders at 1× by
+ * default — see `useBrowserRecommendedResolution`), so 3 buffer pixels WERE 3
+ * CSS pixels; since `src/phoneRender.js` it is 2, so they are 1.5, and the
+ * governor's `resolutionScale` shrinks them further while the camera moves.
  * A fingertip covers 20 to 30 CSS pixels. The target is roughly one percent of
  * the contact patch: on a phone, a tap on a charging station, a buoy or a bike
  * dock misses, and — because {@link isWorldPick} reads a miss as "the reader

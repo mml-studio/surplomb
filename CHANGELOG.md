@@ -5,6 +5,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Fixed
+- **Sur téléphone, la carte était floue, quel que soit le fond.** Satellite
+  IGN comme Plan IGN : un pixel d’image couvrait 6 à 12 pixels d’un iPhone.
+  Deux réglages s’additionnaient. Le globe s’arrêtait à des tuiles trois fois
+  trop grossières (tolérance d’erreur 3, celle du profil léger) et il se
+  dessinait à la résolution CSS, que l’écran étirait ensuite ×3. Le téléphone
+  s’arrête maintenant à une tolérance de 1 et dessine à 2× : la tuile tombe à
+  un pixel d’image par pixel d’écran, comme Google Maps. Les pastilles, les
+  traits et les étiquettes gardent leur taille. Le prix : une vue au repos
+  demande environ deux fois plus d’octets d’imagerie (mesuré à 1 200 m sur
+  Montparnasse : 1,1 → 2,2 Mo) ; pendant un glissé ou un pincement, le coût ne
+  change pas.
+
 ### Changed
 - **Le globe portait encore l’identité de God’s Eye View.** L’œil cyan qui
   suivait le curseur, le mot en capitales espacées, les panneaux bleu nuit,

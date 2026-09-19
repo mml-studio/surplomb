@@ -120,10 +120,11 @@ export const PHONE_CACHE_OVERFLOW_BYTES = 128 * 1024 * 1024;
  * The error tolerance a phone asks the mesh for, in pixels of screen error.
  *
  * 16 is Cesium's default and what the desktop keeps. 24 is roughly 44 % fewer
- * tiles for the same view, and it is invisible where it applies: Cesium renders
- * the globe at `pixelRatio = 1` by default, so an iPhone's canvas is 390 px
- * wide and not 1170 — a third of a tile's worth of extra error lands inside one
- * of its device pixels.
+ * tiles for the same view. Cesium divides the error by `scene.pixelRatio`, so
+ * it is counted in CSS pixels whatever the buffer: the 2× buffer a phone has
+ * rendered at since `src/phoneRender.js` sharpens the mesh it gets, and does
+ * not ask for more of it. The mesh is the memory risk on a phone, which is why
+ * this stays coarser than the flat globe's error there.
  */
 export const DESKTOP_MAX_SCREEN_SPACE_ERROR = 16;
 export const PHONE_MAX_SCREEN_SPACE_ERROR = 24;
