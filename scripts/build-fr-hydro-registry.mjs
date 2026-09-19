@@ -86,7 +86,7 @@ import {
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'src', 'data', 'local_data', 'fr_hydro_plants', 'plants.json');
 const CACHE_DIR = path.join(ROOT, '.gev-cache');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 
 const ODRE_BASE = 'https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets';
 const GEO_API = 'https://geo.api.gouv.fr/communes';

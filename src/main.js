@@ -31,7 +31,6 @@ import {
   rememberPhotorealAdoption,
 } from './photorealAdoption.js';
 import { ignTerrainFlagEnabled } from './data/ignBilTerrain.js';
-import { initLogoGaze } from './logoGaze.js';
 import { installIconFontFallback } from './iconFontFallback.js';
 import { installStarfield } from './starfield.js';
 import { initCockpitCloudEffects } from './cockpitCloudEffects.js';
@@ -97,7 +96,7 @@ function describeError(error) {
 }
 
 /**
- * GOD'S EYE VIEW — Main Entry Point
+ * SURPLOMB — cockpit entry point
  * Initializes CesiumJS with Google Photorealistic 3D Tiles,
  * style system, intelligence HUD, location presets, and share links.
  *
@@ -1030,7 +1029,6 @@ let cockpitStarted = null;
  */
 export function startCockpit(options = {}) {
   if (cockpitStarted) return cockpitStarted;
-  initLogoGaze();
   installIconFontFallback();
   cockpitStarted = init(options);
   return cockpitStarted;

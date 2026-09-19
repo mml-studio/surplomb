@@ -59,7 +59,7 @@ import { fetchZipMemberRanged, readZipMember } from './lib/remoteZip.mjs';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'config', 'pan_route_types.json');
 const FEED_INDEX = path.join(ROOT, 'config', 'pan_gtfs_rt_feeds.json');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 
 function parseArgs(argv) {
   const args = {

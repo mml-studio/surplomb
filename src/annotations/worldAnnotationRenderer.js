@@ -234,7 +234,7 @@ export function createWorldAnnotationRenderer(viewer) {
   function labelGraphic(anno, base) {
     return {
       text: anno.label,
-      font: '600 14px "Inter", system-ui, sans-serif',
+      font: '600 14px "DM Sans", system-ui, sans-serif',
       fillColor: liveColor(anno, Cesium.Color.WHITE, { alpha: 1 }),
       outlineColor: liveColor(anno, Cesium.Color.BLACK, { alpha: 0.85 }),
       outlineWidth: 3,

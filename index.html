@@ -141,7 +141,7 @@
   <meta property="og:image" content="/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Carte sombre : SURPLOMB, « La France au rayon X », et la mention 59 couches publiques, 56 sans clé, open source." />
+  <meta property="og:image:alt" content="Carte verte : le symbole et le mot surplomb, « La France au rayon X. », et « Aucun angle mort. »" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Surplomb — La France au rayon X" />
   <meta name="twitter:description" content="Tout ce que vous n’auriez jamais pensé à chercher : 59 couches de données publiques françaises sur un globe 3D en direct. 56 ne demandent aucune clé." />
@@ -205,7 +205,7 @@
     (function () {
       var faces = document.documentElement.hasAttribute('data-vitrine')
         ? ['/fonts/manrope-latin.e310b55a.woff2', '/fonts/dm-sans-latin.468d56b6.woff2']
-        : ['/fonts/inter-latin.c9407645.woff2', '/fonts/jetbrains-mono-latin.1e06740a.woff2'];
+        : ['/fonts/manrope-latin.e310b55a.woff2', '/fonts/dm-sans-latin.468d56b6.woff2'];
       for (var i = 0; i < faces.length; i += 1) {
         var link = document.createElement('link');
         link.rel = 'preload';
@@ -462,8 +462,8 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span> <span>SUR<span class="title-accent">PLOMB</span></span></h1>
-    <p class="subtitle">AUCUN ANGLE MORT</p>
+    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word">surplomb</span></h1>
+    <p class="subtitle">Aucun angle mort.</p>
   </div>
 
   <!-- Style indicator -->
@@ -1599,8 +1599,8 @@
   <!-- Loading screen -->
   <div id="loading-screen">
     <div class="loader-content">
-      <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span>
-      <h2>SUR<span class="title-accent">PLOMB</span></h2>
+      <span class="loader-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span>
+      <h2 class="brand-word">surplomb</h2>
       <p class="loader-status">Initializing photorealistic world...</p>
     </div>
   </div>

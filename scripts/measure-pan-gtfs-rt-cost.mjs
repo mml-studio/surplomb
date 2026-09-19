@@ -54,7 +54,7 @@ import {
 const gzip = promisify(zlib.gzip);
 
 const USER_AGENT =
-  'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view; GTFS-RT storage sizing)';
+  'surplomb/0.1 (+https://github.com/mml-studio/surplomb; GTFS-RT storage sizing)';
 const TIMEOUT_MS = 15_000;
 const MAX_BYTES = 48 * 1024 * 1024;
 

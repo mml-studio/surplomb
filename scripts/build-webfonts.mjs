@@ -228,14 +228,16 @@ writeFileSync(CSS_PATH, `${out.css.join('\n\n')}\n`);
 // by hand — this rewrites it, between markers, and
 // `src/materialSymbolsSubset.test.mjs` fails if the two ever disagree.
 //
-// TWO SURFACES, TWO PAIRS. `index.html` is the showcase for a first visitor
-// and the cockpit for everyone else (src/vitrine/gate.js), and a preload of
-// the other surface's type is ~90 kB spent before the first paint. So the
-// block is a script that reads the `data-vitrine` the gate script has already
-// put on `<html>` (it runs earlier in the head) and inserts the right pair —
-// still ahead of the stylesheet, still at preload priority.
+// TWO SURFACES, ONE PAIR SINCE THE BELVÉDÈRE IDENTITY (2026-09-19).
+// `index.html` is the showcase for a first visitor and the cockpit for
+// everyone else (src/vitrine/gate.js). They used to set text in different
+// faces (Inter + JetBrains Mono in the cockpit), so the block is a script that
+// reads the `data-vitrine` the gate script has already put on `<html>` and
+// inserts that surface's pair. Both now speak Manrope (the mark) and DM Sans
+// (everything else); the branch stays so a surface can diverge again without
+// re-plumbing the head.
 const PRELOAD_ROLES = Object.freeze({
-  cockpit: ['inter-latin', 'jetbrains-mono-latin'],
+  cockpit: ['manrope-latin', 'dm-sans-latin'],
   vitrine: ['manrope-latin', 'dm-sans-latin'],
 });
 const preloadHrefs = (roles) => roles.map((role) => {

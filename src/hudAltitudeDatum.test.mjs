@@ -242,16 +242,19 @@ test('no invented ground sample distance is printed beside the real coordinates'
   assert.equal(has(/getElementById\('hud-gsd'\)/), false, 'nothing may write a GSD readout');
 });
 
-test('the invented mission identifiers are typographically separated from the measured ones', () => {
-  // CARTOGRAPHIE A1. KH11/OPS/ORB/PASS are set dressing; MGRS, lat, lon and
-  // ALT are instruments. They may share a screen, not a voice.
-  for (const anchor of [/hud-top-bar-center hud-simulated/, /hud-system hud-simulated/,
-    /hud-orbital hud-simulated/, /hud-right-edge hud-simulated/]) {
-    assert.equal(has(anchor), true, `simulated readout must carry .hud-simulated: ${anchor}`);
+test('the HUD prints no invented reconnaissance set dressing', () => {
+  // CARTOGRAPHIE A1 first set the invented mission identifiers apart from the
+  // measured readouts (a `SIM` prefix, a dimmer voice). The Surplomb identity
+  // (2026-09-19) removes them outright: the product shows what the State
+  // publishes, never a surveillance fiction. Only instruments remain.
+  for (const dressing of [/TOP SECRET/, /NOFORN/, /KH11-/, /SIM ORB:/, /SIM BAND/, /PAGE 1\/1/,
+    /hud-rec-dot/, /hud-simulated/, /_missionId/]) {
+    assert.equal(has(dressing), false, `set dressing must not return: ${dressing}`);
   }
-  assert.equal(has(/SIM \$\{this\._missionId\}/), true, 'the mission id must be prefixed SIM');
-  assert.equal(has(/SIM ORB:/), true, 'the orbit/pass line must be prefixed SIM');
-  assert.equal(has(/SIM BAND: PAN/), true, 'the band/bits/level strip must be prefixed SIM');
+  for (const instrument of [/id="hud-mode"/, /id="hud-summary"/, /id="hud-timestamp"/, /id="hud-alt"/,
+    /id="hud-coll"/, /id="hud-ona"/, /id="hud-bottom-line"/]) {
+    assert.equal(has(instrument), true, `measured readout must stay: ${instrument}`);
+  }
 });
 
 // ── The cold → resolved transition, driven live ─────────────────────────────

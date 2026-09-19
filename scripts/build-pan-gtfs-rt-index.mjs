@@ -88,7 +88,7 @@ import {
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = path.join(ROOT, 'config', 'pan_gtfs_rt_feeds.json');
-const USER_AGENT = 'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)';
+const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 /**
  * Feed body cap. The largest French vehicle-position feed is well under 1 MB;
  * the largest TRIP-UPDATE body is TBM's at 1.2 MB, because a trip update

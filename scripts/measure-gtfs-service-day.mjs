@@ -32,7 +32,7 @@ import path from 'node:path';
 import { fetchZipMemberRanged, readZipMember } from './lib/remoteZip.mjs';
 
 const USER_AGENT =
-  'gods-eye-view/0.1 (+https://github.com/bilawalsidhu/gods-eye-view; GTFS service-day sizing)';
+  'surplomb/0.1 (+https://github.com/mml-studio/surplomb; GTFS service-day sizing)';
 /** The four networks measured for the write-up: a metropolis, two mid-size, one village line. */
 const DEFAULT_FEEDS = ['pan-83026', 'pan-82163', 'pan-81786', 'pan-83192'];
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];

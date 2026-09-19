@@ -176,7 +176,8 @@ Updated: September 17, 2026
 >   loop is `position: fixed` behind the whole page on EVERY width; « Image
 >   fixe » (`#vitrine-still`, shown only in `data-state="live"`) pauses it on
 >   the current frame. The page ends on `.footer-ending`: the city with two
->   opaque blocks. The cockpit's own title bar still shows `public/logo.svg`.
+>   opaque blocks. The cockpit carries the same mark since 2026-09-19 (see
+>   « Cockpit identity » below).
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
 >   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop
@@ -1106,9 +1107,14 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   intent from its pre-entry snapshot. Its OFF control therefore leaves Space
 >   Missions off and restores Satellites to their exact pre-entry visibility
 >   and parameter state.
->   The title and loading logos use a blue 10 px outer-eye stroke with a
->   translucent slate fill, while the globe-and-cage gaze travels up to 34 SVG
->   units toward the pointer for clearer feedback at the compact title size.
+>   **Cockpit identity (Belvédère, 2026-09-19):** the title bar and the boot
+>   screen carry the home page's mark — the inline symbol (two ivory planes,
+>   apricot sun) and « surplomb » in Manrope 800 — with « Aucun angle mort. »
+>   under the word. The old eye (`public/logo.svg`, `src/logoGaze.js`) is
+>   removed. Chrome palette: night-green glass (`--glass-bg`), ivory type,
+>   apricot accent (`--accent`), DM Sans for prose (`--font-sans`); JetBrains
+>   Mono stays the DATA face (readouts, canvas cards), because the canvas
+>   layout arithmetic is exact only in a monospace.
 > - **Context, Cockpit, and Radio interaction contract:** explicit Contacts,
 >   Space Missions, and successful Cockpit actions reveal the Context panel, while
 >   restoration and replay preserve its prior collapsed state. Contacts uses the

@@ -111,9 +111,8 @@ async function discover() {
         if (parsed.origin === new URL(base).origin) out.push(parsed.pathname + parsed.search);
       } catch { /* not a URL */ }
     }
-    // Duplicates are KEPT here. A recorded boot asks for `/logo.svg` three
-    // times — favicon, two `<img>` — and de-duplicating would bench a boot
-    // nobody performs. The auto-discovery branch dedups because it reads a
+    // Duplicates are KEPT here. A recorded boot can ask for the same asset
+    // more than once, and de-duplicating would bench a boot nobody performs. The auto-discovery branch dedups because it reads a
     // document, not a trace.
     return out;
   }
