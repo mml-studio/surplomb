@@ -80,7 +80,7 @@ v2.0 requires.
 >
 > Je souhaite obtenir une clé d'accès à l'API Candhis (v1) afin d'afficher
 > l'état de la mer mesuré par le réseau sur un globe cartographique ouvert
-> (projet God's Eye View, visualisation de données publiques françaises).
+> (projet Surplomb, visualisation de données publiques françaises).
 >
 > - Nom : …
 > - Domaine d'activité : atlas de données

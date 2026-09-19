@@ -5145,7 +5145,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `/anomalies`) ; l'écriture se fait à l'intérieur des proxys. Le sondeur
   QualiCharge est **opt-in** (`CHRONICLE_IRVE_DYNAMIC=1`, armé sur le
   déploiement de staging, qui est le seul à avoir un volume persistant).
-  Raisonnement complet dans [`docs/CHRONIQUE.md`](docs/CHRONIQUE.md) ;
+  Raisonnement complet dans [`docs/CHRONICLE.md`](docs/CHRONICLE.md) ;
   `npm run qa:chronicle`.
 - **La route d'un vol suivi, sur une seule vue.** Sélectionner un avion et
   vouloir voir d'où il vient et où il va demandait jusqu'ici de dézoomer à la
