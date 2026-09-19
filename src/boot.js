@@ -74,12 +74,30 @@ function enableCesiumWidgets() {
   return widgetsReady;
 }
 
+let loaderSun = null;
+
+/**
+ * The loading veil's sun (src/loaderSun.js). Fetched on its own, beside the
+ * cockpit rather than inside this module: the showcase never shows the veil
+ * and must not carry it. Until it lands the veil shows the mark, still; once
+ * the veil lifts it lets go of everything.
+ */
+function startLoaderSun() {
+  loaderSun ??= import('./loaderSun.js')
+    .then((module) => {
+      module.initLoaderSun();
+      return module;
+    })
+    .catch((error) => console.warn('[boot] the loading sun could not start:', error));
+}
+
 /**
  * Start the cockpit.
  * @param {object} [options] Forwarded to `startCockpit` (src/main.js).
  * @returns {Promise<void>}
  */
 async function openCockpit(options = {}) {
+  startLoaderSun();
   const [{ startCockpit }] = await Promise.all([loadCockpit(), enableCesiumWidgets()]);
   return startCockpit(options);
 }
@@ -89,8 +107,10 @@ function reportBootFailure(error) {
   console.error('[boot] the cockpit could not load:', error);
   const status = document.querySelector('#loading-screen .loader-status');
   if (status) {
+    void loaderSun?.then((module) => module?.stopLoaderSun());
     status.textContent = 'Le globe n’a pas pu se charger. Rechargez la page.';
-    status.style.color = '#ff4444';
+    // Light coral: 6:1 on the veil's green, where #ff4444 read at 3:1.
+    status.style.color = '#ffb4a8';
   }
 }
 

@@ -1166,6 +1166,13 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   apricot accent (`--accent`), DM Sans for prose (`--font-sans`); JetBrains
 >   Mono stays the DATA face (readouts, canvas cards), because the canvas
 >   layout arithmetic is exact only in a monospace.
+>   **The boot veil's sun** (`src/loaderSun.js`, started by `src/boot.js`
+>   beside the cockpit import, never on the showcase): the veil is brand green;
+>   the sun runs a 6 s arc over the terrace, the terrace's shadow falls on the
+>   ground (a clipped `<use>`), and the pointer steers it. `#loading-screen
+>   .hidden` lands it back in the mark in 600 ms, inside the veil's 800 ms fade,
+>   then every frame and listener stops. Reduced motion, an off-screen veil or a
+>   boot error (`stopLoaderSun()`) leave the mark still.
 > - **Context, Cockpit, and Radio interaction contract:** explicit Contacts,
 >   Space Missions, and successful Cockpit actions reveal the Context panel, while
 >   restoration and replay preserve its prior collapsed state. Contacts uses the
