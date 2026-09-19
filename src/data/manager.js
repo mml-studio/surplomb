@@ -2807,6 +2807,38 @@ export class DataLayerManager {
   }
 
   /**
+   * The panel's rows as a surface OUTSIDE the panel reads them: the phone's
+   * row of layer chips under its search bar (`src/phoneLayerChips.js`).
+   *
+   * A projection, never a second copy of layer state — the same one the
+   * active strip reads, with the same two filters on what owns a row.
+   *
+   * @returns {Array<{id: string, label: string, icon: ?string,
+   *   iconGlyph: ?string, enabled: boolean, transitioning: boolean}>}
+   */
+  getPanelRowStates() {
+    return this._panelRowLayers().map((layer) => ({
+      id: layer.id,
+      label: this._displayName(layer),
+      icon: layer.icon ?? null,
+      iconGlyph: layer.iconGlyph ?? null,
+      enabled: this._rowEnabled(layer.id),
+      transitioning: layer.lifecycleState === 'enabling' || layer.lifecycleState === 'disabling',
+    }));
+  }
+
+  /**
+   * Switch a whole row, exactly as its own toggle button does: the direction
+   * is read from the primary, and companions travel with it.
+   * @param {string} layerId Primary layer id of the row.
+   * @returns {Promise<void>}
+   */
+  toggleRow(layerId) {
+    if (!this.layers.has(layerId)) return Promise.resolve();
+    return this._setRowEnabled(layerId, !this.isEnabled(layerId));
+  }
+
+  /**
    * Switch off every row the panel shows as lit — the strip's "TOUT ÉTEINDRE".
    *
    * ROWS, NOT LAYERS. A coordinator with no row of its own is not something

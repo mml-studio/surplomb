@@ -119,13 +119,24 @@ html[data-shell="phone"] :is(.button-grid, .location-pills, .poi-row-container, 
 }
 
 /* ═══ THE TOP BAR ═══════════════════════════════════════════════════════════
-   Everything a phone keeps above the globe: a 36 px logo on the left, three
-   44 px actions on the right, and one column of status chips under them. The
-   desktop version of this band holds eleven surfaces across the full width and
-   three of them overlapped each other at 390 px. */
+   Laid out the way Google Maps lays out a phone (owner request, 2026-09-19):
+   the logo tile and a search bar across the top, a row of layer chips under
+   them, and one column of round buttons on the right — the basemap first.
+   The status chips sit under the layer chips, on the left. The desktop
+   version of this band holds eleven surfaces across the full width and three
+   of them overlapped each other at 390 px.
+
+   Three heights, named once: every surface below the bar is placed from them,
+   and `src/phoneSheet.js` measures the search bar for the sheet's `full`. */
+html[data-shell="phone"] {
+  --phone-top: max(10px, env(safe-area-inset-top));
+  --phone-search-height: 48px;
+  --phone-chips-height: 40px;
+  --phone-under-chips: calc(var(--phone-top) + var(--phone-search-height) + 8px + var(--phone-chips-height) + 12px);
+}
 
 html[data-shell="phone"] #title-bar {
-  top: max(10px, env(safe-area-inset-top));
+  top: calc(var(--phone-top) + 4px);
   left: 12px;
 }
 
@@ -151,24 +162,265 @@ html[data-shell="phone"] #title-bar .title-logo {
   filter: none;
 }
 
+/* THE COLUMN OF ROUND BUTTONS, under the chips on the right: basemap, « autour
+   de moi », share, reset the globe (« tout éteindre » moved into Couches). A
+   column and not a row, because the row they used to be now belongs to the
+   search bar.
+
+   IT STEPS ASIDE WHEN THE SHEET OPENS. At `half` its foot would reach the help
+   button of the voice column, which rides the top of the sheet; and a reader
+   who has opened the sheet is reading the sheet. Google Maps retires its map
+   buttons the same way. `visibility` and not `display`, so the fade runs and
+   nothing reflows. */
 html[data-shell="phone"] #top-center-actions {
-  top: max(10px, env(safe-area-inset-top));
+  top: var(--phone-under-chips);
   right: 12px;
   left: auto;
+  flex-direction: column;
+  gap: 8px;
   transform: none;
 }
 
-/* 44, the Apple HIG floor, not the desktop 36. These three — clear the layers,
-   share, reset the globe — are the only chrome buttons a phone reader ever
-   needs to find without looking, and they sit in the corner a thumb reaches
-   worst, so they get the full target. */
+/* EXCEPT « ne plus suivre ». Following starts from a selection, and a
+   selection opens the sheet at `half` — the one state where this button is
+   the way out, so it never steps aside, and it leads the column while it
+   exists, clear of the voice column's help button. */
+html[data-shell="phone"] body:has(#phone-sheet:is([data-snap='half'], [data-snap='full'])) #top-center-actions > :not(#tracking-release) {
+  opacity: 0;
+  visibility: hidden;
+}
+
+html[data-shell="phone"] #top-center-actions #tracking-release {
+  order: -1;
+}
+
+/* A landscape phone has 390 px of height and a 119 px sheet: a column of four
+   would run under it. The same four go side by side — one column in from the
+   edge, which the voice module's help button reaches up into. */
+@media (max-height: 500px) {
+  html[data-shell="phone"] #top-center-actions {
+    right: 68px;
+    flex-direction: row;
+  }
+}
+
+/* 44, the Apple HIG floor, not the desktop 36. They sit on the map with
+   nothing around them, so they get the full target. */
 html[data-shell="phone"] #top-center-actions button {
   width: 44px;
   height: 44px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* The basemap button is the one a reader comes looking for, so it is the one
+   drawn in full ivory; the other three keep the secondary tone. */
+html[data-shell="phone"] #top-center-actions #phone-basemap-button {
+  color: var(--text-primary);
+}
+
+html[data-shell="phone"] #phone-basemap-button svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
 }
 
 html[data-shell="phone"] #top-center-actions .material-symbols-outlined {
   font-size: 22px;
+}
+
+/* ── THE SEARCH BAR AND THE LAYER CHIPS ──────────────────────────────────────
+   Two fixed surfaces, placed from the heights named at the top of this file.
+   `#phone-topbar` only groups them in the markup (`display: contents`): a
+   full-width box around both would sit over the logo tile, and every tap in
+   the air between them would land on a box instead of the globe. Both sit
+   UNDER the sheet (150), so a sheet at `full` covers the chips — the sheet
+   stops under the bar itself (`measureTopInset` in `src/phoneSheet.js`). */
+html[data-shell="phone"] #phone-topbar:not([hidden]) {
+  display: contents;
+}
+
+/* The logo tile owns the first 12 + 40 + 12 px of the row. */
+html[data-shell="phone"] #phone-search {
+  position: fixed;
+  top: var(--phone-top);
+  left: 64px;
+  right: 12px;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--phone-search-height);
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: calc(var(--phone-search-height) / 2);
+  background: rgba(20, 34, 29, 0.92);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  color: var(--text-secondary);
+}
+
+html[data-shell="phone"] #phone-search:focus-within {
+  border-color: rgba(247, 171, 124, 0.6);
+}
+
+html[data-shell="phone"] .phone-search-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* The form arrives from the dock with a desktop box of its own; here it is the
+   bar's content and nothing else. */
+html[data-shell="phone"] #phone-search #location-search-form {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* The magnifier is a DISCLOSURE — it toggles the field between 0 and 180 px.
+   The field is always open here, so all it could do is close it. */
+html[data-shell="phone"] #phone-search #search-toggle {
+  display: none;
+}
+
+html[data-shell="phone"] #phone-search #location-search,
+html[data-shell="phone"] #phone-search #location-search.expanded {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4px 0 8px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  /* The width transition is the desktop disclosure's animation. Left armed,
+     the first paint is a 180 px field growing to fill the bar. */
+  transition: none;
+  opacity: 1;
+  visibility: visible;
+}
+
+html[data-shell="phone"] #phone-search #location-search::placeholder {
+  color: var(--text-dim);
+  font-style: normal;
+}
+
+/* The arrow only once there is something to send: an empty bar with a « go »
+   button reads as a form, and Google's reads as a place to tap. The keyboard's
+   own search key does the same job. */
+html[data-shell="phone"] #phone-search .search-submit-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  border-radius: 20px;
+}
+
+html[data-shell="phone"] #phone-search #location-search:placeholder-shown + .search-submit-btn {
+  display: none;
+}
+
+/* The row scrolls sideways. Proximity snap stops a flick on half a chip, and
+   the mask fades the last chip out to say « there is more » with no chrome. */
+html[data-shell="phone"] #phone-layer-chips {
+  position: fixed;
+  top: calc(var(--phone-top) + var(--phone-search-height) + 8px);
+  left: 0;
+  right: 0;
+  z-index: 140;
+  display: flex;
+  gap: 8px;
+  min-height: var(--phone-chips-height);
+  padding: 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding: 0 12px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+
+html[data-shell="phone"] #phone-layer-chips::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-shell="phone"] .phone-layer-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  max-width: 190px;
+  min-height: var(--phone-chips-height);
+  padding: 0 14px 0 11px;
+  border: 1px solid var(--glass-border);
+  border-radius: calc(var(--phone-chips-height) / 2);
+  background: rgba(20, 34, 29, 0.92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.38);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  scroll-snap-align: start;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+html[data-shell="phone"] .phone-layer-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-shell="phone"] .phone-layer-chip-icon {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* A taxonomy glyph, masked in `currentColor` like the panel row's own icon,
+   so it follows the chip from ivory to dark when the chip lights. */
+html[data-shell="phone"] .phone-layer-chip-icon.has-glyph {
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: var(--phone-chip-glyph) center / contain no-repeat;
+  mask: var(--phone-chip-glyph) center / contain no-repeat;
+}
+
+html[data-shell="phone"] .phone-layer-chip-icon:empty:not(.has-glyph) {
+  display: none;
+}
+
+/* LIT is FILLED — the one state a glance has to read from across the row. */
+html[data-shell="phone"] .phone-layer-chip.active {
+  border-color: transparent;
+  background: var(--brand-apricot);
+  color: #1c2a24;
+}
+
+html[data-shell="phone"] .phone-layer-chip:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+html[data-shell="phone"] .phone-layer-chip.is-all {
+  color: var(--text-secondary);
 }
 
 /* THE STATUS COLUMN.
@@ -188,8 +440,9 @@ html[data-shell="phone"] #top-center-actions .material-symbols-outlined {
 html[data-shell="phone"] #phone-status {
   display: flex;
   position: fixed;
-  top: calc(max(10px, env(safe-area-inset-top)) + 54px);
-  right: 12px;
+  top: var(--phone-under-chips);
+  /* Clear of the column of round buttons on the right. */
+  right: 68px;
   left: 12px;
   z-index: 102;
   flex-direction: column;
@@ -708,59 +961,35 @@ html[data-shell="phone"] #phone-sheet #global-context-panel.collapsed :is(
   display: grid;
 }
 
-/* ── THE RECHERCHE TAB ───────────────────────────────────────────────────────
+/* ── THE RECHERCHE PANEL ─────────────────────────────────────────────────────
 
-   The dock keeps this row for a cursor and for 370 px of tray: eight city
-   pills scrolling sideways, and a search field 0 px wide behind a 32 px
-   magnifier. A tab named RECHERCHE is a different contract — the reader has
-   already performed the disclosure by opening it — so the row becomes a
-   column: the field first at full width, the shortcuts under it.
+   What opens under the search bar when the field is focused: the city and
+   landmark shortcuts, the dock's row turned into a column. The field itself
+   is in the bar (`#phone-search` above), so the column holds shortcuts only.
 
-   `order: -1` and not a DOM move: `.location-city-row` is the desktop's own
-   grouping and the pills belong inside it. Reordering the markup would drag
-   the dock's layout along for a phone's benefit. */
+   `.location-city-row` is the desktop's own grouping and the pills belong
+   inside it; it is re-laid-out here rather than re-ordered in the markup,
+   which would drag the dock's layout along for a phone's benefit. */
 html[data-shell="phone"] #phone-sheet .location-city-row {
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
 }
 
-html[data-shell="phone"] #phone-sheet #location-search-form {
-  order: -1;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 48px;
-  padding: 0;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+/* The cities WRAP here instead of scrolling sideways as they do in the dock:
+   the panel has the whole height of the screen, and a row cut by the mask
+   hides half the shortcuts behind a swipe nobody knows to make. */
+html[data-shell="phone"] #phone-sheet #location-pills {
+  flex-wrap: wrap;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
-/* The magnifier is a DISCLOSURE — it toggles the field between 0 and 180 px.
-   With the field permanently open (`phoneSheet.js` adds `.expanded`), the only
-   thing left for it to do is close the field the reader came to type in. */
-html[data-shell="phone"] #phone-sheet #search-toggle {
+/* A tab that is no longer a tab: the bar is the door to this panel. The node
+   stays because the panel is labelled by it. */
+html[data-shell="phone"] #phone-sheet .phone-sheet-tab[hidden] {
   display: none;
-}
-
-html[data-shell="phone"] #phone-sheet #location-search,
-html[data-shell="phone"] #phone-sheet #location-search.expanded {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 0 0 14px;
-  /* The width transition is the disclosure's animation. Nothing animates a
-     width here any more, and leaving it armed makes the first paint of the
-     tab a 180 px field growing to fill the row. */
-  transition: none;
-}
-
-html[data-shell="phone"] #phone-sheet .search-submit-btn {
-  width: 44px;
-  height: 44px;
-  margin: 0 2px 0 0;
 }
 
 /* 40 px with the 8 px of air the column gap already provides — the floor
@@ -777,49 +1006,207 @@ html[data-shell="phone"] #phone-sheet :is(#location-pills, #poi-row) {
   gap: 8px;
 }
 
-/* ── FOND DE CARTE, adopted to the top of Couches ────────────────────────────
-   The section arrives as the tail of a desktop tray: an 8 px heading, a
-   three-column grid of 9 px chips, a hairline above it. Here it is the first
-   thing in the tab and the chips are targets, so it gets the tab's own type
-   size and a hairline BELOW instead — the rule that separates it from the
-   layer list it frames. Three columns still: « Relief Google » is 13
-   characters and the fourth column would cut it. */
-html[data-shell="phone"] #phone-sheet .map-source-section {
-  gap: 8px;
-  margin: 0 0 10px;
-  padding: 0 0 12px;
-  border-top: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+/* ── FOND DE CARTE, in a panel of its own ────────────────────────────────────
+   Opened by the round button at the top of the column, closed by its ×, by
+   the backdrop or by Échap (`src/phoneSheet.js`). Above the sheet (150) and
+   below the dialogs (170+). The panel stays open after a choice, as Google
+   Maps' does: the map behind it is how a reader sees what they picked. */
+html[data-shell="phone"] #phone-basemap-backdrop:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 164;
+  background: rgba(0, 0, 0, 0.32);
 }
 
-html[data-shell="phone"] #phone-sheet .map-source-heading {
-  font-size: 10px;
-  letter-spacing: 1.2px;
+html[data-shell="phone"] #phone-basemap-sheet:not([hidden]) {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 165;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--phone-vv-height, 100dvh) - var(--phone-top-safe, 64px));
+  padding: 4px 16px calc(18px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--glass-border);
+  border-radius: 16px 16px 0 0;
+  background: rgba(15, 26, 22, 0.97);
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.55);
+  color: var(--text-primary);
+  animation: phone-basemap-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Three, against the two that `style.css` drops to under 620 px. That media
-   query is written for a narrow DESKTOP window, where the tray is still a
-   popover over a map and a tall block of chips would bury it; here the tab
-   scrolls and the row is the first thing in it, so the eight sources cost
-   three rows instead of four — 54 px of the layer list back. */
-html[data-shell="phone"] #phone-sheet .map-stack-chip-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+@keyframes phone-basemap-in {
+  from { transform: translateY(24px); opacity: 0; }
 }
 
-/* A column, not a baseline row: the ION badge beside a label is what makes
-   « Bing Aerial ION » wider than a third of a 390 px screen. */
-html[data-shell="phone"] #phone-sheet .map-stack-chip {
+@media (prefers-reduced-motion: reduce) {
+  html[data-shell="phone"] #phone-basemap-sheet:not([hidden]) { animation: none; }
+}
+
+html[data-shell="phone"] .phone-basemap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+}
+
+html[data-shell="phone"] #phone-basemap-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+html[data-shell="phone"] .phone-basemap-close {
+  width: 44px;
+  height: 44px;
+  margin-right: -8px;
+  border: 0;
+  border-radius: 22px;
+  background: rgba(247, 244, 234, 0.06);
+  color: var(--text-secondary);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The section arrives as the tail of a desktop tray: a hairline above it and
+   an 8 px heading that says what the panel's title now says. */
+html[data-shell="phone"] #phone-basemap-sheet .map-source-section {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-source-heading {
+  display: none;
+}
+
+/* CARDS, NOT CHIPS: a picture of what each source looks like over its name,
+   four to a row. The three free sources — the ones this app is built on —
+   come first; `order` does it, so the chip module's desktop order stands. */
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 10px;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip {
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1px;
-  min-height: 44px;
-  padding: 4px 6px;
-  border-radius: 10px;
-  font-size: 10px;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: normal;
   text-align: center;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip::before {
+  content: '';
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 72px;
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--phone-basemap-thumb, none) center / cover no-repeat, var(--brand-green);
+  box-shadow: inset 0 0 0 1px rgba(247, 244, 234, 0.14);
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip.active {
+  color: var(--brand-apricot);
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip.active::before {
+  border-color: var(--brand-apricot);
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip:focus-visible {
+  outline: none;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip:focus-visible::before {
+  outline: 2px solid var(--brand-apricot);
+  outline-offset: 2px;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip.unavailable,
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[aria-disabled='true'] {
+  color: var(--text-dim);
+  background: none;
+  opacity: 0.5;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip-req {
+  font-size: 9px;
+}
+
+/* The three free sources carry a real picture of themselves: one tile over
+   the Île de la Cité, from IGN's Géoplateforme (Licence Ouverte 2.0) and from
+   OpenStreetMap (© OpenStreetMap contributors, ODbL). The five keyed sources
+   carry a pictogram instead: their imagery may not be stored outside its
+   service, and a free tile passed off as theirs would be a lie. */
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='ign-ortho'] {
+  order: -3;
+  --phone-basemap-thumb: url('/basemaps/ign-ortho.webp');
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='ign-plan'] {
+  order: -2;
+  --phone-basemap-thumb: url('/basemaps/ign-plan.webp');
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='osm'] {
+  order: -1;
+  --phone-basemap-thumb: url('/basemaps/osm.webp');
+}
+
+/* Material Symbols pictograms (Apache 2.0), ivory on the brand green. */
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip:is(
+  [data-stack-id='photoreal'],
+  [data-stack-id='google-roadmap'],
+  [data-stack-id='google-terrain'],
+  [data-stack-id='bing-aerial'],
+  [data-stack-id='bing-labels']
+)::before {
+  background-size: 46%;
+  background-position: center;
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='photoreal'] {
+  --phone-basemap-thumb: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960' fill='%23f7f4ea'%3E%3Cpath d='M440-181 240-296q-19-11-29.5-29T200-365v-230q0-22 10.5-40t29.5-29l200-115q19-11 40-11t40 11l200 115q19 11 29.5 29t10.5 40v230q0 22-10.5 40T720-296L520-181q-19 11-40 11t-40-11Zm0-92v-184l-160-93v185l160 92Zm80 0 160-92v-185l-160 93v184ZM80-680v-120q0-33 23.5-56.5T160-880h120v80H160v120H80ZM280-80H160q-33 0-56.5-23.5T80-160v-120h80v120h120v80Zm400 0v-80h120v-120h80v120q0 33-23.5 56.5T800-80H680Zm120-600v-120H680v-80h120q33 0 56.5 23.5T880-800v120h-80ZM480-526l158-93-158-91-158 91 158 93Z'/%3E%3C/svg%3E");
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='google-roadmap'] {
+  --phone-basemap-thumb: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960' fill='%23f7f4ea'%3E%3Cpath d='m600-120-240-84-186 72q-20 8-37-4.5T120-170v-560q0-13 7.5-23t20.5-15l212-72 240 84 186-72q20-8 37 4.5t17 33.5v560q0 13-7.5 23T812-192l-212 72Zm-40-98v-468l-160-56v468l160 56Zm80 0 120-40v-474l-120 46v468Zm-440-10 120-46v-468l-120 40v474Z'/%3E%3C/svg%3E");
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='google-terrain'] {
+  --phone-basemap-thumb: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960' fill='%23f7f4ea'%3E%3Cpath d='m40-240 240-320 180 240h300L560-586 460-454l-50-66 150-200 360 480H40Zm160-80h160l-80-107-80 107Z'/%3E%3C/svg%3E");
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='bing-aerial'] {
+  --phone-basemap-thumb: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960' fill='%23f7f4ea'%3E%3Cpath d='M560-32v-80q117 0 198.5-81.5T840-392h80q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T560-32Zm0-160v-80q50 0 85-35t35-85h80q0 83-58.5 141.5T560-192ZM222-57q-15 0-30-6t-27-17L23-222q-11-12-17-27t-6-30q0-16 6-30.5T23-335l127-127q23-23 57-23.5t57 22.5l50 50 28-28-50-50q-23-23-23-56t23-56l57-57q23-23 56.5-23t56.5 23l50 50 28-28-50-50q-23-23-23-56.5t23-56.5l127-127q12-12 27-18t30-6q15 0 29.5 6t26.5 18l142 142q12 11 17.5 25.5T895-730q0 15-5.5 30T872-673L745-546q-23 23-56.5 23T632-546l-50-50-28 28 50 50q23 23 22.5 56.5T603-405l-56 56q-23 23-56.5 23T434-349l-50-50-28 28 50 50q23 23 22.5 57T405-207L278-80q-11 11-25.5 17T222-57Zm0-79 42-42-142-142-42 42 142 142Zm85-85 42-42-142-142-42 42 142 142Zm184-184 56-56-142-142-56 56 142 142Zm198-198 42-42-142-142-42 42 142 142Zm85-85 42-42-142-142-42 42 142 142Z'/%3E%3C/svg%3E");
+}
+
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip[data-stack-id='bing-labels'] {
+  --phone-basemap-thumb: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960' fill='%23f7f4ea'%3E%3Cpath d='M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h440q19 0 36 8.5t28 23.5l216 288-216 288q-11 15-28 23.5t-36 8.5H160Zm0-80h440l180-240-180-240H160v480Z'/%3E%3C/svg%3E");
 }
 
 /* The Sélection tab's two verbs — CONTACTS and SPACE MISSIONS — ship at a
@@ -996,6 +1383,13 @@ html[data-shell="phone"] #command-dock {
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* At `full` the sheet reaches the search bar, and the dock riding its top
+   edge would land on the bar — the mic over the field a reader is typing in.
+   A reader at `full` is reading the sheet; the dock comes back one snap down. */
+html[data-shell="phone"] body:has(#phone-sheet[data-snap='full']) #command-dock {
+  visibility: hidden;
 }
 
 html[data-shell="phone"] #command-dock:has(#location-bar:not(.collapsed)),
@@ -1400,14 +1794,23 @@ html[data-shell="phone"] :is(.first-run-choices, .coverage-briefing-choices) but
   min-height: 48px;
 }
 
-/* THE FIRST-RUN BUBBLE (variant C) sits on the sheet, over its Recherche tab.
-   It is deliberately ABSENT from the two `:is(#zoom-prompt, #phone-sheet)`
-   lists above and below: those hide the sheet, and the sheet is what the
-   bubble points at. Its height comes from the sheet, like #zoom-prompt; its x
-   is written by src/firstRunHint.js from the tab's box. */
+/* THE FIRST-RUN BUBBLE (variant C) hangs UNDER the search bar, caret up: the
+   field it advertises is the top of a phone's screen, not a tab of the sheet.
+   It is still ABSENT from the `:is(#zoom-prompt, #phone-sheet)` lists above
+   and below — nothing it points at is ever hidden by them. `top` and `x` are
+   written by src/firstRunHint.js from the bar's box. */
 html[data-shell="phone"] #first-run-hint {
-  bottom: calc(var(--phone-sheet-height, 116px) + 10px);
+  top: var(--first-run-hint-top, 72px);
+  bottom: auto;
   width: min(20rem, calc(100vw - 24px));
+}
+
+html[data-shell="phone"] #first-run-hint::after {
+  top: -0.36rem;
+  bottom: auto;
+  border: 0;
+  border-left: 1px solid rgba(247, 171, 124, 0.34);
+  border-top: 1px solid rgba(247, 171, 124, 0.34);
 }
 
 html[data-shell="phone"] .first-run-hint-body {

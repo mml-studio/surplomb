@@ -3632,6 +3632,27 @@ test('a chip is not addressable as a row, so voice and the phone still find the 
   }
 });
 
+test('the phone chips read the same rows the strip does, and toggle a row as its button would', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    const states = () => new Map(panel.mgr.getPanelRowStates().map((row) => [row.id, row]));
+    const before = states();
+    assert.equal(before.get('flights').label, 'Vols en direct', 'the French label, same as the row');
+    assert.equal(before.get('flights').enabled, false);
+    assert.equal(before.has('military-awareness'), false, 'a coordinator has no row, so it has no chip');
+
+    await panel.mgr.toggleRow('flights');
+    assert.equal(panel.mgr.isEnabled('flights'), true);
+    assert.equal(states().get('flights').enabled, true);
+
+    await panel.mgr.toggleRow('flights');
+    assert.equal(panel.mgr.isEnabled('flights'), false);
+    await panel.mgr.toggleRow('no-such-layer');
+  } finally {
+    await panel.restore();
+  }
+});
+
 test('the sweep appears from two rows up and takes every lit row down', async () => {
   const panel = makeGroupedPanel();
   try {

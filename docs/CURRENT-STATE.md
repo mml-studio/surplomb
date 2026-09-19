@@ -1,6 +1,26 @@
 # Surplomb Current State
 
-Updated: September 17, 2026
+Updated: September 19, 2026
+
+> **2026-09-19 — le haut d'un téléphone, comme Google Maps.** Sous
+> `html[data-shell="phone"]` seulement (`src/phoneSheet.js`, `phone.css`,
+> balisage `#phone-topbar` / `#phone-basemap-*` dans `index.html`) :
+> la **barre de recherche** est en haut, à droite du logo — le formulaire
+> `#location-search-form` y est adopté, pas recopié ; le focus ouvre le panneau
+> Recherche (villes, repères) à `full`, sous la barre, et un envoi ou un
+> raccourci rend la carte (`peek`). L'onglet RECHERCHE est masqué, son panneau
+> reste. Dessous, une **rangée de puces** (`src/phoneLayerChips.js`) : les huit
+> couches « À LA UNE » dans un ordre fixe, allumées sur place, précédées de
+> toute autre ligne allumée, puis « Toutes les couches ». Une puce appelle
+> `dataManager.toggleRow()` et relit `getPanelRowStates()` à chaque
+> notification `visibility*` — les deux méthodes publiques ajoutées au
+> gestionnaire. À droite, une **colonne de boutons ronds** : fond de carte,
+> partager, autour de moi, globe ; elle s'efface dès que la feuille dépasse
+> `peek`. Le **fond de carte** quitte la tête de Couches pour un panneau à lui
+> (`#phone-basemap-sheet`), en vignettes : une tuile réelle pour Satellite,
+> Plan IGN et OSM (`public/basemaps/`, voir NOTICE.md), un pictogramme pour
+> les cinq fonds à clé. Le rendu du globe sur téléphone est traité à part
+> (`src/phoneRender.js`, #264).
 
 > **2026-09-08 — la boîte à datasets : un jeu de données se branche, il ne se
 > code plus.** Contrat et limites dans `docs/DATASETS.md` ; code dans
@@ -262,13 +282,16 @@ Updated: September 17, 2026
 >   tile BY NAME and keeps the card open for a retry.
 > - **C « Pas de carte ».** No card: the bubble `#first-run-hint`, « Première
 >   visite ? Tapez une adresse ici. », anchored to the LOCATION label on a
->   desktop and to the sheet's Recherche tab on a phone. Never a dialog, no
+>   desktop and, on a phone, hung UNDER the search bar at the top of the
+>   screen, caret up (since 2026-09-19; it pointed at the sheet's Recherche tab
+>   before). Never a dialog, no
 >   keydown handler — ESC and every hotkey go where they always went. It closes
 >   on the first pointerdown elsewhere, after 12 s
 >   (`FIRST_RUN_HINT_TIMEOUT_MS`), or when an exclusive surface takes the
 >   screen; one already up means it never opens. A click inside opens the
 >   search: `styleManager.openLocationSearch()` on a desktop,
->   `phoneSheet.selectTab('search')` plus focus on a phone. It is its own
+>   `phoneSheet.openSearch()` on a phone (the search panel at full, the caret
+>   in the bar). It is its own
 >   element because `phone.css` hides the whole sheet while the launcher is
 >   visible, and the sheet is what the bubble points at.
 >
@@ -313,7 +336,7 @@ Updated: September 17, 2026
 > - `locateMe({ onArrival, notify })` → `flying`, `refused`, or `failed` with the
 >   French `message`; `notify: false` leaves the toast to the caller.
 > - `openLocationSearch()` expands LOCATION and puts the caret in the field.
->   Desktop only: on a phone the field lives in the sheet's Recherche tab.
+>   Desktop only: on a phone the field is the bar at the top of the screen.
 >
 > The dock field and `#locate-me` go through the same seams with unchanged
 > behaviour, and every free-text landing shares `_landOnSearchedLocation(label)`.

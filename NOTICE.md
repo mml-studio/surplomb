@@ -21,6 +21,12 @@ remain subject to their own licenses and terms. Notably:
   - NASA FIRMS active-fire snapshot: CC0 / U.S. public domain (citation
     requested).
 
+  - Basemap thumbnails (public/basemaps/): one tile each over the Île de
+    la Cité, cropped and re-encoded. `ign-ortho.webp` and `ign-plan.webp` are
+    IGN Géoplateforme imagery (ORTHOIMAGERY.ORTHOPHOTOS, PLANIGNV2) under
+    Licence Ouverte 2.0 — « © IGN ». `osm.webp` is an OpenStreetMap Carto tile,
+    © OpenStreetMap contributors, data ODbL 1.0, cartography CC BY-SA 2.0.
+
 Live sources (Google Maps, OpenSky, adsb.lol, AISStream, CelesTrak, USGS,
 OSM Overpass, City of Austin, GBFS) are fetched at runtime under each
 provider's terms; some (e.g. Google Maps, OpenSky) restrict commercial use

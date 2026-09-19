@@ -1,7 +1,7 @@
 // Variant C of the first-run experience: no card, a bubble on the search field.
 //
 // "Première visite ? Tapez une adresse ici." pointing at LOCATION on a desktop
-// and at the sheet's Recherche tab on a phone. It never takes the screen:
+// and at the search bar at the top of a phone. It never takes the screen:
 //
 //   - it is NOT a dialog and holds no keyboard handler, so Échap and every
 //     hotkey go where they always went;
@@ -86,8 +86,12 @@ export function initFirstRunHint({
       : anchorX;
     host.style.setProperty('--first-run-hint-x', `${Math.round(x)}px`);
     host.style.setProperty('--first-run-hint-caret', `${Math.round(anchorX - x)}px`);
-    // A phone takes its height from the sheet (phone.css), like #zoom-prompt.
-    if (!phoneShell) {
+    // A phone's search bar is at the TOP of the screen, so the bubble hangs
+    // under it with the caret turned up (phone.css); a desktop's sits above
+    // LOCATION, at the bottom.
+    if (phoneShell) {
+      host.style.setProperty('--first-run-hint-top', `${Math.round(rect.bottom + 10)}px`);
+    } else {
       const viewportHeight = Number(windowRef.innerHeight) || 0;
       host.style.setProperty('--first-run-hint-bottom', `${Math.round(viewportHeight - rect.top + 10)}px`);
     }

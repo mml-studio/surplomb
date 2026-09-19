@@ -827,10 +827,12 @@ const hintGeometry = (page, anchorSelector) => page.evaluate((sel) => {
   const styles = getComputedStyle(hint);
   const caret = Number.parseFloat(hint.style.getPropertyValue('--first-run-hint-caret')) || 0;
   return {
+    hintTop: Math.round(h.top),
     hintBottom: Math.round(h.bottom),
     hintLeft: Math.round(h.left),
     hintRight: Math.round(h.right),
     anchorTop: Math.round(a.top),
+    anchorBottom: Math.round(a.bottom),
     anchorCentre: Math.round(a.left + a.width / 2),
     caretX: Math.round(h.left + h.width / 2 + caret),
     vw: window.innerWidth,
@@ -918,9 +920,9 @@ async function runVariantCSections(browser, page, { shots, consoleErrors }) {
       const state = await firstRunState(phonePage);
       record('the phone gets the bubble and no card', state.hintVisible && !state.present);
       await sleep(400);
-      const geometry = await hintGeometry(phonePage, '#phone-tab-search');
-      record('the bubble sits above the Recherche tab',
-        !!geometry && state.hintVisible && geometry.hintBottom <= geometry.anchorTop + 1
+      const geometry = await hintGeometry(phonePage, '#phone-search');
+      record('the bubble hangs under the search bar',
+        !!geometry && state.hintVisible && geometry.hintTop >= geometry.anchorBottom - 1
           && geometry.hintLeft >= 0 && geometry.hintRight <= geometry.vw
           && Math.abs(geometry.caretX - geometry.anchorCentre) <= 3,
         geometry ? JSON.stringify(geometry) : 'absent');
@@ -937,7 +939,7 @@ async function runVariantCSections(browser, page, { shots, consoleErrors }) {
         snap: window.__godsEyeView?.phoneSheet?.getSnap?.() ?? null,
         focused: document.activeElement?.id || null,
       }));
-      record('a tap opens the Recherche tab, above peek, with the field focused',
+      record('a tap opens the search panel, above peek, with the field focused',
         state.hintVisible && opened.panelShown && opened.snap && opened.snap !== 'peek' && opened.focused === 'location-search',
         JSON.stringify(opened));
     } finally {
