@@ -2,164 +2,166 @@
 
 Updated: September 19, 2026
 
-> **2026-09-19 — le haut d'un téléphone, comme Google Maps.** Sous
-> `html[data-shell="phone"]` seulement (`src/phoneSheet.js`, `phone.css`,
-> balisage `#phone-topbar` / `#phone-basemap-*` dans `index.html`) :
-> la **barre de recherche** est en haut, à droite du logo — le formulaire
-> `#location-search-form` y est adopté, pas recopié ; le focus ouvre le panneau
-> Recherche (villes, repères) à `full`, sous la barre, et un envoi ou un
-> raccourci rend la carte (`peek`). L'onglet RECHERCHE est masqué, son panneau
-> reste. Dessous, une **rangée de puces** (`src/phoneLayerChips.js`) : les huit
-> couches « À LA UNE » dans un ordre fixe, allumées sur place, précédées de
-> toute autre ligne allumée, puis « Toutes les couches ». Une puce appelle
-> `dataManager.toggleRow()` et relit `getPanelRowStates()` à chaque
-> notification `visibility*` — les deux méthodes publiques ajoutées au
-> gestionnaire. À droite, une **colonne de boutons ronds** : fond de carte,
-> partager, autour de moi, globe ; elle s'efface dès que la feuille dépasse
-> `peek`. Le **fond de carte** quitte la tête de Couches pour un panneau à lui
-> (`#phone-basemap-sheet`), en vignettes : une tuile réelle pour Satellite,
-> Plan IGN et OSM (`public/basemaps/`, voir NOTICE.md), un pictogramme pour
-> les cinq fonds à clé. Le rendu du globe sur téléphone est traité à part
-> (`src/phoneRender.js`, #264).
+> **2026-09-19 — the top of a phone, like Google Maps.** Under
+> `html[data-shell="phone"]` only (`src/phoneSheet.js`, `phone.css`,
+> markup `#phone-topbar` / `#phone-basemap-*` in `index.html`):
+> the **search bar** is at the top, right of the logo — the
+> `#location-search-form` form is adopted there, not copied; focus opens the
+> *Recherche* (Search) panel (cities, landmarks) at `full`, under the bar, and
+> a submit or a shortcut gives the map back (`peek`). The RECHERCHE (SEARCH)
+> tab is hidden, its panel stays. Below it, a **row of chips**
+> (`src/phoneLayerChips.js`): the eight *À LA UNE* (FEATURED) layers in a fixed
+> order, switched on in place, preceded by any other row that is on, then
+> *Toutes les couches* (All layers). A chip calls `dataManager.toggleRow()` and
+> rereads `getPanelRowStates()` on every `visibility*` notification — the two
+> public methods added to the manager. On the right, a **column of round
+> buttons**: basemap, share, around me, globe; it fades out as soon as the
+> sheet goes past `peek`. The **basemap** leaves the head of Layers for a panel
+> of its own (`#phone-basemap-sheet`), as thumbnails: a real tile for
+> Satellite, Plan IGN and OSM (`public/basemaps/`, see NOTICE.md), a pictogram
+> for the five keyed basemaps. Rendering the globe on a phone is handled
+> separately (`src/phoneRender.js`, #264).
 
-> **2026-09-08 — la boîte à datasets : un jeu de données se branche, il ne se
-> code plus.** Contrat et limites dans `docs/DATASETS.md` ; code dans
-> `src/data/dataset*.js`. Trois portes : **＋ BRANCHER UN JEU DE DONNÉES** sous
-> la liste des couches (coller une adresse → brouillon → BRANCHER, retenu dans
-> ce navigateur sous `gev:plugged-datasets:v1`), un fichier `datasets/<id>.json`
-> (livré à tous au build, validé par `datasetsCatalog.test.mjs`), et
-> `npm run dataset:manifest -- <url>` — la commande qui suit une recherche sur
-> le MCP data.gouv.fr. Six adaptateurs (`datasetSources.js`) : GeoJSON,
-> GeoJSONL, CSV, **data.gouv.fr par l'API tabulaire** (pages de 200 lignes
-> typées, filtres d'emprise sur les colonnes de position — jamais utilisée
-> avant dans ce dépôt), WFS (`CRS:84`, mesuré contre la Géoplateforme) et
-> Opendatasoft (`in_bbox`). Tout part du navigateur : les plateformes
-> françaises répondent en CORS ouvert (mesuré) ; `/api/plug` est un relais
-> sur liste blanche pour celles qui refusent un `Origin` (INSEE), tenté
-> après un échec direct seulement.
+> **2026-09-08 — the dataset box: a dataset is plugged in, no longer coded.**
+> Contract and limits in `docs/DATASETS.md`; code in `src/data/dataset*.js`.
+> Three doors: **＋ BRANCHER UN JEU DE DONNÉES** (＋ PLUG IN A DATASET) under
+> the layer list (paste an address → draft → BRANCHER (PLUG IN), remembered in
+> this browser under `gev:plugged-datasets:v1`), a `datasets/<id>.json` file
+> (shipped to everyone at build time, validated by `datasetsCatalog.test.mjs`),
+> and `npm run dataset:manifest -- <url>` — the command that follows a search
+> on the data.gouv.fr MCP. Six adapters (`datasetSources.js`): GeoJSON,
+> GeoJSONL, CSV, **data.gouv.fr through the tabular API** (pages of 200 typed
+> rows, bounding-box filters on the position columns — never used in this
+> repository before), WFS (`CRS:84`, measured against the Géoplateforme) and
+> Opendatasoft (`in_bbox`). Everything starts from the browser: the French
+> platforms answer with open CORS (measured); `/api/plug` is an allow-listed
+> relay for those that refuse an `Origin` (INSEE), tried only after a direct
+> attempt has failed.
 >
-> **Ce qui a bougé dans le cœur.** `localGeojson.js` prend trois crochets —
-> `loadFeatures`, `cardCopy`, `invalidate` — et rien d'autre : un jeu branché
-> hérite des tiges, cartes, arbitrage d'étiquettes et occultation des packs
-> livrés. `manager.js` ouvre une porte après le scellé, `registerDataset()` /
-> `unregisterDataset()`, qui ajoute la ligne de taxonomie dérivée du manifeste
-> et redessine le panneau ; les jetons de partage ne sont PAS touchés (un jeu
-> branché n'en a pas, et `docs/DATASETS.md` dit pourquoi). Un neuvième groupe,
-> `plugged` « JEUX BRANCHÉS », vide au démarrage et sans en-tête tant qu'il
-> l'est. L'énumération vocale reste octet pour octet la même ; l'exécuteur
-> accepte tout identifiant enregistré, donc `ds-<id>` se commande à la voix.
+> **What moved in the core.** `localGeojson.js` takes three hooks —
+> `loadFeatures`, `cardCopy`, `invalidate` — and nothing else: a plugged
+> dataset inherits the stems, cards, label arbitration and occlusion of the
+> shipped packs. `manager.js` opens a door after the seal,
+> `registerDataset()` / `unregisterDataset()`, which adds the taxonomy row
+> derived from the manifest and redraws the panel; share tokens are NOT touched
+> (a plugged dataset has none, and `docs/DATASETS.md` says why). A ninth group,
+> `plugged` *JEUX BRANCHÉS* (PLUGGED DATASETS), empty at startup and without a
+> header for as long as it stays empty. The voice enumeration stays byte for
+> byte the same; the executor accepts any registered id, so `ds-<id>` can be
+> commanded by voice.
 >
-> **Ce que la ligne dit** (CARTOGRAPHIE A5, D1, F6, H1) : « 4 000 affichés
-> sur 186 137 — plafond 4 000, premières lignes », « 42 dans la vue », « n
-> sans position », « via relais » ; au-delà de `maxSpanDeg` un jeu chargé pour
-> la vue affiche « rapprochez-vous » comme consigne (`status: 'zoom-in'`),
-> pas comme panne. La légende porte une entrée par groupe avec son effectif.
+> **What the row says** (CARTOGRAPHY A5, D1, F6, H1): *4 000 affichés sur
+> 186 137 — plafond 4 000, premières lignes* (“4,000 shown of 186,137 —
+> ceiling 4,000, first rows”), *42 dans la vue* (“42 in view”), *n sans
+> position* (“n without a position”), *via relais* (“via relay”); beyond
+> `maxSpanDeg` a dataset loaded for the view shows *rapprochez-vous* (“move
+> closer”) as an instruction (`status: 'zoom-in'`), not as a failure. The
+> legend carries one entry per group with its count.
 >
-> **Un manifeste livré** : défibrillateurs GeoDAE (data.gouv.fr, vue), et il
-> n'a pas de ligne à lui — son bloc `fusion` en fait une puce de « Santé &
-> secours », la ligne des médecins. Licence confirmée sur la page du jeu et
-> portée dans `DATA_SOURCES.md`. Deux autres ont été retirés pour la même
-> raison, qui est la règle : **un manifeste n'est pas livré pour ce qu'une
-> couche dessine déjà.** Les emprises d'aérodromes BD TOPO — la couche
-> Aéroports en embarque 418 — et les arbres remarquables de Paris, dont les
-> 183 sont un palier de la couche Îlots de fraîcheur, et depuis le 14/09 une
-> puce REMARQUABLES qui les charge pour la ville entière sans la limite de
-> 1 500 m qui gouverne le reste de la canopée.
+> **One shipped manifest**: GeoDAE defibrillators (data.gouv.fr, per view), and
+> it has no row of its own — its `fusion` block makes it a chip of *Santé &
+> secours* (Health & emergency services), the doctors' row. License confirmed
+> on the dataset page and carried in `DATA_SOURCES.md`. Two others were
+> withdrawn for the same reason, which is the rule: **a manifest is not shipped
+> for what a layer already draws.** The BD TOPO aerodrome footprints — the
+> Aéroports layer ships 418 of them — and the remarkable trees of Paris, whose
+> 183 are a tier of the Îlots de fraîcheur (Cool islands) layer, and since
+> 2026-09-14 a REMARQUABLES (REMARKABLE) chip that loads them for the whole
+> city without the 1,500 m limit that governs the rest of the canopy.
 >
-> **Vérifié** : 6 393 tests unitaires, 0 échec (60 nouveaux) ; `npm run
-> qa:datasets -- --url … --deep` en navigateur, 16 contrôles au vert :
-> catalogue sur le panneau, inférence d'une page Opendatasoft, plug/unplug
-> par l'API et par le formulaire, chargement réel du GeoDAE branché par le
-> formulaire (5 000 lignes de la vue par défaut en 25 requêtes à l'API
-> tabulaire, écrêtage déclaré), persistance à travers un rechargement.
-> **Piège de harnais** : `page.click()` et les captures d'écran de puppeteer
-> expirent sur cette page alors qu'`evaluate` répond en 1 ms — le harnais
-> clique par le DOM et les captures sont sur option (`--shots`).
+> **Verified**: 6,393 unit tests, 0 failures (60 new); `npm run
+> qa:datasets -- --url … --deep` in a browser, 16 checks green: catalog on the
+> panel, inference from an Opendatasoft page, plug/unplug through the API and
+> through the form, a real load of the GeoDAE dataset plugged through the form
+> (5,000 rows of the default view in 25 requests to the tabular API, capping
+> declared), persistence across a reload.
+> **Harness trap**: puppeteer's `page.click()` and screenshots time out on
+> this page while `evaluate` answers in 1 ms — the harness clicks through the
+> DOM and screenshots are opt-in (`--shots`).
 
-> **2026-09-08 — la fiche d'adresse dit où elle se situe dans le pays.**
-> `src/data/baremeNational.js` porte onze échelles nationales mesurées par
-> `npm run bareme:fr` sur **1 200 anneaux piétons de dix minutes**, tirés à
-> probabilité proportionnelle à la population sur les 377 234 carreaux de 1 km
-> de l'INSEE (64 089 848 habitants), zéro refus. La `Fiche implantation` imprime
-> un **centile national** par indicateur et une **lettre A→E** pour les trois
-> dont le sens n'est pas une opinion. Méthode et mesures : `docs/BAREME.md`.
+> **2026-09-08 — the Site report says where the address stands in the
+> country.** `src/data/baremeNational.js` carries eleven national scales
+> measured by `npm run bareme:fr` on **1,200 ten-minute walking rings**, drawn
+> with probability proportional to population over INSEE's 377,234 1 km grid
+> cells (64,089,848 residents), zero refusals. The `Fiche implantation` (Site
+> report) prints a **national percentile** per indicator and an **A→E letter**
+> for the three whose meaning is not a matter of opinion. Method and
+> measurements: #99.
 >
-> **La géométrie est une clé de jointure, pas un commentaire.** Une valeur ne se
-> classe que dans une distribution mesurée sur la même forme. Mesuré sur le même
-> échantillon, l'intervalle interdécile d'un anneau vaut **74 %** de celui d'un
-> carreau de 200 m : noté sur `FILOSOFI_RAMPS`, un anneau au 10ᵉ centile se
-> lirait au 22ᵉ et un anneau au 90ᵉ au 84ᵉ — une bande de lettre à chaque bout.
-> Sur un anneau de 5 ou 15 min, les rangs d'anneau sont **refusés et la carte le
-> dit** ; le rang du prix, mesuré sur un disque de 300 m, survit.
+> **Geometry is a join key, not a comment.** A value can only be ranked within
+> a distribution measured on the same shape. Measured on the same sample, the
+> interdecile range of a ring is **74%** of that of a 200 m grid cell: scored
+> on `FILOSOFI_RAMPS`, a ring at the 10th percentile would read at the 22nd and
+> a ring at the 90th at the 84th — one letter band off at each end. On a 5- or
+> 15-minute ring, ring ranks are **refused and the card says so**; the price
+> rank, measured on a 300 m disc, survives.
 >
-> **Huit indicateurs sur onze n'ont pas de lettre.** Un prix élevé est bon pour
-> un vendeur et mauvais pour un acheteur ; une part de logement social est une
-> politique publique. Ceux-là reçoivent un rang. Les trois qui portent une lettre
-> annoncent leur convention sur la même ligne.
+> **Eight indicators out of eleven have no letter.** A high price is good for a
+> seller and bad for a buyer; a share of social housing is public policy. Those
+> get a rank. The three that carry a letter state their convention on the same
+> line.
 >
-> **Un bug est tombé de la mesure** : `implantationFeed.js` perdait le `crs` du
-> carreau, donc tout carreau de Martinique ou de La Réunion atterrissait dans la
-> baie d'Hudson et la fiche répondait « aucun carreau INSEE habité » pour toute
-> adresse d'outre-mer. Corrigé, test de régression posé.
+> **A bug fell out of the measurement**: `implantationFeed.js` dropped the grid
+> cell's `crs`, so every cell in Martinique or La Réunion landed in Hudson Bay
+> and the report answered *aucun carreau INSEE habité* (“no inhabited INSEE
+> grid cell”) for every overseas address. Fixed, regression test in place.
 >
-> **QA navigateur passée** : `npm run qa:implantation -- --url http://localhost:4173`
-> — 40 contrôles au vert sur Lyon et Paris, dont les cinq nouveaux. 6 200 tests
-> unitaires, 0 échec.
+> **Browser QA passed**: `npm run qa:implantation -- --url http://localhost:4173`
+> — 40 checks green on Lyon and Paris, including the five new ones. 6,200 unit
+> tests, 0 failures.
 
-> **2026-09-03 — l'axe Z entre en service.** Suite de la doctrine
-> `docs/CARTOGRAPHIE.md` et de l'audit `docs/REPRESENTATION.md` (dont la section
-> « État d'application » porte le détail, les mesures et les preuves). Avant ce
-> passage, **une seule** couche de données portait une donnée sur la hauteur
-> (`bdtopo-buildings`, et c'était la hauteur réelle du bâtiment). Elles sont
-> maintenant **dix** : sept par extrusion (`bdtopo-buildings`, `sitadel-fr`,
-> `irve-fr`, `schools-fr`, `sup-fr`, `france-energy`, `local-datacenters`) et
-> trois par polyligne verticale (`marine-buoys`, `earthquakes`, `anfr-fr`).
+> **2026-09-03 — the Z axis goes into service.** A follow-up to the
+> `docs/CARTOGRAPHY.md` doctrine and to the representation audit of #78 (whose
+> “state of application” section carried the detail, the measurements and the
+> evidence). Before this pass, **a single** data layer put a datum on height
+> (`bdtopo-buildings`, and it was the building's real height). There are now
+> **ten**: seven by extrusion (`bdtopo-buildings`, `sitadel-fr`, `irve-fr`,
+> `schools-fr`, `sup-fr`, `france-energy`, `local-datacenters`) and three by
+> vertical polyline (`marine-buoys`, `earthquakes`, `anfr-fr`).
 >
-> **Quatre prismes départementaux/régionaux** remplacent quatre aplats
-> d'effectif (`choroplethPrism.js` : hauteur = l'absolu sur un domaine GELÉ,
-> couleur = un taux ; enveloppe commune 4 km → 120 km, base sur l'ellipsoïde).
-> **Piège connu et non encore déclaré en légende** : deux couches à prisme
-> allumées ensemble ne sont PAS comparables — `irve-fr` et `france-energy` ont
-> même `domainMax` (12 000), même mode et mêmes graduations pour des points de
-> charge et des mégawatts, et `irve-fr` / `schools-fr` / `sup-fr` extrudent les
-> mêmes 96 polygones depuis la même base.
+> **Four department/region prisms** replace four count choropleths
+> (`choroplethPrism.js`: height = the absolute value on a FROZEN domain,
+> color = a rate; shared envelope 4 km → 120 km, base on the ellipsoid).
+> **Known trap, not yet declared in the legend**: two prism layers switched on
+> together are NOT comparable — `irve-fr` and `france-energy` have the same
+> `domainMax` (12,000), the same mode and the same graduations for charge
+> points and for megawatts, and `irve-fr` / `schools-fr` / `sup-fr` extrude the
+> same 96 polygons from the same base.
 >
-> **2026-09-10 — une onzième, et c'est un registre (4) enfin nommé.** Le
-> faisceau d'`irve-fr` porte les points de charge du site, en longueur d'écran
-> gelée corrigée du tangage (`L · cos(tangage)` : 87 % à −30°, 50 % à −60°,
-> zéro au nadir). Sa légende écrit la convention en toutes lettres, ce que
-> l'obligation (a) de F7 réclame et qu'aucune tige de rappel ne fait encore.
-> Son plafond de 40 km n'est pas cosmétique : à 1 400 km de caméra, 64 px
-> valent 129 km, au-dessus du sommet de 120 km des prismes gelés.
+> **2026-09-10 — an eleventh, and it is register (4), finally named.** The
+> `irve-fr` beam carries the site's charge points, as a frozen screen length
+> corrected for tilt (`L · cos(tilt)`: 87% at −30°, 50% at −60°, zero at
+> nadir). Its legend spells the convention out, which obligation (a) of F7
+> requires and which no leader stem does yet. Its 40 km ceiling is not
+> cosmetic: with the camera at 1,400 km, 64 px are worth 129 km, above the
+> 120 km top of the frozen prisms.
 >
-> **Le bâti BD TOPO devient un support thématique** (`buildingTheme.js`) :
-> `dpe-fr`, `dvf-sales` et `ads-fr` enregistrent un thème et peignent les
-> volumes, par précédence 10 < 20 < 30. Un volume non joint garde sa teinte
-> d'usage lavée — jamais le même signe qu'une valeur mesurée (A1).
+> **BD TOPO buildings become a thematic support** (`buildingTheme.js`):
+> `dpe-fr`, `dvf-sales` and `ads-fr` register a theme and paint the volumes, by
+> precedence 10 < 20 < 30. An unjoined volume keeps its washed-out use tint —
+> never the same sign as a measured value (A1).
 >
-> **Faits à l'intégration**, hors périmètre des agents : `manager.js:2470`
-> garde désormais avec `Number.isFinite` comme le bloc de légende sur carte, donc
-> une entrée sans compte (titre de canal, graduation de règle, clé hachurée) ne
-> rend plus la chaîne littérale « undefined » ; les trois versions de cache
-> disque du proxy sont incrémentées (IRVE 3→4, SCHOOLS 2→3, SUP 1→2) parce que
-> les trois rollups ont changé de forme ; et `ingestAisStreamEnvelope` capture
-> enfin le bloc de dimensions AIS, stocké entier sous `row.hull` plutôt que
-> ré-éclaté en quatre offsets. **Conséquence à connaître** : `vesselHullFromRow()`
-> ne lisait que `to_bow…` / `length`, donc ce câblage a rendu 100 % des contacts
-> « non mesurés » jusqu'à ce que la fonction accepte les trois formes publiées
-> (bloc réduit d'abord, offsets, puis `length`/`beam`), en re-validant le bloc
-> plutôt qu'en le croyant.
+> **Done at integration**, outside the agents' scope: `manager.js:2470` now
+> guards with `Number.isFinite` like the on-map legend block, so an entry with
+> no count (channel title, rule graduation, hatched key) no longer renders the
+> literal string “undefined”; the proxy's three disk cache versions are bumped
+> (IRVE 3→4, SCHOOLS 2→3, SUP 1→2) because the three rollups changed shape; and
+> `ingestAisStreamEnvelope` finally captures the AIS dimension block, stored
+> whole under `row.hull` rather than split again into four offsets.
+> **Consequence to know**: `vesselHullFromRow()` only read `to_bow…` /
+> `length`, so this wiring turned 100% of contacts into *non mesurés* (“not
+> measured”) until the function accepted the three published shapes (reduced
+> block first, offsets, then `length`/`beam`), re-validating the block rather
+> than trusting it.
 >
-> **Aucune QA navigateur n'a été passée sur ce chantier.** 994 tests unitaires
-> sur 32 fichiers, 0 échec ; les rendus Cesium sont argumentés depuis la source
-> embarquée, pas vus à l'écran. C'est la dette la plus importante de ce passage,
-> et la coque AIS — dont le chemin de données vient seulement d'être refermé —
-> est la première chose à regarder.
+> **No browser QA was run on this work.** 994 unit tests over 32 files, 0
+> failures; the Cesium renderings are argued from the shipped source, not seen
+> on screen. It is the largest debt of this pass, and the AIS hull — whose data
+> path has only just been closed — is the first thing to look at.
 
 > **2026-09-17 — the showcase at `/`, the globe at `/globe`** (`src/boot.js` is
 > the page's only entry; `src/vitrine/` owns the rest; markup `#vitrine` in
-> `index.html`, styles `landing.css`; plan
-> `docs/designs/landing/PLAN-EXECUTION.md`).
+> `index.html`, styles `landing.css`).
 >
 > - **Two addresses, one origin.** `/` is the showcase's, `APP_PATH` (`/globe`,
 >   `src/vitrine/gate.js`) is the globe's. Both are `index.html`: the SPA
@@ -179,7 +181,7 @@ Updated: September 19, 2026
 >   `?waitlist=`, `?welcome=` → cockpit; otherwise the showcase
 >   (`html[data-vitrine]`). **A pure function of the address**: no storage is
 >   read, and nothing is written on any arrival.
-> - **There is no « already seen » memory** (`gev:vitrine-seen:v1`, #257,
+> - **There is no “already seen” memory** (`gev:vitrine-seen:v1`, #257,
 >   retired by #260). It sent every later visit to `/` into the cockpit, which
 >   made the home page unreachable at its own URL once a browser had opened the
 >   globe. `/globe` replaced its purpose. `forgetVitrineSeen()` (called once by
@@ -189,15 +191,15 @@ Updated: September 19, 2026
 >   imported at idle (evaluated, nothing built); on a phone nothing is fetched
 >   before the press. Cesium's widget stylesheet is inert on `index.html`
 >   (`deferCesiumWidgets`, vite.config.js) until `boot.js` enables it.
-> - **Identity and the 2 bis markup** (Codex « Belvédère », 2026-09-19): the
+> - **Identity and the 2 bis markup** (Codex “Belvédère”, 2026-09-19): the
 >   symbol is inline SVG (`.brand-symbol`, planes in `currentColor`) before the
 >   word, in `.top` and `.closing-brand`; `public/icon.svg` is the tab icon and
 >   the source of `npm run icons:build` (all four PNG icons, on `#24473C`). The
->   loop is `position: fixed` behind the whole page on EVERY width; « Image
->   fixe » (`#vitrine-still`, shown only in `data-state="live"`) pauses it on
+>   loop is `position: fixed` behind the whole page on EVERY width; *Image
+>   fixe* (Still image; `#vitrine-still`, shown only in `data-state="live"`) pauses it on
 >   the current frame. The page ends on `.footer-ending`: the city with two
 >   opaque blocks. The cockpit carries the same mark since 2026-09-19 (see
->   « Cockpit identity » below).
+>   “Cockpit identity” below).
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
 >   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop
@@ -216,7 +218,7 @@ Updated: September 19, 2026
 >   + H.264 (1440 AV1 only), the stills are frame 0 of each loop.
 >   `src/vitrine/gallery.js` — itself fetched only as the gallery nears the
 >   screen — fetches a box's loop half a screen ahead, plays it on screen,
->   pauses it off screen, and obeys the hero's policy and « Image fixe ».
+>   pauses it off screen, and obeys the hero's policy and *Image fixe* (Still image).
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
@@ -234,11 +236,12 @@ Updated: September 19, 2026
 >   address; a non-empty query replaces the boot flight with the search box's
 >   own `flyToAddress`; not found → toast, text left in `#location-search`,
 >   ordinary arrival. Showcase arrivals get the first-run SESSION suppression.
-> - **The live figures** (« En ce moment au-dessus de la France »). One
->   `GET /api/pulse` after `load`, at idle (`src/vitrine/counters.js`); the
->   group and each entry ship `hidden` and only a positive integer no older
->   than 10 min is revealed, and taken down again when it passes 10 min on
->   screen — any failure leaves everything hidden, silently.
+> - **The live figures** (*En ce moment au-dessus de la France*, “Right now
+>   above France”). One `GET /api/pulse` after `load`, at idle
+>   (`src/vitrine/counters.js`); the group and each entry ship `hidden` and only
+>   a positive integer no older than 10 min is revealed, and taken down again
+>   when it passes 10 min on screen — any failure leaves everything hidden,
+>   silently.
 >   The server (`pulseProxy`, vite.config.js; rules in `src/data/pulse.js`)
 >   counts from caches it already holds and fetches nothing: aircraft over
 >   French LAND from the OpenSky snapshot (warm only while a reader has the
@@ -266,15 +269,16 @@ Updated: September 19, 2026
 > session.
 >
 > **Three variants, one door** (`FIRST_RUN_VARIANT_IDS = ['A', 'B', 'C']`). The
-> aside is a shell — kicker `SURPLOMB · PREMIÈRE VISITE`, footer
-> `Échap pour fermer`, a status line reading
-> `59 couches de données publiques · 56 sans clé` — and the chosen template is
-> cloned into it before the footer.
+> aside is a shell — kicker `SURPLOMB · PREMIÈRE VISITE` (first visit), footer
+> `Échap pour fermer` (Esc to close), a status line reading
+> `59 couches de données publiques · 56 sans clé` (59 public data layers · 56
+> without a key) — and the chosen template is cloned into it before the footer.
 >
-> - **A « Une adresse » (the default).** « Qu’est-ce qui est vrai à cette
->   adresse ? », one field, the chips « Autour de moi » (revealed only when
->   `canGeolocate()`), « Tour Eiffel, Paris » and « Vieux-Port, Marseille », and
->   the link « Regarder autour d’ici sans rien taper ». Enter calls
+> - **A *Une adresse* (An address, the default).** *Qu’est-ce qui est vrai à
+>   cette adresse ?* (What is true at this address?), one field, the chips
+>   *Autour de moi* (Around me; revealed only when `canGeolocate()`), *Tour
+>   Eiffel, Paris* and *Vieux-Port, Marseille*, and the link *Regarder autour
+>   d’ici sans rien taper* (Look around here without typing). Enter calls
 >   `styleManager.flyToAddress(query, { onArrival })`, and the card closes as the
 >   flight STARTS. The bundle (`FIRST_RUN_ADDRESS_BUNDLE`: `dvf-sales`,
 >   `ads-fr`, `dpe-fr`) is switched on exactly ONCE, at the first of
@@ -286,27 +290,27 @@ Updated: September 19, 2026
 >   `locateMe({ onArrival, notify: false })` and writes a refusal into that
 >   status line rather than a toast behind the card. No autofocus on a phone:
 >   the soft keyboard would cover the sheet.
-> - **B « Trois questions ».** « Par où commencer ? », four tiles, layers only,
+> - **B *Trois questions* (Three questions).** *Par où commencer ?* (Where to
+>   start?), four tiles, layers only,
 >   no camera call: `sales` → `dvf-sales` + `cadastre-fr` (on a phone
->   `cadastre-fr` is skipped because it is badged LOURD, and the subcopy becomes
->   « Ventes DVF, 5 ans »), `permits` → `ads-fr` + `sitadel-fr`, `live` →
+>   `cadastre-fr` is skipped because it is badged LOURD (HEAVY), and the subcopy
+>   becomes *Ventes DVF, 5 ans*, “DVF sales, 5 years”), `permits` → `ads-fr` + `sitadel-fr`, `live` →
 >   `traffic` + `transit-fr` + `flights` (`traffic` is already on at boot;
 >   asking again is idempotent), `explore` → nothing. A refused layer fails the
 >   tile BY NAME and keeps the card open for a retry.
-> - **C « Pas de carte ».** No card: the bubble `#first-run-hint`, « Première
->   visite ? Tapez une adresse ici. », anchored to the LOCATION label on a
->   desktop and, on a phone, hung UNDER the search bar at the top of the
->   screen, caret up (since 2026-09-19; it pointed at the sheet's Recherche tab
->   before). Never a dialog, no
->   keydown handler — ESC and every hotkey go where they always went. It closes
->   on the first pointerdown elsewhere, after 12 s
+> - **C *Pas de carte* (No card).** No card: the bubble `#first-run-hint`,
+>   *Première visite ? Tapez une adresse ici.* (First visit? Type an address
+>   here.), anchored to the LOCATION label on a desktop and, on a phone, hung
+>   UNDER the search bar at the top of the screen, caret up (since 2026-09-19;
+>   it pointed at the sheet's *Recherche* (Search) tab before). Never a dialog,
+>   no keydown handler — ESC and every hotkey go where they always went. It
+>   closes on the first pointerdown elsewhere, after 12 s
 >   (`FIRST_RUN_HINT_TIMEOUT_MS`), or when an exclusive surface takes the
 >   screen; one already up means it never opens. A click inside opens the
 >   search: `styleManager.openLocationSearch()` on a desktop,
->   `phoneSheet.openSearch()` on a phone (the search panel at full, the caret
->   in the bar). It is its own
->   element because `phone.css` hides the whole sheet while the launcher is
->   visible, and the sheet is what the bubble points at.
+>   `phoneSheet.openSearch()` on a phone (the search panel at full, the caret in
+>   the bar). It is its own element because `phone.css` hides the whole sheet
+>   while the launcher is visible, and the sheet is what the bubble points at.
 >
 > A and B drive eight distinct layers, all already in the shipped
 > `set_layer_visibility` enum (unit pin). The card adds no voice tool, and the
@@ -318,7 +322,7 @@ Updated: September 19, 2026
 > (`forcedFirstRunVariant`, case-insensitive) outranks the caller and replays
 > like `?welcome=1`. Assigning B and C to real visitors on the hosted instance
 > is a separate change (assignment, beacon, privacy page, report); for where
-> `onEvent` goes now, see « 2026-09-17 — first-run A/B test » below.
+> `onEvent` goes now, see “2026-09-17 — first-run A/B test” below.
 >
 > **The `onEvent` contract.** `{type: 'impression', shell}` (`desktop` or
 > `phone`); `{type: 'action', kind, outcome, queryLength?, layerIds?}` with
@@ -421,7 +425,7 @@ Updated: September 19, 2026
 > **What left with the upstream card.** The four mission tiles, the checkbox
 > and its "blocked storage un-ticks the box" rule, the Context-panel reveal, the
 > keyed/keyless ENVIRONMENTAL branch of `qa-firstrun`, the INFRASTRUCTURE-tile
-> note (its memory measurements live in `docs/PLAN-PERFORMANCE.md` § 3.1), and
+> note (its memory measurements are in phase 3.1 of the performance plan, #131), and
 > the `local_fire_department` glyph (the icon font is down to 27). What stays:
 > the voice shorthands "infrastructure mode" and "environmental mode", one
 > `NAMED VIEWS` instruction paragraph in `vite.config.js` that never depended
@@ -478,9 +482,10 @@ Updated: September 19, 2026
 > naming a variant the test no longer runs is replaced. A draw younger than
 > 30 minutes marks the report `newVisitor`.
 >
-> **The refusal**, which the CNIL audience-measurement exemption requires: the
-> « Ne pas être mesuré » button on `/confidentialite`
-> (`localStorage['gev:first-run-optout:v1'] = 'refused'`, the button flips it
+> **The refusal**, which the CNIL audience-measurement exemption requires, is
+> either the button on `/confidentialite` that reads *Ne pas être mesuré* (Do
+> not measure me) and stores
+> `localStorage['gev:first-run-optout:v1'] = 'refused'` (the button flips it
 > back), or the Global Privacy Control signal, which needs no click and hides
 > the button. Either one means A, nothing sent and the draw deleted, from the
 > next boot. The privacy page loads `src/firstRunOptOutPage.js` and nothing of
@@ -551,7 +556,8 @@ Updated: September 19, 2026
 > `src/legalNotice.js` gains `abtest` and `noabtest`. With the test on,
 > `/confidentialite` describes the draw, every field of a report, what is never
 > sent, the 13-month and 90-day retentions, the legal basis and the refusal
-> button; with it off, it keeps « pas de mesure d’audience ».
+> button; with it off, it keeps *pas de mesure d’audience* (no audience
+> measurement).
 >
 > **The reading.** `node scripts/first-run-ab-report.mjs <dir>
 > [--include-forced] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--alpha]
@@ -1160,7 +1166,8 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   and parameter state.
 >   **Cockpit identity (Belvédère, 2026-09-19):** the title bar and the boot
 >   screen carry the home page's mark — the inline symbol (two ivory planes,
->   apricot sun) and « surplomb » in Manrope 800 — with « Aucun angle mort. »
+>   apricot sun) and “surplomb” in Manrope 800 — with *Aucun angle mort.* (No
+>   blind spots.)
 >   under the word. The old eye (`public/logo.svg`, `src/logoGaze.js`) is
 >   removed. Chrome palette: night-green glass (`--glass-bg`), ivory type,
 >   apricot accent (`--accent`), DM Sans for prose (`--font-sans`); JetBrains
@@ -2167,8 +2174,8 @@ Use docs in this order when details conflict:
 
 1. `docs/CURRENT-STATE.md` (this file)
 2. `docs/opensky-auth.md` (OpenSky authentication)
-3. `docs/CHRONIQUE.md` (what the server records and why, and the licence line on
-   an accumulated base)
+3. `docs/CHRONICLE.md` (what the server records and why, and the license line on
+   an accumulated database)
 4. `CHANGELOG.md` (release history)
 
 Historical planning documents may not match runtime behavior.
@@ -2211,8 +2218,8 @@ its criteria cannot be silently ignored.
 | Earthquakes | USGS — M2.5+, trailing 24 h, drawn as a 3D phenomenon since 2026-09-03. A POINT at the epicentre whose diameter is in CONSTANT SCREEN PIXELS and carries the MAGNITUDE (6 px at M2.5, +3 px per unit, frozen domain M2.5–M9.5); a vertical RULER rising from it whose length in world metres at 1:1 is the FOCAL DEPTH — declared in the legend as a READING SCALE and not the position of the focus, because both underground options were built and measured away (with `disableDepthTestDistance` the stem draws THROUGH the planet: parked at the antipode of the day's deepest event, 26 of 28 marks were phantoms from the far hemisphere; `scene.globe.translucency` took the WHOLE scene from 0.30 ms to 1.30–2.40 ms median and is a scene property no layer owns); and one COLOUR shared by point and ruler carrying the AGE inside the 24 h window on four frozen bands, re-banded at every 60 s poll and never per frame. **Since 2026-09-10 the key and the card split the job** (D1): the on-map key carries the colour ramp with its counts plus ONE line per shape channel publishing its frozen domain — measured in Chrome at 1440×900 on a 29-event feed, 827 px of content in a 216 px window became 215 px, and 31 lines / 375 words became 11 / 93 — while **clicking a mark, or its floating `M4.1` label, opens a card** carrying that event's magnitude, place, UTC instant + age, focal depth and USGS id, each next to the caveat that belongs to it (`×31,6` of energy per magnitude unit, no footprint, the ruler's direction, the 1 km floor). The click leaves a separate cyan RING rather than repainting the mark, because every channel of the mark is already a datum; Escape, a click on the world, a poll that ages the event out, and switching the layer off all take the card down | `src/data/earthquakes.js` | — | 60s |
 | Satellites | CelesTrak | `src/data/satellites.js` | `/api/celestrak` | 120s |
 | Space Missions (30d) | Launch Library 2 + CelesTrak | `src/data/rocketLaunches.js` | `/api/launches` + `/api/celestrak/active` | 5 min |
-| Marine Buoys ⬡ | NOAA NDBC — one ~106 KB text report carrying the latest observation from every reporting station worldwide. **NOAA is the operator, not the extent**: only about a fifth of reporting stations carry a wave sensor, and one without renders neutral rather than calm. Sea state coloured on the WMO ladder, AND carried a second time by a vertical stem in WORLD METRES: significant wave height at a ×10 000 reading scale published in the legend (1 m of swell = 10 km of stem), linear, floor 2 km, frozen domain 14 m — the top of the last NAMED band of the WMO ladder, so hue and height clip at the same place for the same published reason. The dot's pixel size no longer encodes anything (it was 9 px / 6 px for « has a sensor »); the SHAPE carries that now — filled disc = sensor, hollow grey ring = none — because a vertical stem has zero projected length at nadir and absence cannot rest on the stem alone. Stations are FIXED, so a poll replaces values in place and nothing interpolates | `src/data/marineBuoys.js`, `src/data/ndbcObservations.js` | `/api/ndbc` (keyless, disk cache, serve-stale) | 5 min |
-| Aéroports ✈ | OurAirports (public domain, bundled) — **7,466 fields**, from Roissy's 4,215 m to an 82 m strip at La Tour-du-Pin. Worldwide: every large and medium airport plus everything selling a scheduled seat; in France the whole long tail — 1,337 fields across métropole and outre-mer, altiports, hydrobases and one balloon field included. **Second publisher, second licence:** 418 French fields also carry the aerodrome boundary the IGN surveys in **BD TOPO® (Licence Ouverte 2.0, attribution required)**, downloaded by the same build from `data.geopf.fr/wfs/ows` and joined on the ICAO code (377) or on the field's point falling inside an unkeyed outline (41) — 0 shared, 0 refused on the 5 km anchor guard, worst kept offset 1,382 m. **213 fields gain a shape they did not have**, 207 of them aéroclubs, which is the tier upstream georeferenced at 8 %. Drawn as one terrain-clamped wash for all 418 (a batched ground primitive colours by bounding rectangle) with its own 8 px screen floor, so the outline goes away between 24 km and 1,208 km depending on its size while the pastille keeps the tier's longer range; the anchor stays on the published reference point. Refused: héliports (704 of the IGN layer's 1,370 objects), anything under 1 ha (219, of which 205 are BD TOPO's 5.2 m placeholder square), and 30 outlines — 1,457 ha, mostly military, largest Lann Bihoué at 767 ha — that match no packed field | `src/data/localLayers.js`, `src/data/airportsPack.js` | — | static |
+| Marine Buoys ⬡ | NOAA NDBC — one ~106 KB text report carrying the latest observation from every reporting station worldwide. **NOAA is the operator, not the extent**: only about a fifth of reporting stations carry a wave sensor, and one without renders neutral rather than calm. Sea state coloured on the WMO ladder, AND carried a second time by a vertical stem in WORLD METRES: significant wave height at a ×10 000 reading scale published in the legend (1 m of swell = 10 km of stem), linear, floor 2 km, frozen domain 14 m — the top of the last NAMED band of the WMO ladder, so hue and height clip at the same place for the same published reason. The dot's pixel size no longer encodes anything (it was 9 px / 6 px for “has a sensor”); the SHAPE carries that now — filled disc = sensor, hollow grey ring = none — because a vertical stem has zero projected length at nadir and absence cannot rest on the stem alone. Stations are FIXED, so a poll replaces values in place and nothing interpolates | `src/data/marineBuoys.js`, `src/data/ndbcObservations.js` | `/api/ndbc` (keyless, disk cache, serve-stale) | 5 min |
+| Aéroports ✈ | OurAirports (public domain, bundled) — **7,466 fields**, from Roissy's 4,215 m to an 82 m strip at La Tour-du-Pin. Worldwide: every large and medium airport plus everything selling a scheduled seat; in France the whole long tail — 1,337 fields across métropole and outre-mer, altiports, hydrobases and one balloon field included. **Second publisher, second licence:** 418 French fields also carry the aerodrome boundary the IGN surveys in **BD TOPO® (Licence Ouverte 2.0, the Etalab Open License, attribution required)**, downloaded by the same build from `data.geopf.fr/wfs/ows` and joined on the ICAO code (377) or on the field's point falling inside an unkeyed outline (41) — 0 shared, 0 refused on the 5 km anchor guard, worst kept offset 1,382 m. **213 fields gain a shape they did not have**, 207 of them aéroclubs, which is the tier upstream georeferenced at 8 %. Drawn as one terrain-clamped wash for all 418 (a batched ground primitive colours by bounding rectangle) with its own 8 px screen floor, so the outline goes away between 24 km and 1,208 km depending on its size while the pastille keeps the tier's longer range; the anchor stays on the published reference point. Refused: héliports (704 of the IGN layer's 1,370 objects), anything under 1 ha (219, of which 205 are BD TOPO's 5.2 m placeholder square), and 30 outlines — 1,457 ha, mostly military, largest Lann Bihoué at 767 ha — that match no packed field | `src/data/localLayers.js`, `src/data/airportsPack.js` | — | static |
 | Ports ⚓ | NGA *World Port Index* (US public domain, bundled) — 2,951 ports | `src/data/localLayers.js` | — | static |
 | Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js` | `/api/overpass` + `/api/tomtom` | viewport-driven |
 | CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback | `src/data/cctv.js` | `/api/cctv` + `/api/osm-cameras` | 10s (active) |
@@ -2222,17 +2229,17 @@ its criteria cannot be silently ignored.
 | Road Status FR 🇫🇷 🛣 | Bison Futé DATEX II — live `trafficStatusValue` from 16 DIR traffic centres (`TRAFICOLOR-DIR`, 60–360 s) joined to the site geometry in `config/datex_traficolor_sites.json` (1 958 sites, 1 587 located — 844 from a DIR-published coordinate and 743 resolved from a point repère against the Bornage RRN — 608 segments, 975 km, 589 of them drawn along the surveyed centre of their own carriageway from Liaisons RRN), plus the six-minute national flow/speed snapshot (`QTV-DIR`) | `src/data/roadStatusFrance.js`, `src/data/datexRoadStatus.js`, `src/data/roadStatusCoverage.js`, `scripts/lib/rrnBornage.mjs`, `scripts/lib/rrnCentreline.mjs` | `/api/road-status-fr/segments`, `/api/road-status-fr/sources` | 60s, viewport-driven below ~2 000 km; proxy holds ONE national snapshot (TTL 60 s status / 6 min flow, serve-stale 30 min) and filters it per box |
 | Événements routiers 🇫🇷 ⚠ | Bison Futé / Tipi *Événementiel-DIR* (DATEX II v2 `SituationPublication`) — every accident, rockfall, closure, roadworks order and diversion the **Directions interdépartementales des routes** declare on the non-conceded national network. **One marker per *situation*, not per record**: an accident and the two lanes it blocked are one incident, with its consequences counted on the card. Planned is not happening — future orders are held apart from what is live now | `src/data/roadEventsFrance.js`, `src/data/bisonFuteFeed.js` | `/api/bison-fute/events` (keyless) | 5 min |
 | Véhicules partagés (FR) 🛴 | transport.data.gouv.fr GBFS (135 distinct systems after de-duplication; observed footprints in `config/gbfs_fr_systems.json`; per-operator PLATES in `src/data/sharedMobilityIcons.js` — an operator-coloured disc with the form factor punched out of it (Maki, CC0) and, below ~1.2 km, the operator's initial badged on it (Inter, via `src/data/interCapitals.js`); per-operator hues and monograms in `src/data/mobilityOperators.js`; empty VIRTUAL bays dropped and declared — empty physical docks kept; a `name` echoing its own `station_id` refused) | `src/data/sharedMobilityFrance.js` | `/api/shared-mobility-fr/objects`, `/api/shared-mobility-fr/systems` | 60s, viewport-driven below ~80 km |
-| Bornes IRVE 🇫🇷 🔌 | *fichier consolidé des bornes IRVE* (transport.data.gouv.fr, via ODRÉ) — 231,079 points de charge measured 2026-08-27, rebuilt daily, folded to one site per coordinate. Three regimes by view span: 96 départements as EXTRUDED PRISMS (≥ 9.5° lat) — height = installed charge points on a frozen domain of 12 000 (≈ 15 % above the highest ever measured, 10 539 on 2026-08-27), colour = density on a frozen geometric ladder 100/250/500/1 000/2 500 per 1 000 km²; the old quantile bins are gone (six EQUAL intervals put 94 of 96 départements in one class, the geometric ladder gives 11·27·28·19·7·4). Four states, four marks: coloured prism, hatched prism (density not computable), filled flat footprint (measured zero), grid footprint (absent from the rollup) — then a **world-locked carroyage** (9.5°–0.35°): cells are squares of the graticule at a step frozen per zoom tier (0.25° / 0.0625° / 0.015625°, a quadtree, doubling itself if the occupied cells overflow the budget), one mark per occupied cell standing on a real site inside it and carrying the cell's COMPLETE charge-point total. Panning a France-wide view by 0.05° kept 179 of 1 100 marks under the old view-relative grid and keeps 1 050 of 1 057 now (G3). Every site with full detail (≤ 0.35°), where the BEAM height is the site's charge points (√, frozen domain of 24 = 98.1 % of sites, corrected for pitch, capped at −70°). The MARK is a tinted plate with Material's `bolt` punched out of it (`src/data/irveMarkIcons.js`), sized against an ink budget — `√(202 800 / marks)` clamped to 16–26 CSS px, so coverage stays flat at 15.6 % of a 1 440 × 900 frame from the ceiling down to the floor at 792 marks, and past that the answer is the power filter rather than a smaller plate. It replaced a 7 px disc that drew 318 marks nobody could find over Bordeaux at 12 653 m, the beam being a WORLD vertical whose shortest projection in that view was 1.1 px. Four rasters serve the whole fleet (the band colour rides on `billboard.color`). The POWER RAMP is monotonic in lightness and spends its whole order in the LIGHT half — L\* 54.1 → 63.3 → 72.3 → 81.7 → 90.9, gaps of 9.2 — because its first version ran from L\* 30.6 and a reader called those plates too dark to pick out: the two bottom rungs are 46 % of the sites in a French city, and a dark plate inside a dark casing is a dark blob whatever its hue. Composited over four control backdrops the smallest adjacent ΔE went 21.4 → 35.5, and the order still survives a simulated deuteranopia (40 → 46 → 52 → 68 → 93). `inconnue` is the HOLLOW plate, a rim with no fill, in the house refusal graphite at L\* 54.8 — the bottom of the ramp rather than the middle of it, so it is as findable as any measured band and what tells it apart is its SHAPE (D3); four power-floor chips `TOUT · > 22 · > 50 · > 150 kW` filter by the band ladder's own cuts (sites regime flips `filteredOut` and never rebuilds the collection, maillage re-picks in 1–12 ms). **Since 2026-09-14 the key answers ONE question — what does the colour mean** — and is one header plus the classes in view with their counts: measured in Chrome over a city view, 13 rows / 301 words / **717 px of content in a 355 px window** (clipped, its last sentence never on screen) became 7 rows / 46 words / **215 px in a 262 px window**, clipping nothing. What left it was true and is one click away: the beam's ruler (four ticks quoted in PIXELS) and its frozen domain of 24 are declared on the SITE CARD beside the exact figure they decode (F7 a, A5); the OPERATORS' clock is on that same card, per site and in French (`🗓 déclaré 15/11/2025 → 30/07/2026`), which is the stronger statement since a tenth of the register has not been touched since 2023; the publisher is named by `dataCredits.js` in the attribution surface; and the maillage cell's size in degrees and km is the first line of its own card. The key keeps only what nothing else says: the classes (D1), the refused one as a hollow ring (D3), the maillage's mark-to-site ratio and — only while a floor is hiding marks — one line saying how many and why slow classes survive it (A5). `inconnue` is labelled **« Puissance inconnue »** rather than « non exploitable », which described what the value did to the parser rather than what the reader can know | `src/data/irveFrance.js`, `src/data/irveMarkIcons.js`, `src/data/irveFeed.js`, `src/data/irveDepartements.js`, `src/data/irveMesh.js` | `/api/irve-fr/sites`, `/api/irve-fr/departements`, `/api/irve-fr/mesh`, `/api/irve-fr/status` | 30 min (viewport TTL 6 h, national TTL 24 h; upstream consolidation is daily) |
+| Bornes IRVE 🇫🇷 🔌 | *fichier consolidé des bornes IRVE* (transport.data.gouv.fr, via ODRÉ) — 231,079 charge points measured 2026-08-27, rebuilt daily, folded to one site per coordinate. Three regimes by view span: 96 départements as EXTRUDED PRISMS (≥ 9.5° lat) — height = installed charge points on a frozen domain of 12 000 (≈ 15 % above the highest ever measured, 10 539 on 2026-08-27), colour = density on a frozen geometric ladder 100/250/500/1 000/2 500 per 1 000 km²; the old quantile bins are gone (six EQUAL intervals put 94 of 96 départements in one class, the geometric ladder gives 11·27·28·19·7·4). Four states, four marks: coloured prism, hatched prism (density not computable), filled flat footprint (measured zero), grid footprint (absent from the rollup) — then a **world-locked carroyage** (9.5°–0.35°): cells are squares of the graticule at a step frozen per zoom tier (0.25° / 0.0625° / 0.015625°, a quadtree, doubling itself if the occupied cells overflow the budget), one mark per occupied cell standing on a real site inside it and carrying the cell's COMPLETE charge-point total. Panning a France-wide view by 0.05° kept 179 of 1 100 marks under the old view-relative grid and keeps 1 050 of 1 057 now (G3). Every site with full detail (≤ 0.35°), where the BEAM height is the site's charge points (√, frozen domain of 24 = 98.1 % of sites, corrected for pitch, capped at −70°). The MARK is a tinted plate with Material's `bolt` punched out of it (`src/data/irveMarkIcons.js`), sized against an ink budget — `√(202 800 / marks)` clamped to 16–26 CSS px, so coverage stays flat at 15.6 % of a 1 440 × 900 frame from the ceiling down to the floor at 792 marks, and past that the answer is the power filter rather than a smaller plate. It replaced a 7 px disc that drew 318 marks nobody could find over Bordeaux at 12 653 m, the beam being a WORLD vertical whose shortest projection in that view was 1.1 px. Four rasters serve the whole fleet (the band colour rides on `billboard.color`). The POWER RAMP is monotonic in lightness and spends its whole order in the LIGHT half — L\* 54.1 → 63.3 → 72.3 → 81.7 → 90.9, gaps of 9.2 — because its first version ran from L\* 30.6 and a reader called those plates too dark to pick out: the two bottom rungs are 46 % of the sites in a French city, and a dark plate inside a dark casing is a dark blob whatever its hue. Composited over four control backdrops the smallest adjacent ΔE went 21.4 → 35.5, and the order still survives a simulated deuteranopia (40 → 46 → 52 → 68 → 93). `inconnue` is the HOLLOW plate, a rim with no fill, in the house refusal graphite at L\* 54.8 — the bottom of the ramp rather than the middle of it, so it is as findable as any measured band and what tells it apart is its SHAPE (D3); four power-floor chips `TOUT · > 22 · > 50 · > 150 kW` filter by the band ladder's own cuts (sites regime flips `filteredOut` and never rebuilds the collection, maillage re-picks in 1–12 ms). **Since 2026-09-14 the key answers ONE question — what does the colour mean** — and is one header plus the classes in view with their counts: measured in Chrome over a city view, 13 rows / 301 words / **717 px of content in a 355 px window** (clipped, its last sentence never on screen) became 7 rows / 46 words / **215 px in a 262 px window**, clipping nothing. What left it was true and is one click away: the beam's ruler (four ticks quoted in PIXELS) and its frozen domain of 24 are declared on the SITE CARD beside the exact figure they decode (F7 a, A5); the OPERATORS' clock is on that same card, per site and in French (`🗓 déclaré 15/11/2025 → 30/07/2026`), which is the stronger statement since a tenth of the register has not been touched since 2023; the publisher is named by `dataCredits.js` in the attribution surface; and the maillage cell's size in degrees and km is the first line of its own card. The key keeps only what nothing else says: the classes (D1), the refused one as a hollow ring (D3), the maillage's mark-to-site ratio and — only while a floor is hiding marks — one line saying how many and why slow classes survive it (A5). `inconnue` is labelled **_Puissance inconnue_ (Unknown power)** rather than *non exploitable* (unusable), which described what the value did to the parser rather than what the reader can know | `src/data/irveFrance.js`, `src/data/irveMarkIcons.js`, `src/data/irveFeed.js`, `src/data/irveDepartements.js`, `src/data/irveMesh.js` | `/api/irve-fr/sites`, `/api/irve-fr/departements`, `/api/irve-fr/mesh`, `/api/irve-fr/status` | 30 min (viewport TTL 6 h, national TTL 24 h; upstream consolidation is daily) |
 | Établissements scolaires 🇫🇷 🎓 | *Annuaire de l'éducation* (data.education.gouv.fr, MENJ) — 68,939 rows measured 2026-09-01, rebuilt daily, of which 68,158 are open and geolocated over 68,083 distinct UAI. Pupil rolls joined on the UAI from four per-level *effectifs* datasets at rentrée 2025 (91.7% of teaching establishments). The DEPP's **IPS** joined on the same key from four more (`fr-en-ips-ecoles-ap2022` at rentrée 2024-2025, `-colleges-ap2023`, `-lycees-ap2023` and `-erea-ap2022` at 2025-2026 — each dataset discovers its OWN newest rentrée, floored; a global max drops all 32,494 écoles): 43,322 indexed UAI, reaching **40,529 of the 62,857 drawn schools that could carry an index (64.5%)**, with 2,504 `NS` sentinels and 348 indexed establishments this map does not draw. Three regimes by view span: 96 départements as EXTRUDED PRISMS (≥ 9.5° lat) — height = establishments on a frozen linear domain of 2 600 (measured range 150 Lozère → 2 504 Nord, median 577, spread 1:16.7), colour = density per 1 000 km² on frozen ×2 breaks 40/80/160/320/640 (measured class populations 8·34·30·14·4·6, none empty); a missing count is drawn STRIPED even when the rate exists, so it can never be the pixel-identical twin of a measured zero — then a grid-thinned maillage of real positions (9.5°–0.35°), every establishment with full detail (≤ 0.35°). Sites are coloured by level, sized by roll — the IPS changes NEITHER channel and there is no IPS colour scale, opt-in or otherwise; it is a card attribute and a coverage clause in the toggle readout. The maillage carries no IPS (it would undo the 1.66 MB-vs-5.42 MB name decision); a maillage click fetches the register for one coordinate and gets the same card the exact regime draws. 2,762 overseas schools are outside the bundled metropolitan polygons and are reported rather than painted | `src/data/schoolsFrance.js`, `src/data/schoolsFeed.js`, `src/data/schoolsDepartements.js`, `src/data/schoolsMesh.js`, `src/data/ipsFeed.js` | `/api/schools-fr/sites`, `/api/schools-fr/departements`, `/api/schools-fr/mesh`, `/api/schools-fr/status` | 30 min (viewport TTL 6 h, national TTL 24 h; IPS index built once per process — 8 requests, 7.6 MB raw / 750 KB gz, 3.4 s cold; upstream register rebuild is daily, IPS annual) |
 | Enseignement supérieur 🇫🇷 🏛 | *Effectifs d'étudiants inscrits — détail par établissements* (data.enseignementsup-recherche.gouv.fr, MESR) — 22,068 rows at rentrée 2024, resolved to **6,294 establishments and 6,914 sites** holding 2,960,012 students. The rentrée and the Parcoursup session are DISCOVERED at build time and floored at 2024/2026. 1,665 establishments carry no `geo`; 977 are placed from *Cartographie des formations Parcoursup* (session 2026) where it gives exactly one point for the UAI, which also supplies 5,705 establishment names and the per-card formation lists — a borrowed coordinate is flagged on its card, and the 688 neither file places are reported. **Two regimes, not three**: 96 départements as EXTRUDED PRISMS over STUDENTS (≥ 9.5° lat) — height on a SQUARE-ROOT scale (declared: the domain is 738 Corse-du-Sud → 394 788 Paris, i.e. 1:535, and a linear rule would crush 51 of the 96 départements onto the 4 km floor, median included), frozen domain 400 000 students, colour = share of students at bac+4 and beyond. Density was REFUSED as the colour on measurement: Spearman ρ 0.974 against the count, so the hue would have repeated the height — then every site in view drawn straight from the national pack — no bbox query, no ceiling and no thinning, because the pack is 6,914 sites and 0.62 MB gzipped with every name on it. Coloured by seven bands folded from the register's 14 categories, sized by the enrolment at that site; 214 overseas sites are outside the bundled metropolitan polygons and are reported rather than painted | `src/data/supFrance.js`, `src/data/supFeed.js`, `src/data/supDepartements.js` | `/api/sup-fr/sites`, `/api/sup-fr/departements`, `/api/sup-fr/status` | 6 h (proxy TTL 7 d, serve-stale 30 d; the register is published once a year at the rentrée) |
-| Comptages routiers 🇫🇷 🚦 | *Comptages routiers — capteurs permanents* (opendata.paris.fr, Ville de Paris, ODbL) — **27,772,889 hourly readings**, of which the last COMPLETE local Monday–Sunday week is folded server-side into **2,977 arcs / 500,136 readings**. The week is DISCOVERED from `max(t_1h)` and floored at 2026-08-24; the feed is a nightly batch landing ~46 h behind the wall clock and is never presented as live. Live build 2026-09-02: 1,730 arcs counting vehicles, 356 occupancy-only, **891 silent** (724 *Invalide*, 141 *Ouvert*, 26 *Barré*), 31 with no published geometry of which 19 are measuring. Geometry and street names come from the measurement export, NOT from `referentiel-comptages-routiers` (3,739 rows for 3,348 distinct arcs). **Bivariate since 2026-09-03**: hue = the SHAPE OF THE RHYTHM computed over the 168 hours (nocturne 56 · week-end 100 · pendulaire 367 · pointe du matin 150 · pointe du soir 652 · continu 369 · indéterminé 36 — measured on the real pack, no empty class), width = flow, plus an hour cursor of 48 slots transposed from `idfm-frequency`. The four rhythm thresholds are round frozen numbers, never quantiles of the week (C1). No green anywhere in the wheel, on purpose: a traffic-light reading needs green, so the amber « pointe du soir » cannot be read as congestion. The cursor rebuilds NO vertices — geometry is built once per width band and the cursor only writes `show` (G2); 6 287 instances in 8 draw calls, bounded by `comptagesReachableBands()` at 58.1 % of the cartesian product. Default stays « Moyenne ouvrée », not « À cette heure », because the chips are not serialised into the share link. One regime — Paris is one city and the whole fold is 305 KB gzipped | `src/data/comptagesParis.js`, `src/data/comptagesFeed.js`, `src/data/comptagesRhythm.js` | `/api/comptages-fr/arcs`, `/api/comptages-fr/status` | 6 h (proxy TTL 6 h, serve-stale 14 d; upstream batch is nightly and already J-2) |
+| Comptages routiers 🇫🇷 🚦 | *Comptages routiers — capteurs permanents* (opendata.paris.fr, Ville de Paris, ODbL) — **27,772,889 hourly readings**, of which the last COMPLETE local Monday–Sunday week is folded server-side into **2,977 arcs / 500,136 readings**. The week is DISCOVERED from `max(t_1h)` and floored at 2026-08-24; the feed is a nightly batch landing ~46 h behind the wall clock and is never presented as live. Live build 2026-09-02: 1,730 arcs counting vehicles, 356 occupancy-only, **891 silent** (724 *Invalide* (invalid), 141 *Ouvert* (open), 26 *Barré* (closed)), 31 with no published geometry of which 19 are measuring. Geometry and street names come from the measurement export, NOT from `referentiel-comptages-routiers` (3,739 rows for 3,348 distinct arcs). **Bivariate since 2026-09-03**: hue = the SHAPE OF THE RHYTHM computed over the 168 hours (*nocturne* night 56 · *week-end* weekend 100 · *pendulaire* commuter 367 · *pointe du matin* morning peak 150 · *pointe du soir* evening peak 652 · *continu* continuous 369 · *indéterminé* undetermined 36 — measured on the real pack, no empty class), width = flow, plus an hour cursor of 48 slots transposed from `idfm-frequency`. The four rhythm thresholds are round frozen numbers, never quantiles of the week (C1). No green anywhere in the wheel, on purpose: a traffic-light reading needs green, so the amber *pointe du soir* (evening peak) cannot be read as congestion. The cursor rebuilds NO vertices — geometry is built once per width band and the cursor only writes `show` (G2); 6 287 instances in 8 draw calls, bounded by `comptagesReachableBands()` at 58.1 % of the cartesian product. Default stays *Moyenne ouvrée* (Weekday average), not *À cette heure* (At this hour), because the chips are not serialised into the share link. One regime — Paris is one city and the whole fold is 305 KB gzipped | `src/data/comptagesParis.js`, `src/data/comptagesFeed.js`, `src/data/comptagesRhythm.js` | `/api/comptages-fr/arcs`, `/api/comptages-fr/status` | 6 h (proxy TTL 6 h, serve-stale 14 d; upstream batch is nightly and already J-2) |
 | Délinquance enregistrée 🇫🇷 🚓 | *Bases statistiques de la délinquance enregistrée* (SSMSI, via data.gouv.fr, LO 2.0, edition 2026-07-09) — DEP table (101 départements × 18 indicators × 2016–2025) plus the COM table streamed from a 39.9 MB gzip (**5,238,000 rows → 34,920 communes**, folded to the newest year, 8.8 s cold). Two regimes: a département choropleth on published rates, then per-département commune packs joined to geo.api.gouv.fr contours. **Suppression is the layer**: 0 suppressed cells at département grain, 9.0%–69.8% at commune grain depending on indicator. A withheld cell arrives as `[state]` with no number, is excluded from every quantile, and has its own colour. Quantile thresholds are cut ONCE nationally and shared by every pack. The layer OPENS on a computed all-offences total (`tous`) — GEV's arithmetic, not the register's, which publishes no total: 14 commune-grain contributors and 16 at département grain, the two `Usage de stupéfiants` sub-indicators dropped because the parent equals AFD + hors AFD in 101 of 101 départements, and the rate recomputed on `insee_pop` because published rates sit on two denominators. Exact at département grain, a stated **minorant** at commune grain (2025: 9,606 communes positive of which 9,428 are floors, 243 complete zeros, 25,071 with nothing publishable). 45 SSMSI codes have no contour (Paris 20, Marseille 16, Lyon 9 arrondissements) and are reported as `unshaped`. Cards come in two registers: compact by default — one line per claim, ≤ 60 characters, so nothing wraps — and the SSMSI's rules word for word behind a `Méthodo` chip that redraws the card already open | `src/data/delinquanceFrance.js`, `src/data/delinquanceFeed.js`, `src/data/delinquanceDepartements.js` | `/api/delinquance-fr/departements`, `/api/delinquance-fr/communes/:dep`, `/api/delinquance-fr/status` | 24 h (proxy TTL 24 h, serve-stale 120 d; the base is republished about once a year) |
-| Antennes mobiles 🇫🇷 📡 | Observatoire ANFR des réseaux mobiles (data.anfr.fr, D4C, LOv2, hebdomadaire) — édition 2026-08-27, 826 418 lignes → **72 700 supports** sur 107 codes département, DOM/COM compris. Deux régimes : **maillage** (72 700 tuples `[lat, lon, opérateurs, bande]`, 394 KB gz, éclairci à 1 100–2 200 points ; une vue France entière contient 68 878 supports et 305 cellules occupées, sélection en 15,3 ms) et **supports** sous 0,32° de portée (boîte ≤ 0,35°, la plus dense de France = 6 462 supports = 113 KB gz). Couleur = génération qui ÉMET (5G 50 148 · 4G 18 698 · 3G 127 · 2G 89) ; taille = nombre d'opérateurs (1→36 671, 4→11 012, 5→1) ; **hauteur = le fût, en unités monde, à la hauteur réelle du support** — couverture mesurée à 99,24 % (72 149 sur 72 700 ; médiane 30 m, p95 48 m, max 343,3 m), et les 551 sans hauteur ne reçoivent AUCUN fût parce qu'ils sont exactement les 506 « intérieur sous-terrain » + 38 « tunnel » + 7 « galerie » : l'ANFR laisse la case vide parce qu'il n'y a pas de mât à mesurer. Un support où rien n'émet reçoit un fût TIRETÉ (hauteur déclarée sur un dossier autorisé, pas mesure d'un objet construit). Les **azimuts** sortent en rayons de 60 m, sur la fiche du support sélectionné uniquement : l'observatoire n'en publie aucun (en-tête CSV relu en direct, 22 colonnes) et Cartoradio en donne 98,8 %. Anneau pâle = projet approuvé (3 638 sans aucune émission, 3 776 extensions réelles sur 15 606 dossiers). NON peint : pas de choroplèthe départementale (les polygones embarqués sont métropolitains et masqueraient l'écart DOM — 1,0 % de 5G en Nouvelle-Calédonie contre 84,1 % dans le Val-d'Oise) ; pas d'aviation civile, de Défense ni d'Intérieur (exclus par la loi) ; pas de FH/TNT/PMR (nommés sur la fiche, jamais tracés) ; pas de valeur d'exposition par antenne — la mesure la plus proche est celle d'un LIEU, avec sa distance et sa date. | src/data/anfrFeed.js, src/data/anfrMesh.js, src/data/anfrFrance.js | /api/anfr-fr/mesh, /api/anfr-fr/supports, /api/anfr-fr/support/:id, /api/anfr-fr/status | poll 6 h ; TTL proxy 6 h, serve-stale 14 j, cache disque 5,2 Mo ; fiche Cartoradio 24 h ; amont hebdomadaire (build à froid 36,4 s / 517 Mo) |
+| Antennes mobiles 🇫🇷 📡 | ANFR mobile network observatory (*Observatoire ANFR des réseaux mobiles*; data.anfr.fr, D4C, LOv2, weekly) — edition 2026-08-27, 826,418 rows → **72,700 supports** over 107 department codes, overseas (DOM/COM) included. Two regimes: **mesh** (72,700 tuples `[lat, lon, opérateurs, bande]`, 394 KB gz, thinned to 1,100–2,200 points; a whole-France view holds 68,878 supports and 305 occupied cells, selected in 15.3 ms) and **supports** under 0.32° of span (box ≤ 0.35°, the densest in France = 6,462 supports = 113 KB gz). Color = the generation that TRANSMITS (5G 50,148 · 4G 18,698 · 3G 127 · 2G 89); size = number of operators (1→36,671, 4→11,012, 5→1); **height = the shaft, in world units, at the support's real height** — coverage measured at 99.24% (72,149 of 72,700; median 30 m, p95 48 m, max 343.3 m), and the 551 with no height get NO shaft because they are exactly the 506 *intérieur sous-terrain* (indoor underground) + 38 *tunnel* + 7 *galerie* (gallery): ANFR leaves the field empty because there is no mast to measure. A support where nothing transmits gets a DASHED shaft (a height declared on an authorized application, not the measurement of a built object). **Azimuths** come out as 60 m rays, on the selected support's card only: the observatory publishes none (CSV header reread live, 22 columns) and Cartoradio gives 98.8% of them. Pale ring = approved project (3,638 with no transmission at all, 3,776 real extensions out of 15,606 applications). NOT painted: no departmental choropleth (the bundled polygons are mainland-only and would hide the overseas gap — 1.0% 5G in Nouvelle-Calédonie against 84.1% in the Val-d'Oise); no civil aviation, Defense or Interior sites (excluded by law); no FH/TNT/PMR (microwave links, digital terrestrial TV, private mobile radio: named on the card, never drawn); no exposure value per antenna — the closest measurement is that of a PLACE, with its distance and its date. | src/data/anfrFeed.js, src/data/anfrMesh.js, src/data/anfrFrance.js | /api/anfr-fr/mesh, /api/anfr-fr/supports, /api/anfr-fr/support/:id, /api/anfr-fr/status | poll 6 h; proxy TTL 6 h, serve-stale 14 d, disk cache 5.2 MB; Cartoradio card 24 h; weekly upstream (cold build 36.4 s / 517 MB) |
 | Îlots de fraîcheur 🇫🇷 🌳 | *Îlots de fraîcheur — équipements et activités* (535 points, modified 2026-09-01T05:45:08Z), *— espaces verts frais* (984 footprints, 584 Polygon + 400 MultiPolygon, modified 2026-08-28T05:40:21Z), *Fontaines à boire* (1 323 points, Eau de Paris, modified 2026-08-31T07:42:08Z) and *Les arbres* (219 432 points, modified 2026-08-28T08:35:28Z) — opendata.paris.fr, all four ODbL, keyless. **TWO regimes, and the split is by size not by zoom**: the three refuge registers are folded server-side into ONE document of 3 451 189 B / 643 107 B gzipped (9 929 649 B upstream, 2 454 ms in parallel) and shipped whole — no bbox, no maillage, no thinning — while the trees are a per-viewport `in_bbox` export gated at 1 500 m of camera altitude and a 0,016° box snapped onto a 0,002° grid, preceded by a 36-byte count probe that refuses the download over 12 500 trees (the densest grid-aligned 0,020° window in Paris holds 10 571, the densest 0,022° one 12 269). **FOUR CHIPS, and the trees are OFF by default**: each register is switchable (`PARCS · REFUGES · FONTAINES · ARBRES`) and the key prints only what is drawing — 8 rows with the defaults, 11 with the trees on, against the 18 it printed when all four were painted at once over a screen the 12 500 tree dots take 95 % of. The tree chip gates the REQUEST, not just the paint. Green-space fills are coloured by `indice_veget_sup8m_2024` on TWO fixed bands cut at a quarter of the ground (401 under, 582 over; the 66 at exactly 0 are inside the low band and named in its blurb, the 1 with no index at all is grey and reported in the key's note rather than given a row); the **23** spaces declaring `canicule_ouverture = "Oui"` carry a hot ground stroke, 9 of them also `ouvert_24h`, 11 of them with zero measured canopy. Equipment dots are coloured by THREE mechanisms folded from the 12 published types — you go in (225), you stand under something (156), there is water (154) — with the published `type` kept verbatim on every card; fountains by `dispo` (1 238 OUI / 85 NON, 10 of the NON past their own end date); trees by whether a height was published at all (19 407 are 0) and sized by it, capped at 25 m. Every dot is seated on the surface being DRAWN (`provisionalFloor.js` under the DEM warm, with a doubling retry) rather than on the ellipsoid, which is what stops the whole layer sliding across the city as the camera moves. Open/closed is re-folded in the browser on Europe/Paris every minute (757 spaces open at 14 h vs 367 at 01 h 30, 5,0 ms per re-fold) rather than taken from the proxy's hour-old summary. NOT painted: nothing — all 535 equipment rows, all 1 323 fountains and all 219 432 trees carry a real coordinate, and 984 of 984 spaces keep at least one ring (22 of 3 439 rings fall below a triangle at 1 m and are dropped and counted) | `src/data/fraicheurParis.js`, `src/data/fraicheurFeed.js`, `src/data/fraicheurTrees.js` | `/api/fraicheur-fr/refuges`, `/api/fraicheur-fr/arbres`, `/api/fraicheur-fr/status` | 60 min for the pack + a local re-fold of the clock every minute (proxy TTL 60 min, serve-stale 7 d; the equipment and fountain registers are rebuilt daily). Trees: viewport-driven, 400 ms debounce, proxy TTL 6 h per box, 48 boxes in memory and on disk |
-| Autorisations d'urbanisme 🇫🇷 🏗 | Sitadel via DiDo — *liste des autorisations d'urbanisme créant des logements* (rid `8b35affb…`, 1 917 260 rows, millésime 2026-08) and *liste des permis de démolir* (rid `1a9a2f0c…`, 202 895 rows, from 1996), both keyless and `fr-lo`, PLUS `cadastre.data.gouv.fr` Etalab parcels (edition discovered from the `latest` 302, floored at 2026-06-01) and `geo.api.gouv.fr/communes` for the commune under the screen centre. **ONE regime, and the arithmetic forbids a second**: DiDo scans an 889 MB CSV in 3,57–5,01 s per query whatever the query, so 34 945 communes is 39 h for one national pass — the layer answers one commune at a time and names it on the row. The file publishes NO coordinate (`geoFields: ["REG","DEP"]`); every position is a cadastral-reference join, refused when the reference matches more than one parcel. Ground-clamped `GroundPrimitive` fills, one per parcel part, coloured by the lifecycle band of the MOST RECENT permit on that plot (`Autorisé` / `Chantier ouvert` / `Travaux achevés` / `Annulé` / demolition), a `GroundPolylinePrimitive` edge per ring, a `PointPrimitiveCollection` dot per placed permit sized by `NB_LGT_TOT_CREES` (√, ceiling 200), **a 12 m-square COLUMN per dossier, one metre per authorised dwelling, linear, ceiling 200 m** — a height is a length and reads directly, so the square root that is right for a disc's AREA is wrong here; the unit is chosen so the column reads against the city it stands in (a Nantes block is 10–30 m of BD TOPO volume). **Until 2026-09-14 the PARCEL ITSELF was extruded, and that multiplied the dwelling count by the size of the plot**: measured over the parcels actually extruded, base p50 403 m² / max 40 400 m² (Paris), p50 395 m² / max 153 173 m² (Nantes, 388× the median), p50 637 m² / max 24 955 m² (Ustaritz), largest single mark 25 426 754 m³ for one file — and the height was drawn once per parcel, so a dossier naming three plots claimed its dwellings three times (×1.87 Ustaritz, ×1.73 Nantes, ×1.30 Paris). The reported case was Ustaritz 06454721B0037, 45 logements over three adjoining parcels = 404 000 m³ of opaque orange over a village of 8 m houses, for a file whose `SURFACE_PLANCHER_CREEE` is 3 308 m². The fixed base makes volume proportional to the count and nothing else (total drawn volume ÷20 to ÷28 by commune) and the parcel keeps the ground: its wash, its edge, its card. The columns are NOT `GroundPrimitive`, carry no `classificationType` and are draped on nothing: opaque geometry depth-tested against the Google mesh, so it occludes them instead of being painted over (F1a/F4). The floor is read at the PERMIT's anchor, where its dot already stands, so one dossier has one floor for both marks; a cold ground cell leaves the dossier with NO column, counted and re-asked, never extruded from the ellipsoid. **Every mark reads ONE floor** (`sitadelFloorM`, 2026-09-14): the shared DEM cell when it is warm, a `provisionalFloor.js` probe of the surface actually being DRAWN while it is not, and `null` — never `0` — when neither answers. Before that the dots took `0` for a cold cell and were never written again: measured over Paris, camera at 500 m, **all 4 753 sat at ellipsoidal height 1.0 m while the drawn mesh under them read 76.7–96.9 m**, and because they paint through depth their screen position followed the camera pose and the layer slid across the rooftops. `reanchorPoints` now re-seats the dots already on screen when a better floor lands, on a doubling ladder refilled at every camera settle, and a floor that stops answering never overwrites one that did. A floor outside **−100 m to 5 000 m** is refused as not-French-ground and re-probed on every later pass rather than latched: measured over Nantes with the tileset reporting `tilesLoaded: true`, 81 probes on a 1,3 km grid ALL answered between −424.9 m and −360.2 m in a smooth 5 % ramp (a planet-scale root tile answering for a city), every one passed `provisionalFloor.js`'s world band, and the fill radius lent one of them to the whole commune. Proven by `npm run qa:sitadel-floor`, which refuses `/api/terrain/heights` so the claim is about the DRAWN surface and not about a network round trip. A permit with no published dwelling count is not drawn at zero height: it keeps its clickable ground fill, edged in ITS OWN band colour instead of the neutral — a sign that survives a nadir camera, where a column and a fill look alike. Selecting a dossier rings the GROUND of every plot it names — it had to climb to the roof only while the plot itself was the opaque volume. And the commune contour as a second polyline — the scope of the answer, decimated (Nantes 804 → 269 vertices, worst displacement 183 m) and labelled *contour communal simplifié*. Measured: Paris 4 500 parcels / 70 766 vertices / 4 753 dots, Nantes 3 032 / 47 676 / 2 747. NOT painted and COUNTED instead: 9 449 ambiguous, 1 859 missing and 219 reference-less permits over the six measured communes — never moved to a commune centre, and never given a legend swatch, because the swatch is the colour the object is painted | `src/data/sitadelFrance.js`, `src/data/sitadelFeed.js` | `/api/sitadel-fr/commune`, `/api/sitadel-fr/status` | camera-driven (450 ms debounce, gated on camera ALTITUDE ≤ 12 000 m — 2·h·tan 30° = 13,86 km of ground at Cesium's default 60° FOV, against communes 12,1–17,9 km wide — asking once per 0,01° focus cell and carrying `have=<insee>` so an unchanged commune answers in 53 B instead of 2 085 535 B) + 6 h idle; proxy TTL 24 h memory + `.gev-cache/sitadel-fr/communes/`, serve-stale 30 d, global DiDo semaphore of 2 because the 4th simultaneous request is a 429 |
-| Réseau et fréquence IDFM 🇫🇷 Ⓜ | ONE row over TWO Île-de-France Mobilités publications, merged 2026-09-10 — they drew the same stops and the reader was left to do the join. **The referential** (`arrets`, `referentiel-des-lignes`, ODbL 1.0): 37,956 stops and 2,121 lines with their official liveries, drawn below 20 km of altitude as **filled mode badges, 21–27 px** (a pictogram knocked into a disc), at most 100 per 1° box, seated on the terrain under them. The badge replaced naked 14–24 px line-art on 2026-09-10: tinted `#c9d4e0` for the mode this referential is mostly made of, it was pale grey line-art on pale grey roofs, and a filled mark brings its own ground instead of hoping for a luckier hue. IDFM publishes NO GTFS-Realtime vehicle positions at all (0 in Paris intra-muros against 453 in Bordeaux), so this layer draws the offer and never fakes a vehicle. **The hourly offer** (*Offre hebdomadaire moyenne hors vacances*, Licence Ouverte v2.0) — **1,311,578 rows, 22 fields**, edition `data_processed` 2026-08-18T15:54:55+00:00 discovered from the portal and floored there. **The only time-of-day dimension in the app**: average departures per stop for a 7 × 24 (day, band) grid, operating day 04:00→03:59 so bands run 4..27. It draws below a 0.035° view span (leaves at 0.045°) as a small rate disc — **but never on a stop the referential already badges**: one point carries one mark since 2026-09-10, and the badge carries the rate in its FILL, so mode is the shape and rate is the colour. Five upstream calls per box — one identity page plus four band windows, because `offset + limit <= 20000` caps grouped reads and the band axis cannot be pivoted — **3,303,162 bytes in 2.42 s → 540,404 raw / 87,143 gzipped for 805 stops** on a 4 km box on Châtelet. Fixed six-step ladder (2/4/8/16/32 departures per hour), never a quantile, so a colour means the same wait in Paris at 08:00 and in Melun at 01:00; on an average Tuesday that box splits 23/6/17/167/240/237/115 at 08:00 and 397/179/80/103/44/2/0 at 01:00. **The join is `arrets.arrid`** — measured 2026-09-02, 34,903 of the offer's 36,502 stops (95.6 %) join it — and one click prints both halves on one card: mode, arrondissement, fare zone and step-free status, then the rate for the selected band, the day's sparkline, first/peak/last, the day total and the same band across all seven days. **No licence line on the card since 2026-09-10** — both licences are named by `dataCredits.js` in the attribution surface for as long as the row is on, and a card a reader opens to find out what serves their street is not an attribution surface. NOT claimed: a referential stop outside the offer file (**3,053 of 37,956, 8.0 %**) says so instead of showing a zero; **a click above the frequency gate BUYS the profile it cannot draw** — the card carried "offre horaire non lue à cette altitude" until 2026-09-10 and a box the proxy had refused as too dense answered a click with a flat "aucun profil publié", which was not merely unhelpful but false; a click names one coordinate and the cheapest legal box around one coordinate is one 0.005° cell, so the gate now bounds the DRAWING and never the answer, and every profile that box paid for is kept so the next click on the street is free; the **549 stops (1.50 %) with no coordinate** (473 Train, 69 Bus, 7 Tramway; 2.76 % of a Tuesday's courses) are counted and never placed; a box past the 1,200-stop ceiling is refused after one call with `tooDense` and an "au moins" count; and no stop is drawn for a `stop_times.txt` this layer never opens. **The legend follows the fills**: in a charted view it is the six-rung ramp plus the measured-silence row plus a `#8a93a6` "offre horaire non publiée" row; above the gate, or in a refused box, it is the MODES on screen with their counts — until 2026-09-10 it was six rungs at zero and a silent row at zero, a legend describing nothing that was drawn. **Dropped in the merge**: the eight-département choropleth the frequency row painted above its gate. A choropleth needs an alpha low enough for the imagery underneath to survive, and at that altitude the result read as a faint wash over half of France rather than as a reading. The fold survives server-side at `/api/idfm-frequency/region` (356 aggregate rows + 17 stop censuses → 14,719 bytes raw / 5,864 gzipped) and nothing in the browser imports it | src/data/idfmNetwork.js, src/data/idfmFeed.js, src/data/idfmFrequencyFeed.js, src/data/idfmFrequencyDepartements.js (proxy only) | /api/idfm/stops, /api/idfm/lines, /api/idfm-frequency/stops, /api/idfm-frequency/region, /api/idfm-frequency/status | poll 60 s (a CLOCK tick, not a data poll: the band follows `Europe/Paris` and a scrub is a repaint of the 7 × 24 profile the browser already holds); proxy TTL 24 h per box / 7 d for the région, serve-stale 30 d, disk cache `.gev-cache/idfm-frequency/`; upstream is a yearly average republished a few times a year |
-| Bruit des aéroports 🇫🇷 🔊 | *DGAC Plan d'Exposition au Bruit* and *Plan de Gêne Sonore* via Géoplateforme WMS-V `GetFeatureInfo` (`INFO_FORMAT=application/json`, real EPSG:4326 MultiPolygon), plus the `dgac_peb_arrete_wfs` register (224 points, 66 355 B, `numberMatched` 224) cached to `.gev-cache/bruit-fr/`. Keyless, CORS `*`, `<Fees>none</Fees>` + cartes.gouv.fr CGU. **TWO regimes on one route, camera-anchored, on the shared `createAddressScanLayer` shell.** Below 12 000 m, POINT MODE: two probes at the ground point the camera looks at, **scale PINNED at 1e-4°/pixel = 1:39 757** and never derived from the camera, because `dgac_peb_plan_wmsv` stops rendering below ~1:25 000 and then answers HTTP 200 with a 137-byte empty FeatureCollection. Between 12 000 m and 250 000 m, OVERVIEW MODE: the layer adds `km=` to the same request and the proxy answers about the AERODROMES in view instead — one probe each at their own published reference points, at **1e-2°/pixel = 1:3 975 696**, whose GetFeatureInfo buffer is wide enough to return a whole plan rather than the one band the reference point sits in. A PEB is nested rings, so at the fine scale a probe returns zone A and nothing else; measured over 25 aerodromes, 37 distinct bands at 1e-4 against **88 at 1e-2**, and Roissy's zone D and Toussus's zone B return at no finer scale. **That coarse scale is then paid back by a SECOND PASS**, because the same number that widens the `GetFeatureInfo` buffer is what GeoServer generalises the outline to — measured, Roissy's zone C returns 381 vertices at 1:39 757 and 22 at 1:3 975 696, its zone D 664 against 37, so a 65,8 km ring drew with visible facets. The overview probe is therefore demoted to a DISCOVERY pass that only names the bands, and each named band is re-fetched at the probe scale aimed at its own coarse outline — which works because the service does not clip the geometry it returns to the box it was asked through. Seeds are `BRUIT_REFINE_SEEDS` = 6 points spread around the band's own biggest outer ring, each pulled 2 % toward that ring's centroid: measured 2026-09-07 over two disjoint 25-aerodrome slices, **170 of 170 bands recovered**, candidates needed 1→149 2→3 3→9 4→1, 209 fine probes for 170 bands. **That second pass has TWO tempos, and 30 000 m is the boundary.** Above it, it is a BACKGROUND pass — measured cold, the twelve aerodromes around Paris cost 12 probes and ~1,5 s coarse against 85 probes and ~9,5 s refined, so the coarse answer is served at once and the fine geometry lands in the per-aerodrome cache behind it; the refiner yields to any foreground scan rather than competing for the three-concurrent budget. **Below 30 000 m the layer adds `fine=1` and the proxy plays that pass in FRONT of the answer**, nearest aerodrome first, so the frame a reader dezooms to in order to see one airport's plan (≈42 km across at that altitude) is at 1:39 757 on its first paint instead of arriving faceted and redrawing seconds later. The point ceiling is deliberately NOT what moved: a point probe owes its sharpness to an 11 m buffer, and that buffer is exactly why it returns one ring of four — extending POINT MODE to 30 km would have bought a sharp outline by dropping zones B, C and D. The wait is bounded by `BRUIT_FINE_FOREGROUND_BUDGET_MS` = **4 000 ms**, floored by the ~0,8 s one aerodrome costs cold (so the centred aerodrome is always fine on the first paint) and capped under the layer's own 5 s refine poll (so a truncated pass never stacks with the poll behind it); whatever the budget does not reach stays coarse, says so, and is handed back to the background worker. It bounds the SECOND PASS and not the request — the discovery probes run first and are not on that clock. Measured 2026-09-10 at Roissy, radius 25 km, 18 aerodromes and 72 bands, from an empty `zones.json`: **no `fine` 2,66 s and 0 of 72 bands fine; `fine=1` 6,64 s and 27 of 72 fine on the FIRST payload; `fine=1` 0,08 s and 72 of 72 once the background pass has landed** — and on that first fine payload LFPG's own four zones return at 110 / 247 / 381 / 664 vertices, the probe scale's numbers, on the aerodrome the camera is centred on. The foreground pass holds the same gate the refiner yields to, so it never turns three concurrent upstream calls into five, and a pass the BUDGET cut short does not stamp `triedAt` — stamping it would freeze the half-refined plan of the airport under the camera for the 10 min cooldown. The proxy grants `fine` only at the first rung of the radius ladder (≤ 25 km), because at a 50 km radius the screen is ~140 km across, the median band is 1,9 km wide, and 37 vertices against 381 is under a pixel for the same four seconds. Measured end to end over a 100 km radius on Paris: **1 399 vertices at t=0, 9 177 at t+15 s, 12 045 and 94/94 bands refined at t+45 s** — ×8,6. The payload carries `refining` — aerodromes whose pass is queued NOW, not merely coarse, so the count reaches zero and the polling stops even where a band could not be refined at all; an aerodrome whose pass came up short is left alone for 10 min rather than re-probed on every scan. `scheduleBruitRefinePoll` re-asks every 5 s through the shell's new `rescan` hook (the layer's answer improves while its question does not, which neither of the shell's own refetch triggers can see), giving up after 6 polls with no progress because a coarse overview is still complete. **The card never overclaims**: every band carries the scale its own outline was fetched at, a payload reports the COARSEST of them plus `refinedBands`/`coarseBands`, and a mixed draw prints the coarse figure and names how many bands are already better. **The card is written for a reader, not for a cartographer**: the scale is stated as the ground size of one service pixel (“tracé à ~11 m près”, ~1,1 km in overview) rather than as “1:39 757”; a zone leads with what it means for the ground (“gêne très forte : logements neufs interdits”) and the threshold follows as its evidence; the innermost ring, which the register publishes with its two thresholds equal, prints “70 dB(A) et plus” rather than a bare “70”; and no card carries the arrêté's PDF URL, because the overlay is a canvas with `interactive: false` where a link is eighty unselectable characters costing two of six rows — the document is named by `arrêté préfectoral du <date> · <OACI>`, which is what the filename is built from. Up to **24 aerodromes** (a complete map to a 75 km radius over Paris, the densest ground in the register), selected nearest-centre-first with a 35 km reach past the radius because a plan is drawn around a point that can be off screen; what the budget drops is counted and said. Overview bands carry `atPoint: false` because nothing was tested against a point, so there is no winner, no runner-up and no dash — the most exposed band of each aerodrome simply takes the strongest wash. Above 250 000 m the layer is dormant with a `zoom-in` GUIDANCE status (never an error). **Every band's interior answers a click** through the shell's `groundCard` hook, re-tested point-in-polygon against the drawn rings and holes: the wash is a polygon, a polygon entity has no position, and without it only the outlines were clickable — measured, a pick on the aerodrome marker's own pixel returns the wash beneath it. `scripts/qa-bruit-overview.mjs` proves the whole boundary in a real scene: one band at 6 km, four at 60 km with no dash among 318 rings and 18 aerodromes drawn at once, a click on a wash opening its band's card, dormancy at 400 km, and the card's printed denominator matching the payload's in whichever refinement state the cache is in. Measured 2026-09-02 over one probe at each of the 224 aerodromes: 215 answer, 9 do not (LFPN/LFPK/LFPT answer at no scale at all), 298 zone rows, features per probe 0→9 1→141 2→67 3→5 4→2, heaviest response 15 041 B / 742 vertices at Le Bourget, whole sweep 473 193 B / 15 619 vertices, so nothing is decimated. Bands are coloured by zone letter (PEB A `#ff2d55` / B `#ff7a1f` / C `#ffcc33` / D `#9fd0ff`; PGS I/II/III on a separate violet family so the two documents never read as one scale), filled as hole-cut ground classification with a stroke on every ring including the interior ones, and painted quietest-last because two classification washes blend. **The winner is chosen deliberately and named on the card**: only a band containing the point is eligible, then the most exposed zone, then the newest effective arrêté, then the ICAO code, then the feature id — and the card prints “2 zones ici, retenue : la plus exposée” plus the runner-up's own band. Alphas are BORROWED from `urbanismeGpu.js`'s measured ladder (0,42 winner / 0,30 also-inside / 0,22 beside), not re-measured, and the imported ceiling is enforced at the draw. NOT painted: any non-aviation noise — there is no CBS on the Géoplateforme (915 layer names, 4 mention bruit) and the per-DDT Géo-IDE archives have no CORS (**re-measured 2026-09-08, and the CORS half is no longer the blocker**: these layers would come through a server proxy, where CORS does not apply. What blocks is the format and the weight — 155 CBS datasets on data.gouv.fr, published per DDT / département / infrastructure / period, four organisations across the first 50 results, WFS advertising **GML only** with `OUTPUTFORMAT=application/json` answering 500-wrapping-400, and `COUNT=1` on Côte-d'Or's rail-noise layer returning **1 080 625 bytes for one band**. So it is a GML parser and a per-DDT collection chantier, not this layer's WMS `GetFeatureInfo` pattern, and national coverage does not exist yet); no PSA (that is obstacle height, not noise); no Bruitparif (licence). NOT converted: indice psophique is never turned into dB | `src/data/bruitFrance.js`, `src/data/bruitFeed.js`, `src/data/bruitArretes.js` | `/api/bruit-fr`, `/api/bruit-fr/index`, `/api/bruit-fr/status` | Camera-driven: 450 ms settle, refetch past 250 m of movement; manager tick 15 min. Proxy: 6 h per ~11 m point in memory (overview centres snapped to a 0,05° grid so panning at altitude hits the cache; an overview's key also carries `fine`/`coarse`, or a complete coarse answer — which reports `refining: 0` and so earns the six-hour shelf life — would be handed to the request that asked to wait for the fine one and hold the facets until it expired), arrêté register 7 d TTL on disk with a 90 d serve-stale and `BRUIT_CACHE_VERSION` 1, **per-aerodrome overview zones 30 d on disk** in `zones.json` at `BRUIT_ZONES_CACHE_VERSION` 2 (an entry now also records whether its outlines have been refined) — measured cold 23 aerodromes / 46 calls at three concurrent in 0,59 s and 177 KB, warm 11 ms; measured after the second pass, 24 aerodromes served from a restarted process in 59 ms at full fine geometry. An overview still carrying `refining > 0` is cached for **3 s instead of 6 h** and served `Cache-Control: no-store`, because a provisional answer that outlived the refinement it is waiting for would pin the facets for the rest of the day. **The header was the bug that nearly shipped**: the shared route answered every address scan `private, max-age=300`, so measured in a real browser the layer's five-second poll was served entirely from the HTTP cache, not one request reached the server, and the draw stayed at 72 coarse bands for a whole session while the proxy finished all 18 aerodromes in 20 s. `addressCacheControl` now derives the header from the same shelf life as the server cache — `no-store` under a minute, the historical five minutes above it, capped at the server's own TTL. Upstream cadence: the register gained 8 arrêtés in the whole of the 2020s |
-| Équipements du quotidien 🇫🇷 🏪 | Insee BPE 2025 (édition découverte via data.gouv `548acaf2c751df1eac4120e7`, plancher BPE25, 2 921 770 lignes × 95 colonnes) + FINESS (réexposition data.gouv `67e43007cd5e91b9fdcbc7b3`, lov2, mensuel, extrait du 02/07/2026, 103 032 établissements). 126 859 lignes retenues → **95 406 points** en sept familles : médecin 30 215 · commerce alimentaire 19 354 · pharmacie 19 216 · La Poste 16 832 · gendarmerie/police 3 953 · bassin de natation 3 625 · hôpital 2 211. Trois régimes : **national** (96 départements peints par la PART des communes équipées — 43,7 % de 34 778, de 21,6 % dans le Gers à 100 % à Paris, seuils 29/43/49/56/69), **maillage** (95 406 tuples `[lat, lon, précision, famille]`, 642 KB gz, éclairci de 1 100 à 2 200 points **par famille** pour qu'aucune ne soit écrasée — un tri global ne garderait que 14 hôpitaux sur 2 211 à 1 100 points, le plancher en garde 39) et **sites** sous 0,32° de portée (boîte ≤ 0,35° ; le carré le plus dense que ce plafond autorise en France, à 48,65 N / 2,20 E, tient 9 139 points, 277 KB gz, envoyée famille la plus rare en tête pour que le plafond d'affichage coupe des médecins et jamais des hôpitaux). NON dessiné : **aucune école** (79 743 lignes DOM=C refusées — schools-fr et sup-fr, et la BPE n'a pas de colonne UAI) ; aucune borne de recharge (B326, 28 819, doublon figé d'irve-fr) ; aucune gare ni aéroport (DOM=E, 99 280, dont 96 253 adresses de taxis/VTC) ; aucune pharmacie BPE (D307, 20 334, FINESS répond) ; aucune urgence BPE (D106, 695, dont 547 à moins de 200 m d'un hôpital déjà tracé) ; **2 182 positions que les registres avouent avoir inventées** (1 284 « aléatoire dans la commune », 898 centroïdes ADMIN-EXPRESS) et 170 sans coordonnée, dont les 100 lignes de Mayotte. La taille du point n'est PAS une magnitude — aucun registre n'en publie — c'est une règle de lisibilité inverse à l'effectif national. | src/data/amenitiesFeed.js, src/data/amenitiesMesh.js, src/data/amenitiesDepartements.js, src/data/amenitiesFrance.js | /api/amenities-fr/departements, /api/amenities-fr/mesh, /api/amenities-fr/sites, /api/amenities-fr/status | poll 6 h ; TTL proxy 30 j, serve-stale 120 j, cache disque 37,8 Mo (relu à froid en 131 ms) ; amont BPE annuel révisé mensuellement, FINESS mensuel (build à froid 52,9 s dont 51 s de téléchargement) |
+| Autorisations d'urbanisme 🇫🇷 🏗 | Sitadel via DiDo — *liste des autorisations d'urbanisme créant des logements* (rid `8b35affb…`, 1 917 260 rows, millésime 2026-08) and *liste des permis de démolir* (rid `1a9a2f0c…`, 202 895 rows, from 1996), both keyless and `fr-lo`, PLUS `cadastre.data.gouv.fr` Etalab parcels (edition discovered from the `latest` 302, floored at 2026-06-01) and `geo.api.gouv.fr/communes` for the commune under the screen centre. **ONE regime, and the arithmetic forbids a second**: DiDo scans an 889 MB CSV in 3,57–5,01 s per query whatever the query, so 34 945 communes is 39 h for one national pass — the layer answers one commune at a time and names it on the row. The file publishes NO coordinate (`geoFields: ["REG","DEP"]`); every position is a cadastral-reference join, refused when the reference matches more than one parcel. Ground-clamped `GroundPrimitive` fills, one per parcel part, coloured by the lifecycle band of the MOST RECENT permit on that plot (`Autorisé` / `Chantier ouvert` / `Travaux achevés` / `Annulé` / demolition), a `GroundPolylinePrimitive` edge per ring, a `PointPrimitiveCollection` dot per placed permit sized by `NB_LGT_TOT_CREES` (√, ceiling 200), **a 12 m-square COLUMN per dossier, one metre per authorised dwelling, linear, ceiling 200 m** — a height is a length and reads directly, so the square root that is right for a disc's AREA is wrong here; the unit is chosen so the column reads against the city it stands in (a Nantes block is 10–30 m of BD TOPO volume). **Until 2026-09-14 the PARCEL ITSELF was extruded, and that multiplied the dwelling count by the size of the plot**: measured over the parcels actually extruded, base p50 403 m² / max 40 400 m² (Paris), p50 395 m² / max 153 173 m² (Nantes, 388× the median), p50 637 m² / max 24 955 m² (Ustaritz), largest single mark 25 426 754 m³ for one file — and the height was drawn once per parcel, so a dossier naming three plots claimed its dwellings three times (×1.87 Ustaritz, ×1.73 Nantes, ×1.30 Paris). The reported case was Ustaritz 06454721B0037, 45 logements over three adjoining parcels = 404 000 m³ of opaque orange over a village of 8 m houses, for a file whose `SURFACE_PLANCHER_CREEE` is 3 308 m². The fixed base makes volume proportional to the count and nothing else (total drawn volume ÷20 to ÷28 by commune) and the parcel keeps the ground: its wash, its edge, its card. The columns are NOT `GroundPrimitive`, carry no `classificationType` and are draped on nothing: opaque geometry depth-tested against the Google mesh, so it occludes them instead of being painted over (F1a/F4). The floor is read at the PERMIT's anchor, where its dot already stands, so one dossier has one floor for both marks; a cold ground cell leaves the dossier with NO column, counted and re-asked, never extruded from the ellipsoid. **Every mark reads ONE floor** (`sitadelFloorM`, 2026-09-14): the shared DEM cell when it is warm, a `provisionalFloor.js` probe of the surface actually being DRAWN while it is not, and `null` — never `0` — when neither answers. Before that the dots took `0` for a cold cell and were never written again: measured over Paris, camera at 500 m, **all 4 753 sat at ellipsoidal height 1.0 m while the drawn mesh under them read 76.7–96.9 m**, and because they paint through depth their screen position followed the camera pose and the layer slid across the rooftops. `reanchorPoints` now re-seats the dots already on screen when a better floor lands, on a doubling ladder refilled at every camera settle, and a floor that stops answering never overwrites one that did. A floor outside **−100 m to 5 000 m** is refused as not-French-ground and re-probed on every later pass rather than latched: measured over Nantes with the tileset reporting `tilesLoaded: true`, 81 probes on a 1,3 km grid ALL answered between −424.9 m and −360.2 m in a smooth 5 % ramp (a planet-scale root tile answering for a city), every one passed `provisionalFloor.js`'s world band, and the fill radius lent one of them to the whole commune. Proven by `npm run qa:sitadel-floor`, which refuses `/api/terrain/heights` so the claim is about the DRAWN surface and not about a network round trip. A permit with no published dwelling count is not drawn at zero height: it keeps its clickable ground fill, edged in ITS OWN band colour instead of the neutral — a sign that survives a nadir camera, where a column and a fill look alike. Selecting a dossier rings the GROUND of every plot it names — it had to climb to the roof only while the plot itself was the opaque volume. And the commune contour as a second polyline — the scope of the answer, decimated (Nantes 804 → 269 vertices, worst displacement 183 m) and labelled *contour communal simplifié* (“simplified municipal outline”). Measured: Paris 4 500 parcels / 70 766 vertices / 4 753 dots, Nantes 3 032 / 47 676 / 2 747. NOT painted and COUNTED instead: 9 449 ambiguous, 1 859 missing and 219 reference-less permits over the six measured communes — never moved to a commune centre, and never given a legend swatch, because the swatch is the colour the object is painted | `src/data/sitadelFrance.js`, `src/data/sitadelFeed.js` | `/api/sitadel-fr/commune`, `/api/sitadel-fr/status` | camera-driven (450 ms debounce, gated on camera ALTITUDE ≤ 12 000 m — 2·h·tan 30° = 13,86 km of ground at Cesium's default 60° FOV, against communes 12,1–17,9 km wide — asking once per 0,01° focus cell and carrying `have=<insee>` so an unchanged commune answers in 53 B instead of 2 085 535 B) + 6 h idle; proxy TTL 24 h memory + `.gev-cache/sitadel-fr/communes/`, serve-stale 30 d, global DiDo semaphore of 2 because the 4th simultaneous request is a 429 |
+| Réseau et fréquence IDFM 🇫🇷 Ⓜ | ONE row over TWO Île-de-France Mobilités publications, merged 2026-09-10 — they drew the same stops and the reader was left to do the join. **The referential** (`arrets`, `referentiel-des-lignes`, ODbL 1.0): 37,956 stops and 2,121 lines with their official liveries, drawn below 20 km of altitude as **filled mode badges, 21–27 px** (a pictogram knocked into a disc), at most 100 per 1° box, seated on the terrain under them. The badge replaced naked 14–24 px line-art on 2026-09-10: tinted `#c9d4e0` for the mode this referential is mostly made of, it was pale grey line-art on pale grey roofs, and a filled mark brings its own ground instead of hoping for a luckier hue. IDFM publishes NO GTFS-Realtime vehicle positions at all (0 in Paris intra-muros against 453 in Bordeaux), so this layer draws the offer and never fakes a vehicle. **The hourly offer** (*Offre hebdomadaire moyenne hors vacances*, Licence Ouverte v2.0) — **1,311,578 rows, 22 fields**, edition `data_processed` 2026-08-18T15:54:55+00:00 discovered from the portal and floored there. **The only time-of-day dimension in the app**: average departures per stop for a 7 × 24 (day, band) grid, operating day 04:00→03:59 so bands run 4..27. It draws below a 0.035° view span (leaves at 0.045°) as a small rate disc — **but never on a stop the referential already badges**: one point carries one mark since 2026-09-10, and the badge carries the rate in its FILL, so mode is the shape and rate is the colour. Five upstream calls per box — one identity page plus four band windows, because `offset + limit <= 20000` caps grouped reads and the band axis cannot be pivoted — **3,303,162 bytes in 2.42 s → 540,404 raw / 87,143 gzipped for 805 stops** on a 4 km box on Châtelet. Fixed six-step ladder (2/4/8/16/32 departures per hour), never a quantile, so a colour means the same wait in Paris at 08:00 and in Melun at 01:00; on an average Tuesday that box splits 23/6/17/167/240/237/115 at 08:00 and 397/179/80/103/44/2/0 at 01:00. **The join is `arrets.arrid`** — measured 2026-09-02, 34,903 of the offer's 36,502 stops (95.6 %) join it — and one click prints both halves on one card: mode, arrondissement, fare zone and step-free status, then the rate for the selected band, the day's sparkline, first/peak/last, the day total and the same band across all seven days. **No licence line on the card since 2026-09-10** — both licences are named by `dataCredits.js` in the attribution surface for as long as the row is on, and a card a reader opens to find out what serves their street is not an attribution surface. NOT claimed: a referential stop outside the offer file (**3,053 of 37,956, 8.0 %**) says so instead of showing a zero; **a click above the frequency gate BUYS the profile it cannot draw** — the card carried *offre horaire non lue à cette altitude* (“timetable not read at this altitude”) until 2026-09-10 and a box the proxy had refused as too dense answered a click with a flat *aucun profil publié* (“no published profile”), which was not merely unhelpful but false; a click names one coordinate and the cheapest legal box around one coordinate is one 0.005° cell, so the gate now bounds the DRAWING and never the answer, and every profile that box paid for is kept so the next click on the street is free; the **549 stops (1.50 %) with no coordinate** (473 Train, 69 Bus, 7 Tramway; 2.76 % of a Tuesday's courses) are counted and never placed; a box past the 1,200-stop ceiling is refused after one call with `tooDense` and an *au moins* (“at least”) count; and no stop is drawn for a `stop_times.txt` this layer never opens. **The legend follows the fills**: in a charted view it is the six-rung ramp plus the measured-silence row plus a `#8a93a6` *offre horaire non publiée* (“timetable not published”) row; above the gate, or in a refused box, it is the MODES on screen with their counts — until 2026-09-10 it was six rungs at zero and a silent row at zero, a legend describing nothing that was drawn. **Dropped in the merge**: the eight-département choropleth the frequency row painted above its gate. A choropleth needs an alpha low enough for the imagery underneath to survive, and at that altitude the result read as a faint wash over half of France rather than as a reading. The fold survives server-side at `/api/idfm-frequency/region` (356 aggregate rows + 17 stop censuses → 14,719 bytes raw / 5,864 gzipped) and nothing in the browser imports it | src/data/idfmNetwork.js, src/data/idfmFeed.js, src/data/idfmFrequencyFeed.js, src/data/idfmFrequencyDepartements.js (proxy only) | /api/idfm/stops, /api/idfm/lines, /api/idfm-frequency/stops, /api/idfm-frequency/region, /api/idfm-frequency/status | poll 60 s (a CLOCK tick, not a data poll: the band follows `Europe/Paris` and a scrub is a repaint of the 7 × 24 profile the browser already holds); proxy TTL 24 h per box / 7 d for the région, serve-stale 30 d, disk cache `.gev-cache/idfm-frequency/`; upstream is a yearly average republished a few times a year |
+| Bruit des aéroports 🇫🇷 🔊 | *DGAC Plan d'Exposition au Bruit* and *Plan de Gêne Sonore* via Géoplateforme WMS-V `GetFeatureInfo` (`INFO_FORMAT=application/json`, real EPSG:4326 MultiPolygon), plus the `dgac_peb_arrete_wfs` register (224 points, 66 355 B, `numberMatched` 224) cached to `.gev-cache/bruit-fr/`. Keyless, CORS `*`, `<Fees>none</Fees>` + cartes.gouv.fr CGU. **TWO regimes on one route, camera-anchored, on the shared `createAddressScanLayer` shell.** Below 12 000 m, POINT MODE: two probes at the ground point the camera looks at, **scale PINNED at 1e-4°/pixel = 1:39 757** and never derived from the camera, because `dgac_peb_plan_wmsv` stops rendering below ~1:25 000 and then answers HTTP 200 with a 137-byte empty FeatureCollection. Between 12 000 m and 250 000 m, OVERVIEW MODE: the layer adds `km=` to the same request and the proxy answers about the AERODROMES in view instead — one probe each at their own published reference points, at **1e-2°/pixel = 1:3 975 696**, whose GetFeatureInfo buffer is wide enough to return a whole plan rather than the one band the reference point sits in. A PEB is nested rings, so at the fine scale a probe returns zone A and nothing else; measured over 25 aerodromes, 37 distinct bands at 1e-4 against **88 at 1e-2**, and Roissy's zone D and Toussus's zone B return at no finer scale. **That coarse scale is then paid back by a SECOND PASS**, because the same number that widens the `GetFeatureInfo` buffer is what GeoServer generalises the outline to — measured, Roissy's zone C returns 381 vertices at 1:39 757 and 22 at 1:3 975 696, its zone D 664 against 37, so a 65,8 km ring drew with visible facets. The overview probe is therefore demoted to a DISCOVERY pass that only names the bands, and each named band is re-fetched at the probe scale aimed at its own coarse outline — which works because the service does not clip the geometry it returns to the box it was asked through. Seeds are `BRUIT_REFINE_SEEDS` = 6 points spread around the band's own biggest outer ring, each pulled 2 % toward that ring's centroid: measured 2026-09-07 over two disjoint 25-aerodrome slices, **170 of 170 bands recovered**, candidates needed 1→149 2→3 3→9 4→1, 209 fine probes for 170 bands. **That second pass has TWO tempos, and 30 000 m is the boundary.** Above it, it is a BACKGROUND pass — measured cold, the twelve aerodromes around Paris cost 12 probes and ~1,5 s coarse against 85 probes and ~9,5 s refined, so the coarse answer is served at once and the fine geometry lands in the per-aerodrome cache behind it; the refiner yields to any foreground scan rather than competing for the three-concurrent budget. **Below 30 000 m the layer adds `fine=1` and the proxy plays that pass in FRONT of the answer**, nearest aerodrome first, so the frame a reader dezooms to in order to see one airport's plan (≈42 km across at that altitude) is at 1:39 757 on its first paint instead of arriving faceted and redrawing seconds later. The point ceiling is deliberately NOT what moved: a point probe owes its sharpness to an 11 m buffer, and that buffer is exactly why it returns one ring of four — extending POINT MODE to 30 km would have bought a sharp outline by dropping zones B, C and D. The wait is bounded by `BRUIT_FINE_FOREGROUND_BUDGET_MS` = **4 000 ms**, floored by the ~0,8 s one aerodrome costs cold (so the centred aerodrome is always fine on the first paint) and capped under the layer's own 5 s refine poll (so a truncated pass never stacks with the poll behind it); whatever the budget does not reach stays coarse, says so, and is handed back to the background worker. It bounds the SECOND PASS and not the request — the discovery probes run first and are not on that clock. Measured 2026-09-10 at Roissy, radius 25 km, 18 aerodromes and 72 bands, from an empty `zones.json`: **no `fine` 2,66 s and 0 of 72 bands fine; `fine=1` 6,64 s and 27 of 72 fine on the FIRST payload; `fine=1` 0,08 s and 72 of 72 once the background pass has landed** — and on that first fine payload LFPG's own four zones return at 110 / 247 / 381 / 664 vertices, the probe scale's numbers, on the aerodrome the camera is centred on. The foreground pass holds the same gate the refiner yields to, so it never turns three concurrent upstream calls into five, and a pass the BUDGET cut short does not stamp `triedAt` — stamping it would freeze the half-refined plan of the airport under the camera for the 10 min cooldown. The proxy grants `fine` only at the first rung of the radius ladder (≤ 25 km), because at a 50 km radius the screen is ~140 km across, the median band is 1,9 km wide, and 37 vertices against 381 is under a pixel for the same four seconds. Measured end to end over a 100 km radius on Paris: **1 399 vertices at t=0, 9 177 at t+15 s, 12 045 and 94/94 bands refined at t+45 s** — ×8,6. The payload carries `refining` — aerodromes whose pass is queued NOW, not merely coarse, so the count reaches zero and the polling stops even where a band could not be refined at all; an aerodrome whose pass came up short is left alone for 10 min rather than re-probed on every scan. `scheduleBruitRefinePoll` re-asks every 5 s through the shell's new `rescan` hook (the layer's answer improves while its question does not, which neither of the shell's own refetch triggers can see), giving up after 6 polls with no progress because a coarse overview is still complete. **The card never overclaims**: every band carries the scale its own outline was fetched at, a payload reports the COARSEST of them plus `refinedBands`/`coarseBands`, and a mixed draw prints the coarse figure and names how many bands are already better. **The card is written for a reader, not for a cartographer**: the scale is stated as the ground size of one service pixel (*tracé à ~11 m près*, “drawn to within ~11 m”, ~1,1 km in overview) rather than as “1:39 757”; a zone leads with what it means for the ground (*gêne très forte : logements neufs interdits*, “very strong nuisance: new housing forbidden”) and the threshold follows as its evidence; the innermost ring, which the register publishes with its two thresholds equal, prints *70 dB(A) et plus* (“70 dB(A) and above”) rather than a bare “70”; and no card carries the arrêté's PDF URL, because the overlay is a canvas with `interactive: false` where a link is eighty unselectable characters costing two of six rows — the document is named by `arrêté préfectoral du <date> · <OACI>`, which is what the filename is built from. Up to **24 aerodromes** (a complete map to a 75 km radius over Paris, the densest ground in the register), selected nearest-centre-first with a 35 km reach past the radius because a plan is drawn around a point that can be off screen; what the budget drops is counted and said. Overview bands carry `atPoint: false` because nothing was tested against a point, so there is no winner, no runner-up and no dash — the most exposed band of each aerodrome simply takes the strongest wash. Above 250 000 m the layer is dormant with a `zoom-in` GUIDANCE status (never an error). **Every band's interior answers a click** through the shell's `groundCard` hook, re-tested point-in-polygon against the drawn rings and holes: the wash is a polygon, a polygon entity has no position, and without it only the outlines were clickable — measured, a pick on the aerodrome marker's own pixel returns the wash beneath it. `scripts/qa-bruit-overview.mjs` proves the whole boundary in a real scene: one band at 6 km, four at 60 km with no dash among 318 rings and 18 aerodromes drawn at once, a click on a wash opening its band's card, dormancy at 400 km, and the card's printed denominator matching the payload's in whichever refinement state the cache is in. Measured 2026-09-02 over one probe at each of the 224 aerodromes: 215 answer, 9 do not (LFPN/LFPK/LFPT answer at no scale at all), 298 zone rows, features per probe 0→9 1→141 2→67 3→5 4→2, heaviest response 15 041 B / 742 vertices at Le Bourget, whole sweep 473 193 B / 15 619 vertices, so nothing is decimated. Bands are coloured by zone letter (PEB A `#ff2d55` / B `#ff7a1f` / C `#ffcc33` / D `#9fd0ff`; PGS I/II/III on a separate violet family so the two documents never read as one scale), filled as hole-cut ground classification with a stroke on every ring including the interior ones, and painted quietest-last because two classification washes blend. **The winner is chosen deliberately and named on the card**: only a band containing the point is eligible, then the most exposed zone, then the newest effective arrêté, then the ICAO code, then the feature id — and the card prints *2 zones ici, retenue : la plus exposée* (“2 zones here, kept: the most exposed”) plus the runner-up's own band. Alphas are BORROWED from `urbanismeGpu.js`'s measured ladder (0,42 winner / 0,30 also-inside / 0,22 beside), not re-measured, and the imported ceiling is enforced at the draw. NOT painted: any non-aviation noise — there is no CBS on the Géoplateforme (915 layer names, 4 mention bruit) and the per-DDT Géo-IDE archives have no CORS (**re-measured 2026-09-08, and the CORS half is no longer the blocker**: these layers would come through a server proxy, where CORS does not apply. What blocks is the format and the weight — 155 CBS datasets on data.gouv.fr, published per DDT / département / infrastructure / period, four organisations across the first 50 results, WFS advertising **GML only** with `OUTPUTFORMAT=application/json` answering 500-wrapping-400, and `COUNT=1` on Côte-d'Or's rail-noise layer returning **1 080 625 bytes for one band**. So it is a GML parser and a per-DDT collection chantier, not this layer's WMS `GetFeatureInfo` pattern, and national coverage does not exist yet); no PSA (that is obstacle height, not noise); no Bruitparif (licence). NOT converted: indice psophique is never turned into dB | `src/data/bruitFrance.js`, `src/data/bruitFeed.js`, `src/data/bruitArretes.js` | `/api/bruit-fr`, `/api/bruit-fr/index`, `/api/bruit-fr/status` | Camera-driven: 450 ms settle, refetch past 250 m of movement; manager tick 15 min. Proxy: 6 h per ~11 m point in memory (overview centres snapped to a 0,05° grid so panning at altitude hits the cache; an overview's key also carries `fine`/`coarse`, or a complete coarse answer — which reports `refining: 0` and so earns the six-hour shelf life — would be handed to the request that asked to wait for the fine one and hold the facets until it expired), arrêté register 7 d TTL on disk with a 90 d serve-stale and `BRUIT_CACHE_VERSION` 1, **per-aerodrome overview zones 30 d on disk** in `zones.json` at `BRUIT_ZONES_CACHE_VERSION` 2 (an entry now also records whether its outlines have been refined) — measured cold 23 aerodromes / 46 calls at three concurrent in 0,59 s and 177 KB, warm 11 ms; measured after the second pass, 24 aerodromes served from a restarted process in 59 ms at full fine geometry. An overview still carrying `refining > 0` is cached for **3 s instead of 6 h** and served `Cache-Control: no-store`, because a provisional answer that outlived the refinement it is waiting for would pin the facets for the rest of the day. **The header was the bug that nearly shipped**: the shared route answered every address scan `private, max-age=300`, so measured in a real browser the layer's five-second poll was served entirely from the HTTP cache, not one request reached the server, and the draw stayed at 72 coarse bands for a whole session while the proxy finished all 18 aerodromes in 20 s. `addressCacheControl` now derives the header from the same shelf life as the server cache — `no-store` under a minute, the historical five minutes above it, capped at the server's own TTL. Upstream cadence: the register gained 8 arrêtés in the whole of the 2020s |
+| Équipements du quotidien 🇫🇷 🏪 | Insee BPE 2025 (edition discovered via data.gouv `548acaf2c751df1eac4120e7`, floor BPE25, 2,921,770 rows × 95 columns) + FINESS (data.gouv re-exposure `67e43007cd5e91b9fdcbc7b3`, lov2, monthly, extract of 2026-07-02, 103,032 establishments). 126,859 rows kept → **95,406 points** in seven families: doctor 30,215 · food shop 19,354 · pharmacy 19,216 · La Poste 16,832 · gendarmerie/police 3,953 · swimming pool 3,625 · hospital 2,211. Three regimes: **national** (96 departments painted by the SHARE of equipped municipalities — 43.7% of 34,778, from 21.6% in the Gers to 100% in Paris, thresholds 29/43/49/56/69), **mesh** (95,406 tuples `[lat, lon, précision, famille]`, 642 KB gz, thinned from 1,100 to 2,200 points **per family** so that none is crushed — a global sort would keep only 14 hospitals of 2,211 at 1,100 points, the floor keeps 39) and **sites** under 0.32° of span (box ≤ 0.35°; the densest square this ceiling allows in France, at 48.65 N / 2.20 E, holds 9,139 points, 277 KB gz, sent rarest family first so that the display ceiling cuts doctors and never hospitals). NOT drawn: **no school** (79,743 DOM=C rows refused — schools-fr and sup-fr cover them, and the BPE has no UAI column); no charging station (B326, 28,819, a frozen duplicate of irve-fr); no train station or airport (DOM=E, 99,280, of which 96,253 are taxi/ride-hailing addresses); no BPE pharmacy (D307, 20,334, FINESS answers); no BPE emergency department (D106, 695, of which 547 lie within 200 m of a hospital already drawn); **2,182 positions the registers admit they invented** (1,284 *aléatoire dans la commune* (random within the municipality), 898 ADMIN-EXPRESS centroids) and 170 with no coordinate, including the 100 rows of Mayotte. The dot size is NOT a magnitude — no register publishes one — it is a legibility rule, inverse to the national count. | src/data/amenitiesFeed.js, src/data/amenitiesMesh.js, src/data/amenitiesDepartements.js, src/data/amenitiesFrance.js | /api/amenities-fr/departements, /api/amenities-fr/mesh, /api/amenities-fr/sites, /api/amenities-fr/status | poll 6 h; proxy TTL 30 d, serve-stale 120 d, disk cache 37.8 MB (reread cold in 131 ms); BPE upstream yearly, revised monthly, FINESS monthly (cold build 52.9 s, of which 51 s downloading) |
 | Accueil du jeune enfant 🇫🇷 🧸 | *Taux de couverture d'accueil du jeune enfant* + *Nombre de places offertes* (data.caf.fr, Cnaf) — seven Opendatasoft datasets, edition **2023**, discovered at build time and floored at 2023. An INDICATOR, not a register: no national list of crèches is published as open data (the measurement is in `petiteEnfanceFeed.js`). **Two regimes, both TERRITORIES — no point anywhere**: 96 département polygons joined by CODE (verified exact — the opposite of the Annuaire, which zero-pads) down to a 0,9° lat span, then the EPCI and commune territories themselves, filled from geo.api.gouv.fr commune contours served by view box. An EPCI has no published contour and is drawn as its member communes under one colour with no internal outline (`codeEpci` rides along with the geometry); below 0,45° the 1 061 published communes are CUT OUT of that wash and filled with their own rate, so no ground carries two numbers. Paris/Lyon/Marseille need a second `type=arrondissement-municipal` request and the arrondissement replaces its parent commune outright. Colour is a RATIO to the national rate (60,9), not a quantile, so it means the same at all three scales; there is no size channel any more and the places count is on the card. Fills are batched one primitive per band colour and the selection is its own pair — a batched `GroundPrimitive` colours by bounding RECTANGLE. Measured payload: 111 KB for a Lyon view (32 KB gzipped), 2,03 MB / 636 KB worst case (1,3° over Île-de-France, 2 261 communes). 6 overseas rows cannot be painted and are all below the national rate; 1 `XX`/`XXX` placeholder row is dropped | `src/data/petiteEnfanceFrance.js`, `src/data/petiteEnfanceFeed.js`, `src/data/petiteEnfanceDepartements.js`, `src/data/communeContours.js` | `/api/petite-enfance-fr/departements`, `/api/petite-enfance-fr/areas`, `/api/petite-enfance-fr/contours?box`, `/api/petite-enfance-fr/status` | 6 h (proxy TTL 7 d, serve-stale 30 d; the Cnaf publishes once a year in January) |
 | Médecins 🇫🇷 ✚ | CNAM *Annuaire santé Ameli* — **64,232 practice addresses and 117,922 named doctors**, geocoded at build time against the Base Adresse Nationale because **the register publishes no latitude** (its `coordonnees_*` block is contact details). Three regimes by span: the DREES's *accessibilité potentielle localisée* nationally — a capacity map, not a headcount, because 0.49 % of the population lives beyond 10 km of a GP — then a thinned mesh, then sites. In both close regimes a practice is a tinted plate with its FAMILY of medicine punched out of it (`medecinFamilyIcons.js`: Maki's stethoscope and cross, Temaki's trefoil, Material's adult-and-child, head and scalpel), sized by DISTINCT doctors and riding a distance ramp back down to a coloured speck at mesh altitude. Every mark stands on the GROUND under it — the shared DEM/mesh cell, a rendered-surface probe while that is cold — and is re-placed when a better floor lands: the ellipsoid is 220 m under Lyon and projected 171 px from the street at the median. Practitioner names arrive on the click that wants them, not in the sites payload | `src/data/medecinsFrance.js`, `src/data/medecinsFrFeed.js` | `/api/medecins-fr/national`, `/api/medecins-fr/mesh`, `/api/medecins-fr/sites`, `/api/medecins-fr/praticiens` | 30 min |
 | Mix élec 🇫🇷 ⚡ | éCO2mix national + 12 régions (RTE, via ODRÉ) — région balances as EXTRUDED PRISMS over the bundled département geometry grouped into 12 regions: height = |MW| on a frozen linear domain of 12 000 MW ↔ 120 km (highest observed 7 781; the margin is deliberate — AURA carries ~13.5 GW of nuclear against ~6.5 GW of load), colour = the SIGN of the exchange in two flat hues plus a slate 'balanced' class for the dead band. BOTH prisms rise: a downward one is verifiably unimplementable (`Globe.translucency.enabled` is false by default and is a SCENE property no layer owns; on the photoreal stack the globe is hidden anyway), and a signed bar chart only works because its zero line is straight — here the datum is a sphere. Corsica is a HATCHED flat footprint, never a zero-height prism. Five commercial border flows as arcs | `src/data/franceEnergy.js` | `/api/energy-fr` | 3 min (proxy TTL 4 min; product steps every 15 min) |
@@ -2242,14 +2249,14 @@ its criteria cannot be silently ignored.
 | Vigicrues 🇫🇷 ≋ | SCHAPI's own keyless GeoJSON — every monitored *tronçon de vigilance crues* (337 reaches) with the state's 24 h 4-level risk colour. The State's READING of flood risk; Hub'Eau below carries the raw measurement behind it | `src/data/vigicrues.js`, `src/data/vigicruesFeed.js` | `/api/vigicrues`, `/api/vigicrues/geometry` | 5 min |
 | Hub'Eau Gauges 🇫🇷 ◉ | Hub'Eau *API Hydrométrie* v2 (PHyC / Vigicrues, mesures DREAL) — up to ~4,000 gauging stations, sized by discharge, with the raw number on the label. **Q is in litres per second and H in millimetres** in the API, converted once at the projection so no card can print a river at 240,000 of anything | `src/data/hubeauHydrometry.js` | `hubeau.eaufrance.fr/api/v2/hydrometrie/*` (keyless, direct) | 3 min |
 | Vigilance MF 🇫🇷 ⚠ | Météo-France *Vigilance météorologique* — 9 phenomena assessed twice a day per département and published as a 4-colour level; only raised départements are painted. Served from Météo-France's own data.gouv.fr mirror unless `METEOFRANCE_API_KEY` is set, in which case the contracted API is preferred and the mirror stays the fallback | `src/data/meteoFranceVigilance.js`, `src/data/meteoFranceVigilanceFeed.js` | `/api/vigilance` (keyless mirror; `METEOFRANCE_API_KEY` optional) | 5 min (proxy TTL 5 min) |
-| Stations météo 🇫🇷 🌡 | The **190 French stations that publish their readings in the open**, out of Météo-France's 2,144-station real-time network. The pack bundles all 2,144 (`local_data/meteo_stations_fr/stations.json`, joined at build time to the publisher's 191 MB per-parameter inventory); `SHOW_ONLY_PUBLISHING` draws the ones a click can answer and `getStats()` names the **1,954 withheld behind the Météo-France key** — see `docs/meteofrance-api-access.md`. Colour is what each station CAN measure, which across the drawn set is nearly uniform (182 complete synoptic stations) and across the network is not (1,254 of 2,144 measure only temperature and rain). A click fetches the newest observation plus the station's records. The keyless product is a DAILY consolidation of three-hourly observations, so a reading is **11 to 35 hours old** and the card prints its own timestamp | `src/data/meteoStationsFrance.js`, `src/data/meteoStationsFrFeed.js` | `/api/meteo-stations/observations`, `/api/meteo-stations/normals`, `/api/meteo-stations/status` (keyless, lazy) | 30 min (pack); observations 6 h proxy TTL |
-| Bâti 3D 🇫🇷 ▤ | IGN BD TOPO® `batiment`, Géoplateforme vector tiles at z15, per viewport — extruded volumes coloured by `usage_1`, seated on their own NGF-IGN69 altitudes (h = H + N), re-anchored by a per-~1.1 km-cell median of the rendered surface measured UNDER EACH BUILDING (`globe.getHeight`), each volume then reaching down to the lowest ground under its footprint. **Since 2026-09-03 it is also the thematic support for the address layers** (`src/data/buildingTheme.js`): a layer registers a theme, the volumes are painted by it, and this layer's legend and stats are replaced by the theme's ramp. Precedence 10 `dpe-fr` < 20 `dvf-sales` < 30 `ads-fr`; smallest footprint wins a point that falls in several; ties broken by id, so tile order can never move a diagnostic from one volume to another. A PAINTED volume takes the theme colour FLAT — the height shading is switched off, otherwise a tall D and a short C land on the same pixel value; an UNJOINED volume keeps the height shading on a WASHED version of its usage tint (s×0.15 / l×0.42 in HSL, ΔE76 ≥ 36.5 against all three target palettes) so it is graphically distinguishable rather than merely absent (A1). Two separate A5 counters travel with the paint: points geocoded but on no loaded footprint, and points with no coordinate at all — `Number(null)` being 0, an empty-longitude row would otherwise sail off Ghana and be counted as « missed a building ». The coupling is one-way: `bdtopoBuildings` subscribes in `init()` and unsubscribes in `destroy()`, so a theme layer only ever calls `registerBuildingTheme` / `clearBuildingTheme` | `src/data/bdtopoBuildings.js`, `src/data/bdtopoBuildingsFeed.js`, `src/data/buildingTheme.js` | none — keyless, CORS-open, `max-age` 21 d, straight from `data.geopf.fr/tms` | viewport-driven (450 ms debounce, ≤ 0.08° box, ≤ 64 tiles, ≤ 14,000 volumes) + 30 min idle; one re-seat 3 s after a load where the terrain was not yet resident under every building |
-| Pouls vélo 🇫🇷 ◷ | A typical week of cycling in Lyon and Paris, bundled as `local_data/velo_pulse/pulse.json` — 168 numbers per site, averaged over four weeks of June 2026, read in LOCAL wall-clock hours in both cities. **Two instruments, never one scale**: Lyon is Vélo'v dock occupancy (a STOCK, 450 stations) because the Métropole publishes an availability archive since 2023-03-27; Paris is permanent bike counters (a FLOW, 111 sites) because **no Vélib' availability archive exists anywhere public**. Drawn as a **field of soft ground-clamped blobs, one per station** — a proportional symbol, not a kernel-density heatmap, which is what leaves each station clickable (CARTOGRAPHIE G4) — and no longer as 561 extruded squares. Colour is the site's share of its OWN weekly maximum on a five-band ramp **monotone in CIE L\*** and warm at the busy end (93 · 80 · 63 · 45 · 27 — pale where a station is idle, deep carmine at its weekly maximum; ≥ 6.3 L\* apart composited over the backdrops it lands on, ΔE 24 from the map at the busy end and ΔE 19 from the two other magnitude ramps drawn over the same streets; `veloPulseRamp.test.mjs` recomputes the chain — alpha included, read out of `veloPulse.js` — and fails on any inversion, any band that stops separating, and a busiest band that stops being visible), interpolated between the bands; the blob's AREA is the absolute quantity in that city's own unit, **sized in metres with no distance inflation** (B2), so it fades out between 40 and 90 km rather than pretending to be readable — Cesium's fade works on SQUARED distances with a pow(t, 0.2) curve, which puts it at 42 % opacity by 45 km, so that is where the panel and the row say « descendez sous 45 km » (F6). Fill alpha is a flat **0.45** — it stopped being a second encoding of the value (A3), and the basemap keeps 55 % of itself under every blob. Three modes — the current hour of the week, the 168-hour animation, and the network's busiest hour — plus a **panel under the globe** (`veloPulseHud.js`) carrying the hour in words, what the network is doing at it, the week as a 168-bar strip that is also the transport (click/drag/arrows to scrub, which pauses), and the clicked site's fiche with its own week in the map's colours. The panel is **draggable** anywhere in the viewport and remembers where it was left (`src/panelDrag.js`, shared with `ui.js`); double-clicking its header brings it home | `src/data/veloPulse.js`, `src/data/veloPulseFeed.js`, `src/data/veloPulseHud.js`, `src/panelDrag.js` | — (bundled; `npm run velo:pulse` rebuilds) | static; the animation eases between the hours at 520 ms per hour, a whole week in about 87 s |
+| Stations météo 🇫🇷 🌡 | The **190 French stations that publish their readings in the open**, out of Météo-France's 2,144-station real-time network. The pack bundles all 2,144 (`local_data/meteo_stations_fr/stations.json`, joined at build time to the publisher's 191 MB per-parameter inventory); `SHOW_ONLY_PUBLISHING` draws the ones a click can answer and `getStats()` names the **1,954 withheld behind the Météo-France key** — the access request that would open them is in #195. Colour is what each station CAN measure, which across the drawn set is nearly uniform (182 complete synoptic stations) and across the network is not (1,254 of 2,144 measure only temperature and rain). A click fetches the newest observation plus the station's records. The keyless product is a DAILY consolidation of three-hourly observations, so a reading is **11 to 35 hours old** and the card prints its own timestamp | `src/data/meteoStationsFrance.js`, `src/data/meteoStationsFrFeed.js` | `/api/meteo-stations/observations`, `/api/meteo-stations/normals`, `/api/meteo-stations/status` (keyless, lazy) | 30 min (pack); observations 6 h proxy TTL |
+| Bâti 3D 🇫🇷 ▤ | IGN BD TOPO® `batiment`, Géoplateforme vector tiles at z15, per viewport — extruded volumes coloured by `usage_1`, seated on their own NGF-IGN69 altitudes (h = H + N), re-anchored by a per-~1.1 km-cell median of the rendered surface measured UNDER EACH BUILDING (`globe.getHeight`), each volume then reaching down to the lowest ground under its footprint. **Since 2026-09-03 it is also the thematic support for the address layers** (`src/data/buildingTheme.js`): a layer registers a theme, the volumes are painted by it, and this layer's legend and stats are replaced by the theme's ramp. Precedence 10 `dpe-fr` < 20 `dvf-sales` < 30 `ads-fr`; smallest footprint wins a point that falls in several; ties broken by id, so tile order can never move a diagnostic from one volume to another. A PAINTED volume takes the theme colour FLAT — the height shading is switched off, otherwise a tall D and a short C land on the same pixel value; an UNJOINED volume keeps the height shading on a WASHED version of its usage tint (s×0.15 / l×0.42 in HSL, ΔE76 ≥ 36.5 against all three target palettes) so it is graphically distinguishable rather than merely absent (A1). Two separate A5 counters travel with the paint: points geocoded but on no loaded footprint, and points with no coordinate at all — `Number(null)` being 0, an empty-longitude row would otherwise sail off Ghana and be counted as “missed a building”. The coupling is one-way: `bdtopoBuildings` subscribes in `init()` and unsubscribes in `destroy()`, so a theme layer only ever calls `registerBuildingTheme` / `clearBuildingTheme` | `src/data/bdtopoBuildings.js`, `src/data/bdtopoBuildingsFeed.js`, `src/data/buildingTheme.js` | none — keyless, CORS-open, `max-age` 21 d, straight from `data.geopf.fr/tms` | viewport-driven (450 ms debounce, ≤ 0.08° box, ≤ 64 tiles, ≤ 14,000 volumes) + 30 min idle; one re-seat 3 s after a load where the terrain was not yet resident under every building |
+| Pouls vélo 🇫🇷 ◷ | A typical week of cycling in Lyon and Paris, bundled as `local_data/velo_pulse/pulse.json` — 168 numbers per site, averaged over four weeks of June 2026, read in LOCAL wall-clock hours in both cities. **Two instruments, never one scale**: Lyon is Vélo'v dock occupancy (a STOCK, 450 stations) because the Métropole publishes an availability archive since 2023-03-27; Paris is permanent bike counters (a FLOW, 111 sites) because **no Vélib' availability archive exists anywhere public**. Drawn as a **field of soft ground-clamped blobs, one per station** — a proportional symbol, not a kernel-density heatmap, which is what leaves each station clickable (CARTOGRAPHY G4) — and no longer as 561 extruded squares. Colour is the site's share of its OWN weekly maximum on a five-band ramp **monotone in CIE L\*** and warm at the busy end (93 · 80 · 63 · 45 · 27 — pale where a station is idle, deep carmine at its weekly maximum; ≥ 6.3 L\* apart composited over the backdrops it lands on, ΔE 24 from the map at the busy end and ΔE 19 from the two other magnitude ramps drawn over the same streets; `veloPulseRamp.test.mjs` recomputes the chain — alpha included, read out of `veloPulse.js` — and fails on any inversion, any band that stops separating, and a busiest band that stops being visible), interpolated between the bands; the blob's AREA is the absolute quantity in that city's own unit, **sized in metres with no distance inflation** (B2), so it fades out between 40 and 90 km rather than pretending to be readable — Cesium's fade works on SQUARED distances with a pow(t, 0.2) curve, which puts it at 42 % opacity by 45 km, so that is where the panel and the row say *descendez sous 45 km* (“go below 45 km”, F6). Fill alpha is a flat **0.45** — it stopped being a second encoding of the value (A3), and the basemap keeps 55 % of itself under every blob. Three modes — the current hour of the week, the 168-hour animation, and the network's busiest hour — plus a **panel under the globe** (`veloPulseHud.js`) carrying the hour in words, what the network is doing at it, the week as a 168-bar strip that is also the transport (click/drag/arrows to scrub, which pauses), and the clicked site's fiche with its own week in the map's colours. The panel is **draggable** anywhere in the viewport and remembers where it was left (`src/panelDrag.js`, shared with `ui.js`); double-clicking its header brings it home | `src/data/veloPulse.js`, `src/data/veloPulseFeed.js`, `src/data/veloPulseHud.js`, `src/panelDrag.js` | — (bundled; `npm run velo:pulse` rebuilds) | static; the animation eases between the hours at 520 ms per hour, a whole week in about 87 s |
 | Carroyage INSEE 🇫🇷 ▩ | **Four regimes on one row.** Above a 12° box: one screen-space disc per **RÉGION**; from 12° down to the grid's 0.9° ceiling: one per **DÉPARTEMENT** — both from INSEE's **Melodi** API (`DS_FILOSOFI_CC` 2023 + `DS_POPULATIONS_REFERENCE` 2023 + `DS_BTS_SAL_EQTP_SEX_AGE` 2024, keyless, 97 codes in one URL, month-long proxy cache), anchored on a bundled 16.8 KB point pack (`france_territoires/territoires.json`, built from the IGN outlines + API Géo). Six indicators there, two of which the grid cannot compute at all (Gini, D9/D1), on their own measured bands — the grid's ramp spans 15 300–32 400 € and every département sits inside a 10 000 € window, so borrowing it would paint the country in two bands. It is a DIFFERENT dataset and every card says so: a median where the grid has a mean, people where it has households, 2023 where the relay is 2019. The layer therefore has **no `ensureViewGate`** — it no longer needs the camera moved for it. Below 0.9°: INSEE *Filosofi* gridded income and population — **from a local 2021 pack when one is built (`npm run filosofi:pack-2021`), otherwise the Géoplateforme WFS relay, which is still on 2019**. The millésime travels with every answer and is printed on every card, never assumed: INSEE published 2021 on 2026-02-12 and the relay has not moved (2 314 836 cells served against 2 324 577 documented for 2021). The pack holds **2 324 577 cells — INSEE's published total for 2021 exactly** — across all three grids INSEE publishes on: métropole `CRS3035`, Martinique `CRS5490`, La Réunion `CRS2975`. Reading those two took adding an inverse UTM alongside the LAEA one, and fixed a bug the layer had shipped with: **both overseas départements were declared as coverage and drew nothing**, because `parseCellId` accepted `CRS3035` alone — a Réunion box matched 2 502 cells and drew 0. The inverse is checked against the WFS's own geometry: 0.78 mm worst error over La Réunion, 0.50 mm over Martinique. Relayed as WFS by the Géoplateforme — **2,314,836 carreaux at 200 m and 377,234 at 1 km**, per viewport, drawn as **flat translucent proportional discs, one per cell**. **No geometry is transported**: each cell is rebuilt from its own INSPIRE identifier by inverting EPSG:3035, which reproduces the published polygon to eight decimals and cuts a Lyon viewport from 1.63 MB to 0.31 MB. Colour is one of eight indicators on absolute national quantile bands; the disc's AREA is the count each indicator is computed on (`ind` or `men`), never the indicator, in **six national size classes** — the measured population quantiles, per grid (`build-filosofi-ramp.mjs --resolution 1000` added the coarse set: 6 727 cells, p90 at 28 652 people). Classed and not proportional because the drawable range is 3:1 in diameter against 100:1 in the data: proportional put 65 % of a Gironde viewport's 1 907 coarse cells on the floor. **A symbol is capped at 0.68 of the cell side — 36 % of its area — and drawn at α 0.7, so the basemap is readable between the discs and through them**; the extruded blocks it replaced covered every cell edge to edge. Imputed cells are drawn as a ring, grown to keep the area the hole costs it. The two grids disagree about their own column names — `i_car_est` at 200 m, `i_est_1km` at 1 km, and no commune at all on the coarse one | `src/data/filosofiCarreaux.js`, `src/data/filosofiFeed.js` | `/api/filosofi/carreaux`, `/api/filosofi/status` (keyless, 30 d disk cache, serve-stale) | viewport-driven (450 ms debounce, ≤ 0.9° box, ≤ 6,000 cells) + 60 min idle |
 | Parcelles 🇫🇷 ▦ | IGN Api Carto `cadastre/parcelle` (PCI vecteur, DGFiP), per viewport — ground-clamped classification fills coloured by the SCALE of the `feuille` each parcel was drawn on (four bands from 1:250/1:500 to 1:4000/1:5000, joined on a FIVE-part key incl. `code_arr`), batched ONE `GroundPrimitive` PER BAND COLOUR — a batch mixing colours has each instance repaint its neighbours inside its own bounding rectangle, which is Cesium's classification shader, not a bug here — with the selected parcel drawn as its OWN PAIR of primitives, fill and outline, over the batch (`scripts/qa-cadastre-highlight.mjs` proves the highlight against the polygon on pixels), plus a `GroundPolylinePrimitive` outline per ring. Reports the fraction of the view that is cadastred at all — the rest is public domain. A box over Api Carto's own 5,000-feature ceiling is REFUSED whole (the truncation is scattered, not cropped, so a short draw is indistinguishable from the public-domain gaps) | `src/data/cadastreParcels.js`, `src/data/cadastreFeed.js` | `/api/cadastre-fr/parcelles`, `/api/cadastre-fr/status` | viewport-driven (450 ms debounce, gated on camera ALTITUDE ≤ 1 500 m — not on the view rectangle's span, which on a tilted camera reaches the horizon — and requesting a ≤ 0.02° box anchored on the screen-centre ground point, clipped to the view, 0.002° cache snap) + 60 min idle; proxy TTL 24 h memory + `.gev-cache/cadastre/`, serve-stale 30 d; the PCI is republished monthly |
 | Groupes de prod 🇫🇷 ☢ | RTE `actual_generations_per_unit` (171 units ≥ 100 MW, hourly) joined by EIC code to ODRÉ's *Registre national des installations de production et de stockage d'électricité*, shipped as a file (positions anchored on EDF Open Data, then OpenStreetMap, then commune centres); 108 stations drawn as a capacity ring plus an output disc | `src/data/rteGeneration.js`, `src/data/rteGenerationFeed.js`, `src/data/local_data/rte_production_units/units.json` | `/api/rte-generation`, `/api/rte-generation/status` | 3 min (proxy TTL 5 min; resource publishes hourly). Needs `RTE_CLIENT_ID`/`RTE_CLIENT_SECRET` for output; the fleet draws keyless |
 | Centrales hydro 🇫🇷 ≈ | ODRÉ *Registre national des installations de production et de stockage d'électricité*, hydraulic filière entire — **2,742 installations for 26.02 GW**, shipped as a file because the register publishes NO coordinate, only an INSEE code. 998 placed where they physically are (589 on an IGN BD TOPO® building footprint), the other 1,744 rolled into 1,147 commune rings that claim a count and never a position. Renamed from *Petite hydro (FR)* on 2026-09-14: it holds Grand-Maison (1 690 MW), so nothing about it was small. It also draws **592 stations outside France** that used to ship inside the dams pack as barrages — a SAMPLE, with its own colour, its own legend row and its own four-line card all saying so | `src/data/frHydroPlants.js`, `src/data/frHydroFeed.js`, `local_data/world_hydro/` | — (bundled; `npm run hydro:registry` + `npm run hydro:world` rebuild) | 30 min |
-| Datacenters ▣ | OSM extract (bundled, 4 351 objects) — the footprint is drawn where it is, in WORLD METRES, and the anchor dot drops from 10 px to 6 px so size stops being the channel. Four marks, measured on the pack: extruded volume 461 (10.6 %), flat slab 2 739 (63.0 % — the A1 sign for « footprint known, height unknown »), site outline 317 (7.3 %), hollow ring with no footprint 834 (19.2 %). Height is read from `height` first (154 objects) then converted from `building:levels` (374) by a MEASURED factor: the 59 objects carrying both give a median 5.0 m per level (p25 4.0, p75 6.7) — a data hall, not an office floor. A site outline is NEVER extruded, even where a mapper put a height on it (5 cases) | `src/data/localLayers.js`, `src/data/datacentersPack.js`, `src/data/localGeojson.js` | — | static |
+| Datacenters ▣ | OSM extract (bundled, 4 351 objects) — the footprint is drawn where it is, in WORLD METRES, and the anchor dot drops from 10 px to 6 px so size stops being the channel. Four marks, measured on the pack: extruded volume 461 (10.6 %), flat slab 2 739 (63.0 % — the A1 sign for “footprint known, height unknown”), site outline 317 (7.3 %), hollow ring with no footprint 834 (19.2 %). Height is read from `height` first (154 objects) then converted from `building:levels` (374) by a MEASURED factor: the 59 objects carrying both give a median 5.0 m per level (p25 4.0, p75 6.7) — a data hall, not an office floor. A site outline is NEVER extruded, even where a mapper put a height on it (5 cases) | `src/data/localLayers.js`, `src/data/datacentersPack.js`, `src/data/localGeojson.js` | — | static |
 | Barrages & digues ▰ | OSM via Overpass for France + a 69-feature OpenInfraMap tail elsewhere (bundled, **6 840 features**) — `height` is MEASURED at 143 of 6 840 (2.09 %) and therefore REFUSED, with the refusal locked by an assertion. The size channel carries `spanM` instead, the longest dimension measured on the geometry at build time, present on 5 328 (77.89 %), 25 m → 6 399 m (median 100, p95 539), in CONSTANT SCREEN PIXELS — four frozen span classes (100/300/1 000 m) at 18/13/9/6 px plus a hollow 8 px ring for the 1 512 unmeasured (22.1 %). **The row was renamed and simplified on 2026-09-14**: 1 267 of its French features are digues, so the name says so; the 592 hydroelectric stations its world half held moved to `world_hydro/` and the *Centrales hydro* layer; and the second chip row (TOUS/NOMMÉS/GRANDS) was deleted, because GRANDS kept 494 features of which only 65 carry a height — it was a hydro filter wearing a size label. Thinning is the zoom's job now, via a per-tier `markerMaxDistance` (900 km / 3 000 km / orbit). One chip row left: TOUS / BARRAGES / DIGUES | `src/data/localLayers.js`, `src/data/damsPack.js`, `src/data/localGeojson.js` | — | static |
 | Submarine Cables ◠ | TeleGeography public map (bundled) | `src/data/telegeographySubmarineCables.js` | — | static |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
@@ -2563,8 +2570,9 @@ It is deliberately not an event bus, not a cache and not a dependency graph:
 nothing here can enable a layer, and a card that needs one switched on says so
 rather than switching it on.
 
-`docs/PLAN-CROISEMENTS.md` records what the 2026-09 audit asked for, what
-landed, and — for each item left out — the reason it was left out.
+The cross-referencing plan of #128 and #129 recorded what the 2026-09 audit
+asked for, what landed, and — for each item left out — the reason it was left
+out.
 
 Published today:
 
@@ -2630,8 +2638,10 @@ both, and the wording of both lines is the load-bearing part.
   (`HUBEAU_JOIN_MAX_M`), and the layer is viewport-driven, so a plant outside
   the current box gets no answer rather than a cached one from another region.
 - **A NEIGHBOUR, never an identity.** Nothing in ODRÉ or OSM links a structure
-  to a plant. The line says "ouvrage voisin cartographié, aucun registre ne le
-  relie à cette centrale", names the distance, and never writes "son barrage".
+  to a plant. The line says *ouvrage voisin cartographié, aucun registre ne le
+  relie à cette centrale* (“neighboring structure on the map, no register links
+  it to this plant”), names the distance, and never writes *son barrage* (“its
+  dam”).
   Ceiling 10 km (`DAM_JOIN_MAX_M`) — wide enough for an intake and a
   powerhouse kilometres apart, tight enough to stay in the same valley.
 - **A named structure beats a closer anonymous one.** 4 579 of the pack's 6 189
@@ -2700,11 +2710,11 @@ half their own question, and the audit had counted both routes as "in
 production for a layer, with no line on the sheet":
 
 - **Nuisances** gains `/api/bruit-fr` — the PEB or PGS band under the point,
-  with its index, its range and the date of its arrêté; outside every plan, the
+  with its index, its range and the date of its order (*arrêté*); outside every plan, the
   nearest aerodrome and its distance. A band with `atPoint: false` (the
   overview wash the layer draws AROUND an aerodrome, tested against no point)
   never reaches the sheet.
-- **Numérique** gains `/api/anfr-fr/supports` — masts around the address by
+- **Numérique** (Digital) gains `/api/anfr-fr/supports` — masts around the address by
   generation, counting only what RADIATES (`live`), never what is approved
   (`plan`). An empty NATIONAL register is reported as an empty register and
   never as an empty street; see `docs/KNOWN-ISSUES.md` for the 222-byte
@@ -2741,12 +2751,12 @@ chip under a dark row would be a layer drawing with no visible control.
 primary through the intent protocol — the operator's utterance is reported on
 that one transition — and then calls `setRowFollowers`, which moves the
 companions beside it and names them back in the result as `companions`. Without
-it, "montre les transports en commun" lit `transit-fr` alone and left
+it, *montre les transports en commun* (“show public transit”) lit `transit-fr` alone and left
 Île-de-France with no vehicles, which is the exact gap the fusion closes. An
 unfused layer's answer is byte-identical to what it was: the key is named only
-when there are followers. The bare word "météo" was moved off
+when there are followers. The bare word *météo* (weather) was moved off
 `meteo-stations-fr`'s alias list for the same reason — it names the row now,
-and "stations météo" still reaches the instruments.
+and *stations météo* (weather stations) still reaches the instruments.
 
 A row whose primary is off but whose companion a share link left on reads `OFF`
 and still shows its chips, so the drawn layer is always controllable. The
@@ -2768,7 +2778,7 @@ tells a reader outside France that a layer serving them is not for them.
 
 **What the fusion does NOT do**, and is owed separately: deduplicate the 56
 plants three registers share (`edf-power-plants`, `rte-generation`,
-`fr-hydro-plants`, plus 14 in `gas-fr`), and move the médecin family out of
+`fr-hydro-plants`, plus 14 in `gas-fr`), and move the doctor (*médecin*) family out of
 `amenities-fr`. The row merge is the first half of that work.
 
 #### Viewport-gated layers and the view gate (September 2026)
@@ -2788,7 +2798,7 @@ Two rules keep that ceiling from reading as a broken layer:
 - **The zoom a layer needs is applied, not announced.** A layer may expose
   `ensureViewGate(viewer, { signal })`. Three do: `powerGrid`,
   `bdtopoBuildings`, `cadastreParcels`. It is reached from the **zoom card**
-  (`src/zoomPrompt.js`) — the reader presses « Zoomer ici » and the layer solves
+  (`src/zoomPrompt.js`) — the reader presses *Zoomer ici* (Zoom here) and the layer solves
   and flies. A gate that throws or cannot be satisfied is not a failure: the
   layer stays ON with its own guidance text.
 
@@ -2832,10 +2842,10 @@ reader watching an empty globe at 1 000 km never saw it.
 
 `src/zoomPrompt.js` states it at **42% of the viewport height** — above centre,
 so the card does not cover the subject it is talking about — as one card for all
-the waiting layers: up to three rows, then "+N autres". The words are the
+the waiting layers: up to three rows, then *+N autres* (“+N more”). The words are the
 LAYER'S own `loadingLabel`, never a second sentence written in the card that
 could drift from the row. Where the layer exposes `ensureViewGate()`, the row
-carries **« Zoomer ici »**, which is what finally calls the three solvers.
+carries **_Zoomer ici_ (Zoom here)**, which is what finally calls the three solvers.
 
 The ceilings, measured from the source: `road-status-fr` 2 000 km · `transit-fr`
 300 km · `bruit-fr` 250 km · `power-grid` 120 km outside France (inside it the national pack draws at any altitude) · `shared-mobility-fr` 80 km ·
@@ -2853,7 +2863,7 @@ Three details that are not obvious:
   their own viewport read.
 - **A dismissal is remembered against the SET of waiting layers**, not for the
   session: the same situation stays closed, a different one is news again.
-- **The card leaves on the PRESS of « Zoomer ici », in 140 ms** — not when the
+- **The card leaves on the PRESS of _Zoomer ici_, in 140 ms** — not when the
   layer stops being gated. It used to stand through the 1,6 s flight and the
   settle behind it, which reads as a button that did nothing. The situation is
   held in `_zoomPromptFlyingSignature` for the length of the flight so the
@@ -2861,9 +2871,10 @@ Three details that are not obvious:
   flight settles: a flight that did not reach the gate brings the card straight
   back with its button re-armed.
 
-Every prompt is in French and says **zoome**, which two layers already did and
-eleven did not — three were still in English, the rest said "descends",
-"descendez" or "rapprochez-vous" for the same act.
+Every prompt is in French and says **zoome** (zoom in), which two layers
+already did and eleven did not — three were still in English, the rest said
+*descends*, *descendez* (go lower) or *rapprochez-vous* (move closer) for the
+same act.
 
 #### French address layers (September 2026)
 
@@ -2885,9 +2896,9 @@ falls silent and a B→F block keeps every dissenting badge on its roof.
 to five years, so a median would publish a price nobody paid on a date that does
 not exist — and it keeps that mutation even when it has no €/m², painting the
 volume a declared neutral rather than sending a building that has just changed
-hands back into the « no sale here » wash. `ads-fr` offers only dossiers that can
+hands back into the “no sale here” wash. `ads-fr` offers only dossiers that can
 bear on EXISTING fabric (declared work on an existing building, demolition
-permits, and unpublished nature); a declared new build and a permis d'aménager —
+permits, and unpublished nature); a declared new build and a development permit (*permis d'aménager*) —
 which authorises LAND — are held back, counted, and stay cranes.
 
 **The join is by IDENTIFIER first since 2026-09-07, and by geometry only then.**
@@ -2901,7 +2912,7 @@ four boxes: diagnostics reaching a drawn volume go 81.8 % → 96.3 % (Paris 13e)
 40.4 % → 75.7 % (Lyon 2e), 78.8 % → 88.9 % (Marseille), 14.0 % → 41.5 %
 (Ustaritz), and 2 to 83 rows per box were being painted on a NEIGHBOUR's roof.
 The two paths are counted apart (`themeMatchedById` / `themeMatchedByPoint`,
-« 96 % par identifiant RNB » on the Bâti 3D row): they paint the same colour and
+*96 % par identifiant RNB* (“96% by RNB identifier”) on the Bâti 3D row): they paint the same colour and
 are not the same claim. The join costs no request — both registers carry the key
 — and `rnbPivot.js` states the two multiplicities that break a naive index (one
 emprise merging several RNB buildings; one building drawn as several emprises).
@@ -2922,8 +2933,8 @@ published key.
 300 m (DVF) and 400 m (ADS) while the building layer loads a box up to 0.08°,
 i.e. 8.90 × 6.04 km = 53.8 km² at the 47th parallel — up to 107× more. At most
 ~1 % of the volumes on screen were ever inside the question. Each theme's
-"no data" label therefore names BOTH silences (« hors du rayon de 300 m ou sans
-mutation »), and the honest count lives on the Bâti 3D row rather than being
+"no data" label therefore names BOTH silences (*hors du rayon de 300 m ou sans
+mutation*, “outside the 300 m radius or no sale”), and the honest count lives on the Bâti 3D row rather than being
 recomputed on each theme's row, which would give two numbers for one fact.
 
 | Layer | Token | Proxy | Upstream |
@@ -2940,10 +2951,11 @@ recomputed on each theme's row, which would give two numbers for one fact.
 
 `avis-valeur` (`vv`, `/api/avis-valeur`, `src/data/avisValeurFeed.js` +
 `src/data/avisValeur.js`) is the seventh address layer and the first whose
-product is a NUMBER WE COMPUTED. `docs/CITYSCAN.md` puts it at the top of
-palier 2: of the eleven data routes behind `app.cityscan.fr` not one carries a
-source we do not already have, and their own public translation file credits
-*« Source : Algorithme »* for exactly one module — the estimate.
+product is a NUMBER WE COMPUTED. The Cityscan teardown (#99) put it at the top
+of tier 2 (#101): of the eleven data routes behind `app.cityscan.fr` not one
+carries a source we do not already have, and their own public translation file
+credits *Source : Algorithme* (“Source: Algorithm”) for exactly one module — the
+estimate.
 
 **One plugin, two routes.** The estimate reads the SAME memoised commune-year
 editions `/api/dvf` was drawn from (`dvfProxy` in `vite.config.js` mounts both),
@@ -2980,7 +2992,7 @@ median is STRICTLY narrower than `p75 − p25` (we must know the middle better
 than the market is dispersed — no constant in it), and neither of its ends sits
 more than 20 % from the median. Strictly, because the equality case is the
 degenerate one: a sample with no spread has both quantities at zero, and a `>`
-comparison published « 1 000 €/m², ±0 % » from twelve identical prices with
+comparison published *1 000 €/m², ±0 %* (“€1,000/m², ±0%”) from twelve identical prices with
 96 % confidence attached. Measured on live ground the two clauses catch
 different things: around Aurillac at 300 m, 43 sales give 973 €/m² at ±22,6 % —
 clause 1 passes, clause 2 refuses, and the 600 m rung answers 1 333 €/m² at
@@ -2993,8 +3005,8 @@ interquartile range; clause 1 refuses and the commune rung answers 4 127 €/m²
 and in the legend. *Distribution-free removes an assumption about shape, not
 about sampling*: the interval is exact for independent draws, and the
 comparables are a near-census of one pocket, so the honest reading is a model
-(« these sales behave as an independent draw from the price law of this
-pocket »). And *the rung is chosen with the same prices that then set the
+(“these sales behave as an independent draw from the price law of this
+pocket”). And *the rung is chosen with the same prices that then set the
 interval's width*, which can only lower real coverage — measured by resampling
 each commune's own price law onto its own geography, 4 000 draws each:
 **92,5 % (Paris 13e), 91,9 % and 92,0 % (Rodez), 92,8 % (Biarritz)** against
@@ -3013,9 +3025,11 @@ register's own sign, so the one marker that is not a transaction is the one that
 is not a euro sign.
 
 **The euro band is not a range anyone paid.** It is the €/m² band multiplied by
-the SUBJECT's surface, and it is printed on its own line saying so — « soit
-417 000 € à 545 000 € ramené aux 60 m² du sujet — pas des prix payés ». Printed
-as one sentence with « la moitié des ventes comparables » it was false whenever
+the SUBJECT's surface, and it is printed on its own line saying so — *soit
+417 000 € à 545 000 € ramené aux 60 m² du sujet — pas des prix payés* (“i.e.
+€417,000 to €545,000 scaled to the subject's 60 m² — not prices paid”). Printed
+as one sentence with *la moitié des ventes comparables* (“half of the comparable
+sales”) it was false whenever
 the comparables were not all the subject's size: forty sales of 48 m² and 72 m²
 all at 1 000 €/m² give a 60 000 € band that not one of the forty landed in.
 
@@ -3041,8 +3055,9 @@ field so the sales layer stops reading as "nothing was sold in Strasbourg".
 cache every failed download as an empty commune-year, in memory with no TTL and
 on disk for a week, so one reset made an outage permanent and the estimate
 published from the surviving years without saying so. Only a 404 is cached as
-empty now; anything else returns `null`, is not remembered, and travels to the
-card as `unavailableYears` — « ces éditions EXISTENT et ne sont pas arrivées ».
+empty now; anything else returns `null`, is not remembered, and is passed to the
+card as `unavailableYears`, which the card prints as *ces éditions EXISTENT et
+ne sont pas arrivées* (“these editions EXIST and did not arrive”).
 
 **Four exclusions, each counted and named on the row.** VEFA (a dwelling that
 does not exist yet — measured on Paris 13e editions 2021–2025, the 9 priced VEFA
@@ -3060,7 +3075,7 @@ zero: across 31 609 priced resales in nine communes the declared values run 1 �
 cut would be a plausibility model wearing a constant's clothes. The retained
 sales declared under 10 000 € are COUNTED (`symbolicCount`) instead — and the
 euro rounding is derived from the magnitude for the same reason, because a flat
-1 000 € step turned every positive total under 500 € into « 0 € ».
+1 000 € step turned every positive total under 500 € into *0 €* (“€0”).
 
 **The drift is measured and printed, never applied.** Commune median €/m² 2023 →
 2025: Paris 13e −4,3 %, Bordeaux −9,2 %, Lille −3,6 %, Rodez −0,5 %, Ajaccio
@@ -3124,18 +3139,20 @@ to HTTP 429) plus one bulk BAN geocode — measured at 13-15 s for Paris — and
 every scan inside that commune afterwards is served from cache.
 
 **Bordeaux is the only one of them that publishes the GROUND**, and the layer
-draws it: the emprise of the parcels a dossier names, clamped onto the terrain
+draws it: the footprint (*emprise*) of the parcels a dossier names, clamped onto the terrain
 under the crane that marks the dossier itself.
 
 **And for a year every plot card in France said so, including the ones Bordeaux
-never touched.** The sentence « emprise publiée par Bordeaux Métropole » was
+never touched.** The sentence *emprise publiée par Bordeaux Métropole* (“footprint
+published by Bordeaux Métropole”) was
 hard-coded when Bordeaux was the only source of a shape here; the cadastral
 placement below then gave the whole country an outline and the credit was never
 moved, so an Ustaritz parcel drawn from the Etalab cadastre was crediting a
 métropole 200 km away. Fixed 2026-09-14: `empriseProvenanceLine` reads the
 provenance off the dossiers standing on the plot — the portal's own label where
-the counter shipped the geometry, « emprise cadastrale — la parcelle nommée par
-le dossier » where this layer joined it, both where one outline serves both.
+the counter shipped the geometry, *emprise cadastrale — la parcelle nommée par
+le dossier* (“cadastral footprint — the parcel named by the dossier”) where this
+layer joined it, both where one outline serves both.
 
 Everywhere else the ground is RESOLVED rather than published, and
 `cadastreLineage.js` is what does it. Sitadel carries no coordinate but names up
@@ -3167,9 +3184,10 @@ filed at "67 impasse d'Haroztegia" and name AN 515, which the BAL numbers 63).
 Neither is a guess and neither always answers: over the 125 ambiguous divisions
 of Ustaritz since 2018 the building diff names a single lot in **29,6 %** of
 cases, 45,6 % have several children built and 24,8 % have none. The rest are
-drawn on the PARENT, labelled *emprise avant division*, because a polygon that
-certainly contains the site beats a confident dot in the road. A permis
-d'aménager always stays on the parent — it is the act of drawing the lots, not
+drawn on the PARENT, labelled *emprise avant division* (“footprint before
+subdivision”), because a polygon that certainly contains the site beats a
+confident dot in the road. A development permit (*permis d'aménager*) always
+stays on the parent — it is the act of drawing the lots, not
 a project on one — and two dossiers competing for the same built lot both fall
 back to the parent unless their own BAL numbers separate them.
 
@@ -3290,7 +3308,7 @@ than replaces. Nothing is uploaded anywhere, which is why the share token is
 prices, surfaces and listing links are never transmitted; the ADDRESS a reader
 types goes to `/api/geocode` and to the BAN reverse endpoint because that is
 what turns an address into a coordinate, and the property's position goes to
-`/api/dvf`. « Rien ne quitte le navigateur » was the round version, and an
+`/api/dvf`. *Rien ne quitte le navigateur* (“Nothing leaves the browser”) was the round version, and an
 adversarial pass was right to refuse it. A listing's URL is stored as a link and **never
 requested**; `scripts/qa-comparables.mjs` watches every request the page makes
 and fails if one reaches the host typed into that field.
@@ -3370,7 +3388,8 @@ shell make that possible for any layer with a shape around its marker:
 a card can be opened), and `cardAnchor`, which moves an open card off its
 marker. Both are opt-in and the other five address layers pass neither.
 
-**And the card is titled by the address.** "Point fixé — à pied" named the
+**And the card is titled by the address.** *Point fixé — à pied* (“Pinned
+point — on foot”) named the
 layer's own state. The proxy reverse-geocodes the pin through the BAN — folded
 into the memo that already answered the INSEE code for DVF and Géorisques, so a
 mode switch over one pin costs nothing — and the title is the street within
@@ -3544,7 +3563,7 @@ WITH the ring they perforate, so a hole is never what a budget drops.
 
 `typezone` carries SEVEN values and the colour table had four. A census over
 twelve APIcarto boxes on 2026-09-01 — 4 216 zoning features — found **zero
-occurrences of plain `AU`**: every à-urbaniser zone publishes `AUc` (open under
+occurrences of plain `AU`**: every future urban (*à urbaniser*) zone publishes `AUc` (open under
 the PLU as it stands) or `AUs` (closed until the document is modified or
 revised), so the family this layer exists for was the one drawn in the
 unknown-value grey. Both are now coloured, `AUs` cooled and quieter, and
@@ -3581,17 +3600,18 @@ point the register has already answered — `atPoint` for the zoning, and every
 easement in the payload by construction, since that half is always a point
 query. So near the marker the register wins and the geometry is not consulted;
 further out the drawn map answers and the card says its outlines are
-simplified. The card also distinguishes the four ways a point can have no
-zoning — the answer was refused whole, the box never covered this spot, the
-camera is above 1 500 m so only the marker was asked about, or the published
-document genuinely stops here — because printing "aucun zonage" for all four
-would report three of this layer's own limits as facts about the plot. Easement
-absence is worded the same way: "aucune servitude à ce point" only where the
-register answered that point, and "aucune des N servitudes du repère n'atteint
-ce point" everywhere else.
+simplified. The card also distinguishes the four ways a point can have no zoning
+— the answer was refused whole, the box never covered this spot, the camera is
+above 1 500 m so only the marker was asked about, or the published document
+genuinely stops here — because printing *aucun zonage* (“no zoning”) for all
+four would report three of this layer's own limits as facts about the plot.
+Easement absence is worded the same way: *aucune servitude à ce point* (“no
+easement at this point”) only where the register answered that point, and
+*aucune des N servitudes du repère n'atteint ce point* (“none of the marker's N
+easements reaches this point”) everywhere else.
 
 **One row, two registers, and since 2026-09-14 two switches.** The row carries
-a chip per half — *Zonage PLU* and *Servitudes* — and they are independent
+a chip per half — *Zonage PLU* (PLU zoning) and *Servitudes* (Easements) — and they are independent
 rather than a three-state selector, because "zoning only", "easements only" and
 "both" are three questions a reader actually has. Over a village centre the
 wash covers every square metre of the block and the dashed envelopes run across
@@ -3600,8 +3620,8 @@ entirely. Both are `drawOnlyParams`: one request carries both halves — 1,4 MB 
 the measured worst case — so hiding one rebuilds the entities from the payload
 in hand and spends neither a request nor a rate-limit slot. The chips govern
 the GEOMETRY and nothing else: the scan marker and every ground card keep the
-whole register answer, and the marker's card names what is hidden ("zonage
-masqué sur la carte") so five easements listed over a bare photograph read as a
+whole register answer, and the marker's card names what is hidden (*zonage
+masqué sur la carte*, “zoning hidden on the map”) so five easements listed over a bare photograph read as a
 switched-off half rather than as a broken layer. Turning both off is allowed and
 leaves the marker, so a row that is ON never draws nothing. The key follows the
 chips — a swatch for a shape nobody can see is the same defect as a key for a
@@ -3668,8 +3688,8 @@ label, where the point is a few pixels of a target moving at orbital speed) and
 non-interactive: a card names what is already selected, so a rectangle there
 would do nothing but cover the ambient labels behind it.
 
-Layers deliberately left alone: Vigicrues, Météo-France Vigilance, séismes,
-bouées marines, Mix élec and les itinéraires transit all paint ambient labels
+Layers deliberately left alone: Vigicrues, Météo-France Vigilance, the
+earthquakes, the marine buoys, Mix élec and the transit routes all paint ambient labels
 but have no selection to trigger — a click surface with nothing behind it would
 be a lie. Mobilité partagée, Transit (FR), État du réseau and Bâti 3D publish
 only selected-object cards and no ambient labels, so there is nothing to make
@@ -4495,7 +4515,7 @@ easier to meet (detection is now on more often), but does not create it.
   `/anomalies` refuses it with the reason rather than returning an empty list.
   The transit fleet series is `feed.reported`, never `feed.inView`: the proxy
   answers per viewport, and folding the in-box count would make one series mean
-  two different quantities. Full reasoning in `docs/CHRONIQUE.md`; QA harness is
+  two different quantities. Full reasoning in `docs/CHRONICLE.md`; QA harness is
   `npm run qa:chronicle -- --url http://localhost:5173`.
 - **Earthquake discs are STATIC geometry.** Every quake is a `CLAMP_TO_GROUND`
   ellipse; a `CallbackProperty` axis re-tessellates its ground primitive every

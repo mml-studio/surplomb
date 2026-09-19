@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: September 17, 2026
+Updated: September 19, 2026
 
 This file tracks active runtime issues only.
 
@@ -12,7 +12,7 @@ of the public release.
 ## Open
 
 ### What the phone shell does not carry, and why each one was left out
-Status: Intentional, decided 2026-09-16 with the phone shell (volet C)
+Status: Intentional, decided 2026-09-16 with the phone shell (part C of the phone work)
 
 The phone shell (`phone.css`, `src/phoneSheet.js`) is a **selection**, not a
 scaled-down desktop. These are the deliberate holes, each with the reason it is
@@ -58,9 +58,10 @@ Consequences in runtime:
 - `Antennes mobiles` (folded into the `Infrastructure numérique` row) draws
   nothing anywhere, and `/api/anfr-fr/supports` answers `count: 0` for every
   box.
-- The address radiography prints "Le registre ANFR est vide dans cette édition"
-  rather than "0 supports", because an empty register is a fact about the
-  register and never about the address (`projectAntennes`).
+- The Address X-ray prints *Le registre ANFR est vide dans cette édition*
+  (“The ANFR register is empty in this edition”) rather than “0 supports”,
+  because an empty register is a fact about the register and never about the
+  address (`projectAntennes`).
 
 Nothing to fix here: the reader is correct and the cache is short (6 h), so a
 republished file is picked up on its own.
@@ -121,154 +122,152 @@ Status: Open (accepted 2026-07-08, documented)
 
 ---
 
-### Le tilt à deux doigts est délié, et c'est une décision
-Status: Intentional, décidé 2026-09-16 avec le volet tactile
+### Two-finger tilt is unbound, and that is a decision
+Status: Intentional, decided 2026-09-16 with the touch work
 
-Le pincement de Cesium fait zoom **et** tangage en même temps, sans zone morte.
-Deux doigts pas tout à fait parallèles font donc pivoter la caméra pendant qu'on
-s'approche d'une rue, et rien dans la coquille téléphone ne permet d'y revenir.
-`src/touchCamera.js` vide `tiltEventTypes` ; le tangage reste accessible par les
-presets de vue, et une ligne le remet si les testeurs le réclament.
+Cesium's pinch zooms **and** tilts at the same time, with no dead zone. Two
+fingers that are not quite parallel therefore pitch the camera while the reader
+closes in on a street, and nothing in the phone shell offers a way back.
+`src/touchCamera.js` empties `tiltEventTypes`; tilt stays reachable through the
+view presets, and one line brings it back if testers ask for it.
 
-Conséquence, depuis le 2026-09-17 : l'angle d'arrivée est celui que le lecteur
-garde. Un téléphone arrive donc toujours à la verticale, nord en haut
-(`src/topDownView.js`) — démarrage, « Autour de moi », lieux, recherche, feu ou
-navire cliqué. Deux exceptions : un lien partagé restaure l'angle de son auteur,
-et le travelling d'itinéraire comme l'orbite gardent le leur.
+Consequence, since 2026-09-17: the arrival angle is the one the reader keeps. A
+phone therefore always arrives looking straight down, north up
+(`src/topDownView.js`) — startup, *Autour de moi* (Around me), places, search,
+a clicked fire or ship. Two exceptions: a shared link restores its author's
+angle, and the route tracking shot and the orbit keep their own.
 
-Ce que la coquille téléphone ne porte pas — CCTV, cockpit, scène, radio,
-DISPLAY, presets visuels, pliables, tablette en paysage sous 600 px — est listé
-en tête de ce document, avec la raison de chaque trou.
+What the phone shell does not carry — CCTV, cockpit, scene, radio, DISPLAY,
+visual presets, foldables, a tablet in landscape under 600 px — is listed at
+the top of this document, with the reason for each hole.
 
-### Un lien partagé depuis « Autour de moi » révèle où était le lecteur
-Status: Open (par construction), livré 2026-09-16
+### A link shared from *Autour de moi* (Around me) reveals where the reader was
+Status: Open (by construction), shipped 2026-09-16
 
-Contexte :
-- Le bouton « Autour de moi » vole la caméra sur la position de l'appareil,
-  puis `flushHash()` réécrit l'adresse depuis cette caméra — c'est ce qui
-  permet à un rechargement de revenir au même endroit. Conséquence directe :
-  **le lien copié ou partagé ensuite contient la position**, à quelques
-  centaines de mètres près.
-- Ce n'est pas un défaut à corriger en silence : c'est le comportement de
-  n'importe quelle carte, et le lien ne part que si le lecteur le demande.
-  C'est écrit ici pour que personne ne le redécouvre comme une fuite.
-- Aucun `watchPosition` : un seul relevé par appui, jamais de suivi continu.
+Context:
+- The *Autour de moi* button flies the camera to the device's position, then
+  `flushHash()` rewrites the address from that camera — which is what lets a
+  reload come back to the same place. Direct consequence: **the link copied or
+  shared afterwards contains the position**, to within a few hundred meters.
+- This is not a defect to fix quietly: it is how any map behaves, and the link
+  only leaves if the reader asks for it. It is written here so that nobody
+  rediscovers it as a leak.
+- No `watchPosition`: one fix per press, never continuous tracking.
 
-### Trente-sept couches gardent la tolérance de clic de Cesium sur un doigt
-Status: Open (borné, sûr dans ce sens), mesuré 2026-09-16
+### Thirty-seven layers keep Cesium's click tolerance under a finger
+Status: Open (bounded, safe in this direction), measured 2026-09-16
 
-Contexte :
-- `ScreenSpaceEventHandler` n'émet `LEFT_CLICK` au relâchement tactile que si
-  la distance en ligne droite depuis le contact initial tient dans
-  `_clickPixelTolerance` (5 px). Un tap tremblant au-delà **n'arrive jamais**
-  jusqu'au comptage de geste.
-- Les trois couches qui passent par `bindTrackingClickGesture` (vols civils,
-  vols militaires, CCTV) montent cette tolérance à 10 px sous pointeur
-  grossier. Les ~37 autres installent leur propre gestionnaire et gardent les
-  5 px : un tap tremblant y est **perdu**.
-- C'est le sens sûr de la panne : rien n'est sélectionné, et surtout rien n'est
-  DÉSÉLECTIONNÉ. Migrer les 37 est un chantier à part.
+Context:
+- `ScreenSpaceEventHandler` only emits `LEFT_CLICK` on a touch release if the
+  straight-line distance from the first contact stays within
+  `_clickPixelTolerance` (5 px). A trembling tap beyond that **never reaches**
+  the gesture count.
+- The three layers that go through `bindTrackingClickGesture` (civil flights,
+  military flights, CCTV) raise that tolerance to 10 px under a coarse
+  pointer. The ~37 others install their own handler and keep the 5 px: a
+  trembling tap is **lost** there.
+- It is the safe direction of failure: nothing is selected, and above all
+  nothing is DESELECTED. Migrating the 37 is a separate piece of work.
 
-### Deux choses que le harnais téléphone ne peut pas mesurer
-Status: Open (limite de l'outil), mesuré 2026-09-16
+### Two things the phone harness cannot measure
+Status: Open (tool limit), measured 2026-09-16
 
-Contexte :
-- **`-webkit-touch-callout`** est une propriété WebKit : Chromium la jette à
-  l'analyse, donc `getComputedStyle` répond `''` quelle que soit la feuille.
-  `qa:phone-touch` mesure la moitié qu'il peut (`user-select: none`) et la
-  déclaration elle-même est épinglée par
-  `src/data/trackingClickGesture.test.mjs`, qui lit `style.css`.
-- **« Le tap a sélectionné la borne »** est improuvable en headless : aucune
-  entité Cesium ne s'y peint et `scene.pick` ne répond rien pour le globe nu
-  sous SwiftShader. Le seam publie donc ses propres nombres
-  (`getPickDiagnostics()`), et la sélection est épinglée par
+Context:
+- **`-webkit-touch-callout`** is a WebKit property: Chromium drops it at parse
+  time, so `getComputedStyle` answers `''` whatever the stylesheet says.
+  `qa:phone-touch` measures the half it can (`user-select: none`) and the
+  declaration itself is pinned by `src/data/trackingClickGesture.test.mjs`,
+  which reads `style.css`.
+- **"The tap selected the charging station"** cannot be proven headless: no
+  Cesium entity paints there, and `scene.pick` answers nothing for the bare
+  globe under SwiftShader. The seam therefore publishes its own numbers
+  (`getPickDiagnostics()`), and the selection is pinned by
   `src/data/pickAt.test.mjs`.
 
-### À vérifier sur un appareil réel avant de considérer le tactile fini
-Status: Open (checklist), ouverte 2026-09-16
+### To check on a real device before calling touch done
+Status: Open (checklist), opened 2026-09-16
 
-Rien de ce qui suit n'est mesurable depuis un Mac. Un iPhone (Safari 17) et un
-Android (Chrome) doivent cocher :
-- la voix **parle**, et dans quel haut-parleur — iOS route souvent l'audio
-  WebRTC vers l'écouteur quand le micro est capté ;
-- le prompt `getUserMedia` apparaît bien après l'`await import()` du chargeur
-  paresseux, et la permission persiste d'une session à l'autre ;
-- la session vocale se coupe quand l'app passe en arrière-plan, et le point
-  d'enregistrement s'éteint avec elle ;
-- un appui long sur le globe ne fait apparaître ni menu contextuel ni loupe ;
-- `(pointer: coarse)` sur un iPad **avec trackpad** répond bien `fine` ;
-- le ressenti du pincement (`zoomFactor` 15) et des inerties (0,85 / 0,7 / 0,6) ;
-- la touche de retour du clavier logiciel affiche bien « rechercher » ;
-- la feuille `navigator.share` s'ouvre et le lien rouvre au même endroit ;
-- le prompt de géolocalisation iOS, et « Autour de moi » qui atterrit.
+Nothing below can be measured from a Mac. An iPhone (Safari 17) and an
+Android phone (Chrome) must tick:
+- the voice **speaks**, and through which speaker — iOS often routes WebRTC
+  audio to the earpiece when the microphone is captured;
+- the `getUserMedia` prompt does appear after the lazy loader's
+  `await import()`, and the permission persists from one session to the next;
+- the voice session cuts out when the app goes to the background, and the
+  recording dot goes out with it;
+- a long press on the globe brings up neither a context menu nor a magnifier;
+- `(pointer: coarse)` on an iPad **with a trackpad** does answer `fine`;
+- the feel of the pinch (`zoomFactor` 15) and of the inertias (0.85 / 0.7 /
+  0.6);
+- the soft keyboard's return key does read *rechercher* (search);
+- the `navigator.share` sheet opens and the link reopens at the same place;
+- the iOS geolocation prompt, and *Autour de moi* (Around me) landing.
 
-### Une seconde requête `/api/geoid` part avant que la caméra ne soit posée
-Status: Open (mineur, antérieur au travail téléphone), mesuré 2026-09-16
+### A second `/api/geoid` request leaves before the camera is set
+Status: Open (minor, predates the phone work), measured 2026-09-16
 
-Contexte :
-- Sur **tout** appareil, le premier tic du HUD lit la caméra avant le `setView`
-  d'ouverture et demande `/api/geoid?lat=35.15&lon=-82.5` — la position de
-  départ de Cesium, en Caroline du Nord. La cellule est mise en cache et ne
-  resservira jamais.
-- Coût : un aller-retour `/api` par chargement, sur la connexion où il coûte le
-  plus cher. C'est la moitié du budget d'un boot téléphone (2 appels sur 2).
-- Non corrigé ici : la correction est dans `src/hud.js`, pas dans le périmètre
-  du volet A.
+Context:
+- On **every** device, the HUD's first tick reads the camera before the opening
+  `setView` and requests `/api/geoid?lat=35.15&lon=-82.5` — Cesium's starting
+  position, in North Carolina. The cell is cached and will never serve again.
+- Cost: one `/api` round trip per load, on the connection where it costs the
+  most. That is half of a phone boot's budget (2 calls out of 2).
+- Not fixed here: the fix belongs in `src/hud.js`, outside the scope of part A
+  of the phone work.
 
-### La carte de première visite pilote la recherche du globe, pas la fiche
-Status: Open (décision produit à prendre), constaté 2026-09-17
+### The first-run card drives the globe's search, not the Address X-ray
+Status: Open (product decision pending), noted 2026-09-17
 
-Contexte :
-- Le champ de la variante A (« Qu’est-ce qui est vrai à cette adresse ? »)
-  vole sur le globe par `styleManager.flyToAddress`, puis allume
-  `dvf-sales`, `ads-fr` et `dpe-fr` à l’arrivée.
-- La radiographie d’adresse — dix thématiques, imprimable — vit dans
-  `fiche.html`. Depuis le globe, sa seule porte est la pastille RADIOGRAPHIE
-  de la ligne « Fiche implantation » (`implantation-fr`,
-  `src/data/ficheSheet.js`) : la carte ne l’allume pas et ne la mentionne pas.
-  `fiche.html?q=` accepterait pourtant le texte tapé tel quel.
+Context:
+- Variant A's field (*Qu’est-ce qui est vrai à cette adresse ?*, “What is true
+  at this address?”) flies over the globe through `styleManager.flyToAddress`,
+  then switches on `dvf-sales`, `ads-fr` and `dpe-fr` on arrival.
+- The Address X-ray — ten themes, printable — lives in `fiche.html`. From the
+  globe, its only door is the RADIOGRAPHIE (X-RAY) pill on the *Fiche
+  implantation* (Site report) row (`implantation-fr`,
+  `src/data/ficheSheet.js`): the card neither switches it on nor mentions it.
+  Yet `fiche.html?q=` would accept the typed text as it is.
 
-Conséquences à l’exécution :
-- Un visiteur qui tape une adresse voit trois couches autour du point, pas la
-  fiche de cette adresse : la question du titre reçoit une réponse en
-  morceaux, sur la carte.
-- Rien ne lui apprend que la fiche existe tant qu’il n’a pas trouvé la ligne
-  « Fiche implantation » dans le panneau des couches.
+Consequences in runtime:
+- A visitor who types an address sees three layers around the point, not that
+  address's X-ray: the title's question gets an answer in pieces, on the map.
+- Nothing tells them the X-ray exists until they find the *Fiche
+  implantation* row in the layers panel.
 
-### Le test A/B de la carte de bienvenue se lit à la main dans un JSONL : pas d’outil d’analyse produit
-Status: Open (backlog), décidé 2026-09-17
+### The first-run card's A/B test is read by hand from a JSONL file: no product analytics tool
+Status: Open (backlog), decided 2026-09-17
 
-Contexte :
-- La carte de premier lancement se teste en A/B/C sur surplomb.app dès que
-  `GEV_FIRST_RUN_AB=A,B,C` est posé (éteint par défaut). Le puits est
-  volontairement minimal : `POST /api/first-run/events` (`vite.config.js`,
-  `firstRunAbPlugin`) ajoute une ligne par rapport dans
-  `.gev-cache/first-run-ab/events-YYYY-MM-DD.jsonl`, et
-  `scripts/first-run-ab-report.mjs` imprime les totaux par variante, les
-  intervalles de Wilson, un test z contre A, la taille d’échantillon manquante
-  et la règle d’arrêt. Rien d’autre.
-- Décision du mainteneur (2026-09-17) : PostHog viendra plus tard. Ne pas
-  l’intégrer dans la PR du test.
+Context:
+- The first-run card is A/B/C tested on surplomb.app as soon as
+  `GEV_FIRST_RUN_AB=A,B,C` is set (off by default). The sink is deliberately
+  minimal: `POST /api/first-run/events` (`vite.config.js`,
+  `firstRunAbPlugin`) appends one line per report to
+  `.gev-cache/first-run-ab/events-YYYY-MM-DD.jsonl`, and
+  `scripts/first-run-ab-report.mjs` prints the totals per variant, the Wilson
+  intervals, a z-test against A, the missing sample size and the stopping
+  rule. Nothing else.
+- Maintainer's decision (2026-09-17): PostHog will come later. Do not
+  integrate it in the test's pull request.
 
-Conséquences à l’exécution :
-- Pas d’entonnoir entre jours au-delà du couple impression / visite de
-  retour ; pas de tableau de bord, pas d’alerte : lire le résultat demande un
-  `ssh` et un `docker exec`. Une variante qui s’effondre un mardi n’est vue
-  que quand quelqu’un regarde.
-- Ajouter une mesure demande quatre modifications : le client
-  (`src/firstRunTelemetry.js`), le validateur du serveur
-  (`sanitizeFirstRunReport`, `src/firstRunAb.js`), le rapport, et
-  `confidentialite.html`, qui énumère chaque champ envoyé.
-- Ce que PostHog remplacerait : `src/firstRunTelemetry.js`, la route et son
-  validateur, le rapport et son test. `src/firstRunAb.js` (tirage, TTL de
-  13 mois) reste : le tirage doit rester côté client pour que `/` reste une
-  page statique et cacheable.
-- Condition pour garder la dispense de consentement (art. 82 LIL, mesure
-  d’audience) : PostHog EU Cloud (Francfort), mode sans cookie
-  (`persistence: 'memory'`, pas d’autocapture, pas de session replay), sans
-  recoupement avec le cookie `gev_trial`, et le refus déjà en place
-  (`src/firstRunOptOut.js`) branché dessus. Sinon, bandeau de consentement.
-  `/confidentialite` devra nommer PostHog comme sous-traitant, dans la même PR.
+Consequences in runtime:
+- No funnel across days beyond the impression / return-visit pair; no
+  dashboard, no alert: reading the result takes an `ssh` and a `docker exec`.
+  A variant that collapses on a Tuesday is only seen when someone looks.
+- Adding a measure takes four changes: the client
+  (`src/firstRunTelemetry.js`), the server validator
+  (`sanitizeFirstRunReport`, `src/firstRunAb.js`), the report, and
+  `confidentialite.html`, which lists every field sent.
+- What PostHog would replace: `src/firstRunTelemetry.js`, the route and its
+  validator, the report and its test. `src/firstRunAb.js` (the draw, 13-month
+  TTL) stays: the draw must stay client-side so that `/` remains a static,
+  cacheable page.
+- Condition for keeping the consent exemption (article 82 of the French data
+  protection act, LIL, audience measurement): PostHog EU Cloud (Frankfurt),
+  cookieless mode (`persistence: 'memory'`, no autocapture, no session
+  replay), no cross-referencing with the `gev_trial` cookie, and the refusal
+  already in place (`src/firstRunOptOut.js`) wired to it. Otherwise, a consent
+  banner. `/confidentialite` will have to name PostHog as a processor, in the
+  same pull request.
 
 ---
 

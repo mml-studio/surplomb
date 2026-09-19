@@ -2,10 +2,10 @@
 /**
  * Measure what recording ALL French GTFS-RT feeds nationally would cost.
  *
- * `docs/CHRONIQUE.md` records the chronicle as viewport-driven — it keeps only
+ * `docs/CHRONICLE.md` records the chronicle as viewport-driven — it keeps only
  * what an operator's camera happened to make the proxy download — and states
- * the open question in one line: *"le stockage d'un an de GTFS-RT national
- * demande un chiffrage avant de l'allumer"*. This script is that measurement.
+ * the open question in one line: storing a year of national GTFS-RT had to be
+ * priced before anyone switched it on. This script is that measurement.
  *
  * It answers four questions with bytes on the wire, not with arithmetic on
  * guesses:
