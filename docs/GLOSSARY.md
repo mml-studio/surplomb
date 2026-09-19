@@ -69,6 +69,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | la chronique | the chronicle | Server-side archive of live feeds. |
 | essai, liste d’attente | trial, waitlist | |
 | Pass propriétaire | owner pass | |
+| barème national | national scale | The percentile ladder behind the Address X-ray. |
+| note, lettre, rang | score, letter, rank | |
+| fourchette | range | |
 
 ## Administrative and statistical geography
 
@@ -100,6 +103,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | résidence principale / secondaire | primary residence / second home | |
 | logement vacant | vacant dwelling | |
 | pour 1 000 habitants | per 1,000 residents | |
+| arrêté (préfectoral, ministériel) | (prefectoral, ministerial) order | |
+| CGU | terms of use | |
+| loi Informatique et Libertés (LIL) | French data protection act (LIL) | |
 
 ## Real estate and housing
 
@@ -124,6 +130,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | ERP (état des risques et pollutions) | risk disclosure statement (ERP) | **Not** the building category below. |
 | notaire | notary | |
 | estimation | valuation | |
+| bornage | surveyor's boundary marking | Cadastre. On roads, see *Transport*. |
 
 ## Urban planning and buildings
 
@@ -165,6 +172,14 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | méthanisation, méthaniseur | anaerobic digestion, biogas plant | |
 | Bornes de recharge, point de charge | EV charging, charge point | *Bornes de recharge* → *EV charging stations*. |
 | Réseau gaz | Gas network | |
+| filière | generation type | |
+| palier (nucléaire) | reactor series | |
+| fil de l’eau, éclusée, lac | run-of-river, pondage, reservoir | Hydro plant types. |
+| thermique à flamme | fossil-fired | |
+| poste de transformation | transformer substation | |
+| point de piquage | tap-off point | |
+| tronçon (de ligne) | segment | |
+| régie | local utility | |
 
 ## Transport and mobility
 
@@ -191,6 +206,13 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Aéroports | Airports | |
 | Navires et ports, Ports | Ships and ports, Ports | |
 | itinéraire | route | |
+| PAN (point d’accès national) | national access point (PAN) | transport.data.gouv.fr. |
+| créneau, semaine type | slot, typical week | |
+| RRN non concédé | State-run national road network | |
+| bornage (routes) | kilometer-post survey | |
+| Aéroport à trafic régulier / sans trafic régulier | Scheduled-service airport / Airport without scheduled service | |
+| Aérodrome & aéroclub | Airfield & flying club | |
+| piste (aéroport) | runway | |
 
 ## Risks and environment
 
@@ -221,6 +243,18 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | CIEL & MER | SKY & SEA | Layer group. |
 | Missions spatiales, Satellites | Space missions, Satellites | |
 | Contexte global | Global context | |
+| Cours d’eau | Rivers (Vigicrues) | Layer name. |
+| tronçon Vigicrues | river reach | |
+| Stations Hub’Eau | Hub’Eau stations | |
+| Bruit des aéroports, PEB (plan d’exposition au bruit) | Airport noise, noise exposure plan (PEB) | |
+| gêne très forte / forte / modérée | very strong / strong / moderate nuisance | PEB zones. |
+| secteur bâti (Ah, Nh) | built pocket | Zoning. |
+| houlographe | wave buoy | |
+| poste (météo) | station | |
+| fiche climatologique | climate summary sheet | |
+| échéance | forecast horizon | |
+| seuil, levée, digue d’étang | weir, levee, pond dyke | |
+| obstacles à l’écoulement | obstacles to river flow | |
 
 ## Health, emergency services and education
 
@@ -245,6 +279,10 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | éducation prioritaire (REP, REP+) | priority education network (REP, REP+) | |
 | académie | education authority (académie) | |
 | Accueil du jeune enfant, crèche | Early childcare, daycare | |
+| conventionné secteur 1 / secteur 2 | under the health-insurance agreement, sector 1 / sector 2 | |
+| exercice libéral | private practice | |
+| CNAM, Assurance maladie | national health insurance fund (CNAM) | |
+| assistante maternelle | childminder | |
 
 ## Public safety, business and telecoms
 
@@ -267,6 +305,27 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Câbles sous-marins | Submarine cables | |
 | fibre (FTTH) | fiber (FTTH) | |
 | RÉSEAUX & CAPTEURS | NETWORKS & SENSORS | Layer group. |
+| escroqueries | fraud | |
+| dégradations | criminal damage | |
+| Équipements du quotidien | Everyday amenities | Layer name. |
+
+## Cartography and data
+
+| French | English | Note |
+|---|---|---|
+| maille | spatial unit | The unit a value is aggregated on (IRIS, 200 m cell, municipality). |
+| discrétisation | classification | Class breaks of a choropleth. |
+| aplat | fill | |
+| pastille | dot | |
+| tige de rappel | leader stem | The line from a raised label to its ground point. |
+| faisceau | beam | |
+| écrêtage | cap | |
+| maillage (aminci) | (thinned) mesh | |
+| emprise (d’un jeu, d’une couche) | extent | *Emprise au sol* stays *footprint*. |
+| MNT (modèle numérique de terrain) | digital terrain model (MNT) | |
+| millésime | vintage | The year edition of a dataset. |
+| tirage (au sort) | draw | |
+| palier (d’un barème) | plateau | |
 
 ## Interface words
 
@@ -288,6 +347,17 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Partager, Fermer, Ouvrir le globe | Share, Close, Open the globe | |
 | non publié, non publiée | not published | |
 | mesuré, estimé | measured, estimated | |
+| À LA UNE, Toutes les couches | FEATURED, All layers | Phone chips. |
+| Autour de moi, Zoomer ici | Around me, Zoom here | |
+| Image fixe | Still image | |
+| RADIOGRAPHIE, LOURD | X-RAY, HEAVY | Badges. |
+| Recherche | Search | Tab. |
+| Moyenne ouvrée, À cette heure | Weekday average, At this hour | |
+| VENT, SEMAINE, Vélos, Le reste | WIND, WEEK, Bikes, Everything else | Chips. |
+| CHERCHER, ANALYSER, BRANCHER | SEARCH, ANALYZE, PLUG IN | Dataset box steps. |
+| brouillon, sélection | draft, shortlist | |
+| repli (d’un panneau) | fold | |
+| volet A / B / C | part A / B / C | Of a piece of work. |
 
 ## Never translate
 

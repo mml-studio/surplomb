@@ -15,7 +15,9 @@ same things at more length.
   module is migrated, leave its French strings where they are.
 - **Use [`docs/GLOSSARY.md`](docs/GLOSSARY.md)** for every French term
   (*commune* → *municipality*, *DVF* → *property sales (DVF)*). A missing term
-  goes into the section of its domain in the same pull request.
+  goes into the section of its domain in the same pull request — except during
+  a parallel translation wave, where batches list new terms in their PR body and
+  the glossary is updated once, between waves.
 - **Do not rewrite history.** Commits and pull requests before 2026-09-19 are
   mostly French; leave them. The `English` check fails a pull request whose
   title or own commits read as French (`node scripts/check-english.mjs --base
