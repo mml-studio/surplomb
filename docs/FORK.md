@@ -137,8 +137,6 @@ written after the fork point. Where the same concern lives:
 **[`docs/MAINTAINER_WORKFLOW.md`](https://github.com/bilawalsidhu/gods-eye-view/blob/0d41b6be5490db1f10a171f238be75db4d4ec3b4/docs/MAINTAINER_WORKFLOW.md)**
 (acceptance gates for community PRs)
 - One owner opens and merges every PR (269 merged, all from `mml-studio`).
-  259 of the 268 commits carry a `Co-Authored-By: Claude` trailer: the code is
-  written with coding agents and reviewed by the owner.
 - Gates: [AGENTS.md](../AGENTS.md) ("Before you push"), the
   [PR template](../.github/pull_request_template.md) (What changes / Why /
   Verified), and CI: `.github/workflows/ci.yml` (`npm run doctor`, `npm test`,
