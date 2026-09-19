@@ -679,6 +679,54 @@ export function projectPowerGrid(payload, {
     }
   }
 
+  const { tiers, stats } = powerGridRollup(strokes, substations, voltageValues);
+
+  return {
+    strokes,
+    substations,
+    towers,
+    operators: operators.values,
+    routes: routes.values,
+    voltages: voltageValues,
+    tiers,
+    stats: {
+      ...stats,
+      towers: towers.length,
+      // Distinct mapped route names in view — the closest honest answer to
+      // "how many LINES am I looking at", which the way count is not.
+      routes: routes.values.length,
+      rejected,
+    },
+    // Honest truncation, per class: Overpass cut the result, so the box holds
+    // more of that class than was served. Reported rather than hidden, because
+    // a truncated stroke set has GAPS in it and the legend has to say so.
+    saturated: {
+      strokes: counts.strokes >= caps.strokes,
+      substations: counts.substationWays >= caps.substationWays
+        || counts.substationNodes >= caps.substationNodes
+        || counts.substationRelations >= caps.substationRelations,
+      towers: towersRequested && counts.towers >= caps.towers,
+    },
+    caps: { ...caps },
+    towersRequested: Boolean(towersRequested),
+  };
+}
+
+/**
+ * Per-band roll-up of a set of strokes and substations: the numbers the key
+ * prints and the row counts.
+ *
+ * Shared by the per-viewport projection above and by the national pack
+ * (`powerGridNational.js`), so the two legends are the same arithmetic over
+ * different sets rather than two versions of it that could drift.
+ *
+ * @param {Array<object>} strokes Projected strokes (`vi`, `km`, `u`).
+ * @param {Array<object>} substations Projected substations (`vi`, `role`).
+ * @param {Array<object>} voltageValues The voltage dictionary both index into.
+ * @returns {{tiers: Array<object>, stats: object}} Bands in the fixed order,
+ *   empty ones dropped, and the totals.
+ */
+export function powerGridRollup(strokes, substations, voltageValues) {
   // Per-tier roll-up, in the fixed band order so the legend never reshuffles.
   const tierStats = new Map(POWER_GRID_TIERS.map((tier) => [tier.id, {
     id: tier.id,
@@ -719,14 +767,7 @@ export function projectPowerGrid(payload, {
       overheadKm: round1(tier.overheadKm),
       undergroundKm: round1(tier.undergroundKm),
     }));
-
   return {
-    strokes,
-    substations,
-    towers,
-    operators: operators.values,
-    routes: routes.values,
-    voltages: voltageValues,
     tiers,
     stats: {
       strokes: strokes.length,
@@ -734,25 +775,8 @@ export function projectPowerGrid(payload, {
       overheadKm: round1(lengthKm - undergroundKm),
       undergroundKm: round1(undergroundKm),
       substations: substations.length,
-      towers: towers.length,
       byRole,
-      // Distinct mapped route names in view — the closest honest answer to
-      // "how many LINES am I looking at", which the way count is not.
-      routes: routes.values.length,
-      rejected,
     },
-    // Honest truncation, per class: Overpass cut the result, so the box holds
-    // more of that class than was served. Reported rather than hidden, because
-    // a truncated stroke set has GAPS in it and the legend has to say so.
-    saturated: {
-      strokes: counts.strokes >= caps.strokes,
-      substations: counts.substationWays >= caps.substationWays
-        || counts.substationNodes >= caps.substationNodes
-        || counts.substationRelations >= caps.substationRelations,
-      towers: towersRequested && counts.towers >= caps.towers,
-    },
-    caps: { ...caps },
-    towersRequested: Boolean(towersRequested),
   };
 }
 

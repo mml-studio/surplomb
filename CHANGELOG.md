@@ -19,6 +19,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   change pas.
 
 ### Changed
+- **Le réseau électrique mettait longtemps à s’afficher, et rien du tout
+  au-dessus de 120 km.** Chaque tracé venait d’une requête Overpass en direct :
+  4 à 21 s pour une vue jamais demandée, et aucune vue nationale possible (la
+  même requête sur toute la France prend 4 min). La couche embarque désormais
+  un **réseau national** pré-construit, comme le réseau gaz : les 89 000 km de
+  lignes à 50 kV et plus cartographiées en France et 4 400 postes, simplifiés
+  à 50 m près, dans un fichier statique de 570 Ko compressé. Il s’affiche à
+  toute altitude, selon la hauteur de vue : le 400 et le 225 kV depuis
+  l’espace, le maillage 63/90 kV sous 600 km. Sous 120 km, le tracé exact, les
+  postes nommés et les pylônes se chargent comme avant et **remplacent sur
+  place** les lignes nationales qu’ils couvrent, sans jamais tracer une ligne
+  deux fois. Le reste du pays reste affiché autour. Si Overpass ne répond pas,
+  le réseau national reste à l’écran au lieu d’une couche en erreur.
+  Reconstruction : `npm run power-grid:national`.
 - **Le globe portait encore l’identité de God’s Eye View.** L’œil cyan qui
   suivait le curseur, le mot en capitales espacées, les panneaux bleu nuit,
   la police machine à écrire et un bandeau « TOP SECRET » : tout venait du

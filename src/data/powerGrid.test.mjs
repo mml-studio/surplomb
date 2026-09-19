@@ -28,6 +28,7 @@ import powerGridLayer, {
   buildPowerSelectionLabel,
   createSubstationOverlayEntry,
   formatGridKm,
+  formatGridKmFr,
   mapPowerAnalystRecord,
   powerClassificationTypeForScene,
   powerClassificationTypeForStack,
@@ -40,6 +41,7 @@ import powerGridLayer, {
   selectPowerOverlayCohort,
   substationPointSize,
 } from './powerGrid.js';
+import { buildPowerGridNationalPack, hydratePowerGridNationalPack } from './powerGridNational.js';
 
 const OSM = JSON.parse(readFileSync(
   new URL('./fixtures/power-grid-osm-sample.json', import.meta.url),
@@ -721,4 +723,135 @@ test('a view with nothing overhead in it SAYS so, instead of just drawing no pyl
   // And an empty payload has nothing to say either way.
   _setPowerGridStateForTest({ payload: null, records: new Map(), pylonIds: [], enabled: true });
   assert.equal(_powerRowControlsForTest().note, '');
+});
+
+// --- The national pack under the viewport ---------------------------------
+
+/** A national pack cut from the same captured answer, as the layer holds it. */
+function nationalPack() {
+  const OSM_SAMPLE = JSON.parse(readFileSync(
+    new URL('./fixtures/power-grid-osm-sample.json', import.meta.url),
+    'utf8',
+  ));
+  return hydratePowerGridNationalPack(buildPowerGridNationalPack(OSM_SAMPLE.elements, {
+    inFrance: () => true,
+    osmBase: '2026-09-19T12:55:16Z',
+  }));
+}
+
+/** A camera above the viewport ceiling, looking at a stated rectangle. */
+function highCamera(view, heightM = 3_000_000) {
+  return {
+    camera: {
+      computeViewRectangle: () => Cesium.Rectangle.fromDegrees(view.west, view.south, view.east, view.north),
+      positionCartographic: { height: heightM },
+      pickEllipsoid: () => Cesium.Cartesian3.fromDegrees(
+        (view.west + view.east) / 2, (view.south + view.north) / 2, 0, Cesium.Ellipsoid.WGS84,
+      ),
+    },
+    scene: {
+      globe: { ellipsoid: Cesium.Ellipsoid.WGS84 },
+      canvas: { clientWidth: 1400, clientHeight: 900 },
+      requestRender() {},
+    },
+  };
+}
+
+test('above the ceiling over France the national pack IS the map, not a zoom prompt', async () => {
+  // THE REQUEST, as a unit (2026-09-19): "j'aimerais qu'il s'affiche même avec
+  // une vue bien dézoomée et nationale". The same country-wide camera that
+  // used to earn "Zoome sous 120 km" now earns a map and a green row.
+  const overlayHost = { setEntries() {}, setVisible() {}, clearSource() {} };
+  const viewer = highCamera({ west: -5, south: 42, east: 9, north: 51 });
+  _setPowerGridStateForTest({ viewer, records: new Map(), payload: null, overlayHost, national: nationalPack() });
+  assert.equal(powerViewportBox(viewer), null, 'still past the viewport gate');
+  assert.equal(await powerGridLayer.update(viewer), true);
+  const stats = _powerStatsForTest();
+  assert.equal(stats.status, 'ok', 'a national camera is not a guidance state any more');
+  assert.equal(stats.national, true);
+  assert.equal(stats.nationalBand, 'national');
+  assert.ok(!stats.error);
+  assert.match(stats.loadingLabel, /Réseau national/);
+  assert.match(stats.loadingLabel, /400 et 225 kV/, 'from space it says it is drawing the backbone only');
+  assert.match(stats.loadingLabel, /600 km/, 'and where the rest of the grid comes in');
+});
+
+test('outside France the pack says where it applies, and the prompt still flies you in', async () => {
+  const overlayHost = { setEntries() {}, setVisible() {}, clearSource() {} };
+  const viewer = highCamera({ west: 130, south: 30, east: 145, north: 40 });
+  _setPowerGridStateForTest({ viewer, records: new Map(), payload: null, overlayHost, national: nationalPack() });
+  assert.equal(await powerGridLayer.update(viewer), true);
+  const stats = _powerStatsForTest();
+  assert.equal(stats.status, 'zoom-in', 'over Japan there is nothing to show until the viewport path loads');
+  assert.match(stats.loadingLabel, /France seulement/);
+  assert.match(stats.loadingLabel, /120 km/);
+});
+
+test('the national key shows the bands on screen, in French figures, and states the simplification', () => {
+  const pack = nationalPack();
+  _setPowerGridStateForTest({ payload: null, records: new Map(), national: pack, nationalBandId: 'national' });
+  const controls = _powerRowControlsForTest();
+  const labels = controls.legend.map((row) => row.label);
+  assert.deepEqual(labels, ['≥ 300 kV', '180–299 kV'], 'from space the key is the backbone the map draws');
+  for (const row of controls.legend) {
+    assert.match(row.blurb, /cartographiés en France/);
+    assert.match(row.blurb, /pas la hauteur des câbles/, 'the ground-route limit survives the translation');
+  }
+  assert.match(controls.note, /simplifié à 50 m/);
+  assert.match(controls.note, /2026-09-19/, 'the key says how old the map is');
+  assert.match(controls.note, /120 km/, 'and where the exact detail is');
+
+  _setPowerGridStateForTest({ payload: null, records: new Map(), national: pack, nationalBandId: 'regional' });
+  assert.ok(_powerRowControlsForTest().legend.some((row) => row.label === '50–99 kV'),
+    'below 600 km the 63/90 kV mesh has a row, because it has a line on screen');
+
+  // A viewport answer on screen takes the key back: its figures are the view's.
+  _setPowerGridStateForTest({ payload: PAYLOAD, records: new Map(), national: pack, nationalBandId: 'local' });
+  assert.match(_powerRowControlsForTest().legend[0].blurb, /of mapped route in view/);
+});
+
+test('French figures read as French: 89 058 km, never 89,058', () => {
+  assert.match(formatGridKmFr(89058.4), /^89\s058 km$/u);
+  assert.equal(formatGridKmFr(12.34), '12,3 km');
+  assert.equal(formatGridKmFr(Number.NaN), '—');
+});
+
+test('a national stroke card says it is simplified, and a viewport card does not', () => {
+  const pack = nationalPack();
+  const stroke = pack.strokes.find((candidate) => candidate.id === 'w85226749');
+  const national = buildPowerSelectionLabel({ kind: 'stroke', stroke }, pack);
+  assert.match(national, /simplifié à 50 m/);
+  assert.match(national, /120 km/);
+  const viewport = buildPowerSelectionLabel(
+    { kind: 'stroke', stroke: PAYLOAD.strokes.find((candidate) => candidate.id === 'w85226749') },
+    PAYLOAD,
+  );
+  assert.doesNotMatch(viewport, /simplifié/);
+});
+
+test('a failed refinement under the national map is a note, not a red layer', async () => {
+  // Overpass failing used to leave the operator a red row and an empty globe.
+  // With the pack on screen the routes are still there, so the failure is a
+  // sentence under the row and the retry keeps running.
+  const overlayHost = { setEntries() {}, setVisible() {}, clearSource() {} };
+  const viewer = cameraFixture({
+    view: { west: 2.0, south: 48.6, east: 2.4, north: 48.8 },
+    focus: { lat: 48.7, lon: 2.2 },
+    heightM: 20_000,
+  });
+  _setPowerGridStateForTest({ viewer, records: new Map(), payload: null, overlayHost, national: nationalPack() });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('504 from every mirror'); };
+  try {
+    assert.ok(powerViewportBox(viewer), 'the fixture is inside the viewport gate');
+    await powerGridLayer.update(viewer);
+    const stats = _powerStatsForTest();
+    assert.equal(stats.status, 'ok');
+    assert.ok(!stats.error, 'nothing reaches the fault slot');
+    assert.match(stats.loadingLabel, /détail local indisponible/);
+  } finally {
+    globalThis.fetch = realFetch;
+    // Clears the backoff timer the failure armed, so the suite can exit.
+    powerGridLayer.disable();
+  }
 });
