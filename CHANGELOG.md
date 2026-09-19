@@ -5,6 +5,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Added
+- **The globe can speak English, one module at a time.** `/globe?lang=en`
+  switches the page to English and remembers the choice (`?lang=fr` switches
+  back); French stays the default and nothing changes for a French reader.
+  The Gironde megafire layer is the first to answer in English — its play
+  chip, its five frame chips (`Jul 24 09:05`), its clock (`day 4 of 10`,
+  `last detection`) and its whole on-map key — while the rest of the globe is
+  translated batch by batch in the next pull requests. The language is decided
+  before the first paint, so an English page never flashes French.
+
 ### Fixed
 - **Un lien vers Lyon ouvrait les ventes sur une carte vide.** Dans certaines
   orientations de la caméra, Cesium voyait bouger une caméra immobile : la

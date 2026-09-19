@@ -984,6 +984,13 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   color: rgba(247, 244, 234, 0.72);
 }
 
+/* An English page keeps the line hidden until src/i18n/markup.js has
+   translated the markup and set `data-i18n-ready` (src/boot.js): the French
+   of index.html must not flash first. A French page never matches. */
+html[lang="en"]:not([data-i18n-ready]) #loading-screen .loader-status {
+  visibility: hidden;
+}
+
 /* ── Post-Processing Toggles ─────────────────── */
 #pp-toggles {
   --pp-expanded-width: var(--display-panel-expanded-width);

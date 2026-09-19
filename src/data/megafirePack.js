@@ -91,6 +91,9 @@
  * explicit `Z`.
  */
 
+import messages from './megafirePack.i18n.js';
+import { monthName } from '../i18n/format.js';
+
 /** @constant {string} Copernicus EMS Rapid Mapping activation code. */
 export const MEGAFIRE_ACTIVATION = 'EMSR899';
 
@@ -158,9 +161,16 @@ export const MEGAFIRE_WINDOW_END = '2026-08-01T12:44:00Z';
  * 44 minutes after the Legion one, which is why MONIT01 is the best-covered
  * step and carries 234 active flames against MONIT02's 11.
  *
+ * `label` is DATA, and French: the build writes it into `event.json`, the QA
+ * harness matches chips against it, and `megafireClock.test.mjs` pins it to
+ * {@link megafireStepLabel}'s French output. What a reader sees is
+ * `megafireStepLabel(Date.parse(step.acq))`, in the page's language — the
+ * reason the block is exempt from the i18n ratchets.
+ *
  * @constant {ReadonlyArray<{id: string, product: string, acq: string,
  *   sensor: string, resolution: string, burntHa: number, label: string}>}
  */
+// i18n-ignore-start — persisted data values (sensor names, French labels), see above.
 export const MEGAFIRE_STEPS = Object.freeze([
   Object.freeze({
     id: 'del-product',
@@ -208,6 +218,28 @@ export const MEGAFIRE_STEPS = Object.freeze([
     label: '1ᵉʳ août 11:38',
   }),
 ]);
+// i18n-ignore-end
+
+/**
+ * The label of an acquisition instant, in UTC, in the page's language:
+ * `24 juil. 09:05` / `Jul 24 09:05`. The step chips' text, and the stem of
+ * `megafireCursorLabel`.
+ *
+ * UTC and not Europe/Paris: every instant in this pack is a satellite
+ * acquisition or a VIIRS granule, both published in UTC, and converting would
+ * make the hour on screen disagree with `event.json` and with the Copernicus
+ * product name — the two places a reader could go and check it.
+ *
+ * @param {number} instantMs
+ * @returns {string} `—` for a non-finite instant.
+ */
+export function megafireStepLabel(instantMs) {
+  if (!Number.isFinite(instantMs)) return '—';
+  const date = new Date(instantMs);
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  return messages().stamp(date.getUTCDate(), monthName(date.getUTCMonth(), { style: 'short' }), `${hh}:${mm}`);
+}
 
 /**
  * Simplification budget, and why these two numbers.

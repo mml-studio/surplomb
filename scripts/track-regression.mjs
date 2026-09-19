@@ -92,7 +92,7 @@
 
 import fs from 'node:fs';
 import puppeteer from 'puppeteer';
-import { skipVitrine } from './lib/qa-first-run.mjs';
+import { newQaPage } from './lib/qa-first-run.mjs';
 import { classifyAircraft, CLASS_SCALE_3D, CLASS_MODEL_REAL } from '../src/data/aircraftClass.js';
 import { ensureGeoidReady, geoidHeight } from '../src/data/geoid.js';
 
@@ -249,9 +249,11 @@ async function main() {
   const sawLog = { detection: false, readout: false };
 
   try {
-    const page = await browser.newPage();
-    // Every run is a first visitor, and the bare root shows them the showcase.
-    await skipVitrine(page);
+    // Every run is a first visitor: newQaPage keeps the showcase and the
+    // first-run card out of the way and pins the locale (French unless
+    // GEV_QA_LOCALE says otherwise). `photoreal: true` because the ground and
+    // seating checks below measure against Google's 3D surface.
+    const page = await newQaPage(browser, { photoreal: true });
     await page.setViewport({ width: 1280, height: 800 });
     await page.setRequestInterception(true);
     page.on('request', (request) => {
