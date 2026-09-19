@@ -738,10 +738,16 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // enum that kept it would let the model put on the globe something the reader
   // cannot switch back off. −58 bytes, one cache bust. No common-name clause
   // takes its place: there is nothing to resolve TO.
-  assert.equal(block.length, 38201, 'tool schema byte length drifted from the frozen baseline');
+  //
+  // Re-frozen a TENTH time, for the product's name and nothing else: five
+  // descriptions (`fly_to_location`, `set_layer_visibility`, `set_panel_open`,
+  // `set_visual_style`, `get_entity_context`) still called the app "God's Eye
+  // View" or "GEV" after the fork was renamed Surplomb on 2026-09-15. No enum,
+  // no parameter, no tool moved. −3 bytes, one cache bust.
+  assert.equal(block.length, 38198, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '49ffacee5d36ffe306d8ee518e923e3d201185c7bc6ee493423099007bd62e73',
+    '11ac6c78659ebab1e3095c016dad5a8bce34121025665a263f251e44b0697893',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 

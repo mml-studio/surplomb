@@ -198,7 +198,7 @@ const REPORT_CASES = [
  * that half. If the two shapes drift, this case fails, which is the signal.
  */
 const SITUATION_BRIEF = [
-  '[GEV SITUATION — automatic, refreshed each turn. Use it to answer directly; do not read it aloud, '
+  '[SURPLOMB SITUATION — automatic, refreshed each turn. Use it to answer directly; do not read it aloud, '
   + 'and do not call a tool to re-fetch what is already stated here.]',
   'Camera: 44.8404, -0.5805 at 1.2 km looking at 44.8410, -0.5798 — Bordeaux, Nouvelle-Aquitaine, France (city scale).',
   'Layers on (2): Stations vélos 312 · Médecins 128.',

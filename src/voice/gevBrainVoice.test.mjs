@@ -531,7 +531,7 @@ test('every turn carries where-we-are, and only the newest one', async () => {
   let tick = 0;
   const { session } = makeHarness({
     replies: [{ message: { content: 'Ok.' }, usage: { cost: 0 } }],
-    describeSituation: async () => `[GEV SITUATION]\nCamera: brief ${++tick}.`,
+    describeSituation: async () => `[SURPLOMB SITUATION]\nCamera: brief ${++tick}.`,
   });
   await session.start({});
   await session.runTurn('Où suis-je ?');

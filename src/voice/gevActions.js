@@ -1040,7 +1040,7 @@ export async function buildSituationBrief({ viewer, styleManager, dataManager })
     }
 
     const body = lines.join('\n').slice(0, SITUATION_MAX_CHARS);
-    return `[GEV SITUATION — automatic, refreshed each turn. Use it to answer directly; do not read it aloud, `
+    return `[SURPLOMB SITUATION — automatic, refreshed each turn. Use it to answer directly; do not read it aloud, `
       + `and do not call a tool to re-fetch what is already stated here.]\n${body}`;
   } catch {
     return null;

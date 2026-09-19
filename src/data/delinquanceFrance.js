@@ -298,8 +298,8 @@ const SELECTED_COLOR = '#00ffff';
  * these three strings are not a reuse of the ones below.
  */
 const TOTAL_STATE_BLURBS = Object.freeze({
-  published: 'Somme des indicateurs DIFFUSÉS pour cette maille — total calculé par God’s Eye '
-    + 'View, pas publié par le SSMSI. Dès qu’un indicateur y est non diffusé, c’est un MINORANT : '
+  published: 'Somme des indicateurs DIFFUSÉS pour cette maille — total calculé par '
+    + 'Surplomb, pas publié par le SSMSI. Dès qu’un indicateur y est non diffusé, c’est un MINORANT : '
     + 'le vrai total est plus élevé, d’un montant inconnu. Unités mélangées (victimes, '
     + 'infractions, véhicules, mis en cause).',
   zero: 'Aucun fait enregistré sur AUCUN des indicateurs, et aucun n’est non diffusé. Un zéro '

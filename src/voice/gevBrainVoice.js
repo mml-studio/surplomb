@@ -691,8 +691,8 @@ export class GevBrainVoiceSession {
     const voice = this.voices.find((entry) => entry?.voiceURI === uri) || null;
     const utterance = new this.scope.SpeechSynthesisUtterance(
       String(language).toLowerCase().startsWith('fr')
-        ? 'Contrôle vocal GEV. Caméra en place.'
-        : 'GEV voice control. Camera in place.',
+        ? 'Contrôle vocal Surplomb. Caméra en place.'
+        : 'Surplomb voice control. Camera in place.',
     );
     utterance.lang = voice?.lang || language;
     if (voice) utterance.voice = voice;

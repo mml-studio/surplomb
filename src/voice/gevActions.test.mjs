@@ -3350,7 +3350,7 @@ test('the situation brief says where we are, what is on, and what "this" means',
   const runner = createGevActionRunner({ viewer, styleManager, dataManager });
   const brief = await runner.describeSituation();
 
-  assert.match(brief, /GEV SITUATION/);
+  assert.match(brief, /SURPLOMB SITUATION/);
   assert.match(brief, /do not read it aloud/);
   assert.match(brief, /Camera: 30\.2600, -97\.7400/);
   assert.match(brief, /Layers on \(1\): Stations vélos 312\./);

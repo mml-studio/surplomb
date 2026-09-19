@@ -271,7 +271,7 @@ export function avisSubjectCard(payload) {
     details.push(`millésime(s) ${payload.unavailableYears.join(', ')} indisponible(s) au moment `
       + 'du calcul — l’échantillon est plus mince que la fenêtre annoncée');
   }
-  details.push('estimation GEV à partir des comparables DVF — pas un avis de valeur réglementaire');
+  details.push('estimation Surplomb à partir des comparables DVF — pas un avis de valeur réglementaire');
   return { title, details };
 }
 
@@ -493,7 +493,7 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
 export function avisLegendMethod(payload) {
   const estimate = payload?.estimate || {};
   return [
-    'Estimation GEV sur comparables DVF',
+    'Estimation Surplomb sur comparables DVF',
     estimate.rung?.label || null,
     avisYearsLabel(payload?.years),
   ].filter(Boolean).join(' · ');
@@ -599,7 +599,7 @@ const base = createAddressScanLayer({
   id: AVIS_LAYER_ID,
   name: 'Avis de valeur (DVF)',
   icon: '≈',
-  source: 'Estimation GEV — comparables DVF (Etalab / DGFiP)',
+  source: 'Estimation Surplomb — comparables DVF (Etalab / DGFiP)',
   endpoint: '/api/avis-valeur',
   updateInterval: UPDATE_INTERVAL_MS,
   // The block rung, which is where the estimate starts and where it lands
