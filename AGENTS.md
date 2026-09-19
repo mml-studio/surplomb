@@ -17,7 +17,9 @@ same things at more length.
   (*commune* → *municipality*, *DVF* → *property sales (DVF)*). A missing term
   goes into the section of its domain in the same pull request.
 - **Do not rewrite history.** Commits and pull requests before 2026-09-19 are
-  mostly French; leave them.
+  mostly French; leave them. The `English` check fails a pull request whose
+  title or own commits read as French (`node scripts/check-english.mjs --base
+  origin/main --head HEAD --title "…"` runs it locally).
 
 ## Commits and pull requests
 

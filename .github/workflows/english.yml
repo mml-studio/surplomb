@@ -1,0 +1,41 @@
+# Pull requests are written in English since 2026-09-19 (CONTRIBUTING.md,
+# "Language"). This job reads the PR title and the PR's own commits only;
+# the French history before the switch is never checked.
+#
+# Separate from CI so that editing a PR title re-runs this check alone.
+name: English
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: english-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  english:
+    name: English title and commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+
+      - name: Check the PR title, commit messages and added docs
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-english.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --title "$PR_TITLE"
