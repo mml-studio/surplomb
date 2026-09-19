@@ -83,7 +83,7 @@ export const DATA_CREDITS = [
   {
     key: 'power-grid-osm',
     html:
-      'High-voltage grid (lines, cables, substations, pylons &mdash; per viewport): ' +
+      'High-voltage grid (lines, cables, substations, pylons &mdash; France from a pre-built national pack, the exact routes per viewport): ' +
       '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap contributors</a> ' +
       '(ODbL 1.0). Volunteer mapping, not a grid register: coverage varies by country, ' +
       'only features OSM gives a voltage of 50 kV or more are drawn, and routes are the ' +
