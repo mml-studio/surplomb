@@ -90,6 +90,7 @@ export const DVF_MAX_SALES = 400;
  * space carrying no surface, and counting it as a home is how a block sale
  * turns into a thousand imaginary flats.
  */
+// i18n-ignore-next-line — DVF `type_local` values, matched against the register's rows.
 export const DWELLING_TYPES = Object.freeze(['Appartement', 'Maison']);
 
 /**
@@ -102,6 +103,7 @@ export const DWELLING_TYPES = Object.freeze(['Appartement', 'Maison']);
  * different matter and still disqualifies the ratio: it prices on its own
  * terms and the register does not say how the total was split.
  */
+// i18n-ignore-next-line — a DVF `type_local` value, matched against the register's rows.
 export const ANCILLARY_TYPES = Object.freeze(['Dépendance']);
 
 /**
@@ -132,9 +134,11 @@ export const ANCILLARY_TYPES = Object.freeze(['Dépendance']);
  */
 export function saleKind(sale) {
   const types = Array.isArray(sale?.types) ? sale.types : [];
+  // i18n-ignore-start — DVF `type_local` values in, stable fold keys out (share links use them).
   if (types.includes('Maison')) return 'maison';
   if (types.includes('Appartement')) return 'appartement';
   return 'autre';
+  // i18n-ignore-end
 }
 
 /**
@@ -150,6 +154,7 @@ export function saleKind(sale) {
  * a normal listing against. Both are still RETURNED as sales, because they
  * happened; they simply carry `prixM2: null`.
  */
+// i18n-ignore-next-line — DVF `nature_mutation` values, as the register publishes them.
 export const PRICED_NATURES = Object.freeze(['Vente', "Vente en l'état futur d'achèvement"]);
 
 /**
@@ -163,7 +168,7 @@ export const PRICED_NATURES = Object.freeze(['Vente', "Vente en l'état futur d'
  */
 export function departementOf(communeCode) {
   const code = String(communeCode || '').trim().toUpperCase();
-  if (!/^[0-9][0-9AB][0-9]{3}$/.test(code)) throw new Error(`dvf: invalid commune code ${communeCode}`);
+  if (!/^[0-9][0-9AB][0-9]{3}$/.test(code)) throw new Error(`dvf: invalid commune code ${communeCode}`); // i18n-ignore-line — developer error
   return code.startsWith('97') ? code.slice(0, 3) : code.slice(0, 2);
 }
 
@@ -216,7 +221,7 @@ export function buildDvfUrl({ year, communeCode }) {
     throw new Error(`dvf: year ${year} is before the first published edition`);
   }
   const code = String(communeCode).trim().toUpperCase();
-  return `${FILES_ROOT}/${parsedYear}/communes/${departementOf(code)}/${code}.csv`;
+  return `${FILES_ROOT}/${parsedYear}/communes/${departementOf(code)}/${code}.csv`; // i18n-ignore-line — URL path
 }
 
 /**
@@ -491,7 +496,7 @@ export function communeReference(mutations) {
   ratios.sort((a, b) => a - b);
   const median = percentile(ratios, 0.5);
   return {
-    basis: median === null ? 'none' : 'commune',
+    basis: median === null ? 'none' : 'commune', // i18n-ignore-line — stable basis key
     code: dominant(codes),
     name: dominant(names),
     // A set that spans two commune codes is not supposed to happen — the proxy
