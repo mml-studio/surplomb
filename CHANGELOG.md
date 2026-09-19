@@ -5,6 +5,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Fixed
+- **Un lien vers Lyon ouvrait les ventes sur une carte vide.** Dans certaines
+  orientations de la caméra, Cesium voyait bouger une caméra immobile : la
+  lecture du cap déplace le vecteur « haut » d’un arrondi de l’ordre de
+  10⁻¹⁵, assez pour dépasser sa tolérance une image sur trois. La fin de mouvement ne partait alors jamais, et les couches qui
+  attendent qu’on s’arrête pour demander ce qu’il y a sous la caméra (ventes,
+  parcelles, DPE, risques…) ne demandaient rien. Mesuré sur surplomb.app avec
+  le lien « Une parcelle vendue à Lyon » : aucune requête en 40 s. Un écart
+  inférieur à 10⁻¹² est désormais traité comme du bruit : ventes et parcelles
+  arrivent à 5,6 s, et une caméra garée ne redessine plus la scène à chaque
+  image.
+
 ### Changed
 - **Sur téléphone, le haut de l’écran ressemble à Google Maps.** La recherche
   est une barre en haut, à côté du logo : on tape dedans, les villes et les

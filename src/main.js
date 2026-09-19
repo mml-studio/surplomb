@@ -42,6 +42,7 @@ import {
   releaseContinuousRender,
 } from './renderGovernor.js';
 import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
+import { installCameraNoiseFloor } from './cameraNoiseFloor.js';
 import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
 import { startFirstRunExperience } from './firstRunBoot.js';
@@ -845,6 +846,9 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
     // toggle finds it live.
     installScopeMask(viewer);
+    // moveEnd must fire once the camera has stopped, at every pose — see
+    // src/cameraNoiseFloor.js (a Lyon share link never loaded its sales).
+    installCameraNoiseFloor(viewer.scene, { Camera: Cesium.Camera });
     if (phoneShell) {
       // A full-screen 2D canvas repainted on every altitude step, over a globe
       // that already fills a 390 px screen — the vignette it draws reads as a
