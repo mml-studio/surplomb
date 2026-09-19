@@ -6,7 +6,7 @@
  *
  * `perf:boot` measures one visitor on a slow laptop. This one measures the
  * other end of the same wire: a `vite preview` process in a container on a
- * 2-vCPU box **shared with the Enerlens production database**. The number that
+ * 2-vCPU box **shared with a production database**. The number that
  * matters there is not the average — it is the p95 under a crowd, and the
  * container's RSS while it happens, because the failure mode is not "the page
  * is slow", it is "Postgres lost its memory".
@@ -24,10 +24,10 @@
  * ── WHY IT MUST RUN ON THE VPS, NOT ON THE MAC ──────────────────────────────
  *
  * The public hostname sits behind Cloudflare, and the Mac shares its IP with
- * the person reading this. `gev.enerlens.com`, retired on 2026-09-17, capped
+ * the person reading this. The former staging hostname, retired on 2026-09-17, capped
  * `/api` at 30 req/10 s per IP. Fifty visitors from here measure the edge, not
  * the server. Run it on the box, against `127.0.0.1`, where the tunnel and
- * the edge are both out of the path. See `docs/PLAN-PERFORMANCE.md` § phase 0.4.
+ * the edge are both out of the path. See phase 0.4 of the performance plan (#124).
  *
  * Usage:
  *   node scripts/perf-origin-bench.mjs --url http://127.0.0.1:4173

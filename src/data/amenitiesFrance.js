@@ -1240,7 +1240,7 @@ async function loadMesh(box) {
  * domain to `schools-fr` and `sup-fr`, and says so in its own legend.
  *
  * THE WITHDRAWAL IS CONDITIONAL, WHICH IS WHY NOTHING IS REMOVED TO PAY FOR
- * IT. `docs/PLAN-CROISEMENTS.md` recorded this as blocked on
+ * IT. The cross-referencing audit (#128) recorded this as blocked on
  * `AMENITY_FAMILIES` being a CACHE KEY — the mesh stores a family by its INDEX
  * in that array, so deleting one silently renames every row of every cached
  * pack and forces a national rebuild. That is all true, and it is only the

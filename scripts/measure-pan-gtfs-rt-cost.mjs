@@ -279,7 +279,7 @@ function sweepOf(report) {
  * number — vehicle-hours per vehicle running at 17 h — measured from the
  * published schedules by `measure-gtfs-service-day.mjs` rather than assumed.
  *
- * Pure, so the figures quoted in `docs/CHRONIQUE-GTFS-RT.md` can be checked
+ * Pure, so the figures quoted in the GTFS-RT cost estimate (#97) can be checked
  * offline against a report that never touched the network.
  */
 export function budgetFromReport(report, {
@@ -385,7 +385,7 @@ export function budgetFromReport(report, {
   };
 }
 
-/** The same numbers, as the tables `docs/CHRONIQUE-GTFS-RT.md` quotes. */
+/** The same numbers, as the tables of the GTFS-RT cost estimate (#97). */
 function printBudget(report, args) {
   const budget = budgetFromReport(report, args);
   console.log(`\n## budget — from ${report.measuredAt}, fleet ${budget.fleet} vehicles`);

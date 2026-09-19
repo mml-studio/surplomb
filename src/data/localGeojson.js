@@ -46,7 +46,7 @@ const LOCAL_OVERLAY_MAX_DISTANCE_M = 14000000;
 const LOCAL_OVERLAY_FADE_START_M = 250000;
 const LOCAL_OVERLAY_FADE_START_RATIO = LOCAL_OVERLAY_FADE_START_M / LOCAL_OVERLAY_MAX_DISTANCE_M;
 
-// ── The globe-LOD budget (PLAN-PERFORMANCE.md § 3.1) ───────────────────────
+// ── The globe-LOD budget (performance plan 3.1, #131) ──────────────────────
 //
 // Two rules decide what a pack DRAWS, and they answer different questions.
 //
@@ -1200,7 +1200,7 @@ export function createLocalGeoJsonLayer({
   /**
    * The recall stems, in ONE batched primitive — the same trade as the segments.
    *
-   * ── WHY THE STEM LEFT THE ENTITY (PLAN-PERFORMANCE.md § 3.1) ────────────
+   * ── WHY THE STEM LEFT THE ENTITY (performance plan 3.1, #133) ───────────
    *
    * A `PolylineGraphics` on an entity is not a line, it is a dozen `Property`
    * objects, each with its own `Event` and its three arrays, plus the two

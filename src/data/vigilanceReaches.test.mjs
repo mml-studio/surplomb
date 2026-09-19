@@ -1,6 +1,6 @@
 // The join the audit called impossible: a vigilance label that names the river.
 //
-// `docs/PLAN-CROISEMENTS.md` recorded two obstacles and called the second the
+// The cross-referencing audit (#128) recorded two obstacles and called the second the
 // real one — "un tronçon Vigicrues ne porte AUCUN code de département : le
 // rattacher demanderait un point-dans-polygone de chaque tronçon contre chaque
 // contour départemental, à chaque bulletin".

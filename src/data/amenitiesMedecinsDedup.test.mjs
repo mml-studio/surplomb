@@ -4,8 +4,8 @@
 // `medecins-fr` draws the conventioned register (64 232 addresses). The same
 // cabinet, from two registers, twice on the map. `amenities-fr` already
 // applies the rule that settles it — one register per family, which is why it
-// refuses the BPE's whole education domain — and `docs/PLAN-CROISEMENTS.md`
-// recorded that it owes the same withdrawal here.
+// refuses the BPE's whole education domain — and the cross-referencing audit
+// (#128) recorded that it owes the same withdrawal here.
 //
 // The audit recorded the point as blocked on `AMENITY_FAMILIES` being a CACHE
 // KEY: the mesh stores a family by its INDEX, so deleting one renames every

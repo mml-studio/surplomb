@@ -36,7 +36,7 @@
  * landed: seven writes and five clears across `bdtopoBuildings`, `sitadelFrance`,
  * `localGeojson` and the four consumers of this module. The sentence above is
  * kept in the past tense because it is the argument for this file existing, not
- * a live census — `docs/REPRESENTATION.md` holds the current one.)
+ * a live census — `grep -rn extrudedHeight src/` gives the current one.)
  * CARTOGRAPHY B2 already prescribes the fix and nobody had read it as one:
  *
  *   « Le quantitatif doit migrer sur un canal orthogonal à la profondeur :
@@ -129,7 +129,7 @@
  *     backdrop, disappears; and eight columns collide in Île-de-France, which
  *     is precisely where the values are. It stays on the table as the escape
  *     hatch for a domain concentrated in a few points — `sup-fr`, where
- *     REPRESENTATION.md already proposes a Dorling.
+ *     the representation audit (#78) already proposed a Dorling.
  *
  * (c) KEEP THE POLYGON BASE, KEEP THE HEIGHT LINEAR, AND MAKE THE MISREADING
  *     CHECKABLE. This is what ships, and it rests on the bivariate pairing:

@@ -42,8 +42,8 @@ import { pickAt } from './pickAt.js';
  * promise that clicking it tells you something, so the gate belongs at the data
  * and not at the card. `SHOW_ONLY_PUBLISHING` is that gate and it is one
  * boolean: the shipped pack still carries the whole network, so a deployment
- * that holds a key flips it back and draws all 2 144 without a rebuild. See
- * `docs/meteofrance-api-access.md`, which is the contract that would make that
+ * that holds a key flips it back and draws all 2 144 without a rebuild. The
+ * Météo-France API access note (#195) is the contract that would make that
  * worth doing.
  *
  * `getStats()` reports the 1 954 it withholds, every time. Hiding stations is a
@@ -177,8 +177,8 @@ export const METEO_STATIONS_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
  * keeps all 2 144 stations — 660 KB against 72 KB, paid once, only when the
  * layer is switched on — so that a deployment holding a Météo-France key can
  * flip this constant and draw the whole network with the same artifact. That
- * is the entire cost of keeping the door open; see
- * `docs/meteofrance-api-access.md`.
+ * is the entire cost of keeping the door open; see the Météo-France API
+ * access note in #195.
  *
  * What it removes, measured on the 2026-09-02 pack: 1 954 stations, among them
  * all 7 closed ones and all 6 with no published inventory. What it leaves: 190,

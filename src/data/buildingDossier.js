@@ -13,7 +13,7 @@
  * reader looking at a building actually wants — **what it last sold for, what
  * has been authorised on it, and what the PLU allows there**.
  *
- * `docs/PLAN-CROISEMENTS.md` recorded this as blocked because the three
+ * The cross-referencing audit (#128) recorded this as blocked because the three
  * lookups are "des requêtes réseau déclenchées par une carte, ce que le dépôt
  * ne fait nulle part aujourd'hui". Two halves of that turned out to be wrong,
  * and finding out is what made this module small:

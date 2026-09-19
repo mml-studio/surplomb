@@ -43,8 +43,8 @@
  * which the page answers by going quiet, not with the card).
  *
  * THE OWNER IS NOT A VISITOR. The person who runs the instance needs the
- * comfort routes without a count. The address cannot say who that is: the
- * tailnet and the Cloudflare tunnel both reach the container from the Docker
+ * comfort routes without a count. The address cannot say who that is: a
+ * Tailscale path and the Cloudflare tunnel both reach the container from the Docker
  * bridge gateway (measured 2026-09-17: `172.22.0.1` for both), so an address
  * rule would be a rule for everybody. The owner holds a second signed cookie,
  * `gev_owner`, obtained through a single-use link that only someone with

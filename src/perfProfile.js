@@ -104,7 +104,7 @@ export const LITE_TILE_CACHE_SIZE = 60;
  *
  * ── WHY 60 %, AND WHY ONE NUMBER FOR EVERY LAYER ────────────────────────────
  *
- * `PLAN-PERFORMANCE.md` § 3.5 sets it, and the reason it is a single shared
+ * Phase 3.5 of the performance plan (#115) sets it, and the reason it is a single shared
  * constant rather than a per-layer tuning knob is that a reader on a slow
  * machine must not have to discover that this map thins and that one does not.
  * Two layers drawing at two different densities on the same machine is a bug

@@ -1272,8 +1272,8 @@ export function createMedecinsLayer({
    * this layer draws the conventioned register, 64 232 addresses. The same
    * cabinet, twice, from two registers. `amenities-fr` already applies the
    * rule that settles it ("un seul registre par famille", which is why it
-   * refuses the BPE's whole education domain), and `docs/PLAN-CROISEMENTS.md`
-   * recorded that it owes the same withdrawal here.
+   * refuses the BPE's whole education domain), and the cross-referencing
+   * audit (#128) recorded that it owes the same withdrawal here.
    *
    * NOTHING IS REMOVED TO PAY FOR IT. The withdrawal is conditional and it is
    * published rather than compiled in: the offer exists only while this layer

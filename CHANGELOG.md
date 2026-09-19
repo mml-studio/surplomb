@@ -4150,7 +4150,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   la couche — « 1 321 dans la vue », « 5 000 affichés sur 18 630 », ou
   « rien à cet endroit ». Une proposition est une promesse ; les marques sont
   la seule preuve. Les mesures et les règles sont dans
-  [`docs/DEMANDER-UNE-DONNEE.md`](docs/DEMANDER-UNE-DONNEE.md).
+  `docs/DEMANDER-UNE-DONNEE.md`.
 - **`list_layers` — la voix peut citer le registre au lieu de le deviner.** Le
   29ᵉ outil vocal rend « je n'ai pas cette couche » vérifiable : identifiant,
   libellé français, groupe, état et nombre d'objets chargés, filtrables par un
@@ -4615,7 +4615,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   Voisinage — en valeurs mesurées. `?embed=1` retire l'habillage pour une
   iframe et l'impression du navigateur produit le PDF : les deux offres à 50 €
   et 30 €/mois relevées au démontage, sans une ligne de backend. Palier 1 du
-  triage [`docs/CITYSCAN.md`](docs/CITYSCAN.md).
+  triage `docs/CITYSCAN.md`.
   **Deux chiffres sont situés dans le pays, huit ne le sont pas et disent
   pourquoi.** La surface atteignable à pied en dix minutes et le prix médian au
   m² sont mesurés sur exactement les formes du barème national — un centile,
@@ -4717,8 +4717,8 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   lire sans un pays contre lequel le lire. La `Fiche implantation` imprime
   désormais, sous ses valeurs, un **centile national** par indicateur et une
   **lettre A→E** pour les trois dont le sens n'est pas une opinion. Méthode,
-  mesures et refus : [`docs/BAREME.md`](docs/BAREME.md). Palier 1½ du triage
-  [`docs/CITYSCAN.md`](docs/CITYSCAN.md).
+  mesures et refus : `docs/BAREME.md`. Palier 1½ du triage
+  `docs/CITYSCAN.md`.
   **Le chiffrage annoncé se trompait de lot.** Le triage prévoyait « précalculer
   120 indicateurs sur 35 000 communes, les stocker et les rafraîchir » : un
   tableau à la commune **ne peut pas noter la fiche**, parce que la fiche ne
@@ -4819,7 +4819,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   l'allumer ». Il est fait, mesuré à **deux heures** — une soirée à 1 259
   véhicules et un matin à 4 799 — contre les 147 ressources distinctes de
   l'index et contre les horaires publiés de quatre réseaux, et il tient dans
-  [`docs/CHRONIQUE-GTFS-RT.md`](docs/CHRONIQUE-GTFS-RT.md).
+  `docs/CHRONIQUE-GTFS-RT.md`.
   **La journée de service est l'unité de compte, pas l'heure du sondage** : à
   22 h la France en service pèse un cinquième de ce qu'elle pèse à 17 h, donc
   multiplier un balayage nocturne par 1 440 se tromperait de 80 %. La forme de

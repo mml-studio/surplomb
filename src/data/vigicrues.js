@@ -348,7 +348,7 @@ export function buildVigicruesRecords(reaches, levels) {
  *
  * A vigilance label says "Aude · Orange · Crues" and cannot say WHICH RIVER,
  * because a Vigicrues reach carries no département code — that is the second
- * of the two obstacles `docs/PLAN-CROISEMENTS.md` recorded, and the one it
+ * of the two obstacles the cross-referencing audit (#128) recorded, and the one it
  * called the real one: attributing a reach means a point-in-polygon against
  * the departmental outlines.
  *

@@ -825,7 +825,7 @@ let _unpublishZoneAt = null;
  * Offer "what does the PLU say at this point", from the scan already drawn.
  *
  * A BD TOPO volume's card asks it — the third of the three questions
- * `docs/PLAN-CROISEMENTS.md` wanted a building click to answer — and the
+ * the cross-referencing audit (#128) wanted a building click to answer — and the
  * answer is already resident: this layer holds the zones and servitudes for
  * the box around the scan point, and `gpuAnswerAt` is the point query it
  * already runs for its own ground card.

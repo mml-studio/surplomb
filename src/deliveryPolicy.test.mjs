@@ -2,7 +2,7 @@
 //
 // All three exist because a hosted GEV is not a static site: it runs
 // `vite preview`, which hardcodes `Cache-Control: no-cache` on every file it
-// serves. Measured on gev.enerlens.com before this landed, that meant
+// serves. Measured on the staging origin before this landed, that meant
 // `cf-cache-status: BYPASS` on every asset — the Cloudflare edge stored
 // nothing and each cold visitor pulled 5.06 MB out of the Paris origin.
 //

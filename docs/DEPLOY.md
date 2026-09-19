@@ -1,4 +1,4 @@
-# Deploying this fork
+# Deploying Surplomb
 
 Surplomb is **not a static site**. `vite.config.js` carries ~35 middleware
 proxies that broker API keys, cache upstream answers on disk and hold the AIS
@@ -15,20 +15,48 @@ Two consequences shape everything below:
    (the `define` block in `vite.config.js`), so they must be present when the
    image is built, not only when it runs.
 
-## The staging deployment
+## Deploy your own
+
+`deploy/vps/` holds everything a single Linux box with Docker needs: the
+compose file, a pull-based deploy agent, a health probe, a road-cell warmer and
+their systemd units. The commands below call that box `box` (an `ssh` alias)
+and install into `/opt/gev`, the default `GEV_ROOT` of the scripts.
+
+```bash
+ssh box 'mkdir -p /opt/gev'
+scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh box:/opt/gev/
+scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} box:/etc/systemd/system/
+ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh && chmod 600 /opt/gev/.env'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer'
+```
+
+`/opt/gev/.env` needs at least:
+
+```
+GEV_ACCESS_USER=gev
+GEV_ACCESS_PASSWORD=<a long random string>
+GEV_PUBLIC_HOST=<every hostname the deployment answers on, comma-separated>
+GOOGLE_MAPS_API_KEY=...
+```
+
+plus whatever optional keys you want the layers to have (see `.env.example`).
+`GEV_PUBLIC_HOST` is not decoration: `vite preview` answers `Blocked request`
+to a `Host` header it was not told about.
+
+### How the deploy agent works
 
 One box, one URL, showing the branch you most recently opened a pull request
-for — as long as that branch still contains main. The VPS polls GitHub every
-three minutes; nothing on GitHub needs a route back into the VPS, and the box
+for — as long as that branch still contains main. The box polls GitHub every
+three minutes; nothing on GitHub needs a route back into the box, and the box
 holds no CI credentials.
 
 ```
 GitHub (public repo)
    ↑ poll every 3 min: newest open PR if it contains main, else main
 /opt/gev/gev-deploy.sh  ──build──▶  docker compose  ──▶  gev container :4173
-                                                            ↑            ↑
-                                              cloudflared tunnel     tailnet
-                                              surplomb.app        100.x.x.x:4173
+                                                            ↑              ↑
+                                              tunnel or reverse proxy   private network
+                                              (your public hostname)    GEV_TAILSCALE_IP:4173
 ```
 
 ### What the URL is allowed to show
@@ -51,7 +79,7 @@ obligation this rule creates, and CI asks for it anyway.
 
 The verdict is cached against the exact pair of shas it was computed for, so a
 three-minute timer spends **one** API call per push rather than twenty per hour
-against the 60/h anonymous quota this IP shares with its neighbours.
+against the 60/h anonymous quota the box's IP shares with its neighbors.
 
 An explicit pin (`echo my-branch > /opt/gev/target`) still outranks all of
 this — it is a decision, not an accident — but a stale pin now announces itself
@@ -67,7 +95,7 @@ in the journal and in `state/selection` instead of being discovered hours later.
 and holds every branch of that decision, including the refusal to publish a ref
 that predates the access gate.
 
-### Layout on the VPS
+### Layout on the box
 
 | Path | What it is |
 | --- | --- |
@@ -83,22 +111,156 @@ that predates the access gate.
 | `/opt/gev/src/scripts/warm-road-cells.mjs` | weekly Overpass pre-warm for the ten cities, run by `gev-warm-view.timer` — ships with the source, nothing to copy |
 | `/opt/gev/state/health.log` | one line per probe, ~7 days |
 
+### Day to day
+
+```bash
+ssh box 'cat /opt/gev/state/deployed'          # what is live right now
+ssh box 'cat /opt/gev/state/selection'         # ...and why it, rather than main
+ssh box 'echo my-branch > /opt/gev/target'     # pin the URL to one branch
+ssh box 'echo auto      > /opt/gev/target'     # back to newest-open-PR
+ssh box 'systemctl start gev-deploy.service'   # deploy now, do not wait
+ssh box 'journalctl -u gev-deploy -n 50'       # why a deploy did not happen
+ssh box 'docker logs -n 50 gev'                # why the app misbehaves
+```
+
+A failed build leaves the previous container running: the URL never goes dark
+because a PR does not compile. A ref cut before the access gate existed is
+refused outright rather than deployed open. A branch that is behind main is not
+refused — it is simply not shown, and main takes the URL until the branch is
+rebased.
+
+To check the deployment the way a browser meets it — bundle boots, canvas
+draws, layer proxies answer from that origin — rather than by trusting a
+`200` from `/healthz`:
+
+```bash
+node scripts/qa-deployment.mjs --url https://<your-host>/
+```
+
+### Why the source arrives as a tarball and not a clone
+
+On 2026-09-02 every deploy on the staging box started failing with `could not
+read Username for 'https://github.com'`, three minutes apart, while the
+repository stayed public and cloned fine from a laptop. Tracing it with
+`GIT_CURL_VERBOSE=1` narrowed it to one request: GitHub answered that box's
+anonymous ref advertisement — a GET on `/info/refs` — with **200**, then
+returned **401** to `POST /git-upload-pack`. Every pack transfer goes through
+that POST, so `clone` and `fetch` were both unavailable there whatever the
+protocol version. Listing a ref still worked, but only in **protocol v0**,
+which does not POST; the v2 default could not resolve a branch head from that
+IP at all.
+
+So the agent resolves the head with `git -c protocol.version=0 ls-remote` and
+downloads the tree from `codeload.github.com`, a plain GET. Both are anonymous,
+which is the point: the alternative was a token, and the box deliberately
+holds no credential that GitHub would honor. The costs are real and accepted —
+the full tree every time instead of an incremental fetch, and `/opt/gev/src` is
+not a git repository, so `git -C /opt/gev/src log` does not answer. Read
+`/opt/gev/state/deployed` instead; it carries the sha.
+
+### The compose file does not update itself
+
+The deploy agent swaps `/opt/gev/src` on every run, but it calls
+`docker compose up -d --build` with **the box's own
+`/opt/gev/docker-compose.yml`**, which it never rewrites. So a PR that adds an
+environment variable to the repository's compose file is **inert on the box**
+until that file is copied over by hand.
+
+Not hypothetical: the chronicle merged on 2026-09-07 carrying
+`CHRONICLE_IRVE_DYNAMIC: 1` in `deploy/vps/docker-compose.yml`, the staging
+copy dated from 2026-09-01, and the QualiCharge poller — the **only** source
+that records without anyone looking — stayed disarmed for a day with no error
+and no log line, `/api/chronicle-fr/status` simply answering
+`irveDynamic.armed: false`.
+
+```bash
+scp deploy/vps/docker-compose.yml box:/opt/gev/
+ssh box 'cd /opt/gev && docker compose up -d'    # recreates the container; `restart` will not
+ssh box 'set -a; . /opt/gev/.env; set +a; curl -s -u "gev:$GEV_ACCESS_PASSWORD" \
+  http://localhost:4173/api/chronicle-fr/status | head -c 200'
+```
+
+After any merge meant to change the environment, read `armed` — not GitHub.
+
+### Bounds, for a box you share
+
+The compose file is written for a small box that also runs a production
+database: 2 vCPU, 8 GB and **no swap at all**. Until 2026-09-09 the container
+had no memory limit, no CPU limit and no heap ceiling, so an Overpass or AIS
+cache that ran away, or a burst of cold boots gzipping 8 MB of JavaScript on
+the fly, could take the memory out from under the database. Measured that day,
+idle: **197 MiB and ~2% CPU**, against 427 MB free and 4.6 GB available on the
+host.
+
+`deploy/vps/docker-compose.yml` now carries four numbers:
+
+| Setting | Value | What it is for |
+| --- | --- | --- |
+| `mem_limit` / `memswap_limit` | `1g` / `1g` | 5× the idle footprint. Equal values because the host has no swap, and that is how Docker is told not to start using any. |
+| `cpus` | `1.5` | a ceiling on a runaway, not a reservation. |
+| `cpu_shares` | `512` | the weight **under contention** — half the default, so the container yields the core to the database when both want it, and still burns 1.5 vCPU when the box is idle. |
+| `NODE_OPTIONS` | `--max-old-space-size=768` | Node sizes its heap from the **host's** memory, not the cgroup's. Without this the heap happily grows past `mem_limit` and the kernel OOM-kills the process instead of V8 collecting. |
+
+Applying them is the `scp` from the section above — the deploy agent never
+rewrites that file — and then:
+
+```bash
+scp deploy/vps/docker-compose.yml box:/opt/gev/
+ssh box 'cd /opt/gev && docker compose config >/dev/null && docker compose up -d'
+ssh box 'docker inspect gev --format "mem={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}} shares={{.HostConfig.CpuShares}}"'
+ssh box 'docker stats --no-stream gev'
+```
+
+`docker inspect` reporting `mem=0` means the compose file was copied but the
+container was only restarted, not recreated: `docker compose up -d` is the
+verb, `restart` is not.
+
+### Is it still up?
+
+`gev-deploy.timer` knows the container was built and started. It learns
+nothing about the tunnel, DNS, an edge rule, or a process that came up and
+then wedged — so every outage on staging was found by somebody looking at a
+screen until this existed. `deploy/vps/gev-health-probe.sh` checks both ends
+every five minutes and writes one line per run:
+
+```
+2026-09-09T20:14:03Z origin=200 0.004 {"ok":true,...} public=200 0.081 {"ok":true,...}
+```
+
+`origin` up with `public` down is the tunnel or DNS; both down is the app. It
+runs **from the box**, never from a laptop: an edge rule in front of the
+origin is per source address, and the laptop shares its address with the
+owner's browser.
+
+```bash
+scp deploy/vps/gev-health-probe.sh box:/opt/gev/
+scp deploy/vps/gev-health-probe.{service,timer} box:/etc/systemd/system/
+ssh box 'chmod +x /opt/gev/gev-health-probe.sh'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-health-probe.timer'
+ssh box 'tail -5 /opt/gev/state/health.log'
+```
+
+## Data packs
+
+Two layers draw from a pack built on the box, into the container's cache
+volume, rather than from an upstream at request time.
+
 ### The 2021 carroyage pack
 
 The INSEE carroyage the Géoplateforme relays is **millésime 2019**; INSEE
-published 2021 on 2026-02-12 and the relay has not moved. Staging draws 2021
-only if the pack is built into the container's cache volume:
+published 2021 on 2026-02-12 and the relay has not moved. A deployment draws
+2021 only if the pack is built into the container's cache volume:
 
 ```bash
-ssh vps 'docker exec gev npm run filosofi:pack-2021'   # ~2 min, 91 MB in, 59 MB out
-ssh vps 'docker exec gev node scripts/build-filosofi-2021-pack.mjs --check'
+ssh box 'docker exec gev npm run filosofi:pack-2021'   # ~2 min, 91 MB in, 59 MB out
+ssh box 'docker exec gev node scripts/build-filosofi-2021-pack.mjs --check'
 ```
 
 It writes to `/app/.gev-cache/filosofi-2021`, which is the `gev-cache` named
 volume, so it **survives redeploys** and only has to be rebuilt when INSEE ships
 a new millésime. Without it the proxy serves the relay and reports
-`vintage: 2019` — the year travels with every answer, so staging is never
-wrong about which one it is showing, only older.
+`vintage: 2019` — the year travels with every answer, so the deployment is
+never wrong about which one it is showing, only older.
 
 **Nothing else to do after the build.** The proxy re-checks for a pack once a
 minute, and the millésime is part of the viewport cache key, so boxes already
@@ -123,7 +285,7 @@ built in a **throwaway container off the same image**, with its own cgroup and
 the cache volume mounted:
 
 ```bash
-ssh vps '
+ssh box '
   docker run --rm -m 3800m --memory-swap 3800m \
     -e NODE_OPTIONS=--max-old-space-size=3072 \
     -v gev_gev-cache:/app/.gev-cache \
@@ -136,15 +298,15 @@ ssh vps '
 **3072 is a floor, not a round number.** Measured 2026-09-14 on the real
 archive: 2048 and 2560 both die of `Ineffective mark-compacts near heap limit`
 partway through the BPE read, 3072 finishes in 40 s at 1 751 MB of peak RSS. The
-first try on the VPS used 2048 and aborted at two million rows. Check `free -m`
-before running it — the box has ~4.5 GB available and Postgres is on it.
+first try on staging used 2048 and aborted at two million rows. Check `free -m`
+before running it: the throwaway container may take up to 3.8 GB, next to
+whatever else the box runs.
 
-**Not on the host and not with `docker exec`.** The host carries Node 20 and no
-`node_modules` — it has never needed either, because everything builds inside
-Docker — and `docker exec gev` shares the running container's 1 GiB cgroup,
-which is the ceiling this whole section exists to get out from under. A
-throwaway `docker run` is the only one of the three that has the image, the
-volume and a budget of its own.
+**Not on the host and not with `docker exec`.** The host needs neither Node
+nor `node_modules` — everything builds inside Docker — and `docker exec gev`
+shares the running container's 1 GiB cgroup, which is the ceiling this whole
+section exists to get out from under. A throwaway `docker run` is the only one
+of the three that has the image, the volume and a budget of its own.
 
 The `docker restart` is not optional. The proxy reads the pack once per process
 and remembers that it found nothing, so a container that started before the pack
@@ -164,132 +326,7 @@ there is nothing usable, and the proxy now logs *why* it refused a file.
 BPE is published once a year and FINESS once a month, so a pack is fresh for 30
 days and served stale for 120.
 
-### Day to day
-
-```bash
-ssh vps 'cat /opt/gev/state/deployed'          # what is live right now
-ssh vps 'cat /opt/gev/state/selection'         # ...and why it, rather than main
-ssh vps 'echo my-branch > /opt/gev/target'     # pin staging to one branch
-ssh vps 'echo auto      > /opt/gev/target'     # back to newest-open-PR
-ssh vps 'systemctl start gev-deploy.service'   # deploy now, do not wait
-ssh vps 'journalctl -u gev-deploy -n 50'       # why a deploy did not happen
-ssh vps 'docker logs -n 50 gev'                # why the app misbehaves
-```
-
-A failed build leaves the previous container running: staging never goes dark
-because a PR does not compile. A ref cut before the access gate existed is
-refused outright rather than deployed open. A branch that is behind main is not
-refused — it is simply not shown, and main takes the URL until the branch is
-rebased.
-
-### Why the source arrives as a tarball and not a clone
-
-On 2026-09-02 every deploy started failing with `could not read Username for
-'https://github.com'`, three minutes apart, while the repository stayed public
-and cloned fine from a laptop. Tracing it with `GIT_CURL_VERBOSE=1` narrowed it
-to one request: GitHub answers this box's anonymous ref advertisement — a GET
-on `/info/refs` — with **200**, then returns **401** to `POST
-/git-upload-pack`. Every pack transfer goes through that POST, so `clone` and
-`fetch` are both unavailable here whatever the protocol version. Listing a ref
-still works, but only in **protocol v0**, which does not POST; the v2 default
-cannot resolve a branch head from this IP at all.
-
-So the agent resolves the head with `git -c protocol.version=0 ls-remote` and
-downloads the tree from `codeload.github.com`, a plain GET. Both are anonymous,
-which is the point: the alternative was a token, and this box deliberately
-holds no credential that GitHub would honour. The costs are real and accepted —
-the full tree every time instead of an incremental fetch, and `/opt/gev/src` is
-no longer a git repository, so `git -C /opt/gev/src log` no longer answers.
-Read `/opt/gev/state/deployed` instead; it carries the sha.
-
-To check the deployment the way a browser meets it — bundle boots, canvas
-draws, layer proxies answer from that origin — rather than by trusting a
-`200` from `/healthz`:
-
-```bash
-node scripts/qa-deployment.mjs --url https://surplomb.app/
-```
-
-### The VPS compose file does not update itself
-
-The deploy agent swaps `/opt/gev/src` on every run, but it calls
-`docker compose up -d --build` with **the box's own
-`/opt/gev/docker-compose.yml`**, which it never rewrites. So a PR that adds an
-environment variable to the repository's compose file is **inert on staging**
-until that file is copied over by hand.
-
-Not hypothetical: the chronicle merged on 2026-09-07 carrying
-`CHRONICLE_IRVE_DYNAMIC: 1` in `deploy/vps/docker-compose.yml`, the VPS copy
-dated from 2026-09-01, and the QualiCharge poller — the **only** source that
-records without anyone looking — stayed disarmed for a day with no error and no
-log line, `/api/chronicle-fr/status` simply answering `irveDynamic.armed: false`.
-
-```bash
-scp deploy/vps/docker-compose.yml vps:/opt/gev/
-ssh vps 'cd /opt/gev && docker compose up -d'    # recreates the container; `restart` will not
-ssh vps 'set -a; . /opt/gev/.env; set +a; curl -s -u "gev:$GEV_ACCESS_PASSWORD" \
-  http://localhost:4173/api/chronicle-fr/status | head -c 200'
-```
-
-After any merge meant to change the environment, read `armed` — not GitHub.
-
-### Bounds, because the box is shared
-
-This VPS also carries the **Enerlens production** stack — Postgres, Redis,
-Caddy, Next.js — plus gbrain, hermes and clawvisor, on 2 vCPU, 8 GB and
-**no swap at all**. Until 2026-09-09 the GEV container had no memory limit,
-no CPU limit and no heap ceiling, so an Overpass or AIS cache that ran away,
-or a burst of cold boots gzipping 8 MB of JavaScript on the fly, could take
-the memory out from under the database. Measured that day, idle: **197 MiB and
-~2% CPU**, against 427 MB free and 4.6 GB available on the host.
-
-`deploy/vps/docker-compose.yml` now carries four numbers:
-
-| Setting | Value | What it is for |
-| --- | --- | --- |
-| `mem_limit` / `memswap_limit` | `1g` / `1g` | 5× the idle footprint. Equal values because the host has no swap, and that is how Docker is told not to start using any. |
-| `cpus` | `1.5` | a ceiling on a runaway, not a reservation. |
-| `cpu_shares` | `512` | the weight **under contention** — half the default, so GEV yields the core to Postgres when both want it, and still burns 1.5 vCPU when the box is idle. |
-| `NODE_OPTIONS` | `--max-old-space-size=768` | Node sizes its heap from the **host's** memory, not the cgroup's. Without this the heap happily grows past `mem_limit` and the kernel OOM-kills the process instead of V8 collecting. |
-
-Applying them is the `scp` from the section above — the deploy agent never
-rewrites that file — and then:
-
-```bash
-scp deploy/vps/docker-compose.yml vps:/opt/gev/
-ssh vps 'cd /opt/gev && docker compose config >/dev/null && docker compose up -d'
-ssh vps 'docker inspect gev --format "mem={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}} shares={{.HostConfig.CpuShares}}"'
-ssh vps 'docker stats --no-stream gev'
-```
-
-`docker inspect` reporting `mem=0` means the compose file was copied but the
-container was only restarted, not recreated: `docker compose up -d` is the
-verb, `restart` is not.
-
-### Is it still up?
-
-`gev-deploy.timer` knows the container was built and started. It learns
-nothing about the tunnel, DNS, an edge rule, or a process that came up and
-then wedged — so every outage so far has been found by somebody looking at a
-screen. `deploy/vps/gev-health-probe.sh` checks both ends every five minutes
-and writes one line per run:
-
-```
-2026-09-09T20:14:03Z origin=200 0.004 {"ok":true,...} public=200 0.081 {"ok":true,...}
-```
-
-`origin` up with `public` down is the tunnel or DNS; both down is the app. It
-runs **from the VPS**, never from a laptop: the Cloudflare rule in front of
-this origin is per source address, and the laptop shares its address with the
-owner's browser.
-
-```bash
-scp deploy/vps/gev-health-probe.sh vps:/opt/gev/
-scp deploy/vps/gev-health-probe.{service,timer} vps:/etc/systemd/system/
-ssh vps 'chmod +x /opt/gev/gev-health-probe.sh'
-ssh vps 'systemctl daemon-reload && systemctl enable --now gev-health-probe.timer'
-ssh vps 'tail -5 /opt/gev/state/health.log'
-```
+## Road data: Overpass
 
 ### Somebody pays for the first road fetch — and on a bad day, nobody gets it
 
@@ -300,7 +337,7 @@ whoever arrived first — with nothing on screen while they waited.
 
 It is worse than a wait when the upstream is refusing. That day, Paris looked
 perfect (default view, permanently warm) while Marseille and Biarritz drew a
-coloured TomTom ribbon with **no vehicles on it**. A warm cache is not a
+colored TomTom ribbon with **no vehicles on it**. A warm cache is not a
 speed-up here, it is the difference between degraded and working.
 
 `gev-warm-view.timer` runs `scripts/warm-road-cells.mjs` weekly over **ten
@@ -317,13 +354,13 @@ cell (0.30°, ~33 km) is a certainty — it is wider than any of these cities, s
 any arrival lands in it. The street cell (0.05°, ~5.5 km on a ~555 m lattice)
 depends on where the camera LOOKS, not where it is, so the script warms the
 cell the app's own house framing produces and no more. `src/data/warmCities.js`
-states which is which, and why there is no 3×3 block of neighbours.
+states which is which, and why there is no 3×3 block of neighbors.
 
-Three things about it that are not obvious:
+Things about it that are not obvious:
 
 - **It runs against `localhost:4173`, not the public URL.** The cache being
-  warmed is the proxy's own, inside the container; and the Cloudflare rule in
-  front of this origin is per source address.
+  warmed is the proxy's own, inside the container; and an edge rule in front
+  of the origin is per source address.
 - **It uses the HOST's node, not the container's.** The script imports only
   local modules — no `node_modules` — so it needs nothing the container has.
   (The container's bundled Chrome does not run anyway: `libglib-2.0.so.0`
@@ -337,10 +374,10 @@ Three things about it that are not obvious:
   every cell it would fetch; `--only Lyon,Lille` narrows a real run.
 
 ```bash
-scp deploy/vps/gev-warm-view.{service,timer} vps:/etc/systemd/system/
-ssh vps 'systemctl daemon-reload && systemctl enable --now gev-warm-view.timer'
-ssh vps 'systemctl start gev-warm-view.service'    # warm it now, do not wait
-ssh vps 'journalctl -u gev-warm-view -n 20'        # what it asked for, and how long it took
+scp deploy/vps/gev-warm-view.{service,timer} box:/etc/systemd/system/
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-warm-view.timer'
+ssh box 'systemctl start gev-warm-view.service'    # warm it now, do not wait
+ssh box 'journalctl -u gev-warm-view -n 20'        # what it asked for, and how long it took
 ```
 
 A run that reports `cache=HIT` on its own first request is not a failure —
@@ -383,8 +420,8 @@ that was locked. Which means:
 
 Why Paris keeps working while Marseille does not: Paris is the default view and
 is in the disk cache; anywhere else has no graph, and the TomTom ribbon carries
-its own geometry, so the roads still colour in with nobody driving on them. A
-coloured road with no cars is an Overpass symptom, not a TomTom one.
+its own geometry, so the roads still color in with nobody driving on them. A
+colored road with no cars is an Overpass symptom, not a TomTom one.
 
 Three levers, in the order they were used that day:
 
@@ -425,41 +462,18 @@ it would cache the void for the 7-to-30-day disk TTL.
 One probe, from the right place, with the right agent string:
 
 ```bash
-ssh vps 'docker exec gev node -e "fetch(\"https://overpass-api.de/api/interpreter\",{method:\"POST\",headers:{\"User-Agent\":\"surplomb/1.0\"},body:\"data=[out:json];out count;\"}).then(r=>console.log(r.status)).catch(e=>console.log(\"REFUSED\",e.message))"'
+ssh box 'docker exec gev node -e "fetch(\"https://overpass-api.de/api/interpreter\",{method:\"POST\",headers:{\"User-Agent\":\"surplomb/1.0\"},body:\"data=[out:json];out count;\"}).then(r=>console.log(r.status)).catch(e=>console.log(\"REFUSED\",e.message))"'
 ```
 
 A `curl` **from the host** answers 200 and lies — the host has its own route and
 its own reputation. Test from inside the container, or not at all.
-
-### Installing it somewhere else
-
-```bash
-ssh box 'mkdir -p /opt/gev'
-scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh box:/opt/gev/
-scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} box:/etc/systemd/system/
-ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh && chmod 600 /opt/gev/.env'
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer'
-```
-
-`/opt/gev/.env` needs at least:
-
-```
-GEV_ACCESS_USER=gev
-GEV_ACCESS_PASSWORD=<a long random string>
-GEV_PUBLIC_HOST=<every hostname the deployment answers on, comma-separated>
-GOOGLE_MAPS_API_KEY=...
-```
-
-plus whatever optional keys you want the layers to have (see `.env.example`).
-`GEV_PUBLIC_HOST` is not decoration: `vite preview` answers `Blocked request`
-to a `Host` header it was not told about.
 
 ## Why not GitHub Actions / Vercel / Render
 
 - **GitHub Actions cannot host this.** A runner is an ephemeral VM that dies
   with the job (6 h ceiling), so it can *build and ship* the app but never
   *serve* it. It is a fine trigger — the pull-based timer here simply avoids
-  handing GitHub an SSH key and opening a path into the VPS.
+  handing GitHub an SSH key and opening a path into the box.
 - **Vercel / Netlify** are static + serverless. The proxies keep in-process
   caches, a disk cache and a long-lived websocket; none of that survives a
   function boundary.
@@ -473,13 +487,13 @@ to a `Host` header it was not told about.
 `/api/*`, so a stray fetch cannot spend your quota. `/healthz` stays open for
 health checks and reports whether the gate is armed.
 
-Two access paths are wired on the Enerlens box:
+The compose file wires two access paths:
 
-- **Tailnet** — `http://vps-enerlens.tailc409e8.ts.net:4173`. Nothing public;
-  the port is only bound on loopback and the Tailscale address.
-- **Cloudflare tunnel** — `https://surplomb.app` and `https://www.surplomb.app`,
-  the public origin, with no password since 2026-09-16. Add a Cloudflare Access
-  policy on a hostname if you want SSO in front of it.
+- **Private network** — the port is bound on loopback and on
+  `GEV_TAILSCALE_IP` (a Tailscale address, for instance). Nothing public.
+- **Tunnel or reverse proxy** — the public origin, reaching the container on
+  loopback (a Cloudflare tunnel, on staging). Add a Cloudflare Access policy on
+  a hostname if you want SSO in front of it.
 
 The site answers on two addresses of that one origin: `/` is the showcase and
 `/globe` is the globe (`src/vitrine/gate.js`). **Neither needs any edge, tunnel
@@ -492,9 +506,6 @@ hand-off (an origin change forces a real navigation and a second boot) and pull
 in DNS, tunnel ingress, `GEV_PUBLIC_HOST` and the browser Google key's referrer
 list; the path split needs none of it.
 
-`https://gev.enerlens.com` served the same container until 2026-09-17 and no
-longer exists.
-
 ### Retiring a hostname
 
 A hostname appears in six places. Deleting its DNS record is what makes it
@@ -506,10 +517,10 @@ that no longer resolves:
 2. **Tunnel ingress** — remove its `hostname:`/`service:` pair from
    `/etc/cloudflared/config.yml`, validate with
    `cloudflared tunnel --config <file> ingress validate`, then
-   `systemctl restart cloudflared`. **The tunnel is shared with the Enerlens
-   production hostnames**: the restart cuts them for a few seconds, and
-   deleting the tunnel would take them down. `ssh vps` goes through Tailscale,
-   not the tunnel, so the session survives the restart.
+   `systemctl restart cloudflared`. **If the tunnel also carries other
+   hostnames**, the restart cuts them for a few seconds, and deleting the
+   tunnel would take them down. An SSH session over the private network, not
+   the tunnel, survives the restart.
 3. **`GEV_PUBLIC_HOST`** and **`OPENROUTER_SITE_URL`** in `/opt/gev/.env`, then
    `rm -f /opt/gev/state/deployed && systemctl start gev-deploy.service`. Check
    it with `curl -H 'Host: <old-name>' http://127.0.0.1:4173/`, which must now
@@ -517,9 +528,9 @@ that no longer resolves:
 4. **Key restrictions** — the browser Google key's HTTP referrers and the
    Cesium ion token's allowed URLs.
 5. **Script defaults** — `grep -rn '<old-name>' deploy scripts docs`.
-6. **Edge rules** — read the expression before deleting one. The
-   `enerlens.com` zone's `/api/` rule has no host filter and also covers the
-   Enerlens API, so it stays after `gev.enerlens.com` is gone.
+6. **Edge rules** — read the expression before deleting one. A rule with no
+   host filter covers every hostname of its zone, including other
+   applications, and then it stays after this one is gone.
 
 ### Where a visitor's bounding boxes go
 
@@ -541,17 +552,17 @@ adds no identity, and caches nothing.
 The in-app POWER UP panel writes API keys to disk. Its endpoints install
 through `configureServer` only and are deliberately left out of the
 preview-parity map that mirrors every other proxy onto `vite preview` — so on
-this VPS, which runs `vite preview`, they do not exist. `POST /api/setup/keys`
-returns 404 there, and the client removes the chip and the dialog from the DOM
-rather than showing a surface that cannot work.
+a deployment, which runs `vite preview`, they do not exist. `POST
+/api/setup/keys` returns 404 there, and the client removes the chip and the
+dialog from the DOM rather than showing a surface that cannot work.
 
 Two more layers hold even if that ever changed. The admission gate refuses any
 request carrying a proxy header, which is every request that arrives through
-the Cloudflare tunnel (`cf-connecting-ip`) or the nginx front — the very header
+a Cloudflare tunnel (`cf-connecting-ip`) or an nginx front — the very header
 `GEV_TRUSTED_CLIENT_IP_HEADER` exists to read. And it refuses a `Host` that is
-not a local name, which `surplomb.app` is not.
+not a local name, which a public hostname is not.
 
-Prove it after a deploy, from the VPS:
+Prove it after a deploy, from the box:
 
 ```bash
 npm run qa:provider-settings -- --url http://localhost:4173 --expect-absent
@@ -573,7 +584,7 @@ courtesy limits handled in-process.
 **The per-address cap is not a spend limit, and reads like one.** A caller
 with a hundred addresses has a hundred buckets, and until the global variable
 existed the only ceiling was an implied backstop of 20× the per-IP cap — so
-the `GEV_RATELIMIT_OPENAI_PER_MIN=20` on this deployment silently authorised
+the `GEV_RATELIMIT_OPENAI_PER_MIN=20` on staging silently authorized
 400 billable calls a minute. Behind a password that is theoretical. It stops
 being theoretical the moment the password comes off, which is why the opening
 checklist below sets the global one first. When the global cap trips everybody
@@ -599,16 +610,16 @@ curl -s https://gev.example.com/healthz   # → {"ok":true,"gated":true,"client"
 If `client` is a Docker or loopback address, the header is not being trusted.
 
 **Do not put a rate-limiting rule on all of `/api/*` at the edge.** Measured
-on the Enerlens staging on 2026-09-09: a Cloudflare rule of 30 requests per
-10 s per address on `/api`, blocking for 10 s. A GEV page makes about six
-`/api` requests to boot and a handful a minute afterwards, so the page itself
-never trips it — but a script, a test harness or a couple of tabs reloading
-from the same address does, and for those ten seconds *every* `/api` call
-answers 429: the mic reads "Could not reach voice configuration (HTTP 429)",
-live layers stall, tiles proxied through `/api` go grey. The app obeys the
-`Retry-After` it is sent (the mic waits it out and retries, twice, before
-showing the diagnosis), but the rule is still the wrong shape. If you want an
-edge rule at all, scope it to the routes that spend a key:
+on staging on 2026-09-09: a Cloudflare rule of 30 requests per 10 s per
+address on `/api`, blocking for 10 s. A Surplomb page makes about six `/api`
+requests to boot and a handful a minute afterwards, so the page itself never
+trips it — but a script, a test harness or a couple of tabs reloading from the
+same address does, and for those ten seconds *every* `/api` call answers 429:
+the mic reads "Could not reach voice configuration (HTTP 429)", live layers
+stall, tiles proxied through `/api` go gray. The app obeys the `Retry-After` it
+is sent (the mic waits it out and retries, twice, before showing the
+diagnosis), but the rule is still the wrong shape. If you want an edge rule at
+all, scope it to the routes that spend a key:
 
 ```
 (http.request.uri.path in {"/api/voice/brain" "/api/realtime/token" "/api/openai/hud-summary" "/api/google/nearby-places" "/api/google/text-search"})
@@ -625,14 +636,14 @@ throttle, plus `/` as a control; it spends no key and reads no secret, since a
 401 from the Basic gate proves the origin answered just as well as a 200 does.
 
 ```
-$ ssh vps /opt/gev/edge-ratelimit-probe.sh --host gev.enerlens.com   # 2026-09-09
+$ ssh box /opt/gev/edge-ratelimit-probe.sh --host <your-host>   # staging, 2026-09-09
   GET /                    40 requests, no 429
   GET /api/voice/config    FIRST 429 at request 31 (~2s)  retry-after=10  error code: 1015
 VERDICT: the edge rule still covers ALL of /api — a keyless route was
          throttled at request 31.
 ```
 
-Run it from the VPS, never from a laptop: the limit is per source address, and
+Run it from the box, never from a laptop: the limit is per source address, and
 the laptop shares its address with the owner's browser.
 
 **And "per address" is not one number on a phone.** Two things change when the
@@ -663,7 +674,7 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   the trial is spent but do not count themselves — except while a voice trial
   has opened, because the voice asks them too. The globe and every keyless
   layer are never gated.
-- **The HUD cannot take the voice's try.** It summarises on its own, about
+- **The HUD cannot take the voice's try.** It summarizes on its own, about
   once per 15 s of exploring, which emptied all five tries before a visitor
   ever touched the mic. Until the voice trial has opened, a summary may not
   take the last try: it is refused with `quota: "reserved"`, the HUD goes back
@@ -690,30 +701,30 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   or more), one browser can step out of the trial for good:
 
   ```sh
-  ssh vps 'docker exec gev node scripts/owner-pass.mjs'   # https://surplomb.app by default
+  ssh box 'docker exec gev node scripts/owner-pass.mjs https://<your-host>'   # else GEV_PUBLIC_ORIGIN, else https://surplomb.app
   ```
 
   prints a link that works once and for ten minutes. Opening it shows one
   button (a chat preview that fetches the link spends nothing); the button
-  writes `gev_owner`, signed, HttpOnly, 400 days, for `surplomb.app` and
-  `www.surplomb.app`, and goes to the globe. That browser is never counted or
-  refused, gets no crown, and its realtime sessions have no turn limit; the
-  `*_GLOBAL_PER_MIN` and per-IP caps still apply. **Not the address:** the
-  tailnet and the tunnel both reach the container as `172.22.0.1` (the
-  bridge gateway — Tailscale masquerades forwarded traffic), so an address
-  rule would exempt every visitor. The secret stays on the VPS; SSH is the
-  only way to a link, and the `vps` alias goes over Tailscale. **Revoke**
-  every pass by replacing the secret and redeploying. `Domain=surplomb.app`
-  also sends the cookie to any future subdomain: do not point one at a third
-  party without narrowing it. The privacy page does
-  not list the cookie: no visitor ever receives it. The redemption is
-  logged as `[trial] owner pass issued`.
+  writes `gev_owner`, signed, HttpOnly, 400 days, for the site and its `www.`
+  name, and goes to the globe. That browser is never counted or refused, gets
+  no crown, and its realtime sessions have no turn limit; the
+  `*_GLOBAL_PER_MIN` and per-IP caps still apply. **Not the address:** a
+  private-network path and a tunnel both reach the container from the Docker
+  bridge gateway (`172.22.0.1` on staging — Tailscale masquerades forwarded
+  traffic), so an address rule would exempt every visitor. The secret stays on
+  the box; SSH is the only way to a link. **Revoke** every pass by replacing
+  the secret and redeploying. The cookie's `Domain` is the site without its
+  `www.`, so it also reaches any future subdomain: do not point one at a third
+  party without narrowing it. The privacy page does not list the cookie: no
+  visitor ever receives it. The redemption is logged as
+  `[trial] owner pass issued`.
 - **What the page sees.** A 429 whose body carries `quota: "exhausted"`,
   `quota: "reserved"` or `quota: "voice"`, without `Retry-After`. The HUD stops
   asking; on `exhausted` the waitlist card opens in place (once per tab, and
   not at all once a mic click has shown it), on every mic click for `voice`.
   `?waitlist=1` opens the card directly — that is the link to post.
-- **Checking it** (from the VPS, so the Cloudflare `/api` rule stays out of it):
+- **Checking it** (from the box, so an edge `/api` rule stays out of it):
 
   ```sh
   curl -s localhost:4173/api/trial                    # enabled, limit, waitlist target
@@ -725,23 +736,17 @@ Off unless `GEV_TRIAL_LIMIT` is set; all four `GEV_TRIAL_*` /
   silently and `/api/trial` still says `remaining: 1` — the mic can open its
   trial. `node scripts/qa-waitlist-card.mjs` checks both sides. A private
   window starts at zero.
-- **Buttondown side** — done on 2026-09-17: account and newsletter
-  `surplomb` (owner: the domain's contact address; password in the macOS
-  Keychain under `buttondown.com`), language French, double opt-in on (the
-  free plan's default: the confirmation mail comes from
-  `surplomb@buttondown.email`), welcome email OFF (the form promises one
-  message at opening and nothing else), and « After confirming » redirects to
-  `https://surplomb.app/`. The subscriber record carries `usage` and
+- **Buttondown side.** A newsletter named by `GEV_WAITLIST_BUTTONDOWN`, with
+  double opt-in on (the free plan's default), the welcome email off (the form
+  promises one message at opening and nothing else), and "After confirming"
+  redirecting to your origin. The subscriber record carries `usage` and
   `declencheur` as metadata, and the form sets the `liste-attente` tag
-  (Buttondown's new-subscriber notification lists it; only creating tags
-  from the dashboard is a paid feature). Verified end to end with a `+surplombtest` address (created,
-  confirmed, redirected, then deleted so the count starts at zero).
-- **On this VPS**, `GEV_TRIAL_LIMIT=5`, `GEV_TRIAL_SECRET` and
-  `GEV_WAITLIST_BUTTONDOWN=surplomb` are in `/opt/gev/.env` since
-  2026-09-17 (backup `.env.bak-2026-09-17-trial`). They take effect with the
-  first deploy that carries `src/trialQuota.js`.
+  (Buttondown's new-subscriber notification lists it; only creating tags from
+  the dashboard is a paid feature). Check it end to end with a `+test`
+  address — created, confirmed, redirected — then delete that subscriber so
+  the count starts at zero.
 
-### The welcome-card A/B test (« Test A/B de la carte de bienvenue »)
+### The welcome-card A/B test
 
 Off unless `GEV_FIRST_RUN_AB` names at least two of the first-run variants
 (`.env.example` documents it and `GEV_FIRST_RUN_AB_DIR`). The variable is read
@@ -752,35 +757,34 @@ its « Ne pas être mesuré » button. What a report may carry, and what it neve
 carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
 
 - **At most two report requests per visit.** They are `/api` calls, and an edge
-  rule of 30 requests per 10 s per address on `/api` (measured on the Enerlens
-  zone, [above](#rate-limits-the-apps-and-anything-in-front-of-it)) blocks
+  rule of 30 requests per 10 s per address on `/api` (measured on staging,
+  [above](#rate-limits-the-apps-and-anything-in-front-of-it)) blocks
   every `/api` call for ten seconds once tripped. So nothing is sent per event:
   one beacon at the first gesture or close, one cumulative beacon when the page
   is hidden or left. The card reads the same `/api/trial` response as the mic
   crown, so the test adds no other request. The origin also caps the route at
   12 reports a minute per address (1 200 overall), 16 KiB a body, and 5 MiB of
   file a day.
-- **Edge limit on `surplomb.app`.** The probe answered 40 of 40 without a 429
-  on 2026-09-17 (« Correct shape »), but it bursts `/api/voice/config`, not the
-  report route; nothing has been measured against `POST /api/first-run/events`
-  itself. Re-check from the VPS, never from a laptop:
-  `ssh vps /opt/gev/edge-ratelimit-probe.sh --host surplomb.app` (the copy on
-  the box may predate the `surplomb.app` default, so pass `--host`).
+- **Edge limit.** The edge probe bursts `/api/voice/config`, not the report
+  route: on staging it answered 40 of 40 without a 429 on 2026-09-17, and
+  nothing has been measured against `POST /api/first-run/events` itself.
+  Re-check from the box, never from a laptop:
+  `ssh box /opt/gev/edge-ratelimit-probe.sh --host <your-host>`.
 - **Switching it on** (no rebuild; effective with the first deploy that
   carries `src/firstRunAb.js`):
 
   ```sh
-  ssh -t vps 'cd /opt/gev && cp .env .env.bak-$(date +%F)-abtest && $EDITOR .env && docker compose up -d'
+  ssh -t box 'cd /opt/gev && cp .env .env.bak-$(date +%F)-abtest && $EDITOR .env && docker compose up -d'
   # in .env: GEV_FIRST_RUN_AB=A,B,C
   ```
 
 - **Checking it:**
 
   ```sh
-  curl -s https://surplomb.app/api/trial | jq .experiments      # {"firstRun":{"variants":["A","B","C"]}}
-  curl -s https://surplomb.app/healthz | jq .abtest             # true
-  curl -s https://surplomb.app/confidentialite | grep -c 'test A/B'                   # ≥ 1
-  curl -s https://surplomb.app/confidentialite | grep -c 'pas de mesure d’audience'   # 0
+  curl -s https://<your-host>/api/trial | jq .experiments      # {"firstRun":{"variants":["A","B","C"]}}
+  curl -s https://<your-host>/healthz | jq .abtest             # true
+  curl -s https://<your-host>/confidentialite | grep -c 'test A/B'                   # ≥ 1
+  curl -s https://<your-host>/confidentialite | grep -c 'pas de mesure d’audience'   # 0
   ```
 
   Then one report, marked `forced` so the analysis leaves it out, and the line
@@ -789,8 +793,8 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
   ```sh
   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
     --data '{"v":1,"exp":"first-run","variant":"A","forced":true,"visitorId":"deploycheck00000","sessionId":"deploycheck00001","seq":1,"newVisitor":false,"returnVisit":false,"shell":"desktop","input":"fine","viewport":"l","reducedMotion":false,"bootMs":0,"dwellMs":null,"events":[{"t":0,"type":"impression"}]}' \
-    https://surplomb.app/api/first-run/events                  # 204
-  ssh vps 'docker exec gev tail -n 1 /app/.gev-cache/first-run-ab/events-$(date -u +%F).jsonl'
+    https://<your-host>/api/first-run/events                  # 204
+  ssh box 'docker exec gev tail -n 1 /app/.gev-cache/first-run-ab/events-$(date -u +%F).jsonl'
   ```
 
   `404` means the variable did not reach the container (or the live deploy
@@ -804,12 +808,12 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
 - **Reading it:**
 
   ```sh
-  ssh vps 'docker exec gev node scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'
+  ssh box 'docker exec gev node scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'
   ```
 
   Totals per variant, Wilson intervals, a z-test of B and of C against A
   (Bonferroni, α/2), and the sample still missing (356 impressions per variant
-  to see 10 points from a 30 % baseline at α 0.05, 432 at α 0.025).
+  to see 10 points from a 30% baseline at α 0.05, 432 at α 0.025).
   `--include-forced`, `--since`/`--until YYYY-MM-DD`, `--alpha`, `--delta` and
   `--json` change the reading. **Read it once**, when every variant has
   200 unforced impressions or 21 days after the first one, whichever comes
@@ -823,7 +827,7 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
   older than 90 days (at start and hourly, switch or not), so the privacy
   page's promise holds on its own; once the analysis is written up, delete the
   rest without waiting:
-  `ssh vps 'docker exec gev rm -rf /app/.gev-cache/first-run-ab'`.
+  `ssh box 'docker exec gev rm -rf /app/.gev-cache/first-run-ab'`.
 
 ## Opening the origin to the public
 
@@ -849,21 +853,19 @@ so it is the LAST step, not the first. In order:
    referrer-restricted to your hostnames and scoped to **Map Tiles +
    Geocoding**, and pass it as `GOOGLE_MAPS_BROWSER_KEY`; leave
    `GOOGLE_MAPS_API_KEY` as runtime env only and restrict it by **IP** to the
-   origin's egress addresses (both v4 and v6 — this box reaches Overpass over
-   v6 only) and to **Places + Street View + Map Tiles**. Verify by reading the
-   built bundle, not the console:
+   origin's egress addresses (both v4 and v6 — a box can reach some upstreams
+   over v6 only) and to **Places + Street View + Map Tiles**. Verify by reading
+   the built bundle, not the console:
 
    ```sh
-   ssh vps 'docker exec gev sh -c "grep -rhoE \"AIza[A-Za-z0-9_-]{35}\" /app/dist | sort -u"'
+   ssh box 'docker exec gev sh -c "grep -rhoE \"AIza[A-Za-z0-9_-]{35}\" /app/dist | sort -u"'
    ```
 
    Exactly one key must come back, and it must be the browser one. Changing a
    build arg needs `docker compose up -d --build --force-recreate`: a plain
    `up -d` reuses the image and the old key stays in the bundle.
 4. **Check "per IP" is per IP.** `curl -s https://<host>/healthz` must report
-   `client` as your own public address, not a Docker or loopback one. On this
-   deployment `GEV_TRUSTED_CLIENT_IP_HEADER=cf-connecting-ip` is set and
-   verified.
+   `client` as your own public address, not a Docker or loopback one.
 5. **Know what a visitor costs.** A cold boot spends **nothing**: since the
    engagement gate in `src/hud.js`, every metered call waits for a real gesture
    — pointer, wheel or key — because the intro fly-to settles on its own and
@@ -929,12 +931,10 @@ GEV_LEGAL_DIRECTOR=<publication director>
 GEV_LEGAL_HOSTING=<host, address, phone> | <each other storage provider>
 ```
 
-For this box the providers are Hostinger (the VPS: HOSTINGER INTERNATIONAL
-LIMITED, 61 Lordou Vironos Street, 6023 Larnaca, Cyprus), Cloudflare (the
-tunnel and the edge: Cloudflare, Inc., 101 Townsend St, San Francisco, CA
-94107, USA) and, once the waitlist is on, Buttondown (Buttondown, LLC, 406 W
-Franklin St., Suite 201, Richmond, VA 23221, USA). Hostinger publishes no
-phone number in its terms; the law asks for one, so get it from their support.
+`GEV_LEGAL_HOSTING` lists every provider: the company that hosts the box, the
+tunnel or edge in front of it, and, once the waitlist is on, Buttondown. A host
+that publishes no phone number in its terms still owes you one for this page;
+ask its support.
 
 **No ` #` in a value.** Compose reads an unquoted ` #` as the start of a
 comment, so « 406 W Franklin St. #201 » reaches the page as « 406 W Franklin
@@ -942,17 +942,17 @@ St. » — which is how the first preview of this page looked. Write « Suite
 201 », or quote the whole value.
 
 The values are read **per request**, never built into the bundle, so the
-manoeuvre is an edit and a recreate — no rebuild:
+maneuver is an edit and a recreate — no rebuild:
 
 ```sh
-ssh -t vps 'cd /opt/gev && cp .env .env.bak-$(date +%F)-legal && $EDITOR .env && docker compose up -d'
-curl -s https://surplomb.app/healthz          # "legal": true
-curl -s https://surplomb.app/mentions-legales | grep -c 'class="missing'   # 0
+ssh -t box 'cd /opt/gev && cp .env .env.bak-$(date +%F)-legal && $EDITOR .env && docker compose up -d'
+curl -s https://<your-host>/healthz          # "legal": true
+curl -s https://<your-host>/mentions-legales | grep -c 'class="missing'   # 0
 ```
 
 `GEV_LEGAL_PHONE` is the one field the page renders without although the
-law asks for it (art. 1-1 I): leaving it out is an operator's decision, taken
-for this box on 2026-09-17, and the row simply does not appear.
+law asks for it (art. 1-1 I): leaving it out is the operator's decision, and
+the row simply does not appear.
 
 `"legal": false` means at least one required variable is empty; the page
 itself lists which, and a public origin (`GEV_PUBLIC_HOST` set) logs
@@ -965,7 +965,7 @@ instance never lists a processor it does not use. Every other sentence on it is
 a statement about the code, so **a PR that adds a cookie, a log, a stored
 field or a provider the browser calls changes `confidentialite.html` too**.
 
-Two server behaviours exist so that page can be true, and a hosted server
+Two server behaviors exist so that page can be true, and a hosted server
 keeps them on by default:
 
 - **No voice transcript on disk.** `/api/realtime/debug-log` answers 404 under

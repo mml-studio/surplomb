@@ -1,7 +1,7 @@
 // The projection that turns one measured sweep into a year.
 //
 // The measurement half needs 150 live feeds and cannot be tested offline; this
-// half is the arithmetic every figure in `docs/CHRONIQUE-GTFS-RT.md` is quoted
+// half is the arithmetic every figure in the GTFS-RT cost estimate (#97) is quoted
 // from, and it has exactly the failure mode the unit-test roots exist for — a
 // wrong number that reads perfectly well.
 import test from 'node:test';

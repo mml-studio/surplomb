@@ -8,7 +8,7 @@
  * A subject opens the shortlist. Five hits are read at once and only the ones
  * PROVEN drawable are offered, each under four facts in the reader's own
  * words: how many objects, who publishes, how fresh, under what licence. That
- * is deliberate: measured on six subjects (docs/DEMANDER-UNE-DONNEE.md), the
+ * is deliberate: measured on six subjects (#113), the
  * platform's first hit is right about half the time, and its failures look
  * like successes — one town's nineteen points where a national base of 186 118
  * was meant. No machine can tell those apart; the count, side by side, can.

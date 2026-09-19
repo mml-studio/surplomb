@@ -49,7 +49,7 @@ export const WAITLIST_USAGE_CHOICES = Object.freeze([
  * (`get_entity_context` → `layerSummaries`); the route is `annotate_map`
  * `type=route`, drawn on the streets with its distance and time. The line it
  * replaced promised the 2 144 Météo-France stations, which need a contract
- * that is not signed (`docs/meteofrance-api-access.md`).
+ * that is not signed (#195).
  */
 export const WAITLIST_INCLUDES = Object.freeze([
   'La commande vocale',

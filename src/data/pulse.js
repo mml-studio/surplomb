@@ -269,7 +269,8 @@ const SAME_RUN_MAX_KM = 2;
  * sum over those is a count of what one reader was looking at, dressed up as a
  * country — the exact figure `recordTransitChronicle` refuses to record. So
  * partial coverage is null, and the figure appears by itself the day a
- * national sweep fills every network (docs/CHRONIQUE-GTFS-RT.md prices one).
+ * national sweep fills every network (the GTFS-RT cost estimate, #97, prices
+ * one).
  *
  * The same run published by two feeds (Seine-Eure inside the Normandy
  * aggregate) is counted once: same `trip_id` AND within {@link SAME_RUN_MAX_KM}

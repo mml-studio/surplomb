@@ -42,7 +42,7 @@
  * refuses to give them a default size: it would be inventing the size of 82 %
  * of the map, which is the aircraft defect this repo has just corrected ("97 %
  * de la flotte visible portait une silhouette inventée",
- * docs/PLAN-CARTOGRAPHIE.md § 1.4).
+ * cartography plan § 1.4, #78).
  *
  * ── What is drawn now, in two regimes ──────────────────────────────────────
  *

@@ -2,7 +2,7 @@
 /**
  * perf-entity-weight — what one drawn feature of a bundled pack actually costs.
  *
- * `PLAN-PERFORMANCE.md` § 3.1 first concluded that the 28–36 KiB a feature
+ * The performance plan (phase 3.1, #131) first concluded that the 28–36 KiB a feature
  * retains "is the `Entity` + `Property` machinery itself, and only the
  * migration to primitives removes it". The first half is right; the second was
  * a conclusion rather than a measurement, and it sent the plan at the most

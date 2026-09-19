@@ -2,7 +2,7 @@
 /**
  * Measure one network's SERVICE DAY out of its static GTFS.
  *
- * Every storage figure in `docs/CHRONIQUE-GTFS-RT.md` is a rate multiplied by
+ * Every storage figure in the GTFS-RT cost estimate (#97) is a rate multiplied by
  * a day, and the day is not flat: a national fleet count taken at 17 h says
  * nothing about what the same feeds cost at 03 h. A live probe can only ever
  * measure the hour it runs in, so the shape of the day comes from the place
@@ -179,7 +179,7 @@ async function member(source, name) {
 /**
  * The service day, computed from four GTFS members already in memory.
  *
- * Pure on purpose: every storage figure in `docs/CHRONIQUE-GTFS-RT.md` is a
+ * Pure on purpose: every storage figure in the GTFS-RT cost estimate (#97) is a
  * rate multiplied by what this returns, so it is the half worth testing
  * offline. `calendarDates` may be null — several networks have no exceptions —
  * but skipping it when it exists silently zeroes a network: 165 of Irigo's

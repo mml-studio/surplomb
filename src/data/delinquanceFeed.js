@@ -403,8 +403,8 @@ export const DELINQUANCE_YEAR_FLOOR = '2025';
 /**
  * Commune contours. IGN ADMIN EXPRESS / INSEE COG, redistributed by the
  * Etalab `geo` API under Licence Ouverte, keyless, `access-control-allow-origin`
- * echoing the request origin (measured with `Origin: https://gev.enerlens.com`
- * → 200, `access-control-allow-origin: https://gev.enerlens.com`).
+ * echoing the request origin (measured from the staging hostname: 200, and the
+ * `Origin` it sent came back as `access-control-allow-origin`).
  *
  * The SSMSI base publishes a CODGEO and nothing else — no coordinate, no
  * outline — so the shapes have to come from somewhere. This one is the same

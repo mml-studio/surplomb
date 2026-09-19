@@ -100,7 +100,7 @@
  * yearly file once each morning. So the freshest keyless French observation is
  * between 11 and 35 hours old depending on when it is asked for, and no cache
  * setting can improve on that. Anything nearer to now needs the Météo-France
- * API key — see `docs/meteofrance-api-access.md`.
+ * API key — see the Météo-France API access note in #195.
  *
  * @module data/meteoStationsFrFeed
  */

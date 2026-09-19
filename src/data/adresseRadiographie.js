@@ -4,7 +4,7 @@
  * **La radiographie d'adresse** — one point in, ten themes out.
  *
  * This is the scene Cityscan was built around and the one thing this fork had
- * all the material for and none of the shape. `docs/CITYSCAN.md` measured it:
+ * all the material for and none of the shape. The Cityscan teardown (#99) measured it:
  * eight of their ten themes were already served by routes in production, the
  * remaining two landed as `/api/arcep-fr` and `/api/emploi-fr`, and what was
  * missing was never data — it was *une adresse, un barème et une fiche*.
