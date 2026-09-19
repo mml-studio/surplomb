@@ -60,6 +60,7 @@ Layers already fetch the same platform directly: 162 pinned `www.data.gouv.fr/ap
 - **UI lives in `src/ui.js`** (panels, HUD, styles, the control facade). **Layer logic lives in `src/data/<layer>.js`.** Keep them separate.
 - **Secrets stay server-side.** Anything needing a private key goes through a Vite proxy in `vite.config.js`. The browser only ever sees the Google Maps key (which you restrict) and ephemeral tokens.
 - `docs/CURRENT-STATE.md` is the authoritative runtime reference — read it first.
+- Coming from upstream God's Eye View? [`docs/FORK.md`](docs/FORK.md) maps its component layout onto this one, and lists what is France-specific and what is generic.
 
 ## QA harnesses (and the welcome card)
 
