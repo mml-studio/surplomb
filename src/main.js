@@ -63,6 +63,7 @@ import {
 } from './perfProfile.js';
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 import { initPhoneSheet } from './phoneSheet.js';
+import { applyPhoneRenderDetail } from './phoneRender.js';
 import { applyTouchCameraProfile } from './touchCamera.js';
 import { getPickDiagnostics } from './data/pickAt.js';
 import { rememberFirstRunSessionDismissed } from './firstRunExperience.js';
@@ -318,6 +319,11 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
       viewer.scene.globe.maximumScreenSpaceError = LITE_GLOBE_SSE;
       viewer.scene.globe.tileCacheSize = LITE_TILE_CACHE_SIZE;
     }
+    // A phone overrides the error the `lite` block just set, and renders at
+    // twice its CSS size: at 3 and 1×, one imagery texel covered 6 to 12
+    // physical pixels of an iPhone. Same ordering constraint as above — before
+    // the governor. See src/phoneRender.js for the measurement and the cost.
+    if (isPhoneShell()) applyPhoneRenderDetail(viewer);
 
     // `?photoreal=0`, or the flag the QA fleet installs. Read first, because
     // the whole point is to not make the call: ion bills one "root tile" per

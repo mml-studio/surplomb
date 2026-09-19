@@ -7,7 +7,7 @@
  * every ceiling downstream is worthless if the recognition fails: a handset
  * that boots as a desktop gets MSAA 4, a four-second flight, a layer holding
  * the scene in continuous render, 848 kB of sky, and Google's mesh bought on
- * its first tap. So check 1 is the recognition and checks 2-8 are what it buys.
+ * its first tap. So check 1 is the recognition and checks 2-8 and 10 are what it buys.
  *
  * WHAT THIS RUN COSTS. Zero ion root tiles if the adoption guard works, ONE if
  * it is broken — which is exactly what check 2 is measuring, so the cost is
@@ -180,6 +180,28 @@ try {
     'nothing holds the scene awake: scope off, traffic off, no render holds',
     quiet.scopePressed === 'false' && quiet.trafficEnabled === false && quiet.holds.length === 0,
     quiet,
+  );
+
+  // ── 10. The ground is drawn sharp (src/phoneRender.js) ────────────────────
+  // Read at rest, after the untouched window: in motion the detail governor
+  // doubles the error and drops the buffer to 0.8 of itself, on purpose.
+  // The emulated handset is DPR 3, so the buffer is capped at 2×.
+  const detail = await page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const governor = window.__godsEyeView.getGlobeDetailDiagnostics?.() ?? {};
+    return {
+      bufferRatio: Math.round((viewer.scene.drawingBufferWidth / viewer.scene.canvas.clientWidth) * 100) / 100,
+      resolutionScale: viewer.resolutionScale,
+      sse: viewer.scene.globe.maximumScreenSpaceError,
+      settledSse: governor.settledSse ?? null,
+      relaxed: governor.relaxed ?? null,
+    };
+  });
+  check(
+    'the ground is drawn sharp at rest: a 2× buffer, and the globe settles at an error of 1',
+    detail.relaxed === false && detail.resolutionScale === 2 && detail.bufferRatio === 2
+      && detail.sse === 1 && detail.settledSse === 1,
+    detail,
   );
 
   // ── 5. The page fits its own screen ──────────────────────────────────────
