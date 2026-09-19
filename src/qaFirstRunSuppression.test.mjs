@@ -21,8 +21,11 @@ import {
   auditFirstRunSuppression,
   disablePhotoreal,
   newQaPage,
+  qaLocale,
+  skipVitrine,
   suppressFirstRun,
 } from '../scripts/lib/qa-first-run.mjs';
+import { LOCALE_QA_GLOBAL, readLocaleSignals, resolveLocale } from './i18n/locale.js';
 import { PHOTOREAL_DISABLE_GLOBAL, photorealDisabled } from './photorealTileset.js';
 import { VITRINE_SKIP_GLOBAL, decideVitrine, readVitrineSignals } from './vitrine/gate.js';
 import { FIRST_RUN_SESSION_KEY, FIRST_RUN_STORAGE_KEY } from './firstRunExperience.js';
@@ -274,4 +277,38 @@ test('the showcase harness keeps it', async () => {
   assert.equal(win[VITRINE_SKIP_GLOBAL], undefined);
   const signals = readVitrineSignals({ location: { search: '', hash: '' }, storage: null, windowRef: win });
   assert.equal(decideVitrine(signals).vitrine, true);
+});
+
+// ── the locale every harness runs in ──────────────────────────────────────
+test('a harness runs in French unless it, or GEV_QA_LOCALE, asks for English', () => {
+  assert.equal(qaLocale({}, {}), 'fr');
+  assert.equal(qaLocale({}, { GEV_QA_LOCALE: 'en' }), 'en');
+  assert.equal(qaLocale({}, { GEV_QA_LOCALE: 'EN-us' }), 'en');
+  assert.equal(qaLocale({ locale: 'fr' }, { GEV_QA_LOCALE: 'en' }), 'fr', 'the harness’s own choice wins');
+  assert.equal(qaLocale({}, { GEV_QA_LOCALE: 'de' }), 'fr', 'an unsupported value is not a guess');
+});
+
+test('the suppression pins the locale before any page script, and the gate obeys it', async () => {
+  // Headless Chrome announces en-US: once the gate reads navigator.languages,
+  // a page without the pin would silently run the English globe.
+  const page = fakePage();
+  await suppressFirstRun(page, { locale: 'en' });
+  assert.equal(page.installed.length, 1, 'still one install per page');
+  const { win, local } = page.run();
+  assert.equal(win[LOCALE_QA_GLOBAL], 'en');
+  assert.equal(local.size, 0, 'a QA run writes no language preference');
+  const signals = readLocaleSignals({ windowRef: win, location: { search: '?lang=fr' }, navigatorRef: { languages: ['de-DE'] } });
+  assert.equal(resolveLocale({ ...signals, autoDetect: true }).locale, 'en', 'the pin outranks ?lang= and the browser');
+
+  const byDefault = fakePage();
+  await newQaPage({ newPage: async () => byDefault });
+  assert.equal(byDefault.run().win[LOCALE_QA_GLOBAL], qaLocale({}));
+});
+
+test('skipVitrine pins the locale too — the first-run harness is a harness', async () => {
+  const page = fakePage();
+  await skipVitrine(page, { locale: 'en' });
+  const { win } = page.run();
+  assert.equal(win[VITRINE_SKIP_GLOBAL], true);
+  assert.equal(win[LOCALE_QA_GLOBAL], 'en');
 });

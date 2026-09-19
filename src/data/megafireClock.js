@@ -37,7 +37,8 @@
  * and never a fraction.
  */
 
-import { MEGAFIRE_STEPS, megafireStepAt } from './megafirePack.js';
+import { MEGAFIRE_STEPS, megafireStepAt, megafireStepLabel } from './megafirePack.js';
+import messages from './megafireClock.i18n.js';
 
 /**
  * @constant {number} How long one playthrough of the window takes, in seconds.
@@ -235,14 +236,16 @@ export function megafireWindowDays(clock) {
  *
  * @param {ReturnType<createMegafireClock>} clock
  * @param {ReturnType<megafireClockState>} state
- * @returns {string} e.g. `▶ 26 juil. 04:12 UTC · jour 4 sur 10`.
+ * @returns {string} e.g. `▶ 26 juil. 04:12 UTC · jour 4 sur 10`,
+ *   `▶ Jul 26 04:12 UTC · day 4 of 10`.
  */
 export function megafireCursorReadout(clock, state) {
+  const m = messages();
   const instant = megafireCursorLabel(state.cursorMs);
-  if (state.playing) return `▶ ${instant} · jour ${state.day} sur ${state.days}`;
-  if (state.atEnd) return `■ ${instant} · dernière détection`;
-  if (state.atStart) return `▶ ${instant} · première détection`;
-  return `❚❚ ${instant} · jour ${state.day} sur ${state.days}`;
+  if (state.playing) return `▶ ${instant} · ${m.dayOf(state.day, state.days)}`;
+  if (state.atEnd) return `■ ${instant} · ${m.lastDetection}`;
+  if (state.atStart) return `▶ ${instant} · ${m.firstDetection}`;
+  return `❚❚ ${instant} · ${m.dayOf(state.day, state.days)}`;
 }
 
 /**
@@ -267,24 +270,19 @@ export function megafireEmberStrength(detectionMs, cursorMs) {
 }
 
 /**
- * A short French label for the cursor, in UTC.
+ * A short label for the cursor, in UTC, in the page's language.
  *
  * UTC and not Europe/Paris, even though the fire is French and the reader
  * probably is too. Every instant in this pack is a satellite acquisition or a
  * VIIRS granule, and both are published in UTC; converting for display would
  * mean the hour on the card no longer matches the hour in `event.json`, in the
- * Copernicus product name, or in anything a reader could go and check.
+ * Copernicus product name, or in anything a reader could go and check. The
+ * zone is therefore written out, in both languages.
  *
  * @param {number} instantMs
- * @returns {string} e.g. `24 juil. 09:05 UTC`.
+ * @returns {string} e.g. `24 juil. 09:05 UTC`, `Jul 24 09:05 UTC`.
  */
 export function megafireCursorLabel(instantMs) {
   if (!Number.isFinite(instantMs)) return '—';
-  const date = new Date(instantMs);
-  const day = date.getUTCDate();
-  const month = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-    'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][date.getUTCMonth()];
-  const hh = String(date.getUTCHours()).padStart(2, '0');
-  const mm = String(date.getUTCMinutes()).padStart(2, '0');
-  return `${day === 1 ? '1ᵉʳ' : day} ${month} ${hh}:${mm} UTC`;
+  return `${megafireStepLabel(instantMs)} UTC`;
 }

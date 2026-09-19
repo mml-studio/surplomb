@@ -67,6 +67,7 @@ import {
   MEGAFIRE_LAYER_ID,
   MEGAFIRE_STEP_COLORS,
   megafireFrpLevel,
+  megafireStepLabel,
 } from './megafirePack.js';
 import {
   MEGAFIRE_PLAY_SECONDS,
@@ -87,6 +88,8 @@ import {
   updateMegafireFire,
 } from './megafireFire.js';
 import { megafireDriftVectors } from './megafireFireMath.js';
+import messages from './girondeMegafire.i18n.js';
+import { formatNumber } from '../i18n/format.js';
 
 /**
  * @constant {{east: number, north: number}} Drift used before the pack has
@@ -721,7 +724,12 @@ const girondeMegafireLayer = {
    */
   getRowControls() {
     if (!_clock || !_event) return { chips: [], legend: [] };
+    const m = messages();
     const state = megafireClockState(_clock, _event.steps);
+    // A step's label comes from its instant, in the page's language. The
+    // `label` stored in the pack is the French of the same function (see
+    // `MEGAFIRE_STEPS`), kept as data.
+    const stepLabel = (step) => megafireStepLabel(Date.parse(step.acq));
     // THREE stopped states, not one. "Never played", "stopped halfway" and
     // "finished" are different situations and the same button serves all
     // three, so the label has to say which — a run that ends on `▶ Rejouer`
@@ -730,16 +738,15 @@ const girondeMegafireLayer = {
     // reads as still running.
     const playLabel = state.playing
       ? `❚❚ ${megafireCursorLabel(state.cursorMs)}`
-      : (state.atEnd ? '↺ Rejouer' : (state.atStart ? '▶ Jouer' : '▶ Reprendre'));
+      : (state.atEnd ? m.play.replay : (state.atStart ? m.play.start : m.play.resume));
     const chips = [{
       id: 'play',
       label: playLabel,
       active: state.playing,
       state: state.playing ? 'active' : 'idle',
       title: state.playing
-        ? `${megafireCursorReadout(_clock, state)} — cliquer pour mettre en pause`
-        : `Rejouer les ${state.days} jours en ${MEGAFIRE_PLAY_SECONDS} s — `
-          + megafireCursorReadout(_clock, state),
+        ? m.play.pauseTitle(megafireCursorReadout(_clock, state))
+        : m.play.replayTitle(state.days, MEGAFIRE_PLAY_SECONDS, megafireCursorReadout(_clock, state)),
       params: { play: !state.playing },
     }];
     _event.steps.forEach((step, index) => {
@@ -747,15 +754,14 @@ const girondeMegafireLayer = {
       const active = !state.playing && current;
       chips.push({
         id: step.id,
-        label: step.label,
+        label: stepLabel(step),
         active,
         // While the tape runs, the chip of the frame being held lights in its
         // own state rather than none at all. The five chips are already in
         // chronological order, so the strip becomes the progress bar the layer
         // was missing, for the price of a CSS class.
         state: active ? 'active' : (state.playing && current ? 'passing' : 'idle'),
-        title: `${step.sensor} · ${step.resolution} — `
-          + `${step.burntHa.toLocaleString('fr-FR')} ha brûlés à cette image`,
+        title: m.stepTitle(step.sensor, step.resolution, formatNumber(step.burntHa)),
         params: { step: step.id },
       });
     });
@@ -774,39 +780,33 @@ const girondeMegafireLayer = {
       label: megafireCursorReadout(_clock, state),
       color: null,
       blurb: state.playing
-        ? `Lecture des ${state.days} jours en ${MEGAFIRE_PLAY_SECONDS} s. `
-          + 'Entre deux images satellite rien n’est interpolé : la carte tient la dernière '
-          + 'mesure, et ce sont les points chauds qui portent l’intervalle.'
+        ? m.legend.playing(state.days, MEGAFIRE_PLAY_SECONDS)
         : (state.atEnd
-          ? `Dernière détection de la fenêtre. La dernière image, elle, date du ${lastStep.label} : `
-            + 'après elle, plus personne n’a redessiné ce feu. ↺ pour rejouer depuis le départ.'
-          : `Curseur arrêté. ▶ reprend la lecture des ${state.days} jours en `
-            + `${MEGAFIRE_PLAY_SECONDS} s.`),
+          ? m.legend.ended(stepLabel(lastStep))
+          : m.legend.paused(state.days, MEGAFIRE_PLAY_SECONDS)),
     }];
     const step = state.stepIndex === null ? null : _event.steps[state.stepIndex];
     if (step) {
       legend.push({
-        label: `périmètre au ${step.label}`,
+        label: m.legend.perimeter(stepLabel(step)),
         color: MEGAFIRE_STEP_COLORS[state.stepIndex] ?? MEGAFIRE_STEP_COLORS[0],
         count: Math.round(step.burntHa),
-        blurb: `${step.burntHa.toLocaleString('fr-FR')} ha brûlés, relevés par Copernicus EMS sur `
-          + `une image ${step.sensor} du ${step.label} UTC. Le chiffre est celui du publieur, `
-          + 'jamais recalculé sur le dessin.',
+        blurb: m.legend.perimeterBlurb(formatNumber(step.burntHa), step.sensor, stepLabel(step)),
       });
       if (step.fronts?.length) {
         legend.push({
-          label: 'front de feu actif',
+          label: m.legend.fronts,
           color: MEGAFIRE_FRONT_COLOR,
           count: step.fronts.length,
-          blurb: 'Lignes photo-interprétées sur l’image, là où le feu avançait encore à l’heure de la prise de vue.',
+          blurb: m.legend.frontsBlurb,
         });
       }
       if (step.flames?.length) {
         legend.push({
-          label: 'flammes visibles',
+          label: m.legend.flames,
           color: MEGAFIRE_FLAME_COLOR,
           count: step.flames.length,
-          blurb: 'Points où un interprète a vu des flammes sur une image à 30 cm.',
+          blurb: m.legend.flamesBlurb,
         });
       }
     }
@@ -817,15 +817,13 @@ const girondeMegafireLayer = {
     const fire = megafireFireDiagnostics();
     if (fire.burning > 0) {
       legend.push({
-        label: 'colonne de fumée',
+        label: m.legend.smoke,
         color: '#8a8078',
         count: fire.burning,
         // Kept to three lines: the on-map key is a fixed-height block and a
         // blurb longer than this is clipped, which would cut the sentence that
         // says what is invented — the one part that must survive.
-        blurb: 'Rendu, non mesuré. Un panache se dresse là où FIRMS a vu une anomalie '
-          + 'thermique dans les 12 h précédant le curseur, et penche du côté où le feu a '
-          + 'réellement progressé. Sa hauteur et sa vitesse ne sont mesurées par personne.',
+        blurb: m.legend.smokeBlurb,
       });
     }
     const counts = new Array(MEGAFIRE_FRP_LADDER.length).fill(0);
@@ -833,21 +831,18 @@ const girondeMegafireLayer = {
     MEGAFIRE_FRP_LADDER.forEach((rung, level) => {
       if (!counts[level]) return;
       legend.push({
-        label: `point chaud ${rung.label}`,
+        label: m.legend.hotspot(rung.label),
         color: rung.color,
         count: counts[level],
-        blurb: 'Détection thermique VIIRS ou MODIS. La puissance radiative est celle du pixel, '
-          + 'pas celle du feu : un pixel VIIRS mesure 375 m de côté.',
+        blurb: m.legend.hotspotBlurb,
       });
     });
     if (_event.effis?.main) {
       legend.push({
-        label: 'périmètre final EFFIS',
+        label: m.legend.effis,
         color: MEGAFIRE_EFFIS_COLOR,
         count: Math.round(_event.effis.main.areaHa),
-        blurb: `${_event.effis.main.areaHa.toLocaleString('fr-FR')} ha — la détection automatique `
-          + 'd’EFFIS, sans zone d’intérêt ni échéance, continue après l’arrêt des cartographes. '
-          + 'GDACS, qui note une ALERTE et non une surface, en annonce 47 910.',
+        blurb: m.legend.effisBlurb(formatNumber(_event.effis.main.areaHa)),
       });
     }
     return { chips, legend };

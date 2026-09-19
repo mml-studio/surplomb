@@ -89,6 +89,48 @@
     })();
   </script>
   <!--
+    THE PAGE'S LANGUAGE, DECIDED BEFORE THE STYLESHEET.
+
+    Writes `<html lang>` and nothing else on the page; every module reads the
+    locale from that attribute (src/i18n/locale.js, which carries the rule and
+    its reasons). Order: `window.__GEV_LOCALE__` (the QA fleet) > `?lang=`
+    (remembered in localStorage) > `localStorage['gev:locale:v1']` >
+    `navigator.languages` (off while AUTO is false) > French.
+
+    Inline and before the stylesheet for the reason the two gates above are:
+    `style.css` hides the loading line of an English page until its markup is
+    translated, and that rule has to see the right `lang` on the first paint.
+    `src/i18n/locale.test.mjs` RUNS this script against `resolveLocale()` over
+    a matrix of inputs and fails when the two copies disagree.
+  -->
+  <script>
+    /* locale-gate */
+    (function () {
+      var KEY = 'gev:locale:v1';
+      var AUTO = false;
+      var pick = function (value) {
+        var tag = typeof value === 'string' ? value.toLowerCase().split(/[-_]/)[0] : '';
+        return tag === 'fr' || tag === 'en' ? tag : null;
+      };
+      var locale = pick(window.__GEV_LOCALE__);
+      if (!locale) {
+        locale = pick(new URLSearchParams(location.search).get('lang'));
+        if (locale) {
+          try { window.localStorage.setItem(KEY, locale); } catch (e) { /* no storage */ }
+        }
+      }
+      if (!locale) {
+        try { locale = pick(window.localStorage.getItem(KEY)); } catch (e) { /* no storage */ }
+      }
+      if (!locale && AUTO) {
+        var list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+        for (var i = 0; i < list.length && !locale; i += 1) locale = pick(list[i]);
+        locale = locale || 'en';
+      }
+      document.documentElement.setAttribute('lang', locale || 'fr');
+    })();
+  </script>
+  <!--
     FENÊTRE DE PRÉ-LANCEMENT — À RETIRER LE 22 SEPTEMBRE 2026.
 
     L'origine est ouverte depuis le 16/09 mais l'annonce est prévue le 22 : sans

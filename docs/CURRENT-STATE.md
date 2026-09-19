@@ -2,6 +2,34 @@
 
 Updated: September 19, 2026
 
+> **2026-09-19 — the globe is bilingual by construction.** `src/i18n/` holds the
+> whole mechanism; `docs/i18n/CONVENTIONS.md` is the rulebook every translation
+> batch follows. The locale is decided ONCE, by the inline `/* locale-gate */`
+> script in `index.html` (after the vitrine gate, before the stylesheet):
+> `window.__GEV_LOCALE__` (QA) › `?lang=fr|en` (remembered in `localStorage`
+> under `gev:locale:v1`) › the stored choice › `navigator.languages` (OFF:
+> `LOCALE_AUTO_DETECT = false` until the language switch ships) › French. It
+> writes `<html lang>` and nothing else; every module reads the locale from
+> that attribute through `getLocale()` and never from `navigator` (Node has one,
+> and `npm test` must stay French on an en-US runner). Switching language is
+> store + `shareLink.flushHash()` + reload (`switchLocale()`), so no module ever
+> repaints itself. Strings live in co-located catalogs (`<module>.i18n.js`,
+> `{ fr, en }` per message, read at CALL time — ratchet R5 holds load-time reads
+> at zero); numbers and dates go through `src/i18n/format.js`, whose French
+> output is byte-identical to `toLocaleString('fr-FR')`. `src/boot.js` imports
+> the static-markup applicator (`data-i18n*` attributes, English in
+> `src/i18n/markup.i18n.js`) only when the page is not French: the entry chunk
+> grew by 367 B gzipped and a French page fetches nothing more. Guards:
+> `src/i18n/i18nRatchet.test.mjs` against `src/i18n/i18n-baseline.json`
+> (R1 French literals 4,611, R2 UI literals 1,738, R3 `index.html` text 406,
+> R4 `toLocale*('fr-FR')` 135, R5 0 — a count may fall, never rise;
+> `npm run i18n:report`, `npm run i18n:tighten`), and
+> `src/i18n/messagesParity.test.mjs` over every catalog. QA pages pin their
+> locale through `newQaPage()` (French unless `GEV_QA_LOCALE=en`). Pilot:
+> `girondeMegafire.js`, `megafireClock.js`, `megafirePack.js` speak English;
+> the layer's NAME is still French until the registry batch translates layer
+> names.
+
 > **2026-09-19 — the top of a phone, like Google Maps.** Under
 > `html[data-shell="phone"]` only (`src/phoneSheet.js`, `phone.css`,
 > markup `#phone-topbar` / `#phone-basemap-*` in `index.html`):

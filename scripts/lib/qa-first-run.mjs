@@ -58,8 +58,31 @@ import { fileURLToPath } from 'node:url';
 import { FIRST_RUN_SESSION_KEY, FIRST_RUN_STORAGE_KEY } from '../../src/firstRunExperience.js';
 import { PHOTOREAL_DISABLE_GLOBAL } from '../../src/photorealTileset.js';
 import { VITRINE_SKIP_GLOBAL } from '../../src/vitrine/gate.js';
+import { DEFAULT_LOCALE, LOCALE_QA_GLOBAL, normalizeLocale } from '../../src/i18n/locale.js';
 
 const SCRIPTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * The locale a harness page runs in: `options.locale`, else `GEV_QA_LOCALE`,
+ * else French.
+ *
+ * WHY EVERY PAGE GETS ONE. Headless Chrome announces `en-US`. The day the
+ * locale gate starts reading `navigator.languages`, a harness without this
+ * would silently run the English globe — every French label it asserts on
+ * would vanish at once, and the showcase loops recorded for the landing page
+ * would come out in English. The flag is set before any page script runs and
+ * outranks `?lang=` and storage (src/i18n/locale.js), so a run's language is
+ * the one it asked for, whatever the URL or the profile says.
+ *
+ * `GEV_QA_LOCALE=en npm run qa:…` runs any harness on the English globe.
+ *
+ * @param {{locale?: string}} [options]
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {'fr'|'en'}
+ */
+export function qaLocale(options = {}, env = process.env) {
+  return normalizeLocale(options.locale) || normalizeLocale(env.GEV_QA_LOCALE) || DEFAULT_LOCALE;
+}
 
 /** The launcher's root node, as the app renders it. */
 export const FIRST_RUN_LAUNCHER_SELECTOR = '#first-run-launcher';
@@ -74,13 +97,17 @@ export const FIRST_RUN_LAUNCHER_SELECTOR = '#first-run-launcher';
  * in the same install, so the fleet pays one script per page as before.
  * `vitrine: true` keeps the showcase — for the harness whose subject it is.
  *
+ * It pins the page's LOCALE too ({@link qaLocale}), in the same install.
+ *
  * @param {import('puppeteer').Page} page
- * @param {{durable?: boolean, vitrine?: boolean}} [options] `durable: true`
- *   also writes the durable key every close writes — only for a harness that
- *   clears session storage itself and still needs the card gone.
+ * @param {{durable?: boolean, vitrine?: boolean, locale?: string}} [options]
+ *   `durable: true` also writes the durable key every close writes — only for
+ *   a harness that clears session storage itself and still needs the card
+ *   gone. `locale: 'en'` runs the English globe (default: `GEV_QA_LOCALE`,
+ *   else French).
  * @returns {Promise<import('puppeteer').Page>} the same page, for chaining.
  */
-export async function suppressFirstRun(page, { durable = false, vitrine = false } = {}) {
+export async function suppressFirstRun(page, { durable = false, vitrine = false, locale } = {}) {
   await page.evaluateOnNewDocument((keys) => {
     // Storage can be blocked (private mode, hardened profiles). A harness that
     // cannot write it will simply see the card, which the launcher probe below
@@ -90,24 +117,30 @@ export async function suppressFirstRun(page, { durable = false, vitrine = false 
       try { window.localStorage.setItem(keys.durable, 'suppressed'); } catch { /* no storage */ }
     }
     if (keys.skipVitrine) window[keys.skipVitrine] = true;
+    window[keys.localeGlobal] = keys.locale;
   }, {
     session: FIRST_RUN_SESSION_KEY,
     durable: durable ? FIRST_RUN_STORAGE_KEY : null,
     skipVitrine: vitrine ? null : VITRINE_SKIP_GLOBAL,
+    localeGlobal: LOCALE_QA_GLOBAL,
+    locale: qaLocale({ locale }),
   });
   return page;
 }
 
 /**
  * Open the cockpit at the bare root on a page that does NOT get the first-run
- * suppression (`scripts/qa-firstrun.mjs`, whose subject is the card).
+ * suppression (`scripts/qa-firstrun.mjs`, whose subject is the card). Pins the
+ * locale like {@link suppressFirstRun} does.
  * @param {import('puppeteer').Page} page
+ * @param {{locale?: string}} [options]
  * @returns {Promise<import('puppeteer').Page>}
  */
-export async function skipVitrine(page) {
-  await page.evaluateOnNewDocument((flag) => {
-    window[flag] = true;
-  }, VITRINE_SKIP_GLOBAL);
+export async function skipVitrine(page, options = {}) {
+  await page.evaluateOnNewDocument((keys) => {
+    window[keys.flag] = true;
+    window[keys.localeGlobal] = keys.locale;
+  }, { flag: VITRINE_SKIP_GLOBAL, localeGlobal: LOCALE_QA_GLOBAL, locale: qaLocale(options) });
   return page;
 }
 
@@ -193,8 +226,8 @@ export const QA_WAIT_POLLING_MS = 50;
  * measures something against Google's 3D surface.
  *
  * @param {import('puppeteer').Browser} browser
- * @param {{durable?: boolean, photoreal?: boolean, vitrine?: boolean}} [options]
- *   `durable` and `vitrine` are passed to {@link suppressFirstRun};
+ * @param {{durable?: boolean, photoreal?: boolean, vitrine?: boolean, locale?: string}} [options]
+ *   `durable`, `vitrine` and `locale` are passed to {@link suppressFirstRun};
  *   `photoreal: true` opts this run back into the 3D globe, at the cost of one
  *   billed ion root tile.
  * @returns {Promise<import('puppeteer').Page>}
