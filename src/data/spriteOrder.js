@@ -7,9 +7,9 @@ export const SPRITE_LAYER_ORDER = Object.freeze([
   'schools-fr',
   'medecins-fr',
   'sup-fr',
-  // `petite-enfance-fr` occupait le créneau juste au-dessus : elle ne dessine
-  // plus de sprite du tout depuis qu'elle remplit les territoires eux-mêmes,
-  // et une couche sans collection n'a rien à ordonner ici.
+  // `petite-enfance-fr` used to hold the slot just above: it no longer draws
+  // any sprite at all since it fills the territories themselves, and a layer
+  // with no collection has nothing to order here.
   'amenities-fr',
   'irve-fr',
   'anfr-fr',

@@ -307,19 +307,19 @@ export async function ficheFetch(url, options = {}, { impl = fetch } = {}) {
 }
 
 /**
- * Ce que la fiche sait situer dans le pays, et où elle le lit.
+ * What the report knows how to place in the country, and where it reads it.
  *
- * La table de jointure entre la fiche et `baremeNational.js`. Elle est courte
- * exprès : la fiche calcule une quinzaine de nombres et seuls cinq d'entre eux
- * ont une échelle nationale ET une place lisible sur une carte de vingt lignes.
- * Les autres restent des valeurs, ce qui était déjà leur métier.
+ * The join table between the report and `baremeNational.js`. It is short on
+ * purpose: the report computes some fifteen numbers, and only five of them
+ * have a national scale AND a readable place on a twenty-line card. The
+ * others stay values, which was already their job.
  *
- * `geometry` est une FONCTION de la fiche, jamais une constante. L'anneau que le
- * barème décrit est celui de dix minutes ; le lecteur peut demander cinq ou
- * quinze, et les mêmes indicateurs y valent autre chose. Renvoyer `null` alors
- * fait refuser le rang, ce qui est le comportement voulu — un « A » obtenu sur
- * un anneau de quinze minutes contre une échelle de dix serait faux et
- * invisible.
+ * `geometry` is a FUNCTION of the report, never a constant. The ring the
+ * national scale describes is the ten-minute one; the reader may ask for five
+ * or fifteen, and the same indicators are worth something else there.
+ * Returning `null` then makes the rank refused, which is the intended
+ * behavior — an “A” obtained on a fifteen-minute ring against a ten-minute
+ * scale would be wrong and invisible.
  */
 export const FICHE_SCORED = Object.freeze([
   Object.freeze({
@@ -346,20 +346,20 @@ export const FICHE_SCORED = Object.freeze([
   Object.freeze({
     id: 'prixM2',
     read: (fiche) => fiche?.market?.medianPrixM2 ?? null,
-    // Le disque DVF ne dépend pas du pas choisi : la couche balaie toujours
-    // 300 m, et c'est sur 300 m que le barème a été mesuré.
+    // The DVF disc does not depend on the chosen time step: the layer always
+    // sweeps 300 m, and the national scale was measured over 300 m.
     geometry: () => BAREME_GEOMETRIES.DISC_300,
   }),
 ]);
 
 /**
- * La géométrie d'un agrégat d'anneau — ou rien, quand il n'est pas notable.
+ * The geometry of a ring aggregate — or nothing, when it cannot be scored.
  *
- * DEUX FAÇONS DE NE PAS ÊTRE NOTABLE, et la seconde a déjà coûté un chiffre
- * faux ailleurs dans ce dépôt : le mauvais pas de temps, et une page de
- * carroyage tronquée. Un agrégat tronqué est un PLANCHER — il manque des
- * carreaux — et un plancher classé dans une distribution nationale reçoit
- * toujours un rang trop bas, sans que rien à l'écran ne le dise.
+ * TWO WAYS OF NOT BEING SCORABLE, and the second has already cost a wrong
+ * figure elsewhere in this repository: the wrong time step, and a truncated
+ * grid page. A truncated aggregate is a FLOOR — cells are missing — and a
+ * floor ranked in a national distribution always gets a rank that is too low,
+ * with nothing on screen saying so.
  *
  * @param {object} fiche
  * @returns {string|null}
@@ -371,16 +371,16 @@ function ringGeometryOf(fiche) {
 }
 
 /**
- * Situer la fiche dans le pays.
+ * Place the report in the country.
  *
- * `options` est passé tel quel à `scoreIndicator()` : il n'existe que pour que
- * les tests puissent noter contre une échelle synthétique. La campagne de
- * mesure change les nombres du barème plusieurs fois par an, et un test qui
- * s'appuierait dessus mesurerait la campagne au lieu de la jointure.
+ * `options` is passed as is to `scoreIndicator()`: it exists only so that the
+ * tests can score against a synthetic scale. The measurement campaign changes
+ * the national scale's numbers several times a year, and a test that leaned
+ * on them would measure the campaign instead of the join.
  *
  * @param {object} fiche
  * @param {{bareme?: object, sampleSize?: number}} [options]
- * @returns {Array<object>} Un score par entrée de `FICHE_SCORED`, dans l'ordre.
+ * @returns {Array<object>} One score per entry of `FICHE_SCORED`, in order.
  */
 export function ficheScores(fiche, options = {}) {
   return FICHE_SCORED.map((entry) => scoreIndicator(entry.id, entry.read(fiche), {
@@ -390,11 +390,11 @@ export function ficheScores(fiche, options = {}) {
 }
 
 /**
- * La lettre, ou les deux lettres que la fourchette enjambe.
+ * The letter, or the two letters the range straddles.
  *
- * « B ou C » n'est pas une coquetterie : sur quelques centaines de tirages une
- * valeur assise près d'une borne de quintile a une chance sur deux d'être dans
- * l'autre bande, et imprimer la meilleure des deux serait un choix commercial.
+ * “B ou C” is not an affectation: on a few hundred draws, a value sitting near
+ * a quintile boundary has an even chance of being in the other band, and
+ * printing the better of the two would be a commercial choice.
  * @param {object} score
  * @returns {string|null}
  */
@@ -404,13 +404,13 @@ export function letterPhrase(score) {
 }
 
 /**
- * Le rang en un mot, pour la ligne qui les aligne tous.
+ * The rank in one word, for the line that lines them all up.
  *
- * Un nombre quand la fourchette est étroite, un intervalle quand elle ne l'est
- * pas. Le seuil de vingt points sépare les deux : en dessous, la fourchette
- * n'est que l'erreur d'échantillonnage et un centile la résume ; au-dessus, la
- * valeur est sur un PALIER de l'échelle — 0 % de logement social couvre le bas
- * de la distribution — et un centile unique y serait une invention.
+ * A number when the range is narrow, an interval when it is not. The
+ * twenty-point threshold separates the two: below it, the range is only the
+ * sampling error and one percentile sums it up; above it, the value sits on a
+ * PLATEAU of the scale — 0% social housing covers the bottom of the
+ * distribution — and a single percentile there would be an invention.
  * @param {object} score
  * @returns {string}
  */
@@ -526,11 +526,11 @@ export function ficheLines(fiche) {
     details.push('Population indisponible — le carroyage INSEE n’a pas répondu');
   }
 
-  // ── Le rang national ──────────────────────────────────────────────────────
-  // Jamais une lettre sans la convention qui la produit : « A » ne veut rien
-  // dire tant que le lecteur ignore que c'est le meilleur cinquième de France,
-  // et au nom de qui. La convention voyage donc sur la ligne des lettres, et la
-  // provenance de l'échelle sur celle des centiles.
+  // ── The national rank ─────────────────────────────────────────────────────
+  // Never a letter without the convention that produces it: “A” means nothing
+  // as long as the reader does not know it is the best fifth of France, and on
+  // whose behalf. So the convention travels on the letters line, and the
+  // provenance of the scale on the percentiles line.
   const scores = ficheScores(fiche);
   const lettered = scores.filter((score) => score.letterLow);
   const ranked = scores.filter((score) => Number.isFinite(score.percentile));
@@ -545,10 +545,10 @@ export function ficheLines(fiche) {
       + ` tirés au sort dans la population (${BAREME_SAMPLE.measuredAt})`
       + `, à ±${BAREME_SAMPLE.marginPt} points de centile près`);
   }
-  // Le prix est le seul indicateur dont l'échelle ne couvre pas l'échantillon :
-  // un anneau sur trois n'a aucune vente comparable dans ses 300 m, et ceux-là
-  // sont ruraux. Le rang du prix est donc lu sur une France partielle et plus
-  // urbaine que le pays, ce que la carte dit au lieu de le laisser deviner.
+  // Price is the only indicator whose scale does not cover the sample: one
+  // ring in three has no comparable sale within its 300 m, and those rings are
+  // rural. The price rank is therefore read on a partial France, more urban
+  // than the country, which the card says instead of leaving it to be guessed.
   const price = ranked.find((score) => score.id === 'prixM2');
   const priceCoverage = BAREME_FR.prixM2 && BAREME_SAMPLE.rings
     ? Math.round((BAREME_FR.prixM2.measured / BAREME_SAMPLE.rings) * 100)
@@ -557,13 +557,13 @@ export function ficheLines(fiche) {
     details.push(`Le rang du prix se lit sur les ${priceCoverage} % d’anneaux`
       + ' où une vente comparable existait — une France plus urbaine que la France');
   }
-  // LE REFUS SE DIT MÊME QUAND IL RESTE DES RANGS À IMPRIMER, et c'est la
-  // raison d'être de ce test séparé plutôt que d'un `else`. Sur un anneau de
-  // cinq minutes le prix au m² garde son rang — il est mesuré sur un disque de
-  // 300 m que le pas de temps ne touche pas — et les quatre indicateurs
-  // d'anneau disparaissent. Une ligne « Centiles nationaux » plus courte que
-  // d'habitude, sans un mot d'explication, est exactement l'omission
-  // silencieuse que cette couche refuse partout ailleurs.
+  // THE REFUSAL IS STATED EVEN WHEN THERE ARE RANKS LEFT TO PRINT, and that is
+  // why this is a separate test rather than an `else`. On a five-minute ring
+  // the price per m² keeps its rank — it is measured on a 300 m disc the time
+  // step does not touch — and the four ring indicators disappear. A
+  // “Centiles nationaux” line shorter than usual, without a word of
+  // explanation, is exactly the silent omission this layer refuses everywhere
+  // else.
   if (scores.some((score) => score.reason === BAREME_REASONS.GEOMETRY)) {
     details.push(fiche?.demand?.truncated
       ? 'Rang national suspendu sur l’anneau — un comptage tronqué est un plancher'

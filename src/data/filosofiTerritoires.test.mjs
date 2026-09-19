@@ -38,7 +38,7 @@ const NIVEAU = resolveTerritoryMetric('niveau');
 // ── The anchor pack ─────────────────────────────────────────────────────────
 
 test('the pack anchors every territory INSEE has figures for', () => {
-  // 96 métropole plus La Réunion, and 13 régions plus hers.
+  // 96 mainland departments plus La Réunion, and 13 regions plus hers.
   assert.equal(ANCHORS.departements.length, 97);
   assert.equal(ANCHORS.regions.length, 14);
   for (const entry of [...ANCHORS.departements, ...ANCHORS.regions]) {

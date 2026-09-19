@@ -1,103 +1,104 @@
 /**
- * Le barème national — comment une valeur mesurée à une adresse devient un rang
- * et, parfois seulement, une lettre.
+ * The national scale — how a value measured at an address becomes a rank
+ * and, only sometimes, a letter.
  *
- * ── POURQUOI CE MODULE EXISTE ───────────────────────────────────────────────
- * La fiche implantation sait déjà dire « 4 210 habitants, niveau de vie moyen
- * 22 400 €/an, 1,04 km² atteignables à pied en dix minutes ». Un lecteur qui
- * découvre ces trois nombres n'a aucun moyen de savoir si c'est beaucoup. Le
- * produit que Cityscan vend n'est pas la mesure, c'est la POSITION de la mesure
- * dans le pays — la note sur 100 et la lettre A→E. Ce module est la position.
+ * ── WHY THIS MODULE EXISTS ──────────────────────────────────────────────────
+ * The site report can already say “4,210 residents, average standard of
+ * living €22,400/yr, 1.04 km² reachable on foot in ten minutes”. A reader who
+ * discovers these three numbers has no way of knowing whether that is a lot.
+ * What Cityscan sells is not the measurement, it is the POSITION of the
+ * measurement in the country — the score out of 100 and the letter A→E. This
+ * module is the position.
  *
- * ── CE QUE COÛTE UNE LETTRE, ET POURQUOI ELLE N'ÉTAIT PAS GRATUITE ──────────
- * Dire « A » suppose de connaître la distribution nationale de l'indicateur.
- * Il n'existe aucune source publiée pour « la surface atteignable à pied en dix
- * minutes depuis chez les Français » : cette distribution n'existe que si on la
- * MESURE. `scripts/build-bareme-fr.mjs` la mesure, sur un échantillon national
- * de résidents tiré au sort proportionnellement à la population, en faisant
- * tourner sur chacun exactement la composition que la fiche fait sur l'adresse
- * du lecteur. Les échelles ci-dessous sortent de là et de nulle part ailleurs.
+ * ── WHAT A LETTER COSTS, AND WHY IT WAS NOT FREE ────────────────────────────
+ * Saying “A” presupposes knowing the national distribution of the indicator.
+ * No published source exists for “the area reachable on foot in ten minutes
+ * from where French people live”: that distribution only exists if someone
+ * MEASURES it. `scripts/build-bareme-fr.mjs` measures it, on a national sample
+ * of residents drawn at random in proportion to population, running on each
+ * of them exactly the composition the report runs on the reader's address.
+ * The scales below come from there and from nowhere else.
  *
- * ── LE PIÈGE QUE CE MODULE EXISTE POUR REFUSER ──────────────────────────────
- * `filosofiFeed.js` porte déjà `FILOSOFI_RAMPS`, des quantiles nationaux des
- * mêmes indicateurs. Les réutiliser ici aurait été gratuit et FAUX : ce sont
- * les quantiles d'un CARREAU de 200 m, et la fiche calcule une moyenne pondérée
- * sur les ~30 carreaux d'un anneau de dix minutes. Moyenner trente carreaux
- * écrase les deux queues — c'est le même argument que `build-filosofi-ramp.mjs`
- * oppose aux déciles individuels de l'INSEE, un cran plus haut. Noter une
- * valeur d'anneau contre une échelle de carreau donne une lettre plausible et
- * fausse, et rien à l'écran ne le dirait. D'où `geometry` sur chaque échelle et
- * sur chaque appel : une géométrie qui ne correspond pas ne produit pas une
- * lettre, elle produit un refus nommé. L'écart mesuré entre les deux échelles
- * est reporté dans `BAREME_SAMPLE.ecartCarreau`.
+ * ── THE TRAP THIS MODULE EXISTS TO REFUSE ───────────────────────────────────
+ * `filosofiFeed.js` already carries `FILOSOFI_RAMPS`, national quantiles of
+ * the same indicators. Reusing them here would have been free and WRONG: they
+ * are the quantiles of a 200 m grid CELL, and the report computes a weighted
+ * mean over the ~30 cells of a ten-minute ring. Averaging thirty cells
+ * flattens both tails — the same argument `build-filosofi-ramp.mjs` makes
+ * against INSEE's individual deciles, one level up. Scoring a ring value
+ * against a cell scale gives a plausible and wrong letter, and nothing on
+ * screen would say so. Hence `geometry` on every scale and on every call: a
+ * geometry that does not match does not produce a letter, it produces a named
+ * refusal. The measured gap between the two scales is reported in
+ * `BAREME_SAMPLE.ecartCarreau`.
  *
- * ── POURQUOI SI PEU D'INDICATEURS PORTENT UNE LETTRE ────────────────────────
- * Une lettre est un JUGEMENT : elle exige de savoir dans quel sens l'indicateur
- * est « bon ». Pour la surface atteignable à pied, personne ne conteste le sens.
- * Pour la part de logement social, la part de propriétaires, l'âge des
- * habitants ou le prix au m², le sens dépend entièrement de qui demande — un
- * prix élevé est une bonne nouvelle pour un vendeur et une mauvaise pour un
- * acheteur. Cityscan tranche quand même et ne dit pas au nom de qui. Ici, un
- * indicateur sans sens défendable porte `direction: null` : il reçoit son rang
- * national, jamais de lettre. Ajouter une lettre plus tard est une décision à
- * écrire dans `direction`, pas une machine à construire.
+ * ── WHY SO FEW INDICATORS CARRY A LETTER ────────────────────────────────────
+ * A letter is a JUDGMENT: it requires knowing in which direction the
+ * indicator is “good”. For the area reachable on foot, nobody disputes the
+ * direction. For the share of social housing, the share of owner-occupiers,
+ * the residents' age or the price per m², the direction depends entirely on
+ * who is asking — a high price is good news for a seller and bad news for a
+ * buyer. Cityscan decides anyway and does not say on whose behalf. Here, an
+ * indicator with no defensible direction carries `direction: null`: it gets
+ * its national rank, never a letter. Adding a letter later is a decision to
+ * write into `direction`, not a machine to build.
  *
- * ── LA LETTRE EST ELLE-MÊME UNE FOURCHETTE ──────────────────────────────────
- * Un centile lu sur un échantillon de quelques centaines de tirages porte une
- * erreur d'échantillonnage d'environ trois points au milieu de la distribution.
- * Une valeur qui tombe à 61 % n'est donc pas « B » plutôt que « C », c'est
- * « B ou C ». `scoreIndicator()` renvoie la fourchette et un drapeau `ferme` ;
- * la carte n'imprime une lettre nue que lorsqu'elle est ferme. C'est le même
- * geste que la fourchette de population de `implantationFeed.js`, appliqué au
- * rang plutôt qu'au comptage.
+ * ── THE LETTER IS ITSELF A RANGE ────────────────────────────────────────────
+ * A percentile read off a sample of a few hundred draws carries a sampling
+ * error of about three points in the middle of the distribution. A value that
+ * lands at 61% is therefore not “B” rather than “C”, it is “B or C”.
+ * `scoreIndicator()` returns the range and a `ferme` (firm) flag; the card
+ * prints a bare letter only when it is firm. It is the same move as the
+ * population range in `implantationFeed.js`, applied to the rank rather than
+ * to the count.
  *
- * Pur, sans dépendance et sans effet de bord.
+ * Pure, dependency-free and free of side effects.
  *
  * @module data/baremeNational
  */
 
 /**
- * Les quantiles auxquels chaque échelle est relevée.
+ * The quantiles at which every scale is read.
  *
- * Onze points plutôt que les cinq de `FILOSOFI_RAMPS`, parce qu'une échelle de
- * couleur a six bandes à border et qu'un rang a cent positions à interpoler :
- * entre p50 et p90 une échelle à cinq points impose une droite sur quarante
- * centiles, et le rang rendu au lecteur serait celui de la droite, pas celui du
- * pays. Bornée à p05/p95 et pas à p01/p99 : sur quelques centaines de tirages,
- * le centième point de la queue repose sur trois observations et ne mesure que
- * le tirage.
+ * Eleven points rather than the five of `FILOSOFI_RAMPS`, because a color
+ * scale has six bands to bound while a rank has a hundred positions to
+ * interpolate: between p50 and p90 a five-point scale forces a straight line
+ * across forty percentiles, and the rank handed to the reader would be the
+ * line's, not the country's. Bounded at p05/p95 and not at p01/p99: on a few
+ * hundred draws, the hundredth point of the tail rests on three observations
+ * and measures nothing but the draw.
  */
 export const BAREME_LADDER_Q = Object.freeze([
   0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95,
 ]);
 
 /**
- * Les géométries de mesure, et pourquoi c'en est une clé de jointure.
+ * The measurement geometries, and why they are a join key.
  *
- * Deux nombres portant la même unité et le même nom ne sont comparables que
- * s'ils ont été mesurés sur la même forme. « 22 400 €/an » relevé sur un carreau
- * de 200 m et « 22 400 €/an » moyenné sur un anneau de dix minutes sont deux
- * mesures différentes ; les comparer est la panne silencieuse que ce module
- * rend impossible. La géométrie voyage donc avec l'échelle ET avec l'appel.
+ * Two numbers with the same unit and the same name are only comparable if
+ * they were measured over the same shape. “€22,400/yr” read on a 200 m grid
+ * cell and “€22,400/yr” averaged over a ten-minute ring are two different
+ * measurements; comparing them is the silent failure this module makes
+ * impossible. The geometry therefore travels with the scale AND with the call.
  */
 export const BAREME_GEOMETRIES = Object.freeze({
-  /** Anneau piéton de 600 s, isochrone IGN — la forme que la fiche dessine. */
+  /** 600 s walking ring, IGN isochrone — the shape the report draws. */
   RING_FOOT_600: 'ring-foot-600',
-  /** Disque de 300 m — le rayon que la couche DVF balaie. */
+  /** 300 m disc — the radius the DVF layer sweeps. */
   DISC_300: 'disc-300',
-  /** Carreau INSEE de 200 m — la géométrie de `FILOSOFI_RAMPS`, pas la nôtre. */
+  /** INSEE 200 m grid cell — the geometry of `FILOSOFI_RAMPS`, not ours. */
   CARREAU_200: 'carreau-200',
 });
 
 /**
- * Les bornes des lettres, en note sur 100.
+ * The letter boundaries, as a score out of 100.
  *
- * Des quintiles, et rien de plus savant : A est le meilleur cinquième de
- * France, E le pire. C'est la convention que Cityscan a empruntée au DPE, et
- * elle a le mérite d'être vérifiable — un lecteur peut demander « combien de
- * Français sont en A » et la réponse est « un sur cinq, par construction ».
- * Une découpe non uniforme (A = les 10 % du haut) est défendable aussi, mais
- * elle doit alors être affichée, sinon la lettre ment sur sa propre rareté.
+ * Quintiles, and nothing cleverer: A is the best fifth of France, E the
+ * worst. It is the convention Cityscan borrowed from the DPE, and it has the
+ * merit of being checkable — a reader can ask “how many French people are in
+ * A” and the answer is “one in five, by construction”. A non-uniform cut
+ * (A = the top 10%) is defensible too, but it must then be displayed, or the
+ * letter lies about its own rarity.
  */
 export const BAREME_LETTER_FLOORS = Object.freeze([
   Object.freeze({ letter: 'A', floor: 80 }),
@@ -108,16 +109,16 @@ export const BAREME_LETTER_FLOORS = Object.freeze([
 ]);
 
 /**
- * Les motifs de refus, nommés.
+ * The refusal reasons, named.
  *
- * Un refus nommé est la moitié du produit : « pas d'échelle pour cet
- * indicateur » et « échelle mesurée sur une autre forme » sont deux phrases
- * différentes, et un lecteur mérite la seconde plutôt qu'un tiret.
+ * A named refusal is half the product: “no scale for this indicator” and
+ * “scale measured on another shape” are two different sentences, and a
+ * reader deserves the second rather than a dash.
  *
- * SORTIR DE L'ÉCHELLE N'EST PAS UN REFUS et n'a donc pas de motif ici. Une
- * valeur au-dessus du plus haut point mesuré est parfaitement notable — elle
- * est même la plus facile à noter — elle est seulement connue par un côté, ce
- * que `beyond` dit à part.
+ * FALLING OFF THE SCALE IS NOT A REFUSAL and so has no reason here. A value
+ * above the highest measured point is perfectly scorable — it is even the
+ * easiest one to score — it is only known from one side, which `beyond` says
+ * separately.
  */
 export const BAREME_REASONS = Object.freeze({
   NO_REFERENCE: 'aucune échelle nationale pour cet indicateur',
@@ -127,16 +128,17 @@ export const BAREME_REASONS = Object.freeze({
 });
 
 /**
- * Ce que la fiche sait situer, et au nom de qui.
+ * What the report knows how to place, and on whose behalf.
  *
- * La table des CHOIX, séparée de la table des MESURES (`BAREME_FR`) juste en
- * dessous. Le script de mesure ne réécrit que la seconde ; le sens d'un
- * indicateur est une décision éditoriale et se relit dans un diff.
+ * The table of CHOICES, kept apart from the table of MEASUREMENTS
+ * (`BAREME_FR`) just below. The measurement script rewrites only the second;
+ * the direction of an indicator is an editorial decision and is reviewed in a
+ * diff.
  *
- * `direction` :
- *   `'up'`   — plus il y en a, mieux c'est, du point de vue nommé ;
- *   `'down'` — moins il y en a, mieux c'est ;
- *   `null`   — aucun sens défendable : rang national, jamais de lettre.
+ * `direction`:
+ *   `'up'`   — the more there is, the better, from the named point of view;
+ *   `'down'` — the less there is, the better;
+ *   `null`   — no defensible direction: national rank, never a letter.
  */
 export const BAREME_INDICATORS = Object.freeze([
   Object.freeze({
@@ -147,11 +149,11 @@ export const BAREME_INDICATORS = Object.freeze([
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: 'up',
     round: 0.01,
-    // Le seul indicateur de cette liste dont le sens ne se discute pas. Plus de
-    // sol atteignable en dix minutes de marche, c'est plus de tout ce qui est
-    // dessus, pour n'importe quel lecteur. C'est aussi une mesure de la trame
-    // viaire — une impasse pavillonnaire et un centre-bourg à la même densité
-    // ne donnent pas la même surface.
+    // The only indicator on this list whose direction is not up for debate.
+    // More ground reachable in a ten-minute walk means more of everything on
+    // it, for any reader. It is also a measure of the street grid — a
+    // cul-de-sac subdivision and a village center at the same density do not
+    // give the same area.
     directionNote: 'Sens non contesté : plus de sol accessible à pied est plus '
       + 'd’accès, pour tout lecteur.',
   }),
@@ -163,12 +165,13 @@ export const BAREME_INDICATORS = Object.freeze([
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: 'up',
     round: 100,
-    // LE CHOIX CONTESTABLE DE CE MODULE, écrit ici plutôt que sous-entendu.
-    // C'est la convention d'une radiographie d'adresse vendue à quelqu'un qui
-    // achète pour habiter, et c'est le proxy que le marché lui-même utilise.
-    // Un opérateur social, un commerce discount ou un bailleur la retourneraient
-    // — et auraient raison. La carte nomme donc le point de vue à côté de la
-    // lettre au lieu de la présenter comme une propriété du lieu.
+    // THE DISPUTABLE CHOICE OF THIS MODULE, written here rather than implied.
+    // It is the convention of an address X-ray sold to someone buying a home
+    // to live in, and it is the proxy the market itself uses. A social
+    // housing operator, a discount store or a landlord would turn it upside
+    // down — and they would be right. The card therefore names the point of
+    // view next to the letter instead of presenting it as a property of the
+    // place.
     directionNote: 'Point de vue du résident acheteur, et lui seul. Un bailleur '
       + 'social ou une enseigne discount liraient l’échelle à l’envers.',
   }),
@@ -212,10 +215,10 @@ export const BAREME_INDICATORS = Object.freeze([
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
-    // Refuser la lettre ici est un choix et non un oubli. Une part de logement
-    // social est le résultat d'une politique publique ; la noter revient à
-    // noter la politique, et une note E accolée à un quartier d'habitat social
-    // est exactement l'usage que ce module ne veut pas rendre facile.
+    // Refusing the letter here is a choice, not an oversight. A share of
+    // social housing is the result of a public policy; scoring it amounts to
+    // scoring the policy, and an E stuck on a social-housing neighborhood is
+    // exactly the use this module does not want to make easy.
     directionNote: 'Résultat d’une politique publique, pas une qualité du lieu — '
       + 'rang seulement.',
   }),
@@ -271,9 +274,9 @@ export const BAREME_INDICATORS = Object.freeze([
     geometry: BAREME_GEOMETRIES.DISC_300,
     direction: null,
     round: 10,
-    // Le cas d'école du sens qui dépend du lecteur, et la raison pour laquelle
-    // `direction` existe : un prix élevé est une bonne nouvelle pour celui qui
-    // vend et une mauvaise pour celui qui achète. Le rang répond aux deux.
+    // The textbook case of a direction that depends on the reader, and the
+    // reason `direction` exists: a high price is good news for whoever sells
+    // and bad news for whoever buys. The rank answers both.
     directionNote: 'Bonne nouvelle pour un vendeur, mauvaise pour un acheteur — '
       + 'la même mesure, deux lectures.',
   }),
@@ -284,24 +287,24 @@ const INDICATOR_BY_ID = Object.freeze(Object.fromEntries(
   BAREME_INDICATORS.map((indicator) => [indicator.id, indicator]),
 ));
 
-/** La déclaration d'un indicateur, ou null. */
+/** An indicator's declaration, or null. */
 export function resolveIndicator(id) {
   return INDICATOR_BY_ID[String(id ?? '').trim()] || null;
 }
 
 /**
- * LES ÉCHELLES MESURÉES. Réécrites par `npm run bareme:fr` ; tout le reste de
- * ce fichier est un choix, ce bloc est une mesure.
+ * THE MEASURED SCALES. Rewritten by `npm run bareme:fr`; everything else in
+ * this file is a choice, this block is a measurement.
  *
- * Onze valeurs par indicateur : p05, p10, p20, p30, p40, p50, p60, p70, p80,
- * p90, p95 de la distribution CHEZ LES RÉSIDENTS FRANÇAIS — « 30 % des Français
- * ont moins que ça », pas « 30 % des communes ». C'est le tirage qui porte la
- * pondération, pas le calcul.
+ * Eleven values per indicator: p05, p10, p20, p30, p40, p50, p60, p70, p80,
+ * p90, p95 of the distribution AMONG FRENCH RESIDENTS — “30% of French people
+ * have less than this”, not “30% of municipalities”. The draw carries the
+ * weighting, not the computation.
  *
- * `measured` est le nombre d'anneaux qui ont pu répondre, et il n'égale pas
- * toujours `BAREME_SAMPLE.rings` : 151 anneaux sur 1 200 n'avaient aucune vente
- * comparable dans leurs 300 m, et l'échelle du prix décrit donc une France plus
- * urbaine que la France. La carte le dit quand elle s'en sert.
+ * `measured` is the number of rings that could answer, and it does not always
+ * equal `BAREME_SAMPLE.rings`: 151 rings out of 1,200 had no comparable sale
+ * within their 300 m, so the price scale describes a France more urban than
+ * France. The card says so when it uses it.
  */
 export const BAREME_FR = Object.freeze({
   acces: Object.freeze({ geometry: 'ring-foot-600', measured: 1200,
@@ -330,17 +333,17 @@ export const BAREME_FR = Object.freeze({
 });
 
 /**
- * La campagne : ce qu'elle a coûté, ce qu'elle couvre et ce qu'elle vaut.
+ * The campaign: what it cost, what it covers and what it is worth.
  *
- * `marginPt` est la demi-largeur de l'erreur d'échantillonnage au milieu de la
- * distribution, `2·√(0,25/n)` en points de centile. Elle est publiée ici parce
- * que la carte l'imprime : un rang sans son incertitude invite à lire un 61ᵉ
- * centile comme un fait et non comme une estimation.
+ * `marginPt` is the half-width of the sampling error in the middle of the
+ * distribution, `2·√(0.25/n)` in percentile points. It is published here
+ * because the card prints it: a rank without its uncertainty invites reading
+ * a 61st percentile as a fact rather than as an estimate.
  *
- * `refusals` est vide, et c'est une information : les 1 200 tirages ont tous
- * reçu un anneau, un carroyage complet et une population non nulle. La première
- * campagne, elle, avait refusé seize fois de suite sur La Réunion — voir le
- * commentaire du CRS dans `implantationFeed.js`.
+ * `refusals` is empty, and that is information: all 1,200 draws got a ring, a
+ * complete grid and a non-zero population. The first campaign, by contrast,
+ * refused sixteen times in a row on La Réunion — see the CRS comment in
+ * `implantationFeed.js`.
  */
 export const BAREME_SAMPLE = Object.freeze({
   measuredAt: '2026-09-08',
@@ -355,16 +358,15 @@ export const BAREME_SAMPLE = Object.freeze({
   seed: 20260908,
   refusals: Object.freeze({}),
   /**
-   * Les mêmes indicateurs mesurés AU CARREAU de 200 m, sur le même échantillon.
+   * The same indicators measured PER 200 m GRID CELL, on the same sample.
    *
-   * Publié parce que c'est la preuve chiffrée que ce module ne pouvait pas
-   * emprunter `FILOSOFI_RAMPS`. L'intervalle interdécile d'un anneau vaut
-   * **74 % de celui d'un carreau** en moyenne sur les sept indicateurs
-   * communs — moyenner une trentaine de carreaux rentre les deux queues. La
-   * conséquence n'est pas académique : noté sur l'échelle de carreau, un
-   * anneau assis au 10ᵉ centile national remonte au 22ᵉ et un anneau au 90ᵉ
-   * redescend au 84ᵉ. C'est une bande de lettre entière aux deux extrémités,
-   * et rien à l'écran ne l'aurait dit.
+   * Published because it is the numerical proof that this module could not
+   * borrow `FILOSOFI_RAMPS`. A ring's interdecile range is **74% of a cell's**
+   * on average over the seven shared indicators — averaging thirty-odd cells
+   * pulls both tails in. The consequence is not academic: scored on the cell
+   * scale, a ring sitting at the national 10th percentile climbs to the 22nd,
+   * and a ring at the 90th drops to the 84th. That is a whole letter band at
+   * both ends, and nothing on screen would have said so.
    */
   ecartCarreau: Object.freeze({
     interdecileRatio: 0.74,
@@ -386,7 +388,7 @@ export const BAREME_SAMPLE = Object.freeze({
 });
 
 /**
- * La lettre d'une note sur 100.
+ * The letter for a score out of 100.
  * @param {number} note
  * @returns {string|null}
  */
@@ -400,26 +402,26 @@ export function letterFor(note) {
 }
 
 /**
- * Où une valeur tombe dans une échelle, en fourchette de quantiles.
+ * Where a value falls on a scale, as a range of quantiles.
  *
- * TROIS CAS, ET LE DEUXIÈME EST CELUI QUI COMPTE.
+ * THREE CASES, AND THE SECOND IS THE ONE THAT MATTERS.
  *
- *   i.   la valeur tombe strictement entre deux points de l'échelle : on
- *        interpole, et la fourchette est un point ;
- *   ii.  la valeur ÉGALE un ou plusieurs points de l'échelle. C'est le cas des
- *        indicateurs à plancher — la part de logement social vaut 0 sur tout le
- *        bas de la distribution — et il n'a pas de réponse ponctuelle : 0 % est
- *        « quelque part dans le premier tiers », pas « au 14ᵉ centile ».
- *        Interpoler ici invente une précision que la donnée refuse, et c'est la
- *        façon la plus facile de mentir avec une échelle ;
- *   iii. la valeur sort par le bas ou par le haut : la fourchette est ouverte
- *        jusqu'à la borne, et `beyond` dit de quel côté.
+ *   i.   the value falls strictly between two points of the scale: we
+ *        interpolate, and the range is a single point;
+ *   ii.  the value EQUALS one or more points of the scale. This is the case of
+ *        floored indicators — the share of social housing is 0 across the
+ *        whole bottom of the distribution — and it has no point answer: 0% is
+ *        “somewhere in the first third”, not “at the 14th percentile”.
+ *        Interpolating here invents a precision the data refuses, and it is
+ *        the easiest way to lie with a scale;
+ *   iii. the value falls off the bottom or the top: the range is open up to
+ *        the bound, and `beyond` says on which side.
  *
  * @param {number} value
- * @param {number[]} ladder Valeurs, croissantes, une par entrée de `BAREME_LADDER_Q`.
+ * @param {number[]} ladder Values, ascending, one per entry of `BAREME_LADDER_Q`.
  * @param {number[]} [quantiles]
  * @returns {{low: number, high: number, beyond: ('below'|'above'|null)}|null}
- *   `low`/`high` en fraction 0..1.
+ *   `low`/`high` as a 0..1 fraction.
  */
 export function ladderBracket(value, ladder, quantiles = BAREME_LADDER_Q) {
   if (!Number.isFinite(value)) return null;
@@ -440,8 +442,8 @@ export function ladderBracket(value, ladder, quantiles = BAREME_LADDER_Q) {
   for (let i = points.length - 1; i >= 0; i -= 1) {
     if (points[i].v > value) highIndex = i; else break;
   }
-  // Une égalité exacte avec au moins un point laisse un trou entre `lowIndex`
-  // et `highIndex` : c'est le palier, et il est rendu tel quel.
+  // An exact tie with at least one point leaves a gap between `lowIndex` and
+  // `highIndex`: that is the plateau, and it is returned as is.
   if (highIndex - lowIndex > 1) {
     return {
       low: lowIndex < 0 ? 0 : points[lowIndex].q,
@@ -457,18 +459,18 @@ export function ladderBracket(value, ladder, quantiles = BAREME_LADDER_Q) {
 }
 
 /**
- * L'erreur d'échantillonnage d'un centile, en points.
+ * The sampling error of a percentile, in points.
  *
- * L'écart-type de la proportion, `sqrt(p(1-p)/n)`, parce que le centile d'une
- * valeur EST une proportion : la part de l'échantillon en dessous d'elle. Deux
- * écarts-types de chaque côté, soit environ 95 %. Sur les 1 200 tirages de la
- * campagne, cela fait ±2,9 points au milieu de la distribution et ±1,3 aux
- * extrêmes — de quoi rendre une lettre incertaine dès qu'une valeur approche
- * une borne de quintile, ce que la carte doit dire plutôt que trancher.
+ * The standard deviation of a proportion, `sqrt(p(1-p)/n)`, because a value's
+ * percentile IS a proportion: the share of the sample below it. Two standard
+ * deviations on each side, so about 95%. On the campaign's 1,200 draws, that
+ * makes ±2.9 points in the middle of the distribution and ±1.3 at the
+ * extremes — enough to make a letter uncertain as soon as a value approaches
+ * a quintile boundary, which the card must say rather than decide.
  *
  * @param {number} q Fraction 0..1.
- * @param {number} n Taille de l'échantillon.
- * @returns {number} Demi-largeur, en points de centile.
+ * @param {number} n Sample size.
+ * @returns {number} Half-width, in percentile points.
  */
 export function percentileMarginPt(q, n) {
   if (!Number.isFinite(q) || !Number.isFinite(n) || n <= 0) return 0;
@@ -477,20 +479,19 @@ export function percentileMarginPt(q, n) {
 }
 
 /**
- * Situer une valeur dans le pays.
+ * Place a value in the country.
  *
- * Renvoie TOUJOURS un objet, jamais null et jamais d'exception : un indicateur
- * qu'on n'a pas su situer est une ligne de carte qui dit pourquoi, pas une
- * ligne absente. `reason` est le refus ; `beyond` n'en est pas un — une valeur
- * au-dessus du plus haut point mesuré est parfaitement notable, elle est juste
- * connue par un côté seulement.
+ * ALWAYS returns an object, never null and never an exception: an indicator
+ * that could not be placed is a card row that says why, not a missing row.
+ * `reason` is the refusal; `beyond` is not one — a value above the highest
+ * measured point is perfectly scorable, it is just known from one side only.
  *
  * @param {string} id
  * @param {number|null} value
  * @param {{geometry?: string, bareme?: object, sampleSize?: number}} [options]
- *   `geometry` est la forme sur laquelle l'APPELANT a mesuré. Elle est comparée
- *   à celle de l'échelle, et l'absence de comparaison est le bug que ce
- *   paramètre existe pour rendre impossible.
+ *   `geometry` is the shape the CALLER measured on. It is compared with the
+ *   scale's, and a missing comparison is the bug this parameter exists to make
+ *   impossible.
  * @returns {object}
  */
 export function scoreIndicator(id, value, options = {}) {
@@ -525,9 +526,9 @@ export function scoreIndicator(id, value, options = {}) {
     return { ...base, reason: BAREME_REASONS.NO_REFERENCE };
   }
   if (!Number.isFinite(value)) return { ...base, reason: BAREME_REASONS.NOT_A_NUMBER };
-  // LA COMPARAISON QUI JUSTIFIE TOUT LE MODULE. Un appelant qui ne dit pas sur
-  // quelle forme il a mesuré ne reçoit pas de rang : le silence n'est pas un
-  // accord, c'est l'absence de la seule vérification qui compte.
+  // THE COMPARISON THAT JUSTIFIES THE WHOLE MODULE. A caller that does not say
+  // which shape it measured on gets no rank: silence is not agreement, it is
+  // the absence of the only check that counts.
   if (geometry !== indicator.geometry) {
     return { ...base, reason: BAREME_REASONS.GEOMETRY };
   }
@@ -539,9 +540,10 @@ export function scoreIndicator(id, value, options = {}) {
   const low = Math.max(0, bracket.low * 100 - margin);
   const high = Math.min(100, bracket.high * 100 + margin);
   const mid = (low + high) / 2;
-  // Le sens retourne la note, jamais le centile : le centile reste la position
-  // dans le pays — « 30 % des Français ont moins » veut dire la même chose pour
-  // un taux de pauvreté que pour un revenu — et la note seule porte le jugement.
+  // The direction flips the score, never the percentile: the percentile stays
+  // the position in the country — “30% of French people have less” means the
+  // same thing for a poverty rate as for an income — and the score alone
+  // carries the judgment.
   const orient = (p) => (indicator.direction === 'down' ? 100 - p : p);
   const noteLow = indicator.direction ? Math.min(orient(low), orient(high)) : null;
   const noteHigh = indicator.direction ? Math.max(orient(low), orient(high)) : null;
@@ -554,8 +556,8 @@ export function scoreIndicator(id, value, options = {}) {
     percentileLow: Math.round(low),
     percentileHigh: Math.round(high),
     note: indicator.direction ? Math.round(orient(mid)) : null,
-    // La lettre nue n'existe que si les deux bouts de la fourchette tombent
-    // dans la même bande. Sinon la carte imprime « B ou C », et c'est la vérité.
+    // The bare letter only exists if both ends of the range fall in the same
+    // band. Otherwise the card prints “B or C”, and that is the truth.
     letter: letterLow && letterLow === letterHigh ? letterLow : null,
     letterLow,
     letterHigh,

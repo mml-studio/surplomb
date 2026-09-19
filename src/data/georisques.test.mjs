@@ -3,6 +3,8 @@
 // The reported symptom, from a live session over the Trocadéro on 2026-09-14:
 // "je peux bien voir une petite icône sur laquelle je peux cliquer. Très
 // honnêtement, elle est très peu visible, voire même clairement invisible."
+// (“I can see a small icon I can click on. Quite honestly, it is barely
+// visible, even downright invisible.”)
 // The mark was one part of it. The other was that the eight hazards the same
 // scan had already resolved were drawn nowhere and keyed nowhere — fetched,
 // projected, summarised, and read by no surface of the globe.

@@ -154,7 +154,8 @@ function cameraFixture({ view, focus, heightM }) {
 
 test('the request box follows what the camera LOOKS AT, not how far it can see', () => {
   // THE REPORTED BUG, as a unit (2026-09-14): "il faut un certain zoom, une
-  // certaine inclinaison pour que le réseau daigne bien se montrer".
+  // certaine inclinaison pour que le réseau daigne bien se montrer" (“it takes
+  // a certain zoom, a certain tilt for the grid to deign to show itself”).
   //
   // Both cameras below are at the SAME altitude over the SAME point near
   // Bayonne. The numbers are measured, in the browser, on the app: looking
@@ -759,7 +760,8 @@ function highCamera(view, heightM = 3_000_000) {
 
 test('above the ceiling over France the national pack IS the map, not a zoom prompt', async () => {
   // THE REQUEST, as a unit (2026-09-19): "j'aimerais qu'il s'affiche même avec
-  // une vue bien dézoomée et nationale". The same country-wide camera that
+  // une vue bien dézoomée et nationale" (“I'd like it to show even in a view
+  // zoomed far out, at national scale”). The same country-wide camera that
   // used to earn "Zoome sous 120 km" now earns a map and a green row.
   const overlayHost = { setEntries() {}, setVisible() {}, clearSource() {} };
   const viewer = highCamera({ west: -5, south: 42, east: 9, north: 51 });

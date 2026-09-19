@@ -186,7 +186,7 @@ const VALID_CATEGORY_IDS = new Set(LAYER_CATEGORIES.map((entry) => entry.id));
  * ("Groupes de production" rather than "Groupes de prod (FR)").
  */
 const LAYER_TAXONOMY_TABLE = Object.freeze([
-  // ── CIEL & MER ────────────────────────────────────────────────────────────
+  // ── SKY & SEA ─────────────────────────────────────────────────────────────
   // The order INSIDE a group is this table's order; the order OF the groups is
   // `LAYER_CATEGORIES` above. The sky comes first here because it is what moves.
   Object.freeze({
@@ -234,7 +234,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'periodic',
   }),
 
-  // ── CIEL & MER · le militaire ─────────────────────────────────────────────
+  // ── SKY & SEA · military ──────────────────────────────────────────────────
   Object.freeze({
     id: 'military',
     category: 'air-space',
@@ -269,7 +269,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'live',
   }),
 
-  // ── CIEL & MER · la mer ───────────────────────────────────────────────────
+  // ── SKY & SEA · the sea ───────────────────────────────────────────────────
   // "Navires en direct" rather than "Navires AIS": the acronym means nothing to
   // a first-time visitor, it is already on the source line, and this phrasing
   // makes a matched pair with "Vols en direct" at the top of AIR & ESPACE.
@@ -315,7 +315,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'static',
   }),
 
-  // ── MOBILITÉ TERRESTRE ────────────────────────────────────────────────────
+  // ── GROUND MOBILITY ───────────────────────────────────────────────────────
   Object.freeze({
     id: 'traffic',
     category: 'ground-mobility',
@@ -445,7 +445,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'periodic',
   }),
 
-  // ── ÉNERGIE ───────────────────────────────────────────────────────────────
+  // ── ENERGY ────────────────────────────────────────────────────────────────
   Object.freeze({
     id: 'france-energy',
     category: 'energy',
@@ -555,7 +555,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'static',
   }),
 
-  // ── RISQUES & ENVIRONNEMENT ───────────────────────────────────────────────
+  // ── RISKS & ENVIRONMENT ───────────────────────────────────────────────────
   Object.freeze({
     id: 'earthquakes',
     category: 'hazards',
@@ -674,7 +674,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'static',
   }),
 
-  // ── RÉSEAUX & CAPTEURS ────────────────────────────────────────────────────
+  // ── NETWORKS & SENSORS ────────────────────────────────────────────────────
   Object.freeze({
     id: 'telegeography-submarine-cables',
     category: 'comms-sensors',
@@ -755,7 +755,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'periodic',
   }),
 
-  // ── BÂTI & TERRITOIRE ─────────────────────────────────────────────────────
+  // ── BUILDINGS & LAND ──────────────────────────────────────────────────────
   // `periodic` rather than `static`: nothing about a building moves, but the
   // layer refetches per viewport because no bundle could hold 47 million of
   // them. The cadence facet describes how the app ACQUIRES the data, not how
@@ -764,7 +764,8 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   // who already knew what DVF was that the row was about DVF, and told
   // everybody else nothing at all — the operator's verdict on 2026-09-14:
   // « le nom est peu parlant pour un utilisateur qui arrive sur GEV, il va pas
-  // comprendre ». The acronym has not gone anywhere: it is on the line
+  // comprendre » (“the name says little to a user who lands on GEV, they won't
+  // understand”). The acronym has not gone anywhere: it is on the line
   // immediately under the label, where a source belongs, and it is in the
   // legend's own method line. What the row says is what the row answers.
   Object.freeze({

@@ -306,7 +306,7 @@ export function rteGenerationClass(id) {
   return RTE_GENERATION_CLASSES[String(id ?? '')] || RTE_GENERATION_CLASSES.other;
 }
 
-// --- ODRÉ registre classification -------------------------------------------
+// --- ODRÉ register classification -------------------------------------------
 
 /**
  * ODRÉ `technologie` → class, consulted BEFORE `filiere`.

@@ -250,10 +250,10 @@ const UPDATE_INTERVAL_MS = 900_000;
  * of zone D appears in neither palette.
  */
 export const PEB_ZONE_COLORS = Object.freeze({
-  A: '#ff2d55', // gêne très forte — habitation interdite
-  B: '#ff7a1f', // gêne forte
-  C: '#ffcc33', // gêne modérée
-  D: '#9fd0ff', // information — pas de restriction de construire
+  A: '#ff2d55', // very strong nuisance — housing prohibited
+  B: '#ff7a1f', // strong nuisance
+  C: '#ffcc33', // moderate nuisance
+  D: '#9fd0ff', // information only — no building restriction
 });
 
 /**
@@ -268,7 +268,7 @@ export const PEB_ZONE_COLORS = Object.freeze({
  * point, against 215 for the PEB.
  */
 export const PGS_ZONE_COLORS = Object.freeze({
-  1: '#e05bff', // zone I — aide au taux le plus élevé
+  1: '#e05bff', // zone I — highest aid rate
   2: '#b06bf0', // zone II
   3: '#7d6fe0', // zone III
 });

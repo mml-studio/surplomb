@@ -2,11 +2,12 @@
 //
 // The reported symptom, in the operator's own words: "comment c'est possible
 // qu'une maison puisse se retrouver en même temps dans deux zones de PLU ? il
-// doit y avoir une erreur". There was, and it was ours. The register drew the
-// Ustaritz `UB` zone with two enclaves punched out of it — the school (`UE`)
-// and the industrial estate (`UYc`) — and this layer kept outer rings only,
-// which is invisible while a zone is a hairline and a lie the moment it is a
-// wash. These pin the wash, the holes, and the stroke on each of them.
+// doit y avoir une erreur" (“how can a house be in two PLU zones at the same
+// time? there must be a mistake”). There was, and it was ours. The register
+// drew the Ustaritz `UB` zone with two enclaves punched out of it — the school
+// (`UE`) and the industrial estate (`UYc`) — and this layer kept outer rings
+// only, which is invisible while a zone is a hairline and a lie the moment it
+// is a wash. These pin the wash, the holes, and the stroke on each of them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -271,9 +272,11 @@ test('a neighbouring zone says it is a neighbour, on its own card', () => {
 // The reported symptom, in the operator's own words: "j'aimerais que lorsque
 // l'on clique n'importe où sur la carte, cela vienne ouvrir une fenêtre
 // informative … et que l'on n'ait pas l'obligation d'aller trouver le petit
-// symbole pour aller cliquer dessus". The map was already drawing the answer
-// for a whole block and putting the only words on one 26-pixel glyph, so the
-// plot OPPOSITE — the plot this layer exists for — could be seen and not read.
+// symbole pour aller cliquer dessus" (“I'd like a click anywhere on the map to
+// open an information window … without having to go and find the little
+// symbol and click on it”). The map was already drawing the answer for a whole
+// block and putting the only words on one 26-pixel glyph, so the plot
+// OPPOSITE — the plot this layer exists for — could be seen and not read.
 //
 // These pin the four regimes the answer has, and the two places where reading
 // it off the drawn shapes would be a lie.
@@ -452,11 +455,13 @@ test('with nothing scanned there is nothing to answer, and no empty card', () =>
   assert.equal(gpuGroundCard({ payload: null, lon: 2, lat: 48 }), null);
 });
 
-/* ── deux moitiés, deux puces ─────────────────────────────────────────────── */
+/* ── two halves, two chips ────────────────────────────────────────────────── */
 //
 // Reported 2026-09-14, over Ustaritz: « j'aimerais un pin pour activer ou
 // désactiver les servitudes, et un autre pour les zones de PLU, afin de rendre
-// les deux sous-couches activables séparément ». One row, two registers, one
+// les deux sous-couches activables séparément » (“I'd like one pin to switch
+// the easements on and off, and another for the PLU zones, so that the two
+// sub-layers can be switched separately”). One row, two registers, one
 // switch — and over a village centre the dashed easement envelopes and the
 // zoning wash are painted on the same ground, twenty polygons deep.
 

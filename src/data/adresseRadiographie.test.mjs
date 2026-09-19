@@ -259,7 +259,7 @@ test('a silent source degrades one theme and names it, leaving nine standing', (
   assert.deepEqual(without.absent, []);
 });
 
-// ── Les deux moitiés qui manquaient ─────────────────────────────────────────
+// ── The two halves that were missing ────────────────────────────────────────
 // The audit counted four routes in production with no line on this sheet.
 // Two of them belong to themes that were already here and were answering half
 // their own question: Nuisances printed the air and never the aircraft,

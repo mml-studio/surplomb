@@ -148,6 +148,7 @@ test('one failed endpoint leaves the other standing', () => {
 
 // The reported symptom, in the operator's own words: "comment c'est possible
 // qu'une maison puisse se retrouver en même temps dans deux zones de PLU ?"
+// (“how can a house be in two PLU zones at the same time?”)
 // The register was right and the projection was wrong — it kept outer rings
 // and threw the enclaves away, so a filled UB swallowed a school and an
 // industrial estate. These pin the real answer for the real point.

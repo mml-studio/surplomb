@@ -1,56 +1,57 @@
 #!/usr/bin/env node
 /**
- * Mesurer le barème national — la distribution, chez les Français, de ce que la
- * fiche implantation calcule à une adresse.
+ * Measure the national scale — the distribution, among French residents, of
+ * what the site report computes at an address.
  *
- * ── LE PROBLÈME QU'IL RÈGLE ─────────────────────────────────────────────────
- * `implantationFiche.js` sait dire « 1,04 km² atteignables à pied en dix
- * minutes, 4 210 habitants, niveau de vie moyen 22 400 €/an ». Personne ne sait
- * si c'est beaucoup, et aucune source ne le publie : la distribution nationale
- * de « la surface qu'un Français atteint à pied en dix minutes » n'existe pas
- * en open data. Elle n'existe que si on la mesure. C'est ce que fait ce script.
+ * ── THE PROBLEM IT SOLVES ───────────────────────────────────────────────────
+ * `implantationFiche.js` can say “1.04 km² reachable on foot in ten minutes,
+ * 4,210 residents, average standard of living €22,400/yr”. Nobody knows
+ * whether that is a lot, and no source publishes it: the national distribution
+ * of “the area a French resident reaches on foot in ten minutes” does not
+ * exist in open data. It only exists if someone measures it. That is what this
+ * script does.
  *
- * ── POURQUOI IL NE REPREND PAS `FILOSOFI_RAMPS` ─────────────────────────────
- * Le dépôt porte déjà des quantiles nationaux des mêmes indicateurs, et les
- * réutiliser aurait coûté zéro. Ce sont les quantiles d'un CARREAU de 200 m ;
- * la fiche moyenne une trentaine de carreaux sur un anneau. Moyenner écrase les
- * queues, et une valeur d'anneau notée contre une échelle de carreau reçoit une
- * lettre plausible et fausse. Le script mesure donc les deux sur LE MÊME
- * échantillon et publie l'écart : c'est le chiffre qui justifie le lot.
+ * ── WHY IT DOES NOT REUSE `FILOSOFI_RAMPS` ──────────────────────────────────
+ * The repository already carries national quantiles of the same indicators,
+ * and reusing them would have cost nothing. They are the quantiles of a 200 m
+ * grid CELL; the report averages some thirty cells over a ring. Averaging
+ * flattens the tails, and a ring value scored against a cell scale gets a
+ * plausible and wrong letter. So the script measures both on THE SAME sample
+ * and publishes the gap: that is the figure that justifies this work.
  *
- * ── L'ÉCHANTILLON EST UN ÉCHANTILLON DE RÉSIDENTS, PAS DE LIEUX ─────────────
- * Tirer des points au hasard sur la carte de France, c'est tirer des champs.
- * Tirer des communes, c'est donner à Saint-Front-sur-Lémance le poids de Lyon.
- * Le tirage est donc à probabilité proportionnelle à la population, en deux
- * degrés : d'abord un carreau de 1 km parmi les 377 234 que l'INSEE publie,
- * avec une probabilité proportionnelle à ses habitants ; puis un carreau de
- * 200 m à l'intérieur, de même. Chaque tirage désigne donc UN habitant, et le
- * centre de son carreau de 200 m — au plus 141 m de chez lui — sert de porte.
- * Les quantiles se lisent ensuite sans pondération : la pondération est DANS le
- * tirage.
+ * ── THE SAMPLE IS A SAMPLE OF RESIDENTS, NOT OF PLACES ──────────────────────
+ * Drawing points at random on the map of France means drawing fields. Drawing
+ * municipalities means giving Saint-Front-sur-Lémance the weight of Lyon. The
+ * draw is therefore made with probability proportional to population, in two
+ * stages: first a 1 km cell among the 377,234 INSEE publishes, with a
+ * probability proportional to its residents; then a 200 m cell inside it, the
+ * same way. Each draw therefore designates ONE resident, and the center of
+ * their 200 m cell — at most 141 m from their home — serves as the door. The
+ * quantiles are then read without weighting: the weighting is IN the draw.
  *
- * Tirage SYSTÉMATIQUE et non multinomial : un pas constant sur la population
- * cumulée, ce qui étale l'échantillon sur tout le pays au lieu de laisser le
- * hasard le concentrer. Un carreau plus peuplé que le pas est tiré plusieurs
- * fois, ce qui est correct — il porte plusieurs habitants — et chaque tirage y
- * choisit un carreau de 200 m différent.
+ * SYSTEMATIC draw, not multinomial: a constant step over the cumulative
+ * population, which spreads the sample over the whole country instead of
+ * letting chance bunch it up. A cell more populated than the step is drawn
+ * several times, which is correct — it carries several residents — and each
+ * draw picks a different 200 m cell in it.
  *
- * ── CHAQUE POINT PASSE PAR LES ROUTES DE L'APPLICATION ──────────────────────
- * `/api/isochrone`, `/api/filosofi/carreaux` et `/api/dvf`, sur une instance qui
- * tourne, et l'agrégation par `aggregateInRing()` importée du module que la
- * fiche utilise. Interroger l'IGN en direct aurait été plus simple et aurait
- * mesuré une AUTRE distribution que celle que le lecteur voit : le barème doit
- * sortir du même chemin de code que la mesure qu'il note.
+ * ── EVERY POINT GOES THROUGH THE APP'S ROUTES ───────────────────────────────
+ * `/api/isochrone`, `/api/filosofi/carreaux` and `/api/dvf`, on a running
+ * instance, and the aggregation by `aggregateInRing()` imported from the
+ * module the report uses. Querying IGN directly would have been simpler and
+ * would have measured ANOTHER distribution than the one the reader sees: the
+ * national scale must come out of the same code path as the measurement it
+ * scores.
  *
- * ── CE QUE ÇA COÛTE ─────────────────────────────────────────────────────────
- * La trame nationale à 1 km : 76 pages de WFS, ~50 Mo, deux minutes et demie,
- * mise en cache dans `.gev-cache/` — on ne la retire qu'à changement de
- * millésime. Chaque point d'échantillon : un WFS 200 m, un isochrone IGN, un
- * WFS carroyage via le proxy, un DVF. Mesuré ~5 s par point, soit environ
- * 25 minutes pour 300 tirages. Les observations brutes sont écrites à côté de
- * la trame, pour que recalculer une échelle ne coûte plus rien.
+ * ── WHAT IT COSTS ───────────────────────────────────────────────────────────
+ * The national 1 km grid: 76 WFS pages, ~50 MB, two and a half minutes,
+ * cached in `.gev-cache/` — it is only fetched again when the data vintage
+ * changes. Each sample point: one 200 m WFS, one IGN isochrone, one grid WFS
+ * through the proxy, one DVF. Measured at ~5 s per point, so about 25 minutes
+ * for 300 draws. The raw observations are written next to the grid, so that
+ * recomputing a scale no longer costs anything.
  *
- * Usage :
+ * Usage:
  *   node scripts/build-bareme-fr.mjs --frame
  *   node scripts/build-bareme-fr.mjs --sample 300 --url http://localhost:5199
  *   node scripts/build-bareme-fr.mjs --from .gev-cache/bareme-fr/observations.json
@@ -76,12 +77,12 @@ const FRAME_TYPENAME = 'INSEE.FILOSOFI.INDICATORS:carreaux_1km';
 const FRAME_PAGE = 5_000;
 
 /**
- * Les trois boîtes où l'INSEE publie un carroyage, et pas une de plus.
+ * The three boxes where INSEE publishes a grid, and not one more.
  *
- * Les mêmes que `PACK_BOXES` du pack local. Une seule boîte métropolitaine
- * aurait laissé la Martinique et La Réunion hors du barème, et le barème leur
- * aurait quand même été appliqué — c'est la panne que l'échelle de couleur du
- * carroyage a déjà rencontrée.
+ * The same as the local pack's `PACK_BOXES`. A single mainland box would have
+ * left Martinique and La Réunion out of the national scale, and the scale
+ * would still have been applied to them — the failure the grid's color scale
+ * has already run into.
  */
 const FRAME_BOXES = Object.freeze([
   { name: 'métropole', box: { west: -5.3, south: 41.2, east: 9.7, north: 51.2 } },
@@ -89,22 +90,22 @@ const FRAME_BOXES = Object.freeze([
   { name: 'La Réunion', box: { west: 55.1, south: -21.5, east: 55.9, north: -20.8 } },
 ]);
 
-/** L'anneau que le barème décrit. Le même que le pas par défaut de la fiche. */
+/** The ring the national scale describes. The report's default time step. */
 const RING_SECONDS = 600;
-/** Le rayon que la couche DVF balaie, et donc celui du prix au m². */
+/** The radius the DVF layer sweeps, and so the radius of the price per m². */
 const DVF_RADIUS_M = 300;
-/** La marge de boîte du carroyage, en degrés — la même que `ficheFetch`. */
+/** The grid's box padding, in degrees — the same as `ficheFetch`. */
 const PAD_DEG = 0.004;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const say = (line) => process.stderr.write(`${line}\n`);
 
 /**
- * Un générateur pseudo-aléatoire reproductible.
+ * A reproducible pseudo-random generator.
  *
- * Le tirage doit être rejouable : deux exécutions du même script avec la même
- * graine doivent désigner les mêmes habitants, sinon comparer deux millésimes
- * mesure le tirage autant que le pays.
+ * The draw must be replayable: two runs of the same script with the same seed
+ * must designate the same residents, otherwise comparing two data vintages
+ * measures the draw as much as the country.
  * @param {number} seed
  * @returns {() => number}
  */
@@ -120,12 +121,12 @@ export function mulberry32(seed) {
 }
 
 /**
- * Tirage systématique à probabilité proportionnelle à la taille.
+ * Systematic sampling with probability proportional to size.
  *
- * @param {Array<{weight: number}>} units Ordre stable — il fixe le résultat.
- * @param {number} n Nombre de tirages.
- * @param {() => number} random Pour le seul décalage de départ.
- * @returns {number[]} Indices tirés, avec répétitions possibles.
+ * @param {Array<{weight: number}>} units Stable order — it fixes the result.
+ * @param {number} n Number of draws.
+ * @param {() => number} random For the starting offset only.
+ * @returns {number[]} Drawn indices, repeats possible.
  */
 export function systematicPps(units, n, random) {
   const total = units.reduce((sum, unit) => sum + Math.max(0, unit.weight || 0), 0);
@@ -145,10 +146,10 @@ export function systematicPps(units, n, random) {
 }
 
 /**
- * Un tirage pondéré simple, pour choisir un carreau de 200 m dans un de 1 km.
+ * A simple weighted draw, to pick a 200 m cell inside a 1 km one.
  * @param {Array<{weight: number}>} units
  * @param {() => number} random
- * @returns {number} L'indice tiré, ou -1.
+ * @returns {number} The drawn index, or -1.
  */
 export function weightedPick(units, random) {
   const total = units.reduce((sum, unit) => sum + Math.max(0, unit.weight || 0), 0);
@@ -162,12 +163,12 @@ export function weightedPick(units, random) {
 }
 
 /**
- * Quantiles NON pondérés d'un échantillon déjà tiré proportionnellement à la
+ * UNweighted quantiles of a sample already drawn in proportion to
  * population.
  *
- * Repondérer ici compterait la population deux fois. La convention est celle du
- * plus proche rang inférieur, la même que `build-filosofi-ramp.mjs`, pour que
- * les deux échelles restent lisibles côte à côte.
+ * Reweighting here would count the population twice. The convention is the
+ * nearest lower rank, the same as `build-filosofi-ramp.mjs`, so that the two
+ * scales stay readable side by side.
  * @param {number[]} values
  * @param {number[]} quantiles
  * @returns {Array<number|null>}
@@ -181,7 +182,7 @@ export function sampleQuantiles(values, quantiles) {
   });
 }
 
-/** Arrondir à un pas sans laisser traîner le résidu binaire. */
+/** Round to a step without leaving the binary residue trailing. */
 export function roundTo(value, step) {
   if (!Number.isFinite(value)) return null;
   const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
@@ -195,7 +196,7 @@ async function getJson(url, timeoutMs = 60_000) {
   return response.json();
 }
 
-/** Comme ci-dessus, mais un échec est une absence et non une exception. */
+/** Same as above, but a failure is an absence, not an exception. */
 async function tryJson(url, timeoutMs = 40_000) {
   try {
     const payload = await getJson(url, timeoutMs);
@@ -206,7 +207,7 @@ async function tryJson(url, timeoutMs = 40_000) {
 }
 
 /**
- * Balayer la trame nationale à 1 km, ou la relire du cache.
+ * Sweep the national 1 km grid, or read it back from the cache.
  * @returns {Promise<{builtAt: string, cells: Array<{id: string, ind: number}>}>}
  */
 async function loadFrame({ refresh = false } = {}) {
@@ -250,8 +251,8 @@ async function loadFrame({ refresh = false } = {}) {
       await sleep(250);
     }
   }
-  // Ordre stable : le tirage systématique dépend de l'ordre, et un ordre qui
-  // change d'une exécution à l'autre rend la graine inutile.
+  // Stable order: the systematic draw depends on the order, and an order that
+  // changes from one run to the next makes the seed useless.
   cells.sort((a, b) => (a.id < b.id ? -1 : 1));
   const frame = { builtAt: new Date().toISOString().slice(0, 10), cells };
   await fsp.mkdir(CACHE_DIR, { recursive: true });
@@ -260,7 +261,7 @@ async function loadFrame({ refresh = false } = {}) {
 }
 
 /**
- * Choisir la porte : un carreau de 200 m tiré dans le carreau de 1 km désigné.
+ * Choose the door: a 200 m cell drawn inside the designated 1 km cell.
  * @returns {Promise<{lon: number, lat: number, cell: object}|null>}
  */
 async function drawDoor(kmCellId, random) {
@@ -286,8 +287,8 @@ async function drawDoor(kmCellId, random) {
 }
 
 /**
- * Mesurer un point exactement comme la fiche le mesure.
- * @returns {Promise<object>} Une observation, ou un refus nommé.
+ * Measure a point exactly as the report measures it.
+ * @returns {Promise<object>} An observation, or a named refusal.
  */
 async function measurePoint(base, lon, lat) {
   const isochrone = await tryJson(
@@ -306,9 +307,9 @@ async function measurePoint(base, lon, lat) {
     + `&east=${(bounds.east + PAD_DEG).toFixed(5)}`
     + `&resolution=${resolution}`);
   if (!carreaux) return { refused: 'carroyage' };
-  // Une page tronquée ne donne pas un plancher exploitable dans un quantile :
-  // elle donne une valeur trop basse qu'aucun drapeau ne rattrapera une fois
-  // l'échelle publiée. Elle est comptée comme un refus, pas comme une mesure.
+  // A truncated page does not give a floor usable in a quantile: it gives a
+  // value that is too low, which no flag will catch once the scale is
+  // published. It is counted as a refusal, not as a measurement.
   if (carreaux.truncated) return { refused: 'carroyage tronqué' };
 
   const demand = aggregateInRing(
@@ -339,7 +340,7 @@ async function measurePoint(base, lon, lat) {
   };
 }
 
-/** Les échelles, à partir des observations. */
+/** The scales, from the observations. */
 function buildLadders(observations) {
   const bareme = {};
   for (const indicator of BAREME_INDICATORS) {
@@ -358,8 +359,8 @@ function buildLadders(observations) {
 }
 
 /**
- * L'écart entre l'échelle d'anneau et l'échelle de carreau, sur le MÊME
- * échantillon — le chiffre qui dit si ce lot valait sa peine.
+ * The gap between the ring scale and the cell scale, on the SAME sample —
+ * the figure that says whether this work was worth it.
  */
 function carreauComparison(doors) {
   const keys = ['niveau', 'pauvrete', 'social', 'jeunes', 'aines', 'solo', 'proprietaires'];
@@ -394,9 +395,9 @@ async function main() {
     const saved = JSON.parse(await fsp.readFile(path.resolve(REPO_ROOT, from), 'utf8'));
     ({ observations, doors, meta } = saved);
     say(`Observations relues : ${observations.length} anneaux (${meta.measuredAt}).`);
-    // Un point de reprise n'a vu que la moitié sud du pays — la trame est triée
-    // par northing. Il se relit pour reprendre ou pour regarder, jamais pour
-    // publier une échelle, et le script refuse d'en imprimer un bloc à coller.
+    // A checkpoint has only seen the southern half of the country — the grid is
+    // sorted by northing. It is read back to resume or to look, never to publish
+    // a scale, and the script refuses to print a block to paste from it.
     if (meta.partial) {
       say(`⚠ Fichier PARTIEL (${meta.partial} tirages sur la campagne, sud du pays`
         + ' seulement). Sortie limitée à --json.');
@@ -424,7 +425,7 @@ async function main() {
     for (const index of picks) {
       done += 1;
       const kmCell = frame.cells[index];
-      // eslint-disable-next-line no-await-in-loop -- séquentiel exprès : voir l'en-tête.
+      // eslint-disable-next-line no-await-in-loop -- sequential on purpose: see the header.
       const door = await drawDoor(kmCell.id, random);
       if (!door) {
         refusals.porte = (refusals.porte || 0) + 1;
@@ -445,17 +446,17 @@ async function main() {
         : `${observation.acces} km², ${observation.habitants} hab.`;
       say(`  ${String(done).padStart(4)}/${picks.length}`
         + ` ${door.lat.toFixed(4)},${door.lon.toFixed(4)}  ${label}`);
-      // Point de reprise. Une campagne dure une demi-heure, et une demi-heure de
-      // mesures perdue parce que le poste s'est endormi est autant de service
-      // public gaspillé en plus du nôtre : le fichier est réécrit tous les
-      // vingt-cinq points, et `--from` sait le relire.
+      // Checkpoint. A campaign lasts half an hour, and half an hour of
+      // measurements lost because the machine went to sleep is that much public
+      // service wasted on top of ours: the file is rewritten every twenty-five
+      // points, and `--from` knows how to read it back.
       //
-      // UN FICHIER PARTIEL N'EST PAS UN ÉCHANTILLON NATIONAL. La trame est
-      // triée par `id_inspire`, donc par northing croissant : le tirage
-      // remonte le pays du sud vers le nord — ce qui stratifie implicitement
-      // l'échantillon COMPLET par latitude, et c'est la raison du tri — mais
-      // une campagne arrêtée à mi-course n'a vu que la moitié sud. Le fichier
-      // sert à reprendre, jamais à publier une échelle.
+      // A PARTIAL FILE IS NOT A NATIONAL SAMPLE. The grid is sorted by
+      // `id_inspire`, so by ascending northing: the draw climbs the country
+      // from south to north — which implicitly stratifies the COMPLETE sample
+      // by latitude, and that is the reason for the sort — but a campaign
+      // stopped halfway has only seen the southern half. The file is for
+      // resuming, never for publishing a scale.
       if (done % 25 === 0) {
         // eslint-disable-next-line no-await-in-loop
         await fsp.mkdir(CACHE_DIR, { recursive: true });
@@ -466,7 +467,7 @@ async function main() {
           doors,
         }, null, 1));
       }
-      // eslint-disable-next-line no-await-in-loop -- l'IGN publie 5 req/s sans SLA.
+      // eslint-disable-next-line no-await-in-loop -- IGN publishes 5 req/s with no SLA.
       await sleep(250);
     }
     meta = {
@@ -513,9 +514,9 @@ async function main() {
       + ` measured: ${scale.measured},\n    ladder: Object.freeze(${
         JSON.stringify(scale.ladder)}) }),\n`);
   }
-  // Le bloc d'échantillon, prêt à coller lui aussi : la moitié des erreurs de
-  // ce genre de lot vient d'une échelle recopiée avec la taille d'échantillon
-  // de la campagne d'avant, et la marge de centile s'en déduit.
+  // The sample block, ready to paste as well: half the errors in this kind of
+  // work come from a scale copied with the previous campaign's sample size,
+  // and the percentile margin is derived from it.
   process.stdout.write(`\n  measuredAt: '${result.measuredAt}',\n`
     + `  rings: ${result.rings},\n`
     + `  drawn: ${result.drawn},\n`

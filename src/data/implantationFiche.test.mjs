@@ -401,9 +401,9 @@ test('a ring dominated by its own border says so', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Le rang national
+// The national rank
 // ---------------------------------------------------------------------------
-/** Une échelle linéaire 0→100, pour lire un centile à l'œil. */
+/** A linear 0→100 scale, to read a percentile by eye. */
 const FAKE_LADDER = BAREME_LADDER_Q.map((q) => Math.round(q * 100));
 const FAKE_BAREME = {
   acces: { geometry: BAREME_GEOMETRIES.RING_FOOT_600, ladder: FAKE_LADDER },
@@ -412,11 +412,11 @@ const FAKE_BAREME = {
   prixM2: { geometry: BAREME_GEOMETRIES.DISC_300, ladder: FAKE_LADDER },
 };
 /**
- * Des valeurs qui tombent ENTRE deux points de l'échelle, jamais dessus.
+ * Values that fall BETWEEN two points of the scale, never on one.
  *
- * Une valeur assise exactement sur un point est un palier — `ladderBracket()`
- * rend alors un intervalle large, à raison — et ce n'est pas ce que ces
- * tests-ci mesurent.
+ * A value sitting exactly on a point is a plateau — `ladderBracket()` then
+ * returns a wide interval, and rightly so — and that is not what these tests
+ * measure.
  */
 const SCORED_FICHE = (overrides = {}) => ({
   isochrone: { seconds: 600, areaKm2: 65 },
@@ -425,21 +425,21 @@ const SCORED_FICHE = (overrides = {}) => ({
   ...overrides,
 });
 
-test('un anneau de dix minutes reçoit son rang, indicateur par indicateur', () => {
+test('a ten-minute ring gets its rank, indicator by indicator', () => {
   const scores = ficheScores(SCORED_FICHE(), { bareme: FAKE_BAREME, sampleSize: 100_000 });
   const byId = Object.fromEntries(scores.map((score) => [score.id, score]));
   assert.equal(byId.acces.percentile, 65);
   assert.equal(byId.acces.letter, 'B');
   assert.equal(byId.niveau.percentile, 32);
   assert.equal(byId.habitants.percentile, 88);
-  // La densité n'a pas de sens défendable : un rang, jamais de lettre.
+  // Density has no defensible direction: a rank, never a letter.
   assert.equal(byId.habitants.letter, null);
   assert.equal(byId.prixM2.percentile, 55);
 });
 
-test('un anneau qui n’est pas celui du barème ne reçoit AUCUN rang d’anneau', () => {
-  // La panne silencieuse que la géométrie existe pour rendre impossible : les
-  // mêmes indicateurs sur quinze minutes de marche valent tout autre chose.
+test('a ring that is not the national scale’s ring gets NO ring rank at all', () => {
+  // The silent failure the geometry exists to make impossible: the same
+  // indicators over fifteen minutes of walking are worth something else entirely.
   const scores = ficheScores(
     SCORED_FICHE({ isochrone: { seconds: 900, areaKm2: 65 } }),
     { bareme: FAKE_BAREME, sampleSize: 100_000 },
@@ -449,11 +449,11 @@ test('un anneau qui n’est pas celui du barème ne reçoit AUCUN rang d’annea
     assert.equal(byId[id].reason, BAREME_REASONS.GEOMETRY, `${id} aurait dû être refusé`);
     assert.equal(byId[id].percentile, null);
   }
-  // Le disque DVF, lui, ne dépend pas du pas de temps et garde son rang.
+  // The DVF disc does not depend on the time step, and keeps its rank.
   assert.equal(byId.prixM2.percentile, 55);
 });
 
-test('un carroyage tronqué est un plancher, et un plancher ne se classe pas', () => {
+test('a truncated grid is a floor, and a floor does not get ranked', () => {
   const scores = ficheScores(
     SCORED_FICHE({ demand: { niveau: 32, people: { count: 88 }, truncated: true } }),
     { bareme: FAKE_BAREME, sampleSize: 100_000 },
@@ -461,11 +461,11 @@ test('un carroyage tronqué est un plancher, et un plancher ne se classe pas', (
   const byId = Object.fromEntries(scores.map((score) => [score.id, score]));
   assert.equal(byId.niveau.reason, BAREME_REASONS.GEOMETRY);
   assert.equal(byId.habitants.percentile, null);
-  // La surface atteignable ne vient pas du carroyage : elle reste notable.
+  // The reachable area does not come from the grid: it stays scorable.
   assert.equal(byId.acces.percentile, 65);
 });
 
-test('letterPhrase dit les deux lettres quand la fourchette les enjambe', () => {
+test('letterPhrase states both letters when the range straddles them', () => {
   assert.equal(letterPhrase({ letter: 'A', letterLow: 'A', letterHigh: 'A', ferme: true }), 'A');
   assert.equal(
     letterPhrase({ letter: null, letterLow: 'C', letterHigh: 'B', ferme: false }),
@@ -474,13 +474,13 @@ test('letterPhrase dit les deux lettres quand la fourchette les enjambe', () => 
   assert.equal(letterPhrase({}), null);
 });
 
-test('compactRank rend un intervalle sur un palier et un nombre sinon', () => {
+test('compactRank returns an interval on a plateau and a number otherwise', () => {
   assert.equal(compactRank({ percentile: 42, percentileLow: 39, percentileHigh: 45 }), '42ᵉ');
   assert.equal(compactRank({ percentile: 20, percentileLow: 0, percentileHigh: 40 }), '0–40ᵉ');
   assert.equal(compactRank({}), '—');
 });
 
-test('la carte n’imprime un rang que lorsqu’il y a une échelle, et le date', () => {
+test('the card prints a rank only when there is a scale, and dates it', () => {
   const lines = ficheLines({
     isochrone: { seconds: 600, areaKm2: 1.04, radiusM: 576 },
     demand: null,
@@ -495,9 +495,9 @@ test('la carte n’imprime un rang que lorsqu’il y a une échelle, et le date'
   }
 });
 
-test('les lignes du rang ne peuvent pas casser la carte en deux', () => {
-  // Même règle que pour toute autre ligne : le séparateur du factory ne doit
-  // jamais apparaître à l'intérieur d'une ligne.
+test('the rank lines cannot break the card in two', () => {
+  // Same rule as for any other line: the factory's separator must never appear
+  // inside a line.
   const { details } = ficheLines({
     isochrone: { seconds: 600, areaKm2: 1.04, radiusM: 576 },
     demand: {

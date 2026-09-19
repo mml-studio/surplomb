@@ -130,7 +130,7 @@ import { REGISTERED_LAYER_IDS } from './layerState.js';
  * reversible form of the same decision — take it out to give the chip back.
  */
 export const LAYER_FUSIONS = Object.freeze([
-  // ── 1. Urbanisme ─────────────────────────────────────────────────────────
+  // ── 1. Planning ──────────────────────────────────────────────────────────
   // ONE question in two tenses: what MAY be built on this ground, and what HAS
   // been allowed on it. The PLU zoning draws the rule, Sitadel draws the
   // permits granted under it, and a reader looking at a plot needs both or
@@ -168,7 +168,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 2. Prix de l'immobilier ──────────────────────────────────────────────
+  // ── 2. Property prices ───────────────────────────────────────────────────
   // Three rows for one question: "combien vaut ce sol". They read the same
   // register — `avis-valeur` already reuses the DVF silhouette — and the
   // comparables dossier is a tool applied to that same selection.
@@ -199,7 +199,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 3. Enseignement ──────────────────────────────────────────────────────
+  // ── 3. Schools ───────────────────────────────────────────────────────────
   // The taxonomy already stated the problem in prose next to `sup-fr`: "one
   // subject split across two ministries, and the taxonomy should not repeat
   // the split". It repeated it anyway, as two rows. It stops here.
@@ -215,7 +215,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 4. Navires et ports ──────────────────────────────────────────────────
+  // ── 4. Ships and ports ───────────────────────────────────────────────────
   // A port is where the vessels stop. The two rows shared nothing in code and
   // everything in subject; the destination field of an AIS message is a port
   // name, unresolved to this day.
@@ -241,7 +241,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 5. Zone de chalandise ────────────────────────────────────────────────
+  // ── 5. Catchment area ────────────────────────────────────────────────────
   // The fiche IS the card of the ring: `implantation-fr` joins four layers
   // inside the isochrone this row draws, and neither is readable without the
   // other.
@@ -257,7 +257,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 6. Aéroports ─────────────────────────────────────────────────────────
+  // ── 6. Airports ──────────────────────────────────────────────────────────
   // `bruit-fr` leaves RISQUES & ENVIRONNEMENT to become a chip here. The
   // taxonomy's objection is on the record — "the polygon is about the
   // aircraft, not about the ground under it" — and that is exactly the
@@ -275,7 +275,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 7. Cours d'eau ───────────────────────────────────────────────────────
+  // ── 7. Rivers ────────────────────────────────────────────────────────────
   // The two module headers already cite each other in prose. Vigicrues paints
   // the reach, Hub'Eau measures the flow inside it.
   Object.freeze({
@@ -289,7 +289,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 8. Météo ─────────────────────────────────────────────────────────────
+  // ── 8. Weather ───────────────────────────────────────────────────────────
   // An inventory of instruments has value through its readings. The vigilance
   // says what is coming, the stations say what is measured.
   Object.freeze({
@@ -304,7 +304,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 9. Centrales électriques ─────────────────────────────────────────────
+  // ── 9. Power plants ──────────────────────────────────────────────────────
   // Three registers, 56 plants held by more than one of them, five gas sites
   // drawn twice with different megawatts. The row merge is the FIRST half of
   // this fix; the deduplication by EIC and by ODRÉ id is the second, and it is
@@ -328,7 +328,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 10. Transports en commun ─────────────────────────────────────────────
+  // ── 10. Public transit ───────────────────────────────────────────────────
   // Vehicles where the operator publishes them, stops with their frequency
   // where it does not. Île-de-France is the second case, which is why the
   // capital had zero vehicles on the row that promised them.
@@ -351,7 +351,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 11. Vélos et véhicules partagés ──────────────────────────────────────
+  // ── 11. Bikes and shared vehicles ────────────────────────────────────────
   // `bikeshare` is primary although it is the smaller set: it is the one with
   // data outside France, and a row that carried the `FR` chip would tell a
   // reader in Montréal that a layer serving them is French-only.
@@ -379,7 +379,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 12. Trafic routier ───────────────────────────────────────────────────
+  // ── 12. Road traffic ─────────────────────────────────────────────────────
   // The same road measured four ways: a modelled ratio, a declared status, an
   // event list and a loop count. Three of the four already share the RRN
   // centreline pack.
@@ -422,7 +422,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 13. Territoire ───────────────────────────────────────────────────────
+  // ── 13. Territory ────────────────────────────────────────────────────────
   // Three choropleth engines over the same contours. The row merge is the
   // first half; the shared indicator selector the audit asks for is the
   // second. The delinquance layer's anti-defamation guard travels WITH its
@@ -444,7 +444,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 14. Infrastructure numérique ─────────────────────────────────────────
+  // ── 14. Digital infrastructure ───────────────────────────────────────────
   // `local-datacenters` is primary for the same reason `bikeshare` is: it has
   // data everywhere. The submarine cables stay — they are already here, they
   // are drawn, and a French focus is a reason to ADD French layers, never a
@@ -473,7 +473,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 15. Vols en direct ───────────────────────────────────────────────────
+  // ── 15. Live flights ─────────────────────────────────────────────────────
   // The military register already runs while its row is off — it feeds the
   // CONTACTS roster — and it mirrors `flights` options by explicit registry
   // disposition. It was a second row for the same sky.
@@ -489,7 +489,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ]),
   }),
 
-  // ── 16. Feux actifs ──────────────────────────────────────────────────────
+  // ── 16. Active fires ─────────────────────────────────────────────────────
   // The README already says what these two rows are: "what burns now / what
   // burnt". Same sensor (VIIRS through FIRMS), same subject, two tenses — and
   // the past tense was holding a row of its own for an event that ended on

@@ -1,33 +1,34 @@
 <!doctype html>
 <!--
-  APERÇU — LiDAR HD (MNT) + BD TOPO 3D, sur un quartier réel.
+  PREVIEW — LiDAR HD (MNT) + BD TOPO 3D, over a real neighborhood.
 
-  Page autonome, sans lien avec src/main.js, à ouvrir en dev :
+  A standalone page, unrelated to src/main.js, to open in dev:
       npm run dev  →  http://localhost:5173/lidar-bdtopo.html
 
-  Elle existe pour répondre à une seule question avant de décider quoi intégrer :
-  « à quoi ressemble le bâti IGN posé sur le vrai relief LiDAR ? ».
+  It exists to answer a single question before deciding what to integrate:
+  “what do IGN's buildings look like set on the real LiDAR relief?”.
 
-  Trois sources, toutes IGN, toutes keyless, toutes Licence Ouverte 2.0 :
+  Three sources, all IGN, all keyless, all Licence Ouverte 2.0:
 
-    RELIEF   MNT LiDAR HD 50 cm — data.geopf.fr/wms-r, une seule requête
-             GetMap au format image/x-bil;bits=32 sur l'emprise du quartier,
-             échantillonnée ensuite par un CustomHeightmapTerrainProvider.
-             (Une requête au lieu de centaines : le WMS raster de la
-             Géoplateforme est limité à 40 req/min, un terrain tuilé classique
-             le ferait sauter en trois secondes de navigation.)
+    RELIEF    LiDAR HD MNT (digital terrain model), 50 cm — data.geopf.fr/wms-r,
+              one single GetMap request in image/x-bil;bits=32 over the
+              neighborhood's extent, then sampled by a
+              CustomHeightmapTerrainProvider. (One request instead of hundreds:
+              the Géoplateforme raster WMS is limited to 40 req/min, and a
+              classic tiled terrain would blow through that in three seconds
+              of navigation.)
 
-    BÂTI     BD TOPO, tuiles vectorielles data.geopf.fr/tms/1.0.0/BDTOPO,
-             couche `batiment`. Chaque bâtiment porte ses quatre altitudes
-             (min/max sol, min/max toit) en NGF-IGN69.
+    BUILDINGS BD TOPO, vector tiles data.geopf.fr/tms/1.0.0/BDTOPO, layer
+              `batiment`. Each building carries its four altitudes (min/max
+              ground, min/max roof) in NGF-IGN69.
 
-    IMAGE    BD ORTHO 20 cm, ou l'estompage du MNT / du MNH LiDAR HD, ou le
-             Plan IGN LiDAR — pour voir la même scène habillée autrement.
+    IMAGERY   BD ORTHO 20 cm, or the hillshade of the LiDAR HD MNT / MNH, or
+              the LiDAR Plan IGN — to see the same scene dressed differently.
 
-  Le point de la démonstration : le MNT et la BD TOPO sont tous deux en
-  NGF-IGN69. Ils partagent donc le MÊME datum, et la même correction de géoïde
-  les emmène tous les deux sur l'ellipsoïde WGS84 de Cesium. Le bâti ne se
-  « pose » pas sur le sol par astuce de rendu — il y tombe juste.
+  The point of the demonstration: the MNT and BD TOPO are both in NGF-IGN69.
+  They therefore share the SAME datum, and the same geoid correction takes both
+  of them onto Cesium's WGS84 ellipsoid. The buildings are not “set” on the
+  ground by a rendering trick — they land right on it.
 -->
 <html lang="fr">
 <head>

@@ -5,44 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <!--
-    LES POLICES DE L'APPLICATION, SERVIES PAR CETTE ORIGINE.
+    THE APP'S FONTS, SERVED FROM THIS ORIGIN.
 
-    Cette feuille déclare `var(--font-mono)` et `var(--font-sans)` depuis le
-    début et ne les a jamais chargées : elle tombait sur la pile système, donc
-    sur Times dans une iframe de la feuille du globe, à côté d'une interface en
-    Inter et JetBrains Mono. Même chemin qu'`index.html:153` — quatre faces et
-    le sous-ensemble d'icônes, depuis cette origine, jamais depuis Google.
+    This sheet has declared `var(--font-mono)` and `var(--font-sans)` from the
+    start and never loaded them: it fell back to the system stack, so to Times
+    inside an iframe on the globe's sheet, next to an interface in Inter and
+    JetBrains Mono. Same path as `index.html:153` — four faces and the icon
+    subset, from this origin, never from Google.
   -->
   <link rel="stylesheet" href="/fonts/fonts.css">
   <title>Radiographie d'adresse</title>
   <!--
-    LA RADIOGRAPHIE D'ADRESSE — une adresse, dix thématiques, une feuille.
+    THE ADDRESS X-RAY — one address, ten themes, one sheet.
 
         /fiche.html?lat=48.83&lon=2.376
         /fiche.html?q=13 rue du Chevaleret, Paris
-        /fiche.html?lat=…&lon=…&embed=1      ← sans en-tête ni pied de page
+        /fiche.html?lat=…&lon=…&embed=1      ← without header or footer
 
-    POURQUOI UNE PAGE À PART, ET PAS UN PANNEAU DANS LE GLOBE. Trois raisons,
-    dans cet ordre :
+    WHY A SEPARATE PAGE, AND NOT A PANEL IN THE GLOBE. Three reasons, in this
+    order:
 
-    1. La carte overlay du globe n'affiche que six lignes (`.slice(0, 6)` dans
-       `addressScanLayer.js`, et c'est le bon choix pour une étiquette posée
-       sur une porte). Dix thématiques en font une soixantaine.
-    2. Ce que Cityscan vend, ce n'est pas une carte : c'est un DOCUMENT. Une
-       page imprimable est le format du produit copié, pas un pis-aller.
-    3. `?embed=1` et `Ctrl+P` couvrent, sans une ligne de backend, les deux
-       offres à 50 € et 30 €/mois relevées au démontage — la valorisation de
-       bien et la captation de leads.
+    1. The globe's overlay card shows only six lines (`.slice(0, 6)` in
+       `addressScanLayer.js`, and that is the right choice for a label set on
+       a door). Ten themes make about sixty.
+    2. What Cityscan sells is not a map: it is a DOCUMENT. A printable page is
+       the format of the product being copied, not a stopgap.
+    3. `?embed=1` and `Ctrl+P` cover, without a line of backend, the two
+       offers at €50 and €30/month noted during the teardown — the property
+       valuation and the lead capture.
 
-    AUCUN CESIUM ICI. La page ne charge ni globe ni tuiles : elle appelle les
-    dix-sept routes de `adresseRadiographie.js` et compose du texte. C'est ce qui
-    la rend imprimable, intégrable dans une iframe, et lisible sur un téléphone
-    d'agence.
+    NO CESIUM HERE. The page loads neither globe nor tiles: it calls the
+    seventeen routes of `adresseRadiographie.js` and composes text. That is
+    what makes it printable, embeddable in an iframe, and readable on an
+    estate agency's phone.
 
-    IMPRESSION. Le CSS `@media print` passe le fond en blanc, l'encre en noir,
-    évite les coupures au milieu d'une thématique et imprime l'URL de la
-    source. « Imprimer → Enregistrer au format PDF » suffit : pas de moteur PDF
-    embarqué, donc rien à maintenir et rien à charger.
+    PRINTING. The `@media print` CSS turns the background white and the ink
+    black, avoids breaks in the middle of a theme and prints the source URL.
+    “Print → Save as PDF” is enough: no embedded PDF engine, so nothing to
+    maintain and nothing to load.
   -->
   <style>
     :root {
@@ -79,9 +79,9 @@
       margin: 0 auto;
       background: var(--paper);
       padding: 2.5rem 2.75rem 3rem;
-      /* `dvh`, pas `vh` : sur iOS Safari `100vh` compte la barre d'URL comme si
-         elle n'existait pas, donc la feuille dépasse toujours d'environ 60 px et
-         la page défile sans avoir rien à montrer. */
+      /* `dvh`, not `vh`: on iOS Safari `100vh` counts the URL bar as if it did
+         not exist, so the sheet always overflows by about 60 px and the page
+         scrolls with nothing to show. */
       min-height: 100dvh;
     }
 
@@ -98,18 +98,18 @@
     .subline { color: var(--ink-dim); font-size: 0.92rem; margin: 0; }
     .coords { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-faint); }
 
-    /* Cette page vit aussi dans une iframe posée sur le globe. Sans cette ligne,
-       un défilement qui atteint le bas de la feuille se propage au document
-       parent — c'est-à-dire déclenche le « tirer pour rafraîchir » d'Android sur
-       une application qui n'a rien à recharger. */
+    /* This page also lives in an iframe laid over the globe. Without this line,
+       a scroll that reaches the bottom of the sheet propagates to the parent
+       document — that is, it triggers Android's “pull to refresh” on an app
+       that has nothing to reload. */
     html, body { overscroll-behavior: contain; }
 
     form.lookup { display: flex; gap: 0.5rem; margin: 1.25rem 0 0; }
     form.lookup input {
       flex: 1;
       font: inherit;
-      /* 16 px, et pas `font: inherit` seul : sous 16 px iOS Safari zoome le
-         viewport à la mise au point et ne dézoome jamais. */
+      /* 16 px, and not `font: inherit` alone: below 16 px iOS Safari zooms the
+         viewport on focus and never zooms back out. */
       font-size: 16px;
       padding: 0.5rem 0.7rem;
       border: 1px solid var(--rule);
@@ -173,9 +173,9 @@
       border-top: 1px solid var(--rule);
       padding: 0.42rem 0;
       margin: 0;
-      /* Une cellule de grille a `min-width: auto` par défaut, donc elle refuse
-         de descendre sous la largeur de son plus long mot — et « Consommation
-         énergétique primaire » déborde la colonne au lieu de se couper. */
+      /* A grid cell has `min-width: auto` by default, so it refuses to shrink
+         below the width of its longest word — and “Consommation énergétique
+         primaire” overflows the column instead of wrapping. */
       min-width: 0;
       overflow-wrap: anywhere;
     }
@@ -206,13 +206,12 @@
     body.embed .sheet { padding: 1.25rem 1.25rem 2rem; min-height: 0; }
     body.embed form.lookup, body.embed .print { display: none; }
 
-    /* 48rem et non 40. La rupture décidait qu'à 640 px la feuille était encore
-       large ; or la colonne d'étiquettes est un `minmax(9rem, 1fr)` et la
-       valeur de droite un `minmax(6rem, auto)` — soit 15 rem de plancher, plus
-       les marges, avant que quoi que ce soit ne puisse se réduire. Entre 640 et
-       768 px les deux colonnes se serraient jusqu'à ce que les étiquettes
-       débordent. `minmax(0, …)` des deux côtés est ce qui autorise enfin la
-       grille à rétrécir. */
+    /* 48rem and not 40. The breakpoint decided that at 640 px the sheet was
+       still wide; yet the label column is a `minmax(9rem, 1fr)` and the value
+       on the right a `minmax(6rem, auto)` — 15 rem of floor, plus the margins,
+       before anything at all can shrink. Between 640 and 768 px the two
+       columns squeezed together until the labels overflowed. `minmax(0, …)`
+       on both sides is what finally lets the grid shrink. */
     @media (max-width: 48rem) {
       .sheet { padding: 1.5rem 1.1rem 2rem; }
       dl.rows { grid-template-columns: minmax(0, 1fr) minmax(0, auto); }

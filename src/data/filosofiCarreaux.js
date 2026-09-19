@@ -142,7 +142,7 @@ export const FILOSOFI_MAX_BOX_DEG = 0.9;
  * all three grids.
  */
 const FILOSOFI_COVERAGE = Object.freeze([
-  Object.freeze({ south: 41.2, west: -5.3, north: 51.2, east: 9.7 }), // métropole + Corse
+  Object.freeze({ south: 41.2, west: -5.3, north: 51.2, east: 9.7 }), // mainland France + Corsica
   Object.freeze({ south: 14.3, west: -61.3, north: 15.0, east: -60.7 }), // Martinique
   Object.freeze({ south: -21.5, west: 55.1, north: -20.8, east: 55.9 }), // La Réunion
 ]);

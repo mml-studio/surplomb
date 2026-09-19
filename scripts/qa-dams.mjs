@@ -186,9 +186,9 @@ async function main() {
     // The world tail, and the floor is 100 rather than 400 since 2026-09-14:
     // 592 of the 661 carried-over features were generating stations, and they
     // moved to `world_hydro`. What is left outside the metropolitan box is the
-    // 69 unclassified structures PLUS the outre-mer — Réunion, Guyane, les
-    // Antilles, Mayotte, la Nouvelle-Calédonie and la Polynésie are France and
-    // are in this pack, they are simply not inside a metropolitan bounding box.
+    // 69 unclassified structures PLUS overseas France — Réunion, Guyane, the
+    // Antilles, Mayotte, Nouvelle-Calédonie and Polynésie are France and are in
+    // this pack, they are simply not inside a metropolitan bounding box.
     record('the world tail and the outre-mer survived the split',
       sample.located - sample.french > 100,
       `${sample.located - sample.french} of ${sample.located} outside the metropolitan box`);
