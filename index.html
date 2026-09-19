@@ -1444,6 +1444,40 @@
     <div class="phone-sheet-credits" data-phone-credits></div>
   </section>
 
+  <!--
+    LE HAUT DE L'ÉCRAN, COMME GOOGLE MAPS — téléphone seulement, `hidden`
+    ailleurs, et rempli par `src/phoneSheet.js` comme la feuille basse.
+
+    La recherche est la barre du haut : le formulaire `#location-search-form`
+    y est ADOPTÉ, pas recopié (ses écouteurs de `ui.js` suivent le nœud). Sous
+    elle, une rangée de puces allume ou éteint une couche d'un geste
+    (`src/phoneLayerChips.js`). Le fond de carte a son propre bouton rond et
+    son propre panneau : on change de couche bien plus souvent que de fond, et
+    en tête de l'onglet Couches il repoussait les couches sous la ligne de
+    flottaison.
+
+    Les deux icônes sont des SVG en ligne (Material Symbols, Apache 2.0) et non
+    des glyphes de la police : elles s'affichent même quand un navigateur
+    bloque les polices, où un glyphe s'afficherait en toutes lettres.
+  -->
+  <div id="phone-topbar" hidden>
+    <div id="phone-search" class="phone-search">
+      <svg class="phone-search-icon" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>
+    </div>
+    <div id="phone-layer-chips" class="phone-layer-chips" role="toolbar" aria-label="Couches en un geste"></div>
+  </div>
+  <button id="phone-basemap-button" type="button" hidden aria-haspopup="dialog" aria-controls="phone-basemap-sheet" aria-expanded="false" aria-label="Fond de carte" title="Changer le fond de carte">
+    <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M480-118 120-398l66-50 294 228 294-228 66 50-360 280Zm0-202L120-600l360-280 360 280-360 280Zm0-280Zm0 178 230-178-230-178-230 178 230 178Z"/></svg>
+  </button>
+  <div id="phone-basemap-backdrop" hidden></div>
+  <section id="phone-basemap-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phone-basemap-title">
+    <header class="phone-basemap-head">
+      <h2 id="phone-basemap-title">Fond de carte</h2>
+      <button type="button" class="phone-basemap-close" data-phone-basemap-close aria-label="Fermer le choix du fond de carte">×</button>
+    </header>
+    <div class="phone-basemap-body" data-phone-basemap-slot></div>
+  </section>
+
   <div id="scene-runtime"></div>
 
   <!-- First visit. One invitation, once per browser, after the boot flight has

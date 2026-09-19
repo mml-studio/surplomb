@@ -141,6 +141,17 @@ async function settle(page) {
 // message can name the offender rather than a boolean. ──────────────────────
 
 const readOverflow = () => {
+  // Content inside a sideways scroller that itself fits the screen does not
+  // spill the page: the row of layer chips under the search bar is exactly
+  // that, and its last chips are SUPPOSED to sit past the edge until swiped.
+  const clippedByScroller = (el) => {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+      const overflowX = getComputedStyle(node).overflowX;
+      if (overflowX !== 'visible' && overflowX !== 'clip'
+        && node.getBoundingClientRect().right <= window.innerWidth + 1) return true;
+    }
+    return false;
+  };
   const spillers = [];
   for (const el of document.body.querySelectorAll('*')) {
     const r = el.getBoundingClientRect();
@@ -148,6 +159,7 @@ const readOverflow = () => {
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') continue;
     if (r.right <= window.innerWidth + 1) continue;
+    if (clippedByScroller(el)) continue;
     spillers.push(`${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} right=${Math.round(r.right)}`);
     if (spillers.length >= 10) break;
   }
@@ -543,29 +555,126 @@ async function runHandset(browser, device, full) {
       Object.entries(tabs).every(([name, t]) => t.present && t.height > 0
         && t.controls >= TAB_CONTROL_FLOORS[name] && t.offenders.length === 0), tabs);
 
-    // The map source moved out of a panel a phone never shows; the eight
-    // basemaps are the tab's first block or they are nowhere. Measured with
-    // Couches OPEN — the loop above ends on Sélection, and a hidden panel
-    // reports every height as zero.
+    // The map source moved out of a panel a phone never shows. It led the
+    // Couches tab until 2026-09-19, where it pushed the layers under the fold;
+    // it now has its own panel behind a round button, as Google Maps does.
+    // Couches must no longer hold it, and the button must open and close it.
     await page.evaluate(() => window.__godsEyeView.phoneSheet.selectTab('layers'));
     await wait(400);
-    const mapSource = await page.evaluate(() => {
+    const mapSource = await page.evaluate(async () => {
       const section = document.querySelector('.map-source-section');
-      if (!section) return { present: false };
+      const button = document.getElementById('phone-basemap-button');
+      const panel = document.getElementById('phone-basemap-sheet');
       const layers = document.getElementById('phone-panel-layers');
+      if (!section || !button || !panel) return { present: false };
+      const closedBefore = panel.hidden;
+      button.click();
+      // Measured once the entry animation has run: mid-slide the panel is
+      // 24 px lower than where it rests.
+      await Promise.all(panel.getAnimations().map((animation) => animation.finished.catch(() => {})));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       const r = section.getBoundingClientRect();
-      return {
+      const cards = [...section.querySelectorAll('.map-stack-chip')];
+      const firstCard = cards
+        .map((card) => ({ id: card.dataset.stackId, top: card.getBoundingClientRect().top, left: card.getBoundingClientRect().left }))
+        .sort((a, b) => (a.top - b.top) || (a.left - b.left))[0]?.id ?? null;
+      const state = {
         present: true,
+        closedBefore,
+        opened: !panel.hidden,
+        expanded: button.getAttribute('aria-expanded'),
+        inPanel: panel.contains(section),
         inLayersTab: !!layers && layers.contains(section),
-        first: layers?.firstElementChild === section,
-        chips: section.querySelectorAll('.map-stack-chip').length,
+        chips: cards.length,
+        firstCard,
         active: section.querySelector('.map-stack-chip.active')?.textContent?.trim() ?? null,
         height: Math.round(r.height),
+        panelBottom: Math.round(panel.getBoundingClientRect().bottom),
+        innerHeight: window.innerHeight,
+        panelInside: panel.getBoundingClientRect().bottom <= window.innerHeight + 1,
       };
+      document.querySelector('[data-phone-basemap-close]')?.click();
+      state.closedAfter = panel.hidden && button.getAttribute('aria-expanded') === 'false';
+      return state;
     });
-    check(`[${device.name}] the eight map sources lead the Couches tab`,
-      mapSource.present && mapSource.inLayersTab && mapSource.first
-      && mapSource.chips === 8 && mapSource.height > 0, mapSource);
+    check(`[${device.name}] the eight map sources have their own panel behind the round button, and Couches starts on the layers`,
+      mapSource.present && mapSource.closedBefore && mapSource.opened && mapSource.expanded === 'true'
+      && mapSource.inPanel && !mapSource.inLayersTab && mapSource.chips === 8
+      && mapSource.firstCard === 'ign-ortho' && mapSource.height > 0 && mapSource.panelInside
+      && mapSource.closedAfter, mapSource);
+
+    // ── The top of the screen, as Google Maps has it ────────────────────────
+    // The chips: the featured layers, in their fixed order, then the door to
+    // the full list. One tap lights one layer IN PLACE, a second darkens it.
+    const chipRow = await page.evaluate(() => [...document.querySelectorAll('#phone-layer-chips [data-phone-layer-chip]')]
+      .map((chip) => chip.dataset.phoneLayerChip));
+    check(`[${device.name}] the chip row under the search bar is the featured layers, then « Toutes les couches »`,
+      JSON.stringify(chipRow) === JSON.stringify([...FEATURED_IDS, 'all']), chipRow);
+
+    const CHIP_LAYER = 'meteofrance-vigilance';
+    const chipTap = async () => {
+      await page.evaluate((id) => document.querySelector(`#phone-layer-chips [data-phone-layer-chip="${id}"]`)?.click(), CHIP_LAYER);
+      const t0 = Date.now();
+      let state = null;
+      while (Date.now() - t0 < 20_000) {
+        state = await page.evaluate((id) => {
+          const chip = document.querySelector(`#phone-layer-chips [data-phone-layer-chip="${id}"]`);
+          return {
+            enabled: window.__godsEyeView.dataManager.isEnabled(id),
+            lit: !!chip?.classList.contains('active'),
+            pressed: chip?.getAttribute('aria-pressed') ?? null,
+            index: [...(chip?.parentElement?.children || [])].indexOf(chip),
+            disabled: !!chip?.disabled,
+          };
+        }, CHIP_LAYER);
+        if (!state.disabled) break;
+        await wait(250);
+      }
+      return state;
+    };
+    const lit = await chipTap();
+    const dark = await chipTap();
+    check(`[${device.name}] one tap on a chip lights its layer in place, a second darkens it`,
+      lit?.enabled === true && lit.lit && lit.pressed === 'true' && lit.index === FEATURED_IDS.indexOf(CHIP_LAYER)
+      && dark?.enabled === false && !dark.lit && dark.pressed === 'false', { lit, dark });
+
+    // The bar opens the search panel at full, stopping UNDER the bar.
+    await page.evaluate(() => window.__godsEyeView.phoneSheet.snapTo('peek'));
+    await wait(300);
+    const search = await page.evaluate(async () => {
+      const field = document.getElementById('location-search');
+      field?.focus();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const bar = document.getElementById('phone-search').getBoundingClientRect();
+      const sheet = document.getElementById('phone-sheet').getBoundingClientRect();
+      const state = {
+        inBar: !!field?.closest('#phone-search'),
+        focused: document.activeElement === field,
+        snap: window.__godsEyeView.phoneSheet.getSnap(),
+        panelShown: document.getElementById('phone-panel-search')?.hidden === false,
+        sheetTop: Math.round(sheet.top),
+        barBottom: Math.round(bar.bottom),
+      };
+      field?.blur();
+      return state;
+    });
+    check(`[${device.name}] the search field is the top bar, and focusing it opens the search panel under it`,
+      search.inBar && search.focused && search.snap === 'full' && search.panelShown
+      && search.sheetTop >= search.barBottom, search);
+
+    // The column of round buttons steps aside once the sheet is open.
+    const column = {};
+    for (const snap of ['peek', 'half']) {
+      await page.evaluate((name) => window.__godsEyeView.phoneSheet.snapTo(name), snap);
+      await wait(400);
+      column[snap] = await page.evaluate(() => {
+        const button = document.getElementById('phone-basemap-button');
+        return `${getComputedStyle(button).visibility} (snap=${document.getElementById('phone-sheet').dataset.snap}, opacity=${getComputedStyle(button).opacity})`;
+      });
+    }
+    check(`[${device.name}] the round buttons show at peek and step aside at half`,
+      column.peek.startsWith('visible') && column.half.startsWith('hidden'), column);
+    await page.evaluate(() => window.__godsEyeView.phoneSheet.selectTab('layers'));
 
     // ── Evidence for the two tabs a reader actually uses ───────────────────
     await page.evaluate(() => {

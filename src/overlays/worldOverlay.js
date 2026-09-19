@@ -89,6 +89,11 @@ export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   // CHANGES SIZE while nothing else on the page moves — the service caches
   // rectangles and re-reads them on layout, which a height transition is.
   '#phone-sheet',
+  // The phone's search bar and its row of layer chips, and the basemap panel
+  // that opens over the sheet. The bar's box is the whole top band; a card
+  // parked under it would be read through a search field.
+  '#phone-topbar',
+  '#phone-basemap-sheet',
   '#style-indicator',
   '#top-center-actions',
   '#traffic-sync-chip',

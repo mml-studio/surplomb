@@ -240,10 +240,19 @@ try {
   const controls = await phone.evaluate(() => {
     const shown = (el) => !!el && getComputedStyle(el).display !== 'none';
     const field = document.getElementById('location-search');
+    const submit = document.getElementById('location-search-submit');
+    // On a phone the arrow waits for something to send (the bar reads as a
+    // place to tap, as Google's does), and is there the moment there is.
+    const submitWhenEmpty = shown(submit);
+    const before = field ? field.value : '';
+    if (field) field.value = 'Lyon';
+    const submitWhenTyped = shown(submit);
+    if (field) field.value = before;
     return {
       form: !!document.getElementById('location-search-form'),
       enterkeyhint: field?.getAttribute('enterkeyhint') ?? null,
-      submitShown: shown(document.getElementById('location-search-submit')),
+      submitWhenEmpty,
+      submitShown: submitWhenTyped,
       poiKeys: document.querySelectorAll('.poi-pill-key').length,
       badgesShown: [...document.querySelectorAll('.poi-pill-key')].some(shown),
       trackingRelease: !!document.getElementById('tracking-release'),
@@ -270,6 +279,7 @@ try {
     check(
       'the search submits, the key badges are gone, and the desktop keeps every one of them',
       controls.form && controls.enterkeyhint === 'search' && controls.submitShown
+        && controls.submitWhenEmpty === false
         && controls.badgesShown === false && controls.trackingRelease
         && controls.trackingReleasePainted === false && controls.locateShown
         && deskControls.submitShown === false && deskControls.badgesShown === true

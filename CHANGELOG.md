@@ -5,6 +5,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Changed
+- **Sur téléphone, le haut de l’écran ressemble à Google Maps.** La recherche
+  est une barre en haut, à côté du logo : on tape dedans, les villes et les
+  repères s’ouvrent dessous, et la carte revient dès qu’on lance une recherche.
+  Sous la barre, une rangée de puces allume ou éteint une couche d’un geste
+  (Vols, Trafic, Transports, Vélos, Recharge, Météo, Écoles, Prix immo) ; une
+  couche allumée depuis la liste complète y apparaît en tête pour s’éteindre
+  aussi vite, et la dernière puce ouvre toute la liste. Le fond de carte a son
+  propre bouton rond, à droite, qui ouvre un panneau à vignettes (Satellite,
+  Plan IGN et OSM en tête) : il ne repousse plus les couches sous la ligne de
+  flottaison de l’onglet Couches, qui commence désormais par les couches. Les
+  boutons ronds s’effacent quand le panneau du bas est ouvert.
+
 ### Fixed
 - **Sur téléphone, la carte était floue, quel que soit le fond.** Satellite
   IGN comme Plan IGN : un pixel d’image couvrait 6 à 12 pixels d’un iPhone.

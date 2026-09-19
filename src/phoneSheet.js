@@ -34,6 +34,7 @@
 import { isPhoneShell } from './inputMode.js';
 import { onWorldOverlaySelectionChange } from './overlays/worldOverlay.js';
 import { renderPhoneSelection } from './phoneSelection.js';
+import { mountPhoneLayerChips } from './phoneLayerChips.js';
 import {
   PHONE_FEATURED_LAYER_IDS,
   PHONE_HEAVY_LAYER_IDS,
@@ -60,10 +61,17 @@ const HEAVY_TITLE = 'Couche lourde : beaucoup d’objets à dessiner. Sur un té
 
 let _controller = null;
 
-/** @returns {number} Pixels the top bar owns, measured, with a sane default. */
+/**
+ * Pixels the top bar owns, measured, with a sane default.
+ *
+ * The SEARCH BAR, not the whole top: at `full` the sheet covers the chips and
+ * the round buttons under it, which is what Google Maps does too, and stops
+ * under the field so a search can start from any height.
+ * @returns {number}
+ */
 function measureTopInset() {
-  const actions = document.getElementById('top-center-actions');
-  const rect = actions?.getBoundingClientRect?.();
+  const bar = document.getElementById('phone-search');
+  const rect = bar?.getBoundingClientRect?.();
   if (rect && rect.height > 0) return Math.round(rect.bottom + 8);
   return 64;
 }
@@ -131,41 +139,91 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     layersPanel.insertBefore(clearBtn, layersPanel.firstChild);
   }
 
-  // ── THE MAP SOURCE, WHICH A PHONE COULD NOT REACH AT ALL ──────────────────
+  // ── THE MAP SOURCE, BEHIND ITS OWN ROUND BUTTON ───────────────────────────
   //
-  // The eight basemaps — Google 3D, the two Google 2D stacks, Bing, ion, OSM,
-  // and the two IGN France stacks — live in one section of VISUAL PRESETS, and
-  // `phone.css` hides that whole panel. So the single most visible property of
-  // the app, what the ground is made of, had no phone surface: a reader could
-  // see IGN's orthophoto and no way to ask for anything else. Reported that
-  // way, in those words: « je ne sais pas comment changer de maplayer ».
+  // The eight basemaps live in one section of VISUAL PRESETS, which `phone.css`
+  // hides. They first landed at the top of Couches (« je ne sais pas comment
+  // changer de maplayer »), and that answered one report by creating the next
+  // (2026-09-19): eight buttons a reader rarely needs, above the layers they
+  // came for, pushing the whole list under the fold of `half`.
   //
-  // It lands at the TOP of Couches rather than in a tab of its own, because it
-  // is the same question as the rest of that tab — what is drawn — one layer
-  // further down. Moved, not rebuilt: `ui.js` keeps its `#map-stack-chips`
-  // reference, the `onSelect` handlers ride along on the chips themselves, and
-  // `gev:map-stack-changed` still re-lights the active one.
+  // So the section moves once more — into a panel of its own, opened by a
+  // round button in the corner, as Google Maps does. Moved, not rebuilt:
+  // `ui.js` keeps its `#map-stack-chips` reference, the `onSelect` handlers
+  // ride along on the chips themselves, and `gev:map-stack-changed` still
+  // re-lights the active one. `phone.css` turns the chips into cards with a
+  // picture of what each source looks like.
   const mapSource = document.querySelector('.map-source-section');
-  if (mapSource && layersPanel) {
-    layersPanel.insertBefore(mapSource, layersPanel.firstChild);
-    // The desktop chrome is English and this sheet is French. `MAP SOURCE`
-    // between « TOUT ÉTEINDRE » and « À LA UNE » is the seam a reader sees
-    // first, and the heading is read by nothing but `aria-labelledby`.
-    const mapSourceLabel = document.getElementById('map-source-label');
-    if (mapSourceLabel) mapSourceLabel.textContent = 'FOND DE CARTE';
-  }
+  const basemapButton = document.getElementById('phone-basemap-button');
+  const basemapSheet = document.getElementById('phone-basemap-sheet');
+  const basemapBackdrop = document.getElementById('phone-basemap-backdrop');
+  const basemapSlot = basemapSheet?.querySelector('[data-phone-basemap-slot]');
+  if (mapSource && basemapSlot) basemapSlot.appendChild(mapSource);
 
-  // ── THE SEARCH FIELD IS THE TAB, so it opens with it ──────────────────────
+  const basemapOpen = () => Boolean(basemapSheet && !basemapSheet.hidden);
+  const setBasemapOpen = (open) => {
+    if (!basemapSheet) return;
+    basemapSheet.hidden = !open;
+    if (basemapBackdrop) basemapBackdrop.hidden = !open;
+    basemapButton?.setAttribute('aria-expanded', String(open));
+    if (open) {
+      (basemapSheet.querySelector('.map-stack-chip.active') || basemapSheet.querySelector('.phone-basemap-close'))
+        ?.focus?.({ preventScroll: true });
+    } else if (basemapSheet.contains(document.activeElement)) {
+      basemapButton?.focus?.({ preventScroll: true });
+    }
+  };
+  if (basemapButton) {
+    // Into the column of round buttons, first: it is the one a reader looks
+    // for, and the column already carries the look, the size and the rule
+    // that hides a `[hidden]` button.
+    const actions = document.getElementById('top-center-actions');
+    if (actions) actions.insertBefore(basemapButton, actions.firstChild);
+    basemapButton.hidden = false;
+    const toggle = () => setBasemapOpen(!basemapOpen());
+    basemapButton.addEventListener('click', toggle);
+    cleanups.push(() => basemapButton.removeEventListener('click', toggle));
+  }
+  const closeBasemap = () => setBasemapOpen(false);
+  const closeButton = basemapSheet?.querySelector('[data-phone-basemap-close]');
+  closeButton?.addEventListener('click', closeBasemap);
+  basemapBackdrop?.addEventListener('click', closeBasemap);
+  const onBasemapKey = (event) => {
+    if (event.key === 'Escape' && basemapOpen()) closeBasemap();
+  };
+  document.addEventListener('keydown', onBasemapKey);
+  cleanups.push(() => {
+    closeButton?.removeEventListener('click', closeBasemap);
+    basemapBackdrop?.removeEventListener('click', closeBasemap);
+    document.removeEventListener('keydown', onBasemapKey);
+  });
+
+  // ── THE SEARCH FIELD IS THE TOP BAR ───────────────────────────────────────
   //
   // On a desktop the field is 0 px wide until the magnifier beside it is
-  // clicked: the dock has no room to keep it open. A tab named RECHERCHE has
-  // nothing but room, and a reader who taps it has already performed the
-  // disclosure — `phone.css` hides the magnifier and stretches the field.
+  // clicked: the dock has no room to keep it open. On a phone it is the bar at
+  // the top of the screen, always open — `phone.css` hides the magnifier and
+  // stretches the field. Focusing it opens the Recherche panel under it at
+  // full height, where the city and landmark shortcuts are: Google Maps' own
+  // « tap the bar, get a search page ». A search that starts a flight, or a
+  // shortcut that does, hands the screen back to the map.
+  const topbar = document.getElementById('phone-topbar');
+  const searchHost = document.getElementById('phone-search');
+  const searchForm = document.getElementById('location-search-form');
   const searchField = document.getElementById('location-search');
+  if (searchForm && searchHost) searchHost.appendChild(searchForm);
   if (searchField) {
     searchField.classList.add('expanded');
-    searchField.placeholder = 'Rechercher un lieu, une adresse…';
+    // Short enough to fit the bar whole at 360 px: a placeholder cut in the
+    // middle of a word reads as a broken field.
+    searchField.placeholder = 'Rechercher une adresse';
+    searchField.setAttribute('aria-label', 'Rechercher un lieu ou une adresse');
   }
+  if (topbar) topbar.hidden = false;
+  // The tab stays in the DOM — the panel is still labelled by it, and the
+  // first-run hint of older builds points at it — but the bar is the door now.
+  const searchTab = document.getElementById('phone-tab-search');
+  if (searchTab) searchTab.hidden = true;
 
   sheet.hidden = false;
 
@@ -258,6 +316,39 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     const handler = () => selectTab(button.dataset.phoneTabBtn);
     button.addEventListener('click', handler);
     cleanups.push(() => button.removeEventListener('click', handler));
+  }
+
+  const openSearchPanel = () => {
+    selectTab('search');
+    snapTo('full');
+  };
+  // The keyboard goes WITH the panel: left up, the next viewport event would
+  // read it as « the reader is typing » and throw the sheet back to full
+  // (`syncViewport`), over the map the search is flying to.
+  const returnToMap = () => {
+    searchField?.blur();
+    selectTab('layers');
+    snapTo('peek');
+  };
+  if (searchField) {
+    searchField.addEventListener('focus', openSearchPanel);
+    cleanups.push(() => searchField.removeEventListener('focus', openSearchPanel));
+  }
+  if (searchForm) {
+    // `ui.js` owns the lookup on the same event; this only moves the sheet.
+    const onSubmit = () => {
+      if (String(searchField?.value || '').trim()) returnToMap();
+    };
+    searchForm.addEventListener('submit', onSubmit);
+    cleanups.push(() => searchForm.removeEventListener('submit', onSubmit));
+  }
+  const searchPanel = sheet.querySelector('[data-phone-tab="search"]');
+  if (searchPanel) {
+    const onShortcut = (event) => {
+      if (event.target?.closest?.('.location-pill, .poi-pill')) returnToMap();
+    };
+    searchPanel.addEventListener('click', onShortcut);
+    cleanups.push(() => searchPanel.removeEventListener('click', onShortcut));
   }
 
   // ── The grip ──────────────────────────────────────────────────────────────
@@ -367,6 +458,17 @@ export function initPhoneSheet({ dataManager = null } = {}) {
   // ── « À LA UNE » and « LOURD » ────────────────────────────────────────────
   dataManager?.setPanelFeaturedLayers?.(PHONE_FEATURED_LAYER_IDS);
 
+  // ── The chips under the search bar ────────────────────────────────────────
+  const layerChips = mountPhoneLayerChips({
+    host: document.getElementById('phone-layer-chips'),
+    dataManager,
+    onOpenAll: () => {
+      selectTab('layers');
+      snapTo('half');
+    },
+  });
+  if (layerChips) cleanups.push(() => layerChips.destroy());
+
   const toggleContainer = document.getElementById('data-toggles');
   const heavy = new Set(PHONE_HEAVY_LAYER_IDS);
   const decorateHeavyRows = () => {
@@ -440,6 +542,11 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     snapTo,
     getSnap: () => snap,
     selectTab,
+    openSearch: () => {
+      openSearchPanel();
+      searchField?.focus?.({ preventScroll: true });
+    },
+    setBasemapOpen,
     element: sheet,
     destroy() {
       for (const cleanup of cleanups) {

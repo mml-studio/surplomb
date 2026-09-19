@@ -132,6 +132,19 @@ alt_route, question_mark. Nine glyphs, added when the category left the hue
 channel for the shape channel — the eight hues it used to carry collided with
 the congestion scale and the counting layer's rhythm wheel on the same tarmac.
 
+The phone shell's top bar and basemap panel draw seven glyphs of the OUTLINED
+set (weight 400, retrieved 2026-09-19 from
+fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/<name>/default/24px.svg):
+search and layers, inline in `index.html` (the search bar and the basemap
+button), and view_in_ar, map, landscape, satellite_alt and label, as data URIs
+in `phone.css` (the pictograms of the five basemaps whose imagery may not be
+stored outside its service). They are SVG and not glyphs of the subset font
+because a browser that blocks web fonts shows a glyph's NAME, and these are the
+controls a phone reader starts from. Four of the seven paths are shortened, not
+redrawn: the trailing zero-area subpaths (`Zm0 45Zm0-45Z…`, `Zm521-80Z…`,
+`ZM448-504Z`, `Zm220-240Z`) that Google's exporter appends were dropped; they
+draw no pixel.
+
 WHAT WAS CHANGED. Nothing, in the artwork.
 
 Only the single `d` path string of each glyph is vendored, verbatim and

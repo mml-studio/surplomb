@@ -524,9 +524,9 @@ const MUTATIONS = [
     to: 'html[data-shell="phone"] body:has(:is(#first-run-launcher, #coverage-briefing).visible) :is(#zoom-prompt, #phone-sheet, #first-run-hint) {',
   },
   {
-    defect: 'on a phone the bubble ignores the sheet height and lands on the tabs',
+    defect: 'on a phone the bubble ignores the search bar and falls to the bottom of the screen',
     file: 'phone',
-    from: 'html[data-shell="phone"] #first-run-hint {\n  bottom: calc(var(--phone-sheet-height, 116px) + 10px);',
+    from: 'html[data-shell="phone"] #first-run-hint {\n  top: var(--first-run-hint-top, 72px);\n  bottom: auto;',
     to: 'html[data-shell="phone"] #first-run-hint {\n  bottom: 5.5rem;',
   },
 

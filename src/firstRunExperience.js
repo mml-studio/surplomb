@@ -291,7 +291,7 @@ export function exclusiveSurfaceActive(documentRef = globalThis.document) {
  * @param {((event: object) => void)|null} [input.onEvent] Receives
  *   `{type: 'impression', shell}`, `{type: 'action', kind, outcome, queryLength?, layerIds?}`
  *   and `{type: 'dismiss', via}` — never the typed text, never a coordinate.
- * @param {{selectTab?: Function}|null} [input.phoneSheet] The phone sheet controller (C opens its Recherche tab).
+ * @param {{openSearch?: Function, selectTab?: Function}|null} [input.phoneSheet] The phone sheet controller (C opens the search under its bar).
  * @param {Document} [input.documentRef]
  * @param {Storage} [input.storage]
  * @param {Storage} [input.sessionStorageRef]
@@ -358,12 +358,19 @@ export function initFirstRunExperience({
     const hint = initFirstRunHint({
       host: hintHost,
       template,
+      // On a phone the field is the bar at the top of the screen, and the
+      // bubble hangs UNDER it (phone.css): the sheet no longer has a
+      // Recherche tab to point at.
       anchor: phoneShell
-        ? documentRef.getElementById('phone-tab-search')
+        ? documentRef.getElementById('phone-search')
         : documentRef.querySelector('#location-bar .location-toolbar-label'),
       phoneShell,
       openSearch: phoneShell
         ? () => {
+          if (phoneSheet?.openSearch) {
+            phoneSheet.openSearch();
+            return;
+          }
           phoneSheet?.selectTab?.('search');
           documentRef.getElementById('location-search')?.focus?.({ preventScroll: true });
         }

@@ -79,6 +79,25 @@ const FEATURED = [
 export const PHONE_FEATURED_LAYER_IDS = Object.freeze([...FEATURED]);
 
 /**
+ * What the chip under the search bar calls each featured layer.
+ *
+ * A chip is read at a glance while a thumb scrolls past it, so it gets one or
+ * two words — « Vélos et véhicules partagés » is a row title, not a chip. A
+ * layer with no entry here (a row switched on from the full list) falls back
+ * to its row label, which the chip truncates.
+ */
+export const PHONE_LAYER_CHIP_LABELS = Object.freeze({
+  flights: 'Vols',
+  traffic: 'Trafic',
+  'transit-fr': 'Transports',
+  bikeshare: 'Vélos',
+  'irve-fr': 'Recharge',
+  'meteofrance-vigilance': 'Météo',
+  'schools-fr': 'Écoles',
+  'dvf-sales': 'Prix immo',
+});
+
+/**
  * The layers that cost a handset noticeably more than the others, badged
  * « LOURD » in the panel.
  *

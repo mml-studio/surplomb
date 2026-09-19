@@ -132,10 +132,11 @@ test('it opens at once, says so, and points at its anchor', () => {
   assert.equal(world.documentRef.listeners.some((entry) => entry.type === 'keydown'), false);
 });
 
-test('a phone takes its height from the sheet and says it is a phone', () => {
-  const world = makeWorld({ anchorRect: { left: 20, top: 760, width: 90, height: 40 }, width: 280 });
+test('a phone hangs the bubble under the search bar and says it is a phone', () => {
+  const world = makeWorld({ anchorRect: { left: 20, top: 10, width: 90, height: 48, bottom: 58 }, width: 280 });
   initFirstRunHint({ ...world.options, phoneShell: true });
   assert.equal(world.host.props.has('--first-run-hint-bottom'), false);
+  assert.equal(world.host.props.get('--first-run-hint-top'), '68px');
   assert.equal(world.host.props.get('--first-run-hint-x'), '152px');
   assert.deepEqual(world.events, [{ type: 'impression', shell: 'phone' }]);
 });
@@ -273,7 +274,7 @@ test('the bubble never claims the keyboard, and never hides the sheet it points 
   const hiders = [...phone.matchAll(/^html\[data-shell="phone"\] body:has\([^{]*\{/gm)].map((match) => match[0]);
   assert.ok(hiders.length >= 2, 'the sheet-hiding rules moved');
   for (const rule of hiders) assert.doesNotMatch(rule, /first-run-hint/);
-  assert.match(phone, /html\[data-shell="phone"\] #first-run-hint \{\s*bottom: calc\(var\(--phone-sheet-height/);
+  assert.match(phone, /html\[data-shell="phone"\] #first-run-hint \{\s*top: var\(--first-run-hint-top/);
 
   // Its own hide group in style.css, on the same four classes as the card.
   const css = source('../style.css');
