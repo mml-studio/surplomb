@@ -207,7 +207,11 @@ test('no unchanged Realtime tool definition drifts silently', () => {
     .update(JSON.stringify(unchanged))
     .digest('hex')
     .slice(0, 16);
-  assert.equal(digest, 'f1a4693db3add1e5', 'an unchanged Realtime tool definition drifted');
+  // Re-derived when the app's name in `set_visual_style`'s description went
+  // from "God's Eye View" to "Surplomb" (the fork's name since 2026-09-15). A
+  // one-word description edit; the tool itself did not move, so it stays under
+  // this digest rather than joining TOUCHED.
+  assert.equal(digest, '9f4a8bb223988cff', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {

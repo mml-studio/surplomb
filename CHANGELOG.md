@@ -31,6 +31,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   inventés sont retirés. La carte de partage (`og.png`), les pages légales et
   la radiographie d’adresse passent aux mêmes couleurs. Les cartes dessinées
   sur le globe gardent leurs couleurs de données (civil, militaire, trafic).
+- **L’agent vocal se présentait encore sous l’ancien nom.** Il se croyait « GEV
+  Voice Control » d’une application appelée « God’s Eye View », et l’aperçu
+  d’une voix disait « Contrôle vocal GEV ». Il s’appelle désormais Surplomb :
+  dans ses consignes, dans la description de ses outils, dans ce que le client
+  lui envoie à chaque tour (le point de situation, la capture de la vue, les
+  demandes de confirmation) et dans la phrase d’aperçu. Le résumé du HUD est
+  demandé pour Surplomb. Deux textes montrés au lecteur suivent : l’avis de
+  valeur est une « Estimation Surplomb », et le total de la délinquance est
+  « calculé par Surplomb ». Les identifiants internes (`GEV_*`, `gev-*`,
+  `X-GEV-*`, clés de stockage) ne changent pas, et le crédit à God’s Eye View
+  reste dans les mentions légales et le README.
 
 ### Added
 - **Les compteurs « En ce moment au-dessus de la France » restaient masqués

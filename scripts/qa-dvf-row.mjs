@@ -162,7 +162,7 @@ try {
   );
   await new Promise((r) => setTimeout(r, 2_000));
   const both = await read();
-  check(/Estimation GEV/.test(both.legendText), 'the estimate publishes its own block');
+  check(/Estimation Surplomb/.test(both.legendText), 'the estimate publishes its own block');
   // 828 px was the measurement that started this; 550 is the ceiling the
   // rework has to keep, and it is the number to move if the block grows again.
   check(both.legendHeight !== null && both.legendHeight <= 550,

@@ -191,7 +191,7 @@ export const LAYER_MANIFEST = Object.freeze([
     id: 'avis-valeur',
     name: 'Avis de valeur (DVF)',
     icon: '≈',
-    source: 'Estimation GEV — comparables DVF (Etalab / DGFiP)',
+    source: 'Estimation Surplomb — comparables DVF (Etalab / DGFiP)',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
     defaultParams: Object.freeze({ type: 'Appartement', surface: '60', centre: 'camera' }),
     load: () => import('./avisValeur.js').then((module) => module.default),
