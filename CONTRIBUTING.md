@@ -146,7 +146,11 @@ The exceptions are deliberate and narrow:
   section of its domain.
 
 Commits and pull requests before 2026-09-19 are mostly in French. They are
-left as they are.
+left as they are. From that date, the `English` check
+([`scripts/check-english.mjs`](scripts/check-english.mjs)) fails a pull request
+whose title or commit messages read as French, and flags French prose added to
+Markdown files. It counts function words, so French names and quoted French
+labels inside English sentences are fine.
 
 ## Coding style
 
