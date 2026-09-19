@@ -1,13 +1,14 @@
-// Une centrale, une marque — the keys, and the ones that were refused.
+// One power plant, one mark — the keys, and the ones that were refused.
 //
 // Three registers hold 56 of the same French power stations and drew them two
 // and three times over. The cross-referencing audit (#128) called the fix "une colonne
 // vertébrale à écrire (choisir quelle source fait foi pour la position,
-// laquelle pour la puissance)". The position question was already answered, by
-// this repository's own build script, and recorded in the pack: these tests
-// pin down that reading, the tolerance that decides when the two registers'
-// megawatts are a disagreement rather than a rounding, and — measured against
-// the SHIPPED packs — that the chain still resolves.
+// laquelle pour la puissance)" (“a backbone to write: choose which source is
+// authoritative for position, which for capacity”). The position question was
+// already answered, by this repository's own build script, and recorded in the
+// pack: these tests pin down that reading, the tolerance that decides when the
+// two registers' megawatts are a disagreement rather than a rounding, and —
+// measured against the SHIPPED packs — that the chain still resolves.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

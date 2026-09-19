@@ -619,8 +619,9 @@ const note = (ok, message) => {
     // Shape is the only channel left to say WHICH register a marker came from,
     // and it is the one the operator actually asked for: "on ne sait pas
     // qu'est-ce qui correspond à ce data layer et qu'est-ce qui correspond à
-    // cet autre". Two layers that draw the same picture would pass every other
-    // check in this file.
+    // cet autre" (“you can't tell what belongs to this data layer and what
+    // belongs to that other one”). Two layers that draw the same picture would
+    // pass every other check in this file.
     console.log('\n— each register draws its own symbol —');
     const symbols = await readSymbols(page, LAYERS);
     const usedBy = new Map();

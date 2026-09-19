@@ -1462,8 +1462,9 @@ async function main() {
     apl.indicateur = 'APL aux médecins généralistes de 65 ans ou moins';
     apl.unite = 'consultations, visites et téléconsultations accessibles par habitant standardisé et par an';
     apl.champ = 'France hors Mayotte';
-    // Une commune est sous-dotée si son APL est ≤ 2,5 ; moyennement dotée
-    // jusqu'à 4 ; bien dotée au-delà. Ces bornes servent les zonages ARS.
+    // A municipality is under-served if its APL is ≤ 2.5; moderately served up
+    // to 4; well served above that. These bounds feed the regional health
+    // agencies' (ARS) zoning.
     apl.seuils = { sousDotee: 2.5, bienDotee: 4 };
     apl.jointure = {
       communesPubliees: Object.keys(apl.communes).length,

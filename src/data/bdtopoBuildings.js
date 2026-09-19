@@ -188,7 +188,7 @@ const THEME_RETRY_LIMIT = 4;
  * to a public service that asks for nothing in return.
  */
 const BDTOPO_COVERAGE = Object.freeze([
-  Object.freeze({ south: 41.2, west: -5.3, north: 51.2, east: 9.7 }), // métropole + Corse
+  Object.freeze({ south: 41.2, west: -5.3, north: 51.2, east: 9.7 }), // mainland France + Corsica
   Object.freeze({ south: 15.7, west: -61.9, north: 16.6, east: -60.9 }), // Guadeloupe
   Object.freeze({ south: 14.3, west: -61.3, north: 15.0, east: -60.7 }), // Martinique
   Object.freeze({ south: 2.0, west: -54.7, north: 6.0, east: -51.5 }), // Guyane

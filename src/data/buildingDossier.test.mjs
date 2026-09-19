@@ -2,10 +2,12 @@
 //
 // The cross-referencing audit (#128) recorded this as blocked because "les trois
 // tirages sont des requêtes réseau déclenchées par une carte, ce que le dépôt
-// ne fait nulle part aujourd'hui". Two halves of that were wrong — the pattern
-// exists (`cadastreParcels.selectParcel`, and this very layer's RNB lookup),
-// and no network call is needed at all: DVF, Sitadel and the GPU are three
-// layers already loaded for the same viewport, and the answer is a READ.
+// ne fait nulle part aujourd'hui" (“the three lookups are network requests
+// triggered by a card, which the repository does nowhere today”). Two halves
+// of that were wrong — the pattern exists (`cadastreParcels.selectParcel`, and
+// this very layer's RNB lookup), and no network call is needed at all: DVF,
+// Sitadel and the GPU are three layers already loaded for the same viewport,
+// and the answer is a READ.
 //
 // So what needs pinning down is not a fetch. It is the JOIN KEY, which is the
 // one place a wrong answer can be produced silently, and the wording, which is

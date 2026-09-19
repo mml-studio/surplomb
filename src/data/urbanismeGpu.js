@@ -133,14 +133,14 @@ const UPDATE_INTERVAL_MS = 900_000;
  * because they are the exception INSIDE a quiet family.
  */
 const ZONE_COLORS = Object.freeze({
-  U: '#ff9d3d',    // urbaine — already built
-  AU: '#ff5ac8',   // à urbaniser, legacy spelling — never observed
-  AUc: '#ff5ac8',  // à urbaniser, OPEN — the one that changes a view
-  AUs: '#b378e8',  // à urbaniser, CLOSED until the document is revised
-  A: '#9ad14b',    // agricole
-  Ah: '#d3ed72',   // secteur bâti dans la zone agricole
-  N: '#3dd6c4',    // naturelle
-  Nh: '#8ef0e4',   // secteur bâti dans la zone naturelle
+  U: '#ff9d3d',    // urban (urbaine) — already built
+  AU: '#ff5ac8',   // future urban (à urbaniser), legacy spelling — never observed
+  AUc: '#ff5ac8',  // future urban, OPEN — the one that changes a view
+  AUs: '#b378e8',  // future urban, CLOSED until the document is revised
+  A: '#9ad14b',    // agricultural (agricole)
+  Ah: '#d3ed72',   // built pocket inside the agricultural zone
+  N: '#3dd6c4',    // natural (naturelle)
+  Nh: '#8ef0e4',   // built pocket inside the natural zone
 });
 const ZONE_FALLBACK = '#c9d4e0';
 

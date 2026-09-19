@@ -48,7 +48,7 @@ const PACK = new URL('./local_data/dams/dams.geojsonl', import.meta.url);
 
 /** The French Republic's bounding boxes, used only to count what shipped. */
 const FRENCH_BOXES = [
-  [-5.5, 41.2, 9.8, 51.5],    // métropole + Corse
+  [-5.5, 41.2, 9.8, 51.5],    // mainland France + Corsica
   [-61.9, 15.8, -60.9, 16.6], // Guadeloupe
   [-61.3, 14.3, -60.7, 15.0], // Martinique
   [-55.0, 2.0, -51.0, 6.0],   // Guyane

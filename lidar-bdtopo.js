@@ -4,26 +4,26 @@ import { VectorTile } from '@mapbox/vector-tile';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 // -----------------------------------------------------------------------------
-// APERÇU — LiDAR HD (MNT) + BD TOPO 3D sur un quartier réel.
+// PREVIEW — LiDAR HD (MNT) + BD TOPO 3D over a real neighborhood.
 //
-// Voir l'en-tête de lidar-bdtopo.html pour le pourquoi. Ce fichier est le
-// comment, et il tient en quatre morceaux :
+// See the header of lidar-bdtopo.html for the why. This file is the how, and
+// it comes in four pieces:
 //
-//   1. `loadMntPatch`      une requête WMS, un raster de flottants, un
-//                          échantillonneur bilinéaire.
-//   2. `makeTerrainProvider` ce raster présenté à Cesium comme un vrai terrain.
-//   3. `loadBuildings`     les tuiles vectorielles BD TOPO, extrudées entre
-//                          leurs deux altitudes publiées.
-//   4. `measureFit`        la mesure qui dit si les deux se rejoignent
-//                          vraiment, plutôt que de nous le faire croire.
+//   1. `loadMntPatch`      one WMS request, a raster of floats, a bilinear
+//                          sampler.
+//   2. `makeTerrainProvider` that raster presented to Cesium as real terrain.
+//   3. `loadBuildings`     the BD TOPO vector tiles, extruded between their
+//                          two published altitudes.
+//   4. `measureFit`        the measurement that says whether the two really
+//                          meet, rather than making us believe they do.
 // -----------------------------------------------------------------------------
 
-// --- Quartiers --------------------------------------------------------------
-// Emprises vérifiées couvertes par le LiDAR HD (0 pixel nodata au 2026-08-31).
-// `view` est ce qu'on regarde ; le MNT téléchargé déborde de `MNT_MARGIN` de
-// chaque côté, pour que le relief ne se coupe pas net au bord du champ.
-// `heading`/`pitch`/`range` : l'oblique qui rend le dénivelé lisible, `range`
-// en multiples du rayon de l'emprise.
+// --- Neighborhoods ----------------------------------------------------------
+// Extents verified as covered by LiDAR HD (0 nodata pixels as of 2026-08-31).
+// `view` is what we look at; the downloaded MNT (digital terrain model) spills
+// over by `MNT_MARGIN` on each side, so that the relief does not stop dead at
+// the edge of the frame. `heading`/`pitch`/`range`: the oblique view that makes
+// the change in elevation readable, `range` in multiples of the extent's radius.
 const SITES = {
   lyon: {
     label: 'Lyon — Fourvière',
@@ -52,11 +52,11 @@ const SITES = {
   },
 };
 
-/** Débordement du MNT autour de l'emprise regardée, en fraction de sa taille. */
+/** How far the MNT spills over the viewed extent, as a fraction of its size. */
 const MNT_MARGIN = 0.45;
 
 /**
- * L'emprise à télécharger autour d'une emprise regardée.
+ * The extent to download around a viewed extent.
  * @param {{west:number,south:number,east:number,north:number}} view
  * @returns {{west:number,south:number,east:number,north:number}}
  */
@@ -69,18 +69,18 @@ function patchRect(view) {
   };
 }
 
-// --- Services IGN, tous keyless ---------------------------------------------
+// --- IGN services, all keyless ----------------------------------------------
 const WMS_R = 'https://data.geopf.fr/wms-r/wms';
 const WMTS = 'https://data.geopf.fr/wmts';
 const BDTOPO_TMS = 'https://data.geopf.fr/tms/1.0.0/BDTOPO';
 
 /**
- * MNT LiDAR HD. `.MIXED.` plutôt que `.ELEVATIONGRIDCOVERAGE.` : la variante
- * mixte bouche les zones que le vol LiDAR n'a pas encore couvertes avec le
- * RGE ALTI, donc elle ne renvoie jamais de trou au milieu d'une ville.
+ * LiDAR HD MNT. `.MIXED.` rather than `.ELEVATIONGRIDCOVERAGE.`: the mixed
+ * variant fills the areas the LiDAR flights have not covered yet with RGE
+ * ALTI, so it never returns a hole in the middle of a city.
  */
 const MNT_LAYER = 'IGNF_LIDAR-HD_MNT_ELEVATION.MIXED.WGS84G';
-/** Valeur nodata du service — mer, hors emprise. Jamais une altitude. */
+/** The service's nodata value — sea, outside coverage. Never an altitude. */
 const MNT_NODATA_BELOW = -1000;
 
 const IGN_CREDIT = '© IGN — Géoplateforme (Licence Ouverte 2.0)';
@@ -92,20 +92,21 @@ const BASE_LAYERS = {
   plan: { layer: 'PLANIGN.LIDAR.TERRAIN', tms: 'PM_6_18', max: 18, min: 6, format: 'image/png' },
 };
 
-// --- Bâti -------------------------------------------------------------------
-/** Niveau de tuiles BD TOPO. z16 porte le bâti complet, non simplifié. */
+// --- Buildings --------------------------------------------------------------
+/** BD TOPO tile level. z16 carries the complete, unsimplified buildings. */
 const BDTOPO_Z = 16;
-/** Garde-fou : au-delà, c'est qu'on a demandé une emprise trop large. */
+/** Safety cap: beyond it, the requested extent was too wide. */
 const MAX_TILES = 64;
 /**
- * On enfonce la base des volumes de 2 m sous `altitude_minimale_sol`.
- * BD TOPO déclare `precision_altimetrique` à 1,5 m sur du bâti photogrammétrique
- * et le MNT LiDAR est à ±0,2 m : sans cette marge, un bâtiment dont l'altitude
- * publiée dépasse le sol mesuré de 40 cm laisse voir le jour sous ses murs.
- * Elle ne change rien à la partie visible — seul le sous-sol s'allonge.
+ * The base of each volume is sunk 2 m below `altitude_minimale_sol`.
+ * BD TOPO declares `precision_altimetrique` at 1.5 m on photogrammetric
+ * buildings and the LiDAR MNT is at ±0.2 m: without this margin, a building
+ * whose published altitude sits 40 cm above the measured ground shows daylight
+ * under its walls. It changes nothing in the visible part — only the
+ * underground part gets longer.
  */
 const SINK_M = 2;
-/** `precision_altimetrique` quand la BD TOPO n'a pas de Z du tout. */
+/** `precision_altimetrique` when BD TOPO has no Z at all. */
 const NO_Z_SENTINEL = 9999;
 
 const USAGE_COLOR = {
@@ -117,26 +118,26 @@ const USAGE_COLOR = {
   'Religieux': '#b9a7e8',
   'Annexe': '#b9a7e8',
 };
-/** Teinte neutre du mode « maquette » : la forme parle, pas la catégorie. */
+/** Neutral tint of the “massing” mode: the shape speaks, not the category. */
 const MASSING_BASE = '#d8cbb4';
 
 /**
- * La couleur d'un volume.
+ * The color of a volume.
  *
- * OPAQUE, sans exception. Un alpha même de 0,94 fait basculer la géométrie dans
- * la passe translucide de Cesium, qui n'écrit pas la profondeur : les bâtiments
- * cessent de se cacher les uns les autres et la ville se lit comme une seule
- * masse où tout transparaît à travers tout. C'était le défaut principal du
- * premier rendu.
+ * OPAQUE, without exception. Even an alpha of 0.94 tips the geometry into
+ * Cesium's translucent pass, which does not write depth: buildings stop hiding
+ * one another and the city reads as a single mass where everything shows
+ * through everything. That was the main defect of the first render.
  *
- * La luminosité porte la HAUTEUR, et c'est délibéré : sur ces tuiles, 83 à 87 %
- * des bâtiments tombent dans deux valeurs d'`usage_1` (Résidentiel et
- * Indifférencié), donc la couleur par usage est presque constante et ne sépare
- * rien. La hauteur, elle, varie entre voisins immédiats — c'est le seul canal
- * qui distingue deux immeubles accolés quand aucune arête ne les sépare.
+ * Lightness carries HEIGHT, and on purpose: on these tiles, 83 to 87% of the
+ * buildings fall into two `usage_1` values (Résidentiel and Indifférencié), so
+ * color by use is almost constant and separates nothing. Height, on the other
+ * hand, varies between immediate neighbors — it is the only channel that tells
+ * two adjoining buildings apart when no edge separates them.
  * @param {string} usage
- * @param {number} heightM — hauteur visible du volume.
+ * @param {number} heightM — visible height of the volume.
  * @param {'usage'|'massing'} mode
+ * @returns {Cesium.Color}
  * @returns {Cesium.Color}
  */
 function colorFor(usage, heightM, mode) {
@@ -149,24 +150,24 @@ function colorFor(usage, heightM, mode) {
 }
 
 // -----------------------------------------------------------------------------
-// 1. Le MNT, en une requête
+// 1. The MNT, in one request
 // -----------------------------------------------------------------------------
 
 /**
- * Raster d'altitudes NGF-IGN69 sur une emprise, échantillonnable en continu.
+ * NGF-IGN69 altitude raster over an extent, continuously samplable.
  *
- * Le WMS raster de la Géoplateforme est plafonné à 40 requêtes/minute : un
- * fournisseur de terrain tuilé classique le dépasse en quelques secondes de
- * navigation. On télécharge donc UNE dalle qui couvre tout le quartier et on la
- * garde en mémoire. Effet de bord agréable : plus aucune couture entre tuiles.
+ * The Géoplateforme raster WMS is capped at 40 requests/minute: a classic tiled
+ * terrain provider exceeds that within a few seconds of navigation. So we
+ * download ONE patch covering the whole neighborhood and keep it in memory.
+ * Pleasant side effect: no more seams between tiles.
  */
 class MntPatch {
   /**
-   * @param {{west:number,south:number,east:number,north:number}} rect — degrés.
-   * @param {number} width — colonnes du raster.
-   * @param {number} height — lignes du raster.
-   * @param {Float32Array} values — altitudes NGF, ligne 0 = nord.
-   * @param {number} geoidN — ondulation du géoïde au centre, en mètres.
+   * @param {{west:number,south:number,east:number,north:number}} rect — degrees.
+   * @param {number} width — raster columns.
+   * @param {number} height — raster rows.
+   * @param {Float32Array} values — NGF altitudes, row 0 = north.
+   * @param {number} geoidN — geoid undulation at the center, in meters.
    */
   constructor(rect, width, height, values, geoidN) {
     this.rect = rect;
@@ -186,25 +187,25 @@ class MntPatch {
     this.minM = n ? min : 0;
     this.maxM = n ? max : 0;
     this.holes = holes;
-    // Les trous prennent la valeur VALIDE LA PLUS PROCHE, pas la moyenne de
-    // l'emprise : à Grenoble, où le vol LiDAR s'arrête en cours de montagne,
-    // une moyenne poserait un plateau à 350 m en plein milieu d'un versant qui
-    // en fait 430. Le prolongement du bord, lui, se voit à peine.
+    // Holes take the NEAREST VALID value, not the mean of the extent: in
+    // Grenoble, where the LiDAR flight stops halfway up the mountain, a mean
+    // would put a plateau at 350 m right in the middle of a slope that is
+    // actually at 430. Extending the edge is barely visible.
     if (holes) fillHolesNearest(values, width, height, n ? sum / n : 0);
   }
 
   /**
-   * Altitude ORTHOMÉTRIQUE (NGF-IGN69) en un point, par interpolation
-   * bilinéaire entre les centres de pixels. Hors emprise, la valeur du bord est
-   * prolongée : le monde continue à plat au lieu de tomber d'une falaise.
+   * ORTHOMETRIC altitude (NGF-IGN69) at a point, by bilinear interpolation
+   * between pixel centers. Outside the extent, the edge value is extended: the
+   * world carries on flat instead of dropping off a cliff.
    * @param {number} lonDeg
    * @param {number} latDeg
-   * @returns {number} mètres NGF
+   * @returns {number} NGF meters
    */
   orthometricAt(lonDeg, latDeg) {
     const { west, south, east, north } = this.rect;
     const w = this.width; const h = this.height;
-    // -0.5 : le premier échantillon est au CENTRE du premier pixel, pas au bord.
+    // -0.5: the first sample is at the CENTER of the first pixel, not its edge.
     let fx = ((lonDeg - west) / (east - west)) * w - 0.5;
     let fy = ((north - latDeg) / (north - south)) * h - 0.5;
     fx = Math.min(Math.max(fx, 0), w - 1);
@@ -219,12 +220,12 @@ class MntPatch {
   }
 
   /**
-   * La même altitude, ramenée sur l'ellipsoïde WGS84 que Cesium attend :
-   * h = H + N. N est pris au centre de l'emprise — il varie de moins de 2 cm
-   * sur un quartier, très en dessous du bruit du MNT lui-même.
+   * The same altitude, brought onto the WGS84 ellipsoid Cesium expects:
+   * h = H + N. N is taken at the center of the extent — it varies by less than
+   * 2 cm across a neighborhood, far below the noise of the MNT itself.
    * @param {number} lonDeg
    * @param {number} latDeg
-   * @returns {number} mètres ellipsoïdaux
+   * @returns {number} ellipsoidal meters
    */
   ellipsoidalAt(lonDeg, latDeg) {
     return this.orthometricAt(lonDeg, latDeg) + this.geoidN;
@@ -232,12 +233,12 @@ class MntPatch {
 }
 
 /**
- * Un aller-retour de remplissage « plus proche voisin » le long d'un axe.
- * @param {Float32Array} values — modifié sur place.
+ * One back-and-forth “nearest neighbor” fill along one axis.
+ * @param {Float32Array} values — modified in place.
  * @param {number} width
  * @param {number} height
- * @param {boolean} horizontal — true : balayage en lignes, false : en colonnes.
- * @returns {number} nombre de trous encore ouverts après ce passage.
+ * @param {boolean} horizontal — true: sweep by rows, false: by columns.
+ * @returns {number} number of holes still open after this pass.
  */
 function nearestSweep(values, width, height, horizontal) {
   const bad = (v) => v <= MNT_NODATA_BELOW;
@@ -275,14 +276,14 @@ function nearestSweep(values, width, height, horizontal) {
 }
 
 /**
- * Bouche les pixels sans donnée par la valeur valide la plus proche.
+ * Fills the no-data pixels with the nearest valid value.
  *
- * On alterne les axes : un pixel dont la LIGNE ENTIÈRE et la COLONNE ENTIÈRE
- * sont vides n'a de voisin qu'en diagonale et n'est atteint qu'au tour suivant.
- * Deux tours suffisent sur un raster réel — le troisième est là pour que la
- * boucle ait une fin, et le repli pour le cas où l'emprise est vide de bout en
- * bout, qui est un échec de requête, pas un trou.
- * @param {Float32Array} values — modifié sur place.
+ * The axes alternate: a pixel whose WHOLE ROW and WHOLE COLUMN are empty only
+ * has a neighbor diagonally and is only reached on the next round. Two rounds
+ * are enough on a real raster — the third is there so that the loop has an
+ * end, and the fallback for the case where the extent is empty from end to
+ * end, which is a failed request, not a hole.
+ * @param {Float32Array} values — modified in place.
  * @param {number} width
  * @param {number} height
  * @param {number} fallback
@@ -297,23 +298,24 @@ function fillHolesNearest(values, width, height, fallback) {
   }
 }
 
-/** true si la plateforme est petit-boutiste (toutes le sont, mais vérifions). */
+/** true if the platform is little-endian (they all are, but let's check). */
 const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
 
-/** Mètres par degré de longitude à une latitude donnée. @returns {number} */
+/** Meters per degree of longitude at a given latitude. @returns {number} */
 const metresPerLonDeg = (latDeg) => 111320 * Math.cos((latDeg * Math.PI) / 180);
-/** Mètres par degré de latitude — constant à ce qu'on en fait près. */
+/** Meters per degree of latitude — constant, as far as we use it. */
 const METRES_PER_LAT_DEG = 111320;
 
 /**
- * Télécharge le MNT LiDAR HD sur une emprise, en une seule requête WMS.
+ * Downloads the LiDAR HD MNT over an extent, in a single WMS request.
  *
- * `budget` est le côté LE PLUS LONG du raster ; l'autre est calculé pour que le
- * pixel reste carré au sol. Un raster carré sur une emprise qui ne l'est pas
- * étirerait l'échantillonnage dans une direction et le tasserait dans l'autre.
+ * `budget` is the LONGEST side of the raster; the other is computed so that the
+ * pixel stays square on the ground. A square raster over an extent that is not
+ * square would stretch the sampling in one direction and squash it in the
+ * other.
  * @param {{west:number,south:number,east:number,north:number}} rect
  * @param {number} budget — 1024 / 2048 / 4096.
- * @param {number} geoidN — ondulation du géoïde au centre de l'emprise.
+ * @param {number} geoidN — geoid undulation at the center of the extent.
  * @returns {Promise<MntPatch>}
  */
 async function loadMntPatch(rect, budget, geoidN) {
@@ -324,7 +326,7 @@ async function loadMntPatch(rect, budget, geoidN) {
   const width = Math.max(2, Math.round(spanXm * scale));
   const height = Math.max(2, Math.round(spanYm * scale));
 
-  // WMS 1.3.0 + EPSG:4326 : la BBOX est en (lat, lon), pas l'inverse.
+  // WMS 1.3.0 + EPSG:4326: the BBOX is in (lat, lon), not the other way round.
   const url = `${WMS_R}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap`
     + `&LAYERS=${encodeURIComponent(MNT_LAYER)}&STYLES=`
     + `&CRS=EPSG:4326&BBOX=${rect.south},${rect.west},${rect.north},${rect.east}`
@@ -335,7 +337,7 @@ async function loadMntPatch(rect, budget, geoidN) {
   const buf = await res.arrayBuffer();
   const expected = width * height * 4;
   if (buf.byteLength !== expected) {
-    // Le service répond en XML quand il n'est pas content ; on le dit.
+    // The service answers in XML when it is unhappy; we say so.
     const head = new TextDecoder().decode(buf.slice(0, 300));
     throw new Error(`MNT LiDAR : ${buf.byteLength} octets au lieu de ${expected} — ${head.slice(0, 160)}`);
   }
@@ -352,18 +354,18 @@ async function loadMntPatch(rect, budget, geoidN) {
 }
 
 // -----------------------------------------------------------------------------
-// 2. Le raster présenté à Cesium comme un terrain
+// 2. The raster presented to Cesium as terrain
 // -----------------------------------------------------------------------------
 
-/** Côté de la grille d'altitudes remise à Cesium pour chaque tuile de terrain. */
+/** Side of the altitude grid handed to Cesium for each terrain tile. */
 const HEIGHTMAP_SIDE = 64;
 
 /**
- * Terrain Cesium adossé à une dalle MNT en mémoire.
+ * Cesium terrain backed by an in-memory MNT patch.
  *
- * `CustomHeightmapTerrainProvider` veut une grille d'altitudes ELLIPSOÏDALES
- * par tuile, en ordre ligne-majeur, ligne 0 au NORD — exactement l'ordre dans
- * lequel le WMS livre son BIL, ce qui évite tout retournement.
+ * `CustomHeightmapTerrainProvider` wants a grid of ELLIPSOIDAL altitudes per
+ * tile, in row-major order, row 0 at the NORTH — exactly the order in which the
+ * WMS delivers its BIL, which avoids any flipping.
  * @param {MntPatch} patch
  * @returns {Cesium.CustomHeightmapTerrainProvider}
  */
@@ -395,7 +397,7 @@ function makeTerrainProvider(patch) {
 }
 
 // -----------------------------------------------------------------------------
-// Le viewer
+// The viewer
 // -----------------------------------------------------------------------------
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -409,9 +411,9 @@ const viewer = new Cesium.Viewer('cesiumContainer', {
 viewer.scene.globe.depthTestAgainstTerrain = true;
 viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1620');
 viewer.scene.skyAtmosphere.show = true;
-// Le soleil rase : sans ombrage, un MNT à 50 cm ressemble à une nappe.
-// Le soleil éclaire le sol ET les volumes : sans lui, murs et toits rendent le
-// même ton et une boîte à toit plat n'a plus de forme du tout.
+// Grazing sunlight: without shading, a 50 cm MNT looks like a tablecloth.
+// The sun lights the ground AND the volumes: without it, walls and roofs render
+// the same tone and a flat-roofed box has no shape at all.
 viewer.scene.globe.enableLighting = true;
 viewer.scene.light = new Cesium.SunLight();
 
@@ -425,7 +427,7 @@ const terrainEl = document.getElementById('terrain');
 const buildingsEl = document.getElementById('buildings');
 const reloadEl = document.getElementById('reload');
 
-/** État courant, pour que les cases à cocher n'aient pas à tout recharger. */
+/** Current state, so that the checkboxes do not have to reload everything. */
 const state = {
   siteId: null,
   patch: null,
@@ -436,7 +438,7 @@ const state = {
   loading: false,
 };
 
-/** Installe l'habillage choisi, en remplaçant le précédent. */
+/** Installs the chosen basemap, replacing the previous one. */
 function setBaseLayer(key) {
   const spec = BASE_LAYERS[key] || BASE_LAYERS.ortho;
   const labels = [];
@@ -457,7 +459,7 @@ function setBaseLayer(key) {
   state.imageryLayer = next;
 }
 
-/** Applique le terrain LiDAR ou l'ellipsoïde plat, selon la case. */
+/** Applies the LiDAR terrain or the flat ellipsoid, depending on the checkbox. */
 function applyTerrain() {
   const wanted = terrainEl.checked && state.terrainProvider
     ? state.terrainProvider
@@ -466,7 +468,7 @@ function applyTerrain() {
 }
 
 // -----------------------------------------------------------------------------
-// 3. Le bâti BD TOPO
+// 3. The BD TOPO buildings
 // -----------------------------------------------------------------------------
 
 const lon2x = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
@@ -489,15 +491,16 @@ async function fetchTile(z, x, y) {
 const finite = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 /**
- * Où poser un bâtiment, et pourquoi.
+ * Where to seat a building, and why.
  *
- * L'ordre est une hiérarchie de preuve, pas une préférence de rendu :
- *   1. les deux altitudes publiées par l'IGN — le bâtiment sait où il est ;
- *   2. l'altitude de sol publiée + la hauteur publiée — le toit est déduit ;
- *   3. le MNT sous le centroïde + la hauteur publiée — le sol est mesuré,
- *      l'IGN ne l'ayant pas déclaré pour ce bâtiment ;
- *   4. rien de tout ça : 6 m au-dessus du MNT, et on le compte à part.
- * @param {object} props — attributs BD TOPO.
+ * The order is a hierarchy of evidence, not a rendering preference:
+ *   1. the two altitudes published by IGN — the building knows where it is;
+ *   2. the published ground altitude + the published height — the roof is
+ *      deduced;
+ *   3. the MNT under the centroid + the published height — the ground is
+ *      measured, since IGN did not declare it for this building;
+ *   4. none of the above: 6 m above the MNT, and it is counted separately.
+ * @param {object} props — BD TOPO attributes.
  * @param {{lon:number, lat:number}} centroid
  * @param {MntPatch} patch
  * @returns {{base:number, top:number, basis:'published'|'height'|'lidar'|'guess'}}
@@ -522,14 +525,14 @@ function seatBuilding(props, centroid, patch) {
 }
 
 /**
- * La mesure qui vaut la démonstration : l'altitude de sol que la BD TOPO
- * DÉCLARE tombe-t-elle sur le sol que le LiDAR MESURE ?
+ * The measurement that makes this demo worth having: does the ground altitude
+ * BD TOPO DECLARES land on the ground the LiDAR MEASURES?
  *
- * On compare le MNT sous le centroïde à la fourchette [altitude_minimale_sol,
- * altitude_maximale_sol] du bâtiment — la fourchette est la bonne cible, parce
- * qu'un bâtiment en pente n'a pas UNE altitude de sol. Un mètre de tolérance de
- * part et d'autre : la BD TOPO annonce elle-même 1,5 m de précision
- * altimétrique sur le bâti photogrammétrique.
+ * The MNT under the centroid is compared with the building's
+ * [altitude_minimale_sol, altitude_maximale_sol] range — the range is the
+ * right target, because a building on a slope does not have ONE ground
+ * altitude. One meter of tolerance on either side: BD TOPO itself announces
+ * 1.5 m of altimetric precision on photogrammetric buildings.
  * @param {object} props
  * @param {{lon:number, lat:number}} centroid
  * @param {MntPatch} patch
@@ -539,29 +542,30 @@ function measureFit(props, centroid, patch) {
   const minSol = finite(props.altitude_minimale_sol);
   if (minSol === null) return null;
   const declared = finite(props.precision_altimetrique);
-  // 9999 n'est pas une précision de 10 km : c'est la sentinelle « pas de Z ».
-  // Un bâtiment qui n'a pas d'altitude ne peut pas être confronté à une mesure.
+  // 9999 is not a 10 km precision: it is the “no Z” sentinel. A building that
+  // has no altitude cannot be checked against a measurement.
   if (declared === NO_Z_SENTINEL) return null;
 
   const mnt = patch.orthometricAt(centroid.lon, centroid.lat);
   const maxSol = finite(props.altitude_maximale_sol);
-  // La tolérance est celle que la BD TOPO s'accorde à elle-même — jamais une
-  // qu'on choisirait pour se donner raison. Plancher à 1 m : en dessous, c'est
-  // le bruit du MNT et la position du centroïde qu'on mesurerait.
+  // The tolerance is the one BD TOPO grants itself — never one we would pick to
+  // prove ourselves right. Floor at 1 m: below that, we would be measuring the
+  // noise of the MNT and the position of the centroid.
   const tol = Math.max(declared === null ? 1.5 : declared, 1);
   const high = (maxSol === null ? minSol : maxSol) + tol;
   return {
     inside: mnt >= minSol - tol && mnt <= high,
     deltaM: mnt - minSol,
     tol,
-    // Paris ne publie ni `altitude_maximale_sol` ni `altitude_maximale_toit` :
-    // là-bas la cible est un point, ailleurs c'est une fourchette. Dire lequel
-    // évite de comparer deux sévérités différentes comme si c'était la même.
+    // Paris publishes neither `altitude_maximale_sol` nor
+    // `altitude_maximale_toit`: there the target is a point, elsewhere it is a
+    // range. Saying which avoids comparing two different strictnesses as if
+    // they were the same.
     ranged: maxSol !== null,
   };
 }
 
-/** Médiane d'un tableau de nombres (mute le tableau). @returns {number} */
+/** Median of an array of numbers (mutates the array). @returns {number} */
 function median(values) {
   if (!values.length) return 0;
   values.sort((a, b) => a - b);
@@ -569,7 +573,7 @@ function median(values) {
   return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
 }
 
-/** Fiche d'un bâtiment, affichée par l'infoBox de Cesium. @returns {string} */
+/** A building's card, shown by Cesium's infoBox. @returns {string} */
 function describe(props, seat, fit) {
   const rows = [
     ['Usage principal', props.usage_1],
@@ -603,15 +607,15 @@ function describe(props, seat, fit) {
 }
 
 /**
- * Charge et dessine le bâti BD TOPO de l'emprise visible du quartier.
+ * Loads and draws the BD TOPO buildings of the neighborhood's visible extent.
  * @param {object} site
  * @param {MntPatch} patch
- * @returns {Promise<object>} statistiques de chargement.
+ * @returns {Promise<object>} loading statistics.
  */
 async function loadBuildings(site, patch) {
-  // Le bâti déborde de l'emprise regardée exactement comme le MNT : sinon la
-  // ville s'arrête net sur une ligne droite au milieu du champ, ce qui se lit
-  // comme une limite de données alors que ce n'est qu'une limite de requête.
+  // The buildings spill over the viewed extent exactly like the MNT: otherwise
+  // the city stops dead on a straight line in the middle of the frame, which
+  // reads as a data boundary when it is only a request boundary.
   const rect = patchRect(site.view);
   const { west, south, east, north } = rect;
   const x0 = lon2x(west, BDTOPO_Z); const x1 = lon2x(east, BDTOPO_Z);
@@ -657,11 +661,11 @@ async function loadBuildings(site, patch) {
         for (const [lon, lat] of ring) { flat.push(lon, lat); cx += lon; cy += lat; }
         const centroid = { lon: cx / ring.length, lat: cy / ring.length };
 
-        // Les anneaux INTÉRIEURS, que la première version jetait. La BD TOPO en
-        // publie sur 11 % des polygones à Lyon et 6 % à Grenoble : ce sont les
-        // cours d'îlot et les puits de lumière. Les boucher remplissait de
-        // béton plein exactement les vides qui séparent un bâtiment du suivant,
-        // et transformait un front de rue en un bloc unique.
+        // The INNER rings, which the first version threw away. BD TOPO publishes
+        // them on 11% of polygons in Lyon and 6% in Grenoble: they are
+        // courtyards and light wells. Filling them poured solid concrete into
+        // exactly the gaps that separate one building from the next, and turned
+        // a street front into a single block.
         const holes = [];
         for (let h = 1; h < polygon.length; h += 1) {
           const inner = polygon[h];
@@ -671,16 +675,16 @@ async function loadBuildings(site, patch) {
           holes.push(new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(flatHole)));
         }
 
-        // Les tuiles z16 débordent de l'emprise du MNT de plusieurs centaines
-        // de mètres. Au-delà du bord, `orthometricAt` prolonge la dernière
-        // valeur connue : on y dessinerait des bâtiments assis sur un sol
-        // inventé, et on les compterait dans une mesure d'accord qui n'en
-        // serait plus une. On les laisse donc dehors, et on le dit.
+        // The z16 tiles spill several hundred meters past the MNT's extent.
+        // Beyond the edge, `orthometricAt` extends the last known value: we
+        // would draw buildings sitting on invented ground there, and count them
+        // in an agreement measurement that would no longer be one. So we leave
+        // them out, and say so.
         if (centroid.lon < west || centroid.lon > east
           || centroid.lat < south || centroid.lat > north) { outside += 1; continue; }
 
-        // Un bâtiment à cheval sur deux tuiles y apparaît découpé : on dessine
-        // chaque morceau (ils se recollent) mais on ne le compte qu'une fois.
+        // A building straddling two tiles shows up cut in two: every piece is
+        // drawn (they join back up) but the building is counted only once.
         const fresh = props.cleabs && !seen.has(props.cleabs);
         if (fresh) {
           seen.add(props.cleabs);
@@ -713,8 +717,8 @@ async function loadBuildings(site, patch) {
             material: colorFor(props.usage_1, seat.top - seat.base - SINK_M, tintEl.value),
             outline: false,
             closeTop: true,
-            // Fermé : sur un versant la base d'un volume finit par affleurer, et
-            // un fond ouvert laisse voir l'intérieur des murs opposés.
+            // Closed: on a slope the base of a volume ends up surfacing, and an
+            // open bottom shows the inside of the opposite walls.
             closeBottom: true,
           },
           name: props.usage_1 || props.nature || 'Bâtiment',
@@ -749,7 +753,7 @@ async function loadBuildings(site, patch) {
 // Orchestration
 // -----------------------------------------------------------------------------
 
-/** Repeint le bloc de statistiques à partir de l'état courant. */
+/** Repaints the statistics block from the current state. */
 function renderStats() {
   const patch = state.patch;
   if (!patch) { statsEl.textContent = 'Chargement…'; return; }
@@ -776,8 +780,9 @@ function renderStats() {
       + ((b.basis.lidar + b.basis.guess)
         ? ` · MNT LiDAR <b>${pct(b.basis.lidar + b.basis.guess)}</b>` : ''));
     if (b.insidePct !== null) {
-      // Paris ne publie qu'UNE altitude de sol, Lyon en publie deux : la cible
-      // n'a pas la même largeur, et la phrase doit le dire ou le pourcentage ment.
+      // Paris publishes only ONE ground altitude, Lyon publishes two: the target
+      // is not the same width, and the sentence must say so or the percentage
+      // lies.
       const cible = b.rangedPct > 50
         ? 'dans la fourchette de sol publiée'
         : "sur l'altitude de sol publiée";
@@ -799,7 +804,7 @@ function renderStats() {
   statsEl.innerHTML = lines.join('<br>');
 }
 
-/** Charge un quartier de bout en bout : MNT, terrain, habillage, bâti, caméra. */
+/** Loads a neighborhood end to end: MNT, terrain, basemap, buildings, camera. */
 async function loadSite(siteId) {
   if (state.loading) return;
   const site = SITES[siteId];
@@ -824,9 +829,10 @@ async function loadSite(siteId) {
     applyTerrain();
     renderStats();
 
-    // `flyTo` sur un Rectangle cadre à la verticale et ignore l'orientation
-    // demandée : on passe par une sphère englobante, seule façon d'obtenir une
-    // vue oblique à une distance choisie — et l'oblique est tout l'intérêt ici.
+    // `flyTo` on a Rectangle frames straight down and ignores the requested
+    // orientation: we go through a bounding sphere, the only way to get an
+    // oblique view at a chosen distance — and the oblique view is the whole
+    // point here.
     const target = Cesium.Rectangle.fromDegrees(
       site.view.west, site.view.south, site.view.east, site.view.north,
     );
@@ -859,12 +865,13 @@ async function loadSite(siteId) {
   }
 }
 
-// --- Sonde au sol -----------------------------------------------------------
-// Un clic sur le terrain rend l'altitude MESURÉE là où on a cliqué : c'est la
-// seule façon honnête de montrer qu'on regarde une mesure et pas un décor.
+// --- Ground probe -----------------------------------------------------------
+// A click on the terrain returns the altitude MEASURED where you clicked: it is
+// the only honest way to show that we are looking at a measurement and not at a
+// stage set.
 const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 clickHandler.setInputAction((movement) => {
-  if (viewer.scene.pick(movement.position)) return; // un bâtiment : l'infoBox s'en charge
+  if (viewer.scene.pick(movement.position)) return; // a building: the infoBox handles it
   const ray = viewer.camera.getPickRay(movement.position);
   const hit = ray && viewer.scene.globe.pick(ray, viewer.scene);
   if (!hit || !state.patch) return;
@@ -877,15 +884,15 @@ clickHandler.setInputAction((movement) => {
     + ` (= ${(ngf + state.patch.geoidN).toFixed(2)} m ellipsoïdaux, N = ${state.patch.geoidN.toFixed(2)} m)`;
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-// --- Commandes --------------------------------------------------------------
+// --- Controls ---------------------------------------------------------------
 placeEl.addEventListener('change', () => loadSite(placeEl.value));
 resEl.addEventListener('change', () => loadSite(placeEl.value));
 reloadEl.addEventListener('click', () => loadSite(placeEl.value));
 baseEl.addEventListener('change', () => setBaseLayer(baseEl.value));
 tintEl.addEventListener('change', async () => {
   if (!state.patch || !buildingsEl.checked) return;
-  // Re-tracé complet : les tuiles sont dans le cache du navigateur,
-  // donc c'est un aller-retour mémoire, pas réseau.
+  // Full redraw: the tiles are in the browser cache, so it is a memory round
+  // trip, not a network one.
   state.buildingStats = await loadBuildings(SITES[state.siteId], state.patch);
   renderStats();
 });
@@ -905,5 +912,5 @@ buildingsEl.addEventListener('change', async () => {
 setBaseLayer(baseEl.value);
 loadSite(placeEl.value);
 
-// Pour l'inspection depuis la console et pour la capture d'écran automatisée.
+// For inspection from the console and for automated screenshots.
 window.__lidarBdtopo = { state, SITES, loadSite };

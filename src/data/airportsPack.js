@@ -43,7 +43,7 @@ import { geometryAreaM2 } from './datacentersPack.js';
  */
 export const FRENCH_TERRITORY_CODES = Object.freeze([
   'BL', // Saint-Barthélemy
-  'FR', // France métropolitaine
+  'FR', // mainland France
   'GF', // Guyane
   'GP', // Guadeloupe
   'MF', // Saint-Martin

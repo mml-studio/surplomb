@@ -3,7 +3,9 @@
 // The cross-referencing audit (#128) recorded two obstacles and called the second the
 // real one — "un tronçon Vigicrues ne porte AUCUN code de département : le
 // rattacher demanderait un point-dans-polygone de chaque tronçon contre chaque
-// contour départemental, à chaque bulletin".
+// contour départemental, à chaque bulletin" (“a Vigicrues reach carries NO
+// department code: attaching it would take a point-in-polygon test of every
+// reach against every department outline, on every bulletin”).
 //
 // It is only that expensive if you do it for all 337 reaches. Outside an
 // episode every reach is green and no label mentions rivers at all, so the

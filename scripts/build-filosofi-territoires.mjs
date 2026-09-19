@@ -29,7 +29,7 @@ const MELODI = 'https://api.insee.fr/melodi/data';
 /** Geographic vintage the API answers in. It normalises, so this is a hint. */
 const COG = '2026';
 
-/** Métropole plus La Réunion — the scope `DS_FILOSOFI_CC` publishes. */
+/** Mainland France plus La Réunion — the scope `DS_FILOSOFI_CC` publishes. */
 export const DEPARTEMENT_CODES = Object.freeze([
   ...Array.from({ length: 95 }, (_, i) => String(i + 1).padStart(2, '0')).filter((c) => c !== '20'),
   '2A', '2B', '974',
