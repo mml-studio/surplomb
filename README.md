@@ -12,7 +12,7 @@
 
 *Aucun angle mort.*
 
-![Paris en 3D photoréaliste, le trafic en direct rue par rue : ce que montre surplomb.app](public/landing/hero-poster-1920.b47cad6d.jpg)
+![Paris en 3D photoréaliste, le trafic en direct rue par rue : ce que montre surplomb.app](docs/media/surplomb-hero.gif)
 
 <sub>Imagerie : Google, via Cesium ion.</sub>
 

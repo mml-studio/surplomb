@@ -154,9 +154,9 @@ function run(cmd, args, { stderr = false } = {}) {
   return stderr ? result.stderr : result.stdout;
 }
 
-const ffmpeg = (args) => run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args]);
+export const ffmpeg = (args) => run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args]);
 
-function probe(file) {
+export function probe(file) {
   const info = JSON.parse(run('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file]));
   const video = info.streams.find((s) => s.codec_type === 'video');
   const [num, den] = video.r_frame_rate.split('/').map(Number);
@@ -177,7 +177,7 @@ function probe(file) {
   };
 }
 
-function countFrames(file) {
+export function countFrames(file) {
   return Number(run('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v:0',
     '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', file]).trim());
 }
@@ -356,7 +356,7 @@ function checkLaw(device, orbit, capture) {
  * Write `name.webp` (and `name.jpg` unless `webpOnly`) from a sharp pipeline
  * factory, lowering the quality of THIS image only if it breaks its budget.
  */
-async function writeImage({ out, name, make, webpOnly = false, webpQuality = QUALITY.webp, keepAlpha = false }) {
+export async function writeImage({ out, name, make, webpOnly = false, webpQuality = QUALITY.webp, keepAlpha = false }) {
   const budget = BUDGETS[name] ?? Infinity;
   const written = [];
   const formats = webpOnly ? ['webp'] : ['webp', 'jpg'];
@@ -645,8 +645,11 @@ const HQ = Object.freeze({
   posters: [
     { name: 'hero-poster-2880', tier: 'desktop-2880', jpeg: 85 },
     { name: 'hero-poster-1920', tier: 'desktop-1920', jpeg: 85 },
-    // Named after the width it is cut at: the tier the phone serves.
-    { name: 'hero-poster-phone', tier: 'phone', jpeg: 80 },
+    // Named after the width it is cut at: the tier the phone serves. It is on
+    // the phone's first screen, budgeted at 400 kB with the page (criterion
+    // 9): the AVIF may not pass 260 kB, whatever the SSIM rule would pick —
+    // the re-assembled loop's frame 0 wanted q55 and 313 kB (2026-09-19).
+    { name: 'hero-poster-phone', tier: 'phone', jpeg: 80, avifMaxBytes: 260_000 },
   ],
   avifQualities: [50, 55, 60, 65, 70, 75, 80, 85],
   avifEffort: 7,
@@ -707,10 +710,10 @@ export function rungRecipe(codec, level) {
  * content time of every kept frame is its playback time within half a
  * source frame, and the orbit law needs no change.
  */
-function encodeRung({ codec, level, input, output, durationS, work, kbps = null }) {
+export function encodeRung({ codec, level, input, output, durationS, work, kbps = null, recipe: named = null, gop = null }) {
   const fps = rungFps(level);
   const frames = Math.round(durationS * fps);
-  const recipe = rungRecipe(codec, level);
+  const recipe = named ?? rungRecipe(codec, level);
   const tailFrames = Math.round(HQ.tailS * fps);
   const extended = path.join(work, `${path.basename(output, '.mp4')}.tail.mp4`);
   const passlog = path.join(work, `pass-${path.basename(output, '.mp4')}`);
@@ -722,13 +725,17 @@ function encodeRung({ codec, level, input, output, durationS, work, kbps = null 
   const head = ['-i', input, '-filter_complex', graph, '-map', '[v]'];
   const tail = ['-an', '-pix_fmt', 'yuv420p', ...COLOUR_TAGS];
   const idr = ['-force_key_frames', String(durationS), '-forced-idr', '1'];
+  // `gop`: the longest keyframe interval the caller wants. A short, mostly
+  // still loop (scripts/build-landing-gallery.mjs) spends most of its bytes
+  // on keyframes, and SVT-AV1 otherwise opens a new one every ~5 s.
+  const keyint = gop ? ['-g', String(gop)] : [];
   const started = Date.now();
   if (codec === 'av1') {
-    ffmpeg([...head, '-c:v', 'libsvtav1', '-preset', String(HQ.av1Preset), '-crf', String(level.crf),
+    ffmpeg([...head, '-c:v', 'libsvtav1', '-preset', String(HQ.av1Preset), '-crf', String(level.crf), ...keyint,
       '-tag:v', 'av01', ...tail, extended]);
   } else {
     const isHevc = codec === 'hevc';
-    const base = [...head, ...idr, ...(isHevc
+    const base = [...head, ...idr, ...keyint, ...(isHevc
       ? ['-c:v', 'libx265', '-preset', 'slow', '-profile:v', 'main', '-tag:v', 'hvc1']
       : ['-c:v', 'libx264', '-preset', 'slow', '-profile:v', 'high'])];
     const x265 = (extra) => ['-x265-params', `log-level=error:open-gop=0${extra}`];
@@ -771,7 +778,7 @@ function encodeToWeight({ codec, level, input, output, durationS, work }) {
 
 const decoderFor = (file) => (probe(file).codec === 'av1' ? ['-c:v', 'libdav1d'] : []);
 
-function vmafOf({ dist, ref, work, fps = HQ.outputFps, upscale = null }) {
+export function vmafOf({ dist, ref, work, fps = HQ.outputFps, upscale = null }) {
   const logFile = path.join(work, `vmaf-${upscale ? 'display-' : ''}${path.basename(dist)}.json`);
   // A lower-rate rung is scored against the reference thinned the same way.
   const thin = fps === HQ.outputFps ? '' : `fps=${fps},`;
@@ -797,7 +804,7 @@ function vmafOf({ dist, ref, work, fps = HQ.outputFps, upscale = null }) {
 }
 
 /** One decoded frame as sRGB PNG, converted with the matrix the stream declares. */
-function frameAsPng({ file, index, output }) {
+export function frameAsPng({ file, index, output }) {
   ffmpeg([...decoderFor(file), '-i', file, '-vf',
     `select=eq(n\\,${index}),scale=in_range=tv:in_color_matrix=bt709:out_range=pc,format=rgb24`,
     '-frames:v', '1', '-fps_mode', 'passthrough', output]);
@@ -821,16 +828,28 @@ async function buildPoster({ spec, source, out, work, crop, display = null }) {
   const jpegFile = path.join(out, `${spec.name}.jpg`);
   await sharp(framePng).jpeg({ quality: spec.jpeg, mozjpeg: true, progressive: true }).toFile(jpegFile);
   const jpegSsim = stillSsim(framePng, jpegFile);
-  // AVIF: the lowest quality that is at least as faithful as the JPEG.
+  // AVIF: the lowest quality that is at least as faithful as the JPEG — or,
+  // under `avifMaxBytes`, the best one that fits.
   let chosen = null;
-  for (const quality of HQ.avifQualities) {
+  let fitting = null;
+  // A capped poster may go under the ladder's floor to fit.
+  const qualities = spec.avifMaxBytes ? [40, 45, ...HQ.avifQualities] : HQ.avifQualities;
+  for (const quality of qualities) {
     const candidate = path.join(work, `${spec.name}-q${quality}.avif`);
     await sharp(framePng).avif({ quality, effort: HQ.avifEffort }).toFile(candidate);
     const decoded = path.join(work, `${spec.name}-q${quality}.png`);
     await sharp(candidate).png().toFile(decoded);
     const ssim = stillSsim(framePng, decoded);
     chosen = { quality, candidate, decoded, ssim };
+    if (spec.avifMaxBytes && statSync(candidate).size > spec.avifMaxBytes) {
+      chosen = fitting ?? chosen;
+      break;
+    }
+    fitting = chosen;
     if (ssim >= jpegSsim) break;
+  }
+  if (spec.avifMaxBytes && statSync(chosen.candidate).size > spec.avifMaxBytes) {
+    throw new Error(`${spec.name}.avif: ${statSync(chosen.candidate).size} B over ${spec.avifMaxBytes} B even at q${chosen.quality}`);
   }
   const avifFile = path.join(out, `${spec.name}.avif`);
   writeFileSync(avifFile, readFileSync(chosen.candidate));

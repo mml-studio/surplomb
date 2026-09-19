@@ -225,7 +225,7 @@ function parseCli(argv) {
  * `pacingMs`, all rAF callbacks run together once per `pacingMs` of page time,
  * stamped exactly on that grid — one composited frame per output frame.
  */
-function pageInstallClock() {
+export function pageInstallClock() {
   const perf = window.performance;
   const realPerfNow = perf.now.bind(perf);
   const RealDate = window.Date;
@@ -318,7 +318,7 @@ function pageInstallClock() {
   };
 }
 
-function pageReadState(expectedLayers) {
+export function pageReadState(expectedLayers) {
   const g = window.__godsEyeView;
   const viewer = g.viewer;
   const camera = viewer.scene.camera;
@@ -396,7 +396,7 @@ function pageReadState(expectedLayers) {
  * Installs `window.__landingHero`: the orbit centre, the rotation law, a
  * render log and the rAF loop. Returns the law's constants.
  */
-function pageInstallOrbit(orbit) {
+export function pageInstallOrbit(orbit) {
   const g = window.__godsEyeView;
   const viewer = g.viewer;
   const scene = viewer.scene;
@@ -535,8 +535,13 @@ function pageInstallOrbit(orbit) {
    * Run the law from phase `sFrom` to `sTo`. With `slow > 1`, the page clock
    * is slowed from phase `switchAtS` on and frames are paced at `targetFps`
    * per second of page time.
+   *
+   * `speed > 1` is a time-lapse: the phase — the loop's own clock — advances
+   * `speed` times slower than the page's, and one frame is paced per
+   * `speed / targetFps` s of page time, so every output frame still carries
+   * one rendered phase (the gallery's buses, scripts/capture-landing-gallery.mjs).
    */
-  state.start = (sFrom, sTo, { slow = 1, switchAtS = sFrom, targetFps = 30 } = {}) => {
+  state.start = (sFrom, sTo, { slow = 1, switchAtS = sFrom, targetFps = 30, speed = 1 } = {}) => {
     state.running = true;
     state.done = false;
     state.renders = [];
@@ -547,7 +552,7 @@ function pageInstallOrbit(orbit) {
     const tick = (now) => {
       if (!state.running) return;
       if (t0 === null) t0 = now;
-      const s = sFrom + (now - t0) / 1000;
+      const s = sFrom + (now - t0) / 1000 / speed;
       if (s > sTo) {
         state.running = false;
         state.done = true;
@@ -557,7 +562,7 @@ function pageInstallOrbit(orbit) {
       if (slow > 1 && state.slow === 1 && s >= switchAtS && clock) {
         // Cesium's own 60 fps cap stays: the paced grid is coarser, so every
         // paced frame renders.
-        clock.setRate(slow, { pacing: 1000 / targetFps });
+        clock.setRate(slow, { pacing: (1000 * speed) / targetFps });
         state.slow = slow;
         state.switchRealEpochMs = realEpoch();
       }
@@ -611,17 +616,19 @@ function poseOk(camera) {
     && e.heading <= POSE_TOLERANCE.angleDeg && e.pitch <= POSE_TOLERANCE.angleDeg && e.roll <= POSE_TOLERANCE.angleDeg;
 }
 
-async function readState(page) {
-  return page.evaluate(pageReadState, EXPECTED_LAYERS);
+export async function readState(page, expectedLayers = EXPECTED_LAYERS) {
+  return page.evaluate(pageReadState, expectedLayers);
 }
 
 /** Poll until `predicate(state)` holds for `holdMs`, or throw after `timeoutMs`. */
-async function waitForState(page, label, predicate, { holdMs = 0, timeoutMs = 120_000, everyMs = 250 } = {}) {
+export async function waitForState(page, label, predicate, {
+  holdMs = 0, timeoutMs = 120_000, everyMs = 250, expectedLayers = EXPECTED_LAYERS,
+} = {}) {
   const started = Date.now();
   let since = null;
   let state = null;
   while (Date.now() - started < timeoutMs) {
-    state = await readState(page);
+    state = await readState(page, expectedLayers);
     if (predicate(state)) {
       since ??= Date.now();
       if (Date.now() - since >= holdMs) return state;
@@ -638,7 +645,7 @@ async function waitForState(page, label, predicate, { holdMs = 0, timeoutMs = 12
  * written — an unacknowledged frame throttles the next one, and the disk
  * write is the slow half.
  */
-async function startScreencast(page, { dir, maxWidth, maxHeight, format = 'jpeg' }) {
+export async function startScreencast(page, { dir, maxWidth, maxHeight, format = 'jpeg' }) {
   const client = await page.createCDPSession();
   const frames = [];
   const writes = [];
@@ -672,7 +679,7 @@ async function startScreencast(page, { dir, maxWidth, maxHeight, format = 'jpeg'
   };
 }
 
-function frameStats(timestampsS) {
+export function frameStats(timestampsS) {
   if (timestampsS.length < 2) return { frames: timestampsS.length, fps: 0 };
   const gaps = [];
   for (let i = 1; i < timestampsS.length; i++) gaps.push((timestampsS[i] - timestampsS[i - 1]) * 1000);
@@ -688,12 +695,18 @@ function frameStats(timestampsS) {
   };
 }
 
-async function runOrbit(page, sFrom, sTo, orbitOptions = {}) {
+export async function runOrbit(page, sFrom, sTo, orbitOptions = {}) {
   await page.evaluate((a, b, o) => window.__landingHero.start(a, b, o), sFrom, sTo, orbitOptions);
-  await page.waitForFunction(() => window.__landingHero.done, {
-    polling: 500,
-    timeout: (sTo - sFrom) * 1000 * (orbitOptions.slow || 1) + 120_000,
-  });
+  // Polled from Node, one short call at a time: a `waitForFunction` is ONE
+  // protocol call, and a slow-motion run longer than `protocolTimeout` (10 min
+  // on a loaded machine) failed with a bare "Waiting failed" (2026-09-19).
+  const timeoutMs = orbitOptions.timeoutMs
+    ?? (sTo - sFrom) * 1000 * (orbitOptions.slow || 1) * (orbitOptions.speed || 1) + 120_000;
+  const started = Date.now();
+  while (!(await page.evaluate(() => window.__landingHero.done))) {
+    if (Date.now() - started > timeoutMs) throw new Error(`orbit ${sFrom}→${sTo} s not done after ${Math.round(timeoutMs / 1000)} s`);
+    await sleep(500);
+  }
 }
 
 function ffmpeg(args) {
@@ -786,12 +799,21 @@ function phaseStats(frames) {
  * Build the seamless loop: R[0, T] with its last `crossfadeS` blended into
  * R[-crossfadeS, 0]. Output is constant 30 fps, exactly `periodS` long.
  */
-function assembleLoop({ name, out, orbit }) {
+export function assembleLoop({ name, out, orbit }) {
   const framesDir = path.join(out, `${name}-frames`);
   const meta = JSON.parse(readFileSync(path.join(out, `${name}-frames.json`), 'utf8'));
   const phased = phaseFrames(meta.frames, meta.renders, meta);
-  const { frames } = phased;
   const lossless = meta.master === 'lossless';
+  // In slow motion every render is one output frame, one 1/fps step of phase
+  // apart — but the grid starts wherever the first tick fell. Half a frame
+  // off, each output instant sits midway between two renders, and `fps`
+  // settled every third tie on the same one: a repeated frame in three on
+  // the orbits (measured on the gallery rehearsal, 2026-09-19). Snapping the
+  // phases onto the output grid moves the picture by under half a frame
+  // (≤ 17 ms of the law: 0.02° of heading at the hero's fastest).
+  const frames = meta.slow > 1
+    ? phased.frames.map((f) => ({ ...f, s: Math.round(f.s * orbit.outputFps) / orbit.outputFps }))
+    : phased.frames;
   const pngInput = frames[0].file.endsWith('.png');
   const d = orbit.crossfadeS;
   const T = orbit.periodS;
@@ -802,14 +824,21 @@ function assembleLoop({ name, out, orbit }) {
   const lastIdx = frames.findLastIndex((f) => f.s < w1);
   const inWindow = frames.slice(firstIdx, lastIdx + 1);
   if (frames.at(-1).s < w1) throw new Error(`${name}: recording ends at s=${frames.at(-1).s}, before ${w1}`);
+  // Each still is its own image2 input, whose default rate — 25 fps — becomes
+  // the time base of the whole concatenation: 30 frames a second rounded onto
+  // a 40 ms grid collided five times a second, and `fps=30` refilled the holes
+  // with repeats. Every loop assembled before 2026-09-19 carries a repeated
+  // frame every sixth (a 25 fps judder; measured on the hero's phone master:
+  // 90 of 539). A millisecond time base keeps every frame where its phase is.
+  const TIME_BASE = 'option framerate 1000';
   const lines = ['ffconcat version 1.0'];
   inWindow.forEach((frame, i) => {
     const start = Math.max(frame.s, w0);
     const end = i + 1 < inWindow.length ? inWindow[i + 1].s : w1;
-    lines.push(`file '${path.join(framesDir, frame.file)}'`, `duration ${(end - start).toFixed(6)}`);
+    lines.push(`file '${path.join(framesDir, frame.file)}'`, TIME_BASE, `duration ${(end - start).toFixed(6)}`);
   });
   // The concat demuxer ignores the last entry's duration unless it repeats.
-  lines.push(`file '${path.join(framesDir, inWindow.at(-1).file)}'`);
+  lines.push(`file '${path.join(framesDir, inWindow.at(-1).file)}'`, TIME_BASE);
   const listFile = path.join(out, `${name}-concat.txt`);
   writeFileSync(listFile, `${lines.join('\n')}\n`);
 

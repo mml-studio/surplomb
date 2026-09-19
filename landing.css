@@ -525,6 +525,24 @@ html[data-input="coarse"] #vitrine .field input { font-size: 16px; }
   transition: transform 350ms var(--ease-out);
 }
 #vitrine .view:hover .view-image img { transform: scale(1.025); }
+
+/* The gallery's loops (src/vitrine/gallery.js): created over the still when
+   the box nears the screen, faded in on their first frame — frame 0 IS the
+   still, so the fade only starts the motion. The credit stays on top: the
+   video is inserted before it. */
+#vitrine .loop-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 450ms var(--ease-out), transform 350ms var(--ease-out);
+}
+#vitrine [data-loop="live"] > .loop-video { opacity: 1; }
+#vitrine .view:hover .view-image .loop-video { transform: scale(1.025); }
 #vitrine .view figcaption {
   display: flex;
   justify-content: space-between;
@@ -1006,7 +1024,8 @@ html[data-vitrine="opening"] #vitrine .dock { z-index: 2; transition: opacity 30
     transition: none !important;
   }
   #vitrine .examples-progress { display: none !important; }
-  #vitrine .view:hover .view-image img { transform: none; }
+  #vitrine .view:hover .view-image img,
+  #vitrine .view:hover .view-image .loop-video { transform: none; }
 }
 
 @media print {

@@ -4,10 +4,11 @@
  *
  * Loaded by `src/boot.js` only when `html[data-vitrine]` is set, and free of
  * Cesium by construction (its imports are `gate.js`, `rotation.js`,
- * `counters.js` and `../geolocate.js`, whose own graph is two small modules).
- * Everything here works on top of a page that is already readable without it:
- * the form is a native GET to `/?q=`, the examples are links, the list is a
- * list, and the live figures stay hidden until an answer backs them.
+ * `counters.js`, the loop modules beside it and `../geolocate.js`, whose own
+ * graph is two small modules). Everything here works on top of a page that is
+ * already readable without it: the form is a native GET to `/?q=`, the
+ * examples are links, the list is a list, and the live figures stay hidden
+ * until an answer backs them.
  *
  * @module vitrine/vitrine
  */
@@ -36,7 +37,8 @@ export const HANDOFF_HARD_DEADLINE_MS = 15000;
 const REVEAL_FADE_MS = 700;
 
 /**
- * Should this visit play the recorded loop at all?
+ * Should this visit play the recorded loops at all — the hero's and the
+ * gallery's alike?
  *
  * Reduced motion: the poster is the page. Data saver or a 2G link: a few
  * megabytes of decoration is not a trade this page gets to make for the reader.
@@ -124,15 +126,45 @@ export function initVitrine({
   });
   cleanups.push(() => counters.cancel());
 
-  // « Image fixe » (maquette 2 bis): the reader stops the city moving. The
-  // loop is PAUSED on the frame being shown rather than hidden: hiding it would
-  // uncover the poster, which is frame 0, and the picture would jump. The box
-  // is only on screen while the loop plays (landing.css).
+  // ── The gallery's loops ────────────────────────────────────────────────
+  // Same policy as the hero. Nothing of them is on the first screen, not even
+  // their code: the module and its list of files (src/vitrine/gallery.js) are
+  // fetched when the first box is a screen away, which is also before any box
+  // asks for its loop (`LOAD_AHEAD`, half a screen). The phone's first screen
+  // is budgeted at 400 kB (criterion 9).
+  let gallery = null;
+  let opening = false;
+  const boxes = root.querySelectorAll('[data-media]');
+  if (policy.play && boxes.length && typeof win.IntersectionObserver === 'function') {
+    const startGallery = () => {
+      const approach = new win.IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        approach.disconnect();
+        import('./gallery.js').then(({ initGalleryLoops }) => {
+          if (opening || !root.isConnected) return;
+          gallery = initGalleryLoops({ root, win, isStill: () => loop.still });
+          cleanups.push(() => gallery?.dispose());
+        }).catch((error) => console.warn('[vitrine] the gallery loops could not start:', error));
+      }, { rootMargin: '100% 0px 100% 0px' });
+      for (const box of boxes) approach.observe(box);
+      cleanups.push(() => approach.disconnect());
+    };
+    if (documentRef.readyState === 'complete') startGallery();
+    else listen(win, 'load', startGallery, { once: true });
+  }
+
+  // « Image fixe » (maquette 2 bis): the reader stops the city moving — the
+  // hero AND the gallery. Each loop is PAUSED on the frame being shown rather
+  // than hidden: hiding it would uncover the poster, which is frame 0, and the
+  // picture would jump. A gallery loop not fetched yet is not fetched while
+  // the box is ticked. The box is only on screen while the hero plays
+  // (landing.css).
   const stillBox = root.querySelector('#vitrine-still');
   if (stillBox) {
     listen(stillBox, 'change', () => {
       loop.still = stillBox.checked;
       loop.sync?.();
+      gallery?.sync();
     });
   }
 
@@ -167,8 +199,6 @@ export function initVitrine({
     locateButton.disabled = false;
     listen(locateButton, 'click', () => { void locate(); });
   }
-
-  let opening = false;
 
   async function locate() {
     if (opening) return;
@@ -228,6 +258,9 @@ export function initVitrine({
   async function open({ query = '', locate: locateOnArrival = false, viaHash = false } = {}) {
     if (opening) return;
     opening = true;
+    // The globe is about to need every decoder cycle; nobody watches a
+    // thumbnail through the hand-off.
+    gallery?.dispose();
     form?.setAttribute('aria-busy', 'true');
     if (label) label.textContent = 'Ouverture du globe…';
     // `?vitrine=1` forces this page for a demo; once the globe is open it must
@@ -299,6 +332,7 @@ export function initVitrine({
       opening,
       rotation: rotation?.getDiagnostics() ?? null,
       counters: counters.getState(),
+      gallery: gallery?.getDiagnostics() ?? { available: 0, items: {}, off: policy.play ? 'not-started' : policy.reason },
     }),
   };
   win.__gevVitrine = api;
