@@ -396,23 +396,138 @@ const CASES = {
   },
 
   async counters() {
-    const page = await freshPage();
-    await page.goto(`${BASE}/`, { waitUntil: 'load' });
-    const shown = (sel) => page.evaluate((s) => {
-      const el = document.querySelector(s);
-      return Boolean(el) && getComputedStyle(el).display !== 'none';
-    }, sel);
-    check('counters: the group is hidden until a value arrives', !(await shown('#vitrine .counter-panel')));
-    await page.evaluate(() => {
+    // Criterion 8, through the real path: the page asks `/api/pulse` once,
+    // after `load`, and reveals only what the answer backs. The answers are
+    // served by interception so each rule is exercised whatever the server
+    // happens to hold; the server's own answer is checked apart (`pulse`).
+    const AT = new Date().toISOString();
+    const answers = {
+      empty: { status: 200, body: { at: AT, maxAgeMs: 600000, avions: null, navires: null, bus: null, meteo: null, why: {} } },
+      error: { status: 503, body: { error: 'down' } },
+      mixed: {
+        status: 200,
+        body: {
+          at: AT,
+          maxAgeMs: 600000,
+          avions: { value: 0, at: AT },
+          navires: { value: 1234, at: AT },
+          bus: null,
+          meteo: { value: 190, at: '2026-09-08T21:00:00.000Z' },
+          why: { bus: 'partial' },
+        },
+      },
+    };
+    const openWith = async (answer) => {
+      const page = await freshPage();
+      const asked = [];
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname !== '/api/pulse') { request.continue().catch(() => {}); return; }
+        asked.push(Date.now());
+        request.respond({
+          status: answer.status,
+          contentType: 'application/json',
+          body: JSON.stringify(answer.body),
+        }).catch(() => {});
+      });
+      await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
+      const settledState = await waitFor(page, () => {
+        const phase = window.__gevVitrine?.getDiagnostics().counters?.phase;
+        return phase && phase !== 'waiting' && phase !== 'loading' ? phase : null;
+      }, { timeout: 20_000 });
+      return { page, asked, phase: settledState };
+    };
+    const read = (page) => page.evaluate(() => {
       const panel = document.querySelector('#vitrine .counter-panel');
-      panel.hidden = false;
-      const [a, b] = panel.querySelectorAll('.counter');
-      a.hidden = false; a.dataset.value = '0';
-      b.hidden = false; b.dataset.value = '123';
+      const shown = (el) => Boolean(el) && getComputedStyle(el).display !== 'none';
+      return {
+        group: shown(panel),
+        entries: [...panel.querySelectorAll('.counter')].map((counter) => ({
+          key: counter.querySelector('[data-live]').getAttribute('data-live').slice('counter:'.length),
+          shown: shown(counter),
+          value: counter.getAttribute('data-value'),
+          text: counter.querySelector('dd').textContent,
+        })),
+      };
     });
-    check('counters: a zero never shows', !(await shown('#vitrine .counter:nth-child(1)')));
-    check('counters: a positive value shows', await shown('#vitrine .counter:nth-child(2)'));
-    await page.close();
+
+    {
+      const { page, asked, phase } = await openWith(answers.empty);
+      const state = await read(page);
+      check('counters: one request to /api/pulse', asked.length === 1, `${asked.length} request(s), phase ${phase}`);
+      check('counters: the group stays hidden when no figure is backed',
+        phase === 'done' && !state.group && state.entries.every((entry) => !entry.shown), JSON.stringify(state));
+      await page.close();
+    }
+    {
+      const { page, phase } = await openWith(answers.error);
+      const state = await read(page);
+      check('counters: an error answer leaves the group hidden, silently',
+        phase === 'failed' && !state.group, JSON.stringify({ phase, group: state.group }));
+      await page.close();
+    }
+    {
+      const { page, phase } = await openWith(answers.mixed);
+      const state = await read(page);
+      const byKey = Object.fromEntries(state.entries.map((entry) => [entry.key, entry]));
+      check('counters: a zero never shows', !byKey.avions.shown && byKey.avions.value === '', JSON.stringify(byKey.avions));
+      check('counters: a positive value shows, formatted in French',
+        byKey.navires.shown && byKey.navires.value === '1234' && byKey.navires.text === '1\u202f234',
+        JSON.stringify(byKey.navires));
+      check('counters: a figure older than ten minutes never shows', !byKey.meteo.shown, JSON.stringify(byKey.meteo));
+      check('counters: the group shows once one figure is backed', phase === 'done' && state.group);
+      // The stylesheet's own guard, whatever a script does to the markup.
+      await page.evaluate(() => {
+        const counter = document.querySelector('#vitrine .counter');
+        counter.hidden = false;
+        counter.setAttribute('data-value', '0');
+        counter.querySelector('dd').textContent = '0';
+      });
+      check('counters: `data-value="0"` is hidden by the stylesheet even unhidden',
+        !(await read(page)).entries[0].shown);
+      await shot(page, 'counters-mixed');
+      await page.close();
+    }
+  },
+
+  async pulse() {
+    // The server's own answer (criterion 8, the other half). Whatever it holds
+    // right now, the SHAPE is the contract, and so is the rule: a figure is a
+    // positive integer no older than ten minutes, or null with a reason.
+    const response = await fetch(`${BASE}/api/pulse`, { headers: { Accept: 'application/json' } });
+    const type = response.headers.get('content-type') || '';
+    check('pulse: /api/pulse answers 200 JSON, uncached', response.status === 200 && type.includes('application/json')
+      && /no-store/.test(response.headers.get('cache-control') || ''), `${response.status} ${type}`);
+    const body = await response.json().catch(() => null);
+    const builtAt = Date.parse(body?.at ?? '');
+    check('pulse: it says when it was made, and its window', Number.isFinite(builtAt) && body.maxAgeMs === 600000,
+      JSON.stringify({ at: body?.at, maxAgeMs: body?.maxAgeMs }));
+    const report = [];
+    let honest = true;
+    for (const key of ['avions', 'navires', 'bus', 'meteo']) {
+      const entry = body?.[key];
+      if (entry === null) {
+        report.push(`${key}=null(${body?.why?.[key] ?? '?'})`);
+        honest &&= typeof body?.why?.[key] === 'string';
+        continue;
+      }
+      const at = Date.parse(entry?.at ?? '');
+      const ok = Number.isInteger(entry?.value) && entry.value > 0 && Number.isFinite(at) && builtAt - at <= 600000;
+      honest &&= ok;
+      report.push(`${key}=${entry?.value}`);
+    }
+    check('pulse: every figure is a fresh positive integer, or null with a reason', honest, report.join(' '));
+    // A second visitor reads the same counting pass — unless the first one
+    // landed at the very end of the server's minute.
+    const again = await fetch(`${BASE}/api/pulse`).then((r) => r.json()).catch(() => null);
+    const samePass = again?.countedAt === body?.countedAt
+      || Date.parse(again?.countedAt) - Date.parse(body?.countedAt) >= 60_000;
+    check('pulse: a second visitor within the minute gets the same counting pass', samePass,
+      `${body?.countedAt} / ${again?.countedAt}`);
+    const unknown = await fetch(`${BASE}/api/pulse/anything`);
+    const post = await fetch(`${BASE}/api/pulse`, { method: 'POST' });
+    check('pulse: only its own route, only GET', unknown.status === 404 && post.status === 405,
+      `${unknown.status} / ${post.status}`);
   },
 
   async texts() {

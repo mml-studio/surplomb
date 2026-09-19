@@ -20,6 +20,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   sur le globe gardent leurs couleurs de données (civil, militaire, trafic).
 
 ### Added
+- **Les compteurs « En ce moment au-dessus de la France » restaient masqués
+  faute de source.** Un point `/api/pulse` les compte à partir des caches que
+  le serveur tient déjà — l’instantané OpenSky, le flux AISStream, les réseaux
+  GTFS-RT, l’archive SYNOP — sans jamais interroger un amont : une visite de la
+  page d’accueil ne dépense ni crédit OpenSky ni connexion AISStream. Chaque
+  chiffre porte l’heure qu’il décrit ; absent, nul ou vieux de plus de 10 min,
+  il vaut `null`, et la page ne montre que les chiffres valides (le groupe
+  entier reste masqué si aucun ne l’est), puis retire chacun d’eux quand il
+  dépasse les 10 min sous les yeux du lecteur. Les avions sont comptés au-dessus
+  des terres françaises, les navires dans la mer territoriale (12 milles) :
+  la boîte AISStream va de Porto à Anvers, et sans cette coupe le chiffre
+  aurait été 2,6 fois trop grand. Les bus ne s’affichent que si tous les
+  réseaux de l’index national ont répondu dans la fenêtre, et la météo attend
+  une source plus fraîche que l’archive quotidienne : aujourd’hui, seuls les
+  navires sont chauds en continu. Un seul appel, après le chargement et au
+  repos ; un comptage par minute côté serveur, quel que soit le nombre de
+  visiteurs.
 - **La page d’accueil n’avait ni marque, ni fin.** Elle prend l’identité
   « Belvédère » : le symbole à deux plans et son point abricot, devant le mot
   « surplomb », dans l’en-tête et en clôture ; la même icône dans l’onglet, sur
