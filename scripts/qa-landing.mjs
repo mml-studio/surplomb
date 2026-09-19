@@ -173,7 +173,8 @@ const CASES = {
       world: getComputedStyle(document.querySelector('#vitrine .world')).position,
     }));
     check('phone: the showcase, in the phone shell', shell.attr === '' && shell.shell === 'phone', JSON.stringify(shell));
-    check('phone: the picture belongs to the first screen', shell.world === 'absolute', shell.world);
+    // Maquette 2 bis: the picture is fixed behind the whole page on a phone too.
+    check('phone: the picture stays behind the whole page', shell.world === 'fixed', shell.world);
     check('phone: not one engine request while reading', engine.length === 0, engine.map((r) => r.url).slice(0, 3).join(' '));
     await shot(page, 'phone-top');
     await page.evaluate(() => document.querySelector('#vitrine form.dock').requestSubmit());
@@ -604,6 +605,72 @@ const CASES = {
     check('locate refused: the reason is written in the dock, the typed text kept', Boolean(note) && kept.value === 'Lyon' && kept.vitrine,
       `${note} / ${JSON.stringify(kept)}`);
     await refused.close();
+  },
+
+  async identity() {
+    // The « Belvédère » mark (2 bis): the symbol before the word, in the header
+    // and at the end of the page, and the same icon in the tab.
+    const page = await freshPage();
+    await page.goto(`${BASE}/`, { waitUntil: 'load' });
+    const mark = await page.evaluate(() => {
+      const read = (sel) => {
+        const link = document.querySelector(sel);
+        const symbol = link?.querySelector('svg.brand-symbol');
+        const word = link?.querySelector('.brand-word')?.textContent;
+        const box = symbol?.getBoundingClientRect();
+        return { symbol: Boolean(symbol), hidden: symbol?.getAttribute('aria-hidden'), word, width: box?.width || 0, label: link?.getAttribute('aria-label') };
+      };
+      return {
+        header: read('#vitrine .top .brand'),
+        ending: read('#vitrine .closing-brand'),
+        icon: document.querySelector('link[rel="icon"]')?.getAttribute('href'),
+        slogan: document.querySelector('#vitrine .closing-slogan')?.textContent.replace(/\s+/g, ' ').trim(),
+      };
+    });
+    for (const [where, m] of [['header', mark.header], ['ending', mark.ending]]) {
+      check(`identity: ${where} carries the symbol then « surplomb », named for a screen reader`,
+        m.symbol && m.hidden === 'true' && m.word === 'surplomb' && m.width > 20 && /Surplomb/.test(m.label || ''), JSON.stringify(m));
+    }
+    check('identity: the page ends on « Aucun angle mort. »', mark.slogan === 'Aucun angle mort.', mark.slogan);
+    check('identity: the tab icon is the Belvédère icon', mark.icon === '/icon.svg', mark.icon);
+    await page.close();
+  },
+
+  async still() {
+    // « Image fixe » stops the loop on the frame being shown, and unticking it
+    // starts it again. Offered only while something plays.
+    const page = await freshPage();
+    await page.goto(`${BASE}/`, { waitUntil: 'load' });
+    const live = await waitFor(page, () => document.getElementById('vitrine')?.dataset.state === 'live' || null, { timeout: 15_000 });
+    if (!live) {
+      check('still: the loop plays first', false, 'never went live');
+      await page.close();
+      return;
+    }
+    const shown = await page.evaluate(() => getComputedStyle(document.querySelector('#vitrine .motion-control')).display !== 'none');
+    check('still: « Image fixe » is offered while the loop plays', shown);
+    await page.evaluate(() => document.querySelector('#vitrine-still').click());
+    await sleep(400);
+    const t1 = await page.evaluate(() => document.querySelector('#vitrine .world-video').currentTime);
+    await sleep(1200);
+    const frozen = await page.evaluate(() => {
+      const v = document.querySelector('#vitrine .world-video');
+      return { t: v.currentTime, paused: v.paused, visible: getComputedStyle(v).visibility };
+    });
+    check('still: ticked, the picture stops where it was (paused, not swapped for the poster)',
+      frozen.paused && Math.abs(frozen.t - t1) < 0.05 && frozen.visible === 'visible', JSON.stringify({ t1, ...frozen }));
+    await page.evaluate(() => document.querySelector('#vitrine-still').click());
+    await sleep(1200);
+    const moving = await page.evaluate(() => document.querySelector('#vitrine .world-video').currentTime);
+    check('still: unticked, the city moves again', moving > frozen.t + 0.3, `${frozen.t.toFixed(2)} → ${moving.toFixed(2)} s`);
+    await page.close();
+
+    const reduced = await freshPage({ reducedMotion: true });
+    await reduced.goto(`${BASE}/`, { waitUntil: 'load' });
+    await sleep(1500);
+    const offered = await reduced.evaluate(() => getComputedStyle(document.querySelector('#vitrine .motion-control')).display !== 'none');
+    check('still: not offered under reduced motion (nothing plays)', !offered);
+    await reduced.close();
   },
 
   async example() {
