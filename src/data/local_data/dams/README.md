@@ -1,4 +1,4 @@
-# Barrages & digues
+# Dams & levees (*Barrages & digues*)
 
 Bundled dam pack behind the `local-dams` layer. **6 840 features**, rebuilt
 2026-09-01 with `npm run dams:pack`
@@ -7,7 +7,7 @@ Bundled dam pack behind the `local-dams` layer. **6 840 features**, rebuilt
 
 | Half | Features | Source | Geometry |
 |---|---|---|---|
-| France — métropole + outre-mer | 6 771 | OpenStreetMap, extracted directly via the Overpass API on 2026-09-01 | dam AND dyke structures |
+| France — mainland + overseas | 6 771 | OpenStreetMap, extracted directly via the Overpass API on 2026-09-01 | dam AND dyke structures |
 | Rest of the world | 69 | the older Open Infrastructure Map / PostGIS snapshot the pack shipped before | outlines with no generator |
 
 The French half is why this file exists. The pack used to be 704 features for
@@ -54,8 +54,8 @@ the zoom's job now, through `markerMaxDistance` on each tier:
 | Petit ouvrage | 5 744 | **900 km** | 200 km |
 
 900 km is where France stops overflowing a 1080 px viewport, so the nameless
-seuils arrive exactly when a département is the subject of the frame — and a
-globe seen from orbit stops reporting a French dam density that belongs to the
+weirs (*seuils*) arrive exactly when a department is the subject of the frame —
+and a globe seen from orbit stops reporting a French dam density that belongs to the
 SELECTION rather than to the world.
 
 ## Selection
@@ -102,19 +102,20 @@ decision, separate rebuild.
 `man_made=dyke` — 1 428 of 2 661 elements — also carries `highway=*`, and the
 OSM wiki is explicit that a road on a dyke belongs on the highway as
 `embankment=dyke`. Importing them would draw the D-road along the Loire as a
-barrage. Where a levée is mapped ONLY as a road, this pack therefore does not
-hold it: 49 ways of the Levée de la Loire are absent for that reason.
+barrage. Where a levee (*levée*) is mapped ONLY as a road, this pack therefore
+does not hold it: 49 ways of the Levée de la Loire are absent for that reason.
 
-**What OSM cannot say.** There is no tag anywhere that separates a digue de
-protection contre les inondations from a digue d'étang — `dyke:type` has one
-use worldwide. The register that does cover French flood dykes is SIOUH
-(décret n° 2015-526, classes A/B/C, ~9 000 km), and it is not open bulk data.
+**What OSM cannot say.** There is no tag anywhere that separates a
+flood-protection dyke (*digue de protection contre les inondations*) from a pond
+dyke (*digue d'étang*) — `dyke:type` has one use worldwide. The register that does cover French flood dykes is SIOUH
+(decree no. 2015-526, classes A/B/C, ~9 000 km), and it is not open bulk data.
 The layer's own legend says so rather than implying a distinction it cannot
 make.
 
 This is OpenStreetMap's idea of a dam — a volunteer's judgement about a
 structure, not a national register. France's own ROE register lists ~100 000
-obstacles à l'écoulement and is an order of magnitude larger.
+obstacles to river flow (*obstacles à l'écoulement*) and is an order of
+magnitude larger.
 
 ## Shape of what ships
 

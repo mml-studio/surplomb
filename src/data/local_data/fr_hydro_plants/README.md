@@ -2,8 +2,9 @@
 
 `plants.json` is the register the **Centrales hydro** layer draws: every
 hydroelectric installation in ODRÉ's *Registre national des installations de
-production et de stockage d'électricité*, and the best position anyone
-publishes for each one.
+production et de stockage d'électricité* (national register of electricity
+generation and storage installations), and the best position anyone publishes
+for each one.
 
 The layer also draws a second, much smaller pack beside this one —
 [`../world_hydro/`](../world_hydro/README.md), 592 stations OpenStreetMap maps
@@ -13,9 +14,9 @@ own card. Nothing in THIS file is affected by them.
 
 It exists because of a hole found by looking for one place. There are **nine
 hydroelectric plants in the commune of Laruns**, in the Pyrénées-Atlantiques —
-Miégebat 74 MW, Le Hourat 46,9 MW, Pont-de-Camps 39,4 MW, Artouste 25 MW, Bious
-14 MW, Geteu 9,9 MW, Fabrèges 9 MW, Espalungue 3,7 MW, Artouste-Lac 2 MW,
-**223,9 MW in one valley** — and none of them was on this globe. The *Centrales
+Miégebat 74 MW, Le Hourat 46.9 MW, Pont-de-Camps 39.4 MW, Artouste 25 MW, Bious
+14 MW, Geteu 9.9 MW, Fabrèges 9 MW, Espalungue 3.7 MW, Artouste-Lac 2 MW,
+**223.9 MW in one valley** — and none of them was on this globe. The *Centrales
 EDF* layer draws EDF SA's own fleet, and those nine are SHEM's. The *Groupes de
 prod (FR)* layer stops at 100 MW, because that is RTE's publication floor. Two
 correct layers, and a whole valley between them.
@@ -43,16 +44,17 @@ difference silently deleted 27 plants from the output.
 
 Measured on the edition of 30/06/2026:
 
-- **2 742 installations, 26,02 GW.** The register's own hydraulic filière,
+- **2 742 installations, 26.02 GW.** The register's own hydraulic filière,
   entire, down to a 40 kW mill at Monteils.
-- `plants[]` — **998 installations placed where they physically are**, 24,31 GW.
+- `plants[]` — **998 installations placed where they physically are**, 24.31 GW.
   One record per register row, with everything the register publishes about it
   plus the position, WHICH OBJECT that position is, and the evidence for it.
   **589 of them sit on a building footprint surveyed by IGN.**
 - `clusters[]` — **1 744 installations that no source places, rolled up into
-  1 147 commune markers**, 1,71 GW. One record per commune.
+  1 147 commune markers**, 1.71 GW. One record per commune.
 - `excluded` — what the register holds and this file does not: 15 rows named
-  *Agrégation des installations de moins de 36KW*, 24,3 MW, published per REGION
+  *Agrégation des installations de moins de 36KW* (aggregate of installations
+  under 36 kW), 24.3 MW, published per REGION
   with no commune. There is nowhere honest to draw them.
 
 ## Why some plants are rings instead of dots
@@ -63,8 +65,8 @@ the commune centre is the only coordinate that exists. Drawing them there as
 plants would be wrong twice:
 
 - **Wrong about where.** Measured across the 998 plants that *do* get a real
-  position, the commune centre sits a **median 2,5 km** from the actual
-  powerhouse, **p90 7,5 km**. In an Alpine or Pyrenean valley that is routinely
+  position, the commune centre sits a **median 2.5 km** from the actual
+  powerhouse, **p90 7.5 km**. In an Alpine or Pyrenean valley that is routinely
   the wrong side of a ridge, on a different river.
 - **Wrong about how many.** 1 744 installations share 1 147 communes. Drawn
   individually they stack up to a dozen markers on one pixel, each claiming a
@@ -101,7 +103,7 @@ IDENTIFIED. `geometry` says WHICH OBJECT the coordinate is.**
 Every candidate is searched only within **12 km of the commune centre** the
 register names — re-tested on the FINAL position, after any snap — and each
 OpenStreetMap element can be claimed once. Rows are placed **largest first**, so
-a 74 MW plant takes an outline before a 0,4 MW one can match it on a shared
+a 74 MW plant takes an outline before a 0.4 MW one can match it on a shared
 token. Nothing is ever averaged between two anchors: an average of two published
 positions is a third, unpublished one.
 
@@ -135,7 +137,7 @@ an identity of first resort:
 2. **Place.** A row nothing else could position takes a footprint when the
    toponym matches (15) or when the commune holds exactly one register row and
    exactly one free footprint (214). **229 plants that were rings are now
-   dots** — and coverage below 4,5 MW roughly doubled.
+   dots** — and coverage below 4.5 MW roughly doubled.
 
 The honest caveat, on the card as well as here: **86 of those 229 sit on a
 `Centrale électrique` whose `nature_detaillee` IGN leaves blank.** The filter is
@@ -150,7 +152,7 @@ tier exists to find. Where IGN did not say "hydroélectrique", the card says so.
 Both the commune and the source substation are codes the register publishes, and
 OpenStreetMap publishes the substation code too as `ref:FR:RTE`. Across the 378
 RTE-connected rows whose substation OSM carries, the distance between the two
-has a median of 2,4 km and a p90 of 5,4 km. **The largest legitimate one is
+has a median of 2.4 km and a p90 of 5.4 km. **The largest legitimate one is
 11 km — and the next four are 6 717, 6 864, 7 263 and 8 945 km.**
 
 All four are metropolitan hydro plants filed under an overseas commune whose
@@ -159,9 +161,9 @@ INSEE code begins 97:
 | plant | the register says | its own substation says |
 |---|---|---|
 | Lac d'Oô, 30 MW | Montsinéry-Tonnegrande, **Guyane** | Luchon, Haute-Garonne |
-| Luz, 71,7 MW | La Trinité, **Martinique** | Hautes-Pyrénées |
-| Motz, 33,6 MW | Terre-de-Bas, **Guadeloupe** | Savoie |
-| Pont-du-Loup, 8,2 MW | Saint-André, **La Réunion** | Alpes-Maritimes |
+| Luz, 71.7 MW | La Trinité, **Martinique** | Hautes-Pyrénées |
+| Motz, 33.6 MW | Terre-de-Bas, **Guadeloupe** | Savoie |
+| Pont-du-Loup, 8.2 MW | Saint-André, **La Réunion** | Alpes-Maritimes |
 
 For those four the commune is simply the wrong field: every commune-based tier
 would place them on the wrong continent, and the commune ring would file them
@@ -180,15 +182,15 @@ of that box is a point on **no object at all**.
 The first build of this registry used it. Measured on that output: **167 of 722
 OSM-positioned plants (23 %) sat at the centre of an object more than 500 m
 across, and 99 of them more than 3 km across** — Grand-Maison's relation spans
-12,1 km, Montpezat's 22,8 km. The Centrale du Hourat at Laruns was drawn
-**2,7 km up the mountain, mid-forest, halfway along its own penstock**, while
+12.1 km, Montpezat's 22.8 km. The Centrale du Hourat at Laruns was drawn
+**2.7 km up the mountain, mid-forest, halfway along its own penstock**, while
 the powerhouse stands in the middle of the village 47 m from 4 rue de Gerp,
 beside the Arriussé.
 
 The fix is three lines of policy: ask Overpass for `bb` rather than `center` so
 the build can SEE the span; refuse any object wider than **500 m** as a
 position; and snap those to the `power=generator` elements inside them. **127
-plants moved, a median of 1,3 km and up to 7,5 km.** Anything that could not be
+plants moved, a median of 1.3 km and up to 7.5 km.** Anything that could not be
 resolved is not drawn at a guess — it goes to its commune ring.
 
 ## Coverage, honestly
@@ -202,8 +204,12 @@ tranche        total  placées   taux      GW  GW placés  anonymes
 < 1 MW          1802      350    19%    0.59       0.15      1072
 ```
 
+The headers are the build script's own, in French: *tranche* is the power
+band, *placées* the plants placed, *taux* the placed share, *anonymes* the rows
+published as `Confidentiel`.
+
 Read it as one sentence: **the bigger a plant is, the more likely the world has
-written down where it is.** Above 4,5 MW, nine in ten are placed. Below 1 MW,
+written down where it is.** Above 4.5 MW, nine in ten are placed. Below 1 MW,
 one in five — and three in five have no published name either. That is not a
 defect of this build, it is the shape of what France publishes about its own
 micro-hydro, and it is why the two marker kinds exist.
@@ -217,23 +223,25 @@ anonymisation is:
 
 | field | present |
 |---|---:|
-| commune, département, région | 100 % |
+| municipality, department, region | 100 % |
 | installed power | 100 % |
 | connection voltage (BT / HTA / 63–400 kV) | 100 % |
-| grid operator (Enedis, RTE, EDF-SEI, régies) | 100 % |
+| grid operator (Enedis, RTE, EDF-SEI, local utilities) | 100 % |
 | commissioning and connection dates | 100 % |
 | EIC code | 100 % |
-| technology (fil de l'eau, éclusée, lac, …) | 96 % |
+| technology (run-of-river *fil de l'eau*, pondage *éclusée*, reservoir *lac*, …) | 96 % |
 | source substation | 95 % |
 | **energy actually injected, 12 rolling months** | **90 %** |
 | head, in metres | 10 % |
 | number of turbine groups | 3 % |
 
 The last one in bold is the interesting one: it is the only *measurement* in the
-whole register, and it gives a capacity factor. A card for an unnamed 3,9 MW
+whole register, and it gives a capacity factor. A card for an unnamed 3.9 MW
 plant at Licq-Athérey reads *3,9 MW installés · 3,9 GWh injectés sur 12 mois
 glissants (12 %) · Fil de l'eau · HTA, poste L.ATH, Enedis · en service depuis
-le 15/11/2007*. An anonymous plant is a full card missing one line.
+le 15/11/2007* (3.9 MW installed · 3.9 GWh injected over 12 rolling months
+(12%) · run-of-river · HTA, substation L.ATH, Enedis · in service since
+2007-11-15). An anonymous plant is a full card missing one line.
 
 ## Traps the build absorbs
 
@@ -246,7 +254,7 @@ le 15/11/2007*. An anonymous plant is a full card missing one line.
    not declare them, and **`debitmaximal` is zero on every single row in
    France** — it is not read at all.
 4. **26 hydro plants are published as photovoltaic.** 25 of them Corsican and
-   real hydro — Rizzanese 55 MW, Lugo-di-Nazza 43 MW, Castirla 28,5 MW, Tolla,
+   real hydro — Rizzanese 55 MW, Lugo-di-Nazza 43 MW, Castirla 28.5 MW, Tolla,
    Calacuccia, Ocana, Asco. The filière is right and the technology is wrong, so
    the rows are kept, the published string is preserved verbatim on the card,
    and `techKey` is null so the layer will not colour or count them as a hydro

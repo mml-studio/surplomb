@@ -1,4 +1,4 @@
-# Aéroports & aérodromes — OurAirports, and the IGN's ground
+# Airports & aerodromes — OurAirports, and the IGN's ground
 
 The open catalogue of the world's airports, aerodromes, heliports and water
 landing areas, maintained by volunteer editors since 2007 — joined, for 418
@@ -27,9 +27,9 @@ French fields, onto the aerodrome boundary the IGN surveyed.
   Attribution is **required**, unlike the public-domain half: the credit is on
   the layer row, on the card line that prints the outline, and in the in-app
   attribution popover.
-- **Coverage:** métropole + DROM. Polynésie and Nouvelle-Calédonie are absent
-  from BD TOPO, so Tahiti-Fa'a'ā — 1.89 M passengers in 2025 — has no outline
-  while a grass strip in the Aveyron does.
+- **Coverage:** mainland France + overseas departments (DROM). Polynésie and
+  Nouvelle-Calédonie are absent from BD TOPO, so Tahiti-Fa'a'ā — 1.89 M
+  passengers in 2025 — has no outline while a grass strip in the Aveyron does.
 
 ## This is a SELECTION, not the catalogue
 
@@ -108,8 +108,8 @@ used to cross **two** axes — `type`, OurAirports' editorial size class, and
 first. Its four steps therefore changed subject as you descended them: size,
 then service, then size again. It also seated Paris-Le Bourget, which sells no
 scheduled seat at all, at the top of a ladder whose `LIGNES` chip promised
-"terrains desservis par une ligne régulière". 22 fields worldwide made that
-promise false.
+"terrains desservis par une ligne régulière" (fields served by a scheduled
+route). 22 fields worldwide made that promise false.
 
 The ladder asks **one** question now, and it is the hard one: *is a ticket sold
 here?* The two steps under it are not a second axis sneaking back in — they are

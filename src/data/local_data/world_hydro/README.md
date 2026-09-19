@@ -1,4 +1,4 @@
-# Centrales hydroélectriques hors de France
+# Hydroelectric plants outside France
 
 `plants.json` — **592 stations**, drawn by the **Centrales hydro**
 (`fr-hydro-plants`) layer beside France's own register. Built with
@@ -43,7 +43,7 @@ two are drawn as different things so a reader is never invited to compare them:
   OpenStreetMap" are two different silences, and the grey's legend row says the
   first one in ODRÉ's own words;
 - **their own legend row**, which says *échantillon … pas un inventaire
-  mondial* — a legend row is where a reader checks what a colour promises;
+  mondial* (a sample … not a world inventory) — a legend row is where a reader checks what a colour promises;
 - **their own card**, four lines at most, ending on the same warning.
 
 The layer's taxonomy entry stays **`coverage: 'fr'`**, and that is deliberate.
@@ -66,7 +66,7 @@ card omits a line rather than printing a placeholder.
 | `osm` | 592 | `r1144261` / `w121546174` — the identity, and the only key |
 | `lat` / `lon` | 592 | see below |
 | `name` | 536 (91 %) | OpenStreetMap's, verbatim |
-| `kw` | 273 (46 %) | **144,4 GW between them**; the other 319 say "puissance non publiée" |
+| `kw` | 273 (46 %) | **144.4 GW between them**; the other 319 say "puissance non publiée" (power not published) |
 | `operator` | 188 (32 %) | |
 | `builtYear` | 123 (21 %) | |
 
