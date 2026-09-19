@@ -28,6 +28,18 @@ import {
   powerTierById,
   powerTowerIndex,
 } from './powerGridFeed.js';
+import {
+  POWER_GRID_NATIONAL_BBOX,
+  POWER_GRID_NATIONAL_CASING_PX,
+  POWER_GRID_NATIONAL_POINT_PX,
+  POWER_GRID_NATIONAL_POINT_SCALE_FROM_SPACE,
+  POWER_GRID_NATIONAL_TIER_BLURBS,
+  POWER_GRID_NATIONAL_WIDTH_PX,
+  hydratePowerGridNationalPack,
+  powerGridNationalAgeDays,
+  powerGridNationalBand,
+  powerGridStrokeIds,
+} from './powerGridNational.js';
 import { applyViewGate, cameraViewBox } from './viewGate.js';
 import { boxesIntersect, focusedViewBox } from './viewportBox.js';
 import { pickAt } from './pickAt.js';
@@ -105,9 +117,50 @@ import { pickAt } from './pickAt.js';
  *    which nulls `_payload`, and the key is built from `_payload.tiers`. A
  *    camera moving does not make mapped geometry wrong, so what was loaded now
  *    stays drawn — and keyed — until it leaves the shot. See `load`.
+ *
+ * ── WHAT THE 2026-09-19 PASS CHANGED: A NATIONAL LAYER UNDER THE VIEWPORT ───
+ *
+ * "Il met beaucoup de temps à s'afficher, et j'aimerais qu'il s'affiche même
+ * avec une vue bien dézoomée et nationale." Both halves were true, and both
+ * had the same cause: every route on screen came from a live Overpass query,
+ * so nothing could be drawn above the 120 km that query tolerates, and every
+ * box nobody had asked for yet cost 4 to 21 s of Overpass before a line
+ * appeared. The gas layer, which the operator was happy with, has neither
+ * problem because its whole network is one file.
+ *
+ * So the grid now has one too: `local_data/power_grid_fr/national.json`, every
+ * high-voltage route and substation mapped in France, simplified to 50 m and
+ * shipped as a static asset (`powerGridNational.js` says what was cut and why).
+ * The layer draws it at ANY altitude, band by band (`powerGridNationalBand`):
+ * the 400/225 kV backbone from space, the 63/90 kV mesh under 600 km. Under
+ * 120 km the per-viewport path still loads — pylons, named yards, the exact
+ * mapped vertices — and as its answer lands, the national strokes it covers
+ * are hidden ONE WAY AT A TIME (`syncNationalHidden`), so the viewport answer
+ * replaces them in place and the rest of the country stays drawn around it.
+ * Until that answer arrives, and if it never does, the national strokes are
+ * what the operator sees: the wait for Overpass is a refinement now, not a
+ * blank globe.
  */
 
 const GRID_URL = '/api/power-grid';
+/**
+ * The national pack. Resolved by Vite to a content-hashed asset, so it is
+ * served pre-compressed (brotli, ~570 KB on the wire for 2.8 MB) and cached
+ * as immutable — a second visit does not download it again.
+ */
+const NATIONAL_URL = new URL('./local_data/power_grid_fr/national.json', import.meta.url).href;
+/** Render-id prefixes for the national strokes, their casings and their yards. */
+const NATIONAL_STROKE_PREFIX = 'power-grid:nat:';
+const NATIONAL_CASING_PREFIX = 'power-grid:nat-casing:';
+const NATIONAL_SUBSTATION_PREFIX = 'power-grid:nat-substation:';
+/** Retry delay after the pack itself failed to load. */
+const NATIONAL_RETRY_MS = 30_000;
+/**
+ * Band order for the national batches, lowest voltage first: `groundPrimitives`
+ * draws in insertion order, so this is also the paint order — the 400 kV
+ * backbone lands on top of the mesh it crosses.
+ */
+const NATIONAL_TIER_ORDER = Object.freeze(POWER_GRID_TIERS.map((tier) => tier.id).reverse());
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const POWER_GRID_LAYER_ID = 'power-grid';
@@ -362,6 +415,18 @@ export function formatGridKm(km) {
 }
 
 /**
+ * The same length, written for a French sentence: `89 058 km`, not the
+ * `89,058 km` a French reader parses as eighty-nine (the gas layer's lesson).
+ * @param {?number} km
+ * @returns {string}
+ */
+export function formatGridKmFr(km) {
+  if (!Number.isFinite(km)) return '—';
+  if (km >= 100) return `${Math.round(km).toLocaleString('fr-FR')} km`;
+  return `${km.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+}
+
+/**
  * Card copy for a selected object. Every line is a mapped value or a stated
  * limit of the data — never an inference from one.
  *
@@ -391,6 +456,13 @@ export function buildPowerSelectionLabel(record, payload = {}) {
       ? '⌄ Underground cable — no pylons on this route'
       : '⌃ Overhead line — drawn on the ground, not at conductor height');
     if (Number.isFinite(stroke.km)) details.push(`↔ ${formatGridKm(stroke.km)} of this mapped way`);
+    // A stroke from the national pack is drawn simplified, and the card is
+    // where that is said: the length above is the MAPPED way's, the line on
+    // screen is within `toleranceM` of it.
+    if (Number.isFinite(payload.toleranceM)) {
+      details.push(`〰 Tracé national simplifié à ${payload.toleranceM} m — zoome sous `
+        + `${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km pour le tracé exact`);
+    }
     details.push('© OpenStreetMap contributors (ODbL 1.0)');
     return [title, ...details].join('\n');
   }
@@ -616,6 +688,55 @@ let _status = 'idle';
 let _lastUpdate = null;
 let _stale = false;
 let _towersShown = false;
+/** Why the last viewport request failed, while the national pack still draws. */
+let _localError = null;
+
+// --- National pack state ----------------------------------------------------
+
+/** @type {?object} The hydrated national pack, once loaded. */
+let _national = null;
+/** @type {?Promise<void>} The pack fetch in flight. */
+let _nationalPromise = null;
+/** @type {?string} Why the pack failed to load, if it did. */
+let _nationalError = null;
+/** Epoch-ms before which a failed pack is not asked for again. */
+let _nationalRetryAt = 0;
+/** @type {Map<string, Array<object>>} tier id → the pack's strokes in that band. */
+let _nationalByTier = new Map();
+/**
+ * tier id → the batches built for that band, built LAZILY the first time the
+ * band is drawn: a camera that never leaves the national view never pays for
+ * the 39 000 segments of 63/90 kV mesh it would not be shown.
+ * @type {Map<string, {tierId:string, casing:?object, overhead:?object,
+ *   underground:?object, primitives:Array<object>, hidden:Set<string>}>}
+ */
+let _nationalBatches = new Map();
+/** @type {?Cesium.PointPrimitiveCollection} The pack's substation dots. */
+let _nationalPoints = null;
+/** @type {Map<string, object>} render id → record, for the pack's strokes and yards. */
+let _nationalRecords = new Map();
+/** @type {Array<object>} The national yard records, for the per-frame horizon pass. */
+let _nationalPointRecords = [];
+/** @type {Map<string, string>} casing render id → the stroke it sits under. */
+let _nationalAliases = new Map();
+/** @type {?{id:string, strokeTiers:Array<string>, substationTiers:Array<string>}} */
+let _nationalBand = null;
+/**
+ * OSM way ids the national batches should NOT draw, because the viewport
+ * answer on screen draws them itself — applied to the batches by
+ * `syncNationalHidden`, instance by instance.
+ * @type {Set<string>}
+ */
+let _nationalHideTarget = new Set();
+/**
+ * The ids a viewport answer just brought, waiting for ITS batches to finish
+ * building before the national ones stand down — hiding first would blank
+ * those routes for the few hundred milliseconds Cesium's workers take.
+ * @type {?Set<string>}
+ */
+let _pendingNationalHide = null;
+/** Whether `_nationalHideTarget` has changes some batch has not applied yet. */
+let _nationalHideDirty = false;
 
 function setStatus(status, error = null) {
   if (_status === status && _error === error) return;
@@ -881,6 +1002,387 @@ function buildPoints(payload) {
   warmGroundFloor(warm.slice(0, 600));
 }
 
+// --- National pack ----------------------------------------------------------
+
+/** The record behind a render id, from the viewport answer or the pack. */
+function recordFor(id) {
+  if (id === null || id === undefined) return null;
+  return _records.get(id) || _nationalRecords.get(id) || null;
+}
+
+/** Whether a picked id belongs to this layer — casings included. */
+function hasRecord(id) {
+  return _records.has(id) || _nationalRecords.has(id) || _nationalAliases.has(id);
+}
+
+/** A casing answers a pick as the stroke it sits under. */
+function canonicalId(id) {
+  return _nationalAliases.get(id) || id;
+}
+
+/**
+ * Whether the camera is looking at any of the ground the pack covers.
+ * A view the globe cannot rectangle (the whole planet, or sky) is given the
+ * benefit of the doubt: the pack is drawn, and France may well be in shot.
+ * @returns {boolean}
+ */
+function nationalCoversView() {
+  if (!_national) return false;
+  const view = cameraViewBox(_viewer);
+  if (!view) return true;
+  return boxesIntersect(view, POWER_GRID_NATIONAL_BBOX);
+}
+
+/**
+ * Where a national yard's dot is drawn: the DEM floor when it is already
+ * cached, the ellipsoid otherwise. These dots are only drawn above 120 km,
+ * where a pixel is 140 m of ground and the relief under a yard is not a
+ * question anyone can see the answer to — so no probe is spent on them.
+ */
+function nationalPointPosition(lat, lon) {
+  const floor = cachedGroundFloor(lat, lon);
+  return Cesium.Cartesian3.fromDegrees(lon, lat, (Number.isFinite(floor) ? floor : 0) + POINT_LIFT_M);
+}
+
+/** File the pack's strokes by band, and draw its substation dots (hidden until a band shows them). */
+function indexNational(pack) {
+  _nationalByTier = new Map();
+  for (const stroke of pack.strokes) {
+    const tierId = pack.voltages[stroke.vi]?.tier;
+    if (!tierId || !Array.isArray(stroke.c) || stroke.c.length < 4) continue;
+    const list = _nationalByTier.get(tierId);
+    if (list) list.push(stroke);
+    else _nationalByTier.set(tierId, [stroke]);
+  }
+  if (!_nationalPoints) return;
+  _nationalPoints.removeAll();
+  _nationalPointRecords = [];
+  for (const substation of pack.substations) {
+    if (!Number.isFinite(substation?.lat) || !Number.isFinite(substation?.lon)) continue;
+    const tier = powerTierById(pack.voltages[substation.vi]?.tier);
+    if (!tier) continue;
+    const id = `${NATIONAL_SUBSTATION_PREFIX}${substation.id}`;
+    const position = nationalPointPosition(substation.lat, substation.lon);
+    const size = POWER_GRID_NATIONAL_POINT_PX[tier.id] ?? POWER_GRID_NATIONAL_POINT_PX['hv-low'];
+    const color = Cesium.Color.fromCssColorString(tier.color);
+    const point = _nationalPoints.add({
+      id,
+      position,
+      color,
+      pixelSize: size,
+      outlineColor: Cesium.Color.BLACK.withAlpha(SUBSTATION_OUTLINE_ALPHA),
+      outlineWidth: 1,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      show: false,
+    });
+    const record = {
+      id,
+      kind: 'substation',
+      national: true,
+      substation,
+      tierId: tier.id,
+      doc: pack,
+      position,
+      point,
+      baseColor: color,
+      baseSize: size,
+    };
+    _nationalRecords.set(id, record);
+    _nationalPointRecords.push(record);
+  }
+}
+
+/**
+ * Build the batches for ONE band of the pack.
+ *
+ * Same construction as `buildStrokes` — a near-black casing batch under a
+ * coloured core batch, underground dashed in a batch of its own — with two
+ * differences the handover needs. Every instance, casing included, carries an
+ * id, and every one carries a `show` attribute: that pair is what lets
+ * `syncNationalHidden` switch off exactly the ways a viewport answer draws,
+ * without rebuilding 60 000 segments of batch around them. The casing's id is
+ * an ALIAS of its stroke's (`_nationalAliases`), so clicking the dark edge of a
+ * line selects the line rather than nothing.
+ *
+ * @param {string} tierId
+ */
+function buildNationalTier(tierId) {
+  if (!_viewer || !_national || !_groundLinesSupported) return;
+  const tier = powerTierById(tierId);
+  const strokes = _nationalByTier.get(tierId) || [];
+  if (!tier || !strokes.length) return;
+  const width = POWER_GRID_NATIONAL_WIDTH_PX[tierId] ?? POWER_GRID_NATIONAL_WIDTH_PX['hv-low'];
+  const casingColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
+    Cesium.Color.fromCssColorString(POWER_GRID_CASING_COLOR).withAlpha(CASING_ALPHA),
+  );
+  const coreColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
+    Cesium.Color.fromCssColorString(tier.color).withAlpha(STROKE_ALPHA),
+  );
+  const casing = [];
+  const overhead = [];
+  const underground = [];
+  for (const stroke of strokes) {
+    const positions = Cesium.Cartesian3.fromDegreesArray(stroke.c);
+    const coreId = `${NATIONAL_STROKE_PREFIX}${stroke.id}`;
+    const casingId = `${NATIONAL_CASING_PREFIX}${stroke.id}`;
+    // Built already hidden when a viewport answer on screen draws this way.
+    const visible = !_nationalHideTarget.has(stroke.id);
+    casing.push(new Cesium.GeometryInstance({
+      id: casingId,
+      geometry: new Cesium.GroundPolylineGeometry({ positions, width: width + POWER_GRID_NATIONAL_CASING_PX }),
+      attributes: {
+        color: casingColor,
+        show: new Cesium.ShowGeometryInstanceAttribute(visible),
+      },
+    }));
+    const core = new Cesium.GeometryInstance({
+      id: coreId,
+      geometry: new Cesium.GroundPolylineGeometry({ positions, width }),
+      attributes: {
+        color: coreColor,
+        show: new Cesium.ShowGeometryInstanceAttribute(visible),
+      },
+    });
+    (stroke.u ? underground : overhead).push(core);
+    _nationalRecords.set(coreId, {
+      id: coreId,
+      kind: 'stroke',
+      national: true,
+      stroke,
+      tierId,
+      doc: _national,
+    });
+    _nationalAliases.set(casingId, coreId);
+  }
+  const add = (instances, appearance) => (instances.length
+    ? _viewer.scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
+      geometryInstances: instances,
+      classificationType: _classificationType,
+      appearance,
+    }))
+    : null);
+  const batch = {
+    tierId,
+    casing: add(casing, new Cesium.PolylineColorAppearance({ translucent: true })),
+    overhead: add(overhead, new Cesium.PolylineColorAppearance({ translucent: true })),
+    underground: add(underground, new Cesium.PolylineMaterialAppearance({
+      material: Cesium.Material.fromType('PolylineDash', {
+        color: Cesium.Color.fromCssColorString(tier.color).withAlpha(UNDERGROUND_ALPHA),
+        dashLength: UNDERGROUND_DASH_LENGTH,
+      }),
+    })),
+    primitives: [],
+    // What this batch was BUILT hiding; `syncNationalHidden` diffs against it.
+    hidden: new Set(strokes.filter((stroke) => _nationalHideTarget.has(stroke.id)).map((stroke) => stroke.id)),
+  };
+  batch.primitives = [batch.casing, batch.overhead, batch.underground].filter(Boolean);
+  for (const primitive of batch.primitives) primitive.show = false;
+  _nationalBatches.set(tierId, batch);
+}
+
+/** Remove every national batch from the scene (the pack itself stays loaded). */
+function clearNationalBatches() {
+  for (const batch of _nationalBatches.values()) {
+    for (const primitive of batch.primitives) _viewer?.scene?.groundPrimitives?.remove?.(primitive);
+  }
+  _nationalBatches = new Map();
+  for (const id of [..._nationalRecords.keys()]) {
+    if (id.startsWith(NATIONAL_STROKE_PREFIX)) _nationalRecords.delete(id);
+  }
+  _nationalAliases = new Map();
+}
+
+/**
+ * Put this layer's ground batches back in paint order.
+ *
+ * `groundPrimitives` paints in insertion order, and the national bands are
+ * built lazily — so a 63/90 kV batch built on the first descent lands ON TOP
+ * of the 400 kV backbone and of the viewport answer. Order, bottom to top:
+ * every national casing, the national cores lowest voltage first, then the
+ * viewport answer's batches, then a selection highlight.
+ */
+function restackGroundPrimitives() {
+  const ground = _viewer?.scene?.groundPrimitives;
+  if (typeof ground?.raiseToTop !== 'function') return;
+  const order = [];
+  for (const tierId of NATIONAL_TIER_ORDER) {
+    const batch = _nationalBatches.get(tierId);
+    if (batch?.casing) order.push(batch.casing);
+  }
+  for (const tierId of NATIONAL_TIER_ORDER) {
+    const batch = _nationalBatches.get(tierId);
+    if (batch?.overhead) order.push(batch.overhead);
+    if (batch?.underground) order.push(batch.underground);
+  }
+  for (const primitive of _strokePrimitives) order.push(primitive);
+  const highlight = recordFor(_selectedId)?.highlight;
+  if (highlight) order.push(highlight);
+  for (const primitive of order) {
+    if (typeof ground.contains !== 'function' || ground.contains(primitive)) ground.raiseToTop(primitive);
+  }
+}
+
+/**
+ * Draw the bands the camera's altitude calls for, building any that have not
+ * been built yet. Cheap when nothing changed, so it runs every frame.
+ * @param {boolean} [force]
+ */
+function applyNationalBand(force = false) {
+  if (!_national || !_viewer) return;
+  const altitude = _viewer.camera?.positionCartographic?.height;
+  const band = powerGridNationalBand(altitude, POWER_GRID_MAX_ALTITUDE_M);
+  const changed = force || band.id !== _nationalBand?.id;
+  _nationalBand = band;
+  if (!changed) return;
+  // No ground collection means no scene to draw into (a unit test's stand-in
+  // viewer): the band is still decided, so the key and the row can read it.
+  if (!_viewer.scene?.groundPrimitives) return;
+  if (_groundLinesSupported === null) {
+    _groundLinesSupported = Cesium.GroundPolylinePrimitive.isSupported(_viewer.scene);
+  }
+  let built = false;
+  if (_enabled) {
+    for (const tierId of band.strokeTiers) {
+      if (_nationalBatches.has(tierId)) continue;
+      buildNationalTier(tierId);
+      built = true;
+    }
+  }
+  if (built) restackGroundPrimitives();
+  for (const [tierId, batch] of _nationalBatches) {
+    const show = _enabled && band.strokeTiers.includes(tierId);
+    for (const primitive of batch.primitives) primitive.show = show;
+  }
+  if (_nationalPoints) _nationalPoints.show = _enabled && band.substationTiers.length > 0;
+  // Dot size follows the band: from space the yards are the backbone's nodes,
+  // not discs sitting on it. `baseSize` moves with it, so a deselect restores
+  // the size the CURRENT band draws.
+  const scale = band.id === 'national' ? POWER_GRID_NATIONAL_POINT_SCALE_FROM_SPACE : 1;
+  for (const record of _nationalPointRecords) {
+    const size = (POWER_GRID_NATIONAL_POINT_PX[record.tierId] ?? POWER_GRID_NATIONAL_POINT_PX['hv-low']) * scale;
+    record.baseSize = size;
+    if (record.id !== _selectedId) record.point.pixelSize = size;
+  }
+  governorRequestRender('power-grid-national-band');
+}
+
+/**
+ * Ask the national batches to stand down for exactly these ways.
+ * @param {Set<string>} ids OSM way ids (`w123`).
+ */
+function setNationalHideTarget(ids) {
+  _nationalHideTarget = ids;
+  _nationalHideDirty = true;
+}
+
+/**
+ * Apply `_nationalHideTarget` to every national batch that can take it.
+ *
+ * A per-instance `show` flip on a built batch, never a rebuild. A batch still
+ * building in Cesium's workers cannot be addressed yet — its per-instance
+ * table does not exist — so it is left dirty and retried on the next frame;
+ * a batch built AFTER the target was set was built with it already applied.
+ *
+ * The lookups go in pack order on purpose: Cesium finds an instance by
+ * scanning its id list from the last hit, so ids asked for in the order they
+ * were added cost one pass over the batch rather than one pass each.
+ */
+function syncNationalHidden() {
+  if (!_nationalHideDirty) return;
+  let pending = false;
+  for (const [tierId, batch] of _nationalBatches) {
+    if (!batch.primitives.every((primitive) => primitive.ready)) {
+      pending = true;
+      continue;
+    }
+    for (const stroke of _nationalByTier.get(tierId) || []) {
+      const hide = _nationalHideTarget.has(stroke.id);
+      if (hide === batch.hidden.has(stroke.id)) continue;
+      const value = Cesium.ShowGeometryInstanceAttribute.toValue(!hide);
+      const core = stroke.u ? batch.underground : batch.overhead;
+      const coreAttributes = core?.getGeometryInstanceAttributes(`${NATIONAL_STROKE_PREFIX}${stroke.id}`);
+      const casingAttributes = batch.casing?.getGeometryInstanceAttributes(`${NATIONAL_CASING_PREFIX}${stroke.id}`);
+      if (coreAttributes) coreAttributes.show = value;
+      if (casingAttributes) casingAttributes.show = value;
+      if (hide) batch.hidden.add(stroke.id);
+      else batch.hidden.delete(stroke.id);
+    }
+  }
+  _nationalHideDirty = pending;
+  governorRequestRender('power-grid-national-handover');
+}
+
+/** Whether every batch of the viewport answer has finished building. */
+function viewportStrokesReady() {
+  return _strokePrimitives.every((primitive) => primitive.ready);
+}
+
+/**
+ * Fetch and draw the national pack, once per session.
+ *
+ * Fetched ONCE and held, like the gas network: the file is content-hashed,
+ * so there is nothing a second fetch in the same session could bring. A
+ * failure is retried no sooner than `NATIONAL_RETRY_MS`, and until then the
+ * layer is exactly what it was before the pack existed.
+ * @returns {?Promise<void>}
+ */
+function ensureNational() {
+  if (_national || _nationalPromise) return _nationalPromise;
+  if (Date.now() < _nationalRetryAt) return null;
+  _nationalPromise = (async () => {
+    try {
+      const response = await fetch(NATIONAL_URL);
+      if (!response.ok) throw new Error(`national pack HTTP ${response.status}`);
+      const pack = hydratePowerGridNationalPack(await response.json());
+      if (!_viewer) return;
+      _national = pack;
+      _nationalError = null;
+      indexNational(pack);
+      applyNationalBand(true);
+      syncNationalGate();
+      console.log(
+        `[Data:Power Grid] national pack: ${pack.stats?.strokes ?? 0} strokes /`
+        + ` ${formatGridKm(pack.stats?.lengthKm)}, ${pack.stats?.substations ?? 0} substations`,
+      );
+    } catch (error) {
+      _nationalError = error?.message || 'national pack unavailable';
+      _nationalRetryAt = Date.now() + NATIONAL_RETRY_MS;
+      console.warn('[Data:Power Grid] national pack unavailable:', _nationalError);
+    } finally {
+      _nationalPromise = null;
+    }
+  })();
+  return _nationalPromise;
+}
+
+/**
+ * The status a camera above the viewport ceiling earns, now that the pack may
+ * be drawing under it. Called when the pack lands, so a layer that said "zoom
+ * in" a second earlier stops saying it the moment it has a map to show.
+ */
+function syncNationalGate() {
+  if (!_enabled || _loading) return;
+  if (powerViewportBox(_viewer)) return;
+  if (_national && _payload) clearRendered();
+  setNationalHideTarget(new Set());
+  setStatus(_national && nationalCoversView() ? 'ready' : (_payload ? 'out-of-gate' : 'zoom-in'), null);
+}
+
+/**
+ * Per-frame pass over the national yard dots: shown when their band is, and
+ * when the planet is not in the way. Only the dots of a band on screen are
+ * walked; the rest were switched off when their band went.
+ * @param {object} occluder From `horizonOccluder`.
+ */
+function updateNationalPoints(occluder) {
+  if (!_nationalPoints?.show || !_nationalBand) return;
+  const tiers = _nationalBand.substationTiers;
+  for (const record of _nationalPointRecords) {
+    const inBand = tiers.includes(record.tierId);
+    record.point.show = inBand && (record.id === _selectedId || occluder.isPointVisible(record.position));
+  }
+}
+
 /**
  * Metres of ground one screen pixel covers, at the point the camera looks at.
  *
@@ -1061,6 +1563,19 @@ function applyClassification(next) {
   // batches are rebuilt rather than mutated — the geometry is already in hand,
   // and this happens only when the operator switches map stacks.
   if (_payload) buildStrokes(_payload);
+  if (_nationalBatches.size) {
+    // A selected national stroke's record is about to be replaced; its
+    // highlight goes with it rather than outliving the record that owns it.
+    if (_selectedId?.startsWith(NATIONAL_STROKE_PREFIX)) clearSelection();
+    // Only the bands already built are rebuilt; the rest stay lazy.
+    const built = [..._nationalBatches.keys()];
+    clearNationalBatches();
+    for (const tierId of built) buildNationalTier(tierId);
+    // A rebuilt batch is built hidden; the band pass decides what shows, and
+    // the rebuilt batches must go back UNDER the viewport answer.
+    restackGroundPrimitives();
+    applyNationalBand(true);
+  }
   _viewer?.scene?.requestRender?.();
 }
 
@@ -1088,14 +1603,14 @@ function restoreRecordStyle(record) {
 }
 
 function clearSelection() {
-  if (_selectedId) restoreRecordStyle(_records.get(_selectedId));
+  if (_selectedId) restoreRecordStyle(recordFor(_selectedId));
   _selectedId = null;
   _overlayHost.clearSource(POWER_GRID_SELECTED_OVERLAY_SOURCE_ID);
 }
 
 function selectObject(id) {
   clearSelection();
-  const record = _records.get(id);
+  const record = recordFor(id);
   if (!record) return;
   _selectedId = id;
   if (record.kind === 'stroke') {
@@ -1124,7 +1639,9 @@ function selectObject(id) {
     record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
     record.point.pixelSize = SELECTED_POINT_PX;
   }
-  const entry = createPowerSelectedOverlayEntry(record, _payload || {});
+  // A national record carries the pack it came from: its dictionary indices
+  // mean nothing against a viewport answer's, and the reverse.
+  const entry = createPowerSelectedOverlayEntry(record, record.doc || _payload || {});
   if (entry) {
     _overlayHost.setEntries(
       POWER_GRID_SELECTED_OVERLAY_SOURCE_ID,
@@ -1140,7 +1657,7 @@ function onKeyDown(event) {
 }
 
 /** Resolve a Cesium pick into one of this layer's render ids. */
-export function resolvePowerPickId(picked, has = (id) => _records.has(id)) {
+export function resolvePowerPickId(picked, has = hasRecord) {
   if (!picked) return null;
   const primitiveId = picked.primitive?.id;
   if (typeof primitiveId === 'string' && has(primitiveId)) return primitiveId;
@@ -1155,11 +1672,11 @@ function installClickHandler(viewer) {
   if (_clickHandler) return;
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    const id = resolvePowerPickId(pickAt(viewer.scene, click.position));
+    const id = canonicalId(resolvePowerPickId(pickAt(viewer.scene, click.position)));
     if (id) {
       // A stroke has no single position, so its card is anchored where the user
       // clicked rather than at a midpoint that could be a département away.
-      const record = _records.get(id);
+      const record = recordFor(id);
       if (record?.kind === 'stroke') {
         record.position = viewer.scene.pickPosition?.(click.position)
           || viewer.camera.pickEllipsoid?.(click.position)
@@ -1196,10 +1713,22 @@ function installClickHandler(viewer) {
  * clamped ground geometry and need none of it.
  */
 function onPreRender() {
-  if (!_enabled || !_records.size) return;
+  if (!_enabled) return;
   const camera = _viewer?.camera;
   if (!camera) return;
+  // The national bands follow the camera DURING a zoom, not after it: the
+  // 63/90 kV mesh comes in as the camera passes 600 km, on that frame.
+  applyNationalBand();
+  // The viewport answer takes over the ways it draws only once its own
+  // batches have finished building — never a frame with neither on screen.
+  if (_pendingNationalHide && viewportStrokesReady()) {
+    setNationalHideTarget(_pendingNationalHide);
+    _pendingNationalHide = null;
+  }
+  syncNationalHidden();
+  if (!_records.size && !_nationalPoints?.show) return;
   const occluder = horizonOccluder(camera);
+  updateNationalPoints(occluder);
   for (const record of _records.values()) {
     // Both the yard discs and the pylon glyphs draw with depth testing off, so
     // both need the curtain: without it a substation on the far side of the
@@ -1276,6 +1805,12 @@ function scheduleLoad() {
   _debounceTimer = setTimeout(() => { void load(); }, REQUEST_DEBOUNCE_MS);
 }
 
+/**
+ * Take the viewport answer off the globe. The national pack is NOT touched —
+ * it is a different layer of the same map, and the caller decides whether its
+ * hidden ways come back (leaving the local band) or stay hidden until the next
+ * answer replaces them (a pan inside it).
+ */
 function clearRendered() {
   clearSelection();
   clearStrokePrimitives();
@@ -1286,6 +1821,7 @@ function clearRendered() {
   _records.clear();
   _payload = null;
   _loadedBox = null;
+  _pendingNationalHide = null;
   _overlayHost.clearSource(POWER_GRID_OVERLAY_SOURCE_ID);
 }
 
@@ -1307,12 +1843,26 @@ function viewIntersectsLoadedBox() {
 
 async function load() {
   if (!_enabled || !_viewer) return false;
+  void ensureNational();
   const box = powerViewportBox(_viewer);
   if (!box) {
     _abort?.abort();
     _abort = null;
     _loading = false;
+    _localError = null;
     clearUnavailableRetry();
+    if (_national) {
+      // ABOVE THE CEILING THE PACK IS THE MAP. The viewport answer goes, its
+      // ways come back into the national batches, and the key is the pack's —
+      // so the "grid held from the last framed view" state below is only ever
+      // reached by a session whose pack failed to load.
+      if (_payload) clearRendered();
+      setNationalHideTarget(new Set());
+      applyNationalBand();
+      setStatus(nationalCoversView() ? 'ready' : 'zoom-in', null);
+      governorRequestRender('power-grid-national');
+      return false;
+    }
     // THE GRID ALREADY DRAWN STAYS DRAWN, as long as it is still under the
     // camera. This used to `clearRendered()`, and that one line took the map
     // AND THE LEGEND WITH IT: `getRowControls()` builds the voltage key from
@@ -1347,15 +1897,21 @@ async function load() {
     if (requestAbort.signal.aborted || _abort !== requestAbort || !_enabled) return false;
 
     clearRendered();
+    // Every national way comes back while the new answer's batches build, and
+    // the ones it draws stand down only once those batches are ready — so a
+    // pan swaps simplified routes for exact ones, never routes for nothing.
+    setNationalHideTarget(new Set());
     _payload = payload;
     _loadedBox = box;
     buildStrokes(payload);
     buildPoints(payload);
     buildPylons();
     publishOverlay();
+    _pendingNationalHide = powerGridStrokeIds(payload);
     _stale = payload.status === 'stale';
     _towersShown = Boolean(payload.towersRequested);
     _lastUpdate = Date.now();
+    _localError = null;
     clearUnavailableRetry();
     const drawn = payload.stats?.strokes || 0;
     setStatus(drawn || payload.stats?.substations ? (_stale ? 'stale' : 'ready') : 'empty', null);
@@ -1369,7 +1925,14 @@ async function load() {
   } catch (error) {
     if (error?.name === 'AbortError') return false;
     console.warn('[Data:Power Grid] load error:', error);
-    setStatus('error', error?.message || 'Mapped power grid unavailable');
+    if (_national && nationalCoversView()) {
+      // The national routes are still on screen under the camera: a failed
+      // refinement is a note on the row, not a red layer. The retry still runs.
+      _localError = error?.message || 'Mapped power grid unavailable';
+      setStatus(_payload ? (_stale ? 'stale' : 'ready') : 'ready', null);
+    } else {
+      setStatus('error', error?.message || 'Mapped power grid unavailable');
+    }
     scheduleUnavailableRetry();
     return false;
   } finally {
@@ -1384,10 +1947,16 @@ async function load() {
 
 /** Deterministic subsample of drawn substations for the detection overlay. */
 function collectDetectableObjects(options = {}) {
-  if (!_enabled || !_payload) return [];
+  if (!_enabled || (!_payload && !_national)) return [];
   const yards = [];
   for (const record of _records.values()) {
     if (record.kind !== 'substation') continue;
+    if (!record.point?.show && record.id !== _selectedId) continue;
+    yards.push(record);
+  }
+  // The national dots, when a band is drawing them: at a national camera they
+  // are the only yards on screen.
+  for (const record of _nationalPointRecords) {
     if (!record.point?.show && record.id !== _selectedId) continue;
     yards.push(record);
   }
@@ -1403,7 +1972,7 @@ function collectDetectableObjects(options = {}) {
   const result = [];
   for (let i = start; i < yards.length; i += stride) {
     const record = yards[i];
-    const voltage = _payload.voltages?.[record.substation.vi] || {};
+    const voltage = (record.doc || _payload)?.voltages?.[record.substation.vi] || {};
     result.push({
       position: record.position,
       sourceId: record.id,
@@ -1417,8 +1986,49 @@ function collectDetectableObjects(options = {}) {
   return result;
 }
 
+/**
+ * Route length the pack draws in the current band, km.
+ * @returns {number}
+ */
+function nationalBandKm() {
+  const tiers = _nationalBand?.strokeTiers || [];
+  let km = 0;
+  for (const tier of _national?.tiers || []) {
+    if (tiers.includes(tier.id)) km += tier.lengthKm || 0;
+  }
+  return km;
+}
+
+/**
+ * The row's sentence while the pack is what is on screen.
+ * @returns {string}
+ */
+function nationalLoadingLabel() {
+  const ceilingKm = Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000);
+  if (_status === 'zoom-in') {
+    return `Réseau national : France seulement. Ailleurs, zoome sous ${ceilingKm} km`;
+  }
+  const parts = [];
+  if (_nationalBand?.id === 'national') {
+    parts.push(`Réseau national · ${formatGridKmFr(nationalBandKm())} de lignes 400 et 225 kV`);
+    parts.push('le 63/90 kV apparaît sous 600 km');
+  } else {
+    parts.push(`Réseau national · ${formatGridKmFr(nationalBandKm())} de lignes haute tension`);
+    parts.push(`pylônes et postes nommés sous ${ceilingKm} km`);
+  }
+  return parts.join(' · ');
+}
+
 function buildLoadingLabel() {
-  if (_loading) return 'loading the mapped grid for this view...';
+  if (_loading) {
+    return _national && nationalCoversView()
+      ? 'affinage du tracé exact pour cette vue…'
+      : 'loading the mapped grid for this view...';
+  }
+  if (!_payload && _national && _status !== 'error') {
+    const label = nationalLoadingLabel();
+    return _localError ? `${label} · détail local indisponible, tracé national affiché` : label;
+  }
   if (_status === 'zoom-in') {
     return `Zoome sous ${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km pour charger le réseau cartographié`;
   }
@@ -1434,6 +2044,7 @@ function buildLoadingLabel() {
     .map(([key]) => key);
   if (truncated.length) parts.push(`${truncated.join(' + ')} truncated — zoom in`);
   if (_stale) parts.push('serving cached geometry');
+  if (_localError) parts.push('refresh failed, showing the last answer');
   // LAST, and phrased as what the operator is looking at rather than as an
   // instruction: the grid on screen is real, it is simply the last box asked
   // for, and the camera has since moved off it.
@@ -1535,6 +2146,102 @@ function renderDiagnostics() {
   }));
 }
 
+/**
+ * The key while the pack is what is on screen: the bands the current altitude
+ * draws, with the country-wide figures, and a note that says the three things
+ * the picture cannot — how simplified it is, how old, and where the detail is.
+ * @returns {{chips: Array<object>, legend: Array<object>, note: string}}
+ */
+function nationalRowControls() {
+  const shown = _nationalBand?.strokeTiers || [];
+  const legend = [];
+  for (const tier of _national?.tiers || []) {
+    if (shown.length && !shown.includes(tier.id)) continue;
+    const parts = [POWER_GRID_NATIONAL_TIER_BLURBS[tier.id] || tier.blurb];
+    if (tier.lengthKm) parts.push(`${formatGridKmFr(tier.lengthKm)} cartographiés en France`);
+    if (tier.undergroundKm) parts.push(`dont ${formatGridKmFr(tier.undergroundKm)} en souterrain, en tirets`);
+    if (tier.substations) parts.push(`${tier.substations} postes`);
+    legend.push({
+      label: tier.label,
+      color: tier.color,
+      count: tier.strokes + tier.substations,
+      blurb: `${parts.join(' · ')}. Tracé au sol : la route cartographiée, pas la hauteur des câbles.`,
+    });
+  }
+  const age = powerGridNationalAgeDays(_national);
+  const base = _national?.osmBase ? String(_national.osmBase).slice(0, 10) : null;
+  const note = [
+    `Réseau national OpenStreetMap${base ? ` (état du ${base}${Number.isFinite(age) && age > 60 ? `, ${age} jours` : ''})` : ''},`
+      + ` simplifié à ${_national?.toleranceM ?? 50} m près.`,
+    `Sous ${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km, la vue charge le tracé exact, les postes nommés et les pylônes.`,
+  ];
+  return { chips: [], legend, note: note.join(' ') };
+}
+
+/** `getStats` while the pack is what is on screen. @returns {object} */
+function nationalStats() {
+  const stats = _national?.stats || {};
+  const result = {
+    count: (stats.substations || 0) + (stats.strokes || 0),
+    lastUpdate: _lastUpdate,
+    loading: _loading,
+    status: _status === 'ready' ? 'ok' : _status,
+    stale: false,
+    national: true,
+    nationalBand: _nationalBand?.id || null,
+    strokes: stats.strokes ?? null,
+    routes: stats.routes ?? null,
+    lengthKm: stats.lengthKm ?? null,
+    bandLengthKm: Number(nationalBandKm().toFixed(1)),
+    undergroundKm: stats.undergroundKm ?? null,
+    substations: stats.substations ?? null,
+    towers: null,
+    pylonsDrawn: null,
+    pylonSpacingM: null,
+    saturated: false,
+    feedSource: _national?.source || null,
+    osmBase: _national?.osmBase || null,
+  };
+  const label = buildLoadingLabel();
+  if (label) result.loadingLabel = label;
+  if (_error) result.error = _error;
+  return result;
+}
+
+/** See `powerGridLayer.getNationalDiagnostics`. @returns {object} */
+function nationalDiagnostics() {
+  const batches = [];
+  for (const tierId of NATIONAL_TIER_ORDER) {
+    const batch = _nationalBatches.get(tierId);
+    if (!batch) continue;
+    for (const [part, primitive] of [['casing', batch.casing], ['overhead', batch.overhead], ['underground', batch.underground]]) {
+      if (!primitive) continue;
+      batches.push({
+        tierId,
+        part,
+        show: primitive.show !== false,
+        ready: primitive.ready === true,
+        hidden: batch.hidden.size,
+      });
+    }
+  }
+  return {
+    loaded: Boolean(_national),
+    error: _nationalError,
+    band: _nationalBand?.id || null,
+    strokeTiers: _nationalBand?.strokeTiers || [],
+    substationTiers: _nationalBand?.substationTiers || [],
+    strokes: _national?.strokes?.length ?? 0,
+    substations: _national?.substations?.length ?? 0,
+    osmBase: _national?.osmBase || null,
+    batches,
+    hideTarget: _nationalHideTarget.size,
+    hidePending: Boolean(_pendingNationalHide) || _nationalHideDirty,
+    pointsShown: _nationalPointRecords.reduce((count, record) => count + (record.point?.show ? 1 : 0), 0),
+    pointsCollectionShown: Boolean(_nationalPoints?.show),
+  };
+}
+
 /** Power Grid layer. @type {Object} */
 const powerGridLayer = {
   id: POWER_GRID_LAYER_ID,
@@ -1553,6 +2260,10 @@ const powerGridLayer = {
     _pylons.show = false;
     viewer.scene.primitives.add(_pylons);
     registerSpriteCollection(POWER_GRID_LAYER_ID, _pylons);
+    _nationalPoints = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.OPAQUE_AND_TRANSLUCENT });
+    _nationalPoints.show = false;
+    viewer.scene.primitives.add(_nationalPoints);
+    registerSpriteCollection(POWER_GRID_LAYER_ID, _nationalPoints);
 
     _enabled = false;
     _records = new Map();
@@ -1568,6 +2279,20 @@ const powerGridLayer = {
     _pylonIds = [];
     _pylonSpacingM = 0;
     _retryDelayMs = 0;
+    _localError = null;
+    _national = null;
+    _nationalPromise = null;
+    _nationalError = null;
+    _nationalRetryAt = 0;
+    _nationalByTier = new Map();
+    _nationalBatches = new Map();
+    _nationalRecords = new Map();
+    _nationalPointRecords = [];
+    _nationalAliases = new Map();
+    _nationalBand = null;
+    _nationalHideTarget = new Set();
+    _pendingNationalHide = null;
+    _nationalHideDirty = false;
     _classificationType = powerClassificationTypeForScene(viewer?.scene);
 
     if (typeof window !== 'undefined' && !_mapStackListener) {
@@ -1597,7 +2322,7 @@ const powerGridLayer = {
     _overlayHost.setVisible(POWER_GRID_OVERLAY_SOURCE_ID, true);
     _overlayHost.setVisible(POWER_GRID_SELECTED_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
-    registerPickOwner(POWER_GRID_LAYER_ID, (pickedId) => _records.has(pickedId));
+    registerPickOwner(POWER_GRID_LAYER_ID, (pickedId) => hasRecord(pickedId));
     if (!_preRenderRemover) {
       _preRenderRemover = viewer.scene.preRender.addEventListener(onPreRender);
     }
@@ -1606,8 +2331,13 @@ const powerGridLayer = {
     }
     publishOverlay();
     restoreSpriteOrder(viewer);
+    // The pack is a static file, not a viewport request, so it starts NOW
+    // rather than waiting on update(): on a national camera it is the whole
+    // layer. A pack already held from an earlier enable is simply re-shown.
+    void ensureNational();
+    applyNationalBand(true);
     // DataLayerManager invokes update() immediately after enable(), which owns
-    // the first fetch. Avoid racing it with a second aborting request here.
+    // the first viewport fetch. Avoid racing it with a second aborting request.
   },
 
   disable() {
@@ -1621,6 +2351,9 @@ const powerGridLayer = {
     if (_points) _points.show = false;
     if (_pylons) _pylons.show = false;
     for (const primitive of _strokePrimitives) primitive.show = false;
+    // The pack's batches are kept, hidden: a re-enable in the same session
+    // shows them again without re-tessellating the country.
+    applyNationalBand(true);
     _overlayHost.clearSource(POWER_GRID_OVERLAY_SOURCE_ID);
     _overlayHost.setVisible(POWER_GRID_OVERLAY_SOURCE_ID, false);
     _overlayHost.setVisible(POWER_GRID_SELECTED_OVERLAY_SOURCE_ID, false);
@@ -1682,12 +2415,25 @@ const powerGridLayer = {
    * @returns {Array<Object>}
    */
   getAnalystRecords(maxCount = 400) {
-    if (!_enabled || !_payload) return [];
+    if (!_enabled) return [];
     const limit = Number.isFinite(maxCount) ? Math.max(1, Math.floor(maxCount)) : 400;
     const result = [];
-    for (const substation of _payload.substations || []) {
+    if (_payload) {
+      for (const substation of _payload.substations || []) {
+        if (result.length >= limit) break;
+        result.push(mapPowerAnalystRecord(substation, _payload, result.length));
+      }
+      return result;
+    }
+    // A national camera: the pack's yards, highest voltage first, because a
+    // 400-record answer about a whole country should be the backbone.
+    if (!_national) return [];
+    const voltageOf = (substation) => _national.voltages[substation.vi]?.v || 0;
+    const ranked = _national.substations.slice()
+      .sort((a, b) => voltageOf(b) - voltageOf(a) || String(a.id).localeCompare(String(b.id)));
+    for (const substation of ranked) {
       if (result.length >= limit) break;
-      result.push(mapPowerAnalystRecord(substation, _payload, result.length));
+      result.push(mapPowerAnalystRecord(substation, _national, result.length));
     }
     return result;
   },
@@ -1711,6 +2457,7 @@ const powerGridLayer = {
    * @returns {{chips: Array<object>, legend: Array<object>, note: string}}
    */
   getRowControls() {
+    if (!_payload && _national) return nationalRowControls();
     const legend = [];
     for (const tier of _payload?.tiers || []) {
       const parts = [tier.blurb];
@@ -1740,7 +2487,18 @@ const powerGridLayer = {
     return renderDiagnostics();
   },
 
+  /**
+   * The national pack as the scene holds it: which bands are built, which are
+   * shown, whether their batches finished building, and how many ways stand
+   * down for the viewport answer. Read by `scripts/qa-power-grid-national.mjs`.
+   * @returns {object}
+   */
+  getNationalDiagnostics() {
+    return nationalDiagnostics();
+  },
+
   getStats() {
+    if (!_payload && _national) return nationalStats();
     const stats = _payload?.stats;
     const result = {
       count: (stats?.substations || 0) + (stats?.strokes || 0),
@@ -1798,11 +2556,23 @@ const powerGridLayer = {
       _moveEndRemover = null;
     }
     clearStrokePrimitives();
+    clearNationalBatches();
     if (_points) {
       unregisterSpriteCollection(POWER_GRID_LAYER_ID, _points);
       viewer?.scene?.primitives?.remove?.(_points);
       _points = null;
     }
+    if (_nationalPoints) {
+      unregisterSpriteCollection(POWER_GRID_LAYER_ID, _nationalPoints);
+      viewer?.scene?.primitives?.remove?.(_nationalPoints);
+      _nationalPoints = null;
+    }
+    _nationalRecords = new Map();
+    _nationalPointRecords = [];
+    _national = null;
+    _nationalBand = null;
+    _nationalHideTarget = new Set();
+    _pendingNationalHide = null;
     if (_pylons) {
       unregisterSpriteCollection(POWER_GRID_LAYER_ID, _pylons);
       viewer?.scene?.primitives?.remove?.(_pylons);
@@ -1819,8 +2589,23 @@ const powerGridLayer = {
 export function _setPowerGridStateForTest({
   viewer, records, payload, overlayHost, towersShown = true, enabled = true,
   pylonIds = [], pylonSpacingM = 0, status = 'ready', loadedBox = null,
+  national = null, nationalBandId = null, localError = null,
 } = {}) {
   _viewer = viewer || null;
+  // The pack is state like any other here: absent unless a test hands one in,
+  // so a legend test written before the pack existed still reads the
+  // viewport document it seeded.
+  _national = national;
+  // No pack handed in means none is coming: a unit test must not reach for
+  // the asset over a `file:` URL Node's fetch cannot read.
+  _nationalRetryAt = national ? 0 : Number.POSITIVE_INFINITY;
+  _nationalBand = nationalBandId
+    ? { ...powerGridNationalBand(
+      nationalBandId === 'national' ? 1e9 : (nationalBandId === 'regional' ? POWER_GRID_MAX_ALTITUDE_M + 1 : 0),
+      POWER_GRID_MAX_ALTITUDE_M,
+    ) }
+    : null;
+  _localError = localError;
   if (records) _records = records instanceof Map ? records : new Map(Object.entries(records));
   if (payload !== undefined) _payload = payload;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
