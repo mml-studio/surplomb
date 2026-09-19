@@ -2,7 +2,7 @@
   "name": "surplomb",
   "private": true,
   "version": "0.1.0",
-  "description": "France, X-rayed. Everything you never thought to look up. 59 layers of public data on a photorealistic 3D globe, 44 of them written here: DVF property sales and parcels, building permits, energy ratings, schools, doctors, recorded crime, aircraft noise, power generation, real-time transit. 56 of the 59 need no key.",
+  "description": "France, X-rayed. Everything you never thought to look up: 59 layers of French public data on a photorealistic 3D globe, 44 of them built here, most with no key. France ranks first for open government data (OECD OURdata 2025, EU Open Data Maturity 2025). Fork of God's Eye View.",
   "type": "module",
   "license": "MIT",
   "author": "Melvyn Raymond (https://melvynraymond.com/)",
