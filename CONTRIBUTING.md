@@ -12,10 +12,10 @@ cd surplomb
 nvm install 24.14.0
 nvm use 24.14.0
 npm install
-./scripts/dev-fresh.sh        # or: GOOGLE_MAPS_API_KEY="…" npm run dev
+./scripts/dev-fresh.sh        # or: npm run dev
 ```
 
-You need a **Google Maps API key** with the Map Tiles API enabled (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
+**No key is required.** The globe boots on keyless satellite imagery and most data layers need no account. A **Google Maps API key** with the Map Tiles API enabled adds the photorealistic 3D planet (in the EEA, a free Cesium ion token does the same — see the [README](README.md#-api-keys)). On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
 
 Open `http://localhost:4173`. Before sending a PR run `npm run build`, `npm test`, and `npm run test:track` (dev server must be up) — **all three must stay green.**
 
@@ -119,12 +119,41 @@ thing to check.
 
 By hand, the same switch is `http://localhost:4173/?photoreal=0`.
 
+## Language
+
+**Everything in this repository and on its GitHub pages is written in English:**
+code, comments, docs, commit messages, pull-request titles and descriptions,
+review comments. Surplomb is a French product, but its contributors and its
+upstream, [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view), are
+not all French speakers.
+
+The exceptions are deliberate and narrow:
+
+- **What the reader sees is bilingual.** The interface speaks French by default
+  and English on request; every visible string lives in the module's
+  `<module>.i18n.js` catalog with its French and English side by side. Never
+  hard-code a visible string in either language. (The catalogs arrive with the
+  i18n infrastructure; until a module is migrated, leave its French strings
+  where they are rather than translating them in place.)
+- **Data is not prose.** Commune names, DVF property types, crime categories
+  and every other value read from a French source stay as published; only
+  their display label is translated.
+- **The legal pages** (`mentions-legales.html`, `confidentialite.html`) are
+  French and the French text governs.
+- **[`docs/GLOSSARY.md`](docs/GLOSSARY.md)** pairs the French terms with the
+  English ones the docs and the interface use — *commune* → *municipality*,
+  *DVF* → *property sales (DVF)*. Use its words; add a missing term to the
+  section of its domain.
+
+Commits and pull requests before 2026-09-19 are mostly in French. They are
+left as they are.
+
 ## Coding style
 
 - ES modules, **2-space indent, single quotes, semicolons.**
 - JSDoc on exported/public functions.
 - Match the surrounding code — comment density, naming, and idiom.
-- Prefer small, reviewable commits. Conventional-commit-style prefixes (`feat:`, `fix:`, `perf:`, `docs:`) are appreciated but not required.
+- Prefer small, reviewable commits. A commit subject says what the reader saw and what changed (*"Links to Lyon opened sales on an empty map: camera rounding noise no longer blocks moveEnd"*); the body argues the decision. Conventional-commit-style prefixes (`feat:`, `fix:`, `perf:`, `docs:`) are appreciated but not required.
 
 ## Pull requests
 
@@ -132,7 +161,7 @@ By hand, the same switch is `http://localhost:4173/?photoreal=0`.
 2. Keep `npm run build`, `npm test`, and `npm run test:track` green and avoid new console errors.
 3. If you change runtime behavior, update `docs/CURRENT-STATE.md` and `CHANGELOG.md` in the same PR.
 4. If you add or change a data source, update [DATA_SOURCES.md](DATA_SOURCES.md) with its license and attribution. **Don't add data you don't have the right to redistribute** — fetch it at runtime instead.
-5. Describe what you changed and how you verified it (screenshots welcome for anything visual).
+5. Describe what you changed and how you verified it (screenshots welcome for anything visual). The [pull-request template](.github/pull_request_template.md) has the sections.
 
 ## Ground rules
 
