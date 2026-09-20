@@ -71,6 +71,8 @@ import {
   pointInRing as ringContains,
 } from './ringGeometry.js';
 import { boxTooWide, focusedViewBox } from './viewportBox.js';
+import { formatNumber, ordinal } from '../i18n/format.js';
+import messages from './cadastreFeed.i18n.js';
 
 /** Api Carto's cadastre module. Keyless, CORS-open, Licence Ouverte 2.0. */
 export const CADASTRE_API_BASE = 'https://apicarto.ign.fr/api/cadastre';
@@ -202,31 +204,31 @@ export const CADASTRE_PEN_MM = 0.5;
 export const CADASTRE_SCALE_BANDS = Object.freeze([
   Object.freeze({
     id: 'fine',
-    label: 'Plan fin',
+    get label() { return messages().bands.fine.label; },
     color: '#4fd6ff',
     echelles: Object.freeze([250, 500]),
-    blurb: 'Levé au 1:250 ou 1:500 — centres urbains denses. Trait ±0,13 à 0,25 m.',
+    get blurb() { return messages().bands.fine.blurb; },
   }),
   Object.freeze({
     id: 'urban',
-    label: 'Plan urbain',
+    get label() { return messages().bands.urban.label; },
     color: '#7ee787',
     echelles: Object.freeze([1000]),
-    blurb: 'Levé au 1:1000 — villes et bourgs. Trait ±0,5 m.',
+    get blurb() { return messages().bands.urban.blurb; },
   }),
   Object.freeze({
     id: 'rural',
-    label: 'Plan rural',
+    get label() { return messages().bands.rural.label; },
     color: '#f4c542',
     echelles: Object.freeze([2000, 2500]),
-    blurb: 'Levé au 1:2000 ou 1:2500 — campagne cultivée. Trait ±1 à 1,25 m.',
+    get blurb() { return messages().bands.rural.blurb; },
   }),
   Object.freeze({
     id: 'extensive',
-    label: 'Plan étendu',
+    get label() { return messages().bands.extensive.label; },
     color: '#ff7043',
     echelles: Object.freeze([4000, 5000]),
-    blurb: 'Levé au 1:4000 ou 1:5000 — forêt, montagne, grandes propriétés. Trait ±2 à 2,5 m.',
+    get blurb() { return messages().bands.extensive.blurb; },
   }),
 ]);
 
@@ -247,10 +249,10 @@ export const CADASTRE_SCALE_BANDS = Object.freeze([
  */
 export const CADASTRE_UNKNOWN_BAND = Object.freeze({
   id: 'unknown',
-  label: 'Échelle inconnue',
+  get label() { return messages().bands.unknown.label; },
   color: '#8a93a6',
   echelles: Object.freeze([]),
-  blurb: 'Feuille non jointe, ou échelle hors des quatre bandes. La tolérance reste calculée dès que l\'échelle est publiée.',
+  get blurb() { return messages().bands.unknown.blurb; },
 });
 
 /** Band ids in legend order, unknown last. */
@@ -895,10 +897,16 @@ export function arrondissementOrdinal(codeArr, codeInsee) {
   return ordinal > 0 ? ordinal : null;
 }
 
-/** French ordinal suffix: 1ᵉʳ, then 2ᵉ, 3ᵉ… */
+/**
+ * An arrondissement's rank: `1ᵉʳ`, `2ᵉ` in French, `1st`, `2nd` in English.
+ *
+ * Kept under its old name, which four call sites and a test already read; the
+ * suffix now comes from `src/i18n/format.js`, which prints the same French
+ * bytes it always did.
+ */
 export function frenchOrdinal(n) {
   if (!Number.isFinite(n) || n <= 0) return null;
-  return n === 1 ? '1ᵉʳ' : `${n}ᵉ`;
+  return ordinal(n);
 }
 
 /**
@@ -913,9 +921,9 @@ export function frenchOrdinal(n) {
 export function formatSurfaceM2(value) {
   const m2 = finiteOrNull(value);
   if (m2 === null) return null;
-  if (m2 >= 10000) return `${(m2 / 10000).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} ha`;
-  if (m2 > 0 && m2 < 10) return `${m2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} m²`;
-  return `${Math.round(m2).toLocaleString('fr-FR')} m²`;
+  if (m2 >= 10000) return `${formatNumber(m2 / 10000, { maximumFractionDigits: 2 })} ha`;
+  if (m2 > 0 && m2 < 10) return `${formatNumber(m2, { maximumFractionDigits: 2 })} m²`;
+  return `${formatNumber(Math.round(m2))} m²`;
 }
 
 /**
@@ -932,8 +940,11 @@ export function formatSignedPercent(ratio) {
   const percent = value * 100;
   const magnitude = Math.abs(percent);
   const digits = magnitude < 1 ? 2 : (magnitude < 10 ? 1 : 0);
-  const rounded = magnitude.toFixed(digits).replace('.', ',');
-  return `${percent >= 0 ? '+' : '−'}${rounded} %`;
+  // `toFixed` and not the formatter: ICU rounds a half from the shortest
+  // decimal and `toFixed` from the double, so `−0,32 %` is kept byte for byte
+  // by re-pointing the string the module has always built.
+  const rounded = magnitude.toFixed(digits).replace('.', messages().decimalPoint);
+  return messages().signedPercent(`${percent >= 0 ? '+' : '−'}${rounded}`);
 }
 
 /**
@@ -952,7 +963,9 @@ export function formatScale(echelle) {
 export function formatToleranceM(metres) {
   const value = finiteOrNull(metres);
   if (value === null) return null;
-  return `±${value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`;
+  return messages().tolerance(
+    formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  );
 }
 
 /**
@@ -964,11 +977,12 @@ export function formatToleranceM(metres) {
  * @returns {string}
  */
 export function cadastreParcelTitle(parcel) {
+  const m = messages().parcel;
   const section = text(parcel?.s);
   const numero = text(parcel?.n);
-  if (section && numero) return `Parcelle ${section} ${numero}`;
-  if (numero) return `Parcelle ${numero}`;
-  return 'Parcelle';
+  if (section && numero) return m.titled(section, numero);
+  if (numero) return m.numbered(numero);
+  return m.untitled;
 }
 
 /**
@@ -978,11 +992,12 @@ export function cadastreParcelTitle(parcel) {
  * @returns {string}
  */
 export function cadastreCommuneLine(parcel, communes = {}) {
+  const m = messages().parcel;
   const code = text(parcel?.m);
-  const name = text(communes?.[code]) || code || 'Commune inconnue';
-  const ordinal = frenchOrdinal(arrondissementOrdinal(parcel?.r, code));
-  const head = ordinal ? `${name} ${ordinal}` : name;
-  return code ? `${head} · INSEE ${code}` : head;
+  const name = text(communes?.[code]) || code || m.unknownCommune;
+  const rank = frenchOrdinal(arrondissementOrdinal(parcel?.r, code));
+  const head = rank ? `${name} ${rank}` : name;
+  return code ? m.communeCode(head, code) : head;
 }
 
 /**
@@ -993,15 +1008,16 @@ export function cadastreCommuneLine(parcel, communes = {}) {
  * @returns {string}
  */
 export function cadastreSheetLine(sheet, parcel) {
+  const m = messages().sheet;
   const section = text(parcel?.s);
   const feuille = finiteOrNull(parcel?.f);
   const name = section && feuille !== null
-    ? `Feuille ${section} ${String(feuille).padStart(2, '0')}`
-    : 'Feuille';
+    ? m.named(section, String(feuille).padStart(2, '0'))
+    : m.untitled;
   const scale = formatScale(sheet?.e);
-  if (!scale) return `${name} · échelle non publiée`;
+  if (!scale) return m.noScale(name);
   const edition = text(sheet?.d);
-  return edition ? `${name} au ${scale} · édition ${edition}` : `${name} au ${scale}`;
+  return edition ? m.edition(name, scale, edition) : m.scaled(name, scale);
 }
 
 /**
@@ -1014,9 +1030,11 @@ export function cadastreSheetLine(sheet, parcel) {
  * @returns {string}
  */
 export function cadastreToleranceLine(sheet) {
+  const m = messages();
   const tolerance = graphicToleranceM(sheet?.e);
-  if (tolerance === null) return 'Tolérance non calculable — échelle du plan inconnue';
-  return `Trait de plan ${formatToleranceM(tolerance)} (${String(CADASTRE_PEN_MM).replace('.', ',')} mm à l'échelle)`;
+  if (tolerance === null) return m.toleranceLine.unknown;
+  return m.toleranceLine.known(formatToleranceM(tolerance),
+    String(CADASTRE_PEN_MM).replace('.', m.decimalPoint));
 }
 
 /**
@@ -1029,21 +1047,22 @@ export function cadastreToleranceLine(sheet) {
  * @returns {string[]} One or two lines.
  */
 export function cadastreAreaLines(parcel) {
+  const m = messages().area;
   const declared = finiteOrNull(parcel?.c);
   const drawn = finiteOrNull(parcel?.a);
   const lines = [];
-  if (declared === null) lines.push('Contenance non publiée');
-  else if (declared === 0) lines.push('Contenance déclarée 0 m² — valeur publiée telle quelle');
-  else lines.push(`Contenance déclarée ${formatSurfaceM2(declared)}`);
+  if (declared === null) lines.push(m.noContenance);
+  else if (declared === 0) lines.push(m.zeroContenance);
+  else lines.push(m.contenance(formatSurfaceM2(declared)));
 
   if (drawn === null) return lines;
   if (declared !== null && declared > 0) {
     const gap = drawn / declared - 1;
     lines.push(Math.abs(gap) > CADASTRE_AREA_TOLERANCE
-      ? `Tracé ${formatSurfaceM2(drawn)} — ${formatSignedPercent(gap)} contre la contenance`
-      : `Tracé ${formatSurfaceM2(drawn)} (${formatSignedPercent(gap)})`);
+      ? m.drawnDisagreeing(formatSurfaceM2(drawn), formatSignedPercent(gap))
+      : m.drawnAgreeing(formatSurfaceM2(drawn), formatSignedPercent(gap)));
   } else {
-    lines.push(`Tracé ${formatSurfaceM2(drawn)}`);
+    lines.push(m.drawn(formatSurfaceM2(drawn)));
   }
   return lines;
 }
@@ -1054,17 +1073,18 @@ export function cadastreAreaLines(parcel) {
  * @returns {?string}
  */
 export function cadastreLoadingLabel({ status, totalInBox } = {}) {
-  if (status === 'too-high') {
-    return `Zoome sous ${CADASTRE_MAX_ALTITUDE_M.toLocaleString('fr-FR')} m pour charger le parcellaire`;
-  }
-  if (status === 'off-coverage') return 'Hors couverture PCI vecteur (France et DROM)';
+  const m = messages().status;
+  // i18n-ignore-start — the layer's own status keys, not words.
+  if (status === 'too-high') return m.tooHigh(formatNumber(CADASTRE_MAX_ALTITUDE_M));
+  if (status === 'off-coverage') return m.offCoverage;
   if (status === 'too-dense') {
     const count = finiteOrNull(totalInBox);
     return count === null
-      ? 'Vue trop dense pour une réponse complète — zoome'
-      : `${count.toLocaleString('fr-FR')} parcelles ici — au-delà des ${CADASTRE_UPSTREAM_LIMIT.toLocaleString('fr-FR')} qu'Api Carto renvoie. Zoome.`;
+      ? m.tooDense
+      : m.tooDenseCounted(formatNumber(count), formatNumber(CADASTRE_UPSTREAM_LIMIT));
   }
-  if (status === 'empty') return 'Aucune parcelle ici — domaine public, ou hors de France';
-  if (status === 'loading') return 'Parcelles Api Carto…';
+  if (status === 'empty') return m.empty;
+  if (status === 'loading') return m.loading;
+  // i18n-ignore-end
   return null;
 }
