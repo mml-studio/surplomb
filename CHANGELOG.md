@@ -6,6 +6,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The globe speaks French to a French reader and English to everyone else.**
+  The interface used to be half and half: a French product with an English
+  shell inherited from God's Eye View (`DATA LAYERS`, `POWER UP`). Now the
+  page picks its language before the first paint — a stored choice, then
+  `?lang=`, then the browser's — and an FR/EN switch in the top bar changes it
+  and reloads on the spot, camera, layers and panels restored from the share
+  hash. French stays the default and its wording is unchanged, to the byte.
+  Translated so far: the whole static shell and the panels, the layer registry
+  (60 names, 7 groups, their sources and the ACTIF/CHARGEMENT/ÉTEINT statuses),
+  the HUD and the loading screen, the first-visit card, the Address X-ray and
+  the building cards, real estate (sales, energy ratings, valuation, the
+  national scale), and every transport and mobility layer. Planning, crime and
+  schools, health, risks and the voice follow. What the register publishes —
+  a commune name, a DVF property type, a crime category — is data and stays as
+  published; only its label is translated.
+  A non-French reader is out of the first-run A/B test (variant A, no
+  telemetry): the three cards were written and read in French, and measuring
+  them against an English page would be noise.
 - **The globe can speak English, one module at a time.** `/globe?lang=en`
   switches the page to English and remembers the choice (`?lang=fr` switches
   back); French stays the default and nothing changes for a French reader.

@@ -25,10 +25,21 @@ Updated: September 19, 2026
 > R4 `toLocale*('fr-FR')` 135, R5 0 — a count may fall, never rise;
 > `npm run i18n:report`, `npm run i18n:tighten`), and
 > `src/i18n/messagesParity.test.mjs` over every catalog. QA pages pin their
-> locale through `newQaPage()` (French unless `GEV_QA_LOCALE=en`). Pilot:
-> `girondeMegafire.js`, `megafireClock.js`, `megafirePack.js` speak English;
-> the layer's NAME is still French until the registry batch translates layer
-> names.
+> locale through `newQaPage()` (French unless `GEV_QA_LOCALE=en`), and
+> `npm run qa:i18n-en` opens the English globe, unfolds its panels and reports
+> the French a reader can still see (advisory; `--strict` fails).
+>
+> **Translated as of 2026-09-20 (waves 1 and the pilot):** the static shell and
+> every panel (#285, with the FR/EN switch, browser detection and the A/B
+> exclusion of non-French readers), the layer registry — 60 names, 7 groups,
+> their source lines and the ACTIF/CHARGEMENT/ÉTEINT statuses, which harnesses
+> now read through `data-feed-state` — the HUD, the loading screen, the zoom
+> card and the credits (#286), the Address X-ray and the building cards (#283),
+> real estate (#287), transport and mobility (#288), and the megafire pilot
+> (#282). **Still French-only:** planning and land, crime and schools, health,
+> amenities and telecoms, risks and environment, the shell's satellites
+> (waitlist, phone sheet, legal links), and the voice with the server's error
+> prose. Ratchets after wave 1: R1 2,958, R2 951, R3 0, R4 74.
 
 > **2026-09-19 — the top of a phone, like Google Maps.** Under
 > `html[data-shell="phone"]` only (`src/phoneSheet.js`, `phone.css`,
