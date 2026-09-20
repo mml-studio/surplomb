@@ -55,6 +55,9 @@
  * Pure: no fetch, no DOM, no Cesium, no clock.
  */
 
+import { formatEuros, formatEurosPerM2, monthName } from '../i18n/format.js';
+import messages from './buildingDossier.i18n.js';
+
 /**
  * Assemble a cadastral parcel id from its published pieces.
  *
@@ -79,18 +82,11 @@ export function cadastralParcelId({ commune, prefixe, section, numero } = {}) {
   return `${insee}${pre}${sec.padStart(2, '0')}${num.padStart(4, '0')}`;
 }
 
-/** French thousands, matching every other card in the French packs. */
-function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
-}
-
-/** `2024-03-18` → `mars 2024`. Never a day: see {@link dossierSaleLine}. */
+/** `2024-03-18` → `mars 2024`, `March 2024`. Never a day: see {@link dossierSaleLine}. */
 export function dossierMonthLabel(iso) {
   const match = /^(\d{4})-(\d{2})/.exec(String(iso ?? ''));
   if (!match) return null;
-  const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-  const month = months[Number(match[2]) - 1];
+  const month = monthName(Number(match[2]) - 1);
   return month ? `${month} ${match[1]}` : match[1];
 }
 
@@ -112,14 +108,15 @@ export function dossierMonthLabel(iso) {
  */
 export function dossierSaleLine(sale) {
   if (!sale) return null;
+  const m = messages();
   const when = dossierMonthLabel(sale.date);
   const value = Number(sale.valeur);
   if (!when || !Number.isFinite(value) || value <= 0) return null;
-  const parts = [`Vendu ${when} · ${fr(Math.round(value))} €`];
+  const parts = [m.sale.sold(when, formatEuros(Math.round(value)))];
   if (Number.isFinite(sale.prixM2) && sale.prixM2 > 0) {
-    parts.push(`${fr(Math.round(sale.prixM2))} €/m²`);
+    parts.push(formatEurosPerM2(Math.round(sale.prixM2)));
   }
-  return `${parts.join(' · ')} — DVF, sur cette parcelle`;
+  return m.sale.line(parts.join(' · '));
 }
 
 /**
@@ -135,13 +132,16 @@ export function dossierSaleLine(sale) {
 export function dossierPermitLine(permits) {
   const count = Number(permits?.count) || 0;
   if (!count) return null;
+  const m = messages();
   const newest = permits.newest || null;
   const when = dossierMonthLabel(newest?.date);
+  // The permit's own label (`PC · Autorisé`) is composed by `adsFeed.js` and
+  // printed as it came: it is that module's vocabulary, not this card's.
   const head = newest?.label
-    ? `${newest.label}${when ? ` · ${when}` : ''}`
-    : `${count} autorisation${count > 1 ? 's' : ''}`;
-  const rest = count > 1 ? ` · +${count - 1} autre${count > 2 ? 's' : ''} depuis 2013` : '';
-  return `Permis : ${head}${rest} — Sitadel, sur cette parcelle`;
+    ? (when ? m.permits.withDate(newest.label, when) : newest.label)
+    : m.permits.count(count);
+  const rest = count > 1 ? m.permits.more(count - 1) : '';
+  return m.permits.line(`${head}${rest}`);
 }
 
 /**
@@ -159,18 +159,21 @@ export function dossierPermitLine(permits) {
 export function dossierZoningLine(answer) {
   if (!answer) return null;
   if (!answer.insideBox) return null; // never asked about this ground
+  const m = messages();
   const zones = Array.isArray(answer.zones) ? answer.zones : [];
-  if (!zones.length) return 'PLU : aucun zonage publié sur ce point';
+  if (!zones.length) return m.zoning.none;
   const first = zones[0];
+  // The zone's code and label are the PLU document's own words, written by the
+  // municipality that drew it: data, in both languages.
   const name = [first.code, first.label].filter(Boolean).join(' — ') || first.kind || null;
   if (!name) return null;
   // Two zonings on one point is not a bug: two communes digitise their shared
   // limit independently and the Géoportail stacks both documents.
-  const also = zones.length > 1 ? ` · +${zones.length - 1} zonage${zones.length > 2 ? 's' : ''} sur ce point` : '';
+  const also = zones.length > 1 ? m.zoning.alsoZones(zones.length - 1) : '';
   const sup = Array.isArray(answer.servitudes) && answer.servitudes.length
-    ? ` · ${answer.servitudes.length} servitude${answer.servitudes.length > 1 ? 's' : ''}`
+    ? m.zoning.easements(answer.servitudes.length)
     : '';
-  return `PLU : ${name}${also}${sup}`;
+  return m.zoning.line(`${name}${also}${sup}`);
 }
 
 /**

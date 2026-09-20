@@ -5,6 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <!--
+    THE PAGE'S LANGUAGE, DECIDED BEFORE ANYTHING IS DRAWN.
+
+    A VERBATIM COPY of the `/* locale-gate */` script in `index.html` — same
+    order, same storage key, same flag — because this sheet is a second
+    document of the same application and a reader who chose English on the
+    globe must not meet a French page inside its own iframe. The rule and its
+    reasons live in `src/i18n/locale.js`; `src/i18n/locale.test.mjs` RUNS BOTH
+    copies against `resolveLocale()` over a matrix of inputs and fails when
+    either one drifts.
+
+    The globe passes `?lang=` on the iframe URL when it is not French
+    (`src/data/ficheSheet.js`); a reader who opens this page directly is
+    covered by the stored choice.
+  -->
+  <script>
+    /* locale-gate */
+    (function () {
+      var KEY = 'gev:locale:v1';
+      var AUTO = false;
+      var pick = function (value) {
+        var tag = typeof value === 'string' ? value.toLowerCase().split(/[-_]/)[0] : '';
+        return tag === 'fr' || tag === 'en' ? tag : null;
+      };
+      var locale = pick(window.__GEV_LOCALE__);
+      if (!locale) {
+        locale = pick(new URLSearchParams(location.search).get('lang'));
+        if (locale) {
+          try { window.localStorage.setItem(KEY, locale); } catch (e) { /* no storage */ }
+        }
+      }
+      if (!locale) {
+        try { locale = pick(window.localStorage.getItem(KEY)); } catch (e) { /* no storage */ }
+      }
+      if (!locale && AUTO) {
+        var list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+        for (var i = 0; i < list.length && !locale; i += 1) locale = pick(list[i]);
+        locale = locale || 'en';
+      }
+      document.documentElement.setAttribute('lang', locale || 'fr');
+    })();
+  </script>
+  <!--
     THE APP'S FONTS, SERVED FROM THIS ORIGIN.
 
     This sheet has declared `var(--font-mono)` and `var(--font-sans)` from the
@@ -14,7 +56,7 @@
     subset, from this origin, never from Google.
   -->
   <link rel="stylesheet" href="/fonts/fonts.css">
-  <title>Radiographie d'adresse</title>
+  <title data-i18n="page.title">Radiographie d'adresse</title>
   <!--
     THE ADDRESS X-RAY — one address, ten themes, one sheet.
 
@@ -230,14 +272,19 @@
 <body>
   <main class="sheet" id="sheet">
     <header class="masthead">
-      <p class="eyebrow">Radiographie d’adresse</p>
-      <h1 id="title">Une adresse, dix thématiques</h1>
-      <p class="subline" id="subline">Entrez une adresse française, ou ouvrez cette page avec <code>?lat=&amp;lon=</code>.</p>
+      <p class="eyebrow" data-i18n="masthead.eyebrow">Radiographie d’adresse</p>
+      <h1 id="title" data-i18n="masthead.title">Une adresse, dix thématiques</h1>
+      <!-- The sentence is a `<span>` of its own so the applicator rewrites it
+           without emptying the full stop that closes the line after `<code>`:
+           it moves an element's FIRST text node and blanks the others. -->
+      <p class="subline" id="subline"><span data-i18n="masthead.subline">Entrez une adresse française, ou ouvrez cette page avec</span> <code translate="no">?lat=&amp;lon=</code>.</p>
     </header>
     <form class="lookup" id="lookup" autocomplete="off">
-      <input id="query" name="q" type="search" placeholder="13 rue du Chevaleret, Paris" aria-label="Adresse">
-      <button type="submit">Scanner</button>
-      <button type="button" class="ghost print" id="print">Imprimer</button>
+      <input id="query" name="q" type="search"
+             placeholder="13 rue du Chevaleret, Paris" data-i18n-placeholder="lookup.example"
+             aria-label="Adresse" data-i18n-aria-label="lookup.addressLabel">
+      <button type="submit" data-i18n="lookup.scan">Scanner</button>
+      <button type="button" class="ghost print" id="print" data-i18n="lookup.print">Imprimer</button>
     </form>
     <p class="status" id="status"></p>
     <div id="themes"></div>

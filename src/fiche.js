@@ -18,12 +18,20 @@
  * scan is therefore a link — which is the whole distribution mechanism this
  * sheet has, and the reason the address is pushed into the history rather than
  * held in a variable.
+ *
+ * AND `?lang=` IS PART OF THAT STATE. `fiche.html` carries its own copy of the
+ * locale gate, so the page has decided its language before this module runs;
+ * the sentences below are read from `fiche.i18n.js` at render time and the
+ * static masthead is translated once, on boot, by the shared applicator.
  */
 
 import {
   composeRadiographie,
   fetchRadiographieParts,
 } from './data/adresseRadiographie.js';
+import messages, { markupMessages } from './fiche.i18n.js';
+import { formatDateTime } from './i18n/format.js';
+import { DEFAULT_LOCALE, I18N_READY_ATTRIBUTE, getLocale } from './i18n/locale.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -40,12 +48,25 @@ function node(tag, className, content) {
   return element;
 }
 
-/** The status verdict, as a word a reader understands. */
-const STATUS_LABEL = Object.freeze({
-  ok: 'complet',
-  partial: 'partiel',
-  absent: 'sans réponse',
-});
+/**
+ * Translate the static markup of `fiche.html`, once, before the first render.
+ *
+ * Imported dynamically and only when the page is not French, the way
+ * `src/boot.js` does it for the globe: a French reader pays nothing for the
+ * applicator, and an English one has the masthead translated before the sheet
+ * writes its first row into it.
+ *
+ * @returns {Promise<void>}
+ */
+async function translateMarkup() {
+  if (getLocale() === DEFAULT_LOCALE) return;
+  try {
+    const { applyMarkup } = await import('./i18n/markup.js');
+    applyMarkup(document, { catalog: markupMessages });
+  } finally {
+    document.documentElement.setAttribute(I18N_READY_ATTRIBUTE, '');
+  }
+}
 
 /**
  * Read the point from the URL.
@@ -92,12 +113,13 @@ async function geocode(query) {
 
 /** Render one theme section. */
 function renderTheme(theme) {
+  const m = messages();
   const section = node('section', 'theme');
   section.dataset.status = theme.status;
   const heading = node('h2');
   heading.append(node('span', null, theme.label));
   if (theme.status !== 'ok') {
-    heading.append(node('span', 'flag', `— ${STATUS_LABEL[theme.status]}`));
+    heading.append(node('span', 'flag', `— ${m.status[theme.status]}`));
   }
   section.append(heading);
   section.append(node('p', 'question', theme.question));
@@ -116,7 +138,9 @@ function renderTheme(theme) {
 
   const notes = [...theme.notes];
   if (theme.silent?.length) {
-    notes.unshift(`Sources muettes : ${theme.silent.join(', ')}.`);
+    // The keys are the route names of `radiographieRequests` (`atmo`,
+    // `bruit`): identifiers, not words, and the same in both languages.
+    notes.unshift(m.silentSources(theme.silent.join(', ')));
   }
   if (notes.length) {
     const list = node('ul', 'notes');
@@ -128,6 +152,7 @@ function renderTheme(theme) {
 
 /** Render the whole sheet. */
 function render(fiche) {
+  const m = messages();
   const address = fiche.address;
   el('title').textContent = address?.label
     || address?.commune
@@ -141,17 +166,25 @@ function render(fiche) {
   // is not the door: a sheet titled with a street name for a point 180 m away
   // is describing a different place than the reader thinks.
   if (Number.isFinite(address?.distanceM) && address.distanceM > 10) {
-    parts.push(`point à ${address.distanceM} m de l’adresse la plus proche`);
+    parts.push(m.addressDistance(address.distanceM));
   }
   subline.append(node('span', null, parts.join(' · ')));
   subline.append(document.createTextNode(' '));
   subline.append(node('span', 'coords',
     `${fiche.point.lat.toFixed(5)}, ${fiche.point.lon.toFixed(5)}`));
 
-  el('status').textContent = `${fiche.answered} thématiques complètes`
-    + `, ${fiche.partial} partielles`
-    + `, ${fiche.absent.length} sans réponse`
-    + ` — ${new Date(fiche.generatedAt).toLocaleString('fr-FR')}`;
+  // French keeps the shape `toLocaleString('fr-FR')` printed before this page
+  // was bilingual — `20/09/2026 10:23:08`. English follows docs/GLOSSARY.md: a
+  // named month, which is what an English reader of a printed sheet expects,
+  // and the 24-hour clock the glossary fixes for every timestamp.
+  el('status').textContent = m.statusLine(
+    fiche.answered,
+    fiche.partial,
+    fiche.absent.length,
+    getLocale() === DEFAULT_LOCALE
+      ? formatDateTime(fiche.generatedAt)
+      : formatDateTime(fiche.generatedAt, { dateStyle: 'medium', timeStyle: 'medium', hourCycle: 'h23' }),
+  );
 
   const host = el('themes');
   host.textContent = '';
@@ -161,16 +194,12 @@ function render(fiche) {
 
   for (const theme of fiche.themes) host.append(renderTheme(theme));
 
-  el('colophon').textContent = 'Sources publiques françaises — DVF (DGFiP), carte des loyers '
-    + '(DGALN/DHUP), ADEME, IGN, annuaire de l’éducation et IPS (DEPP), BPE (INSEE) et FINESS, '
-    + 'indice ATMO (Atmo France et les AASQA), Géorisques (BRGM), Ma connexion internet (ARCEP), '
-    + 'recensement (INSEE), Géoportail de l’urbanisme, Sitadel (SDES), carroyage Filosofi (INSEE). '
-    + 'Chaque licence et chaque attribution est détaillée dans DATA_SOURCES.md.';
+  el('colophon').textContent = m.colophon;
 }
 
 /** Scan a point and render it. */
 async function scan(point) {
-  el('status').textContent = 'Interrogation des dix-sept sources…';
+  el('status').textContent = messages().scanning;
   const parts = await fetchRadiographieParts(point);
   render(composeRadiographie({ point, parts }));
 }
@@ -178,15 +207,16 @@ async function scan(point) {
 async function boot() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('embed') === '1') document.body.classList.add('embed');
+  await translateMarkup();
 
   el('lookup').addEventListener('submit', async (event) => {
     event.preventDefault();
     const query = el('query').value.trim();
     if (!query) return;
-    el('status').textContent = 'Géocodage…';
+    el('status').textContent = messages().geocoding;
     const found = await geocode(query);
     if (!found) {
-      el('status').textContent = 'Adresse introuvable dans la Base Adresse Nationale.';
+      el('status').textContent = messages().notFound;
       return;
     }
     // The scan is a LINK. Pushed rather than replaced so a reader comparing two
@@ -218,4 +248,8 @@ async function boot() {
   }
 }
 
-void boot();
+// Only in a browser. `src/fiche.i18n.js` makes this module a catalogued one,
+// and `src/i18n/importSafety.test.mjs` imports every catalogued module with
+// `document` and `navigator` poisoned to prove nothing reads the environment
+// while loading. `window` is the one global that says "there is a page here".
+if (typeof window !== 'undefined') void boot();

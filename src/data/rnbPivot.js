@@ -103,6 +103,9 @@
 // Dependency-free and side-effect-free: no Cesium, no DOM, no fetch.
 
 /** RNB API root. Keyless, CORS-open (`access-control-allow-origin: *`). */
+import { labelFor } from '../i18n/messages.js';
+import messages from './rnbPivot.i18n.js';
+
 export const RNB_API_BASE = 'https://rnb-api.beta.gouv.fr/api/alpha';
 
 /**
@@ -223,21 +226,29 @@ export function rnbPlotUrl(plotId) {
 }
 
 /**
- * The statuses the register publishes, and whether the building is standing.
+ * The statuses the register publishes, in French, as the SERVER publishes them.
  *
- * `constructed` is the whole of the Lyon sample; the others exist and a card
- * that met one and printed nothing would be claiming the building is ordinary.
+ * Built from the catalog's definition rather than from a locale: this module
+ * is imported by `vite.config.js`, and a server has no language to read
+ * (docs/i18n/CONVENTIONS.md). The words are the ones this table always
+ * carried, and {@link rnbStatusLabel} is what a browser calls instead.
  */
-export const RNB_STATUS_LABELS = Object.freeze({
-  constructed: 'construit',
-  notUsable: 'non exploitable',
-  demolished: 'démoli',
-  constructionProject: 'projet de construction',
-  canceledConstructionProject: 'projet de construction annulé',
-  ongoingConstruction: 'construction en cours',
-  ongoingChange: 'modification en cours',
-  demolitionProject: 'projet de démolition',
-});
+export const RNB_STATUS_LABELS = Object.freeze(Object.fromEntries(
+  Object.entries(messages.definition).map(([key, leaf]) => [key, leaf.fr]),
+));
+
+/**
+ * One status in the page's language, for a card being drawn.
+ *
+ * A status the register invents next month is shown as it came: an unknown
+ * key is still information, an empty cell is not.
+ *
+ * @param {?string} status A `projectRnbBuilding` status key.
+ * @returns {string} The label, or the key itself.
+ */
+export function rnbStatusLabel(status) {
+  return labelFor(messages, status);
+}
 
 /**
  * One address as the register publishes it, and as a card reads it.
