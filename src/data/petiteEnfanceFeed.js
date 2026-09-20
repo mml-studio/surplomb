@@ -102,13 +102,16 @@ import {
   hasArrondissements,
   projectCommuneContours,
 } from './communeContours.js';
+import messages from './petiteEnfanceFeed.i18n.js';
 
 /** Portal every one of the seven datasets lives on. */
 export const PE_PORTAL = 'data.caf.fr';
 
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — the CNAF's own name for the indicator, as credited.
 export const PE_SOURCE = 'Taux de couverture d’accueil du jeune enfant — Cnaf (data.caf.fr)';
 /** The centroid source, which is a different producer and says so. */
+// i18n-ignore-next-line — Etalab's own name for the service, as credited.
 export const PE_GEO_SOURCE = 'Contours et centres administratifs — geo.api.gouv.fr (Etalab)';
 
 /**
@@ -136,11 +139,14 @@ export const PE_YEAR_FLOOR = 2023;
  */
 export const PE_SCALES = Object.freeze(['dep', 'epci', 'com']);
 
-export const PE_SCALE_LABELS = Object.freeze({
-  dep: 'Département',
-  epci: 'Intercommunalité',
-  com: 'Commune',
-});
+/**
+ * The scale's name in the page's language.
+ * @param {?string} scale A `PE_SCALES` key.
+ * @returns {?string} null for a key this build does not know.
+ */
+export function peScaleLabel(scale) {
+  return messages().scales[scale] || null;
+}
 
 /**
  * Per-scale dataset ids and column names.
@@ -177,24 +183,22 @@ export function peScaleSpec(scale) {
  */
 export const PE_MODES = Object.freeze(['psu', 'horsPsu', 'prescol', 'am', 'gad']);
 
-export const PE_MODE_LABELS = Object.freeze({
-  psu: 'Crèche (EAJE financé PSU)',
-  horsPsu: 'Crèche hors PSU (micro-crèche Paje)',
-  prescol: 'Préscolarisation (maternelle avant 3 ans)',
-  am: 'Assistante maternelle',
-  gad: 'Garde à domicile',
-});
+/**
+ * The mode's full name, for the breakdown on a card.
+ * @param {?string} mode A `PE_MODES` key.
+ * @returns {?string} null for a key this build does not know.
+ */
+export function peModeLabel(mode) {
+  return messages().modes[mode] || null;
+}
 
-/** Short labels, for the status line and the legend where width is scarce. */
-export const PE_MODE_SHORT = Object.freeze({
-  psu: 'crèche PSU',
-  horsPsu: 'micro-crèche',
-  prescol: 'maternelle',
-  am: 'assistante maternelle',
-  gad: 'garde à domicile',
-});
+/** The same, short, for the status line and the legend where width is scarce. */
+export function peModeShortLabel(mode) {
+  return messages().modesShort[mode] || null;
+}
 
 /** Column stem for each mode, before the scale suffix. */
+// i18n-ignore-start — the CNAF's own column stems, read off every row.
 const MODE_STEM = Object.freeze({
   psu: 'psu_col',
   horsPsu: 'hors_psu_col',
@@ -202,6 +206,7 @@ const MODE_STEM = Object.freeze({
   am: 'am_ind',
   gad: 'gad_ind',
 });
+// i18n-ignore-end
 
 /** The two published subtotals, kept because a card reads them as a pair. */
 const SUBTOTAL_STEM = Object.freeze({ collectif: 'eaje', individuel: 'ind' });
@@ -223,18 +228,21 @@ const SUBTOTAL_STEM = Object.freeze({ collectif: 'eaje', individuel: 'ind' });
  */
 export const PE_BAND_RATIOS = Object.freeze([0.60, 0.85, 1.00, 1.15, 1.40]);
 
+// i18n-ignore-start — band KEYS: they ride the payload and the tallies.
 export const PE_BANDS = Object.freeze([
   'tres-bas', 'bas', 'sous-moyenne', 'sur-moyenne', 'haut', 'tres-haut',
 ]);
+// i18n-ignore-end
 
-export const PE_BAND_LABELS = Object.freeze({
-  'tres-bas': 'Très inférieur à la moyenne',
-  bas: 'Inférieur',
-  'sous-moyenne': 'Un peu sous la moyenne',
-  'sur-moyenne': 'Un peu au-dessus',
-  haut: 'Supérieur',
-  'tres-haut': 'Très supérieur à la moyenne',
-});
+/**
+ * The band's name in the page's language.
+ * @param {?string} band A `PE_BANDS` key.
+ * @returns {?string} null for an area with no published rate — the caller
+ *   decides what to say about that, because it is not a band.
+ */
+export function peBandName(band) {
+  return messages().bands[band] || null;
+}
 
 /**
  * Band for one rate, against the national reference.
