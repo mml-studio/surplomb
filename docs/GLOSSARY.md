@@ -106,6 +106,13 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | arrêté (préfectoral, ministériel) | (prefectoral, ministerial) order | |
 | CGU | terms of use | |
 | loi Informatique et Libertés (LIL) | French data protection act (LIL) | |
+| carreau imputé | imputed cell | Filosofi. |
+| secret statistique, non diffusé | statistical confidentiality, not released | |
+| niveau de vie moyen / médian | mean / median standard of living | |
+| écart interdécile D9/D1 | D9/D1 ratio | |
+| indice de Gini | Gini index | |
+| EQTP | full-time equivalent (FTE) | |
+| rentrée, effectif étudiant | intake, enrolment | |
 
 ## Real estate and housing
 
@@ -137,6 +144,11 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | VEFA | off-plan sale (VEFA) | |
 | millésime non téléchargé, domaine gelé | vintage not downloaded, frozen domain | |
 | levé au 1:500 | surveyed at 1:500 | |
+| dossier de comparables | comparables file | |
+| retenu / écarté | shortlisted / left out | |
+| écart affichage sur acte | asking-over-deed gap | |
+| bornes de plausibilité | plausibility bounds | |
+| lot multiple | multi-lot | |
 
 ## Urban planning and buildings
 
@@ -158,6 +170,15 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | établissement recevant du public (ERP) | public-access building (ERP) | **Not** the risk statement above. |
 | îlot de fraîcheur / îlot de chaleur | cool island / heat island | *Îlots de fraîcheur* → *Cool islands*. |
 | BÂTI & TERRITOIRE | BUILDINGS & LAND | Layer group. |
+| zone à urbaniser ouverte / fermée | future urban zone, OPEN / CLOSED | |
+| enclave | enclave | |
+| emprise, assiette (d’une servitude) | extent | *Emprise au sol* stays *footprint*. |
+| ouverture de chantier (DOC) | site opening declaration (DOC) | |
+| achèvement (DAACT) | completion declaration (DAACT) | |
+| nature du projet, destination principale | project nature, main use | |
+| lotissement | housing subdivision | |
+| certificat d’urbanisme | planning certificate | |
+| préfixe de section | section prefix | Cadastre. |
 
 ## Energy
 
@@ -287,6 +308,19 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | puissance radiative | radiative power | FIRMS. |
 | première / dernière détection | first / last detection | |
 | houlographe, fiche climatologique | wave buoy, climate summary sheet | |
+| détection (satellite), expertisé à J+1 | detection, quality-checked at D+1 | |
+| indicatif OMM | WMO number | |
+| pack RADOME / Étendu | RADOME / Extended pack | Météo-France station packs. |
+| thermomètre sous abri | thermometer in a screen | |
+| héliographe, célomètre, visibilimètre | sunshine recorder, ceilometer, visibility meter | |
+| temps présent, nébulosité | present weather, cloud cover | |
+| état de la mer | sea state | |
+| gêne (PEB) | nuisance | |
+| arrêté préfectoral | prefectoral order | |
+| aérodrome | aerodrome | |
+| foyer (séisme), secousse | focus, shaking | |
+| séisme dévastateur / majeur / destructeur | devastating / major / destructive earthquake | |
+| canopée, arbre remarquable | canopy, heritage tree | |
 
 ## Health, emergency services and education
 
@@ -316,6 +350,11 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | CNAM, Assurance maladie | national health insurance fund (CNAM) | |
 | assistante maternelle | childminder | |
 | conventionné secteur 1 / 2 | under the health-insurance agreement, sector 1 / 2 | |
+| tarif fixé (secteur 1) | set fee (sector 1) | |
+| honoraires libres (secteur 2) | own fees (sector 2) | |
+| dépassements plafonnés (OPTAM) | capped extra billing (OPTAM) | |
+| zone sous-dotée / moyennement dotée / bien dotée | under-served / moderately served / well-served area | APL. |
+| Base permanente des équipements (BPE) | Permanent database of amenities (BPE) | |
 
 ## Public safety, business and telecoms
 
@@ -341,6 +380,13 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | escroqueries | fraud | |
 | dégradations | criminal damage | |
 | Équipements du quotidien | Everyday amenities | Layer name. |
+| Base aérienne / Base navale / Champ de tir / Terrain militaire | Air base / Naval base / Firing range / Military land | Military sites key. |
+| support (ANFR), fût | support, shaft | A mast and everything on it. |
+| relevé d’ondes, champ global | field measurement, total field | |
+| azimut, faisceau | bearing, beam | |
+| Techniquement opérationnel, Projet approuvé | Technically operational, Approved project | ANFR status. |
+| 5G rapide / moyenne / basse | 5G high-band / mid-band / low-band | The rung, never a speed. |
+| Direction relevée / non relevée | Direction mapped / not mapped | Public cameras. |
 
 ## Cartography and data
 
@@ -361,6 +407,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | palier (d’un barème) | plateau | |
 | curseur (temps) | cursor | |
 | repli (d’un panneau) | fold | |
+| maillage (couche nationale amincie) | mesh | |
+| brouillon, Écartés (jeu de données) | draft, Set aside | Dataset box. |
+| relais (`/api/plug`) | relay | |
 
 ## Interface words
 
@@ -427,6 +476,28 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 | Vélos et véhicules partagés | Bikes and shared vehicles | Layer name. |
 | Paris intra-muros | Paris proper | |
 | Paris et sa proche couronne | Paris and its inner suburbs | |
+
+## The voice
+
+| French | English | Note |
+|---|---|---|
+| Contrôle vocal | Voice control | The mic button's screen-reader name. |
+| Aide vocale | Voice help | The `?` that opens the tray on a touchscreen. |
+| Cliquez le micro ou maintenez Espace pour parler | Click the mic or hold Space to speak | Cursor. |
+| Touchez le micro pour parler · il se referme seul | Tap the mic to speak · it closes itself | One request per tap. |
+| Micro ou Espace pour parler | Mic or Space to speak | ~30 characters on the dock line. |
+| Question ou commande | Ask or command | Caption of a live mic. |
+| Commandes offertes utilisées | Free commands used up | The hosted trial, spent. |
+| Modèle vocal, niveau du modèle vocal | Voice model, voice model tier | STD ↔ MINI. |
+| Coût estimé de la session | Estimated session cost | |
+| Écouter cette voix | Hear this voice | |
+| L’autorisation du micro a été refusée | Microphone permission was denied | |
+| Reconnaissance vocale | Speech recognition | The Web Speech API's ears. |
+| Voix sans clé | Keyless voice | The browser-ears path, as opposed to Realtime. |
+| Pas le micro : … | Not the microphone: … | Opens every unreachable-server line. |
+
+Instrument lettering on the voice dock (`MIC`, `HEARD`, `STD`, `TOKEN LIMIT`)
+and everything the model reads stay English in both languages, as the HUD does.
 
 ## Never translate
 

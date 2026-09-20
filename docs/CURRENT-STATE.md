@@ -29,6 +29,18 @@ Updated: September 19, 2026
 > `npm run qa:i18n-en` opens the English globe, unfolds its panels and reports
 > the French a reader can still see (advisory; `--strict` fails).
 >
+> **Fully bilingual as of 2026-09-20.** Every batch has landed: the shell
+> (#285), the registry and statuses (#286), the Address X-ray (#283), real
+> estate (#287), transport (#288), energy (#291), planning (#294), crime and
+> schools (#293), health, amenities and telecoms (#297), risks and weather
+> (#296), the shell's satellites — phone, trial, waitlist, legal links, scenes
+> and styles (#295) — and the voice with the server's error codes (#298).
+> Ratchets: R1 4,611 → 46, R2 1,738 → 14, R3 406 → 0, R4 135 → 1. What is left
+> is the layer modules' `name`/`source` fallbacks (the panel reads the
+> taxonomy) and `src/vitrine/*`, the French landing page, which is French by
+> decision. English plurals go through `plural()`; a test refuses a hand-made
+> one (#292).
+>
 > **Translated as of 2026-09-20 (waves 1 and the pilot):** the static shell and
 > every panel (#285, with the FR/EN switch, browser detection and the A/B
 > exclusion of non-French readers), the layer registry — 60 names, 7 groups,
