@@ -45,6 +45,7 @@ import {
 import { pickAt } from './pickAt.js';
 import { formatDecimal, formatNumber } from '../i18n/format.js';
 import messages from './delinquanceFrance.i18n.js';
+import { serverFailureMessage } from '../i18n/serverMessages.js';
 
 /**
  * Recorded delinquency in France, drawn with the publisher's own caution.
@@ -1135,7 +1136,7 @@ async function fetchJson(path, validate) {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(path, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await serverFailureMessage(response));
     const payload = await response.json();
     if (!validate(payload)) throw new Error('malformed payload');
     return payload;
@@ -1467,12 +1468,14 @@ export function buildDelinquanceLoadingLabel({
 
 const delinquanceFranceLayer = {
   id: DELINQUANCE_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Délinquance enregistrée (FR)',
   // 🚓 and not ⚠ or 🔥: the hazards group already carries weather and
   // industrial-risk glyphs, and this layer is not a warning — it is a register
   // of what a force wrote down.
   icon: '🚓',
   source: DELINQUANCE_SOURCE,
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

@@ -13,6 +13,7 @@ import {
   seatEntitiesOnGround,
 } from './addressScanLayer.js';
 import { isWorldPick } from './pickRegistry.js';
+import { useTestLocale } from '../i18n/testing.js';
 
 /** Avenue de France, Paris 13e — the address the whole address stack is built on. */
 const ADDRESS = { lon: 2.3760, lat: 48.8300 };
@@ -793,6 +794,58 @@ test('afterDraw runs on a drawn AND indexed layer, so it can open a card', async
   assert.deepEqual(calls[0].payload, { zones: ['one'] });
   assert.equal(layer.getStats().selectedId, 'centre');
   layer.disable();
+});
+
+/**
+ * The seam #298 opened and this batch wired: the server answers an outage with
+ * French prose AND a stable `code`, and the client picks the words. Before
+ * this, every client in `src/data` bailed on `!response.ok` before parsing the
+ * body, so the code reached nobody and the row read `Scan test HTTP 503`.
+ */
+test('a failed scan shows the server’s reason, in the reader’s language', async (t) => {
+  withDocument(t);
+  const warn = console.warn;
+  console.warn = () => {};
+  t.after(() => { console.warn = warn; });
+  const failing = (body) => async () => ({
+    ok: false,
+    status: 503,
+    json: async () => body,
+  });
+  const payload = {
+    code: 'peb-register-unavailable',
+    error: 'Le registre des arrêtés PEB (Géoplateforme WFS) n’a pas répondu et aucune copie locale n’existe.',
+  };
+
+  const french = await scannedLayer({ fetchImpl: failing(payload) });
+  assert.equal(french.layer.getStats().error, payload.error, 'the server’s own bytes, unchanged');
+  french.layer.disable();
+
+  useTestLocale('en', t);
+  const english = await scannedLayer({ fetchImpl: failing(payload) });
+  assert.equal(
+    english.layer.getStats().error,
+    'The register of noise-exposure orders (PEB, Géoplateforme WFS) did not answer, and there is no local copy.',
+  );
+  english.layer.disable();
+});
+
+test('an outage with no body to read still names the layer and the status', async (t) => {
+  withDocument(t);
+  const warn = console.warn;
+  console.warn = () => {};
+  t.after(() => { console.warn = warn; });
+  // The shape every outage double in this repository has. Reading the body for
+  // a code is an addition to that line, never a replacement for it.
+  const { layer } = await scannedLayer({ fetchImpl: async () => ({ ok: false, status: 503 }) });
+  assert.equal(layer.getStats().error, 'Scan test HTTP 503');
+  layer.disable();
+
+  const malformed = await scannedLayer({
+    fetchImpl: async () => ({ ok: true, json: async () => ({ error: 'Panne amont' }) }),
+  });
+  assert.equal(malformed.layer.getStats().error, 'Panne amont', 'a 200 carrying an error is read too');
+  malformed.layer.disable();
 });
 
 test('a hook that throws does not take the scan down with it', async (t) => {

@@ -12,6 +12,7 @@ import { SCAN_BOUNDARY_KIND } from './scanCells.js';
 import { deriveFetchCenter, greatCircleKm } from './trafficBounds.js';
 import { pickAt } from './pickAt.js';
 import messages from './addressScanLayer.i18n.js';
+import { serverFailureMessage, serverMessage } from '../i18n/serverMessages.js';
 
 /**
  * Shared shell for the point-centred French address layers.
@@ -1151,12 +1152,12 @@ export function createAddressScanLayer(config) {
       try {
         const response = await fetchImpl(`${endpoint}?${queryString}`, signal ? { signal } : undefined);
         if (!response.ok) {
-          _lastError = `${name} HTTP ${response.status}`;
+          _lastError = await serverFailureMessage(response, { fallback: `${name} HTTP ${response.status}` });
           return false;
         }
         const payload = await response.json();
         if (!payload || payload.error) {
-          _lastError = payload?.error || `Malformed ${name} response`;
+          _lastError = serverMessage(payload, { fallback: `Malformed ${name} response` });
           return false;
         }
         clearSelection();

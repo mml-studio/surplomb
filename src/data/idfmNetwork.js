@@ -56,6 +56,7 @@ import { pickAt } from './pickAt.js';
 import { formatDecimal, formatInteger, formatNumber } from '../i18n/format.js';
 import { labelFor } from '../i18n/messages.js';
 import messages, { IDFM_MODE_NAMES, IDFM_MODE_VEHICLES } from './idfmNetwork.i18n.js';
+import { serverFailureMessage, serverMessage } from '../i18n/serverMessages.js';
 
 /**
  * Île-de-France Mobilités — ONE layer for the Paris network: what serves this
@@ -1625,7 +1626,7 @@ async function fetchJson(url, { timeoutMs = FREQ_TIMEOUT_MS, validate } = {}) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await _http(url, { signal: controller.signal });
-    if (!response?.ok) throw new Error(`HTTP ${response?.status ?? '???'}`);
+    if (!response?.ok) throw new Error(await serverFailureMessage(response));
     const payload = await response.json();
     if (typeof validate === 'function' && !validate(payload)) throw new Error('malformed payload');
     return payload;
@@ -1860,12 +1861,12 @@ async function runScan(viewer, signal = null) {
     try {
       const response = await _http(`${STOPS_URL}?${query}`, signal ? { signal } : undefined);
       if (!response.ok) {
-        _lastError = `IDFM HTTP ${response.status}`;
+        _lastError = await serverFailureMessage(response, { fallback: `IDFM HTTP ${response.status}` });
         return false;
       }
       const payload = await response.json();
       if (!payload || payload.error || !Array.isArray(payload.stops)) {
-        _lastError = payload?.error || 'Malformed IDFM response';
+        _lastError = serverMessage(payload, { fallback: 'Malformed IDFM response' });
         return false;
       }
       clearSelection();
@@ -2044,9 +2045,11 @@ function adoptWeekHour(cursor) {
 
 const idfmNetworkLayer = {
   id: IDFM_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Réseau IDFM (Paris)',
   icon: 'Ⓜ',
   source: 'Île-de-France Mobilités — référentiel (ODbL 1.0) et offre horaire (Licence Ouverte v2.0)',
+  // i18n-ignore-end
   updateInterval: UPDATE_INTERVAL_MS,
 
   init(viewer) {

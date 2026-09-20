@@ -22,6 +22,7 @@ import {
   describeInstruments,
 } from './meteoStationsFrFeed.js';
 import { pickAt } from './pickAt.js';
+import { serverFailureMessage } from '../i18n/serverMessages.js';
 
 /**
  * Stations météo (FR) — the French stations whose readings are public, and what
@@ -762,7 +763,7 @@ export function createMeteoStationsFranceLayer({
       _observationsInflight = (async () => {
         try {
           const response = await fetchImpl(OBSERVATIONS_ENDPOINT);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) throw new Error(await serverFailureMessage(response));
           const payload = await response.json();
           if (!payload?.observations) throw new Error('no observations in payload');
           _observations = payload.observations;
@@ -796,7 +797,7 @@ export function createMeteoStationsFranceLayer({
     if (_normals.has(station.id)) return _normals.get(station.id);
     try {
       const response = await fetchImpl(`${NORMALS_ENDPOINT}?id=${encodeURIComponent(station.id)}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await serverFailureMessage(response));
       const payload = await response.json();
       _normals.set(station.id, payload?.fiche ?? null);
       return payload?.fiche ?? null;
@@ -1000,7 +1001,7 @@ export function createMeteoStationsFranceLayer({
       try {
         const response = await fetchImpl(registryUrl);
         if (!response.ok) {
-          _lastError = messages().errors.http(response.status);
+          _lastError = await serverFailureMessage(response, { fallback: messages().errors.http(response.status) });
           return false;
         }
         const payload = await response.json();
