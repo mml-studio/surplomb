@@ -50,6 +50,8 @@
  */
 
 import { CONGESTION_RUNGS } from './congestionLadder.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './datexRoadStatus.i18n.js';
 
 /** Bison Futé's open DATEX II root. HTTP only — the host serves no TLS. */
 export const TIPI_BASE = 'http://tipi.bison-fute.gouv.fr/bison-fute-ouvert/publicationsDIR';
@@ -84,7 +86,12 @@ export const ROAD_STATUS_LICENCE = 'Licence Ouverte 2.0';
  * The registry is a LABEL table, not an allow-list. A directory that appears
  * on the server and is not named here is still read and still drawn, under its
  * raw directory name — a new agglomeration must not need a release to show up.
+ *
+ * These are city names — DATA, identical in both languages, and read on the
+ * server as well (`vite.config.js` labels the segments it serves), so they are
+ * not messages and must never become ones.
  */
+// i18n-ignore-start — city names: data, not prose, and read on the server.
 export const AGGLOMERATION_LABELS = Object.freeze({
   ALIENOR: 'Bordeaux',
   TraficErato: 'Toulouse',
@@ -103,6 +110,7 @@ export const AGGLOMERATION_LABELS = Object.freeze({
   TRAFIC_TraficTriskell56: 'Lorient – Vannes',
   TraficMyrabel: 'Nancy – Metz',
 });
+// i18n-ignore-end
 
 /**
  * The DATEX II `TrafficStatusEnum` values, as this app draws them.
@@ -126,40 +134,45 @@ export const AGGLOMERATION_LABELS = Object.freeze({
  * because a road reported congested by one centre and free by another is not a
  * road anyone should be told is free.
  */
-// `id` stays English because it is a code identifier; the labels are French
-// because they are what a reader sees on the card and in the key of a layer
-// called « État du réseau routier ».
+// `id` stays English because it is a code identifier; a label is what a reader
+// sees on the card and in the key, so it is read from the ladder — through a
+// GETTER, when it is asked for, never when this module loads. The server
+// imports this file for `worseRoadStatus` and never reads a label.
 export const ROAD_STATUS_LEVELS = Object.freeze({
   freeFlow: Object.freeze({
     id: 'freeFlow',
     rank: CONGESTION_RUNGS.free.rank,
-    label: CONGESTION_RUNGS.free.label,
+    get label() { return CONGESTION_RUNGS.free.label; },
     color: CONGESTION_RUNGS.free.color,
     widthPx: 3.5,
   }),
   heavy: Object.freeze({
     id: 'heavy',
     rank: CONGESTION_RUNGS.slow.rank,
-    label: CONGESTION_RUNGS.slow.label,
+    get label() { return CONGESTION_RUNGS.slow.label; },
     color: CONGESTION_RUNGS.slow.color,
     widthPx: 4.5,
   }),
   congested: Object.freeze({
     id: 'congested',
     rank: CONGESTION_RUNGS.jam.rank,
-    label: CONGESTION_RUNGS.jam.label,
+    get label() { return CONGESTION_RUNGS.jam.label; },
     color: CONGESTION_RUNGS.jam.color,
     widthPx: 5.5,
   }),
   impossible: Object.freeze({
     id: 'impossible',
     rank: CONGESTION_RUNGS.impassable.rank,
-    label: CONGESTION_RUNGS.impassable.label,
+    get label() { return CONGESTION_RUNGS.impassable.label; },
     color: CONGESTION_RUNGS.impassable.color,
     widthPx: 6,
   }),
   unknown: Object.freeze({
-    id: 'unknown', rank: -1, label: 'Non communiqué', color: '#7c8794', widthPx: 2.5,
+    id: 'unknown',
+    rank: -1,
+    get label() { return messages().unknownState; },
+    color: '#7c8794',
+    widthPx: 2.5,
   }),
 });
 
@@ -367,12 +380,14 @@ export function parseQtvMeasurements(xml) {
  * count, rather than zipping against this list. The list is kept because it is
  * the publisher's own contract, and the divergence from it is the finding.
  */
+// i18n-ignore-start — the publisher's own CSV header: field names, not words.
 export const REFERENTIAL_DECLARED_COLUMNS = Object.freeze([
   'code_pme', 'source', 'source_2', 'code_insee_commune', 'axe',
   'pr_debut', 'abscisse_debut', 'pr_fin', 'abscisse_fin',
   'sens_gestionnaire', 'sens_cardinal', 'sens_migratoire', 'sens_giratoire',
   'longueur', 'nb_voies', 'x_deb', 'y_deb', 'x_fin', 'y_fin', 'code_traficolor',
 ]);
+// i18n-ignore-end
 
 /** Field count the rows actually carry. */
 export const REFERENTIAL_ROW_COLUMNS = 19;
@@ -538,8 +553,9 @@ export function formatFlow(flowVehH) {
   if (!Number.isFinite(flowVehH) || flowVehH < 0) return null;
   // `véh/h` with the accent, matching `comptagesParis` — the taxonomy presents
   // the two layers as the same subject measured differently, so they must not
-  // spell the unit two ways.
-  return `${Math.round(flowVehH).toLocaleString('en-US').replace(/,/g, ' ')} véh/h`;
+  // spell the unit two ways. `plainSpaces` keeps the ASCII space this card has
+  // always printed inside the number, in either language.
+  return `${formatNumber(Math.round(flowVehH), { plainSpaces: true })} ${messages().vehPerHour}`;
 }
 
 /**
