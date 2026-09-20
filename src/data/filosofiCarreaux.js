@@ -37,8 +37,11 @@ import {
   metricBand,
   resolutionForBox,
   resolveMetric,
+  filosofiMetrics,
 } from './filosofiFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './filosofiCarreaux.i18n.js';
 
 /**
  * Carroyage INSEE — the demand side of a location, drawn as ground you can
@@ -196,7 +199,15 @@ let _primitive = null;
 /** cell id -> drawn record */
 let _records = new Map();
 let _payload = null;
-let _metric = FILOSOFI_METRICS[0];
+/**
+ * The indicator the discs are coloured by, once one has been chosen.
+ *
+ * Null until then rather than `FILOSOFI_METRICS[0]`: that constant is FRENCH
+ * by construction (see `filosofiFeed.js`), and reading the catalog here would
+ * be a message read while the module loads. {@link currentMetric} resolves it
+ * at draw time instead.
+ */
+let _metric = null;
 let _selectedId = null;
 let _loading = false;
 let _error = null;
@@ -218,7 +229,13 @@ let _points = null;
 /** territory id -> drawn record */
 let _territoryRecords = new Map();
 let _territoryPayload = null;
-let _territoryMetric = resolveTerritoryMetric('niveau');
+/**
+ * The indicator the national discs are coloured by, once one has been chosen.
+ *
+ * Null until then, for the same reason {@link currentMetric} exists: resolving
+ * it here would read the page's language while the module is still loading.
+ */
+let _territoryMetric = null;
 let _territoryLoadedKey = null;
 let _territoryAnchors = null;
 
@@ -333,7 +350,7 @@ function buildRecords(cells, resolution) {
   let coldGround = 0;
   let fallbackM = null;
   for (const cell of cells) {
-    const symbol = cellSymbol(cell, _metric, { resolution });
+    const symbol = cellSymbol(cell, currentMetric(), { resolution });
     if (symbol.fill <= 0) continue;
     const [lon, lat] = cellCentre({
       res: resolution, n: cell.n, e: cell.e, crs: cell.crs ?? 3035,
@@ -348,7 +365,7 @@ function buildRecords(cells, resolution) {
     } else if (fallbackM === null) {
       fallbackM = groundM;
     }
-    const color = cellColor(cell, _metric);
+    const color = cellColor(cell, currentMetric());
     if (!color) continue;
     const baseM = groundM + cellClearanceM(resolution, symbol.fill);
     records.push({
@@ -468,6 +485,16 @@ function clearSelection() {
   _overlayHost.clearSource(TERRITORY_SELECTED_OVERLAY_SOURCE_ID);
 }
 
+/** The grid indicator in force, in the page's language. */
+function currentMetric() {
+  return _metric ?? resolveMetric(null);
+}
+
+/** The territory indicator in force, in the page's language. */
+function currentTerritoryMetric() {
+  return _territoryMetric ?? resolveTerritoryMetric(null);
+}
+
 /** Repaint every instance after the metric changed, without refetching. */
 function recolorAll() {
   for (const [id, record] of _records) {
@@ -479,17 +506,19 @@ function recolorAll() {
 // ---------------------------------------------------------------------------
 // The card
 // ---------------------------------------------------------------------------
-const _fr = new Intl.NumberFormat('fr-FR');
+/** A number, grouped the way the reader's language groups one. */
+function _fmt(value) {
+  return formatNumber(value);
+}
 
 /** @param {?number} value @returns {string} */
 function count(value) {
-  return Number.isFinite(value) ? _fr.format(Math.round(value)) : '—';
+  return Number.isFinite(value) ? _fmt(Math.round(value)) : '—';
 }
 
-/** @param {?number} value @param {string} unit @returns {string} */
-function measure(value, unit) {
-  if (!Number.isFinite(value)) return 'non publié';
-  return `${_fr.format(value)} ${unit}`;
+/** @param {?number} value @returns {string} */
+function published(value) {
+  return Number.isFinite(value) ? _fmt(value) : messages().notPublished;
 }
 
 /**
@@ -509,43 +538,44 @@ export function createFilosofiSelectedOverlayEntry(record, communes = {}) {
   const cell = record.cell;
   const side = record.resolution === 1000 ? '1 km' : '200 m';
   const commune = cell.com ? communes[cell.com] : null;
+  const m = messages();
   const details = [];
 
-  details.push(`${count(cell.ind)} habitants · ${count(cell.men)} ménages`);
+  details.push(m.card.people(count(cell.ind), count(cell.men)));
   details.push(cell.niveau !== null
-    ? `Niveau de vie moyen ${measure(cell.niveau, '€/an')}`
-    : 'Niveau de vie non publié pour ce carreau');
-  if (cell.pauvrete !== null) details.push(`${cell.pauvrete} % de ménages pauvres`);
-  if (cell.social !== null) details.push(`${cell.social} % en logement social`);
+    ? m.card.standardOfLiving(published(cell.niveau))
+    : m.card.noStandardOfLiving);
+  if (cell.pauvrete !== null) details.push(m.card.poor(cell.pauvrete));
+  if (cell.social !== null) details.push(m.card.social(cell.social));
   if (cell.jeunes !== null || cell.aines !== null) {
-    details.push(`${cell.jeunes ?? '—'} % de moins de 18 ans · ${cell.aines ?? '—'} % de 65 ans et plus`);
+    details.push(m.card.ages(cell.jeunes ?? '—', cell.aines ?? '—'));
   }
-  if (cell.proprietaires !== null) details.push(`${cell.proprietaires} % de propriétaires`);
-  if (cell.solo !== null) details.push(`${cell.solo} % de personnes seules`);
-  if (cell.surface !== null) details.push(`${cell.surface} m² par logement en moyenne`);
+  if (cell.proprietaires !== null) details.push(m.card.owners(cell.proprietaires));
+  if (cell.solo !== null) details.push(m.card.alone(cell.solo));
+  if (cell.surface !== null) details.push(m.card.surface(cell.surface));
 
   // The one line that must never be dropped — and never guessed either: with
   // the flag absent the card says the flag is absent, because "observé" is a
   // claim and a missing column does not support it.
-  if (cell.est === 1) {
-    details.push('Carreau IMPUTÉ : valeurs approchées, pas observées (secret statistique)');
-  } else if (cell.est === 0) {
-    details.push('Carreau observé, non imputé');
-  } else {
-    details.push('Imputation non renseignée par l’INSEE pour ce carreau');
-  }
+  if (cell.est === 1) details.push(m.card.imputed);
+  else if (cell.est === 0) details.push(m.card.observed);
+  else details.push(m.card.imputationUnknown);
   // THE MILLÉSIME IS READ, NOT ASSERTED. The relay serves 2019 and a local pack
   // serves 2021, and Martinique and La Réunion stay on the relay even when
   // métropole has moved — so the year belongs to the ANSWER this cell came in,
   // not to the layer. A constant here is one upstream refresh away from
   // captioning 2021 figures with "2019".
   const vintage = record.vintage ?? FILOSOFI_VINTAGE;
-  details.push(`Carreau ${side} · revenus ${vintage} · INSEE Filosofi`);
+  details.push(m.card.vintage(side, vintage));
   // Size is the count, not the indicator — stated on the card because it is the
   // one thing a viewer cannot read off the picture, and because a disc that
   // stops short of its cell must say what the space around it means: nobody
   // there, not no data there.
-  details.push(`Aire du disque = ${_metric.weight === 'men' ? 'ménages' : 'habitants'}, couleur = ${_metric.label.toLowerCase()}`);
+  const metric = currentMetric();
+  details.push(m.card.channels(
+    metric.weight === 'men' ? m.card.households : m.card.residents,
+    metric.label.toLowerCase(),
+  ));
 
   return {
     id: String(record.id),
@@ -556,7 +586,7 @@ export function createFilosofiSelectedOverlayEntry(record, communes = {}) {
     paintLane: 'selected',
     collisionGroup: 'ambient-card',
     priority: Number.MAX_SAFE_INTEGER,
-    title: commune || (cell.com ? `Commune ${cell.com}` : `Carreau ${side}`),
+    title: commune || (cell.com ? m.card.communeCode(cell.com) : m.card.cellTitle(side)),
     details,
     accent: SELECTED_COLOR,
     interactive: false,
@@ -651,7 +681,7 @@ function drawTerritories(records) {
     _points = new Cesium.PointPrimitiveCollection();
     _viewer.scene.primitives.add(_points);
   }
-  const drawn = fillTerritoryCollection(_points, records, _territoryMetric);
+  const drawn = fillTerritoryCollection(_points, records, currentTerritoryMetric());
   _territoryRecords = new Map(drawn.map((record) => [record.id, record]));
   _points.show = _enabled;
   governorRequestRender('filosofi-territoires');
@@ -692,7 +722,7 @@ async function loadTerritories(level) {
         .then(async (response) => {
           if (!response.ok) throw new Error(`territoires HTTP ${response.status}`);
           const body = await response.json();
-          if (!Array.isArray(body?.territories)) throw new Error('Réponse territoires illisible');
+          if (!Array.isArray(body?.territories)) throw new Error(messages().error.territories);
           return body;
         }),
       _territoryAnchors ? Promise.resolve(_territoryAnchors) : loadTerritoryAnchors(),
@@ -731,7 +761,7 @@ function selectTerritory(id) {
   if (!record) return false;
   clearSelection();
   _selectedId = id;
-  const entry = createTerritorySelectedOverlayEntry(record, _territoryMetric);
+  const entry = createTerritorySelectedOverlayEntry(record, currentTerritoryMetric());
   if (entry) {
     _overlayHost.setVisible(TERRITORY_SELECTED_OVERLAY_SOURCE_ID, true);
     _overlayHost.setEntries(
@@ -812,7 +842,7 @@ async function load() {
     if (!response.ok) throw new Error(`carroyage HTTP ${response.status}`);
     const payload = await response.json();
     if (signal.aborted) return false;
-    if (!payload || payload.error) throw new Error(payload?.error || 'Réponse carroyage illisible');
+    if (!payload || payload.error) throw new Error(payload?.error || messages().error.cells);
 
     const { records, coldGround } = buildRecords(payload.cells || [], resolution);
     drawRecords(records);
@@ -901,32 +931,33 @@ export function filosofiLegend(metric, cells = [], resolution = 200) {
     if (band < 0) unknown += 1;
     else counts[band] += 1;
   }
-  const suffix = metric.unit.startsWith('%') ? ' %' : '';
+  const m = messages().legend;
+  const suffix = metric.unit.startsWith('%') ? m.percentSuffix : '';
   const legend = metric.ramp.map((color, index) => {
     const low = index === 0 ? null : breaks[index - 1];
     const high = index < breaks.length ? breaks[index] : null;
     const label = low === null
-      ? `< ${_fr.format(high)}${suffix}`
+      ? m.below(_fmt(high), suffix)
       : high === null
-        ? `≥ ${_fr.format(low)}${suffix}`
-        : `${_fr.format(low)} – ${_fr.format(high)}${suffix}`;
+        ? m.above(_fmt(low), suffix)
+        : m.between(_fmt(low), _fmt(high), suffix);
     return {
       label,
       color,
       count: counts[index],
       blurb: index === 0
-        ? `Décile national bas — ${metric.unit}`
+        ? m.lowDecile(metric.unit)
         : index === metric.ramp.length - 1
-          ? `Décile national haut — ${metric.unit}`
+          ? m.highDecile(metric.unit)
           : `${metric.unit}`,
     };
   });
   if (unknown > 0) {
     legend.push({
-      label: 'Non publié',
+      label: m.unpublished,
       color: '#4a5568',
       count: unknown,
-      blurb: 'Le carreau existe mais l’indicateur n’y est pas diffusé.',
+      blurb: m.unpublishedBlurb,
     });
   }
 
@@ -947,30 +978,23 @@ export function filosofiLegend(metric, cells = [], resolution = 200) {
   const sizeBreaks = (FILOSOFI_SIZE_BREAKS[resolution] || FILOSOFI_SIZE_BREAKS[200])[
     metric.weight === 'men' ? 'men' : 'ind'
   ];
-  const unit = metric.weight === 'men' ? 'ménages' : 'habitants';
+  const words = messages().card;
+  const unit = metric.weight === 'men' ? words.households : words.residents;
   const gridLabel = resolution === 1000 ? '1 km' : '200 m';
   legend.push({
-    label: metric.weight === 'men' ? 'Aire = ménages' : 'Aire = habitants',
+    label: metric.weight === 'men' ? m.areaHouseholds : m.areaResidents,
     color: SHAPE_LEGEND_TINT,
     glyph: SIZE_GLYPH,
     count: Math.round(weightTotal),
-    blurb: `Six tailles, sur les quantiles nationaux du carroyage ${gridLabel} :`
-      + ` ${sizeBreaks.map((edge) => _fr.format(edge)).join(' · ')} ${unit}.`
-      + ' Six paliers et pas une échelle continue, pour la raison qui donne six'
-      + ' paliers à la couleur : l’œil ne relit pas une grandeur continue en'
-      + ' nombre, et la fiche porte le chiffre exact. Le disque ne remplit jamais'
-      + ' son carreau : le vide autour de lui est le fond de carte, pas une'
-      + ' absence de données.',
+    blurb: m.sizes(gridLabel, sizeBreaks.map((edge) => _fmt(edge)).join(' · '), unit),
   });
   if (imputed > 0) {
     legend.push({
-      label: 'Évidé = imputé',
+      label: m.hollow,
       color: SHAPE_LEGEND_TINT,
       glyph: HOLLOW_GLYPH,
       count: imputed,
-      blurb: 'Valeurs modélisées par l’INSEE au titre du secret statistique, pas'
-        + ' observées. L’anneau garde l’aire que son trou lui enlève : l’évidement dit'
-        + ' d’où vient le chiffre, pas combien il vaut.',
+      blurb: m.hollowBlurb,
     });
   }
   return legend;
@@ -998,13 +1022,13 @@ const filosofiCarreauxLayer = {
     _lastUpdate = null;
     _loadedKey = null;
     _retryDelayMs = 0;
-    _metric = FILOSOFI_METRICS[0];
+    _metric = null;
     _regime = 'carreaux';
     _level = 'DEP';
     _territoryPayload = null;
     _territoryRecords = new Map();
     _territoryLoadedKey = null;
-    _territoryMetric = resolveTerritoryMetric('niveau');
+    _territoryMetric = null;
     _overlayHost.setVisible(FILOSOFI_SELECTED_OVERLAY_SOURCE_ID, false);
     _overlayHost.setVisible(TERRITORY_SELECTED_OVERLAY_SOURCE_ID, false);
     console.log('[Data:Carroyage INSEE] Initialized');
@@ -1075,7 +1099,8 @@ const filosofiCarreauxLayer = {
     // so `niveau` has to mean the right thing on both sides of the threshold.
     const nextCarreau = resolveMetric(params.metric);
     const nextTerritory = resolveTerritoryMetric(params.metric);
-    const changed = nextCarreau.id !== _metric.id || nextTerritory.id !== _territoryMetric.id;
+    const changed = nextCarreau.id !== currentMetric().id
+      || nextTerritory.id !== currentTerritoryMetric().id;
     if (!changed) return false;
     _metric = nextCarreau;
     _territoryMetric = nextTerritory;
@@ -1109,7 +1134,7 @@ const filosofiCarreauxLayer = {
     // The regime on screen owns the answer: the national view has two
     // indicators the grid does not have at all, and serialising the carreau
     // chip while the operator is looking at Gini would share a different map.
-    return { metric: _regime === 'territoires' ? _territoryMetric.id : _metric.id };
+    return { metric: _regime === 'territoires' ? currentTerritoryMetric().id : currentMetric().id };
   },
 
   /**
@@ -1125,26 +1150,29 @@ const filosofiCarreauxLayer = {
     if (_regime === 'territoires') {
       const records = [..._territoryRecords.values()];
       return {
-        chips: territoryChips(_territoryMetric),
-        legend: territoryLegend(_territoryMetric, records, _level),
+        chips: territoryChips(currentTerritoryMetric()),
+        legend: territoryLegend(currentTerritoryMetric(), records, _level),
       };
     }
     const cells = _payload?.cells || [];
-    const chips = FILOSOFI_METRICS.map((metric) => ({
+    const current = currentMetric();
+    const row = messages().row;
+    const chips = filosofiMetrics().map((metric) => ({
       id: metric.id,
       label: metric.short,
-      active: _metric.id === metric.id,
-      state: _metric.id === metric.id ? 'active' : 'idle',
-      title: `${metric.label} — ${metric.blurb} (${metric.unit})`,
+      active: current.id === metric.id,
+      state: current.id === metric.id ? 'active' : 'idle',
+      title: row.chipTitle(metric.label, metric.blurb, metric.unit),
       params: { metric: metric.id },
     }));
-    return { chips, legend: filosofiLegend(_metric, cells, _payload?.resolution || 200) };
+    return { chips, legend: filosofiLegend(current, cells, _payload?.resolution || 200) };
   },
 
   getStats() {
     if (_regime === 'territoires') {
       const records = [..._territoryRecords.values()];
       const stats = territoryStats(records, _level);
+      const territory = currentTerritoryMetric();
       const result = {
         count: records.length,
         regime: 'territoires',
@@ -1154,12 +1182,12 @@ const filosofiCarreauxLayer = {
         resolution: null,
         people: stats.people,
         niveau: stats.niveau,
-        metric: _territoryMetric.id,
-        metricLabel: _territoryMetric.label,
+        metric: territory.id,
+        metricLabel: territory.label,
         // The year belongs to the number, and the two regimes disagree about
         // it. Publishing the vintage of the regime ON SCREEN is what stops the
         // panel from captioning a 2023 median with the grid's 2019.
-        vintage: _territoryMetric.year,
+        vintage: territory.year,
         vintages: TERRITORY_VINTAGE,
         scope: stats.scope,
         withoutFigures: stats.withoutFigures,
@@ -1167,21 +1195,23 @@ const filosofiCarreauxLayer = {
         loading: _loading,
         status: _status === 'ready' ? 'ok' : _status,
         stale: Boolean(_territoryPayload?.stale),
-        feedSource: 'INSEE Filosofi, recensement et base Tous salariés — API Melodi',
+        feedSource: messages().row.feedSource,
       };
+      const row = messages().row;
       if (_territoryPayload?.partial) {
         result.degraded = true;
-        result.loadingLabel = 'Vue nationale incomplète : une des trois sources INSEE n’a pas répondu';
+        result.loadingLabel = row.partial;
       } else if (_loading) {
-        result.loadingLabel = `Agrégats ${stats.levelLabel.toLowerCase()}…`;
+        result.loadingLabel = row.loadingTerritories(stats.levelLabel.toLowerCase());
       } else if (records.length) {
-        result.loadingLabel = `${stats.levelLabel} · Filosofi ${TERRITORY_VINTAGE.filosofi}`
-          + ' — zoome pour le carroyage 200 m';
+        result.loadingLabel = row.territories(stats.levelLabel, TERRITORY_VINTAGE.filosofi);
       }
       if (_error) result.error = _error;
       return result;
     }
     const summary = _payload?.summary || null;
+    const current = currentMetric();
+    const row = messages().row;
     const result = {
       count: _payload?.drawn ?? 0,
       cells: summary?.cells ?? 0,
@@ -1199,8 +1229,8 @@ const filosofiCarreauxLayer = {
       imputedUnknown: summary?.imputedUnknown ?? null,
       truncated: Boolean(_payload?.truncated),
       matched: _payload?.matched ?? null,
-      metric: _metric.id,
-      metricLabel: _metric.label,
+      metric: current.id,
+      metricLabel: current.label,
       regime: 'carreaux',
       // Whatever answered, not what the module was compiled believing.
       vintage: _payload?.vintage ?? FILOSOFI_VINTAGE,
@@ -1214,13 +1244,12 @@ const filosofiCarreauxLayer = {
     };
     if (_payload?.truncated) {
       result.degraded = true;
-      result.loadingLabel = `${_fr.format(_payload.matched)} carreaux dans la vue,`
-        + ` ${_fr.format(_payload.returned)} dessinés — zoome pour les avoir tous`;
+      result.loadingLabel = row.truncated(_fmt(_payload.matched), _fmt(_payload.returned));
     } else if (_status === 'off-coverage') {
       result.status = 'ok';
-      result.loadingLabel = 'Hors couverture INSEE (métropole, Martinique, La Réunion)';
+      result.loadingLabel = row.offCoverage;
     } else if (_loading) {
-      result.loadingLabel = 'Carreaux INSEE…';
+      result.loadingLabel = row.loadingCells;
     }
     if (_error) result.error = _error;
     return result;
@@ -1285,7 +1314,7 @@ export function _filosofiSetParamsForTest(params) {
 }
 
 export function _filosofiMetricForTest() {
-  return _metric;
+  return currentMetric();
 }
 
 export default filosofiCarreauxLayer;

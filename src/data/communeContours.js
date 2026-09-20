@@ -68,6 +68,7 @@ function assertFields(fields) {
 /** Guarded département code, upper-cased, or a throw naming the offender. */
 function assertDep(departement, who) {
   const code = String(departement || '').trim().toUpperCase();
+  // i18n-ignore-next-line — a developer error, never shown to a reader
   if (!DEP_CODE.test(code)) throw new Error(`${who}: invalid département code ${departement}`);
   return code;
 }
@@ -81,6 +82,7 @@ function assertDep(departement, who) {
  */
 export function communeContoursUrl(departement, { fields = COMMUNE_CONTOUR_FIELDS } = {}) {
   const code = assertDep(departement, 'communeContours');
+  // i18n-ignore-next-line — a URL path, not prose
   return `${GEO_API_ROOT}/departements/${code}/communes`
     + `?format=geojson&geometry=contour&fields=${assertFields(fields)}`;
 }
@@ -100,6 +102,7 @@ export function communeContoursUrl(departement, { fields = COMMUNE_CONTOUR_FIELD
  */
 export function arrondissementContoursUrl(departement, { fields = COMMUNE_CONTOUR_FIELDS } = {}) {
   const code = assertDep(departement, 'arrondissementContours');
+  // i18n-ignore-next-line — a URL path, not prose
   return `${GEO_API_ROOT}/communes`
     + `?codeDepartement=${code}&type=arrondissement-municipal`
     + `&format=geojson&geometry=contour&fields=${assertFields(fields)}`;
@@ -266,8 +269,10 @@ const COMMUNE_CODE = /^[0-9][0-9AB][0-9]{3}$/;
  */
 export function singleCommuneContourUrl(code, { fields = COMMUNE_CONTOUR_FIELDS } = {}) {
   const insee = String(code || '').trim().toUpperCase();
+  // i18n-ignore-start — a developer error and a URL path, never shown to a reader
   if (!COMMUNE_CODE.test(insee)) throw new Error(`communeContours: invalid commune code ${code}`);
   return `${GEO_API_ROOT}/communes/${insee}`
+  // i18n-ignore-end
     + `?format=geojson&geometry=contour&fields=${assertFields(fields)}`;
 }
 

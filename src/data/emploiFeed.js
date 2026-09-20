@@ -62,6 +62,7 @@
 import { isArrondissementCode, normaliseCommuneCode } from './communeCode.js';
 
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — a publisher and a dataset name, relayed as attribution
 export const EMPLOI_SOURCE = 'Recensement de la population — INSEE (Melodi)';
 export const EMPLOI_LICENCE = 'Licence Ouverte 2.0';
 
@@ -182,8 +183,14 @@ export function projectEmploiYear(year, values) {
     unemploymentRate: enough && consistent ? rate(unemployed, active) : null,
     activityRate: enough && consistent ? rate(active, total) : null,
     employmentRate: enough && consistent ? rate(employed, total) : null,
+    // i18n-ignore-start — PAYLOAD VALUES, and a contract. This module runs in
+    // the `/api/emploi-fr` proxy, which has no locale; the Address X-ray reads
+    // these two strings back and translates them (`withheldReason` in
+    // `adresseRadiographie.js`, `emploi.withheld*` in its catalog). Changing
+    // the words here silently drops the English on the other side.
     ratesWithheld: enough ? (consistent ? null : 'identités arithmétiques non vérifiées')
       : `moins de ${EMPLOI_RATE_FLOOR} actifs`,
+    // i18n-ignore-end
     consistent,
   };
 }
@@ -231,8 +238,12 @@ export function projectEmploi({ payload, code, inScope = true }) {
     trend: previous && current.unemploymentRate !== null && previous.unemploymentRate !== null
       ? Math.round((current.unemploymentRate - previous.unemploymentRate) * 10) / 10
       : null,
+    // i18n-ignore-start — payload facts about the census, not display prose:
+    // nothing reads them on screen today, and the X-ray words the same two
+    // facts itself (`emploi.censusSense`).
     ageRange: '15 à 64 ans',
     basis: 'lieu de résidence',
+    // i18n-ignore-end
     outOfScope: false,
     empty: false,
     source: EMPLOI_SOURCE,

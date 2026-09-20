@@ -67,6 +67,8 @@
  * @module data/filosofiFeed
  */
 
+import messages from './filosofiFeed.i18n.js';
+
 const SERVICE_URL = 'https://data.geopf.fr/wfs/ows';
 
 /** The two grids the Géoplateforme relays, keyed by cell side in metres. */
@@ -115,6 +117,7 @@ const SHARED_FIELDS = Object.freeze([
   'part_men_coll_div_men',
 ]);
 
+// i18n-ignore-start — the grid's own published column names
 export const FILOSOFI_FIELDS = Object.freeze({
   200: Object.freeze([...SHARED_FIELDS, 'depcom', 'nom_com', 'i_car_est']),
   1000: Object.freeze([...SHARED_FIELDS, 'i_est_1km']),
@@ -122,6 +125,7 @@ export const FILOSOFI_FIELDS = Object.freeze({
 
 /** The imputation flag each grid publishes under its own name. */
 export const FILOSOFI_IMPUTED_FIELD = Object.freeze({ 200: 'i_car_est', 1000: 'i_est_1km' });
+// i18n-ignore-end
 
 /**
  * Row ceiling per request — THE SERVICE'S OWN, not a choice.
@@ -260,10 +264,12 @@ function geodeticLatitude(beta) {
  * LAEA constants above use. The datum differences from WGS84 are centimetric
  * and this draws 200 m squares.
  */
+// i18n-ignore-start — the two projections' own EPSG names, never displayed
 export const FILOSOFI_UTM_CRS = Object.freeze({
   2975: Object.freeze({ zone: 40, south: true, label: 'RGR92 / UTM 40S — La Réunion' }),
   5490: Object.freeze({ zone: 20, south: false, label: 'RGAF09 / UTM 20N — Antilles' }),
 });
+// i18n-ignore-end
 
 /** Universal Transverse Mercator constants. Both zones share them. */
 const UTM = Object.freeze({
@@ -642,106 +648,54 @@ const RAMP_WARM = Object.freeze([...RAMP_COLD].reverse());
  * "27 100" is meaningless without "€ per person per year", and a legend that
  * omits the unit is a legend that invites the wrong reading.
  */
-export const FILOSOFI_METRICS = Object.freeze([
-  Object.freeze({
-    id: 'niveau',
-    label: 'Niveau de vie',
-    short: 'NIVEAU DE VIE',
-    unit: '€/an par personne',
-    field: 'niveau',
-    weight: 'ind',
-    ramp: RAMP_COLD,
-    // Higher is warmer here: the ramp runs cold→warm and money runs low→high.
-    reversed: false,
-    blurb: 'Moyenne winsorisée du niveau de vie des habitants du carreau.',
-  }),
-  Object.freeze({
-    id: 'pauvrete',
-    label: 'Ménages pauvres',
-    short: 'PAUVRETÉ',
-    unit: '% des ménages',
-    field: 'pauvrete',
-    weight: 'men',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des ménages sous le seuil de pauvreté (60 % du niveau de vie médian).',
-  }),
-  Object.freeze({
-    id: 'population',
-    label: 'Population',
-    short: 'POPULATION',
-    unit: 'habitants',
-    field: 'ind',
-    weight: 'ind',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Individus recensés dans le carreau — la seule grandeur qui s’additionne.',
-  }),
-  Object.freeze({
-    id: 'social',
-    label: 'Logement social',
-    short: 'LOG. SOCIAL',
-    unit: '% des ménages',
-    field: 'social',
-    weight: 'men',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des ménages en logement social.',
-  }),
-  Object.freeze({
-    id: 'jeunes',
-    label: 'Moins de 18 ans',
-    short: '– 18 ANS',
-    unit: '% des habitants',
-    field: 'jeunes',
-    weight: 'ind',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des habitants de moins de 18 ans.',
-  }),
-  Object.freeze({
-    id: 'aines',
-    label: '65 ans et plus',
-    short: '65 ANS +',
-    unit: '% des habitants',
-    field: 'aines',
-    weight: 'ind',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des habitants de 65 ans et plus.',
-  }),
-  Object.freeze({
-    id: 'proprietaires',
-    label: 'Propriétaires',
-    short: 'PROPRIÉTAIRES',
-    unit: '% des ménages',
-    field: 'proprietaires',
-    weight: 'men',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des ménages propriétaires de leur logement.',
-  }),
-  Object.freeze({
-    id: 'solo',
-    label: 'Personnes seules',
-    short: 'PERS. SEULES',
-    unit: '% des ménages',
-    field: 'solo',
-    weight: 'men',
-    ramp: RAMP_COLD,
-    reversed: false,
-    blurb: 'Part des ménages d’une seule personne.',
-  }),
+const FILOSOFI_METRIC_SPECS = Object.freeze([
+  Object.freeze({ id: 'niveau', field: 'niveau', weight: 'ind', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'pauvrete', field: 'pauvrete', weight: 'men', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'population', field: 'ind', weight: 'ind', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'social', field: 'social', weight: 'men', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'jeunes', field: 'jeunes', weight: 'ind', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'aines', field: 'aines', weight: 'ind', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'proprietaires', field: 'proprietaires', weight: 'men', ramp: RAMP_COLD, reversed: false }),
+  Object.freeze({ id: 'solo', field: 'solo', weight: 'men', ramp: RAMP_COLD, reversed: false }),
 ]);
 
-/** @type {Object<string, object>} */
-const METRIC_BY_ID = Object.freeze(Object.fromEntries(
-  FILOSOFI_METRICS.map((metric) => [metric.id, metric]),
-));
+/** One spec plus one locale's four words. */
+function withWords(spec, words) {
+  return Object.freeze({ ...spec, ...words[spec.id] });
+}
 
-/** The metric a chip id names, or the default. */
+/**
+ * The eight indicators, in FRENCH.
+ *
+ * The words come from `filosofiFeed.i18n.js` rather than being retyped here;
+ * {@link filosofiMetrics} is the same table in the page's language, and
+ * {@link resolveMetric} reads it.
+ */
+export const FILOSOFI_METRICS = Object.freeze(FILOSOFI_METRIC_SPECS.map((spec) => withWords(
+  spec,
+  Object.fromEntries(Object.entries(messages.definition).map(([id, group]) => [
+    id,
+    Object.fromEntries(Object.entries(group).map(([key, leaf]) => [key, leaf.fr])),
+  ])),
+)));
+
+/** The same eight, named in the page's language. Built once per locale. */
+const _metricsByLocale = new Map([[FILOSOFI_METRICS[0].label, FILOSOFI_METRICS]]);
+export function filosofiMetrics() {
+  const words = messages();
+  let table = _metricsByLocale.get(words.niveau.label);
+  if (!table) {
+    table = Object.freeze(FILOSOFI_METRIC_SPECS.map((spec) => withWords(spec, words)));
+    _metricsByLocale.set(words.niveau.label, table);
+  }
+  return table;
+}
+
+/** The metric a chip id names, or the default, in the page's language. */
 export function resolveMetric(id) {
-  return METRIC_BY_ID[String(id ?? '').trim()] || METRIC_BY_ID.niveau;
+  const key = String(id ?? '').trim();
+  const table = filosofiMetrics();
+  return table.find((metric) => metric.id === key) || table[0];
 }
 
 /** The ramp key a metric reads its breaks from. */
