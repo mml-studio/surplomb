@@ -8,6 +8,9 @@ import { drawScanBoundary } from './scanBoundary.js';
 import { cellDiscRadiusM, discRing } from './scanCells.js';
 import { SCAN_CELL_MIN_ALTITUDE_M, scanCellParams } from './scanRegime.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
+import { formatDecimal, formatEuros, formatEurosPerM2, formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { NATURE, TYPE_LOCAL } from './dvfSales.i18n.js';
 
 /**
  * DVF — what the flats around this point actually sold for, on the buildings
@@ -181,24 +184,29 @@ export const DVF_LAYER_ID = 'dvf-sales';
  * intention, two layers — instead of the two identical-looking strips of chips
  * that caused the confusion in the first place.
  */
+// The ids are DATA: `tous` is a share-link token and the other two are the
+// register's own `type_local`, which `avis-valeur` takes as its subject. The
+// words are read when a chip is drawn, so one loaded layer labels itself in
+// whichever language the page is in.
+// i18n-ignore-start — `type_local` values and a share-link token.
 export const DVF_TYPE_FILTERS = Object.freeze([
   Object.freeze({
     id: 'tous',
-    label: 'Toutes',
-    title: 'Toutes les mutations du rayon — logements, locaux, dépendances et terrains',
+    get label() { return messages().filters.tous.label; },
+    get title() { return messages().filters.tous.title; },
   }),
   Object.freeze({
     id: 'Appartement',
-    label: 'Appart.',
-    title: 'Seulement les mutations qui portent un appartement, cave ou parking compris',
+    get label() { return messages().filters.appartement.label; },
+    get title() { return messages().filters.appartement.title; },
   }),
   Object.freeze({
     id: 'Maison',
-    label: 'Maisons',
-    title: 'Seulement les mutations qui portent une maison — leur prix porte le terrain, '
-      + 'qui n’est pas neutralisé',
+    get label() { return messages().filters.maison.label; },
+    get title() { return messages().filters.maison.title; },
   }),
 ]);
+// i18n-ignore-end
 
 /**
  * The sales a filter keeps.
@@ -208,6 +216,7 @@ export const DVF_TYPE_FILTERS = Object.freeze([
  */
 export function filterSalesByType(sales, filter) {
   const list = Array.isArray(sales) ? sales : [];
+  // i18n-ignore-next-line — `type_local` values in, `saleKind` folds out.
   const wanted = filter === 'Appartement' ? 'appartement' : (filter === 'Maison' ? 'maison' : null);
   if (!wanted) return list;
   return list.filter((sale) => saleKind(sale) === wanted);
@@ -295,36 +304,36 @@ export const DVF_RATIO_CLASSES = Object.freeze([
     id: 'very-high',
     min: 1.25,
     color: '#ff6b4a',
-    label: '+25 % et plus',
-    blurb: 'Au moins un quart au-dessus du médian de la commune.',
+    get label() { return messages().classes.veryHigh.label; },
+    get blurb() { return messages().classes.veryHigh.blurb; },
   }),
   Object.freeze({
     id: 'high',
     min: 1.05,
     color: '#ffb03d',
-    label: '+5 à +25 %',
-    blurb: 'Au-dessus du médian de la commune, hors de la bande d’équivalence.',
+    get label() { return messages().classes.high.label; },
+    get blurb() { return messages().classes.high.blurb; },
   }),
   Object.freeze({
     id: 'at-median',
     min: 0.95,
     color: '#ffe066',
-    label: '−5 à +5 % — au médian',
-    blurb: 'Dans les 5 % du médian de la commune : le prix courant du territoire.',
+    get label() { return messages().classes.atMedian.label; },
+    get blurb() { return messages().classes.atMedian.blurb; },
   }),
   Object.freeze({
     id: 'low',
     min: 0.75,
     color: '#7ed957',
-    label: '−25 à −5 %',
-    blurb: 'Sous le médian de la commune, hors de la bande d’équivalence.',
+    get label() { return messages().classes.low.label; },
+    get blurb() { return messages().classes.low.blurb; },
   }),
   Object.freeze({
     id: 'very-low',
     min: -Infinity,
     color: '#3dd6c4',
-    label: 'moins de −25 %',
-    blurb: 'Au moins un quart sous le médian de la commune.',
+    get label() { return messages().classes.veryLow.label; },
+    get blurb() { return messages().classes.veryLow.blurb; },
   }),
 ]);
 
@@ -383,19 +392,19 @@ export function saleColor(prixM2, referenceMedian) {
   return Cesium.Color.fromCssColorString(saleColorCss(prixM2, referenceMedian));
 }
 
-/** Format a euro amount the way a French reader expects to see it. */
+/** A euro amount, in the page's language: `245 000 €` / `€245,000`. */
 function euros(value) {
-  return Number.isFinite(value) ? `${value.toLocaleString('fr-FR')} €` : '—';
+  return Number.isFinite(value) ? formatEuros(value) : '—';
 }
 
-/** Format a €/m² the way a French reader expects to see it. */
+/** A €/m², rounded as this layer has always rounded it. */
 function eurosPerM2(value) {
-  return Number.isFinite(value) ? `${Math.round(value).toLocaleString('fr-FR')} €/m²` : '—';
+  return Number.isFinite(value) ? formatEurosPerM2(Math.round(value)) : '—';
 }
 
-/** `1,39` — two decimals, French separator. */
+/** `1,39` / `1.39` — two decimals. */
 function ratioText(ratio) {
-  return ratio.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatNumber(ratio, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**
@@ -408,11 +417,12 @@ export function dvfYearsLabel(years) {
     .map((year) => Number.parseInt(year, 10))
     .filter((year) => Number.isFinite(year)))].sort((a, b) => a - b);
   if (!list.length) return null;
-  if (list.length === 1) return `édition ${list[0]}`;
+  const m = messages();
+  if (list.length === 1) return m.years.one(list[0]);
   const contiguous = list[list.length - 1] - list[0] === list.length - 1;
   return contiguous
-    ? `éditions ${list[0]} à ${list[list.length - 1]}`
-    : `éditions ${list.join(', ')}`;
+    ? m.years.span(list[0], list[list.length - 1])
+    : m.years.list(list.join(', '));
 }
 
 /**
@@ -426,6 +436,7 @@ export function dvfYearsLabel(years) {
  * @returns {object}
  */
 export function dvfReference(payload) {
+  const m = messages();
   const raw = payload?.summary?.reference || null;
   const median = typeof raw?.medianPrixM2 === 'number' && Number.isFinite(raw.medianPrixM2)
     && raw.medianPrixM2 > 0
@@ -433,10 +444,10 @@ export function dvfReference(payload) {
     : null;
   const name = raw?.name || payload?.commune?.name || null;
   const code = raw?.code || payload?.commune?.code || null;
-  const territory = name || (code ? `commune ${code}` : null);
+  const territory = name || (code ? m.reference.byCode(code) : null);
   const yearsLabel = dvfYearsLabel(payload?.years);
   return {
-    basis: raw ? (median === null ? 'none' : 'commune') : 'absent',
+    basis: raw ? (median === null ? 'none' : 'commune') : 'absent', // i18n-ignore-line — keys
     medianPrixM2: median,
     name,
     code,
@@ -450,9 +461,9 @@ export function dvfReference(payload) {
     /** The sentence that has to travel with every colour this layer draws. */
     label: median === null
       ? (raw
-        ? `Aucun médian pour ${territory || 'cette commune'} : rien à rapporter`
-        : 'Dénominateur indisponible : rien à rapporter')
-      : `Médian de ${territory || 'la commune'} ${eurosPerM2(median)}`,
+        ? m.reference.none(territory || m.reference.thisCommune)
+        : m.reference.absent)
+      : m.reference.median(territory || m.reference.theCommune, eurosPerM2(median)),
   };
 }
 
@@ -473,9 +484,12 @@ export function classBoundsText(referenceMedian, klass) {
   const lower = Number.isFinite(klass.min) ? klass.min : null;
   const lo = lower === null ? null : Math.round(referenceMedian * lower);
   const hi = upper === null ? null : Math.round(referenceMedian * upper);
-  if (lo === null) return `moins de ${eurosPerM2(hi)}`;
-  if (hi === null) return `${eurosPerM2(lo)} et plus`;
-  return `${lo.toLocaleString('fr-FR')} à ${eurosPerM2(hi)}`;
+  const m = messages();
+  if (lo === null) return m.bounds.under(eurosPerM2(hi));
+  if (hi === null) return m.bounds.over(eurosPerM2(lo));
+  // The low bound is a bare number and the high one carries the unit: the
+  // French writes `8 508 à 9 404 €/m²`, the English `€8,508 to €9,404/m²`.
+  return m.bounds.between(formatNumber(lo), eurosPerM2(hi));
 }
 
 /**
@@ -493,20 +507,21 @@ export function classBoundsText(referenceMedian, klass) {
  * @returns {string}
  */
 export function dvfLegendNote(reference, { parcels = 0 } = {}) {
+  const m = messages();
   const line = [
     reference.label,
     reference.yearsLabel,
     // The frozen rule, said once. Without it the €/m² bounds below read as
     // quantiles of what is on screen, which is exactly what C1 forbids and
     // exactly what this layer stopped doing on 2026-09-03.
-    'classes gelées à ±5 % et ±25 % de ce médian',
+    m.note.frozenClasses,
   ].filter(Boolean).join(' · ');
   // WHAT THE TINTED GROUND IS. The plots wear the same ramp as the markers —
   // one channel, one information — so they need no class of their own; what
   // they need is the sentence that says they are plots, and which of several
   // mutations each one is showing. Only when there are any: a commune Etalab
   // publishes no cadastre for must not be told it is looking at parcels.
-  return parcels > 0 ? `${line} · sol teinté = la parcelle vendue` : line;
+  return parcels > 0 ? `${line} · ${m.note.tintedGround}` : line;
 }
 
 /**
@@ -528,27 +543,26 @@ export function dvfLegendNote(reference, { parcels = 0 } = {}) {
  * @returns {string}
  */
 export function dvfLegendDisclosure(reference, summary, drawn, options = {}) {
+  const m = messages();
   const parts = [];
   // A4: this silence has a cause, and it is not "these sales bought no
   // ground". Only said when the register DID name plots and the cadastre
   // could not return them — an answer with no `parcels` key at all is an
   // older cached payload, not a failure to report.
   if (Array.isArray(options.parcels) && options.parcels.length === 0 && drawn > 0) {
-    parts.push('parcelles indisponibles pour cette commune : les ventes sont dessinées, le sol '
-      + 'qu’elles ont acheté ne l’est pas');
+    parts.push(m.disclosure.noParcels);
   }
   const filter = DVF_TYPE_FILTERS.find((entry) => entry.id === options.filter);
+  // i18n-ignore-next-line — share-link token
   if (filter && filter.id !== 'tous' && options.hidden > 0) {
-    parts.push(`filtre « ${filter.label} » : ${options.hidden} autre(s) mutation(s) non `
-      + 'dessinée(s), que le médian de référence compte quand même');
+    parts.push(m.disclosure.filtered(filter.label, options.hidden));
   }
-  parts.push(`rayon ${SCAN_RADIUS_M} m`);
+  parts.push(m.disclosure.radius(SCAN_RADIUS_M));
   if (summary?.truncated) {
-    parts.push(`écrêté à ${drawn} sur ${summary.count}, les plus proches`);
+    parts.push(m.disclosure.truncated(drawn, summary.count));
   }
   if (reference.unplacedCount > 0) {
-    parts.push(`${reference.unplacedCount} mutation(s) sans coordonnée publiée, comptée(s) dans `
-      + 'le médian et impossibles à dessiner');
+    parts.push(m.disclosure.unplaced(reference.unplacedCount));
   }
   const line = parts.join(' · ');
   return `${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
@@ -599,6 +613,7 @@ export function dvfLegendDisclosure(reference, summary, drawn, options = {}) {
  * @returns {Array<object>}
  */
 export function dvfLegendEntries(reference, counts = null) {
+  const m = messages();
   const entries = [];
   for (const klass of DVF_RATIO_CLASSES) {
     const bounds = classBoundsText(reference.medianPrixM2, klass);
@@ -607,28 +622,24 @@ export function dvfLegendEntries(reference, counts = null) {
       color: klass.color,
       // The ratio leads the tooltip, because that is the class's DEFINITION
       // and the label is only what it means at today's reference.
-      blurb: `${klass.label} — ${klass.blurb}`,
+      blurb: m.classTooltip(klass.label, klass.blurb),
     };
     if (counts) entry.count = counts.get(klass.id) || 0;
     entries.push(entry);
   }
   const neutral = {
-    label: 'sans prix au m²',
+    label: m.noRatio.label,
     color: COLOR_NO_RATIO,
-    blurb: 'Mutation qui a acheté autre chose qu’un seul logement — un immeuble de 179 lots, '
-      + 'un appartement avec un commerce — ou un échange. Le registre ne dit pas comment le '
-      + 'prix se répartit, donc rien n’est peint : la vente est dessinée, pas évaluée.',
+    blurb: m.noRatio.blurb,
   };
   if (counts) neutral.count = counts.get('no-ratio') || 0;
   entries.push(neutral);
   if (counts && (counts.get('no-basis') || 0) > 0) {
     entries.push({
-      label: 'sans médian de référence',
+      label: m.noBasis.label,
       color: COLOR_NO_BASIS,
       count: counts.get('no-basis') || 0,
-      blurb: 'Un prix au m² sans commune à le rapporter. Cet état ne devrait pas exister — '
-        + 'les ventes servies sont un sous-ensemble des mutations dont le médian est calculé — '
-        + 'et il est peint plutôt que masqué pour qu’il ne passe jamais pour une classe de prix.',
+      blurb: m.noBasis.blurb,
     });
   }
   return entries;
@@ -696,7 +707,7 @@ let _themeEnabled = false;
  * runtime in reach, and a theme painting a different subset from the markers
  * above it would put the row, the key and the city in three populations.
  */
-let _typeFilter = 'tous';
+let _typeFilter = 'tous'; // i18n-ignore-line — share-link token
 
 /**
  * Publish (or withdraw) the theme for the payload in hand.
@@ -765,7 +776,7 @@ function publishTheme() {
   const sales = filterSalesByType(_themePayload.sales, _typeFilter);
   registerBuildingTheme({
     id: DVF_LAYER_ID,
-    label: 'Ventes DVF (€/m²)',
+    label: messages().theme.label,
     precedence: DVF_THEME_PRECEDENCE,
     points: sales,
     reduce: dvfMostRecentSale,
@@ -781,7 +792,7 @@ function publishTheme() {
     // volumes were never asked about at all. Labelling them "no sale recorded"
     // would turn the layer's own reach into a statement about the market —
     // the exact shape of A1, applied to a whole city block.
-    unknownLabel: `hors du rayon de ${SCAN_RADIUS_M} m ou sans mutation`,
+    unknownLabel: messages().theme.unknown(SCAN_RADIUS_M),
   });
   return true;
 }
@@ -826,6 +837,7 @@ export function drawDvfParcels(dataSource, parcels, sales, reference, classifica
     const held = byParcel.get(key);
     if (held) held.push(sale); else byParcel.set(key, [sale]);
   }
+  const m = messages();
   let drawn = 0;
   for (const parcel of list) {
     // A plot whose every sale was filtered out is ground with nothing to say.
@@ -838,13 +850,13 @@ export function drawDvfParcels(dataSource, parcels, sales, reference, classifica
     const css = saleColorCss(price, reference.medianPrixM2);
     const fill = Cesium.Color.fromCssColorString(css).withAlpha(PARCEL_FILL_ALPHA);
     const stroke = Cesium.Color.fromCssColorString(css).withAlpha(PARCEL_OUTLINE_ALPHA);
-    const name = sale.address || sale.commune || 'Parcelle';
+    const name = sale.address || sale.commune || m.parcel.fallbackName;
     const description = [
-      `parcelle ${parcel.id}`,
+      m.parcel.id(parcel.id),
       sale.date,
       euros(sale.valeur),
-      price === null ? 'pas de €/m² comparable' : eurosPerM2(price),
-      'dernière mutation connue de cette parcelle dans le rayon scruté',
+      price === null ? m.card.noComparable : eurosPerM2(price),
+      m.parcel.lastSale,
     ].filter(Boolean).join(' · ');
     for (const [index, rings] of (parcel.parts || []).entries()) {
       const outer = ringPositions(rings[0]);
@@ -906,25 +918,28 @@ export function drawDvfParcels(dataSource, parcels, sales, reference, classifica
  * @returns {string}
  */
 export function dvfSaleCard(sale, reference) {
+  const m = messages();
   const price = saleRatioPrice(sale);
   const comparable = price !== null;
   const ratio = comparable && reference.medianPrixM2 ? price / reference.medianPrixM2 : null;
   return [
     sale.date,
-    sale.nature,
+    // The register's own words, displayed: the VALUE stays what it parsed.
+    labelFor(NATURE, sale.nature),
     euros(sale.valeur),
-    (sale.types || []).join(' + ') || 'type non publié',
+    (sale.types || []).map((type) => labelFor(TYPE_LOCAL, type)).join(' + ')
+      || m.card.typeUnpublished,
     comparable ? eurosPerM2(price)
       // Saying WHY there is no ratio is the point of drawing it neutral.
-      : sale.dwellingCount > 1 ? `${sale.dwellingCount} logements — pas de €/m² comparable`
-        : 'pas de €/m² comparable',
+      : sale.dwellingCount > 1 ? m.card.dwellings(sale.dwellingCount)
+        : m.card.noComparable,
     // The denominator travels with every single card, never only with the
     // legend: a ratio a reader cannot trace back to a named territory is a
     // decoration.
     ratio === null
       ? (comparable ? reference.label : null)
-      : `${ratioText(ratio)} × le médian de ${reference.territory || 'la commune'} `
-        + `(${eurosPerM2(reference.medianPrixM2)})`,
+      : m.card.ratio(ratioText(ratio), reference.territory || m.reference.theCommune,
+        eurosPerM2(reference.medianPrixM2)),
     sale.dwellingSurface ? `${sale.dwellingSurface} m²` : null,
     Number.isFinite(sale.distanceM) ? `${sale.distanceM} m` : null,
   ].filter(Boolean).join(' · ');
@@ -1008,6 +1023,7 @@ export function dvfSaleRecord(sale) {
  */
 export function dvfVoiceSummary(stats) {
   if (!stats || stats.dormant) return null;
+  const subject = messages().voice.subject;
   // THE CELL REGIME NEEDS ITS OWN SENTENCE, and this is not a nicety. Left to
   // fall through, a box answer would have been published with
   // `radiusM: SCAN_RADIUS_M` beside it — a caller would have said "sur les
@@ -1017,7 +1033,7 @@ export function dvfVoiceSummary(stats) {
   // caller that read that as "no sales" would be inverting the answer.
   if (stats.scanBasis === 'cells') {
     return {
-      subject: 'ventes immobilières publiées au registre DVF',
+      subject,
       basis: 'cells',
       measuredAt: stats.scanCentre ? { ...stats.scanCentre } : null,
       communes: stats.communes ?? null,
@@ -1031,20 +1047,20 @@ export function dvfVoiceSummary(stats) {
       note: 'The camera is high enough that this layer answers by AREA, not by '
         + 'sale: it holds cells, not a list of mutations, so there is nothing to '
         + 'rank or to quote a single price from. Say the view median with the '
-        + 'communes behind it. For one property, fly below '
+        + 'municipalities behind it. For one property, fly below '
         + `${SCAN_CELL_MIN_ALTITUDE_M} m and ask again.`,
     };
   }
   if (!Number.isFinite(stats.salesFound)) {
     return {
-      subject: 'ventes immobilières publiées au registre DVF',
+      subject,
       pending: true,
       note: 'The register has not answered for this point yet. Say the reading is '
         + 'coming and ask again in a moment — this is NOT "no sales here".',
     };
   }
   return {
-    subject: 'ventes immobilières publiées au registre DVF',
+    subject,
     // WHERE it was measured, not just what. A scan does not clear on arrival:
     // fly from Paris to Bordeaux and this summary describes the Paris block
     // until the new answer lands, and a caller with no way to tell would quote
@@ -1091,11 +1107,6 @@ const CELL_FILL_ALPHA = 0.15;
 let _cellMode = false;
 const CELL_OUTLINE_ALPHA = 0.8;
 const CELL_OUTLINE_WIDTH_PX = 1.4;
-
-/** French plural with a thousands-separated count. */
-function plural(n, singular, pluralForm = `${singular}s`) {
-  return `${Number(n || 0).toLocaleString('fr-FR')} ${n > 1 ? pluralForm : singular}`;
-}
 
 /* ── the cell regime ───────────────────────────────────────────────────── */
 /**
@@ -1145,10 +1156,11 @@ export function dvfCellColorCss(cell) {
  * @returns {object}
  */
 export function dvfCellReference(payload) {
+  const m = messages();
   const references = payload?.summary?.references || [];
   const named = references.filter((entry) => Number.isFinite(entry?.medianPrixM2));
   return {
-    basis: named.length ? 'communes' : 'none',
+    basis: named.length ? 'communes' : 'none', // i18n-ignore-line — keys
     medianPrixM2: null,
     name: null,
     code: null,
@@ -1161,8 +1173,8 @@ export function dvfCellReference(payload) {
     p75PrixM2: null,
     references: named,
     label: named.length
-      ? `Chaque cellule est rapportée au médian de SA commune (${named.length})`
-      : 'Aucun médian communal : rien à rapporter',
+      ? m.cells.reference(named.length)
+      : m.cells.noReference,
   };
 }
 
@@ -1189,21 +1201,22 @@ export function countCellsByClass(cells) {
  * @param {object} payload @returns {string}
  */
 export function dvfCellLegendNote(payload) {
+  const m = messages();
   const reference = dvfCellReference(payload);
   const named = reference.references.slice(0, 4)
     .map((entry) => `${entry.name || entry.code} ${eurosPerM2(entry.medianPrixM2)}`);
   const more = reference.references.length - named.length;
   const line = [
     named.length
-      ? `Rapporté au médian de chaque commune : ${named.join(' · ')}${more > 0 ? ` · +${more}` : ''}`
+      ? m.cells.references(`${named.join(' · ')}${more > 0 ? ` · +${more}` : ''}`)
       : reference.label,
     reference.yearsLabel,
-    'classes gelées à ±5 % et ±25 % de ce médian',
+    m.note.frozenClasses,
     // WHAT THE DISC IS, in the words `filosofiCarreaux.js` uses for the same
     // mark: the colour is the price and the AREA is how many sales stand
     // behind it. Without this line a big pale disc and a small vivid one read
     // as two prices instead of as two sample sizes.
-    'taille du disque = nombre de ventes',
+    m.cells.discSize,
   ].filter(Boolean).join(' · ');
   return line;
 }
@@ -1213,29 +1226,26 @@ export function dvfCellLegendNote(payload) {
  * @param {object} payload @returns {string}
  */
 export function dvfCellDisclosure(payload) {
+  const m = messages();
   const summary = payload?.summary || {};
   const communes = payload?.communes || [];
   const parts = [];
   const spanKm = payload?.box
-    ? ((payload.box.north - payload.box.south) * 110.54).toFixed(1).replace('.', ',')
+    ? formatDecimal((payload.box.north - payload.box.south) * 110.54, 1,
+      { minimumFractionDigits: 1 })
     : null;
-  parts.push(`vue agrégée sur ${spanKm ? `${spanKm} km` : 'la boîte'} de côté, `
-    + `cellules de ${summary.cellM || '?'} m`);
-  parts.push(`${plural(summary.count || 0, 'vente')} dans la boîte, `
-    + `${summary.pricedCount || 0} avec un €/m²`);
+  parts.push(m.cells.aggregated(spanKm ? `${spanKm} km` : m.cells.box, summary.cellM || '?'));
+  parts.push(m.cells.inBox(Number(summary.count || 0), summary.pricedCount || 0));
   // A4: the commune list comes from probing the box, not from intersecting it —
   // see `boxSamplePoints`. A commune no probe landed in contributes nothing,
   // and its ground is then empty for the same reason a field is.
   if (communes.length) {
-    parts.push(`${plural(communes.length, 'commune')} identifiée${communes.length > 1 ? 's' : ''} `
-      + `par ${payload.communesProbed || 0} sondages : une commune qu'aucun sondage n'a touchée `
-      + 'ne contribue pas');
+    parts.push(m.cells.communes(communes.length, payload.communesProbed || 0));
   }
   if ((payload?.unavailableYears || []).length) {
-    parts.push(`millésime(s) non téléchargé(s) : ${payload.unavailableYears.join(', ')}`);
+    parts.push(m.cells.missingYears(payload.unavailableYears.join(', ')));
   }
-  parts.push(`descendre sous ${SCAN_CELL_MIN_ALTITUDE_M} m pour retrouver chaque vente `
-    + 'et sa parcelle');
+  parts.push(m.cells.descendForSales(SCAN_CELL_MIN_ALTITUDE_M));
   const line = parts.join(' · ');
   return `${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
 }
@@ -1245,22 +1255,23 @@ export function dvfCellDisclosure(payload) {
  * @param {object} cell @param {object} payload @returns {string}
  */
 export function dvfCellCard(cell, payload) {
+  const m = messages();
   const klass = dvfCellClass(cell?.medianRatio);
   const reference = (payload?.summary?.references || [])
     .find((entry) => entry.code === cell?.communeCode) || null;
   return [
-    `${plural(cell.count, 'vente')} dans cette cellule`,
+    m.cells.inCell(Number(cell.count || 0)),
     cell.pricedCount < cell.count
-      ? `${cell.pricedCount} avec un €/m² exploitable`
-      : 'toutes avec un €/m² exploitable',
-    cell.medianPrixM2 !== null ? `médian ${eurosPerM2(cell.medianPrixM2)}` : null,
+      ? m.cells.priced(cell.pricedCount)
+      : m.cells.allPriced,
+    cell.medianPrixM2 !== null ? m.cells.median(eurosPerM2(cell.medianPrixM2)) : null,
     reference
-      ? `contre ${eurosPerM2(reference.medianPrixM2)} pour ${reference.name || reference.code}`
+      ? m.cells.against(eurosPerM2(reference.medianPrixM2), reference.name || reference.code)
       : null,
-    klass ? klass.label : 'pas de médian : rien n’est peint',
-    (cell.years || []).length ? `millésimes ${cell.years.join(', ')}` : null,
+    klass ? klass.label : m.cells.noMedian,
+    (cell.years || []).length ? m.cells.vintages(cell.years.join(', ')) : null,
     // The honest ceiling on what this mark can answer, said on the mark itself.
-    `descendre sous ${SCAN_CELL_MIN_ALTITUDE_M} m pour voir les ventes une par une`,
+    m.cells.descendForEach(SCAN_CELL_MIN_ALTITUDE_M),
   ].filter(Boolean).join(' · ');
 }
 
@@ -1279,6 +1290,7 @@ export function dvfCellCard(cell, payload) {
  * @returns {number} Discs drawn.
  */
 function drawDvfCells(payload, dataSource, classificationType) {
+  const m = messages();
   const cells = payload?.cells || [];
   const breaks = dvfCellBreaks(payload?.summary?.cellM);
   let drawn = 0;
@@ -1290,8 +1302,8 @@ function drawDvfCells(payload, dataSource, classificationType) {
     const positions = Cesium.Cartesian3.fromDegreesArray(ring.flat());
     const klass = dvfCellClass(cell.medianRatio);
     const name = cell.medianPrixM2 !== null
-      ? `${eurosPerM2(cell.medianPrixM2)} · ${plural(cell.count, 'vente')}`
-      : plural(cell.count, 'vente');
+      ? m.cells.discName(eurosPerM2(cell.medianPrixM2), Number(cell.count || 0))
+      : m.cells.discNameNoPrice(Number(cell.count || 0));
     const description = dvfCellCard(cell, payload);
     dataSource.entities.add({
       id: `dvf-cell:${cell.key}`,
@@ -1342,7 +1354,7 @@ const baseLayer = createAddressScanLayer({
   runtimeParams: {
     type: {
       values: DVF_TYPE_FILTERS.map((entry) => entry.id),
-      defaultValue: 'tous',
+      defaultValue: 'tous', // i18n-ignore-line — share-link token
     },
   },
   // DELIBERATELY ABSENT FROM `params`. The proxy is asked for every mutation
@@ -1388,7 +1400,7 @@ const baseLayer = createAddressScanLayer({
   },
 
   render({ payload, dataSource, viewer, runtime, point }) {
-    _typeFilter = String(runtime?.type ?? 'tous');
+    _typeFilter = String(runtime?.type ?? 'tous'); // i18n-ignore-line — share-link token
     // THE PAYLOAD DECIDES, NOT THE CAMERA. An answer in flight while the reader
     // crossed 600 m lands after the altitude already says the other thing, and
     // drawing a box payload as points — or the reverse — is one frame of
@@ -1460,7 +1472,7 @@ const baseLayer = createAddressScanLayer({
           nature: sale.nature,
           rowCount: sale.rowCount,
         },
-        name: sale.address || sale.commune || 'Mutation',
+        name: sale.address || sale.commune || messages().card.fallbackName,
         description: dvfSaleCard(sale, reference),
       });
       drawn += 1;
@@ -1489,7 +1501,7 @@ const baseLayer = createAddressScanLayer({
     // READ, NEVER WRITTEN, here: `render` owns the mirror — see `_typeFilter`.
     // The chips still show the runtime, which is the truth even on the tick
     // before the draw has caught up with it.
-    const filter = String(runtime?.type ?? 'tous');
+    const filter = String(runtime?.type ?? 'tous'); // i18n-ignore-line — share-link token
     const chips = DVF_TYPE_FILTERS.map((entry) => ({
       id: `type:${entry.id}`,
       label: entry.label,
