@@ -116,7 +116,32 @@
  * `node --test`.
  */
 
+import { formatNumber, formatPercent } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
 import { pointInPolygons, polygonsBounds } from './ringGeometry.js';
+import messages, { SITADEL_NATURE, SITADEL_OUTCOME_WORDS, SITADEL_TYPES } from './sitadelFeed.i18n.js';
+
+// --- French tables the server publishes -------------------------------------
+//
+// `projectSitadelCommune()` is imported by `vite.config.js`, and a server has
+// no locale to read. The three tables below therefore keep publishing FRENCH,
+// built from the catalog's definition rather than retyped beside it, exactly
+// as `rnbPivot.js` does. A browser calls the `…Label()` reader next to each.
+
+/** A catalog's French side, flat, keyed by the data value. */
+function frenchTable(catalog) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(catalog.definition).map(([key, leaf]) => [key, leaf.fr]),
+  ));
+}
+
+/** One band record: its id, its `ETAT_DAU` state, its colour, its French words. */
+function bandRecord(id, state, color) {
+  const words = messages.definition.bands[id];
+  return Object.freeze({
+    id, state, label: words.label.fr, color, blurb: words.blurb.fr,
+  });
+}
 
 // --- Upstream ---------------------------------------------------------------
 
@@ -126,6 +151,7 @@ export const SITADEL_DIDO_BASE = 'https://data.statistiques.developpement-durabl
 /** The DiDo dataset that lists the four Sitadel datafiles and their rids. */
 export const SITADEL_DIDO_DATASET = '6513f0189d7d312c80ec5b5b';
 /** The data.gouv.fr landing page, for the credit line. */
+// i18n-ignore-next-line — a URL, not prose
 export const SITADEL_DATASET_PAGE = 'https://www.data.gouv.fr/fr/datasets/689c42fa521ccf80ce954f83/';
 
 /**
@@ -138,8 +164,10 @@ export const SITADEL_DATASET_PAGE = 'https://www.data.gouv.fr/fr/datasets/689c42
  */
 export const SITADEL_HOUSING_RID = '8b35affb-55fc-4c1f-915b-7750f974446a';
 export const SITADEL_DEMOLITION_RID = '1a9a2f0c-56fe-4e69-84a7-fbbda2121f02';
+// i18n-ignore-start — the publisher's own datafile titles, matched on verbatim
 export const SITADEL_HOUSING_TITLE = 'créant des logements';
 export const SITADEL_DEMOLITION_TITLE = 'permis de démolir';
+// i18n-ignore-end
 
 /**
  * Newest DiDo edition accepted, and the one every number here was measured on.
@@ -229,8 +257,10 @@ export const CADASTRE_ETALAB_BASE = 'https://cadastre.data.gouv.fr/data/etalab-c
 export const CADASTRE_EDITION_FLOOR = '2026-06-01';
 
 /** Etalab's own reverse commune lookup. Keyless and CORS-open. */
+// i18n-ignore-next-line — a URL, not prose
 export const GEO_API_COMMUNES = 'https://geo.api.gouv.fr/communes';
 
+// i18n-ignore-next-line — the registry owns a layer's source line (layerTaxonomy.i18n.js)
 export const SITADEL_SOURCE = 'Sitadel — permis de construire et de démolir, SDES/CGDD'
   + ' · parcelles cadastrales Etalab (DGFiP)';
 export const SITADEL_LICENCE = 'Licence Ouverte (Etalab)';
@@ -292,42 +322,21 @@ export const ARRONDISSEMENT_COMMUNES = Object.freeze({
  * amber of an open site, which is the most legible reading of "work in
  * progress" and is worth the collision.
  */
+/**
+ * The five bands, AS THE SERVER PUBLISHES THEM.
+ *
+ * `label` and `blurb` are the French words this table always carried, read off
+ * `sitadelFeed.i18n.js` rather than retyped: `projectSitadelCommune` runs in
+ * `vite.config.js`, and a server has no language to read
+ * (docs/i18n/CONVENTIONS.md). {@link sitadelBandLabel} and
+ * {@link sitadelBandBlurb} are what a browser calls instead.
+ */
 export const SITADEL_BANDS = Object.freeze([
-  Object.freeze({
-    id: 'autorise',
-    state: 2,
-    label: 'Autorisé',
-    color: '#b197fc',
-    blurb: 'Autorisé, et rien de plus n’est remonté au SDES — ni ouverture de chantier ni achèvement. Pâle : il n’y a peut-être encore rien sur le terrain.',
-  }),
-  Object.freeze({
-    id: 'commence',
-    state: 5,
-    label: 'Chantier ouvert',
-    color: '#f59f00',
-    blurb: 'Déclaration d’ouverture de chantier (DOC) déposée, achèvement non déclaré. Les travaux ont commencé.',
-  }),
-  Object.freeze({
-    id: 'termine',
-    state: 6,
-    label: 'Travaux achevés',
-    color: '#4c6ef5',
-    blurb: 'Déclaration attestant l’achèvement (DAACT) déposée. Le bâti devrait exister — la BD TOPO doit être d’accord.',
-  }),
-  Object.freeze({
-    id: 'annule',
-    state: 4,
-    label: 'Annulé',
-    color: '#6c757d',
-    blurb: 'Autorisation annulée après coup. Le permis a existé, le projet non.',
-  }),
-  Object.freeze({
-    id: 'demolition',
-    state: null,
-    label: 'Permis de démolir',
-    color: '#c92a2a',
-    blurb: 'Fichier des permis de démolir (depuis 1996). Une seule bande : 94,3 % des démolitions de Nantes et 98,3 % de celles de Paris restent à « Autorisé », l’état d’avancement n’y dit rien.',
-  }),
+  bandRecord('autorise', 2, '#b197fc'),
+  bandRecord('commence', 5, '#f59f00'),
+  bandRecord('termine', 6, '#4c6ef5'),
+  bandRecord('annule', 4, '#6c757d'),
+  bandRecord('demolition', null, '#c92a2a'),
 ]);
 
 /** Band ids in legend order. */
@@ -349,32 +358,32 @@ const BAND_BY_ID = Object.freeze(Object.fromEntries(SITADEL_BANDS.map((band) => 
  * change, everything else means an existing building is being worked on. A
  * reader looking at a roof needs to know which.
  */
-export const SITADEL_NATURE_LABELS = Object.freeze({
-  1: 'Nouvelle construction',
-  2: 'Transformation sans changement de surface',
-  3: 'Transformation avec extension',
-  4: 'Transformation avec diminution de surface',
-  5: 'Extension sans transformation',
-  6: 'Diminution de surface sans transformation',
-});
+export const SITADEL_NATURE_LABELS = frenchTable(SITADEL_NATURE);
+
+/** One `NATURE_PROJET_COMPLETEE` modality in the page's language. */
+export function sitadelNatureLabel(modality) {
+  if (modality == null || !(String(modality) in SITADEL_NATURE_LABELS)) return undefined;
+  return labelFor(SITADEL_NATURE, modality);
+}
 
 /** `TYPE_DAU`. `PA` and `PD` genuinely occur inside the housing file — 3 each over 22 474 rows. */
-export const SITADEL_TYPE_LABELS = Object.freeze({
-  PC: 'Permis de construire',
-  DP: 'Déclaration préalable',
-  PA: 'Permis d’aménager',
-  PD: 'Permis de démolir',
-});
+export const SITADEL_TYPE_LABELS = frenchTable(SITADEL_TYPES);
+
+/** One `TYPE_DAU` in the page's language, or nothing for a code off the list. */
+export function sitadelTypeLabel(type) {
+  if (type == null || !(String(type) in SITADEL_TYPE_LABELS)) return undefined;
+  return labelFor(SITADEL_TYPES, type);
+}
 
 /** How a permit ended up where it is — or why it is nowhere. Printed on the row. */
 export const SITADEL_OUTCOMES = Object.freeze(['placed', 'ambiguous', 'missing', 'noref']);
 
-export const SITADEL_OUTCOME_LABELS = Object.freeze({
-  placed: 'Posé sur sa parcelle',
-  ambiguous: 'Référence ambiguë — plusieurs parcelles portent ce numéro',
-  missing: 'Parcelle absente du cadastre actuel — divisée ou renumérotée',
-  noref: 'Aucune référence cadastrale publiée',
-});
+export const SITADEL_OUTCOME_LABELS = frenchTable(SITADEL_OUTCOME_WORDS);
+
+/** One join outcome in the page's language. */
+export function sitadelOutcomeLabel(outcome) {
+  return labelFor(SITADEL_OUTCOME_WORDS, outcome);
+}
 
 /**
  * Dwellings above which the dot stops growing.
@@ -620,6 +629,7 @@ export function sitadelDatafileMetaUrl(rid) {
 /** Etalab's parcel file for one commune, at the `latest` alias. */
 export function cadastreCommuneUrl(insee) {
   const code = String(insee).trim();
+  // i18n-ignore-next-line — a URL path, not prose
   return `${CADASTRE_ETALAB_BASE}/latest/geojson/communes/${code.slice(0, 2)}/${code}`
     + `/cadastre-${code}-parcelles.json.gz`;
 }
@@ -854,6 +864,23 @@ export function sitadelBand(id) {
 /** Colour for one band id. */
 export function sitadelBandColor(id) {
   return sitadelBand(id).color;
+}
+
+/**
+ * A band's label in the page's language.
+ *
+ * Read off the band ID rather than off `summary.bands[].label`, which the
+ * server baked in French: the id is the stable key, the words are not.
+ * @param {?string} id
+ * @returns {string}
+ */
+export function sitadelBandLabel(id) {
+  return messages().bands[sitadelBand(id).id].label;
+}
+
+/** A band's blurb in the page's language. @param {?string} id @returns {string} */
+export function sitadelBandBlurb(id) {
+  return messages().bands[sitadelBand(id).id].blurb;
 }
 
 /**
@@ -1151,32 +1178,37 @@ export function projectSitadelCommune({
 
 // --- Card copy --------------------------------------------------------------
 
-/** French thousands separator, matching the other French packs. */
+/** A count, grouped the way the reader's language groups one. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
-/** `1 234 m²`, hectares once a plot stops being a plot. */
+/** `1 234 m²` / `1,234 m²`, hectares once a plot stops being a plot. */
 export function formatSurfaceM2(value) {
   const m2 = finiteOrNull(value);
   if (m2 === null) return null;
-  if (m2 >= 10000) return `${(m2 / 10000).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} ha`;
-  return `${Math.round(m2).toLocaleString('fr-FR')} m²`;
+  const m = messages();
+  if (m2 >= 10000) {
+    return m.hectares(formatNumber(m2 / 10000, { maximumFractionDigits: 2 }));
+  }
+  return m.squareMeters(formatNumber(Math.round(m2)));
 }
 
-/** `04/10/2024` from an ISO date, or null. */
+/** `04/10/2024` / `Oct 4, 2024` from an ISO date, or null. */
 export function formatSitadelDate(value) {
   const text = String(value ?? '').trim();
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+  return match ? messages().date(match[1], match[2], match[3]) : null;
 }
 
 /** The one-line title of a permit. */
 export function sitadelPermitTitle(permit) {
-  const type = SITADEL_TYPE_LABELS[permit?.t] || (permit?.f === 'dem' ? 'Permis de démolir' : 'Autorisation d’urbanisme');
+  const m = messages();
+  const type = sitadelTypeLabel(permit?.t)
+    || (permit?.f === 'dem' ? sitadelBandLabel('demolition') : m.card.fallbackType);
   const created = finiteOrNull(permit?.lgt);
   if (created !== null && created > 0) {
-    return `${type} — ${fr(created)} logement${created > 1 ? 's' : ''}`;
+    return m.card.titleWithDwellings(type, fr(created), created);
   }
   return type;
 }
@@ -1195,11 +1227,12 @@ export function sitadelPermitTitle(permit) {
  * @returns {string[]} Title first, then detail lines.
  */
 export function buildSitadelPermitCard(permit, parcels = []) {
+  const m = messages().card;
   const lines = [];
-  const band = sitadelBand(permit?.b);
+  const band = sitadelBandLabel(permit?.b);
 
   const authorised = formatSitadelDate(permit?.da);
-  lines.push(authorised ? `${band.label} · autorisé le ${authorised}` : band.label);
+  lines.push(authorised ? m.authorizedOn(band, authorised) : band);
 
   // The three real dates, and the gaps between them. An `Autorisé` permit has
   // no DOC and no DAACT by construction, so saying "chantier non déclaré"
@@ -1207,16 +1240,16 @@ export function buildSitadelPermitCard(permit, parcels = []) {
   // actually distinguishes two moments.
   const started = formatSitadelDate(permit?.do);
   const finished = formatSitadelDate(permit?.df);
-  if (started && finished) lines.push(`Chantier ouvert le ${started}, achevé le ${finished}`);
-  else if (started) lines.push(`Chantier ouvert le ${started} — achèvement non déclaré`);
-  else if (finished) lines.push(`Achevé le ${finished} — aucune ouverture de chantier déclarée`);
+  if (started && finished) lines.push(m.startedAndFinished(started, finished));
+  else if (started) lines.push(m.startedOnly(started));
+  else if (finished) lines.push(m.finishedOnly(finished));
 
   const created = finiteOrNull(permit?.lgt);
   const surface = finiteOrNull(permit?.srf);
   if (created !== null || surface !== null) {
     const parts = [];
-    if (created !== null) parts.push(`${fr(created)} logement${created > 1 ? 's' : ''} créé${created > 1 ? 's' : ''}`);
-    if (surface !== null && surface > 0) parts.push(`${formatSurfaceM2(surface)} de surface habitable`);
+    if (created !== null) parts.push(m.dwellingsCreated(fr(created), created));
+    if (surface !== null && surface > 0) parts.push(m.livingArea(formatSurfaceM2(surface)));
     if (parts.length) lines.push(parts.join(' · '));
   }
 
@@ -1224,12 +1257,12 @@ export function buildSitadelPermitCard(permit, parcels = []) {
   const removedSurface = finiteOrNull(permit?.dsr);
   if ((removedDwellings ?? 0) > 0 || (removedSurface ?? 0) > 0) {
     const parts = [];
-    if ((removedDwellings ?? 0) > 0) parts.push(`${fr(removedDwellings)} logement${removedDwellings > 1 ? 's' : ''} démoli${removedDwellings > 1 ? 's' : ''}`);
-    if ((removedSurface ?? 0) > 0) parts.push(`${formatSurfaceM2(removedSurface)} supprimée`);
+    if ((removedDwellings ?? 0) > 0) parts.push(m.dwellingsDemolished(fr(removedDwellings), removedDwellings));
+    if ((removedSurface ?? 0) > 0) parts.push(m.areaRemoved(formatSurfaceM2(removedSurface)));
     lines.push(parts.join(' · '));
   }
 
-  const nature = SITADEL_NATURE_LABELS[permit?.np];
+  const nature = sitadelNatureLabel(permit?.np);
   if (nature) lines.push(nature);
 
   const address = [permit?.an, permit?.av].filter(Boolean).join(' ');
@@ -1241,13 +1274,13 @@ export function buildSitadelPermitCard(permit, parcels = []) {
   if (named.length) {
     const label = named.map((parcel) => `${parcel.s ?? '?'} ${parcel.n ?? '?'}`).join(' · ');
     lines.push(named.length > 1
-      ? `${named.length} parcelles : ${label}`
-      : `Parcelle ${label}`);
+      ? m.manyParcels(named.length, label)
+      : m.oneParcel(label));
     // The préfixe is the component Sitadel does not publish. Where it is not
     // `000` the reference could only be resolved because nothing else in the
     // commune shares this (section, numéro) — worth naming.
     const prefixes = [...new Set(named.map((parcel) => parcel.x).filter((value) => value && value !== '000'))];
-    if (prefixes.length) lines.push(`Préfixe de section ${prefixes.join(', ')} — absent du fichier Sitadel`);
+    if (prefixes.length) lines.push(m.sectionPrefix(prefixes.join(', ')));
   }
 
   const terrain = finiteOrNull(permit?.ter);
@@ -1256,15 +1289,15 @@ export function buildSitadelPermitCard(permit, parcels = []) {
     const agreement = finiteOrNull(permit?.ag);
     const verdict = agreement === null ? null
       : (agreement >= 1 / SITADEL_AREA_AGREEMENT && agreement <= SITADEL_AREA_AGREEMENT
-        ? 'concordant' : 'DISCORDANT');
-    lines.push(`Terrain déclaré ${formatSurfaceM2(terrain)} · parcelle tracée ${formatSurfaceM2(drawn)}`
-      + (verdict ? ` — ${verdict}` : ''));
+        ? m.agrees : m.disagrees);
+    const sentence = m.landVersusParcel(formatSurfaceM2(terrain), formatSurfaceM2(drawn));
+    lines.push(verdict ? m.verdict(sentence, verdict) : sentence);
   } else {
-    lines.push('Superficie du terrain non publiée — le tracé n’est pas recoupé');
+    lines.push(m.noLandArea);
   }
 
-  lines.push('Position calculée par jointure cadastrale — Sitadel ne publie aucune coordonnée');
-  if (permit?.i) lines.push(`N° ${permit.i}`);
+  lines.push(m.joined);
+  if (permit?.i) lines.push(m.fileNumber(permit.i));
   return [sitadelPermitTitle(permit), ...lines];
 }
 
@@ -1281,21 +1314,22 @@ export function buildSitadelPermitCard(permit, parcels = []) {
 export function sitadelLoadingLabel({
   status, commune, summary, millesime,
 } = {}) {
-  if (status === 'too-high') return 'Sitadel interroge une commune à la fois — zoome sous 12 km';
-  if (status === 'off-coverage') return 'Hors de France — Sitadel ne couvre que les communes françaises';
-  if (status === 'loading') return commune ? `Permis de ${commune}…` : 'Recherche de la commune…';
-  if (status === 'no-commune') return 'Aucune commune française sous le centre de l’écran';
+  const m = messages().row;
+  if (status === 'too-high') return m.tooHigh;
+  if (status === 'off-coverage') return m.offCoverage;
+  if (status === 'loading') return commune ? m.loadingCommune(commune) : m.loading;
+  if (status === 'no-commune') return m.noCommune;
   if (!summary) return null;
   const parts = [];
   const head = commune ? `${commune} · ` : '';
-  parts.push(`${head}${fr(summary.drawn || 0)} permis posés sur ${fr(summary.parcels || 0)} parcelles`);
+  parts.push(m.placed(head, fr(summary.drawn || 0), fr(summary.parcels || 0)));
   const unplaced = (summary.ambiguous || 0) + (summary.missing || 0) + (summary.noref || 0);
   if (unplaced > 0) {
     const share = summary.permits > 0 ? Math.round((100 * unplaced) / summary.permits) : 0;
-    parts.push(`${fr(unplaced)} non posés (${share} %)`);
+    parts.push(m.unplaced(fr(unplaced), formatPercent(share)));
   }
-  if (summary.dwellingsDrawn > 0) parts.push(`${fr(summary.dwellingsDrawn)} logements autorisés`);
-  if (millesime) parts.push(`millésime ${millesime}`);
+  if (summary.dwellingsDrawn > 0) parts.push(m.dwellings(fr(summary.dwellingsDrawn)));
+  if (millesime) parts.push(m.vintage(millesime));
   return parts.join(' · ');
 }
 
@@ -1311,18 +1345,11 @@ export function sitadelLoadingLabel({
  * @returns {string[]}
  */
 export function sitadelUnplacedLines(summary) {
+  const m = messages().unplaced;
   const lines = [];
   if (!summary) return lines;
-  if (summary.ambiguous > 0) {
-    lines.push(`${fr(summary.ambiguous)} référence${summary.ambiguous > 1 ? 's' : ''} ambiguë${summary.ambiguous > 1 ? 's' : ''}`
-      + ' — plusieurs parcelles de la commune portent la même section et le même numéro (préfixes de section, absents de Sitadel)');
-  }
-  if (summary.missing > 0) {
-    lines.push(`${fr(summary.missing)} parcelle${summary.missing > 1 ? 's' : ''} introuvable${summary.missing > 1 ? 's' : ''}`
-      + ' dans le cadastre d’aujourd’hui — divisée ou renumérotée depuis le dépôt');
-  }
-  if (summary.noref > 0) {
-    lines.push(`${fr(summary.noref)} permis sans aucune référence cadastrale publiée`);
-  }
+  if (summary.ambiguous > 0) lines.push(m.ambiguous(fr(summary.ambiguous), summary.ambiguous));
+  if (summary.missing > 0) lines.push(m.missing(fr(summary.missing), summary.missing));
+  if (summary.noref > 0) lines.push(m.noref(fr(summary.noref)));
   return lines;
 }
