@@ -109,7 +109,9 @@ export default defineMessages({
     },
     url: {
       fr: '`source.url` : URL http(s)',
-      en: '`source.url`: an http(s) URL',
+      en: '`source.url`: an http or https URL',
+      note: 'Spelled out rather than “http(s)”: the English plural rule reads a bare '
+        + '“(s)” as an unchosen plural, and here it is a scheme name.',
     },
     typeName: {
       fr: '`source.typeName` : nom de la couche WFS (ex. BDTOPO_V3:aerodrome)',
@@ -330,7 +332,7 @@ export default defineMessages({
     },
     url: {
       fr: '`attribution.url` : URL http(s)',
-      en: '`attribution.url`: an http(s) URL',
+      en: '`attribution.url`: an http or https URL',
     },
     text: {
       fr: '`attribution.text` : chaîne non vide',
