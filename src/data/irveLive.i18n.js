@@ -8,12 +8,13 @@
  * would report five plugs as busy that nobody asked about.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   /** Every plug at the site has been silent for over a day. */
   allMute: {
     fr: (count) => `${count} borne${count > 1 ? 's' : ''} sans état publié depuis plus de 24 h`,
-    en: (count) => `${count} charge point${count > 1 ? 's' : ''} with no published state for over 24 h`,
+    en: (count) => `${count} charge ${plural(count, 'point', 'points', { locale: 'en' })} with no published state for over 24 h`,
     sample: [4],
   },
   free: {

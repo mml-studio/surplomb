@@ -158,7 +158,7 @@ test('the cell A5 line and the cell card answer in English', () => {
   const note = withLocale('en', () => dpeCellRowControls(CELLS).note);
   assertNoFrench(note, { allow: KEEP });
   assert.equal(note, 'View aggregated over 2.2 km a side · 44 ratings in 2 cells · '
-    + '2 tile(s) of 16 did not answer: this ground is empty for want of data, not for want of '
+    + '2 tiles of 16 did not answer: this ground is empty for want of data, not for want of '
     + 'a rating · drop below 600 m to get each building back, its footprint and its labels.');
   const card = withLocale('en', () => dpeCellCard(CELLS.cells[0]));
   assertNoFrench(card, { allow: KEEP });

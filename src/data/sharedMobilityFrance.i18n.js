@@ -21,6 +21,7 @@
  * Operator names, system names and station names are data.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   channels: {
@@ -39,7 +40,7 @@ export default defineMessages({
   chipTitles: {
     share: {
       fr: (kept, total) => ` — ${kept} objet${kept > 1 ? 's' : ''} sur ${total}`,
-      en: (kept, total) => ` — ${kept} object${kept > 1 ? 's' : ''} of ${total}`,
+      en: (kept, total) => ` — ${kept} ${plural(kept, 'object', 'objects', { locale: 'en' })} of ${total}`,
       sample: ['84', '168'],
     },
     active: {
@@ -79,7 +80,7 @@ export default defineMessages({
     },
     ofPlaces: {
       fr: (count) => ` sur ${count} place${count > 1 ? 's' : ''}`,
-      en: (count) => ` of ${count} space${count > 1 ? 's' : ''}`,
+      en: (count) => ` of ${count} ${plural(count, 'space', 'spaces', { locale: 'en' })}`,
       sample: ['19'],
     },
     freeDocks: {
@@ -101,7 +102,7 @@ export default defineMessages({
     },
     mechanical: {
       fr: (count) => `mécanique${count > 1 ? 's' : ''}`,
-      en: (count) => `pedal bike${count > 1 ? 's' : ''}`,
+      en: (count) => `pedal ${plural(count, 'bike', 'bikes', { locale: 'en' })}`,
       note: 'Inside a bikes-only dock the split IS the power source.',
       sample: [5],
     },

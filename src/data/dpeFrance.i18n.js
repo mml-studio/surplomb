@@ -12,6 +12,7 @@
  * for the block. Every one of those refusals is a sentence here.
  */
 import { countNoun } from '../i18n/format.js';
+import { plural } from '../i18n/format.js';
 import { defineMessages } from '../i18n/messages.js';
 
 /** A leaf that counts its own noun says which language it is in. */
@@ -285,7 +286,7 @@ export default defineMessages({
     tilesMissing: {
       fr: (missing, tiles) => `${missing} tuile(s) sur ${tiles} sans réponse : `
         + 'ce sol est vide faute de donnée, pas faute de diagnostic',
-      en: (missing, tiles) => `${missing} tile(s) of ${tiles} did not answer: `
+      en: (missing, tiles) => `${missing} ${plural(missing, 'tile', 'tiles', { locale: 'en' })} of ${tiles} did not answer: `
         + 'this ground is empty for want of data, not for want of a rating',
       sample: [2, 16],
     },

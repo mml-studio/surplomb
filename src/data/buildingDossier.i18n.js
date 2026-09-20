@@ -6,6 +6,7 @@
  * (`monthName`): a message only places words around them.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   /** What this ground last sold for — DVF, a month and never a day. */
@@ -28,7 +29,7 @@ export default defineMessages({
   permits: {
     count: {
       fr: (count) => `${count} autorisation${count > 1 ? 's' : ''}`,
-      en: (count) => `${count} permit${count > 1 ? 's' : ''}`,
+      en: (count) => `${count} ${plural(count, 'permit', 'permits', { locale: 'en' })}`,
       note: 'Used when the newest permit carries no label of its own.',
       sample: [3],
     },
@@ -65,13 +66,13 @@ export default defineMessages({
     },
     alsoZones: {
       fr: (more) => ` · +${more} zonage${more > 1 ? 's' : ''} sur ce point`,
-      en: (more) => ` · +${more} more zoning${more > 1 ? 's' : ''} at this point`,
+      en: (more) => ` · +${more} more ${plural(more, 'zoning', 'zonings', { locale: 'en' })} at this point`,
       note: 'Two municipalities digitize their shared limit independently.',
       sample: [1],
     },
     easements: {
       fr: (count) => ` · ${count} servitude${count > 1 ? 's' : ''}`,
-      en: (count) => ` · ${count} easement${count > 1 ? 's' : ''}`,
+      en: (count) => ` · ${count} ${plural(count, 'easement', 'easements', { locale: 'en' })}`,
       sample: [2],
     },
   },

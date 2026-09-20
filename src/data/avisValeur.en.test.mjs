@@ -160,7 +160,7 @@ test('the method line and the A5 line answer in English', () => {
   assert.match(disclosure, /^Dropped: 3 off-plan \(VEFA\), 1 at one euro, 2 with no coordinate, /);
   assert.match(disclosure, /8 of the other dwelling type, 4 with no usable €\/m²/);
   assert.match(disclosure, /comparables drawn out of \d+ kept — the statistics cover them all/);
-  assert.match(disclosure, /vintage\(s\) 2025 not downloaded — those editions EXIST/);
+  assert.match(disclosure, /vintage 2025 not downloaded — those editions EXIST/);
   assert.match(disclosure, /the chosen point does NOT travel in the share link/);
   assert.match(withLocale('fr', () => avisLegendDisclosure({ ...ANSWERED, truncated: true, served: 120 })),
     /comparables dessinées sur \d+ retenues/);

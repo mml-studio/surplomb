@@ -13,6 +13,20 @@
  * surface and the type in the order they want.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
+
+/**
+ * How many items a pre-joined list holds — `2023, 2024` is two.
+ *
+ * The caller formats the list before the message sees it, so the message has
+ * to count the separators to choose singular or plural. A number is returned
+ * as itself, so a caller that already counted keeps working.
+ */
+function countItems(list) {
+  if (typeof list === 'number') return list;
+  const text = String(list ?? '').trim();
+  return text ? text.split(/\s*(?:,|·|;| and | et )\s*/).filter(Boolean).length : 0;
+}
 
 export default defineMessages({
   /** Where a comparable sits in the band this answer published. */
@@ -205,14 +219,14 @@ export default defineMessages({
     symbolic: {
       fr: (count) => `dont ${count} vente(s) déclarée(s) sous 10 000 € — gardées et signalées, `
         + 'pas filtrées',
-      en: (count) => `including ${count} sale(s) declared under €10,000 — kept and flagged, `
+      en: (count) => `including ${count} ${plural(count, 'sale', 'sales', { locale: 'en' })} declared under €10,000 — kept and flagged, `
         + 'not filtered out',
       sample: [2],
     },
     missingYears: {
       fr: (years) => `millésime(s) ${years} indisponible(s) au moment du calcul — `
         + 'l’échantillon est plus mince que la fenêtre annoncée',
-      en: (years) => `vintage(s) ${years} unavailable when this was computed — the sample is `
+      en: (years) => `${plural(countItems(years), 'vintage', 'vintages', { locale: 'en' })} ${years} unavailable when this was computed — the sample is `
         + 'thinner than the window announced',
       sample: ['2025'],
     },
@@ -370,7 +384,7 @@ export default defineMessages({
     missingYears: {
       fr: (years) => `millésime(s) ${years} non téléchargé(s) — ces éditions EXISTENT et ne `
         + 'sont pas arrivées : l’échantillon est plus mince que la fenêtre annoncée',
-      en: (years) => `vintage(s) ${years} not downloaded — those editions EXIST and did not `
+      en: (years) => `${plural(countItems(years), 'vintage', 'vintages', { locale: 'en' })} ${years} not downloaded — those editions EXIST and did not `
         + 'arrive: the sample is thinner than the window announced',
       sample: ['2025'],
     },
@@ -383,7 +397,7 @@ export default defineMessages({
     },
     driftYear: {
       fr: (year, count) => `${year} ${count} vente(s)`,
-      en: (year, count) => `${year} ${count} sale(s)`,
+      en: (year, count) => `${year} ${count} ${plural(count, 'sale', 'sales', { locale: 'en' })}`,
       sample: [2024, 41],
     },
     driftNoYear: { fr: 'aucun millésime', en: 'no vintage' },

@@ -17,7 +17,7 @@
  *   - a commune ring is not a plant, and says so in its first line.
  */
 import { defineMessages } from '../i18n/messages.js';
-import { monthName } from '../i18n/format.js';
+import { monthName, plural } from '../i18n/format.js';
 
 export default defineMessages({
   /** The bucket the OpenStreetMap half of the layer falls into. */
@@ -314,7 +314,7 @@ export default defineMessages({
     fallbackCommune: { fr: 'Commune', en: 'Municipality' },
     title: {
       fr: (commune, count) => `${commune} — ${count} centrale${count > 1 ? 's' : ''} non localisée${count > 1 ? 's' : ''}`,
-      en: (commune, count) => `${commune} — ${count} plant${count > 1 ? 's' : ''} with no published location`,
+      en: (commune, count) => `${commune} — ${count} ${plural(count, 'plant', 'plants', { locale: 'en' })} with no published location`,
       sample: ['Laruns', 4],
     },
     installed: {

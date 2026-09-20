@@ -12,6 +12,7 @@
  * what each class is, and the reason no default height is invented.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   surfaces: {
@@ -73,7 +74,7 @@ export default defineMessages({
     },
     levels: {
       fr: (count) => `${count} niveau${count > 1 ? 'x' : ''}`,
-      en: (count) => `${count} floor${count > 1 ? 's' : ''}`,
+      en: (count) => `${count} ${plural(count, 'floor', 'floors', { locale: 'en' })}`,
       sample: [3],
     },
     height: {

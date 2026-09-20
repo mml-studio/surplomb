@@ -16,6 +16,7 @@
  * both languages.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 /** The seven days of the week cursor, keyed by the pack's own day name. */
 export const PULSE_DAY_NAMES = defineMessages({
@@ -71,7 +72,7 @@ export default defineMessages({
     },
     percentFullWithBikes: {
       fr: (percent, bikes, capacity) => `${percent} % pleine — environ ${bikes} vélo${bikes > 1 ? 's' : ''} sur ${capacity}`,
-      en: (percent, bikes, capacity) => `${percent}% full — about ${bikes} bike${bikes > 1 ? 's' : ''} of ${capacity}`,
+      en: (percent, bikes, capacity) => `${percent}% full — about ${bikes} ${plural(bikes, 'bike', 'bikes', { locale: 'en' })} of ${capacity}`,
       note: 'A 19-stand dock at 7% holds ONE bike; "1 bikes" would read as a bug in the number.',
       sample: [42, 8, 19],
     },
@@ -113,7 +114,7 @@ export default defineMessages({
     },
     averageOf: {
       fr: (weeks) => `Moyenne de ${weeks} semaine${weeks > 1 ? 's' : ''} sur les 4 relevées`,
-      en: (weeks) => `Average of ${weeks} week${weeks > 1 ? 's' : ''} out of the 4 sampled`,
+      en: (weeks) => `Average of ${weeks} ${plural(weeks, 'week', 'weeks', { locale: 'en' })} out of the 4 sampled`,
       sample: [3],
     },
     noSample: {
