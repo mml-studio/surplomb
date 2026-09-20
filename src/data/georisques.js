@@ -1,7 +1,17 @@
 import * as Cesium from 'cesium';
+import { getLocale, DEFAULT_LOCALE } from '../i18n/locale.js';
+import { labelFor } from '../i18n/messages.js';
 import { createAddressScanLayer } from './addressScanLayer.js';
 import { ringAnchor } from './communeContours.js';
 import { nearFarScalarValueAtDistance } from './focusDeemphasis.js';
+import { icpeSiteName } from './georisquesFeed.js';
+import messages, {
+  ICPE_REGIMES,
+  RISK_GRADES,
+  RISK_LABELS,
+  RISK_VERDICTS,
+  SEVESO_STATUSES,
+} from './georisques.i18n.js';
 import { hazardPlateGlyph } from './hazardMarkerIcons.js';
 import { registerPickDecoration } from './pickRegistry.js';
 import { surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
@@ -159,6 +169,15 @@ const COMMUNE_STROKE_PX = 4;
  */
 export const COMMUNE_FILL_ALPHA = 0.18;
 
+/**
+ * The regime a site the state took OUT of the ICPE list carries.
+ *
+ * The register's own value, matched, never shown: `published()` is what puts
+ * it on screen. Greyed apart from the two regimes that are still classified.
+ */
+// i18n-ignore-next-line — a value of the ICPE register, matched on.
+const REGIME_DECLASSIFIED = 'Non ICPE';
+
 /** Refresh cadence. The register is republished in weeks, not minutes. */
 const UPDATE_INTERVAL_MS = 300_000;
 /** Radius asked of the API, in metres. */
@@ -242,8 +261,66 @@ export function markPixelsAtDistance(sizePx, distanceM) {
  */
 function icpeStyle(site) {
   if (site.seveso) return { color: COLOR_SEVESO, sizePx: SIZE_SEVESO_PX };
-  if (site.regime === 'Non ICPE') return { color: COLOR_DECLASSIFIED, sizePx: SIZE_DECLASSIFIED_PX };
+  if (site.regime === REGIME_DECLASSIFIED) {
+    return { color: COLOR_DECLASSIFIED, sizePx: SIZE_DECLASSIFIED_PX };
+  }
   return { color: COLOR_ICPE, sizePx: SIZE_ICPE_PX };
+}
+
+/**
+ * One value the register publishes, in the page's language.
+ *
+ * French prints what the register published, byte for byte — it IS the French
+ * — and English reads the table, falling back to the published string for a
+ * value nobody has worded yet. The same seam `adresseRadiographie.js` uses on
+ * the same scan.
+ *
+ * @param {object} table A `defineMessages` table keyed by the published value.
+ * @param {?string} value
+ * @returns {?string}
+ */
+function published(table, value) {
+  if (!value) return value ?? null;
+  if (getLocale() === DEFAULT_LOCALE) return value;
+  return labelFor(table, value);
+}
+
+/**
+ * One hazard's family name, in the page's language.
+ *
+ * Keyed by the upstream's `id` rather than by its `libelle`, because the id is
+ * the stable half: `libelle` is free text and has already changed spelling
+ * upstream (`Feu de foret`, unaccented). A family nobody has worded yet keeps
+ * the register's own words, which is information; a blank is not.
+ *
+ * @param {object} hazard @returns {string}
+ */
+function hazardFamily(hazard) {
+  if (getLocale() === DEFAULT_LOCALE) return hazard.label;
+  const translated = labelFor(RISK_LABELS, hazard.id);
+  return translated === hazard.id ? hazard.label : translated;
+}
+
+/**
+ * One verdict of the register, in full, in the page's language.
+ *
+ * The register answers a closed vocabulary optionally graded after a dash
+ * (`Risque Existant - important`). The grade is split off rather than listed
+ * as a dozen combinations — the same split `adresseRadiographie.js` makes on
+ * the same field, and the reason its `RISK_GRADES` table is shared.
+ *
+ * @param {?string} verdict @returns {?string}
+ */
+function fullVerdict(verdict) {
+  if (!verdict) return verdict ?? null;
+  if (getLocale() === DEFAULT_LOCALE) return verdict;
+  const match = /^(.*?)\s-\s*(.+)$/.exec(String(verdict).trim());
+  if (!match) return published(RISK_VERDICTS, verdict);
+  const [, head, grade] = match;
+  return messages().hazard.verdictGraded(
+    published(RISK_VERDICTS, head.trim()),
+    published(RISK_GRADES, grade.trim()),
+  );
 }
 
 /**
@@ -323,22 +400,27 @@ export function legendBucket(hazard) {
  * @returns {{label: string, color: null, blurb: string}}
  */
 export function hazardLegendEntry(hazard) {
+  const m = messages();
   const standing = effectiveStanding(hazard);
-  const verdict = standing === 'concerned'
-    ? (hazard.grade ? `concerné · ${hazard.grade}` : 'concerné')
-    : (standing === 'unknown' ? 'non connu' : 'hors zone');
+  const word = standing === 'concerned'
+    ? m.standing.concerned
+    : (standing === 'unknown' ? m.standing.unknown : m.standing.clear);
+  const verdict = standing === 'concerned' && hazard.grade
+    ? m.hazard.graded(word, published(RISK_GRADES, hazard.grade))
+    : word;
   return {
     // THE DISAGREEMENT IS IN THE LABEL, not only in the sentence under it.
     // "Hors zone" alone, for a hazard the same register says reaches the
     // commune, is the one reading this layer exists to prevent: the reader
     // concludes the subject is settled when what the source said is "not on
     // your street, yes around here".
-    label: `${hazard.label} — ${verdict}${hazard.variesByAddress ? ' · diffère de la commune' : ''}`,
+    label: m.hazard.line(hazardFamily(hazard), verdict)
+      + (hazard.variesByAddress ? m.hazard.varies : ''),
     // Assessed, not mapped. The manager draws an empty aligned slot for this,
     // which is the honest swatch for a verdict with no geometry behind it.
     color: null,
     blurb: hazard.variesByAddress
-      ? `commune : ${hazard.communeVerdict} · à cette adresse : ${hazard.addressVerdict}`
+      ? m.hazard.bothVerdicts(fullVerdict(hazard.communeVerdict), fullVerdict(hazard.addressVerdict))
       : (hazard.detail || ''),
   };
 }
@@ -353,6 +435,7 @@ export function hazardLegendEntry(hazard) {
  * @returns {boolean}
  */
 export function isCommuneWashId(id) {
+  // i18n-ignore-next-line — entity id prefixes, not words.
   return typeof id === 'string' && id.startsWith('georisques:commune:') && id.includes(':wash:');
 }
 
@@ -419,6 +502,7 @@ export function drawCommuneWash(dataSource, contour, classificationType) {
     const ring = closed ? flat.slice(0, -2) : flat;
     if (ring.length < 8) continue;
     dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
       id: `georisques:commune:${contour.code}:wash:${index}`,
       polygon: {
         hierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(ring)),
@@ -467,6 +551,7 @@ export function drawCommuneOutline(dataSource, contour, classificationType, desc
     if (!Array.isArray(flat) || flat.length < 8) continue;
     const positions = Cesium.Cartesian3.fromDegreesArray(flat);
     dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
       id: `georisques:commune:${contour.code}:${index}`,
       name: contour.name,
       description,
@@ -494,27 +579,23 @@ export function drawCommuneOutline(dataSource, contour, classificationType, desc
  * @returns {string}
  */
 export function communeDescription(payload, contour) {
+  const m = messages();
   const hazards = allHazards(payload);
   const concerned = hazards.filter((entry) => entry.communeStanding === 'concerned');
   const varying = hazards.filter((entry) => entry.variesByAddress);
   return [
-    `Commune de ${contour.name} (${contour.code})`,
+    m.commune.title(contour.name, contour.code),
     concerned.length
-      ? `${concerned.length} risque${concerned.length > 1 ? 's' : ''} recensé${concerned.length > 1 ? 's' : ''} sur la commune : `
-        + concerned.map((entry) => entry.label).join(', ')
-      : 'aucun risque recensé sur la commune',
-    varying.length
-      ? `${varying.length} verdict${varying.length > 1 ? 's' : ''} diffère${varying.length > 1 ? 'nt' : ''} entre la commune et l’adresse scannée`
-      : null,
+      ? m.commune.concerned(concerned.length, concerned.map(hazardFamily).join(', '))
+      : m.commune.none,
+    varying.length ? m.commune.varying(varying.length) : null,
     // Said on the object itself, not only in the key: this shape is a legal
     // boundary that has been decimated to be drawable, and the one thing a
     // reader must not do with it is measure against it. It matters more now
     // that the boundary is FILLED: a wash reads as an area, and an area
     // invites being compared with the ground under its edge.
-    contour.simplified
-      ? 'contour simplifié pour l’affichage — ce n’est pas la limite cadastrale'
-      : null,
-    'Aucun de ces risques n’a d’emprise publiée : la surbrillance porte la commune, pas la zone exposée',
+    contour.simplified ? m.commune.simplified : null,
+    m.commune.noExtent,
   ].filter(Boolean).join(' · ');
 }
 
@@ -526,24 +607,13 @@ export function communeDescription(payload, contour) {
  * to hunt for a colour that is not on screen.
  */
 const ICPE_LEGEND_CLASSES = Object.freeze([
+  Object.freeze({ test: (site) => site.seveso, key: 'seveso', css: '#ff4d3d' }),
   Object.freeze({
-    test: (site) => site.seveso,
-    label: 'Site Seveso',
-    css: '#ff4d3d',
-    blurb: 'Seuil haut ou bas — l\u2019établissement relève de la directive Seveso.',
-  }),
-  Object.freeze({
-    test: (site) => !site.seveso && site.regime !== 'Non ICPE',
-    label: 'Installation classée',
+    test: (site) => !site.seveso && site.regime !== REGIME_DECLASSIFIED,
+    key: 'classified',
     css: '#ffa63d',
-    blurb: 'Autorisation, enregistrement ou déclaration au titre des ICPE.',
   }),
-  Object.freeze({
-    test: (site) => site.regime === 'Non ICPE',
-    label: 'Site déclassé',
-    css: '#7c8aa0',
-    blurb: 'Recensé puis sorti du régime ICPE — le registre le garde, la carte aussi.',
-  }),
+  Object.freeze({ test: (site) => site.regime === REGIME_DECLASSIFIED, key: 'declassified', css: '#7c8aa0' }),
 ]);
 
 /**
@@ -566,20 +636,19 @@ const ICPE_LEGEND_CLASSES = Object.freeze([
  */
 export function georisquesLegend(payload, summary = null) {
   if (!payload) return null;
+  const m = messages();
   const legend = [];
 
   const contour = payload.communeContour || null;
   if (contour) {
     legend.push({
-      label: `Commune de ${contour.name}`,
+      label: m.legend.commune(contour.name),
       color: COMMUNE_STROKE_CSS,
       // WHAT THE TINT IS, AND WHAT IT IS NOT, in that order. The shape on
       // screen is now a filled commune, and a reader who has just read
       // "inondation — concerné" three lines below is one glance away from
       // taking the wash for the water.
-      blurb: 'La surbrillance couvre la commune sur laquelle portent les '
-        + 'verdicts ci-dessous — c\u2019est un périmètre administratif, pas '
-        + 'l\u2019étendue d\u2019un risque, qu\u2019aucun de ces aléas ne publie.',
+      blurb: m.legend.communeBlurb,
     });
   }
 
@@ -590,11 +659,11 @@ export function georisquesLegend(payload, summary = null) {
     const count = (payload.icpe || []).filter(klass.test).length;
     if (!count) continue;
     legend.push({
-      label: klass.label,
+      label: m.icpe[klass.key].label,
       color: klass.css,
       count,
       glyph: hazardPlateGlyph({ key: true }),
-      blurb: klass.blurb,
+      blurb: m.icpe[klass.key].blurb,
     });
   }
 
@@ -617,10 +686,9 @@ export function georisquesLegend(payload, summary = null) {
   const clear = buckets.settled;
   if (clear.length) {
     legend.push({
-      label: `${clear.length} autres aléas vérifiés — hors zone`,
+      label: m.legend.settled(clear.length),
       color: null,
-      blurb: 'Contrôlés par le registre et sans objet à cette adresse — '
-        + 'ce qui n\u2019est pas la même chose que non vérifiés.',
+      blurb: m.legend.settledBlurb,
     });
   }
 
@@ -637,11 +705,9 @@ export function georisquesLegend(payload, summary = null) {
   // only holds if the degraded act says so.
   if (payload.available && payload.available.report === false) {
     legend.push({
-      label: 'Aléas indisponibles',
+      label: m.legend.reportDown,
       color: null,
-      blurb: 'Le registre des risques n’a pas répondu — inondation, argiles, '
-        + 'sismicité et radon ne sont pas connus ici, ce qui n’est pas la même '
-        + 'chose qu’absents. Les établissements ci-dessus, eux, sont à jour.',
+      blurb: m.legend.reportDownBlurb,
     });
   }
 
@@ -654,9 +720,12 @@ export function georisquesLegend(payload, summary = null) {
     // classification surface — where the tint climbs the façades and the
     // tileset's own baked shading darkens it.
     surfaceFill: Boolean(contour),
-    note: 'Les aléas n\u2019ont pas de géométrie chez Géorisques : ils sont dits, pas dessinés.',
+    note: m.legend.note,
     legendNote: summary?.commune
-      ? `Géorisques — BRGM / MTE · ${summary.commune}${summary.radonClass ? ` · radon classe ${summary.radonClass}` : ''}`
+      ? (summary.radonClass
+        ? m.legend.creditRadon(summary.commune, summary.radonClass)
+        : m.legend.credit(summary.commune))
+      // i18n-ignore-next-line — proper nouns only: the source's own credit line.
       : 'Géorisques — BRGM / MTE',
   };
 }
@@ -676,6 +745,7 @@ const georisquesLayer = createAddressScanLayer({
   redrawOnMapStack: true,
 
   render({ payload, dataSource, viewer }) {
+    const m = messages();
     const classificationType = communeClassificationTypeForScene(viewer?.scene);
     const contour = payload.communeContour || null;
     if (contour) {
@@ -693,6 +763,7 @@ const georisquesLayer = createAddressScanLayer({
       const anchor = ringAnchor(contour.parts?.[0]);
       if (anchor) {
         dataSource.entities.add({
+          // i18n-ignore-next-line — an entity id, not a word.
           id: `georisques:commune:${contour.code}:label`,
           position: Cesium.Cartesian3.fromDegrees(anchor[0], anchor[1]),
           name: contour.name,
@@ -751,11 +822,11 @@ const georisquesLayer = createAddressScanLayer({
         },
         description: [
           site.address, site.commune,
-          site.regime ? `Régime : ${site.regime}` : null,
-          site.sevesoStatus ? `Seveso : ${site.sevesoStatus}` : null,
+          site.regime ? m.icpe.regime(published(ICPE_REGIMES, site.regime)) : null,
+          site.sevesoStatus ? m.icpe.sevesoStatus(published(SEVESO_STATUSES, site.sevesoStatus)) : null,
           site.distanceM !== null ? `${site.distanceM} m` : null,
         ].filter(Boolean).join(' · '),
-        name: site.name,
+        name: icpeSiteName(site),
       });
       drawn += 1;
     }
