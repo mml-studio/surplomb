@@ -21,6 +21,8 @@
  * the 360 kB that `lazyVoice.js` defers.
  */
 
+import messages from './voicePremium.i18n.js';
+
 /**
  * Material Symbols Outlined `crown`, filled, weight 400 — the path verbatim,
  * in Google's own `0 -960 960 960` box. See licenses/material-symbols/NOTICE.
@@ -40,13 +42,10 @@ export const PREMIUM_CROWN_SVG = `<svg class="premium-crown" viewBox="0 -960 960
  * @returns {string}
  */
 export function voicePremiumText(state, turns = 0) {
-  if (state === 'trial') {
-    const count = Number(turns) > 0 ? Number(turns) : 3;
-    const plural = count > 1 ? 's' : '';
-    return `Fonction premium · ${count} commande${plural} vocale${plural} offerte${plural}`;
-  }
-  if (state === 'spent') return 'Fonction premium · commandes offertes utilisées';
-  if (state === 'closed') return 'Fonction premium · disponible à l’ouverture';
+  const m = messages();
+  if (state === 'trial') return m.trial(Number(turns) > 0 ? Number(turns) : 3);
+  if (state === 'spent') return m.spent;
+  if (state === 'closed') return m.closed;
   return '';
 }
 

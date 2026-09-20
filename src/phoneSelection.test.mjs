@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  PHONE_SELECTION_EMPTY_TEXT,
+  phoneSelectionEmptyText,
   phoneSelectionSignature,
   renderPhoneSelection,
 } from './phoneSelection.js';
@@ -58,7 +58,7 @@ test('an empty selection says what to do instead of showing nothing', () => {
   assert.equal(renderPhoneSelection(host, []), 0);
   assert.equal(host.children.length, 1);
   assert.equal(host.children[0].className, 'phone-selection-empty');
-  assert.equal(host.children[0].textContent, PHONE_SELECTION_EMPTY_TEXT);
+  assert.equal(host.children[0].textContent, phoneSelectionEmptyText());
 });
 
 test('a card carries the title, every detail line, and the layer accent', () => {

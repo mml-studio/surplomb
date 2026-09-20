@@ -10,6 +10,8 @@
  * @module phoneSheetLayout
  */
 
+import messages from './phoneSheetLayout.i18n.js';
+
 /**
  * The resting height, in CSS pixels, and it is PIXELS ON PURPOSE.
  *
@@ -85,16 +87,20 @@ export const PHONE_FEATURED_LAYER_IDS = Object.freeze([...FEATURED]);
  * two words — « Vélos et véhicules partagés » is a row title, not a chip. A
  * layer with no entry here (a row switched on from the full list) falls back
  * to its row label, which the chip truncates.
+ *
+ * GETTERS, because this table is built when the module loads and read when a
+ * chip is painted: a plain string would fix the language at import (ratchet
+ * R5). `Object.keys` and `Object.values` still see all eight.
  */
 export const PHONE_LAYER_CHIP_LABELS = Object.freeze({
-  flights: 'Vols',
-  traffic: 'Trafic',
-  'transit-fr': 'Transports',
-  bikeshare: 'Vélos',
-  'irve-fr': 'Recharge',
-  'meteofrance-vigilance': 'Météo',
-  'schools-fr': 'Écoles',
-  'dvf-sales': 'Prix immo',
+  get flights() { return messages().chips.flights; },
+  get traffic() { return messages().chips.traffic; },
+  get 'transit-fr'() { return messages().chips.transit; },
+  get bikeshare() { return messages().chips.bikes; },
+  get 'irve-fr'() { return messages().chips.charging; },
+  get 'meteofrance-vigilance'() { return messages().chips.weather; },
+  get 'schools-fr'() { return messages().chips.schools; },
+  get 'dvf-sales'() { return messages().chips.prices; },
 });
 
 /**
