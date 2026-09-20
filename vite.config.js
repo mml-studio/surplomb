@@ -689,11 +689,11 @@ import { normalizeAdsbLolPointResponse } from './src/data/adsbLolFallback.js';
 import {
   BRAIN_RELAY_LIMITS,
   OPENROUTER_VOICE_MODEL_DEFAULT,
-  normalizeVoiceLanguage,
   resolveVoiceProvider,
+  resolveVoiceSessionLanguage,
   sanitizeBrainMessages,
   toChatCompletionTools,
-  voiceLanguageInstruction,
+  voiceSessionInstruction,
 } from './src/voice/voiceProviderPolicy.js';
 import {
   aisStaticDimensions,
@@ -4393,7 +4393,7 @@ function meteoStationsProxy() {
 
           if (subPath === '/normals') {
             const id = posteId(query.get('id'));
-            if (!id) { sendJson(400, { error: 'id must be an 8-digit poste number' }); return; }
+            if (!id) { sendJson(400, { error: 'id must be an 8-digit poste number', code: 'poste-id-invalid' }); return; }
             const fiche = await fetchNormals(id);
             // 200 with `fiche: null` and not 404: "this station publishes no
             // fiche" is an answer about the network, and the card says so.
@@ -6705,7 +6705,7 @@ function petiteEnfanceFranceProxy() {
           json(200, await peContoursForBox(box), { 'X-PETITE-ENFANCE-FR': 'BOX' });
         } catch (error) {
           console.warn('[PetiteEnfance Proxy] contours unavailable:', error?.message || error);
-          json(503, { error: 'Commune outlines are temporarily unavailable' });
+          json(503, { error: 'Commune outlines are temporarily unavailable', code: 'commune-outlines-unavailable' });
         }
         return;
       }
@@ -7706,7 +7706,11 @@ function delinquanceFranceProxy() {
         }, { 'X-DELINQUANCE-FR': stale ? 'STALE' : 'HIT' });
       } catch (error) {
         console.warn(`[Delinquance Proxy] commune pack ${dep} unavailable:`, error?.message || error);
-        json(503, { error: `Commune contours for département ${dep} are temporarily unavailable` });
+        json(503, {
+          error: `Commune contours for département ${dep} are temporarily unavailable`,
+          code: 'commune-contours-unavailable',
+          params: { departement: dep },
+        });
       }
     });
   }
@@ -9234,7 +9238,7 @@ function sitadelFranceProxy() {
         commune = await locateSitadelCommune(lat, lon);
       } catch (error) {
         console.warn('[Sitadel Proxy] commune lookup failed:', error?.message || error);
-        json(503, { error: 'Le référentiel des communes est momentanément indisponible' });
+        json(503, { error: 'Le référentiel des communes est momentanément indisponible', code: 'commune-register-unavailable' });
         return;
       }
       if (!commune?.code) {
@@ -9283,6 +9287,8 @@ function sitadelFranceProxy() {
           error: busy
             ? 'DiDo n’accepte que 3 requêtes simultanées — réessaie dans quelques secondes'
             : `Les autorisations d’urbanisme de ${commune.nom} sont momentanément indisponibles`,
+          code: busy ? 'dido-too-many-requests' : 'ads-commune-unavailable',
+          params: busy ? {} : { commune: commune.nom },
           insee,
         }, busy ? { 'Retry-After': '5' } : {});
       }
@@ -9715,7 +9721,10 @@ function idfmFrequencyProxy() {
             json(200, { ...cached.payload, fetchedAt: cached.at, stale: true }, { 'X-IDFM-FREQUENCY': 'STALE' });
             return;
           }
-          json(503, { error: 'L’offre régionale Île-de-France Mobilités est momentanément indisponible' });
+          json(503, {
+            error: 'L’offre régionale Île-de-France Mobilités est momentanément indisponible',
+            code: 'idfm-region-unavailable',
+          });
         }
         return;
       }
@@ -9768,7 +9777,10 @@ function idfmFrequencyProxy() {
           json(200, { ...cached.payload, fetchedAt: cached.at, stale: true }, { 'X-IDFM-FREQUENCY': 'STALE' });
           return;
         }
-        json(503, { error: 'L’offre horaire Île-de-France Mobilités est momentanément indisponible' });
+        json(503, {
+          error: 'L’offre horaire Île-de-France Mobilités est momentanément indisponible',
+          code: 'idfm-schedule-unavailable',
+        });
       }
     });
   }
@@ -10815,6 +10827,7 @@ function bruitFranceProxy() {
         if (!entry) {
           json(503, {
             error: 'Le registre des arrêtés PEB (Géoplateforme WFS) n’a pas répondu et aucune copie locale n’existe.',
+            code: 'peb-register-unavailable',
           });
           return;
         }
@@ -10822,6 +10835,8 @@ function bruitFranceProxy() {
         if (age > BRUIT_INDEX_STALE_MS) {
           json(503, {
             error: `La copie locale du registre des arrêtés PEB a ${Math.round(age / 86_400_000)} jours et l’amont ne répond pas.`,
+            code: 'peb-copy-stale',
+            params: { days: Math.round(age / 86_400_000) },
           });
           return;
         }
@@ -11143,6 +11158,7 @@ function amenitiesFranceProxy() {
         }
         json(503, {
           error: 'La base permanente des équipements et le registre FINESS sont momentanément indisponibles ; le pack national n’a pas pu être construit.',
+          code: 'amenities-pack-unavailable',
           // Named because on a memory-capped host this is not a weather report:
           // the pack has to be built out of process and nothing else will do it.
           build: 'npm run amenities:pack',
@@ -17998,7 +18014,7 @@ function openAiRealtimeProxy() {
       if (!apiKey) {
         res.statusCode = 503;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }));
+        res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set', code: 'voice-key-missing' }));
         return;
       }
 
@@ -18097,7 +18113,7 @@ function openAiRealtimeProxy() {
       if (!apiKey) {
         res.statusCode = 503;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }));
+        res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set', code: 'voice-key-missing' }));
         return;
       }
 
@@ -18114,6 +18130,18 @@ function openAiRealtimeProxy() {
           return null;
         }
       })();
+      // WHICH LANGUAGE THIS SESSION SPEAKS. The page says which one it is in
+      // (`?lang=`); the environment says what the operator pinned. The server
+      // has no locale of its own and is not getting one — no cookie, no
+      // Accept-Language, because a proxy that varied its answers by language
+      // would have to vary its cache by it too (CONVENTIONS § 7). Until this
+      // parameter existed the realtime session was never told a language at
+      // all, and answered in the one its shipped examples are written in.
+      const sessionLanguage = resolveVoiceSessionLanguage({
+        requested: voiceRequestLocale(req),
+        configured: process.env.GEV_VOICE_LANGUAGE,
+      });
+      const sessionLanguageLines = voiceSessionInstruction(sessionLanguage);
       const tier = resolveVoiceModel(requestedTier).tier;
       const model =
         tier === 'mini'
@@ -18153,7 +18181,8 @@ function openAiRealtimeProxy() {
             },
             output: { voice },
           },
-          instructions: GEV_VOICE_INSTRUCTION_LINES.join('\n'),
+          instructions: [GEV_VOICE_INSTRUCTION_LINES.join('\n'), sessionLanguageLines]
+            .filter(Boolean).join('\n'),
           tools: GEV_REALTIME_TOOLS,
           tool_choice: 'auto',
         },
@@ -18189,6 +18218,9 @@ function openAiRealtimeProxy() {
         // bogus ?tier= was silently downgraded to standard.
         res.setHeader('X-GEV-Voice-Tier', tier);
         res.setHeader('X-GEV-Voice-Model', model);
+        // What the session was told to speak, so a client can show it and a
+        // harness can assert it without reading the prompt.
+        res.setHeader('X-GEV-Voice-Language', sessionLanguage);
         if (requestedTier && !isKnownVoiceTier(requestedTier)) {
           res.setHeader('X-GEV-Voice-Tier-Fallback', '1');
         }
@@ -18196,7 +18228,10 @@ function openAiRealtimeProxy() {
       } catch (error) {
         res.statusCode = 502;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'Failed to create Realtime token' }));
+        res.end(JSON.stringify({
+          error: error?.message || 'Failed to create Realtime token',
+          code: 'realtime-token-failed',
+        }));
       }
     });
   }
@@ -18229,6 +18264,24 @@ function voiceBrainRateLimiter() {
   return _voiceBrainRateLimiter;
 }
 
+/**
+ * The locale the PAGE says it is in, off `?lang=`.
+ *
+ * Total and defensive: a request with no URL, a malformed one, or a `lang`
+ * nobody supports all answer null, which sends `resolveVoiceSessionLanguage`
+ * back to the environment — exactly what an old client gets.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @returns {string|null}
+ */
+function voiceRequestLocale(req) {
+  try {
+    return new URL(req.url || '', 'http://localhost').searchParams.get('lang');
+  } catch {
+    return null;
+  }
+}
+
 /** The provider this server can actually drive, recomputed per request so a
  *  key added to .env takes effect on the next mic click, not the next restart. */
 function currentVoiceProvider() {
@@ -18257,11 +18310,20 @@ function voiceBrainProxy() {
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        res.end(JSON.stringify({ error: 'Method not allowed', code: 'method-not-allowed' }));
         return;
       }
       const { provider, reason } = currentVoiceProvider();
-      const language = normalizeVoiceLanguage(process.env.GEV_VOICE_LANGUAGE);
+      // The browser names the page's locale in `?lang=`; the operator's
+      // `GEV_VOICE_LANGUAGE` answers a request that names none, and still wins
+      // when it names a language the interface itself does not have. This
+      // `language` drives the browser's ears (recognition), its mouth (which
+      // synthesis voice) and the examples in the help tray, so all three now
+      // follow the page instead of the server's one global setting.
+      const language = resolveVoiceSessionLanguage({
+        requested: voiceRequestLocale(req),
+        configured: process.env.GEV_VOICE_LANGUAGE,
+      });
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -18294,22 +18356,26 @@ function voiceBrainProxy() {
         res.setHeader('Cache-Control', 'no-store');
         res.end(JSON.stringify(body));
       };
-      if (req.method !== 'POST') return json(405, { error: 'Method not allowed' });
+      if (req.method !== 'POST') return json(405, { error: 'Method not allowed', code: 'method-not-allowed' });
       if (!enforceOptInRateLimit(voiceBrainRateLimiter(), req, res)) return;
 
       const { provider, reason } = currentVoiceProvider();
-      if (provider !== 'openrouter') return json(503, { error: reason });
+      if (provider !== 'openrouter') return json(503, { error: reason, code: 'voice-not-configured' });
       const apiKey = process.env.OPENROUTER_API_KEY;
-      if (!apiKey) return json(503, { error: 'OPENROUTER_API_KEY is not set' });
+      if (!apiKey) return json(503, { error: 'OPENROUTER_API_KEY is not set', code: 'voice-key-missing' });
 
       let payload;
       try {
         payload = JSON.parse(await readRequestBody(req, 512 * 1024) || '{}');
       } catch (error) {
-        return json(400, { error: `Invalid JSON body: ${error?.message || error}` });
+        return json(400, {
+          error: `Invalid JSON body: ${error?.message || error}`,
+          code: 'bad-json-body',
+          params: { detail: String(error?.message || error) },
+        });
       }
       const sanitized = sanitizeBrainMessages(payload?.messages, BRAIN_RELAY_LIMITS);
-      if (!sanitized.ok) return json(400, { error: sanitized.error });
+      if (!sanitized.ok) return json(400, { error: sanitized.error, code: 'voice-request-refused' });
       // Checked once the body says what this round is: the tool rounds that
       // finish a request are part of it, so the voice trial's last request is
       // still answered after it has been counted. A tool round nobody paid
@@ -18318,8 +18384,16 @@ function voiceBrainProxy() {
       const trialState = readTrialState(req, trialConfig());
       if ((opensRequest || !trialState.voiceUsed) && !enforceTrial('voice', req, res)) return;
 
-      const language = normalizeVoiceLanguage(process.env.GEV_VOICE_LANGUAGE);
-      const languageLines = voiceLanguageInstruction(language);
+      // The page's locale rides in the body here rather than the query, because
+      // this is a POST the browser already builds; the rule that arbitrates
+      // between it and GEV_VOICE_LANGUAGE is the same one /api/voice/config
+      // uses, so one turn cannot be answered in a different language from the
+      // one the mic announced.
+      const language = resolveVoiceSessionLanguage({
+        requested: typeof payload?.locale === 'string' ? payload.locale : null,
+        configured: process.env.GEV_VOICE_LANGUAGE,
+      });
+      const languageLines = voiceSessionInstruction(language);
       const model = process.env.OPENROUTER_VOICE_MODEL || OPENROUTER_VOICE_MODEL_DEFAULT;
       const system = [
         GEV_VOICE_INSTRUCTION_LINES.join('\n'),
@@ -18368,10 +18442,14 @@ function voiceBrainProxy() {
           console.warn(`[Voice Brain] upstream refused: ${detail}`);
           // Upstream status is passed through so the client can tell a bad key
           // (401) from a rate limit (429) from an outage (5xx) and say which.
-          return json(response.status >= 400 ? response.status : 502, { error: detail });
+          return json(response.status >= 400 ? response.status : 502, {
+            error: detail,
+            code: 'voice-brain-refused',
+            params: { detail },
+          });
         }
         const message = data?.choices?.[0]?.message || null;
-        if (!message) return json(502, { error: 'The brain returned no message' });
+        if (!message) return json(502, { error: 'The brain returned no message', code: 'voice-brain-empty' });
         // One spoken request is one request of the voice trial, however many
         // tool rounds it takes: only the round that opens a turn ends on the
         // visitor's own words. The first one also takes one of the tries.
@@ -18391,7 +18469,11 @@ function voiceBrainProxy() {
         });
       } catch (error) {
         console.warn(`[Voice Brain] ${error?.message || error}`);
-        return json(502, { error: error?.message || 'Voice brain request failed' });
+        return json(502, {
+          error: error?.message || 'Voice brain request failed',
+          code: 'voice-brain-unreachable',
+          params: { detail: String(error?.message || error) },
+        });
       }
     });
   }
@@ -23054,7 +23136,7 @@ function filosofiProxy() {
           json(200, { ...stale.payload, fetchedAt: stale.at, stale: true }, { 'X-Filosofi': 'STALE' });
           return;
         }
-        json(503, { error: 'Le carroyage INSEE est temporairement indisponible' });
+        json(503, { error: 'Le carroyage INSEE est temporairement indisponible', code: 'filosofi-grid-unavailable' });
       }
     });
   }

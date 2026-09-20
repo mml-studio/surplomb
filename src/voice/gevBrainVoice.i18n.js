@@ -156,6 +156,7 @@ export default defineMessages({
       + 'Accessibilité → Contenu énoncé → Voix système → Français → téléchargez Audrey ou Amélie (Premium).',
     en: 'Only the compact French voice is installed. For a natural one: System Settings → '
       + 'Accessibility → Spoken Content → System Voice → French → download Audrey or Amélie (Premium).',
+    keep: ['Amélie'],
   },
 
   /** The running cost readout on the relay path, where the model is named. */

@@ -238,9 +238,13 @@ test('the voice refusal says whether the trial was used or never offered', () =>
   const used = fakeResponse();
   sendTrialRefusal(used, 'voice', config());
   assert.equal(JSON.parse(used.body).error, 'Essai de la voix terminé');
+  assert.equal(JSON.parse(used.body).code, 'trial-voice-spent');
   const never = fakeResponse();
   sendTrialRefusal(never, 'voice', config({ GEV_TRIAL_VOICE: '0' }));
   assert.equal(JSON.parse(never.body).error, 'La voix n’est pas incluse dans l’essai');
+  // The two refusals differ in kind, so they differ in code: one trial was
+  // spent, the other was never offered.
+  assert.equal(JSON.parse(never.body).code, 'trial-voice-closed');
 });
 
 test('the refusal is a 429 the page can tell from load: a quota field and no Retry-After', () => {
@@ -249,7 +253,9 @@ test('the refusal is a 429 the page can tell from load: a quota field and no Ret
   assert.equal(res.statusCode, 429);
   assert.equal(res.getHeader('Retry-After'), undefined);
   assert.equal(res.getHeader('Cache-Control'), 'no-store');
-  assert.deepEqual(JSON.parse(res.body), { places: [], error: 'Essai terminé', quota: 'exhausted', limit: 5 });
+  assert.deepEqual(JSON.parse(res.body), {
+    places: [], error: 'Essai terminé', code: 'trial-exhausted', quota: 'exhausted', limit: 5,
+  });
 });
 
 test('/api/trial reports the state without spending it', () => {

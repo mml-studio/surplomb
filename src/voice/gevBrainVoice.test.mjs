@@ -361,7 +361,8 @@ test('the default fetch survives being called as a method — the browser checks
 
     seen.length = 0;
     const config = await fetchVoiceConfig();
-    assert.deepEqual(seen, ['/api/voice/config']);
+    // The page's language rides along: the server has no locale of its own.
+    assert.deepEqual(seen, ['/api/voice/config?lang=fr']);
     assert.equal(config.provider, null, 'that stub returns no provider, and that is read safely');
   } finally {
     globalThis.fetch = realFetch;

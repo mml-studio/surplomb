@@ -10,9 +10,11 @@ import test from 'node:test';
 
 import { assertNoFrench, useTestLocale } from '../i18n/testing.js';
 import {
+  GevBrainVoiceSession,
   describeRecognitionError,
   describeUnreachableConfig,
   describeVoiceUpgradeHint,
+  fetchVoiceConfig,
 } from './gevBrainVoice.js';
 
 const MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15';
@@ -73,4 +75,33 @@ test('French keeps its own words: the same failures, the reader’s language', (
     String(describeVoiceUpgradeHint([{ name: 'Thomas', lang: 'fr-FR' }], 'fr-FR', { userAgent: MAC_SAFARI })),
     /Réglages Système → Accessibilité → Contenu énoncé/,
   );
+});
+
+test('the page’s language travels with every request the mic makes', async (t) => {
+  useTestLocale('en', t);
+  // The server has no locale — no cookie, no Accept-Language, by design — so
+  // the only way an English page gets an English voice is by saying so.
+  const urls = [];
+  await fetchVoiceConfig(async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => ({ provider: 'openrouter', language: 'en-US' }) };
+  });
+  assert.deepEqual(urls, ['/api/voice/config?lang=en']);
+
+  let posted = null;
+  const session = new GevBrainVoiceSession({
+    host: { ui: {}, setStatus() {}, setVoiceSpeaker() {} },
+    runner: async () => ({ ok: true }),
+    config: { language: 'en-US', maxRounds: 1 },
+    scope: { speechSynthesis: null },
+    fetchImpl: async (url, init) => {
+      posted = { url, body: JSON.parse(init.body) };
+      return { ok: true, json: async () => ({ message: { content: 'ok' }, usage: { cost: 0 } }) };
+    },
+  });
+  session.active = true;
+  session.messages = [{ role: 'user', content: 'take me to Lyon' }];
+  await session.relay();
+  assert.equal(posted.url, '/api/voice/brain');
+  assert.equal(posted.body.locale, 'en');
 });

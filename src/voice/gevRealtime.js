@@ -18,6 +18,8 @@ import {
   resolveVoiceReadyPrompt,
   voiceControlAriaLabel,
 } from './voiceControlDom.js';
+import { getLocale, localeTag } from '../i18n/locale.js';
+import { serverMessage } from '../i18n/serverMessages.js';
 import messages from './gevRealtime.i18n.js';
 import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
 import { isCoarseInput } from '../inputMode.js';
@@ -2160,9 +2162,13 @@ export class GevRealtimeController {
    * different three each time it opens, is what makes the mic look like it can
    * do more than the last thing it was asked.
    *
-   * @param {string} [language] BCP-47 tag; the fork ships French.
+   * @param {string} [language] BCP-47 tag; defaults to the session's, then
+   *   to the page's. Before the config lookup answers there is no session
+   *   language yet, and the tray was hard-coded to French — three French
+   *   suggestions under an English interface, a second before the server said
+   *   which language the mic would speak.
    */
-  refreshVoiceExamples(language = this.voiceLanguage || 'fr-FR') {
+  refreshVoiceExamples(language = this.voiceLanguage || localeTag()) {
     const list = this.ui?.helpExamples;
     if (!list) return;
     this.voiceExampleRotation = (this.voiceExampleRotation || 0) + 1;
@@ -3211,7 +3217,12 @@ function isNearlyBlackFrame(ctx, width, height) {
  * against its own tier assumption.
  */
 async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
-  const url = `${TOKEN_URL}?tier=${encodeURIComponent(resolveVoiceModel(tier).tier)}`;
+  // `lang` is the page's locale, and it is what makes the session answer in
+  // the language on screen: the realtime prompt is built server-side, and the
+  // server has no locale of its own (no cookie, no Accept-Language, by
+  // design). Without it an English reader got the French instruction set.
+  const url = `${TOKEN_URL}?tier=${encodeURIComponent(resolveVoiceModel(tier).tier)}`
+    + `&lang=${encodeURIComponent(getLocale())}`;
   const response = await fetch(url, { cache: 'no-store' });
   const data = await response.json().catch(() => null);
   // Server echo first (authoritative, always present); the minted session
@@ -3228,8 +3239,12 @@ async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
     // OpenAI error bodies are objects ({error:{message,type,...}}); only the
     // key-absent server case is a bare string. Render either without the
     // "[object Object]" that String(object) produces (H9).
+    // Our own server sends a `code` (`voice-key-missing`,
+    // `realtime-token-failed`), so its refusals are read in the page's
+    // language; `serverMessage` falls back to the `error` string, which is
+    // what OpenAI's own body carries and what an older server sends.
     const reason = typeof data?.error === 'string'
-      ? data.error
+      ? serverMessage(data)
       : data?.error?.message;
     throw new Error(reason || `Realtime token failed: HTTP ${response.status}`);
   }

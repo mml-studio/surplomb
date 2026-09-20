@@ -295,6 +295,28 @@ export function trialRefusalReason(kind, state, config) {
 }
 
 /**
+ * The four refusals, as stable codes.
+ *
+ * `quota` already tells a page WHICH refusal this is, and `trialRefusal.js`
+ * reads it to open the right waitlist card — so no page has ever printed the
+ * `error` prose below. `code` exists for the one reader that has no card: a
+ * client reading the payload directly (a script, a fork's own interface, the
+ * next surface nobody has written yet) resolves it through
+ * `src/i18n/serverMessages.js` and gets the sentence in its own language,
+ * while `error` keeps the exact French bytes as the wire fallback.
+ *
+ * Kept next to the words they name rather than in the catalog: this function
+ * is the only place that chooses between the four.
+ * @type {Readonly<Record<string, string>>}
+ */
+const TRIAL_REFUSAL_CODES = Object.freeze({
+  exhausted: 'trial-exhausted',
+  reserved: 'trial-reserved-for-voice',
+  voiceSpent: 'trial-voice-spent',
+  voiceClosed: 'trial-voice-closed',
+});
+
+/**
  * The response for a refused route. 429 because that is what every caller
  * already degrades on; the `quota` field is what tells the page it is the
  * trial and not load. No `Retry-After`: waiting does not help.
@@ -317,6 +339,9 @@ export function sendTrialRefusal(res, reason, config, extra = {}) {
   res.statusCode = 429;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
+  const kind = reason === 'exhausted' || reason === 'reserved'
+    ? reason
+    : (config.voiceTurns > 0 ? 'voiceSpent' : 'voiceClosed');
   res.end(JSON.stringify({
     ...extra,
     // i18n-ignore-start — server prose, no locale available; the page reads
@@ -329,6 +354,7 @@ export function sendTrialRefusal(res, reason, config, extra = {}) {
           ? 'Essai de la voix terminé'
           : 'La voix n’est pas incluse dans l’essai',
     // i18n-ignore-end
+    code: TRIAL_REFUSAL_CODES[kind],
     quota: reason,
     limit: config.limit,
   }));

@@ -19,6 +19,8 @@
  */
 
 import { isTrialRefusalReason, requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
+import { getLocale } from '../i18n/locale.js';
+import { serverMessage } from '../i18n/serverMessages.js';
 import messages from './gevBrainVoice.i18n.js';
 
 /** Where the operator's chosen synthesis voice is remembered between sessions. */
@@ -167,7 +169,13 @@ export async function fetchVoiceConfig(fetchImpl = defaultFetch) {
   });
   let response;
   try {
-    response = await fetchImpl('/api/voice/config', { headers: { Accept: 'application/json' } });
+    // The page's language travels with the question. The server has no locale
+    // of its own — no cookie, no Accept-Language, by design — so without this
+    // parameter an English page was answered in whatever language
+    // GEV_VOICE_LANGUAGE named, which on a French install is French.
+    response = await fetchImpl(`/api/voice/config?lang=${encodeURIComponent(getLocale())}`, {
+      headers: { Accept: 'application/json' },
+    });
   } catch (error) {
     return unreachable(error?.message || 'network error');
   }
@@ -908,7 +916,11 @@ export class GevBrainVoiceSession {
         const response = await this.fetchImpl('/api/voice/brain', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: this.messages }),
+          // `locale` is the page's, not the session's: the server decides
+          // between them (`resolveVoiceSessionLanguage`), because only it can
+          // see whether the operator pinned a third language in the
+          // environment.
+          body: JSON.stringify({ messages: this.messages, locale: getLocale() }),
           signal,
         });
         const data = await response.json().catch(() => null);
@@ -925,7 +937,13 @@ export class GevBrainVoiceSession {
           if (!(await this.waitMs(waitMs, signal))) return { ok: false, error: 'Turn cancelled' };
           continue;
         }
-        return { ok: false, error: data?.error || `Voice brain failed: HTTP ${response.status}` };
+        // The relay's refusals carry a `code` (see vite.config.js), so they
+        // read in the page's language; a payload without one falls back to
+        // whatever the server wrote, which is what a fork's own build sends.
+        return {
+          ok: false,
+          error: serverMessage(data, { fallback: `Voice brain failed: HTTP ${response.status}` }),
+        };
       }
     } catch (error) {
       if (error?.name === 'AbortError') return { ok: false, error: 'Turn cancelled' };
