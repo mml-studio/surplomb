@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Cesium from 'cesium';
+import { useTestLocale } from '../i18n/testing.js';
 import {
   applyFirmsOverlayPolicy,
   buildFireCard,
@@ -60,7 +61,11 @@ test('buildFireCard: SNPP satellite code renders as SNPP, weak fire is not red',
   assert.notEqual(card.accent, accentForSeverity('red'));
 });
 
-test('buildSelectedFireCard: full detail card with coords, selected flag, no fade', () => {
+test('buildSelectedFireCard: full detail card with coords, selected flag, no fade', (t) => {
+  // This card's wording arrived from the upstream project in English and is
+  // now bilingual (see firmsHeatmap.i18n.js). The SHAPE this test pins is
+  // language-independent; the title is read in the language it was written in.
+  useTestLocale('en', t);
   const card = buildSelectedFireCard(fire(), NOW);
   assert.equal(card.title, 'FIRE · 1520 MW');
   assert.equal(card.selected, true);

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as Cesium from 'cesium';
 import { gstime } from 'satellite.js';
+import { useTestLocale } from '../i18n/testing.js';
 import rocketLaunchesLayer, {
   _setRocketMissionOverlayHostForTest,
   _setSelectedRocketMissionForTest,
@@ -865,7 +866,12 @@ test('finds a newly launched payload in the active TLE fallback catalog', () => 
   assert.equal(typeof track?.positionAt, 'function');
 });
 
-test('real mission build, select, refresh, deselect, disable, and destroy paths publish no native labels', async () => {
+test('real mission build, select, refresh, deselect, disable, and destroy paths publish no native labels', async (t) => {
+  // The world labels arrived from the upstream project in English and are now
+  // bilingual (see rocketLaunches.i18n.js). What this test pins is that NO
+  // native Cesium label is published; the two label texts are read in the
+  // language they were written in.
+  useTestLocale('en', t);
   const realDocument = globalThis.document;
   const realFetch = globalThis.fetch;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
