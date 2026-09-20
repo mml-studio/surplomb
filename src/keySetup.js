@@ -12,12 +12,20 @@
  * The surface self-destructs where it cannot work: a prod build (no endpoint)
  * or a LAN visitor (loopback-only endpoint) fails the status fetch, and both
  * the chip and the dialog are removed outright.
+ *
+ * Every word it prints comes from `src/keySetup.i18n.js`, read at call time.
+ * What a key unlocks arrives from the server in English — the registry runs in
+ * Node, which has no locale — and is relabelled here through `labelFor`.
  */
+
+import { labelFor } from './i18n/messages.js';
+import messages, { KEY_UNLOCKS } from './keySetup.i18n.js';
 
 /** Chip label — pure, exported for tests. */
 export function keySetupChipLabel(status) {
   const missing = Math.max(0, (status?.total || 0) - (status?.setCount || 0));
-  return missing > 0 ? `POWER UP · ${missing} ${missing === 1 ? 'KEY' : 'KEYS'} WAITING` : 'POWERED UP';
+  const m = messages();
+  return missing > 0 ? m.chip(missing) : m.chipDone;
 }
 
 /**
@@ -59,6 +67,7 @@ const TIER_DOTS = Object.freeze({ metered: '🔴', free: '🟡' });
 
 /** Build one key row. All content is our own registry text, set via textContent. */
 function buildRow(documentRef, key) {
+  const m = messages();
   const row = documentRef.createElement('section');
   row.className = 'key-setup-row';
   row.dataset.keyId = key.id;
@@ -76,13 +85,13 @@ function buildRow(documentRef, key) {
   const tier = documentRef.createElement('span');
   tier.className = 'key-setup-tier';
   tier.textContent = TIER_DOTS[key.tier] || '';
-  tier.title = key.tier === 'metered' ? 'Metered — a billing-enabled account' : 'Free key — register, paste, done';
+  tier.title = key.tier === 'metered' ? m.tierMetered : m.tierFree;
   head.append(led, title, tier);
   if (key.clientExposed) {
     const exposed = documentRef.createElement('span');
     exposed.className = 'key-setup-exposed';
-    exposed.textContent = 'browser-side';
-    exposed.title = 'This key runs in the browser by design — restrict it at the provider (see SECURITY.md)';
+    exposed.textContent = m.browserSide;
+    exposed.title = m.browserSideTitle;
     head.append(exposed);
   }
   if (external) {
@@ -90,8 +99,8 @@ function buildRow(documentRef, key) {
     // facts this panel reports, never values it rewrites or deletes.
     const badge = documentRef.createElement('span');
     badge.className = 'key-setup-external';
-    badge.textContent = 'configured externally';
-    badge.title = 'Supplied by your environment, Keychain, or launcher — change it where it was set';
+    badge.textContent = m.external;
+    badge.title = m.externalTitle;
     head.append(badge);
   }
   const get = documentRef.createElement('a');
@@ -99,12 +108,14 @@ function buildRow(documentRef, key) {
   get.href = key.getUrl;
   get.target = '_blank';
   get.rel = 'noopener noreferrer';
-  get.textContent = key.set ? 'MANAGE ↗' : 'GET KEY ↗';
+  get.textContent = key.set ? m.manage : m.getKey;
   head.append(get);
 
   const unlocks = documentRef.createElement('p');
   unlocks.className = 'key-setup-unlocks';
-  unlocks.textContent = key.unlocks;
+  // The server sends the registry's English; a known id is relabelled, an
+  // unknown one is shown exactly as it arrived rather than as a blank line.
+  unlocks.textContent = labelFor(KEY_UNLOCKS, key.id) === key.id ? key.unlocks : labelFor(KEY_UNLOCKS, key.id);
 
   row.append(head, unlocks);
   if (!external) {
@@ -119,9 +130,7 @@ function buildRow(documentRef, key) {
       input.spellcheck = false;
       input.dataset.envVar = envVar;
       input.setAttribute('aria-label', envVar);
-      input.placeholder = key.set
-        ? `${envVar} saved — paste to replace`
-        : `paste ${envVar}`;
+      input.placeholder = key.set ? m.savedPlaceholder(envVar) : m.pastePlaceholder(envVar);
       fields.append(input);
     }
     if (key.managed === 'file') {
@@ -129,8 +138,8 @@ function buildRow(documentRef, key) {
       remove.type = 'button';
       remove.className = 'key-setup-remove';
       remove.dataset.keySetupRemove = JSON.stringify(key.envVars);
-      remove.textContent = 'REMOVE';
-      remove.title = `Remove ${key.title} from this app's saved keys`;
+      remove.textContent = m.remove;
+      remove.title = m.removeTitle(key.title);
       fields.append(remove);
     }
     row.append(fields);
@@ -252,15 +261,22 @@ export async function initKeySetup({ documentRef = globalThis.document, fetchImp
   const say = (text) => { if (statusLine) statusLine.textContent = text; };
 
   const storeLabel = () => (status?.store === 'pinokio-environment'
-    ? 'your app configuration'
-    : 'your local .env');
+    ? messages().storeApp
+    : messages().storeEnv);
 
-  const submitUpdates = async (updates, doneVerb) => {
+  /**
+   * POST the updates, then say what happened.
+   * @param {Record<string, string|null>} updates
+   * @param {'savedTo'|'removedFrom'} done Which sentence closes the exchange:
+   *   the whole sentence is one message per language, never a verb glued to a
+   *   store name (docs/i18n/CONVENTIONS.md § 2).
+   */
+  const submitUpdates = async (updates, done) => {
     if (busy) return;
     const googleWasUnset = !status?.keys?.find((key) => key.id === 'google-maps')?.set;
     busy = true;
     applyButton?.setAttribute('aria-disabled', 'true');
-    say('Saving…');
+    say(messages().saving);
     try {
       const response = await doFetch('/api/setup/keys', {
         method: 'POST',
@@ -269,7 +285,7 @@ export async function initKeySetup({ documentRef = globalThis.document, fetchImp
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok) {
-        say(payload.error || `Save failed (${response.status}).`);
+        say(payload.error || messages().saveFailedStatus(response.status));
         return;
       }
       for (const input of root.querySelectorAll('input[data-env-var]')) input.value = '';
@@ -288,9 +304,9 @@ export async function initKeySetup({ documentRef = globalThis.document, fetchImp
         // the restart's reload lands, so strip again at the door.
         globalThis.addEventListener?.('pagehide', strip, { once: true });
       }
-      say(`${doneVerb} ${storeLabel()}. Restarting — this page reloads itself.`);
+      say(messages()[done](storeLabel()));
     } catch (error) {
-      say(`Save failed: ${error?.message || error}`);
+      say(messages().saveFailed(error?.message || error));
     } finally {
       busy = false;
       applyButton?.setAttribute('aria-disabled', 'false');
@@ -304,10 +320,10 @@ export async function initKeySetup({ documentRef = globalThis.document, fetchImp
       inputs.map((input) => ({ envVar: input.dataset.envVar, value: input.value })),
     );
     if (!Object.keys(updates).length) {
-      say('Paste at least one key first.');
+      say(messages().pasteFirst);
       return;
     }
-    await submitUpdates(updates, 'Saved to');
+    await submitUpdates(updates, 'savedTo');
   };
 
   chip.addEventListener('click', openDialog);
@@ -328,11 +344,11 @@ export async function initKeySetup({ documentRef = globalThis.document, fetchImp
     // stop it — a clickjack target. A confirm turns a single aligned click into
     // a deliberate two-step the lure cannot pre-satisfy.
     const ok = typeof globalThis.confirm !== 'function'
-      || globalThis.confirm('Remove this key from your saved configuration?');
+      || globalThis.confirm(messages().confirmRemove);
     if (!ok) return;
     void submitUpdates(
       Object.fromEntries(envVars.map((name) => [name, null])),
-      'Removed from',
+      'removedFrom',
     );
   });
 

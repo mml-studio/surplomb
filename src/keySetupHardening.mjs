@@ -6,7 +6,13 @@ import {
   parseWindowsUserSid,
 } from './keySetupCore.mjs';
 
-/** PowerShell verification for the exact owner-only Windows credential DACL. */
+/**
+ * PowerShell verification for the exact owner-only Windows credential DACL.
+ *
+ * i18n-ignore-start — PowerShell source, not interface text. The French
+ * detector reads `-ne`, `$rule` and `Count` as French words; nothing in this
+ * array is ever shown to anybody.
+ */
 const WINDOWS_ACL_VERIFY_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
   '$acl = Get-Acl -LiteralPath $env:GEV_ACL_FILE',
@@ -27,6 +33,7 @@ const WINDOWS_ACL_VERIFY_SCRIPT = [
   '}',
   'if ($seen.Count -ne 3) { exit 9 }',
 ].join('; ');
+// i18n-ignore-end
 
 /**
  * Resolve the native Windows ACL tools without consulting PATH.

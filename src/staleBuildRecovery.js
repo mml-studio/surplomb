@@ -24,6 +24,7 @@
  */
 
 import { LAYER_STATE_REGISTRY } from './data/layerState.js';
+import messages from './staleBuildRecovery.i18n.js';
 
 /**
  * How long the reader gets to read the notice and stop the reload.
@@ -168,10 +169,11 @@ export function staleBuildSecondsLeft(deadlineMs, nowMs) {
  * @returns {string} Toast copy.
  */
 export function staleBuildNotice({ label, mode, secondsLeft = 0 }) {
-  const name = String(label || 'Cette couche');
-  if (mode !== 'auto') return `${name} : code non chargé — recharge la page`;
-  if (secondsLeft <= 0) return `${name} : code non chargé — rechargement…`;
-  return `${name} : code non chargé — rechargement dans ${secondsLeft} s`;
+  const m = messages();
+  const name = String(label || m.fallbackLabel);
+  if (mode !== 'auto') return m.manual(name);
+  if (secondsLeft <= 0) return m.reloading(name);
+  return m.reloadingIn(name, secondsLeft);
 }
 
 /**

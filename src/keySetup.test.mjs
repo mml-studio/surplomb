@@ -5,12 +5,21 @@ import {
   keySetupChipLabel,
   stripKeylessBasemapFromHash,
 } from './keySetup.js';
+import { useTestLocale } from './i18n/testing.js';
 
 test('the chip counts what is missing, and retires the count at zero', () => {
+  assert.equal(keySetupChipLabel({ setCount: 0, total: 8 }), 'PUISSANCE · 8 CLÉS EN ATTENTE');
+  assert.equal(keySetupChipLabel({ setCount: 7, total: 8 }), 'PUISSANCE · 1 CLÉ EN ATTENTE', 'one key, singular');
+  assert.equal(keySetupChipLabel({ setCount: 8, total: 8 }), 'PLEINE PUISSANCE');
+  assert.equal(keySetupChipLabel(null), 'PLEINE PUISSANCE', 'no status is not a broken label');
+});
+
+test('the same chip counts in English — the dialog was English-only until the shell was translated', (t) => {
+  useTestLocale('en', t);
   assert.equal(keySetupChipLabel({ setCount: 0, total: 8 }), 'POWER UP · 8 KEYS WAITING');
   assert.equal(keySetupChipLabel({ setCount: 7, total: 8 }), 'POWER UP · 1 KEY WAITING');
   assert.equal(keySetupChipLabel({ setCount: 8, total: 8 }), 'POWERED UP');
-  assert.equal(keySetupChipLabel(null), 'POWERED UP', 'no status is not a broken label');
+  assert.equal(keySetupChipLabel(null), 'POWERED UP');
 });
 
 test('collectKeyUpdates keeps only non-empty trimmed values', () => {
