@@ -76,6 +76,9 @@ export const PAN_SERVICE_ALERTS_FEATURE = 'service_alerts';
 export const PAN_GTFS_FORMAT = 'GTFS';
 
 /** Human labels for the licence codes the PAN publishes on these datasets. */
+// i18n-ignore-start — labels the SERVER stamps into the payload; it has no
+// locale by design (docs/i18n/CONVENTIONS.md). Licence names are proper nouns;
+// the two that are prose are listed for the voice+server batch.
 export const PAN_LICENCE_LABELS = Object.freeze({
   lov2: 'Licence Ouverte 2.0',
   'fr-lo': 'Licence Ouverte 1.0',
@@ -84,6 +87,7 @@ export const PAN_LICENCE_LABELS = Object.freeze({
   'notspecified': 'Licence non précisée',
   'other-open': 'Autre licence ouverte',
 });
+// i18n-ignore-end
 
 /**
  * `sub_types` values seen on vehicle-position datasets, mapped to the display
@@ -151,6 +155,7 @@ export const PAN_MAX_VEHICLES = 6000;
  */
 export function panLicenceLabel(licence) {
   const code = String(licence ?? '').trim();
+  // i18n-ignore-next-line — same payload value as the table above.
   if (!code) return 'Licence non précisée';
   return PAN_LICENCE_LABELS[code] || code;
 }
@@ -175,6 +180,7 @@ export function panNetworkName(dataset) {
     const commercial = String(offers[0]?.nom_commercial ?? '').trim();
     if (commercial) return commercial;
   }
+  // i18n-ignore-next-line — stamped into the payload by the server.
   return title || 'Réseau sans nom';
 }
 

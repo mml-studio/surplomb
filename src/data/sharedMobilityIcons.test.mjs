@@ -19,7 +19,9 @@ import {
 } from './sharedMobilityIcons.js';
 import { MAKI_PATHS, mapIconArtwork } from './mapIcons.js';
 import { INTER_CAPITALS } from './interCapitals.js';
-import { VEHICLE_KIND_LABELS } from './gbfsFeeds.js';
+// `VEHICLE_KINDS` replaced `VEHICLE_KIND_LABELS` when the words moved to a
+// catalog: the keys are what this test is about, and they have not changed.
+import { VEHICLE_KINDS } from './gbfsFeeds.js';
 
 const decode = (uri) => Buffer.from(uri.split('base64,')[1], 'base64').toString('utf8');
 const PLATE = _sharedMobilityPlateForTest();
@@ -27,7 +29,7 @@ const PLATE = _sharedMobilityPlateForTest();
 test('every kind the feeds can report has a plate of its own', () => {
   // The layer folds `form_factor` + `propulsion_type` onto these six; a kind
   // with no drawing would silently inherit whatever `other` looks like.
-  for (const kind of Object.keys(VEHICLE_KIND_LABELS)) {
+  for (const kind of VEHICLE_KINDS) {
     assert.ok(SHARED_MOBILITY_GLYPH_KINDS.includes(kind), `no glyph for ${kind}`);
   }
   assert.ok(SHARED_MOBILITY_GLYPH_KINDS.includes('station'), 'a dock is drawn as a place, not a vehicle');

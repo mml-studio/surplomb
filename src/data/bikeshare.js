@@ -125,6 +125,9 @@ function bcycleEntry({ id, city, centerLat, centerLon, systemId, loadRadiusKm = 
  * Entries using BCycle hosting are constructed via bcycleEntry() for brevity.
  * @type {Object[]}
  */
+// i18n-ignore-start — a registry of CITIES and OPERATOR BRANDS: data. City
+// names carry their state or country code as published, and an operator's
+// name is never translated.
 const RAW_GBFS_CITY_REGISTRY = [
   {
     id: 'nyc-citibike',
@@ -444,6 +447,7 @@ const RAW_GBFS_CITY_REGISTRY = [
     provider: 'Le Vélo (TBM)',
   },
 ];
+// i18n-ignore-end
 
 /**
  * Validate and normalize a raw GBFS city registry entry.

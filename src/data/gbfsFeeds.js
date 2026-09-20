@@ -58,6 +58,8 @@ import {
   snapBoxOutward,
   validBox,
 } from './viewportBox.js';
+import { labelFor } from '../i18n/messages.js';
+import { VEHICLE_KIND_NAMES, VEHICLE_KIND_PLURAL_NAMES } from './gbfsFeeds.i18n.js';
 
 /** Catalog endpoint — the same national access point the transit layer reads. */
 export const PAN_DATASETS_URL = 'https://transport.data.gouv.fr/api/datasets';
@@ -68,7 +70,15 @@ export const PAN_GBFS_FORMAT = 'gbfs';
 /** Dataset type the PAN uses for shared-vehicle systems. */
 export const PAN_SHARING_TYPE = 'vehicles-sharing';
 
-/** Human labels for the licence codes the PAN publishes on these datasets. */
+/**
+ * Human labels for the licence codes the PAN publishes on these datasets.
+ *
+ * Baked into the committed index by `scripts/build-gbfs-fr-index.mjs` and
+ * republished by the proxy, both of which run without a locale — so these
+ * stay French, as DATA carried by the payload. Licence names are proper nouns
+ * anyway; the two that are prose are listed for the server batch.
+ */
+// i18n-ignore-start — payload values written by a build script and the server.
 export const GBFS_LICENCE_LABELS = Object.freeze({
   lov2: 'Licence Ouverte 2.0',
   'fr-lo': 'Licence Ouverte 1.0',
@@ -77,6 +87,7 @@ export const GBFS_LICENCE_LABELS = Object.freeze({
   notspecified: 'Licence non précisée',
   'other-open': 'Autre licence ouverte',
 });
+// i18n-ignore-end
 
 /**
  * Display vehicle kinds. Derived from the GBFS `form_factor` +
@@ -87,24 +98,27 @@ export const GBFS_LICENCE_LABELS = Object.freeze({
  * seated one. The two words are false friends across the Channel and the
  * silhouettes on screen differ, so the labels must not swap them.
  */
-export const VEHICLE_KIND_LABELS = Object.freeze({
-  bike: 'Vélo',
-  ebike: 'VAE',
-  scooter: 'Trottinette',
-  moped: 'Scooter',
-  car: 'Voiture',
-  other: 'Véhicule',
-});
+export const VEHICLE_KINDS = Object.freeze(['bike', 'ebike', 'scooter', 'moped', 'car', 'other']);
 
-/** Plural forms. `VAE` is an acronym and stays invariable. */
-export const VEHICLE_KIND_PLURALS = Object.freeze({
-  bike: 'Vélos',
-  ebike: 'VAE',
-  scooter: 'Trottinettes',
-  moped: 'Scooters',
-  car: 'Voitures',
-  other: 'Véhicules',
-});
+/**
+ * One vehicle of this kind, in the page's language.
+ * @param {?string} kind
+ * @returns {?string} null for a kind this app does not know.
+ */
+export function gbfsVehicleKindLabel(kind) {
+  const key = String(kind ?? '');
+  return VEHICLE_KINDS.includes(key) ? labelFor(VEHICLE_KIND_NAMES, key) : null;
+}
+
+/**
+ * Several of them, in the page's language.
+ * @param {?string} kind
+ * @returns {?string} null for a kind this app does not know.
+ */
+export function gbfsVehicleKindPlural(kind) {
+  const key = String(kind ?? '');
+  return VEHICLE_KINDS.includes(key) ? labelFor(VEHICLE_KIND_PLURAL_NAMES, key) : null;
+}
 
 /**
  * Largest viewport this source answers, in degrees. Shared vehicles are a
@@ -247,6 +261,7 @@ export function stationFrequency(systems) {
  */
 export function gbfsLicenceLabel(licence) {
   const code = String(licence ?? '').trim();
+  // i18n-ignore-next-line — written into the committed index, no locale there.
   if (!code) return 'Licence non précisée';
   return GBFS_LICENCE_LABELS[code] || code;
 }
@@ -321,7 +336,7 @@ export function freeVehicleFeedUrl(feeds) {
  * Normalize one GBFS vehicle type row to a display kind.
  *
  * @param {Object} type Row of `vehicle_types.json`.
- * @returns {string} One of {@link VEHICLE_KIND_LABELS}'s keys.
+ * @returns {string} One of {@link VEHICLE_KINDS}.
  */
 export function vehicleKindFromType(type) {
   const form = String(type?.form_factor ?? '').toLowerCase();
@@ -755,6 +770,7 @@ export function gbfsSystemName(dataset) {
   // Paris"); the leading category token is noise once the layer groups by kind.
   return title.replace(/^(VLS|Vélos et trottinettes|Vélos|Trottinettes|Autopartage|Scooters)\s+/i, '').trim()
     || title
+    // i18n-ignore-next-line — written into the committed index, no locale there.
     || 'Système sans nom';
 }
 
