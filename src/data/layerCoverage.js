@@ -52,6 +52,40 @@
 
 import { boxesIntersect } from './viewportBox.js';
 import { ROAD_STATUS_DARK_AREAS } from './roadStatusCoverage.js';
+import messages from './layerCoverage.i18n.js';
+
+/**
+ * One row of the table: its measurement, plus getters for the words.
+ *
+ * `where` and `brief` are read when a tooltip or a card is drawn, from
+ * `layerCoverage.i18n.js` keyed by the same id. They are getters rather than
+ * strings for the reason the taxonomy's names are: this table is frozen at
+ * import, the page's language is known before anything is painted, and one
+ * table has to answer in both.
+ *
+ * @param {object} row The measured half — id, chip, boxes, goto, dark.
+ * @returns {object} Frozen row.
+ */
+function coverageRow(row) {
+  const entry = {
+    ...row,
+    get where() { return messages().where[row.id]; },
+  };
+  // `brief` is DEFINED only for a row that has one — `entry.brief` is how the
+  // panel and the tests ask whether a layer earned a card, and a getter that
+  // answered `undefined` would still have to resolve the locale to say so,
+  // which at import is exactly what is forbidden.
+  if (Object.hasOwn(messages.definition.briefs, row.id)) {
+    Object.defineProperty(entry, 'brief', {
+      enumerable: true,
+      get() {
+        const brief = messages().briefs[row.id];
+        return Object.freeze({ title: brief.title, lines: brief.lines });
+      },
+    });
+  }
+  return Object.freeze(entry);
+}
 
 /**
  * A layer's territory.
@@ -80,24 +114,15 @@ export const LAYER_COVERAGE = Object.freeze([
    * 2,421, lat 48,813 → 48,902. `comptagesParis.js` pads that by 0,05° and this
    * row carries the padded box verbatim.
    */
-  Object.freeze({
+  // The briefing card — three lines, and no fourth — is
+  // `briefs['comptages-fr']` in the catalog beside this file.
+  coverageRow({
     id: 'comptages-fr',
     chip: 'PARIS',
-    where: 'Paris intra-muros',
     boxes: Object.freeze([
       Object.freeze({ south: 48.76, west: 2.20, north: 48.95, east: 2.47 }),
     ]),
     goto: 'paris',
-    brief: Object.freeze({
-      title: 'Comptages routiers',
-      // Three lines, and each one answers a question a reader actually has.
-      // No fourth line: a card that has to be read is a card that is not read.
-      lines: Object.freeze([
-        'Des capteurs installés dans les rues de Paris comptent les véhicules qui passent, rue par rue.',
-        'Ce n’est pas de la congestion : c’est un nombre de véhicules par heure. Les sept boutons de créneau lisent la même semaine à des heures différentes.',
-        'Semaine archivée, pas du direct — et Paris intra-muros uniquement : ailleurs, cette couche ne dessine rien.',
-      ]),
-    }),
   }),
 
   /*
@@ -106,10 +131,9 @@ export const LAYER_COVERAGE = Object.freeze([
    * its dead in Thiais and Saint-Ouen. Measured 2026-09-01 over all four files:
    * lat 48,7423 → 48,9122, lon 2,2102 → 2,4698.
    */
-  Object.freeze({
+  coverageRow({
     id: 'fraicheur-fr',
     chip: 'PARIS',
-    where: 'Paris et sa proche couronne',
     boxes: Object.freeze([
       Object.freeze({ south: 48.73, west: 2.20, north: 48.92, east: 2.48 }),
     ]),
@@ -131,10 +155,9 @@ export const LAYER_COVERAGE = Object.freeze([
    * frequency dimension did not move region when it moved module, so this row
    * covers both publications.
    */
-  Object.freeze({
+  coverageRow({
     id: 'idfm-network',
     chip: 'IDF',
-    where: 'Île-de-France',
     boxes: Object.freeze([
       Object.freeze({ south: 48.10, west: 1.42, north: 49.25, east: 3.58 }),
     ]),
@@ -153,10 +176,9 @@ export const LAYER_COVERAGE = Object.freeze([
    * capital. Lyon is named in `where`, so the offer is honest about being one
    * of two.
    */
-  Object.freeze({
+  coverageRow({
     id: 'velo-pulse-fr',
     chip: 'PARIS · LYON',
-    where: 'Paris et Lyon',
     boxes: Object.freeze([
       Object.freeze({ south: 48.78, west: 2.23, north: 48.93, east: 2.45 }),
       Object.freeze({ south: 45.66, west: 4.74, north: 45.92, east: 5.01 }),
@@ -177,10 +199,9 @@ export const LAYER_COVERAGE = Object.freeze([
    * The holes come from `roadStatusCoverage.js`, measured 2026-09-01. They are
    * imported rather than copied.
    */
-  Object.freeze({
+  coverageRow({
     id: 'road-status-fr',
     chip: 'FR',
-    where: 'réseau routier national non concédé',
     boxes: Object.freeze([
       Object.freeze({ south: 41.2, west: -5.3, north: 51.2, east: 9.7 }),
     ]),
@@ -223,7 +244,12 @@ export function validateLayerCoverage(table = LAYER_COVERAGE) {
     if (typeof entry.chip !== 'string' || !entry.chip.trim()) {
       throw new Error(`Coverage row missing chip text: ${id}`);
     }
-    if (typeof entry.where !== 'string' || !entry.where.trim()) {
+    // From the CATALOG's definition when the row has one, never through the
+    // getter: this runs at import, where reading the page's language is
+    // forbidden (`src/i18n/importSafety.test.mjs`). A synthetic row in a test
+    // carries its own `where` and is checked exactly as it was.
+    const where = messages.definition.where[id]?.fr ?? entry.where;
+    if (typeof where !== 'string' || !where.trim()) {
       throw new Error(`Coverage row missing long-form territory: ${id}`);
     }
     if (!Array.isArray(entry.boxes) || entry.boxes.length === 0) {
@@ -237,7 +263,9 @@ export function validateLayerCoverage(table = LAYER_COVERAGE) {
     }
     // A brief with no lines is a card that opens on nothing, which is worse
     // than no card: it costs the reader a click and gives back an empty box.
-    if (entry.brief && (!Array.isArray(entry.brief.lines) || !entry.brief.lines.length)) {
+    const declared = messages.definition.briefs[id];
+    const brief = declared ? { lines: declared.lines?.fr } : entry.brief;
+    if (brief && (!Array.isArray(brief.lines) || !brief.lines.length)) {
       throw new Error(`Coverage row has an empty briefing: ${id}`);
     }
   }
@@ -373,17 +401,20 @@ export function coverageSignature(view) {
 export function coverageNoticeFor(layerId, state, darkArea = null, { clickable = false } = {}) {
   const entry = COVERAGE_BY_ID.get(layerId);
   if (!entry) return '';
+  const m = messages();
   if (state === 'out') {
     return clickable && entry.goto
-      ? `Aucune donnée dans cette vue — couvre ${entry.where}. Cliquer pour y aller.`
-      : `Aucune donnée dans cette vue — couvre ${entry.where}.`;
+      ? m.notice.outClickable(entry.where)
+      : m.notice.out(entry.where);
   }
   if (state === 'dark') {
     // Name the operator. "No data here" invites the reader to blame the map;
-    // "DIRIF publishes nothing" is the fact, and it is checkable.
+    // "DIRIF publishes nothing" is the fact, and it is checkable. The area and
+    // the operator are DATA, published as measured by `roadStatusCoverage.js`;
+    // only the sentence around them is translated.
     return darkArea
-      ? `${darkArea.name} : ${darkArea.operator} ne publie rien ici — le reste du réseau reste dessiné.`
-      : `Zone non publiée — le reste du réseau reste dessiné.`;
+      ? m.notice.dark(darkArea.name, darkArea.operator)
+      : m.notice.darkUnnamed;
   }
   return '';
 }
