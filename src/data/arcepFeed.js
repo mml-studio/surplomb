@@ -84,12 +84,15 @@
  * `/api/arcep-fr` proxy imports it; nothing in the browser bundle does.
  */
 
+// i18n-ignore-start — the ARCEP service's own name and the URL of its files,
+// written into the payload the proxy builds
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
 export const ARCEP_SOURCE = 'Ma connexion internet — ARCEP';
 export const ARCEP_LICENCE = 'Licence Ouverte 2.0';
 
 /** The `last/` alias always points at the newest quarterly edition. */
 const ARCEP_BASE = 'https://data.arcep.fr/fixe/maconnexioninternet/statistiques/last/commune';
+// i18n-ignore-end
 
 /**
  * The three files this module reads, and why each one is here.
@@ -97,6 +100,7 @@ const ARCEP_BASE = 'https://data.arcep.fr/fixe/maconnexioninternet/statistiques/
  * `debit` — the satellite-inflated variant — is deliberately NOT in this list.
  * See the module header.
  */
+// i18n-ignore-start — the three file names ARCEP publishes
 export const ARCEP_FILES = Object.freeze({
   /** Each local under its best available technology. Partitions exactly. */
   best: 'commune_meilleure_techno_thd.csv',
@@ -105,6 +109,7 @@ export const ARCEP_FILES = Object.freeze({
   /** Raw eligibility, for the one column the other two do not carry: copper. */
   techno: 'commune_techno.csv',
 });
+// i18n-ignore-end
 
 /** @param {string} file @returns {string} */
 export function arcepFileUrl(file) {
@@ -118,6 +123,11 @@ export function arcepFileUrl(file) {
  * bottom as "how good is it here". `hdr`/`thdr` are fixed radio, `4gf` is
  * fixed 4G, `sat` is satellite.
  */
+// i18n-ignore-start — the labels below travel in the payload the /api/arcep-fr
+// proxy builds, in Node, where there is no locale by design. They are the
+// register's own wording and the Address X-ray relabels them by KEY —
+// `ARCEP_TECHNOLOGIES` in `adresseRadiographie.i18n.js`. Rewriting them here
+// would break that join and change what the server publishes.
 export const ARCEP_TECHNOLOGIES = Object.freeze([
   Object.freeze({ key: 'ftth', column: 'elig_ftth', label: 'fibre optique', wired: true }),
   Object.freeze({ key: 'coax', column: 'elig_coax', label: 'câble coaxial', wired: true }),
@@ -142,6 +152,7 @@ export const ARCEP_SPEED_CLASSES = Object.freeze([
   Object.freeze({ key: 'bhd8', column: 'elig_bhd8', label: '8 Mbit/s ou plus', mbps: 8 }),
   Object.freeze({ key: 'hd3', column: 'elig_hd3', label: '3 Mbit/s ou plus', mbps: 3 }),
 ]);
+// i18n-ignore-end
 
 /**
  * Columns that stay TEXT even when they read as digits.
@@ -233,9 +244,12 @@ export function projectArcep({ code, best = null, wired = null, techno = null })
   if (!anchor) return null;
   const premises = Number.isFinite(anchor.nbr) ? anchor.nbr : null;
   const missing = [];
+  // i18n-ignore-start — the names of the three CSVs, as the payload reports
+  // which of them was missing. Diagnostics, keyed on the file, never drawn.
   if (!best) missing.push('meilleure technologie');
   if (!wired) missing.push('débits filaires');
   if (!techno) missing.push('technologies');
+  // i18n-ignore-end
 
   /** Each local under its best technology — the only column set that sums. */
   let technologies = null;
@@ -264,7 +278,9 @@ export function projectArcep({ code, best = null, wired = null, techno = null })
     const unserved = covered === null || premises === null ? null : Math.max(0, premises - covered);
     if (unserved !== null && unserved > 0) {
       technologies.push({
+        // i18n-ignore-next-line — a stable key, joined against by the X-ray
         key: 'aucune',
+        // i18n-ignore-next-line — payload value; the X-ray relabels the key
         label: 'aucune offre à 8 Mbit/s',
         wired: false,
         premises: unserved,

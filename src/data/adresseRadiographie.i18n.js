@@ -88,6 +88,9 @@ export const ARCEP_TECHNOLOGIES = defineMessages({
   hdr: { fr: 'radio haut débit', en: 'broadband radio' },
   '4gf': { fr: '4G fixe', en: 'fixed 4G' },
   sat: { fr: 'satellite', en: 'satellite' },
+  // Not a technology but the premises the register places under none: the
+  // feed appends it to the same list, so the sheet has to be able to name it.
+  aucune: { fr: 'aucune offre à 8 Mbit/s', en: 'no offer at 8 Mbit/s' },
 });
 
 /**

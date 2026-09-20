@@ -235,9 +235,13 @@ export const ANFR_DAS_FIELDS = 'marque,modele,date_prelevement,das_tete__nf_en_5
 export const ANFR_REF_ZIP_URL = 'https://static.data.gouv.fr/resources/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/20260824-081936/20260731-export-etalab-ref.zip';
 export const ANFR_REF_MEMBER = 'SUP_NATURE.txt';
 
+// i18n-ignore-start — written into the payload by the /api/anfr-fr proxy,
+// which runs in Node where there is no locale by design. Both halves of the
+// name are the register's own; the browser draws its own source line.
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
 export const ANFR_SOURCE = 'Observatoire des réseaux mobiles & installations de plus de 5 W — '
   + 'Agence nationale des fréquences (data.anfr.fr, data.gouv.fr)';
+// i18n-ignore-end
 
 /** Cartoradio's undocumented REST root — ON-DEMAND DETAIL ONLY. See below. */
 export const CARTORADIO_BASE = 'https://www.cartoradio.fr/api/v1';
@@ -269,6 +273,7 @@ export const ANFR_EXPOSURE_RADIUS_M = 300;
  * Cartoradio resolves all of them to labels on the card, and carrying the
  * postcode alone measured +210 KB gzipped on the national pack.
  */
+// i18n-ignore-start — column names of the ANFR export, matched verbatim
 export const ANFR_CSV_COLUMNS = Object.freeze([
   'sup_id',
   'adm_lb_nom',
@@ -282,6 +287,7 @@ export const ANFR_CSV_COLUMNS = Object.freeze([
   'emr_dt',
   'date_maj',
 ]);
+// i18n-ignore-end
 
 /**
  * The generation ladder, oldest first.
@@ -301,18 +307,16 @@ export const ANFR_GENERATIONS = Object.freeze(['2G', '3G', '4G', '5G']);
  * radiates. *Projet approuvé* is a file at ANFR, not a mast. So `live` folds
  * the first two and `plan` is kept apart.
  */
+// i18n-ignore-start — ANFR's own `statut` values, matched against the CSV.
+// A register's value is never rewritten; `ANFR_STATUS_LABELS` in
+// `anfrFeed.i18n.js` is how a card reads one back out.
 export const ANFR_STATUSES = Object.freeze([
   'En service', 'Techniquement opérationnel', 'Projet approuvé',
 ]);
 
-export const ANFR_STATUS_LABELS = Object.freeze({
-  'En service': 'En service',
-  'Techniquement opérationnel': 'Techniquement opérationnel — allumé, pas déclaré en service',
-  'Projet approuvé': 'Projet approuvé — autorisé, pas construit',
-});
-
 /** The two statuses that mean something is radiating. */
 export const ANFR_LIVE_STATUSES = Object.freeze(['En service', 'Techniquement opérationnel']);
+// i18n-ignore-end
 
 /**
  * The colour ladder: five bands, LOWEST CLAIM FIRST.
@@ -330,14 +334,6 @@ export const ANFR_LIVE_STATUSES = Object.freeze(['En service', 'Techniquement op
  * radiates too, so only 127 masts in France have 3G as their best generation.
  */
 export const ANFR_BANDS = Object.freeze(['projet', '2g', '3g', '4g', '5g']);
-
-export const ANFR_BAND_LABELS = Object.freeze({
-  projet: 'Projet approuvé — rien n’émet',
-  '2g': '2G seule',
-  '3g': '3G au plus',
-  '4g': '4G au plus',
-  '5g': '5G en service',
-});
 
 /** Index of a band in the ladder — also its mesh category. */
 export const ANFR_BAND_INDEX = Object.freeze(
@@ -430,9 +426,11 @@ export const ANFR_HEIGHT_MISSING = 551;
  * card and the legend both say it and neither should be able to drift from
  * the count.
  */
+// i18n-ignore-start — `nat_id` values as the register writes them
 export const ANFR_HEIGHTLESS_NATURES = Object.freeze([
   'Intérieur sous-terrain', 'Tunnel', 'Intérieur galerie',
 ]);
+// i18n-ignore-end
 
 /**
  * Support height in metres, or null.
@@ -809,6 +807,7 @@ export function projectAnfrSupports({
     const operator = str(row?.adm_lb_nom);
     if (operator) support.ops |= 1 << slot(operatorIndex, operator);
 
+    // i18n-ignore-next-line — the register's own value, matched
     if (statut === 'Projet approuvé') {
       support.plan |= 1 << gen;
       continue;
@@ -936,8 +935,10 @@ export function projectAnfrDas(body) {
   const brands = new Set();
   for (const row of records) {
     const verdict = str(row?.conformite____);
+    // i18n-ignore-start — the DAS register's own verdict values, matched
     if (verdict === 'Conforme') conforming += 1;
     else if (verdict === 'Non Conforme') nonConforming += 1;
+    // i18n-ignore-end
     const brand = str(row?.marque);
     if (brand) brands.add(brand);
     const sampled = str(row?.date_prelevement);

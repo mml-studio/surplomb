@@ -192,6 +192,10 @@
  * the dot imply the whole installation.
  */
 
+import { formatDate, formatNumber } from '../i18n/format.js';
+import { getLocale } from '../i18n/locale.js';
+import { ANFR_BAND_LABELS } from './anfrFeed.i18n.js';
+import messages from './anfrFrance.i18n.js';
 import * as Cesium from 'cesium';
 import { profileCountBudget } from '../perfProfile.js';
 import { claimCameraSensitivity, releaseCameraSensitivity } from './cameraSensitivity.js';
@@ -208,7 +212,6 @@ import {
 import { prismHatchGlyph } from './choroplethPrism.js';
 import {
   ANFR_BANDS,
-  ANFR_BAND_LABELS,
   ANFR_EXPOSURE_RADIUS_M,
   ANFR_GENERATIONS,
   ANFR_HEIGHTLESS_NATURES,
@@ -453,13 +456,7 @@ const CARD_OPERATOR_LIMIT = 5;
  * What is left is the one thing a colour swatch has to answer — WHAT DOES THIS
  * COLOUR MEAN — plus the national count that puts it in proportion.
  */
-const BAND_BLURBS = Object.freeze({
-  '5g': 'La 5G émet depuis ce mât. 50 148 supports : un sur deux en France.',
-  '4g': 'La 4G est la plus récente qui émet ici : pas de 5G sur ce mât. 18 698 supports.',
-  '3g': 'La 3G est la plus récente qui émet ici. 127 supports dans toute la France.',
-  '2g': '2G seule. 89 supports dans toute la France.',
-  projet: 'Rien n’émet : une autorisation déposée à l’ANFR, aucune installation. 3 638 supports.',
-});
+const bandBlurb = (band) => messages().bandBlurbs[band] ?? '';
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -527,9 +524,10 @@ export function anfrBandColor(band) {
   return ANFR_BAND_COLORS[band] || ANFR_BAND_COLORS.projet;
 }
 
-/** French label for one band. */
+/** The band's name, in the page's language. */
 export function anfrBandLabelFor(band) {
-  return ANFR_BAND_LABELS[band] || ANFR_BAND_LABELS.projet;
+  const resolved = ANFR_BAND_LABELS();
+  return resolved[band] || resolved.projet;
 }
 
 /**
@@ -849,15 +847,15 @@ function supportAnchors(lat, lon, heightM) {
   };
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** Thousands grouped the page's way, matching the rest of the packs. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
-/** `2026-08-27` → `27 août 2026`. */
+/** `2026-08-27` → `27 août 2026` / `August 27, 2026`. */
 export function anfrEditionLabel(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString('fr-FR', {
+  return formatDate(new Date(`${iso}T12:00:00Z`), {
     day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
   });
 }
@@ -1135,6 +1133,10 @@ export function anfrOperatorShort(name) {
  * untouched and an abbreviation this table has never seen degrades to itself
  * rather than to a guess.
  */
+// i18n-ignore-start — the register's own abbreviations and the French
+// particles that stay lower-case inside a proper name. This expands a FRENCH
+// address into French words; an English reader still reads the street as the
+// register filed it.
 const ANFR_ABBREVIATIONS = Object.freeze({
   R: 'rue', AV: 'avenue', BD: 'boulevard', BVD: 'boulevard', CHE: 'chemin',
   RTE: 'route', PL: 'place', ALL: 'allée', IMP: 'impasse', LD: 'lieu-dit',
@@ -1145,6 +1147,7 @@ const ANFR_ABBREVIATIONS = Object.freeze({
 });
 /** Particles that stay lowercase inside a French proper name. */
 const ANFR_PARTICLES = new Set(['DE', 'DU', 'DES', 'LA', 'LE', 'LES', 'ET', 'SUR', 'SOUS', 'AUX', 'AU', 'D', 'L']);
+// i18n-ignore-end
 
 /** `30 R PETRICOT RES HORIZON` → `30 rue Petricot résidence Horizon`. */
 export function anfrPlainText(value) {
@@ -1195,7 +1198,7 @@ export function anfrPlainAddress(site) {
 export function anfrMhzLabel(mhz) {
   const value = Number(mhz);
   if (!Number.isFinite(value)) return null;
-  if (value === 3500) return '3,5 GHz';
+  if (value === 3500) return messages().band35;
   // No thousands separator: the band is a NAME, not a quantity, and nobody in
   // France has ever called LTE 1800 "la 1 800".
   return `${value} MHz`;
@@ -1212,9 +1215,10 @@ export function anfrMhzLabel(mhz) {
  */
 export function anfrFiveGBandLabel(mhz) {
   const value = Number(mhz);
-  if (value >= 3000) return 'rapide';
-  if (value >= 1500) return 'moyenne';
-  if (Number.isFinite(value)) return 'basse';
+  const m = messages().fiveG;
+  if (value >= 3000) return m.fast;
+  if (value >= 1500) return m.mid;
+  if (Number.isFinite(value)) return m.low;
   return null;
 }
 
@@ -1222,7 +1226,7 @@ export function anfrFiveGBandLabel(mhz) {
 export function anfrCardinal(deg) {
   const value = Number(deg);
   if (!Number.isFinite(value)) return null;
-  const points = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  const points = messages().compass;
   return points[Math.round((((value % 360) + 360) % 360) / 45) % 8];
 }
 
@@ -1237,36 +1241,44 @@ export function anfrCardinal(deg) {
  * than to a guess.
  */
 export function anfrPlacementLine(nature, heightM) {
+  const m = messages().placement;
   const noun = String(nature || '').trim();
-  const tall = Number.isFinite(heightM) && heightM > 0 ? `, ${fr(heightM)} m` : '';
-  if (!noun) return tall ? `Support${tall} — nature non publiée` : 'Nature et hauteur non publiées';
+  const tall = Number.isFinite(heightM) && heightM > 0 ? m.height(fr(heightM)) : '';
+  if (!noun) return tall ? m.unnamedWithHeight(tall) : m.unknown;
   const lower = noun.toLocaleLowerCase('fr-FR');
   // The 551 supports with no published height are all of them underground or
   // indoor — see the feed's Trap 3 — so this branch is the one that explains
   // the missing shaft rather than leaving it as a silence.
   if (/tunnel|intérieur|souterrain|sous-terrain|galerie/i.test(lower)) {
-    return `Installation souterraine (${lower}) — aucun mât`;
+    return m.underground(lower);
   }
   if (/pylône|pylone|mât|mat |tour|fût|fut |éolienne|eolienne|sémaphore|phare/i.test(lower)) {
-    return tall ? `${noun}${tall}` : `${noun} — hauteur non publiée`;
+    return tall ? `${noun}${tall}` : m.noHeight(noun);
   }
   if (/immeuble|bâtiment|batiment|monument|château|chateau|silo|local technique|dalle/i.test(lower)) {
-    const of = /^[aeiouâàéèêëîïôöûüh]/i.test(lower) ? `d’${lower}` : `de ${lower}`;
-    return tall ? `Toit ${of}${tall}` : `Toit ${of} — hauteur non publiée`;
+    // The French elision rides with the noun; the English message adds its own
+    // preposition and is handed the bare word.
+    // i18n-ignore-next-line — the French elision, written onto the register's
+    // own noun; the English message adds its own preposition to the bare word.
+    const of = getLocale() === 'fr'
+      ? (/^[aeiouâàéèêëîïôöûüh]/i.test(lower) ? `d’${lower}` : `de ${lower}`)
+      : lower;
+    return tall ? m.roof(of, tall) : m.roofNoHeight(of);
   }
   if (/mobilier|signalisation|ouvrage/i.test(lower)) {
-    return tall ? `Sur ${lower}${tall}` : `Sur ${lower} — hauteur non publiée`;
+    return tall ? m.on(lower, tall) : m.onNoHeight(lower);
   }
-  return tall ? `${noun}${tall}` : `${noun} — hauteur non publiée`;
+  return tall ? `${noun}${tall}` : m.noHeight(noun);
 }
 
 /** `les 4 opérateurs`, `Orange et SFR`, or a single name. */
 function anfrOperatorSet(names, total) {
+  const m = messages().operators;
   const list = [...names];
-  if (total > 1 && list.length === total) return `les ${fr(total)} opérateurs`;
+  if (total > 1 && list.length === total) return m.all(fr(total));
   const plain = list.sort((a, b) => a.localeCompare(b, 'fr')).map(anfrOperatorShort);
   if (plain.length === 1) return plain[0];
-  return `${plain.slice(0, -1).join(', ')} et ${plain[plain.length - 1]}`;
+  return m.andLast(plain.slice(0, -1).join(', '), plain[plain.length - 1]);
 }
 
 /**
@@ -1336,8 +1348,9 @@ export function anfrOperatorSummaryLine(detail) {
     if (found) found.labels.push(label);
     else groups.push({ key, labels: [label], names });
   }
+  const m = messages().operators;
   return groups
-    .map((group) => `${group.labels.join(' et ')} : ${anfrOperatorSet(group.names, total)}`)
+    .map((group) => m.rungs(group.labels.join(m.rungJoin), anfrOperatorSet(group.names, total)))
     .join(' · ');
 }
 
@@ -1352,8 +1365,9 @@ export function anfrOperatorSummaryLine(detail) {
  */
 export function anfrLivePlainLine(support) {
   const live = anfrDecodeMask(support?.live, ANFR_GENERATIONS).reverse();
-  if (!live.length) return 'Rien n’émet à cette position';
-  return `Émet en ${live.join(' · ')}`;
+  const m = messages().live;
+  if (!live.length) return m.nothing;
+  return m.transmits(live.join(' · '));
 }
 
 /** The approved project, named by what it would add, or null. */
@@ -1364,9 +1378,10 @@ export function anfrPlanLine(support) {
   const adds = anfrDecodeMask(plan & ~live, ANFR_GENERATIONS).reverse();
   const again = anfrDecodeMask(plan & live, ANFR_GENERATIONS).reverse();
   if (adds.length) {
+    const m = messages().plan;
     return live
-      ? `${adds.join(' · ')} autorisée${adds.length > 1 ? 's' : ''} en plus — pas encore installée${adds.length > 1 ? 's' : ''}`
-      : `${adds.join(' · ')} autorisée${adds.length > 1 ? 's' : ''} ici — rien n’a encore été installé`;
+      ? m.alsoAuthorized(adds.join(' · '), adds.length)
+      : m.authorizedHere(adds.join(' · '), adds.length);
   }
   // A RE-FILING TAKES NO LINE. An operator lodging a fresh dossier for a band
   // already on the air is paperwork, and the feed counted it: 11 830 of the
@@ -1400,10 +1415,10 @@ export function buildAnfrSelectionLabel(record, payload = null) {
   // SUP_ID used to lead and now closes the card: it is the one field on here
   // nobody arrived wanting, and it is still printed because it is the handle
   // for every other ANFR tool.
+  const m = messages().card;
   const title = operators.length
-    ? `Antenne-relais · ${fr(operators.length)} opérateur${operators.length > 1 ? 's' : ''}`
-      + `${top ? ` · ${top}` : ' · rien n’émet'}`
-    : 'Antenne-relais · aucun opérateur déclaré';
+    ? m.title(fr(operators.length), operators.length, top ? m.titleTop(top) : m.titleSilent)
+    : m.titleNoOperator;
 
   // 551 of the 72 700 supports publish a height of 0, which is the register's
   // way of saying nobody filled the field in. The feed returns null for those
@@ -1418,8 +1433,7 @@ export function buildAnfrSelectionLabel(record, payload = null) {
   if (merged.length <= CARD_WRAP_CHARS) details.push(merged);
   else details.push(placement, where);
   if (!Number.isFinite(support.heightM)) {
-    details.push(`Aucun fût dessiné : ${fr(ANFR_HEIGHT_MISSING)} supports du registre ne publient pas `
-      + `de hauteur, tous ${ANFR_HEIGHTLESS_NATURES.join(' · ').toLowerCase()}`);
+    details.push(m.noShaft(fr(ANFR_HEIGHT_MISSING), ANFR_HEIGHTLESS_NATURES.join(' · ').toLowerCase()));
   }
 
   // WHO TRANSMITS, grouped by offering. Cartoradio is the only upstream that
@@ -1431,7 +1445,7 @@ export function buildAnfrSelectionLabel(record, payload = null) {
   } else if (operators.length) {
     const shown = operators.slice(0, CARD_OPERATOR_LIMIT).map(anfrOperatorName).join(', ');
     const rest = operators.length - CARD_OPERATOR_LIMIT;
-    details.push(`${shown}${rest > 0 ? ` +${rest}` : ''} · ${anfrLivePlainLine(support)}`);
+    details.push(m.operatorsFallback(shown, rest > 0 ? ` +${rest}` : '', anfrLivePlainLine(support)));
   } else {
     details.push(anfrLivePlainLine(support));
   }
@@ -1442,23 +1456,23 @@ export function buildAnfrSelectionLabel(record, payload = null) {
   // Everything below is Cartoradio's, on demand, and is labelled as such by
   // being absent until it arrives.
   if (record?.detailPending) {
-    details.push('Lecture de la fiche détaillée du mât…');
+    details.push(m.detailPending);
   } else if (record?.detailError) {
-    details.push(`⚠ Fiche détaillée indisponible — ${record.detailError}`);
+    details.push(m.detailUnavailable(record.detailError));
   } else if (detail) {
     details.push(...anfrDetailLines(detail));
   }
 
   if (record?.coSited > 0) {
-    details.push(`⚠ ${fr(record.coSited)} autre${record.coSited > 1 ? 's' : ''} support${record.coSited > 1 ? 's' : ''} à cette position exacte`);
+    details.push(m.coSited(fr(record.coSited), record.coSited));
   }
 
   const edition = anfrEditionLabel(payload?.edition);
   // Who owns the ground the mast stands on — the question a copropriété or a
   // council arrives with, and one line of the register answers it.
   const owner = anfrPlainText(detail?.site?.owner);
-  if (owner) details.push(`Propriétaire : ${owner}`);
-  details.push(`ANFR n° ${support.id} · registre du ${edition || '—'} · Licence Ouverte 2.0`);
+  if (owner) details.push(m.owner(owner));
+  details.push(m.provenance(support.id, edition || '—'));
   return [title, ...details].join('\n');
 }
 
@@ -1484,7 +1498,7 @@ export function anfrDetailLines(detail) {
   // with a zero-byte body, so the card would otherwise be indistinguishable
   // from a mast Cartoradio has nothing to say about.
   if (Array.isArray(detail?.degraded) && detail.degraded.length) {
-    lines.push(`⚠ Fiche détaillée muette sur : ${detail.degraded.join(' · ')}`);
+    lines.push(messages().card.degraded(detail.degraded.join(' · ')));
   }
   return lines;
 }
@@ -1510,11 +1524,14 @@ export function anfrMastBandsMhz(detail) {
  */
 export function anfrServicePlainBand(label) {
   const text = String(label || '').trim();
+  const m = messages().service;
   const mobile = /^TM\s*(\d{3,4})/.exec(text);
-  if (mobile) return `téléphonie mobile ${mobile[1]} MHz`;
+  if (mobile) return m.mobile(mobile[1]);
   if (/wifi|wi-fi/i.test(text)) return 'Wi-Fi';
-  if (/^Radiodiffusion sonore/i.test(text)) return 'radio FM';
-  if (/^TV$/i.test(text)) return 'télévision';
+  if (/^Radiodiffusion sonore/i.test(text)) return m.radio;
+  if (/^TV$/i.test(text)) return m.tv;
+  // Everything else is already the report's own French wording and is left
+  // exactly as published — a register's value is never rewritten.
   return text;
 }
 
@@ -1533,7 +1550,7 @@ export function anfrShortBand(label) {
 /** `2025-07-18` → `07/2025`. A month is enough to date an installation. */
 export function anfrShortMonth(iso) {
   const match = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
-  return match ? `${match[2]}/${match[1]}` : 'date inconnue';
+  return match ? `${match[2]}/${match[1]}` : messages().service.unknownDate;
 }
 
 /**
@@ -1558,15 +1575,15 @@ export function anfrExposureLines(detail) {
   const exposure = detail?.exposure;
   const lines = [];
   if (!exposure) return lines;
+  const m = messages().exposure;
   if (exposure.within === 0) {
-    lines.push(`Aucun relevé d’ondes publié dans ${fr(exposure.radiusM ?? ANFR_EXPOSURE_RADIUS_M)} m `
-      + 'autour de ce mât');
+    lines.push(m.none(fr(exposure.radiusM ?? ANFR_EXPOSURE_RADIUS_M)));
     return lines;
   }
   const report = exposure.report;
   if (!report) {
     if (exposure.nearest) {
-      lines.push(`Un relevé d’ondes à ${fr(exposure.nearest.metres)} m — rapport illisible`);
+      lines.push(m.unreadable(fr(exposure.nearest.metres)));
     }
     return lines;
   }
@@ -1575,30 +1592,30 @@ export function anfrExposureLines(detail) {
   const year = String(report.measuredOn || '').slice(0, 4) || '?';
   const limit = Number(report.lowestLimitVoltsPerM);
   const global = Number(report.globalVoltsPerM);
-  const volts = (value) => value.toLocaleString('fr-FR', { minimumFractionDigits: 2 });
+  const volts = (value) => formatNumber(value, { minimumFractionDigits: 2 });
 
   // WHICH band was strongest rides the headline as a suffix, because that is
   // how a reader learns whether the mobile network is even the dominant
   // source at that address — and it costs four words there instead of a line.
   const strongest = report.strongest;
   const peak = strongest && Number.isFinite(strongest.volts)
-    ? `, pic : ${anfrShortBand(strongest.band)}` : '';
+    ? m.peak(anfrShortBand(strongest.band)) : '';
   if (Number.isFinite(global) && global > 0) {
     // "51× sous la limite" rather than "2 % de la limite": the two are the
     // same fact, and a reader who is frightened reads a multiple faster than
     // a percentage of something they have never heard of.
     const ratio = Number.isFinite(limit) && limit > 0
-      ? ` — ${fr(Math.round(limit / global))}× sous la limite (${fr(limit)} V/m)`
+      ? m.ratio(fr(Math.round(limit / global)), fr(limit))
       : '';
-    lines.push(`${volts(global)} V/m à ${metres} m (${year})${ratio}${peak}`);
+    lines.push(m.reading(volts(global), metres, year, ratio, peak));
   } else if (Number.isFinite(global)) {
     // A global of zero is the protocol's floor, not a reassuring number, so
     // the strongest band carries its real reading here rather than the zero.
     const reading = strongest && Number.isFinite(strongest.volts)
-      ? `, pic : ${anfrShortBand(strongest.band)} à ${volts(strongest.volts)} V/m` : '';
-    lines.push(`Champ global sous le seuil mesurable, à ${metres} m (${year})${reading}`);
+      ? m.peakWithValue(anfrShortBand(strongest.band), volts(strongest.volts)) : '';
+    lines.push(m.belowFloor(metres, year, reading));
   } else {
-    lines.push(`Relevé à ${metres} m (${year}) — valeur globale non publiée`);
+    lines.push(m.noGlobal(metres, year));
   }
 
   // ONE caveat line, and it carries the two things a reader cannot supply
@@ -1608,15 +1625,13 @@ export function anfrExposureLines(detail) {
   // are not bands it measured at zero, and that is the sharper of the two.
   const missing = anfrUnmeasuredBands(report, anfrMastBandsMhz(detail));
   if (missing.length) {
-    lines.push(`⚠ Relevé chez un voisin, ${year} — ${missing.map(anfrMhzLabel).join(', ')} `
-      + 'jamais mesurés');
+    lines.push(m.neighbourUnmeasured(year, missing.map(anfrMhzLabel).join(', ')));
   } else if (report.predatesEquipment) {
-    lines.push('⚠ Relevé chez un voisin, antérieur à l’équipement de '
-      + `${anfrShortMonth(report.newestService)}`);
+    lines.push(m.neighbourStale(anfrShortMonth(report.newestService)));
   } else {
-    lines.push('Relevé chez un voisin, pas sur le mât');
+    lines.push(m.neighbour);
   }
-  if (report.conforming === false) lines.push('⚠ Non conforme selon le rapport ANFR');
+  if (report.conforming === false) lines.push(m.nonConforming);
   return lines;
 }
 
@@ -1640,8 +1655,9 @@ export function anfrAzimuthLines(detail) {
   // to the antenna count and reads as one only while it is beside it.
   const other = detail?.antennas?.other;
   const alsoCount = Number(other?.antennas) || 0;
+  const m = messages().azimuth;
   const also = alsoCount > 0
-    ? ` · +${fr(alsoCount)} ${other.labels?.length ? other.labels.join('/') : 'autres'} hors téléphonie`
+    ? m.alsoOther(fr(alsoCount), other.labels?.length ? other.labels.join('/') : m.otherLabel)
     : '';
   if (bearings.length) {
     // A bare list of twelve bearings is twelve numbers nobody can use. The
@@ -1654,27 +1670,27 @@ export function anfrAzimuthLines(detail) {
     // that convention on the legend row that appears with the rays.
     const heights = [...new Set(rays.map((ray) => ray.heightM))].sort((a, b) => b - a);
     const named = bearings.length <= CARD_BEARING_NAME_LIMIT
-      ? ` (${bearings.map((deg) => `${deg.toLocaleString('fr-FR')}° ${anfrCardinal(deg)}`).join(' · ')})`
+      ? m.named(bearings.map((deg) => m.bearing(fr(deg), anfrCardinal(deg))).join(' · '))
       : '';
     // Rounded to the metre: the register publishes 30,9 and 48,8 and the
     // tenths are precision the reader cannot use and the card cannot spare.
     const round = (value) => fr(Math.round(value));
     const tier = heights.length === 0 ? ''
       : heights.length === 1
-        ? `, ${round(heights[0])} m du sol`
-        : `, ${round(heights[heights.length - 1])} à ${round(heights[0])} m du sol`;
-    lines.push(`${antennas ? `${fr(antennas)} antennes, ` : ''}`
-      + `${fr(bearings.length)} direction${bearings.length > 1 ? 's' : ''}${named}${tier}${also}`);
+        ? m.oneHeight(round(heights[0]))
+        : m.heightRange(round(heights[heights.length - 1]), round(heights[0]));
+    lines.push(m.line(antennas ? m.antennasPrefix(fr(antennas)) : '',
+      fr(bearings.length), bearings.length, named, tier, also));
   } else if (antennas > 0) {
-    lines.push(`${fr(antennas)} antennes — aucune direction publiée${also}`);
+    lines.push(m.noDirection(fr(antennas), also));
   } else if (also) {
-    lines.push(also.replace(/^ · \+/, 'Porte '));
+    lines.push(also.replace(/^ · \+/, m.carries));
   }
   if (unplaced > 0) {
-    lines.push(`⚠ ${fr(unplaced)} direction${unplaced > 1 ? 's' : ''} sans hauteur de fixation publiée — non dessinée${unplaced > 1 ? 's' : ''}`);
+    lines.push(m.unplaced(fr(unplaced), unplaced));
   }
   if (unaimed > 0) {
-    lines.push(`⚠ ${fr(unaimed)} antenne${unaimed > 1 ? 's' : ''} sans direction publiée`);
+    lines.push(m.unaimed(fr(unaimed), unaimed));
   }
   return lines;
 }
@@ -1698,19 +1714,20 @@ export function buildAnfrMeshLabel(record, payload = null) {
   const tuple = record?.tuple || [];
   const band = meshSupportBand(tuple);
   const operators = Number(tuple[MESH_OPERATORS]) || 0;
+  const m = messages().mesh;
   const details = [anfrBandLabelFor(band)];
-  details.push(`${fr(operators)} opérateur${operators > 1 ? 's' : ''} déclaré${operators > 1 ? 's' : ''}`);
+  details.push(m.operators(fr(operators), operators));
   if (record?.lookupPending) {
-    details.push('Lecture du mât dans le registre…');
+    details.push(m.lookupPending);
   } else if (record?.lookupError) {
-    details.push(`⚠ Registre injoignable pour ce point — ${record.lookupError}`);
+    details.push(m.lookupError(record.lookupError));
   } else if (record?.lookupEmpty) {
-    details.push('⚠ Aucun mât du registre à cette position exacte');
+    details.push(m.lookupEmpty);
   }
-  details.push('Approchez pour la fiche du mât : opérateurs, bandes et relevé d’ondes');
+  details.push(m.zoomIn);
   const edition = anfrEditionLabel(payload?.edition);
-  details.push(`Vue d’ensemble — un point par cellule · registre du ${edition || '—'}`);
-  return ['Antenne-relais', ...details].join('\n');
+  details.push(m.provenance(edition || '—'));
+  return [m.title, ...details].join('\n');
 }
 
 function selectedOverlayEntry(id, position, copy) {
@@ -1960,7 +1977,7 @@ async function loadMesh(box) {
     // The upstream's own words go to the console; the row gets a sentence a
     // reader can act on. `HTTP 503` and `malformed payload` are diagnostics,
     // not user copy, and this is a French UI.
-    _error = 'maillage national ANFR indisponible';
+    _error = messages().errors.meshUnavailable;
     _status = 'error';
     return;
   }
@@ -2011,7 +2028,7 @@ async function resolveMeshSupport(record) {
     if (error?.name !== 'AbortError') {
       console.warn('[Data:ANFR FR] mesh support lookup failed:', error?.message || error);
     }
-    record.lookupError = error?.message || 'délai dépassé';
+    record.lookupError = error?.message || messages().errors.timedOut;
   } finally {
     record.lookupPending = false;
     repaintSelectedCard(id);
@@ -2114,8 +2131,8 @@ async function loadSupports(box, { force = false } = {}) {
     // Keep whatever is drawn: an older box is still a true map of the masts in
     // it, and blanking the screen would say France has no antennas.
     _error = _records.size
-      ? 'rafraîchissement du registre ANFR indisponible'
-      : 'registre ANFR indisponible';
+      ? messages().errors.refreshUnavailable
+      : messages().errors.registerUnavailable;
     _status = _records.size ? 'ready' : 'error';
   } finally {
     if (generation === _requestGeneration) _loading = false;
@@ -2152,7 +2169,7 @@ async function resolveDetail(record) {
     if (error?.name !== 'AbortError') {
       console.warn('[Data:ANFR FR] Cartoradio detail failed:', error?.message || error);
     }
-    record.detailError = error?.message || 'délai dépassé';
+    record.detailError = error?.message || messages().errors.timedOut;
   } finally {
     record.detailPending = false;
     repaintSelectedCard(record.id);
@@ -2266,7 +2283,7 @@ function collectDetectableObjects(options = {}) {
       position: record.position,
       sourceId: record.id,
       id: operators > 1
-        ? `${band.toUpperCase()} · ${operators} opérateurs`
+        ? messages().detectable.withOperators(band.toUpperCase(), operators)
         : band.toUpperCase(),
       type: 'Antenna mast',
       skipLabel: record.id === _selectedId,
@@ -2293,59 +2310,48 @@ export function buildAnfrLoadingLabel({
   mastsUnpublished = _mastsUnpublished,
   mastsClipped = _mastsClipped,
 } = {}) {
-  if (loading) return 'lecture du registre ANFR...';
+  const m = messages().status;
+  if (loading) return m.loading;
   if (status === 'error') return '';
   const parts = [];
   if (regime === 'maillage') {
     // A camera over the Pacific is not a broken layer and not an empty
     // register: `layerFeedState()` renders `empty` as a green ON chip, and the
     // sentence is what tells a reader which of the two they are looking at.
-    if (!count) return national?.count ? 'aucun support ANFR dans cette vue' : '';
+    if (!count) return national?.count ? m.empty : '';
     parts.push(pick?.thinned
-      ? `${fr(count)} points pour ${fr(inView)} supports dans la vue`
-      : `${fr(count)} supports`);
-    if (national?.count) parts.push(`${fr(national.count)} en France`);
+      ? m.thinned(fr(count), fr(inView))
+      : m.supports(fr(count)));
+    if (national?.count) parts.push(m.inFrance(fr(national.count)));
     // The maillage cannot draw the upgrade ring — the tuple has no plan mask —
     // so it says how many rings it is NOT showing rather than letting the
     // absence read as absence.
     if (national?.plannedUpgrades > 0) {
-      parts.push(`${fr(national.plannedUpgrades)} projets d’extension visibles seulement en zoom`);
+      parts.push(m.plannedZoomOnly(fr(national.plannedUpgrades)));
     }
     return parts.join(' · ');
   }
-  if (!count) return 'aucun support ANFR dans cette vue';
-  parts.push(`${fr(count)} supports`);
-  if (inView > count) parts.push(`${fr(inView - count)} non tracés`);
+  if (!count) return m.empty;
+  parts.push(m.supports(fr(count)));
+  if (inView > count) parts.push(m.notDrawn(fr(inView - count)));
   let hollow = 0;
   let ringed = 0;
   for (const record of records.values()) {
     if (record.style?.hollow) hollow += 1;
     else if (record.style?.ringed) ringed += 1;
   }
-  if (hollow > 0) {
-    parts.push(hollow > 1
-      ? `${fr(hollow)} projets approuvés, rien n’émet`
-      : '1 projet approuvé, rien n’émet');
-  }
-  if (ringed > 0) {
-    parts.push(ringed > 1
-      ? `${fr(ringed)} extensions autorisées`
-      : '1 extension autorisée');
-  }
+  if (hollow > 0) parts.push(m.approvedOnly(fr(hollow), hollow));
+  if (ringed > 0) parts.push(m.extensions(fr(ringed), ringed));
   // The shafts are the layer's only world-space channel, and a reader who sees
   // none has to be able to tell "too far to draw them" from "no height
   // published" from "the cap bit". A4 has three empties and these are three of
   // them, so they get three different sentences.
   if (!mastRegime) {
-    parts.push('fûts à leur hauteur en vue rapprochée');
+    parts.push(m.shaftsWhenClose);
   } else {
-    if (masts > 0) parts.push(`${fr(masts)} fûts à leur hauteur`);
-    if (mastsUnpublished > 0) {
-      parts.push(mastsUnpublished > 1
-        ? `${fr(mastsUnpublished)} sans hauteur publiée, sans fût`
-        : '1 sans hauteur publiée, sans fût');
-    }
-    if (mastsClipped > 0) parts.push(`${fr(mastsClipped)} fûts écrêtés par le plafond`);
+    if (masts > 0) parts.push(m.shafts(fr(masts)));
+    if (mastsUnpublished > 0) parts.push(m.noHeight(fr(mastsUnpublished), mastsUnpublished));
+    if (mastsClipped > 0) parts.push(m.clipped(fr(mastsClipped)));
   }
   return parts.join(' · ');
 }
@@ -2394,33 +2400,31 @@ export function anfrMastLegend({
   sectors = _sectorsDrawn,
 } = {}) {
   if (regime !== 'supports' || !mastRegime) return [];
+  const legendWords = messages().legend;
   const rows = [];
   if (mastsUnpublished > 0) {
     rows.push({
-      label: 'Sans mât — hauteur non publiée',
+      label: legendWords.noMast.label,
       color: null,
       count: mastsUnpublished,
       glyph: prismHatchGlyph(),
-      blurb: 'Le point reste au sol et aucun fût n’est dessiné. Les '
-        + `${fr(ANFR_HEIGHT_MISSING)} concernés sont souterrains ou en tunnel : il n’y a pas de mât `
-        + 'à mesurer.',
+      blurb: legendWords.noMast.blurb(fr(ANFR_HEIGHT_MISSING)),
     });
   }
   if (mastsClipped > 0) {
     rows.push({
-      label: 'Fûts écrêtés',
+      label: legendWords.clipped.label,
       color: null,
       count: mastsClipped,
-      blurb: `Plafond de ${fr(MAX_RENDERED_MASTS)} fûts par vue : le point est dessiné, le fût non.`,
+      blurb: legendWords.clipped.blurb(fr(MAX_RENDERED_MASTS)),
     });
   }
   if (sectors > 0) {
     rows.push({
-      label: 'Azimuts du support sélectionné',
+      label: legendWords.azimuths.label,
       color: SELECTED_COLOR,
       count: sectors,
-      blurb: 'Une direction publiée par rayon. La longueur est une convention de dessin, pas une '
-        + 'portée : ni l’ouverture du faisceau ni la distance couverte ne sont publiées.',
+      blurb: legendWords.azimuths.blurb,
     });
   }
   return rows;
@@ -2625,7 +2629,7 @@ const anfrFranceLayer = {
         label: anfrBandLabelFor(band),
         color: anfrBandColor(band),
         count: tally.get(band) || 0,
-        blurb: BAND_BLURBS[band],
+        blurb: bandBlurb(band),
       }));
     legend.push(...anfrMastLegend());
     // No chips: the manager renders a chip as a BUTTON keyed by `chip.id` and
