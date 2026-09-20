@@ -65,25 +65,28 @@ test('cockpit altitude reads zero on the ground without changing airborne MSL', 
   assert.equal(cockpitAltitudeDisplayFt(null, false), null);
 });
 
+// The scope readout was English in both languages until the closing i18n pull
+// request; these two now run in the default locale, French, and the English
+// they used to pin lives in `cockpitMath.en.test.mjs`.
 test('cockpit Context scope distinguishes radius-complete feeds from viewport installations', () => {
   assert.equal(
-    formatCockpitContextScope('TEST123', 250000, 'CURRENT VIEWPORT ONLY'),
-    'TEST123 · 250 KM AIR/SEA WINDOW · INSTALLATIONS CURRENT VIEWPORT ONLY',
+    formatCockpitContextScope('TEST123', 250000, 'VUE ACTUELLE UNIQUEMENT'),
+    'TEST123 · FENÊTRE AIR/MER 250 KM · INSTALLATIONS VUE ACTUELLE UNIQUEMENT',
   );
   assert.equal(
     formatCockpitContextScope('TEST123', 250000),
-    'TEST123 · 250 KM AIR/SEA WINDOW',
+    'TEST123 · FENÊTRE AIR/MER 250 KM',
   );
 });
 
 test('cockpit Context scope preserves zero and replaces missing values intentionally', () => {
   assert.equal(
     formatCockpitContextScope('', 0),
-    '— · 0 KM AIR/SEA WINDOW',
+    '— · FENÊTRE AIR/MER 0 KM',
   );
   assert.equal(
     formatCockpitContextScope(undefined, Number.NaN, {}),
-    '— · — KM AIR/SEA WINDOW',
+    '— · FENÊTRE AIR/MER — KM',
   );
 });
 

@@ -12,30 +12,42 @@
  * instructions, in the register a public warning uses.
  *
  * The hex values, the four levels and the nine phenomenon IDS stay untouched:
- * those are the state's signal, quoted from the technical spec.
+ * those are the state's signal, quoted from the technical spec. So are the
+ * nine French phenomenon names, which are READ from the feed rather than
+ * copied here — see `PHENOMENON_EN` below.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { VIGILANCE_PHENOMENA } from './meteoFranceVigilanceFeed.js';
 
 /**
- * The nine phenomena Météo-France assesses, keyed by its own id.
+ * The English of the nine phenomena, keyed by Météo-France's own id.
  *
- * DUPLICATED ON PURPOSE from `meteoFranceVigilanceFeed.js`, with the French
- * beside it so a drift is a test failure: that module belongs to another batch
- * and is not bilingual yet. When it is, this table goes and the labels come
- * from there. Same arrangement `adresseRadiographie.i18n.js` records for the
- * amenity families.
+ * Only the English. B7 typed the French here too and held the two copies
+ * together with a drift test — a test that can only fail AFTER a wrong name
+ * has shipped, and only if someone edits the copy rather than the original.
+ * The feed quotes the spec (`VIGILANCE_PHENOMENA`) and is now the one source:
+ * the French below is read from it, never retyped, so the two cannot drift.
+ *
+ * A tenth phenomenon, or a renumbering, arrives here with NO English rather
+ * than with the wrong one — `messagesParity.test.mjs` fails on a leaf without
+ * an `en`, which is the loudest place this can break.
  */
-export const VIGILANCE_PHENOMENON_NAMES = defineMessages({
-  1: { fr: 'Vent violent', en: 'High wind' },
-  2: { fr: 'Pluie-inondation', en: 'Rain and flooding' },
-  3: { fr: 'Orages', en: 'Thunderstorms' },
-  4: { fr: 'Crues', en: 'River flooding' },
-  5: { fr: 'Neige-verglas', en: 'Snow and ice' },
-  6: { fr: 'Canicule', en: 'Heatwave' },
-  7: { fr: 'Grand froid', en: 'Extreme cold' },
-  8: { fr: 'Avalanches', en: 'Avalanches' },
-  9: { fr: 'Vagues-submersion', en: 'Waves and marine flooding' },
+const PHENOMENON_EN = Object.freeze({
+  1: 'High wind',
+  2: 'Rain and flooding',
+  3: 'Thunderstorms',
+  4: 'River flooding',
+  5: 'Snow and ice',
+  6: 'Heatwave',
+  7: 'Extreme cold',
+  8: 'Avalanches',
+  9: 'Waves and marine flooding',
 });
+
+/** The nine phenomena, the feed's French beside this file's English. */
+export const VIGILANCE_PHENOMENON_NAMES = defineMessages(Object.fromEntries(
+  Object.entries(VIGILANCE_PHENOMENA).map(([id, fr]) => [id, { fr, en: PHENOMENON_EN[id] }]),
+));
 
 export default defineMessages({
   /** The four levels and the one for a département the bulletin skipped. */

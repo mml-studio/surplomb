@@ -99,14 +99,19 @@ export function parseArgs(argv) {
   return options;
 }
 
-const fr = (n) => new Intl.NumberFormat('fr-FR').format(n);
-const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+// A developer CLI, and developer output is English — the repository's language
+// (AGENTS.md), the same call `scripts/dataset-manifest.mjs` makes. Nothing here
+// reaches a reader: the pack it writes carries no words, and the layer that
+// serves it reads its own bilingual catalog. So no locale, no formatters, and
+// grouping in the one convention a build log is read in.
+const num = (n) => new Intl.NumberFormat('en-US').format(n);
+const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /** Age of a pack in plain words, and whether the proxy still counts it fresh. */
 export function describeAge(at, now = Date.now(), ttlMs = AMENITIES_TTL_MS) {
   const days = Math.floor((now - at) / (24 * 60 * 60 * 1000));
   const fresh = now - at <= ttlMs;
-  return `${days} jour${days > 1 ? 's' : ''} — ${fresh ? 'frais' : 'périmé, à reconstruire'}`;
+  return `${days} day${days > 1 ? 's' : ''} — ${fresh ? 'fresh' : 'stale, rebuild it'}`;
 }
 
 /** `--check`: say what is on disk and stop. */
@@ -116,7 +121,7 @@ async function check(file) {
   if (!entry) {
     console.log(`✘ ${file}`);
     for (const problem of problems) console.log(`  ${problem}`);
-    if (!problems.length) console.log('  aucun pack sur le disque');
+    if (!problems.length) console.log('  no pack on disk');
     return 1;
   }
   const { size } = await fsp.stat(file);
@@ -129,14 +134,14 @@ async function check(file) {
   const missing = cells.length - (await Promise.all(cells.map((key) => fsp
     .stat(amenitiesShardPath(path.dirname(file), key)).then(() => 1, () => 0)))).reduce((a, b) => a + b, 0);
   console.log(`✔ ${file}`);
-  console.log(`  version ${entry.version} · ${mb(size)} + ${fr(cells.length)} shards de ${mb(shardBytes)}`
+  console.log(`  version ${entry.version} · ${mb(size)} + ${num(cells.length)} shards of ${mb(shardBytes)}`
     + ` · ${describeAge(entry.at)}`);
-  if (missing) console.log(`  ⚠ ${fr(missing)} shards annoncés mais absents du disque`);
-  console.log(`  BPE ${provenance.edition ?? '?'} (${provenance.year ?? '?'}) · ${fr(provenance.bpeRows ?? 0)} lignes`);
-  console.log(`  FINESS ${fr(provenance.finessRows ?? 0)} lignes · maj ${provenance.finessUpdated ?? 'inconnue'}`);
+  if (missing) console.log(`  ⚠ ${num(missing)} shards announced but missing from disk`);
+  console.log(`  BPE ${provenance.edition ?? '?'} (${provenance.year ?? '?'}) · ${num(provenance.bpeRows ?? 0)} rows`);
+  console.log(`  FINESS ${num(provenance.finessRows ?? 0)} rows · updated ${provenance.finessUpdated ?? 'unknown'}`);
   const dots = cells.reduce((total, key) => total + entry.payload.shards.cells[key], 0);
-  console.log(`  ${fr(dots)} points · ${fr(entry.payload.mesh.length)} mailles`
-    + ` · ${fr(entry.payload.rollup.departements.length)} départements`);
+  console.log(`  ${num(dots)} points · ${num(entry.payload.mesh.length)} spatial units`
+    + ` · ${num(entry.payload.rollup.departements.length)} departments`);
   return 0;
 }
 
@@ -147,7 +152,7 @@ function reportFamilies(perFamily = {}) {
     .sort((a, b) => b[1] - a[1]);
   const width = Math.max(...rows.map(([family]) => family.length));
   for (const [family, count] of rows) {
-    console.log(`  ${family.padEnd(width)}  ${fr(count).padStart(9)}`);
+    console.log(`  ${family.padEnd(width)}  ${num(count).padStart(9)}`);
   }
 }
 
@@ -179,9 +184,9 @@ async function main() {
     sample();
     console.log(`  ${String((Date.now() - started) / 1000).padStart(6)}s  ${message}`);
   };
-  console.log(`Pack équipements du quotidien — version ${AMENITIES_CACHE_VERSION}`);
-  if (options.archiveFile) console.log(`  archive locale : ${options.archiveFile}`);
-  if (options.finessFile) console.log(`  FINESS local   : ${options.finessFile}`);
+  console.log(`Everyday amenities pack — version ${AMENITIES_CACHE_VERSION}`);
+  if (options.archiveFile) console.log(`  local archive: ${options.archiveFile}`);
+  if (options.finessFile) console.log(`  local FINESS:  ${options.finessFile}`);
 
   const payload = await buildAmenitiesPack({
     archiveFile: options.archiveFile,
@@ -198,17 +203,17 @@ async function main() {
 
   console.log('');
   console.log(`✔ ${file}`);
-  console.log(`  ${mb(written.packBytes)} + ${fr(written.shards)} shards de ${mb(written.shardBytes)}`
-    + ` · ${((Date.now() - started) / 1000).toFixed(1)} s · RSS max ${mb(peak)}`);
+  console.log(`  ${mb(written.packBytes)} + ${num(written.shards)} shards of ${mb(written.shardBytes)}`
+    + ` · ${((Date.now() - started) / 1000).toFixed(1)} s · peak RSS ${mb(peak)}`);
   console.log(`  BPE ${payload.provenance.edition} (${payload.provenance.year})`
-    + `${payload.provenance.editionDiscovered ? ' — édition découverte' : ' — page de repli'}`);
-  console.log(`  ${fr(payload.provenance.bpeRows)} lignes BPE + ${fr(payload.provenance.finessRows)} FINESS`
-    + ` → ${fr(payload.records.length)} points`);
+    + `${payload.provenance.editionDiscovered ? ' — edition discovered' : ' — fallback page'}`);
+  console.log(`  ${num(payload.provenance.bpeRows)} BPE rows + ${num(payload.provenance.finessRows)} FINESS`
+    + ` → ${num(payload.records.length)} points`);
   // Each of these is a per-family record, not a number — printing one straight
   // gives `NaN`, which is how this line read the first time it ran.
-  console.log(`  refusés : ${fr(sumByFamily(payload.provenance.refusedNoCoordinate))} sans coordonnée,`
-    + ` ${fr(sumByFamily(payload.provenance.refusedInvented))} position inventée,`
-    + ` ${fr(sumByFamily(payload.provenance.refusedCrs))} hors CRS`);
+  console.log(`  refused: ${num(sumByFamily(payload.provenance.refusedNoCoordinate))} with no coordinate,`
+    + ` ${num(sumByFamily(payload.provenance.refusedInvented))} with an invented position,`
+    + ` ${num(sumByFamily(payload.provenance.refusedCrs))} outside the CRS`);
   console.log('');
   reportFamilies(payload.provenance.perFamily);
 }

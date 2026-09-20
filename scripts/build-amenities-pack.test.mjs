@@ -19,7 +19,7 @@ test('flags are read, and an unknown one is an error rather than a shrug', () =>
 test('a pack past its TTL is reported as needing a rebuild', () => {
   const day = 24 * 60 * 60 * 1000;
   const now = Date.UTC(2026, 8, 14);
-  assert.match(describeAge(now - day, now), /^1 jour — frais$/);
-  assert.match(describeAge(now - 29 * day, now), /29 jours — frais/);
-  assert.match(describeAge(now - 40 * day, now), /40 jours — périmé, à reconstruire/);
+  assert.match(describeAge(now - day, now), /^1 day — fresh$/);
+  assert.match(describeAge(now - 29 * day, now), /29 days — fresh/);
+  assert.match(describeAge(now - 40 * day, now), /40 days — stale, rebuild it/);
 });

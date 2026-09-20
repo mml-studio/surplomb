@@ -23,6 +23,14 @@ export default defineMessages({
     vessels: { fr: 'Navires AIS', en: 'AIS vessels' },
     installations: { fr: 'Sites cartographiés', en: 'Mapped installations' },
   },
+
+  /**
+   * The installations row's hedge: its count is what the CAMERA can see, not
+   * everything inside the 250 km radius the other three cohorts cover. The
+   * scope readout (`src/cockpitMath.js`) frames it and the panel row repeats
+   * it, so it is one string read in two places.
+   */
+  installationCoverage: { fr: 'VUE ACTUELLE UNIQUEMENT', en: 'CURRENT VIEWPORT ONLY' },
   heading: {
     fr: (degrees) => `HDG ${degrees}°`,
     en: (degrees) => `HDG ${degrees}°`,
