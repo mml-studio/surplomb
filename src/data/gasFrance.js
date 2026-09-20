@@ -14,10 +14,12 @@ import { pickOverlayLabelId } from './overlayLabelPick.js';
 import {
   GAS_INJECTION_COLOR,
   GAS_NETWORK_OPERATORS,
-  GAS_NETWORK_TIERS,
   GAS_PLANT_COLOR,
+  gasTierWords,
 } from './gasFranceFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatInteger, formatNumber } from '../i18n/format.js';
+import messages from './gasFrance.i18n.js';
 
 /**
  * Réseau gaz (FR) — the French gas system as three things at once.
@@ -258,8 +260,8 @@ export function gasInjectionPointSize(gwh) {
  * @param {number} [digits=0] Fraction digits, fixed (not a maximum).
  * @returns {string}
  */
-function fr(value, digits = 0) {
-  return Number(value).toLocaleString('fr-FR', {
+function grouped(value, digits = 0) {
+  return formatNumber(Number(value), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
@@ -268,21 +270,21 @@ function fr(value, digits = 0) {
 /** Format a megawatt figure the way a control room writes it. */
 export function formatMw(mw) {
   if (!Number.isFinite(mw)) return '—';
-  if (mw >= 1000) return `${fr(mw / 1000, mw >= 10_000 ? 0 : 1)} GW`;
-  return `${fr(Math.round(mw))} MW`;
+  if (mw >= 1000) return `${grouped(mw / 1000, mw >= 10_000 ? 0 : 1)} GW`;
+  return `${grouped(Math.round(mw))} MW`;
 }
 
 /** Format an annual energy figure. */
 export function formatGwhPerYear(gwh) {
   if (!Number.isFinite(gwh)) return '—';
-  if (gwh >= 1000) return `${fr(gwh / 1000, 1)} TWh/an`;
-  return `${fr(gwh, gwh < 100 ? 1 : 0)} GWh/an`;
+  if (gwh >= 1000) return `${grouped(gwh / 1000, 1)} ${messages().units.twhPerYear}`;
+  return `${grouped(gwh, gwh < 100 ? 1 : 0)} ${messages().units.gwhPerYear}`;
 }
 
 /** Format a network length. */
 export function formatKm(km) {
   if (!Number.isFinite(km)) return '—';
-  return `${fr(Math.round(km))} km`;
+  return `${grouped(Math.round(km))} km`;
 }
 
 /**
@@ -292,53 +294,62 @@ export function formatKm(km) {
  */
 export function buildGasSelectionLabel(record) {
   const site = record?.site || {};
+  const m = messages();
   const details = [];
 
   if (record?.kind === 'pipe') {
     const operator = GAS_NETWORK_OPERATORS[site.operator];
-    const title = operator ? `${operator.label} — réseau de transport` : 'Réseau de transport';
+    const title = operator ? m.card.pipeTitle(operator.label) : m.card.pipeFallbackTitle;
     if (site.departement) {
       details.push(`📍 ${site.departement}${site.region ? ` · ${site.region}` : ''}`);
     }
-    if (Number.isFinite(site.km)) details.push(`⌇ ${site.km.toFixed(1)} km of published trace`);
-    details.push('Tracé simplifié — accurate to about 250 m, by design');
+    if (Number.isFinite(site.km)) {
+      // A decimal POINT in both languages: this figure sits inside the
+      // inherited English sentence, where `12,4 km` would read as a list.
+      details.push(m.card.pipeLength(site.km.toFixed(1)));
+    }
+    details.push(m.card.pipeSimplified);
     details.push('Licence Ouverte 2.0 · ODRÉ');
     return [title, ...details].join('\n');
   }
 
   if (record?.kind === 'plant') {
-    const title = site.name || 'Centrale gaz';
-    details.push(`⚡ ${formatMw(site.mw)} installed`);
+    const title = site.name || m.card.plantFallbackTitle;
+    details.push(m.card.plantInstalled(formatMw(site.mw)));
     if (site.operator) details.push(`🏭 ${site.operator}`);
     if (site.status) details.push(`▸ ${site.status}`);
-    if (site.commissioned) details.push(`🗓 mise en service ${site.commissioned}`);
+    if (site.commissioned) details.push(m.card.commissioned(site.commissioned));
     // Trap 2 surfaced where it matters: this station said something else in an
     // earlier edition of the same file.
     if (Array.isArray(site.supersededBy) && site.supersededBy.length) {
-      details.push(`↳ earlier editions said: ${site.supersededBy.join(', ')}`);
+      details.push(m.card.supersededBy(site.supersededBy.join(', ')));
     }
     if (Number.isFinite(site.edition)) {
-      details.push(`Edition ${site.edition}${
-        site.editions?.length > 1 ? ` of ${site.editions.length}` : ''
-      } — installed capacity, not live output`);
+      details.push(m.card.edition(
+        site.edition,
+        site.editions?.length > 1 ? m.card.editionOf(site.editions.length) : '',
+      ));
     }
     return [title, ...details].join('\n');
   }
 
-  const title = site.name || 'Site d’injection';
-  details.push(`♻️ ${formatGwhPerYear(site.gwh)} declared capacity`);
+  const title = site.name || m.card.injectionFallbackTitle;
+  details.push(m.card.injectionCapacity(formatGwhPerYear(site.gwh)));
   if (site.feedstock) details.push(`🌾 ${site.feedstock}`);
+  // `Méthanisation` is the register's own word for the ordinary process, and
+  // the card only speaks up when the row says something else.
+  // i18n-ignore-next-line
   if (site.process && site.process !== 'Méthanisation') details.push(`⚗️ ${site.process}`);
-  const tier = GAS_NETWORK_TIERS[site.tier];
+  const tier = gasTierWords(site.tier);
   if (tier) {
-    details.push(`⌇ ${tier.label}${site.network ? ` · ${site.network}` : ''}`);
-    if (site.tier === 'distribution') details.push('↳ distribution network — not the trace drawn here');
+    details.push(m.card.tier(tier.label, site.network ? m.card.tierNetwork(site.network) : ''));
+    if (site.tier === 'distribution') details.push(m.card.distributionNote);
   }
   if (site.commune) {
     details.push(`📍 ${site.commune}${site.departement ? ` · ${site.departement}` : ''}`);
   }
-  if (site.commissioned) details.push(`🗓 mise en service ${site.commissioned}`);
-  if (site.expanding) details.push('↗ an increase is declared as planned');
+  if (site.commissioned) details.push(m.card.commissioned(site.commissioned));
+  if (site.expanding) details.push(m.card.expanding);
   return [title, ...details].join('\n');
 }
 
@@ -859,13 +870,13 @@ async function load() {
     // Half a system is still a system — the layer reports which half is
     // missing rather than blanking the half that arrived.
     if (!_networkLoaded && !_sitesLoaded) {
-      _error = 'jeux de données gaz ODRÉ indisponibles';
+      _error = messages().errors.bothDown;
       _status = 'error';
       return false;
     }
     _error = _networkLoaded && _sitesLoaded
       ? null
-      : (_networkLoaded ? 'sites unavailable' : 'network trace unavailable');
+      : (_networkLoaded ? messages().errors.sitesDown : messages().errors.traceDown);
     _status = 'ready';
     _lastUpdate = Date.now();
     governorRequestRender('gas-fr-load');
@@ -877,7 +888,7 @@ async function load() {
     return true;
   } catch (error) {
     console.warn('[Data:Gas FR] load error:', error);
-    _error = 'erreur du réseau gaz ODRÉ';
+    _error = messages().errors.network;
     _status = 'error';
     return false;
   } finally {
@@ -909,6 +920,7 @@ function collectDetectableObjects(options = {}) {
     result.push({
       position: record.position,
       sourceId: record.id,
+      // i18n-ignore-next-line — a synthetic id for the detection rail.
       id: String(record.site?.name || 'GAZ').toUpperCase().slice(0, 22),
       type: record.kind === 'plant' ? 'PWR' : 'GAS',
       skipLabel: record.id === _selectedId,
@@ -919,13 +931,14 @@ function collectDetectableObjects(options = {}) {
 }
 
 function buildLoadingLabel() {
-  if (_loading && !_networkLoaded) return 'chargement du tracé de transport…';
-  if (_loading) return 'actualisation du registre gaz…';
-  if (_status === 'error') return _error || 'indisponible';
+  const m = messages().row;
+  if (_loading && !_networkLoaded) return m.loadingNetwork;
+  if (_loading) return m.refreshing;
+  if (_status === 'error') return _error || m.unavailable;
   const parts = [];
-  if (_networkStats?.lengthKm) parts.push(`${formatKm(_networkStats.lengthKm)} de tracé`);
-  if (_plants.length) parts.push(`${_plants.length} centrales`);
-  if (_injections.length) parts.push(`${_injections.length} sites d’injection`);
+  if (_networkStats?.lengthKm) parts.push(m.trace(formatKm(_networkStats.lengthKm)));
+  if (_plants.length) parts.push(m.plants(_plants.length));
+  if (_injections.length) parts.push(m.injections(_injections.length));
   if (_error) parts.push(_error);
   return parts.join(' · ');
 }
@@ -945,6 +958,7 @@ const gasFranceLayer = {
     viewer.scene.primitives.add(_points);
     registerSpriteCollection(GAS_FR_LAYER_ID, _points);
 
+    // i18n-ignore-next-line — an internal data-source handle, never drawn.
     _networkSource = new Cesium.CustomDataSource('Réseau gaz (FR) — tracé de transport');
     _networkSource.show = false;
     viewer.dataSources.add(_networkSource);
@@ -1062,42 +1076,40 @@ const gasFranceLayer = {
    */
   getRowControls() {
     const legend = [];
+    const m = messages().legend;
     for (const operator of _operators) {
       legend.push({
         label: operator.label,
         color: operator.color,
         count: operator.strokes,
-        blurb: `${formatKm(operator.lengthKm)} of published trace across `
-          + `${operator.departements} départements — simplified to about 250 m by the operator, `
-          + 'never redrawn here.',
+        blurb: m.operator(formatKm(operator.lengthKm), formatInteger(operator.departements)),
       });
     }
     if (_plants.length) {
       const mw = _siteStats?.plants?.fleetMw;
       legend.push({
-        label: 'Centrales gaz',
+        label: m.plantsLabel,
         color: GAS_PLANT_COLOR,
         count: _plants.length,
-        blurb: `${formatMw(mw)} installed, sized by nameplate power. Installed capacity — `
-          + 'what these machines are producing right now is the Mix élec layer.',
+        blurb: m.plantsBlurb(formatMw(mw)),
       });
     }
     const transport = _injections.filter((site) => site.tier === 'transport').length;
     const distribution = _injections.length - transport;
     if (transport) {
       legend.push({
-        label: 'Injection · transport',
+        label: m.injectionTransport,
         color: GAS_INJECTION_COLOR,
         count: transport,
-        blurb: GAS_NETWORK_TIERS.transport.blurb,
+        blurb: gasTierWords('transport').blurb,
       });
     }
     if (distribution) {
       legend.push({
-        label: 'Injection · distribution',
+        label: m.injectionDistribution,
         color: GAS_INJECTION_COLOR,
         count: distribution,
-        blurb: GAS_NETWORK_TIERS.distribution.blurb,
+        blurb: gasTierWords('distribution').blurb,
       });
     }
     return { chips: [], legend };
