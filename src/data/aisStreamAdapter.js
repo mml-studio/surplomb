@@ -72,6 +72,10 @@ export function classifyAisFailure(input = {}) {
     status = match ? Number(match[1]) : NaN;
   }
 
+  // i18n-ignore-start — failure messages of a SERVER-side adapter: this module
+  // is imported by vite.config.js and runs in Node, where there is no locale
+  // (docs/i18n/CONVENTIONS.md). They reach a reader only through the server's
+  // own status surface, which the voice+server batch owns.
   if (status === 401 || status === 403) {
     return { kind: 'auth', message: `AISStream rejected the API key (HTTP ${status})` };
   }
@@ -89,6 +93,7 @@ export function classifyAisFailure(input = {}) {
   if (RATE_TEXT.test(text)) return { kind: 'rate-limit', message: text, retryAfterMs: fromHeader() };
   return { kind: 'transport', message: text || 'AISStream websocket error' };
 }
+// i18n-ignore-end
 
 /**
  * Decode a frame to text WITHOUT suspending, or return null if that is
@@ -401,6 +406,7 @@ export function createAisStreamAdapter(options) {
       return;
     }
     if (!socket) {
+      // i18n-ignore-next-line — server-side failure message, as above.
       failGeneration(owner, generation, { kind: 'transport', message: 'socket factory returned nothing' });
       return;
     }
@@ -413,10 +419,12 @@ export function createAisStreamAdapter(options) {
     if (typeof socket.on !== 'function') {
       sockets.delete(generation);
       abort(socket, 'unsupported-transport');
+      // i18n-ignore-start — server-side failure message, as above.
       failGeneration(owner, generation, {
         kind: 'transport',
         message: 'AIS socket does not expose ws emitter semantics',
       });
+      // i18n-ignore-end
       return;
     }
     const on = (event, handler) => socket.on(event, handler);

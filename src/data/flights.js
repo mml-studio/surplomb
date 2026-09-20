@@ -104,6 +104,7 @@ import {
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { pickAt } from './pickAt.js';
+import messages from './flights.i18n.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -4773,14 +4774,14 @@ const flightsLayer = {
       _backoff = sourceStale;
       _retryAt = 0;
       _lastError = sourceStale
-        ? `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
+        ? messages().staleSource(Math.max(2, Math.round(sourceAgeMs / 60_000)))
         : null;
       _lastSource = responseSource || 'OpenSky Network';
       // The proxy publishes a radius; the sentence is worded here, in the
       // language the chip is read in. Absent header = the worldwide feed.
       _lastCoverage = Number.isFinite(responseCoverageNm) && responseCoverageNm > 0
-        ? `cercle régional de ${responseCoverageNm} NM`
-        : 'couverture mondiale';
+        ? messages().coverage.regional(responseCoverageNm)
+        : messages().coverage.worldwide;
       const currentIcaos = new Set();
       const acceptedSnapshotIcaos = new Set();
       const now = Cesium.JulianDate.now();
@@ -6010,42 +6011,38 @@ const flightsLayer = {
         // the billboards do, so the key shows the shape actually on screen.
         glyph: classLegendGlyph(klass === TR3B_CLASS && _irBoost ? 'tr3bHot' : klass),
         count,
-        blurb: klass === 'unknown'
-          ? 'Type encore non déclaré — la silhouette est un substitut, remplacé '
-            + 'sur place dès que la réponse de type arrive.'
-          : undefined,
+        blurb: klass === 'unknown' ? messages().unknownBlurb : undefined,
       }));
     if (military > 0) {
       legend.push({
-        label: 'Plage OACI militaire',
+        label: messages().militaryBlock.label,
         color: '#ffb800',
         count: military,
-        blurb: 'L’ambre marque le bloc d’allocation enregistré du transpondeur, pas la mission.',
+        blurb: messages().militaryBlock.blurb,
       });
     }
     if (_trackedIcao) {
       legend.push({
-        label: 'Contact suivi',
+        label: messages().tracked.label,
         color: '#00ffff',
         count: 1,
-        blurb: 'Le cyan et sa trace — le chemin parcouru, pas une prédiction.',
+        blurb: messages().tracked.blurb,
       });
     }
     if (coasting > 0) {
       legend.push({
-        label: 'À l’estime (sondages manqués)',
+        label: messages().coasting.label,
         // The exact washed tint the sprite wears — freshness is a COLOUR here,
         // not an alpha, so the swatch can be the datum.
         color: coastingSwatchCss('#ffffff'),
         count: coasting,
-        blurb: 'Délavé, et non estompé : la position est tenue à l’estime depuis '
-          + 'le dernier point, elle n’est pas rapportée. Ici la transparence dit l’ancienneté.',
+        blurb: messages().coasting.blurb,
       });
     }
     if (unclassified > 0 && !byClass.has('unknown')) {
       // Defensive: the tally above already covers it, but a future refactor
       // must not be able to drop the honest class silently.
-      legend.push({ label: 'Non classé', color: '#ffffff', count: unclassified });
+      legend.push({ label: messages().unclassified, color: '#ffffff', count: unclassified });
     }
     return { legend };
   },

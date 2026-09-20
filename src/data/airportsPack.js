@@ -30,6 +30,9 @@
  */
 
 import { geometryAreaM2 } from './datacentersPack.js';
+import { formatInteger } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { AIRPORT_TYPE_NAMES, RUNWAY_SURFACE_NAMES } from './airportsPack.i18n.js';
 
 /**
  * ISO 3166-1 codes OurAirports uses for France and the French overseas
@@ -66,15 +69,20 @@ const FRENCH_TERRITORY_SET = new Set(FRENCH_TERRITORY_CODES);
  */
 const FRENCH_LONG_TAIL_TYPES = new Set(['small_airport', 'seaplane_base', 'balloonport']);
 
-/** OurAirports size/kind buckets, in French. See the header before "fixing" these. */
-export const AIRPORT_TYPE_LABELS = Object.freeze({
-  large_airport: 'Grand aéroport',
-  medium_airport: 'Aéroport',
-  small_airport: 'Aérodrome',
-  heliport: 'Hélistation',
-  seaplane_base: 'Hydrobase',
-  balloonport: 'Base de ballons',
-});
+/** OurAirports size/kind buckets. See the header before "fixing" these. */
+export const AIRPORT_TYPE_KEYS = Object.freeze([
+  'large_airport', 'medium_airport', 'small_airport', 'heliport', 'seaplane_base', 'balloonport',
+]);
+
+/**
+ * The bucket names, read when a card asks for one.
+ * @param {?string} type An OurAirports `type` value.
+ * @returns {string} '' for a type the pack never writes.
+ */
+export function airportTypeLabel(type) {
+  const key = String(type ?? '');
+  return AIRPORT_TYPE_KEYS.includes(key) ? labelFor(AIRPORT_TYPE_NAMES, key) : '';
+}
 
 /**
  * Surface FAMILIES, not surface values. The upstream column is free text — 627
@@ -83,11 +91,29 @@ export const AIRPORT_TYPE_LABELS = Object.freeze({
  * data-entry history of a volunteer database as if it were a specification.
  * Three families is what the text can honestly support.
  */
+// i18n-ignore-start — the VALUES are what the committed pack carries on every
+// runway row; they are data, and `runwaySurfaceLabel()` is what translates them.
 export const RUNWAY_SURFACE_FAMILIES = Object.freeze({
   paved: 'revêtue',
   unpaved: 'non revêtue',
   water: 'eau',
 });
+// i18n-ignore-end
+
+/**
+ * The word a card prints for a surface family.
+ *
+ * The family VALUE is the pack's and stays French wherever it is stored; only
+ * the display is the page's language, and a value the table has never met is
+ * printed as it came.
+ *
+ * @param {?string} family A value of {@link RUNWAY_SURFACE_FAMILIES}.
+ * @returns {string} '' when the upstream text matched nothing.
+ */
+export function runwaySurfaceLabel(family) {
+  const value = String(family ?? '');
+  return value ? labelFor(RUNWAY_SURFACE_NAMES, value) : '';
+}
 
 /**
  * Substrings tested against the upper-cased surface text, most specific first.
@@ -105,6 +131,7 @@ const SURFACE_PATTERNS = Object.freeze([
   ]],
   [RUNWAY_SURFACE_FAMILIES.unpaved, [
     'TURF', 'GRAS', 'GRS', 'GRE', 'GVL', 'GRV', 'GRAVEL', 'DIRT', 'EARTH', 'SAND',
+    // i18n-ignore-next-line — spellings observed in the upstream free-text column.
     'CLAY', 'CORAL', 'ICE', 'SNOW', 'SOD', 'SOIL', 'LATER', 'PIÇARRA', 'PICARRA',
     'GROUND',
   ]],
@@ -444,6 +471,7 @@ export function airportRunwaySegments(props) {
  */
 
 /** BD TOPO `nature` values that describe a prepared landing surface, not a pad. */
+// i18n-ignore-next-line — IGN's own column values, matched against the data.
 export const FOOTPRINT_NATURES = Object.freeze(['Aérodrome', 'Altiport', 'Hydrobase']);
 
 const FOOTPRINT_NATURE_SET = new Set(FOOTPRINT_NATURES);
@@ -799,25 +827,26 @@ export function summarizeRunways(runways, anchor = null) {
 }
 
 /**
- * Format a metre count the way French reads it — `4 215 m`, with an ordinary
- * space. `toLocaleString` emits U+202F/U+00A0 depending on the ICU build, and
- * an invisible character that varies by runtime is a test that fails on one
- * machine and passes on another.
+ * Format a metre count the way the reader's language does — `4 215 m` /
+ * `4,215 m` — with an ordinary space inside the number. `plainSpaces` is what
+ * flattens U+202F/U+00A0, which vary by ICU build: an invisible character that
+ * changes with the runtime is a test that fails on one machine and passes on
+ * another.
  * @param {number} metres
  * @returns {string}
  */
 function metresText(metres) {
-  return `${Math.round(metres).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} m`;
+  return messages().card.metres(formatInteger(metres, { plainSpaces: true }));
 }
 
 /**
- * Format a hectare count the way French reads it — `2 820 ha`. Same ordinary
- * space, and the same reason, as {@link metresText}.
+ * Format a hectare count the same way — `2 820 ha` / `2,820 ha`, with the
+ * same flattened space, and for the same reason, as {@link metresText}.
  * @param {number} hectares
  * @returns {string}
  */
 function hectaresText(hectares) {
-  return `${Math.round(hectares).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} ha`;
+  return messages().card.hectares(formatInteger(hectares, { plainSpaces: true }));
 }
 
 /**
@@ -829,7 +858,8 @@ function hectaresText(hectares) {
  * from `name`. Lines are returned unclamped, because the host owns the width.
  *
  * @param {object} props Shipped feature properties.
- * @returns {string[]} 0–4 detail lines, French, empty entries already dropped.
+ * @returns {string[]} 0–4 detail lines, in the page's language, empty entries
+ *   already dropped.
  */
 export function airportCardDetails(props, { traffic = null } = {}) {
   const source = props && typeof props === 'object' ? props : {};
@@ -841,17 +871,18 @@ export function airportCardDetails(props, { traffic = null } = {}) {
     text(source.icao),
     text(source.iata),
     text(source.localCode),
-    source.scheduled === true ? 'vols réguliers' : '',
+    source.scheduled === true ? messages().card.scheduled : '',
   ].filter(Boolean).join(' · ');
   if (identity) lines.push(identity);
 
   // Kind, then the number that says what can land. An unknown type is dropped
   // rather than echoed: the pack only ever writes the six keys above.
-  const kind = AIRPORT_TYPE_LABELS[text(source.type)] || '';
+  const kind = airportTypeLabel(text(source.type));
   const runways = source.runways && typeof source.runways === 'object' ? source.runways : {};
   const longest = Number(runways.longestM);
+  const surface = runwaySurfaceLabel(runways.surface);
   const runwayText = Number.isFinite(longest) && longest > 0
-    ? `piste ${metresText(longest)}${runways.surface ? ` ${runways.surface}` : ''}`
+    ? messages().card.runway(metresText(longest), surface ? ` ${surface}` : '')
     : '';
   const shape = [kind, runwayText].filter(Boolean).join(' · ');
   if (shape) lines.push(shape);
@@ -867,7 +898,7 @@ export function airportCardDetails(props, { traffic = null } = {}) {
   if (Number.isFinite(areaHa) && areaHa > 0) {
     const use = text(footprint.use);
     lines.push([
-      `emprise IGN ${hectaresText(areaHa)}`,
+      messages().card.footprint(hectaresText(areaHa)),
       // `usage` only ships when it is not `Civil` — see `attachAirportFootprints`.
       use ? use.toLocaleLowerCase('fr-FR') : '',
     ].filter(Boolean).join(' · '));
@@ -891,12 +922,12 @@ export function airportCardDetails(props, { traffic = null } = {}) {
   const traffic_ = traffic && typeof traffic === 'object' ? traffic : null;
   if (traffic_ && (traffic_.inbound > 0 || traffic_.outbound > 0)) {
     const legs = [
-      traffic_.inbound > 0 ? `${traffic_.inbound} en approche` : '',
-      traffic_.outbound > 0 ? `${traffic_.outbound} au départ` : '',
+      traffic_.inbound > 0 ? messages().card.inbound(traffic_.inbound) : '',
+      traffic_.outbound > 0 ? messages().card.outbound(traffic_.outbound) : '',
     ].filter(Boolean).join(' · ');
     const named = [...(traffic_.inboundSamples || []), ...(traffic_.outboundSamples || [])]
       .slice(0, 3).join(', ');
-    lines.push(named ? `${legs} — ${named}` : legs);
+    lines.push(named ? messages().card.trafficWithNames(legs, named) : legs);
   }
 
   return lines;
@@ -937,7 +968,7 @@ export function airportCardDetails(props, { traffic = null } = {}) {
  * draws with. Colouring by the bucket while sizing by the measurement was one
  * fact on two channels (A3), and the measurement is the better of the two.
  * Roissy still towers over the grass strip beside it — at 18 px against 6, in
- * published metres. `AIRPORT_TYPE_LABELS` keeps the bucket for the CARD, where
+ * published metres. `airportTypeLabel()` keeps the bucket for the CARD, where
  * it is named and therefore honest.
  *
  * WHY `airfield` IS ENTIRELY FRENCH, AND WHY THAT IS NOT A BUG
@@ -988,7 +1019,7 @@ export function airportCardDetails(props, { traffic = null } = {}) {
 export const AIRPORT_TIERS = Object.freeze([
   Object.freeze({
     key: 'airline',
-    label: 'Aéroport de ligne',
+    get label() { return messages().tiers.airline.label; },
     color: '#e6d8ff',
     stemWidth: 3.5,
     priority: 240,
@@ -996,22 +1027,22 @@ export const AIRPORT_TIERS = Object.freeze([
     // A field with 3 000 m of runway overrides this to 14 000 km on its own.
     cardMaxDistance: 3_000_000,
     markerMaxDistance: 14_000_000,
-    blurb: 'Dessert au moins une ligne régulière — un billet s’y achète.',
+    get blurb() { return messages().tiers.airline.blurb; },
   }),
   Object.freeze({
     key: 'airport',
-    label: 'Aéroport sans ligne',
+    get label() { return messages().tiers.airport.label; },
     color: '#a98ada',
     stemWidth: 2.75,
     priority: 110,
     // Regional scale.
     cardMaxDistance: 1_200_000,
     markerMaxDistance: 3_000_000,
-    blurb: 'Aucune ligne régulière : bases aériennes, aviation d’affaires, terrains de fret.',
+    get blurb() { return messages().tiers.airport.blurb; },
   }),
   Object.freeze({
     key: 'airfield',
-    label: 'Aérodrome & aéroclub',
+    get label() { return messages().tiers.airfield.label; },
     color: '#6d5a94',
     stemWidth: 2,
     priority: 30,
@@ -1021,7 +1052,7 @@ export const AIRPORT_TIERS = Object.freeze([
     // overflowing the frame.
     cardMaxDistance: 200_000,
     markerMaxDistance: 900_000,
-    blurb: 'Terrain sans ligne régulière — aéroclubs, altisurfaces, hydrobases. France uniquement dans ce paquet.',
+    get blurb() { return messages().tiers.airfield.blurb; },
   }),
 ]);
 
@@ -1095,21 +1126,21 @@ export function airportTier(props) {
 export const AIRPORT_DISPLAY_FLOORS = Object.freeze([
   Object.freeze({
     id: 'all',
-    label: 'TOUS',
+    get label() { return messages().floors.all.label; },
     keep: Object.freeze(['airline', 'airport', 'airfield']),
-    title: 'Tous les terrains du paquet',
+    get title() { return messages().floors.all.title; },
   }),
   Object.freeze({
     id: 'airports',
-    label: 'AÉROPORTS',
+    get label() { return messages().floors.airports.label; },
     keep: Object.freeze(['airline', 'airport']),
-    title: 'Masquer les aérodromes et aéroclubs',
+    get title() { return messages().floors.airports.title; },
   }),
   Object.freeze({
     id: 'airlines',
-    label: 'LIGNES',
+    get label() { return messages().floors.airlines.label; },
     keep: Object.freeze(['airline']),
-    title: 'Ne garder que les terrains desservis par une ligne régulière',
+    get title() { return messages().floors.airlines.title; },
   }),
 ]);
 
@@ -1151,12 +1182,12 @@ export function airportTierLegend(tally) {
     // range is one, and it is invisible by construction — a reader who never
     // descends below 900 km has no way of learning that the aéroclubs exist.
     const range = tier.markerMaxDistance < 14_000_000
-      ? ` Marque affichée sous ${Math.round(tier.markerMaxDistance / 1000).toLocaleString('fr-FR').replace(/[  ]/g, ' ')} km.`
+      ? messages().legend.markerRange(formatInteger(tier.markerMaxDistance / 1000, { plainSpaces: true }))
       : '';
     legend.push({
       label: tier.label,
       color: tier.color,
-      blurb: `${tier.blurb}${range}${hidden > 0 ? ` — ${hidden} masqué${hidden > 1 ? 's' : ''}` : ''}`,
+      blurb: `${tier.blurb}${range}${hidden > 0 ? messages().legend.hidden(hidden) : ''}`,
       count: bucket.visible ?? bucket.total,
     });
   }
@@ -1224,16 +1255,16 @@ export function airportTierLegend(tally) {
  * nobody can discuss.
  */
 export const AIRPORT_LENGTH_CLASSES = Object.freeze([
-  Object.freeze({ key: 'len3000', minM: 3000, label: '3 000 m et plus', pixelSize: 18, count: 1280 }),
-  Object.freeze({ key: 'len1800', minM: 1800, label: '1 800 – 2 999 m', pixelSize: 13, count: 2577 }),
-  Object.freeze({ key: 'len1000', minM: 1000, label: '1 000 – 1 799 m', pixelSize: 9, count: 1690 }),
-  Object.freeze({ key: 'len0', minM: 0, label: 'moins de 1 000 m', pixelSize: 6, count: 603 }),
+  Object.freeze({ key: 'len3000', minM: 3000, get label() { return messages().lengths.len3000; }, pixelSize: 18, count: 1280 }),
+  Object.freeze({ key: 'len1800', minM: 1800, get label() { return messages().lengths.len1800; }, pixelSize: 13, count: 2577 }),
+  Object.freeze({ key: 'len1000', minM: 1000, get label() { return messages().lengths.len1000; }, pixelSize: 9, count: 1690 }),
+  Object.freeze({ key: 'len0', minM: 0, get label() { return messages().lengths.len0; }, pixelSize: 6, count: 603 }),
 ]);
 
 /** The class for a field whose runway length OurAirports never published. */
 export const AIRPORT_LENGTH_UNKNOWN = Object.freeze({
   key: 'nolength',
-  label: 'Longueur non publiée',
+  get label() { return messages().lengths.nolength; },
   pixelSize: 8,
   count: 1314,
 });

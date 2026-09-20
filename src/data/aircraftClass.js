@@ -7,6 +7,9 @@
  * integer category (states index 17) and ADS-B emitter strings ("A1".."B1").
  */
 
+import { labelFor } from '../i18n/messages.js';
+import messages from './aircraftClass.i18n.js';
+
 const HELI = new Set([
   'EC20', 'EC25', 'EC30', 'EC35', 'EC45', 'EC55', 'AS50', 'AS55', 'AS65', 'AS32',
   'A109', 'A119', 'A139', 'A169', 'A189', 'B06', 'B06T', 'B407', 'B412', 'B427',
@@ -130,7 +133,7 @@ export function classifyAircraft({ typeCode, category } = {}) {
  * legend. Shared by the civil and military layers so one silhouette can never
  * be captioned two ways.
  *
- * In French, like every other legend the product renders (`unknown` is worded
+ * In the page's language, like every other legend the product renders (`unknown` is worded
  * exactly as vesselLabels.js words it, so a reader meets one phrase for one
  * idea across the air and sea layers). `airliner`/`widebody` take the terms
  * the industry actually uses in French — monocouloir, gros-porteur — rather
@@ -141,19 +144,25 @@ export function classifyAircraft({ typeCode, category } = {}) {
  * so "avion de combat" would assert a mission from a speed reading. Same rule
  * the amber swatch follows — allocation block, not mission.
  */
-export const CLASS_LEGEND_LABELS = {
-  light: 'Avion léger',
-  glider: 'Planeur',
-  turboprop: 'Turbopropulseur',
-  airliner: 'Jet monocouloir',
-  widebody: 'Gros-porteur',
-  quadjet: 'Quadriréacteur lourd',
-  helicopter: 'Hélicoptère',
-  fastjet: 'Jet rapide',
-  bizjet: "Jet d'affaires",
-  uav: 'Grand drone',
-  unknown: 'Type non déclaré',
-};
+export const CLASS_LEGEND_KEYS = Object.freeze([
+  'light', 'glider', 'turboprop', 'airliner', 'widebody', 'quadjet',
+  'helicopter', 'fastjet', 'bizjet', 'uav', 'unknown',
+]);
+
+/**
+ * The captions themselves, read when a legend asks for one.
+ *
+ * GETTERS, not values: a caption is the page's language and this module loads
+ * long before a legend is drawn. Indexing (`CLASS_LEGEND_LABELS[klass]`) and
+ * `Object.entries()` both keep working, because the properties are
+ * enumerable accessors.
+ */
+export const CLASS_LEGEND_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  CLASS_LEGEND_KEYS.map((key) => [key, {
+    get: () => labelFor(messages, key),
+    enumerable: true,
+  }]),
+)));
 
 /** Billboard scale multipliers (skylight GLYPH_SCALE, + fastjet).
  *  `unknown` sits at 0.9 — deliberately NOT 1.0. Size is the weight-class

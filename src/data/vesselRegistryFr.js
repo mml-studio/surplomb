@@ -90,7 +90,13 @@ export const ANFR_KEPT_CATEGORIES = Object.freeze({
 /** The type tokens a pack is allowed to contain, derived from the table above. */
 const KEPT_TYPE_TOKENS = Object.freeze(new Set(Object.values(ANFR_KEPT_CATEGORIES)));
 
-/** Credit line for the layer's source row. Attribution is a licence condition. */
+/**
+ * Credit line for the layer's source row. Attribution is a licence condition.
+ *
+ * The register's own title and the licence name: proper nouns, identical in
+ * both languages, and composed on the server, which has no locale.
+ */
+// i18n-ignore-next-line
 export const VESSEL_REGISTRY_FR_CREDIT = 'ANFR — Données radiomaritimes (Licence Ouverte v2.0)';
 
 /** MMSI is numeric by protocol; nine digits in this register. */
