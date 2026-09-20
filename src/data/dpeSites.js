@@ -63,6 +63,7 @@
 // `dpeFrance.js` and the upstream resolution in the `/api/dpe` proxy.
 
 import { DPE_LABELS } from './dpeFeed.js';
+import messages from './dpeSites.i18n.js';
 import { ringAreaM2, ringLabelAnchor, sanitisePolygonParts } from './ringGeometry.js';
 
 /**
@@ -307,22 +308,21 @@ export function partsAnchor(parts) {
  * the fourth borrow the first's authority.
  *
  * @param {object} site
- * @returns {?string} French, or null when there is nothing to disclose.
+ * @returns {?string} In the page's language, or null when there is nothing to
+ *   disclose. Drawn by `dpeFrance.js`; never composed on the server.
  */
 export function dpeSitePlacementLine(site) {
+  const m = messages().placement;
   const shape = site?.shape;
   if (!shape) {
-    return site?.kind === 'building'
-      ? 'bâtiment nommé par le registre, emprise non publiée'
-      : 'position BAN — géocodage à l’adresse, pas au bâtiment';
+    // i18n-ignore-next-line — `building` is the site's own kind, a stable key.
+    return site?.kind === 'building' ? m.namedNoShape : m.address;
   }
-  if (shape.via === 'id') return 'bâtiment nommé par le diagnostic (id RNB)';
-  if (shape.via === 'inside') return 'bâtiment retrouvé sous le point BAN';
+  if (shape.via === 'id') return m.byId;
+  if (shape.via === 'inside') return m.inside;
   if (shape.via === 'closest') {
     const d = Number.isFinite(shape.distanceM) ? Math.round(shape.distanceM) : null;
-    return d !== null
-      ? `bâtiment le plus proche du point BAN — ${d} m, déduction`
-      : 'bâtiment le plus proche du point BAN — déduction';
+    return d !== null ? m.closestWithDistance(d) : m.closest;
   }
   return null;
 }

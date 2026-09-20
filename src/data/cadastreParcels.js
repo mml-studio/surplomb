@@ -15,12 +15,14 @@ import { bdtopoTileUrl, bdtopoTiles, BDTOPO_LAYER_NAME } from './bdtopoBuildings
 import {
   addressLine,
   buildingLines,
-  dimensionLine,
+  parcelSpanM,
   projectBanAddress,
   summarizeParcelBuildings,
   BAN_REVERSE_URL,
   BUILDING_TILE_CAP,
 } from './cadastreParcelDetail.js';
+import { formatNumber, formatQuantity } from '../i18n/format.js';
+import messages from './cadastreParcels.i18n.js';
 import {
   CADASTRE_AREA_TOLERANCE,
   CADASTRE_BOX_STEP_DEG,
@@ -289,6 +291,18 @@ export function cadastreViewportBox(viewer) {
   return { box, reason: null };
 }
 
+/**
+ * A distance in the reader's units: `48 m`, `1,2 km` / `1.2 km`. The same
+ * two rules `cadastreParcelDetail.js` applies to its own span line.
+ * @param {number} metres
+ * @returns {string}
+ */
+function spanText(metres) {
+  return metres >= 1000
+    ? formatQuantity(metres / 1000, 'km', { maximumFractionDigits: 1 })
+    : `${formatNumber(Math.round(metres))} m`;
+}
+
 /** The band a parcel's sheet puts it in. */
 export function parcelBand(parcel, sheets = {}) {
   const sheet = parcel?.k ? sheets[parcel.k] : null;
@@ -311,6 +325,7 @@ export function parcelBand(parcel, sheets = {}) {
  */
 export function createCadastreSelectedOverlayEntry(record, communes = {}, sheets = {}, detail = null) {
   if (!record?.id || !record.position) return null;
+  const m = messages();
   const parcel = record.parcel || {};
   const sheet = parcel.k ? sheets[parcel.k] : null;
   const details = [];
@@ -326,21 +341,23 @@ export function createCadastreSelectedOverlayEntry(record, communes = {}, sheets
   if (parcel.u) details.push(`IDU ${parcel.u}`);
   // Only when it is not the `000` that most of France carries: a line saying
   // "préfixe 000" is a line spent on the absence of a subdivision.
-  if (parcel.b && parcel.b !== '000') details.push(`Préfixe de section ${parcel.b}`);
+  if (parcel.b && parcel.b !== '000') details.push(m.sectionPrefix(parcel.b));
 
   const areas = cadastreAreaLines(parcel);
-  const span = dimensionLine(record.polygons);
   // Folded onto the drawn-area line rather than given a row of its own: the
   // card is already long and the dimension is a qualifier of the surface beside
-  // it, not a separate finding.
-  if (span && areas.length > 1) areas[areas.length - 1] += ` · ${span.replace('Plus grande dimension ', '')} de long`;
+  // it, not a separate finding. Measured here rather than taken from
+  // `dimensionLine()`, whose own sentence would have to be unpicked — and
+  // unpicking it by its French words is what broke the moment it had two.
+  const span = parcelSpanM(record.polygons);
+  if (span !== null && areas.length > 1) areas[areas.length - 1] += ` · ${m.spanLong(spanText(span))}`;
   details.push(...areas);
 
   if (detail?.buildings) details.push(...buildingLines(detail.buildings, detail.partial));
 
   details.push(cadastreSheetLine(sheet, parcel));
   details.push(cadastreToleranceLine(sheet));
-  details.push('Document fiscal — la limite de propriété se fixe par bornage');
+  details.push(m.fiscalDocument);
 
   return {
     id: String(record.id),

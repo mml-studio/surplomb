@@ -27,7 +27,7 @@ import messages, {
   RISK_LABELS,
 } from './adresseRadiographie.i18n.js';
 import { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamilies.js';
-import { BAREME_REASONS, resolveIndicator } from './baremeNational.js';
+import { BAREME_REASONS, baremeReasonLabel, resolveIndicator } from './baremeNational.js';
 import { assertNoFrench, withLocale } from '../i18n/testing.js';
 
 const PARTS = JSON.parse(readFileSync(
@@ -305,14 +305,18 @@ test('the tables repeat the producers’ own French, word for word', () => {
   }
 });
 
-test('the barème’s two sentences are repeated exactly, so a rewrite over there fails here', () => {
-  const m = messages('fr');
-  assert.equal(m.rank.refusedGeometry, BAREME_REASONS.GEOMETRY);
-  assert.equal(m.rank.directionNote.prixM2, resolveIndicator('prixM2').directionNote);
-  // And every indicator this sheet ranks either has a direction (so no note is
-  // printed) or has its note translated here.
+test('the barème’s two sentences come from the barème, in both languages', () => {
+  // They used to be repeated in this catalog with a drift test. They are not
+  // any more: `baremeNational.i18n.js` publishes them, and this sheet prints
+  // whatever the score carries — so there is nothing left to drift.
+  assert.equal(withLocale('fr', () => BAREME_REASONS.GEOMETRY),
+    'échelle mesurée sur une autre géométrie');
+  assert.equal(withLocale('en', () => baremeReasonLabel('geometry')),
+    'scale measured on a different geometry');
   for (const id of ['acces', 'prixM2']) {
     const indicator = resolveIndicator(id);
-    assert.ok(indicator.direction || m.rank.directionNote[id], `${id} prints an untranslated note`);
+    if (indicator.direction) continue;
+    const note = withLocale('en', () => resolveIndicator(id).directionNote);
+    assertNoFrench(note, { message: `${id} prints an untranslated note` });
   }
 });

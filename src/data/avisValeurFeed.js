@@ -245,8 +245,12 @@
  */
 
 import { dvfCoverage, haversineM, percentile } from './dvfFeed.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import { labelFor } from '../i18n/messages.js';
+import rungMessages from './avisValeurFeed.i18n.js';
 
 /** The two local types the register prices as a dwelling, as a subject. */
+// i18n-ignore-next-line — DVF `type_local` values: a subject, a chip and a share-link token.
 export const AVIS_TYPES = Object.freeze(['Appartement', 'Maison']);
 
 /**
@@ -262,7 +266,7 @@ export const AVIS_TYPES = Object.freeze(['Appartement', 'Maison']);
 export const AVIS_SUBJECT_SURFACES = Object.freeze([30, 60, 100, 150]);
 
 /** The subject the layer asks about until the reader says otherwise. */
-export const AVIS_DEFAULT_TYPE = 'Appartement';
+export const AVIS_DEFAULT_TYPE = 'Appartement'; // i18n-ignore-line — a `type_local` value
 export const AVIS_DEFAULT_SURFACE = 60;
 
 /**
@@ -275,12 +279,40 @@ export const AVIS_DEFAULT_SURFACE = 60;
  * territory's name.
  */
 export const AVIS_RUNGS = Object.freeze([
-  Object.freeze({ id: 'block', radiusM: 300, band: 0.20, label: '300 m, ±20 % de surface' }),
-  Object.freeze({ id: 'quarter', radiusM: 600, band: 0.20, label: '600 m, ±20 % de surface' }),
-  Object.freeze({ id: 'district', radiusM: 1500, band: 0.20, label: '1,5 km, ±20 % de surface' }),
-  Object.freeze({ id: 'commune', radiusM: null, band: 0.20, label: 'toute la commune, ±20 % de surface' }),
-  Object.freeze({ id: 'commune-wide-band', radiusM: null, band: 0.35, label: 'toute la commune, ±35 % de surface' }),
+  Object.freeze({ id: 'block', radiusM: 300, band: 0.20, label: rungMessages.definition.block.fr }),
+  Object.freeze({ id: 'quarter', radiusM: 600, band: 0.20, label: rungMessages.definition.quarter.fr }),
+  Object.freeze({ id: 'district', radiusM: 1500, band: 0.20, label: rungMessages.definition.district.fr }),
+  // i18n-ignore-next-line — `commune` is the rung's stable id, not a word.
+  Object.freeze({ id: 'commune', radiusM: null, band: 0.20, label: rungMessages.definition.commune.fr }),
+  Object.freeze({
+    id: 'commune-wide-band',
+    radiusM: null,
+    band: 0.35,
+    label: rungMessages.definition['commune-wide-band'].fr,
+  }),
 ]);
+
+/**
+ * One rung in the page's language, for a card or a legend being drawn.
+ *
+ * The payload carries the French label the server composed; in French that
+ * label is printed verbatim, so nothing a French reader sees can move. In
+ * English the rung's stable ID is looked up here, and an id nobody has
+ * translated yet falls back to the words the server published — better than
+ * an empty line.
+ *
+ * @param {?object|string} rung A rung of {@link AVIS_RUNGS}, or its id.
+ * @returns {?string}
+ */
+export function avisRungLabel(rung) {
+  if (!rung) return null;
+  const id = typeof rung === 'string' ? rung : rung.id;
+  const published = typeof rung === 'object' ? rung.label : null;
+  if (getLocale() === DEFAULT_LOCALE && published) return published;
+  const translated = labelFor(rungMessages, id);
+  if (translated && translated !== String(id)) return translated;
+  return published ?? translated;
+}
 
 /** Confidence level of the interval on the median. */
 export const AVIS_CI_ALPHA = 0.10;
@@ -465,7 +497,7 @@ function pricesOf(mutations) {
 export function communeDrift(mutations, type) {
   const byYear = new Map();
   for (const mutation of Array.isArray(mutations) ? mutations : []) {
-    if (mutation?.nature !== 'Vente') continue;
+    if (mutation?.nature !== 'Vente') continue; // i18n-ignore-line — `nature_mutation` value
     if (!Array.isArray(mutation?.types) || !mutation.types.includes(type)) continue;
     const year = String(mutation.date || '').slice(0, 4);
     if (!/^\d{4}$/.test(year)) continue;
@@ -548,6 +580,7 @@ export function comparablePool(mutations, subject) {
     // `dvfFeed.PRICED_NATURES` carries a non-null ratio, and it holds exactly
     // `Vente` and the VEFA. An auction or a swap has already been counted as
     // `notPriceable` two lines up.
+    // i18n-ignore-next-line — `nature_mutation` value
     if (mutation.nature !== 'Vente') { excluded.vefa += 1; continue; }
     if (!Array.isArray(mutation.types) || !mutation.types.includes(subject.type)) {
       excluded.otherType += 1;
@@ -802,6 +835,7 @@ export function projectAvisValeur({ mutations, subject, commune = null, years = 
       symbolicCount: stats?.symbolicCount ?? 0,
       // Only for a house, and only ever as a caveat: the plot is inside the
       // price and nothing here normalises it.
+      // i18n-ignore-next-line — a `type_local` value
       terrainMedian: subject.type === 'Maison' ? percentile(terrains, 0.5) : null,
     },
     drift,
