@@ -131,6 +131,12 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | notaire | notary | |
 | estimation | valuation | |
 | bornage | surveyor's boundary marking | Cadastre. On roads, see *Transport*. |
+| contenance | registered area | Cadastre. |
+| tracé, milieu, échelon | drawn, middle, rung | |
+| dérive du marché | market drift | |
+| VEFA | off-plan sale (VEFA) | |
+| millésime non téléchargé, domaine gelé | vintage not downloaded, frozen domain | |
+| levé au 1:500 | surveyed at 1:500 | |
 
 ## Urban planning and buildings
 
@@ -180,6 +186,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | point de piquage | tap-off point | |
 | tronçon (de ligne) | segment | |
 | régie | local utility | |
+| point de piquage, régie | tap-off point, local utility | |
 
 ## Transport and mobility
 
@@ -213,6 +220,24 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Aéroport à trafic régulier / sans trafic régulier | Scheduled-service airport / Airport without scheduled service | |
 | Aérodrome & aéroclub | Airfield & flying club | |
 | piste (aéroport) | runway | |
+| enveloppe (isochrone), surface majorée | envelope, upper-bound area | |
+| expansion libre | free expansion | |
+| jour ouvré type, week-end type | typical weekday, typical weekend | |
+| semaine archivée, Mesuré, J-2 | archived week, Measured, D-2 | |
+| arc (comptage) | link | |
+| état barré / invalide | declared closed / declared invalid | |
+| Pré-saturé | Near saturation | |
+| Pendulaire / Nocturne / Continu | Commuter / Night / Steady | Traffic rhythms. |
+| à l’estime | dead reckoning | AIS. |
+| Plage OACI militaire | Military ICAO block | |
+| Jet monocouloir / Gros-porteur | Narrow-body jet / Wide-body jet | |
+| Type laissé vide à bord | Type left blank on board | |
+| Identité pas encore reçue | Identity not received yet | |
+| borne / place (libre-service) | dock / space | |
+| VAE, Trottinette, Scooter | E-bike, E-scooter, Moped | |
+| point de repère (PR) | kilometer post (PR) | |
+| tige (bouée) | stem | |
+| mer forte / grosse | Rough / High | WMO's own English. |
 
 ## Risks and environment
 
@@ -255,6 +280,13 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | échéance | forecast horizon | |
 | seuil, levée, digue d’étang | weir, levee, pond dyke | |
 | obstacles à l’écoulement | obstacles to river flow | |
+| point chaud, front de feu actif | hotspot, active fire front | |
+| périmètre (brûlé) | burned perimeter | |
+| colonne de fumée, panache | smoke column, plume | |
+| photo-interprété | photo-interpreted | |
+| puissance radiative | radiative power | FIRMS. |
+| première / dernière détection | first / last detection | |
+| houlographe, fiche climatologique | wave buoy, climate summary sheet | |
 
 ## Health, emergency services and education
 
@@ -283,6 +315,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | exercice libéral | private practice | |
 | CNAM, Assurance maladie | national health insurance fund (CNAM) | |
 | assistante maternelle | childminder | |
+| conventionné secteur 1 / 2 | under the health-insurance agreement, sector 1 / 2 | |
 
 ## Public safety, business and telecoms
 
@@ -326,6 +359,8 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | millésime | vintage | The year edition of a dataset. |
 | tirage (au sort) | draw | |
 | palier (d’un barème) | plateau | |
+| curseur (temps) | cursor | |
+| repli (d’un panneau) | fold | |
 
 ## Interface words
 
@@ -356,8 +391,42 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | VENT, SEMAINE, Vélos, Le reste | WIND, WEEK, Bikes, Everything else | Chips. |
 | CHERCHER, ANALYSER, BRANCHER | SEARCH, ANALYZE, PLUG IN | Dataset box steps. |
 | brouillon, sélection | draft, shortlist | |
-| repli (d’un panneau) | fold | |
 | volet A / B / C | part A / B / C | Of a piece of work. |
+| n/m ACTIVES, Couches allumées | n/m ON, Layers switched on | Panel tally. |
+| TOUT ÉTEINDRE | TURN EVERYTHING OFF | |
+| Couverture :, vue rapprochée | Coverage:, close-up view | |
+| instantané figé | fixed snapshot | |
+| chargement…, jamais, à l’instant | loading…, never, just now | Freshness line. |
+| nouvelle tentative dans N s | retrying in N s | |
+| hors de cette vue, Aucune donnée dans cette vue | outside this view, No data in this view | |
+| Zone non publiée | Unpublished area | |
+| DÉGRADÉ, PÉRIMÉ, REPLI, INDISPONIBLE, INCERTAIN | DEGRADED, STALE, FALLBACK, UNAVAILABLE, UNCERTAIN | Fault states. Identical in both languages today; the French is the decision recorded here. |
+| Plan Google, Plan IGN | Google map, IGN map | Basemap chips; brand names are not translated. |
+
+## Panel chips and fused rows
+
+One row per subject; a fused row carries a chip per source (`layerFusions.js`).
+
+| French | English | Note |
+|---|---|---|
+| PLU & servitudes | PLU & easements | |
+| Autorisations, Sur parcelle | Permits, On the parcel | |
+| Estimer un bien, Mes comparables | Value a property, My comparables | |
+| Écoles et lycées | Schools and high schools | |
+| Anneau, Fiche | Ring, Report | |
+| Vigilance | Warnings | Météo-France. |
+| Registre EDF, Groupes RTE | EDF register, RTE units | |
+| Véhicules en direct, Stations GBFS | Live vehicles, GBFS stations | |
+| Longue traîne FR | FR long tail | |
+| Semaine type, Débit mesuré | Typical week, Measured flow | |
+| État du réseau, Comptages · Paris | Network status, Counts · Paris | |
+| Revenus, Délinquance | Income, Crime | |
+| Câbles, Antennes | Cables, Antennas | |
+| Civils / Militaires | Civil / Military | |
+| Feux en cours | Active fires | |
+| Vélos et véhicules partagés | Bikes and shared vehicles | Layer name. |
+| Paris intra-muros | Paris proper | |
+| Paris et sa proche couronne | Paris and its inner suburbs | |
 
 ## Never translate
 
