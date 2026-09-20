@@ -93,6 +93,11 @@ import { megawatts as numeric } from './eco2mixFeed.js';
  * plutonium`) and labelling Gravelines by its fuel mix instead of its palier
  * would answer a question nobody asked.
  */
+// i18n-ignore-start — the three published files, named as EDF names them.
+// This module runs on the SERVER (vite.config.js) and on the build scripts,
+// where there is no reader and no locale; `label` travels in the payload as
+// data and the browser names each filière from `key` (edfPowerPlants.i18n.js).
+// The `*Field` values are column names.
 export const EDF_DATASETS = Object.freeze([
   Object.freeze({
     key: 'nucleaire',
@@ -116,6 +121,7 @@ export const EDF_DATASETS = Object.freeze([
     kindField: 'combustible',
   }),
 ]);
+// i18n-ignore-end
 
 /**
  * Sanity box for a parsed coordinate — metropolitan France with a margin.
@@ -306,12 +312,15 @@ export function projectDataset(rows, spec, context = {}) {
       if (value !== null) mw = (mw ?? 0) + value;
     }
     const years = siteRows.map(commissioningYear).filter((year) => year !== null);
+    // i18n-ignore-start — column names of the published files.
     const fuels = distinctValues(siteRows, 'combustible');
     const categories = distinctValues(siteRows, 'categorie_centrale');
     const techs = distinctValues(siteRows, 'sous_filiere').map(shortenSousFiliere).filter(Boolean);
+    // i18n-ignore-end
     // What this object IS, in the publisher's own vocabulary — never a word
     // this layer made up. `sous_filiere` is abbreviated to the acronym the
     // publisher itself parenthesised; the other two columns pass through.
+    // i18n-ignore-next-line — a column name, not a word on screen.
     const kindValues = spec.kindField === 'sous_filiere'
       ? techs
       : distinctValues(siteRows, spec.kindField);
