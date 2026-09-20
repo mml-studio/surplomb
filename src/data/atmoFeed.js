@@ -70,7 +70,13 @@
  * projection only. The `/api/atmo-fr` proxy imports it.
  */
 
-/** Attribution carried on every payload (see DATA_SOURCES.md). */
+/**
+ * Attribution carried on every payload (see DATA_SOURCES.md).
+ *
+ * The producer's own credit line, reproduced word for word because the ODbL
+ * requires it. Not translated in either direction.
+ */
+// i18n-ignore-next-line — a licence attribution, reproduced verbatim.
 export const ATMO_SOURCE = 'Indice ATMO — Atmo France et les AASQA régionales';
 export const ATMO_LICENCE = 'ODbL 1.0';
 
@@ -85,7 +91,14 @@ export const ATMO_TYPENAME = 'ind_atmo_2021';
  * Held here rather than read from `lib_qual` and `coul_qual` so that the
  * seventeen publishers cannot disagree about how one number is drawn — they
  * already disagree about its capitalisation.
+ *
+ * THE LABELS ARE WHAT THE SERVER PUBLISHES, in French, and they stay French:
+ * this module is imported by `vite.config.js` and a server has no locale
+ * (docs/i18n/CONVENTIONS.md). What a reader sees is the CODE, labelled in the
+ * browser by `ATMO_BANDS` in `adresseRadiographie.i18n.js`;
+ * `atmoFeed.en.test.mjs` fails if the two tables ever drift apart.
  */
+// i18n-ignore-start — the French the server publishes; the browser labels `code`.
 export const ATMO_SCALE = Object.freeze([
   Object.freeze({ code: 1, label: 'Bon', colour: '#50F0E6' }),
   Object.freeze({ code: 2, label: 'Moyen', colour: '#50CCAA' }),
@@ -94,8 +107,15 @@ export const ATMO_SCALE = Object.freeze([
   Object.freeze({ code: 5, label: 'Très mauvais', colour: '#960032' }),
   Object.freeze({ code: 6, label: 'Extrêmement mauvais', colour: '#7D2181' }),
 ]);
+// i18n-ignore-end
 
-/** The five sub-indices the overall figure is the maximum of. */
+/**
+ * The five sub-indices the overall figure is the maximum of.
+ *
+ * Same seam as the scale above: the label is the server's French, the `key` is
+ * what the browser labels (`ATMO_POLLUTANTS` in `adresseRadiographie.i18n.js`).
+ */
+// i18n-ignore-start — the French the server publishes; the browser labels `key`.
 export const ATMO_POLLUTANTS = Object.freeze([
   Object.freeze({ key: 'no2', column: 'code_no2', label: 'dioxyde d’azote' }),
   Object.freeze({ key: 'o3', column: 'code_o3', label: 'ozone' }),
@@ -103,6 +123,7 @@ export const ATMO_POLLUTANTS = Object.freeze([
   Object.freeze({ key: 'pm25', column: 'code_pm25', label: 'particules PM2,5' }),
   Object.freeze({ key: 'so2', column: 'code_so2', label: 'dioxyde de soufre' }),
 ]);
+// i18n-ignore-end
 
 /** @param {?number} code @returns {?{code: number, label: string, colour: string}} */
 export function atmoBand(code) {
@@ -258,6 +279,7 @@ export function pickAtmoZone(records, point = null) {
   if (!usable.length) return null;
   const scored = usable.map((record) => ({
     record,
+    // i18n-ignore-next-line — a scale VALUE of the feed (`commune` | `epci`).
     commune: record.scale === 'commune' ? 0 : 1,
     distance: point && record.position ? metresBetween(point, record.position) : null,
   }));
@@ -325,6 +347,7 @@ export function projectAtmo({ collection, point = null, today = null, nearby = f
       distanceM: current.distanceM ?? null,
     },
     // True when the index describes a neighbouring zone rather than this one.
+    // i18n-ignore-next-line — a scale VALUE of the feed (`commune` | `epci`).
     borrowed: Boolean(nearby) || current.scale !== 'commune',
     date: day,
     publishedAt: current.publishedAt,

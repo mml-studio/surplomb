@@ -19,7 +19,7 @@ import {
   EARTHQUAKE_MAG_PX_PER_UNIT,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
-  EARTHQUAKE_LEGEND_NOTE,
+  earthquakeLegendNote,
   EARTHQUAKE_SELECTED_COLOR,
   EARTHQUAKE_SELECTED_OVERLAY_SOURCE_ID,
   ageBandFor,
@@ -296,8 +296,8 @@ test('the A5 note carries the two disclosures, with their counts, and nothing el
   assert.doesNotMatch(note, /plancher/);
 
   // E1 — provenance AND clock, in the slot that frames the classes.
-  assert.match(EARTHQUAKE_LEGEND_NOTE, /USGS/);
-  assert.match(EARTHQUAKE_LEGEND_NOTE, /60 s/);
+  assert.match(earthquakeLegendNote(), /USGS/);
+  assert.match(earthquakeLegendNote(), /60 s/);
 });
 
 test('the legend keeps its shape before the first poll, and hides rows that do not apply', () => {

@@ -207,6 +207,11 @@ import {
   treeCardLines,
 } from './fraicheurTrees.js';
 import { pickAt } from './pickAt.js';
+import { formatNumber } from '../i18n/format.js';
+import messages, {
+  FRAICHEUR_FOUNTAIN_STATE_WORDS,
+  FRAICHEUR_REGISTER_CHIPS,
+} from './fraicheurParis.i18n.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const FRAICHEUR_FR_LAYER_ID = 'fraicheur-fr';
@@ -340,13 +345,28 @@ export const FRAICHEUR_REGISTERS = Object.freeze([
   'spaces', 'equipment', 'fountains', 'trees', 'remarkable',
 ]);
 
-/** Register → the chip label, the record kind it draws, and its default. */
+/**
+ * Register → the chip label, the record kind it draws, and its default.
+ *
+ * `chip` is a GETTER: this table is read at import time and a label read then
+ * would freeze in whichever language loaded first (ratchet R5). `kind` is a
+ * record key and stays what it is in both languages.
+ *
+ * @param {keyof FRAICHEUR_REGISTER_CHIPS} id
+ * @param {string} kind @param {boolean} on
+ */
+const registerSpec = (id, kind, on) => Object.freeze({
+  kind,
+  on,
+  get chip() { return FRAICHEUR_REGISTER_CHIPS()[id]; },
+});
+
 export const FRAICHEUR_REGISTER_SPECS = Object.freeze({
-  spaces: Object.freeze({ chip: 'PARCS', kind: 'space', on: true }),
-  equipment: Object.freeze({ chip: 'REFUGES', kind: 'equipment', on: true }),
-  fountains: Object.freeze({ chip: 'FONTAINES', kind: 'fountain', on: true }),
-  trees: Object.freeze({ chip: 'ARBRES', kind: 'tree', on: false }),
-  remarkable: Object.freeze({ chip: 'REMARQUABLES', kind: 'remarkable', on: false }),
+  spaces: registerSpec('spaces', 'space', true),
+  equipment: registerSpec('equipment', 'equipment', true),
+  fountains: registerSpec('fountains', 'fountain', true),
+  trees: registerSpec('trees', 'tree', false),
+  remarkable: registerSpec('remarkable', 'remarkable', false),
 });
 
 /** Record kind → register, the inverse of {@link FRAICHEUR_REGISTER_SPECS}. */
@@ -401,19 +421,29 @@ export function fraicheurFamilyColor(family) {
  * pair and not a boolean — a future null must not silently become "available".
  */
 export const FRAICHEUR_FOUNTAIN_STATES = Object.freeze([
-  Object.freeze({
-    id: 'en-service', label: 'Fontaine en service', color: '#26a69a',
-    blurb: '1 238 des 1 323 fontaines portent dispo = « OUI ». 72 sont brumisantes, et elles ne sont PAS parmi les 87 brumisateurs de l’autre registre.',
-  }),
-  Object.freeze({
-    id: 'hors-service', label: 'Fontaine hors service', color: '#e53935',
-    blurb: '85 fontaines portent dispo = « NON », avec un motif et une fenêtre d’indisponibilité. 10 d’entre elles ont dépassé leur propre date de fin.',
-  }),
-  Object.freeze({
-    id: 'non-publiee', label: 'Disponibilité non publiée', color: '#8a93a6',
-    blurb: 'dispo absent. Aucune ligne du relevé du 2026-09-02 n’est dans cet état — la bande existe parce que le champ est du texte, pas un booléen.',
-  }),
+  fountainState('en-service', '#26a69a'),
+  fountainState('hors-service', '#e53935'),
+  fountainState('non-publiee', '#8a93a6'),
 ]);
+
+/**
+ * One fountain state: a colour, and two words read when they are asked for.
+ *
+ * Getters, because this table is built at import time and a label read then
+ * would freeze in whichever language loaded first (ratchet R5).
+ *
+ * @param {'en-service'|'hors-service'|'non-publiee'} id
+ * @param {string} color CSS hex.
+ * @returns {{id: string, color: string, label: string, blurb: string}}
+ */
+function fountainState(id, color) {
+  return Object.freeze({
+    id,
+    color,
+    get label() { return FRAICHEUR_FOUNTAIN_STATE_WORDS()[id].label; },
+    get blurb() { return FRAICHEUR_FOUNTAIN_STATE_WORDS()[id].blurb; },
+  });
+}
 
 /** The state one projected fountain is in. */
 export function fraicheurFountainState(fountain) {
@@ -1084,9 +1114,12 @@ function registerChips() {
       label: spec.chip,
       active,
       state: active ? 'active' : 'idle',
+      // eslint-disable-next-line no-nested-ternary
       title: Number.isFinite(count)
-        ? `${spec.chip} — ${fr(count)} objets${active ? '' : ' (masqués)'}`
-        : `${spec.chip}${active ? '' : ' — masqués'}`,
+        ? (active
+          ? messages().chip.counted(spec.chip, fr(count), count)
+          : messages().chip.countedHidden(spec.chip, fr(count), count))
+        : (active ? messages().chip.on(spec.chip) : messages().chip.hidden(spec.chip)),
       params: { [id]: !active },
     };
   });
@@ -1168,9 +1201,9 @@ function refreshSummary(force = false) {
 
 // --- Cards ------------------------------------------------------------------
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A grouped count, in the page's own typography. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
 /**
@@ -1190,24 +1223,25 @@ function fr(value) {
 export function buildFraicheurSelectionLabel(record, payload = null) {
   const now = fraicheurNow();
   const clock = parisClock(now);
+  const m = messages().footer;
   let card = null;
-  let footer = 'Ville de Paris — ODbL';
+  let footer = m.city;
   if (record?.kind === 'space') {
     card = spaceCardLines(record.row, clock, now);
-    footer = 'Ville de Paris — ODbL · canopée : relevé 2024';
+    footer = m.space;
   } else if (record?.kind === 'equipment') {
     card = equipmentCardLines(record.row, clock, now);
   } else if (record?.kind === 'fountain') {
     card = fountainCardLines(record.row, now);
-    footer = 'Eau de Paris — ODbL';
+    footer = m.fountain;
   } else if (isTreeRecord(record)) {
     card = treeCardLines(record.row);
-    footer = 'Ville de Paris, Direction des Espaces Verts — ODbL';
+    footer = m.tree;
   }
   if (!card) return '';
   const details = card.details.filter(Boolean);
   if (!isTreeRecord(record)) {
-    details.push(`Heure de Paris : ${clock.day} ${clock.hhmm}`);
+    details.push(m.clock(clock.day, clock.hhmm));
   }
   details.push(footer);
   return [card.title, ...details].join('\n');
@@ -1400,9 +1434,7 @@ async function loadRefuges({ force = false } = {}) {
     console.warn('[Data:Fraîcheur FR] refuges unavailable:', error?.message || error);
     // An hour-old pack still describes the same 984 parks. Keep drawing it and
     // say the refresh failed rather than blanking a city.
-    _error = _payload
-      ? 'rafraîchissement des îlots de fraîcheur indisponible'
-      : 'îlots de fraîcheur de Paris indisponibles';
+    _error = _payload ? messages().errors.refresh : messages().errors.unavailable;
     _status = _payload ? 'ready' : 'error';
     return false;
   } finally {
@@ -1625,10 +1657,11 @@ function collectDetectableObjects(options = {}) {
 
 /** The one line the DETECT callout shows for a record. */
 export function fraicheurDetectLabel(record) {
-  if (record?.kind === 'space') return record.row?.name || 'Espace vert frais';
-  if (record?.kind === 'equipment') return record.row?.name || record.row?.type || 'Îlot de fraîcheur';
-  if (isTreeRecord(record)) return record.row?.name || 'Arbre remarquable';
-  return record?.row?.street || 'Fontaine';
+  const m = messages().detect;
+  if (record?.kind === 'space') return record.row?.name || m.space;
+  if (record?.kind === 'equipment') return record.row?.name || record.row?.type || m.equipment;
+  if (isTreeRecord(record)) return record.row?.name || m.tree;
+  return record?.row?.street || m.fountain;
 }
 
 /** English type noun for the DETECT callout. */
@@ -1640,6 +1673,28 @@ export function fraicheurDetectType(record) {
 }
 
 // --- Row label --------------------------------------------------------------
+
+/**
+ * One key row for a tree band, WORDED HERE and not read off the payload.
+ *
+ * `summarizeFraicheurTrees` runs in the Vite proxy, where there is no locale,
+ * so the `label` and `blurb` it publishes are French whoever is reading. The
+ * band ID is the part that travels; the words come from `FRAICHEUR_TREE_BANDS`
+ * at draw time. (The refuge summary above has no such problem: it is computed
+ * in the browser, on every clock tick.)
+ *
+ * @param {{id: string, color: string, count: number}} band A payload band.
+ * @returns {{label: string, color: string, count: number, blurb: string}}
+ */
+function treeBandRow(band) {
+  const spec = FRAICHEUR_TREE_BANDS.find((entry) => entry.id === band.id);
+  return {
+    label: spec ? spec.label : band.label,
+    color: band.color,
+    count: band.count,
+    blurb: spec ? spec.blurb : band.blurb,
+  };
+}
 
 /** One line under the layer's toggle: what this view actually contains. */
 export function buildFraicheurLoadingLabel({
@@ -1656,7 +1711,7 @@ export function buildFraicheurLoadingLabel({
   // A failed tree box is NOT a failed layer — the 2 842 refuges are still on
   // screen — but it must not be silent either, or an operator reads an empty
   // street as a street with no trees on it.
-  const suffix = treeStatus === 'unavailable' ? ' · arbres indisponibles pour cette vue' : '';
+  const suffix = treeStatus === 'unavailable' ? messages().errors.trees : '';
   // Only the registers actually drawing. The three of them are counted off the
   // SUMMARY rather than off the record index, so a chip flip costs an addition
   // and not a walk of up to 14 300 records on the panel's one-second refresh.
@@ -1888,13 +1943,15 @@ const fraicheurParisLayer = {
       const canicule24 = (_payload?.spaces || [])
         .filter((space) => space.canicule === true && space.open24 === true).length;
       legend.push({
-        label: 'Ouvert en canicule',
+        label: messages().legend.heatwave,
         color: FRAICHEUR_CANICULE_COLOR,
         count: summary.canicule,
-        blurb: `${fr(summary.canicule)} des ${fr(summary.spaces)} espaces verts frais déclarent une ouverture canicule, `
-          + `dont ${fr(canicule24)} ouverts 24 h/24. `
-          + `${fr(summary.caniculeWithoutCanopy)} d’entre eux n’ont AUCUNE canopée mesurée au-dessus de 8 m — `
-          + `leur médiane est à 0,0280 contre 0,3197 sur l’ensemble du registre.`,
+        blurb: messages().legend.heatwaveBlurb(
+          fr(summary.canicule),
+          fr(summary.spaces),
+          fr(canicule24),
+          fr(summary.caniculeWithoutCanopy),
+        ),
       });
       for (const band of FRAICHEUR_CANOPY_BANDS) {
         const row = summary.canopyBands.find((entry) => entry.id === band.id);
@@ -1904,8 +1961,7 @@ const fraicheurParisLayer = {
       const unmeasured = summary.canopyBands
         .find((entry) => entry.id === FRAICHEUR_CANOPY_UNKNOWN.id)?.count || 0;
       if (unmeasured > 0) {
-        notes.push(`${fr(unmeasured)} espace${unmeasured > 1 ? 's' : ''} sans indice de canopée publié, `
-          + `tracé${unmeasured > 1 ? 's' : ''} en gris — la couleur réservée dans cette couche à « le registre ne l’a pas mesuré ».`);
+        notes.push(messages().legend.unmeasured(fr(unmeasured), unmeasured));
       }
     }
 
@@ -1938,15 +1994,16 @@ const fraicheurParisLayer = {
         // both, the same colour would carry two numbers — one for the city and
         // one for what happens to be on screen — and a key that contradicts
         // itself is worse than a key with one row fewer.
+        // i18n-ignore-next-line — a band ID, never shown.
         if (band.id === 'remarquable' && _registers.remarkable) continue;
-        legend.push({ label: band.label, color: band.color, count: band.count, blurb: band.blurb });
+        legend.push(treeBandRow(band));
       }
     }
 
     if (_registers.remarkable && _remarkablePayload?.summary?.bands) {
       for (const band of _remarkablePayload.summary.bands) {
         if (!(band.count > 0)) continue;
-        legend.push({ label: band.label, color: band.color, count: band.count, blurb: band.blurb });
+        legend.push(treeBandRow(band));
       }
     }
 

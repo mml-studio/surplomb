@@ -35,10 +35,16 @@
  * than the one this report echoes. See `dvfFeed.js`, which is broken by the
  * same distinction in a louder way.
  *
- * Dependency-free and side-effect-free: URL construction and projection only,
- * so a unit test can point at a captured response. The `/api/georisques` proxy
- * imports this; nothing in the browser bundle does.
+ * Side-effect-free: URL construction and projection only, so a unit test can
+ * point at a captured response. The `/api/georisques` proxy imports it, and so
+ * does `georisques.js` — for the two LABEL helpers at the bottom only
+ * ({@link radonClassLabel}, {@link icpeSiteName}), which exist because the
+ * server publishes French and the browser has to say the same thing in its own
+ * language. Nothing else here reaches the browser.
  */
+
+import { labelFor } from '../i18n/messages.js';
+import messages, { RADON_CLASSES } from './georisquesFeed.i18n.js';
 
 const API_ROOT = 'https://www.georisques.gouv.fr/api/v1';
 
@@ -57,14 +63,44 @@ export const GEORISQUES_MAX_RADIUS_M = 5000;
 export const GEORISQUES_MAX_ICPE = 60;
 
 /**
- * Radon potential classes, in the IRSN vocabulary Géorisques republishes.
+ * Radon potential classes, in the IRSN vocabulary Géorisques republishes, as
+ * the SERVER publishes them — in French.
+ *
  * Class 3 is the only one that triggers a regulatory obligation for a seller.
+ * Built from the catalog's definition rather than from a locale: this module
+ * is imported by `vite.config.js`, and a server has no language to read
+ * (docs/i18n/CONVENTIONS.md). {@link radonClassLabel} is what a browser calls.
  */
-export const RADON_CLASS_LABELS = Object.freeze({
-  1: 'Potentiel radon faible',
-  2: 'Potentiel radon faible à moyen',
-  3: 'Potentiel radon significatif',
-});
+export const RADON_CLASS_LABELS = Object.freeze(Object.fromEntries(
+  Object.entries(RADON_CLASSES.definition).map(([key, leaf]) => [key, leaf.fr]),
+));
+
+/**
+ * One radon class in the page's language, for a card being drawn.
+ * @param {?number} klass The `class` field of the projection's `radon`.
+ * @returns {?string} The sentence, or null when the class is not 1 to 3.
+ */
+export function radonClassLabel(klass) {
+  if (!Number.isFinite(klass)) return null;
+  const label = labelFor(RADON_CLASSES, klass);
+  return label === String(klass) ? null : label;
+}
+
+/**
+ * One ICPE establishment's name, in the page's language.
+ *
+ * The register answers without a `raisonSociale` often enough that the
+ * placeholder is a real surface. The projection publishes the French one, and
+ * carries `named: false` so a browser can say the same thing in its own
+ * language without pattern-matching on a sentence.
+ *
+ * @param {{name?: ?string, named?: boolean}} site An entry of `icpe[]`.
+ * @returns {string}
+ */
+export function icpeSiteName(site) {
+  if (site?.named === false) return messages().unnamedEstablishment;
+  return String(site?.name ?? '');
+}
 
 /**
  * Coerce a query value to a number, treating ABSENT as absent.
@@ -115,6 +151,7 @@ export function buildGeorisquesUrls({ lon, lat, radiusM, inseeCode = null }) {
   const radius = clampRadius(radiusM);
   const latlon = `${lon},${lat}`;
   return {
+    // i18n-ignore-next-line — the API's own path and query keys, in French.
     report: `${API_ROOT}/resultats_rapport_risque?latlon=${encodeURIComponent(latlon)}&rayon=${radius}`,
     icpe: `${API_ROOT}/installations_classees?latlon=${encodeURIComponent(latlon)}&rayon=${radius}`
       + `&page_size=${GEORISQUES_MAX_ICPE}`,
@@ -179,9 +216,11 @@ function foldVerdict(value) {
 export function hazardStanding(verdict) {
   const text = foldVerdict(verdict);
   if (!text) return null;
+  // i18n-ignore-start — fragments of the register's own French verdicts, matched, never shown.
   if (text.includes('non conn')) return 'unknown';
   if (text.includes('non ')) return 'clear';
   if (text.includes('existant') || text.includes('concerne')) return 'concerned';
+  // i18n-ignore-end
   // A label neither vocabulary contains. Reported as unknown rather than
   // guessed at: a new verdict string upstream must not silently read "clear".
   return 'unknown';
@@ -313,9 +352,15 @@ export function projectIcpe(payload, origin) {
     const lon = Number(row?.longitude);
     const lat = Number(row?.latitude);
     const hasPosition = Number.isFinite(lon) && Number.isFinite(lat);
+    const raisonSociale = row?.raisonSociale ?? null;
     items.push({
       id: String(row?.codeAIOT ?? row?.siret ?? `icpe-${items.length}`),
-      name: String(row?.raisonSociale ?? 'Établissement sans raison sociale'),
+      name: raisonSociale === null
+        ? messages.definition.unnamedEstablishment.fr
+        : String(raisonSociale),
+      // Whether the register named it. The placeholder above is French
+      // because the server has none; `icpeSiteName()` is what a card calls.
+      named: raisonSociale !== null,
       address: [row?.adresse1, row?.adresse2, row?.adresse3].filter(Boolean).join(', ') || null,
       commune: row?.commune ?? null,
       postalCode: row?.codePostal ?? null,

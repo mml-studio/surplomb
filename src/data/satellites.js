@@ -19,6 +19,7 @@ import {
   satelliteClassLegend,
   tallySatelliteClasses,
 } from './satelliteClass.js';
+import messages from './satellites.i18n.js';
 import {
   clearOverlaySource,
   hitTestWorldOverlay,
@@ -318,7 +319,7 @@ export function createIssOverlayEntry(position) {
     id: String(ISS_NORAD),
     position,
     variant: 'label',
-    title: 'ISS',
+    title: messages().iss,
     accent: '#ff4444',
     priority: 1000,
     collisionGroup: 'ambient-label',
@@ -2152,14 +2153,15 @@ const satellitesLayer = {
     const loading = _denseStatus === 'loading';
     const failed = _denseStatus === 'failed';
     const active = _params.catalog === 'dense' && _denseStatus === 'ready';
-    let title = 'Add the full Starlink broadband shell (thousands of extra points)';
-    if (loading) title = 'Loading the Starlink shell…';
-    else if (failed) title = `Starlink ${_denseError || 'load failed'} — click to retry`;
-    else if (active) title = 'Showing the full Starlink shell — click for the core catalog only';
+    const m = messages();
+    let title = m.chip.addTitle;
+    if (loading) title = m.chip.loadingTitle;
+    else if (failed) title = m.chip.failedTitle(_denseError || m.chip.loadFailed);
+    else if (active) title = m.chip.activeTitle;
     return {
       chips: [{
         id: 'catalog',
-        label: loading ? 'STARLINK ···' : (failed ? 'STARLINK ✕' : 'STARLINK'),
+        label: loading ? m.chip.loading : (failed ? m.chip.failed : m.chip.idle),
         active,
         busy: loading,
         disabled: loading,
@@ -2176,12 +2178,10 @@ const satellitesLayer = {
         // in opposite temporal directions (CARTOGRAPHY E3).
         ...(_params.showOrbits && _orbitPaths.size
           ? [{
-            label: 'Orbit ahead (prediction)',
+            label: m.orbit.label,
             color: '#00ffff',
             count: _orbitPaths.size,
-            blurb: 'One full orbital period propagated FORWARD from the current '
-              + 'TLE — where the satellite is going, not where it has been. '
-              + 'Aircraft and vessel trails are the opposite: past track.',
+            blurb: m.orbit.blurb,
           }]
           : []),
       ],

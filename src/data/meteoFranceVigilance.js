@@ -4,7 +4,9 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import { labelFor } from '../i18n/messages.js';
 import { VIGILANCE_PHENOMENA } from './meteoFranceVigilanceFeed.js';
+import messages, { VIGILANCE_PHENOMENON_NAMES } from './meteoFranceVigilance.i18n.js';
 import { askJoin } from './layerJoins.js';
 import { buildDepartementIndex, locateDepartement } from './franceDepartements.js';
 
@@ -95,34 +97,57 @@ export const VIGILANCE_DRAWN_ECHEANCE = 'J';
  *
  * `fillAlpha` is the severity ramp — see the module header on why flat alpha
  * loses a lone red département in a field of orange.
+ *
+ * `label` and `meaning` are GETTERS. This table is read at import time by
+ * whoever pulls the layer in, and a word read then would freeze in whichever
+ * language the page started in (docs/i18n/CONVENTIONS.md § 2, ratchet R5).
  */
 export const VIGILANCE_LEVELS = Object.freeze({
-  1: Object.freeze({
-    level: 1, key: 'green', label: 'VERT', color: '#15ed13', fillAlpha: 0,
-    meaning: 'Pas de vigilance particulière',
-  }),
-  2: Object.freeze({
-    level: 2, key: 'yellow', label: 'JAUNE', color: '#f9ff00', fillAlpha: 0.45,
-    meaning: 'Soyez attentif',
-  }),
-  3: Object.freeze({
-    level: 3, key: 'orange', label: 'ORANGE', color: '#f7a401', fillAlpha: 0.65,
-    meaning: 'Soyez très vigilant',
-  }),
-  4: Object.freeze({
-    level: 4, key: 'red', label: 'ROUGE', color: '#e71919', fillAlpha: 0.85,
-    meaning: 'Une vigilance absolue s\'impose',
-  }),
+  1: levelSpec(1, 'green', '#15ed13', 0),
+  2: levelSpec(2, 'yellow', '#f9ff00', 0.45),
+  3: levelSpec(3, 'orange', '#f7a401', 0.65),
+  4: levelSpec(4, 'red', '#e71919', 0.85),
 });
 
 /** Presentation for a département the bulletin did not assess. */
-export const VIGILANCE_UNKNOWN_LEVEL = Object.freeze({
-  level: null, key: 'unknown', label: 'INCONNU', color: '#8a93a6', fillAlpha: 0,
-  meaning: 'Niveau non publié',
-});
+export const VIGILANCE_UNKNOWN_LEVEL = levelSpec(null, 'unknown', '#8a93a6', 0);
 
 /** A département at or above this level is drawn and labelled. */
 export const VIGILANCE_ALERT_LEVEL = 2;
+
+/**
+ * One level: the state's own colour, and its two words in the page's language.
+ * @param {?number} level 1 to 4, or null for a département not assessed.
+ * @param {string} key The level's stable key, also the key of the catalog.
+ * @param {string} color CSS hex, quoted from the technical spec.
+ * @param {number} fillAlpha The severity ramp.
+ * @returns {{level: ?number, key: string, color: string, fillAlpha: number,
+ *   label: string, meaning: string}}
+ */
+function levelSpec(level, key, color, fillAlpha) {
+  return Object.freeze({
+    level,
+    key,
+    color,
+    fillAlpha,
+    get label() { return messages().levels[key].label; },
+    get meaning() { return messages().levels[key].meaning; },
+  });
+}
+
+/**
+ * One phenomenon's name, in the page's language.
+ *
+ * A tenth phenomenon Météo-France adds next winter shows as a numbered row
+ * rather than as a blank one: the number IS the information we have.
+ *
+ * @param {string} id Météo-France's own phenomenon id, `'1'` to `'9'`.
+ * @returns {string}
+ */
+export function vigilancePhenomenonName(id) {
+  const label = labelFor(VIGILANCE_PHENOMENON_NAMES, id);
+  return label === String(id) ? messages().unknownPhenomenon(id) : label;
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -291,7 +316,7 @@ export function buildVigilanceRecords(payload, departements, echeance = VIGILANC
       if (!id || !Number.isInteger(colorId)) continue;
       phenomena.push({
         id,
-        name: VIGILANCE_PHENOMENA[id] || `Phénomène ${id}`,
+        name: vigilancePhenomenonName(id),
         level: vigilanceLevel(colorId),
       });
     }
@@ -738,7 +763,7 @@ export function createMeteoFranceVigilanceLayer({
         await ensureShapes();
       } catch (error) {
         console.warn('[Data:Vigilance] Département polygons unavailable:', error);
-        _lastError = 'Département polygons unavailable';
+        _lastError = messages().errors.shapes;
         return false;
       }
       try {

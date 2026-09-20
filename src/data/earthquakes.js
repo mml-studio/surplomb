@@ -9,6 +9,13 @@ import {
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { isOwnedByOtherLayer, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { drillPickAt } from './pickAt.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import messages, {
+  EARTHQUAKE_AGE_WORDS,
+  EARTHQUAKE_DEPTH_WORDS,
+  EARTHQUAKE_MAGNITUDE_WORDS,
+} from './earthquakes.i18n.js';
 
 /**
  * USGS earthquakes — last 24 hours, M2.5+, drawn as a 3D phenomenon.
@@ -421,41 +428,44 @@ export function depthRulerMetres(depthKm) {
 export const EARTHQUAKE_CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000;
 
 /**
+ * One age band: its bound, its ink, and two words read at draw time.
+ *
+ * Getters rather than stored strings: this ramp is read at import time by
+ * whoever pulls the layer in, and a label read then would freeze in whichever
+ * language the page started in (ratchet R5).
+ *
+ * @param {string} id Band id, also the catalog key and the tally key.
+ * @param {?number} maxAgeMs Upper bound, or null for the non-band.
+ * @param {string} color CSS hex.
+ * @returns {{id: string, maxAgeMs: ?number, color: string, label: string, blurb: string}}
+ */
+function ageBand(id, maxAgeMs, color) {
+  return Object.freeze({
+    id,
+    maxAgeMs,
+    color,
+    get label() { return EARTHQUAKE_AGE_WORDS()[id].label; },
+    get blurb() { return EARTHQUAKE_AGE_WORDS()[id].blurb; },
+  });
+}
+
+/**
  * The frozen age ramp. One warm hue, four values, strictly decreasing
  * luminance — the order survives a greyscale conversion (B4), and the bounds
  * are hours of the wall clock, never quantiles of the current feed (C1).
  */
 export const EARTHQUAKE_AGE_BANDS = Object.freeze([
-  Object.freeze({
-    id: 'h1', maxAgeMs: 3600e3, color: '#fff1c9', label: 'moins d’1 h',
-    blurb: 'Secousse de la dernière heure. La bande la plus claire de l’échelle.',
-  }),
-  Object.freeze({
-    id: 'h6', maxAgeMs: 6 * 3600e3, color: '#ffc247', label: '1 à 6 h',
-    blurb: 'Entre une et six heures.',
-  }),
-  Object.freeze({
-    id: 'h12', maxAgeMs: 12 * 3600e3, color: '#e07a1f', label: '6 à 12 h',
-    blurb: 'Entre six et douze heures.',
-  }),
-  Object.freeze({
-    id: 'h24', maxAgeMs: Number.POSITIVE_INFINITY, color: '#8c4a17', label: '12 à 24 h',
-    blurb: 'Le fond de la fenêtre : la secousse sort de la carte au prochain relevé. '
-      + 'Le flux USGS « all_day » livre parfois quelques minutes de plus que 24 h ; '
-      + 'ces événements tombent dans cette bande, ils ne sont pas écartés.',
-  }),
+  ageBand('h1', 3600e3, '#fff1c9'),
+  ageBand('h6', 6 * 3600e3, '#ffc247'),
+  ageBand('h12', 12 * 3600e3, '#e07a1f'),
+  ageBand('h24', Number.POSITIVE_INFINITY, '#8c4a17'),
 ]);
 
 /**
  * The mark for an event whose time is not usable. Deliberately cool and
  * desaturated: off the warm ramp, so it cannot be misread as a rank on it.
  */
-export const EARTHQUAKE_AGE_UNKNOWN = Object.freeze({
-  id: 'unknown', color: '#7f8c99', label: 'âge non publié',
-  blurb: 'Horodatage absent du flux, ou postérieur de plus de cinq minutes à l’horloge '
-    + 'locale. L’âge n’est pas mesuré, donc il n’est pas peint sur l’échelle : ce gris '
-    + 'bleuté n’est pas une cinquième ancienneté.',
-});
+export const EARTHQUAKE_AGE_UNKNOWN = ageBand('unknown', null, '#7f8c99');
 
 /**
  * Which age band an event falls in.
@@ -484,11 +494,11 @@ export function ageBandFor(timeMs, nowMs) {
 // Legend (D1)
 // ---------------------------------------------------------------------------
 
-/** French thousands separator, flattened so the legend wraps identically everywhere. */
+/** A grouped count, flattened so the legend wraps identically everywhere. */
 function fr(value) {
   // ICU groups with U+202F or U+00A0 depending on its version; both are
   // flattened so the legend measures and wraps identically everywhere.
-  return Number(value).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ');
+  return formatNumber(Number(value), { plainSpaces: true });
 }
 
 /**
@@ -511,9 +521,16 @@ export function emptyEarthquakeTally() {
   };
 }
 
-/** Provenance and clock, printed once above the classes (E1). */
-export const EARTHQUAKE_LEGEND_NOTE = 'USGS, flux « all_day » M2,5+ · relevé toutes '
-  + 'les 60 s. Cliquer un point ouvre sa fiche.';
+/**
+ * Provenance and clock, printed once above the classes (E1).
+ *
+ * A FUNCTION rather than a constant: a string read at module load would
+ * freeze in whichever language the page started in (ratchet R5).
+ * @returns {string}
+ */
+export function earthquakeLegendNote() {
+  return messages().legend.note(decimal(EARTHQUAKE_MAG_FLOOR));
+}
 
 /**
  * The key: the two shape channels reduced to their DOMAIN, then the colour.
@@ -532,6 +549,7 @@ export const EARTHQUAKE_LEGEND_NOTE = 'USGS, flux « all_day » M2,5+ · relevé
  * @returns {Array<object>} Legend entries.
  */
 export function buildEarthquakeLegend(tally) {
+  const m = messages();
   const t = tally || emptyEarthquakeTally();
   const entries = [];
 
@@ -541,24 +559,26 @@ export function buildEarthquakeLegend(tally) {
   // STOPS, and that is a bound, not a row. Same move as #141 on the buoys and
   // #166 on the road ladder.
   entries.push({
-    label: `Point — magnitude, M${fr(EARTHQUAKE_MAG_FLOOR)} à M${fr(EARTHQUAKE_MAG_DOMAIN_MAX)}`,
+    label: m.legend.magnitude(fr(EARTHQUAKE_MAG_FLOOR), fr(EARTHQUAKE_MAG_DOMAIN_MAX)),
     color: null,
     // The energy ratio lives here and nowhere else since D3: it qualifies the
     // MARK's scale, which is what this row keys, not any one event.
-    blurb: `${EARTHQUAKE_MAG_BASE_PX} px au plancher, +${EARTHQUAKE_MAG_PX_PER_UNIT} px `
-      + `par unité, à toute distance. Ni énergie — +1 vaut `
-      + `×${decimal(EARTHQUAKE_ENERGY_RATIO_PER_UNIT)} —, ni emprise.`,
+    blurb: m.legend.magnitudeBlurb(
+      EARTHQUAKE_MAG_BASE_PX,
+      EARTHQUAKE_MAG_PX_PER_UNIT,
+      decimal(EARTHQUAKE_ENERGY_RATIO_PER_UNIT),
+    ),
   });
   entries.push({
-    label: `Tige — profondeur du foyer, 0 à ${fr(EARTHQUAKE_DEPTH_MAX_KM)} km`,
+    label: m.legend.depth(fr(EARTHQUAKE_DEPTH_MAX_KM)),
     color: null,
     // The label already binds length to depth; what no shape says is the SCALE
     // and the DIRECTION, so those are what the line is spent on.
-    blurb: 'À l’échelle 1:1, et vers le haut : la tige monte, le foyer descend.',
+    blurb: m.legend.depthBlurb,
   });
 
   entries.push({
-    label: 'Couleur — âge dans la fenêtre de 24 h',
+    label: m.legend.age,
     color: null,
   });
   for (const band of EARTHQUAKE_AGE_BANDS) {
@@ -573,7 +593,7 @@ export function buildEarthquakeLegend(tally) {
       label: EARTHQUAKE_AGE_UNKNOWN.label,
       color: EARTHQUAKE_AGE_UNKNOWN.color,
       count: t.byAge[EARTHQUAKE_AGE_UNKNOWN.id],
-      blurb: 'Hors rampe : ce gris n’est pas une cinquième ancienneté.',
+      blurb: m.legend.offRamp,
     });
   }
 
@@ -581,10 +601,10 @@ export function buildEarthquakeLegend(tally) {
   // is decoded WRONG — as a small event — so the shape earns its row.
   if (t.noDepth) {
     entries.push({
-      label: 'profondeur non publiée — point creux, aucune tige',
+      label: m.legend.noDepth,
       color: null,
       count: t.noDepth,
-      blurb: 'Une tige absente seule se confondrait avec une secousse superficielle.',
+      blurb: m.legend.noDepthBlurb,
     });
   }
 
@@ -603,16 +623,14 @@ export function buildEarthquakeLegend(tally) {
  * @returns {string} One sentence per live disclosure, or '' when neither bites.
  */
 export function buildEarthquakeNote(tally) {
+  const m = messages().note;
   const t = tally || emptyEarthquakeTally();
   const parts = [];
   if (t.depthFloor) {
-    parts.push(`${fr(t.depthFloor)} foyer${t.depthFloor > 1 ? 's' : ''} à moins d’1 km : `
-      + `tige dessinée au plancher d’1 km, seule rupture du 1:1 — « mesuré à zéro » `
-      + `n’est pas « non mesuré ».`);
+    parts.push(m.depthFloor(fr(t.depthFloor), t.depthFloor));
   }
   if (t.drawn > t.labelled) {
-    parts.push(`Les ${fr(t.drawn)} secousses sont dessinées ; seules les `
-      + `${fr(t.labelled)} plus fortes magnitudes portent une étiquette.`);
+    parts.push(m.labelCap(fr(t.drawn), fr(t.labelled)));
   }
   return parts.join(' ');
 }
@@ -705,9 +723,14 @@ const SELECTION_RING_MARGIN_PX = 9;
 /** How deep to look for one of our marks under a click. */
 const DRILL_PICK_LIMIT = 8;
 
-/** One decimal, French comma, for a magnitude or a depth. */
+/**
+ * One decimal, in the page's own separator, for a magnitude or a depth.
+ *
+ * Padded to exactly one place, which is what `toFixed(1)` did and what the
+ * scale is read to: `M5` and `M5,0` are different claims about precision.
+ */
 function decimal(value) {
-  return Number(value).toFixed(1).replace('.', ',');
+  return formatDecimal(Number(value), 1, { minimumFractionDigits: 1 });
 }
 
 /**
@@ -729,11 +752,13 @@ function pad2(value) {
   return String(value).padStart(2, '0');
 }
 
-/** Month names, hand-held rather than left to ICU — see below. */
-const MONTHS_FR = Object.freeze([
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-]);
+/**
+ * Month names, hand-held rather than left to ICU — see below.
+ *
+ * They live in `earthquakes.i18n.js` because the two languages abbreviate
+ * differently: French spells the month out, as this card always did, and
+ * English writes `Sep`, which is the glossary's own date style.
+ */
 
 /** Local midnight opening the calendar day an instant falls in. */
 function localMidnight(date) {
@@ -760,19 +785,37 @@ function localMidnight(date) {
  * @returns {string} `hier à 21 h 41 chez vous`.
  */
 export function formatEarthquakeInstant(timeMs, nowMs = Date.now()) {
+  const m = messages();
   const d = new Date(timeMs);
-  const clock = `${d.getHours()} h ${pad2(d.getMinutes())}`;
+  // French writes « 9 h 05 », English writes `09:05`: the hour is padded on
+  // one side of the catalog and not on the other.
+  const hour = getLocale() === DEFAULT_LOCALE ? d.getHours() : pad2(d.getHours());
+  const clock = m.instant.clock(hour, pad2(d.getMinutes()));
   // Rounded, not floored: a DST day is 23 or 25 hours long, and « hier » must
   // not become « le 13 septembre » twice a year.
   const days = Math.round((localMidnight(new Date(nowMs)) - localMidnight(d)) / 86_400_000);
-  if (days === 0) return `aujourd’hui à ${clock} chez vous`;
-  if (days === 1) return `hier à ${clock} chez vous`;
-  return `le ${d.getDate()} ${MONTHS_FR[d.getMonth()]} à ${clock} chez vous`;
+  if (days === 0) return m.instant.today(clock);
+  if (days === 1) return m.instant.yesterday(clock);
+  return m.instant.onDay(d.getDate(), m.months[d.getMonth()], clock);
 }
 
 // ---------------------------------------------------------------------------
 // Decoding the numbers for a reader who does not know the scales (D3)
 // ---------------------------------------------------------------------------
+
+/**
+ * One magnitude class: its floor, and two sentences read at draw time.
+ * @param {number} min Whole-unit floor.
+ * @param {string} key Catalog key.
+ * @returns {{min: number, label: string, effect: string}}
+ */
+function magnitudeClass(min, key) {
+  return Object.freeze({
+    min,
+    get label() { return EARTHQUAKE_MAGNITUDE_WORDS()[key].label; },
+    get effect() { return EARTHQUAKE_MAGNITUDE_WORDS()[key].effect; },
+  });
+}
 
 /**
  * What a magnitude MEANS, in descending order — first match wins.
@@ -783,13 +826,13 @@ export function formatEarthquakeInstant(timeMs, nowMs = Date.now()) {
  * three are on the card already.
  */
 export const EARTHQUAKE_MAGNITUDE_CLASSES = Object.freeze([
-  { min: 8, label: 'séisme dévastateur', effect: 'Destruction sur des centaines de km.' },
-  { min: 7, label: 'séisme majeur', effect: 'Dégâts graves sur toute une région.' },
-  { min: 6, label: 'séisme destructeur', effect: 'Bâtiments endommagés jusqu’à 100 km.' },
-  { min: 5, label: 'secousse forte', effect: 'Peut endommager les bâtiments fragiles.' },
-  { min: 4, label: 'secousse modérée', effect: 'Ressentie sur place, dégâts rares.' },
-  { min: 3, label: 'secousse faible', effect: 'Ressentie près de l’épicentre, sans dégât.' },
-  { min: Number.NEGATIVE_INFINITY, label: 'secousse très faible', effect: 'Rarement ressentie, sans dégât.' },
+  magnitudeClass(8, 'm8'),
+  magnitudeClass(7, 'm7'),
+  magnitudeClass(6, 'm6'),
+  magnitudeClass(5, 'm5'),
+  magnitudeClass(4, 'm4'),
+  magnitudeClass(3, 'm3'),
+  magnitudeClass(Number.NEGATIVE_INFINITY, 'm0'),
 ]);
 
 /**
@@ -850,6 +893,19 @@ export function magnitudeGauge(magnitude) {
 }
 
 /**
+ * One depth class: its floor, and the clause read at draw time.
+ * @param {number} min Floor, in km.
+ * @param {string} key Catalog key.
+ * @returns {{min: number, label: string}}
+ */
+function depthClass(min, key) {
+  return Object.freeze({
+    min,
+    get label() { return EARTHQUAKE_DEPTH_WORDS()[key]; },
+  });
+}
+
+/**
  * What a depth changes for someone standing above it — descending, first match wins.
  *
  * 70 km and 300 km are the boundaries seismology already uses for shallow /
@@ -859,9 +915,9 @@ export const EARTHQUAKE_DEPTH_CLASSES = Object.freeze([
   // Kept to one short clause each, and to within a few characters of one
   // another: the depth sentence is the only line of the card that wraps, and a
   // long qualifier turns its two rendered lines into three.
-  { min: 300, label: 'très profond, rarement ressenti en surface' },
-  { min: 70, label: 'profondeur moyenne, secousse atténuée' },
-  { min: Number.NEGATIVE_INFINITY, label: 'peu profond, donc ressenti plus fort' },
+  depthClass(300, 'd300'),
+  depthClass(70, 'd70'),
+  depthClass(Number.NEGATIVE_INFINITY, 'd0'),
 ]);
 
 /**
@@ -874,13 +930,20 @@ export function describeEarthquakeDepth(depthKm) {
   return EARTHQUAKE_DEPTH_CLASSES.find((band) => depthKm >= band.min)?.label ?? null;
 }
 
-/** The sixteen compass points USGS abbreviates, in French. */
+/**
+ * The sixteen compass points USGS abbreviates, in French.
+ *
+ * Read on the FRENCH branch only: in English the feed's own string already is
+ * the English, so {@link frenchEarthquakePlace} returns it untouched.
+ */
+// i18n-ignore-start — the French half of a French-only decoding.
 const COMPASS_FR = Object.freeze({
   N: 'nord', NNE: 'nord-nord-est', NE: 'nord-est', ENE: 'est-nord-est',
   E: 'est', ESE: 'est-sud-est', SE: 'sud-est', SSE: 'sud-sud-est',
   S: 'sud', SSW: 'sud-sud-ouest', SW: 'sud-ouest', WSW: 'ouest-sud-ouest',
   W: 'ouest', WNW: 'ouest-nord-ouest', NW: 'nord-ouest', NNW: 'nord-nord-ouest',
 });
+// i18n-ignore-end
 
 /** `86 km SSW of Isangel, Vanuatu` — the shape most of the feed arrives in. */
 const USGS_BEARING_PLACE = /^(\d+(?:[.,]\d+)?)\s*km\s+([NSEW]{1,3})\s+of\s+(.+)$/i;
@@ -908,15 +971,21 @@ const USGS_BEARING_PLACE = /^(\d+(?:[.,]\d+)?)\s*km\s+([NSEW]{1,3})\s+of\s+(.+)$
  */
 export function frenchEarthquakePlace(place) {
   const text = String(place ?? '').trim();
+  // NOTHING TO DO IN ENGLISH. The feed publishes `86 km SSW of Isangel,
+  // Vanuatu`, which is already the English sentence this function builds the
+  // French equivalent of. Rewriting it would only risk breaking a place name.
+  if (getLocale() !== DEFAULT_LOCALE) return text;
   const match = USGS_BEARING_PLACE.exec(text);
   if (!match) return text;
   const bearing = COMPASS_FR[match[2].toUpperCase()];
   if (!bearing) return text;
   const distance = fr(Number(String(match[1]).replace(',', '.')));
+  // i18n-ignore-start — French grammar, reached only on the French branch.
   const toward = /^[eo]/.test(bearing) ? 'à l’' : 'au ';
   const name = match[3].trim();
   const of = /^[aeiouyàâäéèêëîïôöûü]/i.test(name) ? 'd’' : 'de ';
   return `${distance} km ${toward}${bearing} ${of}${name}`;
+  // i18n-ignore-end
 }
 
 /**
@@ -935,16 +1004,17 @@ export function frenchEarthquakePlace(place) {
  * @returns {string}
  */
 function formatAgo(ageMs) {
+  const m = messages().ago;
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
-  if (minutes < 1) return 'à l’instant';
-  if (minutes < 60) return `il y a ${minutes} min`;
-  return `il y a ${Math.floor(minutes / 60)} h`;
+  if (minutes < 1) return m.now;
+  if (minutes < 60) return m.minutes(minutes);
+  return m.hours(Math.floor(minutes / 60));
 }
 
-/** Printed under the gauge's top end: 9,5 is Valdivia 1960, and nothing since. */
-const GAUGE_TOP_NOTE = 'record mondial';
-/** The publisher, expanded once — « USGS » names nothing to a French reader. */
-const EARTHQUAKE_SOURCE_LINE = 'Source : USGS, institut géologique américain';
+// The gauge's top note (9.5 is Valdivia 1960, and nothing since) and the
+// publisher line are `card.gaugeTop` and `card.source` in `earthquakes.i18n.js`.
+// The acronym is expanded once in both languages: it names nothing to most
+// readers of either.
 
 /**
  * The card for one clicked event.
@@ -976,39 +1046,42 @@ export function buildEarthquakeCard(record, nowMs) {
 
   // The title carries the number AND its class, because the number alone is
   // the thing this whole rewrite exists to stop shipping bare.
-  const lines = [magClass
-    ? `Magnitude ${decimal(mag)} — ${magClass.label}`
-    : 'Magnitude non publiée'];
+  const m = messages().card;
+  const lines = [magClass ? m.title(decimal(mag), magClass.label) : m.noMagnitude];
 
   const gauge = magnitudeGauge(mag);
   if (gauge) {
-    lines.push(`${fr(EARTHQUAKE_MAG_FLOOR)} ${gauge} `
-      + `${fr(EARTHQUAKE_MAG_DOMAIN_MAX)} ${GAUGE_TOP_NOTE}`);
+    lines.push(m.gauge(
+      fr(EARTHQUAKE_MAG_FLOOR),
+      gauge,
+      fr(EARTHQUAKE_MAG_DOMAIN_MAX),
+      m.gaugeTop,
+    ));
   }
   if (magClass) lines.push(magClass.effect);
 
   const place = frenchEarthquakePlace(record?.place);
-  if (place) lines.push(`📍 ${place}`);
+  if (place) lines.push(m.place(place));
 
   const timeMs = record?.timeMs;
   if (typeof timeMs === 'number' && Number.isFinite(timeMs)) {
     // E1 — the instant REPRESENTED, then the distance to now. Both, because
     // one alone is either unreadable at a glance or unanchored in the day.
-    lines.push(`🕐 ${formatEarthquakeInstant(timeMs, nowMs)} · ${formatAgo(nowMs - timeMs)}`);
+    lines.push(m.when(formatEarthquakeInstant(timeMs, nowMs), formatAgo(nowMs - timeMs)));
   } else {
-    lines.push('🕐 date non publiée par l’USGS');
+    lines.push(m.noTime);
   }
 
   const depthKm = record?.depthKm;
   if (typeof depthKm !== 'number' || !Number.isFinite(depthKm)) {
     // Why the point is a hollow ring stays in the key, where the shape is:
     // what the card owes THIS event is that the number does not exist.
-    lines.push('↓ profondeur non publiée par l’USGS');
+    lines.push(m.noDepth);
   } else {
     // USGS publishes negative depths for foci above sea level, so the datum is
     // named with the sign rather than assumed: « −1,2 km sous le niveau de la
     // mer » would be a double negative describing a hillside.
-    const datum = depthKm < 0 ? 'au-dessus du niveau de la mer' : 'sous le niveau de la mer';
+    const datum = depthKm < 0 ? m.aboveSeaLevel : m.belowSeaLevel;
     // Two lines, hand-set, and the only place on this card the host's wrap is
     // pre-empted. Joined into one sentence this measures 491–542 px against a
     // 296 px measure, so it ALWAYS wrapped — and the host wraps flush left, so
@@ -1016,11 +1089,11 @@ export function buildEarthquakeCard(record, nowMs) {
     // of its own and read as a fifth bullet. Two complete lines, the second
     // indented under the first, is what the shipped card already did for its
     // « tige au plancher » continuation. Both fit, at every class.
-    lines.push(`↓ foyer à ${depthText(Math.abs(depthKm))} km ${datum}`);
+    lines.push(m.depth(depthText(Math.abs(depthKm)), datum));
     lines.push(`   ${describeEarthquakeDepth(depthKm)}`);
   }
 
-  lines.push(EARTHQUAKE_SOURCE_LINE);
+  lines.push(m.source);
   return lines.join('\n');
 }
 
@@ -1522,7 +1595,7 @@ export function createEarthquakesLayer({
       chips: [],
       legend: buildEarthquakeLegend(_tally),
       note: buildEarthquakeNote(_tally),
-      legendNote: EARTHQUAKE_LEGEND_NOTE,
+      legendNote: earthquakeLegendNote(),
     };
   },
 

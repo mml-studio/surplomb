@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import * as Cesium from 'cesium';
 import { createFirmsHeatmapLayer, applyFirmsOverlayPolicy, buildCellCard } from './firmsHeatmap.js';
 import { fireDetectionKey } from './firmsLabels.js';
+import { useTestLocale } from '../i18n/testing.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { WORLD_FOCUS_REQUEST_EVENT } from '../worldFocus.js';
 import fs from 'node:fs';
@@ -163,7 +164,10 @@ test('selection restoration uses the same key the cards and focus use', () => {
   assert.doesNotMatch(match[1], /fire\.acqMs === previous\.acqMs/);
 });
 
-test('painted detection cards are keyed by the stable detection key', () => {
+test('painted detection cards are keyed by the stable detection key', (t) => {
+  // The accessibility label arrived from upstream in English and is now
+  // bilingual; the KEY this test pins is language-independent.
+  useTestLocale('en', t);
   const h = harness();
   try {
     const card = h.published.find((entry) => entry.id.startsWith('fire:'));

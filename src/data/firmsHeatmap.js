@@ -17,6 +17,8 @@ import {
   resolvePickId,
   unregisterPickOwner,
 } from './pickRegistry.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './firmsHeatmap.i18n.js';
 import { adaptFirmsRecords } from './firmsAdapt.js';
 import { fireAnchorHeight, sampleFireAnchorFloors, warmFireAnchorFloors } from './fireAnchors.js';
 import { provisionalFloorRetryDelayMs } from './provisionalFloor.js';
@@ -387,16 +389,15 @@ export function createFirmsHeatmapLayer({
     getRowControls() {
       const lod = LOD_LEVELS[_currentLodIndex];
       if (!lod || !_cellCount) return null;
+      const m = messages();
       if (lod.mode === 'detections') {
         return {
           legend: [
             {
-              label: 'One detection, coloured by radiative power',
+              label: m.detections.label,
               color: '#ff0000',
               count: _cellCount,
-              blurb: 'Below ~750 km each dot is a single satellite detection; '
-                + 'red above ~110 MW FRP, orange above ~40 MW, yellow below. '
-                + 'Marker size follows FRP too.',
+              blurb: m.detections.blurb,
             },
           ],
         };
@@ -407,23 +408,26 @@ export function createFirmsHeatmapLayer({
       const cellSaturation = HEAT_SATURATION_PER_DEG2 * lod.gridDegrees * lod.gridDegrees;
       const perDetection = 9;
       const atStop = (stop) => Math.round(cellSaturation * stop * stop / perDetection);
-      const unit = `${lod.gridDegrees}° cell`;
+      const unit = m.heat.unit(formatNumber(lod.gridDegrees));
       return {
         legend: [
           {
-            label: `≥ ${atStop(HEAT_RED_STOP)} detections per ${unit}`,
+            label: m.heat.atLeast(formatNumber(atStop(HEAT_RED_STOP)), unit),
             color: '#ff0000',
-            blurb: 'Counted per unit GROUND area, not per cell: a degree cell '
-              + 'covers less land the further north it sits, and the count is '
-              + 'divided by cos(latitude) so the colour cannot reward latitude.',
+            blurb: m.heat.perGround,
           },
-          { label: `≥ ${atStop(HEAT_ORANGE_STOP)} detections per ${unit}`, color: '#ffa500' },
-          { label: `below ${atStop(HEAT_ORANGE_STOP)} per ${unit}`, color: '#ffff00' },
           {
-            label: `${_cellCount} cells drawn`,
+            label: m.heat.atLeast(formatNumber(atStop(HEAT_ORANGE_STOP)), unit),
+            color: '#ffa500',
+          },
+          {
+            label: m.heat.below(formatNumber(atStop(HEAT_ORANGE_STOP)), unit),
+            color: '#ffff00',
+          },
+          {
+            label: m.heat.drawn(formatNumber(_cellCount)),
             color: null,
-            blurb: 'The scale is fixed, not stretched to the current view — the '
-              + 'same fire is the same colour on any screen size and at any framing.',
+            blurb: m.heat.fixedScale,
           },
         ],
       };
@@ -441,7 +445,7 @@ export function createFirmsHeatmapLayer({
         latitude: strongest.lat,
         longitude: strongest.lon,
         frp: strongest.frp,
-        label: `Fire · FRP ${formatFrp(strongest.frp)} MW`,
+        label: messages().fire.withFrp(formatFrp(strongest.frp)),
       };
     },
 
@@ -958,7 +962,7 @@ export function createFirmsHeatmapLayer({
         if (!card.interactive) return card;
         return {
           ...card,
-          accessibilityLabel: `Focus fire detection ${card.title}, ${card.details.join(', ')}`,
+          accessibilityLabel: messages().fire.accessibility(card.title, card.details.join(', ')),
           activate: () => {
             const fire = _fireByCardId.get(card.id);
             if (!fire) return false;
@@ -1022,7 +1026,7 @@ export function createFirmsHeatmapLayer({
     requestWorldFocus({
       kind: 'fire',
       id: fireDetectionKey(fire),
-      label: 'FIRE',
+      label: messages().fire.focusLabel,
       position: firePosition(fire),
     });
   }
@@ -1148,7 +1152,7 @@ export function createFirmsHeatmapLayer({
       layerName: name,
       source: 'NASA FIRMS',
       dataSource: _dataSource,
-      label: `Fire · FRP ${formatFrp(fire.frp)} MW`,
+      label: messages().fire.withFrp(formatFrp(fire.frp)),
       latitude: fire.lat,
       longitude: fire.lon,
       properties: {
@@ -1682,7 +1686,7 @@ export function buildSelectedFireCard(fire, nowMs) {
     cullPosition: fireCullPosition(fire),
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `FIRE · ${formatFrp(fire.frp)} MW`,
+    title: messages().fire.card(formatFrp(fire.frp)),
     details: [
       meta.join(' · '),
       formatLatLon(fire.lat, fire.lon) + (fire.night ? ' · NIGHT' : ''),

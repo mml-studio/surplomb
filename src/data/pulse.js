@@ -61,7 +61,15 @@ import {
 } from './franceDepartements.js';
 import { fleetMergeKey } from './transitFleetMerge.js';
 
-/** The four figures, in the page's order. */
+/**
+ * The four figures, in the page's order.
+ *
+ * These are the FIELD NAMES of the `/api/pulse` body, not labels: the landing
+ * page reads `pulse.avions` (`src/vitrine/counters.js`) and the words beside
+ * each figure live in that page's own catalog. They stay French because the
+ * contract is already published and a server has no locale.
+ */
+// i18n-ignore-next-line — JSON field names of /api/pulse, not display labels.
 export const PULSE_KEYS = Object.freeze(['avions', 'navires', 'bus', 'meteo']);
 
 /** Older than this, a figure is not « en ce moment » any more. */
@@ -98,7 +106,11 @@ const NON_AIRCRAFT_CATEGORIES = new Set([16, 17, 18, 19, 20]);
 /**
  * Why a figure is null — reported beside the figures so an operator can read
  * the state of the four sources from one request.
+ *
+ * Stable codes in the `/api/pulse` body, never shown to a reader: the page
+ * hides a null figure rather than explaining it.
  */
+// i18n-ignore-start — status codes of the /api/pulse contract, not labels.
 export const PULSE_WHY = Object.freeze({
   /** The server holds nothing for it yet (layer never lit, key absent). */
   cold: 'cold',
@@ -111,6 +123,7 @@ export const PULSE_WHY = Object.freeze({
   /** It counted zero, which the page never shows. */
   empty: 'empty',
 });
+// i18n-ignore-end
 
 const KM_PER_DEG_LAT = 110.574;
 const KM_PER_DEG_LON_EQUATOR = 111.320;

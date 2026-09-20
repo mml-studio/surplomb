@@ -12,6 +12,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
+import messages from './rocketLaunches.i18n.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { SPACE_MISSION_SELECTED_EVENT } from '../contextModePolicy.js';
 import { drillPickAt } from './pickAt.js';
@@ -1866,10 +1867,11 @@ function syncReplayButton() {
   if (speedControl) speedControl.hidden = !replayAvailable;
   button.hidden = active || !replayAvailable;
   button.disabled = !replayAvailable;
-  button.textContent = 'REPLAY ASCENT';
+  const m = messages().replay;
+  button.textContent = m.ascent;
   button.classList.remove('active');
   button.setAttribute('aria-pressed', String(active));
-  button.title = 'Replay the estimated ascent with a following camera';
+  button.title = m.ascentTitle;
   if (transport) {
     transport.hidden = !active;
     transport.classList.toggle('is-paused', active && _replayPaused);
@@ -1877,8 +1879,8 @@ function syncReplayButton() {
     if (toggleButton) {
       toggleButton.disabled = !active;
       toggleButton.textContent = _replayPaused ? '▶' : 'Ⅱ';
-      toggleButton.setAttribute('aria-label', _replayPaused ? 'Resume replay' : 'Pause replay');
-      toggleButton.title = _replayPaused ? 'Resume replay' : 'Pause replay';
+      toggleButton.setAttribute('aria-label', _replayPaused ? m.resume : m.pause);
+      toggleButton.title = _replayPaused ? m.resume : m.pause;
     }
   }
 }
@@ -1886,14 +1888,15 @@ function syncReplayButton() {
 function syncReplayCountdownButton(state) {
   const transport = _missionPanel?.querySelector('[data-mission-replay-transport]');
   if (!transport || !_replayCameraLaunchId) return;
+  const m = messages();
   const phase = state.countdownActive
-    ? `T minus ${state.countdownSeconds}`
+    ? m.phase.countdown(state.countdownSeconds)
     : state.preCountdownActive
-      ? 'Preparing launch site'
+      ? m.phase.preparing
     : state.elapsedSinceStart < 1
-      ? 'Liftoff'
-      : state.ascending ? 'Ascent replay' : 'Orbit replay';
-  transport.setAttribute('aria-label', `${phase}${_replayPaused ? ', paused' : ''}`);
+      ? m.phase.liftoff
+      : state.ascending ? m.phase.ascent : m.phase.orbit;
+  transport.setAttribute('aria-label', `${phase}${_replayPaused ? m.replay.paused : ''}`);
 }
 
 function syncReplaySpeedControl() {
@@ -2368,7 +2371,7 @@ function renderMissionRoster() {
   if (!list) return;
   const entries = missionRosterEntries(_launches);
   if (!entries.length) {
-    list.innerHTML = '<div class="space-mission-roster-empty">NO MISSIONS AVAILABLE IN THE CURRENT 30-DAY WINDOW</div>';
+    list.innerHTML = `<div class="space-mission-roster-empty">${messages().roster.empty}</div>`;
     return;
   }
   list.innerHTML = entries.map(({ launch, index }) => {
@@ -2566,13 +2569,18 @@ function createMissionPanel() {
   _missionPanel = document.createElement('aside');
   _missionPanel.id = 'space-mission-panel';
   _missionPanel.className = 'context-space-mission-detail';
-  _missionPanel.setAttribute('aria-label', 'Selected Space Mission');
-  _missionPanel.innerHTML = `<div class="space-mission-view-header"><span>SELECTED SPACE MISSION</span><button type="button" data-mission-close title="Show all missions" aria-label="Deselect mission">×</button></div><div class="space-mission-detail"><strong data-mission-title>MISSION</strong><span data-mission-field data-mission-provider></span><span data-mission-field>STATUS · <b data-mission-status></b></span><span data-mission-field>LAUNCH SITE · <b data-mission-site></b></span><span data-mission-field>LAUNCH TIME · <b data-mission-time></b></span><span data-mission-field>ORBIT · <b data-mission-orbit></b></span><span>ASCENT PATH · <b data-mission-ascent-source></b></span><span data-mission-field>CURRENT DISTANCE FROM EARTH · <b data-mission-distance></b></span><span data-mission-field>SATELLITE SPEED · <b data-mission-speed></b></span></div><section class="mission-data-section"><h4>PAYLOAD</h4><div class="mission-table-scroll"><table class="mission-data-table"><thead><tr><th>NAME</th><th>TYPE</th><th>DESTINATION</th></tr></thead><tbody data-mission-payloads></tbody></table></div></section><section class="mission-data-section" data-mission-stages-section><h4>STAGE / RE-ENTRY / RECOVERY</h4><div class="mission-table-scroll"><table class="mission-data-table"><thead><tr><th>STAGE</th><th>STATUS</th><th>FINAL POSITION</th></tr></thead><tbody data-mission-stages></tbody></table></div></section><div class="mission-replay-speed-control"><div class="mission-replay-speed-header"><label for="space-mission-replay-speed">REPLAY SPEED</label><output class="gev-slider-value" for="space-mission-replay-speed" data-mission-replay-speed-output>1×</output></div><input id="space-mission-replay-speed" class="gev-quantitative-slider" type="range" min="0.25" max="4" step="0.25" value="1" data-mission-replay-speed aria-label="Replay speed multiplier"><div class="mission-replay-speed-scale" aria-hidden="true"><span>0.25×</span><span>1×</span><span>4×</span></div></div><div class="mission-action-row"><button type="button" class="mission-focus-button" data-mission-focus>FOCUS</button><button type="button" class="mission-replay-button" data-mission-replay aria-pressed="false">REPLAY ASCENT</button></div><div class="space-mission-nav"><button type="button" class="mission-nav-button" data-mission-prev title="Previous mission"><span aria-hidden="true">‹</span> PREV</button><span class="mission-nav-index" data-mission-index>—</span><button type="button" class="mission-nav-button" data-mission-next title="Next mission">NEXT <span aria-hidden="true">›</span></button></div><button type="button" class="panel-layer-toggle" data-mission-show-all>SHOW ALL / DESELECT</button>`;
+  const p = messages().panel;
+  _missionPanel.setAttribute('aria-label', p.aria);
+  // ONE TEMPLATE, TWO LANGUAGES. The `data-*` hooks, the class names and the
+  // element structure are load-bearing — every one of them is queried below —
+  // so only the WORDS come from the catalog. A French copy of this markup
+  // would be a second thing to keep in step with the selectors.
+  _missionPanel.innerHTML = `<div class="space-mission-view-header"><span>${p.header}</span><button type="button" data-mission-close title="${p.showAllTitle}" aria-label="${p.deselectAria}">\u00d7</button></div><div class="space-mission-detail"><strong data-mission-title>${p.mission}</strong><span data-mission-field data-mission-provider></span><span data-mission-field>${p.status} \u00b7 <b data-mission-status></b></span><span data-mission-field>${p.site} \u00b7 <b data-mission-site></b></span><span data-mission-field>${p.time} \u00b7 <b data-mission-time></b></span><span data-mission-field>${p.orbit} \u00b7 <b data-mission-orbit></b></span><span>${p.ascentPath} \u00b7 <b data-mission-ascent-source></b></span><span data-mission-field>${p.distance} \u00b7 <b data-mission-distance></b></span><span data-mission-field>${p.speed} \u00b7 <b data-mission-speed></b></span></div><section class="mission-data-section"><h4>${p.payload}</h4><div class="mission-table-scroll"><table class="mission-data-table"><thead><tr><th>${p.name}</th><th>${p.type}</th><th>${p.destination}</th></tr></thead><tbody data-mission-payloads></tbody></table></div></section><section class="mission-data-section" data-mission-stages-section><h4>${p.stagesSection}</h4><div class="mission-table-scroll"><table class="mission-data-table"><thead><tr><th>${p.stage}</th><th>${p.status}</th><th>${p.finalPosition}</th></tr></thead><tbody data-mission-stages></tbody></table></div></section><div class="mission-replay-speed-control"><div class="mission-replay-speed-header"><label for="space-mission-replay-speed">${messages().replay.speed}</label><output class="gev-slider-value" for="space-mission-replay-speed" data-mission-replay-speed-output>1\u00d7</output></div><input id="space-mission-replay-speed" class="gev-quantitative-slider" type="range" min="0.25" max="4" step="0.25" value="1" data-mission-replay-speed aria-label="${messages().replay.speedAria}"><div class="mission-replay-speed-scale" aria-hidden="true"><span>0.25\u00d7</span><span>1\u00d7</span><span>4\u00d7</span></div></div><div class="mission-action-row"><button type="button" class="mission-focus-button" data-mission-focus>${p.focus}</button><button type="button" class="mission-replay-button" data-mission-replay aria-pressed="false">${messages().replay.ascent}</button></div><div class="space-mission-nav"><button type="button" class="mission-nav-button" data-mission-prev title="${p.prevTitle}"><span aria-hidden="true">\u2039</span> ${p.prev}</button><span class="mission-nav-index" data-mission-index>\u2014</span><button type="button" class="mission-nav-button" data-mission-next title="${p.nextTitle}">${p.next} <span aria-hidden="true">\u203a</span></button></div><button type="button" class="panel-layer-toggle" data-mission-show-all>${p.showAll}</button>`;
   _missionPanel.querySelector('.mission-action-row').insertAdjacentHTML(
     'beforeend',
     `<div class="mission-replay-transport" data-mission-replay-transport hidden>
-      <button type="button" data-mission-replay-toggle title="Pause replay" aria-label="Pause replay">Ⅱ</button>
-      <button type="button" class="cancel" data-mission-replay-cancel title="Cancel replay" aria-label="Cancel replay"><span aria-hidden="true">×</span></button>
+      <button type="button" data-mission-replay-toggle title="${messages().replay.pause}" aria-label="${messages().replay.pause}">Ⅱ</button>
+      <button type="button" class="cancel" data-mission-replay-cancel title="${messages().replay.cancel}" aria-label="${messages().replay.cancel}"><span aria-hidden="true">×</span></button>
     </div>`,
   );
   host.appendChild(_missionPanel);
@@ -3080,7 +3088,7 @@ function addLaunchEntity(launch, activeTleText = _activeTleText) {
           createRocketMissionElementOverlayEntry({
             id: `reentry:${launch.id}:${stageIndex}`,
             position: reentryPosition,
-            text: 'STAGE RE-ENTRY',
+            text: messages().world.reentry,
             accent: '#ffd166',
             priority: 700_000 - stageIndex,
             gapPx: 8,
@@ -3231,7 +3239,7 @@ function addLaunchEntity(launch, activeTleText = _activeTleText) {
       createRocketMissionElementOverlayEntry({
         id: `orbit:${launch.id}`,
         position: orbitLabelPosition,
-        text: satelliteTrack ? 'ORBIT' : 'PROJECTED ORBIT',
+        text: satelliteTrack ? messages().world.orbit : messages().world.projectedOrbit,
         accent: satelliteTrack ? '#22e6e6' : '#c084fc',
         priority: 800_000,
         gapPx: 8,

@@ -91,7 +91,14 @@
  * published.
  */
 
+import { formatDecimal, formatNumber, formatPercent, weekdayName } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
 import { polygonsBounds, ringLabelAnchor } from './ringGeometry.js';
+import messages, {
+  FRAICHEUR_CANOPY_WORDS,
+  FRAICHEUR_FAMILIES_WORDS,
+  FRAICHEUR_FOUNTAIN_KINDS,
+} from './fraicheurFeed.i18n.js';
 
 /** The portal all three registers live on. Keyless, ODbL, CORS `*`. */
 export const FRAICHEUR_PORTAL = 'opendata.paris.fr';
@@ -103,9 +110,16 @@ export const FRAICHEUR_SPACES_DATASET = 'ilots-de-fraicheur-espaces-verts-frais'
 /** 1 323 points — drinking fountains, with a live availability flag. */
 export const FRAICHEUR_FOUNTAIN_DATASET = 'fontaines-a-boire';
 
-/** Human-facing provenance, echoed by the proxy's `/status` route. */
+/**
+ * Human-facing provenance, echoed by the proxy's `/status` route.
+ *
+ * The producers' own credit line, reproduced word for word because the ODbL
+ * requires it. Not translated in either direction.
+ */
+// i18n-ignore-start — a licence attribution, reproduced verbatim.
 export const FRAICHEUR_SOURCE = 'Îlots de fraîcheur, espaces verts frais et fontaines — Ville de Paris '
   + '& Eau de Paris (opendata.paris.fr)';
+// i18n-ignore-end
 export const FRAICHEUR_LICENCE = 'Open Database License (ODbL)';
 export const FRAICHEUR_LICENCE_URL = 'http://opendatacommons.org/licenses/odbl/';
 
@@ -117,11 +131,13 @@ export const FRAICHEUR_LICENCE_URL = 'http://opendatacommons.org/licenses/odbl/'
  * utility, and merging it into the city's own credit would drop an attribution
  * the licence requires.
  */
+// i18n-ignore-start — publisher names, as the licence requires them.
 export const FRAICHEUR_PUBLISHERS = Object.freeze({
   [FRAICHEUR_EQUIPMENT_DATASET]: 'Direction de la Transition Écologique et du Climat - Ville de Paris',
   [FRAICHEUR_SPACES_DATASET]: 'Direction de la Transition Écologique et du Climat - Ville de Paris',
   [FRAICHEUR_FOUNTAIN_DATASET]: 'Eau de Paris',
 });
+// i18n-ignore-end
 
 /**
  * Columns pulled from the equipment register — 15 of its 19.
@@ -131,12 +147,14 @@ export const FRAICHEUR_PUBLISHERS = Object.freeze({
  * `id_dicom` is an internal CMS key and `proposition_usager` is `"Non"` on 531
  * of 535 rows, which is not a fact worth a column.
  */
+// i18n-ignore-start — COLUMN NAMES of the published export, not words.
 export const FRAICHEUR_EQUIPMENT_FIELDS = Object.freeze([
   'identifiant', 'nom', 'type', 'payant', 'adresse', 'arrondissement',
   'statut_ouverture', 'horaires_periode',
   'horaires_lundi', 'horaires_mardi', 'horaires_mercredi', 'horaires_jeudi',
   'horaires_vendredi', 'horaires_samedi', 'horaires_dimanche',
 ]);
+// i18n-ignore-end
 
 /**
  * Columns pulled from the green-space register — 21 of its 27.
@@ -148,6 +166,7 @@ export const FRAICHEUR_EQUIPMENT_FIELDS = Object.freeze([
  * They are two different statements about the same park and the card shows both
  * rather than picking one and calling it "the vegetation".
  */
+// i18n-ignore-start — COLUMN NAMES of the published export, not words.
 export const FRAICHEUR_SPACE_FIELDS = Object.freeze([
   'identifiant', 'nsq_espace_vert', 'nom', 'type', 'categorie', 'adresse', 'arrondissement',
   'ouvert_24h', 'canicule_ouverture', 'ouverture_estivale_nocturne', 'horaires_periode',
@@ -161,6 +180,7 @@ export const FRAICHEUR_FOUNTAIN_FIELDS = Object.freeze([
   'gid', 'type_objet', 'modele', 'voie', 'commune', 'dispo',
   'debut_ind', 'fin_ind', 'motif_ind',
 ]);
+// i18n-ignore-end
 
 /**
  * The rectangle these three registers describe, plus a margin.
@@ -193,14 +213,26 @@ export const FRAICHEUR_DECIMALS = 5;
  * order France counts days in; `Date#getDay()` is Sunday-first, which is why
  * {@link parisClock} converts rather than indexing straight into this.
  */
+// i18n-ignore-start — COLUMN NAMES of the published export, not words.
 export const FRAICHEUR_DAY_KEYS = Object.freeze([
   'horaires_lundi', 'horaires_mardi', 'horaires_mercredi', 'horaires_jeudi',
   'horaires_vendredi', 'horaires_samedi', 'horaires_dimanche',
 ]);
+// i18n-ignore-end
 
-export const FRAICHEUR_DAY_LABELS = Object.freeze([
-  'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
-]);
+/**
+ * The seven days, Monday-first, in the page's language.
+ *
+ * A FUNCTION and not a table: a day name read at import time would freeze in
+ * whichever language loaded the module first (ratchet R5). `weekdayName`
+ * counts from Sunday, this register from Monday, hence the `+ 1`.
+ *
+ * @param {number} dow 0 = Monday.
+ * @returns {string}
+ */
+export function fraicheurDayName(dow) {
+  return weekdayName((dow + 1) % 7);
+}
 
 /**
  * The THREE ways a Parisian actually gets cool, and the 12 published types
@@ -248,21 +280,36 @@ export const FRAICHEUR_DAY_LABELS = Object.freeze([
  *
  * Order is legend order, biggest family first.
  */
+// i18n-ignore-next-line — family IDs, also their share-link tokens.
 export const FRAICHEUR_FAMILIES = Object.freeze(['pierre', 'ombre', 'eau']);
 
-export const FRAICHEUR_FAMILY_LABELS = Object.freeze({
-  pierre: 'Intérieur frais',
-  ombre: 'Ombre et plein air',
-  eau: 'Eau',
-});
+/**
+ * A record keyed by family id whose values are read in the page's language
+ * when they are ASKED for.
+ *
+ * Getters, never a `{...catalog()}` spread: the spread resolves at module
+ * load, which is ratchet R5 and would freeze the words in whichever language
+ * loaded first.
+ *
+ * @param {'label'|'blurb'} field
+ * @returns {Readonly<Record<string, string>>}
+ */
+function familyWords(field) {
+  const table = {};
+  for (const id of FRAICHEUR_FAMILIES) {
+    Object.defineProperty(table, id, {
+      enumerable: true,
+      get() { return FRAICHEUR_FAMILIES_WORDS()[id][field]; },
+    });
+  }
+  return Object.freeze(table);
+}
 
-export const FRAICHEUR_FAMILY_BLURBS = Object.freeze({
-  pierre: 'Lieux de culte (125), musées (65), mairies (19), bibliothèques (16). Ils sont sur la liste parce que la pierre est froide, et on y entre.',
-  ombre: 'Ombrières pérennes (127) et temporaires (12), terrains de boules (13), sites Découverte & Initiation (4). Dehors, sans porte ni horaire.',
-  eau: 'Brumisateurs (87), piscines (39), bains-douches (17), baignades extérieures (11). Les 67 bassins où l’on entre sont ce que ce registre publie de plus fiable : 64 sur 67 donnent un horaire lisible. Aucun brumisateur n’en donne.',
-});
+export const FRAICHEUR_FAMILY_LABELS = familyWords('label');
+export const FRAICHEUR_FAMILY_BLURBS = familyWords('blurb');
 
 /** Published `type` → family. All 12 values are named; nothing falls through. */
+// i18n-ignore-start — the register's own published `type` values, matched on.
 const TYPE_TO_FAMILY = Object.freeze({
   'Lieux de culte': 'pierre',
   'Musée': 'pierre',
@@ -278,6 +325,7 @@ const TYPE_TO_FAMILY = Object.freeze({
   'Terrain de boules': 'ombre',
   'Découverte et Initiation': 'ombre',
 });
+// i18n-ignore-end
 
 /**
  * The family for one published type.
@@ -339,27 +387,38 @@ export function fraicheurFamily(type) {
  * beside it.
  */
 export const FRAICHEUR_CANOPY_BANDS = Object.freeze([
-  Object.freeze({
-    id: 'clair', label: 'Parc peu ombragé', color: '#96c66b', min: 0, max: 0.25,
-    blurb: 'Moins d’un quart du sol sous un arbre de plus de 8 m — 401 espaces sur 984, dont 66 à EXACTEMENT zéro : rien de plus haut que 8 m au relevé 2024.',
-  }),
-  Object.freeze({
-    id: 'ombrage', label: 'Parc ombragé', color: '#2f8b43', min: 0.25, max: Infinity,
-    blurb: 'Au moins un quart du sol sous une canopée de plus de 8 m — 582 espaces. Les bois en tiennent l’essentiel : 6 159 289 m² des 8 734 377 m² de canopée mesurée à Paris.',
-  }),
+  canopyBand('clair', '#96c66b', 0, 0.25),
+  canopyBand('ombrage', '#2f8b43', 0.25, Infinity),
 ]);
 
 /** The band for a space whose metric was not published. Grey, and named. */
-export const FRAICHEUR_CANOPY_UNKNOWN = Object.freeze({
-  id: 'inconnue', label: 'Canopée non mesurée', color: '#8a93a6', min: null, max: null,
-  blurb: 'indice_veget_sup8m_2024 absent — un espace sur 984. La surface, elle, manque sur 65.',
-});
+export const FRAICHEUR_CANOPY_UNKNOWN = canopyBand('inconnue', '#8a93a6', null, null);
 
 /** Band ids in legend order, unknown last. */
 export const FRAICHEUR_CANOPY_BAND_IDS = Object.freeze([
   ...FRAICHEUR_CANOPY_BANDS.map((band) => band.id),
   FRAICHEUR_CANOPY_UNKNOWN.id,
 ]);
+
+/**
+ * One canopy band: two numbers, a colour, and two words read at draw time.
+ *
+ * @param {'clair'|'ombrage'|'inconnue'} id Band id, also the catalog key.
+ * @param {string} color CSS hex.
+ * @param {?number} min @param {?number} max
+ * @returns {{id: string, color: string, min: ?number, max: ?number,
+ *   label: string, blurb: string}}
+ */
+function canopyBand(id, color, min, max) {
+  return Object.freeze({
+    id,
+    color,
+    min,
+    max,
+    get label() { return FRAICHEUR_CANOPY_WORDS()[id].label; },
+    get blurb() { return FRAICHEUR_CANOPY_WORDS()[id].blurb; },
+  });
+}
 
 /**
  * The canopy band for one published index.
@@ -386,24 +445,13 @@ export function fraicheurCanopyBand(indice) {
  * card, so every one is mapped and an unknown code is shown verbatim rather
  * than guessed at.
  */
-export const FRAICHEUR_FOUNTAIN_LABELS = Object.freeze({
-  FONTAINE_BOIS: 'Fontaine de parc',
-  FONTNE_WALLACE: 'Fontaine Wallace',
-  FONTAINE_2EN1: 'Fontaine 2-en-1',
-  FONTAINE_ARCEAU: 'Fontaine arceau',
-  BORNE_FONTAINE: 'Borne-fontaine',
-  FTNE_PETILLANTE: 'Fontaine pétillante',
-  FONTAINE_TOTEM: 'Fontaine totem',
-  FTNE_POING_EAU: 'Fontaine « poing d’eau »',
-  FONTAINE_ALBIEN: 'Puits de l’Albien',
-  FTNE_MILLENAIRE: 'Fontaine du Millénaire',
-});
+export const FRAICHEUR_FOUNTAIN_LABELS = FRAICHEUR_FOUNTAIN_KINDS;
 
 /** Label for one fountain code; unmapped codes are printed as published. */
 export function fraicheurFountainLabel(code) {
   const key = String(code ?? '').trim();
-  if (!key) return 'Fontaine';
-  return FRAICHEUR_FOUNTAIN_LABELS[key] || key;
+  if (!key) return messages().fountainGeneric;
+  return labelFor(FRAICHEUR_FOUNTAIN_KINDS, key);
 }
 
 /**
@@ -413,9 +461,11 @@ export function fraicheurFountainLabel(code) {
  * equipment register lists 87 brumisateurs and these 72 are not among them —
  * a reader counting misters in Paris from either list alone is short.
  */
+// i18n-ignore-start — the register's own `modele` values, matched, never shown.
 export const FRAICHEUR_MISTING_MODELS = Object.freeze([
   'Brumisante', 'Brumisation basse pression', 'Brumisation haute pression',
 ]);
+// i18n-ignore-end
 
 // --- Small readers ----------------------------------------------------------
 
@@ -444,8 +494,10 @@ export function ouiNonNull(value) {
   const string = text(value);
   if (!string) return null;
   const lower = string.toLowerCase();
+  // i18n-ignore-start — the register's own two values, matched, never shown.
   if (lower === 'oui') return true;
   if (lower === 'non') return false;
+  // i18n-ignore-end
   return null;
 }
 
@@ -568,7 +620,7 @@ export function parisClock(now = Date.now()) {
   return {
     dow,
     minutes: hour * 60 + minute,
-    day: FRAICHEUR_DAY_LABELS[dow],
+    day: fraicheurDayName(dow),
     hhmm: `${String(hour).padStart(2, '0')} h ${String(minute).padStart(2, '0')}`,
     iso: `${read('year')}-${read('month')}-${read('day')}`,
   };
@@ -1153,24 +1205,24 @@ export function summarizeFraicheurRefuges(rows, { now = Date.now(), reusedIds = 
 
 // --- Card copy --------------------------------------------------------------
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A grouped count, in the page's own typography. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
-/** `4 231 m²`, hectares once a park stops being a square. */
+/** `4 231 m²` / `4,231 m²`, hectares once a park stops being a square. */
 export function formatAreaM2(value) {
   const m2 = finiteOrNull(value);
   if (m2 === null) return null;
-  if (m2 >= 10000) return `${(m2 / 10000).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} ha`;
-  return `${Math.round(m2).toLocaleString('fr-FR')} m²`;
+  if (m2 >= 10000) return `${formatDecimal(m2 / 10000, 2)} ha`;
+  return `${formatNumber(Math.round(m2))} m²`;
 }
 
-/** `32 %`, from a 0–1 share. */
+/** `32 %` / `32%`, from a 0–1 share. */
 export function formatShare(value) {
   const share = finiteOrNull(value);
   if (share === null) return null;
-  return `${(share * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
+  return formatPercent(share * 100, { maximumFractionDigits: 1 });
 }
 
 /**
@@ -1186,35 +1238,34 @@ export function formatShare(value) {
  * @returns {string[]}
  */
 export function openingLines(entry, clock, now = Date.now()) {
+  const m = messages().opening;
   const lines = [];
   const validity = scheduleValidity(entry?.schedule?.periode, now);
   const state = openStateAt(entry?.schedule, clock, { always: entry?.open24 === true });
 
   if (entry?.open24 === true) {
-    lines.push('Ouvert 24 h/24 selon le registre');
+    lines.push(m.always);
   } else if (state.state === 'open') {
     const [, close] = state.interval || [];
-    lines.push(`Ouvert maintenant — ferme à ${formatMinuteOfDay(close)}`);
+    lines.push(m.openUntil(formatMinuteOfDay(close)));
   } else if (state.state === 'closed') {
     if (state.opensAt !== null && state.opensDay !== null) {
-      const when = state.opensDay === clock.dow
-        ? `à ${formatMinuteOfDay(state.opensAt)}`
-        : `${FRAICHEUR_DAY_LABELS[state.opensDay]} à ${formatMinuteOfDay(state.opensAt)}`;
-      lines.push(`Fermé maintenant — ouvre ${when}`);
+      lines.push(state.opensDay === clock.dow
+        ? m.closedUntilToday(formatMinuteOfDay(state.opensAt))
+        : m.closedUntilDay(fraicheurDayName(state.opensDay), formatMinuteOfDay(state.opensAt)));
     } else {
-      lines.push('Fermé maintenant');
+      lines.push(m.closed);
     }
   } else {
-    lines.push('Aucun horaire hebdomadaire publié');
+    lines.push(m.unknown);
   }
 
   if (validity.kind === 'window') {
-    lines.push(validity.expired
-      ? `⚠ Horaires publiés pour ${validity.text} — période expirée`
-      : `Horaires valables ${validity.text}`);
+    lines.push(validity.expired ? m.expired(validity.text) : m.window(validity.text));
   } else if (validity.kind === 'open-ended') {
-    lines.push(`Horaires ${validity.text}`);
+    lines.push(m.openEnded(validity.text));
   } else if (validity.kind === 'prose') {
+    // The register's own sentence, printed as published.
     lines.push(validity.text);
   }
   return lines;
@@ -1233,6 +1284,7 @@ export function openingLines(entry, clock, now = Date.now()) {
  * @returns {{title:string, details:string[]}}
  */
 export function spaceCardLines(space, clock, now = Date.now()) {
+  const m = messages().space;
   const details = [];
   const kind = [space?.type, space?.category].filter(Boolean);
   if (kind.length) details.push(kind.join(' · '));
@@ -1240,33 +1292,31 @@ export function spaceCardLines(space, clock, now = Date.now()) {
   details.push(...openingLines(space, clock, now));
 
   if (space?.canicule === true) {
-    details.push(space.canopy === 0
-      ? '🔥 Ouverture canicule déclarée — mais 0 % de canopée mesurée ici'
-      : '🔥 Ouverture canicule déclarée');
+    details.push(space.canopy === 0 ? m.heatwaveNoCanopy : m.heatwave);
   }
-  if (space?.nocturne === true) details.push('Ouverture estivale nocturne');
+  if (space?.nocturne === true) details.push(m.summerNights);
 
   if (space?.canopy === null || space?.canopy === undefined) {
-    details.push('Canopée > 8 m non mesurée au relevé 2024');
+    details.push(m.canopyUnknown);
   } else {
     const area = formatAreaM2(space.canopyM2);
     details.push(area
-      ? `Canopée > 8 m : ${formatShare(space.canopy)} du sol — ${area} (relevé 2024)`
-      : `Canopée > 8 m : ${formatShare(space.canopy)} du sol — surface non publiée (relevé 2024)`);
+      ? m.canopy(formatShare(space.canopy), area)
+      : m.canopyNoArea(formatShare(space.canopy)));
   }
   // Both numbers, never one, and never an average — they disagree on 903 of
   // the 953 rows that carry both.
   if (space?.vegHigh !== null && space?.vegHigh !== undefined
     && space?.canopy !== null && space?.canopy !== undefined
     && Math.abs(space.vegHigh - space.canopy) > 1e-9) {
-    details.push(`Le registre annonce aussi ${formatShare(space.vegHigh)} de « végétation haute » — un autre chiffre, pas une correction`);
+    details.push(m.otherVegetation(formatShare(space.vegHigh)));
   }
 
   const where = [space?.address, space?.arrondissement].filter(Boolean).join(' · ');
   if (where) details.push(where);
-  if (space?.ref) details.push(`Identifiant ${space.ref}`);
+  if (space?.ref) details.push(m.identifier(space.ref));
 
-  return { title: space?.name || 'Espace vert frais', details };
+  return { title: space?.name || m.untitled, details };
 }
 
 /**
@@ -1277,22 +1327,23 @@ export function spaceCardLines(space, clock, now = Date.now()) {
  * @returns {{title:string, details:string[]}}
  */
 export function equipmentCardLines(site, clock, now = Date.now()) {
+  const m = messages().equipment;
   const details = [];
   const head = [site?.type || FRAICHEUR_FAMILY_LABELS[site?.family]];
-  if (site?.paying === true) head.push('payant');
-  else if (site?.paying === false) head.push('gratuit');
+  if (site?.paying === true) head.push(m.paying);
+  else if (site?.paying === false) head.push(m.free);
   details.push(head.filter(Boolean).join(' · '));
 
   details.push(...openingLines(site, clock, now));
 
   // `statut_ouverture` is null on 508 of the 535 rows, so it is printed only
   // when it says something — and "Eteint" on a mister is worth a line.
-  if (site?.status) details.push(`Statut publié : ${site.status}`);
+  if (site?.status) details.push(m.status(site.status));
 
   const where = [site?.address, site?.arrondissement].filter(Boolean).join(' · ');
   if (where) details.push(where);
-  if (site?.ref) details.push(`Identifiant ${site.ref}`);
-  return { title: site?.name || FRAICHEUR_FAMILY_LABELS[site?.family] || 'Îlot de fraîcheur', details };
+  if (site?.ref) details.push(messages().space.identifier(site.ref));
+  return { title: site?.name || FRAICHEUR_FAMILY_LABELS[site?.family] || m.untitled, details };
 }
 
 /**
@@ -1307,29 +1358,28 @@ export function equipmentCardLines(site, clock, now = Date.now()) {
  * @returns {{title:string, details:string[]}}
  */
 export function fountainCardLines(fountain, now = Date.now()) {
+  const m = messages().fountain;
   const details = [];
-  if (fountain?.model) details.push(`Modèle ${fountain.model}`);
-  if (fountain?.misting) details.push('Modèle brumisant');
+  if (fountain?.model) details.push(m.model(fountain.model));
+  if (fountain?.misting) details.push(m.misting);
 
   const at = now instanceof Date ? now.getTime() : Number(now);
-  if (fountain?.available === true) details.push('En service');
+  if (fountain?.available === true) details.push(m.available);
   else if (fountain?.available === false) {
     const until = fountain.to ? Date.parse(fountain.to) : NaN;
     const stale = Number.isFinite(until) && until < at;
-    details.push(stale
-      ? '⚠ Signalée hors service, mais la fin d’indisponibilité publiée est déjà passée'
-      : 'Hors service');
-    if (fountain.reason) details.push(`Motif : ${fountain.reason}`);
+    details.push(stale ? m.staleOutage : m.out);
+    if (fountain.reason) details.push(m.reason(fountain.reason));
     const window = [fountain.from, fountain.to].filter(Boolean).map((value) => value.slice(0, 10));
-    if (window.length === 2) details.push(`Indisponible du ${window[0]} au ${window[1]}`);
-    else if (window.length === 1) details.push(`Indisponible depuis le ${window[0]}`);
+    if (window.length === 2) details.push(m.outageWindow(window[0], window[1]));
+    else if (window.length === 1) details.push(m.outageSince(window[0]));
   } else {
-    details.push('Disponibilité non publiée');
+    details.push(m.unknownAvailability);
   }
 
   const where = [fountain?.street, fountain?.commune].filter(Boolean).join(' · ');
   if (where) details.push(where);
-  details.push('Source : Eau de Paris');
+  details.push(m.source);
   return { title: fraicheurFountainLabel(fountain?.kind), details };
 }
 
@@ -1344,22 +1394,23 @@ export function fountainCardLines(fountain, now = Date.now()) {
 export function fraicheurLoadingLabel({
   status, summary, drawn, trees, treeStatus, treeTotal,
 } = {}) {
-  if (status === 'loading') return 'lecture des trois registres parisiens…';
-  if (status === 'off-coverage') return 'Hors Paris — cette couche ne décrit que la Ville de Paris et ses bois';
-  if (status === 'empty') return 'Aucun îlot de fraîcheur dans cette vue';
+  const m = messages().status;
+  if (status === 'loading') return m.loading;
+  if (status === 'off-coverage') return m.outsideParis;
+  if (status === 'empty') return m.empty;
   if (!summary) return null;
 
   const parts = [];
   const open = summary.spacesOpenNow + summary.equipmentOpenNow;
   const unknown = summary.spacesUnknownNow + summary.equipmentUnknownNow;
-  parts.push(`${fr(open)} ouverts à ${summary.clock.hhmm} (heure de Paris)`);
-  if (unknown > 0) parts.push(`${fr(unknown)} sans horaire lisible`);
-  if (summary.spacesExpired > 0) parts.push(`${fr(summary.spacesExpired)} horaires expirés`);
-  if (Number.isFinite(drawn)) parts.push(`${fr(drawn)} objets tracés`);
-  if (treeStatus === 'off') parts.push('arbres masqués');
-  else if (treeStatus === 'too-high') parts.push('arbres : zoome pour les charger');
+  parts.push(m.openNow(fr(open), summary.clock.hhmm));
+  if (unknown > 0) parts.push(m.unreadable(fr(unknown)));
+  if (summary.spacesExpired > 0) parts.push(m.expired(fr(summary.spacesExpired)));
+  if (Number.isFinite(drawn)) parts.push(m.drawn(fr(drawn)));
+  if (treeStatus === 'off') parts.push(m.treesOff);
+  else if (treeStatus === 'too-high') parts.push(m.treesTooHigh);
   else if (treeStatus === 'too-dense' && Number.isFinite(treeTotal)) {
-    parts.push(`${fr(treeTotal)} arbres ici — zoome`);
-  } else if (Number.isFinite(trees) && trees > 0) parts.push(`${fr(trees)} arbres`);
+    parts.push(m.treesTooDense(fr(treeTotal)));
+  } else if (Number.isFinite(trees) && trees > 0) parts.push(m.trees(fr(trees), trees));
   return parts.join(' · ');
 }
