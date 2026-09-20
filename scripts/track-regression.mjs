@@ -751,7 +751,10 @@ async function main() {
     record(
       'share-v2: a not-yet-arrived subject is held pending, with no failure notice',
       pendingShare.tracked === null
-        && !/unavailable|expired|could not be restored/i.test(
+        // The notice speaks the page's language, and this run is French by
+        // default: matching only the English words would let a real failure
+        // notice through as a pass.
+        && !/unavailable|expired|could not be restored|indisponible|expiré|restauré/i.test(
           pendingShare.noticeShown ? pendingShare.notice : '',
         ),
       JSON.stringify(pendingShare),
