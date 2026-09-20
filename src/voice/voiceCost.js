@@ -2,8 +2,11 @@
 /**
  * Voice model registry + Realtime session cost estimation.
  *
- * Pure module (no DOM, no network, no imports) so it can be shared by three
- * callers that cannot share anything else:
+ * No DOM and no network, so it can be shared by three callers that cannot
+ * share anything else. Its one import is its own catalog — read in the
+ * browser, by the one sentence `state()` can return; the server never asks
+ * for that sentence, it asks for a model id.
+ *
  *   1. the browser voice UI (`gevRealtime.js`) — live "~$0.42" readout + caps
  *   2. the dev-server token endpoint (`vite.config.js` → `/api/realtime/token`)
  *   3. unit tests (`voiceCost.test.mjs`)
@@ -44,13 +47,15 @@
  */
 export const VOICE_MODEL_RATES_VERIFIED_ON = '2026-08-18';
 
+import messages from './voiceCost.i18n.js';
+
 /** @typedef {'standard'|'mini'} VoiceModelTier */
 
 export const VOICE_MODELS = Object.freeze({
   standard: Object.freeze({
     tier: 'standard',
     id: 'gpt-realtime-2',
-    label: 'STANDARD',
+    label: 'STANDARD', // i18n-ignore-line — the tier's own lettering, like STD and MINI on the dock.
     /** USD per 1M tokens — gpt-realtime-2. */
     rates: Object.freeze({
       textInput: 4,
@@ -66,7 +71,7 @@ export const VOICE_MODELS = Object.freeze({
   mini: Object.freeze({
     tier: 'mini',
     id: 'gpt-realtime-2.1-mini',
-    label: 'MINI',
+    label: 'MINI', // i18n-ignore-line — the tier's own lettering.
     /** USD per 1M tokens — gpt-realtime-2.1-mini (~3.2× cheaper on audio). */
     rates: Object.freeze({
       textInput: 0.6,
@@ -409,9 +414,7 @@ export function createVoiceCostTracker(options = {}) {
     /** Compact chip text. The '*' is a see-note mark, NOT a direction claim. */
     display: formatCostUsd(totalUsd) + (incomplete ? '*' : ''),
     /** Prose for the tooltip; null when the accounting is complete. */
-    note: incomplete
-      ? 'Estimate is incomplete — a response was still in flight when the session ended, so its usage was never reported.'
-      : null,
+    note: incomplete ? messages().incompleteNote : null,
   });
 
   return {

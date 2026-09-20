@@ -19,6 +19,9 @@
  */
 
 import { isTrialRefusalReason, requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
+import { getLocale } from '../i18n/locale.js';
+import { serverMessage } from '../i18n/serverMessages.js';
+import messages from './gevBrainVoice.i18n.js';
 
 /** Where the operator's chosen synthesis voice is remembered between sessions. */
 const VOICE_URI_STORAGE_KEY = 'gev.voice.speechVoiceUri';
@@ -112,13 +115,11 @@ export function parseRetryAfterMs(value, { now = Date.now(), fallbackMs = RETRY_
  * @returns {string}
  */
 export function describeUnreachableConfig(status) {
-  if (status === 429) {
-    return 'Not the microphone: a rate limit in front of this server (not the app) is refusing /api requests from your network address. '
-      + 'Something else on it is busy — a script, a test run, several tabs reloading — or the edge rule is set below what the app needs; see docs/DEPLOY.md.';
-  }
-  if (status === 401) return 'Not the microphone: the access gate refused the request. Reload the page and sign in again.';
-  if (status === 404) return 'Not the microphone: this build predates the voice endpoint. Deploy a current build.';
-  return 'Not the microphone: the server never answered. Check that this host is reachable, then click the mic again.';
+  const m = messages().unreachable;
+  if (status === 429) return m.rateLimited;
+  if (status === 401) return m.unauthorized;
+  if (status === 404) return m.notFound;
+  return m.silent;
 }
 
 /**
@@ -168,7 +169,13 @@ export async function fetchVoiceConfig(fetchImpl = defaultFetch) {
   });
   let response;
   try {
-    response = await fetchImpl('/api/voice/config', { headers: { Accept: 'application/json' } });
+    // The page's language travels with the question. The server has no locale
+    // of its own — no cookie, no Accept-Language, by design — so without this
+    // parameter an English page was answered in whatever language
+    // GEV_VOICE_LANGUAGE named, which on a French install is French.
+    response = await fetchImpl(`/api/voice/config?lang=${encodeURIComponent(getLocale())}`, {
+      headers: { Accept: 'application/json' },
+    });
   } catch (error) {
     return unreachable(error?.message || 'network error');
   }
@@ -224,36 +231,12 @@ export function speechRecognitionConstructor(scope = globalThis) {
  * @type {Record<string, {message: string, hint: string, fatal: boolean}>}
  */
 export const RECOGNITION_ERRORS = Object.freeze({
-  network: {
-    message: 'This browser cannot reach its speech recognition service',
-    hint: "Not your connection and not this server — Chromium forks (Arc, Brave, Electron) ship without the key Google's speech service needs. Open the app in Chrome, Edge or Safari.",
-    fatal: true,
-  },
-  'not-allowed': {
-    message: 'Microphone permission was denied',
-    hint: 'Allow the microphone for this site, then click the mic again.',
-    fatal: true,
-  },
-  'service-not-allowed': {
-    message: 'This browser refused to start speech recognition',
-    hint: 'The page must be served over HTTPS or from localhost, and the browser must allow its speech service. Try Chrome, Edge or Safari over HTTPS.',
-    fatal: true,
-  },
-  'audio-capture': {
-    message: 'No microphone was found',
-    hint: 'Check that an input device is connected and selected in the system sound settings.',
-    fatal: true,
-  },
-  'language-not-supported': {
-    message: 'This browser does not speak the configured language',
-    hint: 'Set GEV_VOICE_LANGUAGE to a language this browser supports, or try Chrome.',
-    fatal: true,
-  },
-  'bad-grammar': {
-    message: 'Speech recognition rejected its grammar',
-    hint: 'This is a browser bug rather than a configuration problem. Try Chrome, Edge or Safari.',
-    fatal: false,
-  },
+  network: { fatal: true },
+  'not-allowed': { fatal: true },
+  'service-not-allowed': { fatal: true },
+  'audio-capture': { fatal: true },
+  'language-not-supported': { fatal: true },
+  'bad-grammar': { fatal: false },
 });
 
 /** Codes that are part of normal listening, not failures. */
@@ -267,14 +250,15 @@ const BENIGN_RECOGNITION_ERRORS = new Set(['no-speech', 'aborted']);
 export function describeRecognitionError(code) {
   const key = typeof code === 'string' ? code.trim() : '';
   if (BENIGN_RECOGNITION_ERRORS.has(key)) return { benign: true };
+  const m = messages().recognition;
   const known = Object.prototype.hasOwnProperty.call(RECOGNITION_ERRORS, key)
     ? RECOGNITION_ERRORS[key]
     : null;
-  if (known) return { benign: false, ...known };
+  if (known) return { benign: false, message: m[key].message, hint: m[key].hint, fatal: known.fatal };
   return {
     benign: false,
-    message: `Speech recognition failed: ${key || 'unknown error'}`,
-    hint: 'Try Chrome, Edge or Safari over HTTPS. If it persists, reload the page.',
+    message: m.unknown.message(key || m.unknown.code),
+    hint: m.unknown.hint,
     fatal: false,
   };
 }
@@ -301,6 +285,8 @@ export function describeRecognitionError(code) {
  * The list is ordered, and order is the preference. Anything not on it is still
  * eligible: this ranks, it does not filter.
  */
+// i18n-ignore-start — the NAMES the operating systems give their voices,
+// matched against `voice.name` and never printed.
 export const SPEECH_VOICE_PREFERENCES = Object.freeze({
   fr: Object.freeze([
     'microsoft denise', 'microsoft vivienne', 'microsoft henri',
@@ -312,6 +298,7 @@ export const SPEECH_VOICE_PREFERENCES = Object.freeze({
     'microsoft aria', 'microsoft guy', 'ava', 'samantha', 'google us english', 'daniel',
   ]),
 });
+// i18n-ignore-end
 
 /**
  * Substrings that mark a voice as a modern engine rather than a compact one.
@@ -465,8 +452,7 @@ export function describeVoiceUpgradeHint(voices, language, { userAgent = '' } = 
     && !String(voice.name || '').toLowerCase().includes('thomas')))) {
     return null;
   }
-  return 'Only the compact French voice is installed. For a natural one: System Settings → '
-    + 'Accessibility → Spoken Content → System Voice → French → download Audrey or Amélie (Premium).';
+  return messages().voiceUpgrade;
 }
 
 /**
@@ -602,12 +588,12 @@ export class GevBrainVoiceSession {
     // that makes a keyless session work there, so it says so once instead of
     // failing loudly and repeatedly.
     if (isIosUserAgent(this.scope?.navigator?.userAgent)) {
-      this.host.setStatus('error', 'Voix sans clé indisponible sur iOS — utilisez le mode Realtime');
+      this.host.setStatus('error', messages().start.ios);
       return;
     }
     const Recognition = speechRecognitionConstructor(this.scope);
     if (!Recognition) {
-      this.host.setStatus('error', 'This browser has no speech recognition — try Chrome, Edge or Safari');
+      this.host.setStatus('error', messages().start.noRecognition);
       return;
     }
     this.active = true;
@@ -635,7 +621,7 @@ export class GevBrainVoiceSession {
     } catch (error) {
       this.active = false;
       this.recognition = null;
-      this.host.setStatus('error', `Microphone could not start: ${error?.message || error}`);
+      this.host.setStatus('error', messages().start.micFailed(error?.message || error));
       return;
     }
     // The host paints LISTENING only for an open mic, so it has to know.
@@ -689,11 +675,16 @@ export class GevBrainVoiceSession {
     if (!synth || !this.scope.SpeechSynthesisUtterance) return;
     const language = this.config.language || 'en-US';
     const voice = this.voices.find((entry) => entry?.voiceURI === uri) || null;
+    // i18n-ignore-start — the audition line, SPOKEN in the session's language
+    // rather than the page's: it is a sample of the voice being auditioned,
+    // and that voice speaks one language (see voiceExamples.js for the same
+    // split between what is said and what is printed).
     const utterance = new this.scope.SpeechSynthesisUtterance(
       String(language).toLowerCase().startsWith('fr')
         ? 'Contrôle vocal Surplomb. Caméra en place.'
         : 'Surplomb voice control. Camera in place.',
     );
+    // i18n-ignore-end
     utterance.lang = voice?.lang || language;
     if (voice) utterance.voice = voice;
     try {
@@ -925,7 +916,11 @@ export class GevBrainVoiceSession {
         const response = await this.fetchImpl('/api/voice/brain', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: this.messages }),
+          // `locale` is the page's, not the session's: the server decides
+          // between them (`resolveVoiceSessionLanguage`), because only it can
+          // see whether the operator pinned a third language in the
+          // environment.
+          body: JSON.stringify({ messages: this.messages, locale: getLocale() }),
           signal,
         });
         const data = await response.json().catch(() => null);
@@ -942,7 +937,13 @@ export class GevBrainVoiceSession {
           if (!(await this.waitMs(waitMs, signal))) return { ok: false, error: 'Turn cancelled' };
           continue;
         }
-        return { ok: false, error: data?.error || `Voice brain failed: HTTP ${response.status}` };
+        // The relay's refusals carry a `code` (see vite.config.js), so they
+        // read in the page's language; a payload without one falls back to
+        // whatever the server wrote, which is what a fork's own build sends.
+        return {
+          ok: false,
+          error: serverMessage(data, { fallback: `Voice brain failed: HTTP ${response.status}` }),
+        };
       }
     } catch (error) {
       if (error?.name === 'AbortError') return { ok: false, error: 'Turn cancelled' };
@@ -1059,7 +1060,7 @@ export class GevBrainVoiceSession {
     node.textContent = formatBrainCost(this.costUsd);
     node.dataset.level = 'ok';
     node.title = this.config.model
-      ? `Estimated session cost — ${this.config.model}`
-      : 'Estimated session cost';
+      ? messages().cost.titleWith(this.config.model)
+      : messages().cost.title;
   }
 }

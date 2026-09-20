@@ -36,7 +36,32 @@ test('nothing usable falls back to the caller’s line, never to “undefined”
   assert.equal(serverMessage({ code: 42, error: '' }, { fallback: 'Échec' }), 'Échec');
 });
 
-test('the shipped catalog starts empty: the server gains codes in its own batch', () => {
-  assert.deepEqual(Object.keys(serverMessages.definition), []);
+test('the shipped catalog carries the codes the server actually sends', (t) => {
+  // Filled by the voice-and-server batch, which is the one that gave
+  // `vite.config.js` and `trialQuota.js` their codes. The French is the
+  // server's own bytes where the server writes French, so a page that
+  // resolves a code prints exactly what it printed when it read `error`.
+  assert.equal(
+    serverMessage({ code: 'filosofi-grid-unavailable', error: 'Le carroyage INSEE est temporairement indisponible' }),
+    'Le carroyage INSEE est temporairement indisponible',
+  );
+  assert.equal(
+    serverMessage({ code: 'peb-copy-stale', params: { days: 12 }, error: 'ignored' }),
+    'La copie locale du registre des arrêtés PEB a 12 jours et l’amont ne répond pas.',
+  );
+  useTestLocale('en', t);
+  assert.equal(
+    serverMessage({ code: 'filosofi-grid-unavailable', error: 'Le carroyage INSEE est temporairement indisponible' }),
+    'The INSEE income grid is temporarily unavailable',
+  );
+  assert.equal(
+    serverMessage({ code: 'trial-exhausted', error: 'Essai terminé' }),
+    'Trial over',
+  );
+  // A code nobody has catalogued still shows what the server wrote, which is
+  // what lets a server ship a new code before a client knows it.
   assert.equal(serverMessage({ code: 'rate-limited', error: 'Trop de demandes' }), 'Trop de demandes');
+  // Every key is a code some route really sends; `serverMessages.i18n.js`
+  // says which, and why the rest of the server's ~250 errors have none.
+  assert.ok(Object.keys(serverMessages.definition).length >= 20);
 });

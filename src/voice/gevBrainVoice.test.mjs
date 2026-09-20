@@ -134,8 +134,10 @@ test('voice quality is read off the NAME, and claims nothing more', () => {
 test('Safari with only the compact voice is told where the good one lives', () => {
   const safariUa = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15';
   const hint = describeVoiceUpgradeHint([{ name: 'Thomas', lang: 'fr-FR' }], 'fr-FR', { userAgent: safariUa });
-  assert.match(hint, /System Settings/);
-  assert.match(hint, /Spoken Content/);
+  // The menu path is named the way the reader's own macOS prints it, so these
+  // tests — which run in French — read the French walk (#296).
+  assert.match(hint, /Réglages Système/);
+  assert.match(hint, /Contenu énoncé/);
   assert.match(hint, /Audrey/);
 
   // Nothing to say once a good voice is installed…
@@ -309,8 +311,8 @@ test('a denied microphone stops the session instead of retrying forever', async 
   await session.start({});
   session.handleRecognitionError({ error: 'not-allowed' });
   assert.equal(session.isActive(), false);
-  assert.ok(statuses.some(([s, d]) => s === 'error' && /permission/i.test(d)));
-  assert.match(host.nextErrorHint, /Allow the microphone/);
+  assert.ok(statuses.some(([s, d]) => s === 'error' && /autorisation du micro/i.test(d)));
+  assert.match(host.nextErrorHint, /Autorisez le micro/);
   // The diagnosis must survive the stop that follows it.
   assert.equal(statuses.at(-1)[0], 'error');
 });
@@ -329,7 +331,7 @@ test('a browser with no SpeechRecognition says so rather than starting', async (
   session.scope = { speechSynthesis: session.scope.speechSynthesis };
   await session.start({});
   assert.equal(session.isActive(), false);
-  assert.match(statuses.at(-1)[1], /no speech recognition/i);
+  assert.match(statuses.at(-1)[1], /pas de reconnaissance vocale/i);
 });
 
 test('the default fetch survives being called as a method — the browser checks its receiver', async () => {
@@ -359,7 +361,8 @@ test('the default fetch survives being called as a method — the browser checks
 
     seen.length = 0;
     const config = await fetchVoiceConfig();
-    assert.deepEqual(seen, ['/api/voice/config']);
+    // The page's language rides along: the server has no locale of its own.
+    assert.deepEqual(seen, ['/api/voice/config?lang=fr']);
     assert.equal(config.provider, null, 'that stub returns no provider, and that is read safely');
   } finally {
     globalThis.fetch = realFetch;
@@ -400,8 +403,8 @@ test('"network" is diagnosed as the browser, not as the user\'s connection', () 
   assert.equal(d.fatal, true, 'retrying in the same browser cannot help');
   assert.doesNotMatch(d.message, /permission/i);
   assert.match(d.hint, /Arc/, 'name the browsers this actually happens on');
-  assert.match(d.hint, /Chrome, Edge or Safari/, 'and name a way out');
-  assert.match(d.hint, /Not your connection and not this server/);
+  assert.match(d.hint, /Chrome, Edge ou Safari/, 'and name a way out');
+  assert.match(d.hint, /Ni votre connexion ni ce serveur/);
 });
 
 test('benign codes are silent, unknown codes still say something useful', () => {
@@ -419,8 +422,8 @@ test('a fatal recognition error stops the session but leaves its diagnosis up', 
   await session.start({});
   session.handleRecognitionError({ error: 'network' });
   assert.equal(session.isActive(), false, 'no restart loop against a service that will not answer');
-  assert.deepEqual(statuses.at(-1), ['error', 'This browser cannot reach its speech recognition service']);
-  assert.match(host.nextErrorHint, /Chrome, Edge or Safari/);
+  assert.deepEqual(statuses.at(-1), ['error', 'Ce navigateur ne peut pas joindre son service de reconnaissance vocale']);
+  assert.match(host.nextErrorHint, /Chrome, Edge ou Safari/);
 });
 
 test('a non-fatal error keeps listening', async () => {
@@ -450,8 +453,8 @@ test('a 429 on the config lookup carries the wait and a hint that is not about t
   assert.equal(limited.retryAfterMs, 10_000, 'the limiter\'s own Retry-After is the wait');
   assert.match(limited.reason, /HTTP 429/);
   assert.match(limited.reason, /in front of this server/, 'the reason says the limit is not the app');
-  assert.match(limited.hint, /^Not the microphone/, 'the tray\'s second line stops pointing at the mic');
-  assert.doesNotMatch(limited.hint, /microphone permission/);
+  assert.match(limited.hint, /^Pas le micro/, 'the tray\'s second line stops pointing at the mic');
+  assert.doesNotMatch(limited.hint, /autorisation du micro/);
 
   const bare = await fetchVoiceConfig(async () => ({ ok: false, status: 429 }));
   assert.equal(bare.retryAfterMs, 10_000, 'a stub without headers still gets the default wait');
@@ -459,11 +462,11 @@ test('a 429 on the config lookup carries the wait and a hint that is not about t
   for (const status of [404, 401]) {
     const other = await fetchVoiceConfig(async () => ({ ok: false, status }));
     assert.equal(other.retryAfterMs, null, `a ${status} is not worth an automatic retry`);
-    assert.match(other.hint, /^Not the microphone/);
+    assert.match(other.hint, /^Pas le micro/);
   }
   const offline = await fetchVoiceConfig(async () => { throw new Error('Failed to fetch'); });
   assert.equal(offline.retryAfterMs, null, 'a dropped connection retried blindly is a loop, not a remedy');
-  assert.match(offline.hint, /never answered/);
+  assert.match(offline.hint, /n’a jamais répondu/);
 
   const answered = await fetchVoiceConfig(async () => ({ ok: true, json: async () => ({ provider: 'openrouter' }) }));
   assert.equal(answered.retryAfterMs, null);
@@ -652,7 +655,7 @@ test('the voice-download advice is a walk through macOS, so an iPhone never gets
   // The same advice still reaches the Mac it was written for.
   assert.match(
     String(describeVoiceUpgradeHint(compact, 'fr-FR', { userAgent: MAC_UA })),
-    /System Settings/,
+    /Réglages Système/,
   );
 });
 

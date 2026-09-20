@@ -551,7 +551,9 @@ test('markIncomplete flags the accounting as partial, without a direction claim'
   tracker.markIncomplete();
   assert.equal(tracker.state().incomplete, true);
   assert.equal(tracker.state().display, '~$1.00*');
-  assert.match(tracker.state().note, /incomplete/i);
+  // The note is a catalog sentence since the voice batch: French here, and
+  // "Estimate is incomplete" on the English globe (voiceCost.i18n.js).
+  assert.match(tracker.state().note, /Estimation incomplète/i);
 });
 
 test('the incomplete marker never claims the total is a minimum', () => {

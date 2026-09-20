@@ -16,7 +16,19 @@
  * being true, delete it: this file is a promise, not a wish list.
  */
 
-/** Spoken examples, French first — the fork's own language. */
+/**
+ * Spoken examples, French first — the fork's own language.
+ *
+ * NOT a catalog, and that is the point: both lists exist at once, and which
+ * one is shown is decided by the SESSION's language, not the page's. They are
+ * usually the same now that the page's locale reaches the session
+ * (`resolveVoiceSessionLanguage`), but `GEV_VOICE_LANGUAGE=de-DE` still makes
+ * them differ, and a reader on a French page may hold a session in English.
+ * A `{fr, en}` leaf would only ever hand back the page's language.
+ */
+// i18n-ignore-start — the French half of a bilingual pair chosen by the mic's
+// language; see above. Neither list is a translation of the other: each names
+// ten things a person actually says in that language.
 export const VOICE_EXAMPLES_FR = Object.freeze([
   'Emmène-moi à Bordeaux.',
   'Montre les médecins.',
@@ -29,6 +41,7 @@ export const VOICE_EXAMPLES_FR = Object.freeze([
   'La station de vélos la plus proche avec des vélos.',
   'Recule, vue du globe entier.',
 ]);
+// i18n-ignore-end
 
 /** The same surface, for an English-speaking operator. */
 export const VOICE_EXAMPLES_EN = Object.freeze([

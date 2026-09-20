@@ -2783,8 +2783,11 @@ test('F1: the toggle still records the next-session preference while live', () =
   controller.setVoiceTier('mini');
   assert.equal(controller.voiceTier, 'mini');
   assert.equal(ui.tierButton.textContent, 'MINI');
-  // ...and says so, rather than implying the live session switched.
-  assert.match(ui.tierButton.title, /this session stays on/i);
+  // ...and says so, rather than implying the live session switched. The
+  // tooltip is a catalog sentence since the voice batch, so this matches the
+  // claim it makes — which model the live session stays on — in the language
+  // these tests run in.
+  assert.match(ui.tierButton.title, /celle-ci reste sur gpt-realtime-2\b/);
 });
 
 test('F1: when idle, toggling does re-price the preview meter', () => {
@@ -2910,8 +2913,8 @@ test('F5: a response in flight at teardown marks the accounting INCOMPLETE', () 
   const state = controller.costTracker.state();
   assert.equal(state.incomplete, true);
   assert.equal(state.display, '~$1.00*', 'see-note mark, not a direction claim');
-  assert.match(state.note, /incomplete/i, 'the tooltip explains why');
-  assert.doesNotMatch(state.note, /at least|lower bound|floor/i, 'no floor claim');
+  assert.match(state.note, /Estimation incomplète/i, 'the tooltip explains why');
+  assert.doesNotMatch(state.note, /au moins|minimum|plancher/i, 'no floor claim');
 });
 
 test('F5: a clean teardown does not mark the total incomplete', () => {

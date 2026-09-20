@@ -97,7 +97,7 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
-import { PAN_MAX_BOX_DEG, PAN_MODE_LABELS } from './panFeeds.js';
+import { PAN_MAX_BOX_DEG, PAN_MODE_LABELS, panPayloadLabel } from './panFeeds.js';
 import { formatDelay } from './transitSchedule.js';
 import { vehicleKindColor, vehicleKindLabel } from './transitVehicleKind.js';
 import { transitHeadingPointer, transitVehicleGlyph } from './transitVehicleIcons.js';
@@ -1035,7 +1035,10 @@ export function buildTransitSelectionLabel(record, nowMs = Date.now()) {
   // the same claim and do not print the same way.
   const kind = transitKindReadout(vehicle);
   const provenance = [kind.qualifier ? m.kindWithQualifier(kind.label, kind.qualifier) : kind.label];
-  if (hasText(feed.licence)) provenance.push(feed.licence);
+  // « Licence non précisée » is a stand-in the index wrote, not a licence:
+  // it is translated on the way out, while a licence NAME — `Licence Ouverte
+  // 2.0`, `ODbL 1.0` — is a proper noun and passes through.
+  if (hasText(feed.licence)) provenance.push(panPayloadLabel(feed.licence));
   details.push(provenance.join(' · '));
 
   // Where this run goes next, from the network's trip updates. Appended after

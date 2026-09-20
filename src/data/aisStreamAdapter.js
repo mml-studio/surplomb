@@ -74,8 +74,12 @@ export function classifyAisFailure(input = {}) {
 
   // i18n-ignore-start — failure messages of a SERVER-side adapter: this module
   // is imported by vite.config.js and runs in Node, where there is no locale
-  // (docs/i18n/CONVENTIONS.md). They reach a reader only through the server's
-  // own status surface, which the voice+server batch owns.
+  // (docs/i18n/CONVENTIONS.md). They reach a reader through /api/ais-live's
+  // status, and the voice+server batch left them English on purpose: each one
+  // names a vendor, a key and an HTTP status, so its audience is whoever holds
+  // the AISStream key and can act on it. There is no French here to leak onto
+  // an English page, and a code per message would buy a translation of
+  // something only an operator can fix.
   if (status === 401 || status === 403) {
     return { kind: 'auth', message: `AISStream rejected the API key (HTTP ${status})` };
   }

@@ -11,7 +11,16 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
-import { createVoiceControl, resolveVoiceControlHint, resolveVoiceReadyPrompt } from './voiceControlDom.js';
+import {
+  createVoiceControl,
+  defaultVoiceErrorHint,
+  resolveVoiceControlHint,
+  resolveVoiceReadyPrompt,
+  voiceControlAriaLabel,
+} from './voiceControlDom.js';
+import { getLocale, localeTag } from '../i18n/locale.js';
+import { serverMessage } from '../i18n/serverMessages.js';
+import messages from './gevRealtime.i18n.js';
 import { getVoiceAudioContext, primeVoiceMedia, resumeVoiceMedia } from './mediaPrime.js';
 import { isCoarseInput } from '../inputMode.js';
 import { requestWaitlistCard, trialRefusalFrom } from '../trialRefusal.js';
@@ -31,11 +40,20 @@ const STATUS = {
   executing: 'EXECUTING',
   error: 'ERROR',
 };
+/**
+ * The dock's three captions, as FUNCTIONS.
+ *
+ * They were three constants until the globe learned English. A constant is
+ * read while this module loads, and this module is loaded on demand, 360 kB
+ * after the page decided its language — so the caption would have been fixed
+ * in whatever language happened to be resolvable at that instant. A caption is
+ * cheap to look up and is looked up when the dock repaints.
+ */
 /** The caption of a live mic when nothing more specific applies. */
-const ASK_PROMPT = 'Question ou commande';
-const RELEASE_SPACE_PROMPT = 'Relâchez Espace pour envoyer';
+const askPrompt = () => messages().dock.ask;
+const releaseSpacePrompt = () => resolveVoiceControlHint(true, true, false);
 /** The dock once the hosted voice trial is spent — the mic's own words (src/voicePremium.js). */
-const TRIAL_SPENT_DETAIL = 'Commandes offertes utilisées';
+const trialSpentDetail = () => messages().trial.spent;
 /**
  * How long an ordinary session may sit with the mic shut before it closes.
  * A click no longer ends a session (it opens the mic for one request), so this
@@ -49,8 +67,9 @@ export const VOICE_IDLE_CLOSE_MS = 2 * 60_000;
  * short of the provider's 60-minute limit.
  */
 export const TRIAL_IDLE_CLOSE_MS = 50 * 60_000;
-/** The tray's fallback second line — see setStatus for when it is replaced. */
-const DEFAULT_VOICE_ERROR_HINT = 'Check microphone permission and network access, then try again.';
+/** The tray's fallback second line — see setStatus for when it is replaced.
+ *  It lives beside the markup that first prints it (`voiceControlDom.js`), so
+ *  the tray cannot say one thing at boot and another after a failure. */
 /** Waits one click sits out when a limiter answers the config lookup with a Retry-After. */
 const VOICE_CONFIG_RETRY_LIMIT = 2;
 /** Names how many requests a minted trial session may answer (src/trialQuota.js). */
@@ -319,7 +338,7 @@ export function describeTokenBudget(bucket, perTurnTokens = RATE_LIMIT_TOKENS_PE
   const seconds = Math.max(1, Math.ceil(bucket.resetSeconds));
   return {
     exhausted: true,
-    detail: `TOKEN LIMIT REACHED — RESETS IN ${seconds} S`,
+    detail: `TOKEN LIMIT REACHED — RESETS IN ${seconds} S`, // i18n-ignore-line — dock lettering, English on both globes.
   };
 }
 
@@ -776,7 +795,7 @@ export class GevRealtimeController {
         void this.audioEl.play?.().catch((err) => {
           this.debugLog('assistant audio refused playback', { name: err?.name });
           if (err?.name === 'NotAllowedError') {
-            this.setStatus('listening', 'Touchez le micro pour activer le son');
+            this.setStatus('listening', messages().audio.tapToHear);
           }
         });
         this.startAssistantVoiceVisualizer(remoteStream);
@@ -1005,7 +1024,7 @@ export class GevRealtimeController {
   suspendVoiceInBackground() {
     if (!isCoarseInput() || !this.isActive()) return;
     this.stop();
-    this.setStatus('idle', 'Session vocale interrompue en arrière-plan');
+    this.setStatus('idle', messages().session.backgrounded);
   }
 
   /**
@@ -1343,7 +1362,7 @@ export class GevRealtimeController {
       announceVoiceSession(false);
     }
     if (!preserveStatus && !removeUi) {
-      this.setStatus('idle', endedTrial ? TRIAL_SPENT_DETAIL : 'Voice off');
+      this.setStatus('idle', endedTrial ? trialSpentDetail() : 'Voice off');
     }
     this.setRadioVoiceDucking(false);
     if (endedTrial && !removeUi) this.announceTrialEnd();
@@ -1373,8 +1392,8 @@ export class GevRealtimeController {
   trialDetail() {
     const left = this.trialAnswersLeft;
     if (left === null) return null;
-    if (this.trialClosing || left <= 0) return TRIAL_SPENT_DETAIL;
-    return left === 1 ? 'Dernière commande offerte' : `${left} commandes offertes`;
+    if (this.trialClosing || left <= 0) return trialSpentDetail();
+    return left === 1 ? messages().trial.last : messages().trial.left(left);
   }
 
   /**
@@ -1987,12 +2006,12 @@ export class GevRealtimeController {
         content: [
           {
             type: 'input_text',
-            text: 'Current Surplomb viewport screenshot. Read any clearly visible street, building, and place labels in the image and combine them with the structured nearbyPlaces, streetLabels, and scene context. Do not invent labels that are not legible.',
+            text: 'Current Surplomb viewport screenshot. Read any clearly visible street, building, and place labels in the image and combine them with the structured nearbyPlaces, streetLabels, and scene context. Do not invent labels that are not legible.', // i18n-ignore-line — the model reads this, not the reader; see gevActions.js.
           },
           {
             type: 'input_image',
             image_url: imageUrl,
-            detail: 'high',
+            detail: 'high', // i18n-ignore-line — the API's own image-detail value.
           },
         ],
       },
@@ -2031,7 +2050,7 @@ export class GevRealtimeController {
     // a stale diagnosis never outlives the error that produced it.
     if (this.ui.errorHint) {
       if (status === 'error' && this.nextErrorHint) this.ui.errorHint.textContent = this.nextErrorHint;
-      else if (status !== 'error') this.ui.errorHint.textContent = DEFAULT_VOICE_ERROR_HINT;
+      else if (status !== 'error') this.ui.errorHint.textContent = defaultVoiceErrorHint();
       this.nextErrorHint = null;
     }
     if (status === 'idle' || status === 'connecting' || status === 'error') {
@@ -2067,8 +2086,8 @@ export class GevRealtimeController {
     let resolvedDetail = this.statusDetail;
     if (shown === 'listening') {
       resolvedDetail = this.pushToTalkKeyHeld
-        ? RELEASE_SPACE_PROMPT
-        : (resolvedDetail || this.trialDetail() || ASK_PROMPT);
+        ? releaseSpacePrompt()
+        : (resolvedDetail || this.trialDetail() || askPrompt());
     } else if (status === 'listening') {
       resolvedDetail = resolvedDetail || this.trialDetail() || resolveVoiceReadyPrompt();
     }
@@ -2079,7 +2098,7 @@ export class GevRealtimeController {
     this.ui.detail.title = primaryDetail;
     if (this.ui.errorDetail) {
       this.ui.errorDetail.textContent = status === 'error'
-        ? (resolvedDetail || 'Voice session could not be started.')
+        ? (resolvedDetail || messages().session.couldNotStart)
         : '';
     }
     this.syncIdleClose();
@@ -2127,12 +2146,12 @@ export class GevRealtimeController {
    */
   updateVoiceButtonLabel() {
     if (!this.ui.buttonLabel) return;
-    this.ui.buttonLabel.textContent = 'MIC';
+    this.ui.buttonLabel.textContent = 'MIC'; // i18n-ignore-line — the mic button's lettering, three characters wide.
     const hint = resolveVoiceControlHint(this.pushToTalkMode, this.pushToTalkKeyHeld);
     if (this.ui.helpDetail) this.ui.helpDetail.textContent = hint;
     // The tray is a hover surface; the aria-label is the only copy a screen
     // reader ever hears, and it was naming a key phones do not have.
-    this.ui.button?.setAttribute('aria-label', `Voice control — ${hint}`);
+    this.ui.button?.setAttribute('aria-label', voiceControlAriaLabel(hint));
   }
 
   /**
@@ -2143,9 +2162,13 @@ export class GevRealtimeController {
    * different three each time it opens, is what makes the mic look like it can
    * do more than the last thing it was asked.
    *
-   * @param {string} [language] BCP-47 tag; the fork ships French.
+   * @param {string} [language] BCP-47 tag; defaults to the session's, then
+   *   to the page's. Before the config lookup answers there is no session
+   *   language yet, and the tray was hard-coded to French — three French
+   *   suggestions under an English interface, a second before the server said
+   *   which language the mic would speak.
    */
-  refreshVoiceExamples(language = this.voiceLanguage || 'fr-FR') {
+  refreshVoiceExamples(language = this.voiceLanguage || localeTag()) {
     const list = this.ui?.helpExamples;
     if (!list) return;
     this.voiceExampleRotation = (this.voiceExampleRotation || 0) + 1;
@@ -2225,7 +2248,7 @@ export class GevRealtimeController {
     // app's own choice without knowing which one that was.
     const auto = document.createElement('option');
     auto.value = '';
-    auto.textContent = selected ? `Automatic (${selected.name})` : 'Automatic';
+    auto.textContent = selected ? messages().picker.automaticWith(selected.name) : messages().picker.automatic;
     picker.appendChild(auto);
     for (const voice of voices) {
       const option = document.createElement('option');
@@ -2547,22 +2570,20 @@ export class GevRealtimeController {
     const pendingTier = resolveVoiceModel(this.voiceTier).tier;
     const isMini = pendingTier === 'mini';
     if (this.ui?.tierButton) {
-      this.ui.tierButton.textContent = isMini ? 'MINI' : 'STD';
+      this.ui.tierButton.textContent = isMini ? 'MINI' : 'STD'; // i18n-ignore-line — the tier button's lettering.
       this.ui.tierButton.setAttribute('aria-pressed', isMini ? 'true' : 'false');
       const pendingId = resolveVoiceModel(pendingTier).id;
       this.ui.tierButton.title = this.isActive() && state.modelId !== pendingId
-        ? `Next session: ${pendingId} — this session stays on ${state.modelId}`
-        : `Voice model: ${pendingId} — click to switch to ${
-          isMini ? 'standard' : 'mini'
-        }; applies next session`;
+        ? messages().tier.pending(pendingId, state.modelId)
+        // i18n-ignore-next-line — the two tier ids, spelled the same way in both languages.
+        : messages().tier.current(pendingId, isMini ? 'standard' : 'mini');
     }
     if (this.ui?.costValue) {
       this.ui.costValue.textContent = state.display;
       this.ui.costValue.dataset.level = state.level;
-      this.ui.costValue.title =
-        `Estimated session cost on ${state.modelId} — ${state.responses} response(s). ` +
-        `Warns at ${formatCostUsd(state.warnUsd)}, ends the session at ${formatCostUsd(state.capUsd)}.`
-        + (state.note ? ` ${state.note}` : '');
+      this.ui.costValue.title = messages().cost.title(
+        state.modelId, state.responses, formatCostUsd(state.warnUsd), formatCostUsd(state.capUsd),
+      ) + (state.note ? ` ${state.note}` : '');
     }
   }
 
@@ -3196,7 +3217,12 @@ function isNearlyBlackFrame(ctx, width, height) {
  * against its own tier assumption.
  */
 async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
-  const url = `${TOKEN_URL}?tier=${encodeURIComponent(resolveVoiceModel(tier).tier)}`;
+  // `lang` is the page's locale, and it is what makes the session answer in
+  // the language on screen: the realtime prompt is built server-side, and the
+  // server has no locale of its own (no cookie, no Accept-Language, by
+  // design). Without it an English reader got the French instruction set.
+  const url = `${TOKEN_URL}?tier=${encodeURIComponent(resolveVoiceModel(tier).tier)}`
+    + `&lang=${encodeURIComponent(getLocale())}`;
   const response = await fetch(url, { cache: 'no-store' });
   const data = await response.json().catch(() => null);
   // Server echo first (authoritative, always present); the minted session
@@ -3213,8 +3239,12 @@ async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
     // OpenAI error bodies are objects ({error:{message,type,...}}); only the
     // key-absent server case is a bare string. Render either without the
     // "[object Object]" that String(object) produces (H9).
+    // Our own server sends a `code` (`voice-key-missing`,
+    // `realtime-token-failed`), so its refusals are read in the page's
+    // language; `serverMessage` falls back to the `error` string, which is
+    // what OpenAI's own body carries and what an older server sends.
     const reason = typeof data?.error === 'string'
-      ? data.error
+      ? serverMessage(data)
       : data?.error?.message;
     throw new Error(reason || `Realtime token failed: HTTP ${response.status}`);
   }
@@ -3311,7 +3341,7 @@ function createErrorRecord(source, error, extra = {}) {
     timestamp: new Date().toISOString(),
     source,
     name: rtcError?.name || null,
-    message: rtcError?.message || extra.errorText || String(error?.message || '').trim() || 'No browser error message supplied',
+    message: rtcError?.message || extra.errorText || String(error?.message || '').trim() || 'No browser error message supplied', // i18n-ignore-line — a debug-log field, never a surface.
     errorDetail: rtcError?.errorDetail || null,
     sctpCauseCode: rtcError?.sctpCauseCode ?? null,
     receivedAlert: rtcError?.receivedAlert ?? null,

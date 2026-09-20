@@ -28,6 +28,8 @@
  * source, which asks the same question of a different catalog.
  */
 import { feedIsSelectable } from './panFeedHealth.js';
+import { labelFor } from '../i18n/messages.js';
+import { PAN_PAYLOAD_LABELS } from './panFeeds.i18n.js';
 import {
   boxArea,
   boxContains as boxContainsPoint,
@@ -149,13 +151,29 @@ export const PAN_UNKNOWN_PROBE_MARGIN_DEG = 1.5;
 export const PAN_MAX_VEHICLES = 6000;
 
 /**
+ * A payload value as a READER should see it.
+ *
+ * The three stand-ins this module writes — « Licence non précisée », « Autre
+ * licence ouverte », « Réseau sans nom » — are stored French, in the committed
+ * index and in every cached proxy answer, because the code that writes them
+ * has no locale. Anything else is handed straight back: a licence name and a
+ * network name are proper nouns.
+ *
+ * @param {unknown} value A `licence` or `network` string out of a PAN payload.
+ * @returns {string}
+ */
+export function panPayloadLabel(value) {
+  return labelFor(PAN_PAYLOAD_LABELS, value);
+}
+
+/**
  * Human-readable licence label for a PAN licence code.
  * @param {*} licence Raw `dataset.licence`.
  * @returns {string}
  */
 export function panLicenceLabel(licence) {
   const code = String(licence ?? '').trim();
-  // i18n-ignore-next-line — same payload value as the table above.
+  // i18n-ignore-next-line — a payload value; `panPayloadLabel` shows it.
   if (!code) return 'Licence non précisée';
   return PAN_LICENCE_LABELS[code] || code;
 }
@@ -180,7 +198,7 @@ export function panNetworkName(dataset) {
     const commercial = String(offers[0]?.nom_commercial ?? '').trim();
     if (commercial) return commercial;
   }
-  // i18n-ignore-next-line — stamped into the payload by the server.
+  // i18n-ignore-next-line — a payload value; `panPayloadLabel` shows it.
   return title || 'Réseau sans nom';
 }
 
