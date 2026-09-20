@@ -45,7 +45,14 @@ export const IDFM_PAGE_LIMIT = 100;
 /**
  * Transport modes the referential publishes, mapped to the app's vocabulary.
  * `rail` covers RER and Transilien alike — IDFM does not separate them here.
+ *
+ * This table is stamped onto every served stop as `modeLabel`, and this module
+ * runs on the SERVER, which has no locale by design. So the payload keeps the
+ * French, and the browser labels the mode itself from the same keys
+ * (`IDFM_MODE_NAMES` in `idfmNetwork.i18n.js`) — a card answers in the reader's
+ * language, and a mode code neither table knows still falls back to this one.
  */
+// i18n-ignore-start — server-side payload labels; the browser has its own.
 export const IDFM_MODES = Object.freeze({
   metro: 'Métro',
   rail: 'RER / Transilien',
@@ -58,6 +65,7 @@ export const IDFM_MODES = Object.freeze({
   // rider the raw code.
   cableway: 'Téléphérique',
 });
+// i18n-ignore-end
 
 /**
  * Build the stops query for a bounding box.

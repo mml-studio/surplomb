@@ -143,6 +143,17 @@ const ODS_ROOT = `https://${IDFM_FREQ_PORTAL}/api/explore/v2.1/catalog/datasets`
  * not a silently ignored `select`. Nothing here selects it, and that is
  * deliberate — the field lists below are valid against all three.
  */
+import { labelFor } from '../i18n/messages.js';
+import messages, {
+  IDFM_FREQ_DAY_CHIP_LABELS,
+  IDFM_FREQ_DAY_NAMES,
+  IDFM_FREQ_MODE_NAMES,
+} from './idfmFrequencyFeed.i18n.js';
+
+// i18n-ignore-start — dataset ids and the publisher's own dataset TITLE: data.
+// The attribution is composed on the server, which has no locale, and names
+// the file as IDFM published it; translating a dataset title would make it
+// unfindable on the portal.
 export const IDFM_FREQ_DATASET = 'offre_hebdomadaire_moyenne_hors_vacances';
 export const IDFM_FREQ_HOLIDAY_DATASET = 'offre_hebdomadaire_moyenne_vacances_scolaires';
 export const IDFM_FREQ_SUMMER_DATASET = 'offre_hebdomadaire_moyenne_vacances_ete';
@@ -150,6 +161,7 @@ export const IDFM_FREQ_SUMMER_DATASET = 'offre_hebdomadaire_moyenne_vacances_ete
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
 export const IDFM_FREQ_SOURCE = 'Offre hebdomadaire moyenne hors vacances — '
   + 'Île-de-France Mobilités (data.iledefrance-mobilites.fr)';
+// i18n-ignore-end
 
 /** Licence of the frequency figures. NOT the ODbL the stop geometry carries. */
 export const IDFM_FREQ_LICENCE = 'Licence Ouverte v2.0 (Etalab)';
@@ -180,31 +192,36 @@ export const IDFM_FREQ_REFERENCE_YEAR = '2025';
  * bytes a stop for information that is a constant. Anything reading a profile
  * reads it through {@link IDFM_FREQ_DAYS}.
  */
+// i18n-ignore-start — COLUMN NAMES of the published file, not words.
 export const IDFM_FREQ_DAYS = Object.freeze([
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ]);
+// i18n-ignore-end
 
 /** Short aliases the aggregate `select` uses, in the same order. */
+// i18n-ignore-start — query aliases, not words.
 export const IDFM_FREQ_DAY_ALIASES = Object.freeze([
   'lu', 'ma', 'me', 'je', 've', 'sa', 'di',
 ]);
+// i18n-ignore-end
 
-/** French labels for the panel and the card. */
-export const IDFM_FREQ_DAY_LABELS = Object.freeze({
-  lundi: 'Lundi',
-  mardi: 'Mardi',
-  mercredi: 'Mercredi',
-  jeudi: 'Jeudi',
-  vendredi: 'Vendredi',
-  samedi: 'Samedi',
-  dimanche: 'Dimanche',
-});
+/**
+ * The name of a day, for the panel and the card.
+ * @param {string} day A key of {@link IDFM_FREQ_DAYS}.
+ * @returns {string} The day this build does not know is printed as its key.
+ */
+export function idfmFrequencyDayLabel(day) {
+  return labelFor(IDFM_FREQ_DAY_NAMES, day);
+}
 
-/** One-character chip labels — seven day chips must fit one panel row. */
-export const IDFM_FREQ_DAY_CHIPS = Object.freeze({
-  lundi: 'L', mardi: 'Ma', mercredi: 'Me', jeudi: 'J', vendredi: 'V',
-  samedi: 'S', dimanche: 'D',
-});
+/**
+ * The one- or two-character chip for a day — seven of them share one row.
+ * @param {string} day A key of {@link IDFM_FREQ_DAYS}.
+ * @returns {string}
+ */
+export function idfmFrequencyDayChip(day) {
+  return labelFor(IDFM_FREQ_DAY_CHIP_LABELS, day);
+}
 
 /**
  * The band axis: 24 one-hour bands over the OPERATING day, 04:00 → 03:59.
@@ -294,15 +311,17 @@ export const IDFM_FREQ_MODES = Object.freeze({
   Funiculaire: 'funicular',
 });
 
-/** French labels for the drawn mode families. */
-export const IDFM_FREQ_MODE_LABELS = Object.freeze({
-  bus: 'Bus',
-  metro: 'Métro',
-  rail: 'Train — RER & Transilien',
-  tram: 'Tramway',
-  funicular: 'Funiculaire',
-  unknown: 'Mode non publié',
-});
+/**
+ * The label of a drawn mode family.
+ * @param {?string} mode `bus`, `metro`, `rail`, `tram`, `funicular`, or none.
+ * @returns {string} The `unknown` label when the mode is absent or unlisted.
+ */
+export function idfmFrequencyModeLabel(mode) {
+  const key = String(mode ?? '');
+  return key in IDFM_FREQ_MODE_NAMES.definition
+    ? labelFor(IDFM_FREQ_MODE_NAMES, key)
+    : IDFM_FREQ_MODE_NAMES().unknown;
+}
 
 /**
  * The frequency ladder: six steps, each one halving the wait.
@@ -327,7 +346,7 @@ export const IDFM_FREQ_MODE_LABELS = Object.freeze({
 export const IDFM_FREQ_LEVELS = Object.freeze([2, 4, 8, 16, 32]);
 
 /**
- * French legend labels, one per level.
+ * The legend labels, one per level, in the page's language.
  *
  * THE LABEL IS THE WAIT, and the rate is gone from it. Rewritten 2026-09-10
  * after a reader called the key "du charabia". The file publishes a RATE —
@@ -339,18 +358,20 @@ export const IDFM_FREQ_LEVELS = Object.freeze([2, 4, 8, 16, 32]);
  *
  * The rate has not disappeared from the product — it is on the stop's own card,
  * where there is room to give both. A key has room for one.
+ *
+ * @returns {ReadonlyArray<string>} Six labels, worst wait first.
  */
-export const IDFM_FREQ_LEVEL_LABELS = Object.freeze([
-  'plus de 30 min d’attente',
-  'un passage toutes les 15 à 30 min',
-  'un passage toutes les 7 à 15 min',
-  'un passage toutes les 4 à 7 min',
-  'un passage toutes les 2 à 4 min',
-  'un passage toutes les 2 min ou moins',
-]);
+export function idfmFrequencyLevelLabels() {
+  return messages().levels;
+}
 
-/** Label for the "runs, but not in this band" state. */
-export const IDFM_FREQ_SILENT_LABEL = 'aucun passage dans cette tranche';
+/**
+ * Label for the "runs, but not in this band" state.
+ * @returns {string}
+ */
+export function idfmFrequencySilentLabel() {
+  return messages().silent;
+}
 
 // --- Small helpers ----------------------------------------------------------
 
@@ -546,6 +567,7 @@ function daySelect() {
 }
 
 /** Fields the identity query groups on. */
+// i18n-ignore-start — the portal's own column names.
 export const IDFM_FREQ_IDENTITY_FIELDS = Object.freeze([
   'id_arret',
   'nom_arret',
@@ -555,6 +577,7 @@ export const IDFM_FREQ_IDENTITY_FIELDS = Object.freeze([
   'latitude_arret',
   'longitude_arret',
 ]);
+// i18n-ignore-end
 
 /**
  * The identity query: one row per (stop, published name) inside the box.
