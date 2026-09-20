@@ -24,6 +24,8 @@ import {
 } from './dpeSites.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
 import { governorRequestRender } from '../renderGovernor.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './dpeFrance.i18n.js';
 
 /**
  * ADEME DPE — the energy label of this building, and of every one around it.
@@ -280,17 +282,13 @@ export const DPE_THEME_PRECEDENCE = 10;
  * so these bounds explain a class without predicting it, which is why the
  * blurbs say so. Arrêté du 31 mars 2021.
  */
-const GRADE_ENERGY = Object.freeze({
-  A: 'jusqu\'à 70 kWh/m²/an',
-  B: '71 à 110 kWh/m²/an',
-  C: '111 à 180 kWh/m²/an',
-  D: '181 à 250 kWh/m²/an',
-  E: '251 à 330 kWh/m²/an',
-  F: '331 à 420 kWh/m²/an',
-  G: 'plus de 420 kWh/m²/an',
-});
+const gradeEnergy = (letter) => messages().energy[letter];
 
-/** French, and the same sentence in the row legend and on the volumes. */
+/**
+ * The layer's name, which the registry batch owns; the THEME label beside it
+ * is read from the catalog when the theme is published, so the Bâti 3D row
+ * says the same thing in whichever language the page is in.
+ */
 const THEME_LABEL = 'Performance énergétique (DPE)';
 
 /**
@@ -301,7 +299,7 @@ const THEME_LABEL = 'Performance énergétique (DPE)';
  * of it. Separating them would need a second wash colour, which A1 spends on
  * "measured / not measured" and cannot spend twice.
  */
-const THEME_UNKNOWN_LABEL = 'sans DPE dans le rayon scanné';
+const themeUnknownLabel = () => messages().theme.unknown;
 
 /**
  * Colour one diagnostic by its published label.
@@ -339,23 +337,25 @@ export function dpeMarkerSizePx(letter, paintedGrade = null) {
   return paintedGrade === letter ? SIZE_QUIET_PX : SIZE_LABELLED_PX;
 }
 
-/** `12 diagnostics` / `1 diagnostic`, in French. */
-function plural(n, singular, pluralForm = `${singular}s`) {
-  return `${n.toLocaleString('fr-FR')} ${n > 1 ? pluralForm : singular}`;
+/** `14 DPE` / `14 ratings` — how many diagnostics stand behind a mark. */
+function ratings(n) {
+  return messages().ratings(Number(n || 0));
 }
 
 /** The letters a site holds, as a phrase: `tous C`, `de B à F`. */
 function spreadPhrase(summary) {
-  if (!summary?.graded) return 'aucune étiquette publiée';
-  if (summary.mixed) return `de ${summary.best} à ${summary.worst}, majorité ${summary.grade}`;
-  return `tous ${summary.grade}`;
+  const m = messages().site;
+  if (!summary?.graded) return m.spreadNone;
+  if (summary.mixed) return m.spreadMixed(summary.best, summary.worst, summary.grade);
+  return m.spreadAll(summary.grade);
 }
 
 /** The card's title: the address, and how many diagnostics stand behind it. */
 export function dpeSiteTitle(site) {
-  const where = site?.address || 'Adresse non publiée';
+  const m = messages().site;
+  const where = site?.address || m.noAddress;
   const n = site?.summary?.total ?? site?.points?.length ?? 0;
-  return n > 1 ? `${where} — ${plural(n, 'DPE', 'DPE')}` : where;
+  return n > 1 ? m.title(where, ratings(n)) : where;
 }
 
 /**
@@ -395,6 +395,7 @@ export function dpeSiteTitle(site) {
  * @returns {string}
  */
 export function dpeSiteCardDescription(site, painted = null, joinRan = false) {
+  const m = messages().site;
   const summary = site?.summary || dpeBuildingSummary(site?.points);
   const costs = (site?.points || [])
     .map((point) => point?.annualCostEur)
@@ -414,24 +415,23 @@ export function dpeSiteCardDescription(site, painted = null, joinRan = false) {
   // words would spend one of the six lines saying nothing.
   let volume = null;
   if (painted?.grade && painted.grade !== summary.grade) {
-    volume = `volume Bâti 3D peint ${painted.grade}`;
+    volume = m.volumePainted(painted.grade);
   } else if (!painted && joinRan) {
-    volume = 'hors des emprises BD TOPO chargées';
+    volume = m.volumeOutside;
   }
   return [
-    `${plural(summary.total, 'DPE', 'DPE')}, ${spreadPhrase(summary)}`,
-    summary.ungraded ? `${summary.ungraded} sans étiquette publiée` : null,
-    poor ? `${plural(poor, 'passoire')} (F ou G)` : null,
-    median !== null
-      ? `${Math.round(median).toLocaleString('fr-FR')} €/an estimés (médiane du site)` : null,
-    shape?.areaM2 ? `emprise ${shape.areaM2.toLocaleString('fr-FR')} m² au sol` : null,
+    `${ratings(summary.total)}, ${spreadPhrase(summary)}`,
+    summary.ungraded ? m.ungraded(summary.ungraded) : null,
+    poor ? m.poor(poor) : null,
+    median !== null ? m.cost(formatNumber(Math.round(median))) : null,
+    shape?.areaM2 ? m.footprint(formatNumber(shape.areaM2)) : null,
     parcel
-      ? `parcelle ${parcel.idu}${Number.isFinite(parcel.contenanceM2)
-        ? ` — ${parcel.contenanceM2.toLocaleString('fr-FR')} m² cadastrés` : ''}`
+      ? `${m.parcel(parcel.idu)}${Number.isFinite(parcel.contenanceM2)
+        ? m.parcelArea(formatNumber(parcel.contenanceM2)) : ''}`
       : null,
     dpeSitePlacementLine(site),
     volume,
-    Number.isFinite(site?.distanceM) ? `${site.distanceM} m du centre du scan` : null,
+    Number.isFinite(site?.distanceM) ? m.distance(site.distanceM) : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -454,20 +454,15 @@ export function dpeThemeLegend(values) {
     painted.set(value.grade, painted.get(value.grade) + 1);
     if (value.mixed) disputed.set(value.grade, disputed.get(value.grade) + 1);
   }
+  const m = messages().legend;
   return DPE_LABELS.map((letter) => {
     const mixed = disputed.get(letter);
     return {
       label: letter,
       color: DPE_COLORS[letter],
       count: painted.get(letter),
-      blurb: `${GRADE_ENERGY[letter]} — la classe publiée est la pire des deux axes, `
-        + 'énergie et gaz à effet de serre. Le volume porte l\'étiquette tenue par le plus '
-        + 'de diagnostics du bâtiment, jamais leur moyenne.'
-        + (mixed
-          ? ` ${plural(mixed, 'immeuble')} peint${mixed > 1 ? 's' : ''} ${letter} `
-            + `${mixed > 1 ? 'ne sont pas unanimes' : 'n\'est pas unanime'} : les diagnostics `
-            + 'qui en diffèrent gardent leur badge à taille pleine sur le toit.'
-          : ''),
+      blurb: m.letterBlurb(gradeEnergy(letter))
+        + (mixed ? m.mixed(mixed, letter) : ''),
     };
   });
 }
@@ -683,9 +678,9 @@ function publishTheme() {
   _themeDirty = false;
   registerBuildingTheme({
     id: DPE_THEME_ID,
-    label: THEME_LABEL,
+    label: messages().theme.label,
     precedence: DPE_THEME_PRECEDENCE,
-    unknownLabel: THEME_UNKNOWN_LABEL,
+    unknownLabel: themeUnknownLabel(),
     // Every diagnostic, not only the graded ones: an ungraded diagnostic still
     // lands on a building, still counts as matched, and is still one of the
     // reasons a volume can be painted a letter that a badge on its roof
@@ -728,20 +723,19 @@ function withdrawTheme() {
  * @returns {{legend: Array<object>}}
  */
 export function dpeRowControls(payload) {
+  const m = messages().legend;
   const distribution = payload?.distribution || {};
   const legend = DPE_LABELS.map((letter) => ({
     label: letter,
     color: DPE_COLORS[letter],
     count: distribution[letter] || 0,
-    blurb: `${GRADE_ENERGY[letter]} — la classe publiée est la pire des deux axes, `
-      + 'énergie et gaz à effet de serre.',
+    blurb: m.letterBlurbShort(gradeEnergy(letter)),
   }));
   legend.push({
-    label: 'étiquette non publiée',
+    label: m.ungraded.label,
     color: COLOR_UNLABELLED_CSS,
     count: _join?.ungradedPoints ?? 0,
-    blurb: 'Diagnostic présent dans le registre sans étiquette exploitable. Il ne peut '
-      + 'peindre aucun volume et n\'est jamais rapproché de la lettre la plus proche.',
+    blurb: m.ungraded.blurb,
   });
   return { legend };
 }
@@ -785,13 +779,12 @@ export function dpeSummarize(payload) {
   const total = payload?.total ?? null;
   const join = _join || emptyJoin();
   const painting = Boolean(_enabled && join.painted);
+  const m = messages().coverage;
   const scan = total !== null && total > served
-    ? `${served.toLocaleString('fr-FR')} DPE servis sur ${total.toLocaleString('fr-FR')} `
-      + `dans ${SCAN_RADIUS_M} m (les plus proches du centre)`
-    : `${plural(served, 'DPE', 'DPE')} dans ${SCAN_RADIUS_M} m`;
+    ? m.truncated(formatNumber(served), formatNumber(total), SCAN_RADIUS_M)
+    : m.served(ratings(served), SCAN_RADIUS_M);
   const paint = painting
-    ? ` · ${plural(join.painted, 'volume')} peint${join.painted > 1 ? 's' : ''} `
-      + `sur ${join.buildings.toLocaleString('fr-FR')} chargés`
+    ? m.painted(join.painted, formatNumber(join.buildings))
     : '';
   // The sites, and the two things that can be true of one at once: it draws a
   // badge, and it may or may not have an outline. Printed as "8 of 10" rather
@@ -800,9 +793,7 @@ export function dpeSummarize(payload) {
   const coverage = payload?.siteCoverage || null;
   const sites = coverage?.sites ?? _sites.length;
   const outlined = coverage?.outlined ?? _sites.filter((site) => site?.shape).length;
-  const ground = sites
-    ? ` · ${plural(sites, 'adresse')} · ${outlined} avec emprise bâtie`
-    : '';
+  const ground = sites ? m.sites(sites, outlined) : '';
   return {
     // "2,805 diagnostics within 300 m" against "here are the 200 nearest".
     diagnosticsTotal: total,
@@ -1048,37 +1039,36 @@ export const DPE_POOR_CLASSES = Object.freeze([
     id: 'very-high',
     min: 25,
     color: '#e02f8c',
-    label: '25 % et plus',
-    blurb: 'Au moins un logement diagnostiqué sur quatre est classé F ou G — deux fois et demie '
-      + 'la part du registre national.',
+    get label() { return messages().cells.classes.veryHigh.label; },
+    get blurb() { return messages().cells.classes.veryHigh.blurb; },
   }),
   Object.freeze({
     id: 'high',
     min: 15,
     color: '#9a3fc4',
-    label: '15 à 25 %',
-    blurb: 'Nettement au-dessus de la part du registre national.',
+    get label() { return messages().cells.classes.high.label; },
+    get blurb() { return messages().cells.classes.high.blurb; },
   }),
   Object.freeze({
     id: 'near',
     min: 5,
     color: '#7b6fe0',
-    label: '5 à 15 %',
-    blurb: 'La bande où tombe le registre national (9,75 %) : un îlot ordinaire à cette échelle.',
+    get label() { return messages().cells.classes.near.label; },
+    get blurb() { return messages().cells.classes.near.blurb; },
   }),
   Object.freeze({
     id: 'low',
     min: 0,
     color: '#6fa3ee',
-    label: 'moins de 5 %',
-    blurb: 'Deux fois moins de passoires que le registre national.',
+    get label() { return messages().cells.classes.low.label; },
+    get blurb() { return messages().cells.classes.low.blurb; },
   }),
   Object.freeze({
     id: 'none',
     min: -Infinity,
     color: '#9adcf5',
-    label: 'aucune',
-    blurb: 'Aucun diagnostic F ou G publié dans cette cellule.',
+    get label() { return messages().cells.classes.none.label; },
+    get blurb() { return messages().cells.classes.none.blurb; },
   }),
 ]);
 
@@ -1113,13 +1103,10 @@ export function dpeCellRowControls(payload) {
     blurb: klass.blurb,
   }));
   legend.push({
-    label: `moins de ${DPE_CELL_MIN_TOTAL} DPE`,
+    label: messages().cells.tooFew.label(DPE_CELL_MIN_TOTAL),
     color: COLOR_UNLABELLED_CSS,
     count: counts.get('unknown') || 0,
-    blurb: `Trop peu de diagnostics pour publier un taux : sous ${DPE_CELL_MIN_TOTAL}, un seul `
-      + 'DPE déplace la part de plus de douze points et le chiffre porterait '
-      + 'l\'échantillonnage, pas l\'îlot. La cellule est quand même dessinée, à la taille '
-      + 'que son nombre lui vaut.',
+    blurb: messages().cells.tooFew.blurb(DPE_CELL_MIN_TOTAL),
   });
   return {
     legend,
@@ -1134,61 +1121,60 @@ export function dpeCellRowControls(payload) {
 
 /** What the colours are read against, named — the anchor, and what it is not. */
 export function dpeCellLegendNote(payload) {
+  const m = messages().cells;
   const summary = payload?.summary || {};
   const here = Number.isFinite(summary.poorShare)
-    ? `${summary.poorShare.toLocaleString('fr-FR')} % ici`
+    ? m.here(formatNumber(summary.poorShare))
     : null;
   return [
-    `Part de passoires (F ou G) · ${DPE_POOR_SHARE_NATIONAL.toLocaleString('fr-FR')} % `
-      + 'dans le registre national',
+    m.anchor(formatNumber(DPE_POOR_SHARE_NATIONAL)),
     here,
     // A2: the denominator is the REGISTER, not the housing stock. A DPE is
     // compulsory on a sale or a new let, so the register over-represents what
     // has changed hands recently — calling this a share of French housing
     // would be a different and unsupported claim.
-    'un DPE est obligatoire à la vente et à la location : le registre n’est pas le parc',
-    'taille du disque = nombre de DPE',
+    m.registerNotStock,
+    m.discSize,
   ].filter(Boolean).join(' · ');
 }
 
 /** The A5 line in cell mode. */
 export function dpeCellDisclosure(payload) {
+  const m = messages().cells;
   const summary = payload?.summary || {};
   const parts = [];
   const spanKm = payload?.box
-    ? ((payload.box.north - payload.box.south) * 110.54).toFixed(1).replace('.', ',')
+    ? formatDecimal((payload.box.north - payload.box.south) * 110.54, 1,
+      { minimumFractionDigits: 1 })
     : null;
-  parts.push(`vue agrégée sur ${spanKm ? `${spanKm} km` : 'la boîte'} de côté`);
-  parts.push(`${plural(summary.total || 0, 'DPE', 'DPE')} en ${plural(summary.cells || 0, 'cellule')}`);
+  parts.push(m.aggregated(spanKm ? `${spanKm} km` : m.box));
+  parts.push(m.inCells(ratings(summary.total || 0), Number(summary.cells || 0)));
   if (summary.tilesMissing > 0) {
-    parts.push(`${summary.tilesMissing} tuile(s) sur ${summary.tiles} sans réponse : `
-      + 'ce sol est vide faute de donnée, pas faute de diagnostic');
+    parts.push(m.tilesMissing(summary.tilesMissing, summary.tiles));
   }
   if (summary.truncated) {
-    parts.push('agrégation écrêtée par l’API : la grille est un sous-ensemble du sol');
+    parts.push(m.truncated);
   }
-  parts.push(`descendre sous ${SCAN_CELL_MIN_ALTITUDE_M} m pour retrouver chaque bâtiment, `
-    + 'son emprise et ses étiquettes');
+  parts.push(m.descendForBuildings(SCAN_CELL_MIN_ALTITUDE_M));
   const line = parts.join(' · ');
   return `${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
 }
 
 /** The card a cell opens. */
 export function dpeCellCard(cell) {
+  const m = messages().cells;
   const klass = dpePoorClass(cell?.poorShare);
   return [
-    `${plural(cell.total, 'DPE', 'DPE')} dans cette cellule`,
+    m.inCell(ratings(cell.total)),
     cell.poorShare === null
-      ? `moins de ${DPE_CELL_MIN_TOTAL} diagnostics : aucun taux publié`
-      : `${plural(cell.poor, 'passoire')} (F ou G) — ${cell.poorShare.toLocaleString('fr-FR')} %`,
+      ? m.noShare(DPE_CELL_MIN_TOTAL)
+      : m.poorShare(messages().site.poor(cell.poor), formatNumber(cell.poorShare)),
     klass && cell.poorShare !== null ? klass.label : null,
-    cell.poorShare !== null
-      ? `registre national ${DPE_POOR_SHARE_NATIONAL.toLocaleString('fr-FR')} %`
-      : null,
+    cell.poorShare !== null ? m.national(formatNumber(DPE_POOR_SHARE_NATIONAL)) : null,
     // The layer's own refusal, restated where a reader could most easily read
     // past it: this disc is a count of F and G, never a grade for the block.
-    'part de F et G, jamais une note moyenne du quartier',
-    `descendre sous ${SCAN_CELL_MIN_ALTITUDE_M} m pour les étiquettes bâtiment par bâtiment`,
+    m.notAGrade,
+    m.descendForLabels(SCAN_CELL_MIN_ALTITUDE_M),
   ].filter(Boolean).join(' · ');
 }
 
@@ -1209,8 +1195,8 @@ function drawDpeCells(payload, dataSource, classificationType) {
     const ring = discRing(cell.lon, cell.lat, radiusM);
     const positions = Cesium.Cartesian3.fromDegreesArray(ring.flat());
     const name = cell.poorShare === null
-      ? plural(cell.total, 'DPE', 'DPE')
-      : `${cell.poorShare.toLocaleString('fr-FR')} % de passoires`;
+      ? ratings(cell.total)
+      : messages().cells.discName(formatNumber(cell.poorShare));
     const description = dpeCellCard(cell);
     dataSource.entities.add({
       id: `dpe-cell:${cell.key}`,
