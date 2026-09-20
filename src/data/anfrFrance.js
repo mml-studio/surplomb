@@ -2438,12 +2438,14 @@ export function anfrMastLegend({
 
 const anfrFranceLayer = {
   id: ANFR_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Antennes mobiles (ANFR)',
   // NOT the ≋ the RÉSEAUX & CAPTEURS group uses, and pointedly not anything the
   // `radio` row could be confused with: that layer is audio streams and this
   // one is the masts. 📡 is the transmitting dish, unused elsewhere on the globe.
   icon: '📡',
   source: 'Observatoire des réseaux mobiles — ANFR',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

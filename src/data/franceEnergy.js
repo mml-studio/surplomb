@@ -2270,9 +2270,11 @@ export function createFranceEnergyLayer({
 
   const layer = {
     id: 'france-energy',
+    // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
     name: 'Mix élec (FR)',
     icon: '⚡',
     source: 'RTE / ODRÉ',
+    // i18n-ignore-end
     updateInterval: UPDATE_INTERVAL_MS,
 
     init(viewer) {

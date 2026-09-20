@@ -1500,12 +1500,14 @@ export function buildSupLoadingLabel({
 
 const supFranceLayer = {
   id: SUP_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Enseignement supérieur (FR)',
   // NOT the 🎓 `schools-fr` uses. The two rows sit next to each other in the
   // same taxonomy group and share 2 800 addresses; giving them the same glyph
   // would make the panel the one place a reader cannot tell them apart.
   icon: '🏛',
   source: 'Effectifs d’étudiants inscrits — MESR',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

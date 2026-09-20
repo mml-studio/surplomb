@@ -190,10 +190,12 @@ const ports = createLocalGeoJsonLayer({
 const airports = createLocalGeoJsonLayer({
   id: 'local-airports',
   url: airportsUrl,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Aéroports',
   color: '#b388ff', // Violet — clear of cyan (datacenters), blue (dams), amber (ports)
   icon: '✈',
   source: 'OurAirports · IGN',
+  // i18n-ignore-end
   labels: true,
   // Tighter than ports (800/136): airports cluster into metro areas — eleven
   // fields inside Île-de-France alone — so the grid needs the extra pitch or

@@ -1734,12 +1734,14 @@ export function buildFraicheurLoadingLabel({
 
 const fraicheurParisLayer = {
   id: FRAICHEUR_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Îlots de fraîcheur (Paris)',
   // 🌳 and not 🌲/🌿: the taxonomy neighbours in RISQUES & ENVIRONNEMENT are
   // 🔥 (FIRMS), 🌊 (Vigicrues), ⚠ (Géorisques) and 🌪 (vigilance météo), so the
   // glyph has to say "vegetation and shade" without saying "wildfire".
   icon: '🌳',
   source: FRAICHEUR_SOURCE,
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

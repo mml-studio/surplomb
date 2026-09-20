@@ -1398,9 +1398,11 @@ function buildLoadingLabel() {
  */
 const sharedMobilityFranceLayer = {
   id: SHARED_MOBILITY_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Véhicules partagés (FR)',
   icon: '🛴',
   source: 'transport.data.gouv.fr',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

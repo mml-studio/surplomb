@@ -289,6 +289,7 @@ const gradeEnergy = (letter) => messages().energy[letter];
  * is read from the catalog when the theme is published, so the Bâti 3D row
  * says the same thing in whichever language the page is in.
  */
+// i18n-ignore-next-line — registry field, not copy: see src/data/layerTaxonomy.i18n.js.
 const THEME_LABEL = 'Performance énergétique (DPE)';
 
 /**
@@ -1244,9 +1245,11 @@ const DPE_CELL_OUTLINE_WIDTH_PX = 1.4;
 
 const dpeScanLayer = createAddressScanLayer({
   id: 'dpe-fr',
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: THEME_LABEL,
   icon: '▤',
   source: 'ADEME — Observatoire DPE',
+  // i18n-ignore-end
   endpoint: '/api/dpe',
   updateInterval: UPDATE_INTERVAL_MS,
   // Two questions, one route — see `dvfSales.js` for the contract.

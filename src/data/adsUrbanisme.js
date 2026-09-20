@@ -918,9 +918,11 @@ export function adsRowControls(payload) {
 
 const adsScanLayer = createAddressScanLayer({
   id: ADS_BUILDING_THEME_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Autorisations d’urbanisme',
   icon: '⌂',
   source: 'Sitadel — SDES + portails ADS',
+  // i18n-ignore-end
   endpoint: '/api/ads-fr',
   updateInterval: UPDATE_INTERVAL_MS,
   runtimeParams: {

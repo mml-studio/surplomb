@@ -83,6 +83,7 @@ import messages from './isochroneRings.i18n.js';
 
 /** Layer id — share-link registry key and voice-tool enum value. */
 export const ISOCHRONE_LAYER_ID = 'isochrone-fr';
+// i18n-ignore-next-line — registry field, not copy: see src/data/layerTaxonomy.i18n.js.
 export const ISOCHRONE_LAYER_NAME = 'Zone de chalandise (isochrone)';
 
 /**
@@ -610,9 +611,11 @@ export function flyToCatchmentFrame(viewer, frame) {
 
 const base = createAddressScanLayer({
   id: ISOCHRONE_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: ISOCHRONE_LAYER_NAME,
   icon: '◎',
   source: 'IGN Géoplateforme (BD TOPO®) · OpenStreetMap / OSRM pour le vélo',
+  // i18n-ignore-end
   endpoint: '/api/isochrone',
   updateInterval: UPDATE_INTERVAL_MS,
   // Functions, not constants: both depend on the mode, and the mode is a
