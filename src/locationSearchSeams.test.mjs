@@ -40,8 +40,8 @@ test('flyToAddress names every outcome instead of toasting it', () => {
   // Toasts are the search box's business, not the seam's: the first-run card
   // writes its own French status line instead.
   assert.doesNotMatch(flyToAddress, /_showToast/);
-  assert.match(ui, /if \(outcome\.status === 'not-found'\) this\._showToast\('Location not found'\);/);
-  assert.match(ui, /else if \(outcome\.status === 'failed'\) this\._showToast\('Search failed'\);/);
+  assert.match(ui, /if \(outcome\.status === 'not-found'\) this\._showToast\(messages\(\)\.toast\.locationNotFound\);/);
+  assert.match(ui, /else if \(outcome\.status === 'failed'\) this\._showToast\(messages\(\)\.toast\.searchFailed\);/);
 });
 
 test('flyToAddress always settles the search field it claimed', () => {

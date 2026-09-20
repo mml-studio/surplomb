@@ -2110,7 +2110,7 @@ class CockpitViewController {
         const chevron = document.createElement('span');
         chevron.className = 'material-symbols-outlined cockpit-signal-target-chevron';
         chevron.setAttribute('aria-hidden', 'true');
-        chevron.textContent = 'chevron_right';
+        chevron.textContent = 'chevron_right';  // i18n-ignore-line — Material Symbols ligature, not a word
         heading.append(label, rule, chevron);
         entry.classList.add('actionable');
       } else {
@@ -2210,6 +2210,7 @@ class CockpitViewController {
       this.contextToggle.setAttribute('aria-label', expanded ? m.collapse : m.expand);
       this.contextToggle.title = expanded ? m.collapseTitle : m.expandTitle;
       const icon = this.contextToggle.querySelector('.material-symbols-outlined');
+      // i18n-ignore-next-line — Material Symbols ligatures, not words
       if (icon) icon.textContent = expanded ? 'chevron_left' : 'chevron_right';
     }
     if (this.active && wasCollapsed && !this.contextCollapsed) {
@@ -2230,6 +2231,7 @@ class CockpitViewController {
       this.signalToggle.setAttribute('aria-label', expanded ? m.collapse : m.expand);
       this.signalToggle.title = expanded ? m.collapseTitle : m.expandTitle;
       const icon = this.signalToggle.querySelector('.material-symbols-outlined');
+      // i18n-ignore-next-line — Material Symbols ligatures, not words
       if (icon) icon.textContent = expanded ? 'right_panel_close' : 'right_panel_open';
     }
     if (this.signalCollapsed) this.stopBriefRotation();
@@ -4356,7 +4358,7 @@ export class StyleManager {
       const hadOldPositions = Object.keys(localStorage)
         .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
       if (hadOldPositions) {
-        this._showToast('Panel layout updated — positions reset to new defaults');
+        this._showToast(messages().toast.panelLayoutReset);
       }
     } catch {
       // storage unavailable
@@ -5081,9 +5083,10 @@ export class StyleManager {
     if (result.classification === 'pending') {
       this._shareTrackingNoticeGeneration += 1;
       this._shareTrackingAcquiringKey = trackingKey;
-      this._showGlobalStatusNotice('ACQUIRING', {
+      const ms = messages().share;
+      this._showGlobalStatusNotice(ms.acquiring, {
         state: 'acquiring',
-        detail: `SHARED ${String(result.label || 'SUBJECT').toUpperCase()}`,
+        detail: ms.acquiringSubject(String(result.label || ms.subjectFallback).toUpperCase()),
         persistent: true,
       });
       return;
@@ -5103,12 +5106,13 @@ export class StyleManager {
     const noticeGeneration = ownsAcquiringNotice
       ? this._shareTrackingNoticeGeneration
       : ++this._shareTrackingNoticeGeneration;
-    const subject = result.label || 'entity';
+    const ms = messages().share;
+    const subject = result.label || ms.entityFallback;
     const message = result.classification === 'expired'
-      ? `Shared ${subject} follow expired`
+      ? ms.followExpired(subject)
       : result.classification === 'source-unavailable'
-        ? `Shared ${subject} could not be restored — feed unavailable`
-        : `Shared ${subject} is unavailable`;
+        ? ms.feedUnavailable(subject)
+        : ms.unavailable(subject);
     const showAfterStartupCover = () => {
       requestAnimationFrame(() => {
         if (!canPresentDeferredStatusNotice(
@@ -5163,7 +5167,7 @@ export class StyleManager {
           nextMode,
           { notificationToken },
         ),
-        'Contacts could not complete the requested transition; try again',
+        messages().toast.contactsFailed,
       ).then((succeeded) => {
         if (nextMode && shouldExpandGlobalContextPanel({
           action: 'contacts',
@@ -5180,7 +5184,7 @@ export class StyleManager {
           nextMode,
           { notificationToken },
         ),
-        'Space Missions could not complete the requested transition; try again',
+        messages().toast.missionsFailed,
       ).then((succeeded) => {
         if (nextMode && shouldExpandGlobalContextPanel({
           action: 'space-missions',
@@ -5193,9 +5197,10 @@ export class StyleManager {
 
   async _runUserFacingContextAction(
     operation,
-    message = 'Context could not restore every layer; try again',
+    message = null,
     { falseIsFailure = true } = {},
   ) {
+    const notice = message ?? messages().toast.contextFailed;
     const notificationToken = Symbol('user-facing-context-action');
     this._userFacingContextNotificationTokens.add(notificationToken);
     try {
@@ -5204,7 +5209,7 @@ export class StyleManager {
         falseIsFailure,
         onFailure: (error) => {
           console.warn('[Context] user-facing transition failed', error);
-          this._showToast(message);
+          this._showToast(notice);
         },
       });
     } finally {
@@ -5670,9 +5675,10 @@ export class StyleManager {
     if (isLayerModuleUnavailable(change?.error)) {
       const label = (this._dataManager?.getAll?.() || [])
         .find((layer) => layer.id === change.layerId)?.label || change.layerId;
-      return `${label} : code non chargé — recharge la page`;
+      return staleBuildNotice({ label, mode: 'manual' });
     }
-    return `${change.layerId} could not ${change.enabled ? 'start' : 'stop'} cleanly`;
+    const m = messages().toast;
+    return m.layerFailed(change.layerId, change.enabled ? m.layerStart : m.layerStop);
   }
 
   /**
@@ -5768,7 +5774,7 @@ export class StyleManager {
     }
     if (change?.type === 'visibility-blocked') {
       if (!this._userFacingContextNotificationTokens.has(change.notificationToken)) {
-        this._showToast(change.reason || 'That layer is unavailable in the current Context mode');
+        this._showToast(change.reason || messages().toast.layerBlocked);
       }
       this._syncContextModeButtons();
       return;
@@ -6468,9 +6474,9 @@ export class StyleManager {
     const compactOpen = Boolean(this._contextRadioDock?.classList.contains('disclosure-open'));
     this._contextRadioToggleBtn.setAttribute('aria-controls', 'context-radio-mini');
     this._contextRadioToggleBtn.setAttribute('aria-expanded', String(compactOpen));
-    const action = compactOpen ? 'Close' : 'Open';
-    this._contextRadioToggleBtn.setAttribute('aria-label', `${action} compact Radio controls`);
-    this._contextRadioToggleBtn.title = `${action} compact Radio controls`;
+    const label = compactOpen ? messages().radio.closeCompact : messages().radio.openCompact;
+    this._contextRadioToggleBtn.setAttribute('aria-label', label);
+    this._contextRadioToggleBtn.title = label;
   }
 
   /** Render Radio state without making playback or Context decisions. */
@@ -6847,7 +6853,7 @@ export class StyleManager {
         selectedCameraId: cameraId,
         calibration: { cameraId, save: true },
       }, { origin: 'user' });
-      this._showToast('CCTV calibration saved');
+      this._showToast(messages().toast.cctvCalibrationSaved);
     });
 
     this._cctvCalibResetBtn?.addEventListener('click', () => {
@@ -7136,7 +7142,7 @@ export class StyleManager {
         reset: true,
       },
     }, { origin: 'user' });
-    this._showToast('CCTV calibration reset');
+    this._showToast(messages().toast.cctvCalibrationReset);
   }
 
   /**
@@ -7228,7 +7234,7 @@ export class StyleManager {
    */
   async _toggleCctvEnabled(forceState) {
     if (!this._dataManager || !this._dataManager.layers?.has('cctv')) {
-      this._showToast('CCTV layer unavailable');
+      this._showToast(messages().toast.cctvUnavailable);
       return false;
     }
     const enabled = this._dataManager.isEnabled('cctv');
@@ -8876,8 +8882,8 @@ export class StyleManager {
       this._celestialBtn.disabled = !styleSupported;
       this._celestialBtn.setAttribute('aria-disabled', String(!styleSupported));
       this._celestialBtn.title = styleSupported
-        ? 'Celestial ring — reveal the full globe'
-        : 'Celestial ring — available in Normal style';
+        ? messages().celestial.reveal
+        : messages().celestial.normalOnly;
     }
     let cameraFocused = false;
     if (nextEnabled && focus) {
@@ -9841,8 +9847,7 @@ export class StyleManager {
     note.hidden = !invalid;
     if (invalid) {
       const label = STYLE_SENSOR_LABELS[styleName] || styleName.toUpperCase();
-      note.textContent = `${label} repaints the whole frame — the colours below `
-        + 'no longer match the map. Return to NORMAL to read the key.';
+      note.textContent = messages().legend.keyInvalid(label);
     } else {
       note.textContent = '';
     }
@@ -10121,8 +10126,8 @@ export class StyleManager {
     const query = this._locationSearch.value.trim();
     if (!query) return;
     const outcome = await this.flyToAddress(query, { searchField: this._locationSearch });
-    if (outcome.status === 'not-found') this._showToast('Location not found');
-    else if (outcome.status === 'failed') this._showToast('Search failed');
+    if (outcome.status === 'not-found') this._showToast(messages().toast.locationNotFound);
+    else if (outcome.status === 'failed') this._showToast(messages().toast.searchFailed);
   }
 
   /**
@@ -10377,7 +10382,7 @@ export class StyleManager {
     orbitPill.id = 'orbit-toggle';
     orbitPill.className = 'poi-pill poi-pill-orbit';
     orbitPill.setAttribute('aria-pressed', String(!!this.orbitController?.active));
-    orbitPill.innerHTML = '<span class="poi-pill-key">O</span><span class="poi-pill-name">ORBITE</span>';
+    orbitPill.innerHTML = `<span class="poi-pill-key">O</span><span class="poi-pill-name">${messages().actions.orbit}</span>`;
     orbitPill.addEventListener('click', () => this._toggleOrbit());
     this._poiRow.appendChild(orbitPill);
     this._orbitToggle = orbitPill;
@@ -10476,7 +10481,7 @@ export class StyleManager {
     // Create orbit indicator element
     this._orbitIndicator = document.createElement('div');
     this._orbitIndicator.id = 'orbit-indicator';
-    this._orbitIndicator.innerHTML = '<span class="orbit-icon">&#x21BB;</span> ORBIT';
+    this._orbitIndicator.innerHTML = `<span class="orbit-icon">&#x21BB;</span> ${messages().actions.orbit}`;
     // The indicator is the only thing on screen that says orbit is running, so
     // it is also where a reader reaches to stop it. It only accepts a pointer
     // while `.active` (CSS), so it never eats a click on the globe behind it.
@@ -10497,7 +10502,7 @@ export class StyleManager {
    */
   _toggleOrbit() {
     if (!this._currentTarget) {
-      this._showToast('Fly to a POI first');
+      this._showToast(messages().toast.flyToPoiFirst);
       return;
     }
 
@@ -10593,7 +10598,7 @@ export class StyleManager {
       if (result === false) return { status: 'refused' };
       // Exactly the free-text search's landing state.
       if (result) this._currentTarget = result.targetPosition;
-      this._landOnSearchedLocation('Autour de moi');
+      this._landOnSearchedLocation(messages().actions.aroundMe);
       return { status: 'flying' };
     } catch (error) {
       if (this._disposed) return { status: 'refused' };
@@ -10689,7 +10694,7 @@ export class StyleManager {
     this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
-    this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
+    this._clearSelectedLayersBtn.setAttribute('aria-label', messages().actions.clearingLayers);
 
     const managerOperation = this._dataManager.clearSelectedLayers({
       origin: 'user',
@@ -10697,17 +10702,18 @@ export class StyleManager {
     });
     this._clearSelectedLayersManagerPromise = managerOperation;
     const operation = managerOperation.then((result) => {
+      const m = messages().toast;
       if (result.targetIds.length === 0) {
-        this._showToast('No selected data layers');
+        this._showToast(m.noSelectedLayers);
       } else if (result.notClearedIds.length > 0) {
-        this._showToast(`${result.notClearedIds.length} data layer${result.notClearedIds.length === 1 ? '' : 's'} could not be cleared`);
+        this._showToast(m.notCleared(result.notClearedIds.length));
       } else {
-        this._showToast(`Cleared ${result.clearedIds.length} data layer${result.clearedIds.length === 1 ? '' : 's'}`);
+        this._showToast(m.cleared(result.clearedIds.length));
       }
       return result;
     }).catch((error) => {
       console.warn('[Data] clear selected layers failed', error);
-      this._showToast('Selected data layers could not be cleared');
+      this._showToast(messages().toast.clearFailed);
       return {
         targetIds: [],
         items: [],
@@ -10724,7 +10730,7 @@ export class StyleManager {
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;
-      this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clear selected data layers');
+      this._clearSelectedLayersBtn.setAttribute('aria-label', messages().actions.clearLayers);
       this._preservePanelStateDuringLayerClear = false;
       this._clearSelectedLayersManagerPromise = null;
       this._clearSelectedLayersPromise = null;
@@ -10780,8 +10786,8 @@ export class StyleManager {
           longitude: Number(Cesium.Math.toDegrees(carto.longitude).toFixed(2)),
         },
       };
-      this._resetGlobeBtn?.setAttribute('aria-label', 'Reset to full globe view');
-      this._cockpitResetGlobeBtn?.setAttribute('aria-label', 'Reset cockpit to full globe view');
+      this._resetGlobeBtn?.setAttribute('aria-label', messages().actions.resetGlobe);
+      this._cockpitResetGlobeBtn?.setAttribute('aria-label', messages().actions.resetCockpit);
       this._globeResetPromise = null;
       resolveReset(result);
     };
@@ -10789,8 +10795,8 @@ export class StyleManager {
       const height = this.viewer.camera.positionCartographic?.height;
       finish(!Number.isFinite(height) || Math.abs(height - GLOBE_VIEW.heightM) > 1000);
     }, 4200);
-    this._resetGlobeBtn?.setAttribute('aria-label', 'Resetting to full globe view');
-    this._cockpitResetGlobeBtn?.setAttribute('aria-label', 'Resetting cockpit to full globe view');
+    this._resetGlobeBtn?.setAttribute('aria-label', messages().actions.resettingGlobe);
+    this._cockpitResetGlobeBtn?.setAttribute('aria-label', messages().actions.resettingCockpit);
     const target = flyToGlobeView(this.viewer, {
       onComplete: () => finish(false),
       onCancel: () => finish(true),
@@ -10810,8 +10816,8 @@ export class StyleManager {
       // `shared` and `cancelled` say nothing a reader needs: the system sheet
       // already reported itself, and dismissing it is not a failure.
       const outcome = await this.shareLinkManager.shareLink();
-      if (outcome === 'copied') this._showToast('Link copied!');
-      else if (outcome === 'failed') this._showToast('Copy failed');
+      if (outcome === 'copied') this._showToast(messages().toast.linkCopied);
+      else if (outcome === 'failed') this._showToast(messages().toast.copyFailed);
     });
   }
 
@@ -10949,8 +10955,8 @@ export class StyleManager {
         // not, and a permanent bar over the globe is its own annoyance.
         durationMs: auto ? Infinity : STALE_BUILD_MANUAL_DWELL_MS,
         action: auto
-          ? { label: 'ANNULER', onClick: () => this._declineStaleBuildReload() }
-          : { label: 'RECHARGER', onClick: () => this._performStaleBuildReload() },
+          ? { label: messages().toast.cancel, onClick: () => this._declineStaleBuildReload() }
+          : { label: messages().toast.reload, onClick: () => this._performStaleBuildReload() },
       },
     );
   }
@@ -11236,21 +11242,17 @@ export class StyleManager {
     const btn = this._detectionBtn;
     const enabled = modeLabel !== 'OFF';
     btn.setAttribute('aria-pressed', String(enabled));
-    btn.setAttribute('aria-label', enabled
-      ? `Detection overlay: ${String(modeLabel).toLowerCase()}`
-      : 'Detection overlay: off');
+    // `modeLabel` is the overlay's own id (SPARSE / BALANCED / DENSE / OFF) —
+    // data, shared with the share link. Only its display is translated.
+    const m = messages().detection;
+    const shown = { SPARSE: m.sparse, BALANCED: m.balanced, DENSE: m.dense }[modeLabel] || m.detect;
+    btn.setAttribute('aria-label', enabled ? m.overlay(shown.toLowerCase()) : m.overlayOff);
     btn.classList.remove('active', 'god', 'panoptic');
-    if (modeLabel === 'SPARSE') {
-      btn.querySelector('.pp-label').textContent = 'SPARSE';
-      btn.classList.add('active');
-    } else if (modeLabel === 'BALANCED') {
-      btn.querySelector('.pp-label').textContent = 'BALANCED';
+    btn.querySelector('.pp-label').textContent = shown;
+    if (modeLabel === 'SPARSE' || modeLabel === 'BALANCED') {
       btn.classList.add('active');
     } else if (modeLabel === 'DENSE') {
-      btn.querySelector('.pp-label').textContent = 'DENSE';
       btn.classList.add('active', 'panoptic');
-    } else {
-      btn.querySelector('.pp-label').textContent = 'DETECT';
     }
 
     if (this._detectionSliderRow) {

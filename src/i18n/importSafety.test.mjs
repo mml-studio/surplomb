@@ -20,11 +20,11 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  *
  * `boot.js` IS the page's entry: deciding the showcase and writing `<html>`
  * at import is its whole job, and it reads `document` on purpose. `main.js`
- * evaluates Cesium's module graph, which needs a browser to be imported at
- * all. Their CATALOGS are still checked here, like every other; only the
- * modules beside them are skipped.
+ * and `ui.js` evaluate Cesium's module graph, which needs a browser to be
+ * imported at all. Their CATALOGS are still checked here, like every other;
+ * only the modules beside them are skipped.
  */
-const ENTRY_MODULES = new Set(['boot.js', 'main.js']);
+const ENTRY_MODULES = new Set(['boot.js', 'main.js', 'ui.js']);
 
 /** Every catalog under src/, plus the modules they belong to. */
 function catalogsAndModules() {

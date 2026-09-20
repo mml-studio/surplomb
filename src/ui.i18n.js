@@ -320,6 +320,117 @@ export default defineMessages({
     start: { fr: 's’allumer', en: 'start' },
     stop: { fr: 's’éteindre', en: 'stop' },
   },
+  // ── what the globe says in a toast or a status chip ────────────────────
+  toast: {
+    panelLayoutReset: {
+      fr: 'Disposition des panneaux mise à jour — positions remises aux nouveaux réglages',
+      en: 'Panel layout updated — positions reset to new defaults',
+    },
+    noSelectedLayers: { fr: 'Aucune couche sélectionnée', en: 'No selected data layers' },
+    notCleared: {
+      fr: (count) => `${count} couche${count === 1 ? '' : 's'} n’a${count === 1 ? '' : 'ont'} pas pu être éteinte${count === 1 ? '' : 's'}`,
+      en: (count) => `${count} data layer${count === 1 ? '' : 's'} could not be cleared`,
+      sample: [2],
+    },
+    cleared: {
+      fr: (count) => `${count} couche${count === 1 ? '' : 's'} éteinte${count === 1 ? '' : 's'}`,
+      en: (count) => `Cleared ${count} data layer${count === 1 ? '' : 's'}`,
+      sample: [3],
+    },
+    clearFailed: { fr: 'Les couches sélectionnées n’ont pas pu être éteintes', en: 'Selected data layers could not be cleared' },
+    linkCopied: { fr: 'Lien copié !', en: 'Link copied!' },
+    copyFailed: { fr: 'La copie a échoué', en: 'Copy failed' },
+    locationNotFound: { fr: 'Lieu introuvable', en: 'Location not found' },
+    searchFailed: { fr: 'La recherche a échoué', en: 'Search failed' },
+    flyToPoiFirst: { fr: 'Volez d’abord vers un point de repère', en: 'Fly to a POI first' },
+    cctvCalibrationSaved: { fr: 'Calibrage de la caméra enregistré', en: 'CCTV calibration saved' },
+    cctvCalibrationReset: { fr: 'Calibrage de la caméra réinitialisé', en: 'CCTV calibration reset' },
+    cctvUnavailable: { fr: 'Couche Caméras indisponible', en: 'CCTV layer unavailable' },
+    layerBlocked: {
+      fr: 'Cette couche est indisponible dans le mode Contexte actuel',
+      en: 'That layer is unavailable in the current Context mode',
+    },
+    layerFailed: {
+      fr: (layerId, action) => `${layerId} n’a pas pu ${action} proprement`,
+      en: (layerId, action) => `${layerId} could not ${action} cleanly`,
+      sample: ['flights', 'start'],
+    },
+    layerStart: { fr: 's’allumer', en: 'start' },
+    layerStop: { fr: 's’éteindre', en: 'stop' },
+    contactsFailed: {
+      fr: 'Contacts n’a pas pu terminer la transition demandée ; réessayez',
+      en: 'Contacts could not complete the requested transition; try again',
+    },
+    missionsFailed: {
+      fr: 'Missions spatiales n’a pas pu terminer la transition demandée ; réessayez',
+      en: 'Space Missions could not complete the requested transition; try again',
+    },
+    contextFailed: {
+      fr: 'Contexte n’a pas pu restaurer toutes les couches ; réessayez',
+      en: 'Context could not restore every layer; try again',
+    },
+    reload: { fr: 'RECHARGER', en: 'RELOAD' },
+    cancel: { fr: 'ANNULER', en: 'CANCEL' },
+  },
+  // ── a shared view that is still being restored ─────────────────────────
+  share: {
+    acquiring: { fr: 'ACQUISITION', en: 'ACQUIRING' },
+    acquiringSubject: { fr: (subject) => `PARTAGÉ ${subject}`, en: (subject) => `SHARED ${subject}`, sample: ['AF1234'] },
+    subjectFallback: { fr: 'SUJET', en: 'SUBJECT' },
+    entityFallback: { fr: 'objet', en: 'entity' },
+    followExpired: {
+      fr: (subject) => `Le suivi partagé de ${subject} a expiré`,
+      en: (subject) => `Shared ${subject} follow expired`,
+      sample: ['AF1234'],
+    },
+    feedUnavailable: {
+      fr: (subject) => `${subject} n’a pas pu être restauré — flux indisponible`,
+      en: (subject) => `Shared ${subject} could not be restored — feed unavailable`,
+      sample: ['AF1234'],
+    },
+    unavailable: {
+      fr: (subject) => `${subject} partagé est indisponible`,
+      en: (subject) => `Shared ${subject} is unavailable`,
+      sample: ['AF1234'],
+    },
+  },
+  // ── the globe's own actions ────────────────────────────────────────────
+  actions: {
+    clearingLayers: { fr: 'Extinction des couches sélectionnées', en: 'Clearing selected data layers' },
+    clearLayers: { fr: 'Éteindre les couches sélectionnées', en: 'Clear selected data layers' },
+    resetGlobe: { fr: 'Revenir au globe entier', en: 'Reset to full globe view' },
+    resetCockpit: { fr: 'Réinitialiser le cockpit et revenir au globe entier', en: 'Reset cockpit to full globe view' },
+    resettingGlobe: { fr: 'Retour au globe entier…', en: 'Resetting to full globe view' },
+    resettingCockpit: { fr: 'Retour du cockpit au globe entier…', en: 'Resetting cockpit to full globe view' },
+    aroundMe: { fr: 'Autour de moi', en: 'Around me', note: 'The label the LOCATION readout keeps after a geolocation flight.' },
+    orbit: { fr: 'ORBITE', en: 'ORBIT' },
+  },
+  // ── the detection overlay ──────────────────────────────────────────────
+  detection: {
+    overlay: {
+      fr: (mode) => `Surcouche de détection : ${mode}`,
+      en: (mode) => `Detection overlay: ${mode}`,
+      sample: ['dense'],
+    },
+    overlayOff: { fr: 'Surcouche de détection : éteinte', en: 'Detection overlay: off' },
+    sparse: { fr: 'ÉPARSE', en: 'SPARSE' },
+    balanced: { fr: 'ÉQUILIBRÉE', en: 'BALANCED' },
+    dense: { fr: 'DENSE', en: 'DENSE' },
+    detect: { fr: 'DÉTECT', en: 'DETECT' },
+  },
+  // ── the map key when a sensor pass is repainting the frame ─────────────
+  legend: {
+    keyInvalid: {
+      fr: (style) => `${style} repeint toute l’image — les couleurs ci-dessous ne correspondent plus à la carte. Revenez à NORMAL pour lire la légende.`,
+      en: (style) => `${style} repaints the whole frame — the colours below no longer match the map. Return to NORMAL to read the key.`,
+      sample: ['FLIR'],
+    },
+  },
+  // ── the celestial ring ─────────────────────────────────────────────────
+  celestial: {
+    reveal: { fr: 'Anneau céleste — révéler le globe entier', en: 'Celestial ring — reveal the full globe' },
+    normalOnly: { fr: 'Anneau céleste — disponible dans le style Normal', en: 'Celestial ring — available in Normal style' },
+  },
   // ── panels ─────────────────────────────────────────────────────────────
   panel: {
     fallbackName: { fr: 'panneau', en: 'panel', note: 'When a panel has no visible title to name.' },
