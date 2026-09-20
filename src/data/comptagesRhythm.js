@@ -175,15 +175,27 @@
  */
 
 import { textSparkline } from './sparkline.js';
+import { formatInteger, formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, {
+  COMPTAGES_BARRE_NAMES,
+  COMPTAGES_OCCUPANCY_NAMES,
+  COMPTAGES_RHYTHM_NAMES,
+} from './comptagesRhythm.i18n.js';
 
 /** The three things an arc can have done over 168 hours. */
 export const COMPTAGES_STATES = Object.freeze(['counted', 'occupancy', 'silent']);
 
-export const COMPTAGES_STATE_LABELS = Object.freeze({
-  counted: 'Véhicules comptés',
-  occupancy: 'Occupation seule',
-  silent: 'Aucune mesure',
-});
+/**
+ * What an arc did over 168 hours, in words — GETTERS, so the three absences
+ * are worded in the reader's language when a key asks, not at import.
+ */
+export const COMPTAGES_STATE_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  COMPTAGES_STATES.map((state) => [state, {
+    get: () => messages().states[state],
+    enumerable: true,
+  }]),
+)));
 
 /** Upper bounds of the flow bands, in vehicles per hour. Five bands. */
 export const COMPTAGES_FLOW_THRESHOLDS = Object.freeze([100, 250, 500, 1000]);
@@ -291,12 +303,11 @@ export function comptagesFlowScaleGlyph() {
 
 /**
  * The domain of the width scale, in the unit the loops count.
- * @returns {string} e.g. `moins de 100 à plus de 1 000 véh/h`.
+ * @returns {string} e.g. `de moins de 100 à plus de 1 000` / `from under 100 to over 1,000`.
  */
 export function comptagesFlowScaleDomain() {
   const cuts = COMPTAGES_FLOW_THRESHOLDS;
-  const top = cuts[cuts.length - 1].toLocaleString('fr-FR');
-  return `de moins de ${cuts[0]} à plus de ${top}`;
+  return messages().flow.domain(cuts[0], formatNumber(cuts[cuts.length - 1]));
 }
 
 /** Occupancy-only arcs: measured, off the ramp, one flat colour. */
@@ -326,7 +337,9 @@ export const COMPTAGES_HOUR_GAP_COLOR = '#aeb9c8';
 export const COMPTAGES_HOUR_GAP_WIDTH = 2.0;
 export const COMPTAGES_HOUR_GAP_DASH_LENGTH = 5;
 export const COMPTAGES_HOUR_GAP_ALPHA = 0.7;
-export const COMPTAGES_HOUR_GAP_LABEL = 'Pas de mesure à cette heure';
+export function comptagesHourGapLabel() {
+  return messages().hourGap;
+}
 
 /** Alpha for every solid stroke. Low enough to keep the tarmac readable. */
 export const COMPTAGES_STROKE_ALPHA = 0.9;
@@ -335,22 +348,29 @@ export const COMPTAGES_STROKE_ALPHA = 0.9;
  * The Ville de Paris's own occupancy bands, copied verbatim from the `k` field
  * description. `min` is inclusive, the next band's `min` is the exclusive top.
  */
+const occupancyBand = (id, min) => Object.freeze({
+  id,
+  min,
+  get label() { return labelFor(COMPTAGES_OCCUPANCY_NAMES, id); },
+});
+
 export const COMPTAGES_OCCUPANCY_BANDS = Object.freeze([
-  Object.freeze({ id: 'fluide', min: 0, label: 'Fluide' }),
-  Object.freeze({ id: 'presature', min: 15, label: 'Pré-saturé' }),
-  Object.freeze({ id: 'sature', min: 30, label: 'Saturé' }),
-  Object.freeze({ id: 'bloque', min: 50, label: 'Bloqué' }),
+  occupancyBand('fluide', 0),
+  occupancyBand('presature', 15),
+  occupancyBand('sature', 30),
+  occupancyBand('bloque', 50),
 ]);
 
 /** At and above this occupancy the city calls the arc saturated. */
 export const COMPTAGES_SATURATED_MIN = 30;
 
 /** What the city says about the arc itself, keyed on `etat_barre`. */
-export const COMPTAGES_BARRE_LABELS = Object.freeze({
-  o: 'déclaré ouvert',
-  b: 'déclaré barré',
-  i: 'déclaré invalide',
-});
+export const COMPTAGES_BARRE_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  ['o', 'b', 'i'].map((code) => [code, {
+    get: () => labelFor(COMPTAGES_BARRE_NAMES, code),
+    enumerable: true,
+  }]),
+)));
 
 /**
  * Band index for a mean hourly flow. `null` for an arc with no count at all —
@@ -379,10 +399,11 @@ export function comptagesFlowBandLabel(bin) {
   if (typeof bin !== 'number') return null;
   const index = bin;
   if (!Number.isInteger(index) || index < 0 || index >= COMPTAGES_FLOW_COLORS.length) return null;
+  const m = messages().flow;
   const top = COMPTAGES_FLOW_THRESHOLDS;
-  if (index === 0) return `< ${top[0]} véh/h`;
-  if (index === top.length) return `≥ ${top[top.length - 1].toLocaleString('fr-FR')} véh/h`;
-  return `${top[index - 1]}–${top[index].toLocaleString('fr-FR')} véh/h`;
+  if (index === 0) return m.under(top[0]);
+  if (index === top.length) return m.over(formatNumber(top[top.length - 1]));
+  return m.between(top[index - 1], formatNumber(top[index]));
 }
 
 // --- The hour cursor --------------------------------------------------------
@@ -394,16 +415,18 @@ const HOURS = 24;
 export const COMPTAGES_DAY_TYPES = Object.freeze(['weekday', 'weekend']);
 
 /**
- * French names for the two day-types.
+ * The two day-types, in words.
  *
  * "type" is not decoration: `wq` is a mean over five weekdays and `eq` over two
  * weekend days, so neither is a Tuesday and neither is a Sunday. Calling them
  * *mardi* would name a day nobody measured.
  */
-export const COMPTAGES_DAY_TYPE_LABELS = Object.freeze({
-  weekday: 'jour ouvré type',
-  weekend: 'week-end type',
-});
+export const COMPTAGES_DAY_TYPE_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  COMPTAGES_DAY_TYPES.map((day) => [day, {
+    get: () => messages().dayTypes[day],
+    enumerable: true,
+  }]),
+)));
 
 /** The profile fields each day-type reads, flow then occupancy. */
 export const COMPTAGES_DAY_TYPE_FIELDS = Object.freeze({
@@ -436,14 +459,20 @@ export const COMPTAGES_CLOCK_ZONE = 'Europe/Paris';
  * Midday is not a chip, and does not need to be: every card draws all 24 hours
  * of BOTH day-types as sparklines, so any hour is one click away on any arc.
  */
+const comptagesMoment = (id, slot) => Object.freeze({
+  id,
+  slot,
+  get label() { return messages().moments[id]; },
+});
+
 export const COMPTAGES_MOMENTS = Object.freeze([
-  Object.freeze({ id: 'mean', slot: COMPTAGES_SLOT_MEAN, label: 'Moyenne ouvrée' }),
-  Object.freeze({ id: 'clock', slot: COMPTAGES_SLOT_CLOCK, label: 'À cette heure' }),
-  Object.freeze({ id: 'w04', slot: 'w04', label: 'Sem. 04 h' }),
-  Object.freeze({ id: 'w08', slot: 'w08', label: 'Sem. 08 h' }),
-  Object.freeze({ id: 'w18', slot: 'w18', label: 'Sem. 18 h' }),
-  Object.freeze({ id: 'e04', slot: 'e04', label: 'W-E 04 h' }),
-  Object.freeze({ id: 'e18', slot: 'e18', label: 'W-E 18 h' }),
+  comptagesMoment('mean', COMPTAGES_SLOT_MEAN),
+  comptagesMoment('clock', COMPTAGES_SLOT_CLOCK),
+  comptagesMoment('w04', 'w04'),
+  comptagesMoment('w08', 'w08'),
+  comptagesMoment('w18', 'w18'),
+  comptagesMoment('e04', 'e04'),
+  comptagesMoment('e18', 'e18'),
 ]);
 
 /** `weekday` → `w`, `weekend` → `e`. */
@@ -542,9 +571,9 @@ export function comptagesResolveSlot(token, nowMs = Date.now()) {
  * worth printing, and the unit is a typical hour of an archived week.
  */
 export function comptagesSlotLabel(slot) {
-  if (!slot || slot.kind === 'mean') return 'moyenne de l’heure ouvrée';
+  if (!slot || slot.kind === 'mean') return messages().slot.mean;
   const day = COMPTAGES_DAY_TYPE_LABELS[slot.day] || COMPTAGES_DAY_TYPE_LABELS.weekday;
-  return `${day} · ${comptagesHourLabel(slot.hour ?? 0)}`;
+  return messages().slot.dayHour(day, comptagesHourLabel(slot.hour ?? 0));
 }
 
 /**
@@ -636,16 +665,13 @@ export const COMPTAGES_RHYTHM_CLASSES = Object.freeze([
   'nocturne', 'weekend', 'pendulaire', 'matinal', 'vesperal', 'plateau', 'indetermine',
 ]);
 
-/** French labels. The legend reads these verbatim. */
-export const COMPTAGES_RHYTHM_LABELS = Object.freeze({
-  nocturne: 'Nocturne',
-  weekend: 'Week-end',
-  pendulaire: 'Pendulaire',
-  matinal: 'Pointe du matin',
-  vesperal: 'Pointe du soir',
-  plateau: 'Continu',
-  indetermine: 'Rythme indéterminé',
-});
+/** The legend reads these verbatim, in the reader's language. */
+export const COMPTAGES_RHYTHM_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  COMPTAGES_RHYTHM_CLASSES.map((rhythm) => [rhythm, {
+    get: () => labelFor(COMPTAGES_RHYTHM_NAMES, rhythm),
+    enumerable: true,
+  }]),
+)));
 
 /**
  * The wheel. Six hues plus one desaturated refusal — see the header for the
@@ -666,9 +692,9 @@ function windowClock([from, to]) {
   return `${String(from).padStart(2, '0')}–${String(to).padStart(2, '0')} h`;
 }
 
-/** `1.15` → `1,15`, `1.2` → `1,2`. French decimal, no trailing zero invented. */
+/** `1.15` → `1,15` in French, `1.15` in English. No trailing zero invented. */
 function ratioText(value) {
-  return String(value).replace('.', ',');
+  return formatNumber(value, { maximumFractionDigits: 2 });
 }
 
 /**
@@ -696,7 +722,8 @@ function ratioText(value) {
  * `comptagesRhythm.test.mjs` fails on any digit in these strings that is not
  * one of those constants, so the prose cannot grow a tally back.
  */
-export const COMPTAGES_RHYTHM_BLURBS = (() => {
+export function comptagesRhythmBlurbs() {
+  const m = messages().cuts;
   const W = COMPTAGES_RHYTHM_WINDOWS;
   const T = COMPTAGES_RHYTHM_THRESHOLDS;
   // Written as INEQUALITIES rather than as sentences, and that is not
@@ -705,17 +732,17 @@ export const COMPTAGES_RHYTHM_BLURBS = (() => {
   // de milieu de journée" only gestures at, and it fits on one line of the key
   // instead of two. Measured at 1440×900, the prose form wrapped five of the
   // seven rows to 40 px; this form keeps all seven at 28.
-  const shoulder = `≥ ${ratioText(T.shoulder)} × le creux ${windowClock(W.midday)}`;
+  const shoulder = m.shoulder(ratioText(T.shoulder), windowClock(W.midday));
   return Object.freeze({
-    nocturne: `${windowClock(W.night)} ≥ ${Math.round(T.night * 100)} % du jour ouvré`,
-    weekend: `week-end ≥ ${ratioText(T.weekend)} × semaine`,
-    pendulaire: `${windowClock(W.morning)} et ${windowClock(W.evening)} ${shoulder}`,
-    matinal: `${windowClock(W.morning)} seule ${shoulder}`,
-    vesperal: `${windowClock(W.evening)} seule ${shoulder}`,
-    plateau: `aucune pointe ${shoulder}`,
-    indetermine: `moins de ${T.coverage} h publiées sur ${HOURS}`,
+    nocturne: m.nocturne(windowClock(W.night), Math.round(T.night * 100)),
+    weekend: m.weekend(ratioText(T.weekend)),
+    pendulaire: m.pendulaire(windowClock(W.morning), windowClock(W.evening), shoulder),
+    matinal: m.matinal(windowClock(W.morning), shoulder),
+    vesperal: m.vesperal(windowClock(W.evening), shoulder),
+    plateau: m.plateau(shoulder),
+    indetermine: m.indetermine(T.coverage, HOURS),
   });
-})();
+}
 
 /** Highest measured value inside `[from, to]`, or null. */
 function windowMax(profile, [from, to]) {
@@ -1043,7 +1070,7 @@ export function comptagesProfileReference(...profiles) {
 
 /** `18 h`, in the French style the rest of the packs use. */
 export function comptagesHourLabel(hour) {
-  return `${String(hour).padStart(2, '0')} h`;
+  return messages().hour(String(hour).padStart(2, '0'));
 }
 
 /**
@@ -1062,23 +1089,24 @@ export function comptagesHourLabel(hour) {
  * @returns {?string}
  */
 export function comptagesDayLine({ label, profile, reference = null, days = 0 } = {}) {
+  const m = messages().day;
   const measured = comptagesMeasuredHours(profile);
   if (!measured) {
-    return days > 0 ? `${label} — aucune heure comptée sur 24` : null;
+    return days > 0 ? m.noHours(label) : null;
   }
   const bars = textSparkline(profile, reference);
   const peak = comptagesPeak(profile);
   const trough = comptagesTrough(profile);
-  const parts = [`${label} ${bars}`];
+  const parts = [m.bars(label, bars)];
   if (peak) {
-    parts.push(`pointe ${comptagesHourLabel(peak.hour)} · ${Math.round(peak.value).toLocaleString('fr-FR')} véh/h`);
+    parts.push(m.peak(comptagesHourLabel(peak.hour), formatInteger(peak.value)));
   }
   // Only worth printing when it is a different hour: an arc measured for one
   // hour has a peak and a trough at the same place, and saying both twice
   // reads as two facts.
   if (trough && peak && trough.hour !== peak.hour) {
-    parts.push(`creux ${comptagesHourLabel(trough.hour)} · ${Math.round(trough.value).toLocaleString('fr-FR')}`);
+    parts.push(m.trough(comptagesHourLabel(trough.hour), formatInteger(trough.value)));
   }
-  if (measured < 24) parts.push(`${measured}/24 h mesurées`);
+  if (measured < 24) parts.push(m.measured(measured));
   return parts.join(' · ');
 }

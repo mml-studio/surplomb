@@ -147,9 +147,16 @@ export const COMPTAGES_DATASET = 'comptages-routiers-permanents';
  */
 export const COMPTAGES_REFERENTIAL = 'referentiel-comptages-routiers';
 
-/** Attribution carried on every payload (see DATA_SOURCES.md). */
+/**
+ * Attribution carried on every payload (see DATA_SOURCES.md).
+ *
+ * The publisher's own name for its dataset and its department, composed on
+ * the server, which has no locale: data, and a licence condition.
+ */
+// i18n-ignore-start
 export const COMPTAGES_SOURCE = 'Comptages routiers — capteurs permanents, '
   + 'Direction de la Voirie et des Déplacements, Ville de Paris (opendata.paris.fr)';
+// i18n-ignore-end
 
 /**
  * ODbL, read from `metas.default.license` / `license_url` on 2026-09-01.

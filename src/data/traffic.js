@@ -57,6 +57,7 @@ import { registerDynamicCredit, TOMTOM_CREDIT } from './dataCredits.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { claimCameraSensitivity, releaseCameraSensitivity } from './cameraSensitivity.js';
 import { markViewportRead, releaseCameraSettle, watchCameraSettle } from './cameraSettle.js';
+import messages from './traffic.i18n.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -339,19 +340,23 @@ const FLOW_BUCKET_COLORS = {
 const FLOW_BUCKET_ORDER = Object.freeze([
   {
     id: 'jam',
-    label: CONGESTION_RUNGS.jam.label,
-    blurb: `moins de ${Math.round(FLOW_THRESHOLDS.slow * 100)} % de la vitesse libre`,
+    get label() { return CONGESTION_RUNGS.jam.label; },
+    get blurb() { return messages().buckets.jam(Math.round(FLOW_THRESHOLDS.slow * 100)); },
   },
   {
     id: 'slow',
-    label: CONGESTION_RUNGS.slow.label,
-    blurb: `${Math.round(FLOW_THRESHOLDS.slow * 100)} à `
-      + `${Math.round(FLOW_THRESHOLDS.free * 100)} % de la vitesse libre`,
+    get label() { return CONGESTION_RUNGS.slow.label; },
+    get blurb() {
+      return messages().buckets.slow(
+        Math.round(FLOW_THRESHOLDS.slow * 100),
+        Math.round(FLOW_THRESHOLDS.free * 100),
+      );
+    },
   },
   {
     id: 'free',
-    label: CONGESTION_RUNGS.free.label,
-    blurb: `au moins ${Math.round(FLOW_THRESHOLDS.free * 100)} % de la vitesse libre`,
+    get label() { return CONGESTION_RUNGS.free.label; },
+    get blurb() { return messages().buckets.free(Math.round(FLOW_THRESHOLDS.free * 100)); },
   },
 ]);
 
@@ -364,7 +369,7 @@ const FLOW_BUCKET_ORDER = Object.freeze([
  * and `comptages-fr` on an ARCHIVED typical week. Until each block named its
  * own, a reader had no way to tell the last minute from last month.
  */
-const FLOW_LEGEND_NOTE = 'débit modélisé par TomTom, rafraîchi toutes les 60 s';
+const flowLegendNote = () => messages().legendNote;
 
 // ─── Jam-viz prototype (live mode only — see 2026-07-21 design doc) ────────
 /** @const {number} Max congestion heat-line polylines per render (jam first). */
@@ -2745,10 +2750,9 @@ export function trafficFeedPresentation({
   // is exactly the state they wrote in to ask about. The line has to name the
   // cars, not deny the ribbon.
   if (roadError) {
-    const missing = ribbonPainted ? 'no vehicles, flow ribbon only' : 'no vehicles';
-    const line = roadRetryGaveUp
-      ? `${roadError} — ${missing}, move the camera to retry`
-      : `${roadError} — ${missing}`;
+    const status = messages().status;
+    const missing = ribbonPainted ? status.noVehiclesRibbon : status.noVehicles;
+    const line = roadRetryGaveUp ? status.retry(roadError, missing) : status.failed(roadError, missing);
     return { mode, error: line, loadingLabel: line };
   }
   if (liveMode && flowError) {
@@ -2756,7 +2760,7 @@ export function trafficFeedPresentation({
     // drops `loadingLabel` in its error branch, so the SIMULATED copy
     // has to BE the error text or the steady state reverts to a bare
     // "TomTom daily budget reached" that never says what is on screen.
-    const degraded = `SIMULATED — ${flowError}`;
+    const degraded = messages().status.degraded(flowError);
     return { mode, error: degraded, loadingLabel: degraded };
   }
   if (liveMode) {
@@ -2764,8 +2768,8 @@ export function trafficFeedPresentation({
       mode,
       error: null,
       loadingLabel: fetching
-        ? 'syncing LIVE traffic flow'
-        : `LIVE · TomTom flow · ${coveragePct}% cov`,
+        ? messages().status.syncing
+        : messages().status.live(coveragePct),
     };
   }
   // Keyless simulation — one terse line that names the mode and the remedy
@@ -2775,8 +2779,8 @@ export function trafficFeedPresentation({
     mode,
     error: null,
     loadingLabel: statusUnavailable
-      ? 'SIMULATED — traffic service unreachable'
-      : 'SIMULATED — add TomTom key for live',
+      ? messages().status.unreachable
+      : messages().status.keyless,
   };
 }
 
@@ -4664,25 +4668,24 @@ const trafficLayer = {
     if (!_enabled) return null;
     const chips = [{
       id: 'uncovered',
-      label: 'MESURÉ SEUL',
+      label: messages().chips.measuredOnly.label,
       active: _uncoveredMode === 'hide',
       state: _uncoveredMode === 'hide' ? 'active' : 'idle',
       title: _uncoveredMode === 'hide'
-        ? 'Affiche aussi le trafic simulé sur les routes sans mesure TomTom'
-        : 'N’affiche que les routes dont TomTom publie réellement le débit',
+        ? messages().chips.measuredOnly.showSimulated
+        : messages().chips.measuredOnly.hideSimulated,
       params: { uncoveredRoads: _uncoveredMode === 'hide' ? 'sim' : 'hide' },
       // Only meaningful in live mode: without a flow feed there is nothing
       // measured to keep, and hiding the rest would empty the layer.
       disabled: !_liveMode,
     }, {
       id: 'flow-ribbon',
-      label: 'FLUX TOMTOM',
+      label: messages().chips.flowRibbon.label,
       active: _flowRibbon === 'on',
       state: _flowRibbon === 'on' ? 'active' : 'idle',
       title: _flowRibbon === 'on'
-        ? 'Masque le débit mesuré et ne garde que les points animés'
-        : 'Trace le débit mesuré par TomTom sur sa propre géométrie — '
-          + 'il s’affiche sans attendre le graphe routier',
+        ? messages().chips.flowRibbon.hide
+        : messages().chips.flowRibbon.show,
       params: { flowRibbon: _flowRibbon === 'on' ? 'off' : 'on' },
       disabled: !_liveMode,
     }];
@@ -4719,18 +4722,18 @@ const trafficLayer = {
           // swatch stays WHITE and un-hatched on purpose — the mark on the globe
           // is a plain white dot, and a swatch that is the datum has to look
           // like it. What makes the row honest is the word, not the texture.
-          label: 'Vitesse simulée',
+          label: messages().legend.simulated,
           color: '#ffffff',
           count: simulated,
-          blurb: 'vitesse inventée, aucune mesure publiée — « MESURÉ SEUL » les retire',
+          blurb: messages().legend.simulatedBlurb,
         });
       }
     }
     const closed = _closedRoads || _ribbonCounts.closure;
     if (closed) {
-      legend.push({ label: 'Route fermée', color: '#ff3b30', count: closed });
+      legend.push({ label: messages().legend.closedRoad, color: '#ff3b30', count: closed });
     }
-    return { chips, legend, legendNote: FLOW_LEGEND_NOTE };
+    return { chips, legend, legendNote: flowLegendNote() };
   },
 };
 

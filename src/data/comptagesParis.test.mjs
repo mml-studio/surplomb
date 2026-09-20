@@ -46,7 +46,7 @@ import {
   COMPTAGES_FLOW_THRESHOLDS,
   COMPTAGES_FLOW_WIDTHS,
   COMPTAGES_HOUR_GAP_COLOR,
-  COMPTAGES_HOUR_GAP_LABEL,
+  comptagesHourGapLabel,
   COMPTAGES_MOMENTS,
   COMPTAGES_RHYTHM_COLORS,
   COMPTAGES_SILENT_COLOR,
@@ -444,7 +444,9 @@ test('an arc that publishes nothing at the selected hour is dashed, not thin', (
 
   // The legend names it, apart from the 168-hour silence.
   const legend = _comptagesRowControlsForTest().legend;
-  const gapRow = legend.find((row) => row.label === COMPTAGES_HOUR_GAP_LABEL);
+  // `comptagesHourGapLabel()` replaced the constant of the same name when the
+  // three absences moved to a catalog; the French it returns is unchanged.
+  const gapRow = legend.find((row) => row.label === comptagesHourGapLabel());
   assert.ok(gapRow, 'the hour gap is a legend row of its own');
   assert.ok(gapRow.count > 0);
   const silentRow = legend.find((row) => row.color === COMPTAGES_SILENT_COLOR);
