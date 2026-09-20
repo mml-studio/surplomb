@@ -59,7 +59,7 @@ import {
   validBox,
 } from './viewportBox.js';
 import { labelFor } from '../i18n/messages.js';
-import { VEHICLE_KIND_NAMES, VEHICLE_KIND_PLURAL_NAMES } from './gbfsFeeds.i18n.js';
+import { GBFS_PAYLOAD_LABELS, VEHICLE_KIND_NAMES, VEHICLE_KIND_PLURAL_NAMES } from './gbfsFeeds.i18n.js';
 
 /** Catalog endpoint — the same national access point the transit layer reads. */
 export const PAN_DATASETS_URL = 'https://transport.data.gouv.fr/api/datasets';
@@ -76,7 +76,9 @@ export const PAN_SHARING_TYPE = 'vehicles-sharing';
  * Baked into the committed index by `scripts/build-gbfs-fr-index.mjs` and
  * republished by the proxy, both of which run without a locale — so these
  * stay French, as DATA carried by the payload. Licence names are proper nouns
- * anyway; the two that are prose are listed for the server batch.
+ * anyway; the two that are PROSE (« Licence non précisée », « Autre licence
+ * ouverte ») are translated where they are shown, by `gbfsPayloadLabel`, so
+ * the file on disk and the cached answers never have to change.
  */
 // i18n-ignore-start — payload values written by a build script and the server.
 export const GBFS_LICENCE_LABELS = Object.freeze({
@@ -762,6 +764,22 @@ export function findRedundantSystems(systems, options = {}) {
 }
 
 // --- Catalog ----------------------------------------------------------------
+
+/**
+ * A payload value as a READER should see it.
+ *
+ * The stand-ins this module writes — « Licence non précisée », « Autre licence
+ * ouverte », « Système sans nom » — are stored French, in the committed index
+ * and in every cached proxy answer, because the code that writes them has no
+ * locale. Anything else is handed straight back: a licence name and a system
+ * name are proper nouns.
+ *
+ * @param {unknown} value A `licence` or system `name` out of a GBFS payload.
+ * @returns {string}
+ */
+export function gbfsPayloadLabel(value) {
+  return labelFor(GBFS_PAYLOAD_LABELS, value);
+}
 
 /** Preferred display name for a shared-mobility system. */
 export function gbfsSystemName(dataset) {

@@ -18,7 +18,8 @@ import {
 } from './transitFrance.js';
 import { transitCoverageNotice } from './transitCoverage.js';
 import messages from './transitFrance.i18n.js';
-import { assertNoFrench, withLocale } from '../i18n/testing.js';
+import { assertNoFrench, useTestLocale, withLocale } from '../i18n/testing.js';
+import { panPayloadLabel } from './panFeeds.js';
 
 // Networks, lines and destinations are data and stay as published.
 const DATA = ['TBM', 'Gare de Bègles', 'Tisséo', 'Ilévia', 'Île-de-France Mobilités'];
@@ -112,4 +113,16 @@ test('an empty view names the operator that is silent, and where to look', () =>
   assert.match(nowhere.text, /^no operator publishes live positions here — try /);
   // A view with feeds in it is not an empty view, in either language.
   assert.equal(withLocale('fr', () => transitCoverageNotice({ south: 44.8, west: -0.6, north: 44.9, east: -0.5 }, { feedsMatched: 3 })), null);
+});
+
+test('a stand-in the index wrote is translated; a licence name is not', (t) => {
+  // « Licence non précisée » is a string this app put in the committed index
+  // and in every cached proxy answer, from code that runs without a locale.
+  // The value stays French where it is stored; only the card translates it.
+  useTestLocale('en', t);
+  assert.equal(panPayloadLabel('Licence non précisée'), 'License not specified');
+  assert.equal(panPayloadLabel('Réseau sans nom'), 'Unnamed network');
+  // A real licence is a proper noun, in both languages.
+  assert.equal(panPayloadLabel('Licence Ouverte 2.0'), 'Licence Ouverte 2.0');
+  assert.equal(panPayloadLabel('ODbL 1.0'), 'ODbL 1.0');
 });

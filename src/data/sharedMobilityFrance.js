@@ -61,6 +61,7 @@ import {
 import {
   GBFS_MAX_BOX_DEG,
   VEHICLE_KINDS,
+  gbfsPayloadLabel,
   gbfsVehicleKindLabel,
   gbfsVehicleKindPlural,
 } from './gbfsFeeds.js';
@@ -808,7 +809,9 @@ export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
   // The network that publishes this dot. Dropped when it only echoes the title
   // or the operator already inside it — « Pony » under « Aire Pony » is a line
   // spent saying nothing.
-  const network = system.name ? String(system.name) : '';
+  // « Système sans nom » is a stand-in the index wrote, not a name: it is
+  // translated on the way out, while a real operator name passes through.
+  const network = system.name ? gbfsPayloadLabel(String(system.name)) : '';
   const echo = network.toLowerCase();
   if (network && echo !== title.toLowerCase() && echo !== String(operator?.label || '').toLowerCase()) {
     details.push(`🅿️ ${network}`);
