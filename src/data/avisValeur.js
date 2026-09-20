@@ -9,7 +9,12 @@ import {
   AVIS_RUNGS,
   AVIS_SUBJECT_SURFACES,
   AVIS_TYPES,
+  avisRungLabel,
 } from './avisValeurFeed.js';
+import { formatEuros, formatEurosPerM2, formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import { SUBJECT_TYPES } from './avisValeurFeed.i18n.js';
+import messages from './avisValeur.i18n.js';
 
 /**
  * Avis de valeur — the estimate, drawn beside the sales it was built from.
@@ -96,23 +101,20 @@ export const AVIS_BAND_CLASSES = Object.freeze([
   Object.freeze({
     id: 'under',
     color: '#63b3ff',
-    label: 'sous la fourchette',
-    blurb: 'Vente comparable dont le prix au m² est sous le premier quartile des '
-      + 'comparables retenues.',
+    get label() { return messages().band.under.label; },
+    get blurb() { return messages().band.under.blurb; },
   }),
   Object.freeze({
     id: 'inside',
     color: '#f4ece0',
-    label: 'dans la fourchette',
-    blurb: 'La moitié des ventes comparables : c’est la fourchette publiée, et c’est '
-      + 'elle qui décrit ce que vaut le bien, pas la médiane seule.',
+    get label() { return messages().band.inside.label; },
+    get blurb() { return messages().band.inside.blurb; },
   }),
   Object.freeze({
     id: 'over',
     color: '#e05aa6',
-    label: 'au-dessus de la fourchette',
-    blurb: 'Vente comparable dont le prix au m² dépasse le troisième quartile des '
-      + 'comparables retenues.',
+    get label() { return messages().band.over.label; },
+    get blurb() { return messages().band.over.blurb; },
   }),
 ]);
 
@@ -132,15 +134,15 @@ export function avisBandClass(prixM2, band) {
 
 /* ── formatting ───────────────────────────────────────────────────────────── */
 
-const euros = (value) => (Number.isFinite(value) ? `${value.toLocaleString('fr-FR')} €` : '—');
+const euros = (value) => (Number.isFinite(value) ? formatEuros(value) : '—');
 const eurosPerM2 = (value) => (Number.isFinite(value)
-  ? `${Math.round(value).toLocaleString('fr-FR')} €/m²` : '—');
+  ? formatEurosPerM2(Math.round(value)) : '—');
 // U+2212 for the sign, not the hyphen `toLocaleString` emits: the interval line
 // two rows up prints a real minus, and two different dashes for one meaning on
 // one card is the kind of detail a reader registers without being able to name.
 const pct = (value) => (Number.isFinite(value)
-  ? `${value > 0 ? '+' : ''}${Math.abs(value).toLocaleString('fr-FR', { maximumFractionDigits: 1 })
-    .replace(/^/, value < 0 ? '−' : '')} %` : '—');
+  ? messages().percent(`${value > 0 ? '+' : ''}${formatNumber(Math.abs(value), { maximumFractionDigits: 1 })
+    .replace(/^/, value < 0 ? '−' : '')}`) : '—');
 
 /**
  * `±3,2 %` when the interval is symmetric, `−40 % / +12 %` when it is not.
@@ -154,9 +156,12 @@ const pct = (value) => (Number.isFinite(value)
  */
 function deviationText(deviation) {
   if (!deviation) return '—';
-  const one = (value) => value.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
-  if (Math.abs(deviation.low - deviation.high) < 0.05) return `±${one(deviation.high)} %`;
-  return `−${one(deviation.low)} % / +${one(deviation.high)} %`;
+  const m = messages();
+  const one = (value) => formatNumber(value, { maximumFractionDigits: 1 });
+  if (Math.abs(deviation.low - deviation.high) < 0.05) {
+    return m.deviationSymmetric(one(deviation.high));
+  }
+  return m.deviationAsymmetric(one(deviation.low), one(deviation.high));
 }
 
 /** `éditions 2024 et 2025`, `édition 2025`. */
@@ -164,14 +169,26 @@ export function avisYearsLabel(years) {
   const list = [...new Set((Array.isArray(years) ? years : [])
     .map((year) => Number.parseInt(year, 10)).filter(Number.isFinite))].sort((a, b) => a - b);
   if (!list.length) return null;
-  if (list.length === 1) return `édition ${list[0]}`;
-  if (list.length === 2) return `éditions ${list[0]} et ${list[1]}`;
-  return `éditions ${list[0]} à ${list[list.length - 1]}`;
+  const m = messages();
+  if (list.length === 1) return m.years.one(list[0]);
+  if (list.length === 2) return m.years.two(list[0], list[1]);
+  return m.years.span(list[0], list[list.length - 1]);
 }
 
-/** `Appartement de 60 m²`. */
+/** `Appartement de 60 m²` / `60 m² apartment`. */
 function subjectLabel(subject) {
-  return `${subject?.type ?? AVIS_DEFAULT_TYPE} de ${subject?.surfaceM2 ?? AVIS_DEFAULT_SURFACE} m²`;
+  return messages().subject(
+    labelFor(SUBJECT_TYPES, subject?.type ?? AVIS_DEFAULT_TYPE),
+    subject?.surfaceM2 ?? AVIS_DEFAULT_SURFACE,
+  );
+}
+
+/** The same phrase inside a sentence: `appartement de 60 m²`. */
+function subjectLabelLower(subject) {
+  return messages().subjectLower(
+    labelFor(SUBJECT_TYPES, subject?.type ?? AVIS_DEFAULT_TYPE),
+    subject?.surfaceM2 ?? AVIS_DEFAULT_SURFACE,
+  );
 }
 
 /**
@@ -183,30 +200,22 @@ function subjectLabel(subject) {
 export function avisRefusalText(payload) {
   const estimate = payload?.estimate;
   if (!estimate || estimate.basis === 'comparables') return null;
+  const m = messages();
   const count = estimate.count || 0;
+  // i18n-ignore-start — the proxy's own reason keys, which travel in the payload.
   switch (estimate.reason) {
     case 'register-does-not-cover':
-      return 'Le registre DVF ne couvre pas ce département : Bas-Rhin, Haut-Rhin, Moselle et '
-        + 'Mayotte relèvent du livre foncier, pas du fichier immobilier. Ce n’est pas '
-        + '« aucune vente ici », c’est « ce fichier n’existe pas ici ».';
+      return m.refusal.notCovered;
     case 'no-comparable':
-      return `Aucune vente comparable dans ces éditions, jusqu’à la commune entière : moins de `
-        + `${AVIS_MIN_COMPARABLES} ventes d’un ${subjectLabel(payload.subject).toLowerCase()}. `
-        + 'Rien n’est publié plutôt qu’un chiffre emprunté ailleurs.';
+      return m.refusal.noComparable(AVIS_MIN_COMPARABLES, subjectLabelLower(payload.subject));
     case 'centre-softer-than-market':
-      return `Fourchette seulement : sur ${count} ventes comparables, l’intervalle sur la médiane `
-        + 'n’est pas plus étroit que l’écart interquartile — on ne connaît pas le milieu mieux '
-        + 'que le marché n’est dispersé, donc le milieu n’ajoute rien à la fourchette. Cas '
-        + 'limite compris : un échantillon sans dispersion du tout, où l’intervalle serait de '
-        + 'largeur nulle et se lirait comme une certitude.';
+      return m.refusal.centreSofter(count);
     case 'interval-too-wide':
-      return `Fourchette seulement : sur ${count} ventes comparables, une des deux bornes de `
-        + `l’intervalle sur la médiane s’écarte de plus de `
-        + `${Math.round(AVIS_MAX_CI_DEVIATION * 100)} % du milieu. Un nombre qui peut être faux `
-        + 'd’un cinquième n’est pas un nombre.';
+      return m.refusal.intervalTooWide(count, Math.round(AVIS_MAX_CI_DEVIATION * 100));
     default:
-      return 'Estimation retenue, sans raison publiée — cet état ne devrait pas exister.';
+      return m.refusal.unexplained;
   }
+  // i18n-ignore-end
 }
 
 /**
@@ -215,16 +224,17 @@ export function avisRefusalText(payload) {
  * @returns {{title: string, details: string[]}}
  */
 export function avisSubjectCard(payload) {
+  const m = messages();
   const estimate = payload?.estimate;
   const subject = payload?.subject;
-  const title = `${subjectLabel(subject)} — estimation`;
+  const title = m.card.title(subjectLabel(subject));
   const details = [];
   const prix = estimate?.prixM2;
   if (estimate?.basis === 'comparables') {
     details.push(euros(estimate.valeur?.median));
-    details.push(`${eurosPerM2(prix.median)} — médiane de ${estimate.count} ventes comparables`);
+    details.push(m.card.median(eurosPerM2(prix.median), estimate.count));
   } else {
-    details.push('pas de valeur publiée');
+    details.push(m.card.noValue);
   }
   if (prix && Number.isFinite(prix.p25) && Number.isFinite(prix.p75)) {
     // TWO LINES, and the split is the honesty. The €/m² band is a fact about
@@ -234,44 +244,38 @@ export function avisSubjectCard(payload) {
     // comparables », which is false whenever the comparables are not all the
     // subject's size: forty sales of 48 m² and 72 m² all at 1 000 €/m² give a
     // 60 000 € band that not one of the forty landed in.
-    details.push(`fourchette ${eurosPerM2(prix.p25)} à ${eurosPerM2(prix.p75)} — la moitié des `
-      + 'ventes comparables');
-    details.push(`soit ${euros(estimate.valeur?.p25)} à ${euros(estimate.valeur?.p75)} ramené aux `
-      + `${payload.subject?.surfaceM2} m² du sujet — pas des prix payés`);
+    details.push(m.card.range(eurosPerM2(prix.p25), eurosPerM2(prix.p75)));
+    details.push(m.card.rangeInEuros(euros(estimate.valeur?.p25), euros(estimate.valeur?.p75),
+      payload.subject?.surfaceM2));
   }
   if (prix?.ci90 && prix.ciDeviationPct) {
-    details.push(`milieu connu à ${deviationText(prix.ciDeviationPct)} `
-      + `(${eurosPerM2(prix.ci90.lo)} à ${eurosPerM2(prix.ci90.hi)}, `
-      + `intervalle à ${Math.round(prix.ci90.coverage * 100)} % sous l’hypothèse que ces ventes `
-      + 'se comportent comme un tirage indépendant du marché local)');
+    details.push(m.card.middle(deviationText(prix.ciDeviationPct), eurosPerM2(prix.ci90.lo),
+      eurosPerM2(prix.ci90.hi), Math.round(prix.ci90.coverage * 100)));
   }
   const refusal = avisRefusalText(payload);
   if (refusal) details.push(refusal);
   if (estimate?.rung) {
-    details.push(`mesuré sur ${estimate.rung.label}`
-      + (avisYearsLabel(payload.years) ? `, ${avisYearsLabel(payload.years)}` : ''));
+    const rung = avisRungLabel(estimate.rung);
+    const years = avisYearsLabel(payload.years);
+    details.push(m.card.measuredOn(years ? m.legend.headlineWithYears(rung, years) : rung));
   }
   if (Number.isFinite(estimate?.surfaceMedian)) {
-    details.push(`surface médiane des comparables ${estimate.surfaceMedian} m²`);
+    details.push(m.card.surfaceMedian(estimate.surfaceMedian));
   }
   if (Number.isFinite(estimate?.terrainMedian)) {
-    details.push(`terrain médian ${estimate.terrainMedian.toLocaleString('fr-FR')} m² — le prix `
-      + 'd’une maison porte son terrain et rien ici ne le neutralise');
+    details.push(m.card.landMedian(formatNumber(estimate.terrainMedian)));
   }
   const drift = payload?.drift;
   if (drift?.basis === 'commune-year' && Number.isFinite(drift.pct)) {
-    details.push(`médian communal ${pct(drift.pct)} de ${drift.fromYear} à ${drift.toYear} — `
-      + 'mesuré, jamais appliqué : aucune vente n’est ramenée à l’argent d’une autre année');
+    details.push(m.card.drift(pct(drift.pct), drift.fromYear, drift.toYear));
   }
   if (estimate?.symbolicCount > 0) {
-    details.push(`dont ${estimate.symbolicCount} vente(s) déclarée(s) sous 10 000 € — gardées et `
-      + 'signalées, pas filtrées');
+    details.push(m.card.symbolic(estimate.symbolicCount));
   }
   if (payload?.unavailableYears?.length) {
-    details.push(`millésime(s) ${payload.unavailableYears.join(', ')} indisponible(s) au moment `
-      + 'du calcul — l’échantillon est plus mince que la fenêtre annoncée');
+    details.push(m.card.missingYears(payload.unavailableYears.join(', ')));
   }
-  details.push('estimation Surplomb à partir des comparables DVF — pas un avis de valeur réglementaire');
+  details.push(m.card.notRegulated);
   return { title, details };
 }
 
@@ -310,14 +314,14 @@ export function avisSubjectCard(payload) {
  * @returns {Array<object>}
  */
 export function avisChips(runtime, summary = null) {
+  const m = messages();
   const surface = String(runtime?.surface ?? AVIS_DEFAULT_SURFACE);
   const chips = [];
   for (const value of AVIS_SUBJECT_SURFACES) {
     const active = String(value) === surface;
-    let title = `Sujet de ${value} m² — choisit la bande de surface des comparables, `
-      + 'pas seulement le multiplicateur';
+    let title = m.chips.surface(value);
     if (active && Number.isFinite(summary?.comparableCount)) {
-      title += ` — ${summary.comparableCount} comparables retenues`;
+      title += m.chips.comparablesKept(summary.comparableCount);
     }
     chips.push({
       id: `surface:${value}`,
@@ -330,11 +334,10 @@ export function avisChips(runtime, summary = null) {
   if (summary?.pinned) {
     chips.push({
       id: 'centre:camera',
-      label: 'Suivre la caméra',
+      label: m.chips.followCamera,
       active: false,
       params: { centre: 'camera' },
-      title: 'Relâcher le point choisi et estimer à nouveau sous la caméra — le point choisi '
-        + 'n’est PAS transporté par un lien de partage, qui rouvre sous la caméra',
+      title: m.chips.followCameraTitle,
     });
   }
   return chips;
@@ -358,6 +361,7 @@ export function avisChips(runtime, summary = null) {
  */
 export function avisLegendEntries(payload, { pinned = false } = {}) {
   if (!payload) return [];
+  const m = messages();
   const estimate = payload.estimate || {};
   const prix = estimate.prixM2;
   const entries = [];
@@ -376,22 +380,21 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
   // prints all of them in full for the reader who clicks the estimate, and
   // the LABELS keep the arithmetic that must never be mis-stated — which is
   // why the band's is in €/m² and not in euros.
-  const ANSWER = 'Ce qu’il vaut';
+  const ANSWER = m.legend.answerChannel;
   if (estimate.basis === 'comparables') {
+    const rung = avisRungLabel(estimate.rung);
+    const years = avisYearsLabel(payload.years);
     entries.push({
-      label: `${subjectLabel(payload.subject)} — ${euros(estimate.valeur?.median)}`,
+      label: m.legend.headline(subjectLabel(payload.subject), euros(estimate.valeur?.median)),
       color: null,
       channel: ANSWER,
       count: estimate.count,
-      blurb: `Médiane de ${estimate.count} ventes comparables à ${eurosPerM2(prix.median)}, `
-        + `retenues sur ${estimate.rung?.label}`
-        + `${avisYearsLabel(payload.years) ? `, ${avisYearsLabel(payload.years)}` : ''}. `
-        + 'Le compte est le nombre de ventes derrière le chiffre, pas le nombre de logements '
-        + 'du quartier.',
+      blurb: m.legend.headlineBlurb(estimate.count, eurosPerM2(prix.median),
+        years ? m.legend.headlineWithYears(rung, years) : rung),
     });
   } else {
     entries.push({
-      label: `${subjectLabel(payload.subject)} — pas de valeur publiée`,
+      label: m.legend.noValue(subjectLabel(payload.subject)),
       color: null,
       // NOT in the channel: a refusal is the one line of this block a reader
       // must be able to read without a pointer, because it is the answer.
@@ -411,30 +414,20 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
     // the reader actually came for — sits in the sentence under it, with the
     // caveat that belongs to it and cannot be separated from it.
     entries.push({
-      label: `fourchette ${eurosPerM2(prix.p25)} à ${eurosPerM2(prix.p75)}`,
+      label: m.legend.range(eurosPerM2(prix.p25), eurosPerM2(prix.p75)),
       color: null,
       channel: ANSWER,
-      blurb: 'La moitié des ventes comparables ont changé de main dans cette bande de prix au '
-        + `m². Aux mêmes prix, ${subjectLabel(payload.subject).toLowerCase()} vaudrait `
-        + `${euros(estimate.valeur?.p25)} à ${euros(estimate.valeur?.p75)} — ce ne sont PAS les `
-        + 'prix des ventes comparables, qui n’ont pas toutes cette surface. Et ce n’est pas une '
-        + 'barre d’erreur qui rétrécit quand les données s’accumulent : c’est la dispersion du '
-        + 'marché. Où se situe CE bien-là dedans — étage, état, vue, exposition — le registre '
-        + 'ne le dit pas, et la fourchette ne le borne pas non plus.',
+      blurb: m.legend.rangeBlurb(subjectLabelLower(payload.subject),
+        euros(estimate.valeur?.p25), euros(estimate.valeur?.p75)),
     });
   }
   if (prix?.ci90 && prix.ciDeviationPct) {
     entries.push({
-      label: `milieu connu à ${deviationText(prix.ciDeviationPct)}`,
+      label: m.legend.middle(deviationText(prix.ciDeviationPct)),
       color: null,
       channel: ANSWER,
-      blurb: `Intervalle sur la médiane, ${eurosPerM2(prix.ci90.lo)} à `
-        + `${eurosPerM2(prix.ci90.hi)}, couverture ${Math.round(prix.ci90.coverage * 100)} %. `
-        + 'Il dit à quel point le MILIEU de la fourchette est fermement placé, pas où le bien '
-        + 'se situe dedans : deux incertitudes différentes, qui ne se mélangent pas. Exact pour '
-        + 'un tirage INDÉPENDANT du marché local ; et l’échelon retenu ayant été choisi sur ces '
-        + 'mêmes prix, cela ne peut que baisser la couverture réelle — mesuré à 91,9–92,8 % sur '
-        + 'quatre communes réelles.',
+      blurb: m.legend.middleBlurb(eurosPerM2(prix.ci90.lo), eurosPerM2(prix.ci90.hi),
+        Math.round(prix.ci90.coverage * 100)),
     });
   }
 
@@ -445,12 +438,10 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
   const drift = payload.drift;
   if (drift?.basis === 'commune-year' && Number.isFinite(drift.pct)) {
     entries.push({
-      label: `médian communal ${pct(drift.pct)} (${drift.fromYear} → ${drift.toYear})`,
+      label: m.legend.drift(pct(drift.pct), drift.fromYear, drift.toYear),
       color: null,
       channel: ANSWER,
-      blurb: 'Mesuré et affiché, jamais appliqué : aucune vente n’est ramenée à l’argent d’une '
-        + 'autre année.'
-        + (drift.loud ? ' Au-delà de 10 %, une comparable de deux ans se lit avec ça en tête.' : ''),
+      blurb: m.legend.driftBlurb + (drift.loud ? m.legend.driftLoud : ''),
     });
   }
 
@@ -471,7 +462,7 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
       // The caption is what says which population they divide — without it,
       // three swatches under a €444 000 headline read as classes of the
       // ESTIMATE rather than of the sales it was built from.
-      channel: 'Les ventes qui le disent',
+      channel: m.legend.salesChannel,
     });
   }
 
@@ -493,8 +484,8 @@ export function avisLegendEntries(payload, { pinned = false } = {}) {
 export function avisLegendMethod(payload) {
   const estimate = payload?.estimate || {};
   return [
-    'Estimation Surplomb sur comparables DVF',
-    estimate.rung?.label || null,
+    messages().legend.method,
+    avisRungLabel(estimate.rung),
     avisYearsLabel(payload?.years),
   ].filter(Boolean).join(' · ');
 }
@@ -520,28 +511,23 @@ export function avisLegendMethod(payload) {
  */
 export function avisLegendDisclosure(payload, { pinned = false } = {}) {
   if (!payload) return '';
+  const m = messages();
   const estimate = payload.estimate || {};
   const excluded = payload.excluded || {};
   const parts = [];
 
-  const dropped = [
-    ['vefa', 'en VEFA'],
-    ['zeroPrice', 'à un euro'],
-    ['unplaced', 'sans coordonnée'],
-    ['otherType', 'de l’autre type de logement'],
-    ['notPriceable', 'sans €/m² exploitable'],
-  ].filter(([key]) => excluded[key] > 0);
+  // The keys are the proxy's own counters; the words are this catalog's.
+  const dropped = ['vefa', 'zeroPrice', 'unplaced', 'otherType', 'notPriceable']
+    .filter((key) => excluded[key] > 0);
   if (dropped.length) {
-    parts.push(`Écartées : ${dropped.map(([key, label]) => `${excluded[key]} ${label}`).join(', ')}`);
+    parts.push(m.disclosure.dropped(dropped
+      .map((key) => m.disclosure.droppedItem(excluded[key], m.disclosure[key])).join(', ')));
   }
   if (payload.truncated) {
-    parts.push(`${payload.served} comparables dessinées sur ${estimate.count} retenues — `
-      + 'les statistiques portent sur toutes');
+    parts.push(m.disclosure.truncated(payload.served, estimate.count));
   }
   if (payload.unavailableYears?.length) {
-    parts.push(`millésime(s) ${payload.unavailableYears.join(', ')} non téléchargé(s) — ces `
-      + 'éditions EXISTENT et ne sont pas arrivées : l’échantillon est plus mince que la '
-      + 'fenêtre annoncée');
+    parts.push(m.disclosure.missingYears(payload.unavailableYears.join(', ')));
   }
   // A4: this silence has a cause, and the cause is the sample, not the market.
   // It reports the COUNTS rather than asserting something about them — there
@@ -550,13 +536,13 @@ export function avisLegendDisclosure(payload, { pinned = false } = {}) {
   const drift = payload.drift;
   if (drift && drift.basis !== 'commune-year') {
     const solid = (drift.perYear || []).filter((year) => year.medianPrixM2 !== null).length;
-    parts.push(`dérive du marché non mesurable ici — il faut deux millésimes d’au moins `
-      + `30 ventes comparables, cette commune en a ${solid} `
-      + `(${(drift.perYear || []).map((year) => `${year.year} ${year.comparableCount} vente(s)`)
-        .join(', ') || 'aucun millésime'})`);
+    parts.push(m.disclosure.driftUnmeasurable(solid,
+      (drift.perYear || [])
+        .map((year) => m.disclosure.driftYear(year.year, year.comparableCount))
+        .join(', ') || m.disclosure.driftNoYear));
   }
   if (pinned) {
-    parts.push('le point choisi ne voyage PAS dans le lien de partage, qui rouvre sous la caméra');
+    parts.push(m.disclosure.pinned);
   }
   return parts.length ? `${parts.join(' · ')}.` : '';
 }
@@ -632,6 +618,7 @@ const base = createAddressScanLayer({
   },
 
   render({ payload, dataSource, point }) {
+    const m = messages();
     const estimate = payload.estimate || {};
     const prix = estimate.prixM2;
     let drawn = 0;
@@ -671,14 +658,14 @@ const base = createAddressScanLayer({
           prixM2: sale.prixM2,
           bandClass: klass ? klass.id : null,
         },
-        name: sale.address || 'Vente comparable',
+        name: sale.address || m.comparable.name,
         description: [
           sale.date,
           eurosPerM2(sale.prixM2),
           euros(sale.valeur),
           `${sale.surface} m²`,
-          Number.isFinite(sale.rooms) && sale.rooms > 0 ? `${sale.rooms} pièces` : null,
-          `${sale.distanceM} m du point estimé`,
+          Number.isFinite(sale.rooms) && sale.rooms > 0 ? m.comparable.rooms(sale.rooms) : null,
+          m.comparable.distance(sale.distanceM),
           klass ? klass.label : null,
         ].filter(Boolean).join(' · '),
       });
@@ -803,14 +790,17 @@ export function avisVoiceSummary(stats) {
   // state in dvfSales.js, and the live session that confused the two.
   if (!stats.basis) {
     return {
-      subject: 'estimation immobilière',
+      subject: messages().voice.pendingSubject,
       pending: true,
       note: 'The estimate has not been computed for this point yet. Say it is '
         + 'coming and ask again in a moment — this is NOT "no comparables here".',
     };
   }
   return {
-    subject: `estimation d’un bien de type ${stats.subjectType ?? '?'} de ${stats.subjectSurfaceM2 ?? '?'} m²`,
+    subject: messages().voice.subject(
+      stats.subjectType ? labelFor(SUBJECT_TYPES, stats.subjectType) : '?',
+      stats.subjectSurfaceM2 ?? '?',
+    ),
     // Where the estimate was centred. The scan does not clear on arrival, so a
     // caller with no way to check would read one neighbourhood's estimate over
     // another's roofs — see the same note in dvfSales.js.
