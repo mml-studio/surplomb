@@ -76,6 +76,23 @@ export default defineMessages({
   detectFallback: { fr: 'Autorisation d’urbanisme', en: 'Planning permit' },
 
   /**
+   * The type noun under a DETECT callout — what KIND of permit the card is
+   * about. These three read in English on the French globe until now; the
+   * English is kept word for word, and the French is the glossary's
+   * (*permis de démolir*, *permis de construire*).
+   */
+  detectType: {
+    demolition: { fr: 'Permis de démolir', en: 'Demolition permit' },
+    buildingSite: {
+      fr: 'Chantier ouvert',
+      en: 'Building site',
+      note: 'The permit’s work has been declared started (`b: commence`), '
+        + 'so what stands there is a site and no longer a plan.',
+    },
+    building: { fr: 'Permis de construire', en: 'Building permit' },
+  },
+
+  /**
    * The height key — the rows without a swatch.
    *
    * A height scale is not a colour, so these carry `color: null`. The count on

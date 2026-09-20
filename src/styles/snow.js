@@ -2,11 +2,18 @@
  * Snow Style — White overlay + Desaturation + Falling particles
  * Transforms the world into a winter wonderland
  */
+import messages from './snow.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const snowShader = {
   name: 'snow',
   uniforms: {
-    density: { default: 0.6, min: 0, max: 1, label: 'Density' },
-    wind: { default: 0.5, min: 0, max: 1, label: 'Wind' },
+    density: { default: 0.6, min: 0, max: 1, get label() { return messages().density; } },
+    wind: { default: 0.5, min: 0, max: 1, get label() { return messages().wind; } },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;

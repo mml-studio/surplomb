@@ -661,7 +661,7 @@ test('DETECT calls out what is being built first, and the biggest of it', () => 
   for (const candidate of all) {
     assert.ok(candidate.position);
     assert.ok(candidate.id && candidate.id.length > 0);
-    assert.ok(['Building permit', 'Building site', 'Demolition permit'].includes(candidate.type));
+    assert.ok(['Permis de construire', 'Chantier ouvert', 'Permis de démolir'].includes(candidate.type));
   }
   // The cap is honoured and the stride never runs off the end.
   assert.equal(_sitadelDetectablesForTest({ maxCount: 3 }).length, 3);
@@ -678,9 +678,11 @@ test('the DETECT line prefers the published address over a computed title', () =
   const nothing = { t: 'PC', lgt: 4 };
   assert.equal(norm(sitadelDetectLabel({ permit: nothing })), 'Permis de construire — 4 logements');
   assert.equal(sitadelDetectLabel(null), 'Autorisation d’urbanisme');
-  assert.equal(sitadelDetectType({ permit: { f: 'dem' } }), 'Demolition permit');
-  assert.equal(sitadelDetectType({ permit: { b: 'commence' } }), 'Building site');
-  assert.equal(sitadelDetectType({ permit: { b: 'termine' } }), 'Building permit');
+  // These three read in English on the French globe until this batch gave
+  // them a French side; the French is what the map says now.
+  assert.equal(sitadelDetectType({ permit: { f: 'dem' } }), 'Permis de démolir');
+  assert.equal(sitadelDetectType({ permit: { b: 'commence' } }), 'Chantier ouvert');
+  assert.equal(sitadelDetectType({ permit: { b: 'termine' } }), 'Permis de construire');
 });
 
 test('a ring is closed once, and a degenerate ring draws nothing', () => {

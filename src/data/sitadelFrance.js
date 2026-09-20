@@ -1834,11 +1834,12 @@ export function sitadelDetectLabel(record) {
   return street || permit.dem || sitadelPermitTitle(permit);
 }
 
-/** English type noun for the DETECT callout. */
+/** The type noun under the DETECT callout: which kind of permit this is. */
 export function sitadelDetectType(record) {
-  if (record?.permit?.f === 'dem') return 'Demolition permit';
-  if (record?.permit?.b === 'commence') return 'Building site';
-  return 'Building permit';
+  const m = messages().detectType;
+  if (record?.permit?.f === 'dem') return m.demolition;
+  if (record?.permit?.b === 'commence') return m.buildingSite;
+  return m.building;
 }
 
 /**
