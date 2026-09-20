@@ -97,6 +97,7 @@ import {
   clearSelectedEntityContextForLayer,
 } from './contextStore.js';
 import { createTrail } from './trailRenderer.js';
+import messages from './aisLiveVessels.i18n.js';
 import { screenProjectedRotation, cameraPoseSignature } from './iconOrientation.js';
 import { formatKnots } from './detectionDraw.js';
 import {
@@ -563,6 +564,7 @@ const aisLiveVesselsLayer = {
   // from the French radio register (`vesselRegistryFr.js`), and the Licence
   // Ouverte makes saying so a condition rather than a courtesy. `layerManifest.js`
   // is GENERATED from this line — change it here, then `npm run layers:manifest`.
+  // i18n-ignore-next-line — the register's own title and the licence name.
   source: 'AISStream + ANFR (Données radiomaritimes, Licence Ouverte v2.0)',
   updateInterval: REFRESH_MS,
   statsRefreshInterval: 1000,
@@ -2071,7 +2073,7 @@ function publishVesselOverlayEntries(entries) {
         : '';
       return {
         ...card,
-        accessibilityLabel: `Focus vessel ${card.title}, MMSI ${mmsi}`,
+        accessibilityLabel: messages().hud.focusVessel(card.title, mmsi),
         activate: () => {
           const record = state.vesselMap.get(mmsi);
           if (!record) return false;
@@ -2465,7 +2467,7 @@ function resetSelectedVesselHud() {
   const el = document.getElementById('hud-ais-vessel');
   if (!el) return;
   el.classList.remove('active');
-  el.textContent = 'AIS: --';
+  el.textContent = messages().hud.empty;
 }
 
 function trimHudValue(value, maxLength) {
@@ -2538,8 +2540,12 @@ export function vesselCardJoins(record) {
 
   const sea = askJoin('buoys/nearest', lat, lon);
   const seaLine = sea?.label
-    ? `MER ${sea.label.toUpperCase()} · ${Math.round(sea.waveHeightM * 10) / 10} m`
-      + ` · bouée ${sea.station} à ${joinDistanceLabel(sea.distanceM)}`
+    ? messages().seaLine(
+      sea.label.toUpperCase(),
+      Math.round(sea.waveHeightM * 10) / 10,
+      sea.station,
+      joinDistanceLabel(sea.distanceM),
+    )
     : null;
 
   return { destinationLine, seaLine };

@@ -135,12 +135,12 @@ import {
   COMPTAGES_HOUR_GAP_ALPHA,
   COMPTAGES_HOUR_GAP_COLOR,
   COMPTAGES_HOUR_GAP_DASH_LENGTH,
-  COMPTAGES_HOUR_GAP_LABEL,
+  comptagesHourGapLabel,
   COMPTAGES_HOUR_GAP_WIDTH,
   COMPTAGES_MOMENTS,
   COMPTAGES_OCCUPANCY_COLOR,
   COMPTAGES_OCCUPANCY_WIDTH,
-  COMPTAGES_RHYTHM_BLURBS,
+  comptagesRhythmBlurbs,
   COMPTAGES_RHYTHM_CLASSES,
   COMPTAGES_RHYTHM_COLORS,
   COMPTAGES_RHYTHM_THRESHOLDS,
@@ -173,6 +173,8 @@ import {
 } from './comptagesRhythm.js';
 import { offScaleGlyph } from './offScaleGlyph.js';
 import { pickAt } from './pickAt.js';
+import { formatDate, formatNumber } from '../i18n/format.js';
+import messages from './comptagesParis.i18n.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const COMPTAGES_FR_LAYER_ID = 'comptages-fr';
@@ -237,10 +239,11 @@ const SELECTED_WIDTH_BONUS = 3;
  * @returns {string} e.g. `semaine type du 31 août au 6 septembre 2026 · moyenne ouvrée`.
  */
 function comptagesLegendNote(week, slot) {
+  const m = messages().legendNote;
   const when = comptagesWeekLabel(week);
   const moment = slot ? comptagesSlotLabel(slot) : null;
   return [
-    when ? `semaine type ${when}` : 'semaine type archivée',
+    when ? m.typicalWeek(when) : m.archived,
     moment ? moment.toLocaleLowerCase('fr-FR') : null,
   ].filter(Boolean).join(' · ');
 }
@@ -678,22 +681,21 @@ function cardPosition(record) {
 
 // --- Cards ------------------------------------------------------------------
 
-/** French thousands separator, matching the rest of the French packs. */
+/** Grouped thousands, in the page's locale. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
-/** `du 24 au 30 août 2026`, from the two ISO dates the pack carries. */
+/** `du 24 au 30 août 2026` / `August 24 to 30, 2026`, from the pack's two ISO dates. */
 export function comptagesWeekLabel(week) {
   if (!week?.start || !week?.end) return null;
-  const month = (iso) => new Date(`${iso}T12:00:00Z`)
-    .toLocaleDateString('fr-FR', { month: 'long', timeZone: 'UTC' });
+  const month = (iso) => formatDate(`${iso}T12:00:00Z`, { month: 'long', timeZone: 'UTC' });
   const day = (iso) => Number(iso.slice(8, 10));
   const year = week.end.slice(0, 4);
-  const from = month(week.start) === month(week.end)
-    ? `${day(week.start)}`
-    : `${day(week.start)} ${month(week.start)}`;
-  return `du ${from} au ${day(week.end)} ${month(week.end)} ${year}`;
+  const m = messages().week;
+  return month(week.start) === month(week.end)
+    ? m.sameMonth(day(week.start), day(week.end), month(week.end), year)
+    : m.acrossMonths(day(week.start), month(week.start), day(week.end), month(week.end), year);
 }
 
 /**
@@ -708,10 +710,11 @@ export function comptagesWeekLabel(week) {
  */
 export function comptagesSilenceLine(arc, hours = 168) {
   if (arc?.s !== 'silent') return null;
-  if (arc.b === 'i') return `Aucune mesure sur ${hours} h — capteur déclaré invalide par la Ville`;
-  if (arc.b === 'b') return `Aucune mesure sur ${hours} h — arc déclaré barré à la circulation`;
-  if (arc.b === 'o') return `Aucune mesure sur ${hours} h — arc pourtant déclaré ouvert`;
-  return `Aucune mesure sur ${hours} h — aucun état publié pour cet arc`;
+  const m = messages().silence;
+  if (arc.b === 'i') return m.invalid(hours);
+  if (arc.b === 'b') return m.closed(hours);
+  if (arc.b === 'o') return m.openAnyway(hours);
+  return m.noState(hours);
 }
 
 /**
@@ -725,26 +728,27 @@ export function comptagesSilenceLine(arc, hours = 168) {
 function rhythmEvidence(arc) {
   const metrics = comptagesRhythmMetrics(arc);
   if (!metrics) return '';
-  const pct = (value) => `${(value * 100).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} %`;
-  const times = (value) => `×${value.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`;
+  const m = messages().evidence;
+  const pct = (value) => m.percent(formatNumber(value * 100, { maximumFractionDigits: 0 }));
+  const times = (value) => m.times(formatNumber(value, { maximumFractionDigits: 2 }));
   const T = COMPTAGES_RHYTHM_THRESHOLDS;
   if (metrics.weekdayHours < T.coverage || metrics.weekendHours < T.coverage) {
-    return ` (${metrics.weekdayHours}/24 h en semaine, ${metrics.weekendHours}/24 h le week-end)`;
+    return m.coverage(metrics.weekdayHours, metrics.weekendHours);
   }
   if (Number.isFinite(metrics.nightShare) && metrics.nightShare >= T.night) {
-    return ` (${pct(metrics.nightShare)} du trafic entre 00 et 04 h)`;
+    return m.night(pct(metrics.nightShare));
   }
   if (Number.isFinite(metrics.weekendRatio) && metrics.weekendRatio >= T.weekend) {
-    return ` (${times(metrics.weekendRatio)} l’heure de semaine, le week-end)`;
+    return m.weekend(times(metrics.weekendRatio));
   }
   const parts = [];
   if (Number.isFinite(metrics.morningShoulder) && metrics.morningShoulder >= T.shoulder) {
-    parts.push(`matin ${times(metrics.morningShoulder)}`);
+    parts.push(m.morning(times(metrics.morningShoulder)));
   }
   if (Number.isFinite(metrics.eveningShoulder) && metrics.eveningShoulder >= T.shoulder) {
-    parts.push(`soir ${times(metrics.eveningShoulder)}`);
+    parts.push(m.evening(times(metrics.eveningShoulder)));
   }
-  return parts.length ? ` (${parts.join(', ')} le creux de midi)` : '';
+  return parts.length ? m.shoulders(parts.join(', ')) : '';
 }
 
 /**
@@ -760,47 +764,48 @@ function rhythmEvidence(arc) {
  * @returns {string} Newline-separated card copy.
  */
 export function buildComptagesSelectionLabel(record, payload = null, slot = _slot) {
+  const m = messages().card;
   const arc = record?.arc || {};
   const details = [];
-  const title = arc.n ? `${arc.n} · arc ${arc.a}` : `Arc ${arc.a}`;
+  const title = arc.n ? m.titleWithName(arc.n, arc.a) : m.title(arc.a);
   const hours = Number(payload?.hours) || 168;
 
   // Which stretch of the street this is. 2 977 arcs carry 892 distinct names,
   // so the two junction labels are the only thing that identifies the segment.
-  if (arc.f && arc.t) details.push(`de ${arc.f} à ${arc.t}`);
+  if (arc.f && arc.t) details.push(m.between(arc.f, arc.t));
 
   if (arc.s === 'silent') {
     details.push(comptagesSilenceLine(arc, hours));
   } else if (arc.s === 'occupancy') {
-    details.push(`Occupation mesurée sur ${fr(arc.hk)} h — aucun véhicule compté`);
+    details.push(m.occupancyOnly(fr(arc.hk)));
   } else {
     // The selected slot FIRST, because it is what the width on screen is
     // showing. A gap here is stated as a gap and never as a low count.
     const flow = comptagesArcFlow(arc, slot);
     if (slot?.kind === 'mean') {
-      details.push(`${fr(arc.mq ?? 0)} véh/h en moyenne, l’heure ouvrée type`);
+      details.push(m.meanFlow(fr(arc.mq ?? 0)));
     } else if (flow === null) {
-      details.push(`Aucun comptage publié — ${comptagesSlotLabel(slot)}`);
+      details.push(m.noCount(comptagesSlotLabel(slot)));
     } else {
-      details.push(`${fr(Math.round(flow))} véh/h — ${comptagesSlotLabel(slot)}`);
-      details.push(`${fr(arc.mq ?? 0)} véh/h en moyenne, l’heure ouvrée type`);
+      details.push(m.slotFlow(fr(Math.round(flow)), comptagesSlotLabel(slot)));
+      details.push(m.meanFlow(fr(arc.mq ?? 0)));
     }
-    details.push(`${fr(arc.hq)} heures comptées sur ${fr(hours)}`);
+    details.push(m.countedHours(fr(arc.hq), fr(hours)));
     // WHY the arc is the colour it is. A hue the reader has to take on trust is
     // not a legend, and the four numbers behind it are already computed.
     // Read off the ARC and not off the render record: the class is a pure
     // function of the pack, and a card built for an arc that is not currently
     // drawn (an unplaced one, say) must say the same thing as one that is.
     const rhythm = comptagesRhythmLabel(comptagesRhythmClass(arc));
-    if (rhythm) details.push(`Rythme : ${rhythm.toLowerCase()}${rhythmEvidence(arc)}`);
+    if (rhythm) details.push(m.rhythm(rhythm.toLowerCase(), rhythmEvidence(arc)));
   }
 
   const reference = comptagesProfileReference(arc.wq, arc.eq);
   const weekday = comptagesDayLine({
-    label: 'Sem.', profile: arc.wq, reference, days: 5,
+    label: m.weekdayLabel, profile: arc.wq, reference, days: 5,
   });
   const weekend = comptagesDayLine({
-    label: 'W-E ', profile: arc.eq, reference, days: 2,
+    label: m.weekendLabel, profile: arc.eq, reference, days: 2,
   });
   if (weekday) details.push(weekday);
   if (weekend) details.push(weekend);
@@ -810,19 +815,19 @@ export function buildComptagesSelectionLabel(record, payload = null, slot = _slo
   if (Number.isFinite(arc.mk)) {
     const band = comptagesOccupancyBand(arc.mk);
     const saturated = comptagesSaturatedHours(arc.wk) + comptagesSaturatedHours(arc.ek);
-    const line = [`Occupation ${fr(arc.mk)} % — ${band ? band.label.toLowerCase() : '—'}`];
-    if (saturated > 0) line.push(`${saturated} h saturées ou pire`);
+    const line = [m.occupancy(fr(arc.mk), band ? band.label.toLowerCase() : '—')];
+    if (saturated > 0) line.push(m.saturatedHours(saturated));
     details.push(line.join(' · '));
   }
 
   if (arc.s !== 'silent' && arc.b && arc.b !== 'o') {
-    details.push(`Arc ${COMPTAGES_BARRE_LABELS[arc.b]} ${fr(arc.bh ?? 0)} h sur ${fr(hours)}`);
+    details.push(m.barre(COMPTAGES_BARRE_LABELS[arc.b], fr(arc.bh ?? 0), fr(hours)));
   }
-  if (!arc.g) details.push('⚠ Aucune géométrie publiée pour cet arc — non tracé');
+  if (!arc.g) details.push(m.noGeometry);
 
   const week = comptagesWeekLabel(payload?.week);
-  details.push(`Mesuré, J-2 · semaine ${week || '—'} · ${comptagesSlotLabel(slot)}`);
-  details.push('Ville de Paris — ODbL');
+  details.push(m.provenance(week || '—', comptagesSlotLabel(slot)));
+  details.push(m.credit);
 
   return [title, ...details.filter(Boolean)].join('\n');
 }
@@ -980,9 +985,7 @@ async function load({ force = false } = {}) {
     console.warn('[Data:Comptages FR] arcs unavailable:', error?.message || error);
     // A week-old pack is still the same week. Keep drawing it and say the
     // refresh failed rather than blanking a city.
-    _error = _payload
-      ? 'rafraîchissement des comptages indisponible'
-      : 'comptages routiers de Paris indisponibles';
+    _error = _payload ? messages().errors.refresh : messages().errors.unavailable;
     _status = _payload ? 'ready' : 'error';
     return false;
   } finally {
@@ -1028,7 +1031,7 @@ function collectDetectableObjects(options = {}) {
         (Number.isFinite(floor) ? floor : 0) + CARD_LIFT_M,
       ),
       sourceId: record.id,
-      id: `${fr(Math.round(record.style?.flow ?? record.arc.mq ?? 0))} véh/h`,
+      id: messages().detection.flow(fr(Math.round(record.style?.flow ?? record.arc.mq ?? 0))),
       type: 'Counting arc',
       skipLabel: record.id === _selectedId,
     });
@@ -1049,19 +1052,20 @@ function collectDetectableObjects(options = {}) {
 export function buildComptagesLoadingLabel({
   payload = _payload, loading = _loading, inView = _inView, error = _error, slot = _slot,
 } = {}) {
-  if (loading) return 'lecture de la semaine mesurée...';
-  if (!inView) return 'Paris intra-muros uniquement — hors de la vue';
+  const m = messages().row;
+  if (loading) return m.loading;
+  if (!inView) return m.outOfView;
   if (!payload) return error ? '' : '';
   const parts = [];
   const week = comptagesWeekLabel(payload.week);
-  parts.push(`${fr(payload.states?.counted || 0)} arcs comptés${week ? ` · semaine ${week}` : ''}`);
+  parts.push(m.counted(fr(payload.states?.counted || 0), week ? m.week(week) : ''));
   parts.push(comptagesSlotLabel(slot));
   const silent = payload.states?.silent || 0;
-  if (silent > 0) parts.push(`${fr(silent)} sans aucune mesure`);
+  if (silent > 0) parts.push(m.silent(fr(silent)));
   // The arcs that count and cannot be drawn. Stated here because the map
   // cannot state it: there is nothing on screen to click.
   if (payload.unplacedMeasuring > 0) {
-    parts.push(`${fr(payload.unplacedMeasuring)} arcs mesurés sans géométrie publiée`);
+    parts.push(m.unplaced(fr(payload.unplacedMeasuring)));
   }
   return parts.join(' · ');
 }
@@ -1318,14 +1322,18 @@ const comptagesParisLayer = {
         active,
         state: active ? 'active' : 'idle',
         title: moment.slot === 'clock'
-          ? `Suivre l’horloge de Paris — actuellement ${comptagesSlotLabel(comptagesResolveSlot('clock', _now()))}, `
-            + `lu dans la semaine archivée ${comptagesWeekLabel(_payload?.week) || '—'}`
-          : `${comptagesSlotLabel(comptagesResolveSlot(moment.slot, _now()))} — `
-            + `semaine archivée ${comptagesWeekLabel(_payload?.week) || '—'}`
+          ? messages().chips.followParis(
+            comptagesSlotLabel(comptagesResolveSlot('clock', _now())),
+            comptagesWeekLabel(_payload?.week) || '—',
+          )
+          : messages().chips.pinned(
+            comptagesSlotLabel(comptagesResolveSlot(moment.slot, _now())),
+            comptagesWeekLabel(_payload?.week) || '—',
+          )
             // An hour chip moves the OTHER typical-week rows too, and a
             // control with a reach beyond its own row has to say so.
             + (comptagesParseSlot(moment.slot)?.kind === 'hour'
-              ? ' · déplace aussi les autres couches de semaine type'
+              ? messages().chips.alsoMoves
               : ''),
         params: { slot: moment.slot },
       };
@@ -1351,7 +1359,7 @@ const comptagesParisLayer = {
         label: comptagesRhythmLabel(rhythm),
         color: COMPTAGES_RHYTHM_COLORS[rhythm],
         count,
-        blurb: COMPTAGES_RHYTHM_BLURBS[rhythm],
+        blurb: comptagesRhythmBlurbs()[rhythm],
         // The refusal to classify is not a class, so it does not take a class's
         // disc: it takes the shared off-scale hatch, the same one
         // `road-events-fr` and `road-status-fr` give their own "no value" rows
@@ -1375,7 +1383,7 @@ const comptagesParisLayer = {
     const banded = bands.reduce((total, count) => total + count, 0);
     if (banded > 0) {
       legend.push({
-        label: 'Épaisseur = véhicules par heure',
+        label: messages().legend.width,
         color: COMPTAGES_WIDTH_INK,
         glyph: comptagesFlowScaleGlyph(),
         count: banded,
@@ -1392,18 +1400,18 @@ const comptagesParisLayer = {
         color: COMPTAGES_OCCUPANCY_COLOR,
         glyph: comptagesStrokeGlyph({ widthPx: COMPTAGES_OCCUPANCY_WIDTH }),
         count: states.occupancy,
-        blurb: 'mesure réelle dans une autre unité, hors de l’échelle en véh/h',
+        blurb: messages().legend.occupancyBlurb,
       });
     }
     if (gaps > 0) {
       legend.push({
-        label: COMPTAGES_HOUR_GAP_LABEL,
+        label: comptagesHourGapLabel(),
         color: COMPTAGES_HOUR_GAP_COLOR,
         glyph: comptagesStrokeGlyph({
           widthPx: COMPTAGES_HOUR_GAP_WIDTH, dashLength: COMPTAGES_HOUR_GAP_DASH_LENGTH,
         }),
         count: gaps,
-        blurb: 'compte dans la semaine, rien publié pour cette tranche',
+        blurb: messages().legend.gapBlurb,
       });
     }
     if (states.silent > 0) {
@@ -1416,9 +1424,11 @@ const comptagesParisLayer = {
         count: states.silent,
         // Derived, every number of it: the three reasons the City gives, summed
         // by the payload and not by a sentence written against one week.
-        blurb: `${fr(_payload.silentBy?.i || 0)} invalides, `
-          + `${fr(_payload.silentBy?.b || 0)} barrés, `
-          + `${fr(_payload.silentBy?.o || 0)} déclarés ouverts`,
+        blurb: messages().legend.silentBlurb(
+          fr(_payload.silentBy?.i || 0),
+          fr(_payload.silentBy?.b || 0),
+          fr(_payload.silentBy?.o || 0),
+        ),
       });
     }
     return { chips, legend, legendNote: comptagesLegendNote(_payload?.week, _slot) };

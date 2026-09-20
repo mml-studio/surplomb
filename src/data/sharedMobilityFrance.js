@@ -58,7 +58,14 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
-import { GBFS_MAX_BOX_DEG, VEHICLE_KIND_LABELS, VEHICLE_KIND_PLURALS } from './gbfsFeeds.js';
+import {
+  GBFS_MAX_BOX_DEG,
+  VEHICLE_KINDS,
+  gbfsVehicleKindLabel,
+  gbfsVehicleKindPlural,
+} from './gbfsFeeds.js';
+import { formatDecimal, formatList, formatNumber } from '../i18n/format.js';
+import messages from './sharedMobilityFrance.i18n.js';
 import { mobilityOperatorShortLabel, resolveMobilityOperator } from './mobilityOperators.js';
 import {
   sharedMobilityGlyph,
@@ -194,12 +201,12 @@ const KIND_LEGEND_TINT = '#cbd5e1';
  * both since its first cut and the key named neither, so it read as two
  * unrelated lists of the same total.
  */
-const SHAPE_CHANNEL = 'forme = quoi';
+const shapeChannel = () => messages().channels.shape;
 // The operator channel gained a second carrier on 2026-09-14: the plate's hue
 // AND, below `monogramAltitudeCeilingM()`, the operator's initial. The label
 // names both, because a reader who has only ever seen the wide view would
 // otherwise meet a letter the key never mentioned.
-const OPERATOR_CHANNEL = 'couleur + lettre = qui';
+const operatorChannel = () => messages().channels.operator;
 /** Operators listed by name in the row legend before the tail is summarised. */
 const MAX_OPERATOR_LEGEND_ROWS = 6;
 
@@ -240,13 +247,15 @@ const STATION_CLOSED = '#687581';
 export const SHARED_MOBILITY_KIND_FILTERS = Object.freeze([
   Object.freeze({
     id: 'velo',
-    label: 'Vélos',
+    get label() { return messages().filters.velo; },
     /** Vehicle kinds on this side of the split. */
     kinds: Object.freeze(['bike', 'ebike']),
   }),
   Object.freeze({
+    // The filter ids are SHARE-LINK tokens (`kinds=autres`): data, not words.
+    // i18n-ignore-next-line
     id: 'autres',
-    label: 'Le reste',
+    get label() { return messages().filters.autres; },
     kinds: Object.freeze(['scooter', 'moped', 'car', 'other']),
   }),
 ]);
@@ -279,7 +288,7 @@ export function stationHoldsBikes(station) {
   for (const [key, count] of Object.entries(byKind)) {
     if (!(Number(count) > 0)) continue;
     if (key === 'bike' || key === 'ebike') return true;
-    if (key in VEHICLE_KIND_LABELS) recognised = true;
+    if (VEHICLE_KINDS.includes(key)) recognised = true;
   }
   return !recognised;
 }
@@ -370,7 +379,7 @@ function recordPrimitive(record) {
 
 /** Display label for a vehicle kind. */
 export function vehicleKindLabel(kind) {
-  return VEHICLE_KIND_LABELS[kind] || (kind ? String(kind) : 'Véhicule');
+  return gbfsVehicleKindLabel(kind) || (kind ? String(kind) : messages().fallbackVehicle);
 }
 
 /**
@@ -381,7 +390,7 @@ export function vehicleKindLabel(kind) {
  */
 export function vehicleKindPlural(kind, count) {
   if (Math.abs(Number(count)) < 2) return vehicleKindLabel(kind);
-  return VEHICLE_KIND_PLURALS[kind] || vehicleKindLabel(kind);
+  return gbfsVehicleKindPlural(kind) || vehicleKindLabel(kind);
 }
 
 /**
@@ -405,10 +414,10 @@ function lowerLabel(label) {
   return label === label.toUpperCase() ? label : label.toLowerCase();
 }
 
-/** Join a short French enumeration: `a`, `a et b`, `a, b et c`. */
+/** Join a short enumeration in the page's language: `a, b et c` / `a, b, and c`. */
 function joinFr(parts) {
   if (parts.length < 2) return parts[0] || '';
-  return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
+  return formatList(parts);
 }
 
 /**
@@ -726,6 +735,7 @@ export function sharedMobilityReadout(record) {
  * @returns {string} Newline-separated card copy.
  */
 export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
+  const card = messages().card;
   const object = record?.object || {};
   const system = record?.system || {};
   const operator = sharedMobilityOperator(record);
@@ -740,7 +750,7 @@ export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
       // Stated, for the same reason `stationColor` paints this case neutral:
       // « on ne sait pas » and « il n'y a rien » are different facts, and only
       // the second one is worth walking to.
-      details.push('Inventaire non publié');
+      details.push(card.noInventory);
     } else {
       // A single kind that accounts for the whole count names itself here, and
       // the breakdown line below disappears — « 1 VAE » printed twice was the
@@ -749,16 +759,17 @@ export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
         ? inventory.kinds[0][0]
         : null;
       const noun = lowerLabel(vehicleKindPlural(single || (inventory.bikesOnly ? 'bike' : 'other'), available));
-      const counts = [`${fr(available)} ${noun} disponible${available > 1 ? 's' : ''}`];
+      const counts = [card.available(fr(available), noun)];
       if (Number.isFinite(object.capacity) && object.capacity > 0) {
-        counts[0] += ` sur ${fr(object.capacity)} place${object.capacity > 1 ? 's' : ''}`;
+        counts[0] += card.ofPlaces(fr(object.capacity));
       }
       if (Number.isFinite(object.docks)) {
         // A painted bay has no dock to lock into: what is free there is a
         // place on the ground, not a borne.
-        const word = object.virtual === true ? 'place' : 'borne';
         const many = object.docks > 1 ? 's' : '';
-        counts.push(`${fr(object.docks)} ${word}${many} libre${many}`);
+        counts.push(object.virtual === true
+          ? card.freeSpaces(fr(object.docks), many)
+          : card.freeDocks(fr(object.docks), many));
       }
       details.push(`${inventory.emoji ? `${inventory.emoji} ` : ''}${counts.join(' · ')}`);
       if (!single && inventory.kinds.length > 1) {
@@ -766,32 +777,31 @@ export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
           // Inside a bikes-only station the split IS the power source, and
           // « 5 vélos » under « 7 vélos disponibles » would not say which five.
           const label = inventory.bikesOnly && kind === 'bike'
-            ? `mécanique${count > 1 ? 's' : ''}`
+            ? card.mechanical(count)
             : lowerLabel(vehicleKindPlural(kind, count));
           return `${fr(count)} ${label}`;
         });
-        details.push(`dont ${joinFr(split)}`);
+        details.push(card.ofWhich(joinFr(split)));
       }
     }
-    if (object.renting === false) details.push('⚠️ Location suspendue');
+    if (object.renting === false) details.push(card.rentingSuspended);
   } else {
     // « Trottinette Dott », not « Trottinette »: the operator is half of what
     // the glyph on screen is saying, and the card is where that colour gets a
     // name.
     const kind = vehicleKindLabel(object.kind);
-    title = operator.id === 'unknown' ? kind : `${kind} ${operator.label}`;
+    title = operator.id === 'unknown' ? kind : card.vehicleWithOperator(kind, operator.label);
     if (Number.isFinite(object.rangeMeters)) {
-      const km = (object.rangeMeters / 1000)
-        .toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-      details.push(`🔋 ${km} km d’autonomie`);
+      const km = formatDecimal(object.rangeMeters / 1000, 1, { minimumFractionDigits: 1 });
+      details.push(card.range(km));
     }
     // Age of the vehicle's OWN last report — several operators publish fixes
     // that are minutes to hours old, and the poll time would hide that.
     if (Number.isFinite(object.lastReported)) {
       const seconds = Math.max(0, Math.round(nowMs / 1000 - object.lastReported));
       details.push(seconds < 90
-        ? `⏱ position il y a ${seconds} s`
-        : `⏱ position il y a ${fr(Math.round(seconds / 60))} min`);
+        ? card.fixSeconds(seconds)
+        : card.fixMinutes(fr(Math.round(seconds / 60))));
     }
   }
 
@@ -1313,6 +1323,7 @@ function kindFilterTally() {
   // controls on every refresh, and this walks up to 6,000 objects for an
   // answer that cannot change until the next viewport answer replaces them.
   if (_tallyPayload === payload) return _tally;
+  // i18n-ignore-start — the two filter ids, which are share-link tokens.
   const tally = { velo: 0, autres: 0 };
   for (const station of Array.isArray(payload.stations) ? payload.stations : []) {
     tally[stationHoldsBikes(station) ? 'velo' : 'autres'] += 1;
@@ -1320,12 +1331,13 @@ function kindFilterTally() {
   for (const vehicle of Array.isArray(payload.vehicles) ? payload.vehicles : []) {
     tally[isBikeKind(vehicle?.kind) ? 'velo' : 'autres'] += 1;
   }
+  // i18n-ignore-end
   _tallyPayload = payload;
   _tally = tally;
   return tally;
 }
 
-const fr = (value) => Number(value).toLocaleString('fr-FR');
+const fr = (value) => formatNumber(Number(value));
 
 /**
  * The tooltip for one filter chip.
@@ -1340,50 +1352,40 @@ const fr = (value) => Number(value).toLocaleString('fr-FR');
  * @returns {string}
  */
 function kindFilterChipTitle(filter, kept, total, active) {
+  const m = messages().chipTitles;
   // Nothing has arrived yet, so there is no share to quote — and a chip that
   // said "0 sur 0" would look like an answer instead of an absence.
-  const share = total > 0
-    ? ` — ${fr(kept)} objet${kept > 1 ? 's' : ''} sur ${fr(total)}`
-    : '';
-  if (active) return `${filter.label} seuls${share}. Appuyer à nouveau pour tout revoir.`;
-  if (filter.id === 'velo') {
-    return `Ne garder que les vélos${share}. Vélo mécanique et VAE, plus les stations`
-      + ' qui en tiennent ; une station qui ne publie pas son inventaire est comptée ici,'
-      + ' comme le veut le défaut GBFS.';
-  }
-  return `Ne garder que le reste${share}. Trottinettes, scooters, voitures partagées`
-    + ' et formes non nommées, plus les stations sans vélo.';
+  const share = total > 0 ? m.share(fr(kept), fr(total)) : '';
+  if (active) return m.active(filter.label, share);
+  return filter.id === 'velo' ? m.bikes(share) : m.rest(share);
 }
 
 function buildLoadingLabel() {
-  if (_status === 'zoom-in') return 'Zoome pour charger les véhicules partagés';
-  if (_loading) return _records.size ? 'actualisation des opérateurs…' : 'recherche des opérateurs…';
+  const m = messages().row;
+  if (_status === 'zoom-in') return m.zoomIn;
+  if (_loading) return _records.size ? m.refreshing : m.searching;
   if (_status === 'empty') {
     // A chip that hides everything has to own it: « aucun véhicule ne se
     // signale ici » would blame the feed for the reader's own filter.
     const tally = kindFilterTally();
     if (_kindFilter && tally.velo + tally.autres > 0) {
-      return _kindFilter === 'velo'
-        ? 'aucun vélo dans cette vue — le reste est filtré'
-        : 'rien que des vélos dans cette vue — ils sont filtrés';
+      return _kindFilter === 'velo' ? m.noBikes : m.onlyBikes;
     }
-    return _systemsMatched > 0
-      ? 'aucun véhicule ne se signale ici'
-      : 'aucun système du PAN ne couvre cette vue';
+    return _systemsMatched > 0 ? m.nothingReporting : m.noSystem;
   }
   const active = _systems.filter((s) => s.stationsInView > 0 || s.vehiclesInView > 0).length;
-  const parts = [`${fr(active)} opérateur${active === 1 ? '' : 's'}`];
-  if (_kindFilter) parts.push(_kindFilter === 'velo' ? 'vélos seuls' : 'vélos masqués');
-  if (_truncated) parts.push('plafonné');
+  const parts = [m.operators(fr(active), active === 1)];
+  if (_kindFilter) parts.push(_kindFilter === 'velo' ? m.bikesOnly : m.bikesHidden);
+  if (_truncated) parts.push(m.capped);
   const suppressed = _systems.reduce((sum, s) => sum + (s.stationsSuppressed || 0), 0);
-  if (suppressed) parts.push(`${fr(suppressed)} station${suppressed > 1 ? 's' : ''} mutualisée${suppressed > 1 ? 's' : ''} fusionnée${suppressed > 1 ? 's' : ''}`);
+  if (suppressed) parts.push(m.mergedStations(fr(suppressed), suppressed > 1 ? 's' : ''));
   // The empty painted bays the proxy dropped. Said out loud for the same
   // reason as the line above: a count that changed silently is a count the
   // reader cannot trust.
   const emptyBays = _systems.reduce((sum, s) => sum + (s.baysHidden || 0), 0);
-  if (emptyBays) parts.push(`${fr(emptyBays)} aire${emptyBays > 1 ? 's' : ''} vide${emptyBays > 1 ? 's' : ''} masquée${emptyBays > 1 ? 's' : ''}`);
+  if (emptyBays) parts.push(m.hiddenBays(fr(emptyBays), emptyBays > 1 ? 's' : ''));
   const stale = _systems.filter((s) => s.stale).length;
-  if (stale) parts.push(`${fr(stale)} flux périmé${stale > 1 ? 's' : ''}`);
+  if (stale) parts.push(m.staleFeeds(fr(stale), stale > 1 ? 's' : ''));
   return parts.join(' · ');
 }
 
@@ -1622,7 +1624,7 @@ const sharedMobilityFranceLayer = {
     const shapes = [...kinds.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([kind, count]) => ({
-        label: kind === 'station' ? 'Stations' : vehicleKindLabel(kind),
+        label: kind === 'station' ? messages().legend.stations : vehicleKindLabel(kind),
         color: KIND_LEGEND_TINT,
         // The legend swatch IS the map glyph, at legend size.
         // The legend swatch IS the map plate, at legend size and with no
@@ -1630,10 +1632,10 @@ const sharedMobilityFranceLayer = {
         // an operator they do not stand for.
         glyph: sharedMobilityGlyph(kind === 'station' ? 'station' : sharedMobilityGlyphKind(kind), { px: LEGEND_GLYPH_PX }),
         count,
-        channel: SHAPE_CHANNEL,
+        channel: shapeChannel(),
         blurb: kind === 'station'
-          ? 'Emplacements de l\u2019exploitant — remplissage selon la disponibilité, contour selon l\u2019exploitant. Les places municipales que tous republient sont fusionnées.'
-          : 'En stationnement et disponible — GBFS ne publie jamais un véhicule pendant une location.',
+          ? messages().legend.stationsBlurb
+          : messages().legend.vehiclesBlurb,
       }));
 
     const ranked = [...operators.values()]
@@ -1652,23 +1654,21 @@ const sharedMobilityFranceLayer = {
       // and `manager.js` masks and tints this swatch with that colour.
       glyph: sharedMobilityMonogramGlyph(operator.initial, { px: LEGEND_GLYPH_PX }),
       count,
-      channel: OPERATOR_CHANNEL,
-      blurb: operator.curated
-        ? null
-        : `${operator.label} — teinte dérivée du titre publié ; aucun flux français ne publie sa couleur de marque.`,
+      channel: operatorChannel(),
+      blurb: operator.curated ? null : messages().legend.derivedHue(operator.label),
     }));
     // Never silently truncate: say how many operators the row is not naming.
     const hidden = ranked.slice(MAX_OPERATOR_LEGEND_ROWS);
     if (hidden.length) {
       listed.push({
-        label: `+${hidden.length} exploitants`,
+        label: messages().legend.moreOperators(hidden.length),
         color: KIND_LEGEND_TINT,
         // A row that stands for SEVERAL operators badges none of them: a
         // letter here would name one of the ones it is summarising.
         glyph: null,
         count: hidden.reduce((sum, entry) => sum + entry.count, 0),
-        channel: OPERATOR_CHANNEL,
-        blurb: `Également dans la vue : ${hidden.map((entry) => entry.operator.label).join(', ')}.`,
+        channel: operatorChannel(),
+        blurb: messages().legend.alsoInView(hidden.map((entry) => entry.operator.label).join(', ')),
       });
     }
 
@@ -1701,7 +1701,7 @@ const sharedMobilityFranceLayer = {
       // them to 168. The channel names above the entries already say WHAT each
       // list answers, so this says only the thing neither of them can: it is
       // one set, read twice.
-      legendNote: 'Le même ensemble, compté deux fois.',
+      legendNote: messages().legend.note,
       legendScope: { inView: _count, where: null },
     };
   },

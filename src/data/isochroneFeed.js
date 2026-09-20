@@ -31,6 +31,9 @@
  * Dependency-free and side-effect-free. The `/api/isochrone` proxy imports this.
  */
 
+import { formatNumber } from '../i18n/format.js';
+import messages from './isochroneFeed.i18n.js';
+
 const SERVICE_URL = 'https://data.geopf.fr/navigation/isochrone';
 
 /** The Valhalla graph the Géoplateforme exposes over IGN's own network. */
@@ -407,6 +410,7 @@ export function projectIsochrone(payload) {
  * a reader wants to know is whether the drawn shape is the right size, and that
  * is the combined question.
  */
+// i18n-ignore-next-line — a service URL; `routed-bike` reads as French to the scanner.
 export const OSRM_BIKE_TABLE_URL = 'https://routing.openstreetmap.de/routed-bike/table/v1/driving';
 
 /**
@@ -722,9 +726,12 @@ export function projectCentreAddress(payload) {
  * @returns {string}
  */
 export function formatCoordinates(lon, lat) {
-  const one = (value, positive, negative) => `${Math.abs(value)
-    .toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} ${value < 0 ? negative : positive}`;
-  return `${one(lat, 'N', 'S')} · ${one(lon, 'E', 'O')}`;
+  const m = messages();
+  const one = (value, positive, negative) => m.coordinate(
+    formatNumber(Math.abs(value), { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
+    value < 0 ? negative : positive,
+  );
+  return `${one(lat, m.cardinals.north, m.cardinals.south)} · ${one(lon, m.cardinals.east, m.cardinals.west)}`;
 }
 
 /**

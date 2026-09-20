@@ -32,7 +32,7 @@ import {
   COMPTAGES_MOMENTS,
   COMPTAGES_OCCUPANCY_BANDS,
   COMPTAGES_OCCUPANCY_COLOR,
-  COMPTAGES_RHYTHM_BLURBS,
+  comptagesRhythmBlurbs,
   COMPTAGES_RHYTHM_CLASSES,
   COMPTAGES_RHYTHM_COLORS,
   COMPTAGES_RHYTHM_LABELS,
@@ -686,8 +686,12 @@ test('a rhythm blurb states its CUT and can hold no other number', () => {
     String(COMPTAGES_RHYTHM_THRESHOLDS.coverage),
     '24',
   ]);
+  // `comptagesRhythmBlurbs()` replaced the `COMPTAGES_RHYTHM_BLURBS` constant
+  // when the cuts moved to a catalog: they are composed when the key is drawn,
+  // in the reader's language, from the same frozen thresholds.
+  const blurbs = comptagesRhythmBlurbs();
   for (const rhythm of COMPTAGES_RHYTHM_CLASSES) {
-    const blurb = COMPTAGES_RHYTHM_BLURBS[rhythm];
+    const blurb = blurbs[rhythm];
     assert.ok(blurb, `${rhythm} has a blurb`);
     for (const number of blurb.match(/\d+(?:[.,]\d+)?/g) || []) {
       assert.ok(allowed.has(number), `${rhythm}: "${number}" is not one of the frozen cuts`);
@@ -696,11 +700,11 @@ test('a rhythm blurb states its CUT and can hold no other number', () => {
   // And the cut is really READ, not transcribed: moving a threshold has to move
   // the sentence. `shoulder` is 1.2, and no blurb may spell it any other way.
   assert.match(
-    COMPTAGES_RHYTHM_BLURBS.plateau,
+    blurbs.plateau,
     new RegExp(String(COMPTAGES_RHYTHM_THRESHOLDS.shoulder).replace('.', ',')),
   );
   assert.match(
-    COMPTAGES_RHYTHM_BLURBS.indetermine,
+    blurbs.indetermine,
     new RegExp(`\\b${COMPTAGES_RHYTHM_THRESHOLDS.coverage}\\b`),
   );
 });

@@ -73,6 +73,8 @@ import {
   roadStatusStyle,
 } from './datexRoadStatus.js';
 import { roadStatusCoverageNotice } from './roadStatusCoverage.js';
+import { formatAge } from '../i18n/format.js';
+import messages from './roadStatusFrance.i18n.js';
 import { offScaleGlyph } from './offScaleGlyph.js';
 import { pickAt } from './pickAt.js';
 
@@ -90,8 +92,15 @@ const SEGMENTS_URL = '/api/road-status-fr/segments';
  * 60–360 s is measured, not claimed: 60 s at Bordeaux, Toulouse, Lyon and
  * Limoges, 120 s at Rouen and Caen, 180 s in Brittany and Lorraine, 360 s at
  * Marseille and Saint-Étienne (see the module header of `datexRoadStatus.js`).
+ *
+ * A function, not a constant: the sentence is read when the key is drawn, so
+ * the same loaded layer answers in the page's language.
+ *
+ * @returns {string}
  */
-export const ROAD_STATUS_LEGEND_NOTE = 'état déclaré par les DIR, rafraîchi toutes les 60 à 360 s';
+export function roadStatusLegendNote() {
+  return messages().legendNote;
+}
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const ROAD_STATUS_FR_LAYER_ID = 'road-status-fr';
@@ -367,9 +376,10 @@ function cardPosition(record) {
  * @returns {string} Newline-separated card copy.
  */
 export function buildRoadStatusSelectionLabel(record, payload = null) {
+  const m = messages().card;
   const segment = record?.segment || {};
   const style = roadStatusStyle(segment.s);
-  const axis = segment.a || 'Voie sans nom';
+  const axis = segment.a || m.unnamedRoad;
   const details = [];
 
   details.push(`● ${style.label}`);
@@ -380,25 +390,25 @@ export function buildRoadStatusSelectionLabel(record, payload = null) {
     // Checked BEFORE the formatted pair, because "0 veh/h" is a true sentence
     // that reads like a broken sensor. It is neither: 114 of 1 192 stations
     // counted nothing at 22:30, and that is a fact about the hour.
-    details.push('aucun véhicule compté sur la dernière fenêtre de 6 min');
+    details.push(m.noVehicles);
   } else if (flow || speed) {
-    details.push(`${[flow, speed].filter(Boolean).join(' · ')} (moyenne sur 6 min)`);
+    details.push(m.average([flow, speed].filter(Boolean).join(' · ')));
   }
 
   const reporters = Array.isArray(segment.src) ? segment.src.map(agglomerationLabel) : [];
-  if (reporters.length) details.push(`⌖ ${reporters.join(' · ')}`);
-  if (segment.d) details.push(`Exploitant ${segment.d}`);
+  if (reporters.length) details.push(m.reportedBy(reporters.join(' · ')));
+  if (segment.d) details.push(m.operator(segment.d));
   // Where the dot on the globe comes from. A published coordinate needs no
   // sentence; one this app resolved from a kilometre post does, because the
   // reader is entitled to know the position is derived and to how much.
-  if (segment.g === 'pr') details.push('position déduite de son point de repère (PR), médiane 4 m');
+  if (segment.g === 'pr') details.push(m.fromPointRepere);
   if (segment.at) {
     const age = Math.max(0, Math.round((Date.now() - new Date(segment.at).getTime()) / 1000));
-    details.push(`état relevé il y a ${age} s`);
+    details.push(m.stateRead(formatAge(age, 's')));
   } else if (payload?.flow?.windowEnd) {
-    details.push('état non communiqué pour ce site');
+    details.push(m.stateNotReported);
   }
-  details.push('Bison Futé / DIR — Licence Ouverte 2.0');
+  details.push(m.credit);
 
   return [`${axis} · ${segment.id}`, ...details].join('\n');
 }
@@ -683,7 +693,7 @@ const roadStatusFranceLayer = {
     // `filosofiFeed`): the threshold is named, and the prompt uses the
     // tutoiement those layers settled on rather than the vouvoiement two
     // others use.
-    if (_status === 'zoom-in') stats.loadingLabel = `Zoome sous ${ROAD_STATUS_MAX_BOX_DEG}° pour charger l’état du réseau`;
+    if (_status === 'zoom-in') stats.loadingLabel = messages().zoomIn(ROAD_STATUS_MAX_BOX_DEG);
     return stats;
   },
 
@@ -766,11 +776,11 @@ const roadStatusFranceLayer = {
         color: level.color,
         count,
         ...(key === 'unknown'
-          ? { glyph: offScaleGlyph(), blurb: 'aucun centre ne publie d’état pour ce point' }
+          ? { glyph: offScaleGlyph(), blurb: messages().unknownBlurb }
           : {}),
       });
     }
-    return { chips: [], legend, legendNote: ROAD_STATUS_LEGEND_NOTE };
+    return { chips: [], legend, legendNote: roadStatusLegendNote() };
   },
 
   destroy(viewer) {

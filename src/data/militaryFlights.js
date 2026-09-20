@@ -67,6 +67,7 @@ import {
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { pickAt } from './pickAt.js';
+import messages from './militaryFlights.i18n.js';
 
 /**
  * @module militaryFlights
@@ -3839,25 +3840,22 @@ const militaryFlightsLayer = {
         // the billboards do, so the key shows the shape actually on screen.
         glyph: classLegendGlyph(klass === TR3B_CLASS && _irBoost ? 'tr3bHot' : klass),
         count,
-        blurb: klass === 'unknown'
-          ? 'Type non déclaré par adsb.lol — la silhouette est un substitut.'
-          : undefined,
+        blurb: klass === 'unknown' ? messages().unknownBlurb : undefined,
       }));
     if (_trackedIcao) {
       legend.push({
-        label: 'Contact suivi',
+        label: messages().tracked.label,
         color: '#00ffff',
         count: 1,
-        blurb: 'Le cyan et sa trace — le chemin parcouru, pas une prédiction.',
+        blurb: messages().tracked.blurb,
       });
     }
     if (coasting > 0) {
       legend.push({
-        label: 'À l’estime (sondages manqués)',
+        label: messages().coasting.label,
         color: coastingSwatchCss('#ffb800'),
         count: coasting,
-        blurb: 'Délavé, et non estompé : la position est tenue à l’estime depuis '
-          + 'le dernier point, elle n’est pas rapportée. Ici la transparence dit l’ancienneté.',
+        blurb: messages().coasting.blurb,
       });
     }
     return { legend };

@@ -38,7 +38,14 @@
  * `impassable` has no TomTom equivalent — DATEX's `impossible` is a road that
  * cannot be driven at all — so it is on the ladder and only one layer reaches
  * it. That is a rung nobody climbs, not a rung that is missing.
+ *
+ * THE WORDS ARE GETTERS, the colours are not. A label is read from the catalog
+ * when it is asked for, never when this module loads, so one loaded ladder
+ * answers in the page's language (docs/i18n/CONVENTIONS.md § 2). That also
+ * keeps this file safe on the server, which imports it through
+ * `datexRoadStatus.js` for `worseRoadStatus` and never touches a label.
  */
+import messages from './congestionLadder.i18n.js';
 
 /**
  * The ladder, in the order traffic degrades.
@@ -49,11 +56,21 @@
  * free.
  */
 export const CONGESTION_RUNGS = Object.freeze({
-  free: Object.freeze({ id: 'free', rank: 0, label: 'Fluide', color: '#2ecc71' }),
-  slow: Object.freeze({ id: 'slow', rank: 1, label: 'Ralenti', color: '#f0b23e' }),
-  jam: Object.freeze({ id: 'jam', rank: 2, label: 'Bloqué', color: '#e05252' }),
+  free: Object.freeze({
+    id: 'free', rank: 0, color: '#2ecc71',
+    get label() { return messages().free; },
+  }),
+  slow: Object.freeze({
+    id: 'slow', rank: 1, color: '#f0b23e',
+    get label() { return messages().slow; },
+  }),
+  jam: Object.freeze({
+    id: 'jam', rank: 2, color: '#e05252',
+    get label() { return messages().jam; },
+  }),
   impassable: Object.freeze({
-    id: 'impassable', rank: 3, label: 'Impraticable', color: '#8e2b2b',
+    id: 'impassable', rank: 3, color: '#8e2b2b',
+    get label() { return messages().impassable; },
   }),
 });
 

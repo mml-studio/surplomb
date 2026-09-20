@@ -10,6 +10,8 @@ import {
 } from './isochroneFeed.js';
 import { estimateCardBoxPx, solveCatchmentFrame } from './isochroneFraming.js';
 import { getOverlayPaintRect } from '../overlays/worldOverlay.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './isochroneRings.i18n.js';
 
 /**
  * Zone de chalandise — the ground you can actually reach, instead of a circle.
@@ -136,6 +138,7 @@ export const ISOCHRONE_MIN_SHIFT_KM = Object.freeze({
  * shapes. Alphas are low because they STACK — see the module header.
  */
 export const ISOCHRONE_RING_STYLES = Object.freeze([
+  // i18n-ignore-next-line — a CSS hex the detector reads as a French word.
   Object.freeze({ seconds: 300, color: '#3ce0c8', fillAlpha: 0.22, widthPx: 3 }),
   Object.freeze({ seconds: 600, color: '#3b9ae0', fillAlpha: 0.16, widthPx: 3 }),
   Object.freeze({ seconds: 900, color: '#5560c8', fillAlpha: 0.12, widthPx: 3 }),
@@ -153,34 +156,23 @@ const FALLBACK_STYLE = ISOCHRONE_RING_STYLES[ISOCHRONE_RING_STYLES.length - 1];
  * card. Two rings drawn with the same confidence from two methods that do not
  * deserve the same confidence is the one way this layer could quietly mislead.
  */
+const isochroneMode = (id, envelope, feed) => Object.freeze({
+  id,
+  available: true,
+  envelope,
+  // The feed is a service and a dataset name: proper nouns, not prose.
+  feed,
+  get label() { return messages().modes[id].label; },
+  get blurb() { return messages().modes[id].blurb; },
+});
+
+// i18n-ignore-start — service and dataset names: proper nouns, not prose.
 export const ISOCHRONE_MODES = Object.freeze([
-  Object.freeze({
-    id: 'foot',
-    label: 'PIÉTON',
-    available: true,
-    envelope: false,
-    feed: 'IGN Géoplateforme — Valhalla sur BD TOPO®',
-    blurb: 'Marche, sur le réseau piéton et routier de la BD TOPO. Polygone exact.',
-  }),
-  Object.freeze({
-    id: 'car',
-    label: 'VOITURE',
-    available: true,
-    envelope: false,
-    feed: 'IGN Géoplateforme — Valhalla sur BD TOPO®',
-    blurb: 'Voiture, sur le réseau routier de la BD TOPO. Polygone exact.',
-  }),
-  Object.freeze({
-    id: 'bike',
-    label: 'VÉLO',
-    available: true,
-    envelope: true,
-    feed: 'OpenStreetMap — table OSRM cyclable (FOSSGIS)',
-    blurb: 'Vélo, sur le réseau cyclable OSM (OSRM) : IGN ne publie aucun profil vélo. '
-      + 'Enveloppe mesurée sur 36 directions — chaque sommet est un temps réel, '
-      + 'le trait entre deux sommets ne l’est pas. Surface majorée.',
-  }),
+  isochroneMode('foot', false, 'IGN Géoplateforme — Valhalla sur BD TOPO®'),
+  isochroneMode('car', false, 'IGN Géoplateforme — Valhalla sur BD TOPO®'),
+  isochroneMode('bike', true, 'OpenStreetMap — table OSRM cyclable (FOSSGIS)'),
 ]);
+// i18n-ignore-end
 
 const MODE_BY_ID = new Map(ISOCHRONE_MODES.map((mode) => [mode.id, mode]));
 
@@ -221,15 +213,15 @@ export function ringStyle(seconds) {
 /** Minutes, as a reader says them. */
 export function minutesLabel(seconds) {
   if (!Number.isFinite(seconds)) return '—';
-  const minutes = Math.round(seconds / 60);
-  return `${minutes} min`;
+  return messages().minutes(Math.round(seconds / 60));
 }
 
-/** The verb that goes with the mode, for a card written in French. */
+/** The verb that goes with the mode, inside a sentence. */
 export function modeVerb(mode) {
-  if (mode === 'car') return 'en voiture';
-  if (mode === 'bike') return 'à vélo';
-  return 'à pied';
+  const verbs = messages().verbs;
+  if (mode === 'car') return verbs.car;
+  if (mode === 'bike') return verbs.bike;
+  return verbs.foot;
 }
 
 /**
@@ -264,13 +256,11 @@ export function ringLabelAnchor(ring) {
  */
 export function expansionSentence(step) {
   if (!step || !Number.isFinite(step.share)) return null;
+  const m = messages().expansion;
   const from = minutesLabel(step.fromSeconds);
   const to = minutesLabel(step.toSeconds);
-  if (step.share >= 100) {
-    return `${from} → ${to} : ${step.share} % de l’expansion libre — le réseau s’ouvre au-delà`;
-  }
-  return `${from} → ${to} : ${step.share} % de l’expansion libre `
-    + `(×${step.ratio} au lieu de ×${step.freeSpaceRatio}) — le réseau freine`;
+  if (step.share >= 100) return m.opens(from, to, step.share);
+  return m.brakes(from, to, step.share, step.ratio, step.freeSpaceRatio);
 }
 
 /**
@@ -290,10 +280,10 @@ export function expansionDigest(expansion) {
   const steps = (Array.isArray(expansion) ? expansion : [])
     .filter((step) => Number.isFinite(step?.share));
   if (!steps.length) return null;
-  const shares = steps.map((step) => `${Math.round(step.share)} %`).join(' puis ');
+  const m = messages().expansion;
+  const shares = steps.map((step) => m.share(Math.round(step.share))).join(m.shareSeparator);
   const last = steps[steps.length - 1];
-  return `${shares} de l’expansion libre — `
-    + `le réseau ${last.share >= 100 ? 's’ouvre' : 'freine'}`;
+  return m.digest(shares, last.share >= 100 ? m.opensVerdict : m.brakesVerdict);
 }
 
 /**
@@ -325,40 +315,33 @@ export function centreCardText({ payload = {}, mode, point }) {
   const warnings = [];
   // Said only when the title is a COMMUNE standing in for an address, which is
   // the one case where the title could be read as more precise than it is.
+  const m = messages().centre;
   if (Number.isFinite(distanceM) && distanceM > CENTRE_ADDRESS_MAX_M && address?.city) {
-    warnings.push(`première adresse à ${fr(distanceM, 0)} m — le point n’en a pas`);
+    warnings.push(m.farAddress(fr(distanceM, 0)));
   }
-  if (payload.missing) {
-    warnings.push(`${payload.missing} anneau${payload.missing > 1 ? 'x' : ''} `
-      + `non renvoyé${payload.missing > 1 ? 's' : ''} par le service`);
-  }
+  if (payload.missing) warnings.push(m.missingRings(payload.missing));
   if (payload.envelope) {
-    warnings.push(`enveloppe OSM, ${outer?.bearings || BIKE_ENVELOPE_BEARINGS} `
-      + 'directions — surface majorée');
+    warnings.push(m.envelopeWarning(outer?.bearings || BIKE_ENVELOPE_BEARINGS));
   }
   const details = [
-    `Zone de chalandise ${modeVerb(mode)} autour de ce point`,
+    m.title(modeVerb(mode)),
     rings.length
       // Commas, not the middle dot every other line here uses: the card's
       // details travel through the entity `description` as ONE string split on
       // ` · `, so a line that contains the separator comes back as three.
-      ? rings.map((ring) => `${minutesLabel(ring.seconds)} ${fr(ring.areaKm2)} km²`).join(', ')
-      : 'aucun anneau renvoyé par le service',
-    outer
-      ? `même surface qu’un disque de ${equivalentRadiusM(outer.areaKm2)} m de rayon`
-      : null,
+      ? rings.map((ring) => m.ring(minutesLabel(ring.seconds), fr(ring.areaKm2))).join(', ')
+      : m.noRings,
+    outer ? m.equivalentCircle(equivalentRadiusM(outer.areaKm2)) : null,
     ...warnings,
     expansionDigest(payload.expansion),
-    point?.pinned
-      ? 'centre fixé par ce clic — LIBÉRER pour le rendre'
-      : 'centre suivi par la caméra — cliquez pour le figer',
+    point?.pinned ? m.pinned : m.following,
   ].filter(Boolean);
   return { title: centreTitle(address, point), details };
 }
 
-/** A number as a French reader writes it. */
+/** A number as the page's language writes it. */
 function fr(value, digits = 2) {
-  return Number(value).toLocaleString('fr-FR', { maximumFractionDigits: digits });
+  return formatNumber(Number(value), { maximumFractionDigits: digits });
 }
 
 /**
@@ -377,18 +360,14 @@ function fr(value, digits = 2) {
  */
 export function envelopeSentences(ring) {
   if (!ring?.envelope) return [];
+  const m = messages().envelope;
   const out = [];
-  out.push(`enveloppe sur ${ring.bearings || BIKE_ENVELOPE_BEARINGS} directions — `
-    + 'surface majorée, pas la surface exacte');
+  out.push(m.bearings(ring.bearings || BIKE_ENVELOPE_BEARINGS));
   if (ring.reachKm && Number.isFinite(ring.reachKm.min)) {
-    out.push(`portée mesurée de ${fr(ring.reachKm.min)} à ${fr(ring.reachKm.max)} km `
-      + `(médiane ${fr(ring.reachKm.median)} km)`);
+    out.push(m.reach(fr(ring.reachKm.min), fr(ring.reachKm.max), fr(ring.reachKm.median)));
   }
-  if (ring.clippedBearings) {
-    out.push(`${ring.clippedBearings} direction${ring.clippedBearings > 1 ? 's' : ''} `
-      + 'au-delà de l’échantillonnage — cette portée est un plancher');
-  }
-  out.push('réseau cyclable OpenStreetMap via OSRM (FOSSGIS) — pas la BD TOPO');
+  if (ring.clippedBearings) out.push(m.clipped(ring.clippedBearings));
+  out.push(m.network);
   return out;
 }
 
@@ -414,9 +393,8 @@ export function envelopeSentences(ring) {
 export function holesSentence(parts) {
   const holes = (parts || []).reduce((total, part) => total + (part.holes?.length || 0), 0);
   if (!holes) return null;
-  return holes > 1
-    ? `${holes} poches intérieures non atteignables, déjà retirées de la surface`
-    : 'une poche intérieure non atteignable, déjà retirée de la surface';
+  const m = messages().holes;
+  return holes > 1 ? m.several(holes) : m.one;
 }
 
 /**
@@ -426,7 +404,7 @@ export function holesSentence(parts) {
  */
 export function partsSentence(parts) {
   const count = (parts || []).length;
-  return count > 1 ? `${count} morceaux disjoints — la surface est leur somme` : null;
+  return count > 1 ? messages().parts(count) : null;
 }
 
 /** One ring of `[lon, lat]` as Cesium positions, bad vertices dropped. */
@@ -528,16 +506,16 @@ export function drawRing(dataSource, ring, {
       pixelOffset: new Cesium.Cartesian2(0, -6 - index * 2),
     },
     properties: { kind: 'isochrone-ring', seconds: ring.seconds },
-    name: `${label} ${modeVerb(mode)}`,
+    name: messages().ring.name(label, modeVerb(mode)),
     description: [
       ring.envelope
-        ? `${fr(ring.areaKm2)} km² au plus — enveloppe, majorant`
-        : `${fr(ring.areaKm2)} km² réellement atteignables`,
+        ? messages().ring.envelopeArea(fr(ring.areaKm2))
+        : messages().ring.exactArea(fr(ring.areaKm2)),
       // The circle this layer exists to refuse, printed beside the shape that
       // refutes it. A reader who only remembers one number remembers a radius,
       // so give them the honest one — the radius of the circle with the SAME
       // AREA — rather than letting them keep the straight-line one.
-      `soit un cercle équivalent de ${radiusM} m — mais ce n’est pas un cercle`,
+      messages().ring.equivalentCircle(radiusM),
       expansionSentence(step),
       ...envelopeSentences(ring),
       // Said out loud, because a hole is the one part of the shape a reader
@@ -547,7 +525,7 @@ export function drawRing(dataSource, ring, {
       partsSentence(parts),
       ring.resourceVersion ? `BD TOPO ${ring.resourceVersion}` : null,
       Number.isFinite(ring.snapM) && ring.snapM > 25
-        ? `point rattaché au réseau à ${ring.snapM} m — la mesure part de là`
+        ? messages().ring.snapped(ring.snapM)
         : null,
     ].filter(Boolean).join(' · '),
   });
@@ -807,6 +785,8 @@ const base = createAddressScanLayer({
 export function resolveCentre(value) {
   const text = String(value ?? '').trim().toLowerCase();
   if (!text) return null;
+  // Share-link tokens, French spelling included: data, never translated.
+  // i18n-ignore-next-line
   if (text === 'camera' || text === 'caméra' || text === 'auto') return 'camera';
   const parts = text.split(',');
   if (parts.length !== 2) return null;
@@ -916,12 +896,11 @@ const isochroneRingsLayer = {
     if (pin) {
       chips.push({
         id: 'centre-camera',
-        label: 'LIBÉRER',
+        label: messages().release.label,
         active: false,
         state: 'idle',
         disabled: false,
-        title: `Centre fixé à ${fr(pin.lat, 5)}, ${fr(pin.lon, 5)} — `
-          + 'relâcher pour resuivre la caméra.',
+        title: messages().release.title(fr(pin.lat, 5), fr(pin.lon, 5)),
         params: { centre: 'camera' },
       });
     }
@@ -934,8 +913,11 @@ const isochroneRingsLayer = {
       // number of hectares' worth of precision, which is what the source's own
       // vertex resolution supports.
       count: Number.isFinite(areas[index]) ? areas[index] : 0,
-      blurb: `${minutesLabel(style.seconds)} ${modeVerb(_mode)} — `
-        + `${envelope ? 'surface majorée de l’enveloppe' : 'surface réellement atteignable'}, en km²`,
+      blurb: messages().legend.blurb(
+        minutesLabel(style.seconds),
+        modeVerb(_mode),
+        envelope ? messages().legend.envelopeArea : messages().legend.exactArea,
+      ),
     }));
     return { chips, legend };
   },
@@ -993,11 +975,10 @@ const isochroneRingsLayer = {
       result.status = 'ok';
       // Both ways out, because there are now two and the second one is the
       // answer for a driving catchment too wide to fit under any ceiling.
-      result.loadingLabel = `Zoome sous ${Math.round(ceilingM / 1000)} km, `
-        + 'ou clique un point pour l’y fixer';
+      result.loadingLabel = messages().row.dormant(Math.round(ceilingM / 1000));
     } else if (stats.ringsMissing) {
       result.degraded = true;
-      result.loadingLabel = `${stats.ringsMissing} anneau(x) non renvoyé(s) par le service`;
+      result.loadingLabel = messages().row.ringsMissing(stats.ringsMissing);
     }
     return result;
   },

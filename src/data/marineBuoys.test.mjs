@@ -9,7 +9,7 @@ import {
   NO_SEA_STATE_CSS,
   SEA_STATE_BANDS,
   SEA_STATE_JOIN_MAX_M,
-  SEA_STATE_LABELS_FR,
+  seaStateNames,
   SWELL_STEM_SCALE,
   buoyInView,
   buoyDashedStemGlyph,
@@ -274,7 +274,10 @@ test('band indices and their French labels follow the frozen ladder', () => {
   assert.equal(seaStateBandIndex(null), -1);
   assert.equal(seaStateBandIndex(0), 0);
   assert.equal(seaStateBandIndex(20), SEA_STATE_BANDS.length - 1);
-  assert.equal(SEA_STATE_LABELS_FR.length, SEA_STATE_BANDS.length);
+  // `seaStateNames()` replaced the `SEA_STATE_LABELS_FR` constant when the
+  // nine names moved to a catalog: the WMO publishes them in both languages,
+  // and the list is now read in the page's own.
+  assert.equal(seaStateNames().length, SEA_STATE_BANDS.length);
   assert.equal(seaStateBandLabel(0), 'Calme · ≤ 0,1 m');
   assert.equal(seaStateBandLabel(3), 'Agitée · 1,25 – 2,5 m');
   assert.equal(seaStateBandLabel(8), 'Énorme · > 14 m');

@@ -45,6 +45,8 @@
 // that fills it. Two copies of that predicate is exactly how a '0' ends up
 // treated as a silence on one side of the layer and as a type on the other.
 import { aisTypeIsDeclared } from './vesselRegistryFr.js';
+import { labelFor } from '../i18n/messages.js';
+import messages from './vesselLabels.i18n.js';
 
 export const VESSEL_OVERLAY_SOURCE_ID = 'ais-live-vessels';
 /** Existing selector grid size; one ambient winner is retained per cell. */
@@ -230,22 +232,25 @@ const VESSEL_FAMILY_KEYS = Object.freeze([
   'tanker', 'cargo', 'passenger', 'fishing', 'service', 'pleasure', 'state', 'hsc', 'other',
 ]);
 
-/** Legend captions, keyed as {@link vesselTypeFamily} reports. */
-export const VESSEL_FAMILY_LABELS = Object.freeze({
-  tanker: 'Pétrolier / chimiquier',
-  cargo: 'Cargo, porte-conteneurs, vraquier',
-  passenger: 'Passagers, ferry, croisière',
-  fishing: 'Pêche',
-  service: 'Remorquage, pilotage, servitude',
-  pleasure: 'Plaisance et voile',
-  state: 'Secours, police, militaire',
-  hsc: 'Navire à grande vitesse',
-  other: 'Autre type déclaré',
-  unavailable: 'Type laissé vide à bord',
-  silent: 'Identité pas encore reçue',
+/** Every key the captions below answer for, families and silent buckets. */
+export const VESSEL_LABEL_KEYS = Object.freeze([
+  ...VESSEL_FAMILY_KEYS, 'unavailable', 'silent',
   // Retained as the caption of last resort for a key this table does not know.
-  unknown: 'Type non déclaré',
-});
+  'unknown',
+]);
+
+/**
+ * Legend captions, keyed as {@link vesselTypeFamily} reports.
+ *
+ * GETTERS: a caption is the page's language, and this module is imported long
+ * before a legend is drawn. Indexing and `Object.entries()` keep working.
+ */
+export const VESSEL_FAMILY_LABELS = Object.freeze(Object.defineProperties({}, Object.fromEntries(
+  VESSEL_LABEL_KEYS.map((key) => [key, {
+    get: () => labelFor(messages, key),
+    enumerable: true,
+  }]),
+)));
 
 /** Swatch colours for the keys that are not families — see {@link vesselSilentFamily}. */
 const SILENT_FAMILY_STYLES = Object.freeze({

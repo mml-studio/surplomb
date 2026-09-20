@@ -9,7 +9,7 @@ import {
   AIRPORT_LENGTH_UNKNOWN,
   AIRPORT_TIERS,
   AIRPORT_TIER_STYLES,
-  AIRPORT_TYPE_LABELS,
+  AIRPORT_TYPE_KEYS,
   FOOTPRINT_MAX_ANCHOR_OFFSET_M,
   FRENCH_TERRITORY_CODES,
   airportCardDetails,
@@ -586,7 +586,9 @@ test('the shipped pack obeys the policy it documents', () => {
     assert.ok(Number.isFinite(lat) && Math.abs(lat) <= 90, `bad latitude on ${props.name}`);
     assert.ok(!(lon === 0 && lat === 0), `Null Island position on ${props.name}`);
     assert.ok(props.name, 'every feature is named');
-    assert.ok(Object.hasOwn(AIRPORT_TYPE_LABELS, props.type), `unlabelled type ${props.type}`);
+    // `AIRPORT_TYPE_KEYS` replaced `AIRPORT_TYPE_LABELS` when the bucket
+    // names moved to a catalog; the keys are what this checks.
+    assert.ok(AIRPORT_TYPE_KEYS.includes(props.type), `unlabelled type ${props.type}`);
     assert.notEqual(props.type, 'closed');
     // The card is written from these properties, so the properties must satisfy
     // the policy that selected them.

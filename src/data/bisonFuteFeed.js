@@ -498,6 +498,7 @@ function readComments(record) {
   for (const comment of record.children) {
     if (comment.name !== 'generalPublicComment') continue;
     const kind = textAt(comment, 'commentType');
+    // i18n-ignore-next-line — DATEX II element names, not words.
     const value = textAt(comment, 'comment', 'values', 'value');
     if (!value) continue;
     if (kind === 'description' && !description) description = value;

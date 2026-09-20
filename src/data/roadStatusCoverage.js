@@ -56,6 +56,7 @@
  * Dependency-free and side-effect-free.
  */
 import { boxContains, boxesIntersect } from './viewportBox.js';
+import messages from './roadStatusCoverage.i18n.js';
 
 /** The date every figure in this module was measured. */
 export const ROAD_STATUS_COVERAGE_MEASURED_AT = '2026-09-01';
@@ -72,7 +73,12 @@ export const ROAD_STATUS_COVERAGE_MEASURED_AT = '2026-09-01';
  * not always zero: two of DIR Est's stations publish a point repère where the
  * other seventy do not, so Nancy–Metz is dark in the way a city with two lit
  * windows is dark, and the table says two rather than none.
+ *
+ * `reason` is a GETTER onto `roadStatusCoverage.i18n.js`, read when a notice
+ * is built and not when this module loads; the names and operators beside it
+ * are data and stay here.
  */
+// i18n-ignore-start — operators, cities and centres: proper nouns, not prose.
 export const ROAD_STATUS_DARK_AREAS = Object.freeze([
   Object.freeze({
     id: 'idf',
@@ -80,7 +86,7 @@ export const ROAD_STATUS_DARK_AREAS = Object.freeze([
     operator: 'DIRIF',
     kind: 'no-publisher',
     located: 0,
-    reason: 'publishes neither counting stations nor a traffic-status feed',
+    get reason() { return messages().reasons.idf; },
     bbox: Object.freeze({ south: 48.55, west: 1.85, north: 49.15, east: 3.05 }),
   }),
   Object.freeze({
@@ -94,7 +100,7 @@ export const ROAD_STATUS_DARK_AREAS = Object.freeze([
     // kilometre-post referential both ways they could be read, and the only
     // reading that fits puts A1 sensors in département 95, 150 km outside DIR
     // Nord's territory. An address that has to be wrong to parse is not one.
-    reason: 'publishes 357 live road states under site ids that are neither a referential row nor an address',
+    get reason() { return messages().reasons.lille; },
     bbox: Object.freeze({ south: 50.45, west: 2.75, north: 50.85, east: 3.35 }),
   }),
   Object.freeze({
@@ -104,7 +110,7 @@ export const ROAD_STATUS_DARK_AREAS = Object.freeze([
     kind: 'no-geometry',
     sites: 74,
     located: 2,
-    reason: 'publishes 74 live road states, and 70 of its 72 stations carry neither a coordinate nor a point repère',
+    get reason() { return messages().reasons['nancy-metz']; },
     bbox: Object.freeze({ south: 48.60, west: 5.95, north: 49.25, east: 6.40 }),
   }),
 ]);
@@ -161,6 +167,7 @@ export const ROAD_STATUS_SHOWCASES = Object.freeze([
     id: 'grenoble', name: 'Grenoble', centre: 'GENTIANE', lat: 45.1885, lon: 5.7245, segments: 16, cadenceS: 180,
   }),
 ]);
+// i18n-ignore-end
 
 /** The dark area a viewport falls in, if any. */
 export function roadStatusDarkArea(box) {
@@ -212,11 +219,12 @@ export function roadStatusCoverageNotice(box, { segments = 0 } = {}) {
   if (segments > 0) return null;
   const showcase = nearestRoadStatusShowcase(box);
   const area = roadStatusDarkArea(box);
+  const m = messages();
   if (area) {
     return {
       area,
       showcase,
-      text: `${area.operator} ${area.reason} — try ${showcase.name} (${showcase.segments} segments)`,
+      text: m.darkNotice(area.operator, area.reason, showcase.name, showcase.segments),
     };
   }
   return {
@@ -224,7 +232,7 @@ export function roadStatusCoverageNotice(box, { segments = 0 } = {}) {
     showcase,
     // The default case is not a failure: most of France is not a State-operated
     // motorway, and the sentence says that rather than blaming a publisher.
-    text: `outside the State-operated national road network — try ${showcase.name} (${showcase.segments} segments)`,
+    text: m.offNetworkNotice(showcase.name, showcase.segments),
   };
 }
 

@@ -71,7 +71,12 @@ import idfmNetworkLayer, {
   _selectIdfmNetworkForTest,
   _setIdfmNetworkStateForTest,
 } from './idfmNetwork.js';
-import { projectFrequencyStops, IDFM_FREQ_SILENT_LABEL } from './idfmFrequencyFeed.js';
+// `idfmFrequencySilentLabel()` replaced the `IDFM_FREQ_SILENT_LABEL` constant
+// when the words moved to a catalog: a constant is read once, at import, and
+// could no longer answer in the page's language. The French it returns is the
+// same string this file always compared against.
+import { projectFrequencyStops, idfmFrequencySilentLabel } from './idfmFrequencyFeed.js';
+const IDFM_FREQ_SILENT_LABEL = idfmFrequencySilentLabel();
 import { COMPTAGES_FLOW_COLORS } from './comptagesRhythm.js';
 
 // Cesium reads the aliased line-width range off a live WebGL context, and there

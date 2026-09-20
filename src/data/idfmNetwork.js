@@ -36,16 +36,16 @@ import {
   IDFM_FREQ_BAND_MIN,
   IDFM_FREQ_BOX_STEP_DEG,
   IDFM_FREQ_DAYS,
-  IDFM_FREQ_DAY_LABELS,
   IDFM_FREQ_LEVELS,
-  IDFM_FREQ_LEVEL_LABELS,
   IDFM_FREQ_MAX_STOPS,
-  IDFM_FREQ_MODE_LABELS,
   IDFM_FREQ_REFERENCE_YEAR,
-  IDFM_FREQ_SILENT_LABEL,
   bandLabel,
   clampBand,
   frequencyLevel,
+  idfmFrequencyDayLabel,
+  idfmFrequencyLevelLabels,
+  idfmFrequencyModeLabel,
+  idfmFrequencySilentLabel,
   meanWaitMin,
   operatingSlot,
   profilePeak,
@@ -53,6 +53,9 @@ import {
   profileSpan,
 } from './idfmFrequencyFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatInteger, formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { IDFM_MODE_NAMES, IDFM_MODE_VEHICLES } from './idfmNetwork.i18n.js';
 
 /**
  * Île-de-France Mobilités — ONE layer for the Paris network: what serves this
@@ -385,17 +388,25 @@ const SELECTED_SIZE_PX = 18;
  * Legend copy for the MODE regime — one sentence per mode, on what it is and
  * why its badge is the size it is.
  */
-const MODE_BLURBS = Object.freeze({
-  metro: 'Bouche ou station de métro. Le plus grand badge, avec le RER : une station porte des '
-    + 'ordres de grandeur de voyageurs de plus qu’un poteau de bus, et à cette altitude c’est '
-    + 'l’ossature du réseau qu’on lit.',
-  rail: 'Gare RER ou Transilien, au même diamètre que le métro.',
-  tram: 'Station de tramway.',
-  bus: 'Poteau de bus. Le mode le plus nombreux du référentiel de très loin, donc le plus petit '
-    + 'badge — sans quoi il recouvrirait les trois autres.',
-  funicular: 'Funiculaire.',
-  cableway: 'Téléphérique. Une seule ligne publiée dans tout le référentiel, le Câble C1 vers Créteil.',
-});
+function modeBlurb(mode) {
+  const blurbs = messages().modeBlurbs;
+  return blurbs[mode] || blurbs.unknown;
+}
+
+/**
+ * The referential's own label for a mode, in the page's language.
+ *
+ * The SERVER stamps a French `modeLabel` onto every stop (`idfmFeed.js`,
+ * which has no locale); the browser labels the mode itself and only falls
+ * back to that field for a mode code this table has never met.
+ *
+ * @param {?string} mode
+ * @returns {?string} null when the mode is unknown here.
+ */
+function idfmModeLabel(mode) {
+  const key = String(mode ?? '');
+  return key in IDFM_MODE_NAMES.definition ? labelFor(IDFM_MODE_NAMES, key) : null;
+}
 
 /**
  * The legend for a view that has read no rate: what modes are on screen.
@@ -416,11 +427,10 @@ export function modeLegend(stops) {
   return [...counts.entries()]
     .sort((a, b) => (size(b[0]) - size(a[0])) || (b[1] - a[1]))
     .map(([mode, count]) => ({
-      label: IDFM_MODES[mode] || 'Mode non publié',
+      label: idfmModeLabel(mode) || messages().unknownMode,
       color: IDFM_MODE_COLORS[mode] || COLOR_UNKNOWN_MODE,
       count,
-      blurb: MODE_BLURBS[mode]
-        || 'Arrêt dont le référentiel ne publie pas le mode — jamais emprunté à un voisin.',
+      blurb: modeBlurb(mode),
     }));
 }
 
@@ -434,7 +444,7 @@ export function modeLegend(stops) {
  * that the reader is not standing in: commentary about the dataset, not about
  * the map in front of them.
  */
-const SILENT_BLURB = 'L’arrêt existe et publie ses horaires. À cette heure-ci, il ne dessert rien.';
+const silentBlurb = () => messages().legend.silentBlurb;
 
 /**
  * The stops nobody can draw — and the reason this is NOT a counted row.
@@ -455,9 +465,7 @@ const SILENT_BLURB = 'L’arrêt existe et publie ses horaires. À cette heure-c
  * published, 35 953 placed, 549 without coordinates — 473 Train, 69 Bus,
  * 7 Tramway — carrying 84 766 of an average Tuesday's 3 071 764 courses.
  */
-const UNPLACED_BLURB = 'Sans latitude ni longitude dans le fichier : 473 Train, 69 Bus, '
-  + '7 Tramway. 518 se rattachent à une zone d’arrêt, mais 512 de ces zones ont deux quais '
-  + 'ou plus — il n’existe aucun point publié à emprunter. Ils portent 2,8 % des passages.';
+const unplacedBlurb = () => messages().legend.unplacedBlurb;
 
 /**
  * The chips: seven moments, one panel row.
@@ -472,14 +480,20 @@ const UNPLACED_BLURB = 'Sans latitude ni longitude dans le fichier : 473 Train, 
  * midday, the evening peak, late evening, and the one o'clock band where half
  * this network stops existing.
  */
+const moment = (id, band) => Object.freeze({
+  id,
+  band,
+  get label() { return messages().moments[id]; },
+});
+
 export const IDFM_FREQ_MOMENTS = Object.freeze([
-  Object.freeze({ id: 'now', band: null, label: 'Maintenant' }),
-  Object.freeze({ id: 'b06', band: 6, label: '06 h' }),
-  Object.freeze({ id: 'b08', band: 8, label: '08 h' }),
-  Object.freeze({ id: 'b12', band: 12, label: '12 h' }),
-  Object.freeze({ id: 'b18', band: 18, label: '18 h' }),
-  Object.freeze({ id: 'b22', band: 22, label: '22 h' }),
-  Object.freeze({ id: 'b01', band: 25, label: '01 h' }),
+  moment('now', null),
+  moment('b06', 6),
+  moment('b08', 8),
+  moment('b12', 12),
+  moment('b18', 18),
+  moment('b22', 22),
+  moment('b01', 25),
 ]);
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
@@ -547,22 +561,23 @@ let _pinnedBand = null;
 let _pinnedDay = null;
 /** Stop following the shared week-hour cursor. Null while the layer is off. */
 let _weekHourUnsubscribe = null;
+// `mardi` is a COLUMN of the offer file, not a word on screen: the seven day
+// keys are the publisher's (see IDFM_FREQ_DAYS).
+// i18n-ignore-next-line
 let _slot = { day: 'mardi', band: 8 };
 
 // --- Small helpers ----------------------------------------------------------
 
-/** French thousands separator, matching the rest of the French packs. */
+/** Grouped thousands, in the page's locale. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
 /** One decimal below ten, whole numbers above — the feed's own wire rule. */
 export function formatRate(rate) {
   const value = Number(rate);
   if (!Number.isFinite(value)) return '—';
-  return value < 10
-    ? value.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
-    : Math.round(value).toLocaleString('fr-FR');
+  return value < 10 ? formatDecimal(value, 1) : formatInteger(value);
 }
 
 /**
@@ -718,9 +733,10 @@ export function frequencyStyle(rate) {
 
 /** Legend label for one ladder step, or the silent state. */
 export function levelLabel(level) {
-  if (typeof level !== 'number' || !Number.isInteger(level)) return IDFM_FREQ_SILENT_LABEL;
-  if (level < 0) return IDFM_FREQ_SILENT_LABEL;
-  return IDFM_FREQ_LEVEL_LABELS[Math.min(level, IDFM_FREQ_LEVEL_LABELS.length - 1)];
+  if (typeof level !== 'number' || !Number.isInteger(level)) return idfmFrequencySilentLabel();
+  if (level < 0) return idfmFrequencySilentLabel();
+  const labels = idfmFrequencyLevelLabels();
+  return labels[Math.min(level, labels.length - 1)];
 }
 
 /** Legend colour for one ladder step, or the silent state. */
@@ -877,11 +893,12 @@ export function dayGlyphs(profile, day) {
 export function waitClock(rate) {
   const minutes = meanWaitMin(rate);
   if (minutes === null) return null;
-  if (minutes < 1) return 'moins d’une minute';
-  if (minutes >= 60) return 'plus d’une heure';
-  if (minutes >= 10) return `${Math.round(minutes)} min`;
+  const m = messages().wait;
+  if (minutes < 1) return m.underAMinute;
+  if (minutes >= 60) return m.overAnHour;
+  if (minutes >= 10) return m.minutes(Math.round(minutes));
   const halves = Math.round(minutes * 2) / 2;
-  return Number.isInteger(halves) ? `${halves} min` : `${Math.floor(halves)} min 30`;
+  return Number.isInteger(halves) ? m.minutes(halves) : m.minutesAndAHalf(Math.floor(halves));
 }
 
 /**
@@ -892,26 +909,23 @@ export function waitClock(rate) {
  * rather than "RER & Transilien" — the mode label is right for a header and
  * wrong inside a sentence.
  */
-const MODE_VEHICLE = Object.freeze({
-  bus: 'bus',
-  metro: 'métro',
-  rail: 'train',
-  tram: 'tram',
-  funicular: 'passage',
-  cableway: 'passage',
-  unknown: 'passage',
-});
-
-/** `06:00–06:59` → `06 h 00`. The card names a moment, not a bracket. */
-function clockOf(band) {
-  const match = /^(\d{2}):(\d{2})/.exec(String(bandLabel(band)));
-  return match ? `${match[1]} h ${match[2]}` : bandLabel(band);
+function modeVehicle(mode) {
+  const key = String(mode ?? '');
+  return key in IDFM_MODE_VEHICLES.definition
+    ? labelFor(IDFM_MODE_VEHICLES, key)
+    : IDFM_MODE_VEHICLES().unknown;
 }
 
-/** `08:00–08:59` → `08 h`. */
+/** `06:00–06:59` → `06 h 00` / `06:00`. The card names a moment, not a bracket. */
+function clockOf(band) {
+  const match = /^(\d{2}):(\d{2})/.exec(String(bandLabel(band)));
+  return match ? messages().card.clock(match[1], match[2]) : bandLabel(band);
+}
+
+/** `08:00–08:59` → `08 h` / `08:00`. */
 function hourOf(band) {
   const match = /^(\d{2})/.exec(String(bandLabel(band)));
-  return match ? `${match[1]} h` : bandLabel(band);
+  return match ? messages().card.hour(match[1]) : bandLabel(band);
 }
 
 /**
@@ -963,14 +977,15 @@ export function mostDifferentDay(profile, band, shownDay, threshold = 0.2) {
  */
 export function networkLine(ref, freq = null) {
   const where = [];
+  const m = messages().card;
   if (ref?.town) where.push(ref.town);
-  else if (freq?.commune) where.push(freq.dept ? `${freq.commune} (${freq.dept})` : freq.commune);
-  if (ref?.fareZone) where.push(`zone ${ref.fareZone}`);
+  else if (freq?.commune) where.push(freq.dept ? m.communeWithDept(freq.commune, freq.dept) : freq.commune);
+  if (ref?.fareZone) where.push(m.fareZone(ref.fareZone));
   if (ref) {
-    where.push(ref.accessible === true ? 'accès de plain-pied'
-      : ref.accessible === 'partial' ? 'accès de plain-pied partiel'
-        : ref.accessible === false ? 'pas d’accès de plain-pied'
-          : 'accessibilité non renseignée');
+    where.push(ref.accessible === true ? m.stepFree
+      : ref.accessible === 'partial' ? m.stepFreePartial
+        : ref.accessible === false ? m.noStepFree
+          : m.accessUnknown);
   }
   return where.length ? where.join(' · ') : null;
 }
@@ -1032,21 +1047,22 @@ export function buildStopCard({ ref = null, freq = null } = {}, context = {}) {
   const pack = context.pack || null;
   const probe = context.probe || null;
 
+  const m = messages().card;
   const mode = ref?.mode || freq?.mode || 'unknown';
-  const modeLabel = ref?.modeLabel || IDFM_MODES[ref?.mode]
-    || IDFM_FREQ_MODE_LABELS[freq?.mode] || IDFM_FREQ_MODE_LABELS.unknown;
-  const name = ref?.name || freq?.name || `Arrêt ${ref?.id || freq?.id}`;
-  const dayLabel = IDFM_FREQ_DAY_LABELS[day] || day;
-  const lines = [`${name} · ${modeLabel}`];
+  // The referential's own word first, then the offer file's — and the server's
+  // French `modeLabel` only for a code neither table knows.
+  const modeLabel = (ref && (idfmModeLabel(ref.mode) || ref.modeLabel))
+    || idfmFrequencyModeLabel(freq?.mode);
+  const name = ref?.name || freq?.name || m.stopFallbackName(ref?.id || freq?.id);
+  const dayLabel = idfmFrequencyDayLabel(day);
+  const lines = [m.title(name, modeLabel)];
 
   if (freq) {
     // 1. THE CONSEQUENCE. How long you stand there, at the hour on screen.
     const rate = profileRate(freq.profile, day, band);
-    const when = `${dayLabel.toLowerCase()} à ${hourOf(band)}`;
-    const vehicle = MODE_VEHICLE[mode] || MODE_VEHICLE.unknown;
-    lines.push(rate > 0
-      ? `Un ${vehicle} toutes les ${waitClock(rate)} — ce ${when}`
-      : `Rien ne passe ici ce ${when}`);
+    const when = m.whenDayHour(dayLabel, hourOf(band));
+    const vehicle = modeVehicle(mode);
+    lines.push(rate > 0 ? m.wait(vehicle, waitClock(rate), when) : m.nothing(when));
 
     // 2. THE PROOF, and the shape of the day around it.
     const span = profileSpan(freq.profile, day);
@@ -1054,28 +1070,28 @@ export function buildStopCard({ ref = null, freq = null } = {}, context = {}) {
     const proof = [];
     if (rate > 0) {
       proof.push(peak && peak.band !== band
-        ? `${formatRate(rate)} par heure ici, jusqu’à ${formatRate(peak.rate)} vers ${hourOf(peak.band)}`
-        : `${formatRate(rate)} par heure ici`);
+        ? m.ratePeak(formatRate(rate), formatRate(peak.rate), hourOf(peak.band))
+        : m.rate(formatRate(rate)));
     }
-    if (span) proof.push(`premier ${clockOf(span.first)}, dernier ${clockOf(span.last)}`);
+    if (span) proof.push(m.span(clockOf(span.first), clockOf(span.last)));
     if (proof.length) lines.push(proof.join(' · '));
 
     // 3. THE DAY THAT DIFFERS, if one does.
     const other = mostDifferentDay(freq.profile, band, day);
     if (other) {
       lines.push(other.rate > 0
-        ? `${IDFM_FREQ_DAY_LABELS[other.day]} à la même heure : un toutes les ${waitClock(other.rate)}`
-        : `${IDFM_FREQ_DAY_LABELS[other.day]} à la même heure : rien`);
+        ? m.otherDay(idfmFrequencyDayLabel(other.day), waitClock(other.rate))
+        : m.otherDayNothing(idfmFrequencyDayLabel(other.day)));
     }
   } else if (probe === 'loading') {
-    lines.push('Lecture de l’offre horaire de cet arrêt…');
+    lines.push(m.probeLoading);
   } else if (probe === 'error') {
-    lines.push('Offre horaire IDFM momentanément indisponible pour cet arrêt');
+    lines.push(m.probeError);
   } else {
     // The one honest absence left, and it is a MEASUREMENT rather than a
     // ceiling: this stop has no row in the offer file at all. Measured,
     // 3 053 of the 37 956 referential stops, 8.0 %.
-    lines.push('Aucun profil horaire publié pour cet arrêt dans l’offre IDFM');
+    lines.push(m.noProfile);
   }
 
   // 4. WHERE IT IS — town, fare zone, step-free. The mode is on the title.
@@ -1085,24 +1101,22 @@ export function buildStopCard({ ref = null, freq = null } = {}, context = {}) {
   if (freq) {
     // 5. THE WHOLE DAY, in one line of glyphs.
     const glyphs = dayGlyphs(freq.profile, day);
-    if (glyphs) lines.push(`04 h ${glyphs} 03 h — la journée entière`);
+    if (glyphs) lines.push(m.wholeDay(glyphs));
 
     // 6. THE CAVEATS THAT ONLY APPEAR WHEN THEY APPLY.
     if (Array.isArray(freq.aliases) && freq.aliases.length) {
-      lines.push(`Aussi publié « ${freq.aliases.join(' », « ')} » au même point`);
+      lines.push(m.aliases(freq.aliases.join(messages().card.aliasSeparator)));
     }
     const missing = missingWindows(pack);
     if (missing) {
-      lines.push(`${missing} des 4 fenêtres horaires n’ont pas répondu — un creux `
-        + 'du graphique peut être une panne amont, pas une absence de service');
+      lines.push(m.missingWindows(missing));
     }
     if (freq.mode === 'unknown' && !ref) {
-      lines.push('Mode non publié par ce jeu de données — non emprunté au référentiel');
+      lines.push(m.modeNotPublished);
     }
 
     // 7. WHAT THIS IS. Never a timetable, and it says so in its own words.
-    lines.push(`Moyenne d’une semaine ordinaire ${pack?.year || IDFM_FREQ_REFERENCE_YEAR}, `
-      + 'hors vacances — ce n’est pas un horaire');
+    lines.push(m.averageWeek(pack?.year || IDFM_FREQ_REFERENCE_YEAR));
   }
 
   return lines.join('\n');
@@ -1125,30 +1139,30 @@ export function buildLoadingLabel({
   dormant = _dormant,
   stops = _count,
 } = {}) {
-  if (dormant) return 'Zoome : le réseau IDFM se dessine sous 20 km d’altitude';
-  if (loading) return 'lecture de l’offre horaire IDFM…';
+  const m = messages().row;
+  if (dormant) return m.dormant;
+  if (loading) return m.loading;
 
-  const parts = [`${fr(stops)} arrêts`];
+  const parts = [m.stops(fr(stops))];
   if (regime !== 'arrets') {
     // The colour channel is named, because up here it carries the MODE and
     // lower down it carries the rate. See {@link stopBadgeFill}.
-    return parts.concat('couleur par mode', 'fréquence à partir d’une vue de 5 km').join(' · ');
+    return parts.concat(m.colorByMode, m.frequencyFrom).join(' · ');
   }
-  const when = `${IDFM_FREQ_DAY_LABELS[slot.day] || slot.day} ${bandLabel(slot.band)}`;
-  parts.push(pinned ? when : `${when} (heure de Paris)`);
-  if (status === 'error') return parts.concat('offre horaire IDFM indisponible').join(' · ');
+  const when = m.when(idfmFrequencyDayLabel(slot.day), bandLabel(slot.band));
+  parts.push(pinned ? when : m.parisClock(when));
+  if (status === 'error') return parts.concat(m.offerUnavailable).join(' · ');
 
   if (pack?.tooDense) {
     // "au moins", because the identity page saturates: the proxy knows the box
     // holds more than the ceiling and cannot know how many more without buying
     // the pages it just refused.
     return parts.concat(
-      `${pack.stopsAtLeast ? 'au moins ' : ''}${fr(pack.stopsInBox ?? 0)} arrêts dans `
-      + `cette vue, plus que les ${fr(IDFM_FREQ_MAX_STOPS)} chiffrés — zoome`,
+      m.tooDense(pack.stopsAtLeast ? m.atLeast : '', fr(pack.stopsInBox ?? 0), fr(IDFM_FREQ_MAX_STOPS)),
     ).join(' · ');
   }
-  if (!records.size) return parts.concat('aucune fréquence publiée dans cette vue').join(' · ');
-  parts.push(`${fr(records.size)} chiffrés`);
+  if (!records.size) return parts.concat(m.noFrequency).join(' · ');
+  parts.push(m.charted(fr(records.size)));
   let silent = 0;
   let top = 0;
   for (const record of records.values()) {
@@ -1156,14 +1170,14 @@ export function buildLoadingLabel({
     if (rate <= 0) silent += 1;
     else if (frequencyLevel(rate) >= IDFM_FREQ_LEVELS.length) top += 1;
   }
-  if (top) parts.push(`${fr(top)} à plus de ${IDFM_FREQ_LEVELS[IDFM_FREQ_LEVELS.length - 1]}/h`);
-  if (silent) parts.push(`${fr(silent)} sans passage`);
-  if (pack?.refused) parts.push(`${fr(pack.refused)} non chiffrés`);
+  if (top) parts.push(m.aboveTop(fr(top), IDFM_FREQ_LEVELS[IDFM_FREQ_LEVELS.length - 1]));
+  if (silent) parts.push(m.silent(fr(silent)));
+  if (pack?.refused) parts.push(m.refused(fr(pack.refused)));
   // The band axis costs four upstream pages, and losing one is a hole in the
   // DAY rather than a hole in the map. Unnamed, that hole reads as "no service
   // between 16:00 and 21:00", which is the worst lie this layer could tell.
   const missing = missingWindows(pack);
-  if (missing) parts.push(`${missing} fenêtres horaires manquantes en amont`);
+  if (missing) parts.push(m.missingWindows(missing));
   return parts.join(' · ');
 }
 
@@ -1748,8 +1762,8 @@ async function loadFrequency(box, { force = false } = {}) {
     // Keep what is drawn: an older box is still a true map of the service in
     // it, and blanking the discs would say the region has no transport.
     _freqError = _freqRecords.size
-      ? 'rafraîchissement de l’offre IDFM indisponible'
-      : 'offre horaire IDFM indisponible';
+      ? messages().row.refreshUnavailable
+      : messages().row.offerUnavailable;
     _freqStatus = _freqRecords.size ? 'ok' : 'error';
   } finally {
     if (generation === _freqGeneration) _freqLoading = false;
@@ -1887,7 +1901,7 @@ async function runScan(viewer, signal = null) {
             fareZone: stop.fareZone,
             communeCode: stop.communeCode,
           },
-          name: stop.name || 'Arrêt',
+          name: stop.name || messages().stop,
         });
         _refStops.set(String(stop.id), stop);
         drawn += 1;
@@ -2182,11 +2196,13 @@ const idfmNetworkLayer = {
       stopsInBox: _total,
       truncated: _truncated,
       byMode: _byMode,
+      // The server's own French table, published as-is for the surfaces that
+      // group by mode; what the reader sees is labelled by `idfmModeLabel`.
       modeLabels: IDFM_MODES,
       // Stated in the layer's own stats so a reader is never left to conclude
       // the vehicles are missing because the layer is broken.
       liveVehicles: null,
-      liveVehicleNote: 'IDFM ne publie aucune position de véhicule en temps réel',
+      liveVehicleNote: messages().noLiveVehicles,
       // The frequency half, reported next to the network half rather than
       // behind a second row.
       regime: _freqRegime,
@@ -2239,11 +2255,12 @@ const idfmNetworkLayer = {
       state: (moment.band === null ? _pinnedBand === null : _pinnedBand === moment.band)
         ? 'active' : 'idle',
       title: moment.band === null
-        ? `Suivre l’horloge de Paris — actuellement ${IDFM_FREQ_DAY_LABELS[_slot.day]} ${bandLabel(_slot.band)}`
+        ? messages().chipTitles.followParis(
+          messages().row.when(idfmFrequencyDayLabel(_slot.day), bandLabel(_slot.band)))
         // A band chip moves the other typical-week rows too, and a control
         // whose reach goes past its own row has to say so.
-        : `${IDFM_FREQ_DAY_LABELS[_slot.day]} ${bandLabel(moment.band)}`
-          + ' · déplace aussi les autres couches de semaine type',
+        : messages().chipTitles.pinBand(
+          messages().row.when(idfmFrequencyDayLabel(_slot.day), bandLabel(moment.band))),
       params: { band: moment.band === null ? 'now' : moment.band },
     }));
 
@@ -2270,10 +2287,10 @@ const idfmNetworkLayer = {
       legend.push({ label: levelLabel(level), color: levelColor(level), count });
     });
     legend.push({
-      label: IDFM_FREQ_SILENT_LABEL,
+      label: idfmFrequencySilentLabel(),
       color: IDFM_FREQ_SILENT_COLOR,
       count: silent,
-      blurb: SILENT_BLURB,
+      blurb: silentBlurb(),
     });
     // The badges the offer does not reach. Its own row, because it is the one
     // grey on this map that means "nobody counted", and a reader who cannot
@@ -2284,13 +2301,10 @@ const idfmNetworkLayer = {
     }
     if (unmeasured) {
       legend.push({
-        label: 'offre horaire non publiée',
+        label: messages().legend.unmeasured,
         color: IDFM_NOT_MEASURED_COLOR,
         count: unmeasured,
-        blurb: 'Arrêt du référentiel qui n’a AUCUNE ligne dans le fichier d’offre — 3 053 des '
-          + '37 956, soit 8,0 %. Le gris « non mesuré » de toute l’application, et non la couleur '
-          + 'du passage nul, qui est une mesure. Un clic sur cet arrêt va tout de même chercher '
-          + 'son profil : le fichier d’offre est interrogé par arrêt, pas seulement par vue.',
+        blurb: messages().legend.unmeasuredBlurb,
       });
     }
     // The stops nobody can draw travel with the legend — but NOT as a counted
@@ -2298,10 +2312,9 @@ const idfmNetworkLayer = {
     // sentence, and the old shape said the opposite of the truth.
     if (_freqUnplaced) {
       legend.push({
-        label: `${fr(_freqUnplaced)} arrêts sans coordonnée publiée : `
-          + 'sur aucune carte, ici ni ailleurs',
+        label: messages().legend.unplaced(fr(_freqUnplaced)),
         color: null,
-        blurb: UNPLACED_BLURB,
+        blurb: unplacedBlurb(),
       });
     }
     return { chips, legend };

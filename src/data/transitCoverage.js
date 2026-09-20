@@ -44,6 +44,7 @@
  * Dependency-free and side-effect-free.
  */
 import { boxesIntersect, boxContains } from './viewportBox.js';
+import messages from './transitCoverage.i18n.js';
 
 /** The date every figure in this module was measured. */
 export const TRANSIT_COVERAGE_MEASURED_AT = '2026-08-31';
@@ -54,47 +55,48 @@ export const TRANSIT_COVERAGE_MEASURED_AT = '2026-08-31';
  * `reason` is what the PAN catalog says, not an interpretation: each is the
  * set of GTFS-Realtime features that publisher actually declares.
  */
+// i18n-ignore-start — cities, networks and operators: proper nouns, not prose.
 export const TRANSIT_DARK_AREAS = Object.freeze([
   Object.freeze({
     id: 'idf',
     name: 'Île-de-France',
     operator: 'Île-de-France Mobilités',
-    reason: 'publishes no GTFS-Realtime resource at all',
+    get reason() { return messages().reasons.idf; },
     bbox: Object.freeze({ south: 48.60, west: 1.90, north: 49.10, east: 2.85 }),
   }),
   Object.freeze({
     id: 'lyon',
     name: 'Lyon',
     operator: 'TCL',
-    reason: 'has no vehicle-position feed in the national catalog',
+    get reason() { return messages().reasons.lyon; },
     bbox: Object.freeze({ south: 45.60, west: 4.70, north: 45.90, east: 5.00 }),
   }),
   Object.freeze({
     id: 'marseille',
     name: 'Marseille',
     operator: 'RTM · Aix-Marseille-Provence',
-    reason: 'publishes service alerts only',
+    get reason() { return messages().reasons.marseille; },
     bbox: Object.freeze({ south: 43.15, west: 5.20, north: 43.45, east: 5.60 }),
   }),
   Object.freeze({
     id: 'lille',
     name: 'Lille',
     operator: 'Ilévia',
-    reason: 'has no vehicle-position feed in the national catalog',
+    get reason() { return messages().reasons.lille; },
     bbox: Object.freeze({ south: 50.55, west: 2.90, north: 50.75, east: 3.25 }),
   }),
   Object.freeze({
     id: 'strasbourg',
     name: 'Strasbourg',
     operator: 'CTS',
-    reason: 'has no vehicle-position feed in the national catalog',
+    get reason() { return messages().reasons.strasbourg; },
     bbox: Object.freeze({ south: 48.45, west: 7.55, north: 48.70, east: 7.90 }),
   }),
   Object.freeze({
     id: 'toulouse',
     name: 'Toulouse',
     operator: 'Tisséo',
-    reason: 'publishes trip updates and alerts, but no vehicle positions',
+    get reason() { return messages().reasons.toulouse; },
     bbox: Object.freeze({ south: 43.50, west: 1.30, north: 43.70, east: 1.55 }),
   }),
 ]);
@@ -171,6 +173,7 @@ export const TRANSIT_SHOWCASES = Object.freeze([
     kinds: Object.freeze(['bus', 'ferry', 'aerial']),
   }),
 ]);
+// i18n-ignore-end
 
 /** The dark area a viewport falls in, if any. */
 export function darkAreaForBox(box) {
@@ -228,13 +231,13 @@ export function transitCoverageNotice(box, { feedsMatched = 0 } = {}) {
     return {
       area,
       showcase,
-      text: `${area.operator} ${area.reason} — try ${showcase.name} (${showcase.vehicles} live)`,
+      text: messages().darkNotice(area.operator, area.reason, showcase.name, showcase.vehicles),
     };
   }
   return {
     area: null,
     showcase,
-    text: `no operator publishes live positions here — try ${showcase.name} (${showcase.vehicles} live)`,
+    text: messages().noOperatorNotice(showcase.name, showcase.vehicles),
   };
 }
 

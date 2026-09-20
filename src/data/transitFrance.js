@@ -116,6 +116,8 @@ import {
   transitRouteCardLines,
 } from './transitRouteView.js';
 import { pickAt } from './pickAt.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { TRANSIT_OCCUPANCY, TRANSIT_STOP_STATUS } from './transitFrance.i18n.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const TRANSIT_FR_LAYER_ID = 'transit-fr';
@@ -265,22 +267,14 @@ const MODE_COLORS = Object.freeze({
 const DEFAULT_MODE_COLOR = '#ffc93c';
 const SELECTED_COLOR = '#00ffff';
 
-/** Human labels for the GTFS-RT stop status enum. */
-const STATUS_LABELS = Object.freeze({
-  'in-transit': 'in transit',
-  incoming: 'arriving',
-  stopped: 'at stop',
-});
-/** Human labels for the GTFS-RT occupancy enum. */
-const OCCUPANCY_LABELS = Object.freeze({
-  empty: 'empty',
-  'many-seats': 'many seats',
-  'few-seats': 'few seats',
-  'standing-room': 'standing room',
-  crushed: 'crush load',
-  full: 'full',
-  'not-accepting': 'not boarding',
-});
+/**
+ * The GTFS-RT `currentStatus` and `occupancyStatus` enumerations, in words.
+ *
+ * `labelFor` prints a value this build has never met as the value itself: a
+ * new enum member must reach the card as a token, never as an empty line.
+ */
+const statusLabel = (status) => (status ? labelFor(TRANSIT_STOP_STATUS, status) : null);
+const occupancyLabel = (level) => (level ? labelFor(TRANSIT_OCCUPANCY, level) : null);
 
 /**
  * Fallback disc for a vehicle whose CLASS did not resolve — the same rule the
@@ -393,7 +387,7 @@ export function transitModeColor(mode) {
 
 /** Display label for a service mode. */
 export function transitModeLabel(mode) {
-  return PAN_MODE_LABELS[mode] || (mode ? String(mode) : 'Transit');
+  return PAN_MODE_LABELS[mode] || (mode ? String(mode) : messages().kind.fallbackMode);
 }
 
 /**
@@ -422,15 +416,16 @@ export function transitVehicleColor(vehicle) {
  * @returns {{label: string, qualifier: ?string}}
  */
 export function transitKindReadout(vehicle) {
+  const m = messages().kind;
   if (vehicle?.kind && vehicle.kindSource === 'route_type') {
     return { label: vehicleKindLabel(vehicle.kind), qualifier: null };
   }
   if (vehicle?.kind && vehicle.kindSource === 'uniform') {
     // Every route this network publishes is one class, so the class holds even
     // though this vehicle's own route id did not resolve.
-    return { label: vehicleKindLabel(vehicle.kind), qualifier: 'single-mode network' };
+    return { label: vehicleKindLabel(vehicle.kind), qualifier: m.uniform };
   }
-  return { label: 'Type unknown', qualifier: transitModeLabel(vehicle?.mode) };
+  return { label: m.unknown, qualifier: transitModeLabel(vehicle?.mode) };
 }
 
 /**
@@ -960,8 +955,8 @@ export function transitVehicleReadout(record, nowMs = Date.now()) {
     lon: carto ? Cesium.Math.toDegrees(carto.longitude) : null,
     speedKph: Number.isFinite(vehicle.speedMps) ? Math.round(vehicle.speedMps * 3.6) : null,
     bearingDeg: Number.isFinite(vehicle.bearing) ? Math.round(vehicle.bearing) : null,
-    status: vehicle.status ? (STATUS_LABELS[vehicle.status] || vehicle.status) : null,
-    occupancy: vehicle.occupancy ? (OCCUPANCY_LABELS[vehicle.occupancy] || vehicle.occupancy) : null,
+    status: statusLabel(vehicle.status),
+    occupancy: occupancyLabel(vehicle.occupancy),
     delaySec: num(vehicle.delaySec),
     delayPublished: Number.isFinite(vehicle.delaySec),
     fixAgeSec: Number.isFinite(vehicle.timestampMs)
@@ -986,31 +981,30 @@ export function buildTransitSelectionLabel(record, nowMs = Date.now()) {
   // what is written on the front of the bus, where `route_id` "07" is the
   // operator's key. Until then, and for a network with no resolvable line, the
   // feed's own label stands unchanged.
+  const m = messages().card;
   const shortName = record?.route?.route?.shortName || vehicle.route;
-  const route = shortName ? `LINE ${shortName}` : 'LINE —';
+  const route = shortName ? m.line(shortName) : m.lineUnknown;
   const headsign = record?.route?.trip?.headsign || vehicle.label;
-  const title = headsign ? `${route} · ${headsign}` : route;
+  const title = headsign ? m.titleWithHeadsign(route, headsign) : route;
 
   const details = [];
   const longName = record?.route?.route?.longName;
   if (longName && longName !== shortName) details.push(longName);
-  if (feed.network) details.push(`🚍 ${feed.network}`);
+  if (feed.network) details.push(m.network(feed.network));
 
   const motion = [];
   if (Number.isFinite(vehicle.speedMps)) {
-    motion.push(`${Math.round(vehicle.speedMps * 3.6)} km/h`);
+    motion.push(m.speed(Math.round(vehicle.speedMps * 3.6)));
   }
   // Half the national fleet publishes no speed and 16% no bearing. A missing
   // value is left out; it is never printed as a zero, which would read as
   // "stationary, facing north" instead of "not reported".
-  if (Number.isFinite(vehicle.bearing)) motion.push(`${Math.round(vehicle.bearing)}°`);
-  else motion.push('no heading published');
-  if (vehicle.status) motion.push(STATUS_LABELS[vehicle.status] || vehicle.status);
+  if (Number.isFinite(vehicle.bearing)) motion.push(m.bearing(Math.round(vehicle.bearing)));
+  else motion.push(m.noHeading);
+  if (vehicle.status) motion.push(statusLabel(vehicle.status));
   if (motion.length) details.push(motion.join(' · '));
 
-  if (vehicle.occupancy) {
-    details.push(`👥 ${OCCUPANCY_LABELS[vehicle.occupancy] || vehicle.occupancy}`);
-  }
+  if (vehicle.occupancy) details.push(m.occupancy(occupancyLabel(vehicle.occupancy)));
 
   // What the operator says about the RUN, not the vehicle: how far off the
   // timetable it is, what it has stopped doing, and what has been written
@@ -1027,7 +1021,7 @@ export function buildTransitSelectionLabel(record, nowMs = Date.now()) {
   // the card must report the newest one the operator actually published.
   if (Number.isFinite(vehicle.timestampMs)) {
     const ageSec = Math.max(0, Math.round((nowMs - vehicle.timestampMs) / 1000));
-    details.push(ageSec < 60 ? `⏱ fix ${ageSec}s ago` : `⏱ fix ${Math.round(ageSec / 60)}m ago`);
+    details.push(ageSec < 60 ? m.fixSeconds(ageSec) : m.fixMinutes(Math.round(ageSec / 60)));
   }
 
   // And WHERE IT IS DRAWN, when that is no longer the same thing. A glyph
@@ -1040,7 +1034,7 @@ export function buildTransitSelectionLabel(record, nowMs = Date.now()) {
   // own `route_type` and a class inferred from a single-mode network are not
   // the same claim and do not print the same way.
   const kind = transitKindReadout(vehicle);
-  const provenance = [kind.qualifier ? `${kind.label} (${kind.qualifier})` : kind.label];
+  const provenance = [kind.qualifier ? m.kindWithQualifier(kind.label, kind.qualifier) : kind.label];
   if (hasText(feed.licence)) provenance.push(feed.licence);
   details.push(provenance.join(' · '));
 
@@ -1671,7 +1665,7 @@ async function loadViewport({ force = false } = {}) {
       let detail = `HTTP ${response.status}`;
       try {
         const body = await response.json();
-        if (body?.error) detail = body.missingIndex ? 'feed index missing' : String(body.error);
+        if (body?.error) detail = body.missingIndex ? messages().errors.missingIndex : String(body.error);
       } catch { /* keep the status-code detail */ }
       throw new Error(detail);
     }
@@ -1700,7 +1694,7 @@ async function loadViewport({ force = false } = {}) {
     if (error?.name === 'AbortError') return;
     if (generation !== _requestGeneration) return;
     console.warn('[Data:TransitFR] viewport load failed:', error?.message || error);
-    _error = error?.message || 'transit feed unavailable';
+    _error = error?.message || messages().errors.unavailable;
     _status = 'error';
     _verdictBox = boxKey;
     scheduleRetry();
@@ -1827,46 +1821,46 @@ function collectDetectableVehicles(options = {}) {
 
 /** Short provenance line for the control-panel row. */
 function buildLoadingLabel() {
-  if (_status === 'zoom-in') return 'Zoome pour charger les transports en direct';
-  if (_loading) return _records.size ? 'refreshing networks...' : 'resolving networks...';
+  const m = messages().row;
+  if (_status === 'zoom-in') return m.zoomIn;
+  if (_loading) return _records.size ? m.refreshing : m.resolving;
   if (_status === 'empty') {
     // Two different empties. Feeds matched and reported nothing: the network
     // exists and its buses are parked. No feed matched at all: nobody
     // publishes positions here, which for Paris, Lyon, Marseille, Lille,
     // Strasbourg and Toulouse is permanent — so the layer names the publisher
     // and points at a city where it works, instead of reading like a bug.
-    if (_feedsMatched > 0) return 'no vehicles reporting here';
-    return transitCoverageNotice(_lastBoxBounds, { feedsMatched: 0 })?.text
-      || 'no PAN feed covers this view';
+    if (_feedsMatched > 0) return m.noVehicles;
+    return transitCoverageNotice(_lastBoxBounds, { feedsMatched: 0 })?.text || m.noFeed;
   }
   const networks = _feedSummaries.filter((feed) => feed.inView > 0).length;
-  const parts = [`${networks} network${networks === 1 ? '' : 's'}`];
+  const parts = [m.networks(networks)];
   // A vehicle whose ground nothing can speak for yet is withheld rather than
   // drawn on the ellipsoid, so the row has to account for the difference
   // between what it counted and what is on the globe. Ordinarily this is
   // true for about a second after arriving somewhere new; if it persists, it
   // is saying that neither the DEM nor the drawn surface will answer here,
   // which is a fact about the session and not a fleet that failed to load.
-  if (hasColdFloor()) parts.push('placing on the ground');
+  if (hasColdFloor()) parts.push(m.placing);
   // The one number worth a row of the control panel: how much of what is on
   // screen is running behind. Only ever shown when a network in view actually
   // published deviations — a silent "0 late" over a fleet that never said
   // would be the layer claiming punctuality it cannot see.
-  if (_schedule?.late) parts.push(`${_schedule.late} late`);
-  if (_schedule?.canceled) parts.push(`${_schedule.canceled} cancelled`);
+  if (_schedule?.late) parts.push(m.late(_schedule.late));
+  if (_schedule?.canceled) parts.push(m.cancelled(_schedule.canceled));
   // The disruption a network can report even when it publishes no deviation
   // at all: Rennes types 27 vehicles, gives a delay for none of them, and says
   // 16 of their runs will skip a stop.
-  if (_schedule?.skipped) parts.push(`${_schedule.skipped} skipping stops`);
+  if (_schedule?.skipped) parts.push(m.skipping(_schedule.skipped));
   // How much of what is on screen is being DRAWN rather than reported. The
   // projection is the only thing in this layer that moves a contact away from
   // a published position, so it is the only thing that has to be counted in
   // the open — a viewer must be able to see it without clicking a bus.
-  if (_projectedCount) parts.push(`${_projectedCount} projected`);
-  if (_feedsTruncated) parts.push(`${_feedsMatched} in range`);
-  if (_vehiclesTruncated || _renderTruncated) parts.push('capped');
+  if (_projectedCount) parts.push(m.projected(_projectedCount));
+  if (_feedsTruncated) parts.push(m.inRange(_feedsMatched));
+  if (_vehiclesTruncated || _renderTruncated) parts.push(m.capped);
   const stale = _feedSummaries.filter((feed) => feed.stale).length;
-  if (stale) parts.push(`${stale} stale`);
+  if (stale) parts.push(m.stale(stale));
   return parts.join(' · ');
 }
 
@@ -2125,10 +2119,7 @@ const transitFranceLayer = {
             : kind.label,
           color: transitVehicleColor(entry.vehicle),
           count: entry.count,
-          blurb: key.startsWith('kind:')
-            ? 'Vehicle class joined from the network\'s static GTFS route_type.'
-            : 'This network publishes no route_id the static feed resolves, so only '
-              + 'its declared SERVICE class is known — not what the vehicle is.',
+          blurb: key.startsWith('kind:') ? messages().legend.joined : messages().legend.declared,
         };
       });
     return { chips: [], legend };

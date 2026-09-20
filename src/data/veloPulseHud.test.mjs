@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PULSE_SLOTS } from './veloPulseFeed.js';
 import {
-  PULSE_HUD_DAY_INITIALS,
+  pulseHudDayInitials,
   pulseLegendSentence,
   pulseSlotFromRatio,
 } from './veloPulseHud.js';
@@ -48,5 +48,7 @@ test('the legend names both instruments, because they are not the same quantity'
 });
 
 test('the strip is labelled Monday to Sunday, in that order', () => {
-  assert.deepEqual([...PULSE_HUD_DAY_INITIALS], ['L', 'M', 'M', 'J', 'V', 'S', 'D']);
+  // `pulseHudDayInitials()` replaced the `PULSE_HUD_DAY_INITIALS` constant
+  // when the letters moved to a catalog: they are the reader's language now.
+  assert.deepEqual([...pulseHudDayInitials()], ['L', 'M', 'M', 'J', 'V', 'S', 'D']);
 });

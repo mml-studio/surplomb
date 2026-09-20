@@ -48,6 +48,7 @@
  */
 
 import { interCapitalFor } from './interCapitals.js';
+import messages from './mobilityOperators.i18n.js';
 
 /**
  * Operator hues, chosen for pairwise separability on a dark globe.
@@ -90,6 +91,8 @@ export const MOBILITY_OPERATOR_UNKNOWN_COLOR = '#6b7a8a';
  * `slot` indexes {@link MOBILITY_OPERATOR_PALETTE}. Each is unique — a test
  * pins that.
  */
+// i18n-ignore-start — operator BRANDS and the words their titles lead with:
+// data, matched against published titles and never translated.
 const CURATED_OPERATORS = Object.freeze([
   // ── Free-floating majors (the ones that overlap each other in one city) ──
   { id: 'lime', label: 'Lime', slot: 4, match: ['lime'] },
@@ -112,15 +115,18 @@ const CURATED_OPERATORS = Object.freeze([
   { id: 'velotoulouse', label: 'VélÔToulouse', slot: 2, match: ['velotoulouse'] },
   { id: 'levelo-tbm', label: 'Le Vélo (TBM)', slot: 9, match: ['tbm', 'le velo tbm'] },
 ]);
+// i18n-ignore-end
 
 /**
  * Leading words that carry no brand. A title starting with one of these is
  * read one word deeper: "Vélo Modalis Grand Angoulême" is Vélo Modalis, not a
  * fourth network called "Vélo".
  */
+// i18n-ignore-start — normalization tokens, compared against titles.
 const GENERIC_LEAD_WORDS = new Set([
   'le', 'la', 'les', 'l', 'du', 'de', 'des', 'd', 'velo', 'velos', 'vls',
 ]);
+// i18n-ignore-end
 
 /**
  * Monograms pinned by hand, where the first letter of the LABEL is not the
@@ -268,7 +274,7 @@ export function resolveMobilityOperator(name) {
   if (!normalized) {
     operator = {
       id: 'unknown',
-      label: 'Unknown operator',
+      label: messages().unknownOperator,
       color: MOBILITY_OPERATOR_UNKNOWN_COLOR,
       // No title, so no letter. The plate draws bare rather than badging a
       // capital the catalogue never published.

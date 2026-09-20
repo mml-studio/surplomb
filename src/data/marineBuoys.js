@@ -24,6 +24,8 @@ import { boxContains, padBox } from './viewportBox.js';
 import { claimCameraSensitivity, releaseCameraSensitivity } from './cameraSensitivity.js';
 import { markViewportRead, releaseCameraSettle, watchCameraSettle } from './cameraSettle.js';
 import { ensureGeoidReady, geoidHeight } from './geoid.js';
+import { formatNumber } from '../i18n/format.js';
+import messages, { SEA_STATE_NAMES } from './marineBuoys.i18n.js';
 
 /**
  * NOAA NDBC marine observation buoys — latest report per station.
@@ -351,6 +353,8 @@ const DEFAULT_OVERLAY_HOST = Object.freeze({
  * Boundaries follow the WMO sea-state code; the colors run calm→severe.
  * @type {ReadonlyArray<{maxM:number, label:string, css:string}>}
  */
+// i18n-ignore-start — the WMO code's own ENGLISH terms, kept as published:
+// they are the card readouts' vocabulary and the keys of the band table.
 export const SEA_STATE_BANDS = Object.freeze([
   Object.freeze({ maxM: 0.1, label: 'Calm', css: '#7fe7ff' }),
   Object.freeze({ maxM: 0.5, label: 'Smooth', css: '#4fd0e0' }),
@@ -362,21 +366,22 @@ export const SEA_STATE_BANDS = Object.freeze([
   Object.freeze({ maxM: 14, label: 'Very high', css: '#c62dab' }),
   Object.freeze({ maxM: Infinity, label: 'Phenomenal', css: '#9b5bff' }),
 ]);
+// i18n-ignore-end
 
 /**
- * The same nine bands under their official French names.
+ * The same nine bands, under the official name of the reader's language.
  *
- * Not a translation of the English strings above — those are the WMO
- * sea-state code's own English terms, and these are its own French ones
- * ("mer forte", "mer grosse"), which is the vocabulary a French mariner
- * actually uses. Card copy stays in English with the rest of this module's
- * readouts; the LEGEND is French, like every other legend in the repo.
- * @type {ReadonlyArray<string>}
+ * NOT a translation: the WMO sea-state code publishes both lists, and each is
+ * the vocabulary a mariner of that language uses ("mer forte" / "Rough").
+ * `seaStateNames()` reads whichever the page is in; in English it returns the
+ * same terms the card readouts print.
+ *
+ * @returns {ReadonlyArray<string>} Nine names, calm first.
  */
-export const SEA_STATE_LABELS_FR = Object.freeze([
-  'Calme', 'Belle', 'Peu agitée', 'Agitée', 'Forte',
-  'Très forte', 'Grosse', 'Très grosse', 'Énorme',
-]);
+export function seaStateNames() {
+  const table = SEA_STATE_NAMES();
+  return Object.freeze(SEA_STATE_BANDS.map((_, index) => table[index]));
+}
 
 /** Neutral color for a station that reports no wave height. */
 export const NO_SEA_STATE_CSS = '#8a97a8';
@@ -611,7 +616,7 @@ export function summarizeSwellStems(stations) {
     tallestHsM,
     atOrAbove,
     bands: SEA_STATE_BANDS.map((band, index) => ({
-      label: SEA_STATE_LABELS_FR[index],
+      label: SEA_STATE_NAMES()[index],
       css: band.css,
       count: bandCounts[index],
     })),
@@ -672,20 +677,21 @@ export function buoyDashedStemGlyph() {
   return uri;
 }
 
-/** French number, flattened so the legend measures and wraps identically everywhere. */
+/** A number, flattened so the legend measures and wraps identically everywhere. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ');
+  return formatNumber(Number(value), { plainSpaces: true });
 }
 
-/** French range label for one WMO band, from the frozen boundaries. */
+/** Range label for one WMO band, from the frozen boundaries. */
 export function seaStateBandLabel(index) {
-  const name = SEA_STATE_LABELS_FR[index];
+  const name = SEA_STATE_NAMES()[index];
   if (!name) return '';
+  const m = messages().band;
   const low = index === 0 ? 0 : SEA_STATE_BANDS[index - 1].maxM;
   const high = SEA_STATE_BANDS[index].maxM;
-  if (index === 0) return `${name} · ≤ ${fr(high)} m`;
-  if (!Number.isFinite(high)) return `${name} · > ${fr(low)} m`;
-  return `${name} · ${fr(low)} – ${fr(high)} m`;
+  if (index === 0) return m.upTo(name, fr(high));
+  if (!Number.isFinite(high)) return m.over(name, fr(low));
+  return m.between(name, fr(low), fr(high));
 }
 
 /**
@@ -784,19 +790,18 @@ export function buoyLegend(summary) {
   const entries = [];
 
   entries.push({
-    label: 'Une tige = des vagues mesurées. Plus haute, plus grosses',
+    label: messages().legend.stem,
     color: PRISM_HEIGHT_SWATCH_COLOR,
     glyph: prismHeightGlyph(1),
     count: summary.stems,
     // F7(a), P0 — the register, in full words, on the map. The factor is
     // derived from the frozen scale rather than typed, so a key that drifted
     // from what the renderer draws is not expressible.
-    blurb: `Échelle de lecture, pas une hauteur réelle : 1 m de houle dessine `
-      + `${fr(SWELL_STEM_SCALE.exaggeration / 1000)} km de tige.`,
+    blurb: messages().legend.stemBlurb(fr(SWELL_STEM_SCALE.exaggeration / 1000)),
   });
 
   entries.push({
-    label: 'Cercle creux = bouée sans capteur de vagues',
+    label: messages().legend.noSensor,
     color: NO_SEA_STATE_CSS,
     glyph: buoyRingGlyph(),
     count: summary.noStem,
@@ -807,7 +812,7 @@ export function buoyLegend(summary) {
   // described them anyway would be describing a mark the reader cannot find.
   if (summary.clipped) {
     entries.push({
-      label: `Tige en tirets = mer au-delà de ${fr(SWELL_STEM_SCALE.domainMaxM)} m, hors échelle`,
+      label: messages().legend.clipped(fr(SWELL_STEM_SCALE.domainMaxM)),
       color: PRISM_HEIGHT_SWATCH_COLOR,
       glyph: buoyDashedStemGlyph(),
       count: summary.clipped,
@@ -818,7 +823,7 @@ export function buoyLegend(summary) {
   // channel, the nine below it are the channel. A swatch would imply the
   // heading itself was mapped to something.
   entries.push({
-    label: "Couleur = état de la mer, le nom qu'en donnent les marins",
+    label: messages().legend.colorChannel,
     color: null,
     count: summary.stems,
   });

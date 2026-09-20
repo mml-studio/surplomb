@@ -57,11 +57,12 @@ import {
   valueAt,
   wrapSlot,
 } from './veloPulseFeed.js';
+import messages from './veloPulseHud.i18n.js';
 
 export const PULSE_HUD_ID = 'velo-pulse-hud';
 
 /** Day initials under the strip. Saturday and Sunday carry the weekend class. */
-const DAY_INITIALS = Object.freeze(['L', 'M', 'M', 'J', 'V', 'S', 'D']);
+const dayInitials = () => messages().dayInitials;
 
 /**
  * The strip's floor, as a fraction of its height.
@@ -98,12 +99,11 @@ export function pulseSlotFromRatio(ratio) {
  * @returns {string}
  */
 export function pulseLegendSentence(summary) {
+  const m = messages().legend;
   const cities = Object.values(summary?.byCity || {});
   const instruments = cities.map((city) => {
-    const name = String(city.label || '').split('—')[0].trim() || 'ville';
-    return city.instrument === 'stock'
-      ? `${name} : le remplissage des stations (un STOCK)`
-      : `${name} : les cyclistes comptés (un FLUX)`;
+    const name = String(city.label || '').split('—')[0].trim() || m.city;
+    return city.instrument === 'stock' ? m.stock(name) : m.flow(name);
   });
   // NAMED, because it decides what the reader is allowed to do with it. This is
   // one mark PER STATION — a proportional symbol whose area is the quantity —
@@ -111,9 +111,8 @@ export function pulseLegendSentence(summary) {
   // make the fiche below a lie: there would be no single station under the
   // cursor to open. Mericskay's own comparison table rules the heatmap out the
   // moment an interface offers per-entity interaction, and this one does.
-  const head = `Une tache par station : la couleur, c’est la part du maximum de la semaine`
-    + ` du site lui-même ; la surface, c’est la quantité mesurée.`;
-  return instruments.length ? `${head} ${instruments.join(' · ')}.` : head;
+  const head = m.head;
+  return instruments.length ? m.sentence(head, instruments.join(' · ')) : head;
 }
 
 /** `document` exists and can host a panel. */
@@ -219,22 +218,24 @@ function paintSiteLines(list, record, pack, slot) {
   }));
 }
 
-const PANEL_MARKUP = `
-  <div class="velo-pulse-hud-head" data-pulse-grip title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
+const panelMarkup = () => {
+  const m = messages().panel;
+  return `
+  <div class="velo-pulse-hud-head" data-pulse-grip title="${m.grip}">
     <span class="velo-pulse-grip" aria-hidden="true"></span>
-    <span class="velo-pulse-hud-title">POULS VÉLO · SEMAINE TYPE</span>
+    <span class="velo-pulse-hud-title">${m.title}</span>
     <span class="velo-pulse-hud-window" data-pulse-window></span>
   </div>
   <div class="velo-pulse-hud-clock">
-    <button type="button" class="velo-pulse-play" data-pulse-play aria-label="Dérouler la semaine">
+    <button type="button" class="velo-pulse-play" data-pulse-play aria-label="${messages().transport.playLabel}">
       <span class="velo-pulse-play-glyph" aria-hidden="true">▶</span>
-      <span class="velo-pulse-play-label">DÉROULER</span>
+      <span class="velo-pulse-play-label">${messages().transport.play}</span>
     </button>
     <strong class="velo-pulse-hour" data-pulse-hour>—</strong>
     <span class="velo-pulse-phase" data-pulse-phase></span>
   </div>
   <div class="velo-pulse-strip" data-pulse-strip role="slider" tabindex="0"
-       aria-label="Heure de la semaine type" aria-valuemin="0" aria-valuemax="167" aria-valuenow="0">
+       aria-label="${m.stripLabel}" aria-valuemin="0" aria-valuemax="167" aria-valuenow="0">
     <canvas class="velo-pulse-curve" data-pulse-curve></canvas>
     <div class="velo-pulse-cursor" data-pulse-cursor></div>
   </div>
@@ -245,7 +246,7 @@ const PANEL_MARKUP = `
     <div class="velo-pulse-site-head">
       <strong data-pulse-site-name></strong>
       <button type="button" class="velo-pulse-site-close" data-pulse-site-close
-              aria-label="Fermer la fiche du site">×</button>
+              aria-label="${m.closeSite}">×</button>
     </div>
     <div class="velo-pulse-site-strip">
       <canvas class="velo-pulse-site-week" data-pulse-site-week></canvas>
@@ -254,9 +255,10 @@ const PANEL_MARKUP = `
     <ul class="velo-pulse-site-lines" data-pulse-site-lines></ul>
   </section>
   <p class="velo-pulse-site-empty" data-pulse-site-empty>
-    Cliquez une tache pour lire une station, sa semaine et son maximum.
+    ${m.siteEmpty}
   </p>
 `;
+};
 
 /**
  * Build the panel and wire its transport.
@@ -275,8 +277,8 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
   const panel = document.createElement('aside');
   panel.id = PULSE_HUD_ID;
   panel.className = 'velo-pulse-hud';
-  panel.setAttribute('aria-label', 'Pouls vélo — semaine type');
-  panel.innerHTML = PANEL_MARKUP;
+  panel.setAttribute('aria-label', messages().panel.ariaLabel);
+  panel.innerHTML = panelMarkup();
   (document.getElementById('cesiumContainer') || document.body).appendChild(panel);
 
   const node = (selector) => panel.querySelector(selector);
@@ -288,7 +290,7 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
   const siteCursor = node('[data-pulse-site-cursor]');
   const playButton = node('[data-pulse-play]');
 
-  node('[data-pulse-days]').replaceChildren(...DAY_INITIALS.map((initial, index) => {
+  node('[data-pulse-days]').replaceChildren(...dayInitials().map((initial, index) => {
     const day = document.createElement('span');
     day.textContent = initial;
     if (index >= 5) day.className = 'weekend';
@@ -390,7 +392,7 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
     node('[data-pulse-hour]').textContent = slotLabel(slot).toUpperCase();
     node('[data-pulse-phase]').textContent = phrase;
     strip.setAttribute('aria-valuenow', String(slot));
-    strip.setAttribute('aria-valuetext', `${slotLabel(slot)} — ${phrase}`);
+    strip.setAttribute('aria-valuetext', messages().clock.valueText(slotLabel(slot), phrase));
     paintedSlot = slot;
   };
 
@@ -422,15 +424,16 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
       // have left the label describing a window that no longer existed.
       const span = pack?.window;
       const weeks = Number(span?.weeks);
+      const w = messages().window;
       node('[data-pulse-window]').textContent = span
-        ? `${Number.isFinite(weeks) ? `${weeks} semaines moyennées · ` : ''}${span.start} → ${span.end}`
-        : 'semaine type';
+        ? w.span(Number.isFinite(weeks) ? w.averaged(weeks) : '', span.start, span.end)
+        : w.fallback;
       const legend = node('[data-pulse-legend]');
       legend.replaceChildren(...PULSE_RAMP.map((entry) => {
         const swatch = document.createElement('span');
         swatch.className = 'velo-pulse-swatch';
         swatch.style.background = entry.color;
-        swatch.title = `Part du maximum hebdomadaire du site — ${entry.label}`;
+        swatch.title = messages().legend.swatchTitle(entry.label);
         return swatch;
       }));
       const sentence = document.createElement('span');
@@ -464,10 +467,9 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
       if (playing === paintedPlaying) return;
       paintedPlaying = Boolean(playing);
       playButton.querySelector('.velo-pulse-play-glyph').textContent = playing ? '❚❚' : '▶';
-      playButton.querySelector('.velo-pulse-play-label').textContent = playing ? 'PAUSE' : 'DÉROULER';
-      playButton.setAttribute('aria-label', playing
-        ? 'Mettre la semaine en pause'
-        : 'Dérouler la semaine');
+      const t = messages().transport;
+      playButton.querySelector('.velo-pulse-play-label').textContent = playing ? t.pause : t.play;
+      playButton.setAttribute('aria-label', playing ? t.pauseLabel : t.playLabel);
       panel.classList.toggle('is-playing', paintedPlaying);
     },
 
@@ -507,9 +509,7 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
     setOutOfRange(outOfRange, ceilingKm) {
       const notice = node('[data-pulse-range]');
       notice.hidden = !outOfRange;
-      notice.textContent = outOfRange
-        ? `Trop haut pour lire le champ — zoome sous ${ceilingKm} km.`
-        : '';
+      notice.textContent = outOfRange ? messages().outOfRange(ceilingKm) : '';
       panel.classList.toggle('is-out-of-range', Boolean(outOfRange));
     },
 
@@ -525,7 +525,14 @@ export function mountPulseHud({ onSeek, onTogglePlay, onClearSelection } = {}) {
   };
 }
 
-/** The strip's day letters, for a test that does not have a DOM. */
-export const PULSE_HUD_DAY_INITIALS = DAY_INITIALS;
+/**
+ * The strip's day letters, for a test that does not have a DOM. A function,
+ * not a constant: the letters are the reader's language (`L M M J V S D` /
+ * `M T W T F S S`) and a constant would freeze whichever one loaded first.
+ * @returns {ReadonlyArray<string>}
+ */
+export function pulseHudDayInitials() {
+  return dayInitials();
+}
 /** Re-exported so the layer and the panel cannot disagree about day names. */
 export const PULSE_HUD_DAYS = PULSE_DAYS;
