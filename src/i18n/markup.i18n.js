@@ -526,6 +526,30 @@ export default defineMessages({
     suppress: { fr: 'Ne plus demander — aller directement', en: 'Stop asking — just go' },
     cancel: { fr: 'ESC pour annuler', en: 'Esc to cancel' },
   },
+  // The provider-key dialog, dev server only: src/keySetup.js removes both
+  // nodes when /api/setup/status is absent, which is every deployed build.
+  keySetup: {
+    chip: { fr: 'PUISSANCE', en: 'POWER UP', note: 'src/keySetup.js rewrites it with the count of keys still missing.' },
+    kicker: { fr: 'STATION AU SOL · RÉGLAGES DES FOURNISSEURS', en: 'GROUND STATION · PROVIDER SETTINGS' },
+    close: { fr: 'Fermer les réglages des clés', en: 'Close key setup' },
+    title: { fr: 'Donnez au globe toute sa puissance', en: 'Power up the globe' },
+    description: {
+      fr: 'Le globe vole déjà sans clé — Esri dans le monde, l’IGN sur la France. Chaque clé ci-dessous allume un flux réel de plus : collez-la et elle est écrite dans le .env de ce dépôt, puis le serveur redémarre tout seul. Les clés côté serveur ne quittent jamais cette machine ; Google Maps et Cesium ion tournent dans le navigateur et doivent être restreintes chez le fournisseur. Les clés configurées ailleurs — votre shell, votre trousseau — sont affichées mais jamais touchées.',
+      en: 'The globe already flies keyless — Esri worldwide, IGN over France. Every key below switches on another real feed: paste one and it is saved into this checkout’s own .env, then the server restarts itself. Server-side keys never leave this machine; Google Maps and Cesium ion run in the browser and must be provider-restricted. Keys you configured elsewhere — your shell, your Keychain — are shown but never touched.',
+    },
+    save: { fr: 'ENREGISTRER LES CLÉS', en: 'SAVE KEYS' },
+    note: {
+      fr: 'Depuis la France, c’est le jeton Cesium ion qui achète le globe 3D — Google le refuse aux comptes facturés dans l’EEE.',
+      en: 'From France, the Cesium ion token is the one that buys the 3D globe — Google withholds it from EEA-billed accounts.',
+    },
+  },
+  loader: {
+    status: {
+      fr: 'Initialisation du monde photoréaliste…',
+      en: 'Initializing photorealistic world…',
+      note: 'First line of the loading veil; src/main.js writes the ones that follow. style.css hides it on an English page until the markup is translated, so its French never flashes.',
+    },
+  },
   viewSwitcher: {
     nav: { fr: 'Changement de vue', en: 'View switcher' },
     resetCockpit: { fr: 'Réinitialiser le cockpit et revenir au globe entier', en: 'Reset cockpit to full globe view' },

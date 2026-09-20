@@ -509,7 +509,7 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word">surplomb</span></h1>
+    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word" translate="no">surplomb</span></h1>
     <p class="subtitle" data-i18n="title.tagline">Aucun angle mort.</p>
   </div>
 
@@ -1786,24 +1786,24 @@
        deployment serves and every visitor that is not this machine. -->
   <button id="key-setup-chip" type="button" hidden aria-haspopup="dialog" aria-controls="key-setup">
     <span class="material-symbols-outlined" aria-hidden="true">bolt</span>
-    <span data-key-setup-chip-label>POWER UP</span>
+    <span data-key-setup-chip-label data-i18n="keySetup.chip">PUISSANCE</span>
   </button>
-  <aside id="key-setup" role="dialog" aria-labelledby="key-setup-title" aria-describedby="key-setup-description" hidden lang="en">
+  <aside id="key-setup" role="dialog" aria-labelledby="key-setup-title" aria-describedby="key-setup-description" hidden>
     <div class="key-setup-scanline" aria-hidden="true"></div>
     <header class="key-setup-header">
-      <span class="key-setup-kicker">GROUND STATION · PROVIDER SETTINGS</span>
-      <button type="button" class="key-setup-close" data-key-setup-close aria-label="Close key setup">
+      <span class="key-setup-kicker" data-i18n="keySetup.kicker">STATION AU SOL · RÉGLAGES DES FOURNISSEURS</span>
+      <button type="button" class="key-setup-close" data-key-setup-close data-i18n-aria-label="keySetup.close" aria-label="Fermer les réglages des clés">
         <span class="material-symbols-outlined" aria-hidden="true">close</span>
       </button>
     </header>
-    <h2 id="key-setup-title">Power up the globe</h2>
-    <p id="key-setup-description">The globe already flies keyless — Esri worldwide, IGN over France. Every key below switches on another real feed: paste one and it is saved into this checkout's own .env, then the server restarts itself. Server-side keys never leave this machine; Google Maps and Cesium ion run in the browser and must be provider-restricted. Keys you configured elsewhere — your shell, your Keychain — are shown but never touched.</p>
+    <h2 id="key-setup-title" data-i18n="keySetup.title">Donnez au globe toute sa puissance</h2>
+    <p id="key-setup-description" data-i18n="keySetup.description">Le globe vole déjà sans clé — Esri dans le monde, l’IGN sur la France. Chaque clé ci-dessous allume un flux réel de plus : collez-la et elle est écrite dans le .env de ce dépôt, puis le serveur redémarre tout seul. Les clés côté serveur ne quittent jamais cette machine ; Google Maps et Cesium ion tournent dans le navigateur et doivent être restreintes chez le fournisseur. Les clés configurées ailleurs — votre shell, votre trousseau — sont affichées mais jamais touchées.</p>
     <div class="key-setup-rows" data-key-setup-rows></div>
     <div class="key-setup-footer">
-      <button type="button" class="key-setup-apply" data-key-setup-apply>SAVE KEYS</button>
-      <span class="key-setup-hint">ESC to close</span>
+      <button type="button" class="key-setup-apply" data-key-setup-apply data-i18n="keySetup.save">ENREGISTRER LES CLÉS</button>
+      <span class="key-setup-hint" data-i18n="firstRun.escClose">Échap pour fermer</span>
     </div>
-    <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite">From France, the Cesium ion token is the one that buys the 3D globe — Google withholds it from EEA-billed accounts.</p>
+    <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite" data-i18n="keySetup.note">Depuis la France, c’est le jeton Cesium ion qui achète le globe 3D — Google le refuse aux comptes facturés dans l’EEE.</p>
   </aside>
 
   <!-- Intelligence HUD Overlay -->
@@ -1818,7 +1818,7 @@
            wrapper: on the <use> itself it would move with the shadow. -->
       <span class="loader-logo" aria-hidden="true"><svg class="brand-symbol" data-loader-sun viewBox="0 -70 360 390" aria-hidden="true" focusable="false"><defs><clipPath id="loader-ground-clip"><use href="#loader-ground"/></clipPath></defs><circle class="loader-sun" cx="188" cy="48" r="40" fill="#F7AB7C"/><g fill="currentColor"><path id="loader-terrace" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path id="loader-ground" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></g><g clip-path="url(#loader-ground-clip)"><use class="loader-shadow" href="#loader-terrace" fill="#82978E" opacity="0"/></g></svg></span>
       <h2 class="brand-word" translate="no">surplomb</h2>
-      <p class="loader-status">Initializing photorealistic world...</p>
+      <p class="loader-status" data-i18n="loader.status">Initialisation du monde photoréaliste…</p>
     </div>
   </div>
 
