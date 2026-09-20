@@ -1547,7 +1547,7 @@ async function runBrowserGroup(record) {
     if (!chip) return fail('no [data-layer-id="ais-live-vessels"] row in the DOM — cannot read the surfaced feed state');
 
     if (env.keys.AIS === false) {
-      const surfaced = chip.feedState === 'unavailable' && /UNAVAILABLE/i.test(chip.text);
+      const surfaced = chip.feedState === 'unavailable';
       if (!surfaced) {
         return fail(`keyless vessels did not SURFACE the unavailable state: chip="${chip.text}" feedState=${chip.feedState} (stats: status=${s.status} error=${s.error}) — a silently empty layer is the failure mode this check exists for`);
       }
@@ -1560,14 +1560,16 @@ async function runBrowserGroup(record) {
     const transport = s.transportStatus;
     const live = transport === 'live' || transport === 'open';
     if (live && s.count > 0) {
-      // Chip vocabulary: ON / LOADING / DEGRADED / STALE / FALLBACK /
-      // UNAVAILABLE (src/data/manager.js:12-19). A live feed with rows reads ON.
-      return /^ON$/i.test(chip.text)
-        ? pass(`${s.count} vessels live: chip="ON", transport=${transport}, lastMessage=${s.lastMessageAt || 'n/a'}`)
+      // Chip vocabulary, as `data-feed-state`: nominal / loading / degraded /
+      // stale / fallback / unavailable (src/data/manager.js). The WORD on the
+      // button is ACTIF in French and ON in English, so the attribute is what
+      // is read here. A live feed with rows is nominal.
+      return chip.feedState === 'nominal'
+        ? pass(`${s.count} vessels live: chip="${chip.text}" (nominal), transport=${transport}, lastMessage=${s.lastMessageAt || 'n/a'}`)
         : fail(`transport=${transport} with ${s.count} vessels, but the chip reads "${chip.text}" — a live feed must present as ON`);
     }
     if (transport === 'auth-failed') {
-      const surfaced = /UNAVAILABLE/i.test(chip.text) && /key rejected/i.test(String(s.error || ''));
+      const surfaced = chip.feedState === 'unavailable' && /key rejected/i.test(String(s.error || ''));
       return surfaced
         ? fail(`AISStream rejected the key — surfaced correctly (chip="${chip.text}", error="${s.error}", retryInSec=${s.retryInSec}) but a rejected key is a product-blocking failure, not an environment condition`)
         : fail(`AISStream rejected the key and the UI did not say so: chip="${chip.text}", error="${String(s.error || 'none')}"`);
@@ -1575,8 +1577,8 @@ async function runBrowserGroup(record) {
     if (['stale', 'reconnecting', 'down'].includes(transport)) {
       // Degraded is ENV only when it is SURFACED. Cached rows must read STALE;
       // no usable rows must read UNAVAILABLE.
-      const expected = s.count > 0 ? /STALE|DEGRADED/i : /UNAVAILABLE|DEGRADED/i;
-      return expected.test(chip.text)
+      const expected = s.count > 0 ? ['stale', 'degraded'] : ['unavailable', 'degraded'];
+      return expected.includes(chip.feedState)
         ? skip(`feed is ${transport}${s.count > 0 ? ` with ${s.count} CACHED vessels` : ''} and the UI says so (chip="${chip.text}", error="${String(s.error || '').slice(0, 60)}", retryInSec=${s.retryInSec}) — honest degradation, not a live feed`, 'ENV')
         : fail(`feed is ${transport} with ${s.count} vessels but the chip reads "${chip.text}" — a degraded feed that presents as healthy is exactly the invisible outage this check exists for`);
     }
@@ -1584,7 +1586,7 @@ async function runBrowserGroup(record) {
       return fail(`${s.count} vessels with transport="${transport}" — neither live nor a recognised degraded state, so this cannot be called a live feed (chip="${chip.text}")`);
     }
     // Keyed but empty: honest only if the UI says so.
-    return /UNAVAILABLE|LOADING|DEGRADED|STALE/i.test(chip.text)
+    return ['unavailable', 'loading', 'degraded', 'stale'].includes(chip.feedState)
       ? skip(`keyed but 0 vessels and the UI says so (chip="${chip.text}", transport=${transport}, error="${String(s.error || '').slice(0, 60)}") — AISStream connects open-but-silent upstream`, 'ENV')
       : fail(`keyed, 0 vessels, and the chip claims "${chip.text}" — the layer is empty without surfacing it`);
   });

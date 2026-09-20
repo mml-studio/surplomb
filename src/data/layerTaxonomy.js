@@ -1072,7 +1072,10 @@ export function validateLayerTaxonomy(
       throw new Error(`Invalid layer category id: ${category?.id}`);
     }
     if (categoryIds.has(category.id)) throw new Error(`Duplicate layer category: ${category.id}`);
-    if (!category.label || typeof category.label !== 'string') {
+    // From the catalog's definition rather than the getter, for the same
+    // reason as the layer names below: this runs at import.
+    const header = messages.definition.categories[category.id]?.fr;
+    if (!header || typeof header !== 'string') {
       throw new Error(`Layer category missing label: ${category.id}`);
     }
     categoryIds.add(category.id);
@@ -1096,14 +1099,19 @@ export function validateLayerTaxonomy(
     if (!VALID_CATEGORY_IDS.has(entry.category)) {
       throw new Error(`Unknown category for layer: ${entry.id}`);
     }
-    // Reads the catalog through the getter: a layer whose id has no entry in
-    // `layerTaxonomy.i18n.js` is an unnamed row, and that is a boot failure
-    // rather than a blank line in the panel.
-    if (!entry.label || typeof entry.label !== 'string') {
+    // The NAME is checked against the CATALOG's definition, not read off the
+    // entry: `entry.label` is a getter over the page's locale, and this runs at
+    // import, where reading the locale is forbidden — under Node there is no
+    // `<html lang>` to read, and `src/i18n/importSafety.test.mjs` fails any
+    // module that touches `document` while loading. Checking the definition is
+    // the stronger test anyway: it fails for a layer with no name in EITHER
+    // language rather than for one the current locale happens to miss.
+    const declaredLabel = messages.definition.labels[entry.id]?.fr;
+    if (!declaredLabel || typeof declaredLabel !== 'string') {
       throw new Error(`Layer taxonomy entry missing label: ${entry.id}`);
     }
-    if (entry.sourceLabel !== undefined && entry.sourceLabel !== null
-        && (typeof entry.sourceLabel !== 'string' || !entry.sourceLabel.trim())) {
+    const declaredSource = messages.definition.sources[entry.id]?.fr;
+    if (declaredSource !== undefined && (typeof declaredSource !== 'string' || !declaredSource.trim())) {
       throw new Error(`Layer taxonomy sourceLabel must be a non-empty string: ${entry.id}`);
     }
     if (!VALID_KINDS.has(entry.kind)) throw new Error(`Invalid layer kind: ${entry.id}`);

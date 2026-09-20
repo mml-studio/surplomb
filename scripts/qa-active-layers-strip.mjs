@@ -251,16 +251,18 @@ async function main() {
     }, target);
     await sleep(1500);
     const afterChip = await page.evaluate(readStrip);
+    // The row's STATE, not the word on its button: the button says ÉTEINT in
+    // French and OFF in English, and `data-feed-state` says `off` in both.
     const afterChipRow = await page.evaluate((id) => ({
       enabled: window.__godsEyeView.dataManager.isEnabled(id),
       rowButton: document.querySelector(`#data-toggles [data-layer-id="${id}"] .data-toggle-btn`)
-        ?.textContent || null,
+        ?.dataset?.feedState || null,
     }), target);
     record('the chip switched its layer off', afterChipRow.enabled === false,
       `${target}.enabled=${afterChipRow.enabled}`);
     record('the chip left the strip with it', !afterChip.ids.includes(target),
       `remaining: ${afterChip.names.join(' | ')}`);
-    record('the row it stood for agrees', afterChipRow.rowButton === 'OFF',
+    record('the row it stood for agrees', afterChipRow.rowButton === 'off',
       `row button reads ${afterChipRow.rowButton}`);
     await shoot(page, '04-after-chip.png');
 

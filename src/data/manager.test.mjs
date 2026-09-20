@@ -3504,7 +3504,7 @@ test('a coordinator gets no row and inflates no group count', async () => {
   try {
     assert.equal(panel.container.querySelector('[data-layer-id="military-awareness"]'), null);
     const airSpace = panel.container.querySelector('.data-category[data-category-id="air-space"]');
-    assert.equal(airSpace.querySelector('.data-category-count').textContent, '0/2 ON');
+    assert.match(airSpace.querySelector('.data-category-count').textContent, /^0\/2 /);
   } finally {
     await panel.restore();
   }
@@ -3539,7 +3539,8 @@ test('the toggle aria-label announces the French name', async () => {
     const button = panel.container
       .querySelector('[data-layer-id="ais-live-vessels"]')
       .querySelector('.data-toggle-btn');
-    assert.equal(button.getAttribute('aria-label'), 'Navires en direct: OFF');
+    assert.equal(button.dataset.feedState, 'off');
+    assert.equal(button.getAttribute('aria-label'), `Navires en direct: ${button.textContent}`);
   } finally {
     await panel.restore();
   }
@@ -3549,13 +3550,13 @@ test('group tallies follow live layer state on refresh', async () => {
   const panel = makeGroupedPanel();
   try {
     const airSpace = panel.container.querySelector('.data-category[data-category-id="air-space"]');
-    assert.equal(airSpace.querySelector('.data-category-count').textContent, '0/2 ON');
+    assert.match(airSpace.querySelector('.data-category-count').textContent, /^0\/2 /);
     assert.ok(!airSpace.classList.contains('has-active'));
 
     await panel.mgr.setEnabled('flights', true, { origin: 'programmatic' });
     panel.mgr._refreshTogglePanel();
 
-    assert.equal(airSpace.querySelector('.data-category-count').textContent, '1/2 ON');
+    assert.match(airSpace.querySelector('.data-category-count').textContent, /^1\/2 /);
     assert.ok(airSpace.classList.contains('has-active'));
   } finally {
     await panel.restore();
@@ -3603,8 +3604,8 @@ test('a chip darkens its row, and leaves the strip when it does', async () => {
     assert.equal(panel.mgr.isEnabled('france-energy'), true, 'one chip switches off one row');
     assert.deepEqual(panel.activeNames(), ['Mix électrique']);
     assert.equal(
-      panel.container.querySelector('[data-layer-id="flights"]').querySelector('.data-toggle-btn').textContent,
-      'OFF',
+      panel.container.querySelector('[data-layer-id="flights"]').querySelector('.data-toggle-btn').dataset.feedState,
+      'off',
       'the row the chip stood for must agree with it',
     );
   } finally {
@@ -3882,7 +3883,7 @@ test('a fused companion has no row of its own, and never inflates a group count'
     assert.equal(await panel.mgr.setEnabled('military', true), true);
 
     const air = panel.container.querySelector('[data-category-id="air-space"]');
-    assert.equal(air.querySelector('.data-category-count').textContent, '0/1 ON');
+    assert.match(air.querySelector('.data-category-count').textContent, /^0\/1 /);
   } finally {
     await panel.restore();
   }
@@ -4049,7 +4050,7 @@ test('a companion left on by a share link keeps a control on the row that owns i
   try {
     await panel.mgr.setEnabled('military', true);
     panel.mgr._refreshTogglePanel();
-    assert.equal(panel.row('flights').querySelector('.data-toggle-btn').textContent, 'OFF');
+    assert.equal(panel.row('flights').querySelector('.data-toggle-btn').dataset.feedState, 'off');
     const chips = panel.chips('flights');
     assert.deepEqual(chips.map((chip) => chip.textContent), ['Militaires', 'Missions']);
     assert.equal(chips[0].attributes['aria-pressed'], 'true');
@@ -4292,7 +4293,7 @@ test('a peer row gives its own primary a chip, so the reader can subtract it', a
     // companion left on by a share link: it reads OFF and stays a "switch the
     // whole subject on" control. What says the row is still drawing is the
     // chip strip, which only appears while something in the group is on.
-    assert.equal(panel.row('local-datacenters').querySelector('.data-toggle-btn').textContent, 'OFF');
+    assert.equal(panel.row('local-datacenters').querySelector('.data-toggle-btn').dataset.feedState, 'off');
     assert.equal(panel.chips('local-datacenters').length, 3);
     assert.deepEqual(
       panel.chips('local-datacenters').map((chip) => chip.attributes['aria-pressed']),

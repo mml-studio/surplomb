@@ -273,7 +273,9 @@ try {
     const row = [...document.querySelectorAll('#data-toggles [data-layer-id]')]
       .find((node) => node.dataset.layerId === id);
     const button = row?.querySelector('.data-toggle-btn');
-    const asked = button?.textContent ?? null;
+    // The state the row was IN when it was clicked, read off the attribute
+    // rather than the word: the button is ÉTEINT in French, OFF in English.
+    const asked = button?.dataset?.feedState ?? null;
     button?.click();
     return asked;
   }, layerId);
@@ -283,7 +285,7 @@ try {
     const button = row?.querySelector('.data-toggle-btn');
     return {
       ...(window.__godsEyeView.dataManager.getLayerLifecycleState(id) || {}),
-      button: button?.textContent ?? null,
+      button: button?.dataset?.feedState ?? null,
       buttonDisabled: button?.disabled ?? null,
       meta: row?.querySelector('.data-toggle-meta')?.textContent ?? null,
       toasts: [...(window.__toasts || [])],
@@ -299,7 +301,7 @@ try {
   const lostFirst = await readRow(LOST_CHUNK_LAYER);
   check(
     'a layer whose chunk 404s falls back to OFF, not to UNCERTAIN',
-    askedFirst === 'OFF' && lostFirst.button === 'OFF' && lostFirst.uncertain === false
+    askedFirst === 'off' && lostFirst.button === 'off' && lostFirst.uncertain === false
       && lostFirst.enabled === false && !/UNCERTAIN|reconciliation/.test(lostFirst.meta || ''),
     { asked: askedFirst, ...lostFirst, refused },
   );
@@ -319,8 +321,8 @@ try {
   const lostSecond = await readRow(LOST_CHUNK_LAYER);
   check(
     'the row stays clickable, and the next click still asks for ON',
-    askedSecond === 'OFF' && lostFirst.buttonDisabled === false
-      && lostSecond.button === 'OFF' && lostSecond.uncertain === false
+    askedSecond === 'off' && lostFirst.buttonDisabled === false
+      && lostSecond.button === 'off' && lostSecond.uncertain === false
       && !lostSecond.toasts.some((text) => /could not stop cleanly/i.test(text)),
     { asked: askedSecond, ...lostSecond },
   );

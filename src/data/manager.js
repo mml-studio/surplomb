@@ -12,6 +12,9 @@ import {
   layerCoverageState,
   layerDarkAreaAt,
 } from './layerCoverage.js';
+import { formatAge, formatNumber } from '../i18n/format.js';
+import messages from './manager.i18n.js';
+
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -22,14 +25,20 @@ function cloneLayerParams(value) {
   return value;
 }
 
-const FEED_STATE_LABELS = Object.freeze({
-  nominal: 'ON',
-  loading: 'LOADING',
-  degraded: 'DEGRADED',
-  stale: 'STALE',
-  fallback: 'FALLBACK',
-  unavailable: 'UNAVAILABLE',
-});
+/**
+ * The feed states a row can be in, in the order they are documented.
+ *
+ * The WORDS are in `manager.i18n.js` and read when the button is painted; this
+ * list is the vocabulary itself, which has no language — it is what
+ * `_syncToggleButton` writes to `data-feed-state` and what every harness reads
+ * instead of the word.
+ */
+const FEED_STATES = Object.freeze(['nominal', 'loading', 'degraded', 'stale', 'fallback', 'unavailable']);
+
+/** The word a feed state prints, in the page's language. */
+function feedStateLabel(state) {
+  return messages().feedState[state] ?? state;
+}
 
 const SUPERSEDED_VISIBILITY_INTENT = Symbol('superseded-visibility-intent');
 const VALID_LAYER_SERIALIZATION_DISPOSITIONS = new Set([
@@ -133,10 +142,13 @@ export function legendScopeOf(scope) {
  */
 export function legendScopeLabel(scope) {
   if (!scope) return '';
+  const m = messages();
   const { inView, where } = scope;
+  // A territory alone is a proper noun the layer published: it is printed, not
+  // translated, and needs no sentence around it.
   if (inView === null) return where ? ` · ${where}` : '';
-  if (inView > 0) return ` · ${inView.toLocaleString('fr-FR')} ici`;
-  return where ? ` · ${where}, hors de cette vue` : ' · hors de cette vue';
+  if (inView > 0) return m.legendScope.here(formatNumber(inView));
+  return where ? m.legendScope.elsewhereNamed(where) : m.legendScope.elsewhere;
 }
 
 /**
@@ -2676,7 +2688,8 @@ export class DataLayerManager {
     const strip = document.createElement('div');
     strip.className = 'data-active-strip';
     strip.setAttribute('role', 'group');
-    strip.setAttribute('aria-label', 'Couches allumées');
+    const m = messages();
+    strip.setAttribute('aria-label', m.strip.ariaLabel);
     // Hidden until something is on, so a panel at rest looks exactly as it did.
     strip.hidden = true;
 
@@ -2685,7 +2698,7 @@ export class DataLayerManager {
 
     const label = document.createElement('span');
     label.className = 'data-active-label';
-    label.textContent = 'ACTIVES';
+    label.textContent = m.strip.heading;
 
     const count = document.createElement('span');
     count.className = 'data-active-count';
@@ -2694,8 +2707,8 @@ export class DataLayerManager {
     const clear = document.createElement('button');
     clear.className = 'data-active-clear';
     clear.type = 'button';
-    clear.textContent = 'TOUT ÉTEINDRE';
-    clear.title = 'Éteindre toutes les couches allumées';
+    clear.textContent = m.strip.clear;
+    clear.title = m.strip.clearTitle;
     // Shown from two rows up. With one chip on the strip it would be a second
     // button that does exactly what the chip beside it does.
     clear.hidden = true;
@@ -2739,6 +2752,7 @@ export class DataLayerManager {
     if (!strip) return;
     const list = strip.querySelector?.('.data-active-chips');
     if (!list) return;
+    const m = messages();
     const active = this._panelRowLayers(layers).filter((layer) => this._rowEnabled(layer.id));
 
     strip.hidden = active.length === 0;
@@ -2783,8 +2797,8 @@ export class DataLayerManager {
       const transitioning = layer.lifecycleState === 'enabling' || layer.lifecycleState === 'disabling';
       chip.disabled = transitioning;
       chip.classList?.toggle?.('transitioning', transitioning);
-      chip.title = `Éteindre — ${displayName}`;
-      chip.setAttribute('aria-label', `Éteindre ${displayName}`);
+      chip.title = m.strip.chipTitle(displayName);
+      chip.setAttribute('aria-label', m.strip.chipAriaLabel(displayName));
     }
     for (const node of stale.values()) node.remove();
   }
@@ -2952,7 +2966,7 @@ export class DataLayerManager {
     for (const group of groups) {
       group.layers = group.layers.filter((layer) => !claimed.has(layer.id));
     }
-    return [{ id: 'featured', label: 'À LA UNE', icon: '★', layers: featured }, ...groups];
+    return [{ id: 'featured', label: messages().panel.featured, icon: '★', layers: featured }, ...groups];
   }
 
   /**
@@ -2965,7 +2979,7 @@ export class DataLayerManager {
     const countEl = section?.querySelector?.('.data-category-count');
     if (!countEl) return;
     const enabled = group.layers.filter((layer) => layer.enabled).length;
-    countEl.textContent = `${enabled}/${group.layers.length} ON`;
+    countEl.textContent = messages().panel.categoryCount(enabled, group.layers.length);
     section.classList?.toggle?.('has-active', enabled > 0);
   }
 
@@ -3061,9 +3075,7 @@ export class DataLayerManager {
       const badge = document.createElement('span');
       badge.className = 'data-scope-chip';
       badge.textContent = scopeText;
-      badge.title = coverageEntry
-        ? `Couverture : ${coverageEntry.where}`
-        : `Couverture : ${scopeText}`;
+      badge.title = messages().panel.coverageTitle(coverageEntry ? coverageEntry.where : scopeText);
       left.appendChild(badge);
     }
 
@@ -3828,7 +3840,7 @@ export class DataLayerManager {
     const notice = offCoverage
       ? coverageNoticeFor(layerId, state, state === 'dark' ? layerDarkAreaAt(layerId, this._coverageView) : null)
       : '';
-    node.title = notice || `Couverture : ${entry.where}`;
+    node.title = notice || messages().panel.coverageTitle(entry.where);
   }
 
   /**
@@ -4227,7 +4239,7 @@ export class DataLayerManager {
     }
     // LAST, so it is the word the line ends on: it is the one that predicts
     // whether switching the row on will show anything.
-    if (layer.tags?.closeRange) parts.push('vue rapprochée');
+    if (layer.tags?.closeRange) parts.push(messages().meta.closeRange);
     return parts.join(' · ');
   }
 
@@ -4259,14 +4271,15 @@ export class DataLayerManager {
   _buildMetaText(layer) {
     const stats = layer.stats || {};
     const feedState = layerFeedState(stats);
-    const stateLabel = FEED_STATE_LABELS[feedState];
+    const m = messages();
+    const stateLabel = feedStateLabel(feedState);
     const source = this._sourceLine(layer, stats);
     const lifecycleState = layer.lifecycleState || (layer.enabled ? 'enabled' : 'disabled');
     if (lifecycleState === 'enabling' || lifecycleState === 'disabling') {
       return `${lifecycleState.toUpperCase()} · ${source}`;
     }
     if (layer.lifecycleUncertain) {
-      return `UNCERTAIN · ${source} · lifecycle state requires reconciliation`;
+      return `${m.feedState.uncertain} · ${source} · ${m.meta.reconciliation}`;
     }
     // An OFF row has no module loaded and therefore no stats worth printing:
     // the age it would show is `jamais`, which is true and useless. What it can
@@ -4297,7 +4310,7 @@ export class DataLayerManager {
     }
     if (presentedError) {
       if (typeof stats.retryInSec === 'number' && stats.retryInSec > 0) {
-        return `${stateLabel} · ${source} · ${presentedError} · nouvelle tentative dans ${stats.retryInSec} s`;
+        return `${stateLabel} · ${source} · ${presentedError}${m.meta.retryIn(stats.retryInSec)}`;
       }
       return `${stateLabel} · ${source} · ${presentedError}`;
     }
@@ -4311,10 +4324,10 @@ export class DataLayerManager {
     // which is exactly what an age means there.
     const cadence = layer.tags?.cadence || null;
     const ago = cadence === 'static'
-      ? 'instantané figé'
+      ? m.meta.frozenSnapshot
       : (stats.lastUpdate
-        ? `${cadence === 'live' ? 'flux · ' : ''}${this._timeAgo(stats.lastUpdate)}`
-        : 'jamais');
+        ? `${cadence === 'live' ? m.meta.streamPrefix : ''}${this._timeAgo(stats.lastUpdate)}`
+        : m.meta.never);
     // COVERAGE — the boundary of what the layer could have drawn at all
     // (CARTOGRAPHY H1: a map states the edge of its own data). Three layers
     // publish it — "533 of 892 measuring sea", "RRN non concédé", "couverture
@@ -4329,7 +4342,7 @@ export class DataLayerManager {
     if (stats.loading) {
       const loadingLabel = typeof stats.loadingLabel === 'string' && stats.loadingLabel.trim()
         ? stats.loadingLabel.trim()
-        : 'chargement…';
+        : m.meta.loading;
       return `${source} · ${loadingLabel}`;
     }
     if (feedState === 'fallback') {
@@ -4340,7 +4353,7 @@ export class DataLayerManager {
     }
     if (feedState === 'stale') {
       const retry = typeof stats.retryInSec === 'number' && stats.retryInSec > 0
-        ? ` · nouvelle tentative dans ${stats.retryInSec} s`
+        ? m.meta.retryIn(stats.retryInSec)
         : '';
       return `${stateLabel} · ${source} · ${coverage}${ago}${retry}`;
     }
@@ -4359,7 +4372,7 @@ export class DataLayerManager {
     button.classList.toggle('enabling', layer.lifecycleState === 'enabling');
     button.classList.toggle('disabling', layer.lifecycleState === 'disabling');
     button.classList.toggle('lifecycle-uncertain', uncertain);
-    for (const state of Object.keys(FEED_STATE_LABELS)) {
+    for (const state of FEED_STATES) {
       button.classList.toggle(`feed-${state}`, layer.enabled && !uncertain && feedState === state);
     }
     button.dataset.feedState = transitioning
@@ -4368,7 +4381,7 @@ export class DataLayerManager {
     button.disabled = transitioning;
     button.textContent = transitioning
       ? layer.lifecycleState.toUpperCase()
-      : (uncertain ? 'UNCERTAIN' : (layer.enabled ? FEED_STATE_LABELS[feedState] : 'OFF'));
+      : (uncertain ? messages().feedState.uncertain : feedStateLabel(layer.enabled ? feedState : 'off'));
     button.setAttribute('aria-label', `${this._displayName(layer)}: ${button.textContent}`);
   }
 
@@ -4377,16 +4390,15 @@ export class DataLayerManager {
     return String(n);
   }
 
-  // Freshness copy is French because it sits on the same line as the layer's
-  // own French name — `Vols en direct · OpenSky Network · just now` was the
-  // reading that made the mix obvious. The UPPERCASE feed states above
-  // (FEED_STATE_LABELS) are deliberately left alone: they are the console's
-  // status vocabulary rather than prose, and harnesses assert on them.
+  // Freshness sits on the same line as the layer's own name, and both are now
+  // read from a catalog at paint time — `Vols en direct · OpenSky Network ·
+  // just now` was the mixed reading that started this. The five-second floor
+  // is kept as its own word: `il y a 0 s` is true and reads like a stopwatch.
   _timeAgo(timestamp) {
     const diff = Math.floor((Date.now() - timestamp) / 1000);
-    if (diff < 5) return 'à l’instant';
-    if (diff < 60) return `il y a ${diff} s`;
-    if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`;
-    return `il y a ${Math.floor(diff / 3600)} h`;
+    if (diff < 5) return messages().meta.justNow;
+    if (diff < 60) return formatAge(diff, 's');
+    if (diff < 3600) return formatAge(Math.floor(diff / 60), 'min');
+    return formatAge(Math.floor(diff / 3600), 'h');
   }
 }
