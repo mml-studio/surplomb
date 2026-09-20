@@ -1119,7 +1119,7 @@ const adsUrbanismeLayer = {
     return {
       ...stats,
       theme: ADS_BUILDING_THEME_ID,
-      themeLabel: ADS_BUILDING_THEME_LABEL,
+      themeLabel: adsBuildingThemeLabel(),
       // The OFFER ledger. Every dossier of the served payload is in exactly one
       // of these, and they sum to `themeTotal` — see `adsBuildingThemePoints`.
       themeTotal: ledger.total,

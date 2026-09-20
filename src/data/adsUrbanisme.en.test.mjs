@@ -30,7 +30,8 @@ import {
 import {
   ADS_KIND_WORDS, ADS_PRECISION_WORDS, ADS_PURPOSE_WORDS, ADS_STATE_WORDS,
 } from './adsFeed.i18n.js';
-import {
+import adsUrbanismeLayer, {
+  ADS_BUILDING_THEME_ID,
   ADS_BUILDING_THEME_LEGEND,
   ADS_WINDOW_DEFAULT,
   adsBuildingThemeLegend,
@@ -43,7 +44,9 @@ import {
   adsWindowChips,
   empriseCard,
   empriseProvenanceLine,
+  syncAdsBuildingTheme,
 } from './adsUrbanisme.js';
+import { clearAllBuildingThemes } from './buildingTheme.js';
 
 const PORTALS = JSON.parse(readFileSync(
   new URL('./fixtures/ads-portals-sample.json', import.meta.url), 'utf8',
@@ -242,4 +245,19 @@ test('a purpose is translated word by word, and free text is left alone', () => 
   for (const key of Object.keys(ADS_PURPOSE_WORDS.definition)) {
     assertNoFrench(ADS_PURPOSE_WORDS('en')[key], { message: `purpose ${key}` });
   }
+});
+
+test('the row’s stats name the theme in English, from the layer itself', (t) => {
+  useTestLocale('en', t);
+  clearAllBuildingThemes();
+  // `getStats()` is the one place `themeLabel` is read, and a dangling
+  // reference there boots the globe and then kills the layer — which is what
+  // the English scanner caught and this pins.
+  syncAdsBuildingTheme(bordeauxPayload());
+  const stats = adsUrbanismeLayer.getStats();
+  assert.equal(stats.theme, ADS_BUILDING_THEME_ID);
+  assert.equal(stats.themeLabel, 'Planning permits');
+  assert.equal(withLocale('fr', () => adsUrbanismeLayer.getStats()).themeLabel,
+    'Autorisations d’urbanisme');
+  clearAllBuildingThemes();
 });
