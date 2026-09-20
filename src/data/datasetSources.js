@@ -28,6 +28,7 @@
  * @module data/datasetSources
  */
 
+import messages from './datasetSources.i18n.js';
 import { parseCsv } from './datasetCsv.js';
 import { isFiniteLat, isFiniteLon, rowTitle, rowToFeature } from './datasetGeometry.js';
 
@@ -71,7 +72,7 @@ function looksLikeCorsFailure(error, response) {
 function guardContentLength(response, maxBytes) {
   const declared = Number(response.headers?.get?.('content-length'));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new DatasetSourceError(`fichier trop volumineux (${(declared / 1048576).toFixed(0)} Mo, plafond ${(maxBytes / 1048576).toFixed(0)} Mo)`, { status: response.status });
+    throw new DatasetSourceError(messages().tooLargeDeclared((declared / 1048576).toFixed(0), (maxBytes / 1048576).toFixed(0)), { status: response.status });
   }
 }
 
@@ -91,7 +92,7 @@ export async function fetchDatasetText(url, {
   maxBytes = DATASET_RAW_MAX_BYTES,
   headers = {},
 } = {}) {
-  if (typeof fetchImpl !== 'function') throw new DatasetSourceError('fetch indisponible');
+  if (typeof fetchImpl !== 'function') throw new DatasetSourceError(messages().noFetch);
   const request = { signal, headers: { Accept: accept, ...headers } };
   let response = null;
   let failure = null;
@@ -104,7 +105,7 @@ export async function fetchDatasetText(url, {
   if (response?.ok) {
     guardContentLength(response, maxBytes);
     const text = await response.text();
-    if (text.length > maxBytes) throw new DatasetSourceError('réponse trop volumineuse');
+    if (text.length > maxBytes) throw new DatasetSourceError(messages().tooLarge);
     return { text, via: 'direct', status: response.status, contentType: response.headers?.get?.('content-type') || '' };
   }
   const corsShaped = looksLikeCorsFailure(failure, response);
@@ -114,20 +115,21 @@ export async function fetchDatasetText(url, {
       relayed = await fetchImpl(relayUrl(url, relay), { signal, headers: { Accept: accept } });
     } catch (error) {
       if (signal?.aborted) throw error;
-      throw new DatasetSourceError('source inaccessible (direct et relais)', { cause: error });
+      throw new DatasetSourceError(messages().unreachableBothWays, { cause: error });
     }
     if (!relayed.ok) {
       let detail = '';
       try { detail = (await relayed.json())?.error || ''; } catch { /* not json */ }
-      throw new DatasetSourceError(detail ? `relais : ${detail}` : `relais HTTP ${relayed.status}`, { status: relayed.status });
+      const m = messages();
+      throw new DatasetSourceError(detail ? m.relayFailed(detail) : m.relayStatus(relayed.status), { status: relayed.status });
     }
     guardContentLength(relayed, maxBytes);
     const text = await relayed.text();
-    if (text.length > maxBytes) throw new DatasetSourceError('réponse trop volumineuse');
+    if (text.length > maxBytes) throw new DatasetSourceError(messages().tooLarge);
     return { text, via: 'relay', status: relayed.status, contentType: relayed.headers?.get?.('content-type') || '' };
   }
   if (response) throw new DatasetSourceError(`HTTP ${response.status}`, { status: response.status });
-  throw new DatasetSourceError('source inaccessible', { cause: failure });
+  throw new DatasetSourceError(messages().unreachable, { cause: failure });
 }
 
 /** Parse JSON without letting a parser message reach the row. */
@@ -135,7 +137,7 @@ function parseJson(text, what) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new DatasetSourceError(`${what} : JSON illisible`);
+    throw new DatasetSourceError(messages().unreadableJson(what));
   }
 }
 
@@ -149,7 +151,7 @@ export function featuresFromGeoJson(payload) {
   if (Array.isArray(payload)) return payload.filter((item) => item?.type === 'Feature');
   if (payload?.type === 'FeatureCollection' && Array.isArray(payload.features)) return payload.features;
   if (payload?.type === 'Feature') return [payload];
-  throw new DatasetSourceError('pas un GeoJSON (FeatureCollection attendue)');
+  throw new DatasetSourceError(messages().notGeoJson);
 }
 
 function hasDrawableGeometry(feature) {
@@ -450,7 +452,7 @@ async function loadWfs(manifest, { bbox, onProgress: _ignoredWfs, ...options }) 
   const { text } = await fetchDatasetText(url, { ...options, accept: 'application/json' });
   const payload = parseJson(text, 'WFS');
   if (payload?.exceptionReport || (typeof payload?.ExceptionReport === 'object')) {
-    throw new DatasetSourceError('WFS : le service a répondu par une exception (typeName inconnu ?)');
+    throw new DatasetSourceError(messages().wfsException);
   }
   const all = featuresFromGeoJson(payload).filter(hasDrawableGeometry);
   const matched = Number(payload?.numberMatched);
@@ -495,7 +497,7 @@ const LOADERS = Object.freeze({
  */
 export async function loadDatasetFeatures(manifest, { bbox = null, fetchImpl = globalThis.fetch, relay = DATASET_RELAY_PATH, signal = undefined, onProgress = null } = {}) {
   const loader = LOADERS[manifest?.source?.kind];
-  if (!loader) throw new DatasetSourceError(`source inconnue : ${manifest?.source?.kind}`);
+  if (!loader) throw new DatasetSourceError(messages().unknownSource(manifest?.source?.kind));
   const result = await loader(manifest, { bbox: normalizeBbox(bbox), fetchImpl, relay, signal, onProgress });
   return { unplaced: 0, via: 'direct', ...result, fetchedAt: Date.now() };
 }
