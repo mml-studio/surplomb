@@ -15,7 +15,17 @@
 // Source of truth is the modules themselves: `scripts/lib/layerManifestSources.mjs`
 // holds the ordered list, and `layerManifest.test.mjs` re-derives every field
 // below from the real files on every `npm test`.
+//
+// LANGUAGE. `name` and `source` are copied from each module as it writes
+// them, and they are not what the panel draws: a row's name is
+// `layerTaxonomy.i18n.js`, and its source line is the registry's
+// `sourceLabel` when one is needed (src/data/manager.js, `_sourceLine`).
+// These are the id-adjacent strings the voice layer and the LLM context read,
+// so they stay as the module wrote them — which is why the ratchet is told to
+// skip them rather than being satisfied by a translation that would be a lie
+// about where the string came from.
 
+// i18n-ignore-start
 export const LAYER_MANIFEST = Object.freeze([
   Object.freeze({
     id: 'flights',
@@ -535,3 +545,4 @@ export const LAYER_MANIFEST = Object.freeze([
     load: () => import('./girondeMegafire.js').then((module) => module.default),
   }),
 ]);
+// i18n-ignore-end
