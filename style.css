@@ -4129,7 +4129,7 @@ body.cockpit-mode #view-switcher button {
   font-size: 9px;
   letter-spacing: 0.14em;
 }
-.cockpit-help span { color: var(--cockpit-accent); }
+.cockpit-help .cockpit-help-dot { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
   #title-bar, #style-indicator, #top-center-actions, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
