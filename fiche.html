@@ -23,7 +23,7 @@
     /* locale-gate */
     (function () {
       var KEY = 'gev:locale:v1';
-      var AUTO = false;
+      var AUTO = true;
       var pick = function (value) {
         var tag = typeof value === 'string' ? value.toLowerCase().split(/[-_]/)[0] : '';
         return tag === 'fr' || tag === 'en' ? tag : null;
