@@ -173,6 +173,30 @@ export function supTypeLabel(code) {
 }
 
 /**
+ * One easement family the SERVER already named, relabelled for a reader.
+ *
+ * `projectServitudes()` runs in `vite.config.js` and bakes the French sentence
+ * into `label`; a consumer that only kept the label — `implantationFeed.js`
+ * does — has no code left to look up. The French sentence IS the payload's
+ * data value there, so it is the key: the reverse of {@link SUP_TYPE_LABELS}.
+ * A sentence this table does not know is shown exactly as it came.
+ *
+ * @param {?string} published A label from a projected easement.
+ * @returns {?string}
+ */
+export function supFamilyLabel(published) {
+  const text = String(published ?? '').trim();
+  if (!text) return null;
+  const code = SUP_CODE_BY_LABEL[text];
+  return code ? labelFor(messages, code) : text;
+}
+
+/** The reverse of {@link SUP_TYPE_LABELS}: a French family back to its code. */
+const SUP_CODE_BY_LABEL = Object.freeze(Object.fromEntries(
+  Object.entries(SUP_TYPE_LABELS).map(([code, label]) => [label, code]),
+));
+
+/**
  * Build one APIcarto URL for a point.
  * @param {'zone-urba'|'assiette-sup-s'|'prescription-surf'} endpoint
  * @param {{lon: number, lat: number}} point

@@ -3,6 +3,10 @@ import { addressMarkerGlyph } from './addressMarkerIcons.js';
 import { createAddressScanLayer } from './addressScanLayer.js';
 import { equivalentRadiusM } from './isochroneFeed.js';
 import { zoneApprovalDate } from './urbanismeGpu.js';
+import { supFamilyLabel } from './gpuFeed.js';
+import { formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { FICHE_MISSING_WORDS } from './implantationFiche.i18n.js';
 import { resolutionForBox } from './filosofiFeed.js';
 import {
   aggregateInRing,
@@ -135,7 +139,13 @@ export function minutesLabel(seconds) {
   return Number.isFinite(seconds) ? `${Math.round(seconds / 60)} min` : '—';
 }
 
-const _fr = new Intl.NumberFormat('fr-FR');
+/** A count, grouped the way the reader's language groups one. */
+const _fr = { format: (value) => formatNumber(value) };
+
+/** One `missing` token in the page's language. The token itself is data. */
+function missingLabel(token) {
+  return labelFor(FICHE_MISSING_WORDS, token);
+}
 
 /**
  * Clip a free-text label to something a card line can hold.
@@ -267,11 +277,14 @@ export async function ficheFetch(url, options = {}, { impl = fetch } = {}) {
   // A page the WFS cut short is not a catchment. Named here so the card can say
   // so, because summing 5 000 of an unknown number of squares and printing the
   // total is the exact failure this layer was built to refuse.
+  // i18n-ignore-start — payload tokens, pinned by the layer's own tests;
+  // `missingLabel()` is what turns them into words for a reader.
   if (!carreaux) missing.push('carroyage');
   else if (carreaux.truncated) missing.push('carroyage tronqué');
   if (!gpu) missing.push('urbanisme');
   if (!dvf) missing.push('marché');
   if (!banFeature) missing.push('adresse');
+  // i18n-ignore-end
 
   const aggregate = ring && carreaux
     ? aggregateInRing(
@@ -400,7 +413,9 @@ export function ficheScores(fiche, options = {}) {
  */
 export function letterPhrase(score) {
   if (!score?.letterLow || !score?.letterHigh) return null;
-  return score.ferme ? score.letter : `${score.letterHigh} ou ${score.letterLow}`;
+  return score.ferme
+    ? score.letter
+    : messages().rank.letterPair(score.letterHigh, score.letterLow);
 }
 
 /**
@@ -416,9 +431,10 @@ export function letterPhrase(score) {
  */
 export function compactRank(score) {
   if (!Number.isFinite(score?.percentile)) return '—';
+  const m = messages().rank;
   return score.percentileHigh - score.percentileLow > 20
-    ? `${score.percentileLow}–${score.percentileHigh}ᵉ`
-    : `${score.percentile}ᵉ`;
+    ? m.percentileRange(score.percentileLow, score.percentileHigh)
+    : m.percentile(score.percentile);
 }
 
 /**
@@ -440,6 +456,7 @@ export function compactRank(score) {
  * @returns {{title: string, details: string[]}}
  */
 export function ficheLines(fiche) {
+  const m = messages();
   const details = [];
   const iso = fiche?.isochrone ?? null;
   const demand = fiche?.demand ?? null;
@@ -447,10 +464,10 @@ export function ficheLines(fiche) {
   const market = fiche?.market ?? null;
 
   if (iso) {
-    details.push(`${minutesLabel(iso.seconds)} à pied — ${iso.areaKm2} km² réellement atteignables`);
-    details.push(`Cercle équivalent ${iso.radiusM} m, mais ce n’est pas un cercle`);
+    details.push(m.ring.reachable(minutesLabel(iso.seconds), iso.areaKm2));
+    details.push(m.ring.equivalentCircle(iso.radiusM));
   } else {
-    details.push('Zone de chalandise indisponible — le service isochrone IGN n’a pas répondu');
+    details.push(m.ring.unavailable);
   }
 
   if (demand && demand.people.count > 0) {
@@ -463,67 +480,66 @@ export function ficheLines(fiche) {
     // the honest headline says "at least" rather than a total with an error bar
     // that does not cover the missing squares.
     if (demand.truncated) {
-      details.push(`Au moins ${count(demand.people.count)} habitants — comptage incomplet`);
-      details.push('Le carroyage INSEE a renvoyé une page tronquée'
-        + (Number.isFinite(demand.matched) ? ` (${count(demand.matched)} carreaux dans la boîte)` : '')
-        + ' — ce total est un plancher, pas une fourchette');
+      details.push(m.demand.atLeast(count(demand.people.count)));
+      details.push(m.demand.truncated(Number.isFinite(demand.matched)
+        ? m.demand.truncatedCells(count(demand.matched))
+        : ''));
     } else {
-      details.push(`${count(demand.people.count)} habitants`
-        + (width === null ? '' : ` (±${width} %)`));
-      details.push(`Entre ${count(demand.people.low)} et ${count(demand.people.high)}`
-        + ' selon qu’on compte les carreaux entiers ou tout carreau touché');
+      details.push(m.demand.people(
+        count(demand.people.count), width === null ? '' : m.demand.margin(width),
+      ));
+      details.push(m.demand.bracket(count(demand.people.low), count(demand.people.high)));
     }
     // The four counts, as a partition a reader can add up: inside + straddling
     // = touched, and counted is the centroid convention drawn from both.
-    details.push(`${count(demand.households.count)} ménages`
-      + `, ${demand.cells.counted} carreaux de ${demand.resolution} m retenus au centre`
-      + ` sur ${demand.cells.touched} touchés (${demand.cells.inside} entiers`
-      + `, ${demand.cells.straddling} à cheval)`);
+    details.push(m.demand.cells(
+      count(demand.households.count), demand.cells.counted, demand.resolution,
+      demand.cells.touched, demand.cells.inside, demand.cells.straddling,
+    ));
     // Said out loud when it dominates, because a reader meeting a ±100 %
     // bracket assumes a bug rather than a grid. A ten-minute walk is about
     // 1,1 km across and a 200 m carreau is a fifth of that, so most of the
     // squares it touches ARE its border — which is a fact about the resolution
     // of the only national grid there is, not about this address.
     if (demand.cells.touched > 0 && demand.cells.inside * 2 < demand.cells.touched) {
-      details.push(`La bordure domine — ${demand.cells.straddling} des`
-        + ` ${demand.cells.touched} carreaux touchés sont à cheval, à cette résolution`);
+      details.push(m.demand.borderDominates(demand.cells.straddling, demand.cells.touched));
     }
     if (demand.niveau !== null) {
-      details.push(`Niveau de vie moyen ${count(demand.niveau)} €/an`
-        + (demand.pauvrete === null ? '' : `, ${demand.pauvrete} % de ménages pauvres`));
+      details.push(m.demand.income(
+        count(demand.niveau),
+        demand.pauvrete === null ? '' : m.demand.poor(demand.pauvrete),
+      ));
     }
     const composition = [
-      demand.jeunes === null ? null : `${demand.jeunes} % de moins de 18 ans`,
-      demand.aines === null ? null : `${demand.aines} % de 65 ans et plus`,
-      demand.solo === null ? null : `${demand.solo} % de personnes seules`,
+      demand.jeunes === null ? null : m.demand.young(demand.jeunes),
+      demand.aines === null ? null : m.demand.old(demand.aines),
+      demand.solo === null ? null : m.demand.alone(demand.solo),
     ].filter(Boolean);
     if (composition.length) details.push(composition.join(', '));
     const tenure = [
-      demand.proprietaires === null ? null : `${demand.proprietaires} % de propriétaires`,
-      demand.social === null ? null : `${demand.social} % en logement social`,
+      demand.proprietaires === null ? null : m.demand.owners(demand.proprietaires),
+      demand.social === null ? null : m.demand.social(demand.social),
     ].filter(Boolean);
     if (tenure.length) details.push(tenure.join(', '));
     // Zero imputed cells is good news and must READ as good news: the old line
     // said "0 carreaux imputés — valeurs approchées, pas observées", which
     // states the opposite of what it means.
     if (demand.imputedCells > 0) {
-      const plural = demand.imputedCells > 1;
-      details.push(`${demand.imputedCells} carreau${plural ? 'x' : ''}`
-        + ` imputé${plural ? 's' : ''} sur ${demand.cells.counted}`
-        + ` (${demand.imputedShare} %) — valeurs approchées, pas observées`);
+      details.push(m.demand.imputed(
+        demand.imputedCells, demand.cells.counted, demand.imputedShare,
+      ));
     } else if (demand.imputedUnknown > 0) {
       // "None imputed" is a claim about INSEE's flag, and it cannot be made
       // when the flag did not arrive. Two cells in five are imputed nationally,
       // so the silent default was the flattering answer, not the neutral one.
-      details.push(`Imputation non renseignée sur ${demand.imputedUnknown}`
-        + ` des ${demand.cells.counted} carreaux retenus — observées ou approchées, l’INSEE ne l’a pas dit`);
+      details.push(m.demand.imputationUnknown(demand.imputedUnknown, demand.cells.counted));
     } else if (demand.cells.counted > 0) {
-      details.push(`Aucun carreau imputé sur les ${demand.cells.counted} retenus`);
+      details.push(m.demand.noneImputed(demand.cells.counted));
     }
   } else if (demand) {
-    details.push('Aucun carreau INSEE habité dans cette zone');
+    details.push(m.demand.empty);
   } else {
-    details.push('Population indisponible — le carroyage INSEE n’a pas répondu');
+    details.push(m.demand.unavailable);
   }
 
   // ── The national rank ─────────────────────────────────────────────────────
@@ -535,15 +551,15 @@ export function ficheLines(fiche) {
   const lettered = scores.filter((score) => score.letterLow);
   const ranked = scores.filter((score) => Number.isFinite(score.percentile));
   if (lettered.length) {
-    details.push(`${lettered.map((score) => `${score.short} ${letterPhrase(score)}`).join(', ')}`
-      + ' — lettres au sens du résident acheteur, A = le meilleur cinquième de France');
+    details.push(m.rank.letters(lettered
+      .map((score) => m.rank.scoreRank(score.short, letterPhrase(score))).join(', ')));
   }
   if (ranked.length) {
-    details.push(`Centiles nationaux — ${ranked
-      .map((score) => `${score.short} ${compactRank(score)}`).join(', ')}`);
-    details.push(`Barème mesuré sur ${count(BAREME_SAMPLE.rings)} anneaux de 10 min`
-      + ` tirés au sort dans la population (${BAREME_SAMPLE.measuredAt})`
-      + `, à ±${BAREME_SAMPLE.marginPt} points de centile près`);
+    details.push(m.rank.percentiles(ranked
+      .map((score) => m.rank.scoreRank(score.short, compactRank(score))).join(', ')));
+    details.push(m.rank.scale(
+      count(BAREME_SAMPLE.rings), BAREME_SAMPLE.measuredAt, BAREME_SAMPLE.marginPt,
+    ));
   }
   // Price is the only indicator whose scale does not cover the sample: 151 of
   // the 1,200 rings (one in eight, `BAREME_FR.prixM2.measured`) have no
@@ -554,8 +570,7 @@ export function ficheLines(fiche) {
     ? Math.round((BAREME_FR.prixM2.measured / BAREME_SAMPLE.rings) * 100)
     : null;
   if (price && priceCoverage !== null && priceCoverage < 95) {
-    details.push(`Le rang du prix se lit sur les ${priceCoverage} % d’anneaux`
-      + ' où une vente comparable existait — une France plus urbaine que la France');
+    details.push(m.rank.priceCoverage(priceCoverage));
   }
   // THE REFUSAL IS STATED EVEN WHEN THERE ARE RANKS LEFT TO PRINT, and that is
   // why this is a separate test rather than an `else`. On a five-minute ring
@@ -566,10 +581,8 @@ export function ficheLines(fiche) {
   // else.
   if (scores.some((score) => score.reason === BAREME_REASONS.GEOMETRY)) {
     details.push(fiche?.demand?.truncated
-      ? 'Rang national suspendu sur l’anneau — un comptage tronqué est un plancher'
-        + ', et un plancher se classerait toujours trop bas'
-      : 'Rang national indisponible sur cet anneau'
-        + ' — le barème n’est mesuré qu’à dix minutes de marche');
+      ? m.rank.suspendedTruncated
+      : m.rank.unavailable);
   }
 
   if (zoning) {
@@ -578,33 +591,39 @@ export function ficheLines(fiche) {
     // the first sentence, then hard, with an ellipsis that says it was clipped.
     const approved = zoneApprovalDate(zoning.approvedOn);
     details.push(zoning.code
-      ? `PLU zone ${zoning.code}${zoning.label ? `, ${clipLabel(zoning.label)}` : ''}`
-        + (approved ? ` (approuvé le ${approved})` : '')
-      : 'PLU — aucun zonage à ce point');
-    if (zoning.overlapping > 1) {
-      details.push(`${zoning.overlapping} zonages se superposent ici`
-        + ' — deux communes ne placent pas leur limite au même endroit');
-    }
+      ? m.zoning.zone(
+        zoning.code,
+        zoning.label ? m.zoning.zoneLabel(clipLabel(zoning.label)) : '',
+        approved ? m.zoning.approvedOn(approved) : '',
+      )
+      : m.zoning.none);
+    if (zoning.overlapping > 1) details.push(m.zoning.overlap(zoning.overlapping));
     if (zoning.servitudes) {
-      details.push(`${zoning.servitudes} servitude${zoning.servitudes > 1 ? 's' : ''}`
-        + (zoning.servitudeLabels.length ? `, ${zoning.servitudeLabels.join(', ')}` : ''));
+      // The families arrive as the SERVER named them — `implantationFeed.js`
+      // keeps the label and drops the code — so they are relabelled from the
+      // French sentence, which is the payload's own value here.
+      const families = zoning.servitudeLabels.map(supFamilyLabel).filter(Boolean);
+      details.push(m.zoning.easements(
+        zoning.servitudes, families.length ? m.zoning.easementFamilies(families.join(', ')) : '',
+      ));
     }
   }
 
   if (market) {
     details.push(market.medianPrixM2 !== null
-      ? `DVF ${count(market.medianPrixM2)} €/m² médian sur ${market.comparable} ventes`
-        + ` comparables, ${market.sales} mutations dans ${DVF_RADIUS_M} m`
-      : `DVF ${market.sales} mutations dans ${DVF_RADIUS_M} m, aucune comparable en €/m²`);
+      ? m.market.withMedian(
+        count(market.medianPrixM2), market.comparable, market.sales, DVF_RADIUS_M,
+      )
+      : m.market.withoutMedian(market.sales, DVF_RADIUS_M));
   }
 
   if (fiche?.missing?.length) {
-    details.push(`Sources muettes — ${fiche.missing.join(', ')}`);
+    details.push(m.missing(fiche.missing.map(missingLabel).join(', ')));
   }
 
   const address = fiche?.address ?? null;
   const title = address?.label
-    || (address?.commune ? `${address.commune}` : 'Fiche implantation');
+    || (address?.commune ? `${address.commune}` : m.fallbackTitle);
   // The separator the factory splits on must never appear inside a line, or the
   // card shatters. Enforced here as well as in the test, because a future line
   // added by hand would otherwise break the card silently.
@@ -835,13 +854,14 @@ const implantationFicheLayer = {
   },
 
   getRowControls() {
+    const m = messages().row;
     const stats = base.getStats();
     const chips = FICHE_STEPS.map((seconds) => ({
       id: String(seconds),
       label: minutesLabel(seconds).toUpperCase(),
       active: _seconds === seconds,
       state: _seconds === seconds ? 'active' : 'idle',
-      title: `Population et revenus à ${minutesLabel(seconds)} à pied de l’adresse scannée`,
+      title: m.chipTitle(minutesLabel(seconds)),
       params: { seconds },
     }));
     // THE DOOR. Disabled rather than hidden while there is no point to open:
@@ -852,35 +872,33 @@ const implantationFicheLayer = {
     const open = Boolean(_sheet && _sheet.point());
     chips.push({
       id: 'sheet',
-      label: 'RADIOGRAPHIE',
+      label: m.sheet,
       active: open,
       state: open ? 'active' : 'idle',
       disabled: !point,
-      title: point
-        ? 'Ouvrir la radiographie complète de ce point — dix thématiques, imprimable'
-        : 'Cliquez une adresse sur le globe : la radiographie s’ouvre sur ce point',
+      title: point ? m.sheetOpen : m.sheetClosed,
       params: { sheet: open ? 'close' : 'open' },
     });
     // A three-row legend that IS the bracket: the two countable bounds and the
     // headline between them. The layer's whole argument, in the row.
     const legend = [
       {
-        label: 'Carreaux entiers',
-        color: '#3ce0c8',
+        label: m.whole,
+        color: '#3ce0c8', // i18n-ignore-line — a hex colour, not a word
         count: stats.peopleLow ?? 0,
-        blurb: 'Habitants des carreaux entièrement dans la zone — la borne basse.',
+        blurb: m.wholeBlurb,
       },
       {
-        label: 'Au centre du carreau',
+        label: m.centered,
         color: SELECTED_COLOR,
         count: stats.people ?? 0,
-        blurb: 'Convention usuelle : le carreau compte si son centre est dans la zone.',
+        blurb: m.centeredBlurb,
       },
       {
-        label: 'Carreaux touchés',
+        label: m.touched,
         color: '#d1442f',
         count: stats.peopleHigh ?? 0,
-        blurb: 'Habitants de tout carreau que la zone touche — la borne haute.',
+        blurb: m.touchedBlurb,
       },
     ];
     return { chips, legend };
@@ -895,13 +913,12 @@ const implantationFicheLayer = {
     };
     if (stats.dormant) {
       result.status = 'ok';
-      result.loadingLabel = `Zoome sous ${Math.round(MAX_ALTITUDE_M / 1000)} km `
-        + 'pour composer une fiche';
+      result.loadingLabel = messages().row.dormant(Math.round(MAX_ALTITUDE_M / 1000));
     } else if (Array.isArray(stats.missing) && stats.missing.length) {
       // DEGRADED, not an error: a fiche short of its market half is still a
       // fiche, and the row has to say which of the two it is looking at.
       result.degraded = true;
-      result.loadingLabel = `Fiche partielle — sources muettes : ${stats.missing.join(', ')}`;
+      result.loadingLabel = messages().row.partial(stats.missing.map(missingLabel).join(', '));
     }
     return result;
   },
