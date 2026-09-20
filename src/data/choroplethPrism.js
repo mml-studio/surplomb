@@ -102,7 +102,7 @@
  * flooring, not a scale. `irve-fr` runs 227 → 10 539 (1 : 46; Lozère lands at
  * 2.6 km linear, under the 4 km floor). `sup-fr` is worse by an order of
  * magnitude. A layer that chooses `'sqrt'` gets {@link prismLegend} to say so
- * in the height blurb, in French, unprompted.
+ * in the height blurb, in the reader's language, unprompted.
  *
  * ── The hard problem: same height, different base areas ─────────────────────
  *
@@ -242,6 +242,9 @@
  *   "no count" is an empty hatched footprint, "measured zero" is a filled flat
  *   footprint with a solid outline, and they must not look alike (A1/D3).
  */
+
+import { formatNumber } from '../i18n/format.js';
+import messages from './choroplethPrism.i18n.js';
 
 // ---------------------------------------------------------------------------
 // Calibration constants
@@ -457,15 +460,16 @@ export function prismApparentPx({
  * @param {string} spec.id Layer id, for error messages and legend keys.
  * @param {number} spec.domainMax Top of the frozen domain, in `heightUnit`.
  * @param {number} [spec.domainMin=0] Bottom of the frozen domain.
- * @param {string} spec.heightLabel French name of the absolute variable.
- * @param {string} spec.heightUnit French unit appended to a tick value.
+ * @param {string} spec.heightLabel Name of the absolute variable, in the caller's
+ *   own words (a catalog of its own, once that layer is bilingual).
+ * @param {string} spec.heightUnit Unit appended to a tick value.
  * @param {'linear'|'sqrt'} [spec.mode='linear'] Height scale. See the header.
  * @param {number} [spec.maxHeightM] Height at `domainMax`.
  * @param {number} [spec.minHeightM] Floor for a non-zero value.
- * @param {string} spec.ratioLabel French name of the relative variable.
+ * @param {string} spec.ratioLabel Name of the relative variable.
  * @param {Array<number>} spec.ratioBreaks Frozen class boundaries, ascending.
  * @param {Array<string>} spec.ratioColors CSS colours, `ratioBreaks.length + 1`.
- * @param {Array<string>} [spec.ratioClassLabels] Per-class French labels.
+ * @param {Array<string>} [spec.ratioClassLabels] Per-class labels.
  * @param {Array<number>} [spec.heightTicks] Explicit legend ticks, descending.
  * @returns {object} Deeply frozen scale, consumed by everything below.
  */
@@ -737,9 +741,9 @@ export function prismTally(rows, scale) {
 // Legend (D1)
 // ---------------------------------------------------------------------------
 
-/** French grouping, via the platform's own fr-FR rules. */
-function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+/** A grouped number in the page's language: `12 000` / `12,000`. */
+function grouped(value) {
+  return formatNumber(Number(value));
 }
 
 /** A round metre count as kilometres, for the height blurb. */
@@ -781,30 +785,26 @@ function km(metres) {
  */
 export function prismLegend(scale, tally = {}) {
   assertScale(scale);
+  const m = messages();
   const entries = [];
   const ratioCounts = tally.ratioCounts || [];
 
-  const modeNote = scale.mode === 'sqrt'
-    ? `Échelle en racine carrée : le domaine est trop étalé pour une règle linéaire, `
-      + `donc un prisme deux fois plus haut vaut quatre fois plus.`
-    : `Échelle linéaire : deux fois plus haut vaut deux fois plus.`;
+  const modeNote = scale.mode === 'sqrt' ? m.mode.sqrt : m.mode.linear;
 
   entries.push({
-    label: `Hauteur — ${scale.heightLabel}`,
+    label: m.height.title(scale.heightLabel),
     color: null,
-    blurb: `${modeNote} Le plus haut prisme fait ${km(scale.maxHeightM)} pour `
-      + `${fr(scale.domainMax)} ${scale.heightUnit}, borne gelée. La base est le département : `
-      + `son aire n'est pas neutralisée, donc un grand département rural fait un gros volume `
-      + `à effectif égal — c'est la couleur, et non le volume, qui répond à « rapporté à quoi ? ».`,
+    blurb: m.height.blurb(modeNote, km(scale.maxHeightM), grouped(scale.domainMax),
+      scale.heightUnit),
   });
 
   for (const tick of scale.heightTicks) {
     const height = prismHeightM(tick, scale);
     entries.push({
-      label: `${fr(tick)} ${scale.heightUnit}`,
+      label: m.height.tick(grouped(tick), scale.heightUnit),
       color: PRISM_HEIGHT_SWATCH_COLOR,
       glyph: prismHeightGlyph(height === null ? 0 : height / scale.maxHeightM),
-      blurb: `${km(height ?? 0)} de haut.`,
+      blurb: m.height.tickBlurb(km(height ?? 0)),
     });
   }
 
@@ -812,44 +812,39 @@ export function prismLegend(scale, tally = {}) {
     // A5 — the frozen domain has a top, and a value above it stops being
     // measured by the mark. Say how many, and say what the mark still means.
     entries.push({
-      label: 'au-dessus du domaine gelé',
+      label: m.clipped.label,
       color: null,
       count: tally.clipped,
-      blurb: `Valeur supérieure à ${fr(scale.domainMax)} ${scale.heightUnit} : le prisme est `
-        + `dessiné à la hauteur maximale et ne dit plus combien. Le domaine reste gelé pour que `
-        + `la même donnée fasse la même hauteur d'une session à l'autre.`,
+      blurb: m.clipped.blurb(grouped(scale.domainMax), scale.heightUnit),
     });
   }
 
   if (tally.zero) {
     entries.push({
-      label: 'mesuré à zéro',
+      label: m.zero.label,
       color: null,
       count: tally.zero,
-      blurb: 'Emprise dessinée à plat, remplie et cerclée. Zéro est une mesure : '
-        + 'elle ne se dessine pas comme une absence de mesure.',
+      blurb: m.zero.blurb,
     });
   }
 
   if (tally.noValue) {
     entries.push({
-      label: `${scale.heightLabel} — non publié`,
+      label: m.noValue.label(scale.heightLabel),
       color: null,
       // The GRID, because that is the material the map draws for this refusal.
       // The rate refusal below gets the stripes it actually wears: two motifs
       // for two independent absences, and the key names each one.
       glyph: PRISM_NO_VALUE_GLYPH,
       count: tally.noValue,
-      blurb: 'Aucun prisme : seule l’emprise en grille est dessinée. Un motif et non une '
-        + 'teinte, parce que sur un globe photoréaliste il n’existe aucune couleur neutre.',
+      blurb: m.noValue.blurb,
     });
   }
 
   entries.push({
-    label: `Couleur — ${scale.ratioLabel}`,
+    label: m.color.title(scale.ratioLabel),
     color: null,
-    blurb: 'Un rapport, donc une variation de valeur : c’est ce que la couleur a le droit '
-      + 'de dire. Seuils de domaine gelés, jamais recalculés depuis ce qui est à l’écran.',
+    blurb: m.color.blurb,
   });
 
   scale.ratioColors.forEach((color, index) => {
@@ -864,12 +859,11 @@ export function prismLegend(scale, tally = {}) {
 
   if (tally.noRatio) {
     entries.push({
-      label: `${scale.ratioLabel} — non publié`,
+      label: m.noRatio.label(scale.ratioLabel),
       color: PRISM_NO_RATIO_COLOR,
       glyph: PRISM_NO_RATIO_BODY_GLYPH,
       count: tally.noRatio,
-      blurb: 'Le prisme est à sa hauteur, mais son corps est rayé : la hauteur est mesurée, '
-        + 'la couleur est refusée. Les deux absences sont indépendantes.',
+      blurb: m.noRatio.blurb,
     });
   }
 
@@ -877,10 +871,11 @@ export function prismLegend(scale, tally = {}) {
 }
 
 /**
- * French label for one colour class, from the frozen breaks.
+ * The label of one colour class, from the frozen breaks: `≤ 12`, `12 – 30`.
  *
- * A layer may override the whole ladder with `ratioClassLabels` when its unit
- * needs a phrasing this cannot guess.
+ * Only numbers and operators, so the two languages differ in the grouping of
+ * the numbers alone. A layer may override the whole ladder with
+ * `ratioClassLabels` when its unit needs a phrasing this cannot guess.
  * @param {number} index 0-based class.
  * @param {object} scale
  * @returns {string} Label.
@@ -889,9 +884,9 @@ export function prismRatioClassLabel(index, scale) {
   assertScale(scale);
   if (scale.ratioClassLabels) return scale.ratioClassLabels[index] ?? '';
   const breaks = scale.ratioBreaks;
-  if (index <= 0) return `≤ ${fr(breaks[0])}`;
-  if (index >= breaks.length) return `> ${fr(breaks[breaks.length - 1])}`;
-  return `${fr(breaks[index - 1])} – ${fr(breaks[index])}`;
+  if (index <= 0) return `≤ ${grouped(breaks[0])}`;
+  if (index >= breaks.length) return `> ${grouped(breaks[breaks.length - 1])}`;
+  return `${grouped(breaks[index - 1])} – ${grouped(breaks[index])}`;
 }
 
 // ---------------------------------------------------------------------------
