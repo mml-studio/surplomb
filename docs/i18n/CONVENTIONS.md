@@ -193,7 +193,27 @@ const TOKENS = ['poste', 'tous'];
 ```
 
 The escape hatch exists for data only. Prose under an `i18n-ignore` is a
-review finding.
+review finding — with one standing exception, marked as such wherever it
+appears: text **read by the model and never by a reader** (a voice tool's
+`note`, a spoken alias). A tool contract is a protocol, and a protocol that
+changed language per page is one the routing bench could never pin.
+
+A marker names a **statement**, not a row of characters: the reason it carries
+may wrap onto a second comment line, and the declaration it points at may wrap
+onto a third. It never reaches into a function body — write the extent out
+with `i18n-ignore-start`/`end` when that is what you mean.
+
+### The layer registry's own three fields
+
+Every layer module opens with `{ id, name, icon, source, … }`, in French,
+under one `i18n-ignore` block per file that points at the header of
+`src/data/layerTaxonomy.i18n.js`. None of those strings is what the panel
+prints: `name` and `source` are the **generator's input** (`npm run
+layers:manifest` derives `layerManifest.js`, `DATA_SOURCES.md` and the
+README's table from them) and the panel's **fallback** for a layer with no
+taxonomy row. What a reader sees is `labels[id]` and `sources[id]` in the
+taxonomy's catalog. One explanation, one pointer, thirty markers — do not
+write a thirty-first argument.
 
 ## 5. Numbers, dates, plurals: `src/i18n/format.js`
 
@@ -284,6 +304,22 @@ status.textContent = serverMessage(payload);   // src/i18n/serverMessages.js
 Codes live in `src/i18n/serverMessages.i18n.js`. An unknown code, or none,
 falls back to `payload.error`, so a client can ship before its server.
 
+A code almost always rides on a **failed** response, and a client that bails on
+`!response.ok` never reads the body that carries it — which is how eleven call
+sites showed `HTTP 503` while the server was sending words. That branch is one
+line:
+
+```js
+if (!response.ok) throw new Error(await serverFailureMessage(response));
+if (!response.ok) {                                   // keeping the old line
+  throw new Error(await serverFailureMessage(response, { fallback: `carroyage HTTP ${response.status}` }));
+}
+```
+
+It is deliberately forgiving about the response it is handed: a test double for
+an outage is usually `{ ok: false, status: 503 }` with no body at all, and it
+falls back to `HTTP <status>` rather than throwing.
+
 ## 8. Tests
 
 - **Leave the French tests alone.** They run in French (the default) and must
@@ -328,8 +364,18 @@ count goes **up** against `src/i18n/i18n-baseline.json`:
 | R4 | `toLocaleString/DateString/TimeString('fr-FR')` and `Intl.*('fr-FR')` outside `src/i18n` | 0 |
 | R5 | a catalog, formatter, `labelFor` or `getLocale` called at module top level | **0, always** |
 
-Catalogs (`*.i18n.js`) and `src/i18n/` are exempt from R1, R2 and R4. The rules'
-exact definitions are at the top of `scripts/lib/i18nScan.mjs`.
+Catalogs (`*.i18n.js`), `src/i18n/` and `src/vitrine/` are exempt from R1, R2
+and R4 — the showcase at `/` is French BY DECISION (D2), the same decision that
+exempts `<head>` and `#vitrine` from R3, and counting a page nobody is
+translating would leave the ratchet a floor it can never reach. Nothing is ever
+exempt from R5. Addresses (URLs, data URIs, asset paths) and lists of CSS class
+tokens are not text and no rule reads them. The rules' exact definitions are at
+the top of `scripts/lib/i18nScan.mjs`.
+
+**All five counts are zero and the baseline is zero.** The ratchet is no longer
+a ladder: any French literal, any hard-coded interface string, any
+`toLocale*('fr-FR')` outside `src/i18n` is a failing test the moment it is
+written. What French remains in `src/` is marked, and every marker says why.
 
 ```sh
 npm run i18n:report                                   # totals against the baseline
@@ -445,6 +491,7 @@ match it through `inAllLocales()` or, better, on a `data-*` attribute.
 `src/i18n/serverMessages.js`
 
 - `serverMessage(payload, { fallback, catalog, locale })` → the message for `payload.code`, else `payload.error`.
+- `serverFailureMessage(response, options)` → the same, reading a failed response's body first; falls back to `HTTP <status>`.
 
 `src/i18n/testing.js`
 
@@ -471,7 +518,10 @@ One owner per hot file, so parallel batches never collide:
   `LOCALE_AUTO_DETECT` on (in `locale.js` **and** the inline gate) — the shell batch.
 - `src/data/manager.js`, `layerTaxonomy.js`, `layerCoverage.js`, `hud.js`,
   layer names and statuses — the registry batch. A layer module's `name` and
-  `source` are registry strings: leave them to it.
+  `source` are registry strings, marked `i18n-ignore` where they stand: change
+  what the panel prints in `layerTaxonomy.i18n.js`, and the module's own field
+  only when the manifest it generates should change too (both, together — a
+  test compares them byte for byte).
 - `vite.config.js` (server error codes), `src/voice/*` — the voice and server batch.
 - `src/i18n/**` — the infrastructure; ask the orchestrator for a change.
 - `src/i18n/i18n-baseline.json`, `CHANGELOG.md`, `README.md` — the orchestrator.
