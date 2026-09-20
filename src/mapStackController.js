@@ -9,60 +9,71 @@ import {
   watchTileFailures,
 } from './data/worldImagery.js';
 import { isPhoneShell } from './inputMode.js';
+import messages from './mapStackController.i18n.js';
+
+/**
+ * One basemap, with its words hung off its id.
+ *
+ * `label`, `shortLabel` and `coverageNote` are getters over
+ * `mapStackController.i18n.js`: the tray is rebuilt on every pick, the page's
+ * language is decided before the first paint, and the stack table itself has
+ * no language — its ids are share tokens (`?map=`) and its providers are
+ * configuration.
+ *
+ * @param {object} stack The stack's own half: id, kind, provider settings.
+ * @returns {object} The stack, with its label.
+ */
+function mapStack(stack) {
+  const words = () => messages().stacks[stack.id] || {};
+  return {
+    ...stack,
+    get label() { return words().label ?? stack.id; },
+    get shortLabel() { return words().shortLabel ?? words().label ?? stack.id; },
+    get coverageNote() { return words().coverageNote; },
+  };
+}
 
 export const MAP_STACKS = [
-  {
+  mapStack({
     id: 'photoreal',
-    label: 'Google 3D',
-    shortLabel: '3D',
     kind: 'photoreal',
     requiresIon: false,
-  },
+  }),
   // ── Google 2D Map Tiles (same key as the 3D globe, no ion token) ──────────
   // These two exist because the EEA withdrawal is narrower than its error
   // message: Google refuses `satellite` and 3D tiles to an EEA billing
   // address but serves `roadmap` and `terrain` on the very same key. So a
   // build whose "Google 3D" chip is permanently dead can still show Google's
   // cartography. See src/data/googleMapTiles.js for the measured evidence.
-  {
+  mapStack({
     id: 'google-roadmap',
-    label: 'Plan Google',
-    shortLabel: 'Plan G',
     kind: 'google-2d',
     requiresIon: false,
     google2d: { mapType: 'roadmap', scale: 'scaleFactor2x' },
-  },
-  {
+  }),
+  mapStack({
     id: 'google-terrain',
-    label: 'Relief Google',
-    shortLabel: 'Relief G',
     kind: 'google-2d',
     requiresIon: false,
     google2d: { mapType: 'terrain', scale: 'scaleFactor2x' },
-  },
-  {
+  }),
+  mapStack({
     id: 'bing-aerial',
-    label: 'Bing Aerial',
-    shortLabel: 'Aerial',
     kind: 'ion',
     style: Cesium.IonWorldImageryStyle.AERIAL,
     requiresIon: true,
-  },
-  {
+  }),
+  mapStack({
     id: 'bing-labels',
-    label: 'Bing Labels',
-    shortLabel: 'Labels',
     kind: 'ion',
     style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS,
     requiresIon: true,
-  },
-  {
+  }),
+  mapStack({
     id: 'osm',
-    label: 'OSM',
-    shortLabel: 'OSM',
     kind: 'osm',
     requiresIon: false,
-  },
+  }),
   // ── IGN Géoplateforme (keyless, France only) ───────────────────────────────
   // The two stacks that make a keyless build worth looking at. `data.geopf.fr`
   // serves WMTS with `access-control-allow-origin: *` and no key of any kind,
@@ -70,7 +81,7 @@ export const MAP_STACKS = [
   // ones). Coverage is France + DOM; this pass ships metropolitan France only
   // (`IGN_FRANCE_RECTANGLE`), because the DOM sit in three different vertical
   // systems and belong with the terrain work, not here.
-  {
+  mapStack({
     // The ID stays `ign-ortho` even though the label no longer says IGN: it is
     // the share token in `?map=`, so renaming it would break every link ever
     // copied out of this app. Only what the operator READS changed.
@@ -80,31 +91,25 @@ export const MAP_STACKS = [
     // IGN's 20 cm orthophoto over keyless world satellite
     // (see `_getStackProviders`), so "IGN Ortho" described a France-shaped
     // island this stack stopped being.
-    label: 'Satellite',
-    shortLabel: 'Sat',
     kind: 'ign-wmts',
     requiresIon: false,
     // The France clamp bounds the SHARP layer, not the whole stack.
-    coverageNote: 'IGN 20 cm over France, world satellite beyond',
     wmts: {
       layer: 'ORTHOIMAGERY.ORTHOPHOTOS',
       format: 'image/jpeg',
       maximumLevel: 19,
     },
-  },
-  {
+  }),
+  mapStack({
     id: 'ign-plan',
-    label: 'Plan IGN',
-    shortLabel: 'Plan',
     kind: 'ign-wmts',
     requiresIon: false,
-    coverageNote: 'metropolitan France only',
     wmts: {
       layer: 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2',
       format: 'image/png',
       maximumLevel: 19,
     },
-  },
+  }),
 ];
 
 const DEFAULT_OSM_CREDIT = '© OpenStreetMap contributors';
@@ -401,6 +406,7 @@ export function createIgnWmtsProvider(stack) {
     // The on-globe line. Etalab 2.0 wants the source named where the data is
     // shown; the fuller notice, with the product edition, is the static entry
     // `registerDataCredits()` puts in the "Data attribution" popover.
+    // i18n-ignore-next-line — the attribution Etalab 2.0 requires, verbatim.
     credit: new Cesium.Credit('© IGN — Géoplateforme', true),
   });
 }
@@ -592,18 +598,19 @@ export class MapStackController {
     // a keyless build WITH a token that still has no tileset failed for some
     // other reason, and saying "API key required" would send the reader to buy
     // the one thing that would not have helped.
+    const m = messages().unavailable;
     if (stack?.kind === 'photoreal' && this.googleKeyConfigured === false && !this.cesiumToken) {
-      return 'Google Maps API key or Cesium ion token required for Google 3D';
+      return m.photorealKeys;
     }
     if (stack?.kind === 'photoreal' && this.googleKeyConfigured !== null) {
       return this.googleTilesetError
-        ? `Google 3D Tiles failed to load: ${this.googleTilesetError}`
-        : 'Google 3D Tiles failed to load';
+        ? m.photorealFailedBecause(this.googleTilesetError)
+        : m.photorealFailed;
     }
     if (stack?.kind === 'google-2d') {
-      return `Google Maps API key required for ${stack.label}`;
+      return m.googleKeyRequired(stack.label);
     }
-    return `${stack?.label || 'This map stack'} is unavailable`;
+    return m.stackUnavailable(stack?.label || m.thisStack);
   }
 
   getStack(id) {
@@ -796,7 +803,7 @@ export class MapStackController {
     // No recorded failure, or photoreal is on the globe after all: nothing to say.
     if (!this.googleTilesetError || this._activeId === 'photoreal') return null;
     const label = this.getActiveStack()?.label || this._activeId;
-    return `Google 3D Tiles failed to load: ${this.googleTilesetError} — showing ${label}`;
+    return messages().bootFallback(this.googleTilesetError, label);
   }
 
   /**

@@ -41,6 +41,9 @@ const GOOGLE_2D_MAX_LEVEL = 20;
 // the on-globe line; `/tile/v1/viewport` returns a per-region variant
 // ("Données cartographiques ©2026 Google") that would have to be re-fetched on
 // every camera move to stay accurate, which a static Cesium.Credit cannot do.
+// Attribution Google requires verbatim, in the language Google itself serves
+// it in; it is not interface prose.
+// i18n-ignore-next-line
 const GOOGLE_2D_CREDIT = 'Données cartographiques ©Google';
 
 /**

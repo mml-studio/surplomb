@@ -22,6 +22,8 @@
 // state is re-synced from controller state (never optimistically), so a failed
 // or superseded switch still leaves the truly-active stack lit.
 
+import messages from './mapStackChips.i18n.js';
+
 export const MAP_STACK_CHIP_CLASS = 'map-stack-chip';
 export const PRESENTED_MAP_STACK_IDS = Object.freeze([
   'photoreal',
@@ -55,10 +57,11 @@ export function mapStackChipModel(stack, activeId) {
   const available = stack?.available !== false;
   const label = String(stack?.label ?? stack?.id ?? '');
   const coverageNote = String(stack?.coverageNote || '');
+  const m = messages();
   const requiresIon = stack?.requiresIon === true;
   const fallbackReason = requiresIon
-    ? 'Cesium ion token required'
-    : `${label || 'This map stack'} is unavailable`;
+    ? m.ionRequired
+    : m.stackUnavailable(label || m.thisStack);
   const unavailableHint = available ? '' : String(stack?.unavailableReason || fallbackReason);
   return {
     id: String(stack?.id ?? ''),
@@ -124,12 +127,12 @@ export function renderMapStackChips(container, stacks, { activeId = null, onSele
     chip.setAttribute('aria-pressed', String(model.active));
     chip.setAttribute('aria-disabled', String(!model.available));
     if (!model.available) {
-      chip.setAttribute('aria-label', `${model.label} unavailable: ${model.unavailableHint}`);
+      chip.setAttribute('aria-label', messages().unavailableAriaLabel(model.label, model.unavailableHint));
     } else if (model.coverageNote) {
       // A `title` alone is mouse-only. A partial-coverage source has to say so
       // to a screen reader too, and it is not "unavailable" — so it gets a
       // plain accessible name, not the unavailable phrasing.
-      chip.setAttribute('aria-label', `${model.label} — ${model.coverageNote}`);
+      chip.setAttribute('aria-label', messages().coverageAriaLabel(model.label, model.coverageNote));
     }
 
     const label = ownerDoc.createElement('span');
