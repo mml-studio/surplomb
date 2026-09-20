@@ -4,7 +4,6 @@ import {
   restorePanelPosition,
 } from '../panelDrag.js';
 import {
-  agree,
   distanceMetres,
   dossierLines,
   dossierSummary,
@@ -48,92 +47,105 @@ import {
  * @module data/comparablesPanel
  */
 
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './comparablesPanel.i18n.js';
+
 export const COMPARABLES_PANEL_ID = 'comparables-panel';
 
-const _fr = new Intl.NumberFormat('fr-FR');
+/** A count, grouped the way the reader's language groups one. */
+const _fr = { format: (value) => formatNumber(value) };
 /** Surfaces keep one decimal, here and on the card — same field, same number. */
-const _surface = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+const _surface = { format: (value) => formatDecimal(value, 1) };
 
 /** How long the destructive button stays armed after the first press, in ms. */
 const CONFIRM_WINDOW_MS = 4000;
 
 /** Dwelling types offered, in the register's own words — DVF says these two. */
+// i18n-ignore-next-line — DVF's own `type_local` values, stored and exported
 const TYPES = Object.freeze(['Appartement', 'Maison', 'Terrain', 'Local']);
 
-const PANEL_MARKUP = `
-  <div class="cmp-head" data-cmp-grip title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
+/**
+ * The static shell, built once per mount.
+ *
+ * A FUNCTION rather than a constant, because the words come from the catalog
+ * and a catalog read while the module loads is the one thing the i18n ratchet
+ * holds at zero. Everything below the shell is written with `textContent`:
+ * every row carries text a user typed, and a listing label is the most
+ * obviously attacker-controlled string in this repository.
+ * @returns {string}
+ */
+function panelMarkup() {
+  const m = messages().shell;
+  return `
+  <div class="cmp-head" data-cmp-grip title="${m.gripTitle}">
     <span class="cmp-grip" aria-hidden="true"></span>
-    <span class="cmp-title">DOSSIER · COMPARABLES</span>
+    <span class="cmp-title">${m.title}</span>
     <span class="cmp-count" data-cmp-count></span>
   </div>
 
   <section class="cmp-block cmp-subject">
-    <div class="cmp-block-head">LE BIEN</div>
-    <p class="cmp-subject-label" data-cmp-subject-label>Aucun bien posé</p>
+    <div class="cmp-block-head">${m.subjectHead}</div>
+    <p class="cmp-subject-label" data-cmp-subject-label>${messages().summary.noSubject}</p>
     <div class="cmp-row">
       <input type="text" class="cmp-input cmp-grow" data-cmp-address
-             placeholder="Adresse du bien…" autocomplete="off" spellcheck="false" />
-      <button type="button" class="cmp-btn" data-cmp-geocode title="Chercher cette adresse (BAN / IGN)">↵</button>
-      <button type="button" class="cmp-btn" data-cmp-here title="Poser le bien au centre de la vue">CENTRE</button>
+             placeholder="${m.addressPlaceholder}" autocomplete="off" spellcheck="false" />
+      <button type="button" class="cmp-btn" data-cmp-geocode title="${m.geocodeTitle}">↵</button>
+      <button type="button" class="cmp-btn" data-cmp-here title="${m.hereTitle}">${m.here}</button>
     </div>
     <div class="cmp-row">
       <input type="text" class="cmp-input cmp-narrow" data-cmp-surface placeholder="m²" inputmode="decimal" />
-      <input type="text" class="cmp-input cmp-narrow" data-cmp-rooms placeholder="pièces" inputmode="numeric" />
+      <input type="text" class="cmp-input cmp-narrow" data-cmp-rooms placeholder="${m.roomsPlaceholder}" inputmode="numeric" />
       <select class="cmp-input cmp-grow" data-cmp-type></select>
     </div>
   </section>
 
   <section class="cmp-block">
-    <div class="cmp-block-head">CE QUE LE DOSSIER DIT</div>
+    <div class="cmp-block-head">${m.linesHead}</div>
     <ul class="cmp-lines" data-cmp-lines></ul>
   </section>
 
   <section class="cmp-block">
-    <div class="cmp-block-head">RETENUS <span class="cmp-sub" data-cmp-retained-count></span></div>
+    <div class="cmp-block-head">${m.retainedHead} <span class="cmp-sub" data-cmp-retained-count></span></div>
     <ul class="cmp-list" data-cmp-retained></ul>
   </section>
 
   <section class="cmp-block">
-    <div class="cmp-block-head">VENTES AUTOUR DU BIEN <span class="cmp-sub" data-cmp-pool-count></span></div>
+    <div class="cmp-block-head">${m.poolHead} <span class="cmp-sub" data-cmp-pool-count></span></div>
     <ul class="cmp-list cmp-pool" data-cmp-pool></ul>
   </section>
 
   <section class="cmp-block">
-    <div class="cmp-block-head">AJOUTER UNE ANNONCE</div>
+    <div class="cmp-block-head">${m.addHead}</div>
     <div class="cmp-row">
       <input type="text" class="cmp-input cmp-grow" data-cmp-new-address
-             placeholder="Adresse de l’annonce…" autocomplete="off" spellcheck="false" />
+             placeholder="${m.newAddressPlaceholder}" autocomplete="off" spellcheck="false" />
     </div>
     <div class="cmp-row">
-      <input type="text" class="cmp-input cmp-narrow" data-cmp-new-price placeholder="prix €" inputmode="decimal" />
+      <input type="text" class="cmp-input cmp-narrow" data-cmp-new-price placeholder="${m.pricePlaceholder}" inputmode="decimal" />
       <input type="text" class="cmp-input cmp-narrow" data-cmp-new-surface placeholder="m²" inputmode="decimal" />
-      <input type="text" class="cmp-input cmp-narrow" data-cmp-new-rooms placeholder="pièces" inputmode="numeric" />
+      <input type="text" class="cmp-input cmp-narrow" data-cmp-new-rooms placeholder="${m.roomsPlaceholder}" inputmode="numeric" />
       <select class="cmp-input cmp-narrow" data-cmp-new-type></select>
     </div>
     <div class="cmp-row">
       <input type="text" class="cmp-input cmp-grow" data-cmp-new-url
-             placeholder="lien de l’annonce (facultatif, jamais consulté)" autocomplete="off" spellcheck="false" />
-      <button type="button" class="cmp-btn cmp-btn-primary" data-cmp-add>AJOUTER</button>
+             placeholder="${m.urlPlaceholder}" autocomplete="off" spellcheck="false" />
+      <button type="button" class="cmp-btn cmp-btn-primary" data-cmp-add>${m.add}</button>
     </div>
     <p class="cmp-status" data-cmp-status role="status" aria-live="polite"></p>
   </section>
 
   <div class="cmp-foot">
-    <button type="button" class="cmp-btn" data-cmp-export>EXPORTER</button>
-    <button type="button" class="cmp-btn" data-cmp-import>IMPORTER</button>
-    <button type="button" class="cmp-btn cmp-btn-danger" data-cmp-clear>VIDER</button>
+    <button type="button" class="cmp-btn" data-cmp-export>${m.export}</button>
+    <button type="button" class="cmp-btn" data-cmp-import>${m.import}</button>
+    <button type="button" class="cmp-btn cmp-btn-danger" data-cmp-clear>${m.clear}</button>
     <input type="file" data-cmp-file accept="application/json,.json" hidden />
   </div>
   <p class="cmp-provenance">
-    Sélection manuelle, comme chez le concurrent. Aucune annonce n’est collectée
-    automatiquement : ce dossier ne contient que ce que vous y mettez, et le lien
-    d’une annonce n’est jamais consulté par l’application.
-    <br />Prix, surfaces et liens ne sont jamais transmis — ils restent dans ce
-    navigateur. Seules sortent l’adresse que vous tapez, envoyée au géocodeur
-    (BAN / IGN) pour devenir des coordonnées, et la position du bien, envoyée à
-    DVF pour lister les ventes autour.
+    ${m.provenance}
+    <br />${m.provenanceOutbound}
   </p>
 `;
+}
 
 /** Whether there is a document to mount into. */
 function canMount() {
@@ -147,7 +159,7 @@ function fillTypes(select, withEmpty = true) {
   select.replaceChildren(...options.map((value) => {
     const option = document.createElement('option');
     option.value = value;
-    option.textContent = value || 'type…';
+    option.textContent = value || messages().shell.typePlaceholder;
     return option;
   }));
 }
@@ -209,7 +221,7 @@ export async function reverseAddress(point, impl = fetch) {
 export function coordinateLabel(point) {
   return Number.isFinite(point?.lat) && Number.isFinite(point?.lon)
     ? `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`
-    : 'position incomplète';
+    : messages().summary.incompletePosition;
 }
 
 /**
@@ -225,8 +237,8 @@ export function mountComparablesPanel(actions = {}) {
   const panel = document.createElement('aside');
   panel.id = COMPARABLES_PANEL_ID;
   panel.className = 'cmp-panel';
-  panel.setAttribute('aria-label', 'Dossier de comparables');
-  panel.innerHTML = PANEL_MARKUP;
+  panel.setAttribute('aria-label', messages().shell.ariaLabel);
+  panel.innerHTML = panelMarkup();
   (document.getElementById('cesiumContainer') || document.body).appendChild(panel);
 
   const node = (selector) => panel.querySelector(selector);
@@ -272,19 +284,21 @@ export function mountComparablesPanel(actions = {}) {
   // ── the property ─────────────────────────────────────────────────────────
   async function poseFromAddress() {
     const query = addressInput?.value ?? '';
-    if (String(query).trim().length < 3) { say('Tapez une adresse à chercher.'); return; }
-    say('Recherche de l’adresse…');
+    const status = messages().status;
+    if (String(query).trim().length < 3) { say(status.typeAddress); return; }
+    say(status.searching);
     const hit = await geocodeAddress(query);
     if (destroyed) return;
-    if (!hit) { say('Adresse introuvable — précisez la commune.'); return; }
+    if (!hit) { say(status.notFound); return; }
     actions.setSubject?.({ lat: hit.lat, lon: hit.lon, label: hit.label });
-    say(`Bien posé sur ${hit.label}.`);
+    say(status.placed(hit.label));
   }
 
   async function poseFromCamera() {
+    const status = messages().status;
     const point = actions.cameraPoint?.();
-    if (!point) { say('La vue ne regarde pas le sol.'); return; }
-    say('Lecture de l’adresse au centre de la vue…');
+    if (!point) { say(status.noGround); return; }
+    say(status.readingCentre);
     const address = await reverseAddress(point);
     if (destroyed) return;
     actions.setSubject?.({
@@ -293,7 +307,7 @@ export function mountComparablesPanel(actions = {}) {
       label: address?.label ?? coordinateLabel(point),
       commune: address?.commune ?? null,
     });
-    say(address?.label ? `Bien posé sur ${address.label}.` : 'Bien posé — aucune adresse à ce point.');
+    say(address?.label ? status.placed(address.label) : status.placedNoAddress);
   }
 
   node('[data-cmp-geocode]')?.addEventListener('click', () => { void poseFromAddress(); });
@@ -303,7 +317,7 @@ export function mountComparablesPanel(actions = {}) {
   });
 
   const pushSubjectField = (field, value) => {
-    if (!dossier.subject) { say('Posez d’abord le bien.'); return; }
+    if (!dossier.subject) { say(messages().status.placeFirst); return; }
     actions.updateSubject?.({ [field]: value });
   };
   surfaceInput?.addEventListener('change', () => pushSubjectField('surface', parseNumber(surfaceInput.value)));
@@ -323,18 +337,19 @@ export function mountComparablesPanel(actions = {}) {
     const url = node('[data-cmp-new-url]')?.value ?? '';
     // A price of 0 or less is not a price. It used to pass the finite check,
     // land in the dossier with a refused ratio, and be announced as retained.
+    const status = messages().status;
     if (!Number.isFinite(price) || price <= 0) {
-      say('Une annonce sans prix n’est pas un comparable.');
+      say(status.noPrice);
       return;
     }
-    if (url.trim() && !safeListingUrl(url)) { say('Lien ignoré — seuls http et https sont acceptés.'); }
+    if (url.trim() && !safeListingUrl(url)) say(status.badLink);
     let position = null;
     adding = true;
     const addButton = node('[data-cmp-add]');
     if (addButton) addButton.disabled = true;
     try {
       if (String(address).trim().length >= 3) {
-        say('Recherche de l’adresse de l’annonce…');
+        say(status.searchingListing);
         position = await geocodeAddress(address);
         if (destroyed) return;
       }
@@ -343,7 +358,7 @@ export function mountComparablesPanel(actions = {}) {
       if (addButton) addButton.disabled = false;
     }
     const added = actions.add?.({
-      kind: 'annonce',
+      kind: 'annonce', // i18n-ignore-line — a stored kind key, not a word
       label: position?.label ?? address,
       lat: position?.lat ?? null,
       lon: position?.lon ?? null,
@@ -356,15 +371,13 @@ export function mountComparablesPanel(actions = {}) {
       // vouch for. A portal's own publication date is not on this screen.
       date: new Date().toISOString().slice(0, 10),
     });
-    if (!added) { say('Annonce refusée — il faut au moins un prix et une adresse.'); return; }
+    if (!added) { say(status.refused); return; }
     for (const selector of ['[data-cmp-new-address]', '[data-cmp-new-price]',
       '[data-cmp-new-surface]', '[data-cmp-new-rooms]', '[data-cmp-new-url]']) {
       const field = node(selector);
       if (field) field.value = '';
     }
-    say(position
-      ? 'Annonce retenue et placée.'
-      : 'Annonce retenue — sans adresse trouvée, elle compte mais ne se trace pas.');
+    say(position ? status.listingPlaced : status.listingUnplaced);
   }
   node('[data-cmp-add]')?.addEventListener('click', () => { void addListing(); });
 
@@ -377,9 +390,9 @@ export function mountComparablesPanel(actions = {}) {
       link.download = `comparables-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-      say('Dossier exporté.');
+      say(messages().status.exported);
     } catch {
-      say('Export impossible dans ce navigateur.');
+      say(messages().status.exportFailed);
     }
   });
 
@@ -390,7 +403,8 @@ export function mountComparablesPanel(actions = {}) {
     const result = importDossierJson(await file.text());
     fileInput.value = '';
     if (destroyed) return;
-    if (!result.dossier) { say('Fichier illisible — un export JSON est attendu.'); return; }
+    const status = messages().status;
+    if (!result.dossier) { say(status.unreadable); return; }
     // MERGE, never replace. An import that emptied a dossier would be the one
     // irreversible action in this panel, and it would look like a success.
     const merged = mergeComparables(dossier, result.dossier.comparables);
@@ -398,33 +412,35 @@ export function mountComparablesPanel(actions = {}) {
       ...merged.dossier,
       subject: dossier.subject ?? result.dossier.subject ?? null,
     });
-    say(`${merged.added} comparables ajoutés`
-      + (result.rejected ? `, ${result.rejected} lignes refusées` : '')
-      + (merged.added < result.kept ? `, ${result.kept - merged.added} déjà présents` : '')
-      + '.');
+    say(status.imported(
+      merged.added,
+      result.rejected ? status.importedRejected(result.rejected) : '',
+      merged.added < result.kept ? status.importedAlready(result.kept - merged.added) : '',
+    ));
   });
 
   clearButton?.addEventListener('click', () => {
+    const m = messages();
     const now = Date.now();
     if (now - clearArmedAt > CONFIRM_WINDOW_MS) {
       // Two presses, no modal. The globe is behind this panel and a blocking
       // dialog over it is a worse interruption than a button that waits.
       clearArmedAt = now;
-      clearButton.textContent = 'CONFIRMER ?';
+      clearButton.textContent = m.shell.confirm;
       clearButton.classList.add('is-armed');
       setTimeout(() => {
         if (destroyed || Date.now() - clearArmedAt < CONFIRM_WINDOW_MS) return;
-        clearButton.textContent = 'VIDER';
+        clearButton.textContent = m.shell.clear;
         clearButton.classList.remove('is-armed');
       }, CONFIRM_WINDOW_MS + 50);
-      say('Appuyez à nouveau pour vider le dossier.');
+      say(m.status.clearArmed);
       return;
     }
     clearArmedAt = 0;
-    clearButton.textContent = 'VIDER';
+    clearButton.textContent = m.shell.clear;
     clearButton.classList.remove('is-armed');
     actions.replace?.(emptyDossier());
-    say('Dossier vidé.');
+    say(m.status.cleared);
   });
 
   // ── rows ─────────────────────────────────────────────────────────────────
@@ -442,12 +458,14 @@ export function mountComparablesPanel(actions = {}) {
    * @returns {string}
    */
   function rowMeta(entry, distanceM) {
+    const m = messages().row;
     return [
       Number.isFinite(entry.prixM2)
-        ? `${_fr.format(entry.prixM2)} €/m²`
-        : `pas de €/m²${entry.ratioRefused === 'lots' ? ' — lot multiple' : ''}`,
+        ? m.prixM2(_fr.format(entry.prixM2))
+        // i18n-ignore-next-line — `lots` is a stored refusal key, not a word
+        : m.noRatio(entry.ratioRefused === 'lots' ? m.multiLot : ''),
       Number.isFinite(entry.surface) ? `${_surface.format(entry.surface)} m²` : null,
-      Number.isFinite(entry.rooms) ? `${entry.rooms} ${agree(entry.rooms, 'pièce')}` : null,
+      Number.isFinite(entry.rooms) ? m.rooms(entry.rooms, entry.rooms) : null,
       Number.isFinite(distanceM) ? `${_fr.format(distanceM)} m` : null,
       frenchDate(entry.date),
     ].filter(Boolean).join(' — ');
@@ -461,13 +479,15 @@ export function mountComparablesPanel(actions = {}) {
    * pair here has to be able to read the map without coming back.
    */
   function retainedRow(entry) {
+    const m = messages().row;
     const item = document.createElement('li');
     item.className = `cmp-item cmp-item-${entry.kind}`
       + (entry.retained === false ? ' is-out' : '');
 
     const badge = document.createElement('span');
     badge.className = 'cmp-badge';
-    badge.textContent = entry.kind === 'vente' ? 'VENTE' : 'ANNONCE';
+    // i18n-ignore-next-line — `vente` is a stored kind key, not a word
+    badge.textContent = entry.kind === 'vente' ? m.badgeSale : m.badgeListing;
     item.appendChild(badge);
 
     const body = document.createElement('div');
@@ -476,7 +496,7 @@ export function mountComparablesPanel(actions = {}) {
     title.type = 'button';
     title.className = 'cmp-item-title';
     title.textContent = entry.label;
-    title.title = 'Voler jusqu’à ce comparable';
+    title.title = m.flyTo;
     title.addEventListener('click', () => actions.lookAt?.(entry));
     body.appendChild(title);
 
@@ -491,7 +511,7 @@ export function mountComparablesPanel(actions = {}) {
       link.href = entry.url;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.textContent = entry.portal ? `voir sur ${entry.portal}` : 'voir l’annonce';
+      link.textContent = entry.portal ? m.seeOn(entry.portal) : m.seeListing;
       body.appendChild(link);
     }
     item.appendChild(body);
@@ -500,9 +520,7 @@ export function mountComparablesPanel(actions = {}) {
     keep.type = 'button';
     keep.className = 'cmp-icon-btn';
     keep.textContent = entry.retained === false ? '○' : '◉';
-    keep.title = entry.retained === false
-      ? 'Remettre ce comparable dans le calcul'
-      : 'Sortir ce comparable du calcul, sans le supprimer';
+    keep.title = entry.retained === false ? m.putBack : m.takeOut;
     keep.addEventListener('click', () => actions.toggle?.(entry.id));
     item.appendChild(keep);
 
@@ -510,7 +528,7 @@ export function mountComparablesPanel(actions = {}) {
     drop.type = 'button';
     drop.className = 'cmp-icon-btn cmp-icon-danger';
     drop.textContent = '✕';
-    drop.title = 'Retirer du dossier';
+    drop.title = m.remove;
     drop.addEventListener('click', () => actions.remove?.(entry.id));
     item.appendChild(drop);
 
@@ -519,6 +537,7 @@ export function mountComparablesPanel(actions = {}) {
 
   /** One DVF sale on offer, as a row with a single verb. */
   function poolRow(entry) {
+    const m = messages().row;
     const item = document.createElement('li');
     item.className = 'cmp-item cmp-item-pool';
 
@@ -539,7 +558,7 @@ export function mountComparablesPanel(actions = {}) {
     take.className = 'cmp-icon-btn';
     take.textContent = entry.already ? '✓' : '+';
     take.disabled = Boolean(entry.already);
-    take.title = entry.already ? 'Déjà dans le dossier' : 'Retenir cette vente comme comparable';
+    take.title = entry.already ? m.already : m.take;
     take.addEventListener('click', () => actions.add?.(entry));
     item.appendChild(take);
     return item;
@@ -553,11 +572,12 @@ export function mountComparablesPanel(actions = {}) {
   }
 
   function renderDossier() {
+    const m = messages().summary;
     const summary = dossierSummary(dossier);
     if (subjectLabel) {
       subjectLabel.textContent = summary.subject
         ? (summary.subject.label || coordinateLabel(summary.subject))
-        : 'Aucun bien posé';
+        : m.noSubject;
       subjectLabel.classList.toggle('is-empty', !summary.subject);
     }
     // Fields are only overwritten when the reader is not typing in them.
@@ -576,29 +596,30 @@ export function mountComparablesPanel(actions = {}) {
     retainedList?.replaceChildren(...rows.map(retainedRow));
     if (retainedCount) {
       retainedCount.textContent = rows.length
-        ? `${summary.retained}/${summary.total} dans le calcul`
-        : 'aucun';
+        ? m.inCalculation(summary.retained, summary.total)
+        : m.none;
     }
     if (countBadge) {
       countBadge.textContent = summary.estimate
-        ? `${Math.round(summary.estimate.mid / 1000)} k€ médian`
-        : `${summary.retained} retenus`;
+        ? m.medianK(Math.round(summary.estimate.mid / 1000))
+        : m.retained(summary.retained);
     }
   }
 
   function renderPool() {
     if (!poolList) return;
+    const m = messages().summary;
     poolList.replaceChildren(...pool.list.map(poolRow));
     if (!poolCount) return;
     if (pool.missing) {
-      poolCount.textContent = 'DVF muet';
+      poolCount.textContent = m.dvfSilent;
     } else if (!pool.list.length) {
-      poolCount.textContent = `aucune dans ${pool.radiusM} m`;
+      poolCount.textContent = m.noneWithin(pool.radiusM);
     } else {
       // A5: the count shown, the count found, and the criterion that chose.
       poolCount.textContent = pool.total > pool.list.length
-        ? `${pool.list.length} des ${pool.total} plus proches, dans ${pool.radiusM} m`
-        : `${pool.list.length} dans ${pool.radiusM} m`;
+        ? m.nearest(pool.list.length, pool.total, pool.radiusM)
+        : m.within(pool.list.length, pool.radiusM);
     }
   }
 
@@ -628,7 +649,7 @@ export function mountComparablesPanel(actions = {}) {
     setDossier(next, { saved = true } = {}) {
       dossier = next ?? emptyDossier();
       renderDossier();
-      if (!saved) say('Le navigateur refuse d’enregistrer — le dossier ne survivra pas au rechargement.');
+      if (!saved) say(messages().status.notSaved);
     },
     /** @param {{list: Array<object>, total: number, missing: boolean, radiusM: number}} next */
     setCandidates(next) {
