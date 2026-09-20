@@ -33,6 +33,7 @@ import {
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
 import { pickAt } from './pickAt.js';
+import messages from './localGeojson.i18n.js';
 
 const DEFAULT_LABEL_MAX = 900;
 const DEFAULT_LABEL_GRID_PX = 132;
@@ -2779,9 +2780,6 @@ function clampCardLine(value) {
 }
 
 function layerTitle(layerId) {
-  if (layerId === 'local-datacenters') return 'Datacenter';
-  if (layerId === 'local-dams') return 'Barrage';
-  if (layerId === 'local-ports') return 'Port';
-  if (layerId === 'local-airports') return 'Aérodrome';
-  return 'Feature';
+  const titles = messages().namelessTitle;
+  return titles[layerId] ?? titles.fallback;
 }

@@ -42,6 +42,7 @@ import {
 import { pickAt } from './pickAt.js';
 import { formatNumber } from '../i18n/format.js';
 import messages from './filosofiCarreaux.i18n.js';
+import { serverFailureMessage, serverMessage } from '../i18n/serverMessages.js';
 
 /**
  * Carroyage INSEE — the demand side of a location, drawn as ground you can
@@ -720,7 +721,9 @@ async function loadTerritories(level) {
     const [payload, anchors] = await Promise.all([
       fetch(`/api/filosofi/territoires?level=${level}`, { signal })
         .then(async (response) => {
-          if (!response.ok) throw new Error(`territoires HTTP ${response.status}`);
+          if (!response.ok) {
+            throw new Error(await serverFailureMessage(response, { fallback: `territoires HTTP ${response.status}` }));
+          }
           const body = await response.json();
           if (!Array.isArray(body?.territories)) throw new Error(messages().error.territories);
           return body;
@@ -839,10 +842,12 @@ async function load() {
       resolution: String(resolution),
     });
     const response = await fetch(`/api/filosofi/carreaux?${query}`, { signal });
-    if (!response.ok) throw new Error(`carroyage HTTP ${response.status}`);
+    if (!response.ok) {
+      throw new Error(await serverFailureMessage(response, { fallback: `carroyage HTTP ${response.status}` }));
+    }
     const payload = await response.json();
     if (signal.aborted) return false;
-    if (!payload || payload.error) throw new Error(payload?.error || messages().error.cells);
+    if (!payload || payload.error) throw new Error(serverMessage(payload, { fallback: messages().error.cells }));
 
     const { records, coldGround } = buildRecords(payload.cells || [], resolution);
     drawRecords(records);

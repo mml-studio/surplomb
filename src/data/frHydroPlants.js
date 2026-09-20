@@ -1338,9 +1338,11 @@ export function createFrHydroPlantsLayer({
 
   const layer = {
     id: FR_HYDRO_LAYER_ID,
+    // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
     name: 'Centrales hydro',
     icon: '≈',
     source: 'ODRÉ + OSM',
+    // i18n-ignore-end
     // The register is a shipped file and never changes between page loads.
     // A finite interval exists only so a first load that failed heals itself.
     updateInterval: 1_800_000,

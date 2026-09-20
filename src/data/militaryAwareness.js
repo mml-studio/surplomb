@@ -464,7 +464,7 @@ function evaluateSubject(subject, sourceStates = collectSourceStates()) {
         id: 'military-installations',
         label: m.cohorts.installations,
         source: installationsState.stats.source || SOURCE_LABEL['military-installations'],
-        coverage: 'CURRENT VIEWPORT ONLY',
+        coverage: m.installationCoverage,
         summary: summarizeInstallationViewport(installations, installationsState),
       },
     ],

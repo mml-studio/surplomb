@@ -332,6 +332,7 @@ import {
 import { formatNumber, formatPercent } from '../i18n/format.js';
 import messages from './sitadelFrance.i18n.js';
 import { pickAt } from './pickAt.js';
+import { serverFailureMessage } from '../i18n/serverMessages.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const SITADEL_FR_LAYER_ID = 'sitadel-fr';
@@ -1706,7 +1707,7 @@ async function load({ force = false } = {}) {
     const params = new URLSearchParams({ lat: focus.lat.toFixed(6), lon: focus.lon.toFixed(6) });
     if (_payload?.insee && !force) params.set('have', String(_payload.insee));
     const response = await fetchImpl(`${SITADEL_COMMUNE_URL}?${params}`, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await serverFailureMessage(response));
     const body = await response.json();
     if (controller.signal.aborted || !_enabled) return false;
 
@@ -1996,6 +1997,7 @@ function publishByParcel() {
 
 const sitadelFranceLayer = {
   id: SITADEL_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Autorisations d’urbanisme (Sitadel)',
   // 🏗 and not 🏠/🏢: the BÂTI & TERRITOIRE neighbours are € (DVF), ▤ (DPE and
   // GPU), ▦ (bâti 3D and cadastre), 🎓 (écoles) and 🏛 (enseignement
@@ -2003,6 +2005,7 @@ const sitadelFranceLayer = {
   // yet", which is the entire distinction between this layer and its siblings.
   icon: '🏗',
   source: SITADEL_SOURCE,
+  // i18n-ignore-end
   updateInterval: UPDATE_INTERVAL_MS,
 
   init(viewer) {

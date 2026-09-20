@@ -8,6 +8,26 @@
  * set — « Enseignement » and « Enseignement supérieur » only read as a pair
  * when they are written side by side. Sixty modules cannot hold that.
  *
+ * WHY EVERY LAYER MODULE STILL CARRIES A FRENCH `name` AND `source`, UNDER AN
+ * `i18n-ignore` THAT POINTS HERE. The thirty-odd modules each open with
+ * `{ id, name, icon, source, … }`, in French, and none of those three strings
+ * is what the panel prints:
+ *
+ *   - `name` is the GENERATOR'S INPUT. `npm run layers:manifest` derives
+ *     `layerManifest.js`, `DATA_SOURCES.md` and the README's table from the
+ *     modules, and the manifest is what the taxonomy is cross-checked against
+ *     (`layerTaxonomy.test.mjs`). Translating it would move a build artifact,
+ *     not a label.
+ *   - `source` is that, plus the string the drift test below compares each
+ *     `sources` entry to, byte for byte.
+ *   - both are the panel's FALLBACK, for a layer with no taxonomy row at all —
+ *     a plugged dataset, a layer mid-registration. `manager.js` reads
+ *     `layer.sourceLabel || layer.source`.
+ *
+ * So they are data with a job, not copy, and the marker in each module says so
+ * in one line and points at this paragraph. Thirty different explanations of
+ * one decision is how a decision stops being one.
+ *
  * `sources` is deliberately PARTIAL. A source line is mostly publisher names,
  * which stay as published in both languages (`OpenSky Network`, `Bison Futé /
  * DIR (DATEX II)`, `INSEE Filosofi (Géoplateforme)`); only the lines that carry
@@ -202,9 +222,27 @@ export default defineMessages({
       fr: 'Taux de couverture — Cnaf',
       en: 'Coverage rate — Cnaf',
     },
+    'schools-fr': {
+      fr: 'Annuaire de l’éducation — MENJ',
+      en: 'Education directory — MENJ',
+      note: 'The ministry’s own dataset title, put into English like ADEME’s observatory above.',
+    },
+    'sup-fr': {
+      fr: 'Effectifs d’étudiants inscrits — MESR',
+      en: 'Enrolled student numbers — MESR',
+    },
     'sitadel-fr': {
       fr: 'Sitadel — permis de construire et de démolir, SDES/CGDD · parcelles cadastrales Etalab (DGFiP)',
       en: 'Sitadel — building and demolition permits, SDES/CGDD · Etalab cadastral parcels (DGFiP)',
+    },
+    'urbanisme-gpu': {
+      fr: 'Géoportail de l\'urbanisme — IGN',
+      en: 'Géoportail de l\'urbanisme — IGN',
+      note: 'One publisher and one service, both proper nouns: the line is already '
+        + 'English. Listed anyway so the panel has an answer of its own rather than '
+        + 'falling through to the module, and so the day a word is added here it has '
+        + 'somewhere to go. The straight apostrophe is the module’s; the detector reads '
+        + 'either (src/i18n/frenchDetector.js).',
     },
   },
 });

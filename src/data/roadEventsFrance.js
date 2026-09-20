@@ -944,9 +944,11 @@ export function createRoadEventsFranceLayer({
 
   const layer = {
     id: ROAD_EVENTS_FR_LAYER_ID,
+    // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
     name: 'Événements routiers (FR)',
     icon: '⚠',
     source: 'Bison Futé / DIR (DATEX II)',
+    // i18n-ignore-end
     updateInterval: UPDATE_INTERVAL_MS,
 
     init(viewer) {

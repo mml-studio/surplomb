@@ -1240,9 +1240,11 @@ function applyMapStack(activeId) {
 /** Bâti 3D (FR) layer. @type {Object} */
 const bdtopoBuildingsLayer = {
   id: BDTOPO_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Bâti 3D (FR)',
   icon: '▤',
   source: 'IGN BD TOPO (Géoplateforme)',
+  // i18n-ignore-end
   updateInterval: UPDATE_INTERVAL_MS,
 
   init(viewer) {

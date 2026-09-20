@@ -109,6 +109,7 @@ import messages from './veloPulse.i18n.js';
 
 /** Layer id — share-link registry key and voice-tool enum value. */
 export const PULSE_LAYER_ID = 'velo-pulse-fr';
+// i18n-ignore-next-line — registry field, not copy: see src/data/layerTaxonomy.i18n.js.
 export const PULSE_LAYER_NAME = 'Pouls vélo';
 export const PULSE_SELECTED_OVERLAY_SOURCE_ID = 'velo-pulse-fr-selected';
 export const PULSE_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({

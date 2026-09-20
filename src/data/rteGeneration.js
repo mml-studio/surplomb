@@ -1056,9 +1056,11 @@ function buildLoadingLabel() {
 /** Groupes de prod (FR) layer. @type {Object} */
 const rteGenerationLayer = {
   id: RTE_GEN_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Groupes de prod (FR)',
   icon: '☢',
   source: 'RTE · ODRÉ · EDF · OpenStreetMap',
+  // i18n-ignore-end
   updateInterval: UPDATE_INTERVAL_MS,
 
   init(viewer) {

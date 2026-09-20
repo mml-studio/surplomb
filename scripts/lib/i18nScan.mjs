@@ -10,8 +10,10 @@
  *   R1  French string literals outside catalogs. Every string or template
  *       literal that src/i18n/frenchDetector.js reads as French (words,
  *       elisions, accents — not number typography, which source code is full
- *       of). Not counted: catalogs (`*.i18n.js`) and src/i18n itself, property
- *       keys, import specifiers, directives, arguments of `console.*`.
+ *       of). Not counted: catalogs (`*.i18n.js`), src/i18n itself and the
+ *       French-by-decision landing page (src/vitrine), property keys, import
+ *       specifiers, directives, arguments of `console.*`, and addresses —
+ *       URLs, data URIs and asset paths, which carry words by accident.
  *   R2  Literals written straight into the interface, in any language: the
  *       right-hand side of `el.textContent = …` (and `innerHTML`, `title`,
  *       `placeholder`, `alt`, `ariaLabel`…), `setAttribute('aria-label' |
@@ -20,7 +22,8 @@
  *       `blurb`, `text`, `description`, `*Label`…) — the shape every layer's
  *       rows, chips and legends take. Through `?:`, `||`, `+` and template
  *       expressions; not through function calls. A literal with no word in it
- *       (`'—'`, `'MW'`, `'<div class="x">'`) is not counted.
+ *       (`'—'`, `'MW'`, `'<div class="x">'`), an address, or a list of CSS
+ *       class tokens (`'has-glyph'`) is not counted.
  *   R3  Text in `index.html` whose element has no `data-i18n`, and `title`,
  *       `aria-label`, `placeholder`, `alt` attributes without their
  *       `data-i18n-*`. `translate="no"` and icon ligatures are exempt, and so
@@ -41,6 +44,11 @@
  *     'Appartement', // i18n-ignore-line
  *     // i18n-ignore-next-line
  *     // i18n-ignore-start … // i18n-ignore-end
+ *
+ * A marker names a STATEMENT: the reason it carries may wrap onto a second
+ * comment line, and the declaration it points at may wrap onto a third. It
+ * never reaches into a function body — write the extent out with
+ * `i18n-ignore-start`/`end` when that is what you mean.
  *
  * Parsing is `rollup/parseAst` (SWC, already installed through Vite): ~430
  * modules in about a second.
@@ -88,19 +96,35 @@ export function listSourceFiles(root = REPO_ROOT) {
 
 export const isCatalogFile = (file) => /\.i18n\.js$/.test(file);
 export const isI18nInfrastructure = (file) => file.startsWith('src/i18n/');
+/**
+ * The landing page at `/`, which is French BY DECISION and not by debt.
+ *
+ * `src/vitrine/` draws the showcase; an English landing is explicitly out of
+ * scope (plan decision D2, the same one that exempts `<head>` and `#vitrine`
+ * from R3). Its French headline, its « Reprendre » button and its
+ * `Intl.NumberFormat('fr-FR')` counters are correct copy for a page written
+ * in one language, and counting them would leave the ratchet with a floor it
+ * can never reach — measuring the globe is the point. R5 still applies: a
+ * message read at module load is a bug in any language.
+ */
+export const isLandingPage = (file) => file.startsWith('src/vitrine/');
 
 /** Which rules look at a file. */
 export function rulesFor(file) {
   const infra = isI18nInfrastructure(file);
+  const landing = isLandingPage(file);
   return {
-    R1: !infra && !isCatalogFile(file),
-    R2: !infra && !isCatalogFile(file),
-    R4: !infra,
+    R1: !infra && !landing && !isCatalogFile(file),
+    R2: !infra && !landing && !isCatalogFile(file),
+    R4: !infra && !landing,
     R5: true,
   };
 }
 
 // ── Escape hatch ─────────────────────────────────────────────────────────────
+
+/** A line that carries no code: blank, or nothing but a comment. */
+const COMMENT_ONLY = /^\s*(?:\/\/|\/\*|\*)/;
 
 /** 1-based line numbers the escape-hatch comments exempt. */
 export function ignoredLines(source) {
@@ -113,7 +137,16 @@ export function ignoredLines(source) {
     if (inBlock) ignored.add(n);
     if (/i18n-ignore-end/.test(line)) inBlock = false;
     if (/i18n-ignore-line/.test(line)) ignored.add(n);
-    if (/i18n-ignore-next-line/.test(line)) ignored.add(n + 1);
+    if (/i18n-ignore-next-line/.test(line)) {
+      // The NEXT LINE OF CODE, not the next physical line: the hatch asks for
+      // a reason, a reason wraps, and a two-line comment used to aim the
+      // exemption at its own second line. `src/data/anfrFrance.js` spent a
+      // whole wave with a French literal counted under an ignore that read as
+      // if it covered it.
+      let target = n + 1;
+      while (target <= lines.length && COMMENT_ONLY.test(lines[target - 1])) target += 1;
+      ignored.add(target);
+    }
   });
   return ignored;
 }
@@ -147,10 +180,35 @@ function literalText(node) {
   return null;
 }
 
+/**
+ * Where something LIVES, not what it says: a URL, a data URI, a path, a hash.
+ *
+ * Addresses carry words by accident — `https://overpass-api.de/api/interpreter`
+ * ends in the French `de`, `/landing/view-02-480-h264.1ce878e0.mp4` contains
+ * `ce` — and no reader ever reads one. Nothing translates an address, so no
+ * rule counts one.
+ */
+export const isResourceLocator = (text) => /^\s*(?:https?:|data:|mailto:|blob:|\.{0,2}\/|#[\w-]*$)/.test(text);
+
+/**
+ * CSS class tokens — `has-glyph`, `data-icon selected`.
+ *
+ * A layer row's markup interpolates class names into its `innerHTML`, which
+ * puts them on the R2 sink beside the words. Kebab or snake case with no
+ * capital and no sentence is an identifier the stylesheet reads, not copy;
+ * one lowercase word on its own (`erreur`) is NOT covered, so nothing hides
+ * behind this.
+ */
+const CSS_TOKEN = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+$/;
+export const isCssClassList = (text) => {
+  const tokens = String(text).trim().split(/\s+/);
+  return tokens.length > 0 && tokens.every((token) => CSS_TOKEN.test(token));
+};
+
 /** Does this literal carry a word a reader would read? */
 export function hasInterfaceText(text) {
   if (typeof text !== 'string') return false;
-  if (/^\s*(?:https?:|data:|mailto:|blob:|\.{0,2}\/|#[\w-]*$)/.test(text)) return false;
+  if (isResourceLocator(text) || isCssClassList(text)) return false;
   const visible = text.replace(/<[^>]*>/g, ' ').replace(/&[#\w]+;/g, ' ');
   const words = visible.match(/\p{L}{2,}/gu);
   if (!words) return false;
@@ -224,6 +282,33 @@ function sinkLiterals(node, out = []) {
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
 /**
+ * The statements an `i18n-ignore` marker reaches over when they wrap.
+ *
+ * A marker names a THING, and a thing written over four lines is still one
+ * thing. `src/data/anfrFrance.js` spent a wave with its French elision counted
+ * because the declaration the comment pointed at put its literal on the third
+ * line. Only leaf statements are reached over, and only when they hold no
+ * function: a marker must never swallow a body someone will write English into
+ * later — that is what `i18n-ignore-start`/`end` is for, where the extent is
+ * typed out and visible.
+ */
+const REACHABLE_STATEMENTS = new Set(['VariableDeclaration', 'ExpressionStatement',
+  'ReturnStatement', 'ThrowStatement', 'Property']);
+
+function containsFunction(node) {
+  if (!node || typeof node.type !== 'string') return false;
+  if (FUNCTION_TYPES.has(node.type)) return true;
+  for (const key of Object.keys(node)) {
+    if (key === 'start' || key === 'end' || key === 'type') continue;
+    const value = node[key];
+    if (Array.isArray(value)) {
+      for (const child of value) if (containsFunction(child)) return true;
+    } else if (containsFunction(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Count R1, R2, R4 and R5 in one module.
  *
  * @param {string} source
@@ -285,6 +370,15 @@ export function scanModule(source, { file = '', rules = file ? rulesFor(file) : 
 
   const visit = (node, depth, parent) => {
     if (!node || typeof node.type !== 'string') return;
+    // A marked statement covers the lines it wraps onto. Done on the way IN,
+    // so every literal underneath reads the widened set.
+    if (REACHABLE_STATEMENTS.has(node.type)) {
+      const from = lineOf(node.start);
+      const to = lineOf(node.end);
+      if (to > from && ignored.has(from) && !containsFunction(node)) {
+        for (let line = from + 1; line <= to; line += 1) ignored.add(line);
+      }
+    }
     let childDepth = depth;
     switch (node.type) {
       case 'ImportDeclaration':
@@ -378,6 +472,7 @@ export function scanModule(source, { file = '', rules = file ? rulesFor(file) : 
       if (notText.has(node) || isIgnored(node)) return;
       const text = literalText(node);
       if (text === null) return;
+      if (isResourceLocator(text)) return;
       if (rules.R1 && looksFrench(text, { formatting: false })) record('R1', node, text);
       if (rules.R2 && onScreen.has(node) && hasInterfaceText(text)) record('R2', node, text);
     }

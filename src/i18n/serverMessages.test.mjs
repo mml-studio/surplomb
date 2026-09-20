@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { serverMessage } from './serverMessages.js';
+import { serverFailureMessage, serverMessage } from './serverMessages.js';
 import { defineMessages } from './messages.js';
 import serverMessages from './serverMessages.i18n.js';
 import { useTestLocale } from './testing.js';
@@ -64,4 +64,46 @@ test('the shipped catalog carries the codes the server actually sends', (t) => {
   // Every key is a code some route really sends; `serverMessages.i18n.js`
   // says which, and why the rest of the server's ~250 errors have none.
   assert.ok(Object.keys(serverMessages.definition).length >= 20);
+});
+
+test('a failed response is read for its code before its status is quoted', async (t) => {
+  const failed = (body, status = 503) => ({
+    ok: false,
+    status,
+    json: async () => body,
+  });
+  assert.equal(
+    await serverFailureMessage(failed({ code: 'filosofi-grid-unavailable', error: 'x' })),
+    'Le carroyage INSEE est temporairement indisponible',
+  );
+  useTestLocale('en', t);
+  assert.equal(
+    await serverFailureMessage(failed({ code: 'filosofi-grid-unavailable', error: 'x' })),
+    'The INSEE income grid is temporarily unavailable',
+  );
+  assert.equal(
+    await serverFailureMessage(failed({ code: 'peb-copy-stale', params: { days: 12 } })),
+    'The local copy of the PEB order register is 12 days old, and the source is not answering.',
+  );
+});
+
+test('a failed response with nothing to read still says what happened', async () => {
+  // The two shapes every outage test in this repository uses: a double with
+  // no `json` at all, and a body that is not JSON. Both keep the HTTP line
+  // these call sites printed before they were wired.
+  assert.equal(await serverFailureMessage({ ok: false, status: 503 }), 'HTTP 503');
+  assert.equal(
+    await serverFailureMessage({ ok: false, status: 502, json: async () => { throw new Error('not json'); } }),
+    'HTTP 502',
+  );
+  assert.equal(
+    await serverFailureMessage({ ok: false, status: 500 }, { fallback: 'carroyage HTTP 500' }),
+    'carroyage HTTP 500',
+  );
+  assert.equal(await serverFailureMessage(null), 'HTTP ???');
+  // An uncatalogued code still shows the server's own words.
+  assert.equal(
+    await serverFailureMessage({ ok: false, status: 429, json: async () => ({ error: 'Trop de demandes' }) }),
+    'Trop de demandes',
+  );
 });

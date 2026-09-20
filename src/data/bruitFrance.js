@@ -1794,9 +1794,11 @@ export function summarizeBruit(payload) {
 
 const bruitScanLayer = createAddressScanLayer({
   id: BRUIT_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Bruit des aéroports (PEB/PGS)',
   icon: '🔊',
   source: BRUIT_SOURCE,
+  // i18n-ignore-end
   endpoint: BRUIT_FR_ENDPOINT,
   updateInterval: UPDATE_INTERVAL_MS,
   // The OVERVIEW ceiling, not the point one. Below `ADDRESS_SCAN_CEILING_M`

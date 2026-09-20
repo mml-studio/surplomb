@@ -67,16 +67,20 @@ test('a département the bulletin skipped says so, and is never green', () => {
   assertNoFrench([VIGILANCE_UNKNOWN_LEVEL.label, VIGILANCE_UNKNOWN_LEVEL.meaning]);
 });
 
-test('the French phenomenon table has not drifted from the feed’s own', () => {
-  // The feed owns the nine names and is not bilingual yet; this table carries
-  // its French beside the English so the day the feed moves, a test fails.
-  for (const [id, name] of Object.entries(VIGILANCE_PHENOMENA)) {
-    assert.equal(VIGILANCE_PHENOMENON_NAMES('fr')[id], name, `phenomenon ${id} drifted`);
-  }
-  assert.equal(
-    Object.keys(VIGILANCE_PHENOMENON_NAMES.definition).length,
-    Object.keys(VIGILANCE_PHENOMENA).length,
+test('the feed is the source: every phenomenon it publishes has an English', () => {
+  // Not a drift test any more — the French IS the feed's, read from it, so
+  // there is nothing left to drift. What can still go wrong is a name the
+  // spec adds or renumbers and nobody translates, so that is what is checked.
+  assert.deepEqual(
+    Object.keys(VIGILANCE_PHENOMENON_NAMES.definition),
+    Object.keys(VIGILANCE_PHENOMENA),
   );
+  for (const [id, name] of Object.entries(VIGILANCE_PHENOMENA)) {
+    assert.equal(VIGILANCE_PHENOMENON_NAMES('fr')[id], name, `phenomenon ${id} is not the feed’s`);
+    const english = VIGILANCE_PHENOMENON_NAMES('en')[id];
+    assert.ok(english && typeof english === 'string', `phenomenon ${id} has no English`);
+  }
+  // Which English, and that it says the same thing, is pinned above.
 });
 
 test('French is untouched', () => {

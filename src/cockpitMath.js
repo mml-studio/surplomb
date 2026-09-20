@@ -1,3 +1,5 @@
+import messages from './cockpitMath.i18n.js';
+
 /** Normalize a heading into the [0, 360) range. */
 export function normalizeHeading(value) {
   if (!Number.isFinite(value)) return 0;
@@ -65,21 +67,23 @@ export function cockpitAltitudeDisplayFt(altitudeM, onGround) {
   return Number.isFinite(altitudeM) ? altitudeM * 3.28084 : null;
 }
 
+/** Nothing to show, in either language: the readout says so rather than guessing. */
+const UNKNOWN = '—';
+
 /** Format the cockpit Context scope without overstating installation coverage. */
 export function formatCockpitContextScope(subjectLabel, radiusM, installationCoverage = null) {
+  const m = messages();
   const normalizedLabel = typeof subjectLabel === 'string'
-    ? subjectLabel.trim() || '—'
-    : Number.isFinite(subjectLabel) ? String(subjectLabel) : '—';
+    ? subjectLabel.trim() || UNKNOWN
+    : Number.isFinite(subjectLabel) ? String(subjectLabel) : UNKNOWN;
   const radiusKm = Number.isFinite(radiusM) && radiusM >= 0
     ? String(Math.round(radiusM / 1000))
-    : '—';
+    : UNKNOWN;
   const coverage = typeof installationCoverage === 'string'
     ? installationCoverage.trim()
     : '';
-  const base = `${normalizedLabel} · ${radiusKm} KM AIR/SEA WINDOW`;
-  return coverage
-    ? `${base} · INSTALLATIONS ${coverage}`
-    : base;
+  const base = m.contextScope(normalizedLabel, radiusKm);
+  return coverage ? m.contextScopeInstallations(base, coverage) : base;
 }
 
 /** Return seven 30-degree compass divisions centered on a heading. */

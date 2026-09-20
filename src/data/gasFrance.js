@@ -946,9 +946,11 @@ function buildLoadingLabel() {
 /** Réseau gaz (FR) layer. @type {Object} */
 const gasFranceLayer = {
   id: GAS_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Réseau gaz (FR)',
   icon: '⬡',
   source: 'NaTran / Teréga / ODRÉ',
+  // i18n-ignore-end
   updateInterval: UPDATE_INTERVAL_MS,
 
   init(viewer) {

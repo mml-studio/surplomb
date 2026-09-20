@@ -91,6 +91,7 @@ import {
 import { pickAt } from './pickAt.js';
 import { formatDecimal, formatNumber } from '../i18n/format.js';
 import messages from './petiteEnfanceFrance.i18n.js';
+import { serverFailureMessage } from '../i18n/serverMessages.js';
 
 export const PE_FR_LAYER_ID = 'petite-enfance-fr';
 
@@ -763,7 +764,7 @@ async function fetchJson(path, validate) {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(path, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await serverFailureMessage(response));
     const payload = await response.json();
     if (!validate(payload)) throw new Error('malformed payload');
     return payload;
@@ -1421,9 +1422,11 @@ export function buildPeLoadingLabel({
 
 const petiteEnfanceFranceLayer = {
   id: PE_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Accueil du jeune enfant (FR)',
   icon: '🧸',
   source: 'Taux de couverture — Cnaf',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

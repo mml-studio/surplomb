@@ -583,9 +583,11 @@ let _lastPayload = null;
 
 const base = createAddressScanLayer({
   id: AVIS_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Avis de valeur (DVF)',
   icon: '≈',
   source: 'Estimation Surplomb — comparables DVF (Etalab / DGFiP)',
+  // i18n-ignore-end
   endpoint: '/api/avis-valeur',
   updateInterval: UPDATE_INTERVAL_MS,
   // The block rung, which is where the estimate starts and where it lands
@@ -792,8 +794,11 @@ export function avisVoiceSummary(stats) {
     return {
       subject: messages().voice.pendingSubject,
       pending: true,
+      // i18n-ignore-start — read by the model, not by the reader; see the
+      // note at the top of src/voice/gevActions.js.
       note: 'The estimate has not been computed for this point yet. Say it is '
         + 'coming and ask again in a moment — this is NOT "no comparables here".',
+      // i18n-ignore-end
     };
   }
   return {

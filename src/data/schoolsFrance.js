@@ -1929,9 +1929,11 @@ export function buildSchoolsLoadingLabel({
 
 const schoolsFranceLayer = {
   id: SCHOOLS_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Établissements scolaires (FR)',
   icon: '🎓',
   source: 'Annuaire de l’éducation — MENJ',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

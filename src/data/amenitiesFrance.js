@@ -193,6 +193,7 @@ import { amenitiesDepartementBinLabels } from './amenitiesDepartements.js';
 import { AMENITY_GLYPH_RASTER_PX, amenityFamilyGlyph } from './amenityFamilyIcons.js';
 import { boxKey, validBox } from './viewportBox.js';
 import { pickAt } from './pickAt.js';
+import { serverFailureMessage } from '../i18n/serverMessages.js';
 
 export const AMENITIES_FR_LAYER_ID = 'amenities-fr';
 
@@ -1030,7 +1031,7 @@ async function ensureNational() {
     const timer = setTimeout(() => controller.abort(), NATIONAL_TIMEOUT_MS);
     try {
       const response = await fetch('/api/amenities-fr/departements', { signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await serverFailureMessage(response));
       const payload = await response.json();
       if (!Array.isArray(payload?.departements)) throw new Error('malformed national rollup');
       _national = payload;
@@ -1103,7 +1104,7 @@ async function ensureMesh() {
     const timer = setTimeout(() => controller.abort(), NATIONAL_TIMEOUT_MS);
     try {
       const response = await fetch('/api/amenities-fr/mesh', { signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await serverFailureMessage(response));
       const payload = await response.json();
       if (!Array.isArray(payload?.rows)) throw new Error('malformed mesh');
       _mesh = payload;
@@ -1505,7 +1506,7 @@ async function loadSites(box, { force = false } = {}) {
     const asked = serialiseAmenityFamilies(_families);
     if (asked) params.set('familles', asked);
     const response = await fetch(`/api/amenities-fr/sites?${params}`, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(await serverFailureMessage(response));
     const payload = await response.json();
     if (generation !== _requestGeneration || !_enabled) return;
     reconcile(payload);
@@ -1710,9 +1711,11 @@ export function buildAmenitiesLoadingLabel({
 
 const amenitiesFranceLayer = {
   id: AMENITIES_FR_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Équipements du quotidien (FR)',
   icon: '🏪',
   source: 'BPE 2025 — Insee · FINESS — ARS/ANS',
+  // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
   init(viewer) {

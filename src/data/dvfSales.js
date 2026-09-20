@@ -1044,19 +1044,24 @@ export function dvfVoiceSummary(stats) {
       viewMedianPrixM2: stats.localMedianPrixM2 ?? null,
       // One per commune, because the colours were read against several.
       communeReferences: stats.references ?? null,
+      // i18n-ignore-start — read by the model, not by the reader; see the
+      // note at the top of src/voice/gevActions.js.
       note: 'The camera is high enough that this layer answers by AREA, not by '
         + 'sale: it holds cells, not a list of mutations, so there is nothing to '
         + 'rank or to quote a single price from. Say the view median with the '
         + 'municipalities behind it. For one property, fly below '
         + `${SCAN_CELL_MIN_ALTITUDE_M} m and ask again.`,
+      // i18n-ignore-end
     };
   }
   if (!Number.isFinite(stats.salesFound)) {
     return {
       subject,
       pending: true,
+      // i18n-ignore-start — read by the model, not by the reader; see above.
       note: 'The register has not answered for this point yet. Say the reading is '
         + 'coming and ask again in a moment — this is NOT "no sales here".',
+      // i18n-ignore-end
     };
   }
   return {
@@ -1346,9 +1351,11 @@ function drawDvfCells(payload, dataSource, classificationType) {
 
 const baseLayer = createAddressScanLayer({
   id: DVF_LAYER_ID,
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Prix de l’immobilier (DVF)',
   icon: '€',
   source: 'DVF — Etalab / DGFiP',
+  // i18n-ignore-end
   endpoint: '/api/dvf',
   updateInterval: UPDATE_INTERVAL_MS,
   runtimeParams: {

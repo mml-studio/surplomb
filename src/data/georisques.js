@@ -732,9 +732,11 @@ export function georisquesLegend(payload, summary = null) {
 
 const georisquesLayer = createAddressScanLayer({
   id: 'georisques',
+  // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Risques (Géorisques)',
   icon: '⚠',
   source: 'Géorisques — BRGM / MTE',
+  // i18n-ignore-end
   endpoint: '/api/georisques',
   updateInterval: UPDATE_INTERVAL_MS,
   params: () => ({ radius: String(SCAN_RADIUS_M) }),
