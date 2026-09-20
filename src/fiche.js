@@ -173,12 +173,17 @@ function render(fiche) {
   subline.append(node('span', 'coords',
     `${fiche.point.lat.toFixed(5)}, ${fiche.point.lon.toFixed(5)}`));
 
-  // 24-hour clock in English too, per docs/GLOSSARY.md; French already is.
+  // French keeps the shape `toLocaleString('fr-FR')` printed before this page
+  // was bilingual — `20/09/2026 10:23:08`. English follows docs/GLOSSARY.md: a
+  // named month, which is what an English reader of a printed sheet expects,
+  // and the 24-hour clock the glossary fixes for every timestamp.
   el('status').textContent = m.statusLine(
     fiche.answered,
     fiche.partial,
     fiche.absent.length,
-    formatDateTime(fiche.generatedAt, { hourCycle: 'h23' }),
+    getLocale() === DEFAULT_LOCALE
+      ? formatDateTime(fiche.generatedAt)
+      : formatDateTime(fiche.generatedAt, { dateStyle: 'medium', timeStyle: 'medium', hourCycle: 'h23' }),
   );
 
   const host = el('themes');
