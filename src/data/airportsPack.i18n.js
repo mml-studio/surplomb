@@ -78,7 +78,9 @@ export default defineMessages({
       title: { fr: 'Masquer les aérodromes et aéroclubs', en: 'Hide airfields and flying clubs' },
     },
     airlines: {
-      label: { fr: 'LIGNES', en: 'ROUTES' },
+      // SCHEDULED, not ROUTES: on a map of roads and rails, "routes" would
+      // read as the wrong kind of line.
+      label: { fr: 'LIGNES', en: 'SCHEDULED' },
       title: {
         fr: 'Ne garder que les terrains desservis par une ligne régulière',
         en: 'Keep only fields served by a scheduled route',

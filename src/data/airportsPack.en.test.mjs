@@ -42,7 +42,7 @@ test('the three display floors, and the buckets a card names', () => {
   assert.deepEqual(floors, [
     { id: 'all', label: 'ALL', title: 'Every field in the pack' },
     { id: 'airports', label: 'AIRPORTS', title: 'Hide airfields and flying clubs' },
-    { id: 'airlines', label: 'ROUTES', title: 'Keep only fields served by a scheduled route' },
+    { id: 'airlines', label: 'SCHEDULED', title: 'Keep only fields served by a scheduled route' },
   ]);
   assert.equal(withLocale('en', () => airportTypeLabel('large_airport')), 'Large airport');
   assert.equal(withLocale('en', () => airportTypeLabel('seaplane_base')), 'Seaplane base');

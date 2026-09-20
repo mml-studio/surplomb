@@ -87,11 +87,12 @@ export default defineMessages({
   moments: {
     mean: { fr: 'Moyenne ouvrée', en: 'Weekday average' },
     clock: { fr: 'À cette heure', en: 'At this hour' },
+    // Abbreviated to the French chips' width: seven of them share one row.
     w04: { fr: 'Sem. 04 h', en: 'Wk 04:00' },
     w08: { fr: 'Sem. 08 h', en: 'Wk 08:00' },
     w18: { fr: 'Sem. 18 h', en: 'Wk 18:00' },
-    e04: { fr: 'W-E 04 h', en: 'We 04:00' },
-    e18: { fr: 'W-E 18 h', en: 'We 18:00' },
+    e04: { fr: 'W-E 04 h', en: 'WE 04:00' },
+    e18: { fr: 'W-E 18 h', en: 'WE 18:00' },
   },
   /** One hour of the archived week: `18 h` / `18:00`. */
   hour: {

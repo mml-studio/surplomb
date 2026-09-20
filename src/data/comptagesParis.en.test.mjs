@@ -125,7 +125,7 @@ test('the counts key: states, bands, hour chips and the scale domain', () => {
   assert.equal(en.gap, 'No measurement at this hour');
   assert.deepEqual(en.bands, ['< 100 veh/h', '250–500 veh/h', '≥ 1,000 veh/h']);
   assert.equal(en.domain, 'from under 100 to over 1,000');
-  assert.deepEqual(en.moments, ['Weekday average', 'At this hour', 'Wk 04:00', 'Wk 08:00', 'Wk 18:00', 'We 04:00', 'We 18:00']);
+  assert.deepEqual(en.moments, ['Weekday average', 'At this hour', 'Wk 04:00', 'Wk 08:00', 'Wk 18:00', 'WE 04:00', 'WE 18:00']);
   // The occupancy bands are the city's own, and they read like the congestion
   // ladder rather than inventing a second vocabulary.
   assert.deepEqual(en.occupancy, ['Free-flowing', 'Near saturation', 'Saturated', 'Jammed']);
