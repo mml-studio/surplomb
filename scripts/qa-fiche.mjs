@@ -86,8 +86,19 @@ async function scan(browser, point, extra = '') {
   page.on('request', (request) => requests.push(request.url()));
   await page.setViewport({ width: 900, height: 1400 });
   await page.goto(`${APP_URL}/fiche.html?lat=${point.lat}&lon=${point.lon}${extra}`,
-    { waitUntil: 'networkidle0', timeout: 180_000 });
-  // The sheet composes fifteen answers; networkidle0 fires when they land.
+    { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // WAIT ON THE SHEET, NOT ON THE NETWORK. `networkidle0` never fires here: the
+  // page opens seventeen API calls, several of them slow proxies, and any one
+  // that keeps a connection alive holds the wait to its 180 s ceiling — the run
+  // then times out on a page that has been complete for two minutes (measured
+  // 2026-09-20, on this branch and on main alike). The sheet says when it is
+  // done: it writes its summary line and renders one section per theme.
+  await page.waitForFunction(
+    () => Boolean(document.getElementById('status')?.textContent?.trim())
+      && document.querySelectorAll('section.theme').length > 0,
+    { timeout: 180_000, polling: 500 },
+  );
+  // Late answers replace a pending theme in place; give them a breath.
   await new Promise((resolve) => { setTimeout(resolve, 1500); });
   const sheet = await page.evaluate(readSheet);
   return {
@@ -98,7 +109,9 @@ async function scan(browser, point, extra = '') {
 async function main() {
   fs.mkdirSync(SHOTS_DIR, { recursive: true });
   const browser = await puppeteer.launch({
-    headless: HEADFUL ? false : 'new',
+    // `headless: 'new'` stopped producing frames on this machine (Metal):
+    // transitions freeze and screenshots come back blank. `shell` still paints.
+    headless: HEADFUL ? false : 'shell',
     executablePath: chrome,
     args: ['--no-sandbox'],
   });
