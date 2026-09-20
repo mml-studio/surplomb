@@ -9,12 +9,19 @@
  *   distortion (0-1)   — CRT barrel/lens bulge strength
  *   instability (0-1)  — jitter, flicker, glitch frequency
  */
+import messages from './retro.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const retroShader = {
   name: 'retro',
   uniforms: {
-    pixelation: { default: 5.0, min: 1, max: 10, label: 'Pixelation' },
-    distortion: { default: 0, min: 0, max: 1, label: 'Distortion' },
-    instability: { default: 0.4, min: 0, max: 1, label: 'Instability' },
+    pixelation: { default: 5.0, min: 1, max: 10, get label() { return messages().pixelation; } },
+    distortion: { default: 0, min: 0, max: 1, get label() { return messages().distortion; } },
+    instability: { default: 0.4, min: 0, max: 1, get label() { return messages().instability; } },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;

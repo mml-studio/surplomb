@@ -9,13 +9,20 @@
  *   scanlineStr (0-1) — scanline intensity (kept for compatibility)
  *   pixelation (1-6)  — intensifier tube resolution pixelation
  */
+import messages from './surveillance.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const nightVisionShader = {
   name: 'surveillance',
   uniforms: {
-    gain: { default: 0.55, min: 0, max: 1, label: 'Gain' },
-    bloom: { default: 0.30, min: 0, max: 1, label: 'Bloom' },
-    scanlineStr: { default: 1.0, min: 0, max: 1, label: 'Scanlines' },
-    pixelation: { default: 2.5, min: 1, max: 6, label: 'Pixelation' },
+    gain: { default: 0.55, min: 0, max: 1, get label() { return messages().gain; } },
+    bloom: { default: 0.30, min: 0, max: 1, get label() { return messages().bloom; } },
+    scanlineStr: { default: 1.0, min: 0, max: 1, get label() { return messages().scanlines; } },
+    pixelation: { default: 2.5, min: 1, max: 6, get label() { return messages().pixelation; } },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;

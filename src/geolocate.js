@@ -34,6 +34,7 @@
  * @module geolocate
  */
 
+import messages from './geolocate.i18n.js';
 import { DEFAULT_CITY_VIEW } from './defaultView.js';
 import { prefersTopDownView } from './topDownView.js';
 
@@ -85,21 +86,23 @@ export function geolocateRangeM(accuracyM, { topDown = prefersTopDownView() } = 
 /**
  * What to tell the reader when there is no fix.
  *
- * Every message names the next move. "Position refusée" alone leaves a reader
- * tapping a button that will never work again, because Safari does not re-ask
- * once permission has been denied for an origin.
+ * Every message names the next move (src/geolocate.i18n.js): "Position
+ * refusée" alone leaves a reader tapping a button that will never work again,
+ * because Safari does not re-ask once permission has been denied for an
+ * origin.
  *
  * @param {{code?: number}|null} error - A `GeolocationPositionError`, or null.
  * @param {boolean} [secure] - Whether the page is a secure context.
  * @returns {string}
  */
 export function geolocateErrorMessage(error, secure = true) {
-  if (!secure) return 'La localisation nécessite une connexion sécurisée (https)';
+  const m = messages();
+  if (!secure) return m.insecure;
   switch (Number(error?.code)) {
-    case 1: return 'Position refusée — autorisez la localisation dans les réglages du navigateur';
-    case 2: return 'Position indisponible pour le moment';
-    case 3: return 'La position met trop de temps à arriver';
-    default: return 'Position indisponible pour le moment';
+    case 1: return m.denied;
+    case 2: return m.unavailable;
+    case 3: return m.timeout;
+    default: return m.unavailable;
   }
 }
 
@@ -121,6 +124,9 @@ export function requestCurrentPosition({
 } = {}) {
   return new Promise((resolve, reject) => {
     if (typeof geolocation?.getCurrentPosition !== 'function') {
+      // A diagnostic for a console, never read by a reader: the words come
+      // from `code`, through geolocateErrorMessage.
+      // i18n-ignore-next-line
       reject({ code: 2, message: 'geolocation unavailable' });
       return;
     }
@@ -129,6 +135,8 @@ export function requestCurrentPosition({
         const lat = Number(position?.coords?.latitude);
         const lon = Number(position?.coords?.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          // A diagnostic, as above.
+          // i18n-ignore-next-line
           reject({ code: 2, message: 'fix carried no coordinates' });
           return;
         }

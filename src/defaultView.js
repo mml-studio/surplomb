@@ -29,6 +29,7 @@ import { roadFetchTier, lookAtGroundPoint, tierFetchBox } from './data/trafficBo
  * the warmer does not pay for.
  */
 export const DEFAULT_CITY_VIEW = Object.freeze({
+  // i18n-ignore-next-line — a place name, and a key several modules match on.
   label: 'Paris',
   lon: 2.2945,
   lat: 48.8584,

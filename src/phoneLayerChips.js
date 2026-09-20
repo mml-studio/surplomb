@@ -28,6 +28,7 @@
  * @module phoneLayerChips
  */
 
+import messages from './phoneLayerChips.i18n.js';
 import { PHONE_FEATURED_LAYER_IDS, PHONE_LAYER_CHIP_LABELS } from './phoneSheetLayout.js';
 
 /** Class of every chip in the row, the « all layers » one included. */
@@ -55,13 +56,14 @@ export function phoneLayerChipModels(rows, {
     .filter((row) => row?.id)
     .map((row) => [row.id, row]));
   const featuredSet = new Set(featured);
+  const m = messages();
   const model = (row, isFeatured) => {
     const full = String(row.label || row.id);
     const label = labels[row.id] || full;
     return {
       id: row.id,
       label,
-      title: `${row.enabled ? 'Éteindre' : 'Allumer'} — ${full}`,
+      title: m.toggleTitle(row.enabled ? m.turnOff : m.turnOn, full),
       icon: row.icon ?? null,
       iconGlyph: row.iconGlyph ?? null,
       active: row.enabled === true,
@@ -125,12 +127,13 @@ export function mountPhoneLayerChips({ host, dataManager, onOpenAll = () => {} }
   const chips = new Map();
   let litOrder = [];
 
+  const m = messages();
   const allChip = doc.createElement('button');
   allChip.type = 'button';
   allChip.className = `${PHONE_LAYER_CHIP_CLASS} is-all`;
   allChip.dataset.phoneLayerChip = 'all';
-  allChip.textContent = 'Toutes les couches';
-  allChip.title = 'Ouvrir la liste des couches';
+  allChip.textContent = m.allLayers;
+  allChip.title = m.allLayersTitle;
   allChip.addEventListener('click', () => onOpenAll());
 
   const buildChip = (id) => {

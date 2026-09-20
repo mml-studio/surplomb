@@ -11,15 +11,25 @@
  *   pixelation (1-6)  — sensor resolution pixelation grid size
  *   palette (0-1)     — 0 = monochrome FLIR, 1 = Ironbow "Predator" color ramp
  */
+import messages from './thermal.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const thermalShader = {
   name: 'thermal',
   uniforms: {
-    sensitivity: { default: 0.75, min: 0, max: 1, label: 'Sensitivity' },
-    bloom: { default: 0.65, min: 0, max: 1, label: 'Bloom' },
-    mode: { default: 0.0, min: 0, max: 1, label: 'WHOT/BHOT' },
-    pixelation: { default: 1.5, min: 1, max: 6, label: 'Pixelation' },
-    palette: { default: 0.0, min: 0, max: 1, label: 'Ironbow' },
+    sensitivity: { default: 0.75, min: 0, max: 1, get label() { return messages().sensitivity; } },
+    bloom: { default: 0.65, min: 0, max: 1, get label() { return messages().bloom; } },
+    mode: { default: 0.0, min: 0, max: 1, get label() { return messages().mode; } },
+    pixelation: { default: 1.5, min: 1, max: 6, get label() { return messages().pixelation; } },
+    palette: { default: 0.0, min: 0, max: 1, get label() { return messages().palette; } },
   },
+  // GLSL source. Its French-looking words are `mode`, `palette` and
+  // `intensity` — uniform names.
+  // i18n-ignore-next-line
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;
     uniform vec2 colorTextureDimensions;

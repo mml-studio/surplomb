@@ -13,10 +13,18 @@
  * so the layer can say the same thing to anyone who flies to Lyon and wonders.
  */
 
+import messages from './recipes.i18n.js';
+
+/*
+ * A recipe's `title` is a GETTER. The list is built when this module loads
+ * and read when the picker is filled, so a plain string would fix the
+ * language at import (ratchet R5). The `id` beside it never moves: it is what
+ * a saved project points at.
+ */
 export const SCENE_RECIPES = [
   {
     id: 'flights-radar',
-    title: 'Global Flights Radar',
+    get title() { return messages().flightsRadar; },
     durationSec: 30,
     style: 'retro',
     ui: { hidePanels: true, hudMode: 'minimal', safeFrame: '16:9' },
@@ -40,7 +48,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'orbital-watch',
-    title: 'Orbital Watch',
+    get title() { return messages().orbitalWatch; },
     durationSec: 32,
     style: 'surveillance',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -72,7 +80,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'thermal-threats',
-    title: 'Thermal Threat Board',
+    get title() { return messages().thermalThreats; },
     durationSec: 26,
     style: 'thermal',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -103,7 +111,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'city-overload',
-    title: 'City Overload',
+    get title() { return messages().cityOverload; },
     durationSec: 30,
     style: 'surveillance',
     ui: { hidePanels: true, hudMode: 'minimal', safeFrame: '9:16' },
@@ -135,7 +143,7 @@ export const SCENE_RECIPES = [
   },
   {
     id: 'omniscience-pullback',
-    title: 'Omniscience Pullback',
+    get title() { return messages().omnisciencePullback; },
     durationSec: 36,
     style: 'retro',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -175,7 +183,7 @@ export const SCENE_RECIPES = [
     // layer stopped at 8 km with a 5.5 km box. 6 km enters the district band,
     // 2.2 km the full street graph over the Garonne.
     id: 'bordeaux-transport-pulse',
-    title: 'Bordeaux Transport Pulse',
+    get title() { return messages().bordeauxPulse; },
     durationSec: 34,
     style: 'surveillance',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },
@@ -217,7 +225,7 @@ export const SCENE_RECIPES = [
     // in the country — Rouen a métro-classed line, Toulon a ferry and a cable
     // car alongside its buses.
     id: 'france-transit-showcase',
-    title: 'France Transit Showcase',
+    get title() { return messages().franceTransit; },
     durationSec: 32,
     style: 'retro',
     ui: { hidePanels: true, hudMode: 'full', safeFrame: '16:9' },

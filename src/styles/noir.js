@@ -2,12 +2,19 @@
  * Noir Style — Desaturation + High Contrast + Vignette
  * Classic film noir / detective movie look
  */
+import messages from './noir.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const noirShader = {
   name: 'noir',
   uniforms: {
-    contrastAmt: { default: 1.2, min: 0, max: 2, label: 'Contrast' },
-    grainAmt: { default: 0.5, min: 0, max: 1, label: 'Grain' },
-    vignetteAmt: { default: 0.5, min: 0, max: 1, label: 'Vignette' },
+    contrastAmt: { default: 1.2, min: 0, max: 2, get label() { return messages().contrast; } },
+    grainAmt: { default: 0.5, min: 0, max: 1, get label() { return messages().grain; } },
+    vignetteAmt: { default: 0.5, min: 0, max: 1, get label() { return messages().vignette; } },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;

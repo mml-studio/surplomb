@@ -644,6 +644,7 @@ function injectStyles() {
   if (document.getElementById('gev-screen-whiteboard-styles')) return;
   const style = document.createElement('style');
   style.id = 'gev-screen-whiteboard-styles';
+  // i18n-ignore-next-line — a stylesheet, not words on screen.
   style.textContent = `
   .gev-screen-whiteboard { position: fixed; inset: 0; pointer-events: none; z-index: 90; }
   .gev-screen-whiteboard-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }

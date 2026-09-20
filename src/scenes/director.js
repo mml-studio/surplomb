@@ -14,6 +14,8 @@
 
 import * as Cesium from 'cesium';
 import { SCENE_RECIPES } from './recipes.js';
+import messages from './director.i18n.js';
+import { formatDecimal, formatInteger } from '../i18n/format.js';
 import { sceneLayerPlan, sceneRequiresContextModeExit } from './scenePolicy.js';
 import { bindLongPress } from '../panelDrag.js';
 
@@ -100,7 +102,7 @@ function recipeToScene(recipe) {
   const path = recipe.cameraPath || [];
   const shots = path.map((keyframe, idx) => ({
     id: uid('shot'),
-    title: `Shot ${idx + 1}`,
+    title: messages().shotTitle(idx + 1),
     durationSec: Math.max(0.2, keyframe.duration || DEFAULT_SHOT_DURATION_SEC),
     holdSec: Math.max(0, keyframe.hold || 0),
     camera: {
@@ -132,7 +134,7 @@ function recipeToScene(recipe) {
 
   return {
     id: recipe.id || uid('scene'),
-    title: recipe.title || 'Untitled Scene',
+    title: recipe.title || messages().untitledScene,
     shots,
   };
 }
@@ -166,7 +168,7 @@ function normalizeShot(rawShot, index = 0) {
 
   return {
     id: rawShot?.id || uid('shot'),
-    title: rawShot?.title || `Shot ${index + 1}`,
+    title: rawShot?.title || messages().shotTitle(index + 1),
     durationSec: Math.max(0.2, Number(rawShot?.durationSec) || DEFAULT_SHOT_DURATION_SEC),
     holdSec: Math.max(0, Number(rawShot?.holdSec) || 0),
     camera: {
@@ -215,7 +217,7 @@ function normalizeProject(rawProject) {
       const shots = shotsRaw.map((shot, shotIdx) => normalizeShot(shot, shotIdx));
       return {
         id: scene?.id || uid('scene'),
-        title: scene?.title || `Scene ${sceneIdx + 1}`,
+        title: scene?.title || messages().sceneTitle(sceneIdx + 1),
         shots,
       };
     })
@@ -330,7 +332,7 @@ export class SceneDirector {
 
   /** Surface a "scene not saved" notice via the global toast + scene status line. */
   _toastStorageError() {
-    const message = 'Scene not saved — browser storage unavailable';
+    const message = messages().notSaved;
     this._updateStatus(message);
     try {
       const toast = document.getElementById('toast');
@@ -372,7 +374,7 @@ export class SceneDirector {
     });
 
     this._sceneStopBtn?.addEventListener('click', () => {
-      this.stopScene('Stopped');
+      this.stopScene(messages().stopped);
     });
 
     this._sceneNextBtn?.addEventListener('click', () => {
@@ -398,7 +400,7 @@ export class SceneDirector {
       this.downloadLastRunMetadata();
     });
 
-    this._updateStatus('Ready');
+    this._updateStatus(messages().ready);
     this._setProgress(0);
     this._setButtons(false);
   }
@@ -439,7 +441,7 @@ export class SceneDirector {
     if (!scene || scene.shots.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'scene-shot-empty';
-      empty.textContent = 'No shots yet. Use CAPTURE SHOT to save current look.';
+      empty.textContent = messages().noShots;
       this._sceneShotList.appendChild(empty);
       return;
     }
@@ -467,7 +469,7 @@ export class SceneDirector {
       // Renaming a shot is behind a double-click, which a touchscreen cannot
       // produce. Same verb, second gesture — a finger holds the label instead.
       const renameShot = () => {
-        const nextTitle = window.prompt('Shot title', shot.title);
+        const nextTitle = window.prompt(messages().renameShot, shot.title);
         if (!nextTitle) return;
         shot.title = nextTitle.trim() || shot.title;
         this._saveProject();
@@ -481,14 +483,14 @@ export class SceneDirector {
 
       const loadBtn = document.createElement('button');
       loadBtn.className = 'scene-shot-btn';
-      loadBtn.textContent = 'LOAD';
+      loadBtn.textContent = messages().load;
       loadBtn.addEventListener('click', () => {
         this.loadShot(scene.id, shot.id);
       });
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'scene-shot-btn scene-shot-danger';
-      deleteBtn.textContent = 'DEL';
+      deleteBtn.textContent = messages().delete;
       deleteBtn.addEventListener('click', () => {
         this.deleteShot(scene.id, shot.id);
       });
@@ -502,7 +504,8 @@ export class SceneDirector {
       meta.className = 'scene-shot-meta';
       const mode = shot.visual?.detection?.mode || 'OFF';
       const style = shot.visual?.style || 'normal';
-      meta.textContent = `${style.toUpperCase()} · ${mode} · ${shot.durationSec.toFixed(1)}s + ${shot.holdSec.toFixed(1)}s`;
+      const seconds = (value) => formatDecimal(value, 1, { minimumFractionDigits: 1 });
+      meta.textContent = messages().shotMeta(style.toUpperCase(), mode, seconds(shot.durationSec), seconds(shot.holdSec));
 
       row.appendChild(top);
       row.appendChild(meta);
@@ -532,12 +535,13 @@ export class SceneDirector {
 
   /** Prompt the user for a name and append a new empty scene to the project. */
   _createScene() {
-    const sceneName = window.prompt('New scene name', `Scene ${this._project.scenes.length + 1}`);
+    const fallbackName = messages().sceneTitle(this._project.scenes.length + 1);
+    const sceneName = window.prompt(messages().newScene, fallbackName);
     if (!sceneName) return;
 
     const scene = {
       id: uid('scene'),
-      title: sceneName.trim() || `Scene ${this._project.scenes.length + 1}`,
+      title: sceneName.trim() || fallbackName,
       shots: [],
     };
 
@@ -554,7 +558,7 @@ export class SceneDirector {
     const scene = this._getSelectedScene();
     if (!scene) return;
 
-    const ok = window.confirm(`Delete scene "${scene.title}" and all shots?`);
+    const ok = window.confirm(messages().confirmDeleteScene(scene.title));
     if (!ok) return;
 
     this._project.scenes = this._project.scenes.filter((item) => item.id !== scene.id);
@@ -596,13 +600,13 @@ export class SceneDirector {
 
     const camera = this.styleManager.getCameraState();
     if (!camera) {
-      this._updateStatus('Cannot capture shot: camera not ready');
+      this._updateStatus(messages().cameraNotReady);
       return;
     }
 
     const shot = normalizeShot({
       id: uid('shot'),
-      title: `Shot ${scene.shots.length + 1}`,
+      title: messages().shotTitle(scene.shots.length + 1),
       durationSec: DEFAULT_SHOT_DURATION_SEC,
       holdSec: DEFAULT_HOLD_SEC,
       camera,
@@ -614,7 +618,7 @@ export class SceneDirector {
     this._selectedShotId = shot.id;
     this._saveProject();
     this._renderShotList();
-    this._updateStatus(`Captured: ${scene.title} / ${shot.title}`);
+    this._updateStatus(messages().captured(scene.title, shot.title));
   }
 
   /**
@@ -627,7 +631,7 @@ export class SceneDirector {
 
     const shot = scene.shots.find((item) => item.id === this._selectedShotId);
     if (!shot) {
-      this._updateStatus('Select a shot first');
+      this._updateStatus(messages().selectShotFirst);
       return;
     }
 
@@ -640,7 +644,7 @@ export class SceneDirector {
 
     this._saveProject();
     this._renderShotList();
-    this._updateStatus(`Updated: ${scene.title} / ${shot.title}`);
+    this._updateStatus(messages().updated(scene.title, shot.title));
   }
 
   /**
@@ -652,7 +656,7 @@ export class SceneDirector {
     const { scene, shot } = this._getShot(sceneId, shotId);
     if (!scene || !shot) return;
 
-    const ok = window.confirm(`Delete shot "${shot.title}"?`);
+    const ok = window.confirm(messages().confirmDeleteShot(shot.title));
     if (!ok) return;
 
     scene.shots = scene.shots.filter((item) => item.id !== shot.id);
@@ -704,7 +708,7 @@ export class SceneDirector {
     if (token.cancelled) return;
 
     if (this._loadAbort === controller) this._loadAbort = null;
-    this._updateStatus(`Loaded: ${scene.title} / ${shot.title}`);
+    this._updateStatus(messages().loaded(scene.title, shot.title));
     this._updateRuntime('');
   }
 
@@ -740,7 +744,7 @@ export class SceneDirector {
     if (typeof this.styleManager?.runImmediateNavigation !== 'function') return true;
     const claimed = this.styleManager.runImmediateNavigation('scene', () => true);
     if (claimed === false) {
-      this._updateStatus('Camera unavailable — exit cockpit first');
+      this._updateStatus(messages().cameraUnavailable);
       return false;
     }
     return true;
@@ -837,7 +841,7 @@ export class SceneDirector {
 
     const queue = this._buildPlaybackQueue(sceneId || this._selectedSceneId || this._project.scenes[0]?.id, { single });
     if (!queue.length) {
-      this._updateStatus('No shots to run');
+      this._updateStatus(messages().noShotsToRun);
       return { started: false, reason: 'no-shots' };
     }
 
@@ -885,6 +889,7 @@ export class SceneDirector {
     // Initialize telemetry accumulator for this run
     this._activeRun = {
       recipeId: `project-${PROJECT_VERSION}`,
+      // i18n-ignore-next-line — a key in the exported run log, not a label.
       title: 'Editable Scene Run',
       startedAt: new Date().toISOString(),
       estimatedDurationSec,
@@ -908,8 +913,8 @@ export class SceneDirector {
         this._renderSceneSelect();
         this._renderShotList();
 
-        this._updateStatus(`Running ${idx + 1}/${queue.length}: ${scene.title} / ${shot.title}`);
-        this._updateRuntime(`${scene.title} · ${shot.title}`);
+        this._updateStatus(messages().running(formatInteger(idx + 1), formatInteger(queue.length), scene.title, shot.title));
+        this._updateRuntime(messages().runtime(scene.title, shot.title));
 
         this._logEvent('shot_start', {
           sceneId: scene.id,
@@ -948,11 +953,12 @@ export class SceneDirector {
 
       if (!token.cancelled) {
         this._setProgress(1);
-        this._updateStatus('Scene run complete');
+        this._updateStatus(messages().runComplete);
         this._logEvent('scene_run_complete', {});
       }
     } catch (error) {
-      this._updateStatus(`Error: ${error.message || 'run failed'}`);
+      this._updateStatus(messages().runError(error.message || messages().runFailed));
+      // i18n-ignore-next-line — a value in the exported run log, not a label.
       this._logEvent('scene_run_error', { message: error.message || 'unknown error' });
     } finally {
       this._finishRun();
@@ -990,15 +996,17 @@ export class SceneDirector {
    * enabled while the post-await check skips its params. The manager rolls an
    * aborted enable back through the module's own disable().
    *
-   * @param {string} [reason='Stopped'] - Human-readable cancellation reason
+   * @param {?string} [reason] - Human-readable cancellation reason; the
+   *   module's own « Arrêté » / « Stopped » when none is given.
    */
-  stopScene(reason = 'Stopped') {
+  stopScene(reason = null) {
     if (!this._running || !this._runToken) return;
+    const why = reason || messages().stopped;
     this._runToken.cancelled = true;
     this._runAbort?.abort();
     this.viewer.camera.cancelFlight();
-    this._updateStatus(reason);
-    this._logEvent('scene_stopped', { reason });
+    this._updateStatus(why);
+    this._logEvent('scene_stopped', { reason: why });
   }
 
   /** Export the entire project as a timestamped JSON file download. */
@@ -1033,9 +1041,9 @@ export class SceneDirector {
       this._saveProject();
       this._renderSceneSelect();
       this._renderShotList();
-      this._updateStatus(`Imported ${file.name}`);
+      this._updateStatus(messages().imported(file.name));
     } catch {
-      this._updateStatus('Import failed (invalid JSON)');
+      this._updateStatus(messages().importFailed);
     }
   }
 
@@ -1114,7 +1122,7 @@ export class SceneDirector {
     }
 
     if (refused.length) {
-      this._updateStatus(`Layers refused: ${refused.join(', ')}`);
+      this._updateStatus(messages().layersRefused(refused.join(', ')));
       this._logEvent('shot_layers_refused', { layerIds: [...refused] });
     }
     return { applied, refused, cancelled: false };
@@ -1150,7 +1158,7 @@ export class SceneDirector {
     const result = await this.styleManager.setContextMode('off');
     if (result && result.ok === false) {
       console.warn(`[Scenes] Could not exit ${mode}:`, result.error || 'unknown reason');
-      this._updateStatus(`Could not exit ${mode} — scene layers may be refused`);
+      this._updateStatus(messages().contextExitFailed(mode));
       this._logEvent('context_mode_exit_failed', { mode, error: result.error || null });
       return false;
     }
@@ -1301,7 +1309,7 @@ export class SceneDirector {
     if (!this._sceneProgressFill) return;
     const pct = Math.round(clamp01(progress) * 100);
     this._sceneProgressFill.style.width = `${pct}%`;
-    this._sceneProgressFill.textContent = `${pct}%`;
+    this._sceneProgressFill.textContent = messages().progress(formatInteger(pct));
   }
 
   /**
@@ -1342,7 +1350,7 @@ export class SceneDirector {
    */
   _onKeyDown(event) {
     if (event.key === ESCAPE_KEY && this._running) {
-      this.stopScene('Stopped (Esc)');
+      this.stopScene(messages().stoppedEsc);
     }
   }
 }

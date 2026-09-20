@@ -31,6 +31,7 @@
  * @module phoneSheet
  */
 
+import messages from './phoneSheet.i18n.js';
 import { isPhoneShell } from './inputMode.js';
 import { onWorldOverlaySelectionChange } from './overlays/worldOverlay.js';
 import { renderPhoneSelection } from './phoneSelection.js';
@@ -54,10 +55,6 @@ const ADOPTIONS = [
 
 /** Travel under which a pointer gesture on the grip is a TAP, not a drag. */
 const TAP_TRAVEL_PX = 6;
-
-/** What the « LOURD » badge says when a reader holds it. */
-const HEAVY_TITLE = 'Couche lourde : beaucoup d’objets à dessiner. Sur un téléphone, '
-  + 'attendez-vous à un chargement plus long et à une carte moins fluide.';
 
 let _controller = null;
 
@@ -133,7 +130,7 @@ export function initPhoneSheet({ dataManager = null } = {}) {
   if (clearBtn && layersPanel) {
     const label = document.createElement('span');
     label.className = 'phone-action-label';
-    label.textContent = 'TOUT ÉTEINDRE';
+    label.textContent = messages().clearLayers;
     clearBtn.appendChild(label);
     clearBtn.classList.add('phone-sheet-action');
     layersPanel.insertBefore(clearBtn, layersPanel.firstChild);
@@ -216,8 +213,8 @@ export function initPhoneSheet({ dataManager = null } = {}) {
     searchField.classList.add('expanded');
     // Short enough to fit the bar whole at 360 px: a placeholder cut in the
     // middle of a word reads as a broken field.
-    searchField.placeholder = 'Rechercher une adresse';
-    searchField.setAttribute('aria-label', 'Rechercher un lieu ou une adresse');
+    searchField.placeholder = messages().searchPlaceholder;
+    searchField.setAttribute('aria-label', messages().searchLabel);
   }
   if (topbar) topbar.hidden = false;
   // The tab stays in the DOM — the panel is still labelled by it, and the
@@ -473,14 +470,15 @@ export function initPhoneSheet({ dataManager = null } = {}) {
   const heavy = new Set(PHONE_HEAVY_LAYER_IDS);
   const decorateHeavyRows = () => {
     if (!toggleContainer) return;
+    const m = messages();
     for (const id of heavy) {
       const row = toggleContainer.querySelector(`[data-layer-id="${CSS.escape(id)}"]`);
       const left = row?.querySelector('.data-toggle-left');
       if (!left || left.querySelector('.data-scope-chip.is-heavy')) continue;
       const chip = document.createElement('span');
       chip.className = 'data-scope-chip is-heavy';
-      chip.textContent = 'LOURD';
-      chip.title = HEAVY_TITLE;
+      chip.textContent = m.heavy;
+      chip.title = m.heavyTitle;
       left.appendChild(chip);
     }
   };

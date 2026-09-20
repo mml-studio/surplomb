@@ -23,8 +23,17 @@
  * @module phoneSelection
  */
 
-/** What the empty tab says. One sentence, and it names the verb. */
-export const PHONE_SELECTION_EMPTY_TEXT = 'Touchez un objet sur le globe pour le lire ici.';
+import messages from './phoneSelection.i18n.js';
+
+/**
+ * What the empty tab says. One sentence, and it names the verb.
+ *
+ * A function and no longer a constant: the words are read when the tab is
+ * painted, so the same loaded module answers in whichever language the page
+ * is in (ratchet R5, and CONVENTIONS § 2).
+ * @returns {string}
+ */
+export const phoneSelectionEmptyText = () => messages().empty;
 
 /**
  * A stable string for a selection list, so an unchanged selection is not
@@ -72,7 +81,7 @@ export function renderPhoneSelection(host, items, { onDismiss = null } = {}) {
 
   if (!list.length) {
     const empty = make('p', 'phone-selection-empty');
-    empty.textContent = PHONE_SELECTION_EMPTY_TEXT;
+    empty.textContent = phoneSelectionEmptyText();
     host.appendChild(empty);
     return 0;
   }
@@ -104,7 +113,7 @@ export function renderPhoneSelection(host, items, { onDismiss = null } = {}) {
 
   const dismiss = make('button', 'phone-selection-dismiss');
   dismiss.type = 'button';
-  dismiss.setAttribute?.('aria-label', 'Replier le panneau');
+  dismiss.setAttribute?.('aria-label', messages().dismiss);
   dismiss.textContent = '×';
   // It lowers the SHEET and does not deselect. What is selected belongs to the
   // layer that selected it; a mirror that could clear it would be a second

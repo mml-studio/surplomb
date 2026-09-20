@@ -6,7 +6,15 @@
  * presentation values.
  */
 
-/** Shared visual tokens used by every world-overlay source. */
+/**
+ * Shared visual tokens used by every world-overlay source.
+ *
+ * i18n-ignore below, and everywhere else in this file: every value here is a
+ * CSS colour or a canvas font shorthand. The ratchets read keys named `label`,
+ * `title` and `detail` as words on screen; in this module they are the colour
+ * a title is painted in.
+ */
+// i18n-ignore-start — colours and canvas font shorthands, not words
 export const WORLD_OVERLAY_STYLE = Object.freeze({
   // Belvédère (2026-09-19): night-green plates, ivory type, apricot accent —
   // the chrome's palette (style.css :root), at the old luminances.
@@ -197,3 +205,4 @@ export const DETECTION_THEME_MAP = Object.freeze({
     },
   },
 });
+// i18n-ignore-end

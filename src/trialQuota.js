@@ -299,6 +299,15 @@ export function trialRefusalReason(kind, state, config) {
  * already degrades on; the `quota` field is what tells the page it is the
  * trial and not load. No `Retry-After`: waiting does not help.
  *
+ * WHY THE PROSE IS STILL FRENCH. This runs in Node, and the server has no
+ * locale by design — no cookie, no `Accept-Language`, because a proxy that
+ * varied its answers by language would have to vary its cache by it too
+ * (docs/i18n/CONVENTIONS.md § 7). Nothing a reader sees comes from here: the
+ * page words the refusal from `quota`, which it turns into the waitlist card
+ * (src/trialRefusal.js → src/waitlistCard.js), and never shows `error`. The
+ * stable `code` that § 7 asks for belongs with the rest of the server's
+ * error codes, which the voice-and-server batch owns.
+ *
  * @param {import('http').ServerResponse} res
  * @param {'exhausted'|'reserved'|'voice'} reason
  * @param {ReturnType<typeof resolveTrialConfig>} config
@@ -310,6 +319,8 @@ export function sendTrialRefusal(res, reason, config, extra = {}) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify({
     ...extra,
+    // i18n-ignore-start — server prose, no locale available; the page reads
+    // `quota`, never this line (see the note above).
     error: reason === 'exhausted'
       ? 'Essai terminé'
       : reason === 'reserved'
@@ -317,6 +328,7 @@ export function sendTrialRefusal(res, reason, config, extra = {}) {
         : config.voiceTurns > 0
           ? 'Essai de la voix terminé'
           : 'La voix n’est pas incluse dans l’essai',
+    // i18n-ignore-end
     quota: reason,
     limit: config.limit,
   }));
@@ -432,7 +444,24 @@ export function describeTrial(req, config, experiments = null) {
 const OWNER_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 /** Tolerance on a link's expiry, for a mint on a machine whose clock is ahead. */
 const OWNER_CLOCK_SLACK_S = 60;
+// ── THIS ONE PAGE STAYS FRENCH ──────────────────────────────────────────────
+//
+// `/api/owner-pass` is served by Node, which has no locale to read (no
+// cookie, no `Accept-Language` — see `sendTrialRefusal` above), and it is not
+// part of the globe: it is a standalone page reached ONLY through a link
+// minted over SSH by whoever holds `GEV_OWNER_PASS_SECRET`
+// (`scripts/owner-pass.mjs`). Its one reader is the operator, who already
+// read `docs/DEPLOY.md` in French. Translating it would mean either guessing
+// a language for one person or building a locale path the rest of the server
+// deliberately does not have.
+// i18n-ignore-start — server-rendered operator page, no locale available
 const OWNER_REFUSAL = 'Lien expiré, déjà utilisé ou invalide.';
+const OWNER_PAGE_TITLE = 'Pass propriétaire';
+const OWNER_PAGE_RETRY = 'Générez-en un nouveau.';
+const OWNER_PAGE_LEDE = 'Ce navigateur n’aura plus de limite d’essais sur ce site. '
+  + 'Le lien ne sert qu’une fois et expire dix minutes après sa création.';
+const OWNER_PAGE_BUTTON = 'Activer sur ce navigateur';
+// i18n-ignore-end
 
 /** Nonces already redeemed, until they expire. Only signed links get in. */
 const redeemedOwnerNonces = new Map();
@@ -562,12 +591,12 @@ function ownerPage(res, status, body) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Pass propriétaire</title>
+<title>${OWNER_PAGE_TITLE}</title>
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; background: #0b1418; color: #e6f1f3; }
   button { font: inherit; padding: .6rem 1rem; border: 0; border-radius: 6px; background: #00d8ff; color: #001018; cursor: pointer; }
 </style>
-<h1>Pass propriétaire</h1>
+<h1>${OWNER_PAGE_TITLE}</h1>
 ${body}
 </html>
 `);
@@ -619,13 +648,13 @@ export async function handleOwnerPass(req, res, config, {
   if (req.method === 'GET' || req.method === 'HEAD') {
     const token = new URL(req.url || '/', 'http://owner.invalid').searchParams.get('t');
     if (!usable(token, clock())) {
-      ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
+      ownerPage(res, 410, `<p>${OWNER_REFUSAL} ${OWNER_PAGE_RETRY}</p>`);
       return;
     }
-    ownerPage(res, 200, `<p>Ce navigateur n’aura plus de limite d’essais sur ce site. Le lien ne sert qu’une fois et expire dix minutes après sa création.</p>
+    ownerPage(res, 200, `<p>${OWNER_PAGE_LEDE}</p>
 <form method="post" action="/api/owner-pass">
   <input type="hidden" name="t" value="${token}">
-  <button type="submit">Activer sur ce navigateur</button>
+  <button type="submit">${OWNER_PAGE_BUTTON}</button>
 </form>`);
     return;
   }
@@ -646,7 +675,7 @@ export async function handleOwnerPass(req, res, config, {
   const link = usable(token, now);
   if (!link) {
     console.warn('[trial] owner link refused');
-    ownerPage(res, 410, `<p>${OWNER_REFUSAL} Générez-en un nouveau.</p>`);
+    ownerPage(res, 410, `<p>${OWNER_REFUSAL} ${OWNER_PAGE_RETRY}</p>`);
     return;
   }
   for (const [nonce, expiresAt] of redeemed) {

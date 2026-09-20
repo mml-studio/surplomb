@@ -22,6 +22,7 @@
  * for `?waitlist=1`, so it costs nothing to a visit that never meets it.
  */
 
+import messages from './waitlistCard.i18n.js';
 import { PREMIUM_CROWN_SVG } from './voicePremium.js';
 
 /** Written on submit, so a returning visitor is not asked twice. */
@@ -30,17 +31,27 @@ export const WAITLIST_JOINED_KEY = 'gev:waitlist-joined:v1';
 export const WAITLIST_AUTO_SHOWN_KEY = 'gev:waitlist-auto-shown:v1';
 const CARD_ID = 'waitlist-card';
 
-/** The use question. Values land on the subscriber as `metadata__usage`. */
+/**
+ * The use question. The VALUES are data — they land on the subscriber as
+ * `metadata__usage` and are read back in Buttondown, so they stay French in
+ * both languages; only the label a visitor reads is translated. `label` is a
+ * getter so the words are read when the card is built, never at import.
+ */
 export const WAITLIST_USAGE_CHOICES = Object.freeze([
-  Object.freeze({ value: 'logement', label: 'Je cherche un logement' }),
-  Object.freeze({ value: 'immobilier', label: 'Je travaille dans l’immobilier' }),
-  Object.freeze({ value: 'curiosite', label: 'Par curiosité' }),
-  Object.freeze({ value: 'autre', label: 'Autre raison' }),
+  // i18n-ignore-start — persisted survey values, not labels
+  Object.freeze({ value: 'logement', get label() { return messages().usage.housing; } }),
+  Object.freeze({ value: 'immobilier', get label() { return messages().usage.property; } }),
+  Object.freeze({ value: 'curiosite', get label() { return messages().usage.curiosity; } }),
+  Object.freeze({ value: 'autre', get label() { return messages().usage.other; } }),
+  // i18n-ignore-end
 ]);
 
 /**
  * What the hosted version adds, named on the card. Everything here works
  * today; nothing is a roadmap item, and nothing waits on a key not yet held.
+ *
+ * A function and no longer a frozen array: the three lines are read when the
+ * card is built (ratchet R5).
  *
  * The two after the voice are what the voice DOES, because they are the
  * strongest things the subscription holds (rewritten 2026-09-17): outside the
@@ -51,11 +62,10 @@ export const WAITLIST_USAGE_CHOICES = Object.freeze([
  * replaced promised the 2 144 Météo-France stations, which need a contract
  * that is not signed (#195).
  */
-export const WAITLIST_INCLUDES = Object.freeze([
-  'La commande vocale',
-  'Le prix au m² autour d’ici, en une question',
-  'Le trajet à pied ou à vélo, tracé et minuté',
-]);
+export function waitlistIncludes() {
+  const { includes } = messages();
+  return [includes.voice, includes.prices, includes.route];
+}
 
 /**
  * Title and opening line for each way into the card.
@@ -65,13 +75,14 @@ export const WAITLIST_INCLUDES = Object.freeze([
  * @returns {{title: string, lede: string}}
  */
 export function waitlistCopy(reason, trial = {}) {
+  const m = messages();
   // Two sentences at most: what ran out, and that the map did not.
-  const open = 'Le globe et ses couches restent gratuits.';
+  const open = m.stillFree;
   if (reason === 'exhausted') {
-    const count = Number(trial.limit) > 0 ? `Vos ${trial.limit} essais` : 'Vos essais';
+    const count = Number(trial.limit) > 0 ? m.exhausted.countedTries(trial.limit) : m.exhausted.tries;
     return {
-      title: 'Essai terminé',
-      lede: `${count} premium sont utilisés. ${open}`,
+      title: m.exhausted.title,
+      lede: m.exhausted.lede(count, open),
     };
   }
   if (reason === 'voice') {
@@ -79,17 +90,15 @@ export function waitlistCopy(reason, trial = {}) {
     // visitor just used the voice trial or this server offers none. The
     // trial is counted in commands, the word the mic uses (src/voicePremium.js).
     const turns = Number(trial.voice?.limit) || 0;
-    const why = turns > 0
-      ? (turns > 1 ? `Vos ${turns} commandes vocales offertes sont utilisées.` : 'Votre commande vocale offerte est utilisée.')
-      : 'Elle arrive à l’ouverture.';
+    const why = turns > 0 ? m.voice.spent(turns) : m.voice.none;
     return {
-      title: 'La voix est une fonction premium',
-      lede: `${why} ${open}`,
+      title: m.voice.title,
+      lede: m.voice.lede(why, open),
     };
   }
   return {
-    title: 'Liste d’attente',
-    lede: 'La version hébergée de Surplomb ouvre bientôt. Le globe et toutes les couches restent gratuits ; l’abonnement ajoute le confort.',
+    title: m.direct.title,
+    lede: m.direct.lede,
   };
 }
 
@@ -128,11 +137,12 @@ const escapeHtml = (value) => String(value ?? '')
  * @returns {string}
  */
 export function renderWaitlistCard({ reason, trial = {}, joined = false }) {
+  const m = messages();
   const { title, lede } = waitlistCopy(reason, trial);
   const waitlist = trial.waitlist && /^https:\/\/buttondown\.com\//.test(trial.waitlist.action || '')
     ? trial.waitlist
     : null;
-  const includes = WAITLIST_INCLUDES.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const includes = waitlistIncludes().map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const choices = WAITLIST_USAGE_CHOICES.map((choice, index) => `
         <label class="waitlist-choice">
           <input type="radio" name="metadata__usage" value="${escapeHtml(choice.value)}"${index === 0 ? ' required' : ''} />
@@ -142,34 +152,34 @@ export function renderWaitlistCard({ reason, trial = {}, joined = false }) {
   const form = waitlist ? `
     <form class="waitlist-form" action="${escapeHtml(waitlist.action)}" method="post" target="_blank" rel="noopener"${joined ? ' hidden' : ''}>
       <label class="waitlist-field" for="waitlist-email">
-        <span>Votre email</span>
-        <input id="waitlist-email" type="email" name="email" required autocomplete="email" inputmode="email" placeholder="vous@exemple.fr" />
+        <span>${escapeHtml(m.email)}</span>
+        <input id="waitlist-email" type="email" name="email" required autocomplete="email" inputmode="email" placeholder="${escapeHtml(m.emailPlaceholder)}" />
       </label>
       <fieldset class="waitlist-usage">
-        <legend>Ce qui vous amène</legend>${choices}
+        <legend>${escapeHtml(m.usageLegend)}</legend>${choices}
       </fieldset>
       <input type="hidden" name="embed" value="1" />
       <input type="hidden" name="tag" value="liste-attente" />
       <input type="hidden" name="metadata__declencheur" value="${escapeHtml(reason)}" />
-      <button type="submit" class="waitlist-submit">Rejoindre la liste d’attente</button>
-      <p class="waitlist-consent">Deux emails, rien d’autre. Via Buttondown, désinscription en un clic. <a href="/confidentialite#vos-donnees" target="_blank" rel="noopener">Vos données</a></p>
+      <button type="submit" class="waitlist-submit">${escapeHtml(m.submit)}</button>
+      <p class="waitlist-consent">${escapeHtml(m.consent)} <a href="/confidentialite#vos-donnees" target="_blank" rel="noopener">${escapeHtml(m.yourData)}</a></p>
     </form>
     <div class="waitlist-joined" role="status"${joined ? '' : ' hidden'}>
-      <p data-waitlist-joined-text>Vous êtes sur la liste. Si ce n’est pas fait, confirmez depuis l’email reçu.</p>
-      <button type="button" class="waitlist-again" data-waitlist-again>Utiliser une autre adresse</button>
+      <p data-waitlist-joined-text>${escapeHtml(m.joined)}</p>
+      <button type="button" class="waitlist-again" data-waitlist-again>${escapeHtml(m.again)}</button>
     </div>` : `
-    <p class="waitlist-unavailable">Les inscriptions ne sont pas encore ouvertes sur ce serveur.</p>`;
+    <p class="waitlist-unavailable">${escapeHtml(m.unavailable)}</p>`;
 
   return `
     <div class="waitlist-scanline" aria-hidden="true"></div>
     <header class="waitlist-header">
-      <span class="waitlist-kicker">${PREMIUM_CROWN_SVG}SURPLOMB · PREMIUM</span>
-      <button type="button" class="waitlist-close" data-waitlist-close aria-label="Fermer">×</button>
+      <span class="waitlist-kicker">${PREMIUM_CROWN_SVG}${escapeHtml(m.kicker)}</span>
+      <button type="button" class="waitlist-close" data-waitlist-close aria-label="${escapeHtml(m.close)}">×</button>
     </header>
     <h2 id="waitlist-title">${escapeHtml(title)}</h2>
     <p id="waitlist-lede">${escapeHtml(lede)}</p>
     <div class="waitlist-body">
-      <p class="waitlist-includes-title">Premium, à l’ouverture</p>
+      <p class="waitlist-includes-title">${escapeHtml(m.includesTitle)}</p>
       <ul class="waitlist-includes">${includes}</ul>
       ${form}
     </div>`;
@@ -244,7 +254,7 @@ export function initWaitlistCard({
       windowRef?.setTimeout?.(() => {
         form.hidden = true;
         if (joinedText) {
-          joinedText.textContent = 'Buttondown s’est ouvert dans un nouvel onglet : terminez-y l’inscription, puis cliquez le lien de l’email de confirmation.';
+          joinedText.textContent = messages().joinedNow;
         }
         if (joined) joined.hidden = false;
       }, 0);

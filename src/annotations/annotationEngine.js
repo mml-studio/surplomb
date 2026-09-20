@@ -1,6 +1,8 @@
 import * as Cesium from 'cesium';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isRateLimitedOutcome, resolveAnnotationTarget } from './annotationResolver.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './annotationEngine.i18n.js';
 
 // `window.__CESIUM__ = Cesium` used to live here — a console convenience for
 // probing the app's single engine instance. It is gone because the engine is
@@ -890,11 +892,14 @@ export function createAnnotationEngine({
      * Lays down a small San Francisco "tour" the way the voice agent would.
      */
     async demo() {
+      // `target` is a geocoder QUERY, not a label: it stays English in both
+      // locales, because that is the string the resolver sends upstream.
+      const m = messages().demo;
       return annotate([
-        { type: 'highlight', target: 'Palace of Fine Arts, San Francisco', label: 'Palace of Fine Arts', color: 'amber' },
-        { type: 'area', target: 'Presidio of San Francisco', label: 'The Presidio (former Army base)', color: 'green', footprint: true },
-        { type: 'pin', target: 'Letterman Digital Arts Center, San Francisco', label: 'ILM / Lucasfilm', color: 'cyan' },
-        { type: 'arrow', target: 'Palace of Fine Arts, San Francisco', toTarget: 'Marina District, San Francisco', label: 'next to the Marina' },
+        { type: 'highlight', target: 'Palace of Fine Arts, San Francisco', label: m.palace, color: 'amber' },
+        { type: 'area', target: 'Presidio of San Francisco', label: m.presidio, color: 'green', footprint: true },
+        { type: 'pin', target: 'Letterman Digital Arts Center, San Francisco', label: m.ilm, color: 'cyan' },
+        { type: 'arrow', target: 'Palace of Fine Arts, San Francisco', toTarget: 'Marina District, San Francisco', label: m.marina },
       ], { flyTo: true, clearPrevious: true, persist: true });
     },
 
@@ -904,20 +909,21 @@ export function createAnnotationEngine({
      * watched end-to-end without a mic. `window.__gevAnnotations.tour()`.
      */
     async tour() {
+      const m = messages().demo;
       clear();
       flyTo({ lon: -122.4486, lat: 37.7960, height: 520, heading: 0, pitch: -26, duration: 3 });
       await wait(3200);
-      await annotate([{ type: 'highlight', target: 'Palace of Fine Arts, San Francisco', label: 'Palace of Fine Arts', color: 'amber' }], { persist: true });
+      await annotate([{ type: 'highlight', target: 'Palace of Fine Arts, San Francisco', label: m.palace, color: 'amber' }], { persist: true });
       await wait(2600);
-      await annotate([{ type: 'arrow', target: 'Palace of Fine Arts, San Francisco', toTarget: 'Marina Green, San Francisco', label: 'next to the Marina', color: 'cyan' }], { persist: true });
+      await annotate([{ type: 'arrow', target: 'Palace of Fine Arts, San Francisco', toTarget: 'Marina Green, San Francisco', label: m.marina, color: 'cyan' }], { persist: true });
       await wait(2600);
       flyTo({ lon: -122.4545, lat: 37.7880, height: 1500, heading: 18, pitch: -32, duration: 3 });
       await wait(3200);
-      await annotate([{ type: 'area', target: 'Presidio of San Francisco', label: 'The Presidio — a former Army base', color: 'green', footprint: true }], { persist: true });
+      await annotate([{ type: 'area', target: 'Presidio of San Francisco', label: m.presidioLong, color: 'green', footprint: true }], { persist: true });
       await wait(2800);
-      await annotate([{ type: 'pin', target: 'Letterman Digital Arts Center, San Francisco', label: 'ILM / Lucasfilm', color: 'red' }], { persist: true });
+      await annotate([{ type: 'pin', target: 'Letterman Digital Arts Center, San Francisco', label: m.ilm, color: 'red' }], { persist: true });
       await wait(2600);
-      await annotate([{ type: 'route', color: 'amber', label: 'Crissy Field shoreline', points: [
+      await annotate([{ type: 'route', color: 'amber', label: m.crissy, points: [
         { target: 'Palace of Fine Arts, San Francisco' },
         { target: 'Crissy Field, San Francisco' },
         { target: 'Fort Point, San Francisco' },
@@ -1117,29 +1123,37 @@ function greatCircleM(a, b) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// The label is read on the map by a French visitor, so it is written in
-// French: a decimal comma, and the mode after the time (« 12 min à pied »).
+// The label is read on the map, in the page's language. The number keeps the
+// shape the module always printed — one decimal under 10 km, none above, tens
+// of metres below a kilometre — and the separator follows the locale: a comma
+// in French, a point in English. `useGrouping: false` because the module never
+// grouped, and a route long enough to need it (≥ 1 000 km) must not suddenly
+// grow a space in the French bytes.
 function formatDistance(m) {
   if (!Number.isFinite(m)) return null;
-  if (m >= 1000) return `${(m / 1000).toFixed(m >= 10000 ? 0 : 1).replace('.', ',')} km`;
-  return `${Math.round(m / 10) * 10} m`;
+  if (m >= 1000) {
+    const digits = m >= 10000 ? 0 : 1;
+    return `${formatDecimal(m / 1000, digits, { minimumFractionDigits: digits, useGrouping: false })} km`;
+  }
+  return `${formatNumber(Math.round(m / 10) * 10, { useGrouping: false })} m`;
 }
 
 export function composeRouteLabel(baseLabel, distM, durS, mode, fallback) {
   const dist = formatDistance(distM);
   if (!dist) return baseLabel;
+  const m = messages().route;
   const min = Number.isFinite(durS) ? Math.max(1, Math.round(durS / 60)) : null;
-  const how = mode === 'car' ? 'en voiture' : mode === 'bike' ? 'à vélo' : 'à pied';
+  const how = mode === 'car' ? m.byCar : mode === 'bike' ? m.byBike : m.onFoot;
   // Fallback = routing was unavailable, so we drew a straight line: label it as a
   // direct line with no travel time (never claim an « X min à pied » we didn't compute).
   let metrics;
-  if (fallback) metrics = `${dist} · à vol d’oiseau, sans itinéraire`;
-  else metrics = min != null ? `${dist} · ${min} min ${how}` : dist;
-  return baseLabel ? `${baseLabel} — ${metrics}` : metrics;
+  if (fallback) metrics = m.straightLine(dist);
+  else metrics = min != null ? m.timed(dist, formatNumber(min), how) : dist;
+  return baseLabel ? m.withBase(baseLabel, metrics) : metrics;
 }
 
 function appendDistance(baseLabel, distM) {
   const dist = formatDistance(distM);
   if (!dist) return baseLabel;
-  return baseLabel ? `${baseLabel} — ${dist}` : dist;
+  return baseLabel ? messages().route.withBase(baseLabel, dist) : dist;
 }

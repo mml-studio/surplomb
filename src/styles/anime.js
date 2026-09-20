@@ -2,11 +2,18 @@
  * Anime / Studio Ghibli Style — Cel-shading + Saturation boost
  * Transforms the world into an animated film look
  */
+import messages from './anime.i18n.js';
+
+/*
+ * The slider labels are GETTERS, read from the catalog beside this file when the panel is
+ * painted: this object is built when the module loads, and a plain string
+ * would fix its language at import (ratchet R5).
+ */
 export const animeShader = {
   name: 'anime',
   uniforms: {
-    saturation: { default: 1.0, min: 0, max: 2, label: 'Saturation' },
-    edgeThick: { default: 0.5, min: 0, max: 1, label: 'Edge Thickness' },
+    saturation: { default: 1.0, min: 0, max: 2, get label() { return messages().saturation; } },
+    edgeThick: { default: 0.5, min: 0, max: 1, get label() { return messages().edgeThickness; } },
   },
   fragmentShader: /* glsl */ `
     uniform sampler2D colorTexture;
