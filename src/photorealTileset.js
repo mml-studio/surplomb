@@ -31,6 +31,7 @@
  */
 
 import { isPhoneShell } from './inputMode.js';
+import messages from './photorealTileset.i18n.js';
 
 /**
  * ion asset for Google Photorealistic 3D Tiles. The same id CesiumJS itself
@@ -232,7 +233,7 @@ export async function loadPhotorealTileset(Cesium, {
     try {
       const tileset = await attempt.run();
       if (tileset) return { tileset, source: attempt.source, errors };
-      errors.push({ source: attempt.source, message: 'no tileset returned' });
+      errors.push({ source: attempt.source, message: messages().noTileset });
     } catch (error) {
       errors.push({ source: attempt.source, message: describe(error) });
     }
@@ -251,6 +252,7 @@ export function describePhotorealFailure(errors) {
   const listed = (errors || []).filter((entry) => entry && entry.message);
   if (!listed.length) return '';
   if (listed.length === 1) return listed[0].message;
+  // i18n-ignore-next-line — the two doors, by their product names.
   const LABELS = { 'google-key': 'Google key', ion: 'Cesium ion' };
   return listed.map((entry) => `${LABELS[entry.source] || entry.source}: ${entry.message}`).join(' · ');
 }

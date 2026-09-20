@@ -21,6 +21,14 @@
  * Server-side only. Nothing here reaches the browser bundle, and nothing is
  * inlined at build time, so editing the deployment's `.env` and recreating the
  * container is enough — no rebuild.
+ *
+ * AND IT IS FRENCH, ON PURPOSE. `mentions-legales.html` and
+ * `confidentialite.html` are French and the French text governs
+ * (CONTRIBUTING.md, "Language"): they are legal documents, not interface, and
+ * a translated notice would be a second version of something that has exactly
+ * one. The rows this module fills are those pages' own words, so they stay
+ * where they are, in French, in both locales. The two LINKS that lead here do
+ * get English labels — see `src/legalLinks.js`.
  */
 
 import { firstRunExperimentFromEnv } from './firstRunAb.js';
@@ -130,6 +138,8 @@ function telLink(phone) {
  */
 export function renderLegalBlocks(notice) {
   const row = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  // i18n-ignore-start — the French legal pages' own rows; see the note at the
+  // top of this file. The pages are French and the French text governs.
   const publisher = [
     row('Éditeur', escapeHtml(notice.publisher)),
     notice.registration ? row('Immatriculation', escapeHtml(notice.registration)) : '',
@@ -144,6 +154,7 @@ export function renderLegalBlocks(notice) {
     hosting: `<ul class="providers">${hosting}</ul>`,
     controller: `<p>Le responsable du traitement est l’éditeur du site : `
       + `${escapeHtml(notice.publisher)}, joignable à ${mailLink(notice.email)}.</p>`,
+    // i18n-ignore-end
   };
 }
 
@@ -175,6 +186,7 @@ export function renderLegalPage(html, env = {}) {
   }
   const notice = legalNoticeFromEnv(env);
   if (!notice.complete) {
+    // i18n-ignore-next-line — as above: an operator's line on a French page.
     const hint = `<p class="missing-vars">Variables manquantes : `
       + `${notice.missing.map((name) => `<code>${name}</code>`).join(', ')}.</p>`;
     for (const name of LEGAL_BLOCKS) {

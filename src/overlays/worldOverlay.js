@@ -16,6 +16,7 @@ import {
   placementVariants,
 } from './worldOverlayDraw.js';
 import { WORLD_OVERLAY_STYLE } from './worldOverlayTokens.js';
+import messages from './worldOverlay.i18n.js';
 
 /**
  * @module worldOverlay
@@ -1303,7 +1304,7 @@ function ensureOverlayDom() {
     _accessibilityRoot.id = ACCESSIBILITY_ROOT_ID;
     _accessibilityRoot.className = 'world-overlay-accessibility';
     _accessibilityRoot.setAttribute('role', 'region');
-    _accessibilityRoot.setAttribute('aria-label', 'Visible map targets');
+    _accessibilityRoot.setAttribute('aria-label', messages().region);
     document.body.appendChild(_accessibilityRoot);
   }
   _accessibilityList = document.getElementById(ACCESSIBILITY_LIST_ID);
@@ -2426,7 +2427,7 @@ function syncAccessibleActions() {
       if (!activate) return;
       const accepted = activate();
       if (accepted !== false && _accessibilityStatus) {
-        _accessibilityStatus.textContent = `Focusing ${item.label}`;
+        _accessibilityStatus.textContent = messages().focusing(item.label);
       }
     });
     _accessibilityList.appendChild(button);

@@ -89,7 +89,14 @@ import {
  * The workload is deterministic: a fixed-seed grid of moving entries, a
  * non-recording Canvas2D stub (so the probe measures the overlay and not the
  * harness), and a fixed virtual clock stepped at 16 ms per frame.
+ *
+ * NOTHING HERE IS TRANSLATED, and nothing here is read by a reader. Every
+ * `title`, `details` and `label` below is a FIXTURE — a synthetic callsign, a
+ * made-up vessel, a `CAMERA 12` — chosen so the probe paints plates of a
+ * realistic width. This whole file runs only under `npm test`, never in a
+ * browser, so its strings are marked as data.
  */
+// i18n-ignore-start — synthetic fixtures for an allocation probe, never shown
 
 const ENTRY_COUNT = Number(process.env.GEV_ALLOC_ENTRIES) || 60;
 const PROFILE = process.env.GEV_ALLOC_PROFILE || 'generic';
@@ -1132,3 +1139,4 @@ function main() {
 }
 
 main();
+// i18n-ignore-end

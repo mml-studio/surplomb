@@ -9,6 +9,7 @@ import {
 } from '../celestialRing.js';
 import { createCctvThumbnailOverlayEntry, createFrameSlot } from '../data/cctvCards.js';
 import { combinedOverlayAlpha } from './worldOverlayDraw.js';
+import { useTestLocale } from '../i18n/testing.js';
 import {
   AMBIENT_CARD_COLLISION_CAPACITY,
   WORLD_OVERLAY_OCCLUDER_SELECTORS,
@@ -1094,7 +1095,11 @@ test('entry normalization validates required fields and source lifecycle is stab
   env.cleanup();
 });
 
-test('accessible actions announce only accepted focus and expose selected state', () => {
+// The live region is one of the strings this batch gave a French side
+// (worldOverlay.i18n.js). The sentence asserted below is the ENGLISH one the
+// overlay has always announced, so the test says so out loud.
+test('accessible actions announce only accepted focus and expose selected state', (t) => {
+  useTestLocale('en', t);
   const env = installMockEnvironment();
   let acceptedActivations = 0;
   let staleActivations = 0;

@@ -408,10 +408,14 @@ export class CelestialRing {
 
     this._sunMarker = document.createElement('span');
     this._sunMarker.className = 'celestial-marker celestial-sun material-symbols-outlined';
+    // A Material Symbols ligature: the font draws a sun, and the overlay is
+    // aria-hidden, so no reader ever meets the word.
+    // i18n-ignore-next-line
     this._sunMarker.textContent = 'light_mode';
 
     this._moonMarker = document.createElement('span');
     this._moonMarker.className = 'celestial-marker celestial-moon material-symbols-outlined';
+    // i18n-ignore-next-line — a ligature, as above.
     this._moonMarker.textContent = 'dark_mode';
 
     this._root.append(
