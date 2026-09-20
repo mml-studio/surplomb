@@ -34,10 +34,17 @@
  * @module data/veloPulseFeed
  */
 
+import { labelFor } from '../i18n/messages.js';
+import messages, { PULSE_DAY_NAMES } from './veloPulseFeed.i18n.js';
+
 /** Hours in a week. Slot 0 is Monday 00:00, local time. */
 export const PULSE_SLOTS = 168;
 
-/** The days, as a French reader names them, for slot 0..167. */
+/**
+ * The days of a week slot, 0..167. KEYS, not labels: the pack is written with
+ * these names and `PULSE_DAY_NAMES` holds what a reader sees.
+ */
+// i18n-ignore-next-line — day keys of the pack, not words on screen.
 export const PULSE_DAYS = Object.freeze([
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ]);
@@ -117,9 +124,9 @@ export function slotForDate(date = new Date()) {
  */
 export function slotLabel(slot) {
   if (!Number.isInteger(slot) || slot < 0 || slot >= PULSE_SLOTS) return '—';
-  const day = PULSE_DAYS[Math.floor(slot / 24)];
+  const day = labelFor(PULSE_DAY_NAMES, PULSE_DAYS[Math.floor(slot / 24)]);
   const hour = slot % 24;
-  return `${day} ${String(hour).padStart(2, '0')}h`;
+  return messages().slot(day, String(hour).padStart(2, '0'));
 }
 
 /**
@@ -417,16 +424,17 @@ export function pulseRelief(slot, curve) {
  * @returns {string}
  */
 export function pulsePhrase(slot, curve) {
+  const m = messages().phrase;
   const index = Number.isFinite(slot) ? Math.floor(wrapSlot(slot)) : 0;
   const relief = pulseRelief(index, curve);
   const weekend = Math.floor(index / 24) >= 5;
-  if (relief === null) return weekend ? 'week-end' : 'heure non relevée';
+  if (relief === null) return weekend ? m.weekend : m.unsampled;
   const hour = index % 24;
-  if (relief >= 0.85) return weekend ? 'pointe du week-end' : 'pointe';
-  if (relief >= 0.6) return hour < 12 ? 'matinée chargée' : 'fin de journée chargée';
-  if (relief >= 0.35) return weekend ? 'week-end, rythme moyen' : 'rythme moyen';
-  if (relief >= 0.15) return hour >= 21 || hour < 5 ? 'la ville se vide' : 'réseau calme';
-  return 'la nuit — presque personne ne roule';
+  if (relief >= 0.85) return weekend ? m.weekendPeak : m.peak;
+  if (relief >= 0.6) return hour < 12 ? m.busyMorning : m.busyEvening;
+  if (relief >= 0.35) return weekend ? m.weekendAverage : m.average;
+  if (relief >= 0.15) return hour >= 21 || hour < 5 ? m.emptying : m.quiet;
+  return m.night;
 }
 
 /**
@@ -473,12 +481,18 @@ export function pulsePhrase(slot, curve) {
  * the alpha read out of `veloPulse.js` itself — and fails on any inversion, any
  * band that stops separating, and a busiest band that stops being visible.
  */
+const band = (upTo, color, key) => Object.freeze({
+  upTo,
+  color,
+  get label() { return messages().bands[key]; },
+});
+
 export const PULSE_RAMP = Object.freeze([
-  Object.freeze({ upTo: 0.2, color: '#e6ecf2', label: '< 20 %' }),
-  Object.freeze({ upTo: 0.4, color: '#eebd74', label: '20 – 40 %' }),
-  Object.freeze({ upTo: 0.6, color: '#e2803f', label: '40 – 60 %' }),
-  Object.freeze({ upTo: 0.8, color: '#c33a33', label: '60 – 80 %' }),
-  Object.freeze({ upTo: Infinity, color: '#7d1230', label: '≥ 80 %' }),
+  band(0.2, '#e6ecf2', 'under20'),
+  band(0.4, '#eebd74', 'to40'),
+  band(0.6, '#e2803f', 'to60'),
+  band(0.8, '#c33a33', 'to80'),
+  band(Infinity, '#7d1230', 'over80'),
 ]);
 
 /** No sample at this slot. Grey, and never the bottom band. */
@@ -631,18 +645,19 @@ export const PULSE_RADIUS_FLOOR_M = 20;
  * @returns {string}
  */
 export function pulseReading(value, city, site) {
-  if (!Number.isFinite(value)) return 'non échantillonné à cette heure';
+  const m = messages().reading;
+  if (!Number.isFinite(value)) return m.unsampled;
   if (city?.instrument === 'stock') {
     const capacity = Number(site?.capacity);
     const percent = Math.round(value);
-    if (!Number.isFinite(capacity) || capacity <= 0) return `${percent} % pleine`;
+    if (!Number.isFinite(capacity) || capacity <= 0) return m.percentFull(percent);
     const bikes = Math.round((value / 100) * capacity);
     // A 19-stand dock at 7 % holds ONE bike, and the fiche under the globe
     // prints this line every hour of the week: "1 vélos" reads as a bug in the
     // number rather than as a plural nobody bothered with.
-    return `${percent} % pleine — environ ${bikes} vélo${bikes > 1 ? 's' : ''} sur ${capacity}`;
+    return m.percentFullWithBikes(percent, bikes, capacity);
   }
-  return `${Math.round(value)} cyclistes par heure`;
+  return m.cyclistsPerHour(Math.round(value));
 }
 
 /**
@@ -671,31 +686,26 @@ export function pulseSiteDetails(record, pack, slot) {
   const value = valueAt(site, slot, scale);
   const peakRaw = sitePeak(site);
   const peak = peakRaw ? (scale > 1 ? peakRaw.value / (scale / 100) : peakRaw.value) : null;
+  const m = messages().details;
   const details = [];
-  details.push(`${slotLabel(slot)} — ${pulseReading(value, city, site)}`);
-  details.push(city.instrument === 'stock'
-    ? 'Mesure un STOCK : combien de vélos sont garés là'
-    : 'Mesure un FLUX : combien de cyclistes passent là');
+  details.push(m.reading(slotLabel(slot), pulseReading(value, city, site)));
+  details.push(city.instrument === 'stock' ? m.measuresStock : m.measuresFlow);
   if (peak !== null && peakRaw) {
     // MAXIMUM, not "pointe": a Vélo'v station is at its maximum when it is
     // fullest, which is the middle of the night, and calling that a peak of
     // activity would be exactly backwards. The next line says which it is.
-    details.push(`Maximum de la semaine ${slotLabel(peakRaw.slot)} — ${pulseReading(peak, city, site)}`);
-    details.push(city.instrument === 'stock'
-      ? 'Une station pleine = des vélos garés ; une station vide = des vélos sur la route'
-      : 'Un compteur élevé = des cyclistes qui passent en ce moment');
+    details.push(m.weeklyMaximum(slotLabel(peakRaw.slot), pulseReading(peak, city, site)));
+    details.push(city.instrument === 'stock' ? m.stockMeaning : m.flowMeaning);
   }
   const samples = site.samples?.[slot];
-  details.push(Number.isFinite(samples) && samples > 0
-    ? `Moyenne de ${samples} semaine${samples > 1 ? 's' : ''} sur les 4 relevées`
-    : 'Aucun relevé à cette heure de la semaine');
+  details.push(Number.isFinite(samples) && samples > 0 ? m.averageOf(samples) : m.noSample);
   if (site.commune) details.push(site.commune);
-  if (site.direction) details.push(`Sens ${site.direction}`);
-  if (site.installedOn) details.push(`Compteur installé le ${site.installedOn}`);
+  if (site.direction) details.push(m.direction(site.direction));
+  if (site.installedOn) details.push(m.installedOn(site.installedOn));
   if (city.instrument === 'stock' && Number.isFinite(site.capacity)) {
-    details.push(`${site.capacity} bornettes`);
+    details.push(m.stands(site.capacity));
   }
-  details.push(`Semaine type ${pack?.window?.start} → ${pack?.window?.end}`);
+  details.push(m.window(pack?.window?.start, pack?.window?.end));
   details.push(city.source);
   return details;
 }

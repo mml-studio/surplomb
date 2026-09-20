@@ -35,6 +35,8 @@ import {
   wrapSlot,
 } from './veloPulseFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatList } from '../i18n/format.js';
+import messages from './veloPulse.i18n.js';
 
 /**
  * Pouls vélo — one typical week of cycling in Lyon and in Paris, and the reason
@@ -253,19 +255,16 @@ const _colorScratch = new Cesium.Color();
  * a Tuesday morning sees a Tuesday morning. `week` animates. `peak` freezes on
  * the busiest hour the network as a whole records.
  */
+const pulseMode = (id) => Object.freeze({
+  id,
+  get label() { return messages().modes[id].label; },
+  get blurb() { return messages().modes[id].blurb; },
+});
+
 export const PULSE_MODES = Object.freeze([
-  Object.freeze({ id: 'now', label: 'MAINTENANT', blurb: 'L’heure de la semaine qu’il est en ce moment.' }),
-  Object.freeze({
-    id: 'week',
-    label: 'SEMAINE',
-    blurb: 'Déroule les 168 heures d’une semaine type, une heure toutes les 0,5 s. '
-      + 'En pause, l’heure affichée déplace aussi les autres couches de semaine type.',
-  }),
-  Object.freeze({
-    id: 'peak',
-    label: 'POINTE',
-    blurb: 'L’heure la plus chargée du réseau — et les autres couches de semaine type s’y placent aussi.',
-  }),
+  pulseMode('now'),
+  pulseMode('week'),
+  pulseMode('peak'),
 ]);
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
@@ -665,9 +664,9 @@ function pulseLegendScope() {
   const places = cities
     .map((city) => String(city?.label ?? '').split('—')[0].trim())
     .filter(Boolean);
-  const where = places.length > 1
-    ? `${places.slice(0, -1).join(', ')} et ${places.at(-1)}`
-    : (places[0] || null);
+  // `formatList` is the language's own conjunction: "Lyon et Paris",
+  // "Lyon and Paris".
+  const where = places.length > 1 ? formatList(places) : (places[0] || null);
 
   const rectangle = _viewer?.camera?.computeViewRectangle?.();
   // No rectangle is NOT "nothing in view" — an oblique camera looking past the
@@ -1118,7 +1117,7 @@ const veloPulseLayer = {
   getRowControls() {
     const chips = PULSE_MODES.map((mode) => ({
       id: mode.id,
-      label: mode.id === 'week' && _mode === 'week' && !_playing ? 'SEMAINE ❚❚' : mode.label,
+      label: mode.id === 'week' && _mode === 'week' && !_playing ? messages().weekPaused : mode.label,
       active: _mode === mode.id,
       state: _mode === mode.id ? 'active' : 'idle',
       title: mode.blurb,
@@ -1148,10 +1147,10 @@ const veloPulseLayer = {
     }));
     if (unsampled > 0) {
       legend.push({
-        label: 'non relevé',
+        label: messages().legend.unsampled,
         color: PULSE_UNSAMPLED_COLOR,
         count: unsampled,
-        blurb: 'Aucun relevé à cette heure de la semaine pour ce site.',
+        blurb: messages().legend.unsampledBlurb,
       });
     }
     return {
@@ -1160,7 +1159,7 @@ const veloPulseLayer = {
       // Ordered bands, so they read as one distribution and not as six
       // unrelated classes: the shape of the week at this hour IS the argument.
       legendBar: true,
-      legendNote: `Part du maximum hebdomadaire du site · ${slotLabel(_slot)}`,
+      legendNote: messages().legend.note(slotLabel(_slot)),
       legendScope: pulseLegendScope(),
     };
   },
@@ -1185,11 +1184,10 @@ const veloPulseLayer = {
       feedSource: 'Métropole de Lyon (Licence Ouverte 2.0) · Ville de Paris (ODbL)',
     };
     if (_error) result.error = _error;
-    else if (_loading) result.loadingLabel = 'Semaine type…';
+    else if (_loading) result.loadingLabel = messages().row.loading;
     else if (!_inReadableBand) {
-      result.loadingLabel = `Zoome sous ${Math.round(BLOB_READABLE_CEILING_M / 1000)} km — `
-        + 'au-dessus, une tache fait moins d’un pixel';
-    } else result.loadingLabel = `${slotLabel(_slot)} — semaine type de juin 2026`;
+      result.loadingLabel = messages().row.tooHigh(Math.round(BLOB_READABLE_CEILING_M / 1000));
+    } else result.loadingLabel = messages().row.slotWindow(slotLabel(_slot));
     result.readable = _inReadableBand;
     return result;
   },
