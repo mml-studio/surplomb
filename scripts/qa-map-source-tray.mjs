@@ -5,6 +5,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
+import uiMessages from '../src/ui.i18n.js';
+
+// The chip speaks the page's language (docs/i18n/CONVENTIONS.md § 10); the QA
+// fleet opens French, so read the expectation out of the catalog rather than
+// pinning one of its two faces.
+const shareMessages = uiMessages().share;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shotsDir = path.join(repoRoot, 'qa-shots', 'map-source-tray');
@@ -430,12 +436,12 @@ try {
     'ACQUIRING DOM notice persists, ignores stale terminals, and clears on ownership completion',
     acquiringLifecycle.pending.hidden === false
       && acquiringLifecycle.pending.state === 'acquiring'
-      && acquiringLifecycle.pending.label === 'ACQUIRING'
-      && acquiringLifecycle.pending.detail === 'SHARED FLIGHT'
+      && acquiringLifecycle.pending.label === shareMessages.acquiring
+      && acquiringLifecycle.pending.detail === shareMessages.acquiringSubject('FLIGHT')
       && acquiringLifecycle.followed.hidden === true
       && acquiringLifecycle.staleTerminal.hidden === false
       && acquiringLifecycle.staleTerminal.state === 'acquiring'
-      && acquiringLifecycle.staleTerminal.detail === 'SHARED MILITARY FLIGHT'
+      && acquiringLifecycle.staleTerminal.detail === shareMessages.acquiringSubject('MILITARY FLIGHT')
       && acquiringLifecycle.cancelled.hidden === true,
     JSON.stringify(acquiringLifecycle),
   );

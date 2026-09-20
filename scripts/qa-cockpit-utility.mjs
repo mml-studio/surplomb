@@ -5,6 +5,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
+import { inAllLocales } from '../src/i18n/messages.js';
+import uiMessages from '../src/ui.i18n.js';
+
+// The shell speaks the page's language (docs/i18n/CONVENTIONS.md § 10), and
+// this harness reads its labels: match the message, not one of its two faces.
+const CONTEXT_COLLAPSE = inAllLocales(uiMessages, 'cockpit.context.collapse');
+const CONTEXT_STANDBY = inAllLocales(uiMessages, 'cockpit.context.standby');
+const MISSIONS_FAILED = inAllLocales(uiMessages, 'toast.missionsFailed');
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shotsDir = path.join(repoRoot, 'qa-shots', 'cockpit-utility');
@@ -445,7 +453,7 @@ try {
           'space-missions',
           { notificationToken },
         ),
-        'Space Missions could not complete the requested transition; try again',
+        MISSIONS_FAILED[0],
       );
       await updateStarted;
       const supersedingOff = dataManager.setEnabled('rocket-launches', false, {
@@ -1044,7 +1052,7 @@ try {
     },
     { timeout: 10_000 },
   );
-  const firstCockpitContact = await page.evaluate(() => {
+  const firstCockpitContact = await page.evaluate((standbyLabels) => {
     const awareness = window.__godsEyeView.dataManager.layers
       .get('military-awareness')?.module;
     const snapshot = awareness?.getContextSnapshot?.() || null;
@@ -1065,9 +1073,9 @@ try {
       previousDisabled: previous?.disabled,
       nextDisabled: next?.disabled,
       navigation: snapshot?.navigation || null,
-      contextStandby: signalText.includes('CONTEXT STANDBY'),
+      contextStandby: standbyLabels.some((label) => signalText.includes(label)),
     };
-  });
+  }, CONTEXT_STANDBY);
   check(
     'first Cockpit entry shows matching Contact Previous/Next controls',
     firstCockpitContact.contextVisible
@@ -1905,7 +1913,7 @@ try {
     contextTransition.afterExpansion === 1
       && contextTransition.afterRepeatedExpansion === 1
       && contextTransition.ariaExpanded === 'true'
-      && contextTransition.label === 'Collapse Contact panel',
+      && CONTEXT_COLLAPSE.includes(contextTransition.label),
     JSON.stringify(contextTransition),
   );
   await page.screenshot({ path: path.join(shotsDir, 'restored-desktop.png') });
