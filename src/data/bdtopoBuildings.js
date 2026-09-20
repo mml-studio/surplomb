@@ -55,6 +55,13 @@ import {
   rnbClosestUrl,
 } from './rnbPivot.js';
 import { pickAt } from './pickAt.js';
+import messages, {
+  BDTOPO_NATURE_LABELS,
+  BDTOPO_USAGE_LABELS,
+} from './bdtopoBuildings.i18n.js';
+import { labelFor } from '../i18n/messages.js';
+import { formatPercent } from '../i18n/format.js';
+import { rnbStatusLabel } from './rnbPivot.js';
 
 /**
  * Bâti 3D (FR) — every building France has surveyed, at its own altitude.
@@ -279,8 +286,11 @@ export function bdtopoStackDrawsBuildings(activeId) {
 /** @returns {string} A one-line human label for a building. */
 export function bdtopoLabel(props) {
   const usage = props?.usage_1;
+  // i18n-ignore-next-line — IGN's own `nature` value, matched, not printed.
   const nature = props?.nature && props.nature !== 'Indifférenciée' ? props.nature : null;
-  return nature || usage || 'Bâtiment';
+  if (nature) return labelFor(BDTOPO_NATURE_LABELS, nature);
+  if (usage) return labelFor(BDTOPO_USAGE_LABELS, usage);
+  return messages().building;
 }
 
 /**
@@ -311,6 +321,7 @@ export function bdtopoLabel(props) {
  * @returns {Array<string>} Zero to five card lines, in reading order.
  */
 export function rnbPivotLines(record, pivot = null) {
+  const m = messages();
   const lines = [];
   const own = Array.isArray(record?.rnb) ? record.rnb : parseRnbIds(record?.rnb);
   const guessed = Boolean(pivot?.rnbId) && !own.includes(pivot.rnbId);
@@ -318,10 +329,12 @@ export function rnbPivotLines(record, pivot = null) {
   if (own.length) {
     lines.push(own.length === 1
       ? `RNB ${own[0]}`
-      : `RNB ${own.join(' · ')} — ${own.length} bâtiments pour une emprise`);
+      : m.pivot.several(own.join(' · '), own.length));
   } else if (pivot?.rnbId) {
-    const near = Number.isFinite(pivot.distanceM) ? ` à ${formatMetres(pivot.distanceM)}` : '';
-    lines.push(`RNB ${pivot.rnbId} — plus proche${near}, non publié sur cette emprise`);
+    const near = Number.isFinite(pivot.distanceM)
+      ? m.pivot.nearestDistance(formatMetres(pivot.distanceM))
+      : '';
+    lines.push(m.pivot.nearest(pivot.rnbId, near));
   }
 
   if (!pivot) return lines;
@@ -330,23 +343,25 @@ export function rnbPivotLines(record, pivot = null) {
   // at full height that the register says is demolished is exactly the kind of
   // disagreement between two editions a reader should see rather than infer.
   if (pivot.status && pivot.status !== 'constructed') {
-    lines.push(`Statut RNB : ${pivot.statusLabel}`);
+    // The projection publishes `statusLabel` in French because it also runs on
+    // the server; the card labels the KEY, in the page's language.
+    lines.push(m.pivot.status(rnbStatusLabel(pivot.status) || pivot.statusLabel));
   }
 
   const addresses = pivot.addresses || [];
   if (addresses.length === 1) lines.push(addresses[0].label);
   else if (addresses.length > 1) {
-    lines.push(`${addresses[0].label} · +${addresses.length - 1} autre${addresses.length > 2 ? 's' : ''} adresse${addresses.length > 2 ? 's' : ''} BAN`);
+    lines.push(m.pivot.moreAddresses(addresses[0].label, addresses.length - 1));
   }
 
   const plots = pivot.plots || [];
-  if (plots.length === 1) lines.push(`Parcelle ${plots[0].id}`);
+  if (plots.length === 1) lines.push(m.pivot.plot(plots[0].id));
   else if (plots.length > 1) {
     // The share is of the BUILDING, not of the parcel — see `projectRnbPlot`.
     const share = Number.isFinite(plots[0].coverRatio)
-      ? ` (${Math.round(plots[0].coverRatio * 100)} % de l'emprise)`
+      ? m.pivot.plotShare(formatPercent(Math.round(plots[0].coverRatio * 100)))
       : '';
-    lines.push(`${plots.length} parcelles · ${plots[0].id}${share}`);
+    lines.push(m.pivot.plots(plots.length, plots[0].id, share));
   }
 
   // The caveat closes the block rather than restating the first line: what a
@@ -354,7 +369,7 @@ export function rnbPivotLines(record, pivot = null) {
   // that the ADDRESS and the PARCEL above are that guessed building's, and
   // three lines up is far enough for the two to come apart.
   if (guessed && lines.length > 1) {
-    lines.push('Adresse et parcelle héritées de ce bâtiment rapproché, non de l\'emprise');
+    lines.push(m.pivot.inherited);
   }
   return lines;
 }
@@ -382,45 +397,44 @@ export function rnbPivotLines(record, pivot = null) {
  */
 export function createBdtopoSelectedOverlayEntry(record, pivot = null, dossier = null) {
   if (!record?.id || !record.position) return null;
+  const m = messages();
   const props = record.props || {};
   const details = [];
 
   details.push(record.heightM !== null
-    ? `Hauteur ${formatMetres(record.heightM)}${props.nombre_d_etages ? ` · ${props.nombre_d_etages} étages` : ''}`
-    : 'Hauteur non publiée');
+    ? m.card.height(formatMetres(record.heightM),
+      props.nombre_d_etages ? m.card.floors(props.nombre_d_etages) : '')
+    : m.card.heightMissing);
 
-  if (record.dwellings) details.push(`${formatCount(record.dwellings)} logements déclarés`);
-  if (props.usage_2) details.push(`Usage secondaire ${props.usage_2}`);
+  if (record.dwellings) details.push(m.card.dwellings(formatCount(record.dwellings)));
+  if (props.usage_2) details.push(m.card.secondaryUse(labelFor(BDTOPO_USAGE_LABELS, props.usage_2)));
 
   const minSol = finiteOrNull(props.altitude_minimale_sol);
   if (minSol !== null) {
     const maxToit = finiteOrNull(props.altitude_maximale_toit);
     details.push(maxToit !== null
-      ? `Sol ${minSol.toFixed(1)} m → toit ${maxToit.toFixed(1)} m NGF`
-      : `Sol ${minSol.toFixed(1)} m NGF · toit non publié`);
+      ? m.card.groundAndRoof(minSol.toFixed(1), maxToit.toFixed(1))
+      : m.card.groundOnly(minSol.toFixed(1)));
   }
 
-  details.push({
-    published: 'Posé sur ses deux altitudes IGN',
-    height: 'Posé sur son altitude de sol IGN + sa hauteur',
-    surface: 'Posé sur la surface rendue — pas d\'altitude IGN utilisable',
-    default: 'Hauteur inconnue : 6 m par défaut',
-  }[record.basis]);
+  details.push(m.card.basis[record.basis]);
 
   // The volume on screen is taller than the two altitudes above whenever the
   // globe's terrain and the survey disagree, and a viewer cannot tell by
   // looking. Under a metre is the survey's own tolerance and not worth a line.
   if (Number.isFinite(record.gapM) && Math.abs(record.gapM) >= 1) {
     const metres = formatMetres(Math.abs(record.gapM));
-    details.push(record.gapM < 0
-      ? `Sol rendu ${metres} sous l'altitude IGN · base prolongée d'autant`
-      : `Sol rendu ${metres} au-dessus de l'altitude IGN · toit relevé d'autant`);
+    details.push(record.gapM < 0 ? m.card.gapBelow(metres) : m.card.gapAbove(metres));
   }
 
   const precision = declaredAltimetricPrecisionM(props);
+  // The acquisition method is IGN's own word for how the Z was obtained
+  // (`Calculé`, `Corrélation`, `Pas de Z`): a value of the tile, printed as
+  // published. Only the frame around it is translated.
+  const method = String(props.methode_d_acquisition_altimetrique || m.card.altimetryUnspecified);
   details.push(precision !== null
-    ? `Altimétrie ${String(props.methode_d_acquisition_altimetrique || 'non précisée').toLowerCase()}, ±${precision} m`
-    : 'Altimétrie non renseignée par l\'IGN');
+    ? m.card.altimetry(method.toLowerCase(), precision)
+    : m.card.altimetryMissing);
 
   for (const line of rnbPivotLines(record, pivot)) details.push(line);
   // THE BUILDING AS A PIVOT. Once the RNB has said which ground this volume
@@ -1358,6 +1372,7 @@ const bdtopoBuildingsLayer = {
    * @returns {{chips: Array<object>, legend: Array<object>}}
    */
   getRowControls() {
+    const m = messages();
     const legend = [];
     if (_themePaint) {
       for (const entry of _themePaint.legend || []) {
@@ -1372,21 +1387,21 @@ const bdtopoBuildingsLayer = {
         label: _themePaint.unknownLabel,
         color: unknownBuildingCss(BDTOPO_USAGE_TIERS[BDTOPO_USAGE_TIERS.length - 1].color),
         count: _themePaint.unpainted,
-        blurb: `Volume sans point ${_themePaint.label} joint : la teinte d'usage BD TOPO, `
-          + 'lavée et assombrie pour qu\'un bâtiment non mesuré ne puisse pas se lire '
-          + 'comme un bâtiment mal noté.',
+        blurb: m.theme.unpaintedBlurb(_themePaint.label),
       });
       if (_themePaint.unmatchedPoints || _themePaint.unplacedPoints) {
         const offScreen = _themePaint.idOffScreen
-          ? ` ${formatCount(_themePaint.idOffScreen)} nomment un bâtiment RNB absent de cette vue.`
+          ? m.theme.offScreen(formatCount(_themePaint.idOffScreen))
           : '';
         legend.push({
-          label: 'points sans bâtiment',
+          label: m.theme.orphanPoints,
           color: unknownBuildingCss(BDTOPO_USAGE_TIERS[BDTOPO_USAGE_TIERS.length - 1].color),
           count: _themePaint.unmatchedPoints + _themePaint.unplacedPoints,
-          blurb: `${formatCount(_themePaint.unmatchedPoints)} tombent hors de toute emprise `
-            + `chargée et ${formatCount(_themePaint.unplacedPoints)} n'ont aucune coordonnée : `
-            + `ils existent dans la donnée et ne sont peints nulle part.${offScreen}`,
+          blurb: m.theme.orphanBlurb(
+            formatCount(_themePaint.unmatchedPoints),
+            formatCount(_themePaint.unplacedPoints),
+            offScreen,
+          ),
         });
       }
       // How the paint was decided is NOT a legend row: every swatch here is a
@@ -1402,18 +1417,23 @@ const bdtopoBuildingsLayer = {
       // reconstruct it, so the owner ships it with the swatches.
       return { chips: [], legend, legendNote: _themePaint.legendNote || undefined };
     }
+    // The payload froze its tiers when the batch was built; the WORDS are read
+    // now, off the band's own id, so the legend is in the page's language
+    // whatever language the load happened in.
     for (const tier of _payload?.tiers || BDTOPO_USAGE_TIERS.map((t) => ({ ...t, count: 0 }))) {
+      const band = BDTOPO_USAGE_TIERS.find((entry) => entry.id === tier.id) || tier;
       legend.push({
-        label: tier.label,
+        label: band.label,
         color: tier.color,
         count: tier.count,
-        blurb: tier.blurb,
+        blurb: band.blurb,
       });
     }
     return { chips: [], legend };
   },
 
   getStats() {
+    const m = messages();
     const result = {
       count: _payload?.count ?? 0,
       volumes: _payload?.volumes ?? null,
@@ -1461,27 +1481,25 @@ const bdtopoBuildingsLayer = {
     // draw is a harder boundary than a few refused squares.
     if (result.saturated && !_photoreal) {
       result.degraded = true;
-      result.coverage = 'Plafond de tracé atteint';
-      result.loadingLabel = `Plafond de tracé atteint (${formatCount(BDTOPO_VOLUME_CAP)} volumes) — `
-        + 'le bord droit du bâti est la limite du tracé, pas la limite de la ville. '
-        + 'Zoome pour voir le reste.';
+      result.coverage = m.status.capped;
+      result.loadingLabel = m.status.cappedDetail(formatCount(BDTOPO_VOLUME_CAP));
     }
     const missing = Number(_payload?.missingTiles) || 0;
     if (missing > 0 && !_photoreal) {
       result.degraded = true;
-      result.loadingLabel = `${missing} tuile${missing > 1 ? 's' : ''} BD TOPO refusée${missing > 1 ? 's' : ''} sur ${formatCount(_payload?.requestedTiles ?? 0)} — bâti incomplet, nouvelle tentative`;
+      result.loadingLabel = m.status.missingTiles(missing, formatCount(_payload?.requestedTiles ?? 0));
     }
     if (_photoreal) {
       result.status = 'ok';
-      result.loadingLabel = 'Masqué : Google 3D dessine déjà ce bâti';
+      result.loadingLabel = m.status.hiddenByGoogle;
     } else if (_status === 'zoom-in') {
       result.status = 'ok';
-      result.loadingLabel = `Zoome sous ${BDTOPO_MAX_BOX_DEG}° pour charger le bâti`;
+      result.loadingLabel = m.status.zoomIn(BDTOPO_MAX_BOX_DEG);
     } else if (_status === 'off-coverage') {
       result.status = 'ok';
-      result.loadingLabel = 'Hors couverture BD TOPO (France et DROM)';
+      result.loadingLabel = m.status.offCoverage;
     } else if (_loading) {
-      result.loadingLabel = 'Tuiles BD TOPO…';
+      result.loadingLabel = m.status.loading;
     }
     // Which theme is painting, and on how many of the volumes on screen (A5).
     // Last, so it never displaces a saturation or missing-tile note: those say
@@ -1495,19 +1513,20 @@ const bdtopoBuildingsLayer = {
       const matched = _themePaint.matchedById + _themePaint.matchedByPoint;
       let byId = '';
       if (_themePaint.matchedById) {
-        byId = ` · ${Math.round((_themePaint.matchedById / matched) * 100)} % par identifiant RNB`;
+        byId = m.theme.byIdentifier(formatPercent(Math.round((_themePaint.matchedById / matched) * 100)));
       } else if (matched) {
         // Not "0 %", which reads as a rounding. Nothing on screen carries the
         // register's key, so every colour here rests on a geocode.
-        byId = ' · jointure géométrique seule';
+        byId = m.theme.geometricOnly;
       }
-      result.loadingLabel = `${formatCount(_themePaint.painted)} volume${plural} `
-        + `peint${plural} par ${_themePaint.label}, `
-        + `${formatCount(_themePaint.unpainted)} ${_themePaint.unknownLabel}`
-        + (unplaced
-          ? ` — ${formatCount(unplaced)} point${unplaced > 1 ? 's' : ''} hors emprise`
-          : '')
-        + byId;
+      result.loadingLabel = m.theme.painted(
+        formatCount(_themePaint.painted),
+        _themePaint.label,
+        formatCount(_themePaint.unpainted),
+        _themePaint.unknownLabel,
+        unplaced ? m.theme.unplacedPoints(formatCount(unplaced), unplaced > 1 ? 's' : '') : '',
+        byId,
+      );
     }
     if (_error) result.error = _error;
     return result;

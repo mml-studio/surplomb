@@ -31,6 +31,9 @@
 //    must be DRAWN (they re-join) and the building COUNTED once.
 
 /** IGN Géoplateforme vector tiles: keyless, CORS-open, 21-day browser cache. */
+import { formatNumber } from '../i18n/format.js';
+import messages from './bdtopoBuildingsFeed.i18n.js';
+
 export const BDTOPO_TILE_BASE = 'https://data.geopf.fr/tms/1.0.0/BDTOPO';
 /** The vector-tile layer that carries the buildings. */
 export const BDTOPO_LAYER_NAME = 'batiment';
@@ -110,38 +113,29 @@ export const MAX_GROUND_CORRECTION_M = 60;
  * that would imply a category.
  */
 export const BDTOPO_USAGE_TIERS = Object.freeze([
-  Object.freeze({
-    id: 'residential', label: 'Résidentiel', color: '#e8b96a',
-    usages: Object.freeze(['Résidentiel']),
-    blurb: 'Logement. Le nombre de logements, quand il est renseigné, vient des fichiers fonciers.',
-  }),
-  Object.freeze({
-    id: 'commercial', label: 'Commercial et services', color: '#6ad0e8',
-    usages: Object.freeze(['Commercial et services']),
-    blurb: 'Commerce, bureaux, équipements publics et de service.',
-  }),
-  Object.freeze({
-    id: 'industrial', label: 'Industriel', color: '#e87d7d',
-    usages: Object.freeze(['Industriel']),
-    blurb: 'Bâti industriel déclaré comme tel par l\'IGN.',
-  }),
-  Object.freeze({
-    id: 'agricultural', label: 'Agricole', color: '#9ee87d',
-    usages: Object.freeze(['Agricole']),
-    blurb: 'Bâti agricole — hangars, serres, exploitations.',
-  }),
-  Object.freeze({
-    id: 'civic', label: 'Sportif, religieux, annexe', color: '#b9a7e8',
-    usages: Object.freeze(['Sportif', 'Religieux', 'Annexe']),
-    blurb: 'Les trois usages rares, regroupés parce qu\'aucun ne remplit une légende seul.',
-  }),
-  Object.freeze({
-    id: 'other', label: 'Indifférencié', color: '#8d9aa6',
-    usages: Object.freeze([]),
-    blurb: 'Usage non renseigné ou hors nomenclature. Gris parce qu\'une couleur '
-      + 'affirmerait une catégorie que la donnée ne donne pas.',
-  }),
-]);
+  // `usages` are IGN's own `usage_1` values and stay French in the data; the
+  // label and the blurb are GETTERS, read when the legend is drawn.
+  // i18n-ignore-start — BD TOPO `usage_1` values, matched against the tiles.
+  { id: 'residential', color: '#e8b96a', usages: Object.freeze(['Résidentiel']) },
+  { id: 'commercial', color: '#6ad0e8', usages: Object.freeze(['Commercial et services']) },
+  { id: 'industrial', color: '#e87d7d', usages: Object.freeze(['Industriel']) },
+  { id: 'agricultural', color: '#9ee87d', usages: Object.freeze(['Agricole']) },
+  { id: 'civic', color: '#b9a7e8', usages: Object.freeze(['Sportif', 'Religieux', 'Annexe']) },
+  { id: 'other', color: '#8d9aa6', usages: Object.freeze([]) },
+  // i18n-ignore-end
+].map((tier) => Object.freeze({
+  ...tier,
+  get label() { return messages().tiers[tier.id].label; },
+  get blurb() { return messages().tiers[tier.id].blurb; },
+})));
+
+/**
+ * One band's label, by id — what a legend built elsewhere asks for.
+ * @param {string} id @returns {string}
+ */
+export function bdtopoTierLabel(id) {
+  return messages().tiers[id]?.label ?? id;
+}
 
 const TIER_BY_USAGE = new Map();
 for (const tier of BDTOPO_USAGE_TIERS) {
@@ -543,8 +537,7 @@ export function formatMetres(metres) {
   return metres >= 100 ? `${Math.round(metres)} m` : `${metres.toFixed(1)} m`;
 }
 
-/** @param {number} value @returns {string} A count with thin-space grouping. */
+/** @param {number} value @returns {string} A count grouped in the page's language. */
 export function formatCount(value) {
-  const n = Number(value) || 0;
-  return n.toLocaleString('fr-FR');
+  return formatNumber(Number(value) || 0);
 }
