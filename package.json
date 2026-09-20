@@ -176,6 +176,7 @@
     "layers:manifest:check": "node scripts/build-layer-manifest.mjs --check",
     "i18n:report": "node scripts/i18n-report.mjs",
     "i18n:tighten": "node scripts/i18n-report.mjs --tighten",
+    "qa:i18n-en": "node scripts/qa-i18n-en.mjs",
     "qa:provider-settings": "node scripts/qa-provider-settings.mjs"
   },
   "dependencies": {
