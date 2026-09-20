@@ -111,6 +111,10 @@
  */
 
 import { textSparkline } from './sparkline.js';
+import messages from './rteGenerationFeed.i18n.js';
+
+/** The catalog's French, for the frozen table below. See {@link rteClassWords}. */
+const WORDS = messages.definition;
 
 /** RTE's OAuth2 token endpoint. HTTP Basic over `client_id:client_secret`. */
 export const RTE_TOKEN_URL = 'https://digital.iservices.rte-france.com/token/oauth/';
@@ -141,100 +145,115 @@ export const RTE_REGISTRY_DATASET =
  * and the live half from RTE's `production_type`; they have to land on the same
  * id or a site would change colour the moment a key is added. `order` is the
  * legend order, coarsest fuel story first.
+ *
+ * The WORDS are the catalog's French, read from its definition so the two can
+ * never drift while this module — which the server imports — resolves no
+ * locale as it loads. What a reader sees comes from {@link rteClassWords},
+ * called when the key and the card are drawn.
  */
 export const RTE_GENERATION_CLASSES = Object.freeze({
   nuclear: Object.freeze({
     id: 'nuclear',
-    label: 'Nucléaire',
+    label: WORDS.classes['nuclear'].label.fr,
     color: '#c8ff4d',
     order: 0,
-    blurb: 'Réacteurs de fission. 57 groupes pour 63,0 GW — trois cinquièmes de tout ce qui est raccordé au réseau de transport, dans une seule filière.',
+    blurb: WORDS.classes['nuclear'].blurb.fr,
   }),
   'hydro-reservoir': Object.freeze({
     id: 'hydro-reservoir',
-    label: 'Hydraulique · lac',
+    label: WORDS.classes['hydro-reservoir'].label.fr,
     color: '#4db8ff',
     order: 1,
-    blurb: 'Hydraulique de lac. De l’eau stockée, lâchée sur commande — la plus grosse variation que le parc sache faire vite.',
+    blurb: WORDS.classes['hydro-reservoir'].blurb.fr,
   }),
   'hydro-run-of-river': Object.freeze({
     id: 'hydro-run-of-river',
-    label: 'Hydraulique · fil de l’eau',
+    label: WORDS.classes['hydro-run-of-river'].label.fr,
     color: '#5fd4e8',
     order: 2,
-    blurb: 'Hydraulique au fil de l’eau et par éclusée. Elle suit la rivière, pas le marché.',
+    blurb: WORDS.classes['hydro-run-of-river'].blurb.fr,
   }),
   'hydro-pumped': Object.freeze({
     id: 'hydro-pumped',
-    label: 'Hydraulique · pompage',
+    label: WORDS.classes['hydro-pumped'].label.fr,
     color: '#a78bfa',
     order: 3,
-    blurb: 'Pompage-turbinage. Elle produit ET elle consomme — une valeur négative ici, c’est la machine qui remplit son lac du haut, et pas la consommation propre qu’un groupe à l’arrêt affiche dans toutes les autres filières.',
+    blurb: WORDS.classes['hydro-pumped'].blurb.fr,
   }),
   'fossil-gas': Object.freeze({
     id: 'fossil-gas',
-    label: 'Gaz',
+    label: WORDS.classes['fossil-gas'].label.fr,
     color: '#ff9d3c',
     order: 4,
-    blurb: 'Gaz en cycle combiné, en cycle ouvert et en cogénération. Ce sont les centrales que la couche Réseau gaz dessine comme inventaire.',
+    blurb: WORDS.classes['fossil-gas'].blurb.fr,
   }),
   'fossil-coal': Object.freeze({
     id: 'fossil-coal',
-    label: 'Charbon',
+    label: WORDS.classes['fossil-coal'].label.fr,
     color: '#9aa0a6',
     order: 5,
-    blurb: 'Charbon. Quatre des six groupes restants sont « en retrait provisoire » au registre.',
+    blurb: WORDS.classes['fossil-coal'].blurb.fr,
   }),
   'fossil-oil': Object.freeze({
     id: 'fossil-oil',
-    label: 'Fioul',
+    label: WORDS.classes['fossil-oil'].label.fr,
     color: '#d2724f',
     order: 6,
-    blurb: 'Turbines à combustion au fioul. Des machines de pointe, à l’arrêt presque toute l’année.',
+    blurb: WORDS.classes['fossil-oil'].blurb.fr,
   }),
   biomass: Object.freeze({
     id: 'biomass',
-    label: 'Bioénergies',
+    label: WORDS.classes['biomass'].label.fr,
     color: '#7ee0a8',
     order: 7,
-    blurb: 'Biomasse et incinération de déchets, au-dessus du seuil de 100 MW.',
+    blurb: WORDS.classes['biomass'].blurb.fr,
   }),
   wind: Object.freeze({
     id: 'wind',
-    label: 'Éolien en mer',
+    label: WORDS.classes['wind'].label.fr,
     color: '#e6f2ff',
     order: 8,
-    blurb: 'Éolien en mer. Le seul éolien au-dessus du seuil : à terre, aucun parc n’atteint 100 MW.',
+    blurb: WORDS.classes['wind'].blurb.fr,
   }),
   solar: Object.freeze({
     id: 'solar',
-    label: 'Solaire',
+    label: WORDS.classes['solar'].label.fr,
     color: '#ffd84d',
     order: 9,
-    blurb: 'Photovoltaïque au-dessus du seuil de 100 MW.',
+    blurb: WORDS.classes['solar'].blurb.fr,
   }),
   marine: Object.freeze({
     id: 'marine',
-    label: 'Énergies marines',
+    label: WORDS.classes['marine'].label.fr,
     color: '#3fd0c0',
     order: 10,
-    blurb: 'Marémoteur. Une seule machine en France : l’usine de la Rance, 240 MW, en service depuis 1966.',
+    blurb: WORDS.classes['marine'].blurb.fr,
   }),
   battery: Object.freeze({
     id: 'battery',
-    label: 'Stockage batterie',
+    label: WORDS.classes['battery'].label.fr,
     color: '#ff5fd0',
     order: 11,
-    blurb: 'Batteries raccordées au réseau, au-dessus du seuil. Comme le pompage-turbinage, elles affichent une valeur négative pendant la charge.',
+    blurb: WORDS.classes['battery'].blurb.fr,
   }),
   other: Object.freeze({
     id: 'other',
-    label: 'Autre',
+    label: WORDS.classes['other'].label.fr,
     color: '#9aa4b2',
     order: 12,
-    blurb: 'Une classe publiée pour laquelle ce build n’a pas de ligne. La valeur d’origine est reprise sur la fiche plutôt que masquée.',
+    blurb: WORDS.classes['other'].blurb.fr,
   }),
 });
+
+/**
+ * The two words a class is drawn with, in the page's language.
+ * @param {string|null|undefined} id A class id.
+ * @returns {{label:string, blurb:string}}
+ */
+export function rteClassWords(id) {
+  const words = messages().classes;
+  return words[String(id ?? '')] || words.other;
+}
 
 /** Legend order for the classes, coarsest fuel story first. */
 export const RTE_CLASS_ORDER = Object.freeze(
@@ -295,9 +314,9 @@ export function classifyRteProductionType(value) {
  */
 export function rteProductionTypeLabel(value) {
   const token = String(value ?? '').trim().toUpperCase();
-  if (!token) return 'Filière non publiée';
+  if (!token) return messages().unpublishedType;
   const known = RTE_PRODUCTION_TYPE_CLASS[token];
-  if (known) return RTE_GENERATION_CLASSES[known].label;
+  if (known) return rteClassWords(known).label;
   return `production_type=${token}`;
 }
 
@@ -423,8 +442,16 @@ const TRAILING_ARTICLE = /^(.*?)\s*\(\s*(LE|LA|LES|L)\s*'?\s*\)$/u;
 
 /**
  * Site captions per class, used to rebuild a readable station name.
- * The register's own words, kept in French because the operator's are.
+ *
+ * FRENCH IN BOTH LANGUAGES, and deliberately: `composeSiteName()` runs in
+ * `scripts/build-rte-units-registry.mjs` and its output is written into
+ * `units.json` as the station's NAME — `Centrale nucléaire du Bugey` is what
+ * that plant is called, the way `Île-de-France` is what that région is
+ * called. Translating it at draw time would rename 108 French power stations
+ * for an English reader, and half of them are already named after the
+ * commune they stand in.
  */
+// i18n-ignore-start — station names persisted in units.json; see above.
 const SITE_KIND_CAPTION = Object.freeze({
   nuclear: 'Centrale nucléaire',
   'hydro-reservoir': 'Centrale hydraulique',
@@ -440,15 +467,18 @@ const SITE_KIND_CAPTION = Object.freeze({
   battery: 'Stockage',
   other: 'Site de production',
 });
+// i18n-ignore-end
 
 /**
  * Particles that stay lower-case inside a French place name — but never as its
  * first word, which is why `Le Tricastin` survives and `Saint-Laurent-des-Eaux`
  * loses its capital D.
  */
+// i18n-ignore-start — French particles of a place name, matched not read.
 const NAME_PARTICLES = new Set([
   'de', 'des', 'du', 'la', 'le', 'les', 'sur', 'sous', 'en', 'et', 'aux', 'au', 'lès', 'les',
 ]);
+// i18n-ignore-end
 
 /**
  * Title-case a shouted register name without destroying its hyphens, its
@@ -630,6 +660,8 @@ export function parseRegistreDate(value) {
  * @param {string} siteName - Raw site name from `parseInstallationName`.
  * @returns {string}
  */
+// i18n-ignore-start — the contractions of a French station NAME; the result
+// is persisted in units.json. See SITE_KIND_CAPTION above.
 export function composeSiteName(klass, siteName) {
   const caption = SITE_KIND_CAPTION[klass] || SITE_KIND_CAPTION.other;
   const name = titleCaseStationName(String(siteName ?? '').replace(/(\S)\(/g, '$1 ('));
@@ -644,6 +676,7 @@ export function composeSiteName(klass, siteName) {
   if (/^[AEIOUYÀÂÉÈÊËÎÏÔÖÛÜ]/u.test(name)) return `${caption} d’${name}`;
   return `${caption} de ${name}`;
 }
+// i18n-ignore-end
 
 /**
  * Project one ODRÉ register row into a registry unit.
