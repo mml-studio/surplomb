@@ -9,6 +9,9 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
+import { formatDate, formatNumber } from '../i18n/format.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import messages from './meteoStationsFrance.i18n.js';
 import {
   FAMILY_KEYS,
   POSTE_TYPES,
@@ -250,8 +253,8 @@ export function stationColor(station) {
 export function stationDisplayName(station) {
   const name = String(station?.name ?? '').trim();
   if (name) return name;
-  const commune = station?.commune ? ` à ${station.commune}` : '';
-  return `Station météo${commune}`;
+  const m = messages();
+  return station?.commune ? m.untitledAt(station.commune) : m.untitled;
 }
 
 /**
@@ -274,16 +277,28 @@ export function stationLabelText(station) {
  * @returns {string}
  */
 function fr(value, digits = 0) {
-  return value.toLocaleString('fr-FR', {
+  return formatNumber(value, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).replace(/[  ]/g, ' ');
+    plainSpaces: true,
+  });
 }
 
-/** `YYYY-MM-DD` as `DD/MM/YYYY`. */
+/**
+ * `YYYY-MM-DD` as the reader's own day.
+ *
+ * `DD/MM/YYYY` in French, as this card always printed it, and `Sep 19, 2026`
+ * in English — `03/04/2007` reads as the fourth of March there, and this is
+ * the line that says when a station closed.
+ */
 function frDate(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''));
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+  if (!match) return null;
+  const [, year, month, day] = match;
+  if (getLocale() === DEFAULT_LOCALE) return `${day}/${month}/${year}`;
+  return formatDate(Date.UTC(Number(year), Number(month) - 1, Number(day)), {
+    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
+  });
 }
 
 /**
@@ -294,7 +309,7 @@ function frDate(iso) {
 export function formatObservationTime(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(iso ?? ''));
   if (!match) return null;
-  return `${match[3]}/${match[2]} à ${match[4]} h ${match[5]} UTC`;
+  return messages().observedAt(match[3], match[2], match[4], match[5]);
 }
 
 /**
@@ -310,13 +325,17 @@ export function formatObservationTime(iso) {
  */
 export function buildObservationLines(observation) {
   if (!observation) return [];
+  const m = messages().observation;
   const lines = [];
   const at = formatObservationTime(observation.at);
   const bits = [];
   if (Number.isFinite(observation.tempC)) bits.push(`${fr(observation.tempC, 1)} °C`);
-  if (Number.isFinite(observation.humidity)) bits.push(`${fr(observation.humidity)} % HR`);
+  if (Number.isFinite(observation.humidity)) bits.push(m.humidity(fr(observation.humidity)));
   if (Number.isFinite(observation.pressureHpa)) bits.push(`${fr(observation.pressureHpa, 1)} hPa`);
-  if (bits.length) lines.push(`🌡 ${bits.join(' · ')}${at ? `  — ${at}` : ''}`);
+  if (bits.length) {
+    const joined = bits.join(' · ');
+    lines.push(at ? m.readingsAt(joined, at) : m.readings(joined));
+  }
 
   if (Number.isFinite(observation.windMs)) {
     // "de secteur OSO", not "de OSO": five of the sixteen compass points start
@@ -325,22 +344,19 @@ export function buildObservationLines(observation) {
     // meteorological phrasing and it is right for all sixteen.
     const point = compassPoint(observation.windDir);
     const gust = Number.isFinite(observation.gustMs)
-      ? `, rafale ${fr(observation.gustMs * 3.6)} km/h`
+      ? m.gust(fr(observation.gustMs * 3.6))
       : '';
-    lines.push(
-      `💨 ${fr(observation.windMs * 3.6)} km/h${point ? ` de secteur ${point}` : ''}${gust}`,
-    );
+    lines.push(m.wind(fr(observation.windMs * 3.6))
+      + (point ? m.windFrom(point) : '') + gust);
   }
   if (Number.isFinite(observation.rain1hMm)) {
-    lines.push(observation.rain1hMm > 0
-      ? `🌧 ${fr(observation.rain1hMm, 1)} mm sur la dernière heure`
-      : '🌧 pas de pluie sur la dernière heure');
+    lines.push(observation.rain1hMm > 0 ? m.rain(fr(observation.rain1hMm, 1)) : m.noRain);
   }
   if (Number.isFinite(observation.snowM) && observation.snowM > 0) {
-    lines.push(`❄ ${fr(observation.snowM * 100)} cm de neige au sol`);
+    lines.push(m.snow(fr(observation.snowM * 100)));
   }
   if (Number.isFinite(observation.visibilityM)) {
-    lines.push(`👁 visibilité ${fr(observation.visibilityM / 1000, 1)} km`);
+    lines.push(m.visibility(fr(observation.visibilityM / 1000, 1)));
   }
   return lines;
 }
@@ -358,10 +374,10 @@ export function buildObservationLines(observation) {
  */
 export function buildNormalsLines(fiche) {
   if (!fiche?.high || !fiche?.low) return [];
-  const window = fiche.period ? ` — records établis sur ${fiche.period}` : '';
+  const m = messages().records;
   return [
-    `📈 record ${fr(fiche.high.value, 1)} °C en ${fiche.high.date}`
-    + ` · ${fr(fiche.low.value, 1)} °C en ${fiche.low.date}${window}`,
+    m.line(fr(fiche.high.value, 1), fiche.high.date, fr(fiche.low.value, 1), fiche.low.date)
+    + (fiche.period ? m.over(fiche.period) : ''),
   ];
 }
 
@@ -378,59 +394,53 @@ export function buildNormalsLines(fiche) {
  * @returns {string} Newline-separated; the first line is the title.
  */
 export function buildStationCard(station, live = {}) {
+  const m = messages().card;
   const lines = [stationDisplayName(station)];
 
-  if (station?.closed) {
-    lines.push(
-      `⚠ station FERMÉE le ${frDate(station.closed)} — toujours présente `
-      + 'dans la liste temps réel de Météo-France',
-    );
-  }
+  if (station?.closed) lines.push(m.closed(frDate(station.closed)));
 
   const { measures, missing } = describeInstruments(station?.fam);
   if (!Array.isArray(station?.fam)) {
-    lines.push('⊘ inventaire non publié — cette station est absente des métadonnées Météo-France');
+    lines.push(m.noInventory);
   } else if (measures.length) {
-    lines.push(`◈ mesure ${measures.join(', ')}`);
-    if (missing.length) lines.push(`⊘ ne mesure pas ${missing.join(', ')}`);
+    lines.push(m.measures(measures.join(', ')));
+    if (missing.length) lines.push(m.doesNotMeasure(missing.join(', ')));
   } else {
-    lines.push('⊘ aucun paramètre en cours de mesure au dernier inventaire publié');
+    lines.push(m.measuresNothing);
   }
 
   if (live.observation) {
     lines.push(...buildObservationLines(live.observation));
   } else if (station?.live) {
-    lines.push(live.pending === false
-      ? '🌡 relevé public indisponible pour l’instant'
-      : '🌡 relevé en cours de chargement…');
+    lines.push(live.pending === false ? m.readingUnavailable : m.readingLoading);
   } else {
     // Not "no data": the station is measuring, and the reading exists behind a
     // credential. Saying so is the difference between a gap and a paywall.
-    lines.push('🔒 relevés non publiés en accès libre — API Météo-France sur clé');
+    lines.push(m.behindKey);
   }
 
   if (live.fiche) lines.push(...buildNormalsLines(live.fiche));
-  else if (station?.fiche && live.pending !== false) lines.push('📈 fiche climatologique en cours de chargement…');
+  else if (station?.fiche && live.pending !== false) lines.push(m.ficheLoading);
 
   const place = [
     station?.commune,
-    station?.place && station.place !== station.commune ? `lieu-dit ${station.place}` : null,
+    station?.place && station.place !== station.commune ? m.locality(station.place) : null,
   ].filter(Boolean).join(', ');
-  const where = `📍 ${place || '—'}${station?.dep ? ` (${station.dep})` : ''}`;
+  const where = m.where(`${place || '—'}${station?.dep ? ` (${station.dep})` : ''}`);
   lines.push(Number.isFinite(station?.alt) ? `${where} · ${fr(station.alt)} m` : where);
 
   const pack = station?.pack ? STATION_PACKS[station.pack] : null;
-  if (pack) lines.push(`▣ pack ${pack.label} — ${pack.blurb}`);
+  if (pack) lines.push(m.pack(pack.label, pack.blurb));
   if (Number.isFinite(station?.type) && POSTE_TYPES[station.type]) {
-    lines.push(`▸ ${POSTE_TYPES[station.type]}`);
+    lines.push(m.posteType(POSTE_TYPES[station.type]));
   }
-  if (station?.opened) lines.push(`🕐 ouverte depuis le ${frDate(station.opened)}`);
+  if (station?.opened) lines.push(m.opened(frDate(station.opened)));
   if (station?.omm) {
     lines.push(station.live
-      ? `# indicatif OMM ${station.omm} · poste ${station.id}`
-      : `# indicatif OMM ${station.omm} (non publié en SYNOP) · poste ${station.id}`);
+      ? m.ids(station.omm, station.id)
+      : m.idsNotInSynop(station.omm, station.id));
   } else {
-    lines.push(`# poste ${station.id}`);
+    lines.push(m.idOnly(station.id));
   }
   return lines.join('\n');
 }
@@ -462,20 +472,18 @@ export function stationLegend(stations) {
   // none of them.
   if (live && live < stations.length) {
     legend.push({
-      label: 'Anneau = relevés publics',
+      label: messages().legend.ring,
       color: LIVE_RING_COLOR,
       count: live,
-      blurb: 'Observation lisible sans clé. Météo-France en liste 62 ; '
-        + 'son archive en contient 190, et la couche compte l’archive.',
+      blurb: messages().legend.ringBlurb,
     });
   }
   if (closed) {
     legend.push({
-      label: 'Disque creux = station fermée',
+      label: messages().legend.closed,
       color: STATION_CLASSES.unknown.color,
       count: closed,
-      blurb: 'Fermée selon les métadonnées Météo-France, toujours listée dans '
-        + 'son réseau temps réel. Conservée et signalée, jamais supprimée en silence.',
+      blurb: messages().legend.closedBlurb,
     });
   }
   return legend;
@@ -992,12 +1000,12 @@ export function createMeteoStationsFranceLayer({
       try {
         const response = await fetchImpl(registryUrl);
         if (!response.ok) {
-          _lastError = `Réseau stations HTTP ${response.status}`;
+          _lastError = messages().errors.http(response.status);
           return false;
         }
         const payload = await response.json();
         if (!Array.isArray(payload?.stations)) {
-          _lastError = 'Réseau stations malformé';
+          _lastError = messages().errors.malformed;
           return false;
         }
         _registry = payload;
@@ -1014,7 +1022,7 @@ export function createMeteoStationsFranceLayer({
         return true;
       } catch (error) {
         console.warn('[Data:Stations météo] Load error:', error);
-        _lastError = 'Réseau stations illisible';
+        _lastError = messages().errors.unreadable;
         return false;
       } finally {
         _loading = false;
@@ -1098,9 +1106,7 @@ export function createMeteoStationsFranceLayer({
         // reader can click; `withheld` is what France measures and does not
         // publish in the open.
         withheld: Number.isFinite(stats?.stations) ? stats.stations - _stations.length : null,
-        withheldReason: SHOW_ONLY_PUBLISHING
-          ? 'relevés non publiés en accès libre — API Météo-France sur clé'
-          : null,
+        withheldReason: SHOW_ONLY_PUBLISHING ? messages().withheldReason : null,
         // Licence Ouverte 2.0 obliges the producer AND the data's own date.
         generated: _registry?.generated ?? null,
         synopNewest: _registry?.synop?.newest ?? null,

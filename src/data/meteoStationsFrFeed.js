@@ -105,6 +105,82 @@
  * @module data/meteoStationsFrFeed
  */
 
+import {
+  COMPASS_POINTS,
+  INSTRUMENT_FAMILY_WORDS,
+  POSTE_TYPE_WORDS,
+  STATION_CLASS_WORDS,
+  STATION_PACK_WORDS,
+} from './meteoStationsFrFeed.i18n.js';
+
+/**
+ * A `{label, blurb}` pair read in the page's language when it is ASKED for.
+ *
+ * Getters, never a spread: these tables are built at import time and a label
+ * read then would freeze in whichever language loaded first (ratchet R5).
+ *
+ * @param {object} catalog A `defineMessages` table of `{label, blurb}` leaves.
+ * @param {string} key
+ * @returns {{label: string, blurb: string}}
+ */
+function wordsOf(catalog, key) {
+  return Object.freeze({
+    get label() { return catalog()[key].label; },
+    get blurb() { return catalog()[key].blurb; },
+  });
+}
+
+/**
+ * A flat catalog as a plain record of getters, so `TABLE[code]` keeps working.
+ * @param {object} catalog A `defineMessages` table of string leaves.
+ * @returns {Readonly<Record<string, string>>}
+ */
+function leafRecord(catalog) {
+  const table = {};
+  for (const key of Object.keys(catalog.definition)) {
+    Object.defineProperty(table, key, { enumerable: true, get() { return catalog()[key]; } });
+  }
+  return Object.freeze(table);
+}
+
+/**
+ * One instrument family: its anchor parameter, its measured count, its
+ * Météo-France field code, and two words read at draw time.
+ *
+ * @param {string} key Family key, also the catalog key.
+ * @param {string} anchor The station's own HOURLY base reading.
+ * @param {number} count Stations carrying it, on the 2026-09-02 inventory.
+ * @param {string} short Météo-France's field code. The same in both languages.
+ * @returns {object}
+ */
+function family(key, anchor, count, short) {
+  return Object.freeze({
+    key,
+    anchor,
+    count,
+    short,
+    get label() { return INSTRUMENT_FAMILY_WORDS()[key].label; },
+    get blurb() { return INSTRUMENT_FAMILY_WORDS()[key].blurb; },
+  });
+}
+
+/**
+ * One station class: its ink, its measured count, and two words at draw time.
+ * @param {string} key Class key, also the catalog key.
+ * @param {string} color CSS hex.
+ * @param {number} count Stations in the class, on the 2026-09-02 build.
+ * @returns {object}
+ */
+function stationClass(key, color, count) {
+  return Object.freeze({
+    key,
+    color,
+    count,
+    get label() { return STATION_CLASS_WORDS()[key].label; },
+    get blurb() { return STATION_CLASS_WORDS()[key].blurb; },
+  });
+}
+
 /**
  * The real-time station list — Météo-France's own, via data.gouv.fr.
  *
@@ -131,6 +207,7 @@ export const SYNOP_STATIONS_URL = 'https://www.data.gouv.fr/api/1/datasets/r/8d2
  * it is read at all — `DATFERM`, which is what catches the seven closed
  * stations the real-time list still carries.
  */
+// i18n-ignore-next-line — a URL, in the publisher's own path vocabulary.
 export const POSTES_URL = 'https://meteofrance.s3.sbg.io.cloud.ovh.net/data/synchro_ftp/BASE/POSTES/POSTES_MF.csv';
 
 /**
@@ -196,8 +273,8 @@ export const NORMALS_CACHE_MS = 86_400_000;
  * apart is entitled to know one of them is in the reference network.
  */
 export const STATION_PACKS = Object.freeze({
-  RADOME: Object.freeze({ label: 'RADOME', blurb: 'réseau de référence, expertisé à J+1' }),
-  ETENDU: Object.freeze({ label: 'Étendu', blurb: 'réseau complémentaire temps réel' }),
+  RADOME: wordsOf(STATION_PACK_WORDS, 'RADOME'),
+  ETENDU: wordsOf(STATION_PACK_WORDS, 'ETENDU'),
 });
 
 /**
@@ -207,13 +284,7 @@ export const STATION_PACKS = Object.freeze({
  * other bodies, published in a separate file, and none of them is in the
  * real-time list this layer draws.
  */
-export const POSTE_TYPES = Object.freeze({
-  0: 'station synoptique, temps réel, expertisée à J+1',
-  1: 'station automatique Radome-Resome, temps réel, expertisée à J+1',
-  2: 'station automatique hors Radome-Resome, temps réel, expertisée à J+1',
-  3: 'station automatique, temps réel, expertisée en temps différé',
-  4: 'poste climatologique manuel ou automatique, acquisition en temps différé',
-});
+export const POSTE_TYPES = leafRecord(POSTE_TYPE_WORDS);
 
 /**
  * The instrument families, each anchored on ONE parameter name.
@@ -235,64 +306,24 @@ export const POSTE_TYPES = Object.freeze({
  * reader would guess — and the order that makes the card's "measures / does not
  * measure" split read as a descent from the ordinary to the rare.
  */
+// i18n-ignore-start — ANCHOR parameter names of the inventory, matched on.
 export const INSTRUMENT_FAMILIES = Object.freeze([
-  Object.freeze({
-    key: 'temp', anchor: 'TEMPERATURE SOUS ABRI HORAIRE', count: 2084,
-    label: 'température', short: 'T', blurb: 'thermomètre sous abri',
-  }),
-  Object.freeze({
-    key: 'rain', anchor: 'HAUTEUR DE PRECIPITATIONS HORAIRE', count: 2068,
-    label: 'précipitations', short: 'RR', blurb: 'pluviomètre',
-  }),
-  Object.freeze({
-    key: 'humidity', anchor: 'HUMIDITE RELATIVE HORAIRE', count: 860,
-    label: 'humidité', short: 'U', blurb: 'hygromètre',
-  }),
-  Object.freeze({
-    key: 'wind', anchor: 'VITESSE DU VENT HORAIRE', count: 845,
-    label: 'vent à 10 m', short: 'FF', blurb: 'anémomètre à 10 m',
-  }),
-  Object.freeze({
-    key: 'snow', anchor: 'EPAISSEUR DE NEIGE TOTALE HORAIRE', count: 309,
-    label: 'neige au sol', short: 'NEIG', blurb: 'hauteur de neige totale',
-  }),
-  Object.freeze({
-    key: 'radiation', anchor: 'RAYONNEMENT GLOBAL HORAIRE', count: 270,
-    label: 'rayonnement global', short: 'GLO', blurb: 'pyranomètre',
-  }),
-  Object.freeze({
-    key: 'pressure', anchor: 'PRESSION STATION HORAIRE', count: 234,
-    label: 'pression', short: 'P', blurb: 'baromètre',
-  }),
-  Object.freeze({
-    key: 'sunshine', anchor: "DUREE D'INSOLATION HORAIRE", count: 228,
-    label: 'insolation', short: 'INS', blurb: 'héliographe',
-  }),
-  Object.freeze({
-    key: 'visibility', anchor: 'VISIBILITE HORAIRE', count: 211,
-    label: 'visibilité', short: 'VV', blurb: 'visibilimètre',
-  }),
-  Object.freeze({
-    key: 'weather', anchor: 'CODE TEMPS PRESENT HORAIRE', count: 206,
-    label: 'temps présent', short: 'WW', blurb: 'capteur de temps présent',
-  }),
-  Object.freeze({
-    key: 'cloud', anchor: 'NEBULOSITE TOTALE HORAIRE', count: 186,
-    label: 'nébulosité', short: 'N', blurb: 'célomètre',
-  }),
-  Object.freeze({
-    key: 'road', anchor: 'TEMPERATURE DE CHAUSSEE', count: 149,
-    label: 'température de chaussée', short: 'RTE', blurb: 'sonde de chaussée — station routière',
-  }),
-  Object.freeze({
-    key: 'soil', anchor: 'TEMPERATURE A -10 CM HORAIRE', count: 132,
-    label: 'température du sol', short: 'SOL', blurb: 'sondes enterrées',
-  }),
-  Object.freeze({
-    key: 'sea', anchor: 'ETAT DE LA MER HORAIRE', count: 44,
-    label: 'état de la mer', short: 'MER', blurb: 'observation de l’état de la mer',
-  }),
+  family('temp', 'TEMPERATURE SOUS ABRI HORAIRE', 2084, 'T'),
+  family('rain', 'HAUTEUR DE PRECIPITATIONS HORAIRE', 2068, 'RR'),
+  family('humidity', 'HUMIDITE RELATIVE HORAIRE', 860, 'U'),
+  family('wind', 'VITESSE DU VENT HORAIRE', 845, 'FF'),
+  family('snow', 'EPAISSEUR DE NEIGE TOTALE HORAIRE', 309, 'NEIG'),
+  family('radiation', 'RAYONNEMENT GLOBAL HORAIRE', 270, 'GLO'),
+  family('pressure', 'PRESSION STATION HORAIRE', 234, 'P'),
+  family('sunshine', "DUREE D'INSOLATION HORAIRE", 228, 'INS'),
+  family('visibility', 'VISIBILITE HORAIRE', 211, 'VV'),
+  family('weather', 'CODE TEMPS PRESENT HORAIRE', 206, 'WW'),
+  family('cloud', 'NEBULOSITE TOTALE HORAIRE', 186, 'N'),
+  family('road', 'TEMPERATURE DE CHAUSSEE', 149, 'RTE'),
+  family('soil', 'TEMPERATURE A -10 CM HORAIRE', 132, 'SOL'),
+  family('sea', 'ETAT DE LA MER HORAIRE', 44, 'MER'),
 ]);
+// i18n-ignore-end
 
 /** Family keys in declaration order — the order every readout uses. */
 export const FAMILY_KEYS = Object.freeze(INSTRUMENT_FAMILIES.map((family) => family.key));
@@ -331,34 +362,13 @@ export const SYNOPTIC_CORE = Object.freeze(['temp', 'rain', 'wind', 'humidity', 
  * layers use for "the publisher did not say", never as an empty station.
  */
 export const STATION_CLASSES = Object.freeze({
-  synoptic: Object.freeze({
-    key: 'synoptic', label: 'Synoptique complète', color: '#7ee8fa', count: 228,
-    blurb: 'température, pluie, vent, humidité et pression',
-  }),
-  wind: Object.freeze({
-    key: 'wind', label: 'Automatique avec vent', color: '#66d9a6', count: 565,
-    blurb: 'température, pluie et vent — pas de pression',
-  }),
-  'temp-rain': Object.freeze({
-    key: 'temp-rain', label: 'Température et pluie', color: '#ffd166', count: 1254,
-    blurb: 'ne mesure ni le vent ni la pression',
-  }),
-  thermo: Object.freeze({
-    key: 'thermo', label: 'Température seule', color: '#f4a261', count: 37,
-    blurb: 'thermomètre sans pluviomètre',
-  }),
-  rain: Object.freeze({
-    key: 'rain', label: 'Pluviomètre', color: '#c792ea', count: 21,
-    blurb: 'la pluie et rien d’autre',
-  }),
-  other: Object.freeze({
-    key: 'other', label: 'Autres capteurs', color: '#8fa3b8', count: 33,
-    blurb: 'ni température ni pluie — capteurs spécialisés',
-  }),
-  unknown: Object.freeze({
-    key: 'unknown', label: 'Inventaire non publié', color: '#5c6b7a', count: 6,
-    blurb: 'station listée en temps réel, absente des métadonnées',
-  }),
+  synoptic: stationClass('synoptic', '#7ee8fa', 228),
+  wind: stationClass('wind', '#66d9a6', 565),
+  'temp-rain': stationClass('temp-rain', '#ffd166', 1254),
+  thermo: stationClass('thermo', '#f4a261', 37),
+  rain: stationClass('rain', '#c792ea', 21),
+  other: stationClass('other', '#8fa3b8', 33),
+  unknown: stationClass('unknown', '#5c6b7a', 6),
 });
 
 /** Legend order — most capable first, `unknown` last. */
@@ -572,8 +582,10 @@ export function kelvinToCelsius(kelvin) {
 export function compassPoint(degrees) {
   const value = finiteOrNull(degrees);
   if (value === null) return null;
-  const points = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-    'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+  // Sixteen abbreviations, and they differ: west is `O` for *ouest* in French
+  // and `W` in English, so half the rose changes letter. Held as an ARRAY in
+  // the catalog, read when the card is drawn.
+  const points = COMPASS_POINTS().points;
   return points[Math.round(((value % 360) + 360) % 360 / 22.5) % 16];
 }
 
@@ -727,8 +739,10 @@ export function parseFicheClim(text) {
     return { value, date, period: period ? `${period[1]} → ${period[2]}` : null };
   };
 
+  // i18n-ignore-start — the fiche's own row headings, matched, never shown.
   const high = block('La température la plus élevée');
   const low = block('La température la plus basse');
+  // i18n-ignore-end
   if (!high || !low) return null;
 
   return {
