@@ -5933,17 +5933,18 @@ export class StyleManager {
       this._cockpitDisplayToggleBtn?.setAttribute('aria-expanded', String(displayOpen));
       this._cockpitRadioToggleBtn?.setAttribute('aria-expanded', String(radioOpen));
       if (displayOpen) this._revealCockpitStyleParameters();
+      const utility = messages().cockpit.utility;
       if (this._cockpitDisplayToggleBtn) {
-        const action = displayOpen ? 'Collapse' : 'Expand';
+        const label = displayOpen ? utility.displayCollapse : utility.displayExpand;
         this._cockpitDisplayToggleBtn.textContent = displayOpen ? '▶' : '◀';
-        this._cockpitDisplayToggleBtn.setAttribute('aria-label', `${action} Cockpit display options`);
-        this._cockpitDisplayToggleBtn.title = `${action} Cockpit display options`;
+        this._cockpitDisplayToggleBtn.setAttribute('aria-label', label);
+        this._cockpitDisplayToggleBtn.title = label;
       }
       if (this._cockpitRadioToggleBtn) {
-        const action = radioOpen ? 'Collapse' : 'Expand';
+        const label = radioOpen ? utility.radioCollapse : utility.radioExpand;
         this._cockpitRadioToggleBtn.textContent = radioOpen ? '▶' : '◀';
-        this._cockpitRadioToggleBtn.setAttribute('aria-label', `${action} Cockpit Radio controls`);
-        this._cockpitRadioToggleBtn.title = `${action} Cockpit Radio controls`;
+        this._cockpitRadioToggleBtn.setAttribute('aria-label', label);
+        this._cockpitRadioToggleBtn.title = label;
       }
       if (!expanded && returnFocus) {
         (kind === 'display' ? this._cockpitDisplayToggleBtn : this._cockpitRadioToggleBtn)
@@ -5995,16 +5996,17 @@ export class StyleManager {
       this._radioTuner?.style.setProperty('--radio-tuner-ratio', String(ratio));
       this._radioTuner?.classList.toggle('is-static', syncStatic ? false : Boolean(this._radioState?.tuningStatic));
       syncTunerTape(resolvedCoordinate);
+      const mr = messages().radio;
       if (this._radioTunerValue) {
         this._radioTunerValue.textContent = station
-          ? `CH ${String(slot.stationIndex + 1).padStart(2, '0')} / ${String(this._radioTunerStations.length).padStart(2, '0')}`
-          : 'NO STATIONS';
+          ? mr.channel(String(slot.stationIndex + 1).padStart(2, '0'), String(this._radioTunerStations.length).padStart(2, '0'))
+          : mr.noStations;
       }
-      if (this._radioTunerStation) this._radioTunerStation.textContent = station?.name || 'NO STATION AVAILABLE';
+      if (this._radioTunerStation) this._radioTunerStation.textContent = station?.name || mr.noStationAvailable;
       if (this._radioTunerSlider) {
         this._radioTunerSlider.setAttribute('aria-valuetext', station
-          ? `${station.name}, station ${slot.stationIndex + 1} of ${this._radioTunerStations.length}`
-          : 'No station available');
+          ? mr.tunerValueText(station.name, slot.stationIndex + 1, this._radioTunerStations.length)
+          : mr.noStationValueText);
       }
       if (syncStatic) radioLayer.previewTuningStation?.(station?.id || null, { rotate });
       return station;
@@ -6118,12 +6120,10 @@ export class StyleManager {
       if (result && !result.ok) {
         this._radioTunerBandPinnedForNavigation = false;
         if (result.reason === 'station-unavailable') {
-          if (this._radioTunerValue) this._radioTunerValue.textContent = 'OFF AIR';
-          if (this._radioTunerStation) this._radioTunerStation.textContent = 'STATION UNAVAILABLE';
-          this._radioTunerSlider?.setAttribute(
-            'aria-valuetext',
-            'Station unavailable after directory refresh',
-          );
+          const mr = messages().radio;
+          if (this._radioTunerValue) this._radioTunerValue.textContent = mr.offAir;
+          if (this._radioTunerStation) this._radioTunerStation.textContent = mr.stationUnavailable;
+          this._radioTunerSlider?.setAttribute('aria-valuetext', mr.stationUnavailableAfterRefresh);
         }
       }
     };
@@ -6151,7 +6151,7 @@ export class StyleManager {
             origin: 'user',
             notificationToken,
           }),
-          `Radio could not ${enabling ? 'start' : 'stop'} cleanly`,
+          messages().radio.couldNot(enabling ? messages().radio.start : messages().radio.stop),
         );
         if (toggled === false) return;
         if (enabling && trigger === this._radioEnableBtn
@@ -6460,7 +6460,7 @@ export class StyleManager {
       const radioExpanded = Boolean(this._radioPanel && !this._radioPanel.classList.contains('collapsed'));
       this._contextRadioToggleBtn.setAttribute('aria-controls', 'radio-panel');
       this._contextRadioToggleBtn.setAttribute('aria-expanded', String(radioExpanded));
-      const label = radioExpanded ? 'Go to expanded Radio section' : 'Expand Radio section in Context';
+      const label = radioExpanded ? messages().radio.goToExpanded : messages().radio.expandInContext;
       this._contextRadioToggleBtn.setAttribute('aria-label', label);
       this._contextRadioToggleBtn.title = label;
       return;
@@ -6502,43 +6502,47 @@ export class StyleManager {
     this._syncContextRadioLauncherState();
     this._radioLayerState?.classList.toggle('active', enabled);
     if (this._radioLayerState) {
+      const mr = messages().radio;
       this._radioLayerState.textContent = transitioning
         ? lifecycleState.toUpperCase()
-        : (uncertain ? 'UNCERTAIN' : (state.loading ? 'SYNC' : (enabled ? `${state.filteredCount}/${state.stationCount}` : 'OFF')));
+        : (uncertain ? mr.uncertain : (state.loading ? mr.sync : (enabled ? `${state.filteredCount}/${state.stationCount}` : mr.off)));
     }
     if (this._radioEnableBtn) {
       this._radioEnableBtn.classList.toggle('active', enabled);
       this._radioEnableBtn.setAttribute('aria-pressed', String(enabled));
+      const mr = messages().radio;
       this._radioEnableBtn.textContent = transitioning
         ? lifecycleState.toUpperCase()
-        : (uncertain ? 'RECONCILE' : (enabled ? 'DISABLE' : 'ENABLE'));
+        : (uncertain ? mr.reconcile : (enabled ? mr.disable : mr.enable));
       this._radioEnableBtn.setAttribute(
         'aria-label',
-        uncertain ? 'Reconcile Radio — lifecycle uncertain' : `${enabled ? 'Disable' : 'Enable'} Radio`,
+        uncertain ? mr.reconcileAria : (enabled ? mr.disableAria : mr.enableAria),
       );
       this._radioEnableBtn.disabled = transitioning;
     }
     if (this._contextRadioMiniEnableBtn) {
       this._contextRadioMiniEnableBtn.classList.toggle('active', enabled);
       this._contextRadioMiniEnableBtn.setAttribute('aria-pressed', String(enabled));
+      const mr = messages().radio;
       this._contextRadioMiniEnableBtn.textContent = transitioning
         ? lifecycleState.toUpperCase()
-        : (uncertain ? 'RECONCILE' : (enabled ? 'DISABLE' : 'ENABLE'));
+        : (uncertain ? mr.reconcile : (enabled ? mr.disable : mr.enable));
       this._contextRadioMiniEnableBtn.setAttribute(
         'aria-label',
-        uncertain ? 'Reconcile Radio — lifecycle uncertain' : `${enabled ? 'Disable' : 'Enable'} Radio`,
+        uncertain ? mr.reconcileAria : (enabled ? mr.disableAria : mr.enableAria),
       );
       this._contextRadioMiniEnableBtn.disabled = transitioning;
     }
     if (this._cockpitRadioEnableBtn) {
       this._cockpitRadioEnableBtn.classList.toggle('active', enabled);
       this._cockpitRadioEnableBtn.setAttribute('aria-pressed', String(enabled));
+      const mr = messages().radio;
       this._cockpitRadioEnableBtn.textContent = transitioning
         ? lifecycleState.toUpperCase()
-        : (uncertain ? 'RECONCILE' : (enabled ? 'DISABLE' : 'ENABLE'));
+        : (uncertain ? mr.reconcile : (enabled ? mr.disable : mr.enable));
       this._cockpitRadioEnableBtn.setAttribute(
         'aria-label',
-        uncertain ? 'Reconcile Radio — lifecycle uncertain' : `${enabled ? 'Disable' : 'Enable'} Radio`,
+        uncertain ? mr.reconcileAria : (enabled ? mr.disableAria : mr.enableAria),
       );
       this._cockpitRadioEnableBtn.disabled = transitioning;
     }
@@ -6572,8 +6576,8 @@ export class StyleManager {
     if (this._radioTunerBandLabel) {
       const activeCategory = state.categories.find((category) => category.id === state.filter);
       this._radioTunerBandLabel.textContent = state.filter === 'all'
-        ? 'DIRECTORY BAND'
-        : `${String(activeCategory?.label || state.filter).toUpperCase()} BAND`;
+        ? messages().radio.directoryBand
+        : messages().radio.band(String(activeCategory?.label || state.filter).toUpperCase());
     }
     this._radioTuner?.classList.toggle('is-static', Boolean(state.tuningStatic));
     if (tunerAvailable) this._refreshRadioTunerBand?.();
@@ -6590,17 +6594,18 @@ export class StyleManager {
       this._radioTunerSelectedId = null;
     }
 
-    if (this._radioStationName) this._radioStationName.textContent = selected?.name || 'NO STATION SELECTED';
+    const mr = messages().radio;
+    if (this._radioStationName) this._radioStationName.textContent = selected?.name || mr.noStationSelected;
     if (this._radioStationMeta) {
       const place = selected ? [selected.state, selected.countryCode].filter(Boolean).join(' · ') : '';
       const signal = selected ? [selected.codec, selected.bitrate ? `${selected.bitrate} kbps` : ''].filter(Boolean).join(' · ') : '';
       this._radioStationMeta.textContent = selected
-        ? [place, signal].filter(Boolean).join('  /  ') || 'Directory metadata only'
-        : (state.loading ? 'Loading station directory…' : 'Choose a globe marker or use next.');
+        ? [place, signal].filter(Boolean).join('  /  ') || mr.metadataOnly
+        : (state.loading ? mr.loadingDirectory : mr.chooseMarker);
     }
     if (this._radioStationTags) {
       const tags = Array.isArray(selected?.tags) ? selected.tags.slice(0, 8) : [];
-      this._radioStationTags.textContent = tags.length ? `TAGS · ${tags.join(' · ')}` : '';
+      this._radioStationTags.textContent = tags.length ? mr.tags(tags.join(' · ')) : '';
     }
     if (this._radioStationHomepage) {
       const homepage = selected?.homepage || '';
@@ -6615,27 +6620,31 @@ export class StyleManager {
     if (this._contextRadioMiniNextBtn) this._contextRadioMiniNextBtn.disabled = !interactive || !hasStations;
     if (this._cockpitRadioPrevBtn) this._cockpitRadioPrevBtn.disabled = !interactive || !hasStations;
     if (this._cockpitRadioNextBtn) this._cockpitRadioNextBtn.disabled = !interactive || !hasStations;
+    // One helper for the three transports: the same verb, the same sentence,
+    // whichever of the three surfaces is on screen.
+    const playbackAction = () => (activePlayback ? mr.pause : (state.audioState === 'paused' ? mr.resume : mr.play));
+    const playbackAria = (action) => (selected ? mr.playSelected(action) : mr.playNearest(action));
     if (this._radioPlayBtn) {
-      const action = activePlayback ? 'Pause' : (state.audioState === 'paused' ? 'Resume' : 'Play');
+      const action = playbackAction();
       this._radioPlayBtn.disabled = !interactive || !hasStations;
       this._radioPlayBtn.classList.toggle('active', activePlayback);
       this._radioPlayBtn.textContent = action.toUpperCase();
-      this._radioPlayBtn.setAttribute('aria-label', `${action} ${selected ? 'selected' : 'nearest'} radio station`);
+      this._radioPlayBtn.setAttribute('aria-label', playbackAria(action));
     }
     if (this._contextRadioMiniPlayBtn) {
-      const action = activePlayback ? 'Pause' : (state.audioState === 'paused' ? 'Resume' : 'Play');
+      const action = playbackAction();
       this._contextRadioMiniPlayBtn.disabled = !interactive || !hasStations;
       this._contextRadioMiniPlayBtn.classList.toggle('active', activePlayback);
       this._contextRadioMiniPlayBtn.textContent = activePlayback ? 'Ⅱ' : '▶';
-      this._contextRadioMiniPlayBtn.setAttribute('aria-label', `${action} ${selected ? 'selected' : 'nearest'} radio station`);
+      this._contextRadioMiniPlayBtn.setAttribute('aria-label', playbackAria(action));
       this._contextRadioMiniPlayBtn.title = action;
     }
     if (this._cockpitRadioPlayBtn) {
-      const action = activePlayback ? 'Pause' : (state.audioState === 'paused' ? 'Resume' : 'Play');
+      const action = playbackAction();
       this._cockpitRadioPlayBtn.disabled = !interactive || !hasStations;
       this._cockpitRadioPlayBtn.classList.toggle('active', activePlayback);
       this._cockpitRadioPlayBtn.textContent = activePlayback ? 'Ⅱ' : '▶';
-      this._cockpitRadioPlayBtn.setAttribute('aria-label', `${action} ${selected ? 'selected' : 'nearest'} radio station`);
+      this._cockpitRadioPlayBtn.setAttribute('aria-label', playbackAria(action));
       this._cockpitRadioPlayBtn.title = action;
     }
     if (this._radioStopBtn) this._radioStopBtn.disabled = !interactive || state.audioState === 'stopped';
@@ -6660,45 +6669,39 @@ export class StyleManager {
     }
     if (this._contextRadioMiniStation) {
       this._contextRadioMiniStation.textContent = uncertain
-        ? 'RADIO STATE UNCERTAIN'
-        : (selected?.name || (state.loading ? 'SYNCING DIRECTORY' : 'RADIO READY'));
+        ? mr.stateUncertain
+        : (selected?.name || (state.loading ? mr.syncingDirectory : mr.ready));
     }
     if (this._cockpitRadioStation) {
       this._cockpitRadioStation.textContent = uncertain
-        ? 'UNCERTAIN'
-        : (selected?.name || (state.loading ? 'SYNCING' : 'READY'));
+        ? mr.uncertain
+        : (selected?.name || (state.loading ? mr.syncingShort : mr.readyShort));
     }
     if (this._radioPlaybackState) {
       const catalogSuffix = state.degraded
-        ? (state.stale ? ' · stale/degraded directory' : ' · degraded directory')
-        : (state.stale ? ' · stale directory' : '');
-      const outsideFilter = selected && state.selectedIndex < 0 ? ' · outside current filter' : '';
-      const messages = {
-        stopped: enabled ? 'Ready — playback starts only from your action' : 'Radio off',
-        loading: 'Connecting directly to broadcaster…',
-        buffering: 'Buffering broadcaster stream…',
-        playing: `Playing ${selected?.name || 'station'}`,
-        paused: `Paused ${selected?.name || 'station'}`,
-        error: state.audioError || 'Broadcaster stream unavailable',
+        ? (state.stale ? mr.directoryStaleDegraded : mr.directoryDegraded)
+        : (state.stale ? mr.directoryStale : '');
+      const outsideFilter = selected && state.selectedIndex < 0 ? mr.outsideFilter : '';
+      const playbackLines = {
+        stopped: enabled ? mr.playbackReady : mr.playbackOff,
+        loading: mr.playbackConnecting,
+        buffering: mr.playbackBuffering,
+        playing: mr.playbackPlaying(selected?.name || mr.playbackStation),
+        paused: mr.playbackPaused(selected?.name || mr.playbackStation),
+        error: state.audioError || mr.playbackError,
       };
       const voiceSuffix = state.voiceDucked
-        ? ' · muted during voice interaction'
-        : (state.voiceRestoring ? ' · restoring volume after voice' : '');
+        ? mr.voiceDucked
+        : (state.voiceRestoring ? mr.voiceRestoring : '');
       const tuningSuffix = state.tuningAwaitingStationId
-        ? (state.audioState === 'error'
-          ? ' · static indicates no broadcaster audio'
-          : ' · tuning static until broadcaster starts')
+        ? (state.audioState === 'error' ? mr.tuningStaticError : mr.tuningStatic)
         : '';
-      const unavailable = state.tuningUnavailableStationId
-        ? 'Station unavailable after directory refresh — choose another channel'
-        : null;
+      const unavailable = state.tuningUnavailableStationId ? mr.tuningUnavailable : null;
       const lifecycleMessage = transitioning
-        ? (lifecycleState === 'enabling' ? 'Radio is enabling…' : 'Radio is disabling…')
+        ? (lifecycleState === 'enabling' ? mr.enabling : mr.disabling)
         : null;
-      const uncertainMessage = uncertain
-        ? 'Radio lifecycle is uncertain — use Enable or Disable to reconcile'
-        : null;
-      this._radioPlaybackState.textContent = `${uncertainMessage || unavailable || lifecycleMessage || state.error || messages[state.audioState] || 'Ready'}${tuningSuffix}${voiceSuffix}${catalogSuffix}${outsideFilter}`;
+      const uncertainMessage = uncertain ? mr.lifecycleUncertain : null;
+      this._radioPlaybackState.textContent = `${uncertainMessage || unavailable || lifecycleMessage || state.error || playbackLines[state.audioState] || mr.fallback}${tuningSuffix}${voiceSuffix}${catalogSuffix}${outsideFilter}`;
       this._radioPlaybackState.classList.toggle('error', Boolean(uncertainMessage || unavailable || state.error || state.audioState === 'error'));
     }
     if (
@@ -6969,7 +6972,7 @@ export class StyleManager {
     if (!this._cctvLightbox || this._cctvLightbox.hidden) return;
     const camera = this._cctvState?.activeCamera || null;
     if (this._cctvLightboxTitle) {
-      this._cctvLightboxTitle.textContent = camera?.name || 'CCTV';
+      this._cctvLightboxTitle.textContent = camera?.name || messages().cctv.fallbackTitle;
     }
     if (!this._cctvLightboxMeta) return;
 
@@ -7096,19 +7099,20 @@ export class StyleManager {
    */
   _syncCctvSourceBadge(activeCamera, enabled) {
     if (!this._cctvSourceBadge) return;
+    const m = messages().cctv;
     if (!enabled || !activeCamera) {
-      this._cctvSourceBadge.textContent = 'SOURCE · UNKNOWN';
+      this._cctvSourceBadge.textContent = m.sourceUnknown;
       this._cctvSourceBadge.dataset.frameState = 'idle';
       return;
     }
     const hasDisplayedFrame = this._cctvFrameWrap?.classList.contains('has-frame');
     if (this._cctvFrame?.dataset.loading === 'true' && !hasDisplayedFrame) {
-      this._cctvSourceBadge.textContent = 'FRAME · LOADING';
+      this._cctvSourceBadge.textContent = m.frameLoading;
       this._cctvSourceBadge.dataset.frameState = 'loading';
       return;
     }
     if (this._cctvFrame?.dataset.error === 'true' && !hasDisplayedFrame) {
-      this._cctvSourceBadge.textContent = 'FRAME · UNAVAILABLE';
+      this._cctvSourceBadge.textContent = m.frameUnavailable;
       this._cctvSourceBadge.dataset.frameState = 'error';
       return;
     }
@@ -7196,7 +7200,7 @@ export class StyleManager {
     if (this._cctvAdjustBtn) {
       const adjustOn = !!this._cctvState?.calibrationMode;
       this._cctvAdjustBtn.classList.toggle('active', adjustOn && canCalibrate);
-      this._cctvAdjustBtn.textContent = adjustOn ? 'ADJUST ON' : 'ADJUST';
+      this._cctvAdjustBtn.textContent = adjustOn ? messages().cctv.adjustOn : messages().cctv.adjust;
       this._cctvAdjustBtn.disabled = !canCalibrate;
     }
     if (this._cctvCalReadout) {
@@ -7255,10 +7259,11 @@ export class StyleManager {
    * @returns {string} Display label, or '--' when there is no active camera.
    */
   _calBadgeLabel(badge) {
+    const m = messages().cctv;
     switch (badge) {
-      case 'calibrated': return 'CALIBRATED';
-      case 'curated': return 'CURATED';
-      case 'raw-prior': return 'RAW PRIOR';
+      case 'calibrated': return m.badgeCalibrated;
+      case 'curated': return m.badgeCurated;
+      case 'raw-prior': return m.badgeRawPrior;
       default: return '--';
     }
   }
@@ -7306,7 +7311,7 @@ export class StyleManager {
 
     if (this._cctvEnableBtn) {
       this._cctvEnableBtn.classList.toggle('active', enabled);
-      this._cctvEnableBtn.textContent = enabled ? 'CCTV ON' : 'CCTV OFF';
+      this._cctvEnableBtn.textContent = enabled ? messages().cctv.on : messages().cctv.off;
     }
 
     if (this._cctvSelect) {
@@ -7342,23 +7347,24 @@ export class StyleManager {
       // (color-coded volumes). The click handler cycles; this renders.
       const mode = state?.coverageMode || (state?.showCoverage ? 'on' : 'off');
       this._cctvCoverageBtn.classList.toggle('active', mode !== 'off');
+      const m = messages().cctv;
       this._cctvCoverageBtn.textContent = mode === 'viewshed'
-        ? 'VIEWSHED ON'
-        : mode === 'on' ? 'COVERAGE ON' : 'COVERAGE OFF';
+        ? m.viewshedOn
+        : mode === 'on' ? m.coverageOn : m.coverageOff;
       this._cctvCoverageBtn.disabled = !enabled;
     }
 
     if (this._cctvAutoHopBtn) {
       const autoHop = !!state?.autoHop;
       this._cctvAutoHopBtn.classList.toggle('active', autoHop);
-      this._cctvAutoHopBtn.textContent = autoHop ? 'AUTO HOP ON' : 'AUTO HOP OFF';
+      this._cctvAutoHopBtn.textContent = autoHop ? messages().cctv.autoHopOn : messages().cctv.autoHopOff;
       this._cctvAutoHopBtn.disabled = !enabled;
     }
 
     if (this._cctvProjectionBtn) {
       const showProjection = state?.showProjection !== false;
       this._cctvProjectionBtn.classList.toggle('active', showProjection);
-      this._cctvProjectionBtn.textContent = showProjection ? 'PROJECTION ON' : 'PROJECTION OFF';
+      this._cctvProjectionBtn.textContent = showProjection ? messages().cctv.projectionOn : messages().cctv.projectionOff;
       this._cctvProjectionBtn.disabled = !enabled;
     }
 
@@ -7373,26 +7379,34 @@ export class StyleManager {
       const badge = activeCamera?.calBadge || null;
       const dirty = !!activeCamera?.calDirty;
       this._cctvQualityChip.textContent = dirty
-        ? 'CAL · EDITED (UNSAVED)'
-        : `CAL · ${this._calBadgeLabel(badge)}`;
+        ? messages().cctv.calEdited
+        : messages().cctv.calBadge(this._calBadgeLabel(badge));
       this._cctvQualityChip.dataset.calBadge = dirty ? 'edited' : (badge || '');
     }
 
     this._syncCctvCalReadout(enabled, activeCamera);
 
     if (this._cctvMeta) {
+      const m = messages().cctv;
       if (activeCamera) {
-        const provider = activeCamera.sourceLabel || activeCamera.provider || 'Configured Source';
+        const provider = activeCamera.sourceLabel || activeCamera.provider || m.configuredSource;
         const statusMsg = activeCamera.sourceMessage ? ` · ${activeCamera.sourceMessage}` : '';
         const calBadge = activeCamera.calBadge ? this._calBadgeLabel(activeCamera.calBadge) : '';
-        const projLabel = state?.showProjection !== false ? 'MONITOR' : 'OFF';
-        this._cctvMeta.textContent = `${activeCamera.city} · HDG ${Math.round(activeCamera.headingDeg)}° · FOV ${Math.round(activeCamera.fovDeg)}° · RANGE ${Math.round(activeCamera.rangeM)}m · ${projLabel}${calBadge ? ` · ${calBadge}` : ''} · ${provider}${statusMsg}`;
+        const projLabel = state?.showProjection !== false ? m.monitor : m.projectionOffShort;
+        this._cctvMeta.textContent = m.meta(
+          activeCamera.city,
+          Math.round(activeCamera.headingDeg),
+          Math.round(activeCamera.fovDeg),
+          Math.round(activeCamera.rangeM),
+          projLabel,
+          calBadge ? ` · ${calBadge}` : '',
+          provider,
+          statusMsg,
+        );
       } else if (cameras.length > 0) {
-        this._cctvMeta.textContent = enabled
-          ? `${cameras.length} cameras loaded · click a camera to activate`
-          : `${cameras.length} cameras loaded · enable CCTV to activate`;
+        this._cctvMeta.textContent = enabled ? m.loadedClick(cameras.length) : m.loadedEnable(cameras.length);
       } else {
-        this._cctvMeta.textContent = 'Enable CCTV to load camera intersections';
+        this._cctvMeta.textContent = m.enableToLoad;
       }
     }
 
@@ -8211,23 +8225,25 @@ export class StyleManager {
         btn.textContent = collapsed ? '+' : '−';
       }
       btn.setAttribute('aria-expanded', String(!collapsed));
-      const panelName = panelEl.querySelector('.panel-title, .pp-header-label, .map-legend-title')?.textContent?.trim() || 'panel';
-      const action = collapsed ? 'Expand' : 'Collapse';
-      btn.title = `${action} ${panelName}`;
-      btn.setAttribute('aria-label', `${action} ${panelName}`);
+      const m = messages();
+      const panelName = panelEl.querySelector('.panel-title, .pp-header-label, .map-legend-title')?.textContent?.trim()
+        || m.panel.fallbackName;
+      const label = collapsed ? m.panel.expandNamed(panelName) : m.panel.collapseNamed(panelName);
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
       if (panelEl.id === 'radio-panel') {
-        const action = collapsed ? 'Expand' : 'Collapse';
-        btn.title = `${action} Radio`;
-        btn.setAttribute('aria-label', `${action} Radio section`);
+        btn.title = collapsed ? m.radio.expandPanel : m.radio.collapsePanel;
+        btn.setAttribute('aria-label', collapsed ? m.radio.expandSection : m.radio.collapseSection);
       }
     });
     const dockToggle = panelEl.querySelector(`[data-dock-toggle-target="${panelEl.id}"]`);
     if (dockToggle) {
-      const panelName = panelEl.querySelector('.panel-title')?.textContent?.trim() || 'panel';
-      const action = collapsed ? 'Expand' : 'Collapse';
+      const m = messages().panel;
+      const panelName = panelEl.querySelector('.panel-title')?.textContent?.trim() || m.fallbackName;
+      const label = collapsed ? m.expandNamed(panelName) : m.collapseNamed(panelName);
       dockToggle.setAttribute('aria-expanded', String(!collapsed));
-      dockToggle.setAttribute('aria-label', `${action} ${panelName}`);
-      dockToggle.title = `${action} ${panelName}`;
+      dockToggle.setAttribute('aria-label', label);
+      dockToggle.title = label;
     }
     if (panelEl.id === 'radio-panel' && this._contextRadioDetailsBtn) {
       this._contextRadioDetailsBtn.setAttribute('aria-expanded', String(!collapsed));
