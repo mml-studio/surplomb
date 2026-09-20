@@ -14,6 +14,7 @@ export const PROPER_NOUNS = Object.freeze({
   publicBodies: Object.freeze([
     'INSEE', 'IGN', 'Etalab', 'ADEME', 'BRGM', 'Cerema', 'Météo-France', 'SHOM', 'ANFR',
     'ARCEP', 'DGAC', 'SSMSI', 'Géorisques', 'Géoportail', 'Géoportail de l’urbanisme',
+    'Géoplateforme', 'Ville de Paris', 'Eau de Paris', 'MENJ', 'DREES',
   ]),
   networks: Object.freeze([
     'RTE', 'Enedis', 'GRDF', 'GRTgaz', 'Teréga', 'ODRÉ', 'éCO2mix', 'SNCF', 'TER', 'TGV', 'RER',

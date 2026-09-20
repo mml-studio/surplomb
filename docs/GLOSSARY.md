@@ -368,7 +368,7 @@ the detector recognizes them from the data. Items are separated by `·`, one
 category per line. This list is mirrored in `src/i18n/glossary.js`.
 
 - Product: Surplomb · Belvédère · God’s Eye View
-- Public bodies: INSEE · IGN · Etalab · ADEME · BRGM · Cerema · Météo-France · SHOM · ANFR · ARCEP · DGAC · SSMSI · Géorisques · Géoportail · Géoportail de l’urbanisme
+- Public bodies: INSEE · IGN · Etalab · ADEME · BRGM · Cerema · Météo-France · SHOM · ANFR · ARCEP · DGAC · SSMSI · Géorisques · Géoportail · Géoportail de l’urbanisme · Géoplateforme · Ville de Paris · Eau de Paris · MENJ · DREES
 - Networks and operators: RTE · Enedis · GRDF · GRTgaz · Teréga · ODRÉ · éCO2mix · SNCF · TER · TGV · RER · Transilien · Île-de-France Mobilités · IDFM · Vélib’ · Bison Futé
 - Datasets and registers: data.gouv.fr · BD TOPO · BD ORTHO · LiDAR HD · Filosofi · Sitadel · FINESS · SIRENE · BODACC · DECP · CASIAS · CANDHIS · Licence Ouverte
 - Places used as names: Île-de-France · Métropole de Lyon · Gironde
