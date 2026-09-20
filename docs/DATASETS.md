@@ -240,7 +240,7 @@ And what the doctrine (`docs/CARTOGRAPHY.md`) requires of a layer:
 |---|---|
 | A5 · every cap is declared | the layer's row says *4 000 affichés sur 186 137 — plafond 4 000, premières lignes* (4,000 shown of 186,137 — cap 4,000, first rows) |
 | D1 · a legend is mandatory where color carries a value | one entry per group with its count, or a single named flat color |
-| E2 · the temporal regime is declared | `cadence` in the manifest → *instantané figé* (frozen snapshot) / age / feed |
+| E2 · the temporal regime is declared | `cadence` in the manifest → *instantané figé* (fixed snapshot) / age / feed |
 | F6 · no layer at every altitude | `maxSpanDeg`: beyond it, the row says *rapprochez-vous* (move closer) as an instruction, not a failure |
 | H1 · the edge of the data is stated | *n dans la vue* (n in view), *n objets, jeu entier* (n features, whole dataset), *n sans position* (n without position), *via relais* (via relay) |
 | H3 · 20,000–30,000 features, the GeoJSON/tiles boundary | `maxFeatures` capped at 30,000 |

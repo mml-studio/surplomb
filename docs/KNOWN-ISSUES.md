@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: September 19, 2026
+Updated: September 20, 2026
 
 This file tracks active runtime issues only.
 
@@ -10,6 +10,41 @@ of the public release.
 ---
 
 ## Open
+
+### A plugged dataset speaks one language, whichever globe you are on
+Status: Open (by design, for now), found 2026-09-20 translating the amenities batch
+
+`datasets/*.json` has one field per label — `label`, `fusion.chip`,
+`fusion.title`, the detail labels, the filter chips — so a dataset plugged in
+by its manifest shows the same words to a French and to an English reader. The
+visible case today is the GeoDAE defibrillators chip, `CNAM + DREES ·
+Défibrillateurs`, which stays French on the English globe.
+
+Widening the schema is a product decision, not a translation: a manifest would
+gain an optional `{ fr, en }` shape for the six text fields, the generator
+(`scripts/dataset-manifest.mjs`) would have to write it, and
+`docs/DATASETS.md` would have to describe it. Until then, a contributor who
+wants an English chip writes it in English. The core layers are unaffected —
+they carry catalogs.
+
+### The premium badge overflows its box on a narrow phone when a trial is configured
+Status: Open, found 2026-09-20 by `qa:phone-shell` with `GEV_TRIAL_LIMIT=5`
+
+`span.gev-premium-badge` sits outside its container at 360 px wide when the
+hosted trial is on; the harness drops from 25/26 to 23/26. It is a layout bug
+in the voice dock, not a string, and it does not reproduce without a trial
+limit — which is why the phone work never saw it.
+
+### The voice speaks English on request, but no bench has heard it
+Status: Open (blocked on credit), 2026-09-20
+
+The realtime session and the OpenRouter path are now told which language to
+speak, and the minted session config proves the instruction is sent
+(`SPEAK ENGLISH …`). What no test can say is whether the models OBEY it in
+every spoken confirmation, and whether *"show me the doctors"* routes through
+the model to `medecins-fr` — only `npm run qa:voice-bench` can, and the
+OpenRouter key is at its ceiling (`Key limit exceeded`). Run the bench in both
+languages the day there is credit.
 
 ### What the phone shell does not carry, and why each one was left out
 Status: Intentional, decided 2026-09-16 with the phone shell (part C of the phone work)

@@ -6,6 +6,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The globe is bilingual, layer by layer, and the voice with it.** Every
+  panel, card, legend, status and refusal now exists in French and in English:
+  the shell, the 60-layer registry, the Address X-ray, real estate, transport,
+  energy, planning, crime and schools, health, amenities and telecoms, risks
+  and weather, the phone sheet, the hosted trial and the waitlist. The voice
+  follows the page too — the model is told which language to speak, its
+  vocabulary answers to « montre les médecins » and to *show the doctors* in
+  either locale, and the server's errors travel as codes the browser words.
+  4,611 French strings outside catalogs at the start of the campaign, 46 left
+  (layer registry fallbacks and the French landing page, which stays French on
+  purpose). French output is unchanged, to the byte, everywhere.
+  Some defects only a translation finds went with it: a layer that crashed on
+  boot in English, a compass rose that stayed French (`O` where an English
+  reader expects `W`), a date that read as the fourth of March in English and
+  the third of April in French, plurals that printed `0 ring` and
+  `1 substations`, and a tree legend whose labels were baked into a server
+  payload.
 - **The globe speaks French to a French reader and English to everyone else.**
   The interface used to be half and half: a French product with an English
   shell inherited from God's Eye View (`DATA LAYERS`, `POWER UP`). Now the
