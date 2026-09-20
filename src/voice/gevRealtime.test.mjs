@@ -2783,8 +2783,11 @@ test('F1: the toggle still records the next-session preference while live', () =
   controller.setVoiceTier('mini');
   assert.equal(controller.voiceTier, 'mini');
   assert.equal(ui.tierButton.textContent, 'MINI');
-  // ...and says so, rather than implying the live session switched.
-  assert.match(ui.tierButton.title, /this session stays on/i);
+  // ...and says so, rather than implying the live session switched. The
+  // tooltip is a catalog sentence since the voice batch, so this matches the
+  // claim it makes — which model the live session stays on — in the language
+  // these tests run in.
+  assert.match(ui.tierButton.title, /celle-ci reste sur gpt-realtime-2\b/);
 });
 
 test('F1: when idle, toggling does re-price the preview meter', () => {

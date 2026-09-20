@@ -19,6 +19,7 @@
 
 import { isCoarseInput } from '../inputMode.js';
 import { PREMIUM_CROWN_SVG, currentVoicePremium, voicePremiumText } from '../voicePremium.js';
+import messages from './voiceControlDom.i18n.js';
 
 /**
  * What the mic panel tells the reader to do with it.
@@ -36,10 +37,34 @@ import { PREMIUM_CROWN_SVG, currentVoicePremium, voicePremiumText } from '../voi
  * @returns {string}
  */
 export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coarse = isCoarseInput()) {
-  if (coarse) return 'Touchez le micro pour parler · il se referme seul';
-  return pushToTalkKeyHeld
-    ? 'Relâchez Espace pour envoyer'
-    : 'Cliquez le micro ou maintenez Espace pour parler';
+  const m = messages().hint;
+  if (coarse) return m.coarse;
+  return pushToTalkKeyHeld ? m.release : m.click;
+}
+
+/**
+ * The mic button's screen-reader name: the control, then the gesture.
+ *
+ * The tray is a hover surface, so this is the only copy a screen reader ever
+ * hears — and it was the last French sentence left on the English globe.
+ *
+ * @param {string} hint - Whatever `resolveVoiceControlHint` just returned.
+ * @returns {string}
+ */
+export function voiceControlAriaLabel(hint) {
+  return messages().buttonAria(hint);
+}
+
+/**
+ * The error tray's last line when nothing more specific is known.
+ *
+ * A function and not a constant: a module-level string would be read while
+ * this file loads, which is before the page has told anyone its language.
+ *
+ * @returns {string}
+ */
+export function defaultVoiceErrorHint() {
+  return messages().errorHint;
 }
 
 /**
@@ -50,7 +75,8 @@ export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, coars
  * @returns {string}
  */
 export function resolveVoiceReadyPrompt(coarse = isCoarseInput()) {
-  return coarse ? 'Touchez le micro pour parler' : 'Micro ou Espace pour parler';
+  const m = messages().ready;
+  return coarse ? m.coarse : m.fine;
 }
 
 /**
@@ -80,10 +106,16 @@ export function createVoiceControl({ reset = false } = {}) {
   if (!root) {
     // Rebuilt by the controller after boot: carry the premium words over.
     const premium = currentVoicePremium(document);
+    const m = messages();
     root = document.createElement('div');
     root.id = 'gev-voice-control';
     root.dataset.status = 'idle';
     root.dataset.speaker = 'idle';
+    // i18n-ignore-start — the words left inline are the cockpit's instrument
+    // face (AI AGENT, OFF, MIC, HEARD, SAID, STD, VOICE STANDBY, VOICE SYSTEM
+    // ERROR, DISMISS): lettering, not sentences, English on the French globe
+    // since upstream, and sized to a dock four to six characters wide. Every
+    // sentence in this markup is read from the catalog above it.
     root.innerHTML = `
       <div class="gev-voice-heading">
         <div class="gev-voice-kicker">AI AGENT</div>
@@ -95,13 +127,13 @@ export function createVoiceControl({ reset = false } = {}) {
           could reach. This button is that surface; it is hidden for a cursor,
           which already gets the tray by pointing at the panel.
         -->
-        <button id="gev-voice-help-btn" class="gev-voice-help-btn" type="button" aria-label="Aide vocale" aria-expanded="false" aria-controls="gev-voice-help" title="Aide vocale">?</button>
+        <button id="gev-voice-help-btn" class="gev-voice-help-btn" type="button" aria-label="${escapeAttribute(m.help)}" aria-expanded="false" aria-controls="gev-voice-help" title="${escapeAttribute(m.help)}">?</button>
         <div class="gev-voice-cost">
-          <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="Voice model tier — applies next session">STD</button>
-          <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
+          <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="${escapeAttribute(m.tier)}">STD</button>
+          <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="${escapeAttribute(m.cost)}">~$0.00</span>
         </div>
       </div>
-      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(`Voice control — ${resolveVoiceControlHint(false, false)}`)}" aria-describedby="gev-voice-help">
+      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(voiceControlAriaLabel(resolveVoiceControlHint(false, false)))}" aria-describedby="gev-voice-help">
         <!-- The crown sits on the ring, which is the one shape every layout
              keeps; shown only where voice is sold (src/voicePremium.js). -->
         <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /><span class="gev-premium-badge">${PREMIUM_CROWN_SVG}</span></span>
@@ -132,7 +164,7 @@ export function createVoiceControl({ reset = false } = {}) {
         <label class="gev-voice-transcript-voice" hidden>
           <span class="gev-voice-transcript-kicker">VOICE</span>
           <select class="gev-voice-picker"></select>
-          <button class="gev-voice-preview" type="button" title="Hear this voice">▶</button>
+          <button class="gev-voice-preview" type="button" title="${escapeAttribute(m.preview)}">▶</button>
         </label>
       </div>
       <div class="gev-voice-error-tray" role="alert" aria-live="assertive">
@@ -141,9 +173,10 @@ export function createVoiceControl({ reset = false } = {}) {
           <button class="gev-voice-error-dismiss" type="button">DISMISS</button>
         </div>
         <div id="gev-voice-error-detail"></div>
-        <div class="gev-voice-error-hint">Check microphone permission and network access, then try again.</div>
+        <div class="gev-voice-error-hint">${escapeAttribute(m.errorHint)}</div>
       </div>
     `;
+    // i18n-ignore-end
     const commandDock = document.getElementById('command-dock');
     if (commandDock) {
       const locationBar = document.getElementById('location-bar');
