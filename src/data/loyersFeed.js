@@ -95,15 +95,27 @@
  * The `/api/loyers-fr` proxy imports it; nothing in the browser bundle does.
  */
 
-/** Attribution carried on every payload (see DATA_SOURCES.md). */
+import { labelFor } from '../i18n/messages.js';
+import messages, { BASIS, SEGMENTS } from './loyersFeed.i18n.js';
+
+/**
+ * Attribution carried on every payload (see DATA_SOURCES.md) — the dataset's
+ * published title and the four bodies that publish it, not a sentence.
+ */
+// i18n-ignore-next-line — the dataset's own title, as credited.
 export const LOYERS_SOURCE = 'Carte des loyers 2025 — DGALN/DHUP, ANIL, SDES';
 export const LOYERS_LICENCE = 'Licence Ouverte 2.0';
 /** The millésime these resource ids belong to. Bumping one means bumping both. */
 export const LOYERS_MILLESIME = 2025;
-/** Where the model's observations come from, named because it changes the reading. */
-export const LOYERS_OBSERVATION_SOURCE = 'annonces leboncoin et Groupe SeLoger, 2019-2025';
-/** The quarter the predicted dwelling is let in. */
-export const LOYERS_REFERENCE_PERIOD = '3ᵉ trimestre 2025';
+/**
+ * Where the model's observations come from, and which quarter it predicts.
+ *
+ * Both travel in the payload as the French this module has always published:
+ * it is composed on a server with no locale. A browser that prints one asks
+ * this module's catalog for the reader's language.
+ */
+export const LOYERS_OBSERVATION_SOURCE = messages.definition.observationSource.fr;
+export const LOYERS_REFERENCE_PERIOD = messages.definition.referencePeriod.fr;
 
 /**
  * The four segments, their data.gouv resource ids and their reference dwelling.
@@ -120,28 +132,29 @@ export const LOYERS_REFERENCE_PERIOD = '3ᵉ trimestre 2025';
 export const LOYERS_SEGMENTS = Object.freeze([
   Object.freeze({
     key: 'app',
-    label: 'Appartement',
+    label: SEGMENTS.definition.app.fr,
     resource: '55b34088-0964-415f-9df7-d87dd98a09be',
     surfaceM2: 52,
     roomSurfaceM2: 22.2,
   }),
   Object.freeze({
     key: 'app12',
-    label: 'Appartement T1-T2',
+    label: SEGMENTS.definition.app12.fr,
     resource: '14a1fe11-b2d1-49b3-9f6b-83d12df9482c',
     surfaceM2: 37,
     roomSurfaceM2: 22.9,
   }),
   Object.freeze({
     key: 'app3',
-    label: 'Appartement T3 et plus',
+    label: SEGMENTS.definition.app3.fr,
     resource: '5e3b28a4-cf56-43a3-ae79-43cceeb27f8c',
     surfaceM2: 72,
     roomSurfaceM2: 21.3,
   }),
   Object.freeze({
+    // i18n-ignore-next-line — the segment's own key, which the payload carries.
     key: 'maison',
-    label: 'Maison',
+    label: SEGMENTS.definition.maison.fr,
     resource: '129f764d-b613-44e4-952c-5ff50a8c9b73',
     surfaceM2: 92,
     roomSurfaceM2: 22.4,
@@ -162,21 +175,43 @@ export function loyersResourceUrl(resource) {
  */
 export const LOYERS_BASIS = Object.freeze({
   commune: Object.freeze({
-    id: 'commune',
-    label: 'estimé sur la commune',
+    id: 'commune', // i18n-ignore-line — a `TYPPRED` key of the published file
+
+    label: BASIS.definition.commune.fr,
     borrowed: false,
   }),
   maille: Object.freeze({
     id: 'maille',
-    label: 'repris d’une maille de communes voisines',
+    label: BASIS.definition.maille.fr,
     borrowed: true,
   }),
   epci: Object.freeze({
     id: 'epci',
-    label: 'repris de l’intercommunalité',
+    label: BASIS.definition.epci.fr,
     borrowed: true,
   }),
 });
+
+/**
+ * One segment in the page's language, for a card being drawn.
+ * @param {?string} key A `segment.key` of {@link LOYERS_SEGMENTS}.
+ * @returns {string} The label, or the key itself when it is a new one.
+ */
+export function loyersSegmentLabel(key) {
+  return labelFor(SEGMENTS, key);
+}
+
+/**
+ * How the model reached a figure, in the page's language.
+ * @param {?string} basis A `TYPPRED` key.
+ * @returns {string} The sentence, or the undocumented-basis one.
+ */
+export function loyersBasisLabel(basis) {
+  const key = String(basis ?? '');
+  return Object.hasOwn(BASIS.definition, key)
+    ? labelFor(BASIS, key)
+    : messages().undocumentedBasis(key);
+}
 
 /** The columns this module reads, pinned so a renamed one fails a test. */
 export const LOYERS_COLUMNS = Object.freeze([
@@ -364,7 +399,9 @@ export function projectLoyers({ code, rows = {}, missing = [] }) {
       monthlyLowEur: monthlyRent(row.low, segment.surfaceM2),
       monthlyHighEur: monthlyRent(row.high, segment.surfaceM2),
       basis: row.basis,
-      basisLabel: basis?.label ?? `base « ${row.basis} » non documentée`,
+      // The French the payload has always carried; the browser relabels it
+      // from `row.basis` through `loyersBasisLabel()`.
+      basisLabel: basis?.label ?? messages('fr').undocumentedBasis(row.basis),
       // Unknown basis counts as borrowed. See `parseLoyersCsv`.
       borrowed: basis ? basis.borrowed : true,
       // Kept apart from `borrowed` on purpose — see Trap 1. This is how many
