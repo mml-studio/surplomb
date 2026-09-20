@@ -139,7 +139,7 @@ export default defineMessages({
      */
     approvalDate: {
       fr: (year, month, day) => `${day}/${month}/${year}`,
-      en: (year, month, day) => `${monthName(Number(month) - 1, { style: 'short' })} ${Number(day)}, ${year}`,
+      en: (year, month, day) => `${monthName(Number(month) - 1, { style: 'short', locale: 'en' })} ${Number(day)}, ${year}`,
       sample: ['2024', '03', '23'],
     },
     enclaves: {

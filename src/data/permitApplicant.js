@@ -36,6 +36,7 @@ const LEGAL_FORMS = [
  * allowed) where a surname could begin the same way — `VILLE` must not take
  * « VILLETARD » — and stems only where no surname starts with them.
  */
+// i18n-ignore-start — tokens matched against a French applicant name, never shown
 const ORGANISATION_WORDS = [
   'GROUPE', 'HOLDING', 'CABINET', 'AGENCE', 'OFFICE', 'INSTITUT', 'CENTRE',
   'SERVICE', 'SYNDIC', 'SYND', 'SYNDICAT', 'IMMO', 'FONCIA', 'CITYA', 'NEXITY',
@@ -50,6 +51,7 @@ const ORGANISATION_STEMS = [
   'PROMOTION', 'CONSTRUCTION', 'AMENAGEMENT', 'INVESTISS', 'DEVELOPPEMENT',
   'ASSURANCE', 'ETABLISSEMENT', 'UNIVERSITE', 'DIOCES',
 ];
+// i18n-ignore-end
 
 const LEGAL_FORM_RE = new RegExp(`\\b(?:${LEGAL_FORMS.join('|')})\\b`);
 const ORGANISATION_RE = new RegExp(
