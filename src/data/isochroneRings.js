@@ -138,6 +138,7 @@ export const ISOCHRONE_MIN_SHIFT_KM = Object.freeze({
  * shapes. Alphas are low because they STACK — see the module header.
  */
 export const ISOCHRONE_RING_STYLES = Object.freeze([
+  // i18n-ignore-next-line — a CSS hex the detector reads as a French word.
   Object.freeze({ seconds: 300, color: '#3ce0c8', fillAlpha: 0.22, widthPx: 3 }),
   Object.freeze({ seconds: 600, color: '#3b9ae0', fillAlpha: 0.16, widthPx: 3 }),
   Object.freeze({ seconds: 900, color: '#5560c8', fillAlpha: 0.12, widthPx: 3 }),

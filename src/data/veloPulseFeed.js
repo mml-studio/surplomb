@@ -44,10 +44,11 @@ export const PULSE_SLOTS = 168;
  * The days of a week slot, 0..167. KEYS, not labels: the pack is written with
  * these names and `PULSE_DAY_NAMES` holds what a reader sees.
  */
-// i18n-ignore-next-line — day keys of the pack, not words on screen.
+// i18n-ignore-start — day keys of the pack, not words on screen.
 export const PULSE_DAYS = Object.freeze([
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ]);
+// i18n-ignore-end
 
 /**
  * The wall clock the pack is written in. Not the reader's.
