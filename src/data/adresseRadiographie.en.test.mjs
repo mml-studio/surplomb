@@ -16,8 +16,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { composeRadiographie, distanceLabel } from './adresseRadiographie.js';
 import messages, {
-  AMENITY_FAMILIES,
-  AMENITY_FAMILY_COUNTS,
   ARCEP_TECHNOLOGIES,
   ATMO_BANDS,
   ATMO_POLLUTANTS,
@@ -26,7 +24,6 @@ import messages, {
   RADON_LABELS,
   RISK_LABELS,
 } from './adresseRadiographie.i18n.js';
-import { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamilies.js';
 import { BAREME_REASONS, baremeReasonLabel, resolveIndicator } from './baremeNational.js';
 import { assertNoFrench, withLocale } from '../i18n/testing.js';
 
@@ -295,14 +292,9 @@ test('the tables repeat the producers’ own French, word for word', () => {
     assert.equal(fr(RISK_LABELS, risk.id), risk.label, `risk ${risk.id}`);
   }
   assert.equal(fr(RADON_LABELS, PARTS.risques.radon.class), PARTS.risques.radon.label);
-  // `amenitiesFamilies.js` is another batch's file and not bilingual yet; the
-  // English lives here until it is, so the French beside it must be its own.
-  for (const [family, label] of Object.entries(AMENITY_FAMILY_LABELS)) {
-    assert.equal(fr(AMENITY_FAMILIES, family), label, `family ${family}`);
-  }
-  for (const [family, plural] of Object.entries(AMENITY_FAMILY_PLURALS)) {
-    assert.equal(fr(AMENITY_FAMILY_COUNTS, family), plural, `family plural ${family}`);
-  }
+  // The amenity families used to be duplicated here with a drift test, because
+  // `amenitiesFamilies.js` was not bilingual. It is now, and this sheet reads
+  // its catalog: there is one definition and nothing left to drift.
 });
 
 test('the barème’s two sentences come from the barème, in both languages', () => {

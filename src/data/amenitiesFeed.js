@@ -237,6 +237,8 @@
  * No key, no quota observed.
  */
 
+import { labelFor } from '../i18n/messages.js';
+import { AMENITY_FAMILY_BLURBS, AMENITY_PRECISION_LABELS } from './amenitiesFeed.i18n.js';
 import { lambert93ToWgs84 } from '../../scripts/lib/lambert93.mjs';
 
 // --- Provenance -------------------------------------------------------------
@@ -301,35 +303,39 @@ export const AMENITIES_MAX_BOX_DEG = 0.35;
  * array, so reordering it silently renames every row of a cached pack — which
  * is why `AMENITIES_CACHE_VERSION` was bumped when the seven became fourteen.
  */
+// i18n-ignore-start — family IDS, not words: the mesh stores a family by its
+// index in this list and a cached pack is keyed on it.
 export const AMENITY_FAMILIES = Object.freeze([
   'restaurant', 'boulangerie', 'commerce', 'medecin', 'banque', 'sport', 'culture',
   'courses', 'pharmacie', 'poste', 'carburant', 'gendarmerie', 'piscine', 'hopital',
 ]);
+// i18n-ignore-end
 
 /** Index of a family in {@link AMENITY_FAMILIES}, or -1. */
 export function amenityFamilyIndex(family) {
   return AMENITY_FAMILIES.indexOf(family);
 }
 
-export { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamilies.js';
+export { amenityFamilyLabel, amenityFamilyPlural } from './amenitiesFamilies.js';
+export { AMENITY_FAMILY_BLURBS, AMENITY_PRECISION_LABELS };
 
-/** One line behind each swatch — what the family actually contains, measured. */
-export const AMENITY_FAMILY_BLURBS = Object.freeze({
-  restaurant: 'BPE A504 « restaurant-restauration rapide ». 231 989 lignes — à elle seule, davantage que les sept familles d’origine réunies.',
-  boulangerie: 'BPE B207 boulangerie-pâtisserie, 50 122 lignes. Le repère de proximité français, et son propre code.',
-  commerce: 'BPE B202 épicerie (30 104), B204 boucherie-charcuterie (17 378), B206 poissonnerie (2 346), B205 produits surgelés (1 726). Le commerce de bouche, séparé du « faire ses courses ».',
-  banque: 'BPE A203 banque et caisse d’épargne, 23 986 lignes. Ce sont des agences recevant du public, pas des distributeurs.',
-  sport: 'BPE F120 salles de remise en forme (8 549) et F121 salles multisports et gymnases (16 113). Le bassin de natation garde sa propre famille.',
-  culture: 'BPE F307 bibliothèque (15 676), F312 exposition et médiation culturelle (2 145), F303 cinéma (1 969), F315 arts du spectacle (1 389). La BPE 2025 ne porte aucun code « musée ».',
-  carburant: 'BPE B316 station-service, 10 497 lignes. Les bornes de recharge sont refusées : irve-fr lit le même fait en direct.',
-  medecin: 'BPE D265. 61 263 dans le fichier, 60 270 dessinés : 946 sont placés au hasard dans leur commune et 47 n’ont pas de coordonnée.',
-  courses: 'BPE B104 hypermarché et grand magasin (2 256), B105 supermarché (12 929), B201 supérette (5 617). Ni épicerie ni boulangerie : ce sont 80 226 lignes de plus.',
-  pharmacie: 'FINESS, catégorie 620 « Pharmacie d’Officine » — 20 003 officines, contre 20 334 pour la BPE. Un seul registre par famille, et c’est celui qui a une clé stable.',
-  poste: 'BPE A206 bureau de poste (6 584), A208 agence postale communale (7 122), A207 relais poste commerçant (3 164). Trois formes de guichet, pas trois postes.',
-  piscine: 'BPE F101. Le recensement des équipements sportifs : 3 626 des 3 633 lignes ne publient AUCUN indice de précision de position.',
-  gendarmerie: 'BPE A104 gendarmerie recevant du public (3 394) et A140 police (661). Ce sont les points d’accueil, pas le maillage opérationnel.',
-  hopital: 'FINESS : CHR (388), centres hospitaliers (1 371), hôpitaux locaux (195), soins de courte durée (631). Les urgences de la BPE ne sont pas ajoutées — 78,8 % d’entre elles sont à moins de 200 m d’un de ces points.',
-});
+/**
+ * The line behind one legend swatch, in the page's language.
+ * @param {string} family A key of {@link AMENITY_FAMILIES}.
+ * @returns {string}
+ */
+export function amenityFamilyBlurb(family) {
+  return labelFor(AMENITY_FAMILY_BLURBS, family);
+}
+
+/**
+ * The precision band of one row, in the page's language.
+ * @param {string} precision One of {@link AMENITY_PRECISIONS}.
+ * @returns {string} The band key itself when it is not one we name.
+ */
+export function amenityPrecisionLabel(precision) {
+  return labelFor(AMENITY_PRECISION_LABELS, precision);
+}
 
 /** Which register answers for a family. One each, never two. */
 export const AMENITY_FAMILY_REGISTER = Object.freeze({
@@ -351,6 +357,7 @@ export const AMENITY_FAMILY_REGISTER = Object.freeze({
 
 // --- BPE selection ----------------------------------------------------------
 
+// i18n-ignore-start — BPE codes on the left, family ids on the right.
 /** TYPEQU → family. The only ten codes of 235 this layer draws. */
 export const BPE_CODE_FAMILY = Object.freeze({
   D265: 'medecin',
@@ -382,7 +389,11 @@ export const BPE_CODE_FAMILY = Object.freeze({
   F315: 'culture',
   B316: 'carburant',
 });
+// i18n-ignore-end
 
+// i18n-ignore-start — INSEE's own wording, copied from `TYPEQU_2025.csv`. A
+// register's value is never rewritten (i18n conventions § 4), and nothing
+// draws this table: the test that keeps the selection honest reads it.
 /** INSEE's own label for each drawn code, verbatim from `TYPEQU_2025.csv`. */
 export const BPE_CODE_LABELS = Object.freeze({
   D265: 'Médecin généraliste',
@@ -410,6 +421,7 @@ export const BPE_CODE_LABELS = Object.freeze({
   F315: 'Arts du spectacle',
   B316: 'Station-service',
 });
+// i18n-ignore-end
 
 /**
  * Cityscan POI types this register CANNOT serve, checked in `TYPEQU_2025.csv`.
@@ -420,6 +432,9 @@ export const BPE_CODE_LABELS = Object.freeze({
  * added, and they will stay open until somebody goes and gets them from
  * OpenStreetMap.
  */
+// i18n-ignore-start — measured provenance notes, read only by the test that
+// stops the selection and its stated reasons from drifting apart. Nothing
+// draws them; see amenitiesFeed.i18n.js.
 export const BPE_ABSENT_TYPES = Object.freeze({
   bar: 'Aucun code « bar », « café » ou « débit de boissons » dans la BPE 2025.',
   tabac: 'Aucun code « tabac » : B209 est le commerce de boissons, pas le bureau de tabac.',
@@ -450,6 +465,7 @@ export const BPE_REFUSED_DOMAINS = Object.freeze({
   C: { rows: 79_743, why: 'Enseignement — schools-fr (68 158 établissements ouverts et géolocalisés) et sup-fr (6 914 sites). La BPE ne porte aucune colonne UAI.' },
   E: { rows: 99_280, why: 'Transports — 96 253 des 99 280 lignes sont des adresses d’exploitants de taxis et VTC ; les gares et aéroports appartiennent à transit-fr et local-airports.' },
 });
+// i18n-ignore-end
 
 // --- FINESS selection -------------------------------------------------------
 
@@ -461,12 +477,15 @@ export const FINESS_PHARMACIE_CATEG = '620';
  * durée (1 109) are hospitals in law and not the building a reader means by
  * "l'hôpital", so they stay out and the card says how many that is.
  */
+// i18n-ignore-start — the health register's own `categagretab` wording; never
+// rewritten, and never drawn.
 export const FINESS_HOPITAL_AGGREGATES = Object.freeze({
   1101: 'Centre hospitalier régional',
   1102: 'Centre hospitalier',
   1106: 'Hôpital local',
   1110: 'Établissement de soins de courte durée',
 });
+// i18n-ignore-end
 
 // --- Position precision -----------------------------------------------------
 
@@ -478,13 +497,6 @@ export const FINESS_HOPITAL_AGGREGATES = Object.freeze({
  * and {@link FINESS_COMMUNE_GEOCODERS}.
  */
 export const AMENITY_PRECISIONS = Object.freeze(['indeterminee', 'approchee', 'voie', 'numero']);
-
-export const AMENITY_PRECISION_LABELS = Object.freeze({
-  numero: 'Numéro trouvé dans une voie sûre',
-  voie: 'Position dans la voie',
-  approchee: 'Voie probable',
-  indeterminee: 'Précision non publiée',
-});
 
 /** `QUALITE_GEOLOC = 33` — "Voie inconnue, Position aléatoire dans la commune". */
 export const BPE_RANDOM_GEOLOC = '33';
@@ -621,6 +633,9 @@ export function utmToWgs84(x, y, zone, southern) {
  * `null` means Lambert-93 and is handled by the borrowed inverse. The two
  * entries with no `EPSG:` prefix are the 18 rows a regex would have dropped.
  */
+// i18n-ignore-start — coordinate reference system names as FINESS writes
+// them, matched on the fifth token of `sourcecoordet`. Data, and not drawn:
+// the card prints the `id`.
 export const FINESS_CRS = Object.freeze({
   'EPSG:2154': { id: 'EPSG:2154', label: 'RGF93 / Lambert-93 (Métropole)', utm: null },
   'EPSG:5490': { id: 'EPSG:5490', label: 'RGAF09 / UTM 20N (Antilles)', utm: { zone: 20, southern: false } },
@@ -630,6 +645,7 @@ export const FINESS_CRS = Object.freeze({
   'WGS84:21N': { id: 'WGS84 / UTM 21N', label: 'WGS84 / UTM 21N (Saint-Pierre-et-Miquelon)', utm: { zone: 21, southern: false } },
   'WGS84:1S': { id: 'WGS84 / UTM 1S', label: 'WGS84 / UTM 1S (Wallis-et-Futuna)', utm: { zone: 1, southern: true } },
 });
+// i18n-ignore-end
 
 /**
  * Read `sourcecoordet` positionally.

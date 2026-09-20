@@ -23,8 +23,8 @@ import {
   AMENITIES_MAX_BOX_DEG,
   AMENITY_CARD_NAME_LIMIT,
   AMENITY_FAMILIES,
-  AMENITY_FAMILY_BLURBS,
-  AMENITY_FAMILY_LABELS,
+  amenityFamilyBlurb,
+  amenityFamilyLabel,
   AMENITY_FAMILY_REGISTER,
   BPE_ABSENT_TYPES,
   BPE_CODE_FAMILY,
@@ -290,8 +290,8 @@ test('the family vocabulary is complete and each family answers to exactly one r
   // Seven of the original brief plus the seven added for the Cityscan grid.
   assert.equal(AMENITY_FAMILIES.length, 14);
   for (const family of AMENITY_FAMILIES) {
-    assert.ok(AMENITY_FAMILY_LABELS[family], `${family} needs a label`);
-    assert.ok(AMENITY_FAMILY_BLURBS[family], `${family} needs a blurb`);
+    assert.ok(amenityFamilyLabel(family), `${family} needs a label`);
+    assert.ok(amenityFamilyBlurb(family), `${family} needs a blurb`);
     assert.ok(['bpe', 'finess'].includes(AMENITY_FAMILY_REGISTER[family]));
     assert.equal(amenityFamilyIndex(family), AMENITY_FAMILIES.indexOf(family));
   }

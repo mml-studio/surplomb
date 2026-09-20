@@ -159,51 +159,6 @@ export const RADON_LABELS = defineMessages({
   3: { fr: 'Potentiel radon significatif', en: 'Significant radon potential' },
 });
 
-/**
- * Amenity families of `amenitiesFamilies.js`, in English.
- *
- * DUPLICATED ON PURPOSE, with the French beside it so a drift is a test
- * failure: that module belongs to another batch and is not bilingual yet.
- * When it is, this table goes and the labels come from there.
- */
-export const AMENITY_FAMILIES = defineMessages({
-  restaurant: { fr: 'Restaurant', en: 'Restaurant' },
-  boulangerie: { fr: 'Boulangerie', en: 'Bakery' },
-  commerce: { fr: 'Commerce de bouche', en: 'Food shop' },
-  banque: { fr: 'Banque', en: 'Bank' },
-  sport: { fr: 'Salle de sport', en: 'Gym' },
-  culture: { fr: 'Lieu culturel', en: 'Cultural venue' },
-  carburant: { fr: 'Station-service', en: 'Filling station' },
-  medecin: { fr: 'Médecin généraliste', en: 'General practitioner' },
-  courses: { fr: 'Supermarché, supérette', en: 'Supermarket, convenience store' },
-  pharmacie: { fr: 'Pharmacie', en: 'Pharmacy' },
-  poste: { fr: 'La Poste', en: 'La Poste', keep: ['La Poste'] },
-  piscine: { fr: 'Bassin de natation', en: 'Swimming pool' },
-  gendarmerie: { fr: 'Gendarmerie, police', en: 'Gendarmerie, police' },
-  hopital: { fr: 'Hôpital', en: 'Hospital' },
-});
-
-/** The plural head-word of a family, counted in a sentence. */
-export const AMENITY_FAMILY_COUNTS = defineMessages({
-  restaurant: { fr: 'restaurants', en: 'restaurants' },
-  boulangerie: { fr: 'boulangeries', en: 'bakeries' },
-  commerce: { fr: 'commerces de bouche', en: 'food shops' },
-  banque: { fr: 'agences bancaires', en: 'bank branches' },
-  sport: { fr: 'salles de sport', en: 'gyms' },
-  culture: { fr: 'lieux culturels', en: 'cultural venues' },
-  carburant: { fr: 'stations-service', en: 'filling stations' },
-  medecin: { fr: 'médecins généralistes', en: 'general practitioners' },
-  courses: { fr: 'commerces alimentaires', en: 'food stores' },
-  pharmacie: { fr: 'pharmacies', en: 'pharmacies' },
-  poste: { fr: 'points de contact La Poste', en: 'La Poste contact points', keep: ['La Poste'] },
-  piscine: { fr: 'bassins de natation', en: 'swimming pools' },
-  gendarmerie: {
-    fr: 'unités de gendarmerie et de police',
-    en: 'gendarmerie and police units',
-  },
-  hopital: { fr: 'hôpitaux', en: 'hospitals' },
-});
-
 export default defineMessages({
   /** The ten themes, and the question each one answers on the sheet. */
   themes: {
@@ -490,7 +445,7 @@ export default defineMessages({
     inBox: {
       fr: (total, family) => `${total} ${family} dans la boîte`,
       en: (total, family) => `${total} ${family} in the box`,
-      note: '`family` is a plural head-word (AMENITY_FAMILY_COUNTS).',
+      note: '`family` is a plural head-word (AMENITY_FAMILY_PLURALS in amenitiesFamilies.i18n.js).',
       sample: ['14', 'bakeries'],
     },
     nearest: {

@@ -170,12 +170,14 @@ import {
 import {
   AMENITIES_MAX_BOX_DEG,
   AMENITY_FAMILIES,
-  AMENITY_FAMILY_BLURBS,
-  AMENITY_FAMILY_LABELS,
-  AMENITY_FAMILY_PLURALS,
-  AMENITY_PRECISION_LABELS,
+  amenityFamilyBlurb,
+  amenityFamilyLabel as familyLabel,
+  amenityFamilyPlural,
+  amenityPrecisionLabel,
   amenityPrecisionRank,
 } from './amenitiesFeed.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './amenitiesFrance.i18n.js';
 import {
   MESH_FAMILY,
   MESH_LAT,
@@ -440,9 +442,6 @@ const SELECTED_POINT_PX = 30;
 /** Mesh plates are flatter than exact ones: a sample must not read as an inventory. */
 const MESH_SIZE_FACTOR = 0.8;
 
-/** One line behind each légende swatch, from the feed's measured vocabulary. */
-const FAMILY_BLURBS = AMENITY_FAMILY_BLURBS;
-
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
   setVisible: setOverlaySourceVisible,
@@ -492,9 +491,9 @@ export function amenityFamilyColor(family) {
   return AMENITY_COLORS[family] || null;
 }
 
-/** French label for one family. */
+/** The family's heading, in the page's language. */
 export function amenityFamilyLabel(family) {
-  return AMENITY_FAMILY_LABELS[family] || family || '';
+  return familyLabel(family) || '';
 }
 
 /**
@@ -625,14 +624,14 @@ function sitePosition(site) {
   return Cesium.Cartesian3.fromDegrees(site.lon, site.lat, height);
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** Thousands grouped the page's way, matching the rest of the packs. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
-/** French decimal for a share. */
+/** A share, with the page's decimal mark. Shares are rounded to one decimal. */
 function pct(value) {
-  return String(Number(value)).replace('.', ',');
+  return formatDecimal(value, 1);
 }
 
 // --- Cards ------------------------------------------------------------------
@@ -652,7 +651,8 @@ export function buildAmenitySelectionLabel(record) {
   const family = site.family;
   const names = Array.isArray(site.names) ? site.names : [];
   const count = Number(site.count) || 0;
-  const title = names[0] || amenityFamilyLabel(family) || 'Équipement';
+  const m = messages().card;
+  const title = names[0] || amenityFamilyLabel(family) || m.fallbackTitle;
   const details = [];
 
   const kinds = Array.isArray(site.kinds) ? site.kinds.filter(Boolean) : [];
@@ -662,55 +662,52 @@ export function buildAmenitySelectionLabel(record) {
     // A maillage dot carries the family and the precision and nothing else —
     // saying so is what stops the empty half of the card reading as an absence
     // in the register.
-    details.push('Point du maillage — zoomer pour la fiche complète');
+    details.push(m.meshDot);
   } else if (count > 1) {
-    details.push(`${fr(count)} ${AMENITY_FAMILY_PLURALS[family] || 'équipements'} à cette adresse`);
+    details.push(m.atThisAddress(fr(count), amenityFamilyPlural(family) || m.fallbackPlural));
     for (const name of names.slice(1)) details.push(`· ${name}`);
-    if (site.moreNames > 0) details.push(`· et ${fr(site.moreNames)} autres`);
-    if (site.unnamed > 0) details.push(`· ${fr(site.unnamed)} sans raison sociale publiée`);
+    if (site.moreNames > 0) details.push(m.andMore(fr(site.moreNames)));
+    if (site.unnamed > 0) details.push(m.unnamed(fr(site.unnamed)));
   } else if (!names.length) {
-    details.push('Raison sociale non diffusée');
+    details.push(m.noName);
   }
 
   if (site.commune) details.push(site.commune);
 
   const precision = site.precision;
   if (precision) {
-    const label = AMENITY_PRECISION_LABELS[precision] || precision;
-    details.push(amenityPositionVouched(precision)
-      ? `Position : ${label}`
-      : `⚠ Position : ${label}`);
+    const label = amenityPrecisionLabel(precision);
+    details.push(amenityPositionVouched(precision) ? m.position(label) : m.positionWarned(label));
   }
-  if (site.distance) details.push(`Distance à l’adresse : ${site.distance}`);
+  if (site.distance) details.push(m.distance(site.distance));
   if (typeof site.score === 'number') {
-    details.push(`Géocodage ${site.geocoder || 'ATLASANTE'} — score ${fr(site.score)}/100`);
+    details.push(m.geocoding(site.geocoder || 'ATLASANTE', fr(site.score)));
   }
-  if (site.crs) details.push(`Coordonnées reprojetées depuis ${site.crs}`);
-  if (site.uai) details.push(`UAI ${site.uai} — aussi dans schools-fr / sup-fr`);
+  if (site.crs) details.push(m.reprojected(site.crs));
+  if (site.uai) details.push(m.uai(site.uai));
   if (Array.isArray(site.finess) && site.finess.length) {
-    details.push(`FINESS ${site.finess.join(', ')}`);
+    details.push(m.finess(site.finess.join(', ')));
   }
 
-  details.push(site.register === 'finess'
-    ? 'FINESS — ARS / Agence du Numérique en Santé'
-    : 'Base permanente des équipements 2025 — Insee');
+  details.push(site.register === 'finess' ? m.registerFiness : m.registerBpe);
   return [title, ...details].join('\n');
 }
 
 /** Card copy for one selected département. */
 export function buildAmenitiesDepartementLabel(row) {
   if (!row) return '';
+  const m = messages().departement;
   const details = [];
   details.push(row.communes > 0
-    ? `${pct(row.share)} % des communes équipées — ${fr(row.covered)} sur ${fr(row.communes)}`
-    : 'Aucune commune rattachée à ce polygone');
-  details.push(`${fr(row.amenities)} équipements dessinés`);
+    ? m.coverage(pct(row.share), fr(row.covered), fr(row.communes))
+    : m.noCommune);
+  details.push(m.drawn(fr(row.amenities)));
   const mix = AMENITY_FAMILIES
     .filter((family) => (row.families?.[family] || 0) > 0)
-    .map((family) => `${fr(row.families[family])} ${AMENITY_FAMILY_PLURALS[family]}`);
+    .map((family) => m.familyCount(fr(row.families[family]), amenityFamilyPlural(family)));
   for (const line of mix) details.push(`· ${line}`);
   // The ratio's own blind spot, stated where the ratio is read.
-  details.push('Part calculée sur les 5 familles de la BPE : FINESS ne publie pas de code commune.');
+  details.push(m.blindSpot);
   return [row.name, ...details].join('\n');
 }
 
@@ -942,7 +939,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
-    source.name = 'Équipements du quotidien — part des communes équipées';
+    source.name = messages().choroplethName;
     source.show = _enabled;
     for (const entity of source.entities.values) {
       const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -1073,7 +1070,7 @@ async function loadNational({ force = false } = {}) {
     await ensureDepartementShapes();
   } catch (error) {
     console.warn('[Data:Amenities-FR] département polygons failed:', error?.message || error);
-    _error = 'département polygons unavailable';
+    _error = messages().departementShapesUnavailable;
     _status = 'error';
     _loading = false;
     return;
@@ -1270,10 +1267,10 @@ function amenityFilterChips() {
   if (_families) {
     chips.push({
       id: 'amenities-families-all',
-      label: 'Tout',
+      label: messages().chips.all,
       active: false,
       state: 'idle',
-      title: `Redessiner les ${AMENITY_DRAWN_FAMILIES.length} familles`,
+      title: messages().chips.allTitle(AMENITY_DRAWN_FAMILIES.length),
       params: { familles: '' },
     });
   }
@@ -1663,39 +1660,40 @@ export function buildAmenitiesLoadingLabel({
   meshPick = _meshPick,
   truncated = _truncated,
 } = {}) {
+  const m = messages().status;
   if (regime === 'maillage') {
-    if (loading) return 'lecture du maillage national...';
+    if (loading) return m.loadingMesh;
     if (status === 'error') return '';
     if (!meshPick) return '';
-    if (!meshPick.inBox) return 'aucun équipement dans cette vue';
+    if (!meshPick.inBox) return m.empty;
     // Naming both numbers is the whole contract of this regime: a thinned map
     // that does not say it is thinned claims France has 1 100 amenities.
     return meshPick.thinned
-      ? `${fr(meshPick.picked.length)} tracé${meshPick.picked.length > 1 ? 's' : ''} sur ${fr(meshPick.inBox)} dans la vue — échantillon par famille`
-      : `${fr(meshPick.picked.length)} équipements dans la vue`;
+      ? m.sampled(fr(meshPick.picked.length), fr(meshPick.inBox), meshPick.picked.length)
+      : m.inView(fr(meshPick.picked.length));
   }
   if (regime === 'national') {
-    if (loading) return 'lecture du registre national...';
+    if (loading) return m.loadingNational;
     if (status === 'error') return '';
     if (!national) return '';
     const parts = [
-      `${pct(national.nationalShare)} % des ${fr(national.communesPlaced)} communes équipées`,
-      `${fr(national.assigned)} équipements sur ${fr(national.painted)} départements`,
+      m.nationalShare(pct(national.nationalShare), fr(national.communesPlaced)),
+      m.nationalSpread(fr(national.assigned), fr(national.painted)),
     ];
     // The choropleth's own blind spot, stated where the choropleth is read.
     if (national.unassigned > 0) {
-      parts.push(`${fr(national.unassigned)} hors métropole non peints`);
+      parts.push(m.unpainted(fr(national.unassigned)));
     }
     return parts.join(' · ');
   }
-  if (loading) return 'lecture du registre...';
+  if (loading) return m.loadingLocal;
   if (status === 'error') return '';
-  if (!count) return 'aucun équipement dans cette vue';
-  const parts = [`${fr(count)} équipements`];
+  if (!count) return m.empty;
+  const parts = [m.count(fr(count))];
   if (summary?.rows > 0 && summary.rows !== count) {
-    parts.push(`${fr(summary.rows)} lignes de registre`);
+    parts.push(m.registerRows(fr(summary.rows)));
   }
-  if (truncated > 0) parts.push(`${fr(truncated)} reçus mais non tracés`);
+  if (truncated > 0) parts.push(m.notDrawn(fr(truncated)));
   // The PROXY's cap, which is a different number from the render cap above and
   // now the one that actually bites. Before the Cityscan catch-up the densest
   // square France allows held 9 139 dots and neither cap ever fired; it now
@@ -1703,7 +1701,7 @@ export function buildAmenitiesLoadingLabel({
   // équipements without saying so would be exactly the "quietly incomplete"
   // failure the comment above refuses.
   if (summary?.capped > 0) {
-    parts.push(`${fr(summary.capped)} au-delà du plafond de la réponse — dézoome pour le maillage`);
+    parts.push(m.overCap(fr(summary.capped)));
   }
   return parts.join(' · ');
 }
@@ -1954,9 +1952,7 @@ const amenitiesFranceLayer = {
         label,
         color: amenitiesDepartementColor(bin),
         count: counts[bin],
-        blurb: bin === 0
-          ? 'Le sixième le moins équipé. La part des communes du département où l’on trouve au moins un médecin, un commerce alimentaire, un bureau de poste, un bassin ou une gendarmerie.'
-          : 'Un sixième des 96 départements. Bins par quantile. Pharmacies et hôpitaux ne sont PAS dans ce ratio : FINESS ne publie pas de code commune.',
+        blurb: bin === 0 ? messages().nationalLegend.lowest : messages().nationalLegend.other,
       })).filter((row) => row.count > 0);
       // No filter chips at national altitude: the choropleth paints a SHARE
       // computed over five families in the pack, not the marks a filter selects.
@@ -1980,6 +1976,7 @@ const amenitiesFranceLayer = {
     // absent from this view says so with a count of zero; one the reader turned
     // off says so with `off`, and keeps its glyph so the thing they press is
     // still the mark they are looking for.
+    const legendWords = messages().legend;
     const legend = AMENITY_DRAWN_FAMILIES
       .filter((family) => !(_medecinsDrawing && family === AMENITIES_DEFERRED_FAMILY))
       .map((family) => {
@@ -1999,13 +1996,13 @@ const amenitiesFranceLayer = {
           // the filter are one surface and cannot disagree.
           toggle: { param: 'basculer', value: family },
           blurb: off
-            ? 'Éteinte. Cliquez pour la rallumer — la vue est alors redemandée avec cette famille.'
+            ? legendWords.off
             : (meshRegime && inView.has(family)
               // Naming the sample per family is the point: the mix on screen is
               // NOT the mix in view, because the thinning deliberately floors
               // the rare families. See `amenitiesMesh.js`.
-              ? `${FAMILY_BLURBS[family]} Échantillon : ${fr(drawn)} tracé${drawn > 1 ? 's' : ''} sur ${fr(inView.get(family))} dans la vue.`
-              : FAMILY_BLURBS[family]),
+              ? legendWords.sampled(amenityFamilyBlurb(family), fr(drawn), fr(inView.get(family)), drawn)
+              : amenityFamilyBlurb(family)),
         };
       });
     // The conditional withdrawal, given a row for the same reason as the
@@ -2013,12 +2010,10 @@ const amenitiesFranceLayer = {
     // they are rather than left to conclude they are missing.
     if (_medecinsDrawing) {
       legend.push({
-        label: 'Médecins — dessinés par la couche Médecins',
+        label: legendWords.doctorsElsewhere.label,
         color: null,
         count: 0,
-        blurb: 'Les 61 263 lignes D265 de la BPE ne sont pas dessinées tant que medecins-fr est allumé : '
-          + 'il porte le registre conventionné, 64 232 adresses avec les noms, les spécialités et le '
-          + 'secteur. Éteignez cette couche-là et la famille revient ici.',
+        blurb: legendWords.doctorsElsewhere.blurb,
       });
     }
     // The two refusals, each given a row of its own so a reader who came
@@ -2026,18 +2021,16 @@ const amenitiesFranceLayer = {
     // data is missing. Neither takes a swatch: an empty slot is how this panel
     // says « counted, and not mapped here ».
     legend.push({
-      label: 'Hôpitaux — dessinés par Santé & secours',
+      label: legendWords.hospitalsElsewhere.label,
       color: null,
       count: 0,
-      blurb: 'Les 2 211 établissements FINESS ont quitté cette couche le 15/09/2026 : ils sont sur « Santé & secours », '
-        + 'avec les 64 232 adresses de praticiens, l’indicateur d’accès de la DREES et les défibrillateurs. '
-        + 'Un hôpital n’est pas une course du quotidien.',
+      blurb: legendWords.hospitalsElsewhere.blurb,
     });
     legend.push({
-      label: 'Écoles — non dessinées ici',
+      label: legendWords.schoolsElsewhere.label,
       color: null,
       count: 0,
-      blurb: 'Les 79 743 lignes « enseignement » de la BPE ne sont pas reprises : schools-fr dessine 68 158 établissements du registre du ministère (clé UAI, que la BPE n’a pas) et sup-fr 6 914 sites du supérieur.',
+      blurb: legendWords.schoolsElsewhere.blurb,
     });
     return { chips: amenityFilterChips(), legend };
   },
