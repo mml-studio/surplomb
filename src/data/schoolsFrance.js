@@ -188,12 +188,14 @@ import { pickOverlayLabelId } from './overlayLabelPick.js';
 import {
   SCHOOLS_MAX_BOX_DEG,
   SCHOOL_LEVELS,
-  SCHOOL_LEVEL_LABELS,
-  SCHOOL_PRECISION_LABELS,
   schoolDisplayName,
+  schoolLevelLabel as levelLabel,
+  schoolPrecisionLabel,
   schoolSiteKey,
 } from './schoolsFeed.js';
 import { ipsCardLines, ipsCoverageClause } from './ipsFeed.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './schoolsFrance.i18n.js';
 import {
   meshSchoolId,
   schoolsMeshBudget,
@@ -330,12 +332,35 @@ export const SCHOOLS_PRISM_SCALE = createPrismScale({
   id: SCHOOLS_FR_LAYER_ID,
   domainMax: 2600,
   mode: 'linear',
-  heightLabel: 'établissements par département',
-  heightUnit: 'établissements',
-  ratioLabel: 'établissements pour 1 000 km²',
+  // The catalog's own French, read off the DEFINITION rather than resolved:
+  // this runs at module load, where there is no locale to read (R5), and the
+  // frozen scale must carry the exact bytes it always carried. The LEGEND
+  // reads the same three keys in the page's language — see
+  // `localizedPrismScale` — so the two can never drift apart.
+  heightLabel: messages.definition.prism.heightLabel.fr,
+  heightUnit: messages.definition.prism.heightUnit.fr,
+  ratioLabel: messages.definition.prism.ratioLabel.fr,
   ratioBreaks: [40, 80, 160, 320, 640],
   ratioColors: DENSITY_COLORS,
 });
+
+/**
+ * The frozen scale, with its three variable names in the page's language.
+ *
+ * `createPrismScale` validates and freezes at construction, so the numbers and
+ * the colours are decided once; only the words are swapped, and only when a
+ * legend is being drawn. `prismLegend` reads properties and never mutates.
+ * @returns {object} A read-alike of {@link SCHOOLS_PRISM_SCALE}.
+ */
+function localizedPrismScale() {
+  const m = messages();
+  return {
+    ...SCHOOLS_PRISM_SCALE,
+    heightLabel: m.prism.heightLabel,
+    heightUnit: m.prism.heightUnit,
+    ratioLabel: m.prism.ratioLabel,
+  };
+}
 
 const SELECTED_COLOR = '#00ffff';
 const OUTLINE_COLOR = Cesium.Color.BLACK.withAlpha(0.35);
@@ -365,9 +390,10 @@ const MESH_POINT_MAX_PX = 9;
  * its own: fourteen marks in a school layer that are not schools. `adapte` is
  * dropped with the rest — the label already names its subject.
  */
-const LEVEL_BLURBS = Object.freeze({
-  autre: 'Rectorats et CIO, pas des écoles.',
-});
+function levelBlurb(level) {
+  // i18n-ignore-next-line — a band key from `SCHOOL_LEVELS`.
+  return level === 'autre' ? messages().legend.autreBlurb : null;
+}
 
 /**
  * The maillage's own disclosure, printed ONCE under the classes.
@@ -375,9 +401,13 @@ const LEVEL_BLURBS = Object.freeze({
  * It was appended to all five blurbs, which is where a third of that key's
  * prose came from. It qualifies every class equally, so it belongs in the
  * block-level `note` slot and not in any of them.
+ *
+ * A function and not a constant: a constant is resolved when the module loads,
+ * which would freeze the note in whatever language booted first.
  */
-const MESH_LEGEND_NOTE = 'Échantillon de la vue, pas tous les établissements. '
-  + 'Cliquez un point pour son nom et son indice social (IPS).';
+function meshLegendNote() {
+  return messages().legend.meshNote;
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -437,9 +467,9 @@ export function schoolLevelColor(level) {
   return LEVEL_COLORS[level] || LEVEL_COLORS.autre;
 }
 
-/** French label for one level. */
+/** The level's name in the page's language. */
 export function schoolLevelLabel(level) {
-  return SCHOOL_LEVEL_LABELS[level] || SCHOOL_LEVEL_LABELS.autre;
+  return levelLabel(level);
 }
 
 /**
@@ -626,17 +656,14 @@ function sitePosition(site) {
   return Cesium.Cartesian3.fromDegrees(site.lon, site.lat, height);
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A grouped integer: `12 400` in French, `12,400` in English. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
-/** One decimal, with the French comma. */
+/** One decimal: `436,3` in French, `436.3` in English. */
 function frDecimal(value) {
-  return Number(value).toLocaleString('fr-FR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
+  return formatDecimal(Number(value), 1, { minimumFractionDigits: 1 });
 }
 
 // --- Cards ------------------------------------------------------------------
@@ -646,13 +673,17 @@ function frDecimal(value) {
  * stated absence of one; nothing here is inferred.
  */
 export function buildSchoolSelectionLabel(record) {
+  const m = messages();
   const site = record?.site || {};
   const details = [];
-  const title = site.name ? schoolDisplayName(site) : (site.commune || 'Établissement scolaire');
+  const title = site.name ? schoolDisplayName(site) : (site.commune || m.site.untitled);
 
+  // `libelle_nature` is the register's own wording for what the establishment
+  // IS ("Ecole de niveau élémentaire"), and it stays as published on either
+  // card — it is a value, and the band label is the fallback when it is empty.
   const kind = [site.nature || schoolLevelLabel(site.level)];
-  if (site.sector === 'public') kind.push('public');
-  else if (site.sector === 'prive') kind.push('privé');
+  if (site.sector === 'public') kind.push(m.site.sectorPublic);
+  else if (site.sector === 'prive') kind.push(m.site.sectorPrivate);
   details.push(kind.join(' · '));
 
   // The roll is the one number a reader will treat as the headline, so its
@@ -660,8 +691,8 @@ export function buildSchoolSelectionLabel(record) {
   // the same claim as "0 élève", and 8.3% of teaching establishments are in
   // the first category.
   details.push(Number.isFinite(site.enrolled) && site.enrolled > 0
-    ? `${fr(site.enrolled)} élèves — rentrée 2025`
-    : 'Effectif non publié pour cet UAI');
+    ? m.site.enrolled(fr(site.enrolled))
+    : m.site.noRoll);
 
   // The IPS sits directly under the roll because it is the second number a
   // reader will treat as a headline, and its absence has to be as loud as the
@@ -672,14 +703,14 @@ export function buildSchoolSelectionLabel(record) {
   // claim neither source makes.
   details.push(...ipsCardLines(site.ips));
 
-  if (site.ep) details.push(`Éducation prioritaire : ${site.ep}`);
+  if (site.ep) details.push(m.site.priorityEducation(site.ep));
 
   const services = [];
-  if (site.services?.restauration) services.push('restauration');
-  if (site.services?.hebergement) services.push('internat');
-  if (site.services?.ulis) services.push('ULIS');
-  if (site.services?.segpa) services.push('SEGPA');
-  if (site.services?.apprentissage) services.push('apprentissage');
+  if (site.services?.restauration) services.push(m.site.services.restauration);
+  if (site.services?.hebergement) services.push(m.site.services.hebergement);
+  if (site.services?.ulis) services.push(m.site.services.ulis);
+  if (site.services?.segpa) services.push(m.site.services.segpa);
+  if (site.services?.apprentissage) services.push(m.site.services.apprentissage);
   if (services.length) details.push(services.join(' · '));
 
   const where = [site.address, site.postal || site.commune].filter(Boolean).join(', ');
@@ -687,21 +718,23 @@ export function buildSchoolSelectionLabel(record) {
 
   // A coordinate geocoded only to the commune is not where the school is, and
   // the card is the only place that can say so.
+  // i18n-ignore-start — the geocoding-ladder KEYS, stored on every site.
   if (site.precision === 'commune') {
-    details.push(`⚠ Position : ${SCHOOL_PRECISION_LABELS.commune}`);
+    details.push(m.site.precisionWarning(schoolPrecisionLabel('commune')));
   } else if (site.precision === 'inconnue') {
-    details.push(`Position : ${SCHOOL_PRECISION_LABELS.inconnue}`);
+    details.push(m.site.precision(schoolPrecisionLabel('inconnue')));
   }
+  // i18n-ignore-end
 
   // Two dots at one address is the register's unit showing through, not a
   // duplicate. Naming the parent is what makes it legible.
   if (site.sharing > 0) {
     details.push(site.sharing === 1
-      ? '1 autre UAI enregistré à cette position'
-      : `${fr(site.sharing)} autres UAI enregistrés à cette position`);
+      ? m.site.sharingOne
+      : m.site.sharingMany(fr(site.sharing)));
   }
-  if (site.motherUai) details.push(`Rattaché à l'UAI ${site.motherUai}`);
-  if (site.uai) details.push(`UAI ${site.uai}`);
+  if (site.motherUai) details.push(m.site.motherUai(site.motherUai));
+  if (site.uai) details.push(m.site.uai(site.uai));
 
   return [title, ...details].join('\n');
 }
@@ -727,15 +760,14 @@ export function buildSchoolSelectionLabel(record) {
 export function buildSchoolsMeshLabel(record) {
   if (record?.resolved) return buildSchoolSelectionLabel({ site: record.resolved });
 
+  const m = messages();
   const site = record?.site || {};
   const details = [schoolLevelLabel(site.level)];
   details.push(Number.isFinite(site.enrolled) && site.enrolled > 0
-    ? `${fr(site.enrolled)} élèves — rentrée 2025`
-    : 'Effectif non publié pour cet UAI');
-  details.push(record?.resolving
-    ? 'Position réelle, échantillonnée — lecture du nom dans le registre…'
-    : 'Position réelle, échantillonnée — nom introuvable dans le registre');
-  return ['Établissement', ...details].join('\n');
+    ? m.site.enrolled(fr(site.enrolled))
+    : m.site.noRoll);
+  details.push(record?.resolving ? m.mesh.resolving : m.mesh.unresolved);
+  return [m.mesh.title, ...details].join('\n');
 }
 
 /**
@@ -747,6 +779,7 @@ export function buildSchoolsMeshLabel(record) {
  * independent (A1), and neither is ever printed as a zero.
  */
 export function buildSchoolsDepartementLabel(row, options = {}) {
+  const m = messages();
   const built = schoolsPrismRow(row, options);
   const details = [];
 
@@ -754,28 +787,28 @@ export function buildSchoolsDepartementLabel(row, options = {}) {
     // The height channel refused. The footprint is drawn flat and hatched, and
     // this line says why, rather than letting a reader take a missing prism
     // for a département where no school exists.
-    details.push('Effectif non relevé — relevé national incomplet');
+    details.push(m.departement.notSurveyed);
   } else if (built.measuredZero) {
-    details.push('Aucun établissement ouvert géolocalisé');
+    details.push(m.departement.measuredZero);
   } else {
-    details.push(`${fr(row.schools)} établissements`);
+    details.push(m.departement.count(fr(row.schools)));
   }
   if (built.clipped) {
-    details.push(`Au-dessus du domaine gelé (${fr(SCHOOLS_PRISM_SCALE.domainMax)} `
-      + 'établissements) : le prisme est à sa hauteur maximale et ne dit plus combien');
+    details.push(m.departement.clipped(fr(SCHOOLS_PRISM_SCALE.domainMax)));
   }
-  // French decimal comma, like the IPS lines two functions up: a card that
-  // writes "436.3" in the middle of a French sentence is reading as English.
+  // The decimal separator comes from the page's locale, like the IPS lines two
+  // functions up: a card that writes "436.3" in the middle of a French
+  // sentence is reading as English.
   details.push(Number.isFinite(row.per1000Km2)
-    ? `${frDecimal(row.per1000Km2)} pour 1 000 km² — la couleur du prisme`
-    : 'Densité non calculable : aire du polygone inconnue');
+    ? m.departement.density(frDecimal(row.per1000Km2))
+    : m.departement.noDensity);
 
-  if (row.pupils > 0) details.push(`${fr(row.pupils)} élèves — rentrée 2025`);
+  if (row.pupils > 0) details.push(m.departement.pupils(fr(row.pupils)));
   const mix = [];
-  if (row.public > 0) mix.push(`${fr(row.public)} public`);
-  if (row.prive > 0) mix.push(`${fr(row.prive)} privé`);
+  if (row.public > 0) mix.push(m.departement.publicShare(fr(row.public)));
+  if (row.prive > 0) mix.push(m.departement.privateShare(fr(row.prive)));
   if (mix.length) details.push(mix.join(' · '));
-  if (row.ep > 0) details.push(`${fr(row.ep)} en éducation prioritaire`);
+  if (row.ep > 0) details.push(m.departement.priorityEducation(fr(row.ep)));
   return [row.name, ...details].join('\n');
 }
 
@@ -823,12 +856,15 @@ export function createSchoolSelectedOverlayEntry(record) {
  * in words instead of showing a number nobody produced.
  */
 export function createSchoolsDepartementOverlayEntry(row, position, options = {}) {
+  const m = messages();
   const built = schoolsPrismRow(row, options);
   return {
     id: `${SCHOOLS_FR_DEP_LABEL_PREFIX}${row.code}`,
     position,
     variant: 'label',
-    title: built.hasValue ? `${row.name} · ${fr(row.schools)}` : `${row.name} · non relevé`,
+    title: built.hasValue
+      ? m.departement.label(row.name, fr(row.schools))
+      : m.departement.labelNotSurveyed(row.name),
     accent: schoolsDensityColor(row.per1000Km2) || PRISM_NO_RATIO_COLOR,
     priority: built.hasValue ? Number(row.schools) || 0 : 0,
     collisionGroup: 'ambient-label',
@@ -1142,7 +1178,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
-    source.name = 'Établissements scolaires — implantation par département';
+    source.name = messages().departementSourceName;
     source.show = _enabled;
     for (const entity of source.entities.values) {
       const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -1447,7 +1483,7 @@ async function loadNational({ force = false } = {}) {
     await ensureDepartementShapes();
   } catch (error) {
     console.warn('[Data:Schools-FR] département polygons failed:', error?.message || error);
-    _error = 'département polygons unavailable';
+    _error = messages().departementShapesError;
     _status = 'error';
     _loading = false;
     return;
@@ -1526,6 +1562,7 @@ function reconcileMesh(box) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
     const id = meshSchoolId(site);
     if (_records.has(id)) continue;
+    // i18n-ignore-next-line — a band key from the pack, not a word.
     const level = SCHOOL_LEVELS[site[MESH_LEVEL]] || 'autre';
     const color = schoolLevelColor(level);
     const pupils = Number(site[MESH_PUPILS]) || 0;
@@ -1788,7 +1825,7 @@ export function schoolCalloutText(record) {
   if (site.name) return schoolDisplayName(site);
   const pupils = Number(site.enrolled) || 0;
   return pupils > 0
-    ? `${schoolLevelLabel(site.level)} · ${fr(pupils)} élèves`
+    ? messages().callout.levelAndPupils(schoolLevelLabel(site.level), fr(pupils))
     : schoolLevelLabel(site.level);
 }
 
@@ -1814,20 +1851,18 @@ export function schoolCalloutText(record) {
  * @returns {Array<object>} Legend entries, in reading order.
  */
 export function buildSchoolsNationalLegend(national) {
-  const entries = prismLegend(SCHOOLS_PRISM_SCALE, schoolsPrismTally(national));
+  const m = messages();
+  const entries = prismLegend(localizedPrismScale(), schoolsPrismTally(national));
   const offshore = Number(national?.unassigned) || 0;
   if (offshore > 0) {
     const snapped = Number(national?.snapped) || 0;
     entries.push({
-      label: 'hors des polygones — aucun prisme',
+      label: m.legend.offshore,
       color: null,
       count: offshore,
-      blurb: 'Établissements ouverts et géolocalisés que le découpage embarqué ne peut pas '
-        + 'porter : les collectivités d’outre-mer, et quelques îles que les contours simplifiés '
-        + 'ne dessinent pas. Ils sont dans les régimes maillage et sites, jamais dans ces 96 '
-        + `prismes.${snapped > 0 ? ` ${fr(snapped)} établissements littoraux ont été rattachés `
-          + 'au département le plus proche à moins de 2 km — un déplacement fait par la carte, '
-          + 'pas une donnée du registre.' : ''}`,
+      blurb: m.legend.offshoreBlurb(
+        snapped > 0 ? m.legend.offshoreSnapped(fr(snapped)) : '',
+      ),
     });
   }
   return entries;
@@ -1843,32 +1878,32 @@ export function buildSchoolsLoadingLabel({
   national = _national,
   meshPick = _meshPick,
 } = {}) {
+  const m = messages();
   if (regime === 'mesh') {
-    if (loading) return 'lecture du maillage national...';
+    if (loading) return m.status.loadingMesh;
     if (status === 'error') return '';
     if (!meshPick) return '';
-    if (!meshPick.inBox) return 'aucun établissement dans cette vue';
+    if (!meshPick.inBox) return m.status.empty;
     // Naming both numbers is the whole contract of this regime: a thinned map
     // that does not say it is thinned claims France has 1 100 schools.
     return meshPick.thinned
-      ? `${fr(meshPick.picked.length)} tracés sur ${fr(meshPick.inBox)} dans la vue — échantillon spatial`
-      : `${fr(meshPick.picked.length)} établissements dans la vue`;
+      ? m.status.meshThinned(fr(meshPick.picked.length), fr(meshPick.inBox))
+      : m.status.meshWhole(fr(meshPick.picked.length));
   }
   if (regime === 'national') {
-    if (loading) return 'lecture du registre national...';
+    if (loading) return m.status.loadingNational;
     if (status === 'error') return '';
     if (!national) return '';
-    const parts = [`${fr(national.assigned)} établissements sur `
-      + `${fr(national.painted)} départements en prismes`];
+    const parts = [m.status.nationalCount(fr(national.assigned), fr(national.painted))];
     // The prism's own blind spot, stated where the prism is read.
     if (national.unassigned > 0) {
-      parts.push(`${fr(national.unassigned)} hors métropole non cartographiés`);
+      parts.push(m.status.nationalOffshore(fr(national.unassigned)));
     }
     // A short export served as HTTP 200 is the one upstream failure that looks
     // exactly like a smaller country. It is also what turns every zero in the
     // rollup into an unproven number, which is why `schoolsPrismRow` demotes
     // those zeros to "not measured" — the line and the mark say the same thing.
-    if (national.truncated) parts.push('relevé national tronqué en amont');
+    if (national.truncated) parts.push(m.status.truncated);
     // The national IPS coverage, and this is the only place it can honestly
     // be given: neither prism channel carries the index — the height is a
     // count and the colour is a density — so it has to be reported as a rate
@@ -1877,16 +1912,16 @@ export function buildSchoolsLoadingLabel({
     if (nationalIps) parts.push(nationalIps);
     return parts.join(' · ');
   }
-  if (loading) return 'lecture du registre...';
+  if (loading) return m.status.loadingViewport;
   if (status === 'error') return '';
-  if (!count) return 'aucun établissement dans cette vue';
-  const parts = [`${fr(count)} établissements`];
-  if (summary?.pupils > 0) parts.push(`${fr(summary.pupils)} élèves`);
+  if (!count) return m.status.empty;
+  const parts = [m.status.siteCount(fr(count))];
+  if (summary?.pupils > 0) parts.push(m.status.sitePupils(fr(summary.pupils)));
   // The box's own coverage, over the schools in THIS view — so a reader who
   // clicks three dots and finds two without an index can see it was expected.
   const boxIps = ipsCoverageClause(summary?.ips);
   if (boxIps) parts.push(boxIps);
-  if (summary && summary.complete === false) parts.push('réponse tronquée en amont');
+  if (summary && summary.complete === false) parts.push(m.status.capped);
   return parts.join(' · ');
 }
 
@@ -2062,7 +2097,8 @@ const schoolsFranceLayer = {
           color: schoolLevelColor(level),
           count: tally.get(level),
         };
-        if (LEVEL_BLURBS[level]) entry.blurb = LEVEL_BLURBS[level];
+        const blurb = levelBlurb(level);
+        if (blurb) entry.blurb = blurb;
         return entry;
       });
     // Naming the sample is the point: this mix is what the thinning drew, close
@@ -2071,7 +2107,7 @@ const schoolsFranceLayer = {
     // it is fetched per click, with the name, and a reader has to be told that
     // before they conclude the index is missing. One line, under the classes,
     // because it is true of all of them.
-    if (_regime === 'mesh') return { chips: [], legend, note: MESH_LEGEND_NOTE };
+    if (_regime === 'mesh') return { chips: [], legend, note: meshLegendNote() };
     return { chips: [], legend };
   },
 

@@ -167,10 +167,14 @@
  * `node --test`.
  */
 
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './ipsFeed.i18n.js';
+
 /** Portal all four datasets are published on — the same one the Annuaire uses. */
 export const IPS_PORTAL = 'data.education.gouv.fr';
 
 /** Attribution carried on every payload that contains an IPS (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — the DEPP's own name for the index, as credited.
 export const IPS_SOURCE = 'Indice de position sociale (IPS) — DEPP '
   + '(data.education.gouv.fr)';
 
@@ -211,6 +215,8 @@ export const IPS_SPREAD_MAX_PLAUSIBLE = 100;
  * Every field name is per-dataset. Nothing here may be hoisted into a shared
  * list — see Trap 3, where doing so is an HTTP 400 and not a null column.
  */
+// i18n-ignore-start — every string below is an upstream COLUMN NAME, sent
+// verbatim in a `select`. Trap 3 is what happens when one of them is retyped.
 export const IPS_DATASETS = Object.freeze([
   Object.freeze({
     kind: 'ecole',
@@ -269,6 +275,7 @@ export const IPS_DATASETS = Object.freeze([
     refFields: Object.freeze({ national: 'ips_national', departemental: 'ips_departemental' }),
   }),
 ]);
+// i18n-ignore-end
 
 /** The four kinds, in `IPS_DATASETS` order. */
 export const IPS_KINDS = Object.freeze(IPS_DATASETS.map((spec) => spec.kind));
@@ -297,6 +304,8 @@ export const LYCEE_REF_FIELDS = Object.freeze({
  * 79, and report EREA — the best-covered type in the whole join, 77 of 79 —
  * as 3.2%.
  */
+// i18n-ignore-start — the Annuaire's own `type_etablissement` values, matched
+// and counted verbatim. They are a join key, never a label.
 export const IPS_TYPE_TO_KIND = Object.freeze({
   Ecole: 'ecole',
   'École': 'ecole',
@@ -307,6 +316,7 @@ export const IPS_TYPE_TO_KIND = Object.freeze({
 
 /** Annuaire types the index applies to at all, in reading order. */
 export const IPS_ELIGIBLE_TYPES = Object.freeze(['Ecole', 'Collège', 'Lycée', 'EREA']);
+// i18n-ignore-end
 
 /**
  * The attribute stamped on a school whose IPS file did not load.
@@ -685,12 +695,9 @@ export function summariseIpsCoverage({
 
 // --- Card copy ---------------------------------------------------------------
 
-/** One IPS number, French-formatted to one decimal: 95.4 → "95,4". */
+/** One IPS number, to one decimal: 95.4 → "95,4" in French, "95.4" in English. */
 export function formatIps(value) {
-  return Number(value).toLocaleString('fr-FR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
+  return formatDecimal(Number(value), 1, { minimumFractionDigits: 1 });
 }
 
 /** A signed écart: -7.8 → "−7,8", 12.8 → "+12,8". U+2212 for the minus. */
@@ -700,12 +707,14 @@ export function formatIpsDelta(delta) {
   return `${sign}${formatIps(Math.abs(rounded))}`;
 }
 
-/** French label for one lycée voie key. */
-export const IPS_VOIE_LABELS = Object.freeze({
-  gt: 'voie générale et technologique',
-  pro: 'voie professionnelle',
-  postBac: 'post-bac',
-});
+/**
+ * The name of one lycée voie, in the page's language.
+ * @param {?string} key One of `IPS_VOIE_ORDER`.
+ * @returns {?string} null for a key this build does not know.
+ */
+export function ipsVoieLabel(key) {
+  return messages().voies[key] || null;
+}
 
 /** Reading order for the voies, general → professional → post-bac. */
 export const IPS_VOIE_ORDER = Object.freeze(['gt', 'pro', 'postBac']);
@@ -731,49 +740,62 @@ export const IPS_VOIE_ORDER = Object.freeze(['gt', 'pro', 'postBac']);
  */
 export function ipsCardLines(ips) {
   if (ips === undefined) return [];
-  if (ips === null) return ['IPS non publié pour cet UAI'];
-  if (ips.status === 'unavailable') {
-    return ['Indice de position sociale indisponible — fichier DEPP injoignable'];
-  }
+  const m = messages();
+  if (ips === null) return [m.card.notPublished];
+  if (ips.status === 'unavailable') return [m.card.unavailable];
   if (ips.status === 'ns') {
     return [ips.sentinel === 'NS'
-      ? 'IPS non significatif (« NS ») — effectif trop faible pour que la DEPP publie l’indice'
-      : `IPS publié comme « ${ips.sentinel} », pas comme un nombre`];
+      ? m.card.notSignificant
+      : m.card.sentinel(ips.sentinel)];
   }
   // 'absent' — a row exists for this UAI and its index cell is empty. That is
   // the same claim as no row at all, so it reads the same; the two are counted
   // apart in `indexIps`, where the difference is a fact about the FILE.
-  if (!Number.isFinite(ips.value)) return ['IPS non publié pour cet UAI'];
+  if (!Number.isFinite(ips.value)) return [m.card.notPublished];
 
   const lines = [];
-  const spread = Number.isFinite(ips.spread) ? ` (écart-type ${formatIps(ips.spread)})` : '';
+  const spread = Number.isFinite(ips.spread) ? m.card.spread(formatIps(ips.spread)) : '';
   // The lycée headline names the unit BEFORE the number, because `ips_etab`
   // is an establishment figure and the two voies underneath it can be 47.7
   // points apart (Trap 2).
   lines.push(ips.kind === 'lycee'
-    ? `IPS ${formatIps(ips.value)}${spread} — établissement entier${ips.lyceeType ? ` (${ips.lyceeType})` : ''}, rentrée ${ips.rentree}`
-    : `IPS ${formatIps(ips.value)}${spread} — rentrée ${ips.rentree}`);
+    ? m.card.lycee(
+      formatIps(ips.value),
+      spread,
+      ips.lyceeType ? ` (${ips.lyceeType})` : '',
+      ips.rentree,
+    )
+    : m.card.value(formatIps(ips.value), spread, ips.rentree));
 
   if (ips.voies) {
     const parts = IPS_VOIE_ORDER
       .filter((key) => Number.isFinite(ips.voies[key]))
-      .map((key) => `${IPS_VOIE_LABELS[key]} ${formatIps(ips.voies[key])}`);
+      .map((key) => m.card.voie(ipsVoieLabel(key) || key, formatIps(ips.voies[key])));
     if (parts.length) {
       lines.push(parts.length > 1
-        ? `${parts.join(' · ')} — l’indice d’établissement mêle ces populations`
-        : `${parts[0]} — seule voie publiée pour ce lycée`);
+        ? m.card.voiesBlended(parts.join(' · '))
+        : m.card.voieOnly(parts[0]));
     }
   }
 
-  const scope = ips.kind === 'lycee' && ips.lyceeType ? `Réf. ${ips.lyceeType}` : 'Réf.';
+  const scope = ips.kind === 'lycee' && ips.lyceeType
+    ? m.card.scopeTyped(ips.lyceeType)
+    : m.card.scope;
   const anchors = [];
-  if (Number.isFinite(ips.departemental)) anchors.push(`département ${formatIps(ips.departemental)}`);
-  if (Number.isFinite(ips.national)) anchors.push(`France ${formatIps(ips.national)}`);
+  if (Number.isFinite(ips.departemental)) {
+    anchors.push(m.card.departemental(formatIps(ips.departemental)));
+  }
+  if (Number.isFinite(ips.national)) anchors.push(m.card.national(formatIps(ips.national)));
   const baseline = ipsBaseline(ips);
   if (anchors.length) {
     lines.push(baseline
-      ? `${scope} : ${anchors.join(' · ')} — écart ${formatIpsDelta(ips.value - baseline.value)} ${baseline.label}`
-      : `${scope} : ${anchors.join(' · ')}`);
+      ? m.card.anchorsWithGap(
+        scope,
+        anchors.join(' · '),
+        formatIpsDelta(ips.value - baseline.value),
+        baseline.label,
+      )
+      : m.card.anchors(scope, anchors.join(' · ')));
   }
 
   return lines;
@@ -802,10 +824,10 @@ export function ipsCardLines(ips) {
 export function ipsBaseline(ips) {
   if (!Number.isFinite(ips?.value)) return null;
   if (Number.isFinite(ips.departemental) && ips.departemental !== ips.value) {
-    return { value: ips.departemental, label: 'au département' };
+    return { value: ips.departemental, label: messages().baseline.departemental };
   }
   if (Number.isFinite(ips.national) && ips.national !== ips.value) {
-    return { value: ips.national, label: 'à la France' };
+    return { value: ips.national, label: messages().baseline.national };
   }
   return null;
 }
@@ -823,11 +845,11 @@ export function ipsBaseline(ips) {
  */
 export function ipsCoverageClause(coverage) {
   if (!coverage) return '';
-  if (coverage.status === 'unavailable') return 'IPS indisponible';
+  const m = messages();
+  if (coverage.status === 'unavailable') return m.coverage.unavailable;
   const eligible = Number(coverage.eligible) || 0;
   if (eligible <= 0) return '';
   const valued = Number(coverage.valued) || 0;
-  const fr = (value) => Number(value).toLocaleString('fr-FR');
-  const clause = `IPS publié pour ${fr(valued)} des ${fr(eligible)} établissements concernés`;
-  return coverage.status === 'partial' ? `${clause} — index partiel` : clause;
+  const clause = m.coverage.clause(formatNumber(valued), formatNumber(eligible));
+  return coverage.status === 'partial' ? m.coverage.partial(clause) : clause;
 }

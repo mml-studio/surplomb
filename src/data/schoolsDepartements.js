@@ -124,6 +124,8 @@ export const SCHOOLS_COAST_SNAP_KM = DEFAULT_COAST_SNAP_KM;
  * for the per-département breakdowns the card prints. The register has 71
  * columns; a full-width export is 40.7 MB against 8.5 MB for a narrow one.
  */
+// i18n-ignore-start — the register's own column names, sent to the portal as
+// published. They are a query, not words a reader sees.
 export const SCHOOLS_SWEEP_FIELDS = Object.freeze([
   'identifiant_de_l_etablissement',
   'type_etablissement',
@@ -133,6 +135,7 @@ export const SCHOOLS_SWEEP_FIELDS = Object.freeze([
   'latitude',
   'longitude',
 ]);
+// i18n-ignore-end
 
 /** Finite number, or null. */
 function num(value) {
@@ -238,6 +241,7 @@ export function projectSchoolsDepartements({
     bucket.levels[level] += 1;
     const sector = String(row?.statut_public_prive || '').trim();
     if (sector === 'Public') bucket.public += 1;
+    // i18n-ignore-next-line — the register's own `statut_public_prive` values.
     else if (sector === 'Privé' || sector === 'Prive') bucket.prive += 1;
     const ep = String(row?.appartenance_education_prioritaire || '').trim();
     if (ep === 'REP' || ep === 'REP+') bucket.ep += 1;
