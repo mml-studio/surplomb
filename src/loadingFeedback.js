@@ -1,3 +1,5 @@
+import messages from './loadingFeedback.i18n.js';
+
 export const LOADING_REVEAL_DELAY_MS = 160;
 export const LOADING_TERMINAL_DWELL_MS = 2200;
 export const LOADING_FAILURE_DWELL_MS = 5000;
@@ -28,7 +30,7 @@ export function normalizeLayerLoading(layer = {}) {
     id: String(layer.id || ''),
     // The toast names the same row the visitor just clicked, so it uses the
     // same display name the panel does — `label` when the taxonomy gave one.
-    label: String(layer.label || layer.name || layer.id || 'Layer'),
+    label: String(layer.label || layer.name || layer.id || messages().layer),
     loading,
     disabling,
     refresh: loading && layer.enabled && (stats.refreshing === true || accepted),
@@ -181,7 +183,7 @@ export function reduceTrafficSyncFeedback(previous, {
       // Neutral default: the layer always supplies its own LIVE/SIMULATED
       // label, and a fallback string must never claim a live feed on a
       // keyless build.
-      label: label || 'syncing road network',
+      label: label || messages().syncingRoadNetwork,
       progressText: hasProgress ? `${progressPct}%` : '...',
     };
   }
@@ -285,17 +287,18 @@ export function reduceLoadingFeedback(previous, summary, nowMs, event = null) {
 export function presentLoadingFeedback(state, summary, nowMs) {
   if (!state?.visible) return null;
   if (state.phase === 'terminal') {
-    const labels = { complete: 'LOAD COMPLETE', cancelled: 'LOAD CANCELLED', error: 'LOAD FAILED' };
+    const m = messages();
     const label = state.operation === 'disabling' && state.terminal === 'complete'
-      ? 'LIVE DATA OFF'
-      : labels[state.terminal] || 'LOAD COMPLETE';
+      ? m.turnedOff
+      : m[state.terminal] || m.complete;
     return { state: state.terminal, label, detail: '' };
   }
   const active = summary.active;
   const elapsed = Math.max(0, nowMs - state.startedAt);
+  const words = messages();
   const label = summary.disabling
-    ? 'TURNING OFF LIVE DATA'
-    : summary.refresh ? 'REFRESHING LIVE DATA' : 'LOADING LIVE DATA';
+    ? words.turningOff
+    : summary.refresh ? words.refreshing : words.loading;
   const names = active.slice(0, 2).map((record) => record.label).join(' · ');
   const suffix = active.length > 2 ? ` +${active.length - 2}` : '';
   return {

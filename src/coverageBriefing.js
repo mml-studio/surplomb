@@ -37,6 +37,8 @@
  * rather than growing a second camera verb here.
  */
 
+import messages from './coverageBriefing.i18n.js';
+
 /** Per-layer durable suppression, written only by the checkbox. */
 export const COVERAGE_BRIEFING_STORAGE_PREFIX = 'gev:coverage-briefing:';
 
@@ -227,9 +229,10 @@ export function initCoverageBriefing(root, { storage } = {}) {
     if (gotoButton) {
       gotoButton.hidden = !destination;
       if (gotoLabel && destination) {
+        const m = messages();
         gotoLabel.textContent = request.gotoName
-          ? `Aller à ${request.gotoName}`
-          : 'Aller à la zone couverte';
+          ? m.gotoNamed(request.gotoName)
+          : m.gotoDefault;
       }
     }
     if (suppressBox) suppressBox.checked = false;

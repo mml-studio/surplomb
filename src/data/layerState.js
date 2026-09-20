@@ -337,6 +337,11 @@ const OPTION_GROUPS = Object.freeze({
   // a link that dropped the token would reopen the right street showing a
   // population its sender never looked at. One letter each, frozen from the
   // first link copied.
+  // i18n-ignore-start — DATA, not labels: `tous` is a share-link value and
+  // `Appartement` / `Maison` are DVF's own `type_local`, which travel in the
+  // URL and are matched against the register. Their DISPLAY is translated
+  // where they are drawn (`labelFor`, see docs/i18n/CONVENTIONS.md § 4); here
+  // a translation would break every link ever copied.
   'dvf-sales': Object.freeze([
     enumOption('type', 't', 'tous', ['tous', 'Appartement', 'Maison'], { tous: 't', Appartement: 'a', Maison: 'm' }),
   ]),
@@ -344,6 +349,7 @@ const OPTION_GROUPS = Object.freeze({
     enumOption('type', 't', 'Appartement', ['Appartement', 'Maison'], { Appartement: 'a', Maison: 'm' }),
     enumOption('surface', 's', '60', ['30', '60', '100', '150'], { 30: 's', 60: 'm', 100: 'l', 150: 'x' }),
   ]),
+  // i18n-ignore-end
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),
     integerOption('selectedSatTrackingId', 't', null),
@@ -379,10 +385,13 @@ const OPTION_GROUPS = Object.freeze({
   // `AMENITIES_WITHDRAWN_FAMILIES` — and giving a withdrawn family a share
   // token would let an old link ask for a mark that can never appear.
   'amenities-fr': Object.freeze([
+    // i18n-ignore-start — the family keys the pack and the link use, not words
+    // on screen: the amenities layer draws them through its own labels.
     enumSetOption('familles', 'f', [
       'restaurant', 'boulangerie', 'commerce', 'medecin', 'banque', 'sport',
       'culture', 'courses', 'pharmacie', 'poste', 'carburant', 'gendarmerie',
       'piscine',
+      // i18n-ignore-end
     ], {
       restaurant: 'r',
       boulangerie: 'b',
@@ -466,6 +475,9 @@ const TRACKING_OPTION_KEY_BY_LAYER = Object.freeze({
   satellites: 'selectedSatTrackingId',
 });
 
+// i18n-ignore-start — `label` here is a DIAGNOSTIC name for the restore log,
+// in the vocabulary of the share link ("flight", "satellite"); nothing draws
+// it, and the panel's own names come from the registry.
 export const SHARE_TRACKING_RESTORE_POLICIES = Object.freeze({
   flights: Object.freeze({
     optionOwner: 'flights',
@@ -486,6 +498,7 @@ export const SHARE_TRACKING_RESTORE_POLICIES = Object.freeze({
     label: 'satellite',
   }),
 });
+// i18n-ignore-end
 
 /**
  * Canonical serialization registry. Its order, not runtime registration order,
@@ -498,6 +511,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   // near enough to read as a pair, distinct enough that a share link cannot
   // enable one for the other. A duplicate here is a BOOT failure
   // (`validateLayerStateRegistry` throws), not a review nit.
+  // i18n-ignore-next-line — `au` is a two-character share token, not a word.
   Object.freeze({ id: 'ads-fr', token: 'au', disposition: 'enabled+options', optionOwner: 'ads-fr' }),
   Object.freeze({ id: 'ais-live-vessels', token: 'a', disposition: 'enabled-only' }),
   // A DIGIT for the same reason as `gas-fr` and `power-grid` below: every

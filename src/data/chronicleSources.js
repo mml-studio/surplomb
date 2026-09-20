@@ -48,6 +48,15 @@ const SOURCE_ID = /^[a-z0-9][a-z0-9-]{1,30}$/;
 /**
  * The recorded feeds.
  *
+ * ENGLISH, AND NOT BILINGUAL. Every string below is read by ONE consumer:
+ * `/api/chronicle-fr/status`, which `vite.config.js` serves from Node. The
+ * server has no locale by design — no cookie, no Accept-Language — and no
+ * browser surface prints any of it; it is operator documentation of what this
+ * fork records, alongside `DATA_SOURCES.md`. So it follows the repository's
+ * own language rule rather than the interface's, and the `label` lines are
+ * marked for the ratchet with that reason. The `attribution` lines are marked
+ * too, and for the opposite reason: they are quoted from the publisher.
+ *
  * `profile: false` is not a lesser status — it says the hour-of-week fold is
  * the WRONG shape for this phenomenon, and that the value of recording it is
  * the chronology alone. Only Vigicrues declares it, and the reason is in its
@@ -56,9 +65,11 @@ const SOURCE_ID = /^[a-z0-9][a-z0-9-]{1,30}$/;
 export const CHRONICLE_SOURCES = Object.freeze([
   Object.freeze({
     id: 'transit-fr',
-    label: 'Transport public — GTFS-RT (PAN)',
-    upstream: 'transport.data.gouv.fr — 151 flux GTFS-Realtime VehiclePositions + TripUpdates',
+    // i18n-ignore-next-line — server-side operator text, never drawn (see the note above).
+    label: 'Public transit — GTFS-RT (PAN)',
+    upstream: 'transport.data.gouv.fr — 151 GTFS-Realtime feeds, VehiclePositions + TripUpdates',
     licence: 'per-feed: Licence Ouverte 2.0 / ODbL 1.0 / Licence Ouverte 1.0',
+    // i18n-ignore-next-line — the attribution each feed requires, as published.
     attribution: 'transport.data.gouv.fr + l’autorité organisatrice de chaque réseau',
     // Five minutes per series, not per tick: the server polls GTFS-RT per
     // VIEWPORT, so which feeds are refreshed depends on where an operator is
@@ -67,9 +78,9 @@ export const CHRONICLE_SOURCES = Object.freeze([
     minIntervalMs: 5 * 60_000,
     retentionDays: 30,
     profile: true,
-    axes: 'feed:<id>/vehicles (flotte publiée par le réseau), feed:<id>/onTimePct et feed:<id>/spoken ; aucune série nationale — la réponse est un viewport',
-    why: 'Un VehiclePositions est écrasé toutes les ~30 s et aucun réseau ne publie sa ponctualité passée. '
-      + 'La jointure horaires × temps réel existe déjà dans le serveur ; seule l’accumulation manque.',
+    axes: 'feed:<id>/vehicles (the fleet the network publishes), feed:<id>/onTimePct and feed:<id>/spoken; no national series — the answer is a viewport',
+    why: 'A VehiclePositions feed is overwritten about every 30 s and no network publishes its past punctuality. '
+      + 'The schedule × real-time join already exists in this server; only the accumulation is missing.',
     // Recorded ONLY where an operator has looked. The bias is real and the
     // status endpoint reports the per-series week count so a thin profile
     // reads as thin rather than as a quiet network.
@@ -77,53 +88,60 @@ export const CHRONICLE_SOURCES = Object.freeze([
   }),
   Object.freeze({
     id: 'irve-fr',
-    label: 'Recharge électrique — statut dynamique (QualiCharge)',
+    // i18n-ignore-next-line — server-side operator text, never drawn (see the note above).
+    label: 'EV charging — dynamic status (QualiCharge)',
     upstream: 'proxy.transport.data.gouv.fr/resource/qualicharge-irve-dynamique',
     licence: 'Licence Ouverte 2.0',
+    // i18n-ignore-next-line — attribution, as the publisher writes it.
     attribution: 'QualiCharge — Direction générale de l’énergie et du climat, via transport.data.gouv.fr',
     minIntervalMs: 15 * 60_000,
     retentionDays: 30,
     profile: true,
-    axes: 'fr/* national, puis op:<code>/occupePct par opérateur d’itinérance',
-    why: 'Le fichier consolidé statique dit où sont les bornes ; celui-ci dit lesquelles sont libres, '
-      + 'et il est remplacé à chaque publication. Personne ne conserve l’occupation passée.',
+    axes: 'fr/* nationally, then op:<code>/occupePct per roaming operator',
+    why: 'The static consolidated file says where the charge points are; this one says which are free, '
+      + 'and it is replaced at every publication. Nobody keeps the past occupancy.',
     opportunistic: false,
   }),
   Object.freeze({
     id: 'road-status-fr',
-    label: 'Réseau routier national — DATEX II (Bison Futé)',
-    upstream: 'tipi.bison-fute.gouv.fr — Traficolor par agglomération + QTV débit/vitesse national',
+    // i18n-ignore-next-line — server-side operator text, never drawn (see the note above).
+    label: 'National road network — DATEX II (Bison Futé)',
+    upstream: 'tipi.bison-fute.gouv.fr — Traficolor per conurbation + QTV national flow/speed',
     licence: 'Licence Ouverte 2.0',
+    // i18n-ignore-next-line — attribution, as the publisher writes it.
     attribution: 'Bison Futé — DGITM / Ministère chargé des transports',
     // The flow snapshot has a strict six-minute publication window; asking
     // faster records the same document twice.
     minIntervalMs: 6 * 60_000,
     retentionDays: 30,
     profile: true,
-    axes: 'fr/* national, puis axis:<A7>/congestedPct et axis:<A7>/speedKph par axe nommé',
-    why: 'Chaque répertoire d’agglomération ne contient que la publication courante ; la précédente est '
-      + 'supprimée. Le débit QTV disparaît au bout de six minutes.',
+    axes: 'fr/* nationally, then axis:<A7>/congestedPct and axis:<A7>/speedKph per named road',
+    why: 'Each conurbation’s directory holds the current publication only; the previous one is deleted. '
+      + 'The QTV flow figure is gone after six minutes.',
     opportunistic: true,
   }),
   Object.freeze({
     id: 'ais-fr',
-    label: 'Trafic maritime — boîte France (AISStream)',
+    // i18n-ignore-next-line — server-side operator text, never drawn (see the note above).
+    label: 'Maritime traffic — the France box (AISStream)',
     upstream: 'stream.aisstream.io — 41.0..51.6 N, -8.0..10.0 E',
-    licence: 'aucune condition formelle ; l’AIS est une émission radio publique',
-    attribution: 'AISStream.io (courtoisie)',
+    licence: 'no formal terms; AIS is a public radio broadcast',
+    attribution: 'AISStream.io (as a courtesy)',
     minIntervalMs: 5 * 60_000,
     retentionDays: 30,
     profile: true,
-    axes: 'fr/* national, puis cell:<lat>,<lon>/vessels par carré de 1° de la boîte France',
-    why: 'Un socket ne se rejoue pas. MarineTraffic vend cet historique pour le monde ; personne ne le '
-      + 'publie pour la façade française.',
+    axes: 'fr/* nationally, then cell:<lat>,<lon>/vessels per 1° square of the France box',
+    why: 'A socket cannot be replayed. MarineTraffic sells this history for the world; nobody publishes '
+      + 'it for the French coast.',
     opportunistic: false,
   }),
   Object.freeze({
     id: 'vigicrues',
-    label: 'Vigilance crues — tronçons surveillés',
+    // i18n-ignore-next-line — server-side operator text, never drawn (see the note above).
+    label: 'Flood warnings — monitored river reaches',
     upstream: 'vigicrues.gouv.fr/services/InfoVigiCru.geojson',
     licence: 'Licence Ouverte 2.0',
+    // i18n-ignore-next-line — attribution, as the publisher writes it.
     attribution: 'Vigicrues — SCHAPI, Ministère de la Transition écologique',
     minIntervalMs: 30 * 60_000,
     retentionDays: 30,
@@ -134,10 +152,10 @@ export const CHRONICLE_SOURCES = Object.freeze([
     // here is the CHRONOLOGY — which reach went amber, when, and for how long —
     // so the raw ticks are kept and nothing is folded.
     profile: false,
-    retention: 'chronologie seule',
-    axes: 'fr/level2, fr/level3, fr/level4 en brut ; aucun profil hebdomadaire',
-    why: 'Le bulletin est republié par-dessus le précédent deux fois par jour, et aucune archive publique '
-      + 'ne dit quel tronçon était orange le 12 mars.',
+    retention: 'chronology only',
+    axes: 'fr/level2, fr/level3, fr/level4 raw; no weekly profile',
+    why: 'The bulletin is republished over the previous one twice a day, and no public archive says which '
+      + 'reach was amber on 12 March.',
     opportunistic: true,
   }),
 ]);

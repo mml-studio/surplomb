@@ -1,0 +1,59 @@
+/**
+ * Strings of src/data/dataCredits.js — the "Data attribution" popover.
+ *
+ * ONLY THE CREDITS THAT ARE WRITTEN IN FRENCH ARE HERE, and there are seven.
+ * The other seventy-seven were written in English on both pages and stay in
+ * the module, next to the source they credit: an attribution is a quotation,
+ * and a dataset title (« Base permanente des équipements 2025 ») or a
+ * publisher (Agence nationale des fréquences) is quoted as published, in
+ * either language.
+ *
+ * What is translated is the SENTENCE AROUND the quotation — what the layer
+ * does with the file, what it refuses to claim, which figure is measured.
+ * Wording a licence prescribes is not touched in either column: the Copernicus
+ * notice is the regulation’s own words, and the Insee notice about opt-outs
+ * and anonymization is repeated as Insee asks.
+ *
+ * See docs/i18n/CONVENTIONS.md.
+ */
+import { defineMessages } from '../i18n/messages.js';
+
+export default defineMessages({
+  qualicharge: {
+    fr: 'Disponibilit&eacute; des bornes (carte de site) : <a href="https://www.data.gouv.fr/datasets/infrastructures-de-recharge-pour-vehicules-electriques-donnees-ouvertes" target="_blank" rel="noopener">QualiCharge</a> &mdash; Direction g&eacute;n&eacute;rale de l&rsquo;&eacute;nergie et du climat, via transport.data.gouv.fr (<a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>). Chaque borne porte son propre <code>horodatage</code> : une borne muette depuis plus de 24 h est compt&eacute;e comme muette, jamais comme libre.',
+    en: 'Charge-point availability (site card): <a href="https://www.data.gouv.fr/datasets/infrastructures-de-recharge-pour-vehicules-electriques-donnees-ouvertes" target="_blank" rel="noopener">QualiCharge</a> &mdash; Direction g&eacute;n&eacute;rale de l&rsquo;&eacute;nergie et du climat, through transport.data.gouv.fr (<a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>). Every charge point carries its own <code>horodatage</code>: one silent for more than 24 h is counted as silent, never as free.',
+    keep: ['Direction g&eacute;n&eacute;rale de l&rsquo;&eacute;nergie et du climat', 'horodatage'],
+    note: 'The live half of the EV charging subject: it only ever answers on a card.',
+  },
+  'anfr-fr': {
+    fr: '&laquo;&nbsp;Observatoire des r&eacute;seaux mobiles 2G/3G/4G/5G&nbsp;&raquo; &mdash; <a href="https://data.anfr.fr/" target="_blank" rel="noopener">Agence nationale des fr&eacute;quences (data.anfr.fr)</a>, &eacute;dition hebdomadaire du 27/08/2026, 826&nbsp;418 lignes sur 72&nbsp;700 supports. Nature des supports&nbsp;: &laquo;&nbsp;Donn&eacute;es sur les installations radio&eacute;lectriques de plus de 5 watts&nbsp;&raquo; &mdash; <a href="https://www.data.gouv.fr/fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/" target="_blank" rel="noopener">ANFR via data.gouv.fr</a>. Fiche support, bandes et mesures d\'exposition&nbsp;: <a href="https://www.cartoradio.fr/" target="_blank" rel="noopener">Cartoradio (ANFR)</a>. <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>. Hors champ par la loi&nbsp;: Aviation Civile, minist&egrave;res de la D&eacute;fense et de l\'Int&eacute;rieur.',
+    en: '&laquo;&nbsp;Observatoire des r&eacute;seaux mobiles 2G/3G/4G/5G&nbsp;&raquo; &mdash; <a href="https://data.anfr.fr/" target="_blank" rel="noopener">Agence nationale des fr&eacute;quences (data.anfr.fr)</a>, weekly edition of 27/08/2026, 826,418 rows over 72,700 masts. Mast types: &laquo;&nbsp;Donn&eacute;es sur les installations radio&eacute;lectriques de plus de 5 watts&nbsp;&raquo; &mdash; <a href="https://www.data.gouv.fr/fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/" target="_blank" rel="noopener">ANFR via data.gouv.fr</a>. Mast sheets, bands and exposure measurements: <a href="https://www.cartoradio.fr/" target="_blank" rel="noopener">Cartoradio (ANFR)</a>. <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>. Out of scope by law: civil aviation, and the ministries of Defence and of the Interior.',
+    keep: ['Observatoire des r&eacute;seaux mobiles', 'Agence nationale des fr&eacute;quences', 'Donn&eacute;es sur les installations radio&eacute;lectriques de plus de 5 watts', 'Cartoradio'],
+    note: 'The two dataset titles are quoted as ANFR publishes them, in French, inside the English.',
+  },
+  'amenities-fr': {
+    fr: '&laquo;&nbsp;Base permanente des &eacute;quipements 2025 &mdash; &Eacute;quipements g&eacute;olocalis&eacute;s&nbsp;&raquo;, parue le 04/08/2026 &mdash; <a href="https://www.insee.fr/fr/statistiques/8217525" target="_blank" rel="noopener">Insee</a>, 2&nbsp;921&nbsp;770 lignes sur 95 colonnes dont vingt-quatre codes TYPEQU lus ici depuis le 08/09/2026, soit 445&nbsp;380 points en quatorze familles, <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte</a>. L\'&eacute;dition 2025 ne porte aucun code &laquo;&nbsp;bar&nbsp;&raquo;, &laquo;&nbsp;caf&eacute;&nbsp;&raquo;, &laquo;&nbsp;mus&eacute;e&nbsp;&raquo;, &laquo;&nbsp;tabac&nbsp;&raquo; ni &laquo;&nbsp;jardin public&nbsp;&raquo;&nbsp;: ces types-l&agrave; ne sont pas absents de la carte, ils sont absents du registre. Fichier actualis&eacute; mensuellement pour tenir compte des oppositions &agrave; la diffusion sur sirene.fr&nbsp;; certaines donn&eacute;es nominatives, d\'adressage et de g&eacute;olocalisation sont anonymis&eacute;es (arr&ecirc;t&eacute; du 3 janvier 2024). Pharmacies et h&ocirc;pitaux&nbsp;: &laquo;&nbsp;R&eacute;exposition des donn&eacute;es Finess&nbsp;&raquo; &mdash; <a href="https://www.data.gouv.fr/fr/datasets/reexposition-des-donnees-finess/" target="_blank" rel="noopener">ARS / Agence du Num&eacute;rique en Sant&eacute;, via data.gouv.fr</a>, extrait du 02/07/2026, 103&nbsp;032 &eacute;tablissements, <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>&nbsp;; g&eacute;ocodage ATLASANTE sur la Base Adresse Nationale.',
+    en: '&laquo;&nbsp;Base permanente des &eacute;quipements 2025 &mdash; &Eacute;quipements g&eacute;olocalis&eacute;s&nbsp;&raquo;, published 04/08/2026 &mdash; <a href="https://www.insee.fr/fr/statistiques/8217525" target="_blank" rel="noopener">Insee</a>, 2,921,770 rows over 95 columns, of which twenty-four TYPEQU codes are read here since 08/09/2026 &mdash; 445,380 points in fourteen families, <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte</a>. The 2025 edition carries no code for a bar, a caf&eacute;, a museum, a tobacconist or a public garden: those types are not missing from the map, they are missing from the register. The file is refreshed monthly to honour opt-outs recorded on sirene.fr; some name, address and geolocation fields are anonymized (arr&ecirc;t&eacute; du 3 janvier 2024). Pharmacies and hospitals: &laquo;&nbsp;R&eacute;exposition des donn&eacute;es Finess&nbsp;&raquo; &mdash; <a href="https://www.data.gouv.fr/fr/datasets/reexposition-des-donnees-finess/" target="_blank" rel="noopener">ARS / Agence du Num&eacute;rique en Sant&eacute;, via data.gouv.fr</a>, extract of 02/07/2026, 103,032 establishments, <a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>; ATLASANTE geocoding against the Base Adresse Nationale.',
+    keep: ['Base permanente des &eacute;quipements 2025 &mdash; &Eacute;quipements g&eacute;olocalis&eacute;s', 'R&eacute;exposition des donn&eacute;es Finess', 'Agence du Num&eacute;rique en Sant&eacute;', 'arr&ecirc;t&eacute; du 3 janvier 2024', 'Base Adresse Nationale', 'caf&eacute;'],
+    note: 'The Insee notice about opt-outs and anonymization is required; the arrêté is named as the file names it.',
+  },
+  'port-gazetteer': {
+    fr: 'Destinations AIS (lieux non dessinés) : <a href="https://unece.org/trade/cefact/UNLOCODE-Download" target="_blank" rel="noopener">UN/LOCODE</a> (UNECE, ODC-PDDL 1.0) et <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0) — 11 545 ports fluviaux et maritimes, 13 657 graphies.',
+    en: 'AIS destinations (places not drawn): <a href="https://unece.org/trade/cefact/UNLOCODE-Download" target="_blank" rel="noopener">UN/LOCODE</a> (UNECE, ODC-PDDL 1.0) and <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0) — 11,545 river and sea ports, 13,657 spellings.',
+    note: 'Not drawn — read on every vessel card, and GeoNames makes attribution a condition.',
+  },
+  'gironde-megafire': {
+    fr: 'Mégafeu de Gironde (juil. 2026) : Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
+    en: 'Gironde megafire (Jul. 2026): Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
+    note: 'The Copernicus wording is PRESCRIBED by Regulation (EU) No 1159/2013 and is not paraphrased in either language.',
+  },
+  datacenters: {
+    fr: 'Datacenters: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL 1.0) · puissances et sites français: <a href="https://gitlab.com/hubblo/datacenter-watch" target="_blank" rel="noopener">DCWatch</a> (Hubblo, ODbL)',
+    en: 'Datacenters: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL 1.0) · French sites and their power: <a href="https://gitlab.com/hubblo/datacenter-watch" target="_blank" rel="noopener">DCWatch</a> (Hubblo, ODbL)',
+  },
+  dams: {
+    fr: 'Barrages &amp; digues: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL 1.0) — France extracted via the <a href="https://overpass-api.de" target="_blank" rel="noopener">Overpass API</a>, the 69-feature world tail from Open Infrastructure Map',
+    en: 'Dams &amp; levees: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL 1.0) — France extracted via the <a href="https://overpass-api.de" target="_blank" rel="noopener">Overpass API</a>, the 69-feature world tail from Open Infrastructure Map',
+    keep: ['overpass-api.de'],
+  },
+});

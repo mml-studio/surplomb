@@ -435,8 +435,8 @@ async function main() {
         && uncertainPresentation.layerState === 'UNCERTAIN'
         && /uncertain/i.test(uncertainPresentation.playbackMessage)
         && uncertainPresentation.miniStation === 'RADIO STATE UNCERTAIN'
-        && uncertainPresentation.dataRailText === 'UNCERTAIN'
         && uncertainPresentation.dataRailState === 'uncertain'
+        && (uncertainPresentation.dataRailText || '').trim().length > 0
         && /uncertain/i.test(uncertainPresentation.dataRailLabel)
         && /uncertain/i.test(uncertainPresentation.dataRailMeta)
         && uncertainPresentation.directSelect === false

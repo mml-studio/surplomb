@@ -21,8 +21,18 @@
  */
 
 import * as Cesium from 'cesium';
-import { forward as toMGRS } from 'mgrs';
+// `mgrs` ships an ESM build with named exports for the bundler and a CommonJS
+// one for Node, and neither form of import works in both: the named import
+// Vite resolves is a SyntaxError under plain Node (a CJS package has no named
+// exports), and the default import Node accepts is missing from the ESM build.
+// A namespace import is the one that loads either way, and the fallback below
+// picks whichever half answered. Node matters here because
+// `src/i18n/importSafety.test.mjs` imports every catalogued module.
+import * as mgrsModule from 'mgrs';
+
+const mgrs = mgrsModule.default ?? mgrsModule;
 import { CITY_POIS } from './locations.js';
+import messages from './hud.i18n.js';
 import { composeLocalityTag } from './hudLocality.js';
 import {
   cachedGeoidHeight,
@@ -211,14 +221,15 @@ export class IntelHUD {
     // or clicked on. The same three values still print on the bottom bar
     // (`hud-bottom-line`), which the `operator` and `minimal` variants show, so
     // `_updateCameraData` still computes them.
+    const m = messages();
     this._el.innerHTML = `
       <div class="hud-corner hud-top-left">
         <div class="hud-bracket">┌</div>
         <div class="hud-content">
-          <div class="hud-mode" id="hud-mode">NORMAL</div>
+          <div class="hud-mode" id="hud-mode">${m.mode}</div>
           <div class="hud-summary-wrap">
-            <div class="hud-summary-label">SUMMARY</div>
-            <div class="hud-summary" id="hud-summary">Awaiting telemetry...</div>
+            <div class="hud-summary-label">${m.summaryLabel}</div>
+            <div class="hud-summary" id="hud-summary">${m.awaitingTelemetry}</div>
           </div>
         </div>
       </div>
@@ -232,19 +243,19 @@ export class IntelHUD {
 
       <div class="hud-corner hud-bottom-right">
         <div class="hud-content" style="text-align:right">
-          <div id="hud-alt">ALT: --m   SUN: --° EL</div>
-          <div id="hud-ais-vessel" class="hud-ais-vessel">AIS: --</div>
+          <div id="hud-alt">${m.placeholders.altSun}</div>
+          <div id="hud-ais-vessel" class="hud-ais-vessel">${m.placeholders.ais}</div>
         </div>
         <div class="hud-bracket">┘</div>
       </div>
 
       <div class="hud-edge hud-left-edge">
-        <div id="hud-coll">COLL: --:--:--Z</div>
-        <div id="hud-ona">ONA: --°</div>
+        <div id="hud-coll">${m.placeholders.coll}</div>
+        <div id="hud-ona">${m.placeholders.ona}</div>
       </div>
 
       <div class="hud-bottom-bar">
-        <span id="hud-bottom-line">LAT: --  LON: --  MGRS: ---</span>
+        <span id="hud-bottom-line">${m.placeholders.position}</span>
       </div>
     `;
     this._el.dataset.variant = this._variant;
@@ -340,18 +351,18 @@ export class IntelHUD {
     const lonDMS = this._toDMS(lonDeg, 'lon');
     let mgrsLabel = '---';
 
-    // MGRS. `toMGRS` throws on a camera outside the grid's latitude band, and
+    // MGRS. `mgrs.forward` throws on a camera outside the grid's latitude band, and
     // the readout says `---` there rather than going blank.
     try {
       // Format: 18SUJ23370716 → 18S UJ 2337 0716
-      mgrsLabel = this._formatMGRS(toMGRS([lonDeg, latDeg], 4)); // 4 = 10m precision
+      mgrsLabel = this._formatMGRS(mgrs.forward([lonDeg, latDeg], 4)); // 4 = 10m precision
     } catch {
       mgrsLabel = '---';
     }
 
     const bottomEl = document.getElementById('hud-bottom-line');
     if (bottomEl) {
-      bottomEl.textContent = `MGRS: ${mgrsLabel}  LAT: ${latDMS}  LON: ${lonDMS}`;
+      bottomEl.textContent = messages().readouts.position(mgrsLabel, latDMS, lonDMS);
     }
 
     // REMOVED (CARTOGRAPHY F2, 2026-09-02): GSD and its derived NIIRS.
@@ -381,7 +392,7 @@ export class IntelHUD {
     const geoidN = this._geoidUndulationM(latDeg, lonDeg);
     const altMslM = ellipsoidalToMslDisplayM(altM, geoidN);
     const sunEl = this._estimateSunElevation(latDeg, lonDeg);
-    if (altEl) altEl.textContent = `ALT: ${Math.round(altMslM)}m   SUN: ${sunEl.toFixed(1)}° EL`;
+    if (altEl) altEl.textContent = messages().readouts.altSun(Math.round(altMslM), sunEl.toFixed(1));
 
     // Collection timestamp
     const collEl = document.getElementById('hud-coll');
@@ -390,7 +401,7 @@ export class IntelHUD {
       const h = String(now.getUTCHours()).padStart(2, '0');
       const m = String(now.getUTCMinutes()).padStart(2, '0');
       const s = String(now.getUTCSeconds()).padStart(2, '0');
-      collEl.textContent = `COLL: ${h}:${m}:${s}Z`;
+      collEl.textContent = messages().readouts.coll(`${h}:${m}:${s}`);
     }
 
     // Off-nadir angle (ONA): camera pitch of -90 deg is nadir (straight down),
@@ -398,7 +409,7 @@ export class IntelHUD {
     const pitchDeg = Cesium.Math.toDegrees(camera.pitch);
     const ona = Math.max(0, 90 + pitchDeg);
     const onaEl = document.getElementById('hud-ona');
-    if (onaEl) onaEl.textContent = `ONA: ${ona.toFixed(1)}°`;
+    if (onaEl) onaEl.textContent = messages().readouts.ona(ona.toFixed(1));
 
     // `altM` stays the raw ellipsoidal camera height the sensor model reads
     // (the STREET/CITY/METRO view band, whose thresholds were tuned against
@@ -606,10 +617,10 @@ export class IntelHUD {
    */
   _composeSummary() {
     const m = this._latestMetrics;
-    if (!m) return 'Awaiting telemetry...';
+    if (!m) return messages().awaitingTelemetry;
 
     const modeEl = document.getElementById('hud-mode');
-    const modeLabel = modeEl?.textContent || 'NORMAL';
+    const modeLabel = modeEl?.textContent || messages().mode;
     const region = this._regionLabel(m.latDeg, m.lonDeg);
     const nearest = this._nearestKnownPoint(m.latDeg, m.lonDeg);
     const band = this._viewBand(m.altM);

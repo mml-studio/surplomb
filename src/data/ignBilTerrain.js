@@ -407,6 +407,9 @@ export class IgnBilTerrainProvider {
     this._tilingScheme = new Cesium.GeographicTilingScheme();
     this._outputSize = outputSize;
     this._errorEvent = new Cesium.Event();
+    // The attribution Etalab 2.0 requires, verbatim: a product name
+    // (RGE ALTI) and a publisher, not a sentence to translate.
+    // i18n-ignore-next-line
     this._credit = new Cesium.Credit('Terrain: © IGN — RGE ALTI via Géoplateforme', false);
     this._rectangle = Cesium.Rectangle.fromDegrees(
       IGN_TERRAIN_RECTANGLE_DEG.west,

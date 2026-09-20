@@ -219,3 +219,24 @@ test('the close-range facet is cross-checked against the modules, not trusted', 
     [],
   );
 });
+
+test('a translated source line repeats the layer module’s own, byte for byte', async () => {
+  // The French side of `sources` is not a translation: it is the string the
+  // module already published, copied here so the panel can pick a language
+  // without the module knowing. If a layer batch rewords its `source`, the
+  // copy goes stale and the French panel would print yesterday's line — so
+  // the manifest, which is re-derived from the modules on every `npm test`,
+  // is what this asserts against.
+  const { LAYER_MANIFEST } = await import('./layerManifest.js');
+  const { default: messages } = await import('./layerTaxonomy.i18n.js');
+  const sourceById = new Map(LAYER_MANIFEST.map((entry) => [entry.id, entry.source]));
+  const translated = Object.entries(messages.definition.sources);
+  assert.ok(translated.length > 0, 'no source line is translated any more');
+  for (const [id, leaf] of translated) {
+    assert.ok(sourceById.has(id), `${id} is not a registered layer`);
+    assert.equal(leaf.fr, sourceById.get(id), `${id}: the French source line drifted from the module`);
+    assert.equal(layerTaxonomyFor(id).sourceLabel, sourceById.get(id));
+  }
+  // Everything else answers null, and the manager then prints the module's own.
+  assert.equal(layerTaxonomyFor('flights').sourceLabel, null);
+});

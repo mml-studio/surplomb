@@ -52,6 +52,70 @@
  */
 
 import { REGISTERED_LAYER_IDS } from './layerState.js';
+import messages from './layerFusions.i18n.js';
+
+/**
+ * Marks a row this table built, as opposed to one a test passed in.
+ *
+ * `validateLayerFusions` runs at import and may not read the page's language
+ * (`src/i18n/importSafety.test.mjs`), so for a row of THIS table it reads the
+ * catalog's definition — including when the catalog has nothing to say, which
+ * is how a fusion with no primary chip stays legal. A synthetic row carries
+ * its own strings and is checked exactly as it was.
+ */
+const FROM_CATALOG = Symbol('surplomb.fusion.catalog');
+
+/**
+ * A companion, with its words hung off its id.
+ *
+ * `chip` and `title` are getters over `layerFusions.i18n.js`, read when the
+ * strip is painted: the table states WHICH layers are one subject, the catalog
+ * states what they are called, and neither has to know the page's language
+ * until something is drawn. A companion with no entry in the catalog fails
+ * `validateLayerFusions` at import.
+ *
+ * @param {{id: string, optIn?: boolean, disabled?: boolean}} companion
+ * @returns {object} Frozen companion descriptor.
+ */
+function fusionCompanion(companion) {
+  return Object.freeze({
+    ...companion,
+    [FROM_CATALOG]: true,
+    get chip() { return messages().chips[companion.id]; },
+    get title() { return messages().titles[companion.id] ?? ''; },
+  });
+}
+
+/**
+ * A fusion, with its primary's chip hung off the primary's id.
+ * @param {{primary: string, primaryToggle?: boolean, companions: object[]}} fusion
+ * @returns {object} Frozen fusion.
+ */
+function fusionRow(fusion) {
+  return Object.freeze({
+    ...fusion,
+    [FROM_CATALOG]: true,
+    get primaryChip() { return messages().chips[fusion.primary]; },
+    companions: Object.freeze(fusion.companions.map(fusionCompanion)),
+  });
+}
+
+/**
+ * The chip a row or a companion declares, without resolving a locale.
+ *
+ * `own` is a THUNK and not a value: a call evaluates its arguments, and
+ * `fusion.primaryChip` is a getter that resolves the locale. Reading it to
+ * hand it to a function that was going to ignore it is exactly the import-time
+ * read this indirection exists to avoid.
+ *
+ * @param {object} entry A fusion or a companion.
+ * @param {string} layerId The layer the chip belongs to.
+ * @param {() => string|undefined} own What the entry carries itself, if any.
+ * @returns {string|undefined}
+ */
+function declaredChip(entry, layerId, own) {
+  return entry[FROM_CATALOG] ? messages.definition.chips[layerId]?.fr : own();
+}
 
 /**
  * The merged subjects.
@@ -150,22 +214,13 @@ export const LAYER_FUSIONS = Object.freeze([
   // l'urbanisme, not Sitadel), it is drawn as ground polygons rather than
   // points, and a reader who came for the permits must be able to switch the
   // zoning off without losing the row.
-  Object.freeze({
+  fusionRow({
     primary: 'urbanisme-gpu',
-    primaryChip: 'PLU & servitudes',
     primaryToggle: true,
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'ads-fr',
-        chip: 'Autorisations',
-        title: 'Permis et déclarations déposés — Sitadel, plus les portails métropolitains',
-      }),
-      Object.freeze({
-        id: 'sitadel-fr',
-        chip: 'Sur parcelle',
-        title: 'Sitadel posé sur la parcelle cadastrale, quand la référence est publiée',
-      }),
-    ]),
+    companions: [
+      { id: 'ads-fr' },
+      { id: 'sitadel-fr' },
+    ],
   }),
 
   // ── 2. Property prices ───────────────────────────────────────────────────
@@ -178,41 +233,29 @@ export const LAYER_FUSIONS = Object.freeze([
   // row called « Prix de l'immobilier » a reader had no way to tell that one
   // of them was about a specific door. The row answers "what does it cost
   // around here"; the chips say what else you can ask.
-  Object.freeze({
+  fusionRow({
     primary: 'dvf-sales',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'avis-valeur',
-        chip: 'Estimer un bien',
-        title: 'Estimer un logement au point cliqué, sur les mêmes ventes — le type suit la '
-          + 'puce de la ligne, la surface se choisit ici',
-      }),
-      Object.freeze({
+    companions: [
+      { id: 'avis-valeur' },
+      {
         id: 'comparables-fr',
-        chip: 'Mes comparables',
         // Opt-in: the dossier is the reader's OWN selection, and an empty
         // dossier switched on by a row toggle draws nothing while costing a
         // lifecycle. It is a tool, and a tool is picked up.
         optIn: true,
-        title: 'Dossier de comparables — sélection manuelle, à ouvrir quand on en constitue un',
-      }),
-    ]),
+      },
+    ],
   }),
 
   // ── 3. Schools ───────────────────────────────────────────────────────────
   // The taxonomy already stated the problem in prose next to `sup-fr`: "one
   // subject split across two ministries, and the taxonomy should not repeat
   // the split". It repeated it anyway, as two rows. It stops here.
-  Object.freeze({
+  fusionRow({
     primary: 'schools-fr',
-    primaryChip: 'Écoles et lycées',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'sup-fr',
-        chip: 'Supérieur',
-        title: 'Établissements du supérieur — 2 800 lycées à BTS sont dans les deux registres',
-      }),
-    ]),
+    companions: [
+      { id: 'sup-fr' },
+    ],
   }),
 
   // ── 4. Ships and ports ───────────────────────────────────────────────────
@@ -225,36 +268,23 @@ export const LAYER_FUSIONS = Object.freeze([
   // wave height today while the mooring sat in a group of its own. What a buoy
   // reports — swell, wind, water temperature — is a fact about the water a
   // vessel is in, and it has no reader outside that question.
-  Object.freeze({
+  fusionRow({
     primary: 'ais-live-vessels',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'local-ports',
-        chip: 'Ports',
-        title: 'World Port Index — les escales que les navires déclarent',
-      }),
-      Object.freeze({
-        id: 'marine-buoys',
-        chip: 'Bouées',
-        title: "État de la mer mesuré — houle, vent, température de l'eau (NDBC)",
-      }),
-    ]),
+    companions: [
+      { id: 'local-ports' },
+      { id: 'marine-buoys' },
+    ],
   }),
 
   // ── 5. Catchment area ────────────────────────────────────────────────────
   // The fiche IS the card of the ring: `implantation-fr` joins four layers
   // inside the isochrone this row draws, and neither is readable without the
   // other.
-  Object.freeze({
+  fusionRow({
     primary: 'isochrone-fr',
-    primaryChip: 'Anneau',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'implantation-fr',
-        chip: 'Fiche',
-        title: "Fiche implantation — ce que l'anneau contient, en une carte",
-      }),
-    ]),
+    companions: [
+      { id: 'implantation-fr' },
+    ],
   }),
 
   // ── 6. Airports ──────────────────────────────────────────────────────────
@@ -264,44 +294,31 @@ export const LAYER_FUSIONS = Object.freeze([
   // argument for filing it with the aircraft. The ground-level reading is
   // owed elsewhere: the address radiography, where a PEB zone is a fact about
   // a door.
-  Object.freeze({
+  fusionRow({
     primary: 'local-airports',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'bruit-fr',
-        chip: 'Bruit (PEB)',
-        title: "Plans d'exposition au bruit — la contrainte au sol des aéroports",
-      }),
-    ]),
+    companions: [
+      { id: 'bruit-fr' },
+    ],
   }),
 
   // ── 7. Rivers ────────────────────────────────────────────────────────────
   // The two module headers already cite each other in prose. Vigicrues paints
   // the reach, Hub'Eau measures the flow inside it.
-  Object.freeze({
+  fusionRow({
     primary: 'vigicrues',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'hubeau-hydro',
-        chip: 'Stations',
-        title: "Hub'Eau — débit et hauteur mesurés sur le tronçon",
-      }),
-    ]),
+    companions: [
+      { id: 'hubeau-hydro' },
+    ],
   }),
 
   // ── 8. Weather ───────────────────────────────────────────────────────────
   // An inventory of instruments has value through its readings. The vigilance
   // says what is coming, the stations say what is measured.
-  Object.freeze({
+  fusionRow({
     primary: 'meteofrance-vigilance',
-    primaryChip: 'Vigilance',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'meteo-stations-fr',
-        chip: 'Stations',
-        title: 'Météo-France — les 190 stations qui publient leur relevé',
-      }),
-    ]),
+    companions: [
+      { id: 'meteo-stations-fr' },
+    ],
   }),
 
   // ── 9. Power plants ──────────────────────────────────────────────────────
@@ -310,22 +327,12 @@ export const LAYER_FUSIONS = Object.freeze([
   // this fix; the deduplication by EIC and by ODRÉ id is the second, and it is
   // not done here. Until it is, the chips at least let a reader see the same
   // plant twice on purpose rather than by accident.
-  Object.freeze({
+  fusionRow({
     primary: 'edf-power-plants',
-    primaryChip: 'Registre EDF',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'rte-generation',
-        chip: 'Groupes RTE',
-        title: 'Groupes de production RTE — production temps réel avec une clé',
-      }),
-      Object.freeze({
-        id: 'fr-hydro-plants',
-        chip: 'Centrales hydro',
-        title: 'Registre ODRÉ — toute la filière hydraulique française, '
-          + 'plus 592 centrales cartographiées hors de France',
-      }),
-    ]),
+    companions: [
+      { id: 'rte-generation' },
+      { id: 'fr-hydro-plants' },
+    ],
   }),
 
   // ── 10. Public transit ───────────────────────────────────────────────────
@@ -339,44 +346,29 @@ export const LAYER_FUSIONS = Object.freeze([
   // had to know to press both, and the frequency half answered a click with a
   // card the network half could not see. The two modules are now one layer and
   // one card; see `idfmNetwork.js` for what the merge kept and what it dropped.
-  Object.freeze({
+  fusionRow({
     primary: 'transit-fr',
-    primaryChip: 'Véhicules en direct',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'idfm-network',
-        chip: 'Réseau IDFM',
-        title: 'Arrêts, lignes et fréquence horaire d’Île-de-France — 37 956 arrêts',
-      }),
-    ]),
+    companions: [
+      { id: 'idfm-network' },
+    ],
   }),
 
   // ── 11. Bikes and shared vehicles ────────────────────────────────────────
   // `bikeshare` is primary although it is the smaller set: it is the one with
   // data outside France, and a row that carried the `FR` chip would tell a
   // reader in Montréal that a layer serving them is French-only.
-  Object.freeze({
+  fusionRow({
     primary: 'bikeshare',
-    primaryChip: 'Stations GBFS',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'shared-mobility-fr',
-        chip: 'Longue traîne FR',
-        title: '135 opérateurs français, tous modes — vélo, trottinette, scooter, voiture',
-      }),
+    companions: [
+      { id: 'shared-mobility-fr' },
       // WITHDRAWN FROM THE INTERFACE on 2026-09-14, by product decision, and
       // kept here rather than deleted: the module, the shipped pack, the share
       // token `vp`, the credit line and `qa-velo-pulse.mjs` all still work, and
       // this entry is the one line to remove to hand the chip back. While the
       // flag stands there is no « Semaine type » chip on the row and the row's
       // toggle no longer carries the layer.
-      Object.freeze({
-        id: 'velo-pulse-fr',
-        chip: 'Semaine type',
-        disabled: true,
-        title: 'Remplissage moyen par heure de la semaine — Paris et Lyon',
-      }),
-    ]),
+      { id: 'velo-pulse-fr', disabled: true },
+    ],
   }),
 
   // ── 12. Road traffic ─────────────────────────────────────────────────────
@@ -390,36 +382,26 @@ export const LAYER_FUSIONS = Object.freeze([
   // vehicle count. Everywhere else the pair reads the other way round. Neither
   // fact was legible on the strip before `layerCoverage.js`: both chips looked
   // equally alive over a city where exactly one of them had data.
-  Object.freeze({
+  fusionRow({
     primary: 'traffic',
-    primaryChip: 'Débit mesuré',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'road-status-fr',
-        chip: 'État du réseau',
-        title: 'Traficolor — état déclaré par les DIR, hors autoroutes concédées',
-      }),
-      Object.freeze({
-        id: 'road-events-fr',
-        chip: 'Événements',
-        title: 'Chantiers, accidents et fermetures publiés par Bison Futé',
-      }),
-      Object.freeze({
+    companions: [
+      { id: 'road-status-fr' },
+      { id: 'road-events-fr' },
+      {
         id: 'comptages-fr',
-        // The territory is IN the label, not only in the tooltip. This chip sits
-        // on a row that works everywhere on Earth, and a bare "Comptages" beside
-        // "État du réseau" and "Événements" reads as the third national feed
-        // rather than as a layer whose entire extent is 12,6 km by 10,0 km.
-        chip: 'Comptages · Paris',
+        // The territory is IN the label, not only in the tooltip — see the
+        // catalog: this chip sits on a row that works everywhere on Earth, and
+        // a bare "Comptages" beside "État du réseau" and "Événements" reads as
+        // the third national feed rather than as a layer whose entire extent is
+        // 12,6 km by 10,0 km.
         // Opt-in: the row toggle used to carry this one, so switching road
         // traffic on over Tokyo switched on a Paris-only layer, fetched its
         // chunk, and contributed SEVEN hour chips to a strip of fifteen — all
         // steering a layer with no payload. Its cost is real and its value is
         // geographic, which is exactly the case `optIn` was written for.
         optIn: true,
-        title: 'Comptages routiers de Paris — un COMPTAGE de véhicules, pas une congestion',
-      }),
-    ]),
+      },
+    ],
   }),
 
   // ── 13. Territory ────────────────────────────────────────────────────────
@@ -427,21 +409,12 @@ export const LAYER_FUSIONS = Object.freeze([
   // first half; the shared indicator selector the audit asks for is the
   // second. The delinquance layer's anti-defamation guard travels WITH its
   // chip — it lives in that module and nothing here weakens it.
-  Object.freeze({
+  fusionRow({
     primary: 'filosofi-fr',
-    primaryChip: 'Revenus',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'delinquance-fr',
-        chip: 'Délinquance',
-        title: 'Taux enregistrés par les services — à lire avec la garde du module',
-      }),
-      Object.freeze({
-        id: 'petite-enfance-fr',
-        chip: 'Petite enfance',
-        title: "Places pour 100 enfants de moins de trois ans",
-      }),
-    ]),
+    companions: [
+      { id: 'delinquance-fr' },
+      { id: 'petite-enfance-fr' },
+    ],
   }),
 
   // ── 14. Digital infrastructure ───────────────────────────────────────────
@@ -455,38 +428,24 @@ export const LAYER_FUSIONS = Object.freeze([
   // the other two qualify", which is the shape every other fusion here has. The
   // row's toggle alone therefore left the data centres forced on under any
   // reader who came for the antennas.
-  Object.freeze({
+  fusionRow({
     primary: 'local-datacenters',
-    primaryChip: 'Data centers',
     primaryToggle: true,
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'telegeography-submarine-cables',
-        chip: 'Câbles',
-        title: 'TeleGeography — atterrages et câbles sous-marins (licence non commerciale)',
-      }),
-      Object.freeze({
-        id: 'anfr-fr',
-        chip: 'Antennes',
-        title: 'Supports ANFR — 2G à 5G, par opérateur',
-      }),
-    ]),
+    companions: [
+      { id: 'telegeography-submarine-cables' },
+      { id: 'anfr-fr' },
+    ],
   }),
 
   // ── 15. Live flights ─────────────────────────────────────────────────────
   // The military register already runs while its row is off — it feeds the
   // CONTACTS roster — and it mirrors `flights` options by explicit registry
   // disposition. It was a second row for the same sky.
-  Object.freeze({
+  fusionRow({
     primary: 'flights',
-    primaryChip: 'Civils',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'military',
-        chip: 'Militaires',
-        title: 'Aéronefs militaires identifiés — même source, même rendu',
-      }),
-    ]),
+    companions: [
+      { id: 'military' },
+    ],
   }),
 
   // ── 16. Active fires ─────────────────────────────────────────────────────
@@ -511,17 +470,11 @@ export const LAYER_FUSIONS = Object.freeze([
   // reading of a row whose live half is gated and whose historical half is
   // not, and the chip title says so rather than leaving a reader to discover
   // that the greyed row still has something to show.
-  Object.freeze({
+  fusionRow({
     primary: 'local-firms',
-    primaryChip: 'Feux en cours',
-    companions: Object.freeze([
-      Object.freeze({
-        id: 'gironde-megafire-2026',
-        chip: 'Archive Gironde 2026',
-        optIn: true,
-        title: 'Mégafeu de juillet 2026 — reconstitution jour par jour, sans clé FIRMS',
-      }),
-    ]),
+    companions: [
+      { id: 'gironde-megafire-2026', optIn: true },
+    ],
   }),
 ]);
 
@@ -553,8 +506,13 @@ export function validateLayerFusions(
     }
     // Optional, but never empty and never a non-string: a blank one would
     // render as a sub-block with a title bar and no title.
-    if (fusion.primaryChip !== undefined
-        && (typeof fusion.primaryChip !== 'string' || !fusion.primaryChip.trim())) {
+    // Read from the CATALOG's French side, never through the getter: this runs
+    // at import, where reading the page's language is forbidden
+    // (`src/i18n/importSafety.test.mjs`). A table a test passes in carries its
+    // own chips and is checked exactly as it was.
+    const primaryChip = declaredChip(fusion, primary, () => fusion.primaryChip);
+    if (primaryChip !== undefined
+        && (typeof primaryChip !== 'string' || !primaryChip.trim())) {
       throw new Error(`Fusion primaryChip must be a non-empty string: ${primary}`);
     }
     // Typed rather than truthy, same reason as `disabled` below: a string
@@ -565,7 +523,7 @@ export function validateLayerFusions(
     // A chip with no label is a blank button, and the fallback `primaryChip`
     // has for the MAP KEY (the layer's display name) is the row's own name —
     // which on the strip would read as a chip for the row inside the row.
-    if (fusion.primaryToggle === true && !fusion.primaryChip) {
+    if (fusion.primaryToggle === true && !primaryChip) {
       throw new Error(`Fusion primaryToggle needs a primaryChip: ${primary}`);
     }
     claimed.set(primary, primary);
@@ -578,10 +536,11 @@ export function validateLayerFusions(
       if (typeof id !== 'string' || !id) throw new Error(`Fusion companion missing id: ${primary}`);
       if (!registered.has(id)) throw new Error(`Unknown fusion companion: ${id}`);
       if (claimed.has(id)) throw new Error(`Layer claimed by two fusions: ${id}`);
-      if (!companion.chip || typeof companion.chip !== 'string') {
+      const chip = declaredChip(companion, id, () => companion.chip);
+      if (!chip || typeof chip !== 'string') {
         throw new Error(`Fusion companion missing chip label: ${id}`);
       }
-      if (companion.chip === fusion.primaryChip) {
+      if (chip === primaryChip) {
         throw new Error(`Fusion companion repeats the primary's chip: ${id}`);
       }
       // Typed rather than truthy: `disabled: 'false'` reads as "on" to a
@@ -619,7 +578,9 @@ const PRIMARY_CHIP_BY_ID = new Map(LAYER_FUSIONS
   .filter((fusion) => fusion.primaryToggle === true)
   .map((fusion) => [fusion.primary, Object.freeze({
     id: fusion.primary,
-    chip: fusion.primaryChip,
+    // A getter over the fusion's own: this map is built at import, where the
+    // page's language is not readable.
+    get chip() { return fusion.primaryChip; },
     title: '',
   })]));
 const PRIMARY_BY_COMPANION = new Map();

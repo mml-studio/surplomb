@@ -89,6 +89,7 @@ import {
 } from './megafireFire.js';
 import { megafireDriftVectors } from './megafireFireMath.js';
 import messages from './girondeMegafire.i18n.js';
+import taxonomyMessages from './layerTaxonomy.i18n.js';
 import { formatNumber } from '../i18n/format.js';
 
 /**
@@ -596,7 +597,13 @@ async function load() {
 
 const girondeMegafireLayer = {
   id: MEGAFIRE_LAYER_ID,
-  name: 'Mégafeu de Gironde (juil. 2026)',
+  // The last French literal the pilot left behind, and it belongs to the
+  // REGISTRY rather than to this module: `layerTaxonomy.i18n.js` names every
+  // row of the panel, this one included, and reading it here is what stops
+  // the two from drifting. A getter, not a string, so the name follows the
+  // page — `layerManifest.js` is generated under Node, where it resolves
+  // French, which is what that file has always carried.
+  get name() { return taxonomyMessages().labels[MEGAFIRE_LAYER_ID]; },
   // 🔥 belongs to `local-firms`, which is the LIVE fire row; this one is the
   // record of a fire that stopped, so it takes the burn scar rather than the
   // flame.

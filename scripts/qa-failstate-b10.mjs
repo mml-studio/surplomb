@@ -33,7 +33,8 @@
 
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
-import { layerTaxonomyFor } from '../src/data/layerTaxonomy.js';
+import { inAllLocales } from '../src/i18n/messages.js';
+import taxonomyMessages from '../src/data/layerTaxonomy.i18n.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,15 +97,23 @@ function record(name, ok, detail) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function readLayerControl(page, layerId, expectedLabel) {
+/**
+ * Wait for a row to settle into a feed STATE, and read what it shows.
+ *
+ * The state is the `data-feed-state` attribute (`unavailable`, `degraded`, …),
+ * never the word on the button: that word is ACTIF / CHARGEMENT / ÉTEINT in
+ * French and ON / LOADING / OFF in English, and this harness has to be able to
+ * run on either page. `name` comes from the row itself for the same reason.
+ */
+async function readLayerControl(page, layerId, expectedState) {
   await page.waitForFunction(
-    (id, label) => {
+    (id, state) => {
       const button = document.querySelector(`[data-layer-id="${id}"] .data-toggle-btn`);
-      return button?.textContent?.trim() === label;
+      return button?.dataset?.feedState === state;
     },
     { timeout: 5000 },
     layerId,
-    expectedLabel,
+    expectedState,
   );
   return page.evaluate((id) => {
     const row = document.querySelector(`[data-layer-id="${id}"]`);
@@ -112,6 +121,7 @@ async function readLayerControl(page, layerId, expectedLabel) {
     const meta = row?.querySelector('.data-toggle-meta');
     return {
       label: button?.textContent?.trim() || '',
+      name: row?.querySelector('.data-name')?.textContent?.trim() || '',
       feedState: button?.dataset?.feedState || '',
       ariaLabel: button?.getAttribute('aria-label') || '',
       meta: meta?.textContent?.trim() || '',
@@ -314,16 +324,17 @@ async function main() {
       return outcomes;
     });
     for (const outcome of refreshFeedback) {
-      // The banner names the layer the way the PANEL does — its French `label`
-      // — while `outcome.name` is the module's own English string. Asking the
-      // taxonomy keeps this assertion about the feedback being present and
-      // attributed, which is the point, instead of about which language it is
-      // written in.
-      const displayName = layerTaxonomyFor(outcome.id)?.label || outcome.name;
+      // The banner names the layer the way the PANEL does — its `label` — while
+      // `outcome.name` is the module's own id-adjacent string. The registry is
+      // asked for that label IN EVERY LANGUAGE, because this harness runs on a
+      // French page and on an English one, and what is being checked is that
+      // the feedback is present and attributed, not which language it is in.
+      const displayNames = inAllLocales(taxonomyMessages, `labels.${outcome.id}`);
+      const displayName = displayNames[0] || outcome.name;
       const passed = !outcome.missing
         && outcome.working.hidden === false
         && outcome.working.label === 'REFRESHING LIVE DATA'
-        && outcome.working.detail.includes(displayName)
+        && displayNames.some((name) => outcome.working.detail.includes(name))
         && outcome.failed.hidden === false
         && outcome.failed.label === 'LOAD FAILED'
         && outcome.failed.state === 'error'
@@ -366,15 +377,19 @@ async function main() {
       );
       if (!hasError) exitCode = 1;
     }
-    const aisControl = await readLayerControl(page, 'ais-live-vessels', 'UNAVAILABLE');
-    // Read the expected name from the taxonomy rather than pinning the string:
-    // the panel renders the French `label`, and a harness that hard-codes it
-    // fails the next time the product renames a row instead of proving anything
-    // about fail-state honesty, which is what this check is for.
-    const aisName = layerTaxonomyFor('ais-live-vessels')?.label || 'Live AIS Vessels';
+    const aisControl = await readLayerControl(page, 'ais-live-vessels', 'unavailable');
+    // The aria-label must name the ROW and the state it is in. Both are read
+    // back from the page — the name from the row, the word from the button —
+    // so this proves the wiring in whichever language the page is in, instead
+    // of pinning a string that a rename or a translation would break.
     const aisChipHonest = aisControl.feedState === 'unavailable'
-      && aisControl.ariaLabel === `${aisName}: UNAVAILABLE`;
-    const aisMetaHonest = /^UNAVAILABLE · AISStream · /i.test(aisControl.meta)
+      && aisControl.name.length > 0
+      && aisControl.ariaLabel === `${aisControl.name}: ${aisControl.label}`;
+    // `AISStream` and not the whole source line: the layer's declared source
+    // gained its ANFR half and its licence in 2026, and this check is about
+    // the META NAMING THE ERROR, not about the exact publisher string.
+    const aisMetaHonest = aisControl.meta.startsWith(`${aisControl.label} · `)
+      && aisControl.meta.includes('AISStream')
       && aisStats.error
       && aisControl.meta.includes(aisStats.error);
     record(
@@ -418,12 +433,12 @@ async function main() {
         await new Promise((r) => setTimeout(r, 800));
         return dm.layers.get('satellites').module.getStats();
       });
-      const partialControl = await readLayerControl(page, 'satellites', 'DEGRADED');
+      const partialControl = await readLayerControl(page, 'satellites', 'degraded');
       const partialChipHonest = partialStats.count > 0
         && /1 CelesTrak group unavailable/i.test(partialStats.error || '')
         && partialControl.feedState === 'degraded'
-        && partialControl.ariaLabel === 'Satellites: DEGRADED';
-      const partialMetaHonest = /^DEGRADED · CelesTrak · /i.test(partialControl.meta)
+        && partialControl.ariaLabel === `${partialControl.name}: ${partialControl.label}`;
+      const partialMetaHonest = partialControl.meta.startsWith(`${partialControl.label} · CelesTrak · `)
         && /1 CelesTrak group unavailable/i.test(partialControl.meta);
       record(
         'Satellites: partial outage renders a DEGRADED chip',
@@ -454,10 +469,10 @@ async function main() {
       const s = outageStats.stats;
       const notWiped = s.count > 0; // catalog preserved, not blanked to 0
       const errorSet = typeof s.error === 'string' && s.error.length > 0;
-      const outageControl = await readLayerControl(page, 'satellites', 'UNAVAILABLE');
+      const outageControl = await readLayerControl(page, 'satellites', 'unavailable');
       const outageChipHonest = outageControl.feedState === 'unavailable'
-        && outageControl.ariaLabel === 'Satellites: UNAVAILABLE';
-      const outageMetaHonest = /^UNAVAILABLE · CelesTrak · /i.test(outageControl.meta)
+        && outageControl.ariaLabel === `${outageControl.name}: ${outageControl.label}`;
+      const outageMetaHonest = outageControl.meta.startsWith(`${outageControl.label} · CelesTrak · `)
         && outageControl.meta.includes(s.error || '');
       record(
         'Satellites: catalog NOT wiped to 0 on total outage',

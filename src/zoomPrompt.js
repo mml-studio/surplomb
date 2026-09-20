@@ -31,7 +31,7 @@
  *   sentence written here that could drift from it. A layer that publishes no
  *   sentence gets a neutral fallback rather than an invented ceiling.
  *
- * • **It aggregates.** One card, up to three rows, then "+N autres". Three
+ * • **It aggregates.** One card, up to three rows, then "+N more". Three
  *   cards stacked in the middle of a globe is a modal dialog by accident.
  *
  * • **It is not a first-run card.** Dismissal is remembered against the SET of
@@ -39,6 +39,8 @@
  *   waits keeps it closed for that situation, and a different set of layers
  *   waiting later is different news.
  */
+
+import messages from './zoomPrompt.i18n.js';
 
 /**
  * Statuses that mean "the camera is the reason nothing drew".
@@ -53,8 +55,18 @@ export const ZOOM_PROMPT_STATUSES = Object.freeze(new Set(['zoom-in', 'too-high'
 /** Rows printed before the card collapses the rest into a count. */
 export const ZOOM_PROMPT_MAX_ROWS = 3;
 
-/** What a waiting layer that published no sentence of its own is given. */
-export const ZOOM_PROMPT_FALLBACK_MESSAGE = 'Zoome pour charger cette couche';
+/**
+ * What a waiting layer that published no sentence of its own is given, in
+ * French.
+ *
+ * The constant is the FRENCH side of the catalog leaf, read from the
+ * definition rather than through the accessor — an exported `const` cannot be
+ * a getter, and resolving it at import would freeze one language into a
+ * module that has to answer in two. What the card prints comes from
+ * `zoomPromptMessage()` below, at call time. This export stays for the callers
+ * that compare against the default.
+ */
+export const ZOOM_PROMPT_FALLBACK_MESSAGE = messages.definition.fallbackMessage.fr;
 
 /**
  * How long the card takes to leave, in ms.
@@ -101,7 +113,7 @@ export function zoomPromptMessage(stats = {}) {
   if (label) return zoomPromptSentence(label);
   const fault = stats?.error || stats?.lastError;
   if (fault) return zoomPromptSentence(String(fault));
-  return ZOOM_PROMPT_FALLBACK_MESSAGE;
+  return messages().fallbackMessage;
 }
 
 /**
@@ -110,7 +122,8 @@ export function zoomPromptMessage(stats = {}) {
  * @returns {string}
  */
 export function zoomPromptTitle(total) {
-  return total > 1 ? `${total} couches attendent un zoom` : 'Zoome pour voir cette couche';
+  const m = messages();
+  return total > 1 ? m.titleMany(total) : m.title;
 }
 
 /**
@@ -285,6 +298,7 @@ export function renderZoomPrompt(host, model, handlers = {}) {
 
   const doc = host.ownerDocument || globalThis.document;
   if (!doc || typeof doc.createElement !== 'function') return true;
+  const m = messages();
 
   const header = doc.createElement('div');
   header.className = 'zoom-prompt-header';
@@ -296,8 +310,8 @@ export function renderZoomPrompt(host, model, handlers = {}) {
   const close = doc.createElement('button');
   close.type = 'button';
   close.className = 'zoom-prompt-close';
-  close.title = 'Fermer';
-  close.setAttribute('aria-label', 'Fermer');
+  close.title = m.close;
+  close.setAttribute('aria-label', m.close);
   close.textContent = '✕';
   close.addEventListener('click', () => handlers.onDismiss?.(model.signature));
   header.appendChild(close);
@@ -322,7 +336,7 @@ export function renderZoomPrompt(host, model, handlers = {}) {
       const fly = doc.createElement('button');
       fly.type = 'button';
       fly.className = 'zoom-prompt-fly';
-      fly.textContent = 'Zoomer ici';
+      fly.textContent = m.fly;
       fly.addEventListener('click', () => {
         // The flight takes about 1,6 s and can retry twice. A button that stays
         // pressable through it would queue a second solve against a camera the
@@ -344,9 +358,7 @@ export function renderZoomPrompt(host, model, handlers = {}) {
   if (model.hiddenCount > 0) {
     const more = doc.createElement('div');
     more.className = 'zoom-prompt-more';
-    more.textContent = model.hiddenCount > 1
-      ? `+${model.hiddenCount} autres couches`
-      : '+1 autre couche';
+    more.textContent = model.hiddenCount > 1 ? m.more(model.hiddenCount) : m.moreOne;
     list.appendChild(more);
   }
 
