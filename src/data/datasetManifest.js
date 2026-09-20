@@ -29,6 +29,8 @@
  * @module data/datasetManifest
  */
 
+import messages from './datasetManifest.i18n.js';
+
 /** Schema version written into every manifest the app produces. */
 export const DATASET_MANIFEST_VERSION = 1;
 
@@ -217,64 +219,65 @@ function rawGroupKeys(group) {
  * @returns {string[]}
  */
 function datasetGroupFaults(group) {
+  const m = messages();
   const faults = [];
-  if (!isPlainObject(group)) return ['`feature.group` : objet'];
+  if (!isPlainObject(group)) return [m.group.object];
   const hasRules = group.rules !== undefined;
   if (hasRules && group.field !== undefined) {
-    faults.push('`feature.group` : `rules` ou `field`/`styles`, pas les deux');
+    faults.push(m.group.bothForms);
   }
   if (hasRules) {
     if (!Array.isArray(group.rules) || group.rules.length === 0) {
-      faults.push('`feature.group.rules` : au moins une règle { key, color, label?, when }');
+      faults.push(m.group.rulesEmpty);
     } else {
       const seen = new Set();
       group.rules.forEach((rule, index) => {
         if (!isPlainObject(rule)) {
-          faults.push(`\`feature.group.rules[${index}]\` : objet { key, color, label?, when }`);
+          faults.push(m.group.ruleObject(index));
           return;
         }
         if (!isNonEmptyString(rule.key) || rule.key === DATASET_OTHER_GROUP_KEY) {
-          faults.push(`\`feature.group.rules[${index}].key\` : identifiant non vide, « ${DATASET_OTHER_GROUP_KEY} » réservé`);
+          faults.push(m.group.ruleKey(index, DATASET_OTHER_GROUP_KEY));
         } else if (seen.has(rule.key)) {
-          faults.push(`\`feature.group.rules[${index}].key\` : « ${rule.key} » en double`);
+          faults.push(m.group.ruleKeyDuplicate(index, rule.key));
         } else {
           seen.add(rule.key);
         }
         if (!(typeof rule.color === 'string' && HEX_COLOR.test(rule.color))) {
-          faults.push(`\`feature.group.rules[${index}].color\` : couleur hexadécimale #rrggbb`);
+          faults.push(m.group.ruleColor(index));
         }
         if (rule.label !== undefined && !isNonEmptyString(rule.label)) {
-          faults.push(`\`feature.group.rules[${index}].label\` : chaîne non vide`);
+          faults.push(m.group.ruleLabel(index));
         }
         const when = rule.when;
         if (!isPlainObject(when) || Object.keys(when).length === 0) {
-          faults.push(`\`feature.group.rules[${index}].when\` : { champ: [valeurs acceptées] }`);
+          faults.push(m.group.ruleWhen(index));
         } else {
           for (const [field, accepted] of Object.entries(when)) {
             if (!isNonEmptyString(field) || !(Array.isArray(accepted) && accepted.length > 0 && accepted.every(isNonEmptyString))) {
-              faults.push(`\`feature.group.rules[${index}].when["${field}"]\` : liste de valeurs non vides`);
+              faults.push(m.group.ruleWhenField(index, field));
             }
           }
         }
       });
     }
   } else if (!isNonEmptyString(group.field)) {
-    faults.push('`feature.group.field` : champ de classement');
+    faults.push(m.group.field);
   } else {
     const styles = group.styles;
     if (!isPlainObject(styles) || Object.keys(styles).length === 0) {
-      faults.push('`feature.group.styles` : au moins une valeur { color, label? }');
+      faults.push(m.group.stylesEmpty);
     } else {
       for (const [value, style] of Object.entries(styles)) {
         if (!isPlainObject(style) || !(typeof style.color === 'string' && HEX_COLOR.test(style.color))) {
-          faults.push(`\`feature.group.styles["${value}"]\` : { color: #rrggbb, label? }`);
+          faults.push(m.group.style(value));
         }
       }
     }
   }
   if (group.other !== undefined
     && !(isPlainObject(group.other) && typeof group.other.color === 'string' && HEX_COLOR.test(group.other.color))) {
-    faults.push('`feature.group.other` : { color: #rrggbb, label? }');
+    faults.push(m.group.other);
   }
   return faults;
 }
@@ -292,44 +295,45 @@ function datasetGroupFaults(group) {
  * @returns {string[]}
  */
 function datasetFilterFaults(filters, group) {
+  const m = messages();
   if (!Array.isArray(filters) || filters.length === 0) {
-    return ['`feature.filters` : liste de puces { id, label, groups? }'];
+    return [m.filters.list];
   }
   const faults = [];
   if (filters.length > DATASET_MAX_FILTERS) {
-    faults.push(`\`feature.filters\` : ${DATASET_MAX_FILTERS} puces au plus`);
+    faults.push(m.filters.tooMany(DATASET_MAX_FILTERS));
   }
   const known = new Set([...rawGroupKeys(group), DATASET_OTHER_GROUP_KEY]);
-  if (known.size === 1) faults.push('`feature.filters` : sans `feature.group`, une puce n\'a rien à filtrer');
+  if (known.size === 1) faults.push(m.filters.nothingToFilter);
   const seen = new Set();
   filters.forEach((filter, index) => {
     if (!isPlainObject(filter)) {
-      faults.push(`\`feature.filters[${index}]\` : objet { id, label, groups? }`);
+      faults.push(m.filters.object(index));
       return;
     }
     if (!isNonEmptyString(filter.id) || !DATASET_ID_PATTERN.test(filter.id)) {
-      faults.push(`\`feature.filters[${index}].id\` : minuscules, chiffres et tirets`);
+      faults.push(m.filters.id(index));
     } else if (seen.has(filter.id)) {
-      faults.push(`\`feature.filters[${index}].id\` : « ${filter.id} » en double`);
+      faults.push(m.filters.idDuplicate(index, filter.id));
     } else {
       seen.add(filter.id);
     }
-    if (!isNonEmptyString(filter.label)) faults.push(`\`feature.filters[${index}].label\` manquant`);
+    if (!isNonEmptyString(filter.label)) faults.push(m.filters.labelMissing(index));
     if (filter.title !== undefined && !isNonEmptyString(filter.title)) {
-      faults.push(`\`feature.filters[${index}].title\` : chaîne non vide`);
+      faults.push(m.filters.title(index));
     }
     if (filter.groups !== undefined) {
       if (!(Array.isArray(filter.groups) && filter.groups.length > 0 && filter.groups.every(isNonEmptyString))) {
-        faults.push(`\`feature.filters[${index}].groups\` : liste de clés de groupe`);
+        faults.push(m.filters.groups(index));
       } else {
         for (const key of filter.groups) {
-          if (!known.has(key)) faults.push(`\`feature.filters[${index}].groups\` : groupe « ${key} » inconnu`);
+          if (!known.has(key)) faults.push(m.filters.groupUnknown(index, key));
         }
       }
     }
   });
   if (!filters.some((filter) => isPlainObject(filter) && filter.groups === undefined)) {
-    faults.push('`feature.filters` : une puce sans `groups` est le retour à « tout »');
+    faults.push(m.filters.needsEverything);
   }
   return faults;
 }
@@ -344,33 +348,34 @@ function datasetFilterFaults(filters, group) {
  * @returns {string[]}
  */
 export function datasetManifestFaults(candidate) {
+  const m0 = messages();
   const faults = [];
-  if (!isPlainObject(candidate)) return ['le manifeste doit être un objet'];
+  if (!isPlainObject(candidate)) return [m0.notAnObject];
   const m = stripNulls(candidate);
 
   if (!isNonEmptyString(m.id) || !DATASET_ID_PATTERN.test(m.id)) {
-    faults.push('`id` : minuscules, chiffres et tirets, 2 à 63 caractères');
+    faults.push(m0.head.id);
   }
-  if (!isNonEmptyString(m.label)) faults.push('`label` manquant');
-  else if (m.label.trim().length > 64) faults.push('`label` : 64 caractères au plus');
-  if (m.name !== undefined && !isNonEmptyString(m.name)) faults.push('`name` : chaîne non vide si présent');
+  if (!isNonEmptyString(m.label)) faults.push(m0.missing('label'));
+  else if (m.label.trim().length > 64) faults.push(m0.head.labelTooLong);
+  if (m.name !== undefined && !isNonEmptyString(m.name)) faults.push(m0.head.name);
   if (m.icon !== undefined && (!isNonEmptyString(m.icon) || m.icon.trim().length > 4)) {
-    faults.push('`icon` : un glyphe (4 caractères au plus)');
+    faults.push(m0.head.icon);
   }
   if (m.color !== undefined && !(typeof m.color === 'string' && HEX_COLOR.test(m.color))) {
-    faults.push('`color` : couleur hexadécimale #rrggbb');
+    faults.push(m0.head.color);
   }
   if (m.category !== undefined && !(isNonEmptyString(m.category) && /^[a-z0-9-]+$/.test(m.category))) {
-    faults.push('`category` : identifiant de groupe (minuscules et tirets)');
+    faults.push(m0.head.category);
   }
   if (m.coverage !== undefined && !DATASET_COVERAGES.includes(m.coverage)) {
-    faults.push(`\`coverage\` : ${DATASET_COVERAGES.join(' | ')}`);
+    faults.push(m0.oneOf('coverage', DATASET_COVERAGES.join(' | ')));
   }
   if (m.cadence !== undefined && !DATASET_CADENCES.includes(m.cadence)) {
-    faults.push(`\`cadence\` : ${DATASET_CADENCES.join(' | ')}`);
+    faults.push(m0.oneOf('cadence', DATASET_CADENCES.join(' | ')));
   }
   if (m.refreshMs !== undefined && !(Number.isInteger(m.refreshMs) && m.refreshMs >= 0)) {
-    faults.push('`refreshMs` : entier ≥ 0 (0 = jamais)');
+    faults.push(m0.head.refreshMs);
   }
 
   // ── fusion ───────────────────────────────────────────────────────────────
@@ -380,70 +385,70 @@ export function datasetManifestFaults(candidate) {
   // nothing about which layers a given build registers, and must not.
   if (m.fusion !== undefined) {
     if (!isPlainObject(m.fusion)) {
-      faults.push('`fusion` : objet { into, chip }');
+      faults.push(m0.fusion.object);
     } else {
-      if (!isNonEmptyString(m.fusion.into)) faults.push('`fusion.into` : identifiant de la couche hôte');
-      if (!isNonEmptyString(m.fusion.chip)) faults.push('`fusion.chip` : libellé de la puce');
+      if (!isNonEmptyString(m.fusion.into)) faults.push(m0.fusion.into);
+      if (!isNonEmptyString(m.fusion.chip)) faults.push(m0.fusion.chip);
       else if (m.fusion.chip.trim().length > DATASET_MAX_CHIP_LENGTH) {
-        faults.push(`\`fusion.chip\` : ${DATASET_MAX_CHIP_LENGTH} caractères au plus`);
+        faults.push(m0.fusion.chipTooLong(DATASET_MAX_CHIP_LENGTH));
       }
       if (m.fusion.title !== undefined && !isNonEmptyString(m.fusion.title)) {
-        faults.push('`fusion.title` : chaîne non vide si présent');
+        faults.push(m0.fusion.title);
       }
       if (m.fusion.optIn !== undefined && typeof m.fusion.optIn !== 'boolean') {
-        faults.push('`fusion.optIn` : booléen');
+        faults.push(m0.fusion.optIn);
       }
-      if (m.fusion.into === m.id) faults.push('`fusion.into` : une couche ne peut pas se fusionner dans elle-même');
+      if (m.fusion.into === m.id) faults.push(m0.fusion.intoSelf);
     }
   }
 
   // ── source ───────────────────────────────────────────────────────────────
   const source = m.source;
   if (!isPlainObject(source)) {
-    faults.push('`source` manquant');
+    faults.push(m0.missing('source'));
   } else {
     const kind = source.kind;
     if (!DATASET_SOURCE_KINDS.includes(kind)) {
-      faults.push(`\`source.kind\` : ${DATASET_SOURCE_KINDS.join(' | ')}`);
+      faults.push(m0.oneOf('source.kind', DATASET_SOURCE_KINDS.join(' | ')));
     } else {
       if (kind === 'datagouv') {
         if (!(isNonEmptyString(source.resourceId) && /^[0-9a-f-]{36}$/i.test(source.resourceId))) {
-          faults.push('`source.resourceId` : identifiant de ressource data.gouv.fr (UUID)');
+          faults.push(m0.source.resourceId);
         }
       } else if (!isHttpUrl(source.url)) {
-        faults.push('`source.url` : URL http(s)');
+        faults.push(m0.source.url);
       }
       if (kind === 'wfs' && !isNonEmptyString(source.typeName)) {
-        faults.push('`source.typeName` : nom de la couche WFS (ex. BDTOPO_V3:aerodrome)');
+        faults.push(m0.source.typeName);
       }
       if (kind === 'opendatasoft' && !isNonEmptyString(source.dataset)) {
-        faults.push('`source.dataset` : identifiant du jeu Opendatasoft');
+        faults.push(m0.source.dataset);
       }
       if (kind === 'opendatasoft' && source.geoField !== undefined && !isNonEmptyString(source.geoField)) {
-        faults.push('`source.geoField` : nom du champ géographique');
+        faults.push(m0.source.geoField);
       }
       if (kind === 'csv' && source.delimiter !== undefined
         && !(typeof source.delimiter === 'string' && source.delimiter.length === 1)) {
-        faults.push('`source.delimiter` : un caractère');
+        faults.push(m0.source.delimiter);
       }
     }
     if (source.scope !== undefined && !DATASET_SCOPES.includes(source.scope)) {
-      faults.push(`\`source.scope\` : ${DATASET_SCOPES.join(' | ')}`);
+      faults.push(m0.oneOf('source.scope', DATASET_SCOPES.join(' | ')));
     }
     if (source.scope === 'viewport' && !DATASET_BBOX_KINDS.has(kind)) {
-      faults.push(`\`source.scope\` viewport : réservé à ${[...DATASET_BBOX_KINDS].join(', ')}`);
+      faults.push(m0.source.viewportScope([...DATASET_BBOX_KINDS].join(', ')));
     }
     if (source.maxFeatures !== undefined
       && !(Number.isInteger(source.maxFeatures) && source.maxFeatures >= 1 && source.maxFeatures <= DATASET_MAX_FEATURES_CEILING)) {
-      faults.push(`\`source.maxFeatures\` : entier entre 1 et ${DATASET_MAX_FEATURES_CEILING}`);
+      faults.push(m0.source.maxFeatures(DATASET_MAX_FEATURES_CEILING));
     }
     if (source.maxSpanDeg !== undefined
       && !(Number.isFinite(source.maxSpanDeg) && source.maxSpanDeg > 0 && source.maxSpanDeg <= 90)) {
-      faults.push('`source.maxSpanDeg` : nombre entre 0 et 90');
+      faults.push(m0.source.maxSpanDeg);
     }
     if (source.columns !== undefined
       && !(Array.isArray(source.columns) && source.columns.every(isNonEmptyString))) {
-      faults.push('`source.columns` : liste de noms de colonnes');
+      faults.push(m0.source.columns);
     }
   }
 
@@ -451,36 +456,36 @@ export function datasetManifestFaults(candidate) {
   const kind = isPlainObject(source) ? source.kind : null;
   const shape = datasetGeometryShape(m.geometry);
   if (kind && !DATASET_NATIVE_GEOMETRY_KINDS.has(kind) && !shape) {
-    faults.push('`geometry` : une source tabulaire doit dire comment une ligne devient un point ({lon,lat} | {point} | {wkt} | {x,y,crs} | {geojson})');
+    faults.push(m0.geometry.required);
   }
   if (m.geometry !== undefined && !isPlainObject(m.geometry)) {
-    faults.push('`geometry` : objet');
+    faults.push(m0.geometry.object);
   } else if (shape === 'projected') {
     if (!(isNonEmptyString(m.geometry.crs) && CRS_PATTERN.test(m.geometry.crs))) {
-      faults.push('`geometry.crs` : code EPSG (ex. EPSG:2154) obligatoire avec x/y');
+      faults.push(m0.geometry.crsRequired);
     } else if (m.geometry.crs !== 'EPSG:2154' && m.geometry.crs !== 'EPSG:4326') {
-      faults.push('`geometry.crs` : seuls EPSG:2154 (Lambert-93) et EPSG:4326 sont reprojetés');
+      faults.push(m0.geometry.crsUnsupported);
     }
   }
 
   // ── feature ──────────────────────────────────────────────────────────────
   if (m.feature !== undefined) {
     if (!isPlainObject(m.feature)) {
-      faults.push('`feature` : objet');
+      faults.push(m0.feature.object);
     } else {
       const f = m.feature;
       if (f.title !== undefined && !(Array.isArray(f.title) && f.title.every(isNonEmptyString))) {
-        faults.push('`feature.title` : liste de champs, le premier non vide fait le titre');
+        faults.push(m0.feature.title);
       }
       if (f.ambient !== undefined && !DATASET_AMBIENTS.includes(f.ambient)) {
-        faults.push(`\`feature.ambient\` : ${DATASET_AMBIENTS.join(' | ')}`);
+        faults.push(m0.oneOf('feature.ambient', DATASET_AMBIENTS.join(' | ')));
       }
       if (f.blank !== undefined && !(Array.isArray(f.blank) && f.blank.every(isNonEmptyString))) {
-        faults.push('`feature.blank` : liste des écritures qui veulent dire « non renseigné »');
+        faults.push(m0.feature.blank);
       }
       if (f.details !== undefined) {
         if (!Array.isArray(f.details) || f.details.length > DATASET_MAX_DETAILS) {
-          faults.push(`\`feature.details\` : liste de ${DATASET_MAX_DETAILS} lignes au plus`);
+          faults.push(m0.feature.detailsTooMany(DATASET_MAX_DETAILS));
         } else {
           f.details.forEach((detail, index) => {
             const ok = isNonEmptyString(detail)
@@ -491,7 +496,7 @@ export function datasetManifestFaults(candidate) {
                 && (detail.omitWhen === undefined
                   || (Array.isArray(detail.omitWhen) && detail.omitWhen.every(isNonEmptyString))));
             if (!ok) {
-              faults.push(`\`feature.details[${index}]\` : "champ" ou {field, label?, unit?, format? (${DATASET_DETAIL_FORMATS.join('|')}), omitWhen?}`);
+              faults.push(m0.feature.detail(index, DATASET_DETAIL_FORMATS.join('|')));
             }
           });
         }
@@ -503,22 +508,24 @@ export function datasetManifestFaults(candidate) {
 
   // ── attribution ──────────────────────────────────────────────────────────
   if (!isPlainObject(m.attribution)) {
-    faults.push('`attribution` manquant — un jeu sans éditeur ni licence ne s\'affiche pas');
+    faults.push(m0.attribution.missing);
   } else {
-    if (!isNonEmptyString(m.attribution.publisher)) faults.push('`attribution.publisher` manquant');
-    if (!isNonEmptyString(m.attribution.licence)) faults.push('`attribution.licence` manquant');
-    if (m.attribution.url !== undefined && !isHttpUrl(m.attribution.url)) faults.push('`attribution.url` : URL http(s)');
-    if (m.attribution.text !== undefined && !isNonEmptyString(m.attribution.text)) faults.push('`attribution.text` : chaîne non vide');
+    if (!isNonEmptyString(m.attribution.publisher)) faults.push(m0.missing('attribution.publisher'));
+    if (!isNonEmptyString(m.attribution.licence)) faults.push(m0.missing('attribution.licence'));
+    if (m.attribution.url !== undefined && !isHttpUrl(m.attribution.url)) faults.push(m0.attribution.url);
+    if (m.attribution.text !== undefined && !isNonEmptyString(m.attribution.text)) faults.push(m0.attribution.text);
   }
 
   return faults;
 }
 
+// i18n-ignore-start — hex colors, not words
 /** Ten hues, far enough apart to read on both the dark and the light basemaps. */
 export const DATASET_PALETTE = Object.freeze([
   '#ffb14e', '#3ce0c8', '#b388ff', '#ff6f91', '#7cd992',
   '#5ac8fa', '#f5d33c', '#ff8a5c', '#9fa8ff', '#c9f24b',
 ]);
+// i18n-ignore-end
 
 /**
  * A stable colour for an id, so the same dataset gets the same hue on every
@@ -563,7 +570,7 @@ function normalizeGroup(group) {
   const other = group.other
     ? Object.freeze({
       color: group.other.color,
-      label: isNonEmptyString(group.other.label) ? group.other.label : 'Autre',
+      label: isNonEmptyString(group.other.label) ? group.other.label : messages().group.otherLabel,
     })
     : null;
   if (Array.isArray(group.rules)) {
@@ -773,7 +780,7 @@ function escapeHtml(text) {
  */
 export function datasetCredit(manifest) {
   const text = manifest.attribution.text
-    || `${manifest.label} : ${manifest.attribution.publisher} (${manifest.attribution.licence})`;
+    || messages().credit(manifest.label, manifest.attribution.publisher, manifest.attribution.licence);
   const html = manifest.attribution.url
     ? `<a href="${escapeHtml(manifest.attribution.url)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`
     : escapeHtml(text);

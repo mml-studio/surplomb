@@ -43,6 +43,8 @@ import {
   fieldMatchKey,
   rowMatchesWhen,
 } from './datasetFields.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './datasetLayer.i18n.js';
 
 /** How often a viewport-scoped layer re-checks the camera, ms. */
 export const DATASET_VIEWPORT_POLL_MS = 2500;
@@ -142,9 +144,12 @@ export function shouldRefetch({ loaded, view, truncated }) {
   return false;
 }
 
-/** French grouping with a plain space — deterministic across runtimes and locales. */
+/**
+ * Thousands grouped the page's way, with a plain space in French — the module
+ * grouped by hand, and French CLDR would put a narrow no-break space there.
+ */
 function formatCount(value) {
-  return String(Math.round(Number(value) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return formatNumber(Math.round(Number(value) || 0), { plainSpaces: true });
 }
 
 /**
@@ -154,19 +159,20 @@ function formatCount(value) {
  * @returns {string}
  */
 export function datasetCoverageLine({ count = 0, total = null, truncated = false, unplaced = 0, scope = 'all', maxFeatures = 0, via = 'direct', gated = false, maxSpanDeg = 0 } = {}) {
-  if (gated) return `au-delà de ${maxSpanDeg}° de vue, rien n'est demandé`;
+  const m = messages().coverage;
+  if (gated) return m.gated(formatNumber(maxSpanDeg, { plainSpaces: true }));
   const parts = [];
   if (truncated && Number.isFinite(Number(total)) && total > count) {
-    parts.push(`${formatCount(count)} affichés sur ${formatCount(total)} — plafond ${formatCount(maxFeatures)}, premières lignes`);
+    parts.push(m.cappedOfTotal(formatCount(count), formatCount(total), formatCount(maxFeatures)));
   } else if (scope === 'viewport') {
-    parts.push(`${formatCount(count)} dans la vue`);
+    parts.push(m.inView(formatCount(count)));
   } else if (truncated) {
-    parts.push(`${formatCount(count)} affichés — plafond ${formatCount(maxFeatures)}`);
+    parts.push(m.capped(formatCount(count), formatCount(maxFeatures)));
   } else {
-    parts.push(`${formatCount(count)} objets, jeu entier`);
+    parts.push(m.whole(formatCount(count)));
   }
-  if (unplaced > 0) parts.push(`${formatCount(unplaced)} sans position`);
-  if (via === 'relay') parts.push('via relais');
+  if (unplaced > 0) parts.push(m.unplaced(formatCount(unplaced)));
+  if (via === 'relay') parts.push(m.viaRelay);
   return parts.join(' · ');
 }
 
@@ -243,9 +249,10 @@ export function datasetRemainingMs(progress, now = Date.now()) {
 /** A duration rounded coarser than the error it carries. */
 export function datasetRemainingLabel(ms) {
   if (!Number.isFinite(ms) || ms < PROGRESS_MIN_REMAINING_MS) return null;
-  if (ms < 60000) return `environ ${Math.max(5, Math.round(ms / 5000) * 5)} secondes`;
+  const m = messages().progress;
+  if (ms < 60000) return m.seconds(Math.max(5, Math.round(ms / 5000) * 5));
   const minutes = Math.round(ms / 30000) / 2;
-  return `environ ${minutes % 1 === 0 ? minutes : minutes.toFixed(1).replace('.', ',')} minutes`;
+  return m.minutes(formatNumber(minutes, { maximumFractionDigits: 1 }));
 }
 
 /**
@@ -260,11 +267,12 @@ export function datasetProgressLine(progress, now = Date.now()) {
   const received = Number(progress.received);
   if (!Number.isFinite(received) || received < 0) return null;
   const ceiling = Number(progress.ceiling);
+  const m = messages().progress;
   const head = Number.isFinite(ceiling) && ceiling > 0
-    ? `${formatCount(received)} sur ${formatCount(ceiling)}`
-    : `${formatCount(received)} lignes reçues`;
+    ? m.receivedOf(formatCount(received), formatCount(ceiling))
+    : m.received(formatCount(received));
   const remaining = datasetRemainingLabel(datasetRemainingMs(progress, now));
-  return remaining ? `${head} — ${remaining}` : head;
+  return remaining ? m.withRemaining(head, remaining) : head;
 }
 
 export function datasetCardCopy(manifest, { titleOnly = false } = {}) {
@@ -353,9 +361,10 @@ export function datasetFilterChips(manifest, params, tally) {
   return filters.map((filter) => {
     const active = filter.id === current.id;
     const kept = filter.groups ? totalOf(filter.groups) : loaded;
+    const chip = messages().chip;
     const title = filter.title
-      ? `${filter.title} — ${formatCount(kept)} sur ${formatCount(loaded)}`
-      : `${formatCount(kept)} sur ${formatCount(loaded)} dans la vue`;
+      ? chip.titled(filter.title, formatCount(kept), formatCount(loaded))
+      : chip.plain(formatCount(kept), formatCount(loaded));
     return {
       id: `filter:${filter.id}`,
       label: filter.label,
@@ -629,7 +638,7 @@ export function createDatasetLayer(manifest, {
         ...(_loading && _progress ? { progress: _progress, progressLine: datasetProgressLine(_progress) } : {}),
         ...(_gated ? {
           status: 'zoom-in',
-          loadingLabel: `Zoome : la source se charge pour une vue de moins de ${manifest.source.maxSpanDeg}°`,
+          loadingLabel: messages().zoomIn(formatNumber(manifest.source.maxSpanDeg, { plainSpaces: true })),
         } : {}),
       };
     },

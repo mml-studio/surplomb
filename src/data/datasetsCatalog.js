@@ -17,6 +17,7 @@
  */
 
 import { datasetManifestFaults, normalizeDatasetManifest } from './datasetManifest.js';
+import messages from './datasetsCatalog.i18n.js';
 
 let modules = {};
 try {
@@ -37,12 +38,14 @@ export function normalizeCatalog(raw, warn = (message) => console.warn(message))
   for (const [file, candidate] of Object.entries(raw || {})) {
     const faults = datasetManifestFaults(candidate);
     if (faults.length) {
-      warn(`[datasets] ${file} ignoré : ${faults.join(' ; ')}`);
+      // Read here and not above: `CATALOG_DATASET_MANIFESTS` calls this at
+      // module load, and a catalog read at load is what ratchet R5 forbids.
+      warn(messages().ignored(file, faults.join(' ; ')));
       continue;
     }
     const manifest = normalizeDatasetManifest(candidate);
     if (seen.has(manifest.id)) {
-      warn(`[datasets] ${file} ignoré : id « ${manifest.id} » déjà pris`);
+      warn(messages().duplicateId(file, manifest.id));
       continue;
     }
     seen.add(manifest.id);

@@ -42,6 +42,7 @@ import {
   writePluggedDatasets,
 } from './datasetStore.js';
 import { mountDatasetPlugPanel } from './datasetPlugPanel.js';
+import messages from './datasetBox.i18n.js';
 
 /**
  * @param {object} options
@@ -83,7 +84,7 @@ export function initDatasetBox({
   function registerManifest(manifest, origin) {
     const layerId = datasetLayerId(manifest);
     if (dataManager.layers.has(layerId)) {
-      throw new Error(`Un jeu « ${manifest.id} » est déjà branché`);
+      throw new Error(messages().alreadyPlugged(manifest.id));
     }
     const layer = createDatasetLayer(manifest, layerOptions);
     dataManager.registerDataset(layer, datasetTaxonomyEntry(manifest, coverageChip));
@@ -97,7 +98,7 @@ export function initDatasetBox({
     try {
       registerManifest(manifest, 'catalog');
     } catch (error) {
-      console.warn(`[datasets] catalogue : ${manifest?.id} non enregistré — ${error?.message || error}`);
+      console.warn(messages().catalogRefused(manifest?.id, error?.message || error));
     }
   }
 
@@ -111,7 +112,7 @@ export function initDatasetBox({
         });
       }
     } catch (error) {
-      console.warn(`[datasets] ${entry.manifest?.id} non restauré — ${error?.message || error}`);
+      console.warn(messages().restoreRefused(entry.manifest?.id, error?.message || error));
     }
   }
 
