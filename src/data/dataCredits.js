@@ -1,4 +1,25 @@
 import * as Cesium from 'cesium';
+import creditMessages from './dataCredits.i18n.js';
+
+/**
+ * The French side of a catalogued credit.
+ *
+ * Seven entries below are written in French and answer in the reader's
+ * language; they still DECLARE an `html` — this string — because
+ * `dataCredits.test.mjs` counts one `html:` line per entry in the SOURCE, and
+ * that count is what catches a merge fusing two credits into one object
+ * literal (it has happened twice, and cost two layers their licence notice).
+ * The getters installed after the array are what actually answer.
+ *
+ * Reading `.definition` is not reading the page's language: it is the catalog
+ * as written, and this module resolves no locale while loading.
+ *
+ * @param {string} key The credit's key.
+ * @returns {string} The French attribution, verbatim.
+ */
+function frenchCredit(key) {
+  return creditMessages.definition[key].fr;
+}
 
 /**
  * Per-layer data attribution registered into Cesium's credit display.
@@ -25,6 +46,20 @@ import * as Cesium from 'cesium';
  * follows DATA_SOURCES.md (live sources, then bundled snapshots).
  * @type {{ key: string, html: string }[]}
  */
+// i18n-ignore-start — ATTRIBUTION, quoted as published. What the ratchet
+// reads as French here is what a licence requires to be French: dataset titles
+// (« Demandes de valeurs foncières géolocalisées », « Annuaire de
+// l'éducation »), publishers (Agence nationale des fréquences, Direction
+// générale des Finances publiques), licence names (Licence Ouverte) and the
+// wording a regulation prescribes. None of it is interface prose and none of
+// it may be translated — DATA_SOURCES.md holds the same strings.
+//
+// THE SENTENCES AROUND THEM ARE NOT EXEMPT. What each layer does with a file,
+// and what it refuses to claim, is this fork's own prose: it is written in
+// English, and the seven credits that were written in French are translated
+// through `dataCredits.i18n.js` (they declare `frenchCredit(key)` above and
+// answer through the getters installed after this array). A new credit whose
+// explanation is French belongs there, not here.
 export const DATA_CREDITS = [
   // ── Live sources ────────────────────────────────────────────────
   {
@@ -402,13 +437,7 @@ export const DATA_CREDITS = [
     // different publisher under a different obligation, and because it only
     // ever answers on a CARD — the map is still installed capacity.
     key: 'qualicharge',
-    html:
-      'Disponibilit&eacute; des bornes (carte de site) : ' +
-      '<a href="https://www.data.gouv.fr/datasets/infrastructures-de-recharge-pour-vehicules-electriques-donnees-ouvertes" target="_blank" rel="noopener">QualiCharge</a> ' +
-      '&mdash; Direction g&eacute;n&eacute;rale de l&rsquo;&eacute;nergie et du climat, via transport.data.gouv.fr ' +
-      '(<a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>). ' +
-      'Chaque borne porte son propre <code>horodatage</code> : une borne muette depuis plus de 24 h est ' +
-      'compt&eacute;e comme muette, jamais comme libre.',
+    html: frenchCredit('qualicharge'),
   },
   {
     key: 'cadastre-pci',
@@ -555,8 +584,7 @@ export const DATA_CREDITS = [
   },
   {
     key: 'anfr-fr',
-    html:
-      "&laquo;&nbsp;Observatoire des r&eacute;seaux mobiles 2G/3G/4G/5G&nbsp;&raquo; &mdash; <a href=\"https://data.anfr.fr/\" target=\"_blank\" rel=\"noopener\">Agence nationale des fr&eacute;quences (data.anfr.fr)</a>, &eacute;dition hebdomadaire du 27/08/2026, 826&nbsp;418 lignes sur 72&nbsp;700 supports. Nature des supports&nbsp;: &laquo;&nbsp;Donn&eacute;es sur les installations radio&eacute;lectriques de plus de 5 watts&nbsp;&raquo; &mdash; <a href=\"https://www.data.gouv.fr/fr/datasets/donnees-sur-les-installations-radioelectriques-de-plus-de-5-watts-1/\" target=\"_blank\" rel=\"noopener\">ANFR via data.gouv.fr</a>. Fiche support, bandes et mesures d'exposition&nbsp;: <a href=\"https://www.cartoradio.fr/\" target=\"_blank\" rel=\"noopener\">Cartoradio (ANFR)</a>. <a href=\"https://github.com/etalab/licence-ouverte/blob/master/LO.md\" target=\"_blank\" rel=\"noopener\">Licence Ouverte 2.0</a>. Hors champ par la loi&nbsp;: Aviation Civile, minist&egrave;res de la D&eacute;fense et de l'Int&eacute;rieur.",
+    html: frenchCredit('anfr-fr'),
   },
   {
     key: 'fraicheur-fr',
@@ -565,8 +593,27 @@ export const DATA_CREDITS = [
   },
   {
     key: 'sitadel-fr',
+    // The body of this credit shipped as ONE string containing its own source
+    // code — `' +\n      '` and `\u2019` printed verbatim in the attribution
+    // popover. Unescaped here, with the wording and every figure unchanged.
     html:
-      "'French building and demolition permits: <em>Sitadel — liste des autorisations d\\u2019urbanisme cr\\u00e9ant des logements</em> (1 917 260 permits) and <em>liste des permis de d\\u00e9molir</em> (202 895), \\u00a9 SDES / CGDD, served through ' +\n      '<a href=\"https://www.data.gouv.fr/fr/datasets/689c42fa521ccf80ce954f83/\" target=\"_blank\" rel=\"noopener\">data.gouv.fr</a> and the ministry\\u2019s DiDo API ' +\n      '(<a href=\"https://github.com/etalab/licence-ouverte/blob/master/LO.md\" target=\"_blank\" rel=\"noopener\">Licence Ouverte</a>). ' +\n      'The file publishes NO coordinate \\u2014 94 columns on the housing register, 33 on the demolitions, and <code>geoFields: [\"REG\",\"DEP\"]</code> on both. ' +\n      'Every position drawn here was computed by joining the published cadastral reference to <em>Plan Cadastral Informatis\\u00e9 (PCI vecteur)</em>, ' +\n      '&copy; Direction g&eacute;n&eacute;rale des Finances publiques, via ' +\n      '<a href=\"https://cadastre.data.gouv.fr/datasets/cadastre-etalab\" target=\"_blank\" rel=\"noopener\">cadastre.data.gouv.fr</a> (Licence Ouverte), ' +\n      'with the commune resolved by <a href=\"https://geo.api.gouv.fr/decoupage-administratif\" target=\"_blank\" rel=\"noopener\">geo.api.gouv.fr</a>. ' +\n      'A permit whose reference does not resolve to exactly one parcel is COUNTED and never placed: measured over six communes on 2026-09-02, ' +\n      '9 744 of 21 271 permits (45,8 %) could be positioned. Each card publishes its own commune\\u2019s rate and its year\\u2019s.'",
+      'French building and demolition permits: <em>Sitadel &mdash; liste des autorisations '
+      + 'd\u2019urbanisme cr\u00e9ant des logements</em> (1 917 260 permits) and <em>liste des permis '
+      + 'de d\u00e9molir</em> (202 895), &copy; SDES / CGDD, served through '
+      + '<a href="https://www.data.gouv.fr/fr/datasets/689c42fa521ccf80ce954f83/" target="_blank" rel="noopener">data.gouv.fr</a> '
+      + 'and the ministry\u2019s DiDo API '
+      + '(<a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte</a>). '
+      + 'The file publishes NO coordinate \u2014 94 columns on the housing register, 33 on the demolitions, '
+      + 'and <code>geoFields: ["REG","DEP"]</code> on both. '
+      + 'Every position drawn here was computed by joining the published cadastral reference to '
+      + '<em>Plan Cadastral Informatis\u00e9 (PCI vecteur)</em>, '
+      + '&copy; Direction g&eacute;n&eacute;rale des Finances publiques, via '
+      + '<a href="https://cadastre.data.gouv.fr/datasets/cadastre-etalab" target="_blank" rel="noopener">cadastre.data.gouv.fr</a> '
+      + '(Licence Ouverte), with the commune resolved by '
+      + '<a href="https://geo.api.gouv.fr/decoupage-administratif" target="_blank" rel="noopener">geo.api.gouv.fr</a>. '
+      + 'A permit whose reference does not resolve to exactly one parcel is COUNTED and never placed: '
+      + 'measured over six communes on 2026-09-02, 9 744 of 21 271 permits (45.8%) could be positioned. '
+      + 'Each card publishes its own commune\u2019s rate and its year\u2019s.',
   },
   {
     key: 'idfm-frequency',
@@ -580,8 +627,7 @@ export const DATA_CREDITS = [
   },
   {
     key: 'amenities-fr',
-    html:
-      "&laquo;&nbsp;Base permanente des &eacute;quipements 2025 &mdash; &Eacute;quipements g&eacute;olocalis&eacute;s&nbsp;&raquo;, parue le 04/08/2026 &mdash; <a href=\"https://www.insee.fr/fr/statistiques/8217525\" target=\"_blank\" rel=\"noopener\">Insee</a>, 2&nbsp;921&nbsp;770 lignes sur 95 colonnes dont vingt-quatre codes TYPEQU lus ici depuis le 08/09/2026, soit 445&nbsp;380 points en quatorze familles, <a href=\"https://github.com/etalab/licence-ouverte/blob/master/LO.md\" target=\"_blank\" rel=\"noopener\">Licence Ouverte</a>. L'&eacute;dition 2025 ne porte aucun code &laquo;&nbsp;bar&nbsp;&raquo;, &laquo;&nbsp;caf&eacute;&nbsp;&raquo;, &laquo;&nbsp;mus&eacute;e&nbsp;&raquo;, &laquo;&nbsp;tabac&nbsp;&raquo; ni &laquo;&nbsp;jardin public&nbsp;&raquo;&nbsp;: ces types-l&agrave; ne sont pas absents de la carte, ils sont absents du registre. Fichier actualis&eacute; mensuellement pour tenir compte des oppositions &agrave; la diffusion sur sirene.fr&nbsp;; certaines donn&eacute;es nominatives, d'adressage et de g&eacute;olocalisation sont anonymis&eacute;es (arr&ecirc;t&eacute; du 3 janvier 2024). Pharmacies et h&ocirc;pitaux&nbsp;: &laquo;&nbsp;R&eacute;exposition des donn&eacute;es Finess&nbsp;&raquo; &mdash; <a href=\"https://www.data.gouv.fr/fr/datasets/reexposition-des-donnees-finess/\" target=\"_blank\" rel=\"noopener\">ARS / Agence du Num&eacute;rique en Sant&eacute;, via data.gouv.fr</a>, extrait du 02/07/2026, 103&nbsp;032 &eacute;tablissements, <a href=\"https://github.com/etalab/licence-ouverte/blob/master/LO.md\" target=\"_blank\" rel=\"noopener\">Licence Ouverte 2.0</a>&nbsp;; g&eacute;ocodage ATLASANTE sur la Base Adresse Nationale.",
+    html: frenchCredit('amenities-fr'),
   },
   {
     key: 'ips-fr',
@@ -633,21 +679,11 @@ export const DATA_CREDITS = [
     // OSM never mapped. Both are ODbL, so the share-alike obligation this entry
     // already carried is unchanged — but a reader looking at a power figure is
     // entitled to find its publisher here and not only on the card.
-    html:
-      'Datacenters: ' +
-      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> ' +
-      '(ODbL 1.0) · puissances et sites français: ' +
-      '<a href="https://gitlab.com/hubblo/datacenter-watch" target="_blank" rel="noopener">DCWatch</a> ' +
-      '(Hubblo, ODbL)',
+    html: frenchCredit('datacenters'),
   },
   {
     key: 'dams',
-    html:
-      'Barrages &amp; digues: ' +
-      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> ' +
-      '(ODbL 1.0) — France extracted via the ' +
-      '<a href="https://overpass-api.de" target="_blank" rel="noopener">Overpass API</a>, ' +
-      'the 69-feature world tail from Open Infrastructure Map',
+    html: frenchCredit('dams'),
   },
   {
     key: 'ports',
@@ -661,12 +697,7 @@ export const DATA_CREDITS = [
     // an index of. Not drawn — but read on every vessel card, so it is
     // credited: GeoNames is CC BY 4.0 and attribution is a condition of it.
     key: 'port-gazetteer',
-    html:
-      'Destinations AIS (lieux non dessinés) : ' +
-      '<a href="https://unece.org/trade/cefact/UNLOCODE-Download" target="_blank" rel="noopener">UN/LOCODE</a> ' +
-      '(UNECE, ODC-PDDL 1.0) et ' +
-      '<a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> ' +
-      '(CC BY 4.0) — 11 545 ports fluviaux et maritimes, 13 657 graphies.',
+    html: frenchCredit('port-gazetteer'),
   },
   {
     key: 'ourairports',
@@ -701,12 +732,7 @@ export const DATA_CREDITS = [
     // any derived product, and this pack is a derived product — simplified,
     // reprojected and repainted.
     key: 'gironde-megafire',
-    html:
-      'Mégafeu de Gironde (juil. 2026) : Contains modified Copernicus EMS Rapid Mapping data ' +
-      '(<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 ' +
-      '· European Forest Fire Information System — ' +
-      '<a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS ' +
-      '· thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
+    html: frenchCredit('gironde-megafire'),
   },
   {
     key: 'telegeography',
@@ -888,6 +914,21 @@ export const NATURAL_EARTH_CREDIT = {
     'Physical region boundaries from ' +
     '<a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a> (public domain)',
 };
+
+// i18n-ignore-end
+
+// The seven credits the catalog carries answer in the reader's language. They
+// are turned into getters HERE rather than written as getters inside the array
+// because the source guard above counts `html:` lines; the entries keep their
+// French declaration, and this replaces it with a live read.
+for (const credit of DATA_CREDITS) {
+  if (!Object.hasOwn(creditMessages.definition, credit.key)) continue;
+  Object.defineProperty(credit, 'html', {
+    enumerable: true,
+    configurable: true,
+    get() { return creditMessages()[credit.key]; },
+  });
+}
 
 /** @type {Set<string>} Keys of dynamic credits already registered this session. */
 const _dynamicCreditKeys = new Set();
