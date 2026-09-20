@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import messages from './militaryInstallations.i18n.js';
 import { governorRequestRender } from '../renderGovernor.js';
 import {
   clearSelectedEntityContextForLayer,
@@ -138,36 +139,16 @@ const LEGEND_GLYPH_PX = 32;
  * Colours are READ from COLOR_BY_CLASS rather than restated here, so a hue can
  * never drift between the map and its key.
  */
-const LEGEND_CLASSES = Object.freeze([
-  Object.freeze({
-    key: 'airfield',
-    label: 'Base aérienne',
-    blurb: 'Le tag OSM military=airfield. La couche dit que le terrain est levé, '
-      + 'jamais qu’il est actif ni ce qui s’y trouve.',
-  }),
-  Object.freeze({
-    key: 'naval_base',
-    label: 'Base navale',
-    blurb: 'Le tag OSM military=naval_base : arsenal, base ou darse militaire.',
-  }),
-  Object.freeze({
-    key: 'range',
-    label: 'Champ de tir',
-    blurb: 'Le tag OSM military=range, et lui seul. Un champ de manœuvre '
-      + '(training_area) ou une zone dangereuse (danger_area) n’a pas de classe '
-      + 'propre : il n’entre dans la couche que s’il porte aussi '
-      + 'landuse=military, et tombe alors dans « Terrain militaire ».',
-  }),
-  Object.freeze({
-    key: 'military_land',
-    label: 'Terrain militaire',
-    blurb: 'landuse=military, plus les tags military=barracks et military=base. '
-      + 'C’est le fourre-tout de la couche, et de loin sa classe la plus '
-      + 'fournie — 39 des 44 objets de la rade de Toulon, 68 des 69 de l’ouest '
-      + 'parisien. Une pastille grise ne dit donc presque rien de ce qu’elle '
-      + 'marque ; la fiche, si.',
-  }),
-]);
+/** The four rows, in the key's own order, in the page's language. */
+function legendClasses() {
+  const m = messages().classes;
+  return [
+    { key: 'airfield', ...m.airfield },
+    { key: 'naval_base', ...m.navalBase },
+    { key: 'range', ...m.range },
+    { key: 'military_land', ...m.militaryLand },
+  ];
+}
 
 const EARTH_MEAN_RADIUS_M = 6371008.8;
 const DISTANCE_PREFILTER_MARGIN_M = 5000;
@@ -257,7 +238,7 @@ export function installationSourceLabel(record) {
   const names = [...new Set((Array.isArray(record?.sources) ? record.sources : [])
     .map((source) => String(source?.name || '').trim())
     .filter(Boolean))];
-  return names.join(' + ') || 'Unknown mapped source';
+  return names.join(' + ') || messages().unknownSource;
 }
 
 /**
@@ -302,7 +283,7 @@ export function installationLegend(records) {
   }
 
   const legend = [];
-  for (const row of LEGEND_CLASSES) {
+  for (const row of legendClasses()) {
     const count = tally.get(row.key) || 0;
     if (!count) continue;
     legend.push({
@@ -339,16 +320,13 @@ export function installationLegend(records) {
  * @returns {string} French, like the rest of this key. Empty when silent.
  */
 export function installationKeyNote({ drawn, inView, fromPack, packRetrievedAt }) {
+  const m = messages().note;
   const parts = [];
   if (Number.isFinite(inView) && Number.isFinite(drawn) && inView > drawn) {
-    parts.push(`${drawn} marques sur ${inView} dans la vue — les classes nommées `
-      + '(base aérienne, base navale, champ de tir) passent avant le fourre-tout, '
-      + 'et un site nommé avant un site sans nom.');
+    parts.push(m.capped(drawn, inView));
   }
   if (fromPack > 0 && packRetrievedAt) {
-    parts.push(`${fromPack} viennent du pack France embarqué, relevé OSM du `
-      + `${packRetrievedAt} : un point par site, sans emprise. Zoomez pour `
-      + 'interroger OpenStreetMap en direct et récupérer les contours.');
+    parts.push(m.fromPack(fromPack, packRetrievedAt));
   }
   return parts.join(' ');
 }
@@ -448,11 +426,12 @@ export function installationResponseSaturated(payload) {
  * @returns {string}
  */
 function installationLoadingLabel() {
-  if (state.loading) return 'loading mapped installation context';
-  if (state.status === 'zoom-in') return 'Zoome pour charger le contexte des sites cartographiés';
+  const m = messages().status;
+  if (state.loading) return m.loading;
+  if (state.status === 'zoom-in') return m.zoomIn;
   // Past the live gate the map is not waiting for anything, and saying "zoom
   // in" there was the layer asking for a zoom it no longer needs.
-  if (state.wideView && state.records.length) return 'wide view — bundled France pack';
+  if (state.wideView && state.records.length) return m.widePack;
   return '';
 }
 
@@ -648,14 +627,14 @@ function renderRecords({ claimSelection = false } = {}) {
     entity.gevTrackedId = `installations:${record.id}`;
     entity.gevDisplayPosition = () => displayPosition;
     entity.gevLabelModel = {
-      title: record.name || 'MAPPED INSTALLATION',
+      title: record.name || messages().unnamed,
       details: [String(record.class || 'installation').replaceAll('_', ' ').toUpperCase()],
       accent: COLOR_BY_CLASS[record.class] || '#9ca6b0',
     };
     registerEntityContext(entity, {
       id: record.id,
       layerId: LAYER_ID,
-      layerName: 'Mapped Military Installations',
+      layerName: messages().layerName,
       source: installationSourceLabel(record),
       label: record.name,
       latitude: record.latitude,

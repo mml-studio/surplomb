@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import messages from './militaryAwareness.i18n.js';
 import flightsLayer from './flights.js';
 import militaryFlightsLayer from './militaryFlights.js';
 import aisLiveVesselsLayer from './aisLiveVessels.js';
@@ -450,17 +451,18 @@ function evaluateSubject(subject, sourceStates = collectSourceStates()) {
     .filter((item) => !isSame(subject, item, 'ais-live-vessels', 'mmsi'));
   const installations = militaryInstallationsLayer.getNearby(position, AWARENESS_RADIUS_M, AWARENESS_QUERY_LIMIT)
     .filter((item) => !isSame(subject, item, 'military-installations', 'id'));
+  const m = messages();
   return {
     subject,
     evaluatedAt: Date.now(),
     radiusM: AWARENESS_RADIUS_M,
     cohorts: [
-      { id: 'flights', label: 'Flights', source: flightsState.stats.source || SOURCE_LABEL.flights, summary: summarizeAwarenessCohortForNavigation(flights, flightsState) },
-      { id: 'military', label: 'Military flights', source: militaryState.stats.source || SOURCE_LABEL.military, summary: summarizeAwarenessCohortForNavigation(military, militaryState) },
-      { id: 'ais-live-vessels', label: 'AIS vessels', source: vesselsState.stats.source || SOURCE_LABEL['ais-live-vessels'], summary: summarizeAwarenessCohortForNavigation(vessels, vesselsState) },
+      { id: 'flights', label: m.cohorts.flights, source: flightsState.stats.source || SOURCE_LABEL.flights, summary: summarizeAwarenessCohortForNavigation(flights, flightsState) },
+      { id: 'military', label: m.cohorts.military, source: militaryState.stats.source || SOURCE_LABEL.military, summary: summarizeAwarenessCohortForNavigation(military, militaryState) },
+      { id: 'ais-live-vessels', label: m.cohorts.vessels, source: vesselsState.stats.source || SOURCE_LABEL['ais-live-vessels'], summary: summarizeAwarenessCohortForNavigation(vessels, vesselsState) },
       {
         id: 'military-installations',
-        label: 'Mapped installations',
+        label: m.cohorts.installations,
         source: installationsState.stats.source || SOURCE_LABEL['military-installations'],
         coverage: 'CURRENT VIEWPORT ONLY',
         summary: summarizeInstallationViewport(installations, installationsState),
@@ -1078,7 +1080,7 @@ function updateDirectionOverlay() {
   const cameraHeading = state.viewer.camera.heading || 0;
   const headingDeg = (Math.round(Cesium.Math.toDegrees(cameraHeading)) + 360) % 360;
   state.compassRing.style.setProperty('--compass-rotation', `${-headingDeg}deg`);
-  state.compassHeading.textContent = `HDG ${String(headingDeg).padStart(3, '0')}°`;
+  state.compassHeading.textContent = messages().heading(String(headingDeg).padStart(3, '0'));
   state.compassHeading.style.left = `${geometry.centerX}px`;
   state.compassHeading.style.top = `${geometry.centerY - compassRadius + 39}px`;
   for (const label of state.compassLabels) {
