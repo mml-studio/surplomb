@@ -22,7 +22,7 @@
  * See docs/i18n/CONVENTIONS.md.
  */
 import { defineMessages } from '../i18n/messages.js';
-import { monthName } from '../i18n/format.js';
+import { monthName, plural } from '../i18n/format.js';
 
 /** `unité au charbon` → `unités au charbon`: the head word, and nothing else. */
 function headWordPlural(phrase) {
@@ -295,7 +295,7 @@ export default defineMessages({
     },
     kindTitle: {
       fr: (what, sites, power) => `${what} — ${sites} site${sites > 1 ? 's' : ''}, ${power}`,
-      en: (what, sites, power) => `${what} — ${sites} site${sites > 1 ? 's' : ''}, ${power}`,
+      en: (what, sites, power) => `${what} — ${sites} ${plural(sites, 'site', 'sites', { locale: 'en' })}, ${power}`,
       sample: ['reservoir plant', 28, '9,000 MW'],
     },
     kindUnspecified: { fr: 'NON PRÉCISÉ', en: 'UNSPECIFIED' },

@@ -19,6 +19,7 @@
  * Areas and distances arrive already formatted.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   modes: {
@@ -120,7 +121,7 @@ export default defineMessages({
     },
     missingRings: {
       fr: (count) => `${count} anneau${count > 1 ? 'x' : ''} non renvoyé${count > 1 ? 's' : ''} par le service`,
-      en: (count) => `${count} ring${count > 1 ? 's' : ''} not returned by the service`,
+      en: (count) => `${count} ${plural(count, 'ring', 'rings', { locale: 'en' })} not returned by the service`,
       sample: [1],
     },
     envelopeWarning: {
@@ -179,7 +180,7 @@ export default defineMessages({
     },
     clipped: {
       fr: (count) => `${count} direction${count > 1 ? 's' : ''} au-delà de l’échantillonnage — cette portée est un plancher`,
-      en: (count) => `${count} bearing${count > 1 ? 's' : ''} beyond the sampling — that reach is a floor`,
+      en: (count) => `${count} ${plural(count, 'bearing', 'bearings', { locale: 'en' })} beyond the sampling — that reach is a floor`,
       sample: [3],
     },
     network: {
@@ -232,7 +233,7 @@ export default defineMessages({
     },
     ringsMissing: {
       fr: (count) => `${count} anneau(x) non renvoyé(s) par le service`,
-      en: (count) => `${count} ring(s) not returned by the service`,
+      en: (count) => `${count} ${plural(count, 'ring', 'rings', { locale: 'en' })} not returned by the service`,
       sample: [1],
     },
   },

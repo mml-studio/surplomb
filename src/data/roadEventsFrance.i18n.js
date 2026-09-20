@@ -19,6 +19,7 @@
  * those claims.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 /**
  * DATEX II subtype → the words an operator would use. Keyed by the feed's
@@ -194,7 +195,7 @@ export default defineMessages({
     },
     lanes: {
       fr: (restricted, total) => `${restricted} voie${restricted > 1 ? 's' : ''} neutralisée${restricted > 1 ? 's' : ''}${total}`,
-      en: (restricted, total) => `${restricted} lane${restricted > 1 ? 's' : ''} closed${total}`,
+      en: (restricted, total) => `${restricted} ${plural(restricted, 'lane', 'lanes', { locale: 'en' })} closed${total}`,
       note: '`total` is already the " sur N" / " of N" tail, or an empty string.',
       sample: [2, ' of 2'],
     },

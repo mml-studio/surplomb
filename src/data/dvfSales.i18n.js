@@ -14,6 +14,7 @@
  * are what a card displays instead, through `labelFor()`.
  */
 import { countNoun } from '../i18n/format.js';
+import { plural } from '../i18n/format.js';
 import { defineMessages } from '../i18n/messages.js';
 
 /**
@@ -59,6 +60,19 @@ export const NATURE = defineMessages({
   Adjudication: { fr: 'Adjudication', en: 'Court-ordered auction' },
   'Expropriation': { fr: 'Expropriation', en: 'Expropriation' },
 });
+
+/**
+ * How many items a pre-joined list holds — `2023, 2024` is two.
+ *
+ * The caller formats the list before the message sees it, so the message has
+ * to count the separators to choose singular or plural. A number is returned
+ * as itself, so a caller that already counted keeps working.
+ */
+function countItems(list) {
+  if (typeof list === 'number') return list;
+  const text = String(list ?? '').trim();
+  return text ? text.split(/\s*(?:,|·|;| and | et )\s*/).filter(Boolean).length : 0;
+}
 
 export default defineMessages({
   /** The three type chips, which filter the map (`drawOnlyParams`). */
@@ -245,7 +259,7 @@ export default defineMessages({
     filtered: {
       fr: (label, hidden) => `filtre « ${label} » : ${hidden} autre(s) mutation(s) non `
         + 'dessinée(s), que le médian de référence compte quand même',
-      en: (label, hidden) => `“${label}” filter: ${hidden} other sale(s) not drawn, which the `
+      en: (label, hidden) => `“${label}” filter: ${hidden} other ${plural(hidden, 'sale', 'sales', { locale: 'en' })} not drawn, which the `
         + 'reference median counts all the same',
       sample: ['Houses', 12],
     },
@@ -262,7 +276,7 @@ export default defineMessages({
     unplaced: {
       fr: (count) => `${count} mutation(s) sans coordonnée publiée, comptée(s) dans `
         + 'le médian et impossibles à dessiner',
-      en: (count) => `${count} sale(s) with no published coordinate, counted in the median `
+      en: (count) => `${count} ${plural(count, 'sale', 'sales', { locale: 'en' })} with no published coordinate, counted in the median `
         + 'and impossible to draw',
       sample: [1],
     },
@@ -366,7 +380,7 @@ export default defineMessages({
     },
     missingYears: {
       fr: (years) => `millésime(s) non téléchargé(s) : ${years}`,
-      en: (years) => `vintage(s) not downloaded: ${years}`,
+      en: (years) => `${plural(countItems(years), 'vintage', 'vintages', { locale: 'en' })} not downloaded: ${years}`,
       sample: ['2025'],
     },
     descendForSales: {

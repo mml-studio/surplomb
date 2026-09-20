@@ -109,9 +109,9 @@ test('the A5 line declares the reach, the clipping and the sales nobody can draw
   ));
   assertNoFrench(en, { allow: PLACES });
   assert.equal(en, 'Parcels unavailable for this municipality: the sales are drawn, the ground '
-    + 'they bought is not · “Houses” filter: 12 other sale(s) not drawn, which the reference '
+    + 'they bought is not · “Houses” filter: 12 other sales not drawn, which the reference '
     + 'median counts all the same · 300 m radius · capped at 400 of 412, the nearest ones · '
-    + '1 sale(s) with no published coordinate, counted in the median and impossible to draw.');
+    + '1 sale with no published coordinate, counted in the median and impossible to draw.');
   const fr = withLocale('fr', () => dvfLegendDisclosure(
     REFERENCE, { truncated: true, count: 412 }, 400,
     { filter: 'Maison', hidden: 12, parcels: [] },
@@ -236,7 +236,7 @@ test('the cell A5 line names the box, the grid and what the probe can miss', () 
   assertNoFrench(en, { allow: PLACES });
   assert.equal(en, 'View aggregated over 2.2 km a side, cells of 150 m · 1,324 sales in the box, '
     + '901 with a €/m² · 2 municipalities identified by 9 probes: a municipality no probe '
-    + 'landed in does not contribute · vintage(s) not downloaded: 2025 · drop below 600 m to '
+    + 'landed in does not contribute · vintage not downloaded: 2025 · drop below 600 m to '
     + 'get each sale back, and its parcel.');
   const fr = withLocale('fr', () => dvfCellDisclosure(CELLS));
   assert.match(fr, /^Vue agrégée sur 2,2 km de côté, cellules de 150 m · 1 324 ventes/);

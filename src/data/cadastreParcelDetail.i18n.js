@@ -8,6 +8,7 @@
  * publishes about this parcel.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   /** The address line, and the distance that qualifies it. */
@@ -30,7 +31,7 @@ export default defineMessages({
   /** The headline: how many, how much ground, how much of the parcel. */
   buildings: {
     fr: (count) => `${count} bâtiment${count > 1 ? 's' : ''}`,
-    en: (count) => `${count} building${count > 1 ? 's' : ''}`,
+    en: (count) => `${count} ${plural(count, 'building', 'buildings', { locale: 'en' })}`,
     note: '`count` is already formatted; the plural reads the raw number beside it.',
     sample: ['2'],
   },

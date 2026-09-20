@@ -16,6 +16,7 @@
  *     verb the French shouts.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 export default defineMessages({
   /** Where the mark stands, and how sure we are of it. Printed on every card. */
@@ -127,7 +128,7 @@ export default defineMessages({
     },
     unitsHeader: {
       fr: (count) => `── ${count} groupe${count > 1 ? 's' : ''} ──`,
-      en: (count) => `── ${count} generating unit${count > 1 ? 's' : ''} ──`,
+      en: (count) => `── ${count} generating ${plural(count, 'unit', 'units', { locale: 'en' })} ──`,
       sample: [4],
     },
     moreUnits: {

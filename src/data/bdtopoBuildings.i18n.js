@@ -12,6 +12,7 @@
  * places words around it.
  */
 import { defineMessages } from '../i18n/messages.js';
+import { plural } from '../i18n/format.js';
 
 /** IGN's `usage_1` / `usage_2`, as the card reads them. */
 export const BDTOPO_USAGE_LABELS = defineMessages({
@@ -80,7 +81,7 @@ export default defineMessages({
     },
     moreAddresses: {
       fr: (first, more) => `${first} · +${more} autre${more > 1 ? 's' : ''} adresse${more > 1 ? 's' : ''} BAN`,
-      en: (first, more) => `${first} · +${more} more BAN address${more > 1 ? 'es' : ''}`,
+      en: (first, more) => `${first} · +${more} more BAN ${plural(more, 'address', 'addresses', { locale: 'en' })}`,
       sample: ['12 rue de Tolbiac 75013 Paris', 2],
       keep: ['rue de Tolbiac'],
     },
@@ -255,7 +256,7 @@ export default defineMessages({
     missingTiles: {
       fr: (missing, requested) => `${missing} tuile${missing > 1 ? 's' : ''} BD TOPO `
         + `refusée${missing > 1 ? 's' : ''} sur ${requested} — bâti incomplet, nouvelle tentative`,
-      en: (missing, requested) => `${missing} BD TOPO tile${missing > 1 ? 's' : ''} `
+      en: (missing, requested) => `${missing} BD TOPO ${plural(missing, 'tile', 'tiles', { locale: 'en' })} `
         + `refused out of ${requested} — buildings incomplete, trying again`,
       sample: [2, '64'],
     },
