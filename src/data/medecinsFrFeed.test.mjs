@@ -16,12 +16,14 @@ import {
   APL_ALL,
   APL_DEP_65,
   APL_STANDING_LABELS,
+  aplStandingLabel,
   MEDECINS_MESH_BUDGETS,
   MEDECINS_NATIONAL_SPAN_DEG,
   MEDECIN_FAMILIES,
   MEDECIN_FAMILY_INDEX,
   MEDECIN_FAMILY_LABELS,
-  MEDECIN_TARIFF_CAPPED,
+  medecinFamilyLabel,
+  medecinTariffCapped,
   MESH_FAMILY,
   MESH_PRACTITIONERS,
   SITE_PRACTITIONERS,
@@ -79,10 +81,10 @@ test('every specialty the shipped pack publishes has an explicit family', () => 
 
 test('every family has a label, and the index covers the list', () => {
   for (const family of MEDECIN_FAMILIES) {
-    assert.ok(MEDECIN_FAMILY_LABELS[family], `no label for ${family}`);
+    assert.ok(medecinFamilyLabel(family) !== family, `no label for ${family}`);
     assert.equal(typeof MEDECIN_FAMILY_INDEX[family], 'number');
   }
-  assert.equal(Object.keys(MEDECIN_FAMILY_LABELS).length, MEDECIN_FAMILIES.length);
+  assert.equal(Object.keys(MEDECIN_FAMILY_LABELS.definition).length, MEDECIN_FAMILIES.length);
 });
 
 test('general practice wins the dot whenever it is present', () => {
@@ -179,8 +181,8 @@ test('the regime ladder is entered on latitude span', () => {
 
 test('a tariff is said the way a patient meets it', () => {
   assert.equal(practitionerTariff('1', ''), 'tarif fixé (secteur 1)');
-  assert.equal(practitionerTariff('3', '3'), MEDECIN_TARIFF_CAPPED);
-  assert.equal(practitionerTariff('3', '4'), MEDECIN_TARIFF_CAPPED);
+  assert.equal(practitionerTariff('3', '3'), medecinTariffCapped());
+  assert.equal(practitionerTariff('3', '4'), medecinTariffCapped());
   assert.equal(practitionerTariff('3', ''), 'honoraires libres (secteur 2)');
   assert.equal(practitionerTariff('0', ''), 'non conventionné');
   // An unpublished sector says so instead of being assumed cheap.
@@ -223,7 +225,7 @@ test('the ARS thresholds are policy, and stay separate from the deciles', () => 
   assert.equal(aplStanding(4, seuils), 'moyennement-dotee');
   assert.equal(aplStanding(4.01, seuils), 'bien-dotee');
   assert.equal(aplStanding(null, seuils), null);
-  for (const key of Object.keys(APL_STANDING_LABELS)) assert.ok(APL_STANDING_LABELS[key]);
+  for (const key of Object.keys(APL_STANDING_LABELS.definition)) assert.ok(aplStandingLabel(key));
 });
 
 test('the retirement cliff is a drop, and refuses to invent one', () => {

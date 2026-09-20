@@ -63,6 +63,8 @@
  * most want answered and neither is in any public file.
  */
 
+import { formatNumber, formatPercent } from '../i18n/format.js';
+import messages from './medecinsFrance.i18n.js';
 import * as Cesium from 'cesium';
 import { profileCountBudget } from '../perfProfile.js';
 import { governorRequestRender } from '../renderGovernor.js';
@@ -89,10 +91,10 @@ import {
   APL_DEP_62,
   APL_DEP_65,
   APL_DEP_POPULATION,
-  APL_STANDING_LABELS,
   MEDECINS_FR_LAYER_ID,
   MEDECINS_MAX_BOX_DEG,
-  MEDECINS_SOURCE,
+  aplStandingLabel,
+  medecinsSource,
   ETAB_COMMUNE,
   ETAB_FINESS,
   ETAB_KINDS,
@@ -103,9 +105,9 @@ import {
   ETAB_PRECISION,
   ETAB_UPDATED,
   MEDECIN_FAMILIES,
-  MEDECIN_FAMILY_LABELS,
   MEDECIN_PRACTICE_FAMILIES,
-  MEDECIN_PRECISION_LABELS,
+  medecinFamilyLabel,
+  medecinPrecisionLabel,
   MESH_FAMILY,
   MESH_LAT,
   MESH_LON,
@@ -231,12 +233,23 @@ const MARK_TRANSLUCENCY = new Cesium.NearFarScalar(900, 1.0, 90_000, 0.4);
  * so a département either clears the country or it does not.
  */
 export const APL_BINS = Object.freeze([
-  Object.freeze({ max: 2.0, color: '#7f1d1d', label: 'sous 2,0 — très sous-doté' }),
-  Object.freeze({ max: 2.5, color: '#dc2626', label: '2,0 à 2,5 — sous-doté' }),
-  Object.freeze({ max: 3.26, color: '#f59e0b', label: '2,5 à 3,3 — sous la moyenne' }),
-  Object.freeze({ max: 4.0, color: '#84cc16', label: '3,3 à 4,0 — au-dessus' }),
-  Object.freeze({ max: Infinity, color: '#22c55e', label: 'au-delà de 4,0 — bien doté' }),
+  Object.freeze({ max: 2.0, color: '#7f1d1d' }),
+  Object.freeze({ max: 2.5, color: '#dc2626' }),
+  Object.freeze({ max: 3.26, color: '#f59e0b' }),
+  Object.freeze({ max: 4.0, color: '#84cc16' }),
+  Object.freeze({ max: Infinity, color: '#22c55e' }),
 ]);
+
+/**
+ * The rung's words, in the page's language. Separate from the bin because the
+ * thresholds are policy and the words are not: `APL_BINS` is read at load,
+ * and a catalog never is.
+ * @param {number} index
+ * @returns {string}
+ */
+export function aplBinLabel(index) {
+  return messages().aplBins[index] ?? '';
+}
 
 export function aplBin(value) {
   if (!Number.isFinite(value)) return null;
@@ -246,8 +259,8 @@ export function aplBin(value) {
   return APL_BINS.length - 1;
 }
 
-const fr = (value) => (Number.isFinite(value) ? Number(value).toLocaleString('fr-FR') : '—');
-const pct = (value) => `${(value * 100).toFixed(0)} %`;
+const fr = (value) => (Number.isFinite(value) ? formatNumber(value) : '—');
+const pct = (value) => formatPercent(Number((value * 100).toFixed(0)));
 
 /**
  * Plate side from the number of DOCTORS at the address. Square-root, so a
@@ -275,12 +288,13 @@ export function tariffLine(practitioners) {
   const mix = tariffMix(practitioners);
   const total = mix.fixe + mix.plafonne + mix.libre + mix.autre;
   if (!total) return null;
-  if (mix.fixe === total) return 'tarif fixé pour tous (secteur 1)';
+  const m = messages().tariff;
+  if (mix.fixe === total) return m.allFixed;
   const parts = [];
-  if (mix.fixe) parts.push(`${mix.fixe} au tarif fixé`);
-  if (mix.plafonne) parts.push(`${mix.plafonne} plafonné (OPTAM)`);
-  if (mix.libre) parts.push(`${mix.libre} en honoraires libres`);
-  if (mix.autre) parts.push(`${mix.autre} sans secteur publié`);
+  if (mix.fixe) parts.push(m.fixed(mix.fixe));
+  if (mix.plafonne) parts.push(m.capped(mix.plafonne));
+  if (mix.libre) parts.push(m.free(mix.libre));
+  if (mix.autre) parts.push(m.other(mix.autre));
   return parts.join(' · ');
 }
 
@@ -318,75 +332,78 @@ export function buildHospitalCard(etab, context = {}) {
   const names = String(etab[ETAB_NAMES] || '').split('+').filter(Boolean);
   const kinds = String(etab[ETAB_KINDS] || '').split('+').filter(Boolean);
   const finess = String(etab[ETAB_FINESS] || '').split('+').filter(Boolean);
-  const title = names[0] || kinds[0] || 'Établissement hospitalier';
+  const m = messages().hospital;
+  const title = names[0] || kinds[0] || m.fallbackTitle;
   const details = [];
 
   if (etab[ETAB_COMMUNE]) details.push(String(etab[ETAB_COMMUNE]));
   // The category FIRST, because it is the fact a reader came for: a CHU and a
   // « centre hospitalier, ex hôpital local » are not the same errand.
   for (const kind of kinds.slice(0, 3)) details.push(`· ${kind}`);
-  if (kinds.length > 3) details.push(`· et ${kinds.length - 3} autres catégories`);
+  if (kinds.length > 3) details.push(m.moreKinds(kinds.length - 3));
 
   // A campus folded onto one coordinate. Said plainly, because the plate the
   // reader clicked stands for more than one registered establishment.
   if (names.length > 1) {
-    details.push(`${fr(names.length)} entités sur ce site : ${names.slice(1, 4).join(', ')}${names.length > 4 ? '…' : ''}`);
+    details.push(m.entities(fr(names.length), names.slice(1, 4).join(', '), names.length > 4 ? '…' : ''));
   }
 
   const liberals = Number(etab[ETAB_PRACTITIONERS]) || 0;
   if (liberals > 0) {
-    details.push(`${fr(liberals)} praticien${liberals > 1 ? 's' : ''} libéra${liberals > 1 ? 'ux' : 'l'} à cette adresse`);
-    details.push('· le registre conventionné ne compte pas les salariés de l’hôpital');
+    details.push(m.liberals(fr(liberals), liberals));
+    details.push(m.liberalsCaveat);
   }
 
-  if (finess.length) details.push(`FINESS ${finess.slice(0, 2).join(', ')}${finess.length > 2 ? `, +${finess.length - 2}` : ''}`);
+  if (finess.length) details.push(m.finess(finess.slice(0, 2).join(', '), finess.length > 2 ? `, +${finess.length - 2}` : ''));
 
   const precision = context.precision?.[etab[ETAB_PRECISION]];
   if (precision && precision !== 'numero') {
+    // i18n-ignore-next-line — `commune` is BAN's own precision key, not a word
     details.push(precision === 'commune'
-      ? '⚠ position au centre de la commune, pas à l’établissement'
-      : `position : ${MEDECIN_PRECISION_LABELS[precision] ?? precision}`);
+      ? m.communeCentre
+      : m.position(medecinPrecisionLabel(precision)));
   }
-  if (etab[ETAB_UPDATED]) details.push(`Géolocalisation FINESS mise à jour le ${etab[ETAB_UPDATED]}`);
+  if (etab[ETAB_UPDATED]) details.push(m.updated(etab[ETAB_UPDATED]));
 
   return [title, ...details].join('\n');
 }
 
 export function buildSiteCard(site, practitioners, context = {}) {
   const { specialites = {}, apl = null } = context;
-  const title = site[SITE_VILLE] ? `${site[SITE_VOIE] || site[SITE_VILLE]}` : 'Cabinet';
+  const m = messages().practice;
+  const title = site[SITE_VILLE] ? `${site[SITE_VOIE] || site[SITE_VILLE]}` : m.fallbackTitle;
   const details = [];
 
   const place = [site[SITE_CP], site[SITE_VILLE]].filter(Boolean).join(' ');
   if (place) details.push(place);
   if (site[SITE_TEL]) details.push(`☎ ${site[SITE_TEL]}`);
-  if (site[SITE_KIND]?.includes('centre-de-sante')) details.push('Centre de santé');
+  if (site[SITE_KIND]?.includes('centre-de-sante')) details.push(m.healthCentre);
 
   const doctors = site[SITE_PRACTITIONERS] || 0;
   const specialties = siteSpecialtyList(site, specialites);
   if (doctors > 0) {
-    details.push(`${fr(doctors)} médecin${doctors > 1 ? 's' : ''}`);
+    details.push(m.doctors(fr(doctors), doctors));
   } else if (specialties.length) {
     // A health centre publishes specialties but no names. Say what is known.
-    details.push('Praticiens non nommés par le registre');
+    details.push(m.unnamed);
   }
 
   for (const entry of specialties.slice(0, 6)) {
-    details.push(`· ${entry.label}${entry.count > 1 ? ` (${entry.count})` : ''}`);
+    details.push(m.specialty(entry.label, entry.count > 1 ? ` (${entry.count})` : ''));
   }
-  if (specialties.length > 6) details.push(`· et ${specialties.length - 6} autres spécialités`);
+  if (specialties.length > 6) details.push(m.moreSpecialties(specialties.length - 6));
 
   const tariff = tariffLine(practitioners);
   if (tariff) details.push(tariff);
 
   for (const entry of (practitioners ?? []).slice(0, 8)) {
     const label = specialites[entry[PRACTITIONER_SPECIALTY]] ?? entry[PRACTITIONER_SPECIALTY];
-    const civilite = entry[PRACTITIONER_CIVILITE] === 'F' ? 'Dre' : 'Dr';
+    const civilite = entry[PRACTITIONER_CIVILITE] === 'F' ? m.civilityF : m.civilityM;
     const cost = practitionerTariff(entry[PRACTITIONER_SECTEUR], entry[PRACTITIONER_OPTION]);
-    details.push(`${civilite} ${entry[PRACTITIONER_NAME]} — ${label}, ${cost}`);
+    details.push(m.practitioner(civilite, entry[PRACTITIONER_NAME], label, cost));
   }
   if ((practitioners?.length ?? 0) > 8) {
-    details.push(`et ${practitioners.length - 8} autres praticiens`);
+    details.push(m.morePractitioners(practitioners.length - 8));
   }
 
   const commune = apl?.communes?.[site[SITE_INSEE]];
@@ -395,44 +412,46 @@ export function buildSiteCard(site, practitioners, context = {}) {
     const decile = aplDecile(value, apl.bornes);
     const standing = aplStanding(value, apl.seuils);
     if (Number.isFinite(value)) {
-      const tenth = decile ? `${decile}ᵉ dixième de France` : null;
-      details.push(`Accès local : ${APL_STANDING_LABELS[standing] ?? '—'}${tenth ? ` · ${tenth}` : ''}`);
+      const tenth = decile ? m.decile(decile) : null;
+      details.push(m.access(aplStandingLabel(standing) || '—', tenth ? ` · ${tenth}` : ''));
     }
     const at62 = commune[APL_62];
     if (Number.isFinite(value) && Number.isFinite(at62) && value > 0) {
-      details.push(`Si les médecins de 62 ans et plus partaient : ${pct(at62 / value - 1)}`);
+      details.push(m.retirements(pct(at62 / value - 1)));
     }
   }
 
   const precision = context.precision?.[site[SITE_PRECISION]];
   if (precision && precision !== 'numero') {
-    details.push(precision === 'commune'
-      ? '⚠ position au centre de la commune, pas au cabinet'
-      : `⚠ position à la ${precision}, pas au numéro`);
+    // i18n-ignore-next-line — `commune` is BAN's own precision key, not a word
+    details.push(precision === 'commune' ? m.communeCentre : m.streetOnly(precision));
   }
   const registre = site[11];
-  if (registre) details.push(`Adresse publiée par le registre : ${registre}`);
+  if (registre) details.push(m.published(registre));
 
   return [title, ...details].join('\n');
 }
 
 /** The card for one département, in the national regime. */
 export function buildDepartementCard(code, name, row, aplRow, stats) {
+  const m = messages().departement;
   const details = [];
   if (aplRow) {
     const value = aplRow[APL_DEP_65];
-    details.push(`APL ${value?.toFixed?.(2) ?? '—'} consultations/habitant/an`);
+    // `toFixed`, not the formatter: this figure has always printed with a
+    // decimal POINT in French too, and French output does not move.
+    details.push(m.apl(value?.toFixed?.(2) ?? '—'));
     const standing = aplStanding(value, stats?.seuils);
-    if (standing) details.push(APL_STANDING_LABELS[standing]);
+    if (standing) details.push(aplStandingLabel(standing));
     const at62 = aplRow[APL_DEP_62];
     const all = aplRow[0];
     if (Number.isFinite(at62) && Number.isFinite(all) && all > 0) {
-      details.push(`Départs des 62 ans et plus : ${pct(at62 / all - 1)}`);
+      details.push(m.retirements(pct(at62 / all - 1)));
     }
-    if (aplRow[APL_DEP_POPULATION]) details.push(`${fr(aplRow[APL_DEP_POPULATION])} habitants`);
+    if (aplRow[APL_DEP_POPULATION]) details.push(m.population(fr(aplRow[APL_DEP_POPULATION])));
   }
   if (row) {
-    details.push(`${fr(row[0])} médecins · ${fr(row[1])} adresses`);
+    details.push(m.counts(fr(row[0]), fr(row[1])));
   }
   return [name || code, ...details].join('\n');
 }
@@ -532,6 +551,7 @@ export function medecinsSiteReadout(record, { specialites = {} } = {}) {
     kind: 'medical-practice',
     // A mesh dot is a thinned national point: it knows a count and a family,
     // never an address. Same honesty as the charge-point layer.
+    // i18n-ignore-next-line — join payload keys, read by the LLM context, not drawn
     detail: site ? 'full' : 'count-only',
     address: site ? (site[SITE_VOIE] || null) : null,
     postcode: site ? (site[SITE_CP] || null) : null,
@@ -542,9 +562,9 @@ export function medecinsSiteReadout(record, { specialites = {} } = {}) {
     lon: num(record.lon),
     practitioners: num(record.practitioners),
     countsEntries: 'practitioners counts REGISTER ENTRIES at this address, not distinct people',
-    family: MEDECIN_FAMILY_LABELS[record.family] || record.family || null,
+    family: medecinFamilyLabel(record.family) || record.family || null,
     specialties,
-    source: MEDECINS_SOURCE,
+    source: medecinsSource(),
   };
 }
 
@@ -811,7 +831,7 @@ export function createMedecinsLayer({
         stroke: Cesium.Color.TRANSPARENT,
         strokeWidth: 0,
       });
-      source.name = 'Médecins (FR) — accessibilité par département';
+      source.name = messages().choroplethName;
       source.show = _enabled;
       for (const entity of source.entities.values) {
         const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -1408,26 +1428,29 @@ export function createMedecinsLayer({
       const chips = [
         {
           id: 'medecins-paint-apl',
-          label: 'Accès',
+          label: messages().chips.access,
           active: _paint === 'apl',
           state: _paint === 'apl' ? 'active' : 'idle',
-          title: 'Peindre l’accessibilité (APL DREES) — combien de consultations un habitant peut atteindre',
+          title: messages().chips.accessTitle,
           params: { paint: 'apl' },
         },
         {
           id: 'medecins-paint-count',
-          label: 'Densité',
+          label: messages().chips.density,
           active: _paint === 'medecins',
           state: _paint === 'medecins' ? 'active' : 'idle',
-          title: 'Peindre le nombre de médecins pour 100 000 habitants',
+          title: messages().chips.densityTitle,
           params: { paint: 'medecins' },
         },
       ];
       const legend = _regime === 'national'
-        ? APL_BINS.map((bin, index) => ({ color: bin.color, label: _paint === 'apl' ? bin.label : `niveau ${index + 1}` }))
+        ? APL_BINS.map((bin, index) => ({
+          color: bin.color,
+          label: _paint === 'apl' ? aplBinLabel(index) : messages().level(index + 1),
+        }))
         : MEDECIN_FAMILIES.map((family) => ({
           color: FAMILY_COLORS[family],
-          label: MEDECIN_FAMILY_LABELS[family],
+          label: medecinFamilyLabel(family),
           // Two channels on ONE row, not a second list by shape: the hue names
           // the family and the swatch IS the mark drawn on the globe, at key
           // size. `manager.js` masks this raster and paints it with the row's
