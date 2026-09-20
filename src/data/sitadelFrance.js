@@ -321,7 +321,6 @@ import {
   SITADEL_SOURCE,
   buildSitadelPermitCard,
   finiteOrNull,
-  sitadelBand,
   sitadelBandBlurb,
   sitadelBandColor,
   sitadelBandLabel,
