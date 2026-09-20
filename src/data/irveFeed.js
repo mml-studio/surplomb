@@ -1,3 +1,8 @@
+import messages from './irveFeed.i18n.js';
+
+/** The catalog's own copy, for the frozen tables below. */
+const WORDS = messages.definition;
+
 /**
  * IRVE feed projection — the seam between ODRÉ's `bornes-irve` records and
  * what the browser is served.
@@ -167,6 +172,7 @@ export const IRVE_GROUP_LIMIT = 20000;
  * the grouping entirely — 224 charge points at La Défense group to 8 rows
  * without them and to 100+ with them. See trap 2.
  */
+// i18n-ignore-start — the register's column names.
 export const IRVE_GROUP_FIELDS = Object.freeze([
   'consolidated_latitude',
   'consolidated_longitude',
@@ -187,6 +193,7 @@ export const IRVE_GROUP_FIELDS = Object.freeze([
   'consolidated_is_lon_lat_correct',
   'date_maj',
 ]);
+// i18n-ignore-end
 
 /**
  * Power bands, in kW, ordered low to high. `max` is inclusive.
@@ -196,11 +203,11 @@ export const IRVE_GROUP_FIELDS = Object.freeze([
  * 771 national rows at 7 360 — is a unit error, not a charger. See trap 4.
  */
 export const IRVE_POWER_BANDS = Object.freeze([
-  Object.freeze({ key: 'lente', max: 7.4, label: 'Lente (≤ 7,4 kW)' }),
-  Object.freeze({ key: 'normale', max: 22, label: 'Normale (≤ 22 kW)' }),
-  Object.freeze({ key: 'accelere', max: 50, label: 'Accélérée (≤ 50 kW)' }),
-  Object.freeze({ key: 'rapide', max: 150, label: 'Rapide (≤ 150 kW)' }),
-  Object.freeze({ key: 'hpc', max: 400, label: 'Haute puissance (> 150 kW)' }),
+  Object.freeze({ key: 'lente', max: 7.4, label: WORDS.bands.lente.fr }),
+  Object.freeze({ key: 'normale', max: 22, label: WORDS.bands.normale.fr }),
+  Object.freeze({ key: 'accelere', max: 50, label: WORDS.bands.accelere.fr }),
+  Object.freeze({ key: 'rapide', max: 150, label: WORDS.bands.rapide.fr }),
+  Object.freeze({ key: 'hpc', max: 400, label: WORDS.bands.hpc.fr }),
 ]);
 /**
  * Band for a charge point whose published power is outside the envelope.
@@ -215,8 +222,21 @@ export const IRVE_POWER_BANDS = Object.freeze([
  */
 export const IRVE_UNKNOWN_BAND = Object.freeze({
   key: 'inconnue',
-  label: 'Puissance inconnue',
+  label: WORDS.bands.inconnue.fr,
 });
+
+/**
+ * A band's name in the page's language, from its key.
+ *
+ * The frozen tables above carry the FRENCH copy, because this module runs on
+ * the server and in the départements roll-up, where no locale is resolved.
+ * @param {string|null|undefined} band
+ * @returns {string} The unknown-power band for a key this build does not know.
+ */
+export function irveBandWords(band) {
+  const words = messages().bands;
+  return words[String(band ?? '')] || words.inconnue;
+}
 /** Band keys, low to high, with the out-of-envelope band last. */
 export const IRVE_BAND_KEYS = Object.freeze([
   ...IRVE_POWER_BANDS.map((band) => band.key),
@@ -234,6 +254,7 @@ export const IRVE_BAND_LABELS = Object.freeze(Object.fromEntries([
  * a station name for any legitimate reason, so re-reading them is a repair
  * rather than a guess. See trap 6.
  */
+// i18n-ignore-next-line — a code-page table, not words.
 const MAC_ROMAN_C1 = 'ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü';
 
 /**
@@ -245,6 +266,8 @@ const MAC_ROMAN_C1 = 'ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõú
  * The skeletons of the legal values stay mutually distinct (`accs libre` vs
  * `accs rserv`), so the fold can never move a value onto its neighbour.
  */
+// i18n-ignore-start — the schema's legal values, matched on their skeleton
+// and carried as data; the browser labels them when it draws a card.
 const IRVE_ENUMS = Object.freeze({
   condition_acces: Object.freeze([
     'Accès libre',
@@ -264,6 +287,7 @@ const IRVE_ENUMS = Object.freeze({
     'Accessibilité inconnue',
   ]),
 });
+// i18n-ignore-end
 
 /** Skeleton → canonical value, per enumerated field. */
 const ENUM_BY_SKELETON = new Map(Object.entries(IRVE_ENUMS).map(([field, values]) => [
@@ -455,12 +479,24 @@ function dominant(tally) {
 
 /** The five connector columns, in the order the card reads them. */
 const CONNECTOR_FIELDS = Object.freeze([
-  Object.freeze({ field: 'prise_type_2', key: 'type2', label: 'Type 2' }),
-  Object.freeze({ field: 'prise_type_combo_ccs', key: 'ccs', label: 'Combo CCS' }),
-  Object.freeze({ field: 'prise_type_chademo', key: 'chademo', label: 'CHAdeMO' }),
-  Object.freeze({ field: 'prise_type_ef', key: 'ef', label: 'Prise E/F' }),
-  Object.freeze({ field: 'prise_type_autre', key: 'autre', label: 'Autre' }),
+  // i18n-ignore-start — `field` is a column name; the labels are the
+  // catalog's French, and `irveConnectorLabel()` is what a card reads.
+  Object.freeze({ field: 'prise_type_2', key: 'type2', label: WORDS.connectors.type2.fr }),
+  Object.freeze({ field: 'prise_type_combo_ccs', key: 'ccs', label: WORDS.connectors.ccs.fr }),
+  Object.freeze({ field: 'prise_type_chademo', key: 'chademo', label: WORDS.connectors.chademo.fr }),
+  Object.freeze({ field: 'prise_type_ef', key: 'ef', label: WORDS.connectors.ef.fr }),
+  Object.freeze({ field: 'prise_type_autre', key: 'autre', label: WORDS.connectors.autre.fr }),
+  // i18n-ignore-end
 ]);
+
+/**
+ * A connector's name in the page's language, from its key.
+ * @param {string|null|undefined} key
+ * @returns {?string} Null for a key this build does not know.
+ */
+export function irveConnectorLabel(key) {
+  return messages().connectors[String(key ?? '')] || null;
+}
 /** Connector key → display label. */
 export const IRVE_CONNECTOR_LABELS = Object.freeze(
   Object.fromEntries(CONNECTOR_FIELDS.map(({ key, label }) => [key, label])),

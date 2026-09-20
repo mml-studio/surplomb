@@ -68,6 +68,7 @@ import {
   projectPowerGrid,
   substationRoleLabel,
 } from './powerGridFeed.js';
+import messages from './powerGridNational.i18n.js';
 
 /** Bump when the pack's shape changes; the layer refuses a pack it cannot read. */
 export const POWER_GRID_NATIONAL_VERSION = 1;
@@ -400,6 +401,9 @@ export function buildPowerGridNationalPack(elements, {
 
   return {
     version: POWER_GRID_NATIONAL_VERSION,
+    // The pack's own coverage string: a value written into the built file and
+    // read back by its consumers, not a label.
+    // i18n-ignore-next-line
     coverage: 'France métropolitaine et Corse',
     source: 'OpenStreetMap contributors (ODbL 1.0), via Overpass',
     builtAt,
@@ -452,16 +456,29 @@ export const POWER_GRID_NATIONAL_WIDTH_PX = Object.freeze({
   'hv-low': 1.6,
 });
 /**
- * What each band IS, for the key the pack shows — in French, like the rest of
- * that key, and naming France's own nominal voltages rather than the generic
- * thresholds the viewport key has to use abroad.
+ * What each band IS, for the key the pack shows — naming France's own nominal
+ * voltages rather than the generic thresholds the viewport key has to use
+ * abroad.
+ *
+ * The French copy, read from the catalog's definition, because this module is
+ * imported by `scripts/build-power-grid-national.mjs` and resolves no locale
+ * as it loads. {@link nationalTierBlurb} is what the key draws with.
  */
 export const POWER_GRID_NATIONAL_TIER_BLURBS = Object.freeze({
-  ehv: 'La colonne vertébrale : le 400 kV sur lequel RTE fait tourner le pays',
-  'hv-high': 'Le transport régional : le 225 kV',
-  'hv-mid': 'Le 150 kV, un étage presque absent en France',
-  'hv-low': 'Le dernier étage avant la distribution : le 63 et le 90 kV',
+  ehv: messages.definition.tiers.ehv.fr,
+  'hv-high': messages.definition.tiers['hv-high'].fr,
+  'hv-mid': messages.definition.tiers['hv-mid'].fr,
+  'hv-low': messages.definition.tiers['hv-low'].fr,
 });
+
+/**
+ * That band's sentence in the page's language.
+ * @param {string|null|undefined} id
+ * @returns {?string}
+ */
+export function nationalTierBlurb(id) {
+  return messages().tiers[String(id ?? '')] || null;
+}
 /** Extra casing width under a national stroke, in pixels. */
 export const POWER_GRID_NATIONAL_CASING_PX = 2;
 /**

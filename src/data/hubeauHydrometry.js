@@ -13,6 +13,8 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { drillPickAt } from './pickAt.js';
+import { formatDecimal, formatInteger } from '../i18n/format.js';
+import messages from './hubeauHydrometry.i18n.js';
 
 /**
  * Hub'Eau Hydrométrie — France's live river-gauge mesh.
@@ -241,6 +243,7 @@ export function hubeauStationsRequestUrl(box, baseUrl = STATIONS_URL) {
     // reads to anyone else as an unexplained warning on a station that is
     // working exactly as intended. Dropped from the request, not just from the
     // card: nothing else consumed it.
+    // i18n-ignore-start — the API's own column names.
     fields: [
       'code_station',
       'libelle_station',
@@ -254,6 +257,7 @@ export function hubeauStationsRequestUrl(box, baseUrl = STATIONS_URL) {
       'qualification_donnees_station',
       'altitude_ref_alti_station',
     ].join(','),
+    // i18n-ignore-end
   });
   return `${baseUrl}?${params}`;
 }
@@ -421,8 +425,6 @@ export function hubeauFreshness(atMs, nowMs) {
  * @param {string} text
  * @returns {string}
  */
-const frDecimal = (text) => text.replace('.', ',');
-
 /**
  * An elapsed duration, for the line that says how old the kept map is.
  * Coarse on purpose: "il y a 4 h" is the fact, four hours and eleven minutes
@@ -431,11 +433,12 @@ const frDecimal = (text) => text.replace('.', ',');
  * @returns {string}
  */
 function formatAgo(ms) {
+  const m = messages().age;
   const minutes = Math.max(0, Math.round(ms / 60000));
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60) return m.minutes(formatInteger(minutes));
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `il y a ${hours} h`;
-  return `il y a ${Math.round(hours / 24)} j`;
+  if (hours < 48) return m.hours(formatInteger(hours));
+  return m.days(formatInteger(Math.round(hours / 24)));
 }
 
 /**
@@ -446,11 +449,11 @@ function formatAgo(ms) {
  */
 export function formatHubeauDischarge(m3s) {
   const abs = Math.abs(m3s);
-  if (abs < 1) return `${frDecimal(m3s.toFixed(2))} m³/s`;
-  if (abs < 100) return `${frDecimal(m3s.toFixed(1))} m³/s`;
+  if (abs < 1) return `${formatDecimal(m3s, 2, { minimumFractionDigits: 2 })} m³/s`;
+  if (abs < 100) return `${formatDecimal(m3s, 1, { minimumFractionDigits: 1 })} m³/s`;
   // Grouped above a thousand: the Rhône in flood reads 11 000 m³/s, and
   // `11000` is a number a reader has to count the digits of.
-  return `${Math.round(m3s).toLocaleString('fr-FR')} m³/s`;
+  return `${formatInteger(m3s)} m³/s`;
 }
 
 /**
@@ -464,7 +467,7 @@ export function formatHubeauDischarge(m3s) {
  * @returns {string}
  */
 export function formatHubeauStage(metres) {
-  return `échelle ${frDecimal(metres.toFixed(2))} m`;
+  return messages().reading.stage(formatDecimal(metres, 2, { minimumFractionDigits: 2 }));
 }
 
 /**
@@ -860,10 +863,10 @@ const NORMAL_PAGE_SIZE = 500;
 /** The reference must never hold the card hostage — same rule as the history. */
 const NORMAL_TIMEOUT_MS = 12_000;
 
-const MONTH_NAMES = Object.freeze([
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-]);
+/** One month's name, in the page's language. `index` is 1-based, as Hub'Eau counts. */
+function monthLabel(index) {
+  return messages().month(index - 1);
+}
 
 /**
  * Build the monthly-mean request for one station.
@@ -988,23 +991,24 @@ export function hubeauSeasonalLines(m3s, normal, nowYear = new Date().getFullYea
   if (!normal || !Number.isFinite(m3s)) return [];
   if (normal.years < HUBEAU_NORMAL_MIN_YEARS) return [];
   if (!(normal.mean > 0)) return [];
-  const month = MONTH_NAMES[normal.month - 1];
+  const m = messages().seasonal;
+  const month = monthLabel(normal.month);
   const span = normal.lastYear - normal.firstYear + 1;
   // A month that has not come round yet this year leaves the latest value in
   // LAST year — current, not lapsed. Two years is the slack that allows for it
   // plus one missed campaign.
   const current = normal.lastYear >= nowYear - 2;
   const period = current
-    ? `sur les ${span} dernières années`
-    : `entre ${normal.firstYear} et ${normal.lastYear}`;
+    ? m.lastYears(formatInteger(span))
+    : m.between(normal.firstYear, normal.lastYear);
   const lines = [
-    `◑ ${month} : ${formatHubeauDischarge(normal.mean)} en moyenne ${period}`,
-    `   entre ${formatHubeauDischarge(normal.min)} et ${formatHubeauDischarge(normal.max)}`,
+    m.mean(month, formatHubeauDischarge(normal.mean), period),
+    m.spread(formatHubeauDischarge(normal.min), formatHubeauDischarge(normal.max)),
   ];
   // The guards above already established a positive mean and a finite reading,
   // which is exactly what `textGauge` needs — it cannot come back empty here.
   const gauge = textGauge(m3s, normal.mean, HUBEAU_GAUGE_WIDTH);
-  lines.push(`   aujourd'hui ${Math.round((m3s / normal.mean) * 100)} % ${gauge}`);
+  lines.push(m.today(formatInteger((m3s / normal.mean) * 100), gauge));
   return lines;
 }
 
@@ -1065,11 +1069,16 @@ export function hubeauSeasonalLines(m3s, normal, nowYear = new Date().getFullYea
  * @returns {string} Newline-separated; the first line is the title.
  */
 export function buildHubeauCard(record, history = null, normal = null) {
-  const lines = [String(record?.name ?? '').trim() || String(record?.code ?? 'Station')];
+  const m = messages();
+  const lines = [String(record?.name ?? '').trim()
+    || String(record?.code ?? m.card.fallbackTitle)];
   const reading = record?.reading || {};
 
-  const measured = reading.kind === 'H' ? 'hauteur' : 'débit';
-  lines.push(`◈ ${reading.text || '—'} · ${measured}${reading.freshness === 'stale' ? ' · relevé ancien' : ''}`);
+  const measured = reading.kind === 'H' ? m.reading.kindStage : m.reading.kindDischarge;
+  lines.push(m.card.reading(
+    reading.text || '—', measured,
+    reading.freshness === 'stale' ? m.reading.stale : '',
+  ));
 
   if (record?.river) lines.push(`≈ ${record.river}`);
 
@@ -1090,7 +1099,7 @@ export function buildHubeauCard(record, history = null, normal = null) {
   let seasonal = [];
   if (reading.kind === 'Q' && Number.isFinite(reading.value)) {
     seasonal = normal?.pending
-      ? ['◑ moyenne du mois …']
+      ? [m.seasonal.pending]
       : hubeauSeasonalLines(reading.value, normal);
   }
   const drawsGauge = seasonal.some(hasTextGauge);
@@ -1098,7 +1107,7 @@ export function buildHubeauCard(record, history = null, normal = null) {
   if (history?.count) {
     if (!drawsGauge) {
       const spark = textSparkline(bucketSeries(history.values, HUBEAU_SPARK_WIDTH));
-      if (spark) lines.push(`↻ 24 h ${spark}`);
+      if (spark) lines.push(m.card.history(spark));
     }
     if (Number.isFinite(history.min) && Number.isFinite(history.max)) {
       const fmt = (value) => (reading.kind === 'H'
@@ -1110,30 +1119,32 @@ export function buildHubeauCard(record, history = null, normal = null) {
       // `↻` itself there, because no glyph line precedes it.
       const mark = drawsGauge ? '↻ ' : '   ';
       lines.push(history.min === history.max
-        ? `${mark}${fmt(history.min)} sur 24 h`
-        : `${mark}de ${fmt(history.min)} à ${fmt(history.max)} sur 24 h`);
+        ? m.card.flat(mark, fmt(history.min))
+        : m.card.range(mark, fmt(history.min), fmt(history.max)));
     }
   } else if (history?.pending) {
-    lines.push('↻ 24 h …');
+    lines.push(m.card.historyPending);
   } else if (history?.failed) {
-    lines.push('↻ historique 24 h indisponible');
+    lines.push(m.card.historyFailed);
   }
 
   lines.push(...seasonal);
 
   if (Number.isFinite(record?.openedYear)) {
-    lines.push(`🕐 station ouverte en ${record.openedYear}`);
+    lines.push(m.card.opened(record.openedYear));
   }
   if (reading.kind === 'H' && Number.isFinite(record?.gaugeZeroM)) {
     // NOT added to the stage. See the header of this function.
-    lines.push(`↧ zéro de l'échelle à ${record.gaugeZeroM} m`);
+    // The published number, as published: the API's own decimal point, which
+    // this line has always printed and which reads the same either way.
+    lines.push(m.card.gaugeZero(record.gaugeZeroM));
   }
   // The blanket "données non qualifiées — Vigicrues reste le canal officiel"
   // used to sit here, on almost every card in the layer, which is what made it
   // furniture: a caveat every station carries tells a reader nothing about the
   // station they clicked. The module header still states it, and the flag that
   // IS per-station — the producer's own `Douteuse` on this reading — is kept.
-  if (reading.doubtful) lines.push('⚠ relevé signalé douteux par le producteur');
+  if (reading.doubtful) lines.push(m.card.doubtful);
 
   return lines.join('\n');
 }
@@ -1319,26 +1330,27 @@ export function createHubeauHydrometryLayer({
    */
   function guidanceLabel() {
     if (_loading) return null;
+    const m = messages().guidance;
     if (_status === 'zoom-in') {
       return _records.length > 0
-        ? `vue trop large pour mesurer — ${_summary.total.toLocaleString('fr-FR')} stations conservées`
-        : `Zoome sous ${HUBEAU_MAX_VIEWPORT_DEGREES}° pour charger les stations`;
+        ? m.tooWide(formatInteger(_summary.total))
+        : m.zoomIn(HUBEAU_MAX_VIEWPORT_DEGREES);
     }
     if (_status === 'empty') {
-      const hours = Math.round(_windowMs / 3600000);
+      const hours = formatInteger(Math.round(_windowMs / 3600000));
       if (_records.length > 0) {
-        const kept = _summary.total.toLocaleString('fr-FR');
+        const kept = formatInteger(_summary.total);
         // No station AT ALL in the box is a different fact from a box full of
         // silent ones, and the kept dots are somewhere else entirely.
-        if (_activeInView === 0) return `aucune station dans cette vue — ${kept} stations conservées`;
+        if (_activeInView === 0) return m.noneHere(kept);
         const age = Number.isFinite(_newestReadingMs)
-          ? ` (dernier relevé ${formatAgo(now() - _newestReadingMs)})`
+          ? m.lastReading(formatAgo(now() - _newestReadingMs))
           : '';
-        return `aucun nouveau relevé depuis ${hours} h — ${kept} stations conservées${age}`;
+        return m.noNewReading(hours, kept, age);
       }
       return _activeInView > 0
-        ? `${_activeInView.toLocaleString('fr-FR')} stations ici, aucun relevé publié depuis ${hours} h`
-        : `aucune station dans cette vue`;
+        ? m.silentHere(formatInteger(_activeInView), hours)
+        : m.noneAtAll;
     }
     return null;
   }

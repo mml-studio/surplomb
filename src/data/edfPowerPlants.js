@@ -11,6 +11,8 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { drillPickAt } from './pickAt.js';
+import { formatInteger } from '../i18n/format.js';
+import messages from './edfPowerPlants.i18n.js';
 
 /**
  * Centrales EDF — where France's biggest generating capacity physically is.
@@ -190,24 +192,38 @@ const UPDATE_INTERVAL_MS = 1_800_000;
  */
 export const FILIERE_STYLES = Object.freeze({
   nucleaire: Object.freeze({
-    key: 'nucleaire', label: 'Nucléaire', subject: 'Centrale nucléaire',
-    chip: 'NUCLÉAIRE',
-    color: '#ffd166', unitNoun: 'réacteur', unitNounFeminine: false,
-    blurb: 'Réacteurs à eau pressurisée exploités par EDF',
+    key: 'nucleaire', color: '#ffd166', unitNounFeminine: false,
   }),
   hydraulique: Object.freeze({
-    key: 'hydraulique', label: 'Hydraulique', subject: 'Centrale hydraulique',
-    chip: 'HYDRAULIQUE',
-    color: '#4fc3f7', unitNoun: null,
-    blurb: 'Centrales EDF de plus de 100 MW, plus celles qui tiennent au moins 20 MW en réserve pour stabiliser le réseau',
+    key: 'hydraulique', color: '#4fc3f7',
   }),
   thermique: Object.freeze({
-    key: 'thermique', label: 'Thermique à flamme', subject: 'Centrale thermique',
-    chip: 'THERMIQUE',
-    color: '#f4736b', unitNoun: 'unité', unitNounFeminine: true,
-    blurb: 'Charbon, gaz et fioul brûlés par EDF pour produire de l’électricité',
+    key: 'thermique', color: '#f4736b', unitNounFeminine: true,
   }),
 });
+
+/**
+ * The four registers a filière is named in, in the page's language.
+ *
+ * Read at DRAW time, never at load: `FILIERE_STYLES` above is the palette
+ * (colours, and the grammatical gender French needs for its participles),
+ * this is the words.
+ * @param {string|null|undefined} filiere
+ * @returns {{label:string, subject:string, chip:string, blurb:string, unitNoun:?string}|null}
+ */
+export function filiereWords(filiere) {
+  const key = String(filiere ?? '');
+  if (!Object.hasOwn(FILIERE_STYLES, key)) return null;
+  const words = messages().filieres[key];
+  return { unitNoun: null, ...words };
+}
+
+/**
+ * The unit power of a reactor family, in megawatts — the number inside
+ * `REP 900`. Kept here rather than in the catalog so it is formatted for the
+ * reader's locale (`1 300 MW` / `1,300 MW`) instead of typed twice.
+ */
+const KIND_UNIT_MW = Object.freeze({ 'REP 900': 900, 'REP 1300': 1300, 'REP 1450': 1450 });
 
 /** Filière order for the legend — largest installed capacity first. */
 export const FILIERE_ORDER = Object.freeze(['nucleaire', 'hydraulique', 'thermique']);
@@ -270,10 +286,10 @@ export function plantColor(filiere) {
  */
 export function formatMegawatts(mw) {
   if (!Number.isFinite(mw)) return '— MW';
-  // `toLocaleString('fr-FR')` groups with U+202F on modern ICU and U+00A0 on
-  // older ones. Both are normalised to a plain space so the label measures and
-  // wraps predictably in the overlay's text layout.
-  return `${Math.round(mw).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} MW`;
+  // `plainSpaces`, because French ICU groups with U+202F on modern versions
+  // and U+00A0 on older ones. Both become a plain space, so the label measures
+  // and wraps predictably in the overlay's text layout.
+  return `${formatInteger(mw, { plainSpaces: true })} MW`;
 }
 
 /**
@@ -302,53 +318,24 @@ export function formatMegawatts(mw) {
  * these words by the Centrales hydro legend (`frHydroFeed.js`).
  *
  * Keyed on all thirteen strings the three files publish, measured against the
- * live proxy on 2026-09-10. A value that is not in this table falls through to
+ * live proxy on 2026-09-10. A value that is not in the table falls through to
  * the publisher's own spelling rather than being dropped or guessed at.
+ *
+ * The table lives in `edfPowerPlants.i18n.js`; this reads it in the page's
+ * language, at draw time, and formats the reactor family's unit power there
+ * rather than typing it twice.
+ *
+ * @param {string|null|undefined} kind One published kind string.
+ * @returns {{short:string, long:string, chip:string, blurb:?string}|null}
  */
-export const PLANT_KIND_PLAIN = Object.freeze({
-  // The number in a palier is the reactor family's unit power, NOT the site's:
-  // Gravelines is six machines of 900 MW, and saying "de 900 MW" beside a
-  // 5 460 MW site is only honest because the count is on the same line.
-  //
-  // `chip` is the fourth register, for the sub-category filter under a selected
-  // filière. It is NOT `short`: all three paliers reduce to "réacteur" there,
-  // which would put three identically-labelled buttons on one strip. What
-  // separates them is the unit power, so that is what the button says — and
-  // the chip's own title carries the sentence that keeps it honest.
-  'REP 900': Object.freeze({ short: 'réacteur', long: 'réacteur à eau pressurisée de 900 MW', chip: '900 MW' }),
-  'REP 1300': Object.freeze({ short: 'réacteur', long: 'réacteur à eau pressurisée de 1 300 MW', chip: '1 300 MW' }),
-  'REP 1450': Object.freeze({ short: 'réacteur', long: 'réacteur à eau pressurisée de 1 450 MW', chip: '1 450 MW' }),
-  Charbon: Object.freeze({ short: 'unité au charbon', long: 'unité au charbon', chip: 'CHARBON' }),
-  'Gaz naturel': Object.freeze({ short: 'unité au gaz', long: 'unité au gaz naturel', chip: 'GAZ' }),
-  'Fioul Domestique': Object.freeze({ short: 'unité au fioul', long: 'unité au fioul domestique', chip: 'FIOUL' }),
-  'Gaz naturel/Fioul Domestique': Object.freeze({
-    short: 'unité gaz ou fioul', long: 'unité au gaz naturel ou au fioul', chip: 'GAZ OU FIOUL',
-  }),
-  Lac: Object.freeze({
-    short: 'retenue de lac', long: 'retenue de lac', chip: 'LAC',
-    blurb: 'l’eau est stockée des mois et turbinée quand la demande grimpe',
-  }),
-  Eclusée: Object.freeze({
-    short: 'éclusée', long: 'éclusée', chip: 'ÉCLUSÉE',
-    blurb: 'sa retenue tient quelques heures à quelques jours de production',
-  }),
-  "Fil de l'eau": Object.freeze({
-    short: 'fil de l’eau', long: 'au fil de l’eau', chip: 'FIL DE L’EAU',
-    blurb: 'elle turbine le débit qui se présente, sans rien mettre en réserve',
-  }),
-  'Pompage pur': Object.freeze({
-    short: 'pompage-turbinage', long: 'pompage-turbinage', chip: 'POMPAGE PUR',
-    blurb: 'elle remonte l’eau dans un lac haut aux heures creuses, et la turbine à la pointe',
-  }),
-  'Pompage mixte': Object.freeze({
-    short: 'pompage-turbinage mixte', long: 'pompage-turbinage mixte', chip: 'POMPAGE MIXTE',
-    blurb: 'elle turbine l’eau qui lui arrive ET remonte de l’eau aux heures creuses',
-  }),
-  Marémotrice: Object.freeze({
-    short: 'marémotrice', long: 'usine marémotrice', chip: 'MARÉMOTRICE',
-    blurb: 'elle turbine le va-et-vient de la marée',
-  }),
-});
+export function plantKindEntry(kind) {
+  const entry = messages().kinds[String(kind ?? '')];
+  if (!entry) return null;
+  const long = typeof entry.long === 'function'
+    ? entry.long(formatMegawatts(KIND_UNIT_MW[String(kind)]))
+    : entry.long;
+  return { short: entry.short, long, chip: entry.chip, blurb: entry.blurb ?? null };
+}
 
 /**
  * The `technologie` column, where it says something the `kind` does not.
@@ -359,23 +346,19 @@ export const PLANT_KIND_PLAIN = Object.freeze({
  * are contained in it. `TAC` does not, and it is the difference between a
  * plant that runs and a plant that waits.
  */
-export const PLANT_TECH_PLAIN = Object.freeze({
-  TAC: 'turbine à combustion — une machine de pointe, démarrée pour quelques heures',
-});
+export function plantTechPlain() {
+  return messages().techs;
+}
 
-/** The `combustible` column, in words. */
-export const PLANT_FUEL_PLAIN = Object.freeze({
-  'Uranium Enrichi': 'uranium enrichi',
-  'Multi-oxyde d’uranium et de plutonium': 'MOX (uranium et plutonium recyclés)',
-  "Multi-oxyde d'uranium et de plutonium": 'MOX (uranium et plutonium recyclés)',
-});
+/** The `combustible` column, in words, in the page's language. */
+export function plantFuelPlain() {
+  return messages().fuels;
+}
 
-/** Plural of a plain noun phrase: the head word only. `unité au charbon` → `unités au charbon`. */
-function pluralizeHead(phrase, count) {
+/** Plural of a plain phrase, by the rule of the page's own language. */
+function pluralizePhrase(phrase, count) {
   if (!Number.isFinite(count) || count < 2) return phrase;
-  const [head, ...rest] = String(phrase).split(' ');
-  if (!head || head.endsWith('s') || head.endsWith('x')) return phrase;
-  return [`${head}s`, ...rest].join(' ');
+  return messages().pluralPhrase(phrase);
 }
 
 /**
@@ -387,7 +370,7 @@ function pluralizeHead(phrase, count) {
 export function plantKindPlain(kind) {
   const parts = String(kind ?? '').split(' + ').map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return { short: '', long: '', blurb: null, known: false };
-  const entries = parts.map((part) => PLANT_KIND_PLAIN[part] || { short: part, long: part });
+  const entries = parts.map((part) => plantKindEntry(part) || { short: part, long: part });
   return {
     short: entries.map((entry) => entry.short).join(' + '),
     long: entries.map((entry) => entry.long).join(' + '),
@@ -396,7 +379,7 @@ export function plantKindPlain(kind) {
     blurb: entries.length === 1 ? entries[0].blurb ?? null : null,
     // Whether EVERY part was in the table. A code this build has never seen is
     // still printed, but it is not inflected: see `plantKindText`.
-    known: parts.every((part) => Object.hasOwn(PLANT_KIND_PLAIN, part)),
+    known: parts.every((part) => plantKindEntry(part) !== null),
   };
 }
 
@@ -419,7 +402,7 @@ export function plantKindText(site, { register = 'plain' } = {}) {
   const raw = String(site?.kind ?? '').trim();
   const units = Number(site?.units);
   const count = Number.isFinite(units) && units >= 2 ? units : null;
-  if (!raw) return style?.label || 'Centrale';
+  if (!raw) return filiereWords(site?.filiere)?.label || messages().plant;
   if (register === 'raw') return count ? `${count} × ${raw}` : raw;
   const plain = plantKindPlain(raw);
   const phrase = register === 'short' ? plain.short : plain.long;
@@ -427,8 +410,9 @@ export function plantKindText(site, { register = 'plain' } = {}) {
   // A code this build has never seen keeps the publisher's `N × CODE` form.
   // Inflecting it would invent French grammar for a string that is not a
   // French word — a future `EPR2` would read `2 EPR2s`.
-  if (!plain.known) return `${count} × ${phrase}`;
-  return `${count} ${pluralizeHead(phrase, count)}`;
+  const m = messages();
+  if (!plain.known) return m.countedRaw(count, phrase);
+  return m.counted(count, pluralizePhrase(phrase, count));
 }
 
 /**
@@ -682,8 +666,8 @@ export function summarizePlants(records) {
  */
 export function plantKindChip(kind) {
   const raw = String(kind ?? '').trim();
-  if (!raw) return 'NON PRÉCISÉ';
-  return PLANT_KIND_PLAIN[raw]?.chip || raw.toUpperCase();
+  if (!raw) return messages().chips.kindUnspecified;
+  return plantKindEntry(raw)?.chip || raw.toUpperCase();
 }
 
 /**
@@ -766,28 +750,29 @@ export function plantFilterChips(records, filter) {
   if (!all.length) return [];
   const summary = summarizePlants(all);
 
+  const m = messages();
   const chips = [{
     id: 'f:all',
-    label: 'TOUTES',
+    label: m.chips.all,
     active: !filiere,
     state: filiere ? 'idle' : 'active',
-    title: `Les ${summary.sites} sites des trois filières — ${formatMegawatts(summary.capacityMw)} installés`,
+    title: m.chips.allTitle(summary.sites, formatMegawatts(summary.capacityMw)),
     params: { filiere: null, kind: null },
   }];
 
   for (const key of FILIERE_ORDER) {
     const bucket = summary.byFiliere[key];
     if (!bucket?.sites) continue;
-    const style = FILIERE_STYLES[key];
+    const words = filiereWords(key);
     const active = filiere === key;
     chips.push({
       id: `f:${key}`,
-      label: style.chip,
+      label: words.chip,
       active,
       state: active ? 'active' : 'idle',
       title: active
-        ? `${style.label} — ${bucket.sites} sites, ${formatMegawatts(bucket.capacityMw)}. Cliquer à nouveau pour revenir à la France entière`
-        : `Ne garder que ${style.label.toLowerCase()} — ${bucket.sites} sites, ${formatMegawatts(bucket.capacityMw)}`,
+        ? m.chips.filiereActive(words.label, bucket.sites, formatMegawatts(bucket.capacityMw))
+        : m.chips.filiereIdle(words.label.toLowerCase(), bucket.sites, formatMegawatts(bucket.capacityMw)),
       // A second click on the filière already showing is the way back out, and
       // it takes the sub-category with it: a kind is a value of that filière's
       // own column and means nothing once the filière is gone.
@@ -801,28 +786,26 @@ export function plantFilterChips(records, filter) {
   const buckets = plantKindBuckets(all, filiere);
   if (buckets.length < 2) return chips;
 
-  const style = FILIERE_STYLES[filiere];
   chips.push({
     id: 'k:all',
-    label: 'TOUS',
+    label: m.chips.kindAll,
     active: !kind,
     state: kind ? 'idle' : 'active',
     chipClass: 'chip-sub',
-    title: `Toutes les sous-catégories — ${style.label.toLowerCase()}`,
+    title: m.chips.kindAllTitle(filiereWords(filiere).label.toLowerCase()),
     params: { filiere, kind: null },
   });
   for (const bucket of buckets) {
     const active = kind === bucket.kind;
     const plain = bucket.kind ? plantKindPlain(bucket.kind) : null;
-    const what = plain?.long || 'sous-catégorie non précisée par le fichier';
+    const what = plain?.long || m.chips.kindUnspecifiedWhat;
     chips.push({
       id: `k:${bucket.kind ?? ''}`,
       label: bucket.label,
       active,
       state: active ? 'active' : 'idle',
       chipClass: 'chip-sub',
-      title: `${what} — ${bucket.sites} site${bucket.sites > 1 ? 's' : ''},`
-        + ` ${formatMegawatts(bucket.capacityMw)}`,
+      title: m.chips.kindTitle(what, bucket.sites, formatMegawatts(bucket.capacityMw)),
       params: { filiere, kind: active ? null : bucket.kind },
     });
   }
@@ -964,8 +947,8 @@ export function commissioningText(from, to) {
  * @returns {string} Newline-separated; the first line is the title.
  */
 export function buildEdfPlantCard(record, crossRegister = null) {
-  const style = FILIERE_STYLES[String(record?.filiere ?? '')] || null;
-  const lines = [String(record?.name ?? '').trim() || 'Centrale'];
+  const m = messages();
+  const lines = [String(record?.name ?? '').trim() || m.plant];
 
   // WHAT THIS PLACE IS, before anything it can do. The card used to open on
   // "5 460 MW installés · 6 × REP 900", which asks a reader to already know
@@ -981,8 +964,7 @@ export function buildEdfPlantCard(record, crossRegister = null) {
   // A disc sized by nameplate over a site with three of six reactors down
   // looks exactly like a site running flat out, and a reader has no way to
   // know that from a number labelled "installés" alone.
-  lines.push(`⚡ ${formatMegawatts(record?.mw)} installés : le maximum du site, `
-    + 'pas ce qu’il produit à cet instant');
+  lines.push(m.card.capacity(formatMegawatts(record?.mw)));
 
   // The machine and the fuel, where they say something the line above does
   // not. `TAC` is the only technology string that survives that test, and the
@@ -996,8 +978,7 @@ export function buildEdfPlantCard(record, crossRegister = null) {
   // secondaire" is the contract's own name for it and means nothing outside a
   // control room; what it does is one clause long.
   if (Number.isFinite(record?.secondaryReserveMw) && record.secondaryReserveMw > 0) {
-    lines.push(`↻ ${formatMegawatts(record.secondaryReserveMw)} tenus en réserve `
-      + 'pour stabiliser le réseau en quelques minutes');
+    lines.push(m.card.reserve(formatMegawatts(record.secondaryReserveMw)));
   }
 
   const where = [record?.commune, record?.departement, record?.region]
@@ -1013,7 +994,7 @@ export function buildEdfPlantCard(record, crossRegister = null) {
   const operator = String(record?.operator ?? '').trim();
   // Every published row currently says EDF SA, so naming it adds nothing on its
   // own — it earns a line only if a future edition names somebody else.
-  if (operator && !/^edf\b/i.test(operator)) lines.push(`⌁ exploitant : ${operator}`);
+  if (operator && !/^edf\b/i.test(operator)) lines.push(m.card.operator(operator));
 
   // The vintage is per FILE, not per fleet: the three EDF datasets are three
   // editions, and a card that quoted one date for all of them would invent a
@@ -1021,8 +1002,8 @@ export function buildEdfPlantCard(record, crossRegister = null) {
   // date, not the way a database stores one.
   const reference = String(record?.referenceDate ?? '').trim();
   if (reference) {
-    lines.push(`# relevé EDF du parc ${(style?.label || 'électrique').toLowerCase()}, `
-      + `arrêté au ${frenchDay(reference)}`);
+    const fleet = (filiereWords(record?.filiere)?.label || m.subject).toLowerCase();
+    lines.push(m.card.vintage(fleet, localDay(reference)));
   }
 
   // THE OTHER REGISTER, when it disagrees. 43 of the 69 sites both registers
@@ -1035,9 +1016,7 @@ export function buildEdfPlantCard(record, crossRegister = null) {
     'RTE',
     crossRegister?.mw ?? null,
     record?.mw ?? null,
-    crossRegister?.units
-      ? `n’y compte que ${crossRegister.units > 1 ? `les ${crossRegister.units} groupes` : 'le groupe'} de 100 MW et plus`
-      : null,
+    crossRegister?.units ? m.card.rteUnits(crossRegister.units) : null,
   );
   if (rte) lines.push(rte);
 
@@ -1054,8 +1033,8 @@ export function buildEdfPlantCard(record, crossRegister = null) {
  * @returns {string}
  */
 export function plantSubjectText(record) {
-  const style = FILIERE_STYLES[String(record?.filiere ?? '')] || null;
-  const subject = style ? style.subject : 'Centrale électrique';
+  const words = filiereWords(record?.filiere);
+  const subject = words ? words.subject : messages().subject;
   // A hydro plant's kind IS its regime, and `Centrale hydraulique · retenue de
   // lac` is the sentence. A site whose file names no kind gets the subject
   // alone: `plantKindText` falls back to the filière label there, and pinning
@@ -1093,8 +1072,8 @@ export function plantMachineNotes(record) {
       .join(' · ');
     notes.push(`${prefix}${plain}`);
   };
-  add(record?.tech, PLANT_TECH_PLAIN);
-  add(record?.fuel, PLANT_FUEL_PLAIN, 'combustible : ');
+  add(record?.tech, plantTechPlain());
+  add(record?.fuel, plantFuelPlain(), messages().fuelPrefix);
   return notes;
 }
 
@@ -1111,12 +1090,16 @@ export function plantMachineNotes(record) {
  */
 export function plantCommissioningText(record, span) {
   const style = FILIERE_STYLES[String(record?.filiere ?? '')] || null;
-  const noun = style?.unitNoun || null;
+  const m = messages();
+  const noun = filiereWords(record?.filiere)?.unitNoun || null;
   const units = Number(record?.units);
-  const when = span.includes('–') ? `entre ${span.replace('–', ' et ')}` : `en ${span}`;
+  const [from, to] = span.split('–');
+  const when = span.includes('–')
+    ? m.card.commissionedBetween(from, to)
+    : m.card.commissionedIn(span);
   // No unit noun means no unit count — a hydro plant publishes neither, so the
   // sentence is about the PLANT rather than about machines it never counted.
-  if (!noun) return `mise en service ${when}`;
+  if (!noun) return m.card.commissionedPlant(when);
   // THE COUNT DECIDES THE PLURAL, not the span: a two-unit site commissioned
   // in one year is still two machines, and it read "unité raccordée en 1977".
   const counted = Number.isFinite(units) && units >= 2 ? units : null;
@@ -1124,15 +1107,20 @@ export function plantCommissioningText(record, span) {
   // `unité` is feminine and `réacteur` is not, so the participle cannot be a
   // constant: "2 unités raccordés" is the kind of sentence that makes a reader
   // stop trusting the rest of the card.
-  const e = style?.unitNounFeminine ? 'e' : '';
-  if (many) return `${counted ? `${counted} ` : ''}${noun}s raccordé${e}s au réseau ${when}`;
-  return `${noun} raccordé${e} au réseau ${when}`;
+  const feminine = Boolean(style?.unitNounFeminine);
+  if (many) return m.card.commissionedUnits(counted, noun, feminine, when);
+  return m.card.commissionedUnit(noun, feminine, when);
 }
 
-/** An ISO day as a French reader writes it. Anything else passes through. */
-export function frenchDay(iso) {
+/**
+ * An ISO day as a reader writes it: `31/12/2025` in French, `Dec 31, 2025` in
+ * English. Anything that is not an ISO day passes through untouched.
+ * @param {string|null|undefined} iso
+ * @returns {string}
+ */
+export function localDay(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? '').trim());
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : String(iso ?? '').trim();
+  return match ? messages().day(match[1], match[2], match[3]) : String(iso ?? '').trim();
 }
 
 /**
@@ -1204,18 +1192,20 @@ export function filiereLegend(summary) {
     const bucket = summary?.byFiliere?.[key];
     if (!bucket?.sites) continue;
     const style = FILIERE_STYLES[key];
-    const units = Number.isFinite(bucket.units) && style.unitNoun
-      ? `, ${bucket.units} ${style.unitNoun}s`
+    const words = filiereWords(key);
+    const m = messages();
+    const units = Number.isFinite(bucket.units) && words.unitNoun
+      ? m.legend.units(bucket.units, words.unitNoun)
       : '';
     legend.push({
-      label: style.label,
+      label: words.label,
       color: style.color,
       // `key: true` drops the mark's black ring: the panel MASKS this swatch and
       // a CSS mask reads ALPHA, so an opaque ring would flatten all three
       // filières into the same plain dot — the one thing the shape channel
       // exists to prevent.
       glyph: plantFiliereGlyph(key, { px: LEGEND_GLYPH_PX, key: true }) || undefined,
-      blurb: `${style.blurb} — ${formatMegawatts(bucket.capacityMw)} installés${units}`,
+      blurb: m.legend.blurb(words.blurb, formatMegawatts(bucket.capacityMw), units),
       count: bucket.sites,
     });
   }

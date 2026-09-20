@@ -1,3 +1,6 @@
+import { formatInteger } from '../i18n/format.js';
+import messages from './plantIdentity.i18n.js';
+
 /**
  * @module data/plantIdentity
  *
@@ -167,6 +170,5 @@ export const PLANT_MW_AGREEMENT = 1.05;
  */
 export function plantCrossRegisterLine(register, mw, ownMw, why = null) {
   if (!plantPowerDiffers(mw, ownMw)) return null;
-  const value = Math.round(Number(mw));
-  return `⌁ ${register} : ${value.toLocaleString('fr-FR')} MW${why ? ` — ${why}` : ''}`;
+  return messages().crossRegister(register, formatInteger(mw), why || '');
 }

@@ -1,3 +1,8 @@
+import messages from './gasFranceFeed.i18n.js';
+
+/** The catalog's own copy, for the frozen table below. */
+const WORDS = messages.definition;
+
 /**
  * ODRÉ gas-system feed projection — pure functions, no Cesium, no network.
  *
@@ -123,6 +128,7 @@ const EARTH_RADIUS_KM = 6371.0088;
  * stays violet, orchid stays orchid, and the operator channel a reader has
  * already learned survives the change.
  */
+// i18n-ignore-start — the two transmission operators, by their own names.
 export const GAS_NETWORK_OPERATORS = Object.freeze({
   natran: Object.freeze({
     id: 'natran',
@@ -141,6 +147,7 @@ export const GAS_NETWORK_OPERATORS = Object.freeze({
     regionField: 'region',
   }),
 });
+// i18n-ignore-end
 
 /** Stable operator order, so the legend and the payload never reshuffle. */
 export const GAS_NETWORK_OPERATOR_IDS = Object.freeze(['natran', 'terega']);
@@ -154,15 +161,24 @@ export const GAS_INJECTION_COLOR = '#5ddc8f';
 export const GAS_NETWORK_TIERS = Object.freeze({
   transport: Object.freeze({
     id: 'transport',
-    label: 'Transport',
-    blurb: 'Injects into the transmission network drawn here.',
+    label: WORDS.tiers.transport.label.fr,
+    blurb: WORDS.tiers.transport.blurb.fr,
   }),
   distribution: Object.freeze({
     id: 'distribution',
-    label: 'Distribution',
-    blurb: 'Injects into the local distribution network, which this layer does not draw.',
+    label: WORDS.tiers.distribution.label.fr,
+    blurb: WORDS.tiers.distribution.blurb.fr,
   }),
 });
+
+/**
+ * The two words a network tier is drawn with, in the page's language.
+ * @param {string|null|undefined} id `transport` or `distribution`.
+ * @returns {{label:string, blurb:string}|null}
+ */
+export function gasTierWords(id) {
+  return messages().tiers[String(id ?? '')] || null;
+}
 
 /**
  * Read an Opendatasoft boolean.
@@ -178,8 +194,10 @@ export function parseOdsBoolean(value) {
   if (value === true || value === false) return value;
   if (value === null || value === undefined) return null;
   const token = String(value).trim().toLowerCase();
+  // i18n-ignore-start — tokens the file publishes, matched not read.
   if (token === 'true' || token === '1' || token === 'oui' || token === 'yes') return true;
   if (token === 'false' || token === '0' || token === 'non' || token === 'no') return false;
+  // i18n-ignore-end
   return null;
 }
 
@@ -543,9 +561,11 @@ export function projectGasPlants(payload) {
       rowsWithoutGeometry += 1;
       continue;
     }
+    // i18n-ignore-next-line — the payload's fallback name for a nameless row.
     const name = text(row?.site) || 'Centrale';
     // The coordinate is part of the key: two editions of one site always share
     // it, and it is what makes the key survive a renamed site.
+    // i18n-ignore-next-line — the slug's fallback, part of a stable key.
     const key = `${slug(name, 'centrale')}@${round5(lon)},${round5(lat)}`;
     const entry = sites.get(key);
     const record = {
@@ -672,6 +692,7 @@ export function projectBiomethaneSites(payload) {
     injections.push({
       id: `gas-injection:${Number.isFinite(Number(id)) ? id : slug(row?.nom_du_projet, 'site')}`,
       kind: 'injection',
+      // i18n-ignore-next-line — the payload's fallback name for a nameless row.
       name: text(row?.nom_du_projet) || 'Site d’injection',
       lon: round5(lon),
       lat: round5(lat),

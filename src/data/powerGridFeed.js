@@ -1,3 +1,8 @@
+import messages from './powerGridFeed.i18n.js';
+
+/** The catalog's own copy, for the frozen tables below. */
+const WORDS = messages.definition;
+
 /**
  * @module powerGridFeed
  *
@@ -123,11 +128,14 @@ export const POWER_GRID_CASING_PX = 3.2;
 export const POWER_GRID_CASING_COLOR = '#05080d';
 
 export const POWER_GRID_TIERS = Object.freeze([
+  // The `blurb`s are the catalog's own copy, read from its definition: this
+  // module loads on the server, so it resolves no locale. `powerTierBlurb()`
+  // is what the key draws with.
   Object.freeze({
     id: 'ehv',
     minKv: 300,
     label: '≥ 300 kV',
-    blurb: 'The backbone. In France this is the 400 kV grid RTE runs the country on.',
+    blurb: WORDS.tiers.ehv.fr,
     color: '#ff5f4d',
     widthPx: 5.5,
     pointPx: 15,
@@ -136,7 +144,7 @@ export const POWER_GRID_TIERS = Object.freeze([
     id: 'hv-high',
     minKv: 180,
     label: '180–299 kV',
-    blurb: 'The regional transmission tier — 225 kV in France, 220 kV across much of Europe.',
+    blurb: WORDS.tiers['hv-high'].fr,
     color: '#ff9d3c',
     widthPx: 4.4,
     pointPx: 12,
@@ -145,7 +153,7 @@ export const POWER_GRID_TIERS = Object.freeze([
     id: 'hv-mid',
     minKv: 100,
     label: '100–179 kV',
-    blurb: 'Sub-transmission — 150 kV in France, 132 kV in the UK, 110 kV in Germany.',
+    blurb: WORDS.tiers['hv-mid'].fr,
     color: '#ffd84d',
     widthPx: 3.6,
     pointPx: 10,
@@ -154,7 +162,7 @@ export const POWER_GRID_TIERS = Object.freeze([
     id: 'hv-low',
     minKv: POWER_GRID_MIN_VOLTAGE_V / 1000,
     label: '50–99 kV',
-    blurb: 'The last high-voltage step before distribution — France’s 63 kV and 90 kV network.',
+    blurb: WORDS.tiers['hv-low'].fr,
     color: '#7ee0a8',
     widthPx: 3,
     pointPx: 8,
@@ -171,22 +179,22 @@ const TIER_BY_ID = new Map(POWER_GRID_TIERS.map((tier) => [tier.id, tier]));
  * turn up tagged `industrial` and plenty of real ones carry no subtype at all.
  */
 export const POWER_SUBSTATION_ROLES = Object.freeze({
-  transmission: 'Transmission substation',
-  distribution: 'Poste source (HV → distribution)',
-  traction: 'Railway traction substation',
-  industrial: 'Industrial / site substation',
-  generation: 'Generation switchyard',
-  transition: 'Overhead ↔ underground transition',
-  converter: 'HVDC converter station',
-  compensation: 'Reactive-compensation station',
+  transmission: WORDS.roles.transmission.fr,
+  distribution: WORDS.roles.distribution.fr,
+  traction: WORDS.roles.traction.fr,
+  industrial: WORDS.roles.industrial.fr,
+  generation: WORDS.roles.generation.fr,
+  transition: WORDS.roles.transition.fr,
+  converter: WORDS.roles.converter.fr,
+  compensation: WORDS.roles.compensation.fr,
   // Normally a street-corner transformer cabinet and far below this layer — but
   // one turns up in central London carrying a mapped 132 kV. Voltage is the
   // evidence, so it is drawn; the label repeats what OSM said rather than
   // promoting it or hiding the disagreement.
-  minor_distribution: 'Tagged minor distribution, at high voltage',
+  minor_distribution: WORDS.roles.minor_distribution.fr,
 });
 /** Role shown when OSM records no `substation` subtype. */
-export const POWER_SUBSTATION_ROLE_UNSTATED = 'Substation (role not stated)';
+export const POWER_SUBSTATION_ROLE_UNSTATED = WORDS.roleUnstated.fr;
 
 /**
  * Caption for one `substation` value.
@@ -200,10 +208,19 @@ export const POWER_SUBSTATION_ROLE_UNSTATED = 'Substation (role not stated)';
  * @returns {string}
  */
 export function substationRoleLabel(value) {
+  const m = messages();
   const role = String(value ?? '').trim().toLowerCase();
-  if (!role) return POWER_SUBSTATION_ROLE_UNSTATED;
-  return POWER_SUBSTATION_ROLES[role]
-    || `Tagged ${role.replaceAll('_', ' ')}`;
+  if (!role) return m.roleUnstated;
+  return m.roles[role] || m.roleTagged(role.replaceAll('_', ' '));
+}
+
+/**
+ * What a voltage tier IS, in the page's language, for the key.
+ * @param {string|null|undefined} id A {@link POWER_GRID_TIERS} id.
+ * @returns {string}
+ */
+export function powerTierBlurb(id) {
+  return messages().tiers[String(id ?? '')] || '';
 }
 
 /** Largest viewport this source will answer, in degrees, on either axis. */

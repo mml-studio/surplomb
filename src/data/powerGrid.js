@@ -20,13 +20,14 @@ import {
   POWER_GRID_TIERS,
   POWER_PYLON_ICON_PX,
   POWER_PYLON_MAX_MARKS,
-  POWER_SUBSTATION_ROLE_UNSTATED,
   formatKilovolts,
   powerPositionKey,
   powerPylonMarks,
   powerPylonSpacingM,
   powerTierById,
+  powerTierBlurb,
   powerTowerIndex,
+  substationRoleLabel,
 } from './powerGridFeed.js';
 import {
   POWER_GRID_NATIONAL_BBOX,
@@ -39,10 +40,13 @@ import {
   powerGridNationalAgeDays,
   powerGridNationalBand,
   powerGridStrokeIds,
+  nationalTierBlurb,
 } from './powerGridNational.js';
 import { applyViewGate, cameraViewBox } from './viewGate.js';
 import { boxesIntersect, focusedViewBox } from './viewportBox.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatInteger, formatNumber, formatPercent } from '../i18n/format.js';
+import messages from './powerGrid.i18n.js';
 
 /**
  * Power Grid — the high-voltage network as OpenStreetMap has mapped it, for the
@@ -410,20 +414,25 @@ export function substationPointSize(tierId) {
  */
 export function formatGridKm(km) {
   if (!Number.isFinite(km)) return '—';
-  if (km >= 100) return `${Math.round(km).toLocaleString('en-US')} km`;
-  return `${km.toFixed(1)} km`;
+  if (km >= 100) return `${formatInteger(km, { locale: 'en' })} km`;
+  return `${formatDecimal(km, 1, { locale: 'en', minimumFractionDigits: 1 })} km`;
 }
 
 /**
- * The same length, written for a French sentence: `89 058 km`, not the
- * `89,058 km` a French reader parses as eighty-nine (the gas layer's lesson).
+ * The same length, written for the sentence around it: `89 058 km` in French,
+ * where `89,058 km` reads as eighty-nine (the gas layer's lesson), and
+ * `89,058 km` in English, where it reads as itself. The name is historical —
+ * it is the locale-aware one of the pair.
+ *
+ * {@link formatGridKm} above stays US-grouped whatever the page is: it sits
+ * inside the inherited English half of this layer's card and key.
  * @param {?number} km
  * @returns {string}
  */
 export function formatGridKmFr(km) {
   if (!Number.isFinite(km)) return '—';
-  if (km >= 100) return `${Math.round(km).toLocaleString('fr-FR')} km`;
-  return `${km.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  if (km >= 100) return `${formatInteger(km)} km`;
+  return `${formatDecimal(km, 1, { minimumFractionDigits: 1 })} km`;
 }
 
 /**
@@ -439,29 +448,29 @@ export function buildPowerSelectionLabel(record, payload = {}) {
   const routes = Array.isArray(payload.routes) ? payload.routes : [];
   const voltages = Array.isArray(payload.voltages) ? payload.voltages : [];
   const details = [];
+  const m = messages();
   const operatorOf = (item) => (item?.o >= 0 ? operators[item.o] : null);
+  const ceilingKm = Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000);
 
   if (record?.kind === 'stroke') {
     const stroke = record.stroke || {};
     const voltage = voltages[stroke.vi] || {};
     const name = stroke.n >= 0 ? routes[stroke.n] : null;
-    const title = name || `${formatKilovolts(voltage.v)} ${stroke.u ? 'cable' : 'line'}`;
-    details.push(`⚡ ${formatKilovolts(voltage.v)}${
-      voltage.all?.length > 1 ? ` · mapped as ${voltage.raw}` : ''
-    }`);
+    const kv = formatKilovolts(voltage.v);
+    const title = name || (stroke.u ? m.card.cableTitle(kv) : m.card.lineTitle(kv));
+    details.push(m.card.voltage(kv, voltage.all?.length > 1 ? m.card.voltageMapped(voltage.raw) : ''));
     const operator = operatorOf(stroke);
     if (operator) details.push(`🏢 ${operator}`);
-    if (Number.isFinite(stroke.circuits)) details.push(`⌇ ${stroke.circuits} circuits mapped`);
-    details.push(stroke.u
-      ? '⌄ Underground cable — no pylons on this route'
-      : '⌃ Overhead line — drawn on the ground, not at conductor height');
-    if (Number.isFinite(stroke.km)) details.push(`↔ ${formatGridKm(stroke.km)} of this mapped way`);
+    if (Number.isFinite(stroke.circuits)) details.push(m.card.circuits(stroke.circuits));
+    details.push(stroke.u ? m.card.underground : m.card.overhead);
+    if (Number.isFinite(stroke.km)) details.push(m.card.length(formatGridKm(stroke.km)));
     // A stroke from the national pack is drawn simplified, and the card is
     // where that is said: the length above is the MAPPED way's, the line on
     // screen is within `toleranceM` of it.
     if (Number.isFinite(payload.toleranceM)) {
-      details.push(`〰 Tracé national simplifié à ${payload.toleranceM} m — zoome sous `
-        + `${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km pour le tracé exact`);
+      details.push(m.card.simplified(
+        formatInteger(payload.toleranceM), formatInteger(ceilingKm),
+      ));
     }
     details.push('© OpenStreetMap contributors (ODbL 1.0)');
     return [title, ...details].join('\n');
@@ -476,18 +485,20 @@ export function buildPowerSelectionLabel(record, payload = {}) {
     const tower = record.tower || null;
     if (!tower) {
       const voltage = voltages[record?.mark?.vi] || {};
-      details.push(`⚡ ${formatKilovolts(voltage.v)} overhead route`);
-      details.push('△ Vertex of the mapped way — a pylon stands on it, and');
-      details.push('   OpenStreetMap has not tagged this one');
+      details.push(m.card.pylonRoute(formatKilovolts(voltage.v)));
+      details.push(m.card.pylonUntaggedA);
+      details.push(m.card.pylonUntaggedB);
       details.push('© OpenStreetMap contributors (ODbL 1.0)');
-      return ['Pylon position', ...details].join('\n');
+      return [m.card.pylonPositionTitle, ...details].join('\n');
     }
-    const title = tower.portal ? 'Portal' : 'Pylon';
+    const title = tower.portal ? m.card.portalTitle : m.card.pylonTitle;
     if (tower.ref) details.push(`# ${tower.ref}`);
     if (tower.design) details.push(`△ ${String(tower.design).replaceAll('_', ' ')}`);
     // Height is mapped for about a third of pylons; the rest say nothing and
     // this card says nothing rather than a prior.
-    details.push(Number.isFinite(tower.h) ? `↕ ${tower.h} m tall` : '↕ height not mapped');
+    details.push(Number.isFinite(tower.h)
+      ? m.card.height(formatInteger(tower.h))
+      : m.card.heightUnmapped);
     const operator = operatorOf(tower);
     if (operator) details.push(`🏢 ${operator}`);
     details.push('© OpenStreetMap contributors (ODbL 1.0)');
@@ -496,15 +507,19 @@ export function buildPowerSelectionLabel(record, payload = {}) {
 
   const substation = record?.substation || {};
   const voltage = voltages[substation.vi] || {};
-  const title = substation.name || (substation.ref ? `Substation ${substation.ref}` : 'Substation');
-  details.push(`⚡ ${formatKilovolts(voltage.v)}${
-    voltage.all?.length > 1 ? ` · mapped as ${voltage.raw}` : ''
-  }`);
-  details.push(`▣ ${substation.roleLabel || POWER_SUBSTATION_ROLE_UNSTATED}`);
+  const title = substation.name
+    || (substation.ref ? m.card.substationTitle(substation.ref) : m.card.substationFallbackTitle);
+  details.push(m.card.voltage(
+    formatKilovolts(voltage.v),
+    voltage.all?.length > 1 ? m.card.voltageMapped(voltage.raw) : '',
+  ));
+  // The role travels on the record, labelled by the feed when the payload was
+  // projected; a payload built in another language still reads here.
+  details.push(`▣ ${substationRoleLabel(substation.role)}`);
   const operator = operatorOf(substation);
   if (operator) details.push(`🏢 ${operator}`);
   if (substation.ref) details.push(`# ${substation.ref}`);
-  details.push('Position is the mapped yard’s centre');
+  details.push(m.card.yardCentre);
   details.push('© OpenStreetMap contributors (ODbL 1.0)');
   return [title, ...details].join('\n');
 }
@@ -552,7 +567,7 @@ export function createPowerSelectedOverlayEntry(record, payload) {
 export function createSubstationOverlayEntry(substation, position, payload = {}) {
   const voltage = payload.voltages?.[substation.vi] || {};
   const tier = powerTierById(voltage.tier);
-  const name = substation.name || `Poste ${substation.ref || ''}`.trim();
+  const name = substation.name || messages().substationFallbackLabel(substation.ref || '').trim();
   return {
     id: `${POWER_GRID_LABEL_PREFIX}${substation.id}`,
     position,
@@ -1976,6 +1991,7 @@ function collectDetectableObjects(options = {}) {
     result.push({
       position: record.position,
       sourceId: record.id,
+      // i18n-ignore-next-line — a synthetic id for the detection rail, not a label.
       id: String(record.substation.name || record.substation.ref || 'POSTE')
         .toUpperCase().slice(0, 22),
       type: Number.isFinite(voltage.v) ? `${Math.round(voltage.v / 1000)}KV` : 'SUB',
@@ -2004,51 +2020,49 @@ function nationalBandKm() {
  * @returns {string}
  */
 function nationalLoadingLabel() {
-  const ceilingKm = Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000);
-  if (_status === 'zoom-in') {
-    return `Réseau national : France seulement. Ailleurs, zoome sous ${ceilingKm} km`;
-  }
+  const m = messages().row;
+  const ceiling = formatInteger(Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000));
+  if (_status === 'zoom-in') return m.nationalZoomIn(ceiling);
   const parts = [];
   if (_nationalBand?.id === 'national') {
-    parts.push(`Réseau national · ${formatGridKmFr(nationalBandKm())} de lignes 400 et 225 kV`);
-    parts.push('le 63/90 kV apparaît sous 600 km');
+    parts.push(m.nationalBackbone(formatGridKmFr(nationalBandKm())));
+    parts.push(m.nationalBackboneMore);
   } else {
-    parts.push(`Réseau national · ${formatGridKmFr(nationalBandKm())} de lignes haute tension`);
-    parts.push(`pylônes et postes nommés sous ${ceilingKm} km`);
+    parts.push(m.nationalAll(formatGridKmFr(nationalBandKm())));
+    parts.push(m.nationalAllMore(ceiling));
   }
   return parts.join(' · ');
 }
 
 function buildLoadingLabel() {
+  const m = messages().row;
   if (_loading) {
-    return _national && nationalCoversView()
-      ? 'affinage du tracé exact pour cette vue…'
-      : 'loading the mapped grid for this view...';
+    return _national && nationalCoversView() ? m.refining : m.loading;
   }
   if (!_payload && _national && _status !== 'error') {
     const label = nationalLoadingLabel();
-    return _localError ? `${label} · détail local indisponible, tracé national affiché` : label;
+    return _localError ? `${label}${m.localUnavailable}` : label;
   }
   if (_status === 'zoom-in') {
-    return `Zoome sous ${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km pour charger le réseau cartographié`;
+    return m.zoomIn(formatInteger(Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)));
   }
-  if (_status === 'error') return _error || 'unavailable';
-  if (_status === 'empty') return 'nothing high-voltage mapped in this view';
+  if (_status === 'error') return _error || m.unavailable;
+  if (_status === 'empty') return m.empty;
   const stats = _payload?.stats;
   if (!stats) return '';
-  const parts = [`${formatGridKm(stats.lengthKm)} of mapped route`];
-  if (stats.substations) parts.push(`${stats.substations} substations`);
-  if (_pylonIds.length) parts.push(`${_pylonIds.length} pylons`);
+  const parts = [m.mappedRoute(formatGridKm(stats.lengthKm))];
+  if (stats.substations) parts.push(m.substations(stats.substations));
+  if (_pylonIds.length) parts.push(m.pylons(_pylonIds.length));
   const truncated = Object.entries(_payload?.saturated || {})
     .filter(([, value]) => value)
     .map(([key]) => key);
-  if (truncated.length) parts.push(`${truncated.join(' + ')} truncated — zoom in`);
-  if (_stale) parts.push('serving cached geometry');
-  if (_localError) parts.push('refresh failed, showing the last answer');
+  if (truncated.length) parts.push(m.truncated(truncated.join(' + ')));
+  if (_stale) parts.push(m.cached);
+  if (_localError) parts.push(m.refreshFailed);
   // LAST, and phrased as what the operator is looking at rather than as an
   // instruction: the grid on screen is real, it is simply the last box asked
   // for, and the camera has since moved off it.
-  if (_status === 'out-of-gate') parts.push('grid held from the last framed view');
+  if (_status === 'out-of-gate') parts.push(m.heldView);
   return parts.join(' · ');
 }
 
@@ -2077,21 +2091,16 @@ function pylonLegendNote() {
     if (!stats || !(stats.lengthKm > 0) || !Number.isFinite(stats.undergroundKm)) return '';
     const undergroundShare = stats.undergroundKm / stats.lengthKm;
     if (undergroundShare >= 0.98) {
-      return 'No pylons here, and none are missing: '
-        + `${Math.round(undergroundShare * 100)}% of the mapped grid in this view runs `
-        + 'UNDERGROUND, which is how a dense city is fed. A cable has no pylons, '
-        + 'and the dashed strokes are the cable.';
+      return messages().pylonNote.allUnderground(
+        formatPercent(Math.round(undergroundShare * 100), { locale: 'en' }),
+      );
     }
     return '';
   }
-  const parts = [
-    `Pylons: one drawn per ${formatSpacing(_pylonSpacingM)} of mapped overhead route, `
-    + 'thinning as you climb and walking back down to every mapped vertex as you descend.',
-    'Each one stands on a node OpenStreetMap has surveyed — never interpolated between two.',
-  ];
+  const m = messages().pylonNote;
+  const parts = [m.spacing(formatSpacing(_pylonSpacingM)), m.surveyed];
   if (_towersShown && Number.isFinite(_payload?.stats?.towers) && _payload.stats.towers > 0) {
-    parts.push(`${_payload.stats.towers} of the nodes in view also carry a pylon record `
-      + '(reference, design, height where it was measured); click one to read it.');
+    parts.push(m.records(formatInteger(_payload.stats.towers, { locale: 'en' })));
   }
   return parts.join(' ');
 }
@@ -2155,25 +2164,28 @@ function renderDiagnostics() {
 function nationalRowControls() {
   const shown = _nationalBand?.strokeTiers || [];
   const legend = [];
+  const m = messages().nationalLegend;
   for (const tier of _national?.tiers || []) {
     if (shown.length && !shown.includes(tier.id)) continue;
-    const parts = [POWER_GRID_NATIONAL_TIER_BLURBS[tier.id] || tier.blurb];
-    if (tier.lengthKm) parts.push(`${formatGridKmFr(tier.lengthKm)} cartographiés en France`);
-    if (tier.undergroundKm) parts.push(`dont ${formatGridKmFr(tier.undergroundKm)} en souterrain, en tirets`);
-    if (tier.substations) parts.push(`${tier.substations} postes`);
+    const parts = [nationalTierBlurb(tier.id) || tier.blurb];
+    if (tier.lengthKm) parts.push(m.mappedInFrance(formatGridKmFr(tier.lengthKm)));
+    if (tier.undergroundKm) parts.push(m.underground(formatGridKmFr(tier.undergroundKm)));
+    if (tier.substations) parts.push(m.substations(formatInteger(tier.substations)));
     legend.push({
       label: tier.label,
       color: tier.color,
       count: tier.strokes + tier.substations,
-      blurb: `${parts.join(' · ')}. Tracé au sol : la route cartographiée, pas la hauteur des câbles.`,
+      blurb: m.blurb(parts.join(' · ')),
     });
   }
   const age = powerGridNationalAgeDays(_national);
   const base = _national?.osmBase ? String(_national.osmBase).slice(0, 10) : null;
   const note = [
-    `Réseau national OpenStreetMap${base ? ` (état du ${base}${Number.isFinite(age) && age > 60 ? `, ${age} jours` : ''})` : ''},`
-      + ` simplifié à ${_national?.toleranceM ?? 50} m près.`,
-    `Sous ${Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000)} km, la vue charge le tracé exact, les postes nommés et les pylônes.`,
+    m.noteBase(
+      base ? m.noteState(base, Number.isFinite(age) && age > 60 ? m.noteAge(formatInteger(age)) : '') : '',
+      formatInteger(_national?.toleranceM ?? 50),
+    ),
+    m.noteZoom(formatInteger(Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000))),
   ];
   return { chips: [], legend, note: note.join(' ') };
 }
@@ -2459,19 +2471,19 @@ const powerGridLayer = {
   getRowControls() {
     if (!_payload && _national) return nationalRowControls();
     const legend = [];
+    const m = messages().legend;
     for (const tier of _payload?.tiers || []) {
-      const parts = [tier.blurb];
-      if (tier.lengthKm) parts.push(`${formatGridKm(tier.lengthKm)} of mapped route in view`);
-      if (tier.undergroundKm) {
-        parts.push(`${formatGridKm(tier.undergroundKm)} of it underground, drawn dashed`);
-      }
-      if (tier.substations) parts.push(`${tier.substations} substations`);
+      // The tier's own sentence is labelled by the feed when the payload is
+      // projected; re-read here so an English page gets the English one.
+      const parts = [powerTierBlurb(tier.id) || tier.blurb];
+      if (tier.lengthKm) parts.push(m.inView(formatGridKm(tier.lengthKm)));
+      if (tier.undergroundKm) parts.push(m.underground(formatGridKm(tier.undergroundKm)));
+      if (tier.substations) parts.push(m.substations(formatInteger(tier.substations, { locale: 'en' })));
       legend.push({
         label: tier.label,
         color: tier.color,
         count: tier.strokes + tier.substations,
-        blurb: `${parts.join(' · ')}. Routes are drawn on the ground — the mapped route, `
-          + 'not the conductor height, which OpenStreetMap does not publish.',
+        blurb: m.blurb(parts.join(' · ')),
       });
     }
     return { chips: [], legend, note: pylonLegendNote() };

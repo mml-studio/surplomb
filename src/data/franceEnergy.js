@@ -30,6 +30,9 @@ import {
   prismRow,
   prismTally,
 } from './choroplethPrism.js';
+import { formatInteger } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages from './franceEnergy.i18n.js';
 
 /**
  * éCO2mix — where French electricity actually comes from, right now.
@@ -451,6 +454,8 @@ export const UNCOVERED_REGIONS = Object.freeze(['94']);
  *
  * 2016 boundaries, matching `code_insee_region` and {@link REGION_DEPARTEMENTS}.
  */
+// i18n-ignore-start — région names as éCO2mix publishes them: DATA, and
+// proper nouns in both languages.
 export const REGION_NAMES = Object.freeze({
   11: 'Île-de-France',
   24: 'Centre-Val de Loire',
@@ -470,6 +475,7 @@ export const REGION_NAMES = Object.freeze({
   93: "Provence-Alpes-Côte d'Azur",
   94: 'Corse',
 });
+// i18n-ignore-end
 
 
 /**
@@ -484,21 +490,42 @@ export const REGION_NAMES = Object.freeze({
  * sign of a 0.3 MW balance is rounding, not a direction, and painting it teal
  * or amber would assert a flow nobody measured. It is drawn slate, and on the
  * captured snapshot it never fires — the smallest real balance is 1 544 MW.
+ *
+ * Its words are the FRENCH of the catalog next door, read from the definition
+ * rather than resolved for a locale: the palette is frozen once at load, while
+ * everything a reader sees is re-read at draw time through
+ * {@link balanceWords}. Reading the definition keeps the two spellings from
+ * drifting without making this module resolve a locale while it loads.
  */
+const WORDS = messages.definition;
+
 export const BALANCE_STYLES = Object.freeze({
   exporter: Object.freeze({
-    key: 'exporter', verb: 'EXPORTE', color: '#2ee6a8', label: 'Excédentaire',
-    blurb: 'Produit plus qu’elle ne consomme',
+    key: 'exporter', verb: WORDS.balance.exporter.verb.fr, color: '#2ee6a8',
+    label: WORDS.balance.exporter.label.fr,
+    blurb: WORDS.balance.exporter.blurb.fr,
   }),
   balanced: Object.freeze({
-    key: 'balanced', verb: 'ÉQUILIBRÉE', color: '#8fa3b8', label: 'Équilibrée',
-    blurb: 'Produit ce qu’elle consomme, à moins d’un mégawatt près',
+    key: 'balanced', verb: WORDS.balance.balanced.verb.fr, color: '#8fa3b8',
+    label: WORDS.balance.balanced.label.fr,
+    blurb: WORDS.balance.balanced.blurb.fr,
   }),
   importer: Object.freeze({
-    key: 'importer', verb: 'IMPORTE', color: '#ff9b3d', label: 'Déficitaire',
-    blurb: 'Consomme plus qu’elle ne produit',
+    key: 'importer', verb: WORDS.balance.importer.verb.fr, color: '#ff9b3d',
+    label: WORDS.balance.importer.label.fr,
+    blurb: WORDS.balance.importer.blurb.fr,
   }),
 });
+
+/**
+ * The three words a balance class is drawn with, in the page's language.
+ * @param {string|null|undefined} key A {@link BALANCE_STYLES} key.
+ * @returns {{verb:string, label:string, blurb:string}}
+ */
+export function balanceWords(key) {
+  const m = messages();
+  return m.balance[String(key)] || m.balance.balanced;
+}
 
 /**
  * Below this many megawatts a balance has no direction worth painting.
@@ -527,7 +554,14 @@ export const ENERGY_PRISM_DOMAIN_MAX_MW = 12_000;
  * is a nominal ladder riding on `choroplethPrism`'s numeric binning, and it is
  * the honest use of the machinery: the colour answers "which way", never "how
  * much". "How much" is the height, and it is |MW|.
+ *
+ * ITS LABELS ARE NEVER DRAWN BY THIS LAYER, which is why they stay French
+ * where they stand. `choroplethPrism` builds a shared height row and colour
+ * ladder from them; this layer publishes two rows of its own instead
+ * ({@link energyPrismLegend}), and takes their words from the catalog.
+ * Translating the shared rows belongs to whoever owns `choroplethPrism.js`.
  */
+// i18n-ignore-start — labels this layer never draws; see the paragraph above.
 export const ENERGY_PRISM_SCALE = createPrismScale({
   id: 'france-energy',
   domainMax: ENERGY_PRISM_DOMAIN_MAX_MW,
@@ -548,6 +582,7 @@ export const ENERGY_PRISM_SCALE = createPrismScale({
     `${BALANCE_STYLES.importer.label} — importe`,
   ],
 });
+// i18n-ignore-end
 
 /**
  * Reference points for the border arcs — NOT interconnection sites.
@@ -1034,10 +1069,10 @@ export function unmeasuredRegions(records) {
  */
 export function formatMegawatts(mw) {
   if (!Number.isFinite(mw)) return '— MW';
-  // `toLocaleString('fr-FR')` groups with U+202F on modern ICU and U+00A0 on
-  // older ones. Both are normalised to a plain space so the label measures
-  // and wraps predictably in the overlay's text layout.
-  return `${Math.round(Math.abs(mw)).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} MW`;
+  // `plainSpaces` because French ICU groups with U+202F on modern versions and
+  // U+00A0 on older ones. Both become a plain space, so the label measures and
+  // wraps predictably in the overlay's text layout.
+  return `${formatInteger(Math.abs(mw), { plainSpaces: true })} MW`;
 }
 
 /**
@@ -1421,8 +1456,13 @@ export function borderArrowRotation(scene, arc, previous = 0) {
  * @returns {string}
  */
 export function regionLabelText(record) {
-  if (!record?.balance) return `${record?.name ?? ''} · SOLDE NON PUBLIÉ`;
-  return `${record.name} · ${record.balance.style.verb} ${formatMegawatts(record.netPhysical)}`;
+  const m = messages();
+  if (!record?.balance) return m.region.unpublished(record?.name ?? '');
+  return m.region.balance(
+    record.name,
+    balanceWords(record.balance.style?.key).verb,
+    formatMegawatts(record.netPhysical),
+  );
 }
 
 /**
@@ -1436,12 +1476,29 @@ export function regionLabelText(record) {
  */
 export function borderLabelText(arc) {
   const importing = Boolean(arc?.importing);
-  const direction = importing ? 'depuis' : 'vers';
-  // The deadband admits a 1 MW flow, so the participle has to agree.
+  // The deadband admits a 1 MW flow, so the French participle has to agree;
+  // the rounded magnitude goes to the message, which knows its own rule.
   const mw = Number(arc?.mw);
-  const plural = !Number.isFinite(mw) || Math.round(Math.abs(mw)) >= 2 ? 's' : '';
-  const verb = `${importing ? 'importé' : 'exporté'}${plural}`;
-  return `${formatMegawatts(arc?.mw)} ${verb} ${direction} ${arc?.label}`;
+  const magnitude = Number.isFinite(mw) ? Math.round(Math.abs(mw)) : Number.NaN;
+  const m = messages();
+  const market = marketLabel(arc?.key, arc?.label);
+  return (importing ? m.border.imported : m.border.exported)(
+    formatMegawatts(arc?.mw), magnitude, market,
+  );
+}
+
+/**
+ * The name of a market area, by éCO2mix's own key.
+ *
+ * The feed publishes a French label beside the key; it is the FALLBACK, for a
+ * market RTE might add after this build, and never the first answer.
+ * @param {string|null|undefined} key
+ * @param {string|null|undefined} published The label carried by the payload.
+ * @returns {string}
+ */
+export function marketLabel(key, published = null) {
+  const known = messages().markets[String(key ?? '')];
+  return known || String(published ?? '').trim() || String(key ?? '');
 }
 
 /**
@@ -1555,12 +1612,18 @@ export function summarizeNational(national) {
   };
 }
 
-/** French grouping for a plain integer, via the platform's own fr-FR rules. */
-function fr(value) {
-  // Same normalisation as `formatMegawatts`: ICU groups with U+202F or U+00A0
-  // depending on its version, and both are flattened so the legend measures and
-  // wraps identically everywhere.
-  return Number(value).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ');
+/**
+ * The name of a generation type, by the éCO2mix field it is published under.
+ *
+ * Like {@link marketLabel}: the key decides, and the French label the feed
+ * carries beside it is only the fallback for a filière added upstream after
+ * this build.
+ * @param {{key?: string, label?: string}|null|undefined} entry One `mix` entry.
+ * @returns {string}
+ */
+export function filiereLabel(entry) {
+  const known = messages().filieres[String(entry?.key ?? '')];
+  return known || String(entry?.label ?? '').trim() || String(entry?.key ?? '');
 }
 
 /**
@@ -1604,17 +1667,19 @@ export function energyPrismLegend(records) {
   })), scale);
 
   const entries = [];
+  const m = messages();
   // Index 0 and 2 of the ratio ladder, never 1: the middle class is « sous
   // 1 MW », which is a deadband and not a thing a reader came to learn.
   for (const index of [0, 2]) {
     const count = tally.ratioCounts[index] || 0;
     if (!count) continue;
-    const spec = index === 0 ? BALANCE_STYLES.exporter : BALANCE_STYLES.importer;
+    const key = index === 0 ? 'exporter' : 'importer';
+    const words = balanceWords(key);
     entries.push({
-      label: scale.ratioClassLabels[index],
+      label: m.legend[key](words.label),
       color: scale.ratioColors[index],
       count,
-      blurb: spec.blurb,
+      blurb: words.blurb,
     });
   }
   return entries;
@@ -1646,7 +1711,7 @@ export function mapAnalystRecord(record, index = 0) {
     // against the figure it was built from.
     prismHeightM: num(energyPrismRow(record).heightM),
     balance: text(record?.balance?.style?.key),
-    topFiliere: record?.mix?.length ? text(record.mix[0].label) : null,
+    topFiliere: record?.mix?.length ? text(filiereLabel(record.mix[0])) : null,
     observedAt: text(record?.at),
     lat: record?.anchor ? record.anchor[1] : null,
     lon: record?.anchor ? record.anchor[0] : null,
@@ -1818,6 +1883,8 @@ export function createFranceEnergyLayer({
         console.warn('[Data:Energy FR] Market outlines unavailable:', error);
       }
 
+      // The data source's name is an internal handle, never drawn.
+      // i18n-ignore-next-line
       const source = new Cesium.CustomDataSource('éCO2mix — mix électrique français');
       source.show = _enabled;
 
@@ -2250,7 +2317,7 @@ export function createFranceEnergyLayer({
         await ensureShapes();
       } catch (error) {
         console.warn('[Data:Energy FR] Département polygons unavailable:', error);
-        _lastError = 'Département polygons unavailable';
+        _lastError = messages().errors.shapes;
         return false;
       }
       try {
@@ -2395,7 +2462,7 @@ export function createFranceEnergyLayer({
         netCommercialExportMw: Number.isFinite(_national.netCommercial)
           ? -_national.netCommercial
           : null,
-        topFiliere: _national.topFiliere ? _national.topFiliere.label : null,
+        topFiliere: _national.topFiliere ? filiereLabel(_national.topFiliere) : null,
         borders: _arcs.length,
         // Licence Ouverte 2.0 obliges the producer AND the last-update date.
         updateTime: _national.at,

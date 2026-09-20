@@ -84,6 +84,9 @@ export const QUALICHARGE_DYNAMIC_URL = 'https://proxy.transport.data.gouv.fr/res
 export const QUALICHARGE_DATASET_PAGE = 'https://www.data.gouv.fr/datasets/infrastructures-de-recharge-pour-vehicules-electriques-donnees-ouvertes';
 
 export const QUALICHARGE_LICENCE = 'Licence Ouverte 2.0';
+// The publisher's own attribution string, as the licence requires it: a
+// proper noun in both languages.
+// i18n-ignore-next-line
 export const QUALICHARGE_ATTRIBUTION = 'QualiCharge — Direction générale de l’énergie et du climat, via transport.data.gouv.fr';
 
 /**

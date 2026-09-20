@@ -1,3 +1,8 @@
+import messages from './damsPack.i18n.js';
+
+/** The catalog's own copy, for the frozen tables below. */
+const WORDS = messages.definition;
+
 /*
  * DAMS PACK — the shared vocabulary of the bundled OpenStreetMap dam snapshot.
  *
@@ -92,6 +97,7 @@
  */
 
 import { sizeRingGlyph } from './sizeLegendGlyphs.js';
+import { formatInteger } from '../i18n/format.js';
 
 /**
  * The Overpass tag filters the pack is extracted with. The selection policy IS
@@ -153,22 +159,22 @@ export const DAM_TAG_FILTERS = Object.freeze([
 export const DAM_STRUCTURES = Object.freeze([
   Object.freeze({
     key: 'dam',
-    label: 'Barrage',
-    blurb: 'Barre le cours d’eau et le retient.',
+    label: WORDS.structures.dam.label.fr,
+    blurb: WORDS.structures.dam.blurb.fr,
   }),
   Object.freeze({
     key: 'dyke',
-    label: 'Digue',
+    label: WORDS.structures.dyke.label.fr,
     // The limit of what OSM can say, stated where a reader will see it: there
     // is no tag anywhere that separates a flood-defence dyke from a pond bund
     // (`dyke:type` has ONE use worldwide), and the register that does cover
     // French flood dykes — SIOUH, décret 2015-526 — is not open bulk data.
-    blurb: 'Longe l’eau. Protection ou étang : inconnu.',
+    blurb: WORDS.structures.dyke.blurb.fr,
   }),
   Object.freeze({
     key: 'dam+dyke',
-    label: 'Barrage-digue',
-    blurb: 'Les deux à la fois, selon OpenStreetMap.',
+    label: WORDS.structures['dam+dyke'].label.fr,
+    blurb: WORDS.structures['dam+dyke'].blurb.fr,
   }),
 ]);
 
@@ -368,6 +374,8 @@ export function damHeightM(tags) {
  * two languages (`beton` beside `concrete`); six families is what it can
  * honestly support, and anything else yields '' rather than a guess.
  */
+// i18n-ignore-start — the family words written into dams.geojson; a card
+// labels them at draw time through `damMaterialLabel()`.
 export const DAM_MATERIAL_FAMILIES = Object.freeze({
   concrete: 'béton',
   earth: 'terre',
@@ -376,6 +384,17 @@ export const DAM_MATERIAL_FAMILIES = Object.freeze({
   metal: 'métal',
   wood: 'bois',
 });
+// i18n-ignore-end
+
+/**
+ * That family, in the page's language.
+ * @param {string|null|undefined} family A value of {@link DAM_MATERIAL_FAMILIES}.
+ * @returns {string} The pack's own word for a family this build does not know.
+ */
+export function damMaterialLabel(family) {
+  const raw = String(family ?? '');
+  return messages().materials[raw] || raw;
+}
 
 /** Upper-cased substrings, most specific first. `''` when nothing matches. */
 const MATERIAL_PATTERNS = Object.freeze([
@@ -598,7 +617,7 @@ export function damFeatureProperties({ tags, osm, spanM = null }) {
 export const DAM_TIERS = Object.freeze([
   Object.freeze({
     key: 'major',
-    label: 'Grand barrage',
+    label: WORDS.tiers.major.label.fr,
     color: '#9ad9ff',
     priority: 240,
     // Readable from orbit: the shared local-layer ceiling, unchanged. The mark
@@ -606,20 +625,18 @@ export const DAM_TIERS = Object.freeze([
     // promise.
     cardMaxDistance: 14_000_000,
     markerMaxDistance: 14_000_000,
-    blurb: 'Au moins 15 m de haut — le seuil international du grand barrage — '
-      + 'ou exploité pour l’électricité (EDF, CNR, SHEM), ou nommé et long de 300 m.',
+    blurb: WORDS.tiers.major.blurb.fr,
   }),
   Object.freeze({
     key: 'named',
-    label: 'Barrage nommé',
+    label: WORDS.tiers.named.label.fr,
     color: '#3fa4e0',
     priority: 110,
     // Regional scale: the name arrives once a région fills the screen, the
     // mark about 2.5× earlier so it precedes its own label.
     cardMaxDistance: 1_200_000,
     markerMaxDistance: 3_000_000,
-    blurb: 'Porte un nom dans OpenStreetMap, sans hauteur, exploitant ni '
-      + 'envergure qui le hisse au-dessus.',
+    blurb: WORDS.tiers.named.blurb.fr,
   }),
   Object.freeze({
     key: 'minor',
@@ -627,7 +644,7 @@ export const DAM_TIERS = Object.freeze([
     // so this tier has never contained a single OSM-tagged weir — the label
     // named a thing the pack does not hold. It names the tier's actual rule
     // instead: no name, no height, no operator.
-    label: 'Petit ouvrage',
+    label: WORDS.tiers.minor.label.fr,
     color: '#2b6c96',
     priority: 30,
     // Départemental scale for the card. The MARK is no longer always drawn:
@@ -635,8 +652,7 @@ export const DAM_TIERS = Object.freeze([
     // 5 744 nameless ouvrages are the wall this layer was reported for.
     cardMaxDistance: 200_000,
     markerMaxDistance: 900_000,
-    blurb: 'Sans nom, sans hauteur et sans exploitant : sorties d’étang et '
-      + 'ouvrages de dérivation, pour l’essentiel.',
+    blurb: WORDS.tiers.minor.blurb.fr,
   }),
 ]);
 
@@ -779,26 +795,31 @@ export function damGroupVisible(groupKey, params = {}) {
  * without losing them, and `local-dams` keeps its single share token.
  */
 export const DAM_STRUCTURE_CHIPS = Object.freeze([
+  // `label` and `title` are GETTERS, and that is what makes these chips
+  // bilingual at all: the strip is built by `localLayers.js`, which reads the
+  // two properties straight off these objects. A getter resolves the page's
+  // language when the strip is drawn, where a plain string would have frozen
+  // French into the table at module load.
   Object.freeze({
     id: 'all',
-    label: 'TOUS',
+    get label() { return messages().chips.all.label; },
     keep: null,
-    title: 'Barrages et digues ensemble',
+    get title() { return messages().chips.all.title; },
   }),
   Object.freeze({
     id: 'dams',
-    label: 'BARRAGES',
+    get label() { return messages().chips.dams.label; },
     // The ambiguous double-tagged features are kept by BOTH chips rather than
     // assigned to one: they genuinely are both, and hiding them from either
     // view would make a filter lie about what it excludes.
     keep: Object.freeze(['dam', 'dam+dyke', '']),
-    title: 'Ouvrages en travers du cours d’eau (et non classés)',
+    get title() { return messages().chips.dams.title; },
   }),
   Object.freeze({
     id: 'dykes',
-    label: 'DIGUES',
+    get label() { return messages().chips.dykes.label; },
     keep: Object.freeze(['dyke', 'dam+dyke']),
-    title: 'Remblais le long de l’eau — protection ou étang, OSM ne dit pas',
+    get title() { return messages().chips.dykes.title; },
   }),
 ]);
 
@@ -846,24 +867,26 @@ export function damTierLegend(tally) {
     byKind.set(kind, seen);
   }
   const legend = [];
+  const m = messages();
   const row = (label, color, blurb, bucket) => {
     if (!bucket?.total) return;
     const hidden = bucket.total - bucket.visible;
     legend.push({
       label,
       color,
-      blurb: hidden > 0 ? `${blurb} — ${hidden} masqué${hidden > 1 ? 's' : ''}` : blurb,
+      blurb: hidden > 0 ? m.legend.hidden(blurb, hidden) : blurb,
       count: bucket.visible,
     });
   };
   // Structure first: it is the distinction this layer was getting wrong.
   for (const structure of DAM_STRUCTURES) {
-    row(structure.label, STRUCTURE_RAMPS[structure.key].named, structure.blurb, byKind.get(structure.key));
+    const words = m.structures[structure.key];
+    row(words.label, STRUCTURE_RAMPS[structure.key].named, words.blurb, byKind.get(structure.key));
   }
   row(
-    'Non classé',
+    m.unclassified.label,
     STRUCTURE_RAMPS[''].named,
-    'Hors de France : type inconnu.',
+    m.unclassified.blurb,
     byKind.get(''),
   );
   // The TIER rows used to follow, one per rung, each with its own blue. They
@@ -904,12 +927,15 @@ export function damTierLegend(tally) {
  * `count` is the shipped pack's population, quoted so a re-extraction that
  * moves it shows up as a stale comment.
  */
+// i18n-ignore-start — the frozen bands' own names, printed nowhere: the key
+// stopped carrying them and the card prints the measured metres instead.
 export const DAM_SPAN_CLASSES = Object.freeze([
   Object.freeze({ key: 'span1000', minM: 1000, label: '1 000 m et plus', pixelSize: 18, count: 116 }),
   Object.freeze({ key: 'span300', minM: 300, label: '300 – 999 m', pixelSize: 13, count: 439 }),
   Object.freeze({ key: 'span100', minM: 100, label: '100 – 299 m', pixelSize: 9, count: 2132 }),
   Object.freeze({ key: 'span25', minM: DAM_MIN_SPAN_M, label: '25 – 99 m', pixelSize: 6, count: 2641 }),
 ]);
+// i18n-ignore-end
 
 /**
  * The class for a structure whose span was never measured — 2 104 features,
@@ -921,7 +947,7 @@ export const DAM_SPAN_CLASSES = Object.freeze([
  */
 export const DAM_SPAN_UNKNOWN = Object.freeze({
   key: 'nospan',
-  label: 'Longueur inconnue',
+  label: WORDS.legend.spanUnknown.fr,
   pixelSize: 8,
   count: 1512,
 });
@@ -1037,10 +1063,10 @@ export function damSpanLegend(tally) {
   }
   if (!loaded) return [];
   return [{
-    label: DAM_SPAN_UNKNOWN.label,
+    label: messages().legend.spanUnknown,
     color: DAM_SIZE_SWATCH_COLOR,
     glyph: sizeRingGlyph(),
-    blurb: 'Anneau creux : OpenStreetMap ne la publie pas.',
+    blurb: messages().legend.spanUnknownBlurb,
     count: drawn,
   }];
 }
@@ -1061,15 +1087,15 @@ export function damLabelPriority(props) {
 }
 
 /**
- * Format a metre count the way French reads it — `1 205 m`, with an ordinary
- * space. `toLocaleString` emits U+202F/U+00A0 depending on the ICU build, and
- * an invisible character that varies by runtime is a test that fails on one
- * machine and passes on another.
+ * Format a metre count the way the reader's language does — `1 205 m` or
+ * `1,205 m`, with an ordinary space between groups: French ICU emits
+ * U+202F/U+00A0 depending on the build, and an invisible character that varies
+ * by runtime is a test that fails on one machine and passes on another.
  * @param {number} metres
  * @returns {string}
  */
 function metresText(metres) {
-  return `${Math.round(metres).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} m`;
+  return `${formatInteger(metres, { plainSpaces: true })} m`;
 }
 
 /**
@@ -1161,10 +1187,11 @@ export function damCardDetails(props) {
   // the first word did not.
   const operator = text(source.operator);
   const output = Number(source.outputMw);
+  const m = messages();
   const identity = [
-    source.abandoned === true ? 'Désaffecté' : '',
+    source.abandoned === true ? m.card.abandoned : '',
     operator && operator.toLocaleLowerCase('fr-FR') !== title ? operator : '',
-    !operator && source.hydro === true ? 'hydroélectrique' : '',
+    !operator && source.hydro === true ? m.card.hydro : '',
     Number.isFinite(output) && output > 0
       ? `${output >= 10 ? Math.round(output) : output} MW`
       : '',
@@ -1176,9 +1203,9 @@ export function damCardDetails(props) {
   const height = Number(source.heightM);
   const span = Number(source.spanM);
   const shape = [
-    Number.isFinite(height) && height > 0 ? `${metresText(height)} de haut` : '',
-    Number.isFinite(span) && span >= DAM_MIN_SPAN_M ? `${metresText(span)} de long` : '',
-    text(source.material),
+    Number.isFinite(height) && height > 0 ? m.card.high(metresText(height)) : '',
+    Number.isFinite(span) && span >= DAM_MIN_SPAN_M ? m.card.long(metresText(span)) : '',
+    damMaterialLabel(text(source.material)),
   ].filter(Boolean).join(' · ');
   if (shape) lines.push(shape);
 

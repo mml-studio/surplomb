@@ -63,6 +63,10 @@
  * turbines running backwards, published as a negative, and stacking it as a
  * generation filière would double-count it against `hydraulique`.
  */
+// i18n-ignore-start — RTE's own labels, carried in the payload as DATA. This
+// module runs on the SERVER (vite.config.js), which has no reader and no
+// locale; the browser labels each entry by its `key` (franceEnergy.i18n.js)
+// and falls back to these only for a filière RTE adds after this build.
 export const NATIONAL_FILIERES = Object.freeze([
   Object.freeze({ key: 'nucleaire', field: 'nucleaire', label: 'Nucléaire', lowCarbon: true }),
   Object.freeze({ key: 'hydraulique', field: 'hydraulique', label: 'Hydraulique', lowCarbon: true }),
@@ -86,6 +90,7 @@ export const REGIONAL_FILIERES = Object.freeze([
   Object.freeze({ key: 'bioenergies', field: 'bioenergies', label: 'Bioénergies', lowCarbon: true }),
   Object.freeze({ key: 'thermique', field: 'thermique', label: 'Thermique fossile', lowCarbon: false }),
 ]);
+// i18n-ignore-end
 
 /**
  * The five commercial border balances, in ODRÉ's field names.
@@ -94,6 +99,8 @@ export const REGIONAL_FILIERES = Object.freeze([
  * the German and Belgian balances together — so it is carried as one entry
  * with both countries named, never split into an invented pair.
  */
+// i18n-ignore-start — the market areas as RTE names them: payload DATA, keyed
+// by `key`, relabelled in the browser. Same reason as the filières above.
 export const BORDER_EXCHANGES = Object.freeze([
   Object.freeze({ key: 'angleterre', field: 'ech_comm_angleterre', label: 'Angleterre' }),
   Object.freeze({ key: 'espagne', field: 'ech_comm_espagne', label: 'Espagne' }),
@@ -105,6 +112,7 @@ export const BORDER_EXCHANGES = Object.freeze([
     label: 'Allemagne + Belgique',
   }),
 ]);
+// i18n-ignore-end
 
 /**
  * Coerce an ODRÉ numeric field to a finite number, or null.

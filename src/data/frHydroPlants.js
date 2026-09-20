@@ -17,11 +17,15 @@ import {
   HYDRO_TECHNOLOGY_ORDER,
   HYDRO_UNKNOWN_COLOR,
   HYDRO_UNKNOWN_TECH_LABEL,
+  hydroTechWords,
+  hydroUnknownTechLabel,
   loadFactor,
   techBucket,
   undecorateName,
 } from './frHydroFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatInteger, formatNumber, formatPercent } from '../i18n/format.js';
+import messages from './frHydroPlants.i18n.js';
 
 /**
  * Centrales hydro — every hydro plant in France's national register, not just
@@ -151,8 +155,12 @@ const WORLD_HYDRO_URL = new URL('./local_data/world_hydro/plants.json', import.m
  */
 export const WORLD_HYDRO_COLOR = '#6f8fc9';
 
-/** Bucket label for the world half, in the legend and in `techBucket`'s place. */
-export const WORLD_HYDRO_TECH_LABEL = 'Hors registre français';
+/**
+ * Bucket label for the world half, in the legend and in `techBucket`'s place.
+ * The FRENCH copy, because it is a tally KEY; the legend row is drawn from
+ * the catalog, in the page's language.
+ */
+export const WORLD_HYDRO_TECH_LABEL = messages.definition.worldBucket.fr;
 
 /**
  * Project one shipped world record into the shape the layer draws.
@@ -263,10 +271,21 @@ export const FR_HYDRO_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
  * small ones.
  */
 export const FR_HYDRO_FLOORS = Object.freeze([
-  Object.freeze({ id: 'all', label: 'TOUT', kw: 0 }),
+  Object.freeze({ id: 'all', kw: 0 }),
+  // Two thresholds and a symbol: the same three characters in both languages.
   Object.freeze({ id: 'mw1', label: '≥ 1 MW', kw: 1000 }),
   Object.freeze({ id: 'mw10', label: '≥ 10 MW', kw: 10_000 }),
 ]);
+
+/**
+ * A floor chip's label: a threshold reads the same either way, and only the
+ * word for "everything" is translated.
+ * @param {{id:string, kw:number, label?:string}} floor
+ * @returns {string}
+ */
+export function hydroFloorLabel(floor) {
+  return floor?.label || messages().floors.all;
+}
 
 /**
  * Disc size in pixels.
@@ -324,13 +343,14 @@ export function hydroColor(plant) {
  */
 export function formatHydroPower(kw) {
   if (!Number.isFinite(kw)) return '— kW';
-  const fr = (value, digits) => value.toLocaleString('fr-FR', {
+  const n = (value, digits) => formatNumber(value, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).replace(/[\u00a0\u202f]/g, ' ');
-  if (kw >= 1_000_000) return `${fr(kw / 1_000_000, 2)} GW`;
-  if (kw >= 1000) return `${fr(kw / 1000, kw >= 100_000 ? 0 : 1)} MW`;
-  return `${fr(kw, 0)} kW`;
+    plainSpaces: true,
+  });
+  if (kw >= 1_000_000) return `${n(kw / 1_000_000, 2)} GW`;
+  if (kw >= 1000) return `${n(kw / 1000, kw >= 100_000 ? 0 : 1)} MW`;
+  return `${n(kw, 0)} kW`;
 }
 
 /**
@@ -340,13 +360,14 @@ export function formatHydroPower(kw) {
  */
 export function formatHydroEnergy(kwh) {
   if (!Number.isFinite(kwh)) return null;
-  const fr = (value, digits) => value.toLocaleString('fr-FR', {
+  const n = (value, digits) => formatNumber(value, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).replace(/[\u00a0\u202f]/g, ' ');
-  if (kwh >= 1_000_000) return `${fr(kwh / 1_000_000, 1)} GWh`;
-  if (kwh >= 1000) return `${fr(kwh / 1000, 0)} MWh`;
-  return `${fr(kwh, 0)} kWh`;
+    plainSpaces: true,
+  });
+  if (kwh >= 1_000_000) return `${n(kwh / 1_000_000, 1)} GWh`;
+  if (kwh >= 1000) return `${n(kwh / 1000, 0)} MWh`;
+  return `${n(kwh, 0)} kWh`;
 }
 
 /**
@@ -368,8 +389,20 @@ export function formatHydroEnergy(kwh) {
 export function hydroDisplayName(plant) {
   const name = undecorateName(plant?.name);
   if (name) return name;
-  const commune = plant?.commune ? ` à ${plant.commune}` : '';
-  return `Centrale hydraulique${commune}`;
+  const m = messages();
+  return m.unnamed(plant?.commune ? m.unnamedIn(plant.commune) : '');
+}
+
+/**
+ * The register's ISO commissioning day, as a reader writes it: `30/06/1966`
+ * in French, `Jun 30, 1966` in English. A value that is not an ISO day passes
+ * through untouched.
+ * @param {string|null|undefined} iso
+ * @returns {string}
+ */
+export function hydroDay(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? '').trim());
+  return match ? messages().day(match[1], match[2], match[3]) : String(iso ?? '').trim();
 }
 
 /** Ambient label text for one plant. */
@@ -384,15 +417,9 @@ export function hydroLabelText(plant) {
  * same dot, and a reader deciding whether to trust a marker within 200 m has to
  * be able to tell them apart.
  */
-export const MATCH_NOTES = Object.freeze({
-  name: 'appariée sur le nom',
-  'name-partial': 'appariée sur une partie du nom seulement — appariement faible',
-  power: 'appariée sur la puissance, seule candidate de la commune',
-  sole: 'seule centrale cartographiée de la commune, seule ligne au registre',
-  postesource: 'code de poste source publié des deux côtés',
-  toponyme: 'appariée sur le toponyme du plan IGN',
-  'insee-sole': 'seule centrale au plan IGN dans la commune, seule ligne au registre',
-});
+export function matchNote(matchedBy) {
+  return messages().match[String(matchedBy ?? '')] || null;
+}
 
 /**
  * WHICH OBJECT the coordinate actually is.
@@ -406,13 +433,9 @@ export const MATCH_NOTES = Object.freeze({
  * were drawn that way before the build learned to snap to the generating hall
  * instead, and the card now names which object it is pointing at.
  */
-export const GEOMETRY_NOTES = Object.freeze({
-  'ign-footprint': 'emprise du bâtiment levée par l’IGN',
-  'published-point': "point publié par l'exploitant",
-  outline: 'emprise cartographiée de la centrale',
-  generators: 'groupes cartographiés à l’intérieur de l’emprise — la salle des machines',
-  switchyard: 'le POSTE de raccordement, pas la salle des machines',
-});
+export function geometryNote(geometry) {
+  return messages().geometry[String(geometry ?? '')] || null;
+}
 
 /** Where the coordinate came from, in the reader's words. */
 export const SOURCE_NOTES = Object.freeze({
@@ -440,17 +463,17 @@ export const SOURCE_NOTES = Object.freeze({
  * @returns {string} Newline-separated; the first line is the title.
  */
 export function buildWorldHydroCard(plant) {
-  const lines = [plant?.name || 'Centrale hydroélectrique'];
+  const m = messages();
+  const lines = [plant?.name || m.world.fallbackName];
   lines.push(Number.isFinite(plant?.kw) && plant.kw > 0
-    ? `⚡ ${formatHydroPower(plant.kw)} installés`
-    : '⚡ puissance non publiée par OpenStreetMap');
+    ? m.card.installed(formatHydroPower(plant.kw))
+    : m.world.noPower);
   const identity = [
     plant?.operator || '',
-    Number.isFinite(plant?.builtYear) && plant.builtYear > 0 ? `mise en service ${plant.builtYear}` : '',
+    Number.isFinite(plant?.builtYear) && plant.builtYear > 0 ? m.world.commissioned(plant.builtYear) : '',
   ].filter(Boolean).join(' · ');
   if (identity) lines.push(`▸ ${identity}`);
-  lines.push('🌍 OpenStreetMap, hors registre français — un échantillon de 592 centrales, '
-    + 'pas un inventaire mondial');
+  lines.push(m.world.sample);
   return lines.join('\n');
 }
 
@@ -465,8 +488,9 @@ export function buildWorldHydroCard(plant) {
  * @returns {string} Newline-separated; the first line is the title.
  */
 export function buildHydroCard(plant, joins = null) {
+  const m = messages();
   const lines = [hydroDisplayName(plant)];
-  lines.push(`⚡ ${formatHydroPower(plant?.kw)} installés`);
+  lines.push(m.card.installed(formatHydroPower(plant?.kw)));
 
   const energy = formatHydroEnergy(plant?.energyKwh);
   if (energy) {
@@ -478,23 +502,20 @@ export function buildHydroCard(plant, joins = null) {
     const factor = loadFactor(plant?.kw, plant?.energyKwh);
     const share = factor === null
       ? ''
-      : ` — ${Math.round(factor * 100)} % de ce qu’elle produirait sans jamais s’arrêter`;
-    lines.push(`↻ ${energy} injectés sur les 12 derniers mois${share}`);
+      : m.card.loadShare(formatPercent(Math.round(factor * 100)));
+    lines.push(m.card.injected(energy, share));
   } else {
-    lines.push('↻ énergie injectée non publiée — ce n’est pas une centrale à l’arrêt');
+    lines.push(m.card.noEnergy);
   }
 
-  if (plant?.anonymous) {
-    lines.push('⊘ nom non publié — ODRÉ anonymise les petites installations privées');
-  }
+  if (plant?.anonymous) lines.push(m.card.anonymous);
 
-  const tech = plant?.techKey ? techBucket(plant) : null;
-  if (tech) {
-    const entry = Object.values(HYDRO_TECHNOLOGIES).find((t) => t.key === plant.techKey);
-    lines.push(`◈ ${tech}${entry ? ` — ${entry.blurb}` : ''}`);
+  const words = plant?.techKey ? hydroTechWords(techBucket(plant)) : null;
+  if (words) {
+    lines.push(m.card.technology(words.label, words.blurb ? m.card.technologyBlurb(words.blurb) : ''));
   } else if (plant?.tech) {
     // The publisher's word, shown and flagged rather than corrected.
-    lines.push(`◈ technologie publiée : « ${plant.tech} » — hors vocabulaire hydraulique du registre`);
+    lines.push(m.card.technologyOutside(plant.tech));
   }
 
   // THE REGISTER PUBLISHES CENTIMETRES OF HEAD (`417.6`, `212.76`) and the card
@@ -502,16 +523,13 @@ export function buildHydroCard(plant, joins = null) {
   // all. Rounded to the metre — the number is a description of a mountain, not
   // a survey — and said as the drop a reader can picture.
   if (plant?.headM) {
-    lines.push(`↧ ${Math.round(plant.headM).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} m `
-      + 'de dénivelé entre la prise d’eau et les turbines');
+    lines.push(m.card.head(formatInteger(plant.headM, { plainSpaces: true })));
   }
   if (plant?.groups) {
-    lines.push(plant.groups > 1
-      ? `▸ ${plant.groups} groupes : ${plant.groups} turbines et leurs alternateurs`
-      : '▸ 1 groupe : une turbine et son alternateur');
+    lines.push(plant.groups > 1 ? m.card.groups(plant.groups) : m.card.oneGroup);
   }
   if (plant?.installations > 1) {
-    lines.push(`▸ ligne agrégée : ${plant.installations} installations`);
+    lines.push(m.card.aggregated(plant.installations));
   }
 
   if (plant?.commune) {
@@ -520,17 +538,22 @@ export function buildHydroCard(plant, joins = null) {
     // COMMUNE_CONTRADICTION_KM in the build script. Both claims are shown,
     // because the reader is owed the contradiction, not a quiet edit.
     lines.push(Number.isFinite(plant?.communeContradictedKm)
-      ? `${commune}  ⚠ selon le registre — et son propre poste source est à ${plant.communeContradictedKm.toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} km de là`
+      ? `${commune}${m.card.communeContradicted(
+        formatNumber(plant.communeContradictedKm, { plainSpaces: true }),
+      )}`
       : commune);
   }
   const connection = [
-    plant?.voltage ? `raccordée en ${plant.voltage}` : null,
-    plant?.poste ? `au poste électrique ${plant.poste}` : null,
+    plant?.voltage ? m.card.connectedAt(plant.voltage) : null,
+    plant?.poste ? m.card.atSubstation(plant.poste) : null,
   ].filter(Boolean).join(' ');
   const grid = [connection || null, plant?.operator].filter(Boolean).join(' · ');
   if (grid) lines.push(`⌁ ${grid}`);
-  if (plant?.commissioned) lines.push(`🕐 en service depuis le ${plant.commissioned.split('-').reverse().join('/')}`);
-  if (plant?.regime && plant.regime !== 'En service') lines.push(`⚠ régime : ${plant.regime}`);
+  if (plant?.commissioned) lines.push(m.card.commissioned(hydroDay(plant.commissioned)));
+  // `En service` is the register's own word for "running", and the card only
+  // speaks up when a plant is in some other state.
+  // i18n-ignore-next-line
+  if (plant?.regime && plant.regime !== 'En service') lines.push(m.card.regime(plant.regime));
 
   lines.push(...buildPlacementLines(plant));
   lines.push(...buildHydroNeighbourLines(joins));
@@ -559,33 +582,32 @@ export function buildHydroCard(plant, joins = null) {
  * @returns {Array<string>}
  */
 export function buildHydroNeighbourLines(joins) {
+  const m = messages().neighbour;
   const lines = [];
   const gauge = joins?.gauge;
   if (gauge && Number.isFinite(gauge.distanceM)) {
-    const where = gauge.river ? `${gauge.name} sur ${gauge.river}` : gauge.name;
-    lines.push(`≋ ${gauge.text} à ${joinKmText(gauge.distanceM)}`
-      + ` — station ${where}, la plus proche qui mesure un débit`);
+    const where = gauge.river ? m.gaugeWhere(gauge.name, gauge.river) : gauge.name;
+    lines.push(m.gauge(gauge.text, joinKmText(gauge.distanceM), where));
   }
   const dam = joins?.dam;
   if (dam && Number.isFinite(dam.distanceM)) {
-    const what = dam.name || dam.kind || 'ouvrage non nommé';
-    const height = Number.isFinite(dam.heightM) ? `, ${dam.heightM} m de haut` : '';
-    lines.push(`▰ ${what}${height} à ${joinKmText(dam.distanceM)}`
-      + ' — ouvrage voisin cartographié, aucun registre ne le relie à cette centrale');
+    const what = dam.name || dam.kind || m.damUnnamed;
+    const height = Number.isFinite(dam.heightM) ? m.damHeight(formatInteger(dam.heightM)) : '';
+    lines.push(m.dam(what, height, joinKmText(dam.distanceM)));
   }
   return lines;
 }
 
-/** One decimal, with the separator a French reader expects. */
-function frDecimal(value) {
-  return Number(value).toFixed(1).replace('.', ',');
+/** One decimal, with the separator the reader's language uses. */
+function oneDecimal(value) {
+  return formatDecimal(Number(value), 1, { minimumFractionDigits: 1 });
 }
 
 /** Kilometres, as a card says them. */
 function joinKmText(metres) {
   if (!Number.isFinite(metres)) return '';
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
-  return `${(metres / 1000).toFixed(1).replace('.', ',')} km`;
+  if (metres < 1000) return `${formatInteger(Math.round(metres / 10) * 10)} m`;
+  return `${oneDecimal(metres / 1000)} km`;
 }
 
 /**
@@ -623,33 +645,35 @@ export function buildPlacementLines(plant) {
   const lines = [];
   const source = SOURCE_NOTES[plant?.placement];
   if (!source) return lines;
-  const geometry = GEOMETRY_NOTES[plant?.geometry];
+  const m = messages().placement;
+  const geometry = geometryNote(plant?.geometry);
   // A DECIMAL POINT ON A FRENCH CARD IS A THOUSANDS SEPARATOR TO ITS READER.
   // `6.1 km` and `0.3 km` were being read beside `74,0 MW` on the same card.
   const km = Number.isFinite(plant?.anchorKm) && plant.anchorKm > 0
-    ? ` · à ${frDecimal(plant.anchorKm)} km du centre de la commune`
+    ? m.fromCommuneCentre(oneDecimal(plant.anchorKm))
     : '';
-  lines.push(`◎ ${source}${geometry ? ` — ${geometry}` : ''}${km}`);
+  lines.push(m.line(source, geometry ? m.geometry(geometry) : '', km));
 
   if (plant?.placement === 'ign-bdtopo') {
     // IGN publishes its own planimetric accuracy per object, so the card can
     // state the position's error bar instead of implying one.
-    const precision = Number.isFinite(plant?.ignPrecisionM) ? ` ± ${plant.ignPrecisionM} m` : '';
+    const precision = Number.isFinite(plant?.ignPrecisionM)
+      ? m.ignPrecision(formatInteger(plant.ignPrecisionM)) : '';
     // …and whether IGN actually called it hydroelectric, or merely did not call
     // it something else. 87 of the plants IGN alone places sit on a
     // `Centrale électrique` of unstated kind, and that is an inference.
     lines.push(plant?.ignKind
-      ? `   « ${plant.ignKind} » au plan IGN${precision}`
-      : `   ⚠ « Centrale électrique » au plan IGN, nature non précisée${precision}`);
+      ? m.ignKind(plant.ignKind, precision)
+      : m.ignUnstated(precision));
     if (Number.isFinite(plant?.ignShiftM)) {
-      const from = MATCH_NOTES[plant?.matchedBy]
-        ? `identifiée par ${SOURCE_NOTES[plant?.corroborates] || 'une autre source'}`
+      const from = matchNote(plant?.matchedBy)
+        ? m.identifiedBy(SOURCE_NOTES[plant?.corroborates] || m.otherSource)
         : '';
-      lines.push(`   ${from}, position affinée de ${plant.ignShiftM} m`);
+      lines.push(m.ignRefined(from, formatInteger(plant.ignShiftM)));
     }
   }
 
-  const match = MATCH_NOTES[plant?.matchedBy];
+  const match = matchNote(plant?.matchedBy);
   if (match && plant?.placement !== 'ign-bdtopo') lines.push(`   ${match}`);
   if (match && plant?.placement === 'ign-bdtopo' && !Number.isFinite(plant?.ignShiftM)) {
     lines.push(`   ${match}`);
@@ -658,15 +682,14 @@ export function buildPlacementLines(plant) {
   // from the bbox centre an earlier build would have used.
   if (Number.isFinite(plant?.snapKm) && plant.snapKm > 0) {
     const span = Number.isFinite(plant?.outlineSpanM)
-      ? ` d’une emprise de ${frDecimal(plant.outlineSpanM / 1000)} km`
+      ? m.snappedSpan(oneDecimal(plant.outlineSpanM / 1000))
       : '';
-    lines.push(`   recalée de ${frDecimal(plant.snapKm)} km depuis le centre${span}`);
+    lines.push(m.snapped(oneDecimal(plant.snapKm), span));
   }
   if (plant?.placement === 'rte-switchyard') {
     lines.push(Number.isFinite(plant?.communeContradictedKm)
-      ? '   ⚠ la commune publiée par le registre est incompatible avec son propre poste'
-        + ' source — c’est le poste qui a été suivi'
-      : '   ⚠ la centrale elle-même n’est cartographiée nulle part');
+      ? m.switchyardContradiction
+      : m.switchyardOnly);
   }
   return lines;
 }
@@ -680,26 +703,41 @@ export function buildPlacementLines(plant) {
  * @returns {string}
  */
 export function buildHydroClusterCard(cluster) {
+  const m = messages().cluster;
   const count = cluster?.plants ?? 0;
-  const lines = [`${cluster?.commune ?? 'Commune'} — ${count} centrale${count > 1 ? 's' : ''} non localisée${count > 1 ? 's' : ''}`];
-  lines.push(`⚡ ${formatHydroPower(cluster?.kw)} installés au total`);
+  const lines = [m.title(cluster?.commune ?? m.fallbackCommune, count)];
+  lines.push(m.installed(formatHydroPower(cluster?.kw)));
   const energy = formatHydroEnergy(cluster?.energyKwh);
-  if (energy) lines.push(`↻ ${energy} injectés sur les 12 derniers mois, toutes ensemble`);
-  lines.push('◎ marqueur posé au CENTRE DE LA COMMUNE — le registre ne publie aucune position');
-  lines.push('   et aucune source ne place ces installations. Distance typique au bâtiment réel : 3 km.');
-  if (cluster?.anonymous) {
-    lines.push(`⊘ ${cluster.anonymous} sans nom publié`);
-  }
+  if (energy) lines.push(m.injected(energy));
+  lines.push(m.placement);
+  lines.push(m.placementTail);
+  if (cluster?.anonymous) lines.push(m.anonymous(cluster.anonymous));
+  // The pack's tally is keyed by the FRENCH bucket label, which is a key and
+  // not a word on screen: each one is relabelled here, at draw time.
   const techs = Object.entries(cluster?.techs || {}).sort((a, b) => b[1] - a[1]);
-  if (techs.length) lines.push(`◈ ${techs.map(([name, n]) => `${n} × ${name}`).join(', ')}`);
+  if (techs.length) {
+    lines.push(`◈ ${techs.map(([name, n]) => `${n} × ${hydroBucketLabel(name)}`).join(', ')}`);
+  }
   for (const name of (cluster?.names || []).slice(0, 6)) {
     if (name) lines.push(`▸ ${name}`);
   }
   const shown = Math.min(6, (cluster?.names || []).filter(Boolean).length);
   const named = (cluster?.names || []).filter(Boolean).length;
-  if (named > shown) lines.push(`… et ${named - shown} autre${named - shown > 1 ? 's' : ''}`);
+  if (named > shown) lines.push(m.moreNames(named - shown));
   if (cluster?.departement) lines.push(`📍 ${cluster.departement}`);
   return lines.join('\n');
+}
+
+/**
+ * The display label of a technology BUCKET, whose key is the French label the
+ * register's own vocabulary produced (and the pack stores).
+ * @param {string} bucket
+ * @returns {string}
+ */
+export function hydroBucketLabel(bucket) {
+  if (bucket === HYDRO_UNKNOWN_TECH_LABEL) return hydroUnknownTechLabel();
+  if (bucket === WORLD_HYDRO_TECH_LABEL) return messages().worldBucket;
+  return hydroTechWords(bucket)?.label || bucket;
 }
 
 /** Keep the largest plants, with stable identity as the tie-break. */
@@ -729,25 +767,26 @@ export function hydroLegend(plants, clusters) {
     tally.set(bucket, entry);
   }
   const legend = [];
+  const m = messages().legend;
   for (const key of HYDRO_TECHNOLOGY_ORDER) {
     const style = HYDRO_TECHNOLOGIES[key];
     const entry = tally.get(style.label);
     if (!entry) continue;
+    const words = hydroTechWords(key);
     legend.push({
-      label: style.label,
+      label: words.label,
       color: style.color,
       count: entry.count,
-      blurb: `${style.blurb} — ${formatHydroPower(entry.kw)} installés`,
+      blurb: m.blurb(words.blurb, formatHydroPower(entry.kw)),
     });
   }
   const unknown = tally.get(HYDRO_UNKNOWN_TECH_LABEL);
   if (unknown) {
     legend.push({
-      label: HYDRO_UNKNOWN_TECH_LABEL,
+      label: hydroUnknownTechLabel(),
       color: HYDRO_UNKNOWN_COLOR,
       count: unknown.count,
-      blurb: 'Le registre ne publie pas la technologie, ou en publie une qui n’est pas '
-        + 'hydraulique — 25 centrales corses sont classées « Photovoltaïque » dans le fichier source',
+      blurb: m.unpublished,
     });
   }
   // The world half gets its OWN row rather than joining "Non publiée": that
@@ -757,23 +796,19 @@ export function hydroLegend(plants, clusters) {
   const world = tally.get(WORLD_HYDRO_TECH_LABEL);
   if (world) {
     legend.push({
-      label: WORLD_HYDRO_TECH_LABEL,
+      label: messages().worldBucket,
       color: WORLD_HYDRO_COLOR,
       count: world.count,
-      blurb: `Centrales cartographiées hors de France — ${formatHydroPower(world.kw)} publiés `
-        + 'sur les 273 qui déclarent une puissance. Un échantillon OpenStreetMap de 592 '
-        + 'ouvrages, pas un inventaire mondial : la France, elle, est complète.',
+      blurb: m.world(formatHydroPower(world.kw)),
     });
   }
   const clusterPlants = clusters.reduce((sum, c) => sum + (c.plants ?? 0), 0);
   if (clusterPlants) {
     legend.push({
-      label: 'Anneau = commune, pas centrale',
+      label: m.clusterLabel,
       color: CLUSTER_COLOR,
       count: clusters.length,
-      blurb: `${clusterPlants} installations qu’aucune source ne localise, regroupées par commune. `
-        + 'Le registre ne publie qu’un code INSEE ; le centre de commune est à 3 km de la centrale '
-        + 'réelle en médiane, donc elles ne sont pas dessinées comme des centrales.',
+      blurb: m.clusterBlurb(clusterPlants),
     });
   }
   return legend;
@@ -1397,7 +1432,7 @@ export function createFrHydroPlantsLayer({
         }
         const payload = await response.json();
         if (!Array.isArray(payload?.plants) || !Array.isArray(payload?.clusters)) {
-          _lastError = 'Registre hydro malformé';
+          _lastError = messages().errors.malformed;
           return false;
         }
         _registry = payload;
@@ -1484,17 +1519,18 @@ export function createFrHydroPlantsLayer({
     },
 
     getRowControls() {
+      const m = messages().floors;
       const chips = FR_HYDRO_FLOORS.map((floor) => ({
         id: floor.id,
-        label: floor.label,
+        label: hydroFloorLabel(floor),
         active: _floorKw === floor.kw,
         state: _floorKw === floor.kw ? 'active' : 'idle',
         title: floor.kw === 0
-          ? `Tout le registre — ${_plants.length + _clusters.length} marqueurs`
+          ? m.allTitle(formatInteger(_plants.length + _clusters.length))
           // A power floor hides what has no published power, and that is the
           // honest answer rather than a special case: 319 of the 592 world
           // stations declare none, so they cannot clear a megawatt threshold.
-          : `Masquer les installations sous ${formatHydroPower(floor.kw)}`,
+          : m.hideBelow(formatHydroPower(floor.kw)),
         params: { floorKw: floor.kw },
       }));
       return { chips, legend: hydroLegend(_visiblePlants, _visibleClusters) };

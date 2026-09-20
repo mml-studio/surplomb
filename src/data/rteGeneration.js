@@ -18,9 +18,12 @@ import {
   RTE_GENERATION_CLASSES,
   generationSparkline,
   joinGenerationToRegistry,
+  rteClassWords,
   rteGenerationClass,
 } from './rteGenerationFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatInteger, formatTime } from '../i18n/format.js';
+import messages from './rteGeneration.i18n.js';
 
 /**
  * Groupes de prod (FR) — every French power station of 100 MW or more, at the
@@ -180,13 +183,28 @@ const DEFAULT_OVERLAY_HOST = Object.freeze({
   hitTest: hitTestWorldOverlay,
 });
 
-/** Human caption for each placement anchor, printed on every card. */
+/**
+ * Human caption for each placement anchor, printed on every card.
+ *
+ * The FRENCH copy, read from the catalog's definition so the two can never
+ * drift; what a card prints comes from {@link rtePlacementNote}, in the
+ * page's language, when the card is built.
+ */
 export const RTE_PLACEMENT_NOTES = Object.freeze({
-  'edf-published': 'posée sur la coordonnée qu’EDF publie pour cette centrale',
-  'osm-plant': 'posée sur l’emprise de la centrale cartographiée dans OpenStreetMap',
-  'rte-switchyard': 'posée sur le poste électrique que son entrée au registre nomme — le poste, pas la salle des machines',
-  'commune-centre': 'posée au centre de sa commune : aucune source ouverte ne publie où elle est',
+  'edf-published': messages.definition.placement['edf-published'].fr,
+  'osm-plant': messages.definition.placement['osm-plant'].fr,
+  'rte-switchyard': messages.definition.placement['rte-switchyard'].fr,
+  'commune-centre': messages.definition.placement['commune-centre'].fr,
 });
+
+/**
+ * That caption in the page's language.
+ * @param {string|null|undefined} placement
+ * @returns {?string} Null for an anchor this build does not know.
+ */
+export function rtePlacementNote(placement) {
+  return messages().placement[String(placement ?? '')] || null;
+}
 
 /**
  * Ring diameter for an installed capacity.
@@ -235,17 +253,18 @@ export function formatGenMw(mw) {
   if (!Number.isFinite(mw)) return '—';
   const abs = Math.abs(mw);
   const sign = mw < 0 ? '−' : '';
-  if (abs >= 10_000) return `${sign}${(abs / 1000).toFixed(1).replace('.', ',')} GW`;
-  // `fr-FR` groups with U+202F on modern ICU and U+00A0 on older ones; both are
-  // normalised so the overlay measures and wraps the string predictably.
-  return `${sign}${Math.round(abs).toLocaleString('fr-FR').replace(/[\u00a0\u202f]/g, ' ')} MW`;
+  if (abs >= 10_000) return `${sign}${formatDecimal(abs / 1000, 1, { minimumFractionDigits: 1 })} GW`;
+  // `plainSpaces`: French ICU groups with U+202F on modern versions and U+00A0
+  // on older ones, and the overlay measures and wraps a plain space predictably.
+  return `${sign}${formatInteger(abs, { plainSpaces: true })} MW`;
 }
 
 /** Format a load fraction as a percentage, keeping its sign. */
 export function formatLoad(load) {
   if (!Number.isFinite(load)) return '—';
-  // A non-breaking space before the % sign, as French typography wants it.
-  return `${load < 0 ? '−' : ''}${Math.round(Math.abs(load) * 100)}\u00a0%`;
+  // French typography puts a no-break space before its `%` and English puts
+  // nothing; the catalog carries that difference.
+  return `${load < 0 ? '−' : ''}${messages().loadPercent(formatInteger(Math.abs(load) * 100))}`;
 }
 
 /**
@@ -256,12 +275,13 @@ export function formatLoad(load) {
  */
 export function formatPublishedAge(at, now = Date.now()) {
   if (!Number.isFinite(at)) return null;
+  const m = messages().age;
   const minutes = Math.round((now - at) / 60_000);
-  if (minutes < 0) return 'publié pour l’heure à venir';
-  if (minutes < 90) return `il y a ${minutes} min`;
+  if (minutes < 0) return m.ahead;
+  if (minutes < 90) return m.minutes(formatInteger(minutes));
   const hours = Math.round(minutes / 60);
-  if (hours < 36) return `il y a ${hours} h`;
-  return `il y a ${Math.round(hours / 24)} j`;
+  if (hours < 36) return m.hours(formatInteger(hours));
+  return m.days(formatInteger(Math.round(hours / 24)));
 }
 
 /**
@@ -276,7 +296,9 @@ export function formatPublishedAge(at, now = Date.now()) {
 function formatStepClock(at) {
   if (!Number.isFinite(at)) return null;
   try {
-    return new Date(at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    // 24-hour in both languages: a grid timestamp is read against a schedule,
+    // and the glossary keeps the 24-hour clock in English for exactly that.
+    return formatTime(at, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   } catch {
     return null;
   }
@@ -305,65 +327,60 @@ function formatStepClock(at) {
  * @returns {string} Newline-separated card copy.
  */
 export function buildRteSelectionLabel(site, now = Date.now()) {
-  const klass = rteGenerationClass(site?.class);
+  const m = messages();
   const details = [];
   const installed = Number.isFinite(site?.installedMw) ? site.installedMw : null;
 
   if (Number.isFinite(site?.mw)) {
-    const load = Number.isFinite(site.load) ? ` · ${formatLoad(site.load)} de son maximum` : '';
+    const load = Number.isFinite(site.load) ? m.card.load(formatLoad(site.load)) : '';
     details.push(
       `${site.mw < 0 ? '🔌' : '⚡'} ${formatGenMw(site.mw)}`
-      + `${installed ? ` sur ${formatGenMw(installed)} installés` : ''}${load}`,
+      + `${installed ? m.card.installedOf(formatGenMw(installed)) : ''}${load}`,
     );
-    if (site.mw < 0) {
-      details.push('↓ elle PREND du courant au réseau au lieu d’en fournir — ses propres '
-        + 'pompes et instruments, ou un stockage en train de se remplir');
-    }
+    if (site.mw < 0) details.push(m.card.pumping);
     const clock = formatStepClock(site.latestAt);
     const age = formatPublishedAge(site.latestAt, now);
     if (clock || age) {
-      details.push(`🕐 mesure de l’heure de ${clock || '—'}${age ? `, publiée ${age}` : ''}`);
+      details.push(m.card.measuredAt(clock || '—', age ? m.card.published(age) : ''));
     }
     if (site.reporting < site.units.length) {
-      details.push(`▸ ${site.reporting} de ses ${site.units.length} groupes ont transmis une mesure`
-        + ' — un groupe est une turbine ou un réacteur');
+      details.push(m.card.reporting(site.reporting, site.units.length));
     }
     // Where RTE publishes the turbine groups inside a plant the register only
     // carries whole, those groups reached this station by NAME, not by code.
     // That is weaker evidence and the card says so rather than blending it in.
     const byName = site.units.filter((unit) => unit.matchedBy === 'name').length;
-    if (byName) {
-      details.push(`↳ ${byName} d’entre eux rattachés par le NOM de la centrale : RTE la publie `
-        + 'groupe par groupe, le registre ne la connaît qu’en bloc');
-    }
+    if (byName) details.push(m.card.matchedByName(byName));
   } else {
-    details.push(`◌ ${installed ? `${formatGenMw(installed)} installés, son maximum` : 'puissance installée non publiée'}`);
-    details.push('RTE n’a publié aucune mesure pour cette centrale — ce n’est PAS « elle ne produit rien »');
+    details.push(`◌ ${installed
+      ? m.card.installedOnly(formatGenMw(installed))
+      : m.card.installedUnpublished}`);
+    details.push(m.card.noReading);
   }
 
-  details.push(`◈ ${klass.label}`);
+  details.push(`◈ ${rteClassWords(site?.class).label}`);
   if (site?.commune) {
     details.push(`📍 ${site.commune}${site.departement ? ` · ${site.departement}` : ''}`);
   }
-  const note = RTE_PLACEMENT_NOTES[site?.placement];
+  const note = rtePlacementNote(site?.placement);
   if (note) {
     const km = Number.isFinite(site.anchorKm) && site.anchorKm > 0
-      ? ` (à ${site.anchorKm.toFixed(1).replace('.', ',')} km du centre de la commune)`
+      ? m.placementDistance(formatDecimal(site.anchorKm, 1, { minimumFractionDigits: 1 }))
       : '';
     details.push(`◎ ${note}${km}`);
   }
 
   const units = Array.isArray(site?.units) ? site.units : [];
   if (units.length) {
-    details.push(`── ${units.length} groupe${units.length > 1 ? 's' : ''} ──`);
+    details.push(m.card.unitsHeader(units.length));
     for (const unit of units.slice(0, CARD_UNIT_ROWS)) {
       details.push(buildUnitRow(unit));
     }
     if (units.length > CARD_UNIT_ROWS) {
-      details.push(`… et ${units.length - CARD_UNIT_ROWS} de plus`);
+      details.push(m.card.moreUnits(units.length - CARD_UNIT_ROWS));
     }
   }
-  return [site?.name || 'Site de production', ...details].join('\n');
+  return [site?.name || m.card.fallbackName, ...details].join('\n');
 }
 
 /**
@@ -373,10 +390,11 @@ export function buildRteSelectionLabel(site, now = Date.now()) {
  * @returns {string}
  */
 export function buildUnitRow(unit) {
-  const name = unit?.name || unit?.code || unit?.eic || 'groupe';
+  const m = messages();
+  const name = unit?.name || unit?.code || unit?.eic || m.unit.fallbackName;
   const capacity = Number.isFinite(unit?.installedMw) ? unit.installedMw : null;
   if (!Number.isFinite(unit?.mw)) {
-    return `${name} · ${capacity ? `${Math.round(capacity)} MW` : '—'} · pas de mesure`;
+    return `${name} · ${capacity ? `${Math.round(capacity)} MW` : '—'} · ${m.unit.noReading}`;
   }
   const spark = generationSparkline(unit.history, capacity);
   const value = `${Math.round(unit.mw)}${capacity ? `/${Math.round(capacity)}` : ''} MW`;
@@ -389,7 +407,7 @@ export function buildUnitRow(unit) {
   const registry = Number.isFinite(unit?.registryMw)
     && Number.isFinite(capacity)
     && Math.abs(unit.registryMw - capacity) >= 1
-      ? ` (registre : ${Math.round(unit.registryMw)} MW)`
+      ? m.unit.registry(formatInteger(unit.registryMw))
       : '';
   return `${name} · ${value}${registry}${spark ? `  ${spark}` : ''}`;
 }
@@ -437,7 +455,7 @@ export function createRteStationOverlayEntry(site, position) {
   const klass = rteGenerationClass(site.class);
   const value = Number.isFinite(site.mw)
     ? `${formatGenMw(site.mw)} / ${formatGenMw(site.installedMw)}`
-    : `${formatGenMw(site.installedMw)} installés`;
+    : messages().ambient.installed(formatGenMw(site.installedMw));
   return {
     id: `${RTE_GEN_LABEL_PREFIX}${site.id}`,
     position,
@@ -523,14 +541,16 @@ export function buildRteLegend(sites) {
     const bucket = buckets.get(id);
     if (!bucket) continue;
     const klass = RTE_GENERATION_CLASSES[id];
+    const words = rteClassWords(id);
+    const m = messages().legend;
     const live = bucket.reporting
-      ? `${formatGenMw(bucket.mw)} produits sur ${formatGenMw(bucket.installedMw)} installés — `
-      : `${formatGenMw(bucket.installedMw)} installés, aucune production publiée — `;
+      ? m.measured(formatGenMw(bucket.mw), formatGenMw(bucket.installedMw))
+      : m.installedOnly(formatGenMw(bucket.installedMw));
     legend.push({
-      label: klass.label,
+      label: words.label,
       color: klass.color,
       count: bucket.sites,
-      blurb: live + klass.blurb,
+      blurb: live + words.blurb,
     });
   }
   return legend;
@@ -969,6 +989,7 @@ function collectDetectableObjects(options = {}) {
     result.push({
       position: record.position,
       sourceId: record.id,
+      // i18n-ignore-next-line — a synthetic id for the detection rail, not a label.
       id: String(record.site?.name || 'CENTRALE').toUpperCase().slice(0, 24),
       type: detectionTypeFor(record.site?.class),
       skipLabel: record.id === _selectedId,
@@ -992,7 +1013,7 @@ function collectDetectableObjects(options = {}) {
  */
 export function generationErrorFor(auth) {
   if (auth === 'ok' || auth === 'missing') return null;
-  return 'production RTE indisponible';
+  return messages().row.error;
 }
 
 /** Three-letter detection tag per class. */
@@ -1011,23 +1032,24 @@ export function detectionTypeFor(klass) {
 }
 
 function buildLoadingLabel() {
-  if (_loading && !_registry) return 'chargement du registre des groupes…';
-  if (_loading) return 'actualisation de la production…';
-  if (_status === 'error') return _error || 'indisponible';
+  const m = messages().row;
+  if (_loading && !_registry) return m.loadingRegistry;
+  if (_loading) return m.refreshing;
+  if (_status === 'error') return _error || m.unavailable;
   const parts = [];
   // WHAT IS DRAWN, and what stood down. `_sites.length` is what the register
   // holds; while EDF is drawing 69 of these stations the map shows fewer, and
   // a row that printed the register count would describe a map that is not on
   // screen. See `plantIdentity.js`.
   const deferred = Math.max(0, _sites.length - _records.size);
-  if (_records.size) parts.push(`${_records.size} centrales`);
-  if (deferred) parts.push(`${deferred} déjà dessinées par Centrales EDF`);
+  if (_records.size) parts.push(m.plants(_records.size));
+  if (deferred) parts.push(m.deferred(deferred));
   if (_joinStats?.placedUnits) {
-    parts.push(`${_joinStats.placedUnits} groupes · ${formatGenMw(_joinStats.placedMw)}`);
+    parts.push(m.units(_joinStats.placedUnits, formatGenMw(_joinStats.placedMw)));
   } else if (_auth === 'missing') {
-    parts.push('sans clé RTE — puissance installée seulement');
+    parts.push(m.keyless);
   }
-  if (_joinStats?.unplacedUnits) parts.push(`${_joinStats.unplacedUnits} groupes non placés`);
+  if (_joinStats?.unplacedUnits) parts.push(m.unplaced(_joinStats.unplacedUnits));
   return parts.join(' · ');
 }
 
@@ -1206,21 +1228,13 @@ const rteGenerationLayer = {
    */
   getRowControls() {
     const legend = [];
+    const m = messages().legend;
     const measured = _joinStats?.placedUnits || 0;
     legend.push({
-      label: measured
-        ? 'Anneau = puissance installée · disque = production'
-        : 'Anneau = puissance installée',
+      label: measured ? m.ringAndDisc : m.ringOnly,
       color: '#dfe7ef',
       count: _sites.length,
-      blurb: measured
-        ? 'Un anneau pâle et vide : RTE n’a rien publié pour cette centrale. Un anneau net et '
-          + 'vide : elle a été mesurée à zéro, elle est à l’arrêt. Un disque magenta : elle PREND '
-          + 'du courant au réseau — un réacteur arrêté fait encore tourner ses pompes, et pèse '
-          + 'une cinquantaine de MW de consommation.'
-        : 'Aucune clé RTE, donc aucune production dessinée. Renseignez RTE_CLIENT_ID et '
-          + 'RTE_CLIENT_SECRET depuis un compte gratuit data.rte-france.com et les anneaux se '
-          + 'remplissent.',
+      blurb: measured ? m.grammar : m.keyless,
     });
     legend.push(...buildRteLegend(_sites));
     return { chips: [], legend };
