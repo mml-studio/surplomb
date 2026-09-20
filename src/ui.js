@@ -277,6 +277,8 @@ function bindCockpitLayers(dataManager) {
   ];
 }
 
+import messages from './ui.i18n.js';
+
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
 /** Past the LOCATION tray's 180 ms fade-in (`.dock-popover-content`, style.css). */
@@ -348,28 +350,30 @@ const COCKPIT_UTILITY_LAUNCHER_MIN_HEIGHT_PX = 50;
 const COCKPIT_GROUND_PROBE_MS = 500;
 const COCKPIT_GROUND_WAIT_TIMEOUT_MS = 5000;
 const COCKPIT_BRIEF_ROTATE_MS = 9000;
-const COCKPIT_BRIEF_CYCLE_OFF_HELP = 'Cycle briefing pages automatically every 9 seconds (Signals → News → Local). Pauses while you hover or focus the panel. Live signal data refreshes continuously either way.';
-const COCKPIT_BRIEF_CYCLE_ON_HELP = 'Stop automatic page cycling. Previous, Next, and the SIG/NEWS/LOCAL tabs stay available.';
+const COCKPIT_BRIEF_CYCLE_OFF_HELP = () => messages().cockpit.brief.cycleOffHelp;
+const COCKPIT_BRIEF_CYCLE_ON_HELP = () => messages().cockpit.brief.cycleOnHelp;
 const COCKPIT_REGIONAL_REFRESH_MS = 5 * 60_000;
 const COCKPIT_REGIONAL_REFRESH_DISTANCE_M = 25_000;
+// Getters, not strings: read at import, the three headings would be frozen in
+// whatever language this module was first loaded in (ratchet R5).
 const COCKPIT_BRIEF_PAGES = [
   {
     id: 'signals',
-    kicker: 'LIVE SIGNALS',
-    subtitle: 'OBSERVED / MAPPED PINGS',
-    source: 'SOURCE-BACKED EVENTS · NO SYNTHETIC NEWS',
+    get kicker() { return messages().cockpit.brief.signalsKicker; },
+    get subtitle() { return messages().cockpit.brief.signalsSubtitle; },
+    get source() { return messages().cockpit.brief.signalsSource; },
   },
   {
     id: 'news',
-    kicker: 'REGIONAL NEWS',
-    subtitle: 'LATEST LOCATION-MATCHED REPORTING',
-    source: 'GOOGLE NEWS RSS · LOCATION QUERY · RECENT',
+    get kicker() { return messages().cockpit.brief.newsKicker; },
+    get subtitle() { return messages().cockpit.brief.newsSubtitle; },
+    get source() { return messages().cockpit.brief.newsSource; },
   },
   {
     id: 'local',
-    kicker: 'LOCAL INFO',
-    subtitle: 'PLACE / CONDITIONS / POSITION',
-    source: 'OPENSTREETMAP · OPEN-METEO · UTC',
+    get kicker() { return messages().cockpit.brief.localKicker; },
+    get subtitle() { return messages().cockpit.brief.localSubtitle; },
+    get source() { return messages().cockpit.brief.localSource; },
   },
 ];
 /**
@@ -677,54 +681,56 @@ const signedNormalizeDeg = (deg) => ((((deg + 180) % 360) + 360) % 360) - 180;
  */
 const CCTV_CAL_FIELDS = {
   heading: {
-    label: 'HDG', unit: '°', decimals: 1,
+    get label() { return messages().cctv.cal.heading; }, unit: '°', decimals: 1,
     get: (cam) => cam.headingDeg,
     toPatch: (value, base) => ({ headingDeg: signedNormalizeDeg(value - base.headingDeg) }),
   },
   pitch: {
-    label: 'PITCH', unit: '°', decimals: 1,
+    get label() { return messages().cctv.cal.pitch; }, unit: '°', decimals: 1,
     get: (cam) => cam.pitchDeg,
     toPatch: (value, base) => ({ pitchDeg: value - base.pitchDeg }),
   },
   fov: {
-    label: 'FOV', unit: '°', decimals: 0,
+    get label() { return messages().cctv.cal.fov; }, unit: '°', decimals: 0,
     get: (cam) => cam.fovDeg,
     toPatch: (value, base) => ({ fovDeg: value - base.fovDeg }),
   },
   range: {
-    label: 'RANGE', unit: 'm', decimals: 0,
+    get label() { return messages().cctv.cal.range; }, unit: 'm', decimals: 0,
     get: (cam) => cam.rangeM,
     toPatch: (value, base) => ({ rangeScale: base.rangeM > 0 ? value / base.rangeM : 1 }),
   },
   height: {
-    label: 'HGT', unit: 'm', decimals: 0,
+    get label() { return messages().cctv.cal.height; }, unit: 'm', decimals: 0,
     get: (cam) => cam.mountHeightM,
     toPatch: (value, base) => ({ heightM: value - base.mountHeightM }),
   },
   north: {
-    label: 'ΔN', unit: 'm', decimals: 1,
+    get label() { return messages().cctv.cal.north; }, unit: 'm', decimals: 1,
     get: (cam) => cam.calibration?.offsetNorthM || 0,
     toPatch: (value) => ({ offsetNorthM: value }),
   },
   east: {
-    label: 'ΔE', unit: 'm', decimals: 1,
+    get label() { return messages().cctv.cal.east; }, unit: 'm', decimals: 1,
     get: (cam) => cam.calibration?.offsetEastM || 0,
     toPatch: (value) => ({ offsetEastM: value }),
   },
 };
 
 function formatCockpitBriefAge(value) {
+  const m = messages().cockpit;
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return 'TIME UNKNOWN';
+  if (!Number.isFinite(timestamp)) return m.timeUnknown;
   const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
-  if (minutes < 60) return `${minutes}M AGO`;
+  if (minutes < 60) return m.minutesAgo(minutes);
   const hours = Math.round(minutes / 60);
-  return hours < 48 ? `${hours}H AGO` : `${Math.round(hours / 24)}D AGO`;
+  return hours < 48 ? m.hoursAgo(hours) : m.daysAgo(Math.round(hours / 24));
 }
 
 function formatCockpitWindDirection(value) {
-  if (!Number.isFinite(value)) return 'DIR UNKNOWN';
-  const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const m = messages().cockpit;
+  if (!Number.isFinite(value)) return m.directionUnknown;
+  const labels = m.compass;
   const normalized = ((value % 360) + 360) % 360;
   return `${labels[Math.round(normalized / 45) % labels.length]} · ${Math.round(normalized)}°`;
 }
@@ -1018,13 +1024,11 @@ class CockpitViewController {
   syncWeatherToggle(enabled) {
     if (!this.weatherToggle) return;
     const active = !!enabled;
+    const m = messages().cockpit.weather;
     this.weatherToggle.setAttribute('aria-pressed', String(active));
-    this.weatherToggle.setAttribute(
-      'aria-label',
-      `${active ? 'Disable' : 'Enable'} cockpit weather effects`,
-    );
-    this.weatherToggle.title = `${active ? 'Disable' : 'Enable'} cockpit weather effects`;
-    if (this.weatherState) this.weatherState.textContent = active ? 'ON' : 'OFF';
+    this.weatherToggle.setAttribute('aria-label', active ? m.disable : m.enable);
+    this.weatherToggle.title = active ? m.disable : m.enable;
+    if (this.weatherState) this.weatherState.textContent = active ? m.on : m.off;
   }
 
   readAircraftInfo() {
@@ -1107,23 +1111,24 @@ class CockpitViewController {
     const signature = available ? `${trackedFlight}:${active ? 1 : 0}:${fits ? 1 : 0}` : '';
     if (this._routeSignature === signature) return;
     this._routeSignature = signature;
+    const m = messages().cockpit.route;
     if (!available) {
       this.routeButton.hidden = true;
       this.routeButton.setAttribute('aria-pressed', 'false');
-      this.routeButton.textContent = 'SHOW ROUTE';
+      this.routeButton.textContent = m.show;
       return;
     }
     this.routeButton.hidden = false;
     this.routeButton.setAttribute('aria-pressed', active ? 'true' : 'false');
-    this.routeButton.textContent = active ? 'HIDE ROUTE' : 'SHOW ROUTE';
+    this.routeButton.textContent = active ? m.hide : m.show;
     // A leg longer than about 3 200 km cannot be held in one view of a globe.
     // Say so on the control rather than let the operator read the missing far
     // pin as a drawing that failed.
     this.routeButton.title = active
-      ? 'Hide the estimated flight plan and return to the close follow view'
+      ? m.hideTitle
       : (fits
-        ? `Pull back to hold ${state.origin || 'origin'} and ${state.destination || 'destination'} in one view`
-        : `${state.origin || 'Origin'} → ${state.destination || 'destination'} is too long for one view of the globe — the arc still shows where it runs`);
+        ? m.fitsTitle(state.origin || m.originFallback, state.destination || m.destinationFallback)
+        : m.tooLongTitle(state.origin || m.originCapitalized, state.destination || m.destinationFallback));
   }
 
   /**
@@ -1141,7 +1146,7 @@ class CockpitViewController {
     this._tr3bSignature = signature;
     this.tr3bToggle.hidden = !icao24;
     this.tr3bToggle.setAttribute('aria-pressed', converted ? 'true' : 'false');
-    this.tr3bToggle.title = converted ? 'Restore real aircraft' : 'Reclassify as TR-3B';
+    this.tr3bToggle.title = converted ? messages().cockpit.tr3bRestore : messages().cockpit.tr3bConvert;
   }
 
   syncEntry() {
@@ -1209,12 +1214,15 @@ class CockpitViewController {
     const next = normalizeCockpitVisionMode(mode);
     this.visionMode = next;
     const inherited = String(this.getInheritedVisionLabel?.() || 'NORMAL').toUpperCase();
+    const m = messages().cockpit.vision;
+    // The four sensor passes keep their names in both languages (CRT, NVG,
+    // FLIR are what the buttons say); only the spelled-out names translate.
     const labels = { optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: 'NOIR' };
-    const names = { optical: inherited, crt: 'CRT', nvg: 'Night vision', thermal: 'Thermal', noir: 'Noir' };
+    const names = { optical: inherited, crt: 'CRT', nvg: m.nightVision, thermal: m.thermal, noir: m.noir };
     if (this.visionCurrent) {
       this.visionCurrent.dataset.cockpitVision = next;
-      this.visionCurrent.setAttribute('aria-label', `Current cockpit vision style: ${names[next]}. Activate for next style.`);
-      this.visionCurrent.title = `Current style: ${names[next]} — click for next`;
+      this.visionCurrent.setAttribute('aria-label', m.current(names[next]));
+      this.visionCurrent.title = m.currentTitle(names[next]);
     }
     if (this.visionCurrentLabel) this.visionCurrentLabel.textContent = labels[next];
     this.onVisionChange?.(next, this.active, { revealParameters });
@@ -1315,14 +1323,10 @@ class CockpitViewController {
     this.signalSignatures.clear();
     this.showBriefPage(0);
     this.startBriefRotation();
-    const trackLabel = info.callsign || info.registration || info.icao24 || 'AIRCRAFT';
+    const m = messages().cockpit;
+    const trackLabel = info.callsign || info.registration || info.icao24 || m.callsignFallback;
     const trackHeading = String(Math.round(normalizeHeading(info.track ?? 0))).padStart(3, '0');
-    this.pushCockpitSignal(
-      'track',
-      'track',
-      'TRACK ACQUIRED',
-      `${trackLabel} · COURSE ${trackHeading}°`,
-    );
+    this.pushCockpitSignal('track', 'track', m.trackAcquired, m.trackCourse(trackLabel, trackHeading));
     this.updateHud(info, performance.now(), true);
     this.setVisionMode(this.visionMode);
     this.scheduleContextLayout();
@@ -1605,7 +1609,7 @@ class CockpitViewController {
     this.lastAircraftInfo = info;
     const heading = normalizeHeading(this.heading ?? info.track ?? 0);
     if (this.callsign) {
-      this.callsign.textContent = info.callsign || info.registration || info.icao24 || 'AIRCRAFT';
+      this.callsign.textContent = info.callsign || info.registration || info.icao24 || messages().cockpit.callsignFallback;
     }
     const speedKt = Number.isFinite(info.velocityMps) ? info.velocityMps * 1.94384 : null;
     setCockpitRollingValue(
@@ -1692,10 +1696,11 @@ class CockpitViewController {
       this.position.textContent = `${lat} · ${lon}`;
     }
     if (this.aircraftMeta) {
+      const m = messages().cockpit;
       const feedState = this.surfaceAcquiring
-        ? 'ACQUIRING SURFACE'
-        : (this.surfaceFallback ? 'SURFACE FALLBACK' : (info.stale ? 'STALE FEED' : 'LIVE TRACK'));
-      this.aircraftMeta.textContent = `${info.layerId === 'military' ? 'MILITARY' : 'COMMERCIAL'} · ${feedState} · COURSE ALIGNED`;
+        ? m.surfaceAcquiring
+        : (this.surfaceFallback ? m.surfaceFallback : (info.stale ? m.staleFeed : m.liveTrack));
+      this.aircraftMeta.textContent = m.aircraftMeta(info.layerId === 'military' ? m.military : m.commercial, feedState);
     }
     this.updateRoute(info);
     if (forceContext
@@ -1712,13 +1717,12 @@ class CockpitViewController {
     const origin = info?.route?.origin;
     const destination = info?.route?.destination;
     const validDestination = Number.isFinite(destination?.lat) && Number.isFinite(destination?.lon);
-    const routeLabel = (airport) => [airport?.code, airport?.name].filter(Boolean).join(' · ') || 'UNKNOWN';
+    const m = messages().cockpit.route;
+    const routeLabel = (airport) => [airport?.code, airport?.name].filter(Boolean).join(' · ') || m.unknown;
     if (this.routeFrom) this.routeFrom.textContent = routeLabel(origin);
     if (this.routeTo) this.routeTo.textContent = routeLabel(destination);
     if (this.routeStatus) {
-      this.routeStatus.textContent = validDestination
-        ? 'ARROW · ESTIMATED DIRECTION'
-        : 'ROUTE DATA UNAVAILABLE';
+      this.routeStatus.textContent = validDestination ? m.estimatedDirection : m.unavailable;
     }
     if (this.route) this.route.hidden = !origin && !destination;
     if (!validDestination || !Number.isFinite(info?.longitude) || !Number.isFinite(info?.latitude)) {
@@ -1742,7 +1746,7 @@ class CockpitViewController {
       this.routeDirection.style.setProperty('--route-angle', `${displayedRelative.toFixed(2)}deg`);
     }
     if (this.routeDirectionLabel) {
-      this.routeDirectionLabel.textContent = `DEST ${String(Math.round(destinationBearing)).padStart(3, '0')}°`;
+      this.routeDirectionLabel.textContent = m.destination(String(Math.round(destinationBearing)).padStart(3, '0'));
     }
   }
 
@@ -1758,8 +1762,8 @@ class CockpitViewController {
       this.pushCockpitSignal(
         'context-status',
         'info',
-        'CONTEXT STANDBY',
-        'ENABLE GLOBAL CONTEXT FOR PROXIMITY PINGS',
+        messages().cockpit.context.standby,
+        messages().cockpit.context.standbyBody,
       );
       return;
     }
@@ -1786,17 +1790,16 @@ class CockpitViewController {
       // say so instead of re-deriving stale geometry as if it were live.
       const enteringLost = this.context.dataset.state !== 'lost';
       this.context.dataset.state = 'lost';
-      if (this.contextUncertainty) {
-        this.contextUncertainty.textContent = 'CONTACT LOST · LAST KNOWN READOUT · NOT AN ALL-CLEAR';
-      }
+      const lost = messages().cockpit.context;
+      if (this.contextUncertainty) this.contextUncertainty.textContent = lost.lost;
       // The cue changes the footer's height; re-run layout once on the way in
       // rather than every frame the contact stays lost.
       if (enteringLost) this.scheduleContextLayout();
       this.pushCockpitSignal(
         'context-status',
         'warning',
-        `CONTACT LOST · ${snapshot.subject.label || snapshot.subject.id || 'SUBJECT'}`,
-        'SUBJECT LEFT ITS FEED · READOUT HOLDING LAST KNOWN',
+        lost.lostSignal(snapshot.subject.label || snapshot.subject.id || lost.lostSubject),
+        lost.lostSignalBody,
       );
       return;
     }
@@ -1814,23 +1817,24 @@ class CockpitViewController {
     nearest.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
     const closest = nearest[0] || null;
     const closestLabel = formatAwarenessLabel(closest);
+    const mc = messages().cockpit.context;
     if (this.contextNearestLabel) {
       this.contextNearestLabel.textContent = closest
-        ? `${closest.cohort.label.toUpperCase()} · ${closestLabel}` : 'NO AVAILABLE EXAMPLE';
+        ? mc.nearest(closest.cohort.label.toUpperCase(), closestLabel) : mc.noExample;
       this.contextNearestLabel.setAttribute(
         'aria-label',
         closest && closestLabel === '—'
-          ? `${closest.cohort.label}, Unavailable`
+          ? mc.cohortUnavailable(closest.cohort.label)
           : this.contextNearestLabel.textContent,
       );
     }
     if (this.contextDistance) {
       const distanceM = closest?.distanceM;
       this.contextDistance.textContent = Number.isFinite(distanceM)
-        ? `${distanceM < 10000 ? (distanceM / 1000).toFixed(1) : Math.round(distanceM / 1000)} KM` : '—';
+        ? mc.distanceKm(distanceM < 10000 ? (distanceM / 1000).toFixed(1) : Math.round(distanceM / 1000)) : '—';
       this.contextDistance.setAttribute(
         'aria-label',
-        Number.isFinite(distanceM) ? this.contextDistance.textContent : 'Unavailable',
+        Number.isFinite(distanceM) ? this.contextDistance.textContent : mc.unavailable,
       );
     }
 
@@ -1856,14 +1860,19 @@ class CockpitViewController {
       this.contextDirection.classList.toggle('unknown', relative === null);
     }
     if (this.contextBearing) {
-      if (relative === null) this.contextBearing.textContent = 'BRG —';
-      else if (Math.abs(relative) < 8) this.contextBearing.textContent = 'AHEAD';
-      else this.contextBearing.textContent = `${relative < 0 ? 'L' : 'R'} ${String(Math.round(Math.abs(relative))).padStart(3, '0')}°`;
+      if (relative === null) this.contextBearing.textContent = mc.bearingUnknown;
+      else if (Math.abs(relative) < 8) this.contextBearing.textContent = mc.ahead;
+      else {
+        this.contextBearing.textContent = mc.bearing(
+          relative < 0 ? mc.bearingLeft : mc.bearingRight,
+          String(Math.round(Math.abs(relative))).padStart(3, '0'),
+        );
+      }
     }
     if (this.contextUncertainty) {
       this.contextUncertainty.textContent = unknownCount
-        ? `${unknownCount} INPUT${unknownCount === 1 ? '' : 'S'} UNKNOWN · NOT AN ALL-CLEAR`
-        : 'AVAILABLE INPUTS CURRENT · NOT AN ALL-CLEAR';
+        ? mc.inputsUnknown(unknownCount)
+        : mc.inputsCurrent;
     }
     if (this.contextUpdated) {
       this.contextUpdated.textContent = Number.isFinite(snapshot.evaluatedAt)
@@ -1915,11 +1924,12 @@ class CockpitViewController {
     this.briefAutoRotateEnabled = Boolean(enabled);
     if (this.briefAutoToggle) {
       this.briefAutoToggle.setAttribute('aria-pressed', String(this.briefAutoRotateEnabled));
-      const label = this.briefAutoRotateEnabled ? 'CYCLE ON' : 'CYCLE OFF';
+      const m = messages().cockpit.brief;
+      const label = this.briefAutoRotateEnabled ? m.cycleOn : m.cycleOff;
       this.briefAutoToggle.textContent = label;
       const help = this.briefAutoRotateEnabled
-        ? COCKPIT_BRIEF_CYCLE_ON_HELP
-        : COCKPIT_BRIEF_CYCLE_OFF_HELP;
+        ? COCKPIT_BRIEF_CYCLE_ON_HELP()
+        : COCKPIT_BRIEF_CYCLE_OFF_HELP();
       this.briefAutoToggle.setAttribute('aria-label', label);
       this.briefAutoToggle.title = help;
     }
@@ -1954,7 +1964,7 @@ class CockpitViewController {
   updateLocalPosition(info) {
     if (!this.localCoordinates) return;
     if (!Number.isFinite(info.latitude) || !Number.isFinite(info.longitude)) {
-      this.localCoordinates.textContent = 'POSITION UNAVAILABLE';
+      this.localCoordinates.textContent = messages().cockpit.brief.positionUnavailable;
       return;
     }
     const lat = `${Math.abs(info.latitude).toFixed(3)}°${info.latitude >= 0 ? 'N' : 'S'}`;
@@ -2008,27 +2018,25 @@ class CockpitViewController {
   }
 
   renderRegionalBriefStatus(status, info) {
+    const m = messages().cockpit.brief;
     if (this.newsStatus) {
       this.newsStatus.hidden = false;
       this.newsStatus.dataset.state = status;
-      this.newsStatus.textContent = status === 'loading'
-        ? 'ACQUIRING REGIONAL NEWS'
-        : 'REGIONAL NEWS UNAVAILABLE';
+      this.newsStatus.textContent = status === 'loading' ? m.newsAcquiring : m.newsUnavailable;
     }
     if (status === 'unavailable') this.newsList?.replaceChildren();
-    if (this.localPlace && status === 'loading') this.localPlace.textContent = 'RESOLVING REGION';
-    if (this.localPlace && status === 'unavailable') this.localPlace.textContent = 'REGION UNAVAILABLE';
+    if (this.localPlace && status === 'loading') this.localPlace.textContent = m.regionResolving;
+    if (this.localPlace && status === 'unavailable') this.localPlace.textContent = m.regionUnavailable;
     this.updateLocalPosition(info);
   }
 
   renderRegionalBrief(payload, info) {
+    const m = messages().cockpit.brief;
     const articles = Array.isArray(payload?.articles) ? payload.articles : [];
     if (this.newsStatus) {
       this.newsStatus.hidden = articles.length > 0;
       this.newsStatus.dataset.state = payload?.newsStatus || 'unavailable';
-      this.newsStatus.textContent = payload?.newsStatus === 'empty'
-        ? 'NO RECENT LOCATION MATCHES'
-        : 'REGIONAL NEWS UNAVAILABLE';
+      this.newsStatus.textContent = payload?.newsStatus === 'empty' ? m.newsNoMatch : m.newsUnavailable;
     }
     if (this.newsList) {
       this.newsList.replaceChildren(...articles.slice(0, 4).map((article) => {
@@ -2040,14 +2048,14 @@ class CockpitViewController {
         const title = document.createElement('strong');
         title.textContent = article.title;
         const metadata = document.createElement('span');
-        metadata.textContent = `${article.domain || 'SOURCE'} · ${formatCockpitBriefAge(article.publishedAt)}`;
+        metadata.textContent = `${article.domain || m.source} · ${formatCockpitBriefAge(article.publishedAt)}`;
         link.append(title, metadata);
         entry.append(link);
         return entry;
       }));
     }
 
-    const placeLabel = payload?.place?.label || payload?.place?.country || 'REGION UNAVAILABLE';
+    const placeLabel = payload?.place?.label || payload?.place?.country || m.regionUnavailable;
     if (this.localPlace) this.localPlace.textContent = placeLabel.toUpperCase();
     this.updateLocalPosition(info);
     const weather = payload?.weather;
@@ -2057,7 +2065,7 @@ class CockpitViewController {
     }
     if (this.localWind) {
       this.localWind.textContent = Number.isFinite(weather?.windKph)
-        ? `${Math.round(weather.windKph)} KM/H` : '—';
+        ? messages().cockpit.local.windSpeed(Math.round(weather.windKph)) : '—';
     }
     if (this.localWindDirection) {
       this.localWindDirection.textContent = formatCockpitWindDirection(weather?.windDirectionDeg);
@@ -2065,7 +2073,7 @@ class CockpitViewController {
     if (this.localCondition) this.localCondition.textContent = weatherCodeLabel(weather?.weatherCode);
     if (this.localCloud) {
       this.localCloud.textContent = Number.isFinite(weather?.cloudCoverPct)
-        ? `CLOUD ${Math.round(weather.cloudCoverPct)}%` : 'CLOUD UNKNOWN';
+        ? messages().cockpit.local.cloud(Math.round(weather.cloudCoverPct)) : messages().cockpit.local.cloudUnknown;
     }
     if (this.localPrecipitation) {
       this.localPrecipitation.textContent = Number.isFinite(weather?.precipitationMm)
@@ -2073,7 +2081,7 @@ class CockpitViewController {
     }
     if (this.signalStream) this.signalStream.dataset.regionalStatus = payload?.status || 'partial';
     if (this.briefPageIndex === 1 && this.briefSource) {
-      this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
+      this.briefSource.textContent = m.locationQuery(String(payload?.newsSource || m.newsKicker).toUpperCase());
     }
     this.scheduleContextLayout();
   }
@@ -2092,7 +2100,7 @@ class CockpitViewController {
         heading.className = 'cockpit-signal-target';
         heading.dataset.signalLayer = item.target.layerId;
         heading.dataset.signalId = item.target.id;
-        heading.setAttribute('aria-label', `Select flight ${item.title}`);
+        heading.setAttribute('aria-label', messages().cockpit.brief.selectFlight(item.title));
         const label = document.createElement('span');
         label.className = 'cockpit-signal-target-label';
         label.textContent = item.title;
@@ -2128,6 +2136,7 @@ class CockpitViewController {
   }
 
   updateCockpitSignals(snapshot, unknownCount) {
+    const mc = messages().cockpit.context;
     const previous = new Map(this.signalItems.map((item) => [item.key, item]));
     const contacts = [];
     const subject = snapshot.subject;
@@ -2136,7 +2145,7 @@ class CockpitViewController {
         key: `flight:${subject.layerId}:${subject.id}`,
         tone: 'track',
         title: subject.label || subject.id,
-        detail: `${subject.layerId === 'military' ? 'MILITARY FLIGHT' : 'COMMERCIAL FLIGHT'} · CURRENT`,
+        detail: mc.current(subject.layerId === 'military' ? mc.militaryFlight : mc.commercialFlight),
         target: { layerId: subject.layerId, id: String(subject.id) },
         distanceM: -1,
       });
@@ -2155,11 +2164,12 @@ class CockpitViewController {
           // contact reads as its registration here too. Same helper the
           // Context panel's nearest list uses.
           title: formatAwarenessLabel(item),
-          detail: `${cohort.id === 'military' ? 'MILITARY FLIGHT' : 'COMMERCIAL FLIGHT'} · ${
+          detail: mc.nearest(
+            cohort.id === 'military' ? mc.militaryFlight : mc.commercialFlight,
             Number.isFinite(item.distanceM)
-              ? `${item.distanceM < 10000 ? (item.distanceM / 1000).toFixed(1) : Math.round(item.distanceM / 1000)} KM`
-              : 'DISTANCE UNKNOWN'
-          }`,
+              ? mc.distanceKm(item.distanceM < 10000 ? (item.distanceM / 1000).toFixed(1) : Math.round(item.distanceM / 1000))
+              : mc.distanceUnknown,
+          ),
           target: { layerId: cohort.id, id: String(id) },
           distanceM: item.distanceM ?? Infinity,
         });
@@ -2178,8 +2188,8 @@ class CockpitViewController {
       nextItems.splice(4, Math.max(0, nextItems.length - 4), {
         key: 'input-status',
         tone: 'warning',
-        title: `${unknownCount} INPUT${unknownCount === 1 ? '' : 'S'} UNKNOWN`,
-        detail: sources || 'SOURCE STATUS UNAVAILABLE',
+        title: mc.inputsUnknownShort(unknownCount),
+        detail: sources || mc.sourceStatusUnavailable,
         target: null,
         timestamp: previous.get('input-status')?.timestamp || snapshot.evaluatedAt || Date.now(),
       });
@@ -2196,8 +2206,9 @@ class CockpitViewController {
     if (this.contextToggle) {
       const expanded = !this.contextCollapsed;
       this.contextToggle.setAttribute('aria-expanded', String(expanded));
-      this.contextToggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} Contact panel`);
-      this.contextToggle.title = `${expanded ? 'Collapse' : 'Expand'} contact panel`;
+      const m = messages().cockpit.context;
+      this.contextToggle.setAttribute('aria-label', expanded ? m.collapse : m.expand);
+      this.contextToggle.title = expanded ? m.collapseTitle : m.expandTitle;
       const icon = this.contextToggle.querySelector('.material-symbols-outlined');
       if (icon) icon.textContent = expanded ? 'chevron_left' : 'chevron_right';
     }
@@ -2215,8 +2226,9 @@ class CockpitViewController {
     if (this.signalToggle) {
       const expanded = !this.signalCollapsed;
       this.signalToggle.setAttribute('aria-expanded', String(expanded));
-      this.signalToggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} cockpit briefing panel`);
-      this.signalToggle.title = `${expanded ? 'Collapse' : 'Expand'} briefing panel`;
+      const m = messages().cockpit.brief;
+      this.signalToggle.setAttribute('aria-label', expanded ? m.collapse : m.expand);
+      this.signalToggle.title = expanded ? m.collapseTitle : m.expandTitle;
       const icon = this.signalToggle.querySelector('.material-symbols-outlined');
       if (icon) icon.textContent = expanded ? 'right_panel_close' : 'right_panel_open';
     }

@@ -19,7 +19,7 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   assert.doesNotMatch(html, /id="cockpit-exit"/);
   assert.match(
     html,
-    /id="map-view-switch"[^>]*aria-label="Exit cockpit view"[^>]*aria-keyshortcuts="Escape C"[\s\S]*?close_fullscreen[\s\S]*?EXIT COCKPIT/,
+    /id="map-view-switch"[\s\S]*?aria-label="Quitter la vue cockpit"[\s\S]*?close_fullscreen[\s\S]*?QUITTER LE COCKPIT/,
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
@@ -32,7 +32,7 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   assert.doesNotMatch(viewSwitcher[0], /id="reset-globe-view"/, 'map-only reset must stay outside Cockpit');
   assert.match(
     viewSwitcher[0],
-    /id="cockpit-reset-globe"[^>]*type="button"[^>]*aria-label="Reset cockpit to full globe view"[^>]*hidden[\s\S]*?public[\s\S]*?RESET[\s\S]*?id="map-view-switch"/,
+    /id="cockpit-reset-globe"[\s\S]*?aria-label="Réinitialiser le cockpit et revenir au globe entier"[\s\S]*?public[\s\S]*?RÉINIT\.[\s\S]*?id="map-view-switch"/,
   );
 
   const actions = html.match(/<div class="global-context-actions"[\s\S]*?<\/div>/);
@@ -149,10 +149,10 @@ test('the Contact panel never hides itself out from under its own NEXT button', 
   );
   // A foreign subject dashes the nose-relative arrow/bearing only.
   assert.match(body, /readout\.aircraftRelative/);
-  assert.match(body, /'BRG —'/);
+  assert.match(body, /mc\.bearingUnknown/);
   // A culled subject holds last-known content behind the CONTACT LOST cue.
   assert.match(body, /readout\.contactLost/);
-  assert.match(body, /CONTACT LOST/);
+  assert.match(body, /lost\.lost;/);
   assert.match(body, /this\.context\.dataset\.state = 'lost'/);
   assert.match(body, /if \(readout\.contactLost\) \{/, 'the CONTACT LOST branch is missing');
   // PREVIOUS/NEXT must be written before any early return, so the operator can
@@ -227,8 +227,8 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(html, /data-cockpit-display-slot="hud"/);
   assert.match(html, /data-cockpit-display-slot="detection"[\s\S]*?data-cockpit-display-slot="parameters"[\s\S]*?data-cockpit-display-slot="models3d"/);
   assert.doesNotMatch(html, /data-cockpit-display-slot="presets"/);
-  assert.match(html, /id="clear-selected-layers"[^>]*aria-label="Clear selected data layers"/);
-  assert.match(html, /id="reset-globe-view"[^>]*aria-label="Reset to full globe view"/);
+  assert.match(html, /id="clear-selected-layers"[\s\S]{0,200}?aria-label="Éteindre les couches sélectionnées"/);
+  assert.match(html, /id="reset-globe-view"[\s\S]{0,200}?aria-label="Revenir au globe entier"/);
   assert.match(css, /#top-center-actions\s*\{[\s\S]*?left:\s*50%;[\s\S]*?display:\s*flex;[\s\S]*?transform:\s*translateX\(-50%\)/);
   assert.match(css, /body\.ui-clean-view #top-center-actions/);
   assert.match(css, /body\.recording-mode #top-center-actions/);
@@ -719,9 +719,9 @@ test('cockpit weather control is off before JavaScript restores an explicit opt-
     /<button\s+id="cockpit-weather-toggle"[\s\S]*?<\/button>/,
   );
   assert.ok(match, 'cockpit weather toggle markup is missing');
-  assert.match(match[0], /aria-label="Enable cockpit weather effects"/);
+  assert.match(match[0], /aria-label="Activer les effets météo du cockpit"/);
   assert.match(match[0], /aria-pressed="false"/);
-  assert.match(match[0], /id="cockpit-weather-state">OFF</);
+  assert.match(match[0], /id="cockpit-weather-state"[^>]*>ÉTEINT</);
 });
 
 test('cockpit summary presents the focused item as Contact', () => {
@@ -729,14 +729,16 @@ test('cockpit summary presents the focused item as Contact', () => {
     /<aside id="cockpit-context"[\s\S]*?<\/aside>/,
   );
   assert.ok(match, 'cockpit Contact summary is missing');
-  assert.match(match[0], /aria-label="Contact cockpit summary"/);
-  assert.match(match[0], /class="cockpit-context-kicker">CONTACT</);
-  assert.match(match[0], /aria-label="Contact navigation"/);
-  assert.match(match[0], /aria-label="Previous — prior visited contact in the 250 km window"/);
-  assert.match(match[0], /aria-label="Next — nearest unvisited contact in the 250 km window"/);
-  assert.match(match[0], /aria-label="Collapse Contact panel"/);
+  assert.match(match[0], /aria-label="Résumé des contacts"/);
+  assert.match(match[0], /class="cockpit-context-kicker"[^>]*>CONTACT</);
+  assert.match(match[0], /aria-label="Navigation entre les contacts"/);
+  assert.match(match[0], /aria-label="Précédent — contact déjà visité dans la fenêtre de 250 km"/);
+  assert.match(match[0], /aria-label="Suivant — contact le plus proche jamais visité dans la fenêtre de 250 km"/);
+  assert.match(match[0], /aria-label="Replier le panneau Contacts"/);
   assert.doesNotMatch(match[0], />GLOBAL CONTEXT</);
-  assert.match(ui, /`\$\{expanded \? 'Collapse' : 'Expand'\} Contact panel`/);
+  // The collapsed/expanded pair is two whole labels in the catalog, never a
+  // verb concatenated to a noun (docs/i18n/CONVENTIONS.md § 2).
+  assert.match(ui, /expanded \? m\.collapse : m\.expand/);
 });
 
 test('Cockpit Contact navigation omits the redundant Focus camera action', () => {
@@ -753,7 +755,7 @@ test('Global Context names its mixed contact cycle without changing the stable m
   assert.ok(match, 'Global Context contacts button is missing');
   assert.match(match[0], />CONTACTS</);
   assert.match(match[0], /aria-label="CONTACTS"/);
-  assert.match(match[0], /title="Cycles the nearest contacts of whatever type you select — planes, vessels, installations\. Satellites track independently\."/);
+  assert.match(match[0], /title="Parcourt les contacts les plus proches du type choisi — avions, navires, installations\. Les satellites se suivent à part\."/);
   assert.doesNotMatch(match[0], />FLIGHTS</);
 });
 
@@ -770,8 +772,8 @@ test('Global Context standby describes both chooser modes', () => {
     /<div id="context-mode-standby"[\s\S]*?<\/div>/,
   );
   assert.ok(match, 'Global Context standby is missing');
-  assert.match(match[0], /CONTACTS — nearest planes · vessels · sites/);
-  assert.match(match[0], /SPACE MISSIONS — launches &amp; orbital assets/);
+  assert.match(match[0], /CONTACTS — avions · navires · sites les plus proches/);
+  assert.match(match[0], /MISSIONS SPATIALES — lancements et objets en orbite/);
 });
 
 test('cockpit briefing cycle control keeps its state as the accessible name', () => {
@@ -779,16 +781,16 @@ test('cockpit briefing cycle control keeps its state as the accessible name', ()
     /<button\s+id="cockpit-brief-auto"[\s\S]*?<\/button>/,
   );
   assert.ok(match, 'cockpit briefing cycle toggle is missing');
-  assert.match(match[0], /aria-label="CYCLE OFF"/);
+  assert.match(match[0], /aria-label="DÉFILEMENT ÉTEINT"/);
   assert.match(match[0], /aria-pressed="false"/);
-  assert.match(match[0], />CYCLE OFF<\/button>/);
-  assert.match(match[0], /title="Cycle briefing pages automatically every 9 seconds \(Signals → News → Local\)\./);
+  assert.match(match[0], />DÉFILEMENT ÉTEINT<\/button>/);
+  assert.match(match[0], /title="Fait défiler les pages du briefing toutes les 9 secondes \(Signaux → Actualités → Local\)\./);
 
   const update = ui.match(
     /setBriefAutoRotate\(enabled\) \{([\s\S]*?)\n  \}\n\n  startBriefRotation/,
   );
   assert.ok(update, 'cockpit briefing cycle state updater is missing');
-  assert.match(update[1], /const label = this\.briefAutoRotateEnabled \? 'CYCLE ON' : 'CYCLE OFF';/);
+  assert.match(update[1], /const label = this\.briefAutoRotateEnabled \? m\.cycleOn : m\.cycleOff;/);
   assert.match(update[1], /setAttribute\('aria-label', label\)/);
   assert.match(update[1], /\.title = help;/);
   assert.doesNotMatch(update[1], /setAttribute\('aria-label', help\)/);
