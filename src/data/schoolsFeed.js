@@ -102,12 +102,14 @@
  */
 
 import { IPS_UNAVAILABLE, ipsKindForType } from './ipsFeed.js';
+import messages from './schoolsFeed.i18n.js';
 
 /** Opendatasoft dataset id backing this layer. */
 export const SCHOOLS_DATASET = 'fr-en-annuaire-education';
 /** Portal host. Both the viewport query and the national pack read it. */
 export const SCHOOLS_PORTAL = 'data.education.gouv.fr';
 /** Attribution string carried on every payload (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — the register's own title, as MENJ credits it.
 export const SCHOOLS_SOURCE = 'Annuaire de l’éducation — MENJ (data.education.gouv.fr)';
 
 /**
@@ -158,6 +160,8 @@ export const SCHOOLS_BOX_STEP_DEG = 0.02;
  * per-section booleans and administrative codes that no surface here reads,
  * and asking for all of them tripled the upstream payload for nothing.
  */
+// i18n-ignore-start — the register's own column names, sent to the portal as
+// published. They are a query, not words a reader sees.
 export const SCHOOLS_SITE_FIELDS = Object.freeze([
   'identifiant_de_l_etablissement',
   'nom_etablissement',
@@ -184,6 +188,7 @@ export const SCHOOLS_SITE_FIELDS = Object.freeze([
   'latitude',
   'longitude',
 ]);
+// i18n-ignore-end
 
 /**
  * The colour ladder: five bands, ordered youngest-and-most-common first.
@@ -194,15 +199,24 @@ export const SCHOOLS_SITE_FIELDS = Object.freeze([
  * nothing. `ecole` is both the youngest level and 71% of the file, so a tie
  * resolving to it is the conservative answer.
  */
+// i18n-ignore-next-line — band KEYS: they ride the national pack and the mesh.
 export const SCHOOL_LEVELS = Object.freeze(['ecole', 'college', 'lycee', 'adapte', 'autre']);
 
-export const SCHOOL_LEVEL_LABELS = Object.freeze({
-  ecole: 'École',
-  college: 'Collège',
-  lycee: 'Lycée',
-  adapte: 'Adapté & médico-social',
-  autre: 'Administratif & orientation',
-});
+/**
+ * The band's name in the page's language. Anything unrecognised reads as
+ * `autre`, which is what `schoolLevel()` already folds an unknown type into.
+ * @param {?string} level A `SCHOOL_LEVELS` key.
+ * @returns {string}
+ */
+export function schoolLevelLabel(level) {
+  const levels = messages().levels;
+  return levels[level] || levels.autre;
+}
+
+/** The band's name, or null when the key is not one of the five. */
+function knownLevelLabel(level) {
+  return messages().levels[level] || null;
+}
 
 /** Index of a level in the ladder, for the mesh tuple. */
 export const SCHOOL_LEVEL_INDEX = Object.freeze(
@@ -227,6 +241,8 @@ export const SCHOOL_LEVEL_INDEX = Object.freeze(
  * ("Administratif & orientation") names a legend row, not a kind of building,
  * and gluing it in front of "Rectorat de l'académie de Lyon" states nothing.
  */
+// i18n-ignore-start — accent-stripped needles matched against the register's
+// own `nom_etablissement`. They are a search, not a label.
 const LEVEL_NAME_HINTS = Object.freeze({
   ecole: Object.freeze(['ecole', 'maternelle', 'elementaire', 'primaire', 'groupe scolaire']),
   college: Object.freeze(['college']),
@@ -234,6 +250,7 @@ const LEVEL_NAME_HINTS = Object.freeze({
   adapte: Object.freeze(['erea', 'enseignement adapte', 'medico', 'regional adapte']),
   autre: Object.freeze([]),
 });
+// i18n-ignore-end
 
 /** Strip accents and lower-case, so "Lycée" matches "LYCEE". */
 function nameKey(value) {
@@ -270,8 +287,8 @@ export function schoolNameStatesLevel(name, level) {
  */
 export function schoolDisplayName(site) {
   const name = typeof site?.name === 'string' ? site.name.trim() : '';
-  const level = SCHOOL_LEVEL_LABELS[site?.level] || null;
-  if (!name) return level || 'Établissement';
+  const level = knownLevelLabel(site?.level);
+  if (!name) return level || messages().unnamed;
   if (schoolNameStatesLevel(name, site?.level)) return name;
   return level ? `${level} · ${name}` : name;
 }
@@ -284,6 +301,8 @@ export function schoolDisplayName(site) {
  * the alternative — folding EREA into `Lycée` — would state something about
  * its pupils that is not true.
  */
+// i18n-ignore-start — the register's own `type_etablissement` values, matched
+// verbatim. Translating a join key is how a map goes silently empty.
 const TYPE_TO_LEVEL = Object.freeze({
   Ecole: 'ecole',
   'École': 'ecole',
@@ -295,6 +314,7 @@ const TYPE_TO_LEVEL = Object.freeze({
   'Information et orientation': 'autre',
   Autre: 'autre',
 });
+// i18n-ignore-end
 
 /**
  * The four-step geocoding-quality ladder the 22 published spellings fold onto.
@@ -302,16 +322,22 @@ const TYPE_TO_LEVEL = Object.freeze({
  * `commune` is the one that matters and the one the card names: it means the
  * dot is the town's centre point, not the school. 2 159 rows are there.
  */
+// i18n-ignore-next-line — ladder KEYS, stored on every projected site.
 export const SCHOOL_PRECISION_STEPS = Object.freeze(['adresse', 'rue', 'commune', 'inconnue']);
 
-export const SCHOOL_PRECISION_LABELS = Object.freeze({
-  adresse: 'Adresse exacte',
-  rue: 'Rue',
-  commune: 'Centre de la commune',
-  inconnue: 'Précision non publiée',
-});
+/**
+ * The ladder step's name in the page's language.
+ * @param {?string} step A `SCHOOL_PRECISION_STEPS` key.
+ * @returns {string}
+ */
+export function schoolPrecisionLabel(step) {
+  const steps = messages().precision;
+  return steps[step] || steps.inconnue;
+}
 
 /** Published spelling (upper-cased, accents stripped) → ladder step. */
+// i18n-ignore-start — the 22 spellings the académies publish, and the four
+// keys they fold onto. Both sides are data.
 const PRECISION_TO_STEP = Object.freeze({
   'NUMERO DE RUE': 'adresse',
   'NUMERO (ADRESSE)': 'adresse',
@@ -335,6 +361,7 @@ const PRECISION_TO_STEP = Object.freeze({
   MAUVAISE: 'commune',
   'NE SAIT PAS': 'inconnue',
 });
+// i18n-ignore-end
 
 /** Strip accents and upper-case, so one spelling matches its own variants. */
 export function precisionKey(value) {
@@ -368,6 +395,7 @@ export function parseSchoolFlag(value) {
 
 /** Band for one register row. Anything unrecognised lands in `autre`. */
 export function schoolLevel(row) {
+  // i18n-ignore-next-line — a band key, not a word.
   return TYPE_TO_LEVEL[String(row?.type_etablissement || '').trim()] || 'autre';
 }
 
@@ -375,6 +403,7 @@ export function schoolLevel(row) {
 export function schoolSector(row) {
   const value = String(row?.statut_public_prive || '').trim();
   if (value === 'Public') return 'public';
+  // i18n-ignore-next-line — the register's own `statut_public_prive` values.
   if (value === 'Privé' || value === 'Prive') return 'prive';
   return null;
 }

@@ -81,14 +81,16 @@ import {
   PE_BOX_STEP_DEG,
   PE_GEO_SOURCE,
   PE_MAX_BOX_DEG,
-  PE_BAND_LABELS,
   PE_BAND_RATIOS,
   PE_MODES,
-  PE_MODE_LABELS,
-  PE_MODE_SHORT,
-  PE_SCALE_LABELS,
+  peBandName,
+  peModeLabel,
+  peModeShortLabel,
+  peScaleLabel,
 } from './petiteEnfanceFeed.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './petiteEnfanceFrance.i18n.js';
 
 export const PE_FR_LAYER_ID = 'petite-enfance-fr';
 
@@ -218,15 +220,15 @@ const SELECTED_OUTLINE_WIDTH_PX = 3;
 /** The selected territory's own wash, laid over the band fill it belongs to. */
 const SELECTED_FILL_ALPHA = 0.16;
 
-/** One-line explanations behind each band swatch. */
-const BAND_BLURBS = Object.freeze({
-  'tres-bas': 'Moins de 60 % de la moyenne nationale. Aucun département métropolitain n’y figure — ils sont tous outre-mer.',
-  bas: 'Entre 60 et 85 % de la moyenne. Trouver une place y demande une recherche, pas un choix.',
-  'sous-moyenne': 'Entre 85 et 100 % de la moyenne nationale.',
-  'sur-moyenne': 'Entre 100 et 115 % de la moyenne nationale.',
-  haut: 'Entre 115 et 140 % de la moyenne. L’offre y dépasse nettement le pays.',
-  'tres-haut': 'Plus de 140 % de la moyenne. Presque toujours porté par l’assistante maternelle, pas par la crèche.',
-});
+/**
+ * One-line explanation behind each band swatch.
+ *
+ * A function and not a constant: a constant is resolved when the module loads,
+ * which would freeze the key in whatever language booted first.
+ */
+function bandBlurb(band) {
+  return messages().bandBlurbs[band] || null;
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -295,9 +297,9 @@ export function peBandAlpha(band) {
   return BAND_ALPHA[band] ?? 0;
 }
 
-/** French label for one band. */
+/** The band's name in the page's language. */
 export function peBandLabel(band) {
-  return PE_BAND_LABELS[band] || 'Taux non publié';
+  return peBandName(band) || messages().noRate;
 }
 
 /**
@@ -308,16 +310,19 @@ export function peBandLabel(band) {
  * editions instead of going quietly stale.
  */
 export function peBandRangeLabels(national) {
+  const m = messages();
   const reference = Number(national);
   const has = Number.isFinite(reference) && reference > 0;
-  const at = (ratio) => (has ? `${(ratio * reference).toFixed(0)}` : `${Math.round(ratio * 100)} %`);
+  const at = (ratio) => (has
+    ? `${(ratio * reference).toFixed(0)}`
+    : m.legend.ratio(Math.round(ratio * 100)));
   const labels = [];
   for (let i = 0; i < PE_BAND_RATIOS.length; i += 1) {
     labels.push(i === 0
-      ? `< ${at(PE_BAND_RATIOS[0])}`
-      : `${at(PE_BAND_RATIOS[i - 1])}–${at(PE_BAND_RATIOS[i])}`);
+      ? m.legend.below(at(PE_BAND_RATIOS[0]))
+      : m.legend.between(at(PE_BAND_RATIOS[i - 1]), at(PE_BAND_RATIOS[i])));
   }
-  labels.push(`> ${at(PE_BAND_RATIOS[PE_BAND_RATIOS.length - 1])}`);
+  labels.push(m.legend.above(at(PE_BAND_RATIOS[PE_BAND_RATIOS.length - 1])));
   return labels;
 }
 
@@ -387,14 +392,16 @@ function territoryAnchor(record) {
   return Cesium.Cartesian3.fromDegrees(anchor[0], anchor[1]);
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A grouped integer: `12 400` in French, `12,400` in English. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
-/** A published rate, with the French decimal comma. */
+/** A published rate, to one decimal: `60,9` in French, `60.9` in English. */
 function rate(value) {
-  return Number.isFinite(value) ? value.toFixed(1).replace('.', ',') : null;
+  return Number.isFinite(value)
+    ? formatDecimal(value, 1, { minimumFractionDigits: 1 })
+    : null;
 }
 
 // --- Cards ------------------------------------------------------------------
@@ -416,21 +423,28 @@ function modeLines(area) {
     rows.push({ mode, value, places: Number.isFinite(places) ? places : null });
   }
   rows.sort((a, b) => b.value - a.value);
-  return rows.map((row) => {
-    const places = row.places !== null ? ` · ${fr(row.places)} places` : '';
-    return `${PE_MODE_LABELS[row.mode]} : ${rate(row.value)}${places}`;
-  });
+  const m = messages();
+  return rows.map((row) => m.card.mode(
+    peModeLabel(row.mode) || row.mode,
+    rate(row.value),
+    row.places !== null ? m.card.modePlaces(fr(row.places)) : '',
+  ));
 }
 
 /** The one line that says how this area sits against France. */
 function comparisonLine(area, national) {
-  if (!Number.isFinite(area?.rate)) return 'Taux non publié pour cette zone';
-  const parts = [`${rate(area.rate)} places pour 100 enfants de moins de 3 ans`];
+  const m = messages();
+  if (!Number.isFinite(area?.rate)) return m.card.noRateHere;
+  const parts = [m.card.rate(rate(area.rate))];
   if (Number.isFinite(national) && national > 0) {
     const ratio = area.rate / national;
     const pct = Math.round(Math.abs(ratio - 1) * 100);
-    if (pct === 0) parts.push('au niveau de la moyenne nationale');
-    else parts.push(`${pct} % ${ratio > 1 ? 'au-dessus' : 'en dessous'} de la moyenne nationale (${rate(national)})`);
+    if (pct === 0) parts.push(m.card.atNationalAverage);
+    else {
+      parts.push(ratio > 1
+        ? m.card.aboveAverage(pct, rate(national))
+        : m.card.belowAverage(pct, rate(national)));
+    }
   }
   return parts.join(' — ');
 }
@@ -440,55 +454,56 @@ function comparisonLine(area, national) {
  * absence of one; nothing here is inferred.
  */
 export function buildPeSelectionLabel(record) {
+  const m = messages();
   const area = record?.area || {};
   const national = record?.national ?? null;
   const details = [];
-  const title = area.name || area.code || 'Zone';
+  const title = area.name || area.code || m.card.untitled;
 
   // The scale is the first thing on the card, because three nested scales sit
   // under the cursor and a rate is meaningless without knowing whose it is.
-  const scale = PE_SCALE_LABELS[area.scale] || 'Zone';
-  details.push(record?.year ? `${scale} · millésime ${record.year}` : scale);
+  const scale = peScaleLabel(area.scale) || m.card.untitled;
+  details.push(record?.year ? m.card.scaleAndYear(scale, record.year) : scale);
 
   details.push(comparisonLine(area, national));
 
   if (Number.isFinite(area.totalPlaces)) {
-    details.push(`${fr(area.totalPlaces)} places d’accueil formel au total`);
+    details.push(m.card.totalPlaces(fr(area.totalPlaces)));
   }
 
   const lines = modeLines(area);
   if (lines.length) details.push(...lines);
 
   if (area.dominant) {
-    details.push(`Mode dominant : ${PE_MODE_SHORT[area.dominant]}`);
+    details.push(m.card.dominant(peModeShortLabel(area.dominant) || area.dominant));
   }
 
   const where = [area.deptName, area.region].filter(Boolean).join(' · ');
+  // i18n-ignore-next-line — a scale KEY from the CNAF's own payload.
   if (where && area.scale !== 'dep') details.push(where);
 
   // The commune scale exists only above 10 000 inhabitants, and a reader
   // looking at one needs to know it is not a complete map of communes.
-  if (area.scale === 'com') {
-    details.push('⚠ Échelle communale publiée seulement pour les communes de plus de 10 000 habitants');
-  }
-  if (area.scale === 'epci') {
-    details.push('Territoire dessiné : les communes membres, sous une seule couleur — geo.api.gouv.fr ne publie pas de contour d’EPCI');
-  }
-  if (record?.simplified) details.push('Contour communal simplifié');
+  // i18n-ignore-next-line — a scale KEY.
+  if (area.scale === 'com') details.push(m.card.communeScaleGap);
+  // i18n-ignore-next-line — a scale KEY.
+  if (area.scale === 'epci') details.push(m.card.epciDrawing);
+  if (record?.simplified) details.push(m.card.simplified);
 
-  if (area.code) details.push(`Code ${area.code}`);
+  if (area.code) details.push(m.card.code(area.code));
   return [title, ...details].join('\n');
 }
 
 /** Card copy for one département at national altitude. */
 export function buildPeDepartementLabel(row, national) {
+  const m = messages();
   const details = [];
   details.push(comparisonLine(row, national));
-  if (Number.isFinite(row.totalPlaces)) {
-    details.push(`${fr(row.totalPlaces)} places d’accueil formel`);
-  }
+  if (Number.isFinite(row.totalPlaces)) details.push(m.card.placesHere(fr(row.totalPlaces)));
   details.push(...modeLines(row));
-  if (row.dominant) details.push(`Mode dominant : ${PE_MODE_SHORT[row.dominant]}`);
+  if (row.dominant) {
+    details.push(m.card.dominant(peModeShortLabel(row.dominant) || row.dominant));
+  }
   if (row.region) details.push(row.region);
   return [row.name, ...details].join('\n');
 }
@@ -531,7 +546,7 @@ export function createPeDepartementOverlayEntry(row, position) {
     id: `petite-enfance-fr:dep:${row.code}`,
     position,
     variant: 'label',
-    title: `${row.name} · ${rate(row.rate) ?? '—'}`,
+    title: messages().departementLabel(row.name, rate(row.rate) ?? '—'),
     accent: peBandColor(row.band) || '#9aa4ad',
     // The most extreme areas earn a label, both ways round: a diverging ramp
     // whose labels all sat at one end would report half the finding.
@@ -661,7 +676,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
-    source.name = 'Accueil du jeune enfant — taux de couverture par département';
+    source.name = messages().departementSourceName;
     source.show = _enabled;
     for (const entity of source.entities.values) {
       const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -797,7 +812,7 @@ async function loadNational({ force = false } = {}) {
     await ensureDepartementShapes();
   } catch (error) {
     console.warn('[Data:PetiteEnfance-FR] département polygons failed:', error?.message || error);
-    _error = 'département polygons unavailable';
+    _error = messages().errors.departementShapes;
     _status = 'error';
     _loading = false;
     return;
@@ -884,7 +899,7 @@ async function ensureContours(box) {
     .catch((error) => {
       if (error?.name !== 'AbortError') {
         console.warn('[Data:PetiteEnfance-FR] contours unavailable:', error?.message || error);
-        _contourError = error?.message || 'indisponible';
+        _contourError = error?.message || messages().errors.unavailable;
       }
       return null;
     })
@@ -1254,8 +1269,8 @@ async function loadLocal(box, span, { force = false } = {}) {
     // failed is the geometry, and the row says exactly that.
     clearAreas();
     _error = _contourError
-      ? `contours communaux indisponibles (${_contourError})`
-      : 'contours communaux indisponibles';
+      ? messages().errors.communeContoursWhy(_contourError)
+      : messages().errors.communeContours;
     _status = 'error';
     return;
   }
@@ -1280,7 +1295,7 @@ async function loadLocal(box, span, { force = false } = {}) {
   // A département whose outlines never arrived is ground with no shape, which
   // looks exactly like ground with no rate and means something else entirely.
   _error = pack.unavailable?.length
-    ? `contours indisponibles : ${pack.unavailable.join(', ')}`
+    ? messages().errors.someContours(pack.unavailable.join(', '))
     : null;
   _status = _count > 0 ? 'ready' : 'empty';
 }
@@ -1377,27 +1392,28 @@ export function buildPeLoadingLabel({
   dropped = _dropped,
   national = _national,
 } = {}) {
+  const m = messages();
   if (regime === 'national') {
-    if (loading) return 'lecture du registre national...';
+    if (loading) return m.status.loadingNational;
     if (status === 'error') return '';
     if (!national) return '';
-    const parts = [`${national.painted} départements · moyenne nationale ${rate(national.national)} places / 100 enfants`];
+    const parts = [m.status.national(national.painted, rate(national.national))];
     // The choropleth's own blind spot, stated where the choropleth is read —
     // and here it is the finding, not a footnote.
     if (national.unpainted?.length) {
-      parts.push(`${national.unpainted.length} territoires ultramarins non cartographiés, tous sous la moyenne`);
+      parts.push(m.status.overseas(national.unpainted.length));
     }
     return parts.join(' · ');
   }
-  if (loading) return 'lecture des contours communaux...';
+  if (loading) return m.status.loadingContours;
   if (status === 'error') return '';
-  if (!inView) return 'aucune zone dans cette vue';
-  const parts = [`${fr(count - communes)} intercommunalités`];
-  if (communes > 0) parts.push(`${fr(communes)} communes`);
+  if (!inView) return m.status.empty;
+  const parts = [m.status.epci(fr(count - communes))];
+  if (communes > 0) parts.push(m.status.communes(fr(communes)));
   // The two silences this regime can produce, named where it is read: ground
   // whose area publishes no rate, and départements the pack cap left out.
-  if (unpainted > 0) parts.push(`${fr(unpainted)} communes sans taux publié`);
-  if (dropped > 0) parts.push(`${fr(dropped)} contours hors plafond`);
+  if (unpainted > 0) parts.push(m.status.unpainted(fr(unpainted)));
+  if (dropped > 0) parts.push(m.status.dropped(fr(dropped)));
   return parts.join(' · ');
 }
 
@@ -1574,6 +1590,7 @@ const petiteEnfanceFranceLayer = {
 
   /** Colour legend for the control-panel row. */
   getRowControls() {
+    const m = messages();
     const national = _regime === 'national' ? _national?.national : _pack?.national;
     const labels = peBandRangeLabels(national);
     const counts = Object.fromEntries(PE_BANDS.map((band) => [band, 0]));
@@ -1589,10 +1606,10 @@ const petiteEnfanceFranceLayer = {
     }
     const legend = PE_BANDS
       .map((band, index) => ({
-        label: `${labels[index]} places / 100 enfants`,
+        label: m.legend.band(labels[index]),
         color: peBandColor(band),
         count: counts[band],
-        blurb: BAND_BLURBS[band],
+        blurb: bandBlurb(band),
       }))
       .filter((row) => row.count > 0);
     return { chips: [], legend };
