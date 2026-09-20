@@ -95,7 +95,7 @@
     locale from that attribute (src/i18n/locale.js, which carries the rule and
     its reasons). Order: `window.__GEV_LOCALE__` (the QA fleet) > `?lang=`
     (remembered in localStorage) > `localStorage['gev:locale:v1']` >
-    `navigator.languages` (off while AUTO is false) > French.
+    `navigator.languages` (AUTO, on since the FR/EN switch shipped) > French.
 
     Inline and before the stylesheet for the reason the two gates above are:
     `style.css` hides the loading line of an English page until its markup is
@@ -107,7 +107,7 @@
     /* locale-gate */
     (function () {
       var KEY = 'gev:locale:v1';
-      var AUTO = false;
+      var AUTO = true;
       var pick = function (value) {
         var tag = typeof value === 'string' ? value.toLowerCase().split(/[-_]/)[0] : '';
         return tag === 'fr' || tag === 'en' ? tag : null;
@@ -283,7 +283,11 @@
     `npm run landing:assets` réécrit les chemins `/landing/…` avec l'empreinte
     de leur contenu (`scripts/build-landing-assets.mjs`).
   -->
-  <div id="vitrine" class="landing" data-state="poster">
+  <!-- The showcase stays French for now: it gets its own English document
+       later (plan decision D2), so its root says so. Without `lang="fr"` an
+       English `<html lang>` would mislabel every French word below it for a
+       screen reader and for a translation tool. -->
+  <div id="vitrine" class="landing" data-state="poster" lang="fr">
     <a class="skip" href="#contenu">Aller au contenu</a>
     <div class="world" aria-hidden="true">
       <!--
@@ -324,7 +328,7 @@
       octets, aucune requête, et les deux plans prennent la couleur du texte.
     -->
     <header class="top" id="haut">
-      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word">surplomb</span></a>
+      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word" translate="no">surplomb</span></a>
       <div class="top-right"><p class="slogan">Aucun <br />angle mort.</p></div>
     </header>
 
@@ -496,7 +500,8 @@
   <div id="world-overlay-root" aria-hidden="true">
     <canvas id="world-overlay-canvas"></canvas>
   </div>
-  <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
+  <div id="world-overlay-actions" class="world-overlay-accessibility" role="region"
+       data-i18n-aria-label="overlay.actions" aria-label="Objets visibles sur la carte">
     <div id="world-overlay-action-list"></div>
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
   </div>
@@ -504,22 +509,28 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word">surplomb</span></h1>
-    <p class="subtitle">Aucun angle mort.</p>
+    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word" translate="no">surplomb</span></h1>
+    <p class="subtitle" data-i18n="title.tagline">Aucun angle mort.</p>
   </div>
 
-  <!-- Style indicator -->
+  <!-- Style indicator. The style's own name is the same word in both
+       languages (NORMAL, CRT, NVG, FLIR…), so it carries `translate="no"`
+       rather than a catalog key it would only ever echo. -->
   <div id="style-indicator">
-    <span class="indicator-label">ACTIVE STYLE</span>
-    <span class="indicator-value" id="active-style-name">NORMAL</span>
+    <span class="indicator-label" data-i18n="style.activeLabel">STYLE ACTIF</span>
+    <span class="indicator-value" id="active-style-name" translate="no">NORMAL</span>
   </div>
 
   <!-- Top-center camera and share actions -->
-  <nav id="top-center-actions" aria-label="Globe actions">
-    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
+  <nav id="top-center-actions" data-i18n-aria-label="actions.nav" aria-label="Actions du globe">
+    <button id="clear-selected-layers" type="button"
+            data-i18n-aria-label="actions.clearLayers" aria-label="Éteindre les couches sélectionnées"
+            data-i18n-title="actions.clearLayersTitle" title="Éteindre toutes les couches sélectionnées">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
-    <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
+    <button id="share-btn" type="button"
+            data-i18n-aria-label="actions.share" aria-label="Copier le lien de partage"
+            data-i18n-title="actions.share" title="Copier le lien de partage">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
     <!--
@@ -530,10 +541,14 @@
       https — un bouton présent qui échoue toujours est pire que pas de bouton.
       Utile au portable aussi, donc il n'est pas gardé sur le tactile.
     -->
-    <button id="locate-me" type="button" hidden aria-label="Autour de moi" title="Centrer la carte sur ma position">
+    <button id="locate-me" type="button" hidden
+            data-i18n-aria-label="actions.locate" aria-label="Autour de moi"
+            data-i18n-title="actions.locateTitle" title="Centrer la carte sur ma position">
       <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
     </button>
-    <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
+    <button id="reset-globe-view" type="button"
+            data-i18n-aria-label="actions.resetGlobe" aria-label="Revenir au globe entier"
+            data-i18n-title="actions.resetGlobeTitle" title="Réinitialiser la caméra et revenir au globe entier">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
     <!--
@@ -544,9 +559,33 @@
       la fiche est peinte sur le canvas — donc le bouton vit ici, masqué tant
       que rien n'est suivi, et visible seulement au doigt.
     -->
-    <button id="tracking-release" type="button" hidden aria-label="Ne plus suivre" title="Ne plus suivre cet objet">
+    <button id="tracking-release" type="button" hidden
+            data-i18n-aria-label="actions.stopFollow" aria-label="Ne plus suivre"
+            data-i18n-title="actions.stopFollowTitle" title="Ne plus suivre cet objet">
       <span class="material-symbols-outlined" aria-hidden="true">close</span>
     </button>
+    <!--
+      LA LANGUE, DANS LA COLONNE DES ACTIONS.
+
+      Un seul bouton, pas deux : la page a une langue, et ce bouton nomme
+      l'AUTRE. Sur une page française il dit « EN » et s'annonce « English » ;
+      l'applicateur de `src/i18n/markup.js` échange les deux valeurs sur une
+      page anglaise, où il dit « FR » et s'annonce « Français » — c'est
+      exactement la bascule que `markup.i18n.js` sait faire, sans une ligne de
+      JavaScript pour choisir le libellé.
+
+      Il vit ici et nulle part ailleurs parce que cette colonne est la seule
+      qui existe sur les deux coquilles : sur téléphone, `phoneSheet.js` y
+      pousse déjà le bouton de fond de carte, donc la langue arrive au même
+      endroit sans que la feuille basse ait à la connaître.
+
+      `src/localeSwitch.js` ne fait qu'une chose au clic : `switchLocale()`,
+      qui retient le choix, vide le hash de partage et recharge.
+    -->
+    <button id="locale-switch" type="button" lang="en"
+            data-i18n="localeSwitch.label" data-i18n-aria-label="localeSwitch.action"
+            data-i18n-title="localeSwitch.action"
+            aria-label="English — passer en anglais" title="English — passer en anglais">EN</button>
   </nav>
   <!--
     LES TROIS PUCES D'ÉTAT, DANS UN SEUL CONTENEUR.
@@ -563,15 +602,15 @@
   -->
   <div id="phone-status">
     <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <span id="global-loading-label">LOADING LIVE DATA</span>
+      <span id="global-loading-label" data-i18n="status.loading">CHARGEMENT DES DONNÉES EN DIRECT</span>
       <span id="global-loading-detail"></span>
     </div>
     <div id="traffic-sync-chip" aria-live="polite">
-      <span id="traffic-sync-label">syncing road network</span>
+      <span id="traffic-sync-label" data-i18n="status.trafficSync">synchronisation du réseau routier</span>
       <span id="traffic-sync-progress">0%</span>
     </div>
     <div id="cctv-sync-chip" aria-live="polite">
-      <span id="cctv-sync-label">loading frames</span>
+      <span id="cctv-sync-label" data-i18n="status.cctvSync">chargement des images</span>
       <span id="cctv-sync-progress">0/0</span>
     </div>
   </div>
@@ -600,7 +639,7 @@
        same visual vocabulary as `#cockpit-compass-tape`, so the two mounts
        cannot disagree about which way north is. -->
   <div id="globe-heading-tape" class="globe-heading-tape" role="img"
-       aria-label="Camera heading">
+       data-i18n-aria-label="heading.camera" aria-label="Cap de la caméra">
     <div id="globe-heading-divisions" class="globe-heading-divisions" aria-hidden="true"></div>
     <div class="globe-heading-readout">
       <span id="globe-heading-value">---</span><small>°</small>
@@ -613,7 +652,7 @@
   </div>
 
   <!-- Aircraft first-person view. It can be entered from the visible view switcher. -->
-  <section id="cockpit-hud" aria-label="Aircraft cockpit view" hidden>
+  <section id="cockpit-hud" data-i18n-aria-label="cockpit.view" aria-label="Vue cockpit de l’avion" hidden>
     <div class="cockpit-visor-shell" aria-hidden="true">
       <div class="cockpit-roll-arc">
         <span style="--slot:-3;--depth:3">−30</span>
@@ -631,19 +670,20 @@
         <span>+20</span><span>+10</span><span class="active">00</span><span>−10</span><span>−20</span>
       </div>
       <div class="cockpit-horizon-guide">
-        <span></span><small>LEVEL</small><span></span>
+        <span></span><small data-i18n="cockpit.level">HORIZON</small><span></span>
       </div>
-      <div id="cockpit-route-direction" class="cockpit-route-direction" hidden aria-label="Estimated destination direction">
+      <div id="cockpit-route-direction" class="cockpit-route-direction" hidden
+           data-i18n-aria-label="cockpit.routeDirection" aria-label="Direction estimée de la destination">
         <svg class="cockpit-route-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M12 2 4.58 19.93c-.34.83.51 1.63 1.31 1.27L12 18.47l6.11 2.73c.8.36 1.65-.44 1.31-1.27L12 2Z" />
         </svg>
-        <small id="cockpit-route-direction-label">DEST ---°</small>
+        <small id="cockpit-route-direction-label" translate="no">DEST ---°</small>
       </div>
-      <div class="cockpit-visor-status cockpit-visor-status-left">OPTICAL PLANE · 01</div>
-      <div class="cockpit-visor-status cockpit-visor-status-right">VISOR LOCK · ACTIVE</div>
+      <div class="cockpit-visor-status cockpit-visor-status-left" data-i18n="cockpit.opticalPlane">PLAN OPTIQUE · 01</div>
+      <div class="cockpit-visor-status cockpit-visor-status-right" data-i18n="cockpit.visorLock">VERROU DE VISIÈRE · ACTIF</div>
     </div>
     <div id="cockpit-speed-rim" class="cockpit-altitude-rim cockpit-speed-rim">
-      <span class="cockpit-altitude-rim-label">GROUND SPEED · KTS</span>
+      <span class="cockpit-altitude-rim-label" data-i18n="cockpit.speedRim">VITESSE SOL · KTS</span>
       <div class="cockpit-altitude-rim-rail"></div>
       <div class="cockpit-altitude-rim-scale">
         <span data-speed-rim-tick><b></b><i></i></span>
@@ -662,7 +702,7 @@
       </div>
     </div>
     <div id="cockpit-altitude-rim" class="cockpit-altitude-rim">
-      <span class="cockpit-altitude-rim-label">ALTITUDE · FT</span>
+      <span class="cockpit-altitude-rim-label" data-i18n="cockpit.altitudeRim">ALTITUDE · FT</span>
       <div class="cockpit-altitude-rim-rail"></div>
       <div class="cockpit-altitude-rim-scale">
         <span data-altitude-rim-tick><b></b><i></i></span>
@@ -682,38 +722,43 @@
     </div>
     <div class="cockpit-topline">
       <div>
-        <span class="cockpit-kicker">FIRST PERSON</span>
-        <strong id="cockpit-callsign">AIRCRAFT</strong>
-        <span id="cockpit-aircraft-meta" class="cockpit-aircraft-meta">LIVE TRACK · COURSE ALIGNED</span>
+        <span class="cockpit-kicker" data-i18n="cockpit.firstPerson">VUE PILOTE</span>
+        <strong id="cockpit-callsign" data-i18n="cockpit.callsign">AVION</strong>
+        <span id="cockpit-aircraft-meta" class="cockpit-aircraft-meta" data-i18n="cockpit.aircraftMeta">SUIVI EN DIRECT · CAP ALIGNÉ</span>
       </div>
-      <div class="cockpit-vision-controls" role="group" aria-label="Cockpit vision style">
-        <button id="cockpit-vision-previous" class="cockpit-vision-nav" type="button" aria-label="Previous cockpit vision style" title="Previous vision style">
+      <div class="cockpit-vision-controls" role="group" data-i18n-aria-label="cockpit.vision.group" aria-label="Style de vision du cockpit">
+        <button id="cockpit-vision-previous" class="cockpit-vision-nav" type="button"
+                data-i18n-aria-label="cockpit.vision.previous" aria-label="Style de vision précédent"
+                data-i18n-title="cockpit.vision.previousTitle" title="Vision précédente">
           <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
-          <small>PREV</small>
+          <small data-i18n="cockpit.vision.prevShort">PRÉC</small>
         </button>
-        <button id="cockpit-vision-current" class="cockpit-vision-current" type="button" data-cockpit-vision="optical" aria-label="Current cockpit vision style: NORMAL. Activate for next style." title="Current style: NORMAL — click for next">
-          <small>CURRENT</small>
-          <strong id="cockpit-vision-current-label" aria-live="polite">NORMAL</strong>
+        <button id="cockpit-vision-current" class="cockpit-vision-current" type="button" data-cockpit-vision="optical" data-i18n-aria-label="cockpit.vision.current" aria-label="Style de vision actuel : NORMAL. Activer pour passer au suivant."
+                data-i18n-title="cockpit.vision.currentTitle" title="Style actuel : NORMAL — cliquer pour le suivant">
+          <small data-i18n="cockpit.vision.currentShort">ACTUEL</small>
+          <strong id="cockpit-vision-current-label" aria-live="polite" translate="no">NORMAL</strong>
         </button>
-        <button id="cockpit-vision-next" class="cockpit-vision-nav" type="button" aria-label="Next cockpit vision style" title="Next vision style">
-          <small>NEXT</small>
+        <button id="cockpit-vision-next" class="cockpit-vision-nav" type="button"
+                data-i18n-aria-label="cockpit.vision.next" aria-label="Style de vision suivant"
+                data-i18n-title="cockpit.vision.nextTitle" title="Vision suivante">
+          <small data-i18n="cockpit.vision.nextShort">SUIV</small>
           <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
         </button>
       </div>
     </div>
     <div class="cockpit-reticle material-symbols-outlined" aria-hidden="true">my_location</div>
-    <div class="cockpit-compass" aria-label="Current aircraft heading">
+    <div class="cockpit-compass" data-i18n-aria-label="cockpit.compass" aria-label="Cap actuel de l’avion">
       <div class="cockpit-instrument-row">
         <div class="cockpit-readout cockpit-speed">
-          <span class="cockpit-readout-label">GROUND SPEED</span>
+          <span class="cockpit-readout-label" data-i18n="cockpit.groundSpeed">VITESSE SOL</span>
           <strong id="cockpit-speed-value">---</strong>
-          <span class="cockpit-readout-unit">KTS</span>
+          <span class="cockpit-readout-unit" translate="no">KTS</span>
         </div>
         <div class="cockpit-heading-value"><span id="cockpit-heading-value">---</span><small>°</small></div>
         <div class="cockpit-readout cockpit-altitude">
-          <span class="cockpit-readout-label">ALTITUDE</span>
+          <span class="cockpit-readout-label" data-i18n="cockpit.altitude">ALTITUDE</span>
           <strong id="cockpit-altitude-value">-----</strong>
-          <span class="cockpit-readout-unit">FT</span>
+          <span class="cockpit-readout-unit" translate="no">FT</span>
         </div>
       </div>
       <span class="cockpit-heading-caret material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
@@ -723,138 +768,157 @@
       <span id="cockpit-clock">--:--:--Z</span>
       <span id="cockpit-position">--° · --°</span>
     </div>
-    <aside id="cockpit-context" class="cockpit-context-window" aria-label="Contact cockpit summary" hidden>
+    <aside id="cockpit-context" class="cockpit-context-window" data-i18n-aria-label="cockpit.context.summary" aria-label="Résumé des contacts" hidden>
       <header class="cockpit-context-header">
         <div>
-          <span class="cockpit-context-kicker">CONTACT</span>
-          <strong id="cockpit-context-subject">CONTACTS · 250 KM</strong>
+          <span class="cockpit-context-kicker" data-i18n="cockpit.context.kicker">CONTACT</span>
+          <strong id="cockpit-context-subject" data-i18n="cockpit.context.subject">CONTACTS · 250 KM</strong>
         </div>
-        <nav class="cockpit-context-actions" aria-label="Contact navigation">
-          <button id="cockpit-context-previous" type="button" aria-label="Previous — prior visited contact in the 250 km window" title="Previous — prior visited contact in the 250 km window">
+        <nav class="cockpit-context-actions" data-i18n-aria-label="cockpit.context.nav" aria-label="Navigation entre les contacts">
+          <button id="cockpit-context-previous" type="button"
+                  data-i18n-aria-label="cockpit.context.previous" aria-label="Précédent — contact déjà visité dans la fenêtre de 250 km"
+                  data-i18n-title="cockpit.context.previous" title="Précédent — contact déjà visité dans la fenêtre de 250 km">
             <span class="material-symbols-outlined" aria-hidden="true">skip_previous</span>
           </button>
-          <button id="cockpit-context-next" type="button" aria-label="Next — nearest unvisited contact in the 250 km window" title="Next — nearest unvisited contact in the 250 km window">
+          <button id="cockpit-context-next" type="button"
+                  data-i18n-aria-label="cockpit.context.next" aria-label="Suivant — contact le plus proche jamais visité dans la fenêtre de 250 km"
+                  data-i18n-title="cockpit.context.next" title="Suivant — contact le plus proche jamais visité dans la fenêtre de 250 km">
             <span class="material-symbols-outlined" aria-hidden="true">skip_next</span>
           </button>
-          <button id="cockpit-context-toggle" type="button" aria-label="Collapse Contact panel" aria-expanded="true" title="Collapse contact panel">
+          <button id="cockpit-context-toggle" type="button" aria-expanded="true"
+                  data-i18n-aria-label="cockpit.context.collapse" aria-label="Replier le panneau Contacts"
+                  data-i18n-title="cockpit.context.collapseTitle" title="Replier le panneau des contacts">
             <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
           </button>
         </nav>
-        <span class="cockpit-context-qualifier">CONTEXT ONLY</span>
+        <span class="cockpit-context-qualifier" data-i18n="cockpit.context.qualifier">CONTEXTE SEUL</span>
       </header>
-      <div class="cockpit-context-cohorts" role="list" aria-label="Nearby cohort counts">
-        <div role="listitem" data-context-cohort="flights"><span>FLT</span><strong>—</strong><small>OpenSky</small></div>
-        <div role="listitem" data-context-cohort="military"><span>MIL</span><strong>—</strong><small>adsb.lol</small></div>
-        <div role="listitem" data-context-cohort="ais-live-vessels"><span>AIS</span><strong>—</strong><small>AISStream</small></div>
-        <div role="listitem" data-context-cohort="military-installations"><span>SITE</span><strong>—</strong><small>OpenStreetMap</small></div>
+      <div class="cockpit-context-cohorts" role="list" data-i18n-aria-label="cockpit.context.cohorts" aria-label="Effectifs à proximité">
+        <div role="listitem" data-context-cohort="flights"><span data-i18n="cockpit.context.cohortFlights">VOL</span><strong>—</strong><small translate="no">OpenSky</small></div>
+        <div role="listitem" data-context-cohort="military"><span translate="no">MIL</span><strong>—</strong><small translate="no">adsb.lol</small></div>
+        <div role="listitem" data-context-cohort="ais-live-vessels"><span translate="no">AIS</span><strong>—</strong><small translate="no">AISStream</small></div>
+        <div role="listitem" data-context-cohort="military-installations"><span translate="no">SITE</span><strong>—</strong><small translate="no">OpenStreetMap</small></div>
       </div>
       <div class="cockpit-context-nearest">
         <span id="cockpit-context-direction" class="material-symbols-outlined" aria-hidden="true">navigation</span>
         <div>
-          <small>NEAREST OBSERVED / MAPPED</small>
-          <strong id="cockpit-context-nearest-label">NO AVAILABLE EXAMPLE</strong>
+          <small data-i18n="cockpit.context.nearest">LE PLUS PROCHE OBSERVÉ / CARTOGRAPHIÉ</small>
+          <strong id="cockpit-context-nearest-label" data-i18n="cockpit.context.noExample">AUCUN EXEMPLE DISPONIBLE</strong>
         </div>
         <span id="cockpit-context-bearing">—</span>
         <span id="cockpit-context-distance">—</span>
       </div>
       <footer class="cockpit-context-footer">
-        <span id="cockpit-context-uncertainty">AVAILABLE INPUTS ONLY · NOT AN ALL-CLEAR</span>
+        <span id="cockpit-context-uncertainty" data-i18n="cockpit.context.uncertainty">ENTRÉES DISPONIBLES SEULEMENT · PAS UN FEU VERT</span>
         <button
           id="cockpit-weather-toggle"
           class="cockpit-context-weather"
           type="button"
-          aria-label="Enable cockpit weather effects"
+          data-i18n-aria-label="cockpit.weather.enable"
+          aria-label="Activer les effets météo du cockpit"
           aria-pressed="false"
-          title="Enable cockpit weather effects"
+          data-i18n-title="cockpit.weather.enable"
+          title="Activer les effets météo du cockpit"
         >
-          <span>WX</span>
-          <strong id="cockpit-weather-state">OFF</strong>
+          <span translate="no">WX</span>
+          <strong id="cockpit-weather-state" data-i18n="cockpit.weather.off">ÉTEINT</strong>
         </button>
         <time id="cockpit-context-updated">--:--:--Z</time>
       </footer>
     </aside>
-    <aside id="cockpit-signal-stream" class="cockpit-signal-window" aria-label="Cockpit briefing carousel" hidden>
-      <section id="cockpit-route" class="cockpit-route-card" aria-label="Estimated flight plan" hidden>
+    <aside id="cockpit-signal-stream" class="cockpit-signal-window" data-i18n-aria-label="cockpit.brief.carousel" aria-label="Carrousel de briefing du cockpit" hidden>
+      <section id="cockpit-route" class="cockpit-route-card" data-i18n-aria-label="cockpit.route.plan" aria-label="Plan de vol estimé" hidden>
         <div class="cockpit-route-heading">
-          <span class="cockpit-route-kicker">ESTIMATED FLIGHT PLAN</span>
-          <small id="cockpit-route-status">ROUTE DATA UNAVAILABLE</small>
+          <span class="cockpit-route-kicker" data-i18n="cockpit.route.kicker">PLAN DE VOL ESTIMÉ</span>
+          <small id="cockpit-route-status" data-i18n="cockpit.route.unavailable">DONNÉES D’ITINÉRAIRE INDISPONIBLES</small>
         </div>
         <div class="cockpit-route-endpoints">
           <div class="cockpit-route-airport">
-            <span>FROM</span>
-            <strong id="cockpit-route-from">UNKNOWN</strong>
+            <span data-i18n="cockpit.route.from">DE</span>
+            <strong id="cockpit-route-from" data-i18n="cockpit.route.unknown">INCONNU</strong>
           </div>
           <span class="cockpit-route-arrow material-symbols-outlined" aria-hidden="true">east</span>
           <div class="cockpit-route-airport">
-            <span>TO</span>
-            <strong id="cockpit-route-to">UNKNOWN</strong>
+            <span data-i18n="cockpit.route.to">VERS</span>
+            <strong id="cockpit-route-to" data-i18n="cockpit.route.unknown">INCONNU</strong>
           </div>
         </div>
       </section>
       <header class="cockpit-signal-header">
         <div class="cockpit-brief-heading">
-          <span id="cockpit-brief-kicker" class="cockpit-signal-kicker"><i aria-hidden="true"></i> LIVE SIGNALS</span>
-          <strong id="cockpit-brief-subtitle">OBSERVED / MAPPED PINGS</strong>
+          <span id="cockpit-brief-kicker" class="cockpit-signal-kicker" data-i18n="cockpit.brief.signals"><i aria-hidden="true"></i> SIGNAUX EN DIRECT</span>
+          <strong id="cockpit-brief-subtitle" data-i18n="cockpit.brief.signalsSubtitle">ÉCHOS OBSERVÉS / CARTOGRAPHIÉS</strong>
         </div>
-        <nav class="cockpit-brief-actions" aria-label="Cockpit briefing controls">
-          <button id="cockpit-brief-previous" type="button" aria-label="Previous briefing page" title="Previous briefing page">
+        <nav class="cockpit-brief-actions" data-i18n-aria-label="cockpit.brief.controls" aria-label="Commandes du briefing">
+          <button id="cockpit-brief-previous" type="button"
+                  data-i18n-aria-label="cockpit.brief.previous" aria-label="Page de briefing précédente"
+                  data-i18n-title="cockpit.brief.previous" title="Page de briefing précédente">
             <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
           </button>
           <span id="cockpit-brief-position" aria-live="polite">1 / 3</span>
-          <button id="cockpit-brief-next" type="button" aria-label="Next briefing page" title="Next briefing page">
+          <button id="cockpit-brief-next" type="button"
+                  data-i18n-aria-label="cockpit.brief.next" aria-label="Page de briefing suivante"
+                  data-i18n-title="cockpit.brief.next" title="Page de briefing suivante">
             <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
           </button>
           <button
             id="cockpit-brief-auto"
             type="button"
-            aria-label="CYCLE OFF"
+            data-i18n-aria-label="cockpit.brief.cycleOff"
+            aria-label="DÉFILEMENT ÉTEINT"
             aria-pressed="false"
-            title="Cycle briefing pages automatically every 9 seconds (Signals → News → Local). Pauses while you hover or focus the panel. Live signal data refreshes continuously either way."
-          >CYCLE OFF</button>
-          <button id="cockpit-signal-toggle" type="button" aria-label="Collapse cockpit briefing panel" aria-expanded="true" title="Collapse briefing panel">
+            data-i18n-title="cockpit.brief.cycleTitle"
+            title="Fait défiler les pages du briefing toutes les 9 secondes (Signaux → Actualités → Local). En pause tant que le pointeur ou le clavier est sur le panneau. Les signaux en direct se rafraîchissent dans tous les cas."
+            data-i18n="cockpit.brief.cycleOff"
+          >DÉFILEMENT ÉTEINT</button>
+          <button id="cockpit-signal-toggle" type="button" aria-expanded="true"
+                  data-i18n-aria-label="cockpit.brief.collapse" aria-label="Replier le panneau de briefing du cockpit"
+                  data-i18n-title="cockpit.brief.collapseTitle" title="Replier le panneau de briefing">
             <span class="material-symbols-outlined" aria-hidden="true">right_panel_close</span>
           </button>
         </nav>
       </header>
       <div class="cockpit-brief-stage">
-        <section data-cockpit-brief-page="signals" aria-label="Live signals">
+        <section data-cockpit-brief-page="signals" data-i18n-aria-label="cockpit.brief.signalsPage" aria-label="Signaux en direct">
           <ol id="cockpit-signal-list" class="cockpit-signal-list" aria-live="polite"></ol>
         </section>
-        <section data-cockpit-brief-page="news" aria-label="Latest regional news" hidden>
-          <div id="cockpit-news-status" class="cockpit-brief-status">ACQUIRING REGIONAL NEWS</div>
+        <section data-cockpit-brief-page="news" data-i18n-aria-label="cockpit.brief.newsPage" aria-label="Dernières actualités régionales" hidden>
+          <div id="cockpit-news-status" class="cockpit-brief-status" data-i18n="cockpit.brief.newsAcquiring">RÉCUPÉRATION DES ACTUALITÉS RÉGIONALES</div>
           <ol id="cockpit-news-list" class="cockpit-news-list" aria-live="polite"></ol>
         </section>
-        <section data-cockpit-brief-page="local" aria-label="Location-based information" hidden>
+        <section data-cockpit-brief-page="local" data-i18n-aria-label="cockpit.brief.localPage" aria-label="Informations sur le lieu" hidden>
           <div class="cockpit-local-place">
-            <strong id="cockpit-local-place">RESOLVING REGION</strong>
+            <strong id="cockpit-local-place" data-i18n="cockpit.local.resolving">IDENTIFICATION DE LA RÉGION</strong>
             <small id="cockpit-local-coordinates">--</small>
           </div>
           <div class="cockpit-local-grid">
-            <div><span>TEMP</span><strong id="cockpit-local-temperature">—</strong><small>OPEN-METEO</small></div>
-            <div><span>WIND</span><strong id="cockpit-local-wind">—</strong><small id="cockpit-local-wind-direction">—</small></div>
-            <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
-            <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>
+            <div><span translate="no">TEMP</span><strong id="cockpit-local-temperature">—</strong><small translate="no">OPEN-METEO</small></div>
+            <div><span data-i18n="cockpit.local.wind">VENT</span><strong id="cockpit-local-wind">—</strong><small id="cockpit-local-wind-direction">—</small></div>
+            <div><span data-i18n="cockpit.local.sky">CIEL</span><strong id="cockpit-local-condition" data-i18n="cockpit.local.unknown">INCONNU</strong><small id="cockpit-local-cloud">—</small></div>
+            <div><span data-i18n="cockpit.local.precip">PRÉCIP</span><strong id="cockpit-local-precipitation">—</strong><small translate="no">MM</small></div>
           </div>
-          <a class="cockpit-weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
+          <a class="cockpit-weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener" data-i18n="cockpit.local.credit">Données météo par Open-Meteo.com</a>
         </section>
       </div>
       <footer class="cockpit-signal-footer">
-        <span id="cockpit-brief-source">SOURCE-BACKED EVENTS · NO SYNTHETIC NEWS</span>
-        <nav class="cockpit-brief-tabs" aria-label="Cockpit briefing pages">
-          <button type="button" data-cockpit-brief-index="0" aria-label="Show Live Signals" aria-current="true">SIG</button>
-          <button type="button" data-cockpit-brief-index="1" aria-label="Show Regional News">NEWS</button>
-          <button type="button" data-cockpit-brief-index="2" aria-label="Show Local Info">LOCAL</button>
+        <span id="cockpit-brief-source" data-i18n="cockpit.brief.sourceNote">ÉVÉNEMENTS SOURCÉS · AUCUNE ACTUALITÉ SYNTHÉTIQUE</span>
+        <nav class="cockpit-brief-tabs" data-i18n-aria-label="cockpit.brief.pages" aria-label="Pages du briefing">
+          <button type="button" data-cockpit-brief-index="0" data-i18n-aria-label="cockpit.brief.showSignals" aria-label="Afficher les signaux en direct" aria-current="true" data-i18n="cockpit.brief.signalsTab">SIG</button>
+          <button type="button" data-cockpit-brief-index="1" data-i18n-aria-label="cockpit.brief.showNews" aria-label="Afficher les actualités régionales" data-i18n="cockpit.brief.newsTab">ACTU</button>
+          <button type="button" data-cockpit-brief-index="2" data-i18n-aria-label="cockpit.brief.showLocal" aria-label="Afficher les infos locales" data-i18n="cockpit.brief.localTab">LOCAL</button>
         </nav>
       </footer>
     </aside>
-    <aside id="cockpit-utility-controls" class="cockpit-utility-controls" aria-label="Cockpit display and Radio controls">
+    <aside id="cockpit-utility-controls" class="cockpit-utility-controls" data-i18n-aria-label="cockpit.utility.group" aria-label="Affichage du cockpit et commandes Radio">
       <div class="cockpit-utility-control">
         <div class="cockpit-utility-launcher" data-cockpit-launcher="display">
-          <span>DISPLAY</span>
+          <span data-i18n="cockpit.utility.display">AFFICHAGE</span>
           <span class="cockpit-utility-divider" aria-hidden="true"></span>
-          <button id="cockpit-display-toggle-btn" class="cockpit-utility-glyph" type="button" aria-expanded="false" aria-controls="cockpit-display-panel" aria-label="Expand Cockpit display options" title="Expand Cockpit display options">◀</button>
+          <button id="cockpit-display-toggle-btn" class="cockpit-utility-glyph" type="button" aria-expanded="false" aria-controls="cockpit-display-panel"
+                  data-i18n-aria-label="cockpit.utility.displayExpand" aria-label="Déplier les options d’affichage du cockpit"
+                  data-i18n-title="cockpit.utility.displayExpand" title="Déplier les options d’affichage du cockpit">◀</button>
         </div>
-        <div id="cockpit-display-panel" class="cockpit-utility-popover" role="group" aria-label="Cockpit display options" hidden>
+        <div id="cockpit-display-panel" class="cockpit-utility-popover" role="group" data-i18n-aria-label="cockpit.utility.displayOptions" aria-label="Options d’affichage du cockpit" hidden>
           <div class="cockpit-display-slot" data-cockpit-display-slot="hud"></div>
           <div class="cockpit-display-slot" data-cockpit-display-slot="detection"></div>
           <div class="cockpit-display-slot" data-cockpit-display-slot="parameters"></div>
@@ -863,95 +927,112 @@
       </div>
       <div class="cockpit-utility-control">
         <div class="cockpit-utility-launcher" data-cockpit-launcher="radio">
-          <span>RADIO</span>
+          <span translate="no">RADIO</span>
           <span class="cockpit-utility-divider" aria-hidden="true"></span>
-          <button id="cockpit-radio-toggle-btn" class="cockpit-utility-glyph" type="button" aria-expanded="false" aria-controls="cockpit-radio-panel" aria-label="Expand Cockpit Radio controls" title="Expand Cockpit Radio controls">◀</button>
+          <button id="cockpit-radio-toggle-btn" class="cockpit-utility-glyph" type="button" aria-expanded="false" aria-controls="cockpit-radio-panel"
+                  data-i18n-aria-label="cockpit.utility.radioExpand" aria-label="Déplier les commandes Radio du cockpit"
+                  data-i18n-title="cockpit.utility.radioExpand" title="Déplier les commandes Radio du cockpit">◀</button>
         </div>
-        <div id="cockpit-radio-panel" class="cockpit-utility-popover cockpit-radio-compact" role="group" aria-label="Cockpit compact Radio controls" hidden>
-          <strong id="cockpit-radio-station" class="cockpit-radio-station">READY</strong>
-          <button id="cockpit-radio-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false">ENABLE</button>
+        <div id="cockpit-radio-panel" class="cockpit-utility-popover cockpit-radio-compact" role="group" data-i18n-aria-label="cockpit.utility.radioCompact" aria-label="Commandes Radio compactes du cockpit" hidden>
+          <strong id="cockpit-radio-station" class="cockpit-radio-station" data-i18n="radio.ready">PRÊTE</strong>
+          <button id="cockpit-radio-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false" data-i18n="radio.enable">ACTIVER</button>
           <div class="cockpit-radio-transport">
-            <button id="cockpit-radio-prev-btn" type="button" aria-label="Previous filtered radio station" disabled>◀◀</button>
-            <button id="cockpit-radio-play-btn" type="button" aria-label="Play selected radio station" disabled>▶</button>
-            <button id="cockpit-radio-next-btn" type="button" aria-label="Next filtered radio station" disabled>▶▶</button>
+            <button id="cockpit-radio-prev-btn" type="button" data-i18n-aria-label="radio.previousStation" aria-label="Station précédente parmi les stations filtrées" disabled>◀◀</button>
+            <button id="cockpit-radio-play-btn" type="button" data-i18n-aria-label="radio.playStation" aria-label="Lire la station sélectionnée" disabled>▶</button>
+            <button id="cockpit-radio-next-btn" type="button" data-i18n-aria-label="radio.nextStation" aria-label="Station suivante parmi les stations filtrées" disabled>▶▶</button>
           </div>
           <label class="cockpit-radio-volume" for="cockpit-radio-volume">
-            <span>VOLUME</span>
-            <input id="cockpit-radio-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80" aria-label="Cockpit Radio volume" disabled />
+            <span translate="no">VOLUME</span>
+            <input id="cockpit-radio-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80" data-i18n-aria-label="cockpit.utility.radioVolume" aria-label="Volume de la Radio du cockpit" disabled />
             <output id="cockpit-radio-volume-value" class="gev-slider-value" for="cockpit-radio-volume">80%</output>
           </label>
         </div>
       </div>
     </aside>
-    <div class="cockpit-help">ESC EXIT <span>·</span> C TOGGLE</div>
+    <div class="cockpit-help"><span class="cockpit-help-text" data-i18n="cockpit.help.exit">ÉCHAP QUITTER</span> <span class="cockpit-help-dot">·</span> <span class="cockpit-help-text" data-i18n="cockpit.help.toggle">C BASCULER</span></div>
   </section>
 
-  <nav id="view-switcher" aria-label="View switcher">
-    <button id="cockpit-reset-globe" type="button" aria-label="Reset cockpit to full globe view" title="Exit cockpit and return to full globe view" hidden>
+  <nav id="view-switcher" data-i18n-aria-label="viewSwitcher.nav" aria-label="Changement de vue">
+    <button id="cockpit-reset-globe" type="button" hidden
+            data-i18n-aria-label="viewSwitcher.resetCockpit" aria-label="Réinitialiser le cockpit et revenir au globe entier"
+            data-i18n-title="viewSwitcher.resetCockpitTitle" title="Quitter le cockpit et revenir au globe entier">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
-      <span>RESET</span>
+      <span data-i18n="viewSwitcher.reset">RÉINIT.</span>
     </button>
-    <button id="map-view-switch" type="button" aria-label="Exit cockpit view" aria-keyshortcuts="Escape C" title="Exit cockpit view" hidden>
+    <button id="map-view-switch" type="button" aria-keyshortcuts="Escape C" hidden
+            data-i18n-aria-label="viewSwitcher.exitCockpit" aria-label="Quitter la vue cockpit"
+            data-i18n-title="viewSwitcher.exitCockpit" title="Quitter la vue cockpit">
       <span class="material-symbols-outlined" aria-hidden="true">close_fullscreen</span>
-      <span>EXIT COCKPIT</span>
+      <span data-i18n="viewSwitcher.exitCockpitLabel">QUITTER LE COCKPIT</span>
     </button>
   </nav>
 
   <!-- Post-processing toggles (top-right) -->
   <div id="pp-toggles" class="panel-collapsible collapsed" data-panel-id="pp-toggles">
     <div class="compact pp-header-row">
-      <span class="pp-header-label">DISPLAY</span>
+      <span class="pp-header-label" data-i18n="display.title">AFFICHAGE</span>
       <span class="panel-divider" aria-hidden="true"></span>
-      <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel" aria-label="Collapse panel">&#x25C0;</button>
+      <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles"
+              data-i18n-title="panel.collapse" title="Replier le panneau"
+              data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">&#x25C0;</button>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD (H)">
+      <button class="pp-toggle-btn" id="hud-toggle" data-i18n-title="display.hudTitle" title="HUD d’analyse (H)">
         <span class="pp-icon">&#x25CE;</span>
-        <span class="pp-label">HUD</span>
+        <span class="pp-label" translate="no">HUD</span>
       </button>
       <div class="pp-slider-row" id="hud-layout-row">
-        <span class="pp-slider-mini-label">Layout</span>
-        <select id="hud-layout-select" class="pp-select" aria-label="HUD layout">
-          <option value="tactical">Tactical</option>
-          <option value="operator">Operator</option>
-          <option value="minimal">Minimal</option>
+        <span class="pp-slider-mini-label" data-i18n="display.layout">Disposition</span>
+        <select id="hud-layout-select" class="pp-select" data-i18n-aria-label="display.layoutAria" aria-label="Disposition du HUD">
+          <option value="tactical" data-i18n="display.layoutTactical">Tactique</option>
+          <option value="operator" data-i18n="display.layoutOperator">Opérateur</option>
+          <option value="minimal" data-i18n="display.layoutMinimal">Minimal</option>
         </select>
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="detection-toggle" title="Detection Overlay (D)" aria-label="Detection overlay" aria-pressed="false">
+      <button class="pp-toggle-btn" id="detection-toggle" aria-pressed="false"
+              data-i18n-title="display.detectionTitle" title="Surcouche de détection (D)"
+              data-i18n-aria-label="display.detection" aria-label="Surcouche de détection">
         <span class="pp-icon">&#x25A3;</span>
-        <span class="pp-label">DETECT</span>
+        <span class="pp-label" data-i18n="display.detectShort">DÉTECT</span>
       </button>
       <div class="pp-slider-row detection-slider-row" id="detection-slider-row">
-        <label class="pp-slider-mini-label" for="detection-density-slider">Density</label>
-        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" aria-label="Detection label density" />
+        <label class="pp-slider-mini-label" for="detection-density-slider" data-i18n="display.density">Densité</label>
+        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50"
+               data-i18n-aria-label="display.densityAria" aria-label="Densité des étiquettes de détection" />
         <span class="pp-slider-value" id="detection-density-value">50%</span>
       </div>
       <div class="pp-slider-row detection-allocation-row" id="detection-allocation-row">
-        <span class="pp-slider-mini-label">Allocation</span>
-        <div class="pp-mode-seg detection-allocation-seg" role="radiogroup" aria-label="Detection label allocation">
-          <button class="pp-mode-btn active" id="detection-allocation-elastic" data-allocation="ELASTIC" role="radio" aria-checked="true">Elastic</button>
-          <button class="pp-mode-btn" id="detection-allocation-weighted" data-allocation="WEIGHTED" role="radio" aria-checked="false">Weighted</button>
+        <span class="pp-slider-mini-label" data-i18n="display.allocation">Allocation</span>
+        <div class="pp-mode-seg detection-allocation-seg" role="radiogroup" data-i18n-aria-label="display.allocationAria" aria-label="Allocation des étiquettes de détection">
+          <button class="pp-mode-btn active" id="detection-allocation-elastic" data-allocation="ELASTIC" role="radio" aria-checked="true" data-i18n="display.allocationElastic">Élastique</button>
+          <button class="pp-mode-btn" id="detection-allocation-weighted" data-allocation="WEIGHTED" role="radio" aria-checked="false" data-i18n="display.allocationWeighted">Pondérée</button>
         </div>
       </div>
       <div class="pp-slider-row detection-fade-row" id="detection-fade-row">
-        <label class="pp-slider-mini-label" for="detection-fade-slider">Fade</label>
-        <input type="range" class="pp-slider" id="detection-fade-slider" min="0" max="40" step="1" value="24" aria-label="Detection fade distance" title="World-overlay fade distance outside the keyhole as a percentage of its radius" />
+        <label class="pp-slider-mini-label" for="detection-fade-slider" data-i18n="display.fade">Fondu</label>
+        <input type="range" class="pp-slider" id="detection-fade-slider" min="0" max="40" step="1" value="24"
+               data-i18n-aria-label="display.fadeAria" aria-label="Distance de fondu de la détection"
+               data-i18n-title="display.fadeTitle" title="Distance de fondu de la surcouche hors de la lunette, en pourcentage de son rayon" />
         <span class="pp-slider-value" id="detection-fade-value">24%</span>
       </div>
       <div class="pp-slider-row detection-opacity-row" id="detection-opacity-row">
-        <label class="pp-slider-mini-label" for="detection-opacity-slider">Outside</label>
-        <input type="range" class="pp-slider" id="detection-opacity-slider" min="0" max="100" step="1" value="37" aria-label="Detection opacity outside the keyhole" title="World-overlay label and card opacity beyond the fade distance" />
+        <label class="pp-slider-mini-label" for="detection-opacity-slider" data-i18n="display.outside">Au-dehors</label>
+        <input type="range" class="pp-slider" id="detection-opacity-slider" min="0" max="100" step="1" value="37"
+               data-i18n-aria-label="display.outsideAria" aria-label="Opacité de la détection hors de la lunette"
+               data-i18n-title="display.outsideTitle" title="Opacité des étiquettes et des fiches de la surcouche au-delà de la distance de fondu" />
         <span class="pp-slider-value" id="detection-opacity-value">37%</span>
       </div>
     </div>
     <!-- The one shared preset-parameter surface is inserted here at runtime. -->
     <div id="param-slider-panel">
       <div class="param-panel-header">
-        <span class="param-panel-title">PARAMETERS</span>
+        <span class="param-panel-title" data-i18n="display.parameters">PARAMÈTRES</span>
         <span class="param-panel-divider"></span>
-        <button class="panel-collapse-btn" id="param-panel-collapse-btn" data-collapse-target="param-slider-panel" title="Collapse panel" aria-label="Collapse panel">−</button>
+        <button class="panel-collapse-btn" id="param-panel-collapse-btn" data-collapse-target="param-slider-panel"
+                data-i18n-title="panel.collapse" title="Replier le panneau"
+                data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">−</button>
       </div>
       <div id="param-sliders"></div>
     </div>
@@ -960,38 +1041,42 @@
            button ships lit and the mode row ships open — the same markup-carries-the-default
            convention as #scope-toggle. ui.js re-syncs both from durable layer state, which
            is what flips them back for a share link or a stored session carrying 3D off. -->
-      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="3D aircraft — flat icons zoomed out, 3D models up close">
+      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true"
+              data-i18n-title="display.models3dTitle" title="Avions 3D — icônes plates de loin, modèles 3D de près">
         <span class="pp-icon">&#x2708;</span>
         <span class="pp-label">3D</span>
       </button>
       <div class="pp-slider-row visible" id="models3d-mode-row">
-        <span class="pp-slider-mini-label">Models</span>
-        <div class="pp-mode-seg" role="radiogroup" aria-label="3D model coverage">
-          <button class="pp-mode-btn active" id="models3d-mode-proximity" data-mode="proximity" role="radio" aria-checked="true">Proximity</button>
-          <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
+        <span class="pp-slider-mini-label" data-i18n="display.models">Modèles</span>
+        <div class="pp-mode-seg" role="radiogroup" data-i18n-aria-label="display.modelsAria" aria-label="Couverture des modèles 3D">
+          <button class="pp-mode-btn active" id="models3d-mode-proximity" data-mode="proximity" role="radio" aria-checked="true" data-i18n="display.modelsProximity">Proximité</button>
+          <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false" data-i18n="display.modelsAll">Tous</button>
         </div>
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn active" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="true">
+      <button class="pp-toggle-btn active" id="scope-toggle" aria-pressed="true"
+              data-i18n-title="display.scopeTitle" title="Lunette — le masque circulaire de la vue">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
-        <span class="pp-label">Scope</span>
+        <span class="pp-label" data-i18n="display.scope">Lunette</span>
       </button>
       <div class="pp-slider-row visible" id="scope-slider-row">
-        <span class="pp-slider-mini-label">Feather</span>
+        <span class="pp-slider-mini-label" data-i18n="display.feather">Adoucissement</span>
         <!-- Feather starts at a wide 49% scope-mask falloff (2026-09-10,
              superseding the 08-24 11%, the 08-23 8% and the 08-22 hard crop);
              mirrors SCOPE_FEATHER_RATIO_DEFAULT in src/scopeMask.js. Feather
              softens the black mask edge; label fading is the separate Fade
              slider. -->
-        <input type="range" class="pp-slider" id="scope-feather-slider" min="0" max="100" value="49" title="Scope edge feather as a percentage of the keyhole radius" />
+        <input type="range" class="pp-slider" id="scope-feather-slider" min="0" max="100" value="49"
+               data-i18n-title="display.featherTitle" title="Adoucissement du bord de la lunette, en pourcentage de son rayon" />
         <span class="pp-slider-value" id="scope-feather-value">49%</span>
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
+      <button class="pp-toggle-btn" id="celestial-toggle" aria-pressed="false"
+              data-i18n-title="display.celestialTitle" title="Anneau céleste — révéler le globe entier">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">flare</span>
-        <span class="pp-label">Celestial</span>
+        <span class="pp-label" data-i18n="display.celestial">Céleste</span>
       </button>
     </div>
     <div class="pp-toggle-group">
@@ -1002,19 +1087,20 @@
            the icon font is subset by name and one more glyph is a font
            rebuild for a half-filled circle. -->
       <button class="pp-toggle-btn" id="perf-lite-toggle" aria-pressed="false"
-              title="Lite render — fewer samples per pixel and fewer pixels while the camera moves. Same map, same data.">
+              data-i18n-title="display.liteTitle"
+              title="Rendu léger — moins d’échantillons par pixel et moins de pixels quand la caméra bouge. Même carte, mêmes données.">
         <span class="pp-icon" aria-hidden="true">&#x25D0;</span>
-        <span class="pp-label">Lite</span>
+        <span class="pp-label" data-i18n="display.lite">Léger</span>
       </button>
     </div>
-    <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
+    <button class="pp-toggle-btn" id="clean-view-toggle" data-i18n-title="display.cleanTitle" title="Masquer l’interface">
       <span class="pp-icon">&#x25A1;</span>
-      <span class="pp-label">Clean UI</span>
+      <span class="pp-label" data-i18n="display.clean">Vue épurée</span>
     </button>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="sharpen-toggle" title="Sharpening">
+      <button class="pp-toggle-btn" id="sharpen-toggle" data-i18n-title="display.sharpenTitle" title="Netteté">
         <span class="pp-icon">&#x1F50D;</span>
-        <span class="pp-label">Sharpen</span>
+        <span class="pp-label" data-i18n="display.sharpen">Netteté</span>
       </button>
       <div class="pp-slider-row" id="sharpen-slider-row">
         <input type="range" class="pp-slider" id="sharpen-intensity-slider" min="0" max="100" value="49" />
@@ -1022,7 +1108,8 @@
       </div>
     </div>
   </div>
-  <button id="clean-view-exit" title="Return UI controls">EXIT CLEAN VIEW</button>
+  <button id="clean-view-exit" data-i18n-title="display.cleanExitTitle" title="Rendre les commandes"
+          data-i18n="display.cleanExit">QUITTER LA VUE ÉPURÉE</button>
 
   <!-- CCTV full-resolution viewer. Opened from the panel preview, which is capped
        at the 360px rail width while most public cameras publish 1920x1080. The
@@ -1031,9 +1118,11 @@
   <div id="cctv-lightbox" class="cctv-lightbox" role="dialog" aria-modal="true"
        aria-labelledby="cctv-lightbox-title" data-panel-satellite="cctv-panel" hidden>
     <div class="cctv-lightbox-bar">
-      <span id="cctv-lightbox-title" class="cctv-lightbox-title">CCTV</span>
+      <span id="cctv-lightbox-title" class="cctv-lightbox-title" data-i18n="cctv.lightboxTitle">CAMÉRA</span>
       <span id="cctv-lightbox-meta" class="cctv-lightbox-meta" role="status" aria-live="polite"></span>
-      <button id="cctv-lightbox-close" class="cctv-lightbox-close" aria-label="Close full-resolution view (Escape)">ESC ✕</button>
+      <button id="cctv-lightbox-close" class="cctv-lightbox-close"
+              data-i18n-aria-label="cctv.lightboxClose" aria-label="Fermer la vue pleine résolution (Échap)"
+              data-i18n="cctv.escClose">ÉCHAP ✕</button>
     </div>
     <!-- No <img> here on purpose. Opening MOVES the panel's own #cctv-frame
          element into this stage and closing puts it back: a DOM move never
@@ -1044,67 +1133,69 @@
   </div>
 
   <!-- Unified bottom command dock: locations, voice (injected at runtime), visual presets -->
-  <div id="command-dock" aria-label="Navigation, voice, and visual preset controls">
+  <div id="command-dock" data-i18n-aria-label="dock.label" aria-label="Navigation, voix et styles visuels">
   <!-- Control panel -->
   <div id="control-panel" class="panel-collapsible collapsed">
     <div class="panel-glow"></div>
     <div class="panel-inner">
       <button id="control-panel-toggle" class="panel-header dock-tray-toggle" type="button"
         data-dock-toggle-target="control-panel" aria-expanded="false"
-        aria-controls="control-panel-popover" aria-label="Expand Visual Presets">
-        <span class="panel-title" lang="en"><span class="dock-label-icon dock-label-icon-presets" aria-hidden="true"></span>VISUAL PRESETS</span>
+        aria-controls="control-panel-popover" data-i18n-aria-label="presets.expand" aria-label="Déplier les styles visuels">
+        <span class="panel-title" data-i18n="presets.title"><span class="dock-label-icon dock-label-icon-presets" aria-hidden="true"></span>STYLES VISUELS</span>
         <span class="panel-divider"></span>
       </button>
       <div id="control-panel-popover" class="dock-popover-content">
-      <button class="dock-pin-btn" data-pin-target="control-panel" type="button" aria-label="Pin visual presets" aria-pressed="false" title="Keep visual presets open"><img src="/pin.svg" alt="" /></button>
+      <button class="dock-pin-btn" data-pin-target="control-panel" type="button" aria-pressed="false"
+              data-i18n-aria-label="presets.pin" aria-label="Épingler les styles visuels"
+              data-i18n-title="presets.pinTitle" title="Garder les styles visuels ouverts"><img src="/pin.svg" alt="" /></button>
       <div id="style-buttons" class="button-grid">
         <button class="style-btn active" data-style="normal">
           <span class="btn-icon">◯</span>
-          <span class="btn-label">Normal</span>
+          <span class="btn-label" translate="no">Normal</span>
           <span class="btn-key">1</span>
         </button>
         <button class="style-btn" data-style="retro">
           <span class="btn-icon">▦</span>
-          <span class="btn-label">CRT</span>
+          <span class="btn-label" translate="no">CRT</span>
           <span class="btn-key">2</span>
         </button>
         <button class="style-btn" data-style="surveillance">
           <span class="btn-icon">🌙</span>
-          <span class="btn-label">NVG</span>
+          <span class="btn-label" translate="no">NVG</span>
           <span class="btn-key">3</span>
         </button>
         <button class="style-btn" data-style="thermal">
           <span class="btn-icon">🌡️</span>
-          <span class="btn-label">FLIR</span>
+          <span class="btn-label" translate="no">FLIR</span>
           <span class="btn-key">4</span>
         </button>
         <button class="style-btn" data-style="anime">
           <span class="btn-icon">✦</span>
-          <span class="btn-label">Anime</span>
+          <span class="btn-label" translate="no">Anime</span>
           <span class="btn-key">5</span>
         </button>
         <button class="style-btn" data-style="noir">
           <span class="btn-icon">◐</span>
-          <span class="btn-label">Noir</span>
+          <span class="btn-label" translate="no">Noir</span>
           <span class="btn-key">6</span>
         </button>
         <button class="style-btn" data-style="snow">
           <span class="btn-icon">❄</span>
-          <span class="btn-label">Snow</span>
+          <span class="btn-label" translate="no">Snow</span>
           <span class="btn-key">7</span>
         </button>
       </div>
       <section class="map-source-section" aria-labelledby="map-source-label">
         <div class="map-source-heading">
-          <span id="map-source-label">MAP SOURCE</span>
+          <span id="map-source-label" data-i18n="mapSource.title">FOND DE CARTE</span>
           <span id="map-stack-status" class="pp-stack-status" aria-live="polite">3D</span>
         </div>
-        <div id="map-stack-chips" class="map-stack-chip-row" role="group" aria-label="Map source"></div>
+        <div id="map-stack-chips" class="map-stack-chip-row" role="group" data-i18n-aria-label="mapSource.group" aria-label="Fond de carte"></div>
       </section>
       </div>
       <div id="style-mini-status" class="panel-mini-status" aria-live="polite">
-        <span class="panel-mini-label">Style</span>
-        <span id="style-mini-value" class="panel-mini-value">NORMAL</span>
+        <span class="panel-mini-label" data-i18n="presets.styleLabel">Style</span>
+        <span id="style-mini-value" class="panel-mini-value" translate="no">NORMAL</span>
       </div>
     </div>
   </div>
@@ -1114,15 +1205,19 @@
     <div class="panel-glow"></div>
     <div class="location-inner">
       <div class="location-toolbar">
-        <span class="location-toolbar-label"><span class="dock-label-icon dock-label-icon-location" aria-hidden="true"></span>LOCATION</span>
-        <button class="panel-collapse-btn" data-collapse-target="location-bar" title="Collapse panel" aria-label="Collapse panel">+</button>
+        <span class="location-toolbar-label" data-i18n="location.title"><span class="dock-label-icon dock-label-icon-location" aria-hidden="true"></span>LIEU</span>
+        <button class="panel-collapse-btn" data-collapse-target="location-bar"
+                data-i18n-title="panel.collapse" title="Replier le panneau"
+                data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">+</button>
       </div>
       <div id="location-mini-status" class="location-mini-status" aria-live="polite">
-        <div id="location-mini-city" class="location-mini-city">📍 Location: --</div>
-        <div id="location-mini-poi" class="location-mini-poi">Landmark: --</div>
+        <div id="location-mini-city" class="location-mini-city" data-i18n="location.miniCity">📍 Lieu : --</div>
+        <div id="location-mini-poi" class="location-mini-poi" data-i18n="location.miniPoi">Point de repère : --</div>
       </div>
       <div class="dock-popover-content">
-        <button class="dock-pin-btn" data-pin-target="location-bar" type="button" aria-label="Pin location tray" aria-pressed="false" title="Keep location tray open"><img src="/pin.svg" alt="" /></button>
+        <button class="dock-pin-btn" data-pin-target="location-bar" type="button" aria-pressed="false"
+              data-i18n-aria-label="location.pin" aria-label="Épingler le panneau Lieu"
+              data-i18n-title="location.pinTitle" title="Garder le panneau Lieu ouvert"><img src="/pin.svg" alt="" /></button>
         <div id="poi-row" class="poi-row-container"></div>
         <div class="location-bar-divider" id="location-bar-divider"></div>
         <div class="location-city-row">
@@ -1139,11 +1234,15 @@
             géocodage sans rien dire.
           -->
           <form id="location-search-form" class="location-search-wrap" role="search" action="#">
-            <button id="search-toggle" class="search-toggle-btn" type="button" title="Search any location" aria-label="Search any location">
+            <button id="search-toggle" class="search-toggle-btn" type="button"
+                    data-i18n-title="search.any" title="Rechercher un lieu"
+                    data-i18n-aria-label="search.any" aria-label="Rechercher un lieu">
               <span>&#x1F50E;</span>
             </button>
-            <input type="search" id="location-search" placeholder="Search any location..." autocomplete="off" spellcheck="false" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" />
-            <button id="location-search-submit" class="search-submit-btn" type="submit" aria-label="Rechercher" title="Rechercher">
+            <input type="search" id="location-search" data-i18n-placeholder="search.placeholder" placeholder="Rechercher un lieu…" autocomplete="off" spellcheck="false" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" />
+            <button id="location-search-submit" class="search-submit-btn" type="submit"
+                    data-i18n-aria-label="search.submit" aria-label="Rechercher"
+                    data-i18n-title="search.submit" title="Rechercher">
               <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
             </button>
           </form>
@@ -1159,9 +1258,11 @@
     <div class="panel-glow"></div>
     <div class="data-panel-inner">
       <div class="panel-header">
-        <span class="panel-title" lang="en">DATA LAYERS</span>
+        <span class="panel-title" data-i18n="layers.title">COUCHES</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="data-panel"
+                data-i18n-title="panel.collapse" title="Replier le panneau"
+                data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">+</button>
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
     </div>
@@ -1172,56 +1273,75 @@
     <div class="panel-glow"></div>
     <div class="cctv-panel-inner">
       <div class="panel-header">
-        <span class="panel-title" lang="en">CCTV</span>
+        <span class="panel-title" data-i18n="cctv.title">CAMÉRAS</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="cctv-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="cctv-panel"
+                data-i18n-title="panel.collapse" title="Replier le panneau"
+                data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">+</button>
       </div>
       <div id="cctv-frame-wrap" class="cctv-frame-wrap" role="button" tabindex="0"
-           aria-label="Open the camera frame at full resolution" title="Click to view at full resolution">
-        <img id="cctv-frame" alt="CCTV feed frame" />
-        <span class="cctv-frame-expand-hint" aria-hidden="true">EXPAND</span>
+           data-i18n-aria-label="cctv.openFull" aria-label="Ouvrir l’image de la caméra en pleine résolution"
+           data-i18n-title="cctv.openFullTitle" title="Cliquer pour voir en pleine résolution">
+        <img id="cctv-frame" data-i18n-alt="cctv.frameAlt" alt="Image du flux de la caméra" />
+        <span class="cctv-frame-expand-hint" aria-hidden="true" data-i18n="cctv.expand">AGRANDIR</span>
       </div>
-      <div id="cctv-source-badge" role="status" aria-live="polite">SOURCE · UNKNOWN</div>
-      <div id="cctv-meta">Enable CCTV to load camera intersections</div>
+      <div id="cctv-source-badge" role="status" aria-live="polite" data-i18n="cctv.sourceUnknown">SOURCE · INCONNUE</div>
+      <div id="cctv-meta" data-i18n="cctv.enableToLoad">Activez les caméras pour charger les carrefours équipés</div>
       <div class="cctv-controls">
-        <button id="cctv-enable-btn" class="scene-btn">CCTV OFF</button>
-        <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
-      </div>
-      <div class="cctv-controls">
-        <button id="cctv-prev-btn" class="scene-btn">PREV</button>
-        <select id="cctv-camera-select" aria-label="CCTV camera"></select>
-        <button id="cctv-next-btn" class="scene-btn">NEXT</button>
+        <button id="cctv-enable-btn" class="scene-btn" data-i18n="cctv.off">CAMÉRAS ÉTEINTES</button>
+        <button id="cctv-nearest-btn" class="scene-btn" data-i18n="cctv.nearest">LA PLUS PROCHE</button>
       </div>
       <div class="cctv-controls">
-        <button id="cctv-focus-btn" class="scene-btn">FOCUS</button>
-        <button id="cctv-coverage-btn" class="scene-btn">COVERAGE OFF</button>
-        <button id="cctv-auto-hop-btn" class="scene-btn">AUTO HOP OFF</button>
+        <button id="cctv-prev-btn" class="scene-btn" data-i18n="common.prev">PRÉC</button>
+        <select id="cctv-camera-select" data-i18n-aria-label="cctv.cameraSelect" aria-label="Caméra"></select>
+        <button id="cctv-next-btn" class="scene-btn" data-i18n="common.next">SUIV</button>
       </div>
       <div class="cctv-controls">
-        <button id="cctv-projection-btn" class="scene-btn">PROJECTION ON</button>
-        <span id="cctv-quality-chip">CAL · --</span>
+        <button id="cctv-focus-btn" class="scene-btn" data-i18n="cctv.focus">CADRER</button>
+        <button id="cctv-coverage-btn" class="scene-btn" data-i18n="cctv.coverageOff">COUVERTURE ÉTEINTE</button>
+        <button id="cctv-auto-hop-btn" class="scene-btn" data-i18n="cctv.autoHopOff">SAUT AUTO ÉTEINT</button>
+      </div>
+      <div class="cctv-controls">
+        <button id="cctv-projection-btn" class="scene-btn" data-i18n="cctv.projectionOn">PROJECTION ACTIVE</button>
+        <span id="cctv-quality-chip" translate="no">CAL · --</span>
       </div>
       <div class="cctv-calibration-block">
         <div class="cctv-calibration-header">
-          <div class="cctv-summary-label">CALIBRATION</div>
-          <button id="cctv-adjust-btn" class="scene-btn" title="Drag the camera in the world: rings rotate, arrows move, handles set range/FOV">ADJUST</button>
+          <div class="cctv-summary-label" data-i18n="cctv.calibration">CALIBRAGE</div>
+          <button id="cctv-adjust-btn" class="scene-btn"
+                  data-i18n-title="cctv.adjustTitle" title="Faites glisser la caméra dans le monde : les anneaux tournent, les flèches déplacent, les poignées règlent la portée et le champ"
+                  data-i18n="cctv.adjust">RÉGLER</button>
         </div>
-        <div id="cctv-cal-readout" class="cctv-cal-readout" aria-label="Camera pose — click a value to type">
-          <button class="cctv-cal-value" data-cal-field="heading" title="Heading (compass °) — click to type">HDG --</button>
-          <button class="cctv-cal-value" data-cal-field="pitch" title="Pitch (° up/down) — click to type">PITCH --</button>
-          <button class="cctv-cal-value" data-cal-field="fov" title="Horizontal FOV (°) — click to type">FOV --</button>
-          <button class="cctv-cal-value" data-cal-field="range" title="Range / monitor-plane distance (m) — click to type">RANGE --</button>
-          <button class="cctv-cal-value" data-cal-field="height" title="Mount height above ground (m) — click to type">HGT --</button>
-          <button class="cctv-cal-value" data-cal-field="north" title="North offset from catalog position (m) — click to type">ΔN --</button>
-          <button class="cctv-cal-value" data-cal-field="east" title="East offset from catalog position (m) — click to type">ΔE --</button>
+        <div id="cctv-cal-readout" class="cctv-cal-readout" data-i18n-aria-label="cctv.pose" aria-label="Pose de la caméra — cliquer une valeur pour la saisir">
+          <button class="cctv-cal-value" data-cal-field="heading"
+                  data-i18n-title="cctv.cal.headingTitle" title="Cap (° boussole) — cliquer pour saisir"
+                  data-i18n="cctv.cal.heading">CAP --</button>
+          <button class="cctv-cal-value" data-cal-field="pitch"
+                  data-i18n-title="cctv.cal.pitchTitle" title="Tangage (° haut/bas) — cliquer pour saisir"
+                  data-i18n="cctv.cal.pitch">TANGAGE --</button>
+          <button class="cctv-cal-value" data-cal-field="fov"
+                  data-i18n-title="cctv.cal.fovTitle" title="Champ horizontal (°) — cliquer pour saisir"
+                  data-i18n="cctv.cal.fov">CHAMP --</button>
+          <button class="cctv-cal-value" data-cal-field="range"
+                  data-i18n-title="cctv.cal.rangeTitle" title="Portée / distance du plan de projection (m) — cliquer pour saisir"
+                  data-i18n="cctv.cal.range">PORTÉE --</button>
+          <button class="cctv-cal-value" data-cal-field="height"
+                  data-i18n-title="cctv.cal.heightTitle" title="Hauteur de fixation au-dessus du sol (m) — cliquer pour saisir"
+                  data-i18n="cctv.cal.height">HAUT --</button>
+          <button class="cctv-cal-value" data-cal-field="north"
+                  data-i18n-title="cctv.cal.northTitle" title="Décalage nord par rapport à la position du catalogue (m) — cliquer pour saisir"
+                  data-i18n="cctv.cal.north">ΔN --</button>
+          <button class="cctv-cal-value" data-cal-field="east"
+                  data-i18n-title="cctv.cal.eastTitle" title="Décalage est par rapport à la position du catalogue (m) — cliquer pour saisir"
+                  data-i18n="cctv.cal.east">ΔE --</button>
         </div>
         <div class="cctv-controls cctv-calibration-actions">
-          <button id="cctv-calib-save-btn" class="scene-btn">SAVE CAL</button>
-          <button id="cctv-calib-reset-btn" class="scene-btn">RESET CAL</button>
+          <button id="cctv-calib-save-btn" class="scene-btn" data-i18n="cctv.saveCal">ENREGISTRER</button>
+          <button id="cctv-calib-reset-btn" class="scene-btn" data-i18n="cctv.resetCal">RÉINITIALISER</button>
         </div>
       </div>
-      <div class="cctv-summary-label">SCENE SUMMARY</div>
-      <div id="cctv-summary">Enable CCTV to start camera-linked intelligence summaries.</div>
+      <div class="cctv-summary-label" data-i18n="cctv.sceneSummary">RÉSUMÉ DE SCÈNE</div>
+      <div id="cctv-summary" data-i18n="cctv.summaryIdle">Activez les caméras pour obtenir des résumés liés à la caméra.</div>
     </div>
   </div>
 
@@ -1230,35 +1350,37 @@
     <div class="panel-glow"></div>
     <div class="scene-panel-inner">
       <div class="panel-header">
-        <span class="panel-title" lang="en">SCENES</span>
+        <span class="panel-title" data-i18n="scenes.title">SCÈNES</span>
         <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="scene-panel" title="Collapse panel" aria-label="Collapse panel">+</button>
+        <button class="panel-collapse-btn" data-collapse-target="scene-panel"
+                data-i18n-title="panel.collapse" title="Replier le panneau"
+                data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">+</button>
       </div>
       <div class="scene-controls">
-        <select id="scene-select" aria-label="Scene recipe"></select>
-        <button id="scene-new-btn" class="scene-btn">NEW</button>
-        <button id="scene-delete-btn" class="scene-btn scene-btn-danger">DEL</button>
+        <select id="scene-select" data-i18n-aria-label="scenes.recipe" aria-label="Recette de scène"></select>
+        <button id="scene-new-btn" class="scene-btn" data-i18n="scenes.new">NOUVELLE</button>
+        <button id="scene-delete-btn" class="scene-btn scene-btn-danger" data-i18n="scenes.delete">SUPPR</button>
       </div>
       <div class="scene-controls">
-        <button id="scene-capture-btn" class="scene-btn">CAPTURE SHOT</button>
-        <button id="scene-update-shot-btn" class="scene-btn">UPDATE SHOT</button>
+        <button id="scene-capture-btn" class="scene-btn" data-i18n="scenes.capture">CAPTURER UN PLAN</button>
+        <button id="scene-update-shot-btn" class="scene-btn" data-i18n="scenes.updateShot">METTRE À JOUR LE PLAN</button>
       </div>
       <div id="scene-shot-list" class="scene-shot-list"></div>
       <div class="scene-controls">
-        <button id="scene-start-btn" class="scene-btn">START</button>
-        <button id="scene-stop-btn" class="scene-btn scene-btn-danger">STOP</button>
-        <button id="scene-next-btn" class="scene-btn">NEXT</button>
+        <button id="scene-start-btn" class="scene-btn" data-i18n="scenes.start">DÉMARRER</button>
+        <button id="scene-stop-btn" class="scene-btn scene-btn-danger" data-i18n="scenes.stop">ARRÊTER</button>
+        <button id="scene-next-btn" class="scene-btn" data-i18n="scenes.next">SUIVANT</button>
       </div>
       <div class="scene-controls">
-        <button id="scene-export-btn" class="scene-btn">EXPORT PRESETS</button>
-        <button id="scene-import-btn" class="scene-btn">IMPORT</button>
-        <button id="scene-download-btn" class="scene-btn">RUN LOG</button>
+        <button id="scene-export-btn" class="scene-btn" data-i18n="scenes.export">EXPORTER</button>
+        <button id="scene-import-btn" class="scene-btn" data-i18n="scenes.import">IMPORTER</button>
+        <button id="scene-download-btn" class="scene-btn" data-i18n="scenes.runLog">JOURNAL</button>
         <input type="file" id="scene-import-file" accept="application/json,.json" hidden />
       </div>
       <div class="scene-progress">
         <div id="scene-progress-fill">0%</div>
       </div>
-      <div id="scene-status">Ready</div>
+      <div id="scene-status" data-i18n="scenes.ready">Prêt</div>
     </div>
   </div>
 
@@ -1281,11 +1403,13 @@
          claim on the shared height: `panelStackAutoCollapseIndices` never
          auto-collapses the leading panel. Still hides with the rest of the
          chrome in clean view and recording mode. -->
-    <aside id="map-legend" class="map-legend panel-collapsible" data-panel-id="map-legend" aria-label="Map legend" hidden>
+    <aside id="map-legend" class="map-legend panel-collapsible" data-panel-id="map-legend" data-i18n-aria-label="legend.aria" aria-label="Légende de la carte" hidden>
       <div class="map-legend-header">
-        <span class="map-legend-title">LEGEND</span>
+        <span class="map-legend-title" data-i18n="legend.title">LÉGENDE</span>
         <span class="panel-divider" aria-hidden="true"></span>
-        <button class="panel-collapse-btn map-legend-collapse-btn" data-collapse-target="map-legend" title="Collapse Legend" aria-label="Collapse Legend">&#x25B6;</button>
+        <button class="panel-collapse-btn map-legend-collapse-btn" data-collapse-target="map-legend"
+                data-i18n-title="legend.collapse" title="Replier la légende"
+                data-i18n-aria-label="legend.collapse" aria-label="Replier la légende">&#x25B6;</button>
       </div>
       <!-- Sensor styles are full-screen post-process passes: they repaint the
            COMPOSED image, thematic layers included. This block is DOM, so it is
@@ -1299,140 +1423,172 @@
       <div class="panel-glow"></div>
       <div class="global-context-panel-inner">
         <div class="panel-header">
-          <span class="panel-title" lang="en">CONTEXT</span>
+          <span class="panel-title" data-i18n="context.title">CONTEXTE</span>
           <span class="panel-divider"></span>
           <div id="context-radio-dock" class="context-radio-dock">
-            <button id="context-radio-toggle-btn" class="context-radio-toggle" type="button" aria-expanded="false" aria-controls="context-radio-mini" aria-label="Open compact Radio controls" title="Open compact Radio controls">
+            <button id="context-radio-toggle-btn" class="context-radio-toggle" type="button" aria-expanded="false" aria-controls="context-radio-mini"
+                    data-i18n-aria-label="radio.openCompact" aria-label="Ouvrir les commandes Radio compactes"
+                    data-i18n-title="radio.openCompact" title="Ouvrir les commandes Radio compactes">
               <span class="material-symbols-outlined" aria-hidden="true">radio</span>
             </button>
-            <div id="context-radio-mini" class="context-radio-mini" role="group" aria-label="Compact Radio controls" hidden>
+            <div id="context-radio-mini" class="context-radio-mini" role="group" data-i18n-aria-label="radio.compactGroup" aria-label="Commandes Radio compactes" hidden>
               <div class="context-radio-mini-heading">
-                <span>RADIO</span>
-                <strong id="context-radio-mini-station">RADIO READY</strong>
+                <span translate="no">RADIO</span>
+                <strong id="context-radio-mini-station" data-i18n="radio.radioReady">RADIO PRÊTE</strong>
                 <span class="context-radio-mini-actions">
-                  <button id="context-radio-details-btn" type="button" aria-label="Open detailed Radio controls" aria-expanded="false" aria-controls="radio-panel" title="Open detailed Radio controls">
+                  <button id="context-radio-details-btn" type="button" aria-expanded="false" aria-controls="radio-panel"
+                      data-i18n-aria-label="radio.openDetailed" aria-label="Ouvrir les commandes Radio détaillées"
+                      data-i18n-title="radio.openDetailed" title="Ouvrir les commandes Radio détaillées">
                     <span class="material-symbols-outlined" aria-hidden="true">open_in_full</span>
                   </button>
-                  <button id="context-radio-mini-close-btn" type="button" aria-label="Close compact Radio controls" title="Close compact Radio controls">
+                  <button id="context-radio-mini-close-btn" type="button"
+                      data-i18n-aria-label="radio.closeCompact" aria-label="Fermer les commandes Radio compactes"
+                      data-i18n-title="radio.closeCompact" title="Fermer les commandes Radio compactes">
                     <span class="material-symbols-outlined" aria-hidden="true">close</span>
                   </button>
                 </span>
               </div>
-              <button id="context-radio-mini-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false">ENABLE</button>
+              <button id="context-radio-mini-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false" data-i18n="radio.enable">ACTIVER</button>
               <div class="context-radio-mini-transport">
-                <button id="context-radio-mini-prev-btn" type="button" aria-label="Previous filtered radio station" title="Previous station" disabled>◀◀</button>
-                <button id="context-radio-mini-play-btn" type="button" aria-label="Play selected radio station" title="Play" disabled>▶</button>
-                <button id="context-radio-mini-next-btn" type="button" aria-label="Next filtered radio station" title="Next station" disabled>▶▶</button>
+                <button id="context-radio-mini-prev-btn" type="button" disabled
+                        data-i18n-aria-label="radio.previousStation" aria-label="Station précédente parmi les stations filtrées"
+                        data-i18n-title="radio.previousShort" title="Station précédente">◀◀</button>
+                <button id="context-radio-mini-play-btn" type="button" disabled
+                        data-i18n-aria-label="radio.playStation" aria-label="Lire la station sélectionnée"
+                        data-i18n-title="radio.playShort" title="Lire">▶</button>
+                <button id="context-radio-mini-next-btn" type="button" disabled
+                        data-i18n-aria-label="radio.nextStation" aria-label="Station suivante parmi les stations filtrées"
+                        data-i18n-title="radio.nextShort" title="Station suivante">▶▶</button>
               </div>
               <label class="context-radio-mini-volume" for="context-radio-mini-volume">
-                <span>VOLUME</span>
-                <input id="context-radio-mini-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80" aria-label="Compact Radio volume" disabled />
+                <span translate="no">VOLUME</span>
+                <input id="context-radio-mini-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80" data-i18n-aria-label="radio.compactVolume" aria-label="Volume de la Radio compacte" disabled />
                 <output id="context-radio-mini-volume-value" class="gev-slider-value" for="context-radio-mini-volume">80%</output>
               </label>
             </div>
           </div>
-          <button class="panel-collapse-btn" data-collapse-target="global-context-panel" title="Expand panel" aria-label="Expand panel">▶</button>
+          <button class="panel-collapse-btn" data-collapse-target="global-context-panel"
+                  data-i18n-title="panel.expand" title="Déplier le panneau"
+                  data-i18n-aria-label="panel.expand" aria-label="Déplier le panneau">▶</button>
         </div>
-        <div class="global-context-modes" role="tablist" aria-label="Context mode">
-          <button id="global-context-flights-btn" class="context-mode-button" type="button" role="tab" tabindex="0" aria-selected="false" aria-controls="context-flights-view" aria-label="CONTACTS" title="Cycles the nearest contacts of whatever type you select — planes, vessels, installations. Satellites track independently.">
+        <div class="global-context-modes" role="tablist" data-i18n-aria-label="context.mode" aria-label="Mode du contexte">
+          <button id="global-context-flights-btn" class="context-mode-button" type="button" role="tab" tabindex="0" aria-selected="false" aria-controls="context-flights-view"
+                  data-i18n-aria-label="context.contacts" aria-label="CONTACTS"
+                  data-i18n-title="context.contactsTitle" title="Parcourt les contacts les plus proches du type choisi — avions, navires, installations. Les satellites se suivent à part.">
             <span class="material-symbols-outlined" aria-hidden="true">radar</span>
-            <span>CONTACTS</span>
+            <span data-i18n="context.contacts">CONTACTS</span>
           </button>
           <button id="global-context-missions-btn" class="context-mode-button" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="context-missions-view">
             <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
-            <span>SPACE MISSIONS</span>
+            <span data-i18n="context.missions">MISSIONS SPATIALES</span>
           </button>
         </div>
         <div id="context-mode-standby" class="context-mode-standby">
-          <strong>SELECT CONTEXT</strong>
-          <span>CONTACTS — nearest planes · vessels · sites<br>SPACE MISSIONS — launches &amp; orbital assets</span>
+          <strong data-i18n="context.selectContext">CHOISIR UN CONTEXTE</strong>
+          <span><span data-i18n="context.standbyContacts">CONTACTS — avions · navires · sites les plus proches</span><br><span data-i18n="context.standbyMissions">MISSIONS SPATIALES — lancements et objets en orbite</span></span>
         </div>
         <section id="context-flights-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-flights-btn" hidden>
-          <div class="global-context-actions" aria-label="Contact Context actions">
+          <div class="global-context-actions" data-i18n-aria-label="context.actions" aria-label="Actions du contexte Contacts">
             <button id="cockpit-entry" type="button" hidden>
               <span class="material-symbols-outlined" aria-hidden="true">flight</span>
-              <span>COCKPIT</span>
+              <span translate="no">COCKPIT</span>
             </button>
             <button id="flight-route-btn" class="panel-layer-toggle" type="button" hidden aria-pressed="false"
-              title="Pull back to hold the tracked flight's origin and destination in one view, and draw its estimated flight plan">SHOW ROUTE</button>
-            <button id="tr3b-toggle" class="tr3b-toggle" type="button" aria-pressed="false" hidden aria-label="Reclassify tracked contact as TR-3B" title="Reclassify as TR-3B">🛸</button>
+              data-i18n-title="context.showRouteTitle"
+              title="Reculer pour tenir le départ et l’arrivée du vol suivi dans une seule vue, et tracer son plan de vol estimé"
+              data-i18n="context.showRoute">AFFICHER L’ITINÉRAIRE</button>
+            <button id="tr3b-toggle" class="tr3b-toggle" type="button" aria-pressed="false" hidden
+              data-i18n-aria-label="context.tr3b" aria-label="Reclasser le contact suivi en TR-3B"
+              data-i18n-title="context.tr3bTitle" title="Reclasser en TR-3B">🛸</button>
           </div>
           <aside id="military-awareness-panel">
             <div class="military-awareness-standby">
-              <strong>CONTACTS CONTEXT OFF</strong>
-              <span>SELECT CONTACTS TO LOAD OBSERVED / MAPPED PROXIMITY</span>
+              <strong data-i18n="context.contactsOff">CONTEXTE CONTACTS ÉTEINT</strong>
+              <span data-i18n="context.contactsOffHint">CHOISIR CONTACTS POUR CHARGER LA PROXIMITÉ OBSERVÉE / CARTOGRAPHIÉE</span>
             </div>
           </aside>
         </section>
         <section id="context-missions-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-missions-btn" hidden>
           <div id="space-mission-panel-host">
-            <div id="space-mission-roster" class="space-mission-roster" aria-label="Available Space Missions">
+            <div id="space-mission-roster" class="space-mission-roster" data-i18n-aria-label="missions.available" aria-label="Missions spatiales disponibles">
               <div class="space-mission-roster-header">
                 <div>
-                  <strong>AVAILABLE MISSIONS</strong>
-                  <span>SELECT A MISSION TO INSPECT</span>
+                  <strong data-i18n="missions.availableTitle">MISSIONS DISPONIBLES</strong>
+                  <span data-i18n="missions.selectHint">CHOISIR UNE MISSION À INSPECTER</span>
                 </div>
                 <output data-mission-roster-count>—</output>
               </div>
               <div class="space-mission-roster-list" data-mission-roster-list>
-                <div class="space-mission-roster-empty">LOADING 30-DAY MISSION INDEX</div>
+                <div class="space-mission-roster-empty" data-i18n="missions.loading">CHARGEMENT DE L’INDEX DES MISSIONS SUR 30 JOURS</div>
               </div>
             </div>
           </div>
         </section>
-        <section id="radio-panel" class="panel-collapsible collapsed" data-panel-id="radio-panel" aria-label="Internet radio companion">
+        <section id="radio-panel" class="panel-collapsible collapsed" data-panel-id="radio-panel" data-i18n-aria-label="radio.panel" aria-label="Radio internet">
           <div class="radio-panel-inner">
             <div class="panel-header">
-              <span class="panel-title" lang="en">RADIO</span>
-              <span id="radio-layer-state" class="radio-layer-state">OFF</span>
+              <span class="panel-title" translate="no">RADIO</span>
+              <span id="radio-layer-state" class="radio-layer-state" data-i18n="radio.stateOff">ÉTEINTE</span>
               <span class="panel-divider"></span>
-              <button class="panel-collapse-btn" data-collapse-target="radio-panel" title="Expand Radio" aria-label="Expand Radio section">+</button>
+              <button class="panel-collapse-btn" data-collapse-target="radio-panel"
+                      data-i18n-title="radio.expand" title="Déplier la Radio"
+                      data-i18n-aria-label="radio.expandSection" aria-label="Déplier la section Radio">+</button>
             </div>
             <div class="radio-directory-row">
-              <button id="radio-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false">ENABLE</button>
-              <label class="radio-filter-label" for="radio-filter">STATION TAG</label>
-              <select id="radio-filter" aria-label="Filter stations by station tag" disabled>
-                <option value="all">All</option>
+              <button id="radio-enable-btn" class="panel-layer-toggle" type="button" aria-pressed="false" data-i18n="radio.enable">ACTIVER</button>
+              <label class="radio-filter-label" for="radio-filter" data-i18n="radio.stationTag">ÉTIQUETTE DE STATION</label>
+              <select id="radio-filter" data-i18n-aria-label="radio.filterAria" aria-label="Filtrer les stations par étiquette" disabled>
+                <option value="all" data-i18n="radio.filterAll">Toutes</option>
               </select>
             </div>
             <div id="radio-station-card" class="radio-station-card" aria-live="polite">
-              <strong id="radio-station-name">NO STATION SELECTED</strong>
-              <span id="radio-station-meta">Enable Radio, then choose a globe marker or use next.</span>
+              <strong id="radio-station-name" data-i18n="radio.noStation">AUCUNE STATION SÉLECTIONNÉE</strong>
+              <span id="radio-station-meta" data-i18n="radio.noStationHint">Activez la Radio, puis choisissez un repère sur le globe ou passez à la suivante.</span>
               <span id="radio-station-tags"></span>
             </div>
             <div id="radio-tuner" class="radio-tuner" hidden>
               <div class="radio-tuner-header">
-                <span id="radio-tuner-band-label">DIRECTORY BAND</span>
-                <output id="radio-tuner-value" for="radio-tuner-slider">DRAG TO TUNE</output>
+                <span id="radio-tuner-band-label" data-i18n="radio.band">BANDE DE L’ANNUAIRE</span>
+                <output id="radio-tuner-value" for="radio-tuner-slider" data-i18n="radio.dragToTune">GLISSER POUR ACCORDER</output>
               </div>
               <div class="radio-tuner-dial">
                 <div class="radio-tuner-scale" aria-hidden="true"></div>
                 <div id="radio-tuner-needle" class="radio-tuner-needle" aria-hidden="true"></div>
                 <input id="radio-tuner-slider" type="range" min="0" max="0" step="1" value="0"
-                  aria-label="Tune available internet radio stations" aria-valuetext="No station available" disabled />
+                  data-i18n-aria-label="radio.tuneAria" aria-label="Accorder les stations de radio disponibles"
+                  aria-valuetext="Aucune station disponible" disabled />
               </div>
               <div class="radio-tuner-readout">
-                <span id="radio-tuner-station">ALL · DRAG THE NEEDLE</span>
-                <span>SNAPS TO AVAILABLE STATIONS</span>
+                <span id="radio-tuner-station" data-i18n="radio.tunerAll">TOUTES · GLISSER L’AIGUILLE</span>
+                <span data-i18n="radio.tunerSnaps">S’ACCROCHE AUX STATIONS DISPONIBLES</span>
               </div>
             </div>
-            <div class="radio-transport" role="group" aria-label="Radio playback">
-              <button id="radio-prev-btn" type="button" aria-label="Previous filtered station" disabled>PREV</button>
-              <button id="radio-play-btn" type="button" aria-label="Play selected station" disabled>PLAY</button>
-              <button id="radio-next-btn" type="button" aria-label="Next filtered station" disabled>NEXT</button>
-              <button id="radio-stop-btn" type="button" aria-label="Stop radio playback" disabled>STOP</button>
+            <div class="radio-transport" role="group" data-i18n-aria-label="radio.playback" aria-label="Lecture radio">
+              <button id="radio-prev-btn" type="button" disabled
+                      data-i18n-aria-label="radio.previousStation" aria-label="Station précédente parmi les stations filtrées"
+                      data-i18n="common.prev">PRÉC</button>
+              <button id="radio-play-btn" type="button" disabled
+                      data-i18n-aria-label="radio.playStation" aria-label="Lire la station sélectionnée"
+                      data-i18n="radio.play">LIRE</button>
+              <button id="radio-next-btn" type="button" disabled
+                      data-i18n-aria-label="radio.nextStation" aria-label="Station suivante parmi les stations filtrées"
+                      data-i18n="common.next">SUIV</button>
+              <button id="radio-stop-btn" type="button" disabled
+                      data-i18n-aria-label="radio.stopAria" aria-label="Arrêter la lecture radio"
+                      data-i18n="radio.stop">STOP</button>
             </div>
             <label class="radio-volume-row" for="radio-volume">
-              <span>VOLUME</span>
-              <input id="radio-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80" aria-label="Radio volume" />
+              <span translate="no">VOLUME</span>
+              <input id="radio-volume" class="gev-quantitative-slider" type="range" min="0" max="100" value="80"
+                     data-i18n-aria-label="radio.volume" aria-label="Volume de la radio" />
               <output id="radio-volume-value" class="gev-slider-value" for="radio-volume">80%</output>
             </label>
-            <div id="radio-playback-state" class="radio-playback-state" role="status" aria-live="polite">Radio off</div>
+            <div id="radio-playback-state" class="radio-playback-state" role="status" aria-live="polite" data-i18n="radio.playbackOff">Radio éteinte</div>
             <div class="radio-links">
-              <a id="radio-station-homepage" href="#" target="_blank" rel="noopener noreferrer" hidden>STATION SITE</a>
-              <a href="https://www.radio-browser.info/" target="_blank" rel="noopener noreferrer">DIRECTORY: RADIO BROWSER</a>
+              <a id="radio-station-homepage" href="#" target="_blank" rel="noopener noreferrer" hidden data-i18n="radio.stationSite">SITE DE LA STATION</a>
+              <a href="https://www.radio-browser.info/" target="_blank" rel="noopener noreferrer" data-i18n="radio.directory">ANNUAIRE : RADIO BROWSER</a>
             </div>
-            <p class="radio-privacy">Audio connects directly to the broadcaster after you press play. Your IP is visible to that broadcaster.</p>
+            <p class="radio-privacy" data-i18n="radio.privacy">Le son vient directement du diffuseur dès que vous appuyez sur Lire. Votre adresse IP lui est visible.</p>
           </div>
         </section>
       </div>
@@ -1459,17 +1615,17 @@
     `hidden` tombe dans `initPhoneSheet()`, qui rend la main immédiatement si
     `isPhoneShell()` est faux — sur un bureau ce bloc ne coûte que son parse.
   -->
-  <section id="phone-sheet" hidden data-snap="peek" aria-label="Panneau téléphone">
-    <div class="phone-sheet-grip" data-phone-grip role="separator" aria-label="Glissez pour redimensionner le panneau"></div>
-    <nav class="phone-sheet-tabs" role="tablist" aria-label="Onglets du panneau">
+  <section id="phone-sheet" hidden data-snap="peek" data-i18n-aria-label="phone.sheet" aria-label="Panneau téléphone">
+    <div class="phone-sheet-grip" data-phone-grip role="separator" data-i18n-aria-label="phone.grip" aria-label="Glissez pour redimensionner le panneau"></div>
+    <nav class="phone-sheet-tabs" role="tablist" data-i18n-aria-label="phone.tabs" aria-label="Onglets du panneau">
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-search"
-              data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1">Recherche</button>
+              data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1" data-i18n="phone.tabSearch">Recherche</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-layers"
-              data-phone-tab-btn="layers" aria-selected="true" aria-controls="phone-panel-layers">Couches</button>
+              data-phone-tab-btn="layers" aria-selected="true" aria-controls="phone-panel-layers" data-i18n="phone.tabLayers">Couches</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-legend"
-              data-phone-tab-btn="legend" aria-selected="false" aria-controls="phone-panel-legend" tabindex="-1">Légende</button>
+              data-phone-tab-btn="legend" aria-selected="false" aria-controls="phone-panel-legend" tabindex="-1" data-i18n="phone.tabLegend">Légende</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-selection"
-              data-phone-tab-btn="selection" aria-selected="false" aria-controls="phone-panel-selection" tabindex="-1">Sélection</button>
+              data-phone-tab-btn="selection" aria-selected="false" aria-controls="phone-panel-selection" tabindex="-1" data-i18n="phone.tabSelection">Sélection</button>
     </nav>
     <div class="phone-sheet-body">
       <section class="phone-sheet-panel" id="phone-panel-search" data-phone-tab="search" role="tabpanel" aria-labelledby="phone-tab-search" hidden></section>
@@ -1506,16 +1662,18 @@
     <div id="phone-search" class="phone-search">
       <svg class="phone-search-icon" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>
     </div>
-    <div id="phone-layer-chips" class="phone-layer-chips" role="toolbar" aria-label="Couches en un geste"></div>
+    <div id="phone-layer-chips" class="phone-layer-chips" role="toolbar" data-i18n-aria-label="phone.chips" aria-label="Couches en un geste"></div>
   </div>
-  <button id="phone-basemap-button" type="button" hidden aria-haspopup="dialog" aria-controls="phone-basemap-sheet" aria-expanded="false" aria-label="Fond de carte" title="Changer le fond de carte">
+  <button id="phone-basemap-button" type="button" hidden aria-haspopup="dialog" aria-controls="phone-basemap-sheet" aria-expanded="false"
+          data-i18n-aria-label="mapSource.group" aria-label="Fond de carte"
+          data-i18n-title="phone.basemapChange" title="Changer le fond de carte">
     <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M480-118 120-398l66-50 294 228 294-228 66 50-360 280Zm0-202L120-600l360-280 360 280-360 280Zm0-280Zm0 178 230-178-230-178-230 178 230 178Z"/></svg>
   </button>
   <div id="phone-basemap-backdrop" hidden></div>
   <section id="phone-basemap-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phone-basemap-title">
     <header class="phone-basemap-head">
-      <h2 id="phone-basemap-title">Fond de carte</h2>
-      <button type="button" class="phone-basemap-close" data-phone-basemap-close aria-label="Fermer le choix du fond de carte">×</button>
+      <h2 id="phone-basemap-title" data-i18n="phone.basemapTitle">Fond de carte</h2>
+      <button type="button" class="phone-basemap-close" data-phone-basemap-close data-i18n-aria-label="phone.basemapClose" aria-label="Fermer le choix du fond de carte">×</button>
     </header>
     <div class="phone-basemap-body" data-phone-basemap-slot></div>
   </section>
@@ -1531,15 +1689,15 @@
   <aside id="first-run-launcher" role="dialog" aria-labelledby="first-run-title" aria-describedby="first-run-description" hidden>
     <div class="first-run-scanline" aria-hidden="true"></div>
     <header class="first-run-header">
-      <span class="first-run-kicker">SURPLOMB · PREMIÈRE VISITE</span>
+      <span class="first-run-kicker" data-i18n="firstRun.kicker">SURPLOMB · PREMIÈRE VISITE</span>
     </header>
     <div class="first-run-footer">
-      <span>Échap pour fermer</span>
+      <span data-i18n="firstRun.escClose">Échap pour fermer</span>
     </div>
     <!-- Kept out of the footer row: it swaps to progress and errors, and a live
          region that also holds layout makes the row jump as it speaks. The two
          numbers are the ones the page description and the README carry. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">59 couches de données publiques · 56 sans clé</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite" data-i18n="firstRun.status">59 couches de données publiques · 56 sans clé</p>
   </aside>
   <div id="first-run-hint" hidden></div>
 
@@ -1547,46 +1705,47 @@
        switch on where the camera lands (src/firstRunVariants.js). The field
        declares what the soft keyboard should offer, like #location-search. -->
   <template data-first-run-variant="A">
-    <h2 id="first-run-title">Qu’est-ce qui est vrai à cette adresse ?</h2>
-    <p id="first-run-description">Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.</p>
+    <h2 id="first-run-title" data-i18n="firstRun.a.title">Qu’est-ce qui est vrai à cette adresse ?</h2>
+    <p id="first-run-description" data-i18n="firstRun.a.description">Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.</p>
     <form class="first-run-form" data-first-run-form role="search" action="#">
-      <input id="first-run-address" class="first-run-address" data-first-run-address type="search" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Adresse, commune ou lieu" placeholder="Une adresse, une commune, un lieu…" />
-      <button class="first-run-submit" data-first-run-submit type="submit">Voir</button>
+      <input id="first-run-address" class="first-run-address" data-first-run-address type="search" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-i18n-aria-label="firstRun.a.addressAria" aria-label="Adresse, commune ou lieu"
+           data-i18n-placeholder="firstRun.a.addressPlaceholder" placeholder="Une adresse, une commune, un lieu…" />
+      <button class="first-run-submit" data-first-run-submit type="submit" data-i18n="firstRun.a.submit">Voir</button>
     </form>
     <div class="first-run-chips">
-      <span class="first-run-chips-label">Essayer :</span>
+      <span class="first-run-chips-label" data-i18n="firstRun.a.try">Essayer :</span>
       <!-- Revealed by the module only where geolocation can work (HTTPS). -->
-      <button type="button" class="first-run-chip" data-first-run-chip="locate" hidden><span class="material-symbols-outlined" aria-hidden="true">my_location</span>Autour de moi</button>
-      <button type="button" class="first-run-chip" data-first-run-chip="Tour Eiffel, Paris">Tour Eiffel, Paris</button>
-      <button type="button" class="first-run-chip" data-first-run-chip="Vieux-Port, Marseille">Vieux-Port, Marseille</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="locate" hidden data-i18n="actions.locate"><span class="material-symbols-outlined" aria-hidden="true">my_location</span>Autour de moi</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Tour Eiffel, Paris" translate="no">Tour Eiffel, Paris</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Vieux-Port, Marseille" translate="no">Vieux-Port, Marseille</button>
     </div>
-    <button type="button" class="first-run-link" data-first-run-look-around>Regarder autour d’ici sans rien taper<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+    <button type="button" class="first-run-link" data-first-run-look-around data-i18n="firstRun.a.lookAround">Regarder autour d’ici sans rien taper<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
   </template>
 
   <!-- B · Trois questions. A tile switches layers on where the camera already
        is and never moves it. The marks are typography, not icon glyphs. -->
   <template data-first-run-variant="B">
-    <h2 id="first-run-title">Par où commencer ?</h2>
-    <p id="first-run-description">Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.</p>
+    <h2 id="first-run-title" data-i18n="firstRun.b.title">Par où commencer ?</h2>
+    <p id="first-run-description" data-i18n="firstRun.b.description">Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.</p>
     <div class="first-run-choices">
       <button type="button" data-first-run-choice="sales">
         <span class="first-run-glyph" aria-hidden="true">€</span>
-        <span><strong>Ce que les voisins ont payé</strong><small>Ventes DVF et parcelle exacte, 5 ans</small></span>
+        <span><strong data-i18n="firstRun.b.salesTitle">Ce que les voisins ont payé</strong><small data-i18n="firstRun.b.salesSub">Ventes DVF et parcelle exacte, 5 ans</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" data-first-run-choice="permits">
         <span class="first-run-glyph" aria-hidden="true">▲</span>
-        <span><strong>Ce qui se construit</strong><small>Permis accordés, chantiers ouverts (Sitadel)</small></span>
+        <span><strong data-i18n="firstRun.b.permitsTitle">Ce qui se construit</strong><small data-i18n="firstRun.b.permitsSub">Permis accordés, chantiers ouverts (Sitadel)</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" data-first-run-choice="live">
         <span class="first-run-glyph" aria-hidden="true">●</span>
-        <span><strong>Ce qui bouge maintenant</strong><small>Trafic, bus en direct, avions au-dessus</small></span>
+        <span><strong data-i18n="firstRun.b.liveTitle">Ce qui bouge maintenant</strong><small data-i18n="firstRun.b.liveSub">Trafic, bus en direct, avions au-dessus</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" class="first-run-explore" data-first-run-choice="explore">
         <span class="first-run-glyph" aria-hidden="true">○</span>
-        <span><strong>Je regarde par moi-même</strong><small>Rester ici, rien d’autre ne s’allume</small></span>
+        <span><strong data-i18n="firstRun.b.exploreTitle">Je regarde par moi-même</strong><small data-i18n="firstRun.b.exploreSub">Rester ici, rien d’autre ne s’allume</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
     </div>
@@ -1596,10 +1755,10 @@
        never modal, gone at the first click elsewhere or after twelve seconds. -->
   <template data-first-run-variant="C">
     <button type="button" class="first-run-hint-body" data-first-run-hint-open>
-      <strong>Première visite ? Tapez une adresse ici.</strong>
-      <span>Ce qui s’est vendu, ce qui se construit, l’école, le risque.</span>
+      <strong data-i18n="firstRun.c.title">Première visite ? Tapez une adresse ici.</strong>
+      <span data-i18n="firstRun.c.body">Ce qui s’est vendu, ce qui se construit, l’école, le risque.</span>
     </button>
-    <span class="first-run-hint-chip">59 couches · 56 sans clé</span>
+    <span class="first-run-hint-chip" data-i18n="firstRun.c.chip">59 couches · 56 sans clé</span>
   </template>
 
   <!-- What a territorial layer says before it starts. Opens ONLY when the
@@ -1610,7 +1769,7 @@
          aria-labelledby="coverage-briefing-title" aria-describedby="coverage-briefing-body" hidden>
     <div class="coverage-briefing-scanline" aria-hidden="true"></div>
     <header class="coverage-briefing-header">
-      <span class="coverage-briefing-kicker">COUVERTURE DE LA COUCHE</span>
+      <span class="coverage-briefing-kicker" data-i18n="coverage.kicker">COUVERTURE DE LA COUCHE</span>
       <span class="coverage-briefing-scope" data-coverage-scope></span>
     </header>
     <h2 id="coverage-briefing-title" data-coverage-title></h2>
@@ -1623,14 +1782,14 @@
              planet" here, and against `my_location` below the pair reads as
              "there" against "here" without costing a font rebuild. -->
         <span class="material-symbols-outlined" aria-hidden="true">public</span>
-        <span data-coverage-goto-label>Aller à la zone couverte</span>
+        <span data-coverage-goto-label data-i18n="coverage.goto">Aller à la zone couverte</span>
       </button>
       <!-- Kept even though it switches on a layer that will draw nothing here.
            Somebody arming a layer before they fly is a real intent, and taking
            the option away would make the card a gate instead of an offer. -->
       <button type="button" data-coverage-choice="here">
         <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
-        <span>Activer sans bouger</span>
+        <span data-i18n="coverage.here">Activer sans bouger</span>
       </button>
     </div>
     <div class="coverage-briefing-footer">
@@ -1638,9 +1797,9 @@
         <input type="checkbox" data-coverage-suppress />
         <!-- Names the consequence, not just the dismissal: a suppressed card
              resolves `goto`, so the next press moves the camera. -->
-        <span>Ne plus demander — aller directement</span>
+        <span data-i18n="coverage.suppress">Ne plus demander — aller directement</span>
       </label>
-      <span>ESC pour annuler</span>
+      <span data-i18n="coverage.cancel">ESC pour annuler</span>
     </div>
   </aside>
 
@@ -1649,24 +1808,24 @@
        deployment serves and every visitor that is not this machine. -->
   <button id="key-setup-chip" type="button" hidden aria-haspopup="dialog" aria-controls="key-setup">
     <span class="material-symbols-outlined" aria-hidden="true">bolt</span>
-    <span data-key-setup-chip-label>POWER UP</span>
+    <span data-key-setup-chip-label data-i18n="keySetup.chip">PUISSANCE</span>
   </button>
-  <aside id="key-setup" role="dialog" aria-labelledby="key-setup-title" aria-describedby="key-setup-description" hidden lang="en">
+  <aside id="key-setup" role="dialog" aria-labelledby="key-setup-title" aria-describedby="key-setup-description" hidden>
     <div class="key-setup-scanline" aria-hidden="true"></div>
     <header class="key-setup-header">
-      <span class="key-setup-kicker">GROUND STATION · PROVIDER SETTINGS</span>
-      <button type="button" class="key-setup-close" data-key-setup-close aria-label="Close key setup">
+      <span class="key-setup-kicker" data-i18n="keySetup.kicker">STATION AU SOL · RÉGLAGES DES FOURNISSEURS</span>
+      <button type="button" class="key-setup-close" data-key-setup-close data-i18n-aria-label="keySetup.close" aria-label="Fermer les réglages des clés">
         <span class="material-symbols-outlined" aria-hidden="true">close</span>
       </button>
     </header>
-    <h2 id="key-setup-title">Power up the globe</h2>
-    <p id="key-setup-description">The globe already flies keyless — Esri worldwide, IGN over France. Every key below switches on another real feed: paste one and it is saved into this checkout's own .env, then the server restarts itself. Server-side keys never leave this machine; Google Maps and Cesium ion run in the browser and must be provider-restricted. Keys you configured elsewhere — your shell, your Keychain — are shown but never touched.</p>
+    <h2 id="key-setup-title" data-i18n="keySetup.title">Donnez au globe toute sa puissance</h2>
+    <p id="key-setup-description" data-i18n="keySetup.description">Le globe vole déjà sans clé — Esri dans le monde, l’IGN sur la France. Chaque clé ci-dessous allume un flux réel de plus : collez-la et elle est écrite dans le .env de ce dépôt, puis le serveur redémarre tout seul. Les clés côté serveur ne quittent jamais cette machine ; Google Maps et Cesium ion tournent dans le navigateur et doivent être restreintes chez le fournisseur. Les clés configurées ailleurs — votre shell, votre trousseau — sont affichées mais jamais touchées.</p>
     <div class="key-setup-rows" data-key-setup-rows></div>
     <div class="key-setup-footer">
-      <button type="button" class="key-setup-apply" data-key-setup-apply>SAVE KEYS</button>
-      <span class="key-setup-hint">ESC to close</span>
+      <button type="button" class="key-setup-apply" data-key-setup-apply data-i18n="keySetup.save">ENREGISTRER LES CLÉS</button>
+      <span class="key-setup-hint" data-i18n="firstRun.escClose">Échap pour fermer</span>
     </div>
-    <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite">From France, the Cesium ion token is the one that buys the 3D globe — Google withholds it from EEA-billed accounts.</p>
+    <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite" data-i18n="keySetup.note">Depuis la France, c’est le jeton Cesium ion qui achète le globe 3D — Google le refuse aux comptes facturés dans l’EEE.</p>
   </aside>
 
   <!-- Intelligence HUD Overlay -->
@@ -1680,8 +1839,8 @@
            the shadow's <use> can recolour the terrace. The clip sits on a
            wrapper: on the <use> itself it would move with the shadow. -->
       <span class="loader-logo" aria-hidden="true"><svg class="brand-symbol" data-loader-sun viewBox="0 -70 360 390" aria-hidden="true" focusable="false"><defs><clipPath id="loader-ground-clip"><use href="#loader-ground"/></clipPath></defs><circle class="loader-sun" cx="188" cy="48" r="40" fill="#F7AB7C"/><g fill="currentColor"><path id="loader-terrace" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path id="loader-ground" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></g><g clip-path="url(#loader-ground-clip)"><use class="loader-shadow" href="#loader-terrace" fill="#82978E" opacity="0"/></g></svg></span>
-      <h2 class="brand-word">surplomb</h2>
-      <p class="loader-status">Initializing photorealistic world...</p>
+      <h2 class="brand-word" translate="no">surplomb</h2>
+      <p class="loader-status" data-i18n="loader.status">Initialisation du monde photoréaliste…</p>
     </div>
   </div>
 

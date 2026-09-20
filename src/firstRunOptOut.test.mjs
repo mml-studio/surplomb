@@ -98,5 +98,10 @@ test('the privacy page loads the opt-out, and only the A/B sections offer it', (
   const entry = fs.readFileSync(new URL('./firstRunOptOutPage.js', import.meta.url), 'utf8');
   assert.deepEqual([...entry.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./firstRunOptOut.js']);
   const module = fs.readFileSync(new URL('./firstRunOptOut.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(module, /^import /m);
+  // The module may reach for its own catalog and nothing else: the privacy
+  // page must never pull a byte of the globe, and a catalog costs the two
+  // files of the i18n layer.
+  assert.deepEqual([...module.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./firstRunOptOut.i18n.js']);
+  const catalog = fs.readFileSync(new URL('./firstRunOptOut.i18n.js', import.meta.url), 'utf8');
+  assert.deepEqual([...catalog.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./i18n/messages.js']);
 });

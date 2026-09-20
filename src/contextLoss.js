@@ -53,6 +53,7 @@ import {
   claimStaleBuildAutoReload,
   staleBuildSecondsLeft,
 } from './staleBuildRecovery.js';
+import messages from './contextLoss.i18n.js';
 
 export { CONTEXT_LOST_RELOAD_STORAGE_KEY };
 
@@ -81,10 +82,8 @@ export function contextLossPlan({ visibility = 'visible', claimed = false } = {}
  * @returns {string}
  */
 export function contextLossNotice({ plan, secondsLeft = 0 }) {
-  if (plan === 'countdown') {
-    return `Le rendu 3D a été interrompu par le système — rechargement dans ${secondsLeft} s.`;
-  }
-  return 'Le rendu 3D a été interrompu par le système. Rechargez pour le relancer.';
+  const m = messages();
+  return plan === 'countdown' ? m.countdown(secondsLeft) : m.manual;
 }
 
 /**
@@ -164,7 +163,7 @@ export function installContextLossRecovery(viewer, {
       showNotice?.(contextLossNotice({ plan }), {
         owner: 'context-lost',
         durationMs: STALE_BUILD_MANUAL_DWELL_MS,
-        action: { label: 'RECHARGER', onClick: doReload },
+        action: { label: messages().reload, onClick: doReload },
       });
       return;
     }
@@ -177,7 +176,7 @@ export function installContextLossRecovery(viewer, {
           owner: 'context-lost',
           durationMs: Infinity,
           action: {
-            label: 'ANNULER',
+            label: messages().cancel,
             onClick: () => {
               // The reader said no. The cure stays in reach and stops acting
               // on its own — the same shape as a declined stale-build reload.
@@ -186,7 +185,7 @@ export function installContextLossRecovery(viewer, {
               showNotice?.(contextLossNotice({ plan: 'manual' }), {
                 owner: 'context-lost',
                 durationMs: STALE_BUILD_MANUAL_DWELL_MS,
-                action: { label: 'RECHARGER', onClick: doReload },
+                action: { label: messages().reload, onClick: doReload },
               });
             },
           },

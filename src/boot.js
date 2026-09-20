@@ -26,6 +26,7 @@ import {
   readVitrineSignals,
 } from './vitrine/gate.js';
 import { DEFAULT_LOCALE, I18N_READY_ATTRIBUTE, getLocale } from './i18n/locale.js';
+import bootMessages from './boot.i18n.js';
 
 const decision = decideVitrine(readVitrineSignals());
 applyVitrineDecision(decision);
@@ -138,7 +139,7 @@ function reportBootFailure(error) {
   const status = document.querySelector('#loading-screen .loader-status');
   if (status) {
     void loaderSun?.then((module) => module?.stopLoaderSun());
-    status.textContent = 'Le globe n’a pas pu se charger. Rechargez la page.';
+    status.textContent = bootMessages().failure;
     // Light coral: 6:1 on the veil's green, where #ff4444 read at 3:1.
     status.style.color = '#ffb4a8';
   }

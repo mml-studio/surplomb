@@ -18,6 +18,7 @@
 // was typed and never a coordinate.
 
 import { canGeolocate } from './geolocate.js';
+import messages from './firstRunVariants.i18n.js';
 
 /**
  * The three address layers A switches on at arrival. All three are
@@ -43,18 +44,20 @@ export const FIRST_RUN_VARIANTS = Object.freeze({
         // The parcel layer is badged LOURD on a phone (PHONE_HEAVY_LAYER_IDS),
         // so the tile keeps the sales and says so in its subcopy.
         phoneSkipLayerIds: Object.freeze(['cadastre-fr']),
-        phoneSubcopy: 'Ventes DVF, 5 ans',
-        busyText: 'Allumage : ce que les voisins ont payé…',
+        // Getters, not strings: a catalog read at module load would freeze
+        // the card in whatever language the module was imported in (R5).
+        get phoneSubcopy() { return messages().phoneSubcopy.sales; },
+        get busyText() { return messages().busy.sales; },
       }),
       permits: Object.freeze({
         layerIds: Object.freeze(['ads-fr', 'sitadel-fr']),
-        busyText: 'Allumage : ce qui se construit…',
+        get busyText() { return messages().busy.permits; },
       }),
       live: Object.freeze({
         // `traffic` is already on at boot (DEFAULT_ENABLED_LAYER_IDS): asking
         // again is the manager's idempotent path and costs nothing.
         layerIds: Object.freeze(['traffic', 'transit-fr', 'flights']),
-        busyText: 'Allumage : ce qui bouge maintenant…',
+        get busyText() { return messages().busy.live; },
       }),
       explore: Object.freeze({ layerIds: Object.freeze([]) }),
     }),
@@ -193,8 +196,8 @@ export async function runFirstRunFlight(startFlight, {
   return { ok: true, status, label: started.label, layerIds: bundle, arrival };
 }
 
-const NOT_FOUND_TEXT = 'Introuvable. Essayez une commune ou une adresse plus précise.';
-const FAILED_TEXT = 'La recherche a échoué. Réessayez, ou regardez autour d’ici.';
+const NOT_FOUND_TEXT = () => messages().notFound;
+const FAILED_TEXT = () => messages().searchFailed;
 
 /** addEventListener that remembers how to undo itself. */
 function listener(cleanups) {
@@ -237,9 +240,9 @@ export function mountVariantA(ctx) {
     const answered = outcome.status === 'not-found' || outcome.status === 'failed';
     emit({ type: 'action', kind, outcome: answered ? 'not-found' : 'cancelled', ...length });
     if (ctx.isClosed()) return;
-    if (outcome.status === 'not-found') setStatus(NOT_FOUND_TEXT);
+    if (outcome.status === 'not-found') setStatus(NOT_FOUND_TEXT());
     // A refused geolocation brings its own French sentence (geolocate.js).
-    else if (outcome.status === 'failed') setStatus(outcome.message || FAILED_TEXT);
+    else if (outcome.status === 'failed') setStatus(outcome.message || FAILED_TEXT());
     setBusy(false);
     if (answered && field) {
       field.focus({ preventScroll: true });
@@ -255,7 +258,7 @@ export function mountVariantA(ctx) {
     }
     void launch(
       kind,
-      `Recherche de « ${text} »…`,
+      messages().searching(text),
       (onArrival) => styleManager.flyToAddress(text, { onArrival }),
       text.length,
     );
@@ -339,8 +342,9 @@ export function mountVariantB(ctx) {
     }
     emit({ type: 'action', kind, outcome: 'cancelled', layerIds });
     if (ctx.isClosed()) return;
-    const failed = outcome?.failedLayerIds?.length ? outcome.failedLayerIds.join(', ') : 'ces couches';
-    setStatus(`Impossible d’allumer ${failed}. Réessayez, ou regardez par vous-même.`);
+    const m = messages();
+    const failed = outcome?.failedLayerIds?.length ? outcome.failedLayerIds.join(', ') : m.theseLayers;
+    setStatus(m.layersFailed(failed));
     setBusy(false);
   };
   for (const button of buttons) listen(button, 'click', onChoice);

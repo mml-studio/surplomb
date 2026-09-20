@@ -21,6 +21,15 @@
 // text (its length, bucketed), never a position, never a layer id, never the
 // IP, the user agent, the referrer or the URL. The server REBUILDS every record
 // field by field from the lists below and drops anything else.
+//
+// AND NEVER THE LANGUAGE. The card is written in French and in English, but
+// the three variants were drawn, worded and read in French: a reader on the
+// English globe is measured against a card that was never written for them,
+// and the result would be noise attributed to the variant. So a non-French
+// page is OUT of the experiment — variant A, no beacon — and its exclusion is
+// computed from `<html lang>` at draw time, never stored and never sent.
+// `confidentialite.html` promises the report carries no language; it does not,
+// and this is the module that has to keep that true.
 
 import {
   FIRST_RUN_VARIANT_IDS,
@@ -30,6 +39,7 @@ import {
   writeFirstRunVariantRecord,
 } from './firstRunExperience.js';
 import { firstRunMeasureRefused } from './firstRunOptOut.js';
+import { DEFAULT_LOCALE, getLocale } from './i18n/locale.js';
 
 export const FIRST_RUN_EXPERIMENT_ID = 'first-run';
 export const FIRST_RUN_DEFAULT_VARIANT = 'A';
@@ -172,6 +182,11 @@ export function isNewVisitor(record, now = Date.now()) {
 /**
  * Decide which card this page shows and whether it is measured.
  *
+ *   0. A page that is not French is not in the test: A (or the forced card),
+ *      no beacon, and the stored draw is left EXACTLY as it was — not read
+ *      into a decision, not rewritten, not cleared. A reader who switches
+ *      back to French therefore resumes the draw they already had, instead of
+ *      being re-rolled into another group.
  *   1. `?welcome=X` forces X and leaves the stored draw alone; measured (and
  *      flagged `forced`, which the report leaves out) only while the test runs.
  *   2. No test (`experiment` null, as `/api/trial` said), or a visitor who
@@ -194,6 +209,8 @@ export function isNewVisitor(record, now = Date.now()) {
  * @param {number} [input.now]
  * @param {boolean} [input.refused] Defaults to this browser's own answer.
  * @param {boolean} [input.known] False when the switch could not be read.
+ * @param {string} [input.locale] The page's language; defaults to `<html lang>`
+ *   READ AT CALL TIME, never at import (docs/i18n/CONVENTIONS.md § 1).
  * @returns {{variant: string, forced: boolean, telemetry: boolean, newVisitor: boolean, visitorId: string|null}}
  */
 export function assignFirstRunVariant({
@@ -204,8 +221,16 @@ export function assignFirstRunVariant({
   now = Date.now(),
   refused = firstRunMeasureRefused({ storage }),
   known = true,
+  locale = getLocale(),
 } = {}) {
   const unmeasured = { variant: FIRST_RUN_DEFAULT_VARIANT, forced: false, telemetry: false, newVisitor: false, visitorId: null };
+  if (locale !== DEFAULT_LOCALE) {
+    // Nothing is read from storage here on purpose: reading is harmless, but
+    // the next line would be a temptation to refresh or clear the record, and
+    // this visitor's draw must survive them untouched.
+    const forcedForeign = forcedFirstRunVariant(location);
+    return forcedForeign ? { ...unmeasured, variant: forcedForeign, forced: true } : unmeasured;
+  }
   if (!known && !refused) {
     const forcedUnknown = forcedFirstRunVariant(location);
     if (forcedUnknown) return { ...unmeasured, variant: forcedUnknown, forced: true };

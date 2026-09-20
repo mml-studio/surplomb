@@ -39,6 +39,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
+import { inAllLocales } from '../src/i18n/messages.js';
+import uiMessages from '../src/ui.i18n.js';
+
+// The button reads « AFFICHER L’ITINÉRAIRE » or SHOW ROUTE depending on the
+// page's language, and this harness runs in both: match the message, not one
+// of its two faces (docs/i18n/CONVENTIONS.md § 10).
+const SHOW_ROUTE = inAllLocales(uiMessages, 'cockpit.route.show');
+const HIDE_ROUTE = inAllLocales(uiMessages, 'cockpit.route.hide');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -288,7 +296,7 @@ async function main() {
       return { hidden: button?.hidden !== false, text: button?.textContent?.trim() || '' };
     });
     check('the control appears for a contact that has a route', !offered.hidden);
-    check('and reads SHOW ROUTE before it is pressed', offered.text === 'SHOW ROUTE', offered.text);
+    check('and reads SHOW ROUTE before it is pressed', SHOW_ROUTE.includes(offered.text), offered.text);
     await shoot(page, '01-tracked-before-route.png');
 
     const before = await readRouteState(page);
@@ -360,7 +368,7 @@ async function main() {
     });
     check(
       'C. the control stays offered, and now reads HIDE ROUTE',
-      control.text === 'HIDE ROUTE' && !control.hidden,
+      HIDE_ROUTE.includes(control.text) && !control.hidden,
       `${control.text}${control.hidden ? ' (hidden)' : ''} · state=${JSON.stringify(after.state)}`,
     );
 

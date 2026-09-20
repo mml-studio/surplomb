@@ -26,11 +26,16 @@ export const KEY_SETUP_APPEND_HEADER = '# Keys added by the in-app POWER UP pane
  * billing-enabled account, 'free' (🟡) is a register-and-paste key.
  * `clientExposed` marks the two keys that are injected into the browser
  * bundle by design (restrict them at the provider, per SECURITY.md).
+ *
+ * THIS FILE HAS NO LOCALE. `vite.config.js` and `scripts/setup-doctor.mjs`
+ * import it, so it runs in Node, where there is no page and no `<html lang>`.
+ * `title` is a provider's own name and is never translated; `unlocks` is prose
+ * and the browser relabels it from `src/keySetup.i18n.js`, keyed by `id`.
  */
 export const KEY_SETUP_KEYS = Object.freeze([
   Object.freeze({
     id: 'google-maps',
-    title: 'GOOGLE MAPS',
+    title: 'GOOGLE MAPS',  // i18n-ignore-line — provider brand name
     unlocks: 'The photorealistic 3D planet + place search',
     getUrl: 'https://developers.google.com/maps/documentation/tile/get-api-key',
     envVars: Object.freeze(['GOOGLE_MAPS_API_KEY']),
@@ -44,7 +49,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   // terrain. Measured from France 2026-08-31.
   Object.freeze({
     id: 'cesium-ion',
-    title: 'CESIUM ION',
+    title: 'CESIUM ION',  // i18n-ignore-line — provider brand name
     unlocks: 'Google 3D from an EEA account, Bing imagery + world terrain',
     getUrl: 'https://ion.cesium.com/tokens',
     envVars: Object.freeze(['CESIUM_ION_TOKEN']),
@@ -53,7 +58,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'openai',
-    title: 'OPENAI',
+    title: 'OPENAI',  // i18n-ignore-line — provider brand name
     unlocks: 'Voice control — talk to the planet',
     getUrl: 'https://platform.openai.com/api-keys',
     envVars: Object.freeze(['OPENAI_API_KEY']),
@@ -64,7 +69,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   // GEV_VOICE_PROVIDER arbitrates when both are present.
   Object.freeze({
     id: 'openrouter',
-    title: 'OPENROUTER',
+    title: 'OPENROUTER',  // i18n-ignore-line — provider brand name
     unlocks: 'Voice control without an OpenAI account (turn-based)',
     getUrl: 'https://openrouter.ai/keys',
     envVars: Object.freeze(['OPENROUTER_API_KEY']),
@@ -72,7 +77,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'aisstream',
-    title: 'AISSTREAM',
+    title: 'AISSTREAM',  // i18n-ignore-line — provider brand name
     unlocks: 'Live ships (France box by default, worldwide on request)',
     getUrl: 'https://aisstream.io',
     envVars: Object.freeze(['AISSTREAM_API_KEY']),
@@ -80,7 +85,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'firms',
-    title: 'NASA FIRMS',
+    title: 'NASA FIRMS',  // i18n-ignore-line — provider brand name
     unlocks: 'Live active-fire detections',
     getUrl: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/',
     envVars: Object.freeze(['FIRMS_MAP_KEY']),
@@ -88,7 +93,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'tomtom',
-    title: 'TOMTOM',
+    title: 'TOMTOM',  // i18n-ignore-line — provider brand name
     unlocks: 'Real live traffic (keyless runs a simulation)',
     getUrl: 'https://developer.tomtom.com',
     envVars: Object.freeze(['TOMTOM_API_KEY']),
@@ -99,7 +104,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   // credential adds what each machine is actually producing right now.
   Object.freeze({
     id: 'rte',
-    title: 'RTE',
+    title: 'RTE',  // i18n-ignore-line — provider brand name
     unlocks: 'What each French generating unit is producing right now',
     getUrl: 'https://data.rte-france.com/create_account',
     envVars: Object.freeze(['RTE_CLIENT_ID', 'RTE_CLIENT_SECRET']),
@@ -107,7 +112,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'opensky',
-    title: 'OPENSKY',
+    title: 'OPENSKY',  // i18n-ignore-line — provider brand name
     unlocks: 'More flight-polling credits (anonymous works without)',
     getUrl: 'https://opensky-network.org',
     envVars: Object.freeze(['OPENSKY_CLIENT_ID', 'OPENSKY_CLIENT_SECRET']),
@@ -118,7 +123,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   // (99.9 % availability) and nothing else.
   Object.freeze({
     id: 'meteo-france',
-    title: 'MÉTÉO-FRANCE',
+    title: 'MÉTÉO-FRANCE',  // i18n-ignore-line — provider brand name
     unlocks: 'The contracted vigilance API (the open mirror works without it)',
     getUrl: 'https://portail-api.meteofrance.fr',
     envVars: Object.freeze(['METEOFRANCE_API_KEY']),
@@ -126,7 +131,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'launch-library',
-    title: 'LAUNCH LIBRARY',
+    title: 'LAUNCH LIBRARY',  // i18n-ignore-line — provider brand name
     unlocks: 'Higher space-missions request allowance',
     getUrl: 'https://thespacedevs.com',
     envVars: Object.freeze(['LL2_API_TOKEN']),

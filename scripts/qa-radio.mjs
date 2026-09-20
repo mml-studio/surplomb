@@ -9,6 +9,17 @@
  * console. Screenshots are written under the gitignored `qa-shots/radio/`.
  *
  * Run: node scripts/qa-radio.mjs --url http://localhost:4173
+ *
+ * IT OPENS THE ENGLISH GLOBE. Twenty-two of the checks below read a label off
+ * the panel — RECONCILE, RADIO STATE UNCERTAIN, « Go to expanded Radio
+ * section » — and those labels became French by default when the shell was
+ * translated (docs/i18n/CONVENTIONS.md § 10 offers the choice: match through
+ * `inAllLocales`, or pin one language and say so). Pinned here, because the
+ * subject of this harness is the radio's LIFECYCLE — enable, disable,
+ * reconcile, duck for voice, restore without autoplay — and reading it in one
+ * language keeps every assertion a statement about that lifecycle. The French
+ * wording of the same states is covered by `src/ui.i18n.js` and the parity
+ * test; how it renders is covered by the batch's screenshots.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,7 +106,7 @@ async function main() {
   });
 
   try {
-    const page = await newQaPage(browser, { photoreal: true });
+    const page = await newQaPage(browser, { photoreal: true, locale: 'en' });
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.evaluateOnNewDocument(() => {
       window.__qaRadioPlayCalls = [];

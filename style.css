@@ -2100,6 +2100,16 @@ html[data-input="coarse"] .search-submit-btn .material-symbols-outlined {
   transform: none;
 }
 
+/* The language switch is the one button in this column with a word instead of
+   a glyph. Two letters at the weight the icons draw at, so the column still
+   reads as one row of round controls rather than as four icons and a label. */
+#locale-switch {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
 #top-center-actions .material-symbols-outlined {
   font-size: 18px;
 }
@@ -4129,14 +4139,14 @@ body.cockpit-mode #view-switcher button {
   font-size: 9px;
   letter-spacing: 0.14em;
 }
-.cockpit-help span { color: var(--cockpit-accent); }
+.cockpit-help .cockpit-help-dot { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
   #title-bar, #style-indicator, #top-center-actions, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #reset-globe-view, #locale-switch) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {

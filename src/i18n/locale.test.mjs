@@ -71,15 +71,25 @@ test('the order: QA flag, then ?lang=, then storage, then the browser (when on),
     const { locale, source, persist } = resolveLocale(signals);
     return `${locale}:${source}${persist ? ':persist' : ''}`;
   };
-  assert.equal(pick({}), 'fr:default');
+  // With detection on, a signal-less call has nothing French to hold on to
+  // and answers with the second language; French needs a French browser, a
+  // stored choice or `?lang=fr`.
+  assert.equal(pick({}), 'en:navigator');
+  assert.equal(pick({ languages: ['fr-FR'] }), 'fr:navigator');
+  assert.equal(pick({ autoDetect: false }), 'fr:default');
   assert.equal(pick({ qa: 'en', query: 'fr', stored: 'fr' }), 'en:qa');
   assert.equal(pick({ query: 'en', stored: 'fr' }), 'en:query:persist');
   assert.equal(pick({ query: 'de', stored: 'en' }), 'en:stored');
   assert.equal(pick({ stored: 'en' }), 'en:stored');
-  assert.equal(pick({ stored: 'xx' }), 'fr:default');
-  // The browser is asked only when detection is on — and it is OFF today.
-  assert.equal(LOCALE_AUTO_DETECT, false);
-  assert.equal(pick({ languages: ['en-US'] }), 'fr:default');
+  assert.equal(pick({ stored: 'xx', languages: ['fr-FR'] }), 'fr:navigator', 'an unusable stored value is not a choice');
+  // The browser is asked when detection is on — and it is ON since the FR/EN
+  // switch shipped, so the default answer follows `navigator.languages`.
+  assert.equal(LOCALE_AUTO_DETECT, true);
+  assert.equal(pick({ languages: ['en-US'] }), 'en:navigator');
+  assert.equal(pick({ languages: ['fr-CA'] }), 'fr:navigator');
+  assert.equal(pick({ languages: ['de-DE'] }), 'en:navigator', 'neither language: the second one, never a guess at a third');
+  assert.equal(pick({ languages: [] }), 'en:navigator');
+  assert.equal(pick({ languages: ['en-US'], autoDetect: false }), 'fr:default');
   assert.equal(pick({ languages: ['en-US'], autoDetect: true }), 'en:navigator');
   assert.equal(pick({ languages: ['fr-FR'], autoDetect: true }), 'fr:navigator');
   assert.equal(pick({ stored: 'fr', languages: ['en-US'], autoDetect: true }), 'fr:stored');

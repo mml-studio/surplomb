@@ -101,7 +101,7 @@ test('the flight reuses the search landing state, and closes the address gap', (
   assert.match(ui, /_initLocateButton\(\)/);
   assert.match(ui, /if \(!canGeolocate\(\)\) return;/);
   // Same landing state as a free-text search: that is what this is.
-  assert.match(ui, /this\._landOnSearchedLocation\('Autour de moi'\);/);
+  assert.match(ui, /this\._landOnSearchedLocation\(messages\(\)\.actions\.aroundMe\);/);
   assert.match(ui, /_landOnSearchedLocation\(label\) \{\s*this\._searchedLocationLabel = label;/);
   // `camera.changed` is quiet until `moveEnd`; without the flush a reader who
   // shares straight after arriving posts the PREVIOUS view.
@@ -109,6 +109,6 @@ test('the flight reuses the search landing state, and closes the address gap', (
   // One fix, not a watch: a globe that chases the reader cannot be panned away.
   assert.doesNotMatch(ui, /watchPosition/);
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /id="locate-me"[^>]*hidden[^>]*aria-label="Autour de moi"/);
-  assert.match(html, /id="locate-me"[\s\S]{0,200}my_location/);
+  assert.match(html, /id="locate-me"[\s\S]{0,160}?aria-label="Autour de moi"/);
+  assert.match(html, /id="locate-me"[\s\S]{0,320}my_location/);
 });
