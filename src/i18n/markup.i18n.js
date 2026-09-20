@@ -459,6 +459,73 @@ export default defineMessages({
     placeholder: { fr: 'Rechercher un lieu…', en: 'Search any location…' },
     submit: { fr: 'Rechercher', en: 'Search' },
   },
+  // The phone shell: the bottom sheet, its four tabs, and the basemap sheet
+  // behind its own round button.
+  phone: {
+    sheet: { fr: 'Panneau téléphone', en: 'Phone panel' },
+    grip: { fr: 'Glissez pour redimensionner le panneau', en: 'Drag to resize the panel' },
+    tabs: { fr: 'Onglets du panneau', en: 'Panel tabs' },
+    tabSearch: { fr: 'Recherche', en: 'Search' },
+    tabLayers: { fr: 'Couches', en: 'Layers' },
+    tabLegend: { fr: 'Légende', en: 'Legend' },
+    tabSelection: { fr: 'Sélection', en: 'Selection', note: 'The card of whatever the reader last tapped.' },
+    chips: { fr: 'Couches en un geste', en: 'One-tap layers' },
+    basemapChange: { fr: 'Changer le fond de carte', en: 'Change the basemap' },
+    basemapTitle: { fr: 'Fond de carte', en: 'Basemap' },
+    basemapClose: { fr: 'Fermer le choix du fond de carte', en: 'Close the basemap picker' },
+  },
+  // The first-visit card. Three variants (A address, B three questions,
+  // C a bubble on the search field) live in templates; src/firstRunVariants.js
+  // clones one of them into the shell.
+  firstRun: {
+    kicker: { fr: 'SURPLOMB · PREMIÈRE VISITE', en: 'SURPLOMB · FIRST VISIT' },
+    escClose: { fr: 'Échap pour fermer', en: 'Esc to close' },
+    status: {
+      fr: '59 couches de données publiques · 56 sans clé',
+      en: '59 public data layers · 56 need no key',
+      note: 'The two numbers the README and the page description carry; keep them in step.',
+    },
+    a: {
+      title: { fr: 'Qu’est-ce qui est vrai à cette adresse ?', en: 'What is true at this address?' },
+      description: {
+        fr: 'Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.',
+        en: 'What the neighbors paid, what is going up down the street, the school, the noise, the risk. All of it from public registers.',
+      },
+      addressAria: { fr: 'Adresse, commune ou lieu', en: 'Address, municipality or place' },
+      addressPlaceholder: { fr: 'Une adresse, une commune, un lieu…', en: 'An address, a municipality, a place…' },
+      submit: { fr: 'Voir', en: 'Go', note: 'Submits the address field; the camera flies there.' },
+      try: { fr: 'Essayer :', en: 'Try:' },
+      lookAround: { fr: 'Regarder autour d’ici sans rien taper', en: 'Look around here without typing' },
+    },
+    b: {
+      title: { fr: 'Par où commencer ?', en: 'Where do I start?' },
+      description: {
+        fr: 'Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.',
+        en: 'You are over Paris. Pick a question: the layers switch on right here, without moving.',
+      },
+      salesTitle: { fr: 'Ce que les voisins ont payé', en: 'What the neighbors paid' },
+      salesSub: { fr: 'Ventes DVF et parcelle exacte, 5 ans', en: 'Property sales (DVF) and the exact parcel, 5 years' },
+      permitsTitle: { fr: 'Ce qui se construit', en: 'What is going up' },
+      permitsSub: { fr: 'Permis accordés, chantiers ouverts (Sitadel)', en: 'Granted permits, open sites (Sitadel)' },
+      liveTitle: { fr: 'Ce qui bouge maintenant', en: 'What is moving right now' },
+      liveSub: { fr: 'Trafic, bus en direct, avions au-dessus', en: 'Traffic, live buses, planes overhead' },
+      exploreTitle: { fr: 'Je regarde par moi-même', en: 'I’ll look around myself' },
+      exploreSub: { fr: 'Rester ici, rien d’autre ne s’allume', en: 'Stay here, nothing else switches on' },
+    },
+    c: {
+      title: { fr: 'Première visite ? Tapez une adresse ici.', en: 'First time? Type an address here.' },
+      body: { fr: 'Ce qui s’est vendu, ce qui se construit, l’école, le risque.', en: 'What sold, what is going up, the school, the risk.' },
+      chip: { fr: '59 couches · 56 sans clé', en: '59 layers · 56 need no key' },
+    },
+  },
+  // What a territorial layer says when the camera is outside its coverage.
+  coverage: {
+    kicker: { fr: 'COUVERTURE DE LA COUCHE', en: 'LAYER COVERAGE' },
+    goto: { fr: 'Aller à la zone couverte', en: 'Go to the covered area' },
+    here: { fr: 'Activer sans bouger', en: 'Switch on without moving' },
+    suppress: { fr: 'Ne plus demander — aller directement', en: 'Stop asking — just go' },
+    cancel: { fr: 'ESC pour annuler', en: 'Esc to cancel' },
+  },
   viewSwitcher: {
     nav: { fr: 'Changement de vue', en: 'View switcher' },
     resetCockpit: { fr: 'Réinitialiser le cockpit et revenir au globe entier', en: 'Reset cockpit to full globe view' },

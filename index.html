@@ -328,7 +328,7 @@
       octets, aucune requête, et les deux plans prennent la couleur du texte.
     -->
     <header class="top" id="haut">
-      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word">surplomb</span></a>
+      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word" translate="no">surplomb</span></a>
       <div class="top-right"><p class="slogan">Aucun <br />angle mort.</p></div>
     </header>
 
@@ -1593,17 +1593,17 @@
     `hidden` tombe dans `initPhoneSheet()`, qui rend la main immédiatement si
     `isPhoneShell()` est faux — sur un bureau ce bloc ne coûte que son parse.
   -->
-  <section id="phone-sheet" hidden data-snap="peek" aria-label="Panneau téléphone">
-    <div class="phone-sheet-grip" data-phone-grip role="separator" aria-label="Glissez pour redimensionner le panneau"></div>
-    <nav class="phone-sheet-tabs" role="tablist" aria-label="Onglets du panneau">
+  <section id="phone-sheet" hidden data-snap="peek" data-i18n-aria-label="phone.sheet" aria-label="Panneau téléphone">
+    <div class="phone-sheet-grip" data-phone-grip role="separator" data-i18n-aria-label="phone.grip" aria-label="Glissez pour redimensionner le panneau"></div>
+    <nav class="phone-sheet-tabs" role="tablist" data-i18n-aria-label="phone.tabs" aria-label="Onglets du panneau">
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-search"
-              data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1">Recherche</button>
+              data-phone-tab-btn="search" aria-selected="false" aria-controls="phone-panel-search" tabindex="-1" data-i18n="phone.tabSearch">Recherche</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-layers"
-              data-phone-tab-btn="layers" aria-selected="true" aria-controls="phone-panel-layers">Couches</button>
+              data-phone-tab-btn="layers" aria-selected="true" aria-controls="phone-panel-layers" data-i18n="phone.tabLayers">Couches</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-legend"
-              data-phone-tab-btn="legend" aria-selected="false" aria-controls="phone-panel-legend" tabindex="-1">Légende</button>
+              data-phone-tab-btn="legend" aria-selected="false" aria-controls="phone-panel-legend" tabindex="-1" data-i18n="phone.tabLegend">Légende</button>
       <button class="phone-sheet-tab" type="button" role="tab" id="phone-tab-selection"
-              data-phone-tab-btn="selection" aria-selected="false" aria-controls="phone-panel-selection" tabindex="-1">Sélection</button>
+              data-phone-tab-btn="selection" aria-selected="false" aria-controls="phone-panel-selection" tabindex="-1" data-i18n="phone.tabSelection">Sélection</button>
     </nav>
     <div class="phone-sheet-body">
       <section class="phone-sheet-panel" id="phone-panel-search" data-phone-tab="search" role="tabpanel" aria-labelledby="phone-tab-search" hidden></section>
@@ -1640,16 +1640,18 @@
     <div id="phone-search" class="phone-search">
       <svg class="phone-search-icon" viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>
     </div>
-    <div id="phone-layer-chips" class="phone-layer-chips" role="toolbar" aria-label="Couches en un geste"></div>
+    <div id="phone-layer-chips" class="phone-layer-chips" role="toolbar" data-i18n-aria-label="phone.chips" aria-label="Couches en un geste"></div>
   </div>
-  <button id="phone-basemap-button" type="button" hidden aria-haspopup="dialog" aria-controls="phone-basemap-sheet" aria-expanded="false" aria-label="Fond de carte" title="Changer le fond de carte">
+  <button id="phone-basemap-button" type="button" hidden aria-haspopup="dialog" aria-controls="phone-basemap-sheet" aria-expanded="false"
+          data-i18n-aria-label="mapSource.group" aria-label="Fond de carte"
+          data-i18n-title="phone.basemapChange" title="Changer le fond de carte">
     <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d="M480-118 120-398l66-50 294 228 294-228 66 50-360 280Zm0-202L120-600l360-280 360 280-360 280Zm0-280Zm0 178 230-178-230-178-230 178 230 178Z"/></svg>
   </button>
   <div id="phone-basemap-backdrop" hidden></div>
   <section id="phone-basemap-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phone-basemap-title">
     <header class="phone-basemap-head">
-      <h2 id="phone-basemap-title">Fond de carte</h2>
-      <button type="button" class="phone-basemap-close" data-phone-basemap-close aria-label="Fermer le choix du fond de carte">×</button>
+      <h2 id="phone-basemap-title" data-i18n="phone.basemapTitle">Fond de carte</h2>
+      <button type="button" class="phone-basemap-close" data-phone-basemap-close data-i18n-aria-label="phone.basemapClose" aria-label="Fermer le choix du fond de carte">×</button>
     </header>
     <div class="phone-basemap-body" data-phone-basemap-slot></div>
   </section>
@@ -1665,15 +1667,15 @@
   <aside id="first-run-launcher" role="dialog" aria-labelledby="first-run-title" aria-describedby="first-run-description" hidden>
     <div class="first-run-scanline" aria-hidden="true"></div>
     <header class="first-run-header">
-      <span class="first-run-kicker">SURPLOMB · PREMIÈRE VISITE</span>
+      <span class="first-run-kicker" data-i18n="firstRun.kicker">SURPLOMB · PREMIÈRE VISITE</span>
     </header>
     <div class="first-run-footer">
-      <span>Échap pour fermer</span>
+      <span data-i18n="firstRun.escClose">Échap pour fermer</span>
     </div>
     <!-- Kept out of the footer row: it swaps to progress and errors, and a live
          region that also holds layout makes the row jump as it speaks. The two
          numbers are the ones the page description and the README carry. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">59 couches de données publiques · 56 sans clé</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite" data-i18n="firstRun.status">59 couches de données publiques · 56 sans clé</p>
   </aside>
   <div id="first-run-hint" hidden></div>
 
@@ -1681,46 +1683,47 @@
        switch on where the camera lands (src/firstRunVariants.js). The field
        declares what the soft keyboard should offer, like #location-search. -->
   <template data-first-run-variant="A">
-    <h2 id="first-run-title">Qu’est-ce qui est vrai à cette adresse ?</h2>
-    <p id="first-run-description">Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.</p>
+    <h2 id="first-run-title" data-i18n="firstRun.a.title">Qu’est-ce qui est vrai à cette adresse ?</h2>
+    <p id="first-run-description" data-i18n="firstRun.a.description">Ce que les voisins ont payé, ce qui se construit au bout de la rue, l’école, le bruit, le risque. Tout vient de registres publics.</p>
     <form class="first-run-form" data-first-run-form role="search" action="#">
-      <input id="first-run-address" class="first-run-address" data-first-run-address type="search" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" aria-label="Adresse, commune ou lieu" placeholder="Une adresse, une commune, un lieu…" />
-      <button class="first-run-submit" data-first-run-submit type="submit">Voir</button>
+      <input id="first-run-address" class="first-run-address" data-first-run-address type="search" enterkeyhint="search" inputmode="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-i18n-aria-label="firstRun.a.addressAria" aria-label="Adresse, commune ou lieu"
+           data-i18n-placeholder="firstRun.a.addressPlaceholder" placeholder="Une adresse, une commune, un lieu…" />
+      <button class="first-run-submit" data-first-run-submit type="submit" data-i18n="firstRun.a.submit">Voir</button>
     </form>
     <div class="first-run-chips">
-      <span class="first-run-chips-label">Essayer :</span>
+      <span class="first-run-chips-label" data-i18n="firstRun.a.try">Essayer :</span>
       <!-- Revealed by the module only where geolocation can work (HTTPS). -->
-      <button type="button" class="first-run-chip" data-first-run-chip="locate" hidden><span class="material-symbols-outlined" aria-hidden="true">my_location</span>Autour de moi</button>
-      <button type="button" class="first-run-chip" data-first-run-chip="Tour Eiffel, Paris">Tour Eiffel, Paris</button>
-      <button type="button" class="first-run-chip" data-first-run-chip="Vieux-Port, Marseille">Vieux-Port, Marseille</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="locate" hidden data-i18n="actions.locate"><span class="material-symbols-outlined" aria-hidden="true">my_location</span>Autour de moi</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Tour Eiffel, Paris" translate="no">Tour Eiffel, Paris</button>
+      <button type="button" class="first-run-chip" data-first-run-chip="Vieux-Port, Marseille" translate="no">Vieux-Port, Marseille</button>
     </div>
-    <button type="button" class="first-run-link" data-first-run-look-around>Regarder autour d’ici sans rien taper<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+    <button type="button" class="first-run-link" data-first-run-look-around data-i18n="firstRun.a.lookAround">Regarder autour d’ici sans rien taper<span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
   </template>
 
   <!-- B · Trois questions. A tile switches layers on where the camera already
        is and never moves it. The marks are typography, not icon glyphs. -->
   <template data-first-run-variant="B">
-    <h2 id="first-run-title">Par où commencer ?</h2>
-    <p id="first-run-description">Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.</p>
+    <h2 id="first-run-title" data-i18n="firstRun.b.title">Par où commencer ?</h2>
+    <p id="first-run-description" data-i18n="firstRun.b.description">Vous survolez Paris. Choisissez une question : les couches s’allument ici, sans bouger.</p>
     <div class="first-run-choices">
       <button type="button" data-first-run-choice="sales">
         <span class="first-run-glyph" aria-hidden="true">€</span>
-        <span><strong>Ce que les voisins ont payé</strong><small>Ventes DVF et parcelle exacte, 5 ans</small></span>
+        <span><strong data-i18n="firstRun.b.salesTitle">Ce que les voisins ont payé</strong><small data-i18n="firstRun.b.salesSub">Ventes DVF et parcelle exacte, 5 ans</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" data-first-run-choice="permits">
         <span class="first-run-glyph" aria-hidden="true">▲</span>
-        <span><strong>Ce qui se construit</strong><small>Permis accordés, chantiers ouverts (Sitadel)</small></span>
+        <span><strong data-i18n="firstRun.b.permitsTitle">Ce qui se construit</strong><small data-i18n="firstRun.b.permitsSub">Permis accordés, chantiers ouverts (Sitadel)</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" data-first-run-choice="live">
         <span class="first-run-glyph" aria-hidden="true">●</span>
-        <span><strong>Ce qui bouge maintenant</strong><small>Trafic, bus en direct, avions au-dessus</small></span>
+        <span><strong data-i18n="firstRun.b.liveTitle">Ce qui bouge maintenant</strong><small data-i18n="firstRun.b.liveSub">Trafic, bus en direct, avions au-dessus</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" class="first-run-explore" data-first-run-choice="explore">
         <span class="first-run-glyph" aria-hidden="true">○</span>
-        <span><strong>Je regarde par moi-même</strong><small>Rester ici, rien d’autre ne s’allume</small></span>
+        <span><strong data-i18n="firstRun.b.exploreTitle">Je regarde par moi-même</strong><small data-i18n="firstRun.b.exploreSub">Rester ici, rien d’autre ne s’allume</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
     </div>
@@ -1730,10 +1733,10 @@
        never modal, gone at the first click elsewhere or after twelve seconds. -->
   <template data-first-run-variant="C">
     <button type="button" class="first-run-hint-body" data-first-run-hint-open>
-      <strong>Première visite ? Tapez une adresse ici.</strong>
-      <span>Ce qui s’est vendu, ce qui se construit, l’école, le risque.</span>
+      <strong data-i18n="firstRun.c.title">Première visite ? Tapez une adresse ici.</strong>
+      <span data-i18n="firstRun.c.body">Ce qui s’est vendu, ce qui se construit, l’école, le risque.</span>
     </button>
-    <span class="first-run-hint-chip">59 couches · 56 sans clé</span>
+    <span class="first-run-hint-chip" data-i18n="firstRun.c.chip">59 couches · 56 sans clé</span>
   </template>
 
   <!-- What a territorial layer says before it starts. Opens ONLY when the
@@ -1744,7 +1747,7 @@
          aria-labelledby="coverage-briefing-title" aria-describedby="coverage-briefing-body" hidden>
     <div class="coverage-briefing-scanline" aria-hidden="true"></div>
     <header class="coverage-briefing-header">
-      <span class="coverage-briefing-kicker">COUVERTURE DE LA COUCHE</span>
+      <span class="coverage-briefing-kicker" data-i18n="coverage.kicker">COUVERTURE DE LA COUCHE</span>
       <span class="coverage-briefing-scope" data-coverage-scope></span>
     </header>
     <h2 id="coverage-briefing-title" data-coverage-title></h2>
@@ -1757,14 +1760,14 @@
              planet" here, and against `my_location` below the pair reads as
              "there" against "here" without costing a font rebuild. -->
         <span class="material-symbols-outlined" aria-hidden="true">public</span>
-        <span data-coverage-goto-label>Aller à la zone couverte</span>
+        <span data-coverage-goto-label data-i18n="coverage.goto">Aller à la zone couverte</span>
       </button>
       <!-- Kept even though it switches on a layer that will draw nothing here.
            Somebody arming a layer before they fly is a real intent, and taking
            the option away would make the card a gate instead of an offer. -->
       <button type="button" data-coverage-choice="here">
         <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
-        <span>Activer sans bouger</span>
+        <span data-i18n="coverage.here">Activer sans bouger</span>
       </button>
     </div>
     <div class="coverage-briefing-footer">
@@ -1772,9 +1775,9 @@
         <input type="checkbox" data-coverage-suppress />
         <!-- Names the consequence, not just the dismissal: a suppressed card
              resolves `goto`, so the next press moves the camera. -->
-        <span>Ne plus demander — aller directement</span>
+        <span data-i18n="coverage.suppress">Ne plus demander — aller directement</span>
       </label>
-      <span>ESC pour annuler</span>
+      <span data-i18n="coverage.cancel">ESC pour annuler</span>
     </div>
   </aside>
 
@@ -1814,7 +1817,7 @@
            the shadow's <use> can recolour the terrace. The clip sits on a
            wrapper: on the <use> itself it would move with the shadow. -->
       <span class="loader-logo" aria-hidden="true"><svg class="brand-symbol" data-loader-sun viewBox="0 -70 360 390" aria-hidden="true" focusable="false"><defs><clipPath id="loader-ground-clip"><use href="#loader-ground"/></clipPath></defs><circle class="loader-sun" cx="188" cy="48" r="40" fill="#F7AB7C"/><g fill="currentColor"><path id="loader-terrace" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path id="loader-ground" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></g><g clip-path="url(#loader-ground-clip)"><use class="loader-shadow" href="#loader-terrace" fill="#82978E" opacity="0"/></g></svg></span>
-      <h2 class="brand-word">surplomb</h2>
+      <h2 class="brand-word" translate="no">surplomb</h2>
       <p class="loader-status">Initializing photorealistic world...</p>
     </div>
   </div>
