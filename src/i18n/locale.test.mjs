@@ -1,9 +1,15 @@
-// The locale gate: which language a page speaks, decided once, in two copies.
+// The locale gate: which language a page speaks, decided once, in three copies.
 //
 // Same arrangement as src/vitrine/gate.test.mjs: the inline head script in
 // index.html paints the right `lang` first, src/i18n/locale.js is the rule the
-// modules read. The inline copy is RUN here over a matrix of inputs and must
+// modules read. Each inline copy is RUN here over a matrix of inputs and must
 // answer exactly what `resolveLocale()` answers, storage write included.
+//
+// TWO PAGES CARRY THE SCRIPT. `index.html` is the globe; `fiche.html` is the
+// Address X-ray, a second document of the same application, framed inside the
+// globe and opened on its own by readers who print it. A reader who chose
+// English must not meet a French sheet in either place, so the two copies are
+// checked against the module AND against each other, character for character.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,7 +33,10 @@ import {
 } from './locale.js';
 
 const INDEX_HTML = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+const FICHE_HTML = readFileSync(new URL('../../fiche.html', import.meta.url), 'utf8');
 const STYLE_CSS = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+/** The documents that carry the inline gate, by name. */
+const GATED_PAGES = Object.freeze({ 'index.html': INDEX_HTML, 'fiche.html': FICHE_HTML });
 
 test('French is the default, English the second, and each has one tag', () => {
   assert.equal(DEFAULT_LOCALE, 'fr');
@@ -116,10 +125,10 @@ test('the signals are read from injectable globals, storage failures included', 
 
 // ── the inline copy ───────────────────────────────────────────────────────
 
-/** The inline gate, extracted from index.html as it ships. */
-function inlineGateScript({ auto } = {}) {
-  const match = INDEX_HTML.match(/<script>\s*\/\* locale-gate \*\/\s*\(function \(\) \{([\s\S]*?)\}\)\(\);\s*<\/script>/);
-  assert.ok(match, 'the inline locale gate is gone from index.html');
+/** The inline gate, extracted from a page as it ships. */
+function inlineGateScript({ auto, page = 'index.html' } = {}) {
+  const match = GATED_PAGES[page].match(/<script>\s*\/\* locale-gate \*\/\s*\(function \(\) \{([\s\S]*?)\}\)\(\);\s*<\/script>/);
+  assert.ok(match, `the inline locale gate is gone from ${page}`);
   const body = match[1];
   if (auto === undefined) return body;
   assert.match(body, /var AUTO = (true|false);/);
@@ -157,30 +166,41 @@ function runInline(body, { qa, search, stored, languages }) {
   return { lang: attrs.get('lang'), writes, windowRef, navigatorRef };
 }
 
-for (const auto of [false, true]) {
-  test(`the inline head script answers exactly what resolveLocale answers (detection ${auto ? 'on' : 'off'})`, () => {
-    const body = inlineGateScript({ auto });
-    let cases = 0;
-    for (const qa of QA_VALUES) {
-      for (const search of SEARCHES) {
-        for (const stored of STORED) {
-          for (const languages of LANGUAGE_LISTS) {
-            const { lang, writes, windowRef, navigatorRef } = runInline(body, { qa, search, stored, languages });
-            const signals = readLocaleSignals({ windowRef, location: { search }, navigatorRef });
-            const expected = resolveLocale({ ...signals, autoDetect: auto });
-            const label = JSON.stringify({ qa, search, stored, languages });
-            assert.equal(lang, expected.locale, `inline gate disagrees for ${label}`);
-            const wrote = writes.length > 0;
-            assert.equal(wrote, expected.persist && stored !== 'THROWS', `storage write disagrees for ${label}`);
-            if (wrote) assert.deepEqual(writes, [[LOCALE_STORAGE_KEY, expected.locale]]);
-            cases += 1;
+for (const page of Object.keys(GATED_PAGES)) {
+  for (const auto of [false, true]) {
+    test(`${page}: the inline head script answers exactly what resolveLocale answers (detection ${auto ? 'on' : 'off'})`, () => {
+      const body = inlineGateScript({ auto, page });
+      let cases = 0;
+      for (const qa of QA_VALUES) {
+        for (const search of SEARCHES) {
+          for (const stored of STORED) {
+            for (const languages of LANGUAGE_LISTS) {
+              const { lang, writes, windowRef, navigatorRef } = runInline(body, { qa, search, stored, languages });
+              const signals = readLocaleSignals({ windowRef, location: { search }, navigatorRef });
+              const expected = resolveLocale({ ...signals, autoDetect: auto });
+              const label = JSON.stringify({ page, qa, search, stored, languages });
+              assert.equal(lang, expected.locale, `inline gate disagrees for ${label}`);
+              const wrote = writes.length > 0;
+              assert.equal(wrote, expected.persist && stored !== 'THROWS', `storage write disagrees for ${label}`);
+              if (wrote) assert.deepEqual(writes, [[LOCALE_STORAGE_KEY, expected.locale]]);
+              cases += 1;
+            }
           }
         }
       }
-    }
-    assert.equal(cases, QA_VALUES.length * SEARCHES.length * STORED.length * LANGUAGE_LISTS.length);
-  });
+      assert.equal(cases, QA_VALUES.length * SEARCHES.length * STORED.length * LANGUAGE_LISTS.length);
+    });
+  }
 }
+
+test('the X-ray carries the same gate as the globe, character for character', () => {
+  // A copy that drifts is worse than no copy: the two pages would disagree
+  // about the same reader's language, and the sheet is framed INSIDE the globe.
+  assert.equal(inlineGateScript({ page: 'fiche.html' }), inlineGateScript({ page: 'index.html' }));
+  // And the page it is copied into says where the original lives.
+  assert.match(FICHE_HTML, /src\/i18n\/locale\.js/);
+  assert.match(FICHE_HTML, /<html lang="fr">/);
+});
 
 test('the inline copy uses the module constants, not look-alikes', () => {
   const body = inlineGateScript();

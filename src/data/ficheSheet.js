@@ -54,6 +54,8 @@ import {
   clearPanelPosition,
   restorePanelPosition,
 } from '../panelDrag.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import messages from './ficheSheet.i18n.js';
 
 export const FICHE_SHEET_ID = 'fiche-sheet';
 
@@ -72,17 +74,26 @@ export const FICHE_SHEET_PATH = '/fiche.html';
  * any register behind the sheet resolves and short enough to stay readable in
  * a URL a reader may copy out of the "open in a tab" button.
  *
+ * THE LANGUAGE TRAVELS WITH THE POINT. `fiche.html` runs its own copy of the
+ * locale gate, which reads `?lang=` before the stored choice, so a globe
+ * showing English frames an English sheet whatever the browser remembers.
+ * Nothing is added in French: French is the default of both gates, and a URL
+ * that says so would only be longer — and would move the string every test
+ * and every share link pins.
+ *
  * @param {{lat: number, lon: number}} point
- * @param {{embed?: boolean}} [options]
+ * @param {{embed?: boolean, locale?: string}} [options] `locale` defaults to
+ *   the page's; pass it explicitly from a test.
  * @returns {string|null} URL, or null when the point is not a point.
  */
-export function ficheSheetUrl(point, { embed = true } = {}) {
+export function ficheSheetUrl(point, { embed = true, locale = null } = {}) {
   const lat = Number(point?.lat);
   const lon = Number(point?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   const params = new URLSearchParams({ lat: lat.toFixed(6), lon: lon.toFixed(6) });
   if (embed) params.set('embed', '1');
+  if (locale && locale !== DEFAULT_LOCALE) params.set('lang', locale);
   return `${FICHE_SHEET_PATH}?${params.toString()}`;
 }
 
@@ -98,24 +109,35 @@ export function ficheSheetCoords(point) {
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
-const PANEL_MARKUP = `
+/**
+ * The panel's own head, built when it mounts.
+ *
+ * A function and not a constant: the messages are read at CALL time, which is
+ * the rule that lets one page be French and the next English without the
+ * module being reloaded (docs/i18n/CONVENTIONS.md § 2).
+ * @returns {string}
+ */
+function panelMarkup() {
+  const m = messages();
+  return `
   <div class="fiche-sheet-head" data-fiche-grip
-       title="Glissez pour déplacer le panneau · double-clic ou appui long pour le remettre en place">
+       title="${m.head.dragTitle}">
     <span class="fiche-sheet-grip" aria-hidden="true"></span>
-    <span class="fiche-sheet-title">RADIOGRAPHIE D’ADRESSE</span>
+    <span class="fiche-sheet-title">${m.head.title}</span>
     <span class="fiche-sheet-coords" data-fiche-coords></span>
     <span class="fiche-sheet-actions">
       <a class="fiche-sheet-btn" data-fiche-open target="_blank" rel="noopener"
-         title="Ouvrir la feuille entière dans un onglet — avec le formulaire et l’impression">ONGLET</a>
+         title="${m.head.openTitle}">${m.head.open}</a>
       <button type="button" class="fiche-sheet-btn" data-fiche-print
-              title="Imprimer la feuille — « Enregistrer au format PDF » suffit">PDF</button>
+              title="${m.head.printTitle}">${m.head.print}</button>
       <button type="button" class="fiche-sheet-btn fiche-sheet-close" data-fiche-close
-              aria-label="Fermer la radiographie">×</button>
+              aria-label="${m.head.close}">×</button>
     </span>
   </div>
-  <iframe class="fiche-sheet-frame" data-fiche-frame title="Radiographie d’adresse"
+  <iframe class="fiche-sheet-frame" data-fiche-frame title="${m.label}"
           referrerpolicy="same-origin"></iframe>
 `;
+}
 
 /** @returns {boolean} Whether there is a document to mount into. */
 function canMount() {
@@ -141,9 +163,9 @@ export function mountFicheSheet({ onClose = null } = {}) {
   const panel = document.createElement('aside');
   panel.id = FICHE_SHEET_ID;
   panel.className = 'fiche-sheet';
-  panel.setAttribute('aria-label', 'Radiographie d’adresse');
+  panel.setAttribute('aria-label', messages().label);
   panel.hidden = true;
-  panel.innerHTML = PANEL_MARKUP;
+  panel.innerHTML = panelMarkup();
   (document.getElementById('cesiumContainer') || document.body).appendChild(panel);
 
   const node = (selector) => panel.querySelector(selector);
@@ -224,9 +246,13 @@ export function mountFicheSheet({ onClose = null } = {}) {
      * @returns {boolean} False when the point is not a point — nothing opens.
      */
     show(point, label = '') {
-      const url = ficheSheetUrl(point);
+      // The frame inherits the globe's language (see `ficheSheetUrl`), and so
+      // does the tab link: a reader who opens the sheet whole must not land
+      // on the other language.
+      const locale = getLocale();
+      const url = ficheSheetUrl(point, { locale });
       if (!url) return false;
-      const embedded = ficheSheetUrl(point, { embed: false });
+      const embedded = ficheSheetUrl(point, { embed: false, locale });
       // `setAttribute`, not `.href =`: the property form resolves against the
       // document base and reads back absolute, so a test — and anything else
       // comparing what was asked for — would never see the string this module
