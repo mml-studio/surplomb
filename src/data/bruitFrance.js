@@ -13,6 +13,9 @@ import {
   bruitBandIsFine,
   bruitGroundResolutionText,
 } from './bruitFeed.js';
+import { formatDate, formatDecimal, formatNumber } from '../i18n/format.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import messages from './bruitFrance.i18n.js';
 import { pointInPolygons } from './ringGeometry.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 
@@ -336,11 +339,11 @@ export const BRUIT_LABEL_MIN_WIDTH_DEG = 0.0004;
  * reason one of them is the headline.
  */
 export const BRUIT_WINNER_RULES = Object.freeze({
-  only: 'seule zone sous le repère',
-  zone: 'la plus exposée',
-  arrete: 'même zone, arrêté le plus récent',
-  oaci: 'même zone et date, OACI alphabétique',
-  id: 'même tout, départage sur l’identifiant',
+  get only() { return messages().winnerRules.only; },
+  get zone() { return messages().winnerRules.zone; },
+  get arrete() { return messages().winnerRules.arrete; },
+  get oaci() { return messages().winnerRules.oaci; },
+  get id() { return messages().winnerRules.id; },
 });
 
 /** Colour a band by its plan and its zone letter. */
@@ -492,15 +495,32 @@ export function bruitBandLabel(band) {
   // The PGS is named on its own bands, not only in the sentence that
   // introduces them: a card that says "zone 3" beside a card that says "zone C"
   // invites reading the two documents as one scale.
-  const prefix = band?.kind === 'pgs' ? `PGS zone ${zone}` : `zone ${zone}`;
+  const m = messages().band;
+  const prefix = band?.kind === 'pgs' ? m.pgsZone(zone) : m.zone(zone);
   const text = bandText(band, { short: true });
-  return text ? `${prefix} — ${text}` : prefix;
+  return text ? m.withThreshold(prefix, text) : prefix;
 }
 
-/** A register date as the day a French reader writes it. */
+/**
+ * A register date as the reader's own language writes it.
+ *
+ * `03/04/2007` in French — the register's own ISO day, reordered by hand, the
+ * way this module always printed it — and `Apr 3, 2007` in English, because
+ * `03/04/2007` in English says the fourth of March. The month is spelled so
+ * the ambiguity cannot arise at all, which matters on a card whose whole job
+ * is to identify one prefectoral order among several.
+ *
+ * Built from the STRING and not from a `Date` in French, so no time zone can
+ * move a day; the English branch pins `timeZone: 'UTC'` for the same reason.
+ */
 export function bruitDayText(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? ''));
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+  if (!match) return null;
+  const [, year, month, day] = match;
+  if (getLocale() === DEFAULT_LOCALE) return `${day}/${month}/${year}`;
+  return formatDate(Date.UTC(Number(year), Number(month) - 1, Number(day)), {
+    timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
+  });
 }
 
 /**
@@ -514,6 +534,7 @@ export function bruitDayText(iso) {
  * fill led with a rule would look like two different answers.
  */
 export function bruitBandDescription(band, answer = null, { area = false } = {}) {
+  const m = messages().bandCard;
   const isWinner = Boolean(answer?.winner && answer.winner.id === band?.id);
   const arrete = bruitDayText(band?.effectiveDate);
   return [
@@ -523,22 +544,20 @@ export function bruitBandDescription(band, answer = null, { area = false } = {})
     // `atPoint` is false on EVERY overview band, because nothing was tested
     // against a point. Printing the point-mode sentence there would invent a
     // marker the reader does not have and then tell them they are outside it.
-    area || band?.atPoint === true ? null : 'zone voisine — le repère n’est pas dedans',
-    isWinner && answer?.ruleLabel ? `retenue : ${answer.ruleLabel}` : null,
-    arrete ? `arrêté préfectoral du ${arrete}` : null,
+    area || band?.atPoint === true ? null : m.nearby,
+    isWinner && answer?.ruleLabel ? m.chosen(answer.ruleLabel) : null,
+    arrete ? m.order(arrete) : null,
     // The register keeping a 1985 date on a plan reissued in Lden. Said on the
     // band because it is the field a reader would check, and because it is what
     // moved this band's unit.
     band?.revisedDocument && bruitDayText(band?.arreteDate)
-      ? `le registre affiche encore ${bruitDayText(band.arreteDate)} — date reprise du document`
+      ? m.registerStillShows(bruitDayText(band.arreteDate))
       : null,
-    band?.inverted ? 'seuils publiés à l’envers dans le registre, remis dans l’ordre' : null,
-    band?.pieces > 1 ? `publiée en ${band.pieces} polygones, fusionnés` : null,
-    band?.holes
-      ? `${band.holes} découpe${band.holes > 1 ? 's' : ''} — la zone plus exposée commence là`
-      : null,
-    band?.oaci ? `${band.oaci}${band.airport ? ` — ${band.airport}` : ''}` : null,
-    band?.producer ? `producteur ${band.producer}` : null,
+    band?.inverted ? m.inverted : null,
+    band?.pieces > 1 ? m.pieces(band.pieces) : null,
+    band?.holes ? m.holes(band.holes) : null,
+    band?.oaci ? (band.airport ? m.airport(band.oaci, band.airport) : band.oaci) : null,
+    band?.producer ? m.producer(band.producer) : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -565,9 +584,10 @@ export function bruitNearestSentence(nearest) {
   if (!nearest || !Number.isFinite(nearest.distanceKm)) return null;
   // The aerodrome's NAME leads and its OACI code closes, same as every headline
   // in this module: the code identifies the document, not the place.
+  const m = messages().nearest;
   const name = [nearest.name, nearest.oaci ? `(${nearest.oaci})` : ''].filter(Boolean).join(' ');
   const day = bruitDayText(nearest.arreteDate);
-  const arrete = day ? `, arrêté ${day}` : '';
+  const arrete = day ? m.orderSuffix(day) : '';
   // STANDING ON IT, and the service still returned nothing. That is the most
   // informative empty answer this layer can give, and "à 0 km" would be the
   // least: measured, 9 of the 224 aerodromes answer an empty FeatureCollection
@@ -575,11 +595,10 @@ export function bruitNearestSentence(nearest) {
   // LFPT — answer nothing at any scale. The arrêté exists; the polygon does
   // not, or does not reach this point.
   if (nearest.distanceKm <= BRUIT_ARRETE_UNDER_MARKER_KM) {
-    return `le repère est sur ${name || 'un aérodrome sans nom'}${arrete}`
-      + ' — le service ne renvoie aucun polygone ici';
+    return m.standingOnIt(`${name || m.unnamed}${arrete}`);
   }
-  const km = nearest.distanceKm.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
-  return `plan le plus proche : ${name || 'sans nom'}, à ${km} km${arrete}`;
+  const km = formatDecimal(nearest.distanceKm, 1);
+  return m.away(name || m.unnamedShort, km, arrete);
 }
 
 /**
@@ -606,8 +625,10 @@ export function bruitBandHeadline(band) {
   // different subject rather than a shared one with a qualifier: a card that
   // said "bruit des avions · zone 1" over a PGS band would read as a fifth PEB
   // ring, which is exactly the confusion the two palettes exist to prevent.
-  const subject = band?.kind === 'pgs' ? 'Aide à l’insonorisation' : 'Bruit des avions';
-  return `${subject} · zone ${zone}${band?.airport ? ` — ${band.airport}` : ''}`;
+  const m = messages().headline;
+  const subject = band?.kind === 'pgs' ? m.pgs : m.peb;
+  const head = m.line(subject, zone);
+  return band?.airport ? m.withAirport(head, band.airport) : head;
 }
 
 /**
@@ -619,11 +640,11 @@ export function bruitBandHeadline(band) {
  */
 export function bruitMarkerTitle(payload, peb, pgs) {
   if (payload?.available?.peb === false && payload?.available?.pgs === false) {
-    return 'Bruit des avions — service sans réponse';
+    return messages().headline.serviceDown;
   }
   const winner = peb?.winner || pgs?.winner;
   if (winner) return bruitBandHeadline(winner);
-  return 'Bruit des avions — aucun plan sur ce point';
+  return messages().headline.nothingHere;
 }
 
 /**
@@ -651,13 +672,14 @@ export function bruitMarkerTitle(payload, peb, pgs) {
  * fact that there had been a choice at all.
  */
 export function bruitScanDescription(payload, peb, pgs) {
+  const m = messages().scan;
   const winner = peb?.winner || null;
   const lines = [];
   // The PEB outage leads, because it is the line that stops a blank answer from
   // being read as "nothing here". The PGS outage does not: it would push the
   // answer the reader came for down one line to report a secondary document.
   if (payload?.available?.peb === false) {
-    lines.push('le service PEB n’a pas répondu — ce n’est pas « aucune zone ici »');
+    lines.push(m.pebDown);
   }
   if (winner) {
     // Rule, then threshold — the same order as the two cards a click produces,
@@ -666,45 +688,49 @@ export function bruitScanDescription(payload, peb, pgs) {
     lines.push(bruitZoneSentence('peb', winner.zone));
     lines.push(bandText(winner));
   } else if (payload?.available?.peb !== false) {
-    lines.push('aucun plan d’exposition au bruit ne couvre ce point');
+    lines.push(m.noPlan);
     lines.push(bruitNearestSentence(payload?.nearest));
   }
   // THE LINE THIS LAYER EXISTS FOR. Never omitted when there was a choice.
   if (peb?.eligible > 1) {
-    lines.push(`${peb.eligible} zones ici, retenue : ${peb.ruleLabel}`);
+    lines.push(m.chosenFrom(peb.eligible, peb.ruleLabel));
     const runnerUp = peb.inside[0];
-    if (runnerUp) lines.push(`aussi sous le repère : ${bruitBandLabel(runnerUp)}`);
+    if (runnerUp) lines.push(m.alsoUnderMarker(bruitBandLabel(runnerUp)));
   }
   if (peb?.overlapping) {
-    lines.push('le registre publie ici deux zones qui se recouvrent, sans découpe entre elles');
+    lines.push(m.overlapping);
   }
   const airports = new Set([...(payload?.peb || [])]
     .filter((band) => band.atPoint === true).map((band) => band.oaci).filter(Boolean));
   if (airports.size > 1) {
-    lines.push(`deux aéroports ici : ${[...airports].sort().join(', ')} — deux arrêtés distincts`);
+    lines.push(m.twoAirports([...airports].sort().join(', ')));
   }
   if (winner) {
     const day = bruitDayText(winner.effectiveDate);
-    if (day) lines.push(`arrêté préfectoral du ${day}${winner.revisedDocument ? ' (date reprise du document, le registre affiche l’ancienne)' : ''}`);
+    if (day) {
+      lines.push(winner.revisedDocument
+        ? messages().bandCard.orderRevised(day)
+        : messages().bandCard.order(day));
+    }
     lines.push(BRUIT_INDEX_SENTENCES[winner.index ?? 'unknown']);
   }
   const nearby = peb?.nearby?.length || 0;
   if (nearby) {
-    lines.push(`${nearby} zone${nearby > 1 ? 's' : ''} renvoyée${nearby > 1 ? 's' : ''} à côté du repère, dessinée${nearby > 1 ? 's' : ''} en tirets`);
+    lines.push(m.drawnDashed(nearby));
   }
   if (pgs?.winner) {
-    lines.push(`insonorisation financée : ${bruitBandLabel(pgs.winner)}`);
+    lines.push(m.pgsWinner(bruitBandLabel(pgs.winner)));
   } else if (payload?.available?.pgs === false) {
-    lines.push('service PGS sans réponse : rien à dire de l’insonorisation');
+    lines.push(m.pgsDown);
   }
   if (payload?.mixedIndex) {
-    lines.push('deux indices ici — les seuils ne se comparent pas entre eux');
+    lines.push(m.mixedIndex);
   }
   if (payload?.disputed) {
-    lines.push('unité incertaine : l’arrêté et les seuils ne concordent pas');
+    lines.push(m.disputed);
   }
   if (payload?.register?.short === true) {
-    lines.push('registre des arrêtés incomplet : « le plus proche » peut en manquer un');
+    lines.push(m.registerShort);
   }
   // THROUGH THE SAME BUDGET AS THE OTHER THREE CARDS, and it was not before.
   // The shell splits this string on ' · ' and slices the result to six, so
@@ -732,16 +758,12 @@ export function bruitScaleDenominator(payload) {
     ?? (payload?.area === true ? BRUIT_AREA_SCALE_DENOMINATOR : BRUIT_PROBE_SCALE_DENOMINATOR);
 }
 
-/**
- * What is NOT in this layer, in one line that fits.
- *
- * It used to run to 103 characters and name the document it is missing — "la
- * carte de bruit stratégique n'est pas publiée ici". True, and two rendered
- * rows out of six on a card whose whole job is to be read at a glance. The
- * reason survives in full where a reader can dwell on it: the data credits, and
- * the `nuisances` notes of the address fiche.
- */
-const BRUIT_AIRCRAFT_ONLY = 'avions seulement, ni route ni train';
+// WHAT IS NOT IN THIS LAYER is `caveat.aircraftOnly` in `bruitFrance.i18n.js`,
+// and it fits on one row. It used to run to 103 characters and name the
+// document it is missing — "la carte de bruit stratégique n'est pas publiée
+// ici". True, and two rendered rows out of six on a card whose whole job is to
+// be read at a glance. The reason survives in full where a reader can dwell on
+// it: the data credits, and the `nuisances` notes of the address fiche.
 
 /**
  * The one caveat every card in this module ends on, in both modes.
@@ -768,13 +790,14 @@ const BRUIT_AIRCRAFT_ONLY = 'avions seulement, ni route ni train';
  * @returns {string}
  */
 export function bruitCardCaveat(payload) {
+  const m = messages().caveat;
   const scale = bruitGroundResolutionText(bruitScaleDenominator(payload));
   const coarse = Number(payload?.coarseBands) || 0;
   const refined = Number(payload?.refinedBands) || 0;
   if (payload?.area === true && coarse > 0 && refined > 0) {
-    return `avions seulement — tracé à ~${scale} près, ${refined} zone${refined > 1 ? 's' : ''} à ~${bruitGroundResolutionText(BRUIT_PROBE_SCALE_DENOMINATOR)}`;
+    return m.mixedScale(scale, refined, bruitGroundResolutionText(BRUIT_PROBE_SCALE_DENOMINATOR));
   }
-  return `${BRUIT_AIRCRAFT_ONLY} — tracé à ~${scale} près`;
+  return m.drawnAt(scale);
 }
 
 /**
@@ -823,7 +846,7 @@ export const BRUIT_CARD_MAX_LINES = 6;
 /** The headline over one aerodrome's plan in the overview. */
 export function bruitAerodromeTitle(aerodrome) {
   const who = [aerodrome?.oaci, aerodrome?.name].filter(Boolean).join(' — ');
-  return who || 'Aérodrome sans code';
+  return who || messages().aerodrome.untitled;
 }
 
 /**
@@ -842,6 +865,7 @@ export function bruitAerodromeTitle(aerodrome) {
  * @returns {string}
  */
 export function bruitAerodromeDescription(aerodrome, payload, pgs = null) {
+  const m = messages().aerodrome;
   const count = aerodrome?.zones ?? 0;
   const arrete = bruitDayText(aerodrome?.top?.effectiveDate);
   return bruitCardDetails([
@@ -851,20 +875,18 @@ export function bruitAerodromeDescription(aerodrome, payload, pgs = null) {
     // ' · ' to make the card's lines, so a band list joined that way is not one
     // line carrying four bands — it is four lines, and four lines out of a
     // budget of six is the caveat pushed off the bottom.
-    `${count} zone${count > 1 ? 's' : ''} publiée${count > 1 ? 's' : ''} : `
-      + (aerodrome?.bands || []).map((band) => bruitBandLabel(band)).join(' ; '),
+    m.zonesPublished(count, (aerodrome?.bands || [])
+      .map((band) => bruitBandLabel(band)).join(' ; ')),
     arrete
-      ? `arrêté préfectoral du ${arrete}${aerodrome?.top?.revisedDocument ? ' (date reprise du document, le registre affiche l’ancienne)' : ''}`
+      ? (aerodrome?.top?.revisedDocument
+        ? messages().bandCard.orderRevised(arrete)
+        : messages().bandCard.order(arrete))
       : BRUIT_INDEX_SENTENCES[aerodrome?.top?.index ?? 'unknown'],
-    pgs?.zones
-      ? `insonorisation financée : ${pgs.zones} zone${pgs.zones > 1 ? 's' : ''}`
-      : null,
+    pgs?.zones ? m.pgsZones(pgs.zones) : null,
     // An aerodrome nobody aimed at. Its plan is whatever fell inside a
     // neighbour's buffer, which is not a promise that the plan is complete.
-    aerodrome?.probed === false
-      ? 'renvoyé par la sonde d’un aérodrome voisin — son plan peut être incomplet ici'
-      : null,
-    'zoome sous 12 km pour savoir quelle zone s’applique à une adresse',
+    aerodrome?.probed === false ? m.notProbed : null,
+    m.zoomForAnswer,
   ], payload).join(' · ');
 }
 
@@ -880,22 +902,21 @@ export function bruitAerodromeDescription(aerodrome, payload, pgs = null) {
  * @returns {string}
  */
 export function bruitAreaSummary(payload) {
+  const m = messages().area;
   const drawn = payload?.aerodromes?.length || 0;
   const lines = [];
   if (payload?.available?.peb === false) {
-    lines.push(`${payload.missing} aérodrome${payload.missing > 1 ? 's' : ''} n’${payload.missing > 1 ? 'ont' : 'a'} pas répondu — la vue est incomplète`);
+    lines.push(m.silent(payload.missing));
   }
-  lines.push(drawn > 0
-    ? `${drawn} aérodrome${drawn > 1 ? 's' : ''} avec un plan dans un rayon de ${payload?.radiusKm} km`
-    : 'aucun plan de bruit aérien dans ce cadre');
+  lines.push(drawn > 0 ? m.drawn(drawn, payload?.radiusKm) : m.empty);
   if (!drawn) lines.push(bruitNearestSentence(payload?.nearest));
   if (payload?.dropped > 0) {
-    lines.push(`${payload.dropped} aérodrome${payload.dropped > 1 ? 's' : ''} de plus dans le cadre, non demandé${payload.dropped > 1 ? 's' : ''}`);
+    lines.push(m.dropped(payload.dropped));
   }
   // Normal here, unlike at a point: a region spans several arrêtés by
   // construction, and the two scales are still not comparable to each other.
   if (payload?.mixedIndex) {
-    lines.push('plusieurs indices dans ce cadre — les seuils ne se comparent pas d’un aérodrome à l’autre');
+    lines.push(m.mixedIndex);
   }
   // Through the same six-line budget as the other two overview cards: this one
   // is painted on an entity too, and its tail is its caveat.
@@ -945,6 +966,7 @@ export function bruitGroundCard({ lon, lat, payload }) {
   const pgs = hit('pgs');
   const lead = peb[0] || pgs[0] || null;
   if (!lead) return null;
+  const m = messages().ground;
   const area = payload.area === true;
   const arrete = bruitDayText(lead.effectiveDate);
   const others = (lead.kind === 'peb' ? peb : pgs).slice(1);
@@ -961,15 +983,18 @@ export function bruitGroundCard({ lon, lat, payload }) {
       // the PDF is named `PEB_<OACI>_<date>.pdf`, so the two together are what
       // a reader needs to find the document. The URL itself is NOT here — see
       // the note below.
+      // eslint-disable-next-line no-nested-ternary
       arrete
-        ? `arrêté préfectoral du ${arrete}${lead.oaci ? ` · ${lead.oaci}` : ''}`
+        ? (lead.oaci
+          ? messages().bandCard.orderWithCode(arrete, lead.oaci)
+          : messages().bandCard.order(arrete))
         : BRUIT_INDEX_SENTENCES[lead.index ?? 'unknown'],
       // Two bands over one piece of ground is a real state of the register —
       // measured at Saint-Cyr and at Cannes — and the strictest is the headline.
       others.length
-        ? `aussi sur ce point : ${others.map((band) => bruitBandLabel(band)).join(' ; ')}`
+        ? m.alsoHere(others.map((band) => bruitBandLabel(band)).join(' ; '))
         : null,
-      peb.length && pgs.length ? `insonorisation financée : ${bruitBandLabel(pgs[0])}` : null,
+      peb.length && pgs.length ? messages().scan.pgsWinner(bruitBandLabel(pgs[0])) : null,
       // The sentence that stops a coloured pixel from passing for a legal
       // limit. At the overview scale a hundred metres of boundary is well under
       // one vertex, so near an edge this answer is a guess.
@@ -990,8 +1015,8 @@ export function bruitGroundCard({ lon, lat, payload }) {
       // guess" was itself taking two of the card's six rows to say it.
       area && !bruitBandIsFine(lead)
         ? (payload?.fine === true
-          ? 'contour encore large : l’affinage n’a pas fini, patientez'
-          : `contour d’ensemble : près d’une limite, descendez sous ${BRUIT_FINE_OVERVIEW_CEILING_M / 1000} km`)
+          ? m.refining
+          : m.descend(BRUIT_FINE_OVERVIEW_CEILING_M / 1000))
         : null,
     ], payload),
   };
@@ -1152,6 +1177,7 @@ export function bruitDrawOrder(bands, kind = 'peb') {
  */
 export function bruitLegend(payload) {
   if (!payload) return [];
+  const m = messages().legend;
   const legend = [];
   for (const [kind, order] of [['peb', PEB_ZONE_ORDER], ['pgs', PGS_ZONE_ORDER]]) {
     const bands = payload[kind] || [];
@@ -1164,23 +1190,22 @@ export function bruitLegend(payload) {
       // marker" — an explanation of dashes that are not on screen.
       const aside = payload.area === true ? 0 : rows.length - here;
       legend.push({
-        label: kind === 'pgs' ? `PGS zone ${zone}` : `PEB zone ${zone}`,
+        label: kind === 'pgs' ? m.pgsZone(zone) : m.pebZone(zone),
         color: bruitZoneColorCss(kind, zone),
         count: rows.length,
         blurb: [
           bruitZoneSentence(kind, zone),
-          aside === 0 ? null
-            : `${aside} dessinée${aside > 1 ? 's' : ''} en tirets : renvoyée${aside > 1 ? 's' : ''} par le service à côté du repère, pas dessous`,
+          aside === 0 ? null : m.aside(aside),
         ].filter(Boolean).join(' — '),
       });
     }
     const unknown = bands.filter((band) => bruitZoneRank(kind, band?.zone) === order.length);
     if (unknown.length) {
       legend.push({
-        label: kind === 'pgs' ? 'PGS zone inconnue' : 'PEB zone inconnue',
+        label: kind === 'pgs' ? m.pgsUnknown : m.pebUnknown,
         color: BRUIT_UNKNOWN_ZONE_COLOR,
         count: unknown.length,
-        blurb: 'lettre de zone absente ou inconnue du registre — jamais retenue comme réponse',
+        blurb: m.unknownBlurb,
       });
     }
   }
@@ -1329,38 +1354,37 @@ export function bruitScanParams(point) {
  * @returns {?string}
  */
 export function bruitGuidanceLabel(stats) {
+  const m = messages().guidance;
   if (stats?.dormant === true) {
-    return `Zoome sous ${(BRUIT_OVERVIEW_CEILING_M / 1000).toLocaleString('fr-FR')} km : au-delà, les zones ne font plus une forme à l’écran`;
+    return m.zoomIn(formatNumber(BRUIT_OVERVIEW_CEILING_M / 1000));
   }
   if (stats?.available?.peb === false) {
-    return stats?.area === true
-      ? `Le service DGAC n’a pas répondu pour ${stats.missing} aérodrome${stats.missing > 1 ? 's' : ''} — la vue est incomplète`
-      : 'Le service DGAC n’a pas répondu — ce n’est pas « aucune zone ici »';
+    return stats?.area === true ? m.serviceDownArea(stats.missing) : m.serviceDown;
   }
   if (stats?.area === true) {
     if (!stats.lastUpdate) return null;
     if (!(stats.aerodromes > 0)) {
       return stats.nearestKm != null
-        ? `Aucun plan dans ce cadre — le plus proche est à ${Number(stats.nearestKm).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
-        : 'Aucun plan de bruit aérien dans ce cadre';
+        ? m.noneInFrame(formatDecimal(Number(stats.nearestKm), 1))
+        : m.emptyFrame;
     }
     // The line that keeps a capped map from reading as a complete one.
     if (stats.dropped > 0) {
-      return `${stats.aerodromes} aérodromes dessinés · ${stats.dropped} de plus dans le cadre, non demandés`;
+      return m.drawnAndDropped(stats.aerodromes, stats.dropped);
     }
     // SAID OUT LOUD, because the shape is about to change under the reader.
     // A coarse overview is complete — every band is drawn — but its outlines
     // are visibly faceted, and a reader who sees them redraw finer a few
     // seconds later is owed the reason rather than left wondering what moved.
     if (stats.refining > 0) {
-      return `contours en cours d’affinage — ${stats.refining} aérodrome${stats.refining > 1 ? 's' : ''} encore au tracé large`;
+      return m.refining(stats.refining);
     }
     return null;
   }
   if (stats?.lastUpdate && !(stats.zonesHere > 0)) {
     return stats.nearestKm != null
-      ? `Aucun plan sur ce point — le plus proche est à ${Number(stats.nearestKm).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
-      : 'Aucun plan de bruit aérien sur ce point';
+      ? m.nonePoint(formatDecimal(Number(stats.nearestKm), 1))
+      : m.emptyPoint;
   }
   return null;
 }
@@ -1488,6 +1512,7 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
       const name = bruitBandLabel(band);
       if (band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG) {
         dataSource.entities.add({
+          // i18n-ignore-next-line — an entity id, not a word.
           id: `bruit:${band.id}:label`,
           position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
           name,
@@ -1509,6 +1534,7 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
           },
         });
       }
+      // i18n-ignore-next-line — an entity id prefix, not a word.
       drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
         css,
         fillAlpha: BRUIT_FILL_ALPHA[emphasis],
@@ -1531,6 +1557,7 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
   // nothing else on screen to hang it on.
   if (point) {
     dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
       id: 'bruit:scan-point',
       position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
       billboard: {
@@ -1596,6 +1623,7 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
       const name = bruitBandLabel(band);
       if (band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG) {
         dataSource.entities.add({
+          // i18n-ignore-next-line — an entity id, not a word.
           id: `bruit:${band.id}:label`,
           position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
           name,
@@ -1618,6 +1646,7 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
           },
         });
       }
+      // i18n-ignore-next-line — an entity id prefix, not a word.
       drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
         css,
         fillAlpha: BRUIT_FILL_ALPHA[emphasis],
@@ -1638,6 +1667,7 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
   for (const aerodrome of payload?.aerodromes || []) {
     if (!Number.isFinite(aerodrome.lat) || !Number.isFinite(aerodrome.lon)) continue;
     dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
       id: `bruit:aerodrome:${aerodrome.oaci ?? aerodrome.bands?.[0]?.id ?? drawn}`,
       position: Cesium.Cartesian3.fromDegrees(aerodrome.lon, aerodrome.lat),
       billboard: {
@@ -1665,6 +1695,7 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
   // overview has.
   if (!(payload?.aerodromes?.length) && payload?.centre) {
     dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
       id: 'bruit:area-centre',
       position: Cesium.Cartesian3.fromDegrees(payload.centre.lon, payload.centre.lat),
       billboard: {
@@ -1675,7 +1706,10 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'bruit-area-centre', area: true },
-      name: 'Aucun plan de bruit aérien dans ce cadre',
+      // The capitalised form, as a title: the same sentence the panel's
+      // guidance line prints, and not the lower-case clause the area summary
+      // opens with.
+      name: messages().guidance.emptyFrame,
       description: bruitAreaSummary(payload),
     });
     drawn += 1;

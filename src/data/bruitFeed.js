@@ -103,7 +103,36 @@
  * dev-server proxy, and under `node --test`.
  */
 
+import { formatQuantity } from '../i18n/format.js';
 import { pointInPolygons, polygonsBounds, ringLabelAnchor } from './ringGeometry.js';
+import messages, {
+  BRUIT_INDEX_UNITS,
+  PEB_ZONE_SENTENCES,
+  PGS_ZONE_SENTENCES,
+} from './bruitFeed.i18n.js';
+
+/**
+ * A zone table whose sentences are read when a card is DRAWN, not when this
+ * module loads.
+ *
+ * `bruitZoneSentence` looks a letter up with `Object.hasOwn`, so the shape has
+ * to stay a plain own-property record — getters keep that and keep ratchet R5
+ * at zero, which a `{...catalog()}` spread at module scope would not.
+ *
+ * @param {object} catalog A `defineMessages` table keyed by zone letter.
+ * @param {string[]} keys The letters, in the register's own spelling.
+ * @returns {Readonly<Record<string, string>>}
+ */
+function zoneSentences(catalog, keys) {
+  const table = {};
+  for (const key of keys) {
+    Object.defineProperty(table, key, {
+      enumerable: true,
+      get() { return catalog()[key]; },
+    });
+  }
+  return Object.freeze(table);
+}
 
 /** The keyless Géoplateforme vector WMS. `<Fees>none</Fees>`, CORS `*`. */
 export const BRUIT_WMS_BASE = 'https://data.geopf.fr/wms-v/ows';
@@ -113,9 +142,16 @@ export const BRUIT_PEB_LAYER = 'dgac_peb_plan_wmsv';
 /** Plan de gêne sonore — who the insulation fund pays. */
 export const BRUIT_PGS_LAYER = 'dgac_pgs_plan_wmsv';
 
-/** Attribution carried on every payload (see DATA_SOURCES.md). */
+/**
+ * Attribution carried on every payload (see DATA_SOURCES.md).
+ *
+ * The producer's own credit line, and a `source` string besides — reproduced
+ * word for word in both languages, like every other credit on the globe.
+ */
+// i18n-ignore-start — a licence attribution, reproduced verbatim.
 export const BRUIT_SOURCE = 'Plans d’exposition au bruit et plans de gêne sonore — DGAC, '
   + 'via la Géoplateforme (data.geopf.fr)';
+// i18n-ignore-end
 
 /**
  * Degrees of the BBOX spent per rendered pixel — the one number that decides
@@ -266,8 +302,8 @@ export function bruitGroundResolutionText(denominator) {
   const metres = Number(denominator) * OGC_STANDARD_PIXEL_M;
   if (!Number.isFinite(metres) || metres <= 0) return null;
   return metres < 1000
-    ? `${Math.round(metres)} m`
-    : `${(metres / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`;
+    ? formatQuantity(Math.round(metres), 'm')
+    : formatQuantity(metres / 1000, 'km', { maximumFractionDigits: 1 });
 }
 
 /**
@@ -314,8 +350,8 @@ export const BRUIT_PSOPHIQUE_MIN_OBSERVED = 72;
  * still one line below for anyone checking against the arrêté.
  */
 export const BRUIT_INDEX_LABELS = Object.freeze({
-  lden: 'dB(A)',
-  psophique: 'ancien indice',
+  get lden() { return BRUIT_INDEX_UNITS().lden; },
+  get psophique() { return BRUIT_INDEX_UNITS().psophique; },
   unknown: null,
 });
 
@@ -328,9 +364,9 @@ export const BRUIT_INDEX_LABELS = Object.freeze({
  * are weighted, and that the pre-2002 scale does not convert.
  */
 export const BRUIT_INDEX_SENTENCES = Object.freeze({
-  lden: 'indice Lden : la soirée et la nuit comptent plus fort',
-  psophique: 'indice psophique, d’avant 2002 : pas convertible en dB(A)',
-  unknown: 'unité incertaine : l’arrêté et les seuils ne concordent pas',
+  get lden() { return messages().index.lden; },
+  get psophique() { return messages().index.psophique; },
+  get unknown() { return messages().index.unknown; },
 });
 
 /**
@@ -359,12 +395,7 @@ export const PEB_ZONE_ORDER = Object.freeze(['A', 'B', 'C', 'D']);
  * wraps a card line at about that width, so a longer sentence does not say
  * more, it costs a second screen line and pushes a fact off the bottom.
  */
-export const PEB_ZONE_LABELS = Object.freeze({
-  A: 'gêne très forte : logements neufs interdits',
-  B: 'gêne forte : logements neufs très limités, isolation imposée',
-  C: 'gêne modérée : logements neufs limités, isolation imposée',
-  D: 'construction libre, isolation imposée, acheteurs prévenus',
-});
+export const PEB_ZONE_LABELS = zoneSentences(PEB_ZONE_SENTENCES, ['A', 'B', 'C', 'D']);
 
 /** PGS zones, most exposed first. Published as the digits 1/2/3. */
 export const PGS_ZONE_ORDER = Object.freeze(['1', '2', '3']);
@@ -376,11 +407,7 @@ export const PGS_ZONE_ORDER = Object.freeze(['1', '2', '3']);
  * les nuisances sonores aériennes* pays to soundproof. That is why it is drawn
  * differently from the PEB and never merged with it.
  */
-export const PGS_ZONE_LABELS = Object.freeze({
-  1: 'zone I : insonorisation financée, au taux le plus élevé',
-  2: 'zone II : insonorisation financée',
-  3: 'zone III : insonorisation financée, au taux le plus bas',
-});
+export const PGS_ZONE_LABELS = zoneSentences(PGS_ZONE_SENTENCES, ['1', '2', '3']);
 
 /**
  * The two plans' field names for the same four concepts.
@@ -419,6 +446,7 @@ const FIELD_MAP = Object.freeze({
  */
 export function buildBruitProbeUrl(kind, { lat, lon } = {}, pixelDeg = BRUIT_PROBE_PIXEL_DEG) {
   const layer = kind === 'pgs' ? BRUIT_PGS_LAYER : BRUIT_PEB_LAYER;
+  // i18n-ignore-start — programmer errors, never shown to a reader.
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     throw new Error('bruit: lat/lon must be finite numbers');
   }
@@ -428,6 +456,7 @@ export function buildBruitProbeUrl(kind, { lat, lon } = {}, pixelDeg = BRUIT_PRO
   if (!Number.isFinite(pixelDeg) || pixelDeg <= 0) {
     throw new Error('bruit: pixelDeg must be a positive number');
   }
+  // i18n-ignore-end
   const half = (BRUIT_PROBE_PIXELS * pixelDeg) / 2;
   const centre = (BRUIT_PROBE_PIXELS - 1) / 2;
   const params = new URLSearchParams({
@@ -817,15 +846,18 @@ export function bandText(band, { short = false } = {}) {
   const banded = Number.isFinite(low) && Number.isFinite(high) && low !== high;
   const value = Number.isFinite(high) ? high : low;
   const open = !banded && isInnermostZone(band);
-  const span = banded ? `de ${low} à ${high}` : `${value}${open ? ' et plus' : ''}`;
-  if (!unit) return `${span}, unité non déterminée`;
+  const m = messages().band;
+  const span = banded ? m.range(low, high) : (open ? m.andAbove(value) : String(value));
+  if (!unit) return m.noUnit(span);
   // The unit is a SUFFIX in Lden and a PREFIX in psophique, because "dB(A)"
   // qualifies the number and "ancien indice" names the scale the number is on.
-  if (band.index === 'psophique') return `${unit} ${span} — pas des décibels`;
+  if (band.index === 'psophique') return m.psophic(unit, span);
   // `70 dB(A) et plus`, not `70 et plus dB(A)`: the unit belongs to the number,
   // the open end to the band.
-  const withUnit = banded ? `${span} ${unit}` : `${value} ${unit}${open ? ' et plus' : ''}`;
-  return short ? withUnit : `${withUnit} en moyenne sur 24 h`;
+  const withUnit = banded
+    ? m.withUnit(span, unit)
+    : (open ? m.valueAndAbove(value, unit) : m.withUnit(value, unit));
+  return short ? withUnit : m.dailyAverage(withUnit);
 }
 
 /**
