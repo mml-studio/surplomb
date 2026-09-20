@@ -7,9 +7,11 @@ import {
   VOICE_PROVIDERS,
   normalizeVoiceLanguage,
   resolveVoiceProvider,
+  resolveVoiceSessionLanguage,
   sanitizeBrainMessages,
   toChatCompletionTools,
   voiceLanguageInstruction,
+  voiceSessionInstruction,
 } from './voiceProviderPolicy.js';
 
 test('auto picks the only configured provider', () => {
@@ -57,6 +59,36 @@ test('English adds no instruction; French adds one that keeps tool arguments Eng
   assert.match(fr, /SPEAK FRENCH/);
   assert.match(fr, /stay in English inside tool calls/);
   assert.match(fr, /Never translate a callsign/);
+});
+
+test('the page the question came from decides which language the mic speaks', () => {
+  // The reader's own choice, and the case this exists for: a French install
+  // serving an English page used to answer it in French.
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'en', configured: 'fr-FR' }), 'en-US');
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'fr', configured: 'fr-FR' }), 'fr-FR');
+  // A page that names nothing — an old client, a curl, the bench — is answered
+  // exactly as before: the environment, or en-US when it says nothing either.
+  assert.equal(resolveVoiceSessionLanguage({ configured: 'fr-FR' }), 'fr-FR');
+  assert.equal(resolveVoiceSessionLanguage({}), 'en-US');
+  // With no environment setting, the page is the only authority there is.
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'fr' }), 'fr-FR');
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'en-GB' }), 'en-US');
+  // A language the INTERFACE does not have can only come from the operator,
+  // so naming one still wins: nobody can ask for German through a page.
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'en', configured: 'de-DE' }), 'de-DE');
+  assert.equal(resolveVoiceSessionLanguage({ requested: 'es', configured: 'fr-FR' }), 'fr-FR');
+});
+
+test('an English session is told to answer "what can I say" in English', () => {
+  const en = voiceSessionInstruction('en-US');
+  assert.match(en, /SPEAK ENGLISH/);
+  assert.match(en, /"Take me to Bordeaux"/);
+  assert.match(en, /not from the French list above/);
+  assert.ok(!en.includes('Emmène-moi'), 'the French examples must not be repeated in English');
+  // French keeps exactly what it had: the shipped prompt already lists the
+  // French phrasings, so nothing is appended but the SPEAK FRENCH lines.
+  assert.equal(voiceSessionInstruction('fr-FR'), voiceLanguageInstruction('fr-FR'));
+  assert.equal(voiceSessionInstruction('de-DE'), voiceLanguageInstruction('de-DE'));
 });
 
 test('realtime tools convert to the nested chat-completions shape', () => {
