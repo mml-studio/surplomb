@@ -1,3 +1,27 @@
+/**
+ * gevActions.js — the hands. One runner, 29 tools, and every provider.
+ *
+ * WHAT LANGUAGE THIS FILE IS IN, AND WHY IT IS NOT THE READER'S.
+ *
+ * Almost every string here is written to a TOOL RESULT: `hint`, `note`,
+ * `scopeLabel`, the `label` on a matched entity. None of them reaches a
+ * screen. They are read by the model, which is instructed to speak the
+ * operator's language whatever language the tool descriptions are written in
+ * (`voiceProviderPolicy.js`), so the English sentence "The layer is ON but
+ * covers nothing from this altitude" comes out of the mic as « la couche est
+ * allumée mais ne couvre rien d'ici » — in French, on a French page, and in
+ * English on an English one, from the same bytes.
+ *
+ * That is why the results are NOT translated and are marked `i18n-ignore`: a
+ * tool contract is a protocol, and translating a protocol per page would mean
+ * the model reads a different contract depending on who is looking — the one
+ * thing the routing bench could never pin. The same reasoning covers the
+ * spoken-alias table below, which is matched and never printed.
+ *
+ * The one language decision this file DOES make is the layer vocabulary it
+ * resolves against, and that one is bilingual on purpose: see
+ * `layerVocabulary.js`.
+ */
 import * as Cesium from 'cesium';
 import { CITY_POIS, findPoiByName, flyToGlobeView, flyToLandmark, flyToPOI, flyToPresetLocation, GLOBE_VIEW, searchAndFlyTo } from '../locations.js';
 import {
@@ -103,7 +127,7 @@ const CONTEXT_MODE_ALIASES = new Map([
  * assert a state that does not exist.
  */
 const CONTEXT_MODE_RESULT_FIELDS = Object.freeze([
-  { field: 'mode', emptyAs: 'off' },
+  { field: 'mode', emptyAs: 'off' }, // i18n-ignore-line
   { field: 'entering', emptyAs: null },
   { field: 'priorMode', emptyAs: null },
 ]);
@@ -180,7 +204,15 @@ const COCKPIT_TARGET_LAYERS = new Set(['flights', 'military', 'ais-live-vessels'
  * instead — a facility count from the BPE answering a question about
  * practitioners. The words moved to the layer that holds the register, and
  * gevActions.test.mjs now fails on any duplicate key at all.
+ *
+ * BOTH LANGUAGES, ALWAYS MATCHED. This is a matching vocabulary and not a
+ * catalog: every phrase in it is HEARD, never printed, and which language
+ * arrives depends on the person at the microphone rather than on the language
+ * the interface happens to be printing. Narrowing it to the page's locale
+ * could only make the mic deaf — see the same argument, at length, in
+ * `layerVocabulary.js`.
  */
+// i18n-ignore-start — spoken names, matched and never printed; see above.
 const LAYER_ALIASES = new Map([
   ['flights', 'flights'],
   ['planes', 'flights'],
@@ -643,6 +675,7 @@ const LAYER_ALIASES = new Map([
   ['sea state', 'marine-buoys'],
   ['wave height', 'marine-buoys'],
 ]);
+// i18n-ignore-end
 
 const CITY_ALIASES = new Map([
   ['new york', 'nyc'],
@@ -847,12 +880,12 @@ export function layerDrawingReport(dataManager, layerId) {
       notDrawnBecause: 'camera-too-high',
       ...(km ? { scanCeilingKm: km } : {}),
       suggestedRangeM: scanDescentRangeM(stats),
-      hint: `The layer is ON but covers nothing from this altitude${km ? ` — it needs the camera below ${km} km` : ''}.`,
+      hint: `The layer is ON but covers nothing from this altitude${km ? ` — it needs the camera below ${km} km` : ''}.`, // i18n-ignore-line
     };
   }
   const feed = layerFeedState(stats);
   if (!count && feed === 'loading') {
-    return { drawing: false, notDrawnBecause: 'loading', hint: 'Confirm it is starting up, not that it is showing data.' };
+    return { drawing: false, notDrawnBecause: 'loading', hint: 'Confirm it is starting up, not that it is showing data.' }; // i18n-ignore-line
   }
   if (!count && feed === 'unavailable') {
     const error = stats.error || stats.lastError || stats.managerRefreshError || 'the source did not answer';
@@ -922,8 +955,10 @@ function layerVoiceSummaries(dataManager, viewTarget = null) {
           layerId,
           label,
           pending: true,
+          // i18n-ignore-start — read by the model, not by the reader.
           note: `This layer is still scanning where the camera is now — its last answer is `
             + `${awayM} m away and describes somewhere else. Say the reading is not in yet and ask again in a moment; do NOT quote it.`,
+          // i18n-ignore-end
         });
         continue;
       }
@@ -1172,7 +1207,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           layerId,
           error: `Unknown data layer: ${args.layerId || 'missing'}`,
           suggestions: suggestVoiceLayers(args.layerId, 3),
-          hint: 'Name the closest registered layers to the operator and ask which they meant. Never say the subject is unavailable without checking list_layers first.',
+          hint: 'Name the closest registered layers to the operator and ask which they meant. Never say the subject is unavailable without checking list_layers first.', // i18n-ignore-line
         };
       }
       const enabled = Boolean(args.enabled);
@@ -2116,12 +2151,15 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
   throw new Error(`Unknown CCTV action: ${args.action || 'missing'}`);
 }
 
+// i18n-ignore-start — a country's name in a radio lookup: matched on the way
+// in, spoken by the model on the way out, printed nowhere.
 const RADIO_COUNTRY_CENTERS = new Map([
   ['us', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
   ['usa', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
   ['united states', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
   ['united states of america', { lat: 39.8, lon: -98.6, country: 'US', label: 'United States' }],
 ]);
+// i18n-ignore-end
 
 /** Resolve curated cities and common country requests without moving the camera. */
 export function knownRadioLocation(query, locationId = '') {
@@ -2589,7 +2627,7 @@ async function trackEntity(viewer, dataManager, styleManager, args = {}) {
       });
       return {
         ok: true, action: 'track_entity', kind: 'fire', layerId: 'local-firms',
-        label: strongest.label || 'Strongest fire',
+        label: strongest.label || 'Strongest fire', // i18n-ignore-line
         latitude: strongest.latitude, longitude: strongest.longitude,
         frp: strongest.frp ?? null,
       };
@@ -3518,7 +3556,7 @@ function aircraftProximityWindowForQuery(args, result, dataManager) {
     ok: true,
     action: 'analyst_query',
     count,
-    scopeLabel: `within ${radiusKm} km of ${label}`,
+    scopeLabel: `within ${radiusKm} km of ${label}`, // i18n-ignore-line
     truncated: false,
     items: items.slice(0, Math.round(clampNumber(args.limit, 1, 50, 12))).map((item) => ({
       layerKey: item.layerKey,
@@ -3532,7 +3570,7 @@ function aircraftProximityWindowForQuery(args, result, dataManager) {
       layersQueried: result?.coverage?.layersQueried || [],
       scope: `window:${radiusKm}km@${label}`,
       followUp: false,
-      note: 'Contacts window engine — the same computation and cohort the Contacts panel displays, so this count matches the panel exactly — counts cover loaded data; the flights layer loads by viewport.',
+      note: 'Contacts window engine — the same computation and cohort the Contacts panel displays, so this count matches the panel exactly — counts cover loaded data; the flights layer loads by viewport.', // i18n-ignore-line
     },
     // (D) The answer always says whose window it is and which engine produced it.
     window: {
@@ -3816,7 +3854,7 @@ function coarseBasemapPlace(viewScale, latitude, longitude, inferredCountry = nu
       region: null,
       country: null,
       precision: 'global',
-      note: 'Camera is too far out for a precise street or city label; do not infer a local place from the center point.',
+      note: 'Camera is too far out for a precise street or city label; do not infer a local place from the center point.', // i18n-ignore-line
     };
   }
   return {
@@ -3828,7 +3866,7 @@ function coarseBasemapPlace(viewScale, latitude, longitude, inferredCountry = nu
     country: inferredCountry?.country || null,
     precision: viewScale,
     confidence: inferredCountry?.confidence || null,
-    note: 'Camera altitude is high, so this is approximate basemap context rather than a precise address.',
+    note: 'Camera altitude is high, so this is approximate basemap context rather than a precise address.', // i18n-ignore-line
   };
 }
 
@@ -4351,6 +4389,8 @@ function layerTitle(layerId) {
   if (layerId === 'medecins-fr') return 'Medical Practice';
   if (layerId === 'sup-fr') return 'Campus';
   if (layerId === 'comptages-fr') return 'Counting Arc';
+  // What a `delinquance-fr` record IS. The French administrative unit, and
+  // the English word for one too. i18n-ignore-next-line
   if (layerId === 'delinquance-fr') return 'Commune';
   if (layerId === 'anfr-fr') return "Antenna mast";
   if (layerId === 'fraicheur-fr') return "Cool refuge";
@@ -4506,6 +4546,7 @@ async function runAnalystQuery(viewer, dataManager, args = {}) {
     // without them a ranked list of sales came back as nothing but internal
     // mutation ids — which the diction rules forbid saying out loud, so the
     // model had a correct answer it was not allowed to speak.
+    // i18n-ignore-next-line — record FIELD NAMES, as the layers publish them.
     for (const k of ['icao24', 'mmsi', 'registration', 'label', 'callsign', 'name', 'altitudeM', 'speedMps', 'speedKts', 'frp', 'magnitude', 'shipType', 'destination', 'operator', 'routeOrigin', 'routeDestination', 'aircraftClass', 'military', 'onGround', 'distanceKm', 'confidence', 'place', 'address', 'commune', 'prixM2', 'valeurEur', 'surfaceM2', 'rooms', 'date', 'propertyType', 'priced']) {
       if (r[k] !== null && r[k] !== undefined) compact[k] = r[k];
     }

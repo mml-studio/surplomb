@@ -308,7 +308,12 @@ function vocabularyFor(layerId) {
  * and the model would be handed three confident suggestions for a layer nobody
  * has. A suggestion list that fires on nonsense is worse than an empty one:
  * it invites the operator to pick something they did not ask for.
+ *
+ * Both languages, always: "show me the layer of unicorns" has to be stripped
+ * to `unicorns` exactly as « la couche des licornes » is stripped to
+ * `licornes`, and which one arrives depends on the speaker, not on the page.
  */
+// i18n-ignore-next-line — stop words of both languages, matched and never printed.
 const STOPWORDS = new Set(['de', 'des', 'du', 'd', 'la', 'le', 'les', 'l', 'en', 'et', 'a', 'au', 'aux', 'the', 'of', 'and', 'fr', 'couche', 'couches', 'layer', 'layers']);
 
 /** Meaningful tokens of a normalized key. */
