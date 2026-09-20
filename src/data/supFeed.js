@@ -109,6 +109,24 @@
  * `node --test`.
  */
 
+import { labelFor } from '../i18n/messages.js';
+import {
+  SUP_CYCLE_SHORT, SUP_CYCLE_WORDS, SUP_KIND_WORDS, SUP_PLACEMENT_WORDS,
+} from './supFeed.i18n.js';
+
+/**
+ * A catalog's French side, flat, keyed by the value that rides the payload.
+ *
+ * This module is imported by `vite.config.js`, and a server has no language to
+ * read (docs/i18n/CONVENTIONS.md): the three tables below therefore keep
+ * publishing French, and each has a locale-aware reader beside it.
+ */
+function frenchTable(catalog) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(catalog.definition).map(([key, leaf]) => [key, leaf.fr]),
+  ));
+}
+
 /** Portal both datasets are published on. */
 export const SUP_PORTAL = 'data.enseignementsup-recherche.gouv.fr';
 
@@ -118,6 +136,7 @@ export const SUP_DATASET = 'fr-esr-atlas_regional-effectifs-d-etudiants-inscrits
 export const SUP_OFFER_DATASET = 'fr-esr-cartographie_formations_parcoursup';
 
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — the registry owns a layer's source line (layerTaxonomy.i18n.js)
 export const SUP_SOURCE = 'Effectifs d’étudiants inscrits & Cartographie Parcoursup — MESR '
   + '(data.enseignementsup-recherche.gouv.fr)';
 
@@ -210,19 +229,26 @@ export const SUP_OFFER_FIELDS = Object.freeze([
  * low end must be the reading that over-claims nothing about the site. A
  * campus that is partly a university IS a university campus.
  */
+// i18n-ignore-start — band keys: they ride the payload and a share link
 export const SUP_KINDS = Object.freeze([
   'universite', 'lycee', 'ingenieur', 'commerce', 'sante', 'art', 'autre',
 ]);
+// i18n-ignore-end
 
-export const SUP_KIND_LABELS = Object.freeze({
-  universite: 'Université',
-  lycee: 'Lycée — BTS & CPGE',
-  ingenieur: 'École d’ingénieurs',
-  commerce: 'Commerce & gestion',
-  sante: 'Santé & social',
-  art: 'Art, archi & culture',
-  autre: 'Autres écoles spécialisées',
-});
+/**
+ * The bands' FRENCH, which is what a module running under Node reads.
+ *
+ * Built from `supFeed.i18n.js` rather than retyped beside it; a browser calls
+ * {@link supKindLabel}.
+ */
+export const SUP_KIND_LABELS = frenchTable(SUP_KIND_WORDS);
+
+/** One band in the page's language. An unknown band is the catch-all. */
+export function supKindLabel(kind) {
+  const key = String(kind ?? '');
+  // i18n-ignore-next-line — a band key, not a word
+  return labelFor(SUP_KIND_WORDS, Object.hasOwn(SUP_KIND_LABELS, key) ? key : 'autre');
+}
 
 /** Index of a band in the ladder. */
 export const SUP_KIND_INDEX = Object.freeze(
@@ -230,6 +256,7 @@ export const SUP_KIND_INDEX = Object.freeze(
 );
 
 /** Published `categorie_etablissement` → band. All 14 are named. */
+// i18n-ignore-start — the register's own published category names, matched on
 const CATEGORY_TO_KIND = Object.freeze({
   'Universités': 'universite',
   'Autre établissements d’enseignement universitaire': 'universite',
@@ -249,6 +276,7 @@ const CATEGORY_TO_KIND = Object.freeze({
   'Écoles de journalisme et écoles littéraires': 'art',
   'Autres écoles de spécialités diverses': 'autre',
 });
+// i18n-ignore-end
 
 /**
  * The three LMD cycles the seven published `degre_etudes` values fold onto.
@@ -260,13 +288,20 @@ const CATEGORY_TO_KIND = Object.freeze({
  */
 export const SUP_CYCLES = Object.freeze(['licence', 'master', 'doctorat']);
 
-export const SUP_CYCLE_LABELS = Object.freeze({
-  licence: 'Licence & bac+1 à +3',
-  master: 'Master — bac+4 et +5',
-  doctorat: 'Doctorat — bac+6 et plus',
-});
+export const SUP_CYCLE_LABELS = frenchTable(SUP_CYCLE_WORDS);
+
+/** One cycle in the page's language. */
+export function supCycleLabel(cycle) {
+  return labelFor(SUP_CYCLE_WORDS, cycle);
+}
+
+/** The same cycle in one word, for a card's mix line. */
+export function supCycleShortLabel(cycle) {
+  return labelFor(SUP_CYCLE_SHORT, cycle);
+}
 
 /** Published `degre_etudes` → cycle. Anything unrecognised is dropped. */
+// i18n-ignore-start — the register's own published degree values, matched on
 const DEGREE_TO_CYCLE = Object.freeze({
   'Inférieur ou égal au baccalauréat': 'licence',
   'BAC + 1': 'licence',
@@ -276,14 +311,17 @@ const DEGREE_TO_CYCLE = Object.freeze({
   'BAC + 5': 'master',
   'BAC + 6 et plus': 'doctorat',
 });
+// i18n-ignore-end
 
 /** How a site's coordinate was obtained. Printed on the card. */
 export const SUP_PLACEMENTS = Object.freeze(['register', 'offer']);
 
-export const SUP_PLACEMENT_LABELS = Object.freeze({
-  register: 'Position publiée par le registre',
-  offer: 'Position reprise de la cartographie Parcoursup',
-});
+export const SUP_PLACEMENT_LABELS = frenchTable(SUP_PLACEMENT_WORDS);
+
+/** How this site got its coordinate, in the page's language. */
+export function supPlacementLabel(placement) {
+  return labelFor(SUP_PLACEMENT_WORDS, placement);
+}
 
 /** Coordinate identity, to 5 decimals (~1 m). */
 export const SUP_SITE_DECIMALS = 5;
@@ -375,14 +413,17 @@ export function supOfferName(value) {
 
 /** Band for one published category. Anything unrecognised lands in `autre`. */
 export function supKind(category) {
+  // i18n-ignore-next-line — a band key, not a word
   return CATEGORY_TO_KIND[String(category || '').trim()] || 'autre';
 }
 
 /** `public` / `prive` / null. */
 export function supSector(value) {
   const text = String(value || '').trim();
+  // i18n-ignore-start — the register's own published sector values
   if (text === 'Public') return 'public';
   if (text === 'Privé' || text === 'Prive') return 'prive';
+  // i18n-ignore-end
   return null;
 }
 
@@ -685,7 +726,7 @@ export function projectSupSites({
       const categories = site.categories.size
         ? [...site.categories]
         : [etab.category].filter(Boolean);
-      let kind = 'autre';
+      let kind = 'autre'; // i18n-ignore-line — a band key, not a word
       let rank = SUP_KINDS.length;
       for (const category of categories) {
         const candidate = supKind(category);

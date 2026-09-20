@@ -182,13 +182,15 @@ import {
 } from '../overlays/worldOverlay.js';
 import {
   SUP_CYCLES,
-  SUP_CYCLE_LABELS,
   SUP_KINDS,
-  SUP_KIND_LABELS,
-  SUP_PLACEMENT_LABELS,
+  supCycleShortLabel,
+  supKindLabel as supKindLabelFromFeed,
+  supPlacementLabel,
 } from './supFeed.js';
 import { supAdvancedShare } from './supDepartements.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './supFrance.i18n.js';
 
 export const SUP_FR_LAYER_ID = 'sup-fr';
 
@@ -304,20 +306,51 @@ const DEPARTEMENT_COLORS = Object.freeze([
  * two is kept because it is a fact about French research, not an accident of
  * cutting.
  */
-export const SUP_PRISM_SCALE = createPrismScale({
+const SUP_PRISM_SPEC = Object.freeze({
   id: 'sup-fr',
   domainMax: 400_000,
-  heightLabel: 'étudiants',
-  heightUnit: 'étudiants',
   mode: 'sqrt',
   heightTicks: [200_000, 50_000, 5_000],
-  ratioLabel: 'part des étudiants à bac+4 et au-delà',
   ratioBreaks: [5, 10, 20, 30, 40],
   ratioColors: DEPARTEMENT_COLORS,
-  ratioClassLabels: Object.freeze([
-    '≤ 5 %', '5 – 10 %', '10 – 20 %', '20 – 30 %', '30 – 40 %', '> 40 %',
-  ]),
 });
+
+/** One scale, with the two variable names filled in from a catalog locale. */
+function buildPrismScale(words) {
+  return createPrismScale({
+    ...SUP_PRISM_SPEC,
+    heightLabel: words.heightLabel,
+    heightUnit: words.heightUnit,
+    ratioLabel: words.ratioLabel,
+    ratioClassLabels: words.ratioClassLabels,
+  });
+}
+
+/**
+ * The scale in FRENCH — the geometry every prism is measured from.
+ *
+ * `choroplethPrism.js` frames a caller's variable names without translating
+ * them, so the key needs a scale in the reader's language; everything else
+ * about a prism (its domain, its breaks, its colours) has no language at all.
+ * This constant is the one the drawing uses, {@link supPrismScale} the one the
+ * legend does.
+ */
+export const SUP_PRISM_SCALE = buildPrismScale(Object.fromEntries(
+  ['heightLabel', 'heightUnit', 'ratioLabel', 'ratioClassLabels']
+    .map((key) => [key, messages.definition.prism[key].fr]),
+));
+
+/** The same scale, named in the page's language. One per locale, built once. */
+const _prismScales = new Map([[SUP_PRISM_SCALE.heightLabel, SUP_PRISM_SCALE]]);
+export function supPrismScale() {
+  const words = messages().prism;
+  let scale = _prismScales.get(words.heightLabel);
+  if (!scale) {
+    scale = buildPrismScale(words);
+    _prismScales.set(words.heightLabel, scale);
+  }
+  return scale;
+}
 
 /**
  * Stripe spacing on the body of a prism whose rate is unpublished.
@@ -373,10 +406,9 @@ const CARD_OFFER_LIMIT = 4;
  *    taxonomy label « Enseignement », which appears nowhere in the panel.
  *  - `autre`, because a catch-all label names nothing at all.
  */
-const KIND_BLURBS = Object.freeze({
-  lycee: 'Aussi comptés dans « Écoles et lycées ».',
-  autre: 'Surtout des CFA et organismes de formation.',
-});
+function kindBlurb(kind) {
+  return messages().kindBlurbs[kind] ?? null;
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -425,9 +457,9 @@ export function supKindColor(kind) {
   return KIND_COLORS[kind] || KIND_COLORS.autre;
 }
 
-/** French label for one band. */
+/** One band's label in the page's language. */
 export function supKindLabel(kind) {
-  return SUP_KIND_LABELS[kind] || SUP_KIND_LABELS.autre;
+  return supKindLabelFromFeed(kind);
 }
 
 /**
@@ -563,19 +595,22 @@ function sitePosition(site) {
   return Cesium.Cartesian3.fromDegrees(site.lon, site.lat, height);
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A count, grouped the way the reader's language groups one. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
 // --- Cards ------------------------------------------------------------------
 
 /** The site's cycle mix, as a line, or null when it says nothing. */
 function cycleLine(cycles) {
+  const m = messages().site;
   const parts = [];
   for (const cycle of SUP_CYCLES) {
     const value = Number(cycles?.[cycle]) || 0;
-    if (value > 0) parts.push(`${SUP_CYCLE_LABELS[cycle].split(' ')[0]} ${fr(value)}`);
+    // The cycle's one-word form, from its own leaf: taking the first word of
+    // `Licence & bac+1 à +3` works in French by luck, and luck is not a rule.
+    if (value > 0) parts.push(m.cycle(supCycleShortLabel(cycle), fr(value)));
   }
   return parts.length > 1 ? parts.join(' · ') : null;
 }
@@ -585,17 +620,20 @@ function cycleLine(cycles) {
  * absence of one; nothing here is inferred.
  */
 export function buildSupSelectionLabel(record) {
+  const m = messages().site;
   const site = record?.site || {};
   const details = [];
-  const title = site.name || site.commune || 'Établissement du supérieur';
+  const title = site.name || site.commune || m.fallbackTitle;
 
+  // `site.category` is the register's own published category — data, shown as
+  // it came; the band label below it is ours, and is translated.
   const kind = [site.category || supKindLabel(site.kind)];
-  if (site.sector === 'public') kind.push('public');
-  else if (site.sector === 'prive') kind.push('privé');
+  if (site.sector === 'public') kind.push(m.public);
+  else if (site.sector === 'prive') kind.push(m.private);
   details.push(kind.join(' · '));
 
-  const rentree = record?.rentree ? ` — rentrée ${record.rentree}` : '';
-  details.push(`${fr(site.students || 0)} étudiants sur ce site${rentree}`);
+  const rentree = record?.rentree ? m.rentree(record.rentree) : '';
+  details.push(m.students(fr(site.students || 0), rentree));
 
   const cycles = cycleLine(site.cycles);
   if (cycles) details.push(cycles);
@@ -604,13 +642,11 @@ export function buildSupSelectionLabel(record) {
   // both numbers is what stops eleven Sorbonne dots reading as eleven
   // universities — or as one university of 15 192 students.
   if (site.siteCount > 1) {
-    details.push(`Site ${site.siteIndex} sur ${site.siteCount} — ${fr(site.etabStudents || 0)} étudiants au total`);
+    details.push(m.siteOf(site.siteIndex, site.siteCount, fr(site.etabStudents || 0)));
   }
   // Students the register counts for this establishment but cannot place. The
   // dots add up to less than the establishment does, and this is why.
-  if (site.unsited > 0) {
-    details.push(`${fr(site.unsited)} étudiants sans site localisé dans ce registre`);
-  }
+  if (site.unsited > 0) details.push(m.unsited(fr(site.unsited)));
 
   if (site.composantes?.length) details.push(site.composantes.join(' · '));
 
@@ -619,14 +655,14 @@ export function buildSupSelectionLabel(record) {
 
   // A borrowed coordinate is a thing the map did, not a thing the register
   // said, and the card is the only place that can say so.
-  if (site.placement === 'offer') details.push(`⚠ ${SUP_PLACEMENT_LABELS.offer}`);
+  if (site.placement === 'offer') details.push(m.borrowed(supPlacementLabel('offer')));
 
   if (site.offer?.length) {
     const shown = site.offer.slice(0, CARD_OFFER_LIMIT).join(' · ');
     const rest = site.offer.length - CARD_OFFER_LIMIT;
-    details.push(`Parcoursup : ${shown}${rest > 0 ? ` · +${rest} autres` : ''}`);
+    details.push(m.offer(shown, rest > 0 ? m.offerRest(rest) : ''));
   }
-  if (site.uai) details.push(`UAI ${site.uai}`);
+  if (site.uai) details.push(m.uai(site.uai));
 
   return [title, ...details].join('\n');
 }
@@ -640,27 +676,24 @@ export function buildSupSelectionLabel(record) {
  * the two facts A1 exists to keep apart.
  */
 export function buildSupDepartementLabel(row) {
+  const m = messages().departement;
   const details = [];
   const prism = supPrismRow(row);
-  details.push(prism.hasValue
-    ? `${fr(prism.students)} étudiants`
-    : 'Effectif étudiant non publié pour ce département');
-  details.push(`${fr(row.etabs)} établissements sur ${fr(row.sites)} sites`);
+  details.push(prism.hasValue ? m.students(fr(prism.students)) : m.noStudents);
+  details.push(m.establishments(fr(row.etabs), fr(row.sites)));
   details.push(prism.hasRatio
-    ? `${prism.share.toFixed(1).replace('.', ',')} % des étudiants à bac+4 et au-delà — la couleur du prisme`
-    : 'Part à bac+4 non calculable ici : aucun cycle renseigné');
+    ? m.advancedShare(formatDecimal(prism.share, 1, { minimumFractionDigits: 1 }))
+    : m.noShare);
   const cycles = cycleLine(row.cycles);
   if (cycles) details.push(cycles);
   const mix = [];
-  if (row.public > 0) mix.push(`${fr(row.public)} sites publics`);
-  if (row.prive > 0) mix.push(`${fr(row.prive)} privés`);
+  if (row.public > 0) mix.push(m.publicSites(fr(row.public)));
+  if (row.prive > 0) mix.push(m.privateSites(fr(row.prive)));
   if (mix.length) details.push(mix.join(' · '));
   // The prism's own blind spot, on the prism's own card: the height is an
   // absolute count on a base whose area is not neutralised, so the density is
   // the figure that answers "big because the territory is big?".
-  if (row.per1000Km2 > 0) {
-    details.push(`${fr(Math.round(row.per1000Km2))} étudiants pour 1 000 km² — la hauteur ne le corrige pas`);
-  }
+  if (row.per1000Km2 > 0) details.push(m.density(fr(Math.round(row.per1000Km2))));
   return [row.name, ...details].join('\n');
 }
 
@@ -712,8 +745,8 @@ export function createSupDepartementOverlayEntry(row, position) {
     position,
     variant: 'label',
     title: prism.hasValue
-      ? `${row.name} · ${fr(prism.students)}`
-      : `${row.name} · non publié`,
+      ? messages().departement.ambient(row.name, fr(prism.students))
+      : messages().departement.ambientUnpublished(row.name),
     accent: prism.color || PRISM_NO_RATIO_COLOR,
     priority: Number(prism.students) || 0,
     collisionGroup: 'ambient-label',
@@ -900,7 +933,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
-    source.name = 'Enseignement supérieur — prismes départementaux';
+    source.name = messages().sourceName;
     source.show = _enabled;
     for (const entity of source.entities.values) {
       const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -956,14 +989,13 @@ function correctAerialClaim(legend) {
   if (!title?.blurb) return;
   // Both apostrophes, because the shared string uses the typewriter one today
   // and the repo's French prose uses the typographic one.
+  const m = messages().prism;
   const promise = Math.max(
-    title.blurb.indexOf('— c’est la couleur'),
-    title.blurb.indexOf("— c'est la couleur"),
+    title.blurb.indexOf(m.claimCut),
+    title.blurb.indexOf(m.claimCutPlain),
   );
   const kept = promise > 0 ? `${title.blurb.slice(0, promise).trimEnd()}.` : title.blurb;
-  title.blurb = `${kept} Sur cette couche la couleur ne corrige PAS ce biais : `
-    + 'elle porte la part du bac+4 et non une densité. Le rapport surfacique est écrit '
-    + 'en chiffres sur la fiche de chaque département (étudiants pour 1 000 km²).';
+  title.blurb = `${kept} ${m.correction}`;
 }
 
 /**
@@ -1225,7 +1257,7 @@ async function loadNational({ force = false } = {}) {
     await ensureDepartementShapes();
   } catch (error) {
     console.warn('[Data:Sup-FR] département polygons failed:', error?.message || error);
-    _error = 'département polygons unavailable';
+    _error = messages().error.shapes;
     _status = 'error';
     _loading = false;
     return;
@@ -1424,7 +1456,7 @@ function collectDetectableObjects(options = {}) {
     result.push({
       position: record.position,
       sourceId: record.id,
-      id: students > 0 ? `${students} étudiants` : supKindLabel(record.site?.kind),
+      id: students > 0 ? messages().row.detect(students) : supKindLabel(record.site?.kind),
       type: 'Campus',
       skipLabel: record.id === _selectedId,
     });
@@ -1443,25 +1475,24 @@ export function buildSupLoadingLabel({
   students = _studentsInView,
   national = _national,
 } = {}) {
+  const m = messages().row;
   if (regime === 'national') {
-    if (loading) return 'lecture du registre national...';
+    if (loading) return m.loading;
     if (status === 'error') return '';
     if (!national) return '';
-    const parts = [`${fr(national.studentsAssigned)} étudiants sur ${fr(national.painted)} départements`];
+    const parts = [m.national(fr(national.studentsAssigned), fr(national.painted))];
     // The prism's own blind spot, stated where the prism is read.
-    if (national.unassigned > 0) {
-      parts.push(`${fr(national.unassigned)} sites hors métropole non cartographiés`);
-    }
+    if (national.unassigned > 0) parts.push(m.offshore(fr(national.unassigned)));
     return parts.join(' · ');
   }
-  if (loading) return 'lecture du registre national...';
+  if (loading) return m.loading;
   if (status === 'error') return '';
-  if (!inView) return 'aucun établissement du supérieur dans cette vue';
-  const parts = [`${fr(count)} sites`];
-  if (students > 0) parts.push(`${fr(students)} étudiants`);
+  if (!inView) return m.empty;
+  const parts = [m.sites(fr(count))];
+  if (students > 0) parts.push(m.students(fr(students)));
   // The cap is above the whole register, so this can only fire on a malformed
   // pack — and if it ever does, it says so rather than drawing a short map.
-  if (inView > count) parts.push(`${fr(inView - count)} non tracés`);
+  if (inView > count) parts.push(m.undrawn(fr(inView - count)));
   return parts.join(' · ');
 }
 
@@ -1630,29 +1661,30 @@ const supFranceLayer = {
       for (const code of _depEntities.keys()) {
         if (!covered.has(code)) rows.push({ code });
       }
-      const tally = prismTally(rows, SUP_PRISM_SCALE);
-      const legend = prismLegend(SUP_PRISM_SCALE, tally);
+      // The scale NAMED in the reader's language: `choroplethPrism.js` frames
+      // a caller's variable names without translating them.
+      const scale = supPrismScale();
+      const tally = prismTally(rows, scale);
+      const legend = prismLegend(scale, tally);
       correctAerialClaim(legend);
+      const words = messages().legend;
       legend.push({
-        label: 'départements couverts',
+        label: words.covered,
         color: null,
         count: rows.length,
-        blurb: 'Un prisme par PARTIE dessinée : la Corse en lève deux, à la même hauteur, '
-          + 'parce que la hauteur est celle du département et non celle de la partie. '
-          + 'Deux prismes voisins ne s’additionnent jamais.',
+        blurb: words.coveredBlurb,
       });
       // A5, on the map rather than only under the toggle: the shortfall this
       // rollup cannot draw at all, because no metropolitan polygon can hold it.
       if (_national.unassigned > 0) {
         legend.push({
-          label: 'hors métropole — aucun prisme',
+          label: words.offshore,
           color: null,
           glyph: PRISM_NO_RATIO_GLYPH,
           count: _national.unassigned,
-          blurb: `${fr(_national.students - _national.studentsAssigned)} étudiants sur `
-            + `${fr(_national.students)} sont sur des sites que les 96 polygones métropolitains `
-            + 'ne peuvent pas contenir (La Réunion, Antilles, Guyane, Mayotte, Polynésie). '
-            + 'Ils sont comptés et jamais déplacés : le prisme le plus proche est à 7 000 km.',
+          blurb: words.offshoreBlurb(
+            fr(_national.students - _national.studentsAssigned), fr(_national.students),
+          ),
         });
       }
       // The drape notice is true only for the FLAT marks: a prism classifies
@@ -1675,7 +1707,8 @@ const supFranceLayer = {
           count: tally.get(kind),
         };
         // Absent rather than undefined: the painter tests the key's presence.
-        if (KIND_BLURBS[kind]) entry.blurb = KIND_BLURBS[kind];
+        const blurb = kindBlurb(kind);
+        if (blurb) entry.blurb = blurb;
         return entry;
       });
     return { chips: [], legend };
