@@ -1,3 +1,12 @@
+import messages from './frHydroFeed.i18n.js';
+
+/**
+ * The catalog's French, for the frozen tables below: this module also runs
+ * in the registry build script, which resolves no locale. What a reader
+ * sees comes from {@link hydroTechWords}, at draw time.
+ */
+const TECH = messages.definition;
+
 /**
  * French hydro register projection — the pure half of the Centrales hydro layer.
  *
@@ -143,42 +152,71 @@ export const PLACEMENT_TIERS = Object.freeze([
  * fil de l'eau 2 305, éclusée 177, lac 107, hydrolien fluvial 45,
  * pompage-turbinage 34, unpublished 60.
  */
+// i18n-ignore-start — the register's own five values, used as keys.
 export const HYDRO_TECHNOLOGIES = Object.freeze({
   "Fil de l'eau": Object.freeze({
-    key: 'run-of-river', label: "Fil de l'eau", color: '#4fc3f7',
-    blurb: 'elle turbine le débit qui se présente, sans rien mettre en réserve',
+    key: 'run-of-river', label: TECH.technologies["Fil de l'eau"].label.fr, color: '#4fc3f7',
+    blurb: TECH.technologies["Fil de l'eau"].blurb.fr,
   }),
   Eclusée: Object.freeze({
-    key: 'pondage', label: 'Éclusée', color: '#66d9a6',
-    blurb: 'sa retenue tient quelques heures à quelques jours de production',
+    key: 'pondage', label: TECH.technologies.Eclusée.label.fr, color: '#66d9a6',
+    blurb: TECH.technologies.Eclusée.blurb.fr,
   }),
   Lac: Object.freeze({
-    key: 'reservoir', label: 'Lac', color: '#c792ea',
-    blurb: 'l’eau est stockée des mois et turbinée quand la demande grimpe',
+    key: 'reservoir', label: TECH.technologies.Lac.label.fr, color: '#c792ea',
+    blurb: TECH.technologies.Lac.blurb.fr,
   }),
   'Pompage turbinage': Object.freeze({
-    key: 'pumped', label: 'Pompage-turbinage', color: '#ffd166',
+    key: 'pumped', label: TECH.technologies['Pompage turbinage'].label.fr, color: '#ffd166',
     // The acronym STEP was the whole blurb's first word and explains nothing
-    // to a reader who does not already know it. Spelled out once, here, where
-    // both the legend row and the card read it.
-    blurb: 'elle remonte l’eau dans un lac haut aux heures creuses, et la turbine à la pointe',
+    // to a reader who does not already know it. Spelled out once, in the
+    // catalog, where both the legend row and the card read it.
+    blurb: TECH.technologies['Pompage turbinage'].blurb.fr,
   }),
   'Hydrolien fluvial': Object.freeze({
-    key: 'instream', label: 'Hydrolien fluvial', color: '#7fd4c1',
-    blurb: 'une turbine immergée dans le courant, sans barrage ni conduite',
+    key: 'instream', label: TECH.technologies['Hydrolien fluvial'].label.fr, color: '#7fd4c1',
+    blurb: TECH.technologies['Hydrolien fluvial'].blurb.fr,
   }),
 });
+// i18n-ignore-end
+
+/**
+ * The two words a technology is drawn with, in the page's language, from the
+ * register's own value — or from the French label a bucket is keyed by.
+ *
+ * Both are accepted because the bucket keys of a roll-up are the FRENCH
+ * labels: they are written into `registry.json` by the build script and read
+ * back by tests, so they stay put while the words on screen move.
+ * @param {string|null|undefined} technology
+ * @returns {{label:string, blurb:string}|null}
+ */
+export function hydroTechWords(technology) {
+  const raw = String(technology ?? '');
+  const words = messages().technologies;
+  if (Object.hasOwn(words, raw)) return words[raw];
+  for (const [key, entry] of Object.entries(HYDRO_TECHNOLOGIES)) {
+    if (entry.label === raw) return words[key];
+  }
+  return null;
+}
 
 /** Technology order for the legend — largest installed fleet first. */
+// i18n-ignore-start — keys of the table above, as the register spells them.
 export const HYDRO_TECHNOLOGY_ORDER = Object.freeze([
   "Fil de l'eau", 'Eclusée', 'Lac', 'Pompage turbinage', 'Hydrolien fluvial',
 ]);
+// i18n-ignore-end
 
 /** Neutral hue for a row whose technology the register leaves blank or wrong. */
 export const HYDRO_UNKNOWN_COLOR = '#8fa3b8';
 
 /** Bucket label for rows whose technology this layer refuses to colour. */
-export const HYDRO_UNKNOWN_TECH_LABEL = 'Non publiée';
+export const HYDRO_UNKNOWN_TECH_LABEL = TECH.unpublished.fr;
+
+/** That bucket's name in the page's language. */
+export function hydroUnknownTechLabel() {
+  return messages().unpublished;
+}
 
 /**
  * The technology bucket a plant counts in, for legends and roll-ups.
