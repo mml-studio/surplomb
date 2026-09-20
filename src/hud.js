@@ -21,7 +21,16 @@
  */
 
 import * as Cesium from 'cesium';
-import { forward as toMGRS } from 'mgrs';
+// `mgrs` ships an ESM build with named exports for the bundler and a CommonJS
+// one for Node, and neither form of import works in both: the named import
+// Vite resolves is a SyntaxError under plain Node (a CJS package has no named
+// exports), and the default import Node accepts is missing from the ESM build.
+// A namespace import is the one that loads either way, and the fallback below
+// picks whichever half answered. Node matters here because
+// `src/i18n/importSafety.test.mjs` imports every catalogued module.
+import * as mgrsModule from 'mgrs';
+
+const mgrs = mgrsModule.default ?? mgrsModule;
 import { CITY_POIS } from './locations.js';
 import messages from './hud.i18n.js';
 import { composeLocalityTag } from './hudLocality.js';
@@ -342,11 +351,11 @@ export class IntelHUD {
     const lonDMS = this._toDMS(lonDeg, 'lon');
     let mgrsLabel = '---';
 
-    // MGRS. `toMGRS` throws on a camera outside the grid's latitude band, and
+    // MGRS. `mgrs.forward` throws on a camera outside the grid's latitude band, and
     // the readout says `---` there rather than going blank.
     try {
       // Format: 18SUJ23370716 → 18S UJ 2337 0716
-      mgrsLabel = this._formatMGRS(toMGRS([lonDeg, latDeg], 4)); // 4 = 10m precision
+      mgrsLabel = this._formatMGRS(mgrs.forward([lonDeg, latDeg], 4)); // 4 = 10m precision
     } catch {
       mgrsLabel = '---';
     }
