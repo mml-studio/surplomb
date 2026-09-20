@@ -28,9 +28,9 @@
  *      it to `localStorage` under {@link LOCALE_STORAGE_KEY}.
  *   3. `localStorage['gev:locale:v1']` — the reader's earlier choice.
  *   4. `navigator.languages` — French if the first French-or-English entry is
- *      French, English otherwise. OFF until the language switch ships
- *      ({@link LOCALE_AUTO_DETECT}): until a reader can switch back, guessing
- *      English for them would be a trap.
+ *      French, English otherwise. ON since the FR/EN switch shipped
+ *      ({@link LOCALE_AUTO_DETECT}): a reader who is guessed wrong has a
+ *      control to say so, and their choice outranks the guess for good.
  *   5. {@link DEFAULT_LOCALE}.
  *
  * {@link resolveLocale} is that order as a pure function. The inline copy in
@@ -63,11 +63,13 @@ export const LOCALE_QUERY_PARAM = 'lang';
 export const LOCALE_QA_GLOBAL = '__GEV_LOCALE__';
 
 /**
- * Whether the gate may guess from `navigator.languages`. False until the
- * FR/EN switch is on screen; the inline copy in `index.html` carries the same
- * value and `locale.test.mjs` fails if the two differ.
+ * Whether the gate may guess from `navigator.languages`. True since the FR/EN
+ * switch reached the corner of the globe: the guess is now undoable in one
+ * click, and the reader's answer is remembered and outranks it. The inline
+ * copy in `index.html` carries the same value and `locale.test.mjs` fails if
+ * the two differ.
  */
-export const LOCALE_AUTO_DETECT = false;
+export const LOCALE_AUTO_DETECT = true;
 
 /**
  * Put on `<html>` once the static markup has been translated. Until then an

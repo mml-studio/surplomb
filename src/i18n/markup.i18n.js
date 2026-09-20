@@ -50,6 +50,18 @@ export default defineMessages({
     stopFollow: { fr: 'Ne plus suivre', en: 'Stop following', note: 'Releases the object the camera is tracking.' },
     stopFollowTitle: { fr: 'Ne plus suivre cet objet', en: 'Stop following this object' },
   },
+  // The FR/EN switch names the language it goes TO, so a French page reads
+  // “EN / English” and an English page reads “FR / Français”. That is why the
+  // two languages of these leaves look swapped: they are.
+  localeSwitch: {
+    label: { fr: 'EN', en: 'FR', note: 'Two letters, the size of the icons beside it: the language this button switches to.' },
+    action: {
+      fr: 'English — passer en anglais',
+      en: 'Français — switch to French',
+      keep: ['Français'],
+      note: 'Each label names the other language IN that language, which is how a reader who does not read this page recognizes it.',
+    },
+  },
   status: {
     loading: {
       fr: 'CHARGEMENT DES DONNÉES EN DIRECT',

@@ -463,7 +463,7 @@ test('Cockpit hides the complete top-center globe action group', () => {
   );
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #reset-globe-view, #locale-switch\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
 });

@@ -95,7 +95,7 @@
     locale from that attribute (src/i18n/locale.js, which carries the rule and
     its reasons). Order: `window.__GEV_LOCALE__` (the QA fleet) > `?lang=`
     (remembered in localStorage) > `localStorage['gev:locale:v1']` >
-    `navigator.languages` (off while AUTO is false) > French.
+    `navigator.languages` (AUTO, on since the FR/EN switch shipped) > French.
 
     Inline and before the stylesheet for the reason the two gates above are:
     `style.css` hides the loading line of an English page until its markup is
@@ -107,7 +107,7 @@
     /* locale-gate */
     (function () {
       var KEY = 'gev:locale:v1';
-      var AUTO = false;
+      var AUTO = true;
       var pick = function (value) {
         var tag = typeof value === 'string' ? value.toLowerCase().split(/[-_]/)[0] : '';
         return tag === 'fr' || tag === 'en' ? tag : null;
@@ -564,6 +564,28 @@
             data-i18n-title="actions.stopFollowTitle" title="Ne plus suivre cet objet">
       <span class="material-symbols-outlined" aria-hidden="true">close</span>
     </button>
+    <!--
+      LA LANGUE, DANS LA COLONNE DES ACTIONS.
+
+      Un seul bouton, pas deux : la page a une langue, et ce bouton nomme
+      l'AUTRE. Sur une page française il dit « EN » et s'annonce « English » ;
+      l'applicateur de `src/i18n/markup.js` échange les deux valeurs sur une
+      page anglaise, où il dit « FR » et s'annonce « Français » — c'est
+      exactement la bascule que `markup.i18n.js` sait faire, sans une ligne de
+      JavaScript pour choisir le libellé.
+
+      Il vit ici et nulle part ailleurs parce que cette colonne est la seule
+      qui existe sur les deux coquilles : sur téléphone, `phoneSheet.js` y
+      pousse déjà le bouton de fond de carte, donc la langue arrive au même
+      endroit sans que la feuille basse ait à la connaître.
+
+      `src/localeSwitch.js` ne fait qu'une chose au clic : `switchLocale()`,
+      qui retient le choix, vide le hash de partage et recharge.
+    -->
+    <button id="locale-switch" type="button" lang="en"
+            data-i18n="localeSwitch.label" data-i18n-aria-label="localeSwitch.action"
+            data-i18n-title="localeSwitch.action"
+            aria-label="English — passer en anglais" title="English — passer en anglais">EN</button>
   </nav>
   <!--
     LES TROIS PUCES D'ÉTAT, DANS UN SEUL CONTENEUR.

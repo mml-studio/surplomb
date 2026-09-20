@@ -277,6 +277,7 @@ function bindCockpitLayers(dataManager) {
   ];
 }
 
+import { initLocaleSwitch } from './localeSwitch.js';
 import messages from './ui.i18n.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
@@ -2899,6 +2900,9 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initLocateButton();
     this._initTrackingReleaseButton();
+    // The FR/EN button: everything it says is in the markup, so all that is
+    // left here is the click (src/localeSwitch.js).
+    this._localeSwitch = initLocaleSwitch({ shareLink: this.shareLinkManager });
     this._initHUDToggle();
     this._initModels3dToggle();
     this._applyGlobalPostDefaults();
