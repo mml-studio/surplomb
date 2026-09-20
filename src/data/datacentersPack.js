@@ -1,3 +1,9 @@
+import { formatNumber } from '../i18n/format.js';
+import messages from './datacentersPack.i18n.js';
+
+/** The catalog's own copy, for the frozen table below. */
+const WORDS = messages.definition;
+
 /*
  * DATACENTERS PACK — what the bundled snapshots can honestly say.
  *
@@ -298,10 +304,9 @@ export function formatFootprint(areaM2) {
     return Math.round(value / magnitude) * magnitude;
   };
   if (area >= HECTARE_THRESHOLD_M2) {
-    const hectares = round2(area / 10_000);
-    return `${hectares.toLocaleString('fr-FR')} ha`;
+    return `${formatNumber(round2(area / 10_000))} ha`;
   }
-  return `${round2(area).toLocaleString('fr-FR')} m²`;
+  return `${formatNumber(round2(area))} m²`;
 }
 
 /**
@@ -362,7 +367,7 @@ export function formatPowerMw(megawatts) {
   const value = Number(megawatts);
   if (!Number.isFinite(value) || value <= 0) return '';
   const digits = value < 10 ? 1 : 0;
-  return `${value.toLocaleString('fr-FR', { maximumFractionDigits: digits })} MW`;
+  return `${formatNumber(value, { maximumFractionDigits: digits })} MW`;
 }
 
 /**
@@ -433,14 +438,18 @@ export function datacenterCardDetails(props, { areaM2 = 0 } = {}) {
   const footprint = datacenterFootprint(tags, areaM2);
   const levels = Number.parseInt(text(tags['building:levels']), 10);
   const height = Number.parseFloat(text(tags.height));
+  const m = messages();
   const fabric = [
     footprint
-      ? `${footprint.kind === 'building' ? 'emprise au sol' : 'emprise du site'} ≈ ${formatFootprint(footprint.areaM2)}`
+      ? m.card.footprint(
+        footprint.kind === 'building' ? m.card.buildingFootprint : m.card.siteFootprint,
+        formatFootprint(footprint.areaM2),
+      )
       : '',
     Number.isFinite(levels) && levels > 0
-      ? `${levels} niveau${levels > 1 ? 'x' : ''}`
+      ? m.card.levels(levels)
       : (Number.isFinite(height) && height > 0
-        ? `${height.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} m de haut`
+        ? m.card.height(formatNumber(height, { maximumFractionDigits: 1 }))
         : ''),
   ].filter(Boolean).join(' · ');
   if (fabric) lines.push(fabric);
@@ -453,7 +462,7 @@ export function datacenterCardDetails(props, { areaM2 = 0 } = {}) {
   // now get.
   const mappedYear = datacenterYear(tags.start_date);
   const year = mappedYear || datacenterYear(dcwatch?.startYear);
-  if (year) lines.push(`en service depuis ${year}`);
+  if (year) lines.push(m.card.inServiceSince(year));
 
   // ── 4. Who said so.
   //
@@ -466,12 +475,12 @@ export function datacenterCardDetails(props, { areaM2 = 0 } = {}) {
   // spelled out reaches 50 and comes back truncated mid-date, which is a worse
   // provenance line than no provenance line.
   const fromDcwatch = [
-    !mappedPower && power ? 'puissance' : '',
-    !mappedYear && year ? 'année' : '',
+    !mappedPower && power ? m.card.fieldPower : '',
+    !mappedYear && year ? m.card.fieldYear : '',
   ].filter(Boolean);
   if (fromDcwatch.length) {
     const release = dcwatch?.release ? ` ${dcwatch.release}` : '';
-    lines.push(`${fromDcwatch.join(', ')} : DCWatch${release}`);
+    lines.push(m.card.fromDcwatch(fromDcwatch.join(', '), release));
   }
 
   return lines;
@@ -573,44 +582,44 @@ export const DATACENTER_POINTLESS_PX = 9;
 export const DATACENTER_SURFACES = Object.freeze([
   Object.freeze({
     key: 'volume',
-    label: 'Volume bâti',
+    label: WORDS.surfaces.volume.label.fr,
     color: DATACENTER_HALL_COLOR,
     count: 461,
-    blurb: 'Emprise OSM extrudée à sa hauteur publiée — height en mètres, ou '
-      + 'building:levels × 5 m (médiane mesurée sur les 59 objets qui portent '
-      + 'les deux tags). 461 objets, 10,6 % du paquet.',
+    blurb: WORDS.surfaces.volume.blurb.fr,
   }),
   Object.freeze({
     key: 'slab',
-    label: 'Emprise seule',
+    label: WORDS.surfaces.slab.label.fr,
     color: DATACENTER_HALL_COLOR,
     count: 2739,
-    blurb: 'Emprise connue, hauteur non publiée : dessinée à plat, jamais '
-      + 'extrudée. 2 739 objets, 63 % du paquet — c’est la raison pour '
-      + 'laquelle aucune hauteur par défaut n’est inventée.',
+    blurb: WORDS.surfaces.slab.blurb.fr,
   }),
   Object.freeze({
     key: 'site',
-    label: 'Contour de site',
+    label: WORDS.surfaces.site.label.fr,
     color: DATACENTER_SITE_COLOR,
     count: 317,
-    blurb: 'Polygone sans tag building : une clôture ou un campus, pas un '
-      + 'hall — médiane 31 204 m² contre 5 008 m². Jamais extrudé, même '
-      + 'quand un mappeur y a posé une hauteur (5 cas).',
+    blurb: WORDS.surfaces.site.blurb.fr,
   }),
   Object.freeze({
     key: 'point',
-    label: 'Sans emprise',
+    label: WORDS.surfaces.point.label.fr,
     color: DATACENTER_HALL_COLOR,
     count: 1121,
-    blurb: 'Aucune surface publiée. Anneau creux et non disque plein, parce '
-      + 'qu’« absent » ne doit pas se lire « petit ». 1 121 objets, 24,2 % : '
-      + '834 nœuds OSM, plus 287 sites français que DCWatch situe et que '
-      + 'personne n’a jamais tracés.',
+    blurb: WORDS.surfaces.point.blurb.fr,
   }),
 ]);
 
 const SURFACE_BY_KEY = new Map(DATACENTER_SURFACES.map((entry) => [entry.key, entry]));
+
+/**
+ * What one surface class IS, in the page's language.
+ * @param {string|null|undefined} key A {@link DATACENTER_SURFACES} key.
+ * @returns {{label:string, blurb:string}|null}
+ */
+export function datacenterSurfaceWords(key) {
+  return messages().surfaces[String(key ?? '')] || null;
+}
 
 /**
  * Which of the four signs one feature draws.
