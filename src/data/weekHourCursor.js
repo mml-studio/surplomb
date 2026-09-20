@@ -77,13 +77,25 @@
  * Pure and module-scoped: no fetch, no DOM, no Cesium, node-testable.
  */
 
+import { weekdayName } from '../i18n/format.js';
+import messages from './weekHourCursor.i18n.js';
+
 /** Hours in a week. The unit every consumer folds down to. */
 export const WEEK_HOUR_SLOTS = 168;
 
-/** Day names, Monday-first, matching `IDFM_FREQ_DAYS` exactly. */
+/**
+ * Day names, Monday-first, matching `IDFM_FREQ_DAYS` exactly.
+ *
+ * A KEY, not a label: `weekHourToOperatingSlot` hands the string straight to
+ * `idfmFrequencyFeed`, whose published profile file names its seven columns
+ * with these exact words. What a reader sees is {@link weekHourLabel}, which
+ * names the day in the page's language.
+ */
+// i18n-ignore-start — COLUMN NAMES of the IDFM profile file, not words.
 export const WEEK_HOUR_DAYS = Object.freeze([
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ]);
+// i18n-ignore-end
 
 /**
  * The day a DAY-TYPE falls back to when nothing better is known.
@@ -322,10 +334,19 @@ export function decodeWeekHourParam(value) {
 
 /**
  * The cursor in words, for a tooltip or a row label. `mardi 08 h`.
+ *
+ * Named from the INSTANT, not from {@link WEEK_HOUR_DAYS}: that table is the
+ * IDFM column key and stays French wherever it goes, while the reader gets
+ * the day in the page's language. `weekdayName` counts from Sunday, this
+ * module from Monday, hence the `+ 1`.
+ *
  * @param {?{day:number, hour:number}} [cursor]
  * @returns {?string}
  */
 export function weekHourLabel(cursor = _cursor) {
   if (!isCursor(cursor)) return null;
-  return `${WEEK_HOUR_DAYS[cursor.day]} ${String(cursor.hour).padStart(2, '0')} h`;
+  return messages().cursor(
+    weekdayName((cursor.day + 1) % 7),
+    String(cursor.hour).padStart(2, '0'),
+  );
 }
