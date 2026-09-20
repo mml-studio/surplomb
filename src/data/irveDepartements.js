@@ -146,6 +146,7 @@ export const IRVE_SWEEP_FIELDS = Object.freeze([
   'consolidated_longitude',
   'puissance_nominale',
   'consolidated_is_lon_lat_correct',
+  // i18n-ignore-next-line — a column name.
   'consolidated_commune',
 ]);
 

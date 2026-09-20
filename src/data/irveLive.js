@@ -78,6 +78,8 @@
 
 import { irveSiteKey } from './irveFeed.js';
 import { QUALICHARGE_FRESH_MS } from './qualichargeDynamic.js';
+import { formatInteger } from '../i18n/format.js';
+import messages from './irveLive.i18n.js';
 
 /**
  * How far apart two published coordinates of ONE plug may be before the plug
@@ -255,16 +257,17 @@ export function irveLiveFromTuple(tuple) {
  */
 export function irveLiveLine(site, { at = null, now = Date.now() } = {}) {
   if (!site) return null;
+  const m = messages();
   const answered = site.free + site.busy + site.other + site.down;
   const age = Number.isFinite(at) ? Math.max(0, now - at) : null;
-  const when = age === null ? '' : ` · relevé ${irveLiveAgeLabel(age)}`;
+  const when = age === null ? '' : m.reading(irveLiveAgeLabel(age));
   if (!answered) {
     if (!site.mute) return null;
-    return `${site.mute} borne${site.mute > 1 ? 's' : ''} sans état publié depuis plus de 24 h`;
+    return m.allMute(site.mute);
   }
-  const parts = [`${site.free} libre${site.free > 1 ? 's' : ''} sur ${answered}`];
-  if (site.down) parts.push(`${site.down} hors service`);
-  if (site.mute) parts.push(`${site.mute} muette${site.mute > 1 ? 's' : ''}`);
+  const parts = [m.free(site.free, answered)];
+  if (site.down) parts.push(m.down(site.down));
+  if (site.mute) parts.push(m.mute(site.mute));
   return `${parts.join(' · ')}${when}`;
 }
 
@@ -279,10 +282,11 @@ export function irveLiveLine(site, { at = null, now = Date.now() } = {}) {
  * @returns {string}
  */
 export function irveLiveAgeLabel(ms) {
+  const m = messages().age;
   const minutes = Math.round(ms / 60000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 1) return m.now;
+  if (minutes < 60) return m.minutes(formatInteger(minutes));
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
-  return `il y a ${Math.round(hours / 24)} j`;
+  if (hours < 24) return m.hours(formatInteger(hours));
+  return m.days(formatInteger(Math.round(hours / 24)));
 }

@@ -233,8 +233,8 @@ import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { irveLiveFromTuple, irveLiveLine } from './irveLive.js';
 import {
   IRVE_BAND_KEYS,
-  IRVE_BAND_LABELS,
-  IRVE_CONNECTOR_LABELS,
+  irveBandWords,
+  irveConnectorLabel,
   IRVE_MAX_BOX_DEG,
   irveSiteKey,
 } from './irveFeed.js';
@@ -250,6 +250,8 @@ import {
 } from './irveMesh.js';
 import { IRVE_MARK_PUNCH_MIN_PX, irveMarkGlyph } from './irveMarkIcons.js';
 import { pickAt } from './pickAt.js';
+import { formatInteger, formatNumber } from '../i18n/format.js';
+import messages from './irveFrance.i18n.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const IRVE_FR_LAYER_ID = 'irve-fr';
@@ -472,6 +474,9 @@ export const IRVE_PRISM_DOMAIN_MAX = 12_000;
  * `choroplethPrism.js`'s own hint: the floor bites at 400 charge points and
  * only three départements of 96 are under it.
  */
+// i18n-ignore-start — `heightLabel` and `ratioLabel` are read by
+// `choroplethPrism`'s shared rows, which this layer does not publish: its key
+// is the power ladder below, and its card names both channels itself.
 export const IRVE_PRISM_SCALE = createPrismScale({
   id: IRVE_FR_LAYER_ID,
   domainMax: IRVE_PRISM_DOMAIN_MAX,
@@ -485,6 +490,7 @@ export const IRVE_PRISM_SCALE = createPrismScale({
   // Paris, 50 km for the fifth département down, 10 km for the first quartile.
   heightTicks: [10_000, 5_000, 1_000],
 });
+// i18n-ignore-end
 /**
  * Fill alpha of a FLAT footprint — the measured zeros and the unmeasured
  * départements, which are the only shapes still clamped to the ground.
@@ -575,15 +581,10 @@ export const IRVE_MARK_INK_BUDGET = 300 * 26 * 26;
 const IRVE_MARK_REFERENCE_CANVAS_PX2 = 1440 * 900;
 const SELECTED_MARK_BONUS_PX = 9;
 
-/** One-line explanations behind each power swatch. */
-const BAND_BLURBS = Object.freeze({
-  lente: 'Une charge de nuit.',
-  normale: 'Voirie et parking.',
-  accelere: 'Le temps d’une course.',
-  rapide: 'Aires d’autoroute.',
-  hpc: 'Jusqu’à 400 kW.',
-  inconnue: 'Mal publiée, jamais corrigée.',
-});
+/** One-line explanation behind one power swatch, in the page's language. */
+function bandBlurb(band) {
+  return messages().bandBlurbs[String(band ?? '')] || '';
+}
 
 /**
  * THE FILTER — G1's missing link, and the two implementations G2 forces.
@@ -617,11 +618,21 @@ const BAND_BLURBS = Object.freeze({
  * rather than believing it is complete.
  */
 export const IRVE_POWER_FLOORS = Object.freeze([
-  Object.freeze({ id: 'all', label: 'TOUT', band: null }),
+  Object.freeze({ id: 'all', band: null }),
   Object.freeze({ id: 'kw22', label: '> 22 kW', band: 'accelere' }),
   Object.freeze({ id: 'kw50', label: '> 50 kW', band: 'rapide' }),
   Object.freeze({ id: 'kw150', label: '> 150 kW', band: 'hpc' }),
 ]);
+/**
+ * A floor chip's label: the threshold reads the same in both languages, and
+ * only the word for "everything" is translated.
+ * @param {{id:string, label?:string}} floor
+ * @returns {string}
+ */
+export function irveFloorLabel(floor) {
+  return floor?.label || messages().chips.all;
+}
+
 /** Index into {@link IRVE_BAND_KEYS} a floor admits, or `-1` for no floor. */
 export function irveFloorBandIndex(floorId) {
   const floor = IRVE_POWER_FLOORS.find((entry) => entry.id === floorId);
@@ -769,9 +780,9 @@ export function irveBandColor(band) {
   return BAND_COLORS[band] || BAND_COLORS.inconnue;
 }
 
-/** Display label for a power band. */
+/** Display label for a power band, in the page's language. */
 export function irveBandLabel(band) {
-  return IRVE_BAND_LABELS[band] || 'Puissance inconnue';
+  return irveBandWords(band);
 }
 
 /**
@@ -1010,9 +1021,9 @@ function sitePosition(site) {
   return Cesium.Cartesian3.fromDegrees(site.lon, site.lat, height);
 }
 
-/** French thousands separator, matching the rest of the French packs. */
+/** Thousands separator, the reader's own. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(Number(value));
 }
 
 /**
@@ -1027,9 +1038,35 @@ function fr(value) {
  */
 export function irveFilingDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''));
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+  return match ? messages().day(match[1], match[2], match[3]) : null;
 }
 
+
+/**
+ * The register's enumerated values, labelled for a card. The VALUE stays what
+ * the file publishes — it is the key here, and the key on the record — and a
+ * value this build has never seen is shown as published.
+ * @param {string|null|undefined} value
+ * @returns {string}
+ */
+export function irveAccessLabel(value) {
+  return messages().access[String(value ?? '')] || String(value ?? '');
+}
+
+/** @param {string|null|undefined} value @returns {string} */
+export function irveImplantationLabel(value) {
+  return messages().implantation[String(value ?? '')] || String(value ?? '');
+}
+
+/** @param {string|null|undefined} value @returns {string} */
+export function irvePmrLabel(value) {
+  return messages().pmr[String(value ?? '')] || String(value ?? '');
+}
+
+/** A band's name without its kW range, lowercased, for a card's split line. */
+function bandWordOnly(band) {
+  return irveBandLabel(band).replace(/\s*\(.*\)$/, '').toLowerCase();
+}
 
 /**
  * Build the card copy for a selected site. Every line is a published value or
@@ -1040,46 +1077,44 @@ export function irveFilingDate(value) {
  */
 export function buildIrveSelectionLabel(record, live = null) {
   const site = record?.site || {};
+  const m = messages();
   const details = [];
-  const title = site.name || site.commune || 'Station de recharge';
+  const title = site.name || site.commune || m.card.fallbackTitle;
 
   const pdc = Number(site.pdcDistinct) || 0;
   const published = Number(site.pdcPublished) || 0;
-  details.push(`🔌 ${fr(pdc)} point${pdc === 1 ? '' : 's'} de charge`);
+  details.push(m.card.chargePoints(fr(pdc), pdc));
   // Naming both figures is the point: the layer is not claiming a truth the
   // file does not hold, it is reporting a file that says a thing twice.
   if (published > pdc) {
-    details.push(`↳ ${fr(published)} publiés — ${fr(published - pdc)} en double`);
+    details.push(m.card.duplicates(fr(published), fr(published - pdc)));
   }
 
   const bands = site.bands || {};
   const split = IRVE_BAND_KEYS
     .filter((band) => Number(bands[band]) > 0)
-    .map((band) => `${fr(bands[band])} × ${irveBandLabel(band).replace(/\s*\(.*\)$/, '').toLowerCase()}`);
+    .map((band) => m.card.bandSplit(fr(bands[band]), bandWordOnly(band)));
   if (split.length > 1) details.push(`⚡ ${split.join(' · ')}`);
-  else if (Number.isFinite(site.peakKW)) details.push(`⚡ ${fr(site.peakKW)} kW max`);
-  if (site.topBand === 'inconnue') {
-    details.push('⚠️ Puissance publiée hors gabarit — non convertie');
-  }
+  else if (Number.isFinite(site.peakKW)) details.push(m.card.peak(fr(site.peakKW)));
+  if (site.topBand === 'inconnue') details.push(m.card.outOfEnvelope);
 
   if (site.connectors?.length) {
-    details.push(`🔗 ${site.connectors.map((key) => IRVE_CONNECTOR_LABELS[key] || key).join(' · ')}`);
+    details.push(`🔗 ${site.connectors.map((key) => irveConnectorLabel(key) || key).join(' · ')}`);
   }
-  if (site.access) details.push(`🚧 ${site.access}`);
-  if (site.implantation) details.push(site.implantation);
-  if (site.pmr && site.pmr !== 'Accessibilité inconnue') details.push(`♿ ${site.pmr}`);
+  if (site.access) details.push(`🚧 ${irveAccessLabel(site.access)}`);
+  if (site.implantation) details.push(irveImplantationLabel(site.implantation));
+  // i18n-ignore-next-line — the register's own value for "not stated".
+  if (site.pmr && site.pmr !== 'Accessibilité inconnue') details.push(`♿ ${irvePmrLabel(site.pmr)}`);
   // Tri-state: an unstated tariff is not a free one.
-  if (site.free === true) details.push('💶 Gratuit');
-  else if (site.free === false) details.push('💶 Payant');
+  if (site.free === true) details.push(m.card.free);
+  else if (site.free === false) details.push(m.card.paid);
 
   if (site.operators?.length) details.push(`🏢 ${site.operators.join(' · ')}`);
   if (site.duplicateOperators?.length) {
-    details.push(`↳ publié aussi par ${site.duplicateOperators.join(' · ')} — fusionné`);
+    details.push(m.card.duplicateOperators(site.duplicateOperators.join(' · ')));
   }
   if (site.commune) details.push(`📍 ${site.commune}`);
-  if (!site.coordVerified) {
-    details.push('📍 Position non vérifiée contre une commune');
-  }
+  if (!site.coordVerified) details.push(m.card.unverifiedPosition);
 
   // The freshness of the DECLARATION, not of the poll: a tenth of this file
   // has not been touched since 2023 and the card has to be able to say so.
@@ -1087,23 +1122,23 @@ export function buildIrveSelectionLabel(record, live = null) {
     const from = irveFilingDate(site.updatedFrom) || site.updatedFrom;
     const to = irveFilingDate(site.updatedTo) || site.updatedTo;
     details.push(to && site.updatedTo !== site.updatedFrom
-      ? `🗓 déclaré ${from} → ${to}`
-      : `🗓 déclaré ${from}`);
+      ? m.card.filedRange(from, to)
+      : m.card.filed(from));
   }
   // F7 a AND A5, on the surface that carries the figure they decode. The beam
   // is a frozen SCREEN scale — not a world height — and past the domain it
   // stops counting; that used to be a 68-word paragraph and a four-rung ruler
   // in the key, read by everyone, useful to the reader who clicked a beam.
   details.push(pdc > IRVE_BEAM_PDC_DOMAIN
-    ? `▮ Le trait mesure les points de charge — au-delà de ${IRVE_BEAM_PDC_DOMAIN}, il plafonne`
-    : `▮ Le trait mesure les points de charge (${IRVE_BEAM_PDC_DOMAIN} au maximum)`);
-  details.push('Capacité installée — ce fichier ne publie pas la disponibilité');
+    ? m.card.beamCapped(fr(IRVE_BEAM_PDC_DOMAIN))
+    : m.card.beam(fr(IRVE_BEAM_PDC_DOMAIN)));
+  details.push(m.card.installedOnly);
   // …AND WHAT DOES. The line above is about the REGISTER and stays true; this
   // one is a second source answering a second question, so it names itself.
   // `irveLive.js` holds why the denominator is what QualiCharge spoke for and
   // not what is installed.
   const liveLine = irveLiveLine(live?.state, { at: live?.at ?? null });
-  if (liveLine) details.push(`⚡ QualiCharge — ${liveLine}`);
+  if (liveLine) details.push(m.card.live(liveLine));
 
   return [title, ...details].join('\n');
 }
@@ -1123,6 +1158,7 @@ export function buildIrveMeshLabel(record) {
   const site = record?.site || {};
   const pdc = Number(site.pdcDistinct) || 0;
   const cell = record?.cell || null;
+  const m = messages();
   const details = [];
   if (cell) {
     // THE CELL FIRST, because the cell is what the mark stands for. Every site
@@ -1130,16 +1166,16 @@ export function buildIrveMeshLabel(record) {
     // used to draw — and the mark's own figures follow, so a reader can see
     // which of the two numbers belongs to which.
     const km = irveMeshCellKm(cell.stepDeg, site.lat);
-    details.push(`▦ Cellule de ${cell.stepDeg}° — ${km.latKm.toFixed(1)} × ${km.lonKm.toFixed(1)} km`);
-    details.push(`🔌 ${fr(cell.pdc)} point${cell.pdc === 1 ? '' : 's'} de charge sur ${fr(cell.sites)} site${cell.sites === 1 ? '' : 's'}`);
-    details.push(`📍 Marque posée sur un site réel de la cellule — ${fr(pdc)} point${pdc === 1 ? '' : 's'} de charge, ${irveBandLabel(site.topBand).toLowerCase()}`);
+    details.push(m.mesh.cell(cell.stepDeg, km.latKm.toFixed(1), km.lonKm.toFixed(1)));
+    details.push(m.mesh.cellTotals(fr(cell.pdc), cell.pdc, fr(cell.sites), cell.sites));
+    details.push(m.mesh.representative(fr(pdc), pdc, irveBandLabel(site.topBand).toLowerCase()));
   } else {
-    details.push(`🔌 ${fr(pdc)} point${pdc === 1 ? '' : 's'} de charge`);
+    details.push(m.card.chargePoints(fr(pdc), pdc));
     details.push(`⚡ ${irveBandLabel(site.topBand)}`);
   }
-  details.push('Zoomez pour l\u2019opérateur, les prises et les conditions d\u2019accès');
-  details.push('Capacité installée — ce fichier ne publie pas la disponibilité');
-  return [cell ? 'Maillage des bornes' : 'Station de recharge', ...details].join('\n');
+  details.push(m.mesh.zoomForDetail);
+  details.push(m.card.installedOnly);
+  return [cell ? m.mesh.title : m.card.fallbackTitle, ...details].join('\n');
 }
 
 /**
@@ -1160,23 +1196,24 @@ export function buildIrveDepartementLabel(row) {
   // The two lines the two channels are read from, named as such: a reader who
   // wants the exact figure behind a height or behind a class finds it here,
   // which is what makes the volume's areal bias checkable rather than fatal.
-  details.push(`🔌 ${fr(pdc)} point${pdc === 1 ? '' : 's'} de charge — la hauteur du prisme`);
+  const m = messages();
+  details.push(m.departement.chargePoints(fr(pdc), pdc));
   if (Number(row.sites) > 0) {
-    details.push(`📍 ${fr(row.sites)} site${row.sites === 1 ? '' : 's'}`);
+    details.push(m.departement.sites(fr(row.sites), row.sites));
   }
   const bands = row.bands || {};
   const split = IRVE_BAND_KEYS
     .filter((band) => Number(bands[band]) > 0)
-    .map((band) => `${fr(bands[band])} × ${irveBandLabel(band).replace(/\s*\(.*\)$/, '').toLowerCase()}`);
+    .map((band) => m.card.bandSplit(fr(bands[band]), bandWordOnly(band)));
   if (split.length) details.push(`⚡ ${split.join(' · ')}`);
   if (Number.isFinite(row.per1000Km2)) {
-    details.push(`▦ ${row.per1000Km2.toLocaleString('fr-FR')} pour 1 000 km² — la couleur (${fr(row.areaKm2)} km²)`);
+    details.push(m.departement.density(fr(row.per1000Km2), fr(row.areaKm2)));
   } else {
     // Not a zero and not a low density: no rate could be computed at all, and
     // the prism says so with a striped body rather than a step of the ramp.
-    details.push('▦ densité non calculable — le prisme est hachuré, sa hauteur reste mesurée');
+    details.push(m.departement.noDensity);
   }
-  details.push('Capacité installée — ce fichier ne publie pas la disponibilité');
+  details.push(m.card.installedOnly);
   return [`${row.name} (${row.code})`, ...details].join('\n');
 }
 
@@ -1902,6 +1939,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
+    // i18n-ignore-next-line — an internal data-source handle, never drawn.
     source.name = 'Bornes IRVE — implantation par département';
     source.show = _enabled;
     // The polygons load lazily, on first entry to the national regime — long
@@ -2185,7 +2223,7 @@ async function loadNational({ force = false } = {}) {
     await ensureDepartementShapes();
   } catch (error) {
     console.warn('[Data:IRVE-FR] département polygons failed:', error?.message || error);
-    _error = 'département polygons unavailable';
+    _error = messages().errors.shapes;
     _status = 'error';
     _loading = false;
     return;
@@ -2654,45 +2692,46 @@ export function buildIrveLoadingLabel({
   meshPick = _meshPick,
   hidden = regime === 'mesh' ? _meshHidden : _siteHidden,
 } = {}) {
+  const m = messages().row;
   if (regime === 'mesh') {
-    if (loading) return 'lecture du maillage national\u2026';
+    if (loading) return m.loadingMesh;
     if (status === 'error') return '';
     if (!meshPick) return '';
-    if (!meshPick.inBox) return 'aucune borne publiée dans la vue';
+    if (!meshPick.inBox) return m.emptyView;
     // NAMING THE CRITERION, not just the ratio. « 960 of 3 747 sites — sampled
     // maillage » said how many were dropped and nothing about how, so the one
     // question it raised — *which* 960? — had no answer on screen. It also
     // said « sites » about marks that are lattice CELLS.
     const parts = meshPick.thinned
-      ? [`${fr(meshPick.picked.length)} cellules pour ${fr(meshPick.inBox)} sites en vue`]
-      : [`${fr(meshPick.picked.length)} cellules · ${fr(meshPick.inBox)} sites, tous comptés`];
-    if (meshPick.stepDeg) parts.push(`maille ${meshPick.stepDeg}° verrouillée sur le monde`);
-    if (hidden > 0) parts.push(`${fr(hidden)} masqués par le filtre`);
-    parts.push('zoomez pour le détail');
+      ? [m.cellsThinned(fr(meshPick.picked.length), fr(meshPick.inBox))]
+      : [m.cellsAll(fr(meshPick.picked.length), fr(meshPick.inBox))];
+    if (meshPick.stepDeg) parts.push(m.meshStep(meshPick.stepDeg));
+    if (hidden > 0) parts.push(m.hidden(fr(hidden)));
+    parts.push(m.zoomForDetail);
     return parts.join(' · ');
   }
   if (regime === 'national') {
-    if (loading) return 'lecture du registre national\u2026';
+    if (loading) return m.loadingNational;
     if (status === 'error') return '';
     if (!national) return '';
-    const parts = [`${fr(national.pdcAssigned ?? 0)} points de charge · ${national.painted ?? 0} départements`];
-    if (national.pdcUnassigned > 0) parts.push(`${fr(national.pdcUnassigned)} outre-mer non cartographiés`);
-    if (national.truncated || national.stalledStripes > 0) parts.push('balayage partiel');
-    if (national.stale) parts.push('en cache');
-    parts.push('zoomez pour les sites');
+    const parts = [m.nationalTotals(fr(national.pdcAssigned ?? 0), fr(national.painted ?? 0))];
+    if (national.pdcUnassigned > 0) parts.push(m.overseas(fr(national.pdcUnassigned)));
+    if (national.truncated || national.stalledStripes > 0) parts.push(m.partialSweep);
+    if (national.stale) parts.push(m.cached);
+    parts.push(m.zoomForSites);
     return parts.join(' · ');
   }
-  if (loading) return count ? 'rafraîchissement du registre\u2026' : 'lecture du registre IRVE\u2026';
-  if (status === 'empty') return 'aucune borne publiée ici';
+  if (loading) return count ? m.refreshing : m.loading;
+  if (status === 'empty') return m.empty;
   if (status !== 'ready' || !summary) return '';
 
-  const parts = [`${fr(summary.pdcDistinct ?? 0)} points de charge`];
+  const parts = [m.chargePoints(fr(summary.pdcDistinct ?? 0))];
   const duplicated = (summary.pdcPublished ?? 0) - (summary.pdcDistinct ?? 0);
-  if (duplicated > 0) parts.push(`${fr(duplicated)} doublons fusionnés`);
-  if (summary.pdcWithheld > 0) parts.push(`${fr(summary.pdcWithheld)} mal placés écartés`);
-  if (hidden > 0) parts.push(`${fr(hidden)} sites masqués par le filtre`);
-  if (summary.truncated) parts.push('écrêté');
-  if (summary.stale) parts.push('en cache');
+  if (duplicated > 0) parts.push(m.merged(fr(duplicated)));
+  if (summary.pdcWithheld > 0) parts.push(m.misplaced(fr(summary.pdcWithheld)));
+  if (hidden > 0) parts.push(m.hiddenSites(fr(hidden)));
+  if (summary.truncated) parts.push(m.capped);
+  if (summary.stale) parts.push(m.cached);
   return parts.join(' · ');
 }
 
@@ -2727,6 +2766,7 @@ export function irveSiteReadout(record) {
   return {
     id: site.id,
     kind: mesh ? 'charge-point-cell' : 'charge-point-site',
+    // i18n-ignore-next-line — a machine value for the analyst engine, not a label.
     detail: mesh ? 'cell-aggregate' : 'full',
     // A maillage mark IS a lattice cell, and a spoken answer that called it a
     // station would put a car park's name on a 28 km square. The complete
@@ -2741,11 +2781,11 @@ export function irveSiteReadout(record) {
     chargePoints: num(site.pdcDistinct),
     chargePointsPublished: num(site.pdcPublished),
     peakKW: mesh ? null : num(site.peakKW),
-    powerBand: IRVE_BAND_LABELS[site.topBand] || null,
+    powerBand: site.topBand ? irveBandLabel(site.topBand) : null,
     operators: mesh || !Array.isArray(site.operators) ? null : site.operators.slice(0, 4),
     connectors: mesh || !Array.isArray(site.connectors)
       ? null
-      : site.connectors.map((key) => IRVE_CONNECTOR_LABELS[key] || key),
+      : site.connectors.map((key) => irveConnectorLabel(key) || key),
     access: mesh ? null : (site.access || null),
     freeToUse: mesh ? null : (site.free ?? null),
     updatedTo: mesh ? null : (site.updatedTo || null),
@@ -2810,14 +2850,15 @@ export function irveSiteReadout(record) {
 /** Chips for the power floor — G1's filter, on the row strip. */
 function irvePowerChips() {
   if (_regime === 'national') return [];
+  const m = messages().chips;
   return IRVE_POWER_FLOORS.map((floor) => ({
     id: floor.id,
-    label: floor.label,
+    label: irveFloorLabel(floor),
     active: _floorId === floor.id,
     state: _floorId === floor.id ? 'active' : 'idle',
     title: floor.band
-      ? `Ne garder que les sites dont la charge la plus rapide dépasse ${floor.label.replace('> ', '')}`
-      : 'Tout le registre, y compris les puissances inconnues',
+      ? m.floorTitle(String(floor.label).replace('> ', ''))
+      : m.allTitle,
     params: { powerFloor: floor.id },
   }));
 }
@@ -2877,7 +2918,7 @@ function irveBandLegend() {
         // into the same plain dot and take the shape channel away.
         glyph: irveMarkImage(band, IRVE_MARK_SPARSE_PX, true),
         count,
-        blurb: BAND_BLURBS[band],
+        blurb: bandBlurb(band),
       });
       continue;
     }
@@ -2886,7 +2927,7 @@ function irveBandLegend() {
       color: irveBandColor(band),
       glyph: irveMarkImage(band, IRVE_MARK_SPARSE_PX, true),
       count,
-      blurb: BAND_BLURBS[band],
+      blurb: bandBlurb(band),
     });
   }
 
@@ -2896,7 +2937,7 @@ function irveBandLegend() {
   // says how many marks the floor took away.
   if (legend.length) {
     legend.unshift({
-      label: mesh ? 'Vitesse de charge dominante' : 'Vitesse de charge',
+      label: mesh ? messages().legend.headingMesh : messages().legend.heading,
       color: null,
       // A caption, not a class: no swatch, or the empty slot in front of it
       // reads as a seventh band — and as the same hollow disc the refused
@@ -2919,18 +2960,20 @@ function irveBandLegend() {
  * coordinate — is on the card of the mark it describes.
  */
 function irveBandLegendNote(mesh) {
+  const m = messages().legend;
   const parts = [];
   const hidden = mesh ? _meshHidden : _siteHidden;
   if (mesh && _meshPick) {
-    parts.push(`${fr(_meshPick.picked.length)} cellule${_meshPick.picked.length === 1 ? '' : 's'} `
-      + `pour ${fr(_meshPick.inBox)} site${_meshPick.inBox === 1 ? '' : 's'} en vue.`);
+    parts.push(m.cellsInView(
+      fr(_meshPick.picked.length), _meshPick.picked.length,
+      fr(_meshPick.inBox), _meshPick.inBox,
+    ));
   }
   if (hidden > 0) {
     // WHY SLOWER CLASSES SURVIVE A HIGH FLOOR, said once rather than left to
     // look like a bug: the floor keeps a SITE by its fastest charging, and a
     // motorway hub with four 300 kW bays also publishes its 22 kW ones.
-    parts.push(`${fr(hidden)} site${hidden === 1 ? '' : 's'} masqué${hidden === 1 ? '' : 's'} `
-      + 'par le filtre — un site retenu compte aussi ses bornes lentes.');
+    parts.push(m.hiddenByFilter(fr(hidden), hidden));
   }
   return parts.join(' ');
 }
