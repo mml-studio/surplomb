@@ -544,8 +544,10 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   assert.match(a, /data-first-run-chip="Vieux-Port, Marseille"/);
   assert.match(a, /data-first-run-look-around/);
   for (const template of [a, b]) {
-    assert.match(template, /<h2 id="first-run-title">/);
-    assert.match(template, /<p id="first-run-description">/);
+    // The card is labelled by these two ids; they also carry a `data-i18n`
+    // key now, so the attribute list is open-ended.
+    assert.match(template, /<h2 id="first-run-title"[^>]*>/);
+    assert.match(template, /<p id="first-run-description"[^>]*>/);
   }
 
   // C: its own element, never the card.

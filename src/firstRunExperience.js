@@ -30,6 +30,7 @@
 
 import { mountVariantA, mountVariantB } from './firstRunVariants.js';
 import { initFirstRunHint } from './firstRunHint.js';
+import messages from './firstRunExperience.i18n.js';
 
 /** Durable suppression. Written by every close since 2026-09-17. */
 export const FIRST_RUN_STORAGE_KEY = 'gev:first-run-mission:v1';
@@ -480,7 +481,8 @@ export function initFirstRunExperience({
     }
   };
 
-  const setBusy = (next, busyText = 'Un instant…') => {
+  const setBusy = (next, busyText = null) => {
+    const text = busyText ?? messages().busy;
     busy = next;
     root.dataset.state = next ? 'loading' : 'ready';
     root.setAttribute('aria-busy', String(next));
@@ -492,7 +494,7 @@ export function initFirstRunExperience({
     if (!status) return;
     if (next) {
       delete status.dataset.sticky;
-      status.textContent = busyText;
+      status.textContent = text;
     } else if (status.dataset.sticky !== 'true') {
       status.textContent = defaultStatus;
     }

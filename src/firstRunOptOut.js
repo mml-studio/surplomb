@@ -12,6 +12,8 @@
 // Kept apart from src/firstRunExperience.js on purpose: the privacy page loads
 // this and nothing of the globe.
 
+import messages from './firstRunOptOut.i18n.js';
+
 export const FIRST_RUN_OPTOUT_KEY = 'gev:first-run-optout:v1';
 
 /** Resolve localStorage inside a try: Safari's private-mode getter throws. */
@@ -69,20 +71,17 @@ export function wireFirstRunOptOut(doc = globalThis.document, { storage, nav = g
   const paint = (note = '') => {
     const byGpc = nav?.globalPrivacyControl === true;
     const refused = firstRunMeasureRefused({ storage, nav });
-    button.textContent = refused ? 'Accepter d’être mesuré' : 'Ne pas être mesuré';
+    const m = messages();
+    button.textContent = refused ? m.accept : m.refuse;
     button.setAttribute('aria-pressed', String(refused));
     button.hidden = byGpc;
     if (!status) return;
-    status.textContent = note || (byGpc
-      ? 'Votre navigateur envoie le signal Global Privacy Control : il n’est pas mesuré.'
-      : refused
-        ? 'Ce navigateur n’est pas mesuré.'
-        : 'Ce navigateur peut être mesuré.');
+    status.textContent = note || (byGpc ? m.gpc : refused ? m.refused : m.measured);
   };
   button.addEventListener('click', () => {
     const next = !firstRunMeasureRefused({ storage, nav });
     const kept = setFirstRunMeasureRefused(next, storage);
-    paint(kept ? '' : 'Ce navigateur refuse d’enregistrer ce choix.');
+    paint(kept ? '' : messages().notStored);
   });
   paint();
   return true;

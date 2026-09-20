@@ -17,6 +17,7 @@ import {
   sanitizeFirstRunReport,
 } from './firstRunAb.js';
 import { FIRST_RUN_VARIANT_KEY } from './firstRunExperience.js';
+import { useTestLocale } from './i18n/testing.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 8, 17, 12, 0, 0);
@@ -319,5 +320,55 @@ test('the kind pattern is exactly the contract', () => {
   }
   for (const kind of ['tile', 'tile:salesX', 'Address', 'address ', '12 rue de la Paix', 'tile.sales']) {
     assert.doesNotMatch(kind, FIRST_RUN_KIND_RE);
+  }
+});
+
+// ── A reader who is not reading French is not in the test ────────────────────
+//
+// The three cards were written, worded and argued in French. Measuring an
+// English reader against them would attribute to a variant what is really the
+// distance between a reader and a card nobody wrote for them.
+
+test('an English page shows A, measures nothing, and never writes a draw', (t) => {
+  useTestLocale('en', t);
+  const storage = memoryStorage();
+  const result = assignFirstRunVariant({ experiment, location: plain, storage, random: () => 0.5, now: NOW });
+  assert.deepEqual(result, { variant: 'A', forced: false, telemetry: false, newVisitor: false, visitorId: null });
+  assert.equal(storage.values.size, 0, 'nothing is stored for a visitor who is not in the test');
+});
+
+test('an English page leaves an existing draw exactly as it found it', (t) => {
+  const storage = memoryStorage({ [FIRST_RUN_VARIANT_KEY]: record({ variant: 'B' }) });
+  const before = storage.values.get(FIRST_RUN_VARIANT_KEY);
+  const restore = useTestLocale('en');
+  const english = assignFirstRunVariant({ experiment, location: plain, storage, now: NOW });
+  restore();
+  assert.equal(english.variant, 'A');
+  assert.equal(english.telemetry, false);
+  assert.equal(storage.values.get(FIRST_RUN_VARIANT_KEY), before, 'byte for byte the record that was there');
+
+  // Back in French, the same browser resumes its own draw — same group, same
+  // id, not a re-roll.
+  const french = assignFirstRunVariant({ experiment, location: plain, storage, now: NOW });
+  assert.equal(french.variant, 'B');
+  assert.equal(french.telemetry, true);
+  assert.equal(french.visitorId, 'abcdefghij012345');
+  void t;
+});
+
+test('an English page may still be forced to a card, for support and demos, unmeasured', (t) => {
+  useTestLocale('en', t);
+  const storage = memoryStorage();
+  const forced = assignFirstRunVariant({ experiment, location: { search: '?welcome=c' }, storage, now: NOW });
+  assert.deepEqual(forced, { variant: 'C', forced: true, telemetry: false, newVisitor: false, visitorId: null });
+  assert.equal(storage.values.size, 0);
+});
+
+test('nothing in a report says which language the reader was in', () => {
+  // confidentialite.html promises the language is never sent. The exclusion
+  // above is computed from `<html lang>` at draw time and stored nowhere, so
+  // the field list is the proof.
+  for (const field of [...FIRST_RUN_REPORT_FIELDS, ...FIRST_RUN_EVENT_FIELDS]) {
+    assert.doesNotMatch(field, /lang|locale/i, `${field} would tell the server the reader's language`);
   }
 });
