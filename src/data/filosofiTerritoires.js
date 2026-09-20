@@ -2,19 +2,21 @@ import * as Cesium from 'cesium';
 import { governorRequestRender } from '../renderGovernor.js';
 import {
   TERRITORY_DISC_PX,
-  TERRITORY_LEVELS,
-  TERRITORY_METRICS,
   TERRITORY_RAMPS,
   TERRITORY_RAMP_COLORS,
   TERRITORY_RAMP_SAMPLE,
-  TERRITORY_SCOPE,
   TERRITORY_SIZE_BREAKS,
   TERRITORY_VINTAGE,
   summarizeTerritories,
   territoryBand,
   territoryColor,
   territoryDiscPx,
+  territoryLevel,
+  territoryMetrics,
+  territoryScope,
 } from './filosofiTerritoiresFeed.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './filosofiTerritoires.i18n.js';
 
 /**
  * The national view: one disc per département or région, drawn in screen space.
@@ -205,12 +207,10 @@ export function fillTerritoryCollection(collection, records, metric) {
   return drawn;
 }
 
-const _fr = new Intl.NumberFormat('fr-FR');
-
 /** @param {?number} value @param {number} [digits] @returns {string} */
 function num(value, digits = 0) {
   if (!Number.isFinite(value)) return '—';
-  return _fr.format(digits ? Number(value.toFixed(digits)) : Math.round(value));
+  return formatNumber(digits ? Number(value.toFixed(digits)) : Math.round(value));
 }
 
 /**
@@ -228,24 +228,26 @@ function num(value, digits = 0) {
  */
 export function createTerritorySelectedOverlayEntry(record, metric) {
   if (!record?.id) return null;
-  const levelLabel = record.level === 'REG' ? 'Région' : 'Département';
+  const m = messages().card;
+  const levelLabel = record.level === 'REG' ? m.region : m.departement;
   const details = [];
 
-  details.push(`${num(record.population)} habitants (recensement ${record.populationYear ?? TERRITORY_VINTAGE.population})`);
+  details.push(m.population(
+    num(record.population), record.populationYear ?? TERRITORY_VINTAGE.population,
+  ));
   details.push(Number.isFinite(record.niveau)
-    ? `Niveau de vie MÉDIAN ${num(record.niveau)} €/an par personne (Filosofi ${record.filosofiYear ?? TERRITORY_VINTAGE.filosofi})`
-    : 'Niveau de vie non publié pour ce territoire');
-  if (Number.isFinite(record.pauvrete)) {
-    details.push(`${num(record.pauvrete, 1)} % des PERSONNES sous le seuil de pauvreté`);
-  }
+    ? m.standardOfLiving(num(record.niveau), record.filosofiYear ?? TERRITORY_VINTAGE.filosofi)
+    : m.noStandardOfLiving);
+  if (Number.isFinite(record.pauvrete)) details.push(m.poverty(num(record.pauvrete, 1)));
   if (Number.isFinite(record.d1) && Number.isFinite(record.d9)) {
-    details.push(`D1 ${num(record.d1)} € · D9 ${num(record.d9)} €`
-      + `${Number.isFinite(record.interdecile) ? ` · rapport ${num(record.interdecile, 1)}` : ''}`);
+    details.push(m.deciles(
+      num(record.d1), num(record.d9),
+      Number.isFinite(record.interdecile) ? m.interdecile(num(record.interdecile, 1)) : '',
+    ));
   }
-  if (Number.isFinite(record.gini)) details.push(`Indice de Gini ${num(record.gini, 3)}`);
+  if (Number.isFinite(record.gini)) details.push(m.gini(num(record.gini, 3)));
   if (Number.isFinite(record.salaire)) {
-    details.push(`Salaire net privé ${num(record.salaire)} €/mois en EQTP (${record.salaireYear ?? TERRITORY_VINTAGE.wages})`
-      + ' — avant impôts et prestations, hors fonction publique');
+    details.push(m.wage(num(record.salaire), record.salaireYear ?? TERRITORY_VINTAGE.wages));
   }
 
   // The line that stops the two regimes being read as one dataset. Never
@@ -255,12 +257,9 @@ export function createTerritorySelectedOverlayEntry(record, metric) {
   // relay is on 2019, and a hard-coded year would caption the map wrongly the
   // moment that happened. It did, on staging, before this line read it.
   const carroyageVintage = record.carroyageVintage ?? TERRITORY_VINTAGE.carroyage;
-  details.push(`Agrégat ${levelLabel.toLowerCase()} — au carreau, le calque montre une MOYENNE`
-    + ` par carreau de 200 m, millésime ${carroyageVintage}`);
-  if (record.anchorFromCoverageBox) {
-    details.push('Repère posé au centre de la zone de couverture : ce territoire n’a pas de contour embarqué');
-  }
-  details.push(`Aire du disque = habitants, couleur = ${metric.label.toLowerCase()}`);
+  details.push(m.aggregate(levelLabel.toLowerCase(), carroyageVintage));
+  if (record.anchorFromCoverageBox) details.push(m.anchorGuessed);
+  details.push(m.channels(metric.label.toLowerCase()));
 
   return {
     id: String(record.id),
@@ -271,7 +270,7 @@ export function createTerritorySelectedOverlayEntry(record, metric) {
     paintLane: 'selected',
     collisionGroup: 'ambient-card',
     priority: Number.MAX_SAFE_INTEGER,
-    title: `${record.nom} (${record.code})`,
+    title: m.title(record.nom, record.code),
     details,
     accent: SELECTED_COLOR,
     interactive: false,
@@ -328,42 +327,41 @@ export function territoryLegend(metric, records = [], level = 'DEP') {
     if (band < 0) unknown += 1;
     else counts[band] += 1;
   }
-  const suffix = metric.unit.startsWith('%') ? ' %' : '';
+  const m = messages().legend;
+  const suffix = metric.unit.startsWith('%') ? m.percentSuffix : '';
   const colors = metric.reversed ? [...TERRITORY_RAMP_COLORS].reverse() : TERRITORY_RAMP_COLORS;
   const legend = colors.map((color, index) => {
     const low = index === 0 ? null : breaks?.[index - 1];
     const high = index < (breaks?.length ?? 0) ? breaks[index] : null;
     const label = low === null || low === undefined
-      ? `< ${_fr.format(high)}${suffix}`
+      ? m.below(num(high), suffix)
       : high === null || high === undefined
-        ? `≥ ${_fr.format(low)}${suffix}`
-        : `${_fr.format(low)} – ${_fr.format(high)}${suffix}`;
+        ? m.above(num(low), suffix)
+        : m.between(num(low), num(high), suffix);
     return {
       label,
       color,
       count: counts[index],
-      blurb: `${metric.unit} — ${metric.label}, millésime ${metric.year}.`
-        + ` Paliers mesurés sur les ${TERRITORY_RAMP_SAMPLE.territories} départements.`,
+      blurb: m.classBlurb(metric.unit, metric.label, metric.year, TERRITORY_RAMP_SAMPLE.territories),
     };
   });
   if (unknown > 0) {
     legend.push({
-      label: 'Non publié',
+      label: m.unpublished,
       color: '#4a5568',
       count: unknown,
-      blurb: `Le territoire existe mais l’indicateur n’y est pas diffusé (${TERRITORY_SCOPE}).`,
+      blurb: m.unpublishedBlurb(territoryScope()),
     });
   }
   legend.push({
-    label: 'Aire = habitants',
+    label: m.area,
     color: SHAPE_LEGEND_TINT,
     glyph: SIZE_GLYPH,
     count: Math.round(people),
-    blurb: `Six tailles, sur les quantiles nationaux de population par ${
-      level === 'REG' ? 'région' : 'département'} : `
-      + `${(TERRITORY_SIZE_BREAKS[level] || TERRITORY_SIZE_BREAKS.DEP).map((b) => _fr.format(b)).join(' · ')}`
-      + ` habitants. Le disque garde sa taille à l’écran quel que soit le zoom :`
-      + ` un territoire est un agrégat posé sur un point, pas une étendue.`,
+    blurb: m.sizes(
+      level === 'REG' ? m.levelRegion : m.levelDepartement,
+      (TERRITORY_SIZE_BREAKS[level] || TERRITORY_SIZE_BREAKS.DEP).map((b) => num(b)).join(' · '),
+    ),
   });
   return legend;
 }
@@ -374,12 +372,13 @@ export function territoryLegend(metric, records = [], level = 'DEP') {
  * @returns {Array<object>}
  */
 export function territoryChips(active) {
-  return TERRITORY_METRICS.map((metric) => ({
+  const chipTitle = messages().chipTitle;
+  return territoryMetrics().map((metric) => ({
     id: metric.id,
     label: metric.short,
     active: active?.id === metric.id,
     state: active?.id === metric.id ? 'active' : 'idle',
-    title: `${metric.label} — ${metric.blurb} (${metric.unit}, ${metric.year})`,
+    title: chipTitle(metric.label, metric.blurb, metric.unit, metric.year),
     params: { metric: metric.id },
   }));
 }
@@ -395,8 +394,8 @@ export function territoryStats(records, level) {
   return {
     ...summary,
     level,
-    levelLabel: (TERRITORY_LEVELS[level] || TERRITORY_LEVELS.DEP).label,
-    scope: TERRITORY_SCOPE,
+    levelLabel: territoryLevel(level).label,
+    scope: territoryScope(),
     vintage: TERRITORY_VINTAGE,
   };
 }
