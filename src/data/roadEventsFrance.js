@@ -10,6 +10,13 @@ import {
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { roadEventGlyph, roadEventMaskGlyph } from './roadEventGlyphs.js';
 import { pickAt } from './pickAt.js';
+import { formatDate, formatDateTime, formatTime } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, {
+  ROAD_EVENT_DIRECTION_LABELS,
+  ROAD_EVENT_SEVERITY_LABELS,
+  ROAD_EVENT_SUBTYPES,
+} from './roadEventsFrance.i18n.js';
 
 /**
  * Événements routiers (FR) — what the road operators themselves have declared.
@@ -120,39 +127,22 @@ export const ROAD_EVENT_INK = '#ffe9b8';
  * `priority` stays and is untouched. It orders the draw, the ambient-label
  * cohort and the legend; none of that is a visual channel.
  */
+const category = (id, priority) => Object.freeze({
+  id,
+  priority,
+  get label() { return messages().categories[id].label; },
+  get blurb() { return messages().categories[id].blurb; },
+});
+
 export const ROAD_EVENT_CATEGORIES = Object.freeze({
-  accident: Object.freeze({
-    id: 'accident', label: 'Accident', priority: 8,
-    blurb: 'collision déclarée par l’exploitant',
-  }),
-  bouchon: Object.freeze({
-    id: 'bouchon', label: 'Bouchon', priority: 7,
-    blurb: 'trafic anormal constaté',
-  }),
-  fermeture: Object.freeze({
-    id: 'fermeture', label: 'Fermeture', priority: 6,
-    blurb: 'route ou chaussée fermée',
-  }),
-  obstacle: Object.freeze({
-    id: 'obstacle', label: 'Obstacle', priority: 5,
-    blurb: 'obstacle, véhicule ou chaussée endommagée',
-  }),
-  intemperie: Object.freeze({
-    id: 'intemperie', label: 'Intempérie', priority: 4,
-    blurb: 'conditions météo affectant la route',
-  }),
-  travaux: Object.freeze({
-    id: 'travaux', label: 'Travaux', priority: 3,
-    blurb: 'chantier en cours ou programmé',
-  }),
-  restriction: Object.freeze({
-    id: 'restriction', label: 'Restriction', priority: 2,
-    blurb: 'limitation, alternat, voie neutralisée',
-  }),
-  deviation: Object.freeze({
-    id: 'deviation', label: 'Déviation', priority: 1,
-    blurb: 'itinéraire de déviation ou bretelle fermée',
-  }),
+  accident: category('accident', 8),
+  bouchon: category('bouchon', 7),
+  fermeture: category('fermeture', 6),
+  obstacle: category('obstacle', 5),
+  intemperie: category('intemperie', 4),
+  travaux: category('travaux', 3),
+  restriction: category('restriction', 2),
+  deviation: category('deviation', 1),
 });
 
 /**
@@ -165,10 +155,7 @@ export const ROAD_EVENT_CATEGORIES = Object.freeze({
  * the projection can emit, and `roadEventLegend` appends it when it has a
  * count, the same way the sensor layer's no-data band works.
  */
-export const ROAD_EVENT_UNKNOWN_CATEGORY = Object.freeze({
-  id: 'inconnu', label: 'Non classé', priority: 0,
-  blurb: 'code d’événement inconnu de cette version',
-});
+export const ROAD_EVENT_UNKNOWN_CATEGORY = category('inconnu', 0);
 
 /**
  * The one sentence this block owes a reader: who says it, and how often.
@@ -182,9 +169,15 @@ export const ROAD_EVENT_UNKNOWN_CATEGORY = Object.freeze({
  * aggregate upstream is republished hourly, so a shorter poll would not buy a
  * fresher event. The number is read from the constant so the sentence cannot
  * outlive a change to it.
+ *
+ * A function, not a constant: the sentence is composed when the key is drawn,
+ * in the language the page is in.
+ *
+ * @returns {string}
  */
-export const ROAD_EVENT_LEGEND_NOTE = 'publié par Bison Futé et les DIR, relu toutes les '
-  + `${Math.round(UPDATE_INTERVAL_MS / 60_000)} min`;
+export function roadEventLegendNote() {
+  return messages().legendNote(Math.round(UPDATE_INTERVAL_MS / 60_000));
+}
 
 /**
  * Resolve a served category to its presentation.
@@ -196,100 +189,71 @@ export function roadEventCategory(id) {
 }
 
 /**
- * DATEX II subtype → the French an operator would say.
+ * DATEX II subtype → the words an operator would say, in the page's language.
  *
- * Every value here was observed in the live feed on 2026-08-31; the rest of the
- * DATEX II enumerations are deliberately absent. An unknown code is shown AS
- * the code rather than silently dropped: "roadClosed" tells a reader something,
- * and an empty line tells them nothing.
+ * Every value in `ROAD_EVENT_SUBTYPES` was observed in the live feed on
+ * 2026-08-31; the rest of the DATEX II enumerations are deliberately absent.
+ *
+ * @param {unknown} code Raw `subtype` from the feed.
+ * @returns {?string} The words, the code itself when unknown, null when absent.
  */
-export const ROAD_EVENT_SUBTYPE_LABELS = Object.freeze({
-  // Accident / obstruction
-  accident: 'accident',
-  brokenDownVehicle: 'véhicule en panne',
-  abandonedVehicle: 'véhicule abandonné',
-  objectOnTheRoad: 'objet sur la chaussée',
-  obstructionOnTheRoad: 'obstacle sur la chaussée',
-  incident: 'incident',
-  rockfalls: 'chutes de pierres',
-  subsidence: 'affaissement de chaussée',
-  fallenTrees: 'chute d’arbres',
-  damagedRoadSurface: 'chaussée dégradée',
-  // Traffic
-  queuingTraffic: 'file d’attente',
-  slowTraffic: 'trafic ralenti',
-  stationaryTraffic: 'trafic à l’arrêt',
-  // Weather
-  snowOnTheRoad: 'neige sur la chaussée',
-  iceOnTheRoad: 'verglas',
-  // Works
-  maintenanceWork: 'entretien',
-  repairWork: 'réparation',
-  roadworks: 'travaux routiers',
-  roadMarkingWork: 'marquage au sol',
-  resurfacingWork: 'réfection de chaussée',
-  roadsideWork: 'travaux en accotement',
-  grassCuttingWork: 'fauchage',
-  constructionWork: 'chantier de construction',
-  // Lane and carriageway management
-  roadClosed: 'route fermée',
-  carriagewayClosed: 'chaussée fermée',
-  laneClosures: 'voies neutralisées',
-  closedPermanentlyForTheWinter: 'fermée pour l’hiver',
-  singleAlternateLineTraffic: 'circulation alternée',
-  narrowLanes: 'voies rétrécies',
-  contraflow: 'basculement de circulation',
-  weightRestrictionInOperation: 'restriction de tonnage',
-  speedRestrictionInOperation: 'limitation de vitesse',
-  noOvertaking: 'dépassement interdit',
-  // Rerouting
-  doNotUseExit: 'sortie fermée',
-  doNotUseEntry: 'entrée fermée',
-  useExit: 'sortie conseillée',
-  followLocalDiversion: 'déviation locale',
-  // Services
-  serviceAreaClosed: 'aire de service fermée',
-  // The `other` bucket the DIRs use when the meaning is only in the text.
-  other: 'autre',
+export function roadEventSubtypeLabel(code) {
+  const raw = code == null ? '' : String(code);
+  if (!raw) return null;
+  // `labelFor` answers the raw code when the table has never heard of it —
+  // "roadClosed" tells a reader something, an empty line tells them nothing.
+  return labelFor(ROAD_EVENT_SUBTYPES, raw);
+}
+
+/**
+ * Severity, in the DIRs' own five levels. The WEIGHT orders the labels and the
+ * draw; the words live in `ROAD_EVENT_SEVERITY_LABELS`.
+ */
+export const ROAD_EVENT_SEVERITY_WEIGHTS = Object.freeze({
+  lowest: 0, low: 1, medium: 2, high: 3, highest: 4,
 });
 
-/** Severity, in the DIRs' own four levels. */
-export const ROAD_EVENT_SEVERITIES = Object.freeze({
-  lowest: { label: 'très faible', weight: 0 },
-  low: { label: 'faible', weight: 1 },
-  medium: { label: 'moyenne', weight: 2 },
-  high: { label: 'forte', weight: 3 },
-  highest: { label: 'majeure', weight: 4 },
-});
+/**
+ * The word for a severity the feed declared, in the page's language.
+ * @param {unknown} code Raw `severity`.
+ * @returns {?string} null for a level this build does not know — the card drops
+ *   the mention rather than printing a code as if it were a severity.
+ */
+export function roadEventSeverityLabel(code) {
+  const raw = String(code ?? '');
+  return raw in ROAD_EVENT_SEVERITY_WEIGHTS ? labelFor(ROAD_EVENT_SEVERITY_LABELS, raw) : null;
+}
 
-/** TPEG direction → French. */
-export const ROAD_EVENT_DIRECTIONS = Object.freeze({
-  bothWays: 'dans les deux sens',
-  northBound: 'sens nord',
-  southBound: 'sens sud',
-  eastBound: 'sens est',
-  westBound: 'sens ouest',
-  innerRing: 'sens intérieur',
-  outerRing: 'sens extérieur',
-});
+/** TPEG direction values this feed uses, as the projection emits them. */
+const ROAD_EVENT_DIRECTION_CODES = Object.freeze([
+  'bothWays', 'northBound', 'southBound', 'eastBound', 'westBound', 'innerRing', 'outerRing',
+]);
+
+/**
+ * The words for a TPEG direction, in the page's language.
+ * @param {unknown} code Raw `direction`.
+ * @returns {?string} null for an unknown code, which the card then omits.
+ */
+export function roadEventDirectionLabel(code) {
+  const raw = String(code ?? '');
+  return ROAD_EVENT_DIRECTION_CODES.includes(raw) ? labelFor(ROAD_EVENT_DIRECTION_LABELS, raw) : null;
+}
 
 /**
  * What the visitor is looking at. Three mutually exclusive scopes, because the
  * question "is this happening now" has exactly one honest default.
  */
+const scope = (id, states) => Object.freeze({
+  id,
+  states,
+  get label() { return messages().scopes[id].label; },
+  get title() { return messages().scopes[id].title; },
+});
+
 export const ROAD_EVENT_SCOPES = Object.freeze([
-  Object.freeze({
-    id: 'active', label: 'En cours', states: ['active'],
-    title: 'Uniquement les événements en cours',
-  }),
-  Object.freeze({
-    id: 'upcoming', label: '+ À venir', states: ['active', 'planned'],
-    title: 'Ajouter les chantiers et fermetures programmés',
-  }),
-  Object.freeze({
-    id: 'all', label: 'Tout', states: ['active', 'planned', 'ended'],
-    title: 'Ajouter les événements que l’exploitant a clôturés',
-  }),
+  scope('active', ['active']),
+  scope('upcoming', ['active', 'planned']),
+  scope('all', ['active', 'planned', 'ended']),
 ]);
 
 const SCOPE_BY_ID = new Map(ROAD_EVENT_SCOPES.map((scope) => [scope.id, scope]));
@@ -342,7 +306,7 @@ export function roadEventPixelSize() {
  * down, which pairs with the alpha rather than fighting it.
  */
 export function roadEventStrokeWidth(event) {
-  const weight = ROAD_EVENT_SEVERITIES[String(event?.severity)]?.weight ?? 2;
+  const weight = ROAD_EVENT_SEVERITY_WEIGHTS[String(event?.severity)] ?? 2;
   return (event?.state === 'planned' ? 2 : 3) + weight * 0.9;
 }
 
@@ -424,13 +388,32 @@ function pluralize(word, count) {
   return /[sxz]$/.test(word) ? word : `${word}s`;
 }
 
-/** Format an epoch as Paris wall time, the only clock a French DIR works in. */
-function formatParis(ms, options) {
+/**
+ * Format an epoch as Paris wall time, the only clock a French DIR works in.
+ *
+ * `hourCycle: 'h23'` is the glossary's rule and costs the French nothing — it
+ * is already what `fr-FR` prints — while it keeps an English card on the
+ * 24-hour clock a timetable is written in.
+ */
+function formatParis(ms, options, format = formatDateTime) {
   if (!Number.isFinite(ms)) return null;
   try {
-    return new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', ...options }).format(ms);
+    return format(ms, { timeZone: 'Europe/Paris', hourCycle: 'h23', ...options });
   } catch {
     return new Date(ms).toISOString();
+  }
+}
+
+/**
+ * The day an instant falls on in Paris, as a COMPARISON key — never shown.
+ * Pinned to French so the two sides of a comparison cannot differ by locale.
+ */
+function parisDayKey(ms) {
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return formatDate(ms, { dateStyle: 'short', timeZone: 'Europe/Paris', locale: 'fr' });
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
   }
 }
 
@@ -441,30 +424,32 @@ function formatParis(ms, options) {
  * @returns {string|null}
  */
 export function formatRoadEventWindow(event, nowMs = Date.now()) {
-  const sameDay = (ms) => formatParis(ms, { dateStyle: 'short' }) === formatParis(nowMs, { dateStyle: 'short' });
+  const m = messages().window;
+  const sameDay = (ms) => parisDayKey(ms) === parisDayKey(nowMs);
   const stamp = (ms) => (sameDay(ms)
-    ? formatParis(ms, { hour: '2-digit', minute: '2-digit' })
+    ? formatParis(ms, { hour: '2-digit', minute: '2-digit' }, formatTime)
     : formatParis(ms, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
   const start = Number.isFinite(event?.start) ? stamp(event.start) : null;
   const end = Number.isFinite(event?.end) ? stamp(event.end) : null;
-  if (event?.state === 'planned') return start ? `Prévu à partir du ${start}` : 'Programmé';
-  if (event?.state === 'ended') return end ? `Terminé le ${end}` : 'Clôturé par l’exploitant';
-  if (start && end) return `De ${start} à ${end}`;
-  if (start) return `Depuis ${start}`;
+  if (event?.state === 'planned') return start ? m.plannedFrom(start) : m.planned;
+  if (event?.state === 'ended') return end ? m.endedOn(end) : m.ended;
+  if (start && end) return m.between(start, end);
+  if (start) return m.since(start);
   return null;
 }
 
 /** Human title for one event: what happened, and on which road. */
 export function roadEventTitle(event) {
+  const m = messages().card;
   const category = roadEventCategory(event?.category);
-  const subtype = ROAD_EVENT_SUBTYPE_LABELS[String(event?.subtype)] || event?.subtype || null;
+  const subtype = roadEventSubtypeLabel(event?.subtype);
   // The subtype is the specific thing ("chutes de pierres"); the category is the
   // bucket ("Obstacle"). When the subtype merely restates the category — an
   // `accidentType` of `accident` — one of them is noise.
   const head = subtype && subtype.toLowerCase() !== category.label.toLowerCase()
-    ? `${category.label} · ${subtype}`
+    ? m.headWithSubtype(category.label, subtype)
     : category.label;
-  return event?.road ? `${head} — ${event.road}` : head;
+  return event?.road ? m.title(head, event.road) : head;
 }
 
 /**
@@ -475,6 +460,7 @@ export function roadEventTitle(event) {
  * @returns {string[]}
  */
 export function roadEventDetails(event, nowMs = Date.now()) {
+  const m = messages().card;
   const lines = [];
   if (event?.description) {
     // The DIRs write multi-line orders into one comment; a card is not a page.
@@ -484,29 +470,29 @@ export function roadEventDetails(event, nowMs = Date.now()) {
   }
   const place = [event?.town, event?.location].filter(Boolean).join(' — ');
   if (place) lines.push(place);
-  if (event?.marker) lines.push(`PR ${event.marker}`);
+  if (event?.marker) lines.push(m.marker(event.marker));
 
   const window = formatRoadEventWindow(event, nowMs);
   if (window) lines.push(window);
 
-  const direction = ROAD_EVENT_DIRECTIONS[String(event?.direction)];
-  const severity = ROAD_EVENT_SEVERITIES[String(event?.severity)]?.label;
-  const meta = [direction, severity ? `gravité ${severity}` : null].filter(Boolean).join(' · ');
+  const direction = roadEventDirectionLabel(event?.direction);
+  const severity = roadEventSeverityLabel(event?.severity);
+  const meta = [direction, severity ? m.severity(severity) : null].filter(Boolean).join(' · ');
   if (meta) lines.push(meta);
 
   if (event?.lanes && Number.isFinite(event.lanes.restricted) && event.lanes.restricted > 0) {
-    const total = Number.isFinite(event.lanes.total) ? ` sur ${event.lanes.total}` : '';
-    lines.push(`${event.lanes.restricted} voie${event.lanes.restricted > 1 ? 's' : ''} neutralisée${event.lanes.restricted > 1 ? 's' : ''}${total}`);
+    const total = Number.isFinite(event.lanes.total) ? m.lanesTotal(event.lanes.total) : '';
+    lines.push(m.lanes(event.lanes.restricted, total));
   }
   // `probable` and `riskOf` are the feed saying it has not happened yet. A card
   // that shows a forecast as fact is the one lie this layer must not tell.
-  if (event?.probability === 'probable') lines.push('Prévision — non confirmé');
-  else if (event?.probability === 'riskOf') lines.push('Risque signalé — non confirmé');
+  if (event?.probability === 'probable') lines.push(m.probable);
+  else if (event?.probability === 'riskOf') lines.push(m.riskOf);
 
   const also = Object.entries(event?.also || {})
     .map(([key, count]) => `${count} ${pluralize(roadEventCategory(key).label.toLowerCase(), count)}`)
     .join(', ');
-  if (also) lines.push(`Conséquences déclarées : ${also}`);
+  if (also) lines.push(m.consequences(also));
 
   if (event?.geometry?.kind === 'segment') {
     const shaped = event.geometry.shaped === 'carriageway';
@@ -521,16 +507,16 @@ export function roadEventDetails(event, nowMs = Date.now()) {
       // The provenance matters as much as the number: this line follows the
       // State's own survey of the carriageway, resolved from the point-repère
       // addresses the record publishes. It is not a guess at a route.
-      lines.push(`Section de ${distance} — tracé relevé sur la chaussée`);
+      lines.push(m.sectionShaped(distance));
     } else {
       // The honest caveat, and only where it is actually needed.
       lines.push(km >= ROAD_EVENT_LONG_CHORD_KM
-        ? `Section de ${distance} — extrémités publiées, tracé non fourni`
-        : `Section de ${distance}`);
+        ? m.sectionChord(distance)
+        : m.section(distance));
     }
   }
-  if (event?.operator) lines.push(`Source : ${event.operator}`);
-  if (event?.safety) lines.push('Message lié à la sécurité');
+  if (event?.operator) lines.push(m.source(event.operator));
+  if (event?.safety) lines.push(m.safety);
   return lines;
 }
 
@@ -614,7 +600,7 @@ export function roadEventAnchor(geometry) {
  */
 export function createRoadEventOverlayEntry({ id, position, event }) {
   const category = roadEventCategory(event?.category);
-  const severity = ROAD_EVENT_SEVERITIES[String(event?.severity)]?.weight ?? 2;
+  const severity = ROAD_EVENT_SEVERITY_WEIGHTS[String(event?.severity)] ?? 2;
   return {
     id: `${ROAD_EVENT_LABEL_PREFIX}${id}`,
     position,
@@ -922,13 +908,13 @@ export function createRoadEventsFranceLayer({
     try {
       const response = await fetchImpl(eventsUrl);
       if (!response.ok) {
-        _lastError = `Bison Futé HTTP ${response.status}`;
+        _lastError = messages().errors.http(response.status);
         console.warn(`[Data:RoadEvents FR] Feed returned ${response.status}`);
         return false;
       }
       const payload = await response.json();
       if (!Array.isArray(payload?.events)) {
-        _lastError = 'Réponse Bison Futé malformée';
+        _lastError = messages().errors.malformed;
         return false;
       }
       _events = payload.events;
@@ -949,7 +935,7 @@ export function createRoadEventsFranceLayer({
       return true;
     } catch (error) {
       console.warn('[Data:RoadEvents FR] Fetch error:', error);
-      _lastError = 'Réseau Bison Futé indisponible';
+      _lastError = messages().errors.unreachable;
       return false;
     } finally {
       _loading = false;
@@ -1076,7 +1062,7 @@ export function createRoadEventsFranceLayer({
       return {
         chips,
         legend: roadEventLegend(_summary.byCategory),
-        legendNote: ROAD_EVENT_LEGEND_NOTE,
+        legendNote: roadEventLegendNote(),
       };
     },
 
@@ -1110,7 +1096,7 @@ export function createRoadEventsFranceLayer({
         // difference is the answer to "why is the map emptier than the count".
         published: _events.length,
         upstream: _counts,
-        coverage: 'RRN non concédé',
+        coverage: messages().coverage,
       };
     },
   };
