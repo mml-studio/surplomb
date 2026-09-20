@@ -79,6 +79,8 @@ import {
   pointOnParcel,
 } from './sitadelFeed.js';
 import { polygonsBounds, ringLabelAnchor } from './ringGeometry.js';
+import { labelFor } from '../i18n/messages.js';
+import messages from './cadastreLineage.i18n.js';
 
 /**
  * The oldest dated snapshot Etalab publishes.
@@ -110,13 +112,26 @@ export const LINEAGE_MILLESIMES = Object.freeze([
 /**
  * How a child was chosen, worst to best, and what each licenses a reader to
  * believe. Carried to the card so an INFERENCE never reads like a record.
+ *
+ * The labels are the catalog's French, read from its definition rather than
+ * resolved: this module is imported by `vite.config.js` and the server has no
+ * locale. A browser drawing the card calls {@link adsLineageBasisLabel}.
  */
 export const ADS_LINEAGE_BASIS = Object.freeze({
-  parent: { rank: 0, label: 'emprise divisée depuis' },
-  sole: { rank: 1, label: 'lot unique après division' },
-  built: { rank: 2, label: 'seul lot construit depuis' },
-  numbered: { rank: 3, label: 'lot identifié par son numéro' },
+  parent: { rank: 0, label: messages.definition.parent.fr },
+  sole: { rank: 1, label: messages.definition.sole.fr },
+  built: { rank: 2, label: messages.definition.built.fr },
+  numbered: { rank: 3, label: messages.definition.numbered.fr },
 });
+
+/**
+ * One lineage basis in the page's language, for a card being drawn.
+ * @param {?string} basis A key of {@link ADS_LINEAGE_BASIS}.
+ * @returns {string} The label, or the key itself when it is a new one.
+ */
+export function adsLineageBasisLabel(basis) {
+  return labelFor(messages, basis);
+}
 
 /**
  * How much the children may disagree with the parent before the match is
@@ -448,6 +463,7 @@ export function assignDivision(entries, { children, built = [] }) {
 export function cadastreArchiveUrl(insee, millesime, kind = 'parcelles') {
   const code = String(insee).trim();
   const edition = String(millesime ?? 'latest').trim() || 'latest';
+  // i18n-ignore-next-line — a path on Etalab's server, not a sentence.
   return `${CADASTRE_ETALAB_BASE}/${edition}/geojson/communes/${code.slice(0, 2)}/${code}`
     + `/cadastre-${code}-${kind}.json.gz`;
 }

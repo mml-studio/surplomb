@@ -11,6 +11,7 @@ import { renderedSurfaceM, seatEntitiesOnSurface } from './renderedSurface.js';
 import { SCAN_BOUNDARY_KIND } from './scanCells.js';
 import { deriveFetchCenter, greatCircleKm } from './trafficBounds.js';
 import { pickAt } from './pickAt.js';
+import messages from './addressScanLayer.i18n.js';
 
 /**
  * Shared shell for the point-centred French address layers.
@@ -302,7 +303,7 @@ export function createAddressScanOverlayEntry(card) {
     paintLane: 'selected',
     collisionGroup: 'ambient-card',
     priority: Number.MAX_SAFE_INTEGER,
-    title: card.title || 'Sans titre',
+    title: card.title || messages().untitled,
     details: Array.isArray(card.details) ? card.details.filter(Boolean).slice(0, 6) : [],
     accent: ADDRESS_SCAN_SELECTED_COLOR,
     interactive: false,

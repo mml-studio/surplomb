@@ -139,6 +139,7 @@
 // The one import, and it keeps the promise above: `rnbPivot.js` is pure too —
 // identifier parsing and a Map, no Cesium, no DOM, no fetch.
 import { indexFootprintsByRnb } from './rnbPivot.js';
+import messages from './buildingTheme.i18n.js';
 
 /** Default precedence for a theme that does not state one. */
 export const BUILDING_THEME_DEFAULT_PRECEDENCE = 100;
@@ -395,9 +396,10 @@ function notify(reason) {
  *   down is not a measurement, and the row that borrows the swatches has no
  *   way to reconstruct it. Forwarded by the geometry owner to its own
  *   `legendNote` slot.
- * @param {string} [theme.unknownLabel] French, for the "no data" legend row and
- *   the row count — 'sans diagnostic', 'sans mutation depuis 2019'. Default
- *   'sans donnée'.
+ * @param {string} [theme.unknownLabel] For the "no data" legend row and the
+ *   row count — 'sans diagnostic', 'sans mutation depuis 2019'. A registering
+ *   layer passes it from its own catalog; the default is this module's
+ *   ('sans donnée' / 'no data').
  * @param {(values: Array<*>) => Array<object>} [theme.legendFor] Legend rebuilt from
  *   the painted values, for a theme whose swatches are not its own output. A
  *   static `legend` is counted automatically by matching swatch to colour.
@@ -442,7 +444,7 @@ export function registerBuildingTheme(theme) {
     legendFor: typeof theme.legendFor === 'function' ? theme.legendFor : null,
     unknownLabel: typeof theme.unknownLabel === 'string' && theme.unknownLabel
       ? theme.unknownLabel
-      : 'sans donnée',
+      : messages().unknown,
     seq: previous ? previous.seq : (_seq += 1),
   };
   _themes.set(id, record);
@@ -862,7 +864,7 @@ export function resolveBuildingThemePaint(footprints, theme, options = {}) {
     themeId: theme.id,
     label: theme.label,
     legendNote: theme.legendNote || '',
-    unknownLabel: theme.unknownLabel || 'sans donnée',
+    unknownLabel: theme.unknownLabel || messages().unknown,
     colorById,
     valueById,
     legend,

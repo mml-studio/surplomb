@@ -50,6 +50,8 @@ import { pointInRing } from './naturalEarthRegions.js';
  */
 export const ANALYST_RECORD_CAP = 2000;
 
+// i18n-ignore-start — FIELD NAMES of each layer's records, copied from its
+// own mapper. They are the query vocabulary, never shown to a reader.
 export const ANALYST_LAYERS = {
   flights: { numeric: ['altitudeM', 'speedMps', 'verticalRateMps'], text: ['callsign', 'icao24', 'originCountry', 'operator', 'routeOrigin', 'routeDestination', 'aircraftClass'], flags: ['military', 'onGround'] },
   military: { numeric: ['altitudeM', 'speedMps', 'verticalRateMps'], text: ['callsign', 'icao24', 'originCountry', 'operator', 'aircraftClass'], flags: ['military', 'onGround'] },
@@ -97,6 +99,7 @@ export const ANALYST_LAYERS = {
     flags: ['priced'],
   },
 };
+// i18n-ignore-end
 
 const EARTH_R_KM = 6371;
 
@@ -325,6 +328,9 @@ export function createAnalystEngine(providers) {
         layersQueried,
         scope: scopeNote,
         followUp: Boolean(spec.followUp && lastResult),
+        // Tool-result metadata read by the voice model and never drawn: the
+        // model answers the reader in the reader's own language.
+        // i18n-ignore-next-line
         note: 'client-side data only — answers cover what the enabled layers currently hold',
       },
       // Surfaced so the narration can name the centre it measured from rather

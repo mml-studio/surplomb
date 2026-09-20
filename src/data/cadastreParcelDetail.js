@@ -40,6 +40,10 @@
 //    subject is which piece of ground you are looking at.
 
 import { parcelAreaM2, parcelPolygons, pointInPolygons } from './cadastreFeed.js';
+import { formatNumber, formatPercent, formatQuantity } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages from './cadastreParcelDetail.i18n.js';
+import { BDTOPO_USAGE_LABELS } from './bdtopoBuildings.i18n.js';
 
 /** Base Adresse Nationale, keyless and CORS-open. Licence Ouverte 2.0. */
 export const BAN_REVERSE_URL = 'https://api-adresse.data.gouv.fr/reverse/';
@@ -145,6 +149,7 @@ export function summarizeParcelBuildings(features, parcel) {
     const homes = finiteOrNull(props.nombre_de_logements);
     if (homes !== null) { dwellings += homes; dwellingsKnown = true; }
     const usage = text(props.usage_1);
+    // i18n-ignore-next-line — IGN's own `usage_1` value, matched, not printed.
     if (usage && usage !== 'Indifférencié') usages.set(usage, (usages.get(usage) || 0) + 1);
     const created = text(props.date_creation).slice(0, 4);
     if (/^\d{4}$/.test(created) && (oldest === null || created < oldest)) oldest = created;
@@ -219,12 +224,12 @@ export function parcelSpanM(polygons) {
   return best > 0 ? Math.sqrt(best) : null;
 }
 
-/** `24 m`, `1,2 km`. */
+/** `24 m`, `1,2 km` — `1.2 km` in English. */
 function formatMetres(value) {
   const m = finiteOrNull(value);
   if (m === null) return null;
-  if (m >= 1000) return `${(m / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`;
-  return `${Math.round(m).toLocaleString('fr-FR')} m`;
+  if (m >= 1000) return formatQuantity(m / 1000, 'km', { maximumFractionDigits: 1 });
+  return formatQuantity(Math.round(m), 'm');
 }
 
 /**
@@ -238,7 +243,7 @@ export function addressLine(address) {
   // Under ten metres the point is on this building and the qualifier is noise.
   // Past that it is the reader's only clue that the address is the NEAREST one.
   if (distance === null || distance < 10) return address.label;
-  return `${address.label} · point adresse à ${formatMetres(distance)}`;
+  return messages().addressPoint(address.label, formatMetres(distance));
 }
 
 /**
@@ -253,36 +258,36 @@ export function addressLine(address) {
  */
 export function buildingLines(summary, partial = false) {
   if (!summary) return [];
+  const m = messages();
   if (!summary.count) {
-    return [partial
-      ? 'Aucun bâti trouvé — recherche partielle (parcelle à cheval sur plusieurs tuiles)'
-      : 'Aucun bâtiment BD TOPO sur cette parcelle'];
+    return [partial ? m.noneFound : m.none];
   }
   const lines = [];
-  const parts = [`${summary.count.toLocaleString('fr-FR')} bâtiment${summary.count > 1 ? 's' : ''}`];
+  const parts = [m.buildings(formatNumber(summary.count))];
   if (summary.footprintM2 > 0) {
-    parts.push(`${summary.footprintM2.toLocaleString('fr-FR')} m² au sol`);
+    parts.push(m.footprint(formatNumber(summary.footprintM2)));
   }
   if (summary.coverage !== null) {
-    parts.push(`${Math.round(summary.coverage * 100)} % de la parcelle`);
+    parts.push(m.coverage(formatPercent(Math.round(summary.coverage * 100))));
   }
   lines.push(parts.join(' · '));
 
   const detail = [];
-  if (summary.storeys !== null) detail.push(`R+${summary.storeys}`);
-  if (summary.tallestM !== null) detail.push(`${formatMetres(summary.tallestM)} de haut`);
-  if (summary.dwellings) detail.push(`${summary.dwellings.toLocaleString('fr-FR')} logements`);
-  if (summary.usages.length) detail.push(summary.usages[0].name.toLowerCase());
+  if (summary.storeys !== null) detail.push(m.storeys(summary.storeys));
+  if (summary.tallestM !== null) detail.push(m.tall(formatMetres(summary.tallestM)));
+  if (summary.dwellings) detail.push(m.dwellings(formatNumber(summary.dwellings)));
+  // The dominant use is IGN's own `usage_1`, lower-cased into the sentence.
+  if (summary.usages.length) {
+    detail.push(labelFor(BDTOPO_USAGE_LABELS, summary.usages[0].name).toLowerCase());
+  }
   if (detail.length) lines.push(detail.join(' · '));
 
-  lines.push(partial
-    ? 'Bâti IGN BD TOPO, centre d\'emprise dans la parcelle — recherche partielle'
-    : 'Bâti IGN BD TOPO, joint par centre d\'emprise (aucun lien publié)');
+  lines.push(partial ? m.rulePartial : m.rule);
   return lines;
 }
 
 /** The parcel's own longest dimension, as a card line. */
 export function dimensionLine(polygons) {
   const span = parcelSpanM(polygons);
-  return span === null ? null : `Plus grande dimension ${formatMetres(span)}`;
+  return span === null ? null : messages().span(formatMetres(span));
 }
