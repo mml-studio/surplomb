@@ -12,6 +12,11 @@ import { framingAngles } from './topDownView.js';
  *   pitch   — camera tilt in degrees (negative = looking down)
  *   buildingHeight — estimated height of landmark center above ground (meters)
  */
+// i18n-ignore-start — PLACE NAMES, and nothing else: a city, and the
+// landmarks the camera can fly to. `Arc de Triomphe` is called that in every
+// language, the voice layer and free-text search resolve against these exact
+// strings, and the seeded CCTV cameras address a landmark by its INDEX in
+// these arrays. There is no prose in this table to translate.
 export const CITY_POIS = {
   austin: {
     name: 'Austin',
@@ -216,6 +221,8 @@ export const CITY_POIS = {
     ],
   },
 };
+
+// i18n-ignore-end
 
 /**
  * The cities the LOCATION tray offers as pills, in commune-population order
