@@ -45,6 +45,7 @@
  * implements the standard layer interface (init/enable/disable/update/destroy)
  * plus CCTV-specific methods (selectCamera, cycleCamera, focusNearest, etc.).
  */
+import messages from './cctv.i18n.js';
 import * as Cesium from 'cesium';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import {
@@ -278,6 +279,8 @@ const CAMERA_ICON = mapIconGlyph('temaki', 'security_camera', { px: 88 });
  * Each seed references a city from CITY_POIS and a POI index within that city,
  * plus offsets to place the camera near the POI.
  */
+// i18n-ignore-start — the seeds' labels are PLACE NAMES of the demo cameras,
+// as the source cities publish them; they are data, not interface copy.
 const CAMERA_SEEDS = [
   { id: 'nyc-midtown-w', cityId: 'nyc', poiIndex: 1, label: 'Midtown West @ 34th', offsetNorthM: 120, offsetEastM: -70, headingDeg: 206, fovDeg: 74, rangeM: 880, elevationM: 26 },
   { id: 'nyc-wtc-n', cityId: 'nyc', poiIndex: 2, label: 'WTC North Plaza', offsetNorthM: 95, offsetEastM: 34, headingDeg: 164, fovDeg: 68, rangeM: 760, elevationM: 32 },
@@ -305,6 +308,7 @@ const CAMERA_SEEDS = [
   { id: 'austin-congress-s', cityId: 'austin', poiIndex: 0, label: 'Congress Southbound', offsetNorthM: -165, offsetEastM: 40, headingDeg: 12, fovDeg: 74, rangeM: 760, elevationM: 24 },
   { id: 'austin-downtown-west', cityId: 'austin', poiIndex: 1, label: 'Downtown West', offsetNorthM: -120, offsetEastM: -160, headingDeg: 120, fovDeg: 69, rangeM: 700, elevationM: 20 },
 ];
+// i18n-ignore-end
 
 // ---------------------------------------------------------------------------
 // Visual style constants
@@ -3559,9 +3563,19 @@ function abortInFlightCardFrames() {
  * Hidden-state gate (perf wave 2): detach in-flight card frame decodes when
  * the document hides — a hidden canvas has no reader, and image decode is
  * the expensive half. New fetches are gated at fetchCardFrame; the steady
- * pacer refills naturally on return. Installed once at module scope.
+ * pacer refills naturally on return.
+ *
+ * Installed once, on the first `enable()`, and NOT at module scope: this
+ * module now carries a catalog, and `src/i18n/importSafety.test.mjs` imports
+ * every catalogued module with `document` poisoned to prove that none of them
+ * reads the environment while loading. There are no in-flight card frames
+ * before the layer is switched on anyway, so the listener has nothing to
+ * detach until then.
  */
-if (typeof document !== 'undefined') {
+let _hiddenGateInstalled = false;
+function installHiddenStateGate() {
+  if (_hiddenGateInstalled || typeof document === 'undefined') return;
+  _hiddenGateInstalled = true;
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
     abortInFlightCardFrames();
@@ -5131,6 +5145,7 @@ const cctvLayer = {
   enable() {
     _enabled = true;
     _lastUpdate = Date.now();
+    installHiddenStateGate();
     // Fill the view the operator is already looking at; every later refresh
     // rides camera settle.
     scheduleOsmCameraLoad();
@@ -5485,23 +5500,24 @@ const cctvLayer = {
       if (headingIsUnsurveyed(record.camera)) unsurveyed += 1;
       else surveyed += 1;
     }
+    const m = messages();
     const legend = [];
     if (surveyed) {
       legend.push({
-        label: 'Direction mapped',
+        label: m.mapped.label,
         color: '#2fe0ff',
         glyph: SOLID_LINE_GLYPH,
         count: surveyed,
-        blurb: 'Solid cone — the bearing comes from the source’s own direction tag.',
+        blurb: m.mapped.blurb,
       });
     }
     if (unsurveyed) {
       legend.push({
-        label: 'Direction not mapped',
+        label: m.unmapped.label,
         color: '#2fe0ff',
         glyph: DASHED_LINE_GLYPH,
         count: unsurveyed,
-        blurb: 'Dashed cone — nobody surveyed this bearing; the azimuth drawn is a placeholder.',
+        blurb: m.unmapped.blurb,
       });
     }
     return legend.length ? { legend } : null;

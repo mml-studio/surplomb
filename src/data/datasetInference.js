@@ -38,11 +38,16 @@ import {
   tabularDataUrl,
   tabularProfileUrl,
 } from './datasetSources.js';
+import messages from './datasetInference.i18n.js';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 /** Bytes read from the head of a raw CSV to learn its header and a sample. */
 export const CSV_PEEK_BYTES = 128 * 1024;
 
+// i18n-ignore-start — the licence label is written INTO the manifest, which is
+// persisted in this browser and exported as a `datasets/*.json` file: it must
+// read the same whatever language the page is in. `LICENCE_DISPLAY` in
+// `datasetInference.i18n.js` is how the panel reads one back out.
 /** data.gouv.fr licence ids → the label a reader recognises. */
 export const DATAGOUV_LICENCE_LABELS = Object.freeze({
   'lov2': 'Licence Ouverte 2.0',
@@ -64,6 +69,7 @@ export function licenceLabel(id) {
   const key = String(id).trim().toLowerCase();
   return DATAGOUV_LICENCE_LABELS[key] || String(id).trim();
 }
+// i18n-ignore-end
 
 /**
  * A manifest id from a title: lower-case ASCII, hyphens, 2–40 characters.
@@ -156,7 +162,7 @@ export function classifyDatasetUrl(input) {
 }
 
 function json(text, what) {
-  try { return JSON.parse(text); } catch { throw new DatasetSourceError(`${what} : réponse illisible`); }
+  try { return JSON.parse(text); } catch { throw new DatasetSourceError(messages().unreadableAnswer(what)); }
 }
 
 /**
@@ -171,12 +177,12 @@ export function csvHeadSample(text) {
 }
 
 function geometryNote(guess) {
-  return guess
-    ? `Géométrie déduite : ${guess.reason}. Vérifiez-la avant de brancher.`
-    : 'Aucune colonne de position reconnue : choisissez les colonnes longitude / latitude.';
+  const m = messages();
+  return guess ? m.notes.geometryGuessed(guess.reason) : m.notes.noPositionColumn;
 }
 
-const LICENCE_NOTE = 'Licence lue sur la plateforme — à confirmer sur la page du jeu avant toute réutilisation.';
+/** Read when a draft is built, never at load (ratchet R5). */
+const licenceNote = () => messages().notes.licence;
 
 function pickDatagouvResource(resources) {
   const list = Array.isArray(resources) ? resources : [];
@@ -201,7 +207,7 @@ async function inferFromDatagouvResource(resourceId, context, options) {
   const { text } = await fetchDatasetText(`https://www.data.gouv.fr/api/2/datasets/resources/${encodeURIComponent(resourceId)}/`, { ...options, accept: 'application/json' });
   const payload = json(text, 'data.gouv.fr');
   const resource = payload?.resource || payload;
-  if (!resource?.id) throw new DatasetSourceError('ressource data.gouv.fr introuvable');
+  if (!resource?.id) throw new DatasetSourceError(messages().errors.resourceNotFound);
   let dataset = context.dataset || null;
   if (!dataset && (payload?.dataset_id || resource?.dataset_id)) {
     try { dataset = await fetchDatagouvDataset(payload.dataset_id || resource.dataset_id, options); } catch { dataset = null; }
@@ -212,7 +218,7 @@ async function inferFromDatagouvResource(resourceId, context, options) {
     licence: licenceLabel(dataset?.license),
     url: dataset?.page || `https://www.data.gouv.fr/datasets/r/${resourceId}`,
   };
-  notes.push(LICENCE_NOTE);
+  notes.push(licenceNote());
   const format = String(resource.format || '').toLowerCase();
   const base = {
     id: slugifyDatasetId(title),
@@ -223,14 +229,14 @@ async function inferFromDatagouvResource(resourceId, context, options) {
 
   if (format === 'ogc:wfs' || format === 'wfs') {
     const wfs = classifyDatasetUrl(resource.url || '');
-    if (wfs.platform !== 'wfs' || !wfs.typeName) throw new DatasetSourceError('ressource WFS sans typeName exploitable');
+    if (wfs.platform !== 'wfs' || !wfs.typeName) throw new DatasetSourceError(messages().errors.wfsWithoutTypeName);
     return {
       manifest: { ...base, source: { kind: 'wfs', url: wfs.url, typeName: wfs.typeName, scope: 'viewport' } },
       notes,
     };
   }
   if (format === 'geojson' || (format === 'json' && /geojson/i.test(resource.title || resource.url || ''))) {
-    if (Number(resource.filesize) > 24 * 1024 * 1024) notes.push(`Fichier de ${(resource.filesize / 1048576).toFixed(0)} Mo : au-delà du plafond de lecture directe (24 Mo).`);
+    if (Number(resource.filesize) > 24 * 1024 * 1024) notes.push(messages().notes.fileOverCap((resource.filesize / 1048576).toFixed(0)));
     return {
       manifest: { ...base, source: { kind: 'geojson', url: latest } },
       notes,
@@ -265,7 +271,7 @@ async function inferFromDatagouvResource(resourceId, context, options) {
     header = peek.header;
     sample = peek.sample;
     delimiter = peek.delimiter;
-    notes.push('Ressource non indexée par la Tabular API : le fichier sera lu en entier (plafond 24 Mo).');
+    notes.push(messages().notes.notTabularised);
   }
   const guess = detectGeometry(header, sample);
   notes.push(geometryNote(guess));
@@ -288,10 +294,10 @@ async function inferFromDatagouvDataset(ref, options) {
   const chosen = options.resourceId
     ? resources.find((resource) => String(resource.id).toLowerCase() === options.resourceId.toLowerCase()) || null
     : pickDatagouvResource(resources);
-  if (!chosen) throw new DatasetSourceError('ce jeu ne publie aucune ressource lisible');
+  if (!chosen) throw new DatasetSourceError(messages().errors.noReadableResource);
   const result = await inferFromDatagouvResource(String(chosen.id).toLowerCase(), { dataset }, options);
   if (resources.length > 1) {
-    result.notes.unshift(`Ressource retenue : « ${chosen.title || chosen.format} » parmi ${resources.length}.`);
+    result.notes.unshift(messages().notes.resourcePicked(chosen.title || chosen.format, resources.length));
   }
   result.resources = resources.map((resource) => ({
     id: String(resource.id).toLowerCase(),
@@ -310,8 +316,8 @@ async function inferFromOpendatasoft(portal, dataset, options) {
   const geoField = fields.find((field) => field?.type === 'geo_point_2d')?.name
     || fields.find((field) => field?.type === 'geo_shape')?.name
     || null;
-  const notes = [LICENCE_NOTE];
-  if (!geoField) notes.push('Aucun champ géographique déclaré par le portail : ce jeu ne se dessine pas.');
+  const notes = [licenceNote()];
+  if (!geoField) notes.push(messages().notes.noGeoField);
   const count = Number(metas.records_count);
   const title = metas.title || dataset;
   return {
@@ -327,7 +333,7 @@ async function inferFromOpendatasoft(portal, dataset, options) {
       },
       attribution: {
         publisher: metas.publisher || new URL(portal).hostname,
-        licence: metas.license || 'non précisée',
+        licence: metas.license || 'non précisée', // i18n-ignore-line — stored in the manifest
         url: `${portal.replace(/\/+$/, '')}/explore/dataset/${encodeURIComponent(dataset)}/`,
       },
     },
@@ -349,9 +355,10 @@ async function inferFromCsvUrl(url, options) {
       label: clampLabel(name),
       source: { kind: 'csv', url, delimiter: peek.delimiter },
       ...(guess ? { geometry: guess.geometry } : {}),
+      // i18n-ignore-next-line — stored in the manifest, read back through LICENCE_DISPLAY
       attribution: { publisher: host, licence: 'à confirmer', url },
     },
-    notes: ['Éditeur et licence inconnus pour un fichier nu : complétez-les.', geometryNote(guess)],
+    notes: [messages().notes.bareFile, geometryNote(guess)],
     columns: peek.header,
     sample: peek.sample,
   };
@@ -382,7 +389,7 @@ export async function inferDatasetManifest(input, { fetchImpl = globalThis.fetch
       result = await inferFromOpendatasoft(classified.portal, classified.dataset, options);
       break;
     case 'wfs': {
-      if (!classified.typeName) throw new DatasetSourceError('adresse WFS sans typeNames : indiquez la couche (ex. …?typeNames=BDTOPO_V3:aerodrome)');
+      if (!classified.typeName) throw new DatasetSourceError(messages().errors.wfsAddressWithoutTypeNames);
       const host = new URL(classified.url).hostname;
       const ign = /geopf\.fr$/.test(host);
       result = {
@@ -392,11 +399,11 @@ export async function inferDatasetManifest(input, { fetchImpl = globalThis.fetch
           source: { kind: 'wfs', url: classified.url, typeName: classified.typeName, scope: 'viewport' },
           attribution: {
             publisher: ign ? 'IGN — Géoplateforme' : host,
-            licence: ign ? 'Licence Ouverte 2.0' : 'à confirmer',
+            licence: ign ? 'Licence Ouverte 2.0' : 'à confirmer', // i18n-ignore-line — stored in the manifest
             url: ign ? 'https://geoservices.ign.fr/' : classified.url,
           },
         },
-        notes: [ign ? 'La plupart des couches IGN sont sous Licence Ouverte 2.0 — confirmez pour celle-ci.' : 'Éditeur et licence inconnus pour ce WFS : complétez-les.'],
+        notes: [ign ? messages().notes.ignWfs : messages().notes.bareWfs],
       };
       break;
     }
@@ -409,9 +416,10 @@ export async function inferDatasetManifest(input, { fetchImpl = globalThis.fetch
           id: slugifyDatasetId(name),
           label: clampLabel(name),
           source: { kind: classified.platform, url: classified.url },
+          // i18n-ignore-next-line — stored in the manifest, read back through LICENCE_DISPLAY
           attribution: { publisher: host, licence: 'à confirmer', url: classified.url },
         },
-        notes: ['Éditeur et licence inconnus pour un fichier nu : complétez-les.'],
+        notes: [messages().notes.bareFile],
       };
       break;
     }
@@ -419,7 +427,7 @@ export async function inferDatasetManifest(input, { fetchImpl = globalThis.fetch
       result = await inferFromCsvUrl(classified.url, options);
       break;
     default:
-      throw new DatasetSourceError('adresse non reconnue : page data.gouv.fr, portail Opendatasoft, WFS, GeoJSON ou CSV');
+      throw new DatasetSourceError(messages().errors.unknownAddress);
   }
   return {
     platform: classified.platform,

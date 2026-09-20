@@ -79,7 +79,10 @@
  * construction and projection only. Runs in the browser and under `node --test`.
  */
 
-import { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamilies.js';
+import {
+  AMENITY_FAMILY_LABELS,
+  AMENITY_FAMILY_PLURALS,
+} from './amenitiesFamilies.i18n.js';
 import { ANFR_GENERATIONS } from './anfrFeed.js';
 import {
   BAREME_GEOMETRIES,
@@ -88,8 +91,6 @@ import {
   scoreIndicator,
 } from './baremeNational.js';
 import messages, {
-  AMENITY_FAMILIES,
-  AMENITY_FAMILY_COUNTS,
   ARCEP_TECHNOLOGIES,
   ATMO_BANDS,
   ATMO_POLLUTANTS,
@@ -592,8 +593,8 @@ function projectCommodites({ amenities, point }) {
     const many = total === 1
       ? m.commodites.onlyOne
       : m.commodites.inBox(count(total),
-        published(AMENITY_FAMILY_COUNTS, family, AMENITY_FAMILY_PLURALS[family] || family));
-    lines.push(line(published(AMENITY_FAMILIES, family, AMENITY_FAMILY_LABELS[family] || family),
+        labelFor(AMENITY_FAMILY_PLURALS, family));
+    lines.push(line(labelFor(AMENITY_FAMILY_LABELS, family),
       distanceLabel(entry.distance),
       m.commodites.nearest(many, nearestName)));
   }

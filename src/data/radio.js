@@ -8,6 +8,8 @@
  *
  * @module radio
  */
+import { labelFor } from '../i18n/messages.js';
+import { RADIO_CATEGORY_LABELS, RADIO_GENRE_LABELS } from './radio.i18n.js';
 import * as Cesium from 'cesium';
 import { cachedGroundFloor, warmGroundFloor } from './groundFloor.js';
 import { normalizeRadioCountryInput } from './radioCountry.js';
@@ -83,33 +85,15 @@ const _radioEarthToCenter = new Cesium.Cartesian3();
 export const DEFAULT_RADIO_FILTER = 'all';
 export const GLOBAL_RADIO_ALTITUDE_M = 2_000_000;
 
-const MUSIC_GENRES = Object.freeze([
-  ['alternative', 'Alternative'],
-  ['ambient', 'Ambient'],
-  ['blues', 'Blues'],
-  ['classical', 'Classical'],
-  ['country', 'Country'],
-  ['dance', 'Dance'],
-  ['electronic', 'Electronic'],
-  ['folk', 'Folk'],
-  ['funk', 'Funk'],
-  ['hip hop', 'Hip-Hop'],
-  ['house', 'House'],
-  ['indie', 'Indie'],
-  ['jazz', 'Jazz'],
-  ['latin', 'Latin'],
-  ['metal', 'Metal'],
-  ['oldies', 'Oldies'],
-  ['pop', 'Pop'],
-  ['punk', 'Punk'],
-  ['r&b', 'R&B'],
-  ['reggae', 'Reggae'],
-  ['rock', 'Rock'],
-  ['soul', 'Soul'],
-  ['techno', 'Techno'],
-  ['trance', 'Trance'],
-  ['world', 'World'],
+// i18n-ignore-start — station TAGS, matched against what a station publishes
+// about itself. `RADIO_GENRE_LABELS` in `radio.i18n.js` names each of them.
+const MUSIC_GENRE_TAGS = Object.freeze([
+  'alternative', 'ambient', 'blues', 'classical', 'country', 'dance',
+  'electronic', 'folk', 'funk', 'hip hop', 'house', 'indie', 'jazz', 'latin',
+  'metal', 'oldies', 'pop', 'punk', 'r&b', 'reggae', 'rock', 'soul', 'techno',
+  'trance', 'world',
 ]);
+// i18n-ignore-end
 
 const CATEGORY_MATCHERS = Object.freeze({
   news: ['news', 'current affairs', 'journalism'],
@@ -736,7 +720,7 @@ function hasTag(station, needles) {
 }
 
 function detectedGenres(station) {
-  return MUSIC_GENRES.filter(([genre]) => hasTag(station, [genre])).map(([genre]) => genre);
+  return MUSIC_GENRE_TAGS.filter((genre) => hasTag(station, [genre]));
 }
 
 /** Return whether a station belongs in a station-tag category. */
@@ -815,24 +799,19 @@ export function radioStationCategoryId(station) {
 /** Build canonical and detected-genre categories from station-level tags. */
 export function buildRadioCategories(stations) {
   const rows = Array.isArray(stations) ? stations : [];
+  const categoryLabel = (id) => labelFor(RADIO_CATEGORY_LABELS, id);
   const categories = [
-    { id: 'all', label: 'All' },
-    { id: 'news', label: 'News' },
-    { id: 'talk', label: 'Talk' },
-    { id: 'weather', label: 'Weather / Emergency' },
-    { id: 'public-safety', label: 'Public Safety' },
-    { id: 'aviation-marine', label: 'Aviation / Marine' },
-    { id: 'traffic-transit', label: 'Traffic / Transit' },
-    { id: 'music', label: 'Music' },
-  ];
+    'all', 'news', 'talk', 'weather', 'public-safety', 'aviation-marine',
+    'traffic-transit', 'music',
+  ].map((id) => ({ id, label: categoryLabel(id) }));
 
-  for (const [genre, label] of MUSIC_GENRES) {
+  for (const genre of MUSIC_GENRE_TAGS) {
     const id = `genre:${genre}`;
     if (rows.some((station) => stationMatchesRadioCategory(station, id))) {
-      categories.push({ id, label });
+      categories.push({ id, label: labelFor(RADIO_GENRE_LABELS, genre) });
     }
   }
-  categories.push({ id: 'other', label: 'Other' });
+  categories.push({ id: 'other', label: categoryLabel('other') });
   return categories.map((category) => ({
     ...category,
     color: radioCategoryColor(category.id),

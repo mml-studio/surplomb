@@ -367,7 +367,7 @@ test('pending mapped installations render as unknown instead of a false zero', a
     assert.match(installations?.reason || '', /unavailable/i);
     assert.match(
       runtime.panel()?.innerHTML || '',
-      /Mapped installations<\/strong><b aria-live="polite">\?<\/b>/,
+      /Sites cartographiés<\/strong><b aria-live="polite">\?<\/b>/,
       'the operator sees ? rather than an all-clear 0 while installations load',
     );
   } finally {
@@ -474,12 +474,12 @@ test('a vessel feed still connecting after the lifecycle settles reads as unknow
     assert.match(vessels?.reason || '', /unavailable/i);
     assert.match(
       runtime.panel()?.innerHTML || '',
-      /AIS vessels<\/strong><b aria-live="polite">\?<\/b>/,
+      /Navires AIS<\/strong><b aria-live="polite">\?<\/b>/,
       'the panel prints ? for the whole settled-but-connecting window',
     );
     assert.doesNotMatch(
       runtime.panel()?.innerHTML || '',
-      /AIS vessels<\/strong><b aria-live="polite">0<\/b>/,
+      /Navires AIS<\/strong><b aria-live="polite">0<\/b>/,
       'the panel must never print an all-clear 0 before the feed has answered once',
     );
   } finally {
@@ -509,7 +509,7 @@ test('a settled vessel feed reporting a real empty viewport recovers to 0', asyn
     assert.equal(vessels?.count, 0, 'an answered empty viewport is a real observation');
     assert.match(
       runtime.panel()?.innerHTML || '',
-      /AIS vessels<\/strong><b aria-live="polite">0<\/b>/,
+      /Navires AIS<\/strong><b aria-live="polite">0<\/b>/,
       'the operator sees the real count once the feed answers',
     );
   } finally {

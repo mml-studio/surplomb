@@ -43,20 +43,37 @@
 import { datasetManifestFaults } from './datasetManifest.js';
 import { detectGeometry } from './datasetGeometry.js';
 import { looksLikeDatasetAddress, shortlistDatasets } from './datasetSearch.js';
+import { LICENCE_DISPLAY } from './datasetInference.i18n.js';
+import { labelFor } from '../i18n/messages.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './datasetPlugPanel.i18n.js';
 
 export const DATASET_PLUG_PANEL_ID = 'dataset-plug-panel';
 
-const MARKUP = `
+/**
+ * The panel's markup, in the page's language.
+ *
+ * A function and not a constant, because a catalog read at module load is
+ * what ratchet R5 forbids — and because the box is mounted once, after the
+ * locale gate has written `<html lang>`.
+ */
+function markup() {
+  const m = messages();
+  const lang = document.documentElement.getAttribute('lang') || 'fr';
+  // `datasetPlugPanelLayout.test.mjs` reads the literal below straight out of
+  // this source to check what ships hidden and what sits inside the scroller,
+  // so the `const MARKUP = \`` opening stays on its own line.
+  const MARKUP = `
   <button type="button" class="dsp-open" data-dsp-open aria-expanded="false">
     <span class="dsp-open-plus" aria-hidden="true">＋</span>
-    <span class="dsp-open-label" lang="fr">BRANCHER UN JEU DE DONNÉES</span>
+    <span class="dsp-open-label" lang="${lang}">${m.open}</span>
     <span class="dsp-open-count" data-dsp-count hidden></span>
   </button>
   <form class="dsp-form" data-dsp-form hidden autocomplete="off">
     <div class="dsp-row">
       <input type="text" class="dsp-input dsp-grow" data-dsp-url spellcheck="false"
-             placeholder="Un sujet — « défibrillateurs » — ou une adresse…" />
-      <button type="submit" class="dsp-btn dsp-btn-primary" data-dsp-analyse>CHERCHER</button>
+             placeholder="${m.placeholder}" />
+      <button type="submit" class="dsp-btn dsp-btn-primary" data-dsp-analyse>${m.search}</button>
     </div>
     <div class="dsp-body" data-dsp-body>
       <section class="dsp-results" data-dsp-results hidden>
@@ -65,18 +82,18 @@ const MARKUP = `
       </section>
       <section class="dsp-draft" data-dsp-draft hidden>
         <div class="dsp-row">
-          <label class="dsp-label">Nom</label>
+          <label class="dsp-label">${m.draft.name}</label>
           <input type="text" class="dsp-input dsp-grow" data-dsp-label maxlength="64" />
-          <input type="color" class="dsp-color" data-dsp-color title="Couleur des marques" />
+          <input type="color" class="dsp-color" data-dsp-color title="${m.draft.colorTitle}" />
         </div>
         <div class="dsp-row" data-dsp-resources-row hidden>
-          <label class="dsp-label">Ressource</label>
+          <label class="dsp-label">${m.draft.resource}</label>
           <select class="dsp-input dsp-grow" data-dsp-resource></select>
         </div>
         <div class="dsp-row" data-dsp-geometry-row hidden>
-          <label class="dsp-label">Position</label>
-          <select class="dsp-input dsp-narrow" data-dsp-lon><option value="">longitude…</option></select>
-          <select class="dsp-input dsp-narrow" data-dsp-lat><option value="">latitude…</option></select>
+          <label class="dsp-label">${m.draft.position}</label>
+          <select class="dsp-input dsp-narrow" data-dsp-lon><option value="">${m.draft.longitude}</option></select>
+          <select class="dsp-input dsp-narrow" data-dsp-lat><option value="">${m.draft.latitude}</option></select>
         </div>
         <dl class="dsp-facts" data-dsp-facts></dl>
         <ul class="dsp-notes" data-dsp-notes></ul>
@@ -84,29 +101,32 @@ const MARKUP = `
       <ul class="dsp-list" data-dsp-list></ul>
     </div>
     <!-- Outside the scroller on purpose: the draft is taller than the box's
-         share of a 13" panel, and a BRANCHER the reader has to go looking for
-         is a BRANCHER they can miss. -->
+         share of a 13" panel, and a PLUG IN the reader has to go looking for
+         is a PLUG IN they can miss. -->
     <div class="dsp-row dsp-actions" data-dsp-actions hidden>
-      <button type="button" class="dsp-btn dsp-btn-primary" data-dsp-plug>BRANCHER</button>
-      <button type="button" class="dsp-btn" data-dsp-cancel>ANNULER</button>
+      <button type="button" class="dsp-btn dsp-btn-primary" data-dsp-plug>${m.plug}</button>
+      <button type="button" class="dsp-btn" data-dsp-cancel>${m.cancel}</button>
     </div>
     <p class="dsp-status" data-dsp-status role="status" aria-live="polite"></p>
   </form>
 `;
+  return MARKUP;
+}
 
 function canMount() {
   return typeof document !== 'undefined' && Boolean(document.body);
 }
 
 function formatCount(value) {
-  return String(Math.round(Number(value) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return formatNumber(Math.round(Number(value) || 0), { plainSpaces: true });
 }
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '';
-  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} Mo`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} ko`;
-  return `${bytes} o`;
+  const m = messages().bytes;
+  if (bytes >= 1048576) return m.megabytes((bytes / 1048576).toFixed(0));
+  if (bytes >= 1024) return m.kilobytes((bytes / 1024).toFixed(0));
+  return m.bytes(bytes);
 }
 
 /**
@@ -127,7 +147,7 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
   const panel = document.createElement('div');
   panel.id = DATASET_PLUG_PANEL_ID;
   panel.className = 'dsp';
-  panel.innerHTML = MARKUP;
+  panel.innerHTML = markup();
   parent.appendChild(panel);
 
   const node = (selector) => panel.querySelector(selector);
@@ -157,6 +177,7 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
   const scroller = node('[data-dsp-body]');
   const list = node('[data-dsp-list]');
 
+  const m = messages();
   let draft = null;
   let busy = false;
   let chosenSlug = null;
@@ -193,22 +214,23 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
       // loader can prove — and the time left once it has earned the right to
       // say one. `sayIfCurrent` keeps this silent if the reader moved on.
       if (settled.progressLine && ticket === statusTicket && status) {
-        status.textContent = `« ${label} » — ${settled.progressLine}`;
+        status.textContent = m.status.progress(label, settled.progressLine);
       }
       await new Promise((resolve) => { setTimeout(resolve, 200); });
     }
     await pending.catch(() => {});
-    const caveat = persisted ? '' : " — le stockage a refusé : il ne survivra pas à cet onglet.";
-    if (!settled) { sayIfCurrent(ticket, `« ${label} » branché.${caveat}`); return; }
+    const caveat = persisted ? '' : m.status.notPersisted;
+    if (!settled) { sayIfCurrent(ticket, m.status.plugged(label, caveat)); return; }
     if (settled.error) {
-      sayIfCurrent(ticket, `« ${label} » branché, mais la source a échoué : ${settled.error}`);
+      sayIfCurrent(ticket, m.status.sourceFailed(label, settled.error));
       return;
     }
     if (settled.count > 0) {
-      sayIfCurrent(ticket, `« ${label} » — ${settled.coverage || `${settled.count} objets`}.${caveat}`);
+      sayIfCurrent(ticket,
+        m.status.drawn(label, settled.coverage || m.status.drawnCount(formatCount(settled.count)), caveat));
       return;
     }
-    sayIfCurrent(ticket, `« ${label} » branché, mais rien à cet endroit — déplacez ou rapprochez la vue.${caveat}`);
+    sayIfCurrent(ticket, m.status.nothingHere(label, caveat));
   }
 
   // Keystrokes stay in the panel: the app binds single keys globally.
@@ -225,7 +247,7 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     openButton.setAttribute('aria-expanded', open ? 'true' : 'false');
     panel.classList.toggle('dsp-expanded', open);
     openGlyph.textContent = open ? '－' : '＋';
-    openButton.title = open ? 'Fermer et rendre la place aux couches' : 'Ajouter un jeu de données au globe';
+    openButton.title = open ? m.closeTitle : m.openTitle;
     if (open) urlInput?.focus();
     syncDepth();
   }
@@ -306,8 +328,8 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     const tabular = Array.isArray(columns) && columns.length && ['csv', 'datagouv'].includes(manifest.source?.kind);
     if (tabular) {
       const guess = manifest.geometry || detectGeometry(columns, sample || [])?.geometry || null;
-      fillSelect(lonSelect, columns, guess?.lon || '', 'longitude…');
-      fillSelect(latSelect, columns, guess?.lat || '', 'latitude…');
+      fillSelect(lonSelect, columns, guess?.lon || '', m.draft.longitude);
+      fillSelect(latSelect, columns, guess?.lat || '', m.draft.latitude);
       geometryRow.hidden = false;
       if (manifest.geometry && !manifest.geometry.lon) {
         // A point / WKT / projected geometry was guessed: keep it, hide the pickers.
@@ -317,14 +339,18 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
       geometryRow.hidden = true;
     }
 
-    addFact('Source', `${manifest.source?.kind}${manifest.source?.scope === 'viewport' ? ' · chargée pour la vue' : ''}`);
-    addFact('Éditeur', manifest.attribution?.publisher);
-    addFact('Licence', manifest.attribution?.licence);
-    if (Number.isFinite(total)) addFact('Lignes', formatCount(total));
-    if (Array.isArray(columns) && columns.length) addFact('Colonnes', `${columns.length} — ${columns.slice(0, 6).join(', ')}${columns.length > 6 ? '…' : ''}`);
+    addFact(m.facts.source, `${manifest.source?.kind}${manifest.source?.scope === 'viewport' ? m.facts.loadedForView : ''}`);
+    addFact(m.facts.publisher, manifest.attribution?.publisher);
+    // The licence stored in the manifest is French data; only its display moves.
+    addFact(m.facts.licence, labelFor(LICENCE_DISPLAY, manifest.attribution?.licence));
+    if (Number.isFinite(total)) addFact(m.facts.rows, formatCount(total));
+    if (Array.isArray(columns) && columns.length) {
+      addFact(m.facts.columns,
+        m.facts.columnsValue(columns.length, columns.slice(0, 6).join(', '), columns.length > 6 ? '…' : ''));
+    }
     if (manifest.geometry) {
       const g = manifest.geometry;
-      addFact('Position', g.lon ? `${g.lon} / ${g.lat}` : (g.point || g.wkt || g.geojson || `${g.x} / ${g.y} (${g.crs})`));
+      addFact(m.facts.position, g.lon ? `${g.lon} / ${g.lat}` : (g.point || g.wkt || g.geojson || `${g.x} / ${g.y} (${g.crs})`));
     }
     for (const note of draft.notes || []) {
       const li = document.createElement('li');
@@ -339,16 +365,16 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
 
   function syncFaults() {
     const manifest = currentManifest();
-    const faults = manifest ? datasetManifestFaults(manifest) : ['aucun brouillon'];
+    const faults = manifest ? datasetManifestFaults(manifest) : [m.noDraft];
     plugButton.disabled = faults.length > 0 || busy;
-    plugButton.title = faults.length ? faults.join('\n') : 'Enregistrer ce jeu et l\'allumer';
-    if (faults.length && manifest) say(`À compléter : ${faults[0]}`);
+    plugButton.title = faults.length ? faults.join('\n') : m.plugTitle;
+    if (faults.length && manifest) say(m.status.toComplete(faults[0]));
   }
 
   /** The button says what the field will do, so no one has to guess a mode. */
   function syncIntent() {
     const text = urlInput.value.trim();
-    analyseButton.textContent = looksLikeDatasetAddress(text) ? 'ANALYSER' : 'CHERCHER';
+    analyseButton.textContent = looksLikeDatasetAddress(text) ? m.analyse : m.search;
   }
 
   function clearCandidates() {
@@ -389,9 +415,9 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     // What was found and set aside, with the reason — a reader who asked is
     // owed the whole answer, not the flattering half of it.
     if (shortlist.blocked.length) {
-      blockedLine.textContent = `Écartés : ${shortlist.blocked
-        .map((entry) => `${entry.title} (${entry.reason})`)
-        .join(' · ')}`;
+      blockedLine.textContent = m.shortlist.setAside(shortlist.blocked
+        .map((entry) => m.shortlist.setAsideEntry(entry.title, entry.reason))
+        .join(' · '));
       blockedLine.title = shortlist.blocked.map((entry) => `${entry.title} — ${entry.rawFault}`).join('\n');
       blockedLine.hidden = false;
     } else {
@@ -418,8 +444,8 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     // pressing a button that does nothing.
     draftSection.scrollIntoView({ block: 'nearest' });
     say(draft.faults.length
-      ? `À compléter : ${draft.faults[0]}`
-      : `« ${entry.title} » — vérifiez, puis BRANCHER pour le voir sur le globe.`);
+      ? m.status.toComplete(draft.faults[0])
+      : m.status.chosen(entry.title));
   }
 
   async function search() {
@@ -430,16 +456,16 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     draft = null;
     renderDraft();
     clearCandidates();
-    say('Recherche sur data.gouv.fr…');
+    say(m.status.searching);
     try {
       const shortlist = await shortlistDatasets(query, (url) => box.infer(url));
       renderCandidates(shortlist);
-      if (!shortlist.total) say(`Aucun jeu publié sur « ${query} ».`);
-      else if (!shortlist.ready.length) say(`${shortlist.total} jeux trouvés, aucun des ${shortlist.blocked.length} premiers n'est exploitable — précisez le sujet, ou collez une adresse.`);
-      else say(`${shortlist.total} jeux trouvés — voici ceux qui se dessinent. Choisissez.`);
+      if (!shortlist.total) say(m.status.nothingPublished(query));
+      else if (!shortlist.ready.length) say(m.status.noneUsable(shortlist.total, shortlist.blocked.length));
+      else say(m.status.chooseOne(shortlist.total));
     } catch (error) {
       clearCandidates();
-      say(`Recherche impossible : ${error?.message || error}`);
+      say(m.status.searchFailed(error?.message || error));
     } finally {
       busy = false;
       analyseButton.disabled = false;
@@ -449,20 +475,20 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
 
   async function analyse(resourceId = null) {
     const url = urlInput.value.trim();
-    if (!url) { say('Collez l\'adresse d\'un jeu de données.'); return; }
+    if (!url) { say(m.status.pasteAddress); return; }
     if (busy) return;
     busy = true;
     analyseButton.disabled = true;
-    say('Lecture de la source…');
+    say(m.status.reading);
     try {
       draft = await box.infer(url, resourceId ? { resourceId } : {});
       if (!resourceId) clearCandidates();
       renderDraft();
-      say(draft.faults.length ? `À compléter : ${draft.faults[0]}` : 'Brouillon prêt — vérifiez, puis BRANCHER.');
+      say(draft.faults.length ? m.status.toComplete(draft.faults[0]) : m.status.draftReady);
     } catch (error) {
       draft = null;
       renderDraft();
-      say(`Impossible de lire cette adresse : ${error?.message || error}`);
+      say(m.status.readFailed(error?.message || error));
     } finally {
       busy = false;
       analyseButton.disabled = false;
@@ -474,17 +500,17 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
     const manifest = currentManifest();
     if (!manifest || busy) return;
     const faults = datasetManifestFaults(manifest);
-    if (faults.length) { say(`À compléter : ${faults[0]}`); return; }
+    if (faults.length) { say(m.status.toComplete(faults[0])); return; }
     busy = true;
     plugButton.disabled = true;
-    say('Branchement…');
+    say(m.status.plugging);
     try {
       const label = manifest.label || manifest.id;
       // Not awaited yet on purpose: the source is fetched inside `plug()`, and
       // a reader watching a blank « Branchement… » for eleven seconds is
       // exactly the silence this panel is supposed to break.
       const pending = box.plug(manifest);
-      say(`« ${label} » — chargement…`);
+      say(m.status.loading(label));
       void reportDrawn(manifest.id, label, pending);
       await pending;
       draft = null;
@@ -496,7 +522,7 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
       markChosen();
       renderList();
     } catch (error) {
-      say(`Échec : ${error?.message || error}`);
+      say(m.status.plugFailed(error?.message || error));
     } finally {
       busy = false;
       syncFaults();
@@ -522,28 +548,28 @@ export function mountDatasetPlugPanel(box, { host = null } = {}) {
       const exportButton = document.createElement('button');
       exportButton.type = 'button';
       exportButton.className = 'dsp-icon-btn';
-      exportButton.title = 'Copier le manifeste (à déposer dans datasets/)';
+      exportButton.title = m.exportTitle;
       exportButton.textContent = '⧉';
       exportButton.addEventListener('click', async () => {
         const text = box.exportManifest(entry.id);
         try {
           await navigator.clipboard.writeText(text);
-          say(`Manifeste « ${entry.id}.json » copié.`);
+          say(m.status.manifestCopied(entry.id));
         } catch {
-          say('Presse-papiers refusé — le manifeste est dans la console.');
+          say(m.status.clipboardRefused);
           console.info(text);
         }
       });
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
       removeButton.className = 'dsp-icon-btn dsp-icon-danger';
-      removeButton.title = 'Débrancher';
+      removeButton.title = m.unplugTitle;
       removeButton.textContent = '✕';
       removeButton.dataset.dspRemove = entry.id;
       removeButton.addEventListener('click', async () => {
         removeButton.disabled = true;
         const removed = await box.unplug(entry.id);
-        say(removed ? `« ${entry.label} » débranché.` : 'Débranchement refusé.');
+        say(removed ? m.status.unplugged(entry.label) : m.status.unplugRefused);
         renderList();
       });
       li.append(name, exportButton, removeButton);

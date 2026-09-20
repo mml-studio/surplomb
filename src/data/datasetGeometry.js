@@ -19,6 +19,7 @@
  */
 
 import { lambert93ToWgs84 } from '../../scripts/lib/lambert93.mjs';
+import messages from './datasetGeometry.i18n.js';
 
 /** Column names, lower-cased and accent-stripped, that carry a longitude. */
 export const LON_COLUMN_NAMES = Object.freeze([
@@ -183,28 +184,29 @@ function sampleLooksDegrees(rows, lonField, latField) {
  * @returns {{geometry: object, reason: string}|null}
  */
 export function detectGeometry(header, sampleRows = []) {
+  const m = messages();
   const columns = Array.isArray(header) ? header : [];
   const lon = findColumn(columns, LON_COLUMN_NAMES);
   const lat = findColumn(columns, LAT_COLUMN_NAMES);
   if (lon && lat && (sampleRows.length === 0 || sampleLooksDegrees(sampleRows, lon, lat))) {
-    return { geometry: { lon, lat }, reason: `colonnes ${lon} / ${lat}` };
+    return { geometry: { lon, lat }, reason: m.lonLat(lon, lat) };
   }
   const point = findColumn(columns, POINT_COLUMN_NAMES);
   if (point && (sampleRows.length === 0 || sampleRows.some((row) => parsePointCell(row?.[point])))) {
-    return { geometry: { point }, reason: `colonne ${point} (un point par cellule)` };
+    return { geometry: { point }, reason: m.point(point) };
   }
   const wkt = findColumn(columns, WKT_COLUMN_NAMES);
   if (wkt && (sampleRows.length === 0 || sampleRows.some((row) => parseWktPoint(row?.[wkt])))) {
-    return { geometry: { wkt }, reason: `colonne ${wkt} (WKT POINT)` };
+    return { geometry: { wkt }, reason: m.wkt(wkt) };
   }
   const x = findColumn(columns, L93_X_COLUMN_NAMES);
   const y = findColumn(columns, L93_Y_COLUMN_NAMES);
   if (x && y && sampleRows.length) {
     if (sampleLooksLambert(sampleRows, x, y)) {
-      return { geometry: { x, y, crs: 'EPSG:2154' }, reason: `colonnes ${x} / ${y} en mètres Lambert-93 (valeurs dans la boîte métropolitaine)` };
+      return { geometry: { x, y, crs: 'EPSG:2154' }, reason: m.lambert(x, y) };
     }
     if (sampleLooksDegrees(sampleRows, x, y)) {
-      return { geometry: { lon: x, lat: y }, reason: `colonnes ${x} / ${y} en degrés` };
+      return { geometry: { lon: x, lat: y }, reason: m.degrees(x, y) };
     }
   }
   // Last resort, by RESEMBLANCE: exactly one column whose name carries "lat"
@@ -215,7 +217,7 @@ export function detectGeometry(header, sampleRows = []) {
   const lonLike = columns.filter((name) => /(^|_)(lon|lng|long)(gitude|itude)?(_|$)/.test(normalizeColumnName(name)));
   if (latLike.length === 1 && lonLike.length === 1 && sampleRows.length
     && sampleLooksDegrees(sampleRows, lonLike[0], latLike[0])) {
-    return { geometry: { lon: lonLike[0], lat: latLike[0] }, reason: `colonnes ${lonLike[0]} / ${latLike[0]} (par ressemblance de nom, valeurs en degrés)` };
+    return { geometry: { lon: lonLike[0], lat: latLike[0] }, reason: m.resemblance(lonLike[0], latLike[0]) };
   }
   return null;
 }
@@ -280,11 +282,14 @@ export function rowGeoJsonGeometry(row, geometry) {
   return value;
 }
 
+// i18n-ignore-start — column names a French open-data file publishes, matched
+// against the header. Data, not prose.
 /** Fields tried, in order, when a manifest names no title. */
 export const DEFAULT_TITLE_FIELDS = Object.freeze([
   'name', 'nom', 'nom_station', 'libelle', 'label', 'title', 'titre', 'intitule', 'appellation',
   'designation', 'denomination', 'nom_commune', 'commune', 'adresse', 'address', 'id',
 ]);
+// i18n-ignore-end
 
 function cleanCell(value) {
   if (value == null) return '';

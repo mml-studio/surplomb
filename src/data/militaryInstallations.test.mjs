@@ -61,8 +61,10 @@ test('attributes a record to the source that carried it, and never guesses one',
   // A record with no source named says so. Every record is an OSM element
   // today, but the label is what would expose a second source arriving without
   // one — which is exactly how the removed Places candidates got in.
-  assert.equal(installationSourceLabel({ sources: [] }), 'Unknown mapped source');
-  assert.equal(installationSourceLabel({}), 'Unknown mapped source');
+  // The words moved into the catalog when the layer became bilingual; the page
+  // this suite runs on is French, so this is the French side of the same key.
+  assert.equal(installationSourceLabel({ sources: [] }), 'Source cartographique inconnue');
+  assert.equal(installationSourceLabel({}), 'Source cartographique inconnue');
 });
 
 test('places installation anchors on the shared cached rendered floor', () => {
@@ -638,7 +640,8 @@ test('reports bounded installation requests as loading and clears on settlement'
     assert.equal(militaryInstallationsLayer.getStats().loading, true);
     assert.equal(
       militaryInstallationsLayer.getStats().loadingLabel,
-      'loading mapped installation context',
+      // English upstream until the layer became bilingual; French page, French line.
+      'lecture du contexte des sites cartographiés',
     );
     resolveInstallations({
       ok: true,
@@ -731,6 +734,10 @@ import { militarySiteGlyph } from './militarySiteIcons.js';
 import { transitVehicleGlyph } from './transitVehicleIcons.js';
 import { mapIconGeometry } from './mapIcons.js';
 
+const installationsCatalog = fs.readFileSync(
+  new URL('./militaryInstallations.i18n.js', import.meta.url),
+  'utf8',
+);
 const installationsSource = fs.readFileSync(
   new URL('./militaryInstallations.js', import.meta.url), 'utf8');
 
@@ -766,8 +773,11 @@ test('the zoom prompt travels as guidance, never as an error', () => {
     'no string may be passed as the error argument of the zoom gate');
   // And the prompt still has somewhere to be seen.
   assert.match(installationsSource,
-    /function installationLoadingLabel\(\)[^]*?status === 'zoom-in'[^]*?return '[^']*Zoome/i,
+    /function installationLoadingLabel\(\)[^]*?status === 'zoom-in'[^]*?return m\.zoomIn/i,
     'the prompt lives in the guidance slot the row reads');
+  // And the prompt itself, now that the words live in the catalog beside it.
+  assert.match(installationsCatalog, /zoomIn: \{[^}]*Zoome/i,
+    'the zoom prompt has lost its French');
 });
 
 test('the retry is wired to every lifecycle edge, not just declared', () => {
@@ -911,9 +921,11 @@ test('installation legend swatches are the colours the map actually paints', () 
   );
   // The rows must READ COLOR_BY_CLASS rather than restate it, or a hue can
   // drift between the map and its own key.
-  const source = fs.readFileSync(new URL('./militaryInstallations.js', import.meta.url), 'utf8');
-  const rows = source.match(/const LEGEND_CLASSES = Object\.freeze\(\[([\s\S]*?)\n\]\);/);
-  assert.ok(rows, 'LEGEND_CLASSES must stay a literal list');
+  // The rows are a literal list in the catalog now that the labels are
+  // bilingual; the rule is unchanged and so is what would break it.
+  const catalog = fs.readFileSync(new URL('./militaryInstallations.i18n.js', import.meta.url), 'utf8');
+  const rows = catalog.match(/classes: \{([\s\S]*?)\n  \},/);
+  assert.ok(rows, 'the four classes must stay a literal list');
   assert.equal(/\bcolor:/.test(rows[1]), false, 'a class row must not carry its own colour');
 });
 

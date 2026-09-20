@@ -61,6 +61,8 @@
  * `node --test`.
  */
 
+import { formatDecimal } from '../i18n/format.js';
+import messages from './amenitiesDepartements.i18n.js';
 import {
   countBin,
   countBins,
@@ -199,13 +201,16 @@ export function projectAmenitiesDepartements({ records, communes, index }) {
  */
 export function amenitiesDepartementBinLabels(thresholds, floor = 0) {
   const bounds = Array.isArray(thresholds) ? thresholds : [];
-  const pct = (value) => String(value).replace('.', ',');
+  const m = messages();
+  // Shares are rounded to one decimal upstream, so one decimal is all this
+  // needs — and the decimal mark follows the page.
+  const pct = (value) => formatDecimal(value, 1);
   const labels = [];
   let low = floor;
   for (const bound of bounds) {
-    labels.push(`${pct(low)} – ${pct(bound)} %`);
+    labels.push(m.band(pct(low), pct(bound)));
     low = bound;
   }
-  labels.push(`> ${pct(low)} %`);
+  labels.push(m.top(pct(low)));
   return labels;
 }

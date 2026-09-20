@@ -27,6 +27,8 @@
 
 import { fetchDatasetText, DATASET_RELAY_PATH } from './datasetSources.js';
 import { licenceLabel } from './datasetInference.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './datasetSearch.i18n.js';
 
 /** data.gouv.fr's relevance search. `api/1` without a sort ranks by nothing useful. */
 export const DATAGOUV_SEARCH_URL = 'https://www.data.gouv.fr/api/2/datasets/search/';
@@ -52,18 +54,15 @@ export function looksLikeDatasetAddress(input) {
   return /^(https?:)?\/\//i.test(text) || /^www\./i.test(text);
 }
 
-/** Thousands separated the French way — 186 118, not 186118. */
+/** Thousands grouped the page's way — 186 118 in French, 186,118 in English. */
 export function formatObjectCount(value) {
   // `Number(null)` is 0, and a dataset that really holds zero rows must be able
   // to say so — the unknown is the absence of the fact, not a falsy value.
   if (value === null || value === undefined || value === '') return null;
   if (!Number.isFinite(Number(value))) return null;
-  return String(Math.round(Number(value))).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
-
-/** « 1 semaine », « 3 semaines » — a plural nobody has to forgive. */
-function plural(count, singular, many = `${singular}s`) {
-  return `${count} ${count > 1 ? many : singular}`;
+  // `plainSpaces` because the module grouped with an ASCII space by hand, and
+  // French CLDR groups with a narrow no-break one.
+  return formatNumber(Math.round(Number(value)), { plainSpaces: true });
 }
 
 /**
@@ -80,12 +79,13 @@ export function freshnessLabel(at, now = Date.now()) {
   if (!Number.isFinite(stamp)) return null;
   const days = Math.floor((now - stamp) / 86400000);
   if (days < 0) return null;
-  if (days === 0) return "à jour aujourd'hui";
-  if (days === 1) return 'à jour hier';
-  if (days < 7) return `à jour il y a ${plural(days, 'jour')}`;
-  if (days < 60) return `à jour il y a ${plural(Math.round(days / 7), 'semaine')}`;
-  if (days < 730) return `à jour il y a ${plural(Math.round(days / 30), 'mois', 'mois')}`;
-  return `figé depuis ${plural(Math.round(days / 365), 'an')}`;
+  const m = messages().fresh;
+  if (days === 0) return m.today;
+  if (days === 1) return m.yesterday;
+  if (days < 7) return m.days(days);
+  if (days < 60) return m.weeks(Math.round(days / 7));
+  if (days < 730) return m.months(Math.round(days / 30));
+  return m.frozen(Math.round(days / 365));
 }
 
 /**
@@ -98,19 +98,23 @@ export function freshnessLabel(at, now = Date.now()) {
  */
 export function blockerLabel(fault, { resourcesUnavailable = false } = {}) {
   const text = String(fault || '').trim();
-  if (/\b404\b|introuvable/i.test(text)) {
-    return resourcesUnavailable
-      ? 'fichiers indisponibles — data.gouv.fr le signale aussi'
-      : 'fichiers introuvables';
+  const m = messages().blocked;
+  // The fault arrives in the page's language — it came from `datasetSources.js`
+  // or `datasetManifest.js`, both bilingual — so each pattern carries both
+  // spellings. A classifier that only knew French would fall through to the raw
+  // sentence on an English page, which is the one thing this function exists to
+  // prevent.
+  if (/\b404\b|introuvable|not found/i.test(text)) {
+    return resourcesUnavailable ? m.filesUnavailable : m.filesNotFound;
   }
-  if (/`geometry`|colonne de position|devient un point/i.test(text)) return 'aucune colonne de position';
-  if (/https uniquement/i.test(text)) return 'adresse non sécurisée';
-  if (/hôte non autorisé/i.test(text)) return 'hébergeur non autorisé';
-  if (/aucune ressource lisible|ne publie aucune/i.test(text)) return 'aucun fichier lisible';
-  if (/trop volumineuse|plafond/i.test(text)) return 'fichier trop lourd';
-  if (/attribution|licence/i.test(text)) return 'éditeur ou licence manquants';
-  if (/\b(5\d\d|timeout|réseau)\b/i.test(text)) return 'la plateforme ne répond pas';
-  return text.length > 64 ? `${text.slice(0, 61)}…` : text || 'illisible';
+  if (/`geometry`|colonne de position|position column|devient un point|becomes a point/i.test(text)) return m.noPositionColumn;
+  if (/https uniquement|https only/i.test(text)) return m.insecureAddress;
+  if (/hôte non autorisé|host not allowed/i.test(text)) return m.hostNotAllowed;
+  if (/aucune ressource lisible|ne publie aucune|no readable resource|publishes no readable/i.test(text)) return m.noReadableFile;
+  if (/trop volumineuse|plafond|too large|\bcap\b/i.test(text)) return m.fileTooHeavy;
+  if (/attribution|licence|license/i.test(text)) return m.noPublisherOrLicence;
+  if (/\b(5\d\d|timeout|réseau|network)\b/i.test(text)) return m.platformSilent;
+  return text.length > 64 ? `${text.slice(0, 61)}…` : text || m.unreadable;
 }
 
 /**
@@ -128,7 +132,7 @@ export function candidateFacts({ total = null, publisher = null, lastUpdate = nu
   // says what a missing number would not). Leading with "nombre inconnu" would
   // give our ignorance the first and loudest position on the row.
   const count = formatObjectCount(total);
-  if (count) parts.push(`${count} objets`);
+  if (count) parts.push(messages().objects(count));
   if (publisher) parts.push(publisher);
   const fresh = freshnessLabel(lastUpdate, now);
   if (fresh) parts.push(fresh);
@@ -167,7 +171,7 @@ export async function searchDatasets(query, { fetchImpl = globalThis.fetch, rela
   const url = `${DATAGOUV_SEARCH_URL}?q=${encodeURIComponent(subject)}&page_size=${Math.max(1, Math.min(20, limit))}`;
   const { text } = await fetchDatasetText(url, { fetchImpl, relay, signal, accept: 'application/json' });
   let payload;
-  try { payload = JSON.parse(text); } catch { throw new Error('réponse illisible de data.gouv.fr'); }
+  try { payload = JSON.parse(text); } catch { throw new Error(messages().searchUnreadable); }
   const hits = (Array.isArray(payload?.data) ? payload.data : []).map(normalizeSearchHit).filter(Boolean);
   return { total: Number(payload?.total) || hits.length, hits };
 }

@@ -39,18 +39,30 @@
  * @module data/datasetFields
  */
 
+import messages from './datasetFields.i18n.js';
+
 /** Longest rendered detail line, before the ellipsis. */
 export const DATASET_FIELD_MAX_LINE = 64;
 
+// i18n-ignore-start — the spellings a French register publishes in a day
+// column, matched against `fieldMatchKey`. Data, not prose: an English page
+// still meets `{lundi,mardi}` in a GeoDAE cell.
 /** French weekdays, Monday first — the order `format: "days"` compacts runs in. */
 export const FRENCH_WEEKDAYS = Object.freeze([
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ]);
+// i18n-ignore-end
 
-/** Their three-letter forms, same order. */
-export const FRENCH_WEEKDAYS_SHORT = Object.freeze([
-  'lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim',
-]);
+/**
+ * Their three-letter forms, same order, in the page's language.
+ *
+ * A function and not a constant: the catalog is read when the line is drawn,
+ * never when the module loads (ratchet R5).
+ * @returns {ReadonlyArray<string>}
+ */
+export function weekdaysShort() {
+  return messages().weekdaysShort;
+}
 
 /** Whitespace collapsed, ends trimmed; `null`/`undefined` become ''. */
 export function cleanFieldText(value) {
@@ -104,18 +116,22 @@ export function parseListValue(raw) {
 }
 
 /**
- * Compact a list of French weekdays into runs: `lun–ven`, `lun–mer, ven`.
+ * Compact a list of French weekdays into runs: `lun–ven` / `Mon–Fri`,
+ * `lun–mer, ven`.
  *
- * Anything that is not a weekday is kept VERBATIM and in place — a GeoDAE day
- * list legitimately contains `7j/7` and `événements`, and a compactor that
- * dropped what it did not recognise would be deleting the only rows whose
- * opening hours are unusual. Weekdays are gathered and compacted, non-weekdays
- * follow in their own order.
+ * The cells it reads are French — the register publishes `lundi` — and what it
+ * writes is in the page's language, because a run of days is a fact, not a
+ * quotation. Anything that is not a weekday is kept VERBATIM and in place — a
+ * GeoDAE day list legitimately contains `7j/7` and `événements`, and a
+ * compactor that dropped what it did not recognise would be deleting the only
+ * rows whose opening hours are unusual. Weekdays are gathered and compacted,
+ * non-weekdays follow in their own order.
  *
  * @param {string[]} values
  * @returns {string} One rendered line, '' when there is nothing to render.
  */
 export function compactFrenchDays(values) {
+  const short = weekdaysShort();
   const indices = [];
   const passthrough = [];
   for (const value of values || []) {
@@ -136,8 +152,8 @@ export function compactFrenchDays(values) {
     // A two-day "run" is printed as two days: `lun, mar` is no longer than
     // `lun–mar` and does not ask the reader to expand a range to count it.
     runs.push(previous - start >= 2
-      ? `${FRENCH_WEEKDAYS_SHORT[start]}–${FRENCH_WEEKDAYS_SHORT[previous]}`
-      : Array.from({ length: previous - start + 1 }, (_, offset) => FRENCH_WEEKDAYS_SHORT[start + offset]).join(', '));
+      ? `${short[start]}–${short[previous]}`
+      : Array.from({ length: previous - start + 1 }, (_, offset) => short[start + offset]).join(', '));
     start = null;
   };
   for (const index of indices) {
@@ -202,9 +218,11 @@ export function datasetDetailLine(row, detail, { blankKeys = null, max = DATASET
   if (kept.length === 0) return null;
   const body = detail.format === 'days' ? compactFrenchDays(kept) : kept.join(', ');
   if (!body) return null;
-  const label = detail.label ? `${detail.label} : ` : '';
   const unit = detail.unit ? ` ${detail.unit}` : '';
-  return clampFieldLine(`${label}${body}${unit}`, max);
+  const value = `${body}${unit}`;
+  // The label is the manifest author's own word and is printed as written;
+  // only the separator is ours, and French puts a space before its colon.
+  return clampFieldLine(detail.label ? messages().labeled(detail.label, value) : value, max);
 }
 
 /**

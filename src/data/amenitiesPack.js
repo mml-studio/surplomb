@@ -354,6 +354,7 @@ async function readBpeArchive(tally, { archiveFile, warn, onProgress }) {
     }
     if (!line) continue;
     scanned += 1;
+    // i18n-ignore-next-line — build-time progress, printed by scripts/build-amenities-pack.mjs, which is French throughout; never reaches a reader
     if (onProgress && scanned % 500_000 === 0) onProgress(`BPE ${scanned} lignes`);
     const fields = splitSemicolonRow(line);
     const outcome = readBpeRow(fields, index);
@@ -419,6 +420,7 @@ async function readFinessExtract(tally, { finessFile, onProgress }) {
     }
     if (!line) continue;
     scanned += 1;
+    // i18n-ignore-next-line — build-time progress, see readBpeArchive
     if (onProgress && scanned % 50_000 === 0) onProgress(`FINESS ${scanned} lignes`);
     const outcome = readFinessRow(splitSemicolonRow(line), index);
     tallyAmenityOutcome(tally, outcome);
@@ -474,6 +476,7 @@ export async function buildAmenitiesPack({
     readBpeArchive(tally, { archiveFile, warn, onProgress }),
     readFinessExtract(tally, { finessFile, onProgress }),
   ]);
+  // i18n-ignore-next-line — build-time progress, see readBpeArchive
   onProgress?.(`repli de ${bpe.sites.length + finess.sites.length} lignes`);
   // Appended rather than spread into a third array: `[...a, ...b]` at half a
   // million elements is one more copy of everything at the exact moment the
@@ -484,6 +487,7 @@ export async function buildAmenitiesPack({
   finess.sites.length = 0;
   const records = foldAmenitySites(sites);
   sites.length = 0;
+  // i18n-ignore-next-line — build-time progress, see readBpeArchive
   onProgress?.(`${records.length} points, maillage et roulement`);
   const mesh = buildAmenityMeshRows(records);
   const rollup = projectAmenitiesDepartements({ records, communes: bpe.communes, index });

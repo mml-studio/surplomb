@@ -21,6 +21,13 @@
  * the distinct-name tally the build wrote, and never the entry sum.
  */
 
+import { labelFor } from '../i18n/messages.js';
+import messages, {
+  APL_STANDING_LABELS,
+  MEDECIN_FAMILY_LABELS,
+  MEDECIN_PRECISION_LABELS,
+  MEDECIN_TARIFF_LABELS,
+} from './medecinsFrFeed.i18n.js';
 import {
   MESH_CATEGORY,
   MESH_LAT,
@@ -36,8 +43,15 @@ import {
 
 export const MEDECINS_FR_LAYER_ID = 'medecins-fr';
 
-export const MEDECINS_SOURCE = 'Annuaire santé Ameli — CNAM (data.gouv.fr), géocodé BAN';
-export const MEDECINS_APL_SOURCE = 'Accessibilité potentielle localisée (APL) — DREES';
+/** Attribution carried on the join payload, in the page's language. */
+export function medecinsSource() {
+  return messages().source;
+}
+
+/** The DREES indicator's own name, in the page's language. */
+export function medecinsAplSource() {
+  return messages().aplSource;
+}
 
 /** Tuple layout of `sites[]`, as `build-medecins-fr.mjs` writes it. */
 export const SITE_LAT = 0;
@@ -136,15 +150,16 @@ export const MEDECIN_FAMILIES = Object.freeze([
   'hopital',
 ]);
 
-export const MEDECIN_FAMILY_LABELS = Object.freeze({
-  generaliste: 'Médecine générale',
-  'femme-enfant': 'Femme et enfant',
-  'sante-mentale': 'Santé mentale',
-  specialiste: 'Spécialité médicale',
-  chirurgie: 'Chirurgie',
-  imagerie: 'Imagerie et biologie',
-  hopital: 'Hôpital',
-});
+export { APL_STANDING_LABELS, MEDECIN_FAMILY_LABELS, MEDECIN_PRECISION_LABELS, MEDECIN_TARIFF_LABELS };
+
+/**
+ * The family's name, in the page's language.
+ * @param {string} family A key of {@link MEDECIN_FAMILIES}.
+ * @returns {string} The key itself when it is not one we name.
+ */
+export function medecinFamilyLabel(family) {
+  return labelFor(MEDECIN_FAMILY_LABELS, family);
+}
 
 /**
  * The families that come from the PRACTICE register, in the mesh's own order.
@@ -229,13 +244,15 @@ export function mappedSpecialtyCodes() {
   return Object.keys(FAMILY_BY_SPECIALTY);
 }
 
-/** BAN's own word for what it matched, in the pack's index order. */
-export const MEDECIN_PRECISION_LABELS = Object.freeze({
-  numero: 'adresse exacte',
-  voie: 'rue, sans le numéro',
-  'lieu-dit': 'lieu-dit',
-  commune: 'centre de la commune',
-});
+/**
+ * BAN's own category for what it matched, said the way a reader experiences
+ * it, in the page's language.
+ * @param {string} precision
+ * @returns {string} The key itself when it is not one we name.
+ */
+export function medecinPrecisionLabel(precision) {
+  return labelFor(MEDECIN_PRECISION_LABELS, precision);
+}
 
 /**
  * The conventional sector, said the way a patient experiences it.
@@ -246,14 +263,10 @@ export const MEDECIN_PRECISION_LABELS = Object.freeze({
  * the shipped pack: 94 % of GP entries are secteur 1, against 18 % of
  * ophthalmologist entries, 63 % of whom set their own fees.
  */
-export const MEDECIN_TARIFF_LABELS = Object.freeze({
-  1: 'tarif fixé (secteur 1)',
-  3: 'honoraires libres (secteur 2)',
-  2: 'dépassement permanent',
-  0: 'non conventionné',
-});
-
-export const MEDECIN_TARIFF_CAPPED = 'dépassements plafonnés (OPTAM)';
+/** Sector 2 with the capped-fee option, in the page's language. */
+export function medecinTariffCapped() {
+  return messages().tariffCapped;
+}
 
 /**
  * What one practitioner costs you, in one phrase.
@@ -262,8 +275,9 @@ export const MEDECIN_TARIFF_CAPPED = 'dépassements plafonnés (OPTAM)';
  */
 export function practitionerTariff(secteur, option) {
   const code = String(secteur ?? '');
-  if (code === '3' && (option === '3' || option === '4')) return MEDECIN_TARIFF_CAPPED;
-  return MEDECIN_TARIFF_LABELS[code] ?? 'secteur non publié';
+  if (code === '3' && (option === '3' || option === '4')) return medecinTariffCapped();
+  const label = labelFor(MEDECIN_TARIFF_LABELS, code);
+  return label === code ? messages().tariffUnpublished : label;
 }
 
 /**
@@ -328,11 +342,15 @@ export function aplStanding(value, seuils) {
   return 'moyennement-dotee';
 }
 
-export const APL_STANDING_LABELS = Object.freeze({
-  'sous-dotee': 'zone sous-dotée',
-  'moyennement-dotee': 'moyennement dotée',
-  'bien-dotee': 'bien dotée',
-});
+/**
+ * Where the ARS's two thresholds put this municipality, in the page's
+ * language.
+ * @param {string} standing One of `aplStanding()`'s three answers.
+ * @returns {string} The key itself when it is not one we name.
+ */
+export function aplStandingLabel(standing) {
+  return labelFor(APL_STANDING_LABELS, standing);
+}
 
 /**
  * How much of the local supply is standing on doctors about to retire.

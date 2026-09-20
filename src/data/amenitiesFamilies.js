@@ -10,41 +10,33 @@
  * The labels are a vocabulary; the parsing is a program, and a document should
  * not have to load the second to say the first.
  *
- * `amenitiesFeed.js` re-exports both maps, so every existing importer is
+ * `amenitiesFeed.js` re-exports both readers, so every existing importer is
  * untouched and there is still exactly one definition.
+ *
+ * The words themselves are in `amenitiesFamilies.i18n.js`, in both languages,
+ * and are read when a card is drawn — never when this module loads.
  */
 
-export const AMENITY_FAMILY_LABELS = Object.freeze({
-  restaurant: 'Restaurant',
-  boulangerie: 'Boulangerie',
-  commerce: 'Commerce de bouche',
-  banque: 'Banque',
-  sport: 'Salle de sport',
-  culture: 'Lieu culturel',
-  carburant: 'Station-service',
-  medecin: 'Médecin généraliste',
-  courses: 'Supermarché, supérette',
-  pharmacie: 'Pharmacie',
-  poste: 'La Poste',
-  piscine: 'Bassin de natation',
-  gendarmerie: 'Gendarmerie, police',
-  hopital: 'Hôpital',
-});
+import { labelFor } from '../i18n/messages.js';
+import { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamilies.i18n.js';
 
-/** Singular/plural head-word for a card, keyed the same way. */
-export const AMENITY_FAMILY_PLURALS = Object.freeze({
-  restaurant: 'restaurants',
-  boulangerie: 'boulangeries',
-  commerce: 'commerces de bouche',
-  banque: 'agences bancaires',
-  sport: 'salles de sport',
-  culture: 'lieux culturels',
-  carburant: 'stations-service',
-  medecin: 'médecins généralistes',
-  courses: 'commerces alimentaires',
-  pharmacie: 'pharmacies',
-  poste: 'points de contact La Poste',
-  piscine: 'bassins de natation',
-  gendarmerie: 'unités de gendarmerie et de police',
-  hopital: 'hôpitaux',
-});
+export { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS };
+
+/**
+ * The family as a heading: `Supermarché, supérette` / `Supermarket,
+ * convenience store`.
+ * @param {string} family A key of `AMENITY_FAMILIES`.
+ * @returns {string} The family key itself when it is not one we name.
+ */
+export function amenityFamilyLabel(family) {
+  return labelFor(AMENITY_FAMILY_LABELS, family);
+}
+
+/**
+ * The head-word a count leans on: `commerces alimentaires` / `food stores`.
+ * @param {string} family A key of `AMENITY_FAMILIES`.
+ * @returns {string} The family key itself when it is not one we name.
+ */
+export function amenityFamilyPlural(family) {
+  return labelFor(AMENITY_FAMILY_PLURALS, family);
+}
