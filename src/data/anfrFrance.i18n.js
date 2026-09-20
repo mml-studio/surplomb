@@ -27,6 +27,64 @@
 import { defineMessages } from '../i18n/messages.js';
 import { plural } from '../i18n/format.js';
 
+/**
+ * The 38 natures of ANFR's `SUP_NATURE.txt`, keyed on the register's own word
+ * lower-cased — which is the form `anfrPlacementLine` already computes.
+ *
+ * A closed vocabulary, so it is translated rather than quoted: “Roof of
+ * immeuble” is not English, and the difference between a *pylône autostable*
+ * and an *immeuble* is the difference between a tower in a field and a rooftop
+ * installation, which is the whole reason the card names it. A nature this
+ * table has never seen falls through to the register's own French, which is
+ * what `labelFor` does and what the module did before it had any English.
+ */
+export const ANFR_NATURE_LABELS = defineMessages({
+  'sans nature': { fr: 'sans nature', en: 'no type given' },
+  'sémaphore': { fr: 'sémaphore', en: 'signal station' },
+  phare: { fr: 'phare', en: 'lighthouse' },
+  "château d'eau - réservoir": { fr: "château d'eau - réservoir", en: 'water tower – reservoir' },
+  immeuble: { fr: 'immeuble', en: 'apartment building' },
+  'local technique': { fr: 'local technique', en: 'utility room' },
+  'mât': { fr: 'mât', en: 'mast' },
+  'intérieur galerie': { fr: 'intérieur galerie', en: 'indoor gallery' },
+  'intérieur sous-terrain': { fr: 'intérieur sous-terrain', en: 'underground interior' },
+  tunnel: { fr: 'tunnel', en: 'tunnel' },
+  'mât béton': { fr: 'mât béton', en: 'concrete mast' },
+  'mât métallique': { fr: 'mât métallique', en: 'steel mast' },
+  'pylône': { fr: 'pylône', en: 'pylon' },
+  'bâtiment': { fr: 'bâtiment', en: 'building' },
+  'monument historique': { fr: 'monument historique', en: 'historic monument' },
+  'monument religieux': { fr: 'monument religieux', en: 'religious building' },
+  'pylône autoportant': { fr: 'pylône autoportant', en: 'self-supporting pylon' },
+  'pylône autostable': { fr: 'pylône autostable', en: 'free-standing pylon' },
+  'pylône haubané': { fr: 'pylône haubané', en: 'guyed pylon' },
+  'pylône treillis': { fr: 'pylône treillis', en: 'lattice pylon' },
+  'pylône tubulaire': { fr: 'pylône tubulaire', en: 'tubular pylon' },
+  silo: { fr: 'silo', en: 'silo' },
+  "ouvrage d'art (pont, viaduc)": {
+    fr: "ouvrage d'art (pont, viaduc)",
+    en: 'engineering structure (bridge, viaduct)',
+  },
+  'tour hertzienne': { fr: 'tour hertzienne', en: 'radio tower' },
+  'dalle en béton': { fr: 'dalle en béton', en: 'concrete slab' },
+  'support non décrit': { fr: 'support non décrit', en: 'support not described' },
+  'fût': { fr: 'fût', en: 'shaft' },
+  'tour de contrôle': { fr: 'tour de contrôle', en: 'control tower' },
+  'contre-poids au sol': { fr: 'contre-poids au sol', en: 'counterweight on the ground' },
+  'contre-poids sur shelter': { fr: 'contre-poids sur shelter', en: 'counterweight on a shelter' },
+  'support defense': { fr: 'support defense', en: 'defence support' },
+  'pylône arbre': { fr: 'pylône arbre', en: 'tree-disguised pylon' },
+  'ouvrage de signalisation (portique routier, panneau routier)': {
+    fr: 'ouvrage de signalisation (portique routier, panneau routier)',
+    en: 'signage structure (road gantry, road sign)',
+  },
+  'balise ou bouée': { fr: 'balise ou bouée', en: 'beacon or buoy' },
+  xxx: { fr: 'xxx', en: 'xxx', note: 'The register really does file one nature as XXX.' },
+  eolienne: { fr: 'eolienne', en: 'wind turbine' },
+  'mobilier urbain': { fr: 'mobilier urbain', en: 'street furniture' },
+  roche: { fr: 'roche', en: 'rock' },
+});
+
 export default defineMessages({
   /** One short sentence per band swatch, with the national count. */
   bandBlurbs: {
@@ -101,35 +159,35 @@ export default defineMessages({
     underground: {
       fr: (noun) => `Installation souterraine (${noun}) — aucun mât`,
       en: (noun) => `Underground installation (${noun}) — no mast`,
-      note: '`noun` is the register’s own word, lower-cased and left in French.',
+      note: '`noun` is the register’s own word, lower-cased and named by ANFR_NATURE_LABELS.',
       sample: ['tunnel'],
     },
     noHeight: {
       fr: (noun) => `${noun} — hauteur non publiée`,
       en: (noun) => `${noun} — height not published`,
-      sample: ['Self-supporting tower'],
+      sample: ['Free-standing pylon'],
     },
     roof: {
       fr: (of, height) => `Toit ${of}${height}`,
       en: (of, height) => `Roof of ${of}${height}`,
       note: '`of` already carries the French elision (`d’immeuble`, `de bâtiment`); the '
-        + 'English adds its own preposition and gets the bare noun.',
-      sample: ['a building', ', 32 m'],
+        + 'English adds its own preposition and gets the named noun.',
+      sample: ['apartment building', ', 32 m'],
     },
     roofNoHeight: {
       fr: (of) => `Toit ${of} — hauteur non publiée`,
       en: (of) => `Roof of ${of} — height not published`,
-      sample: ['a building'],
+      sample: ['apartment building'],
     },
     on: {
       fr: (noun, height) => `Sur ${noun}${height}`,
       en: (noun, height) => `On ${noun}${height}`,
-      sample: ['mobilier urbain', ', 8 m'],
+      sample: ['street furniture', ', 8 m'],
     },
     onNoHeight: {
       fr: (noun) => `Sur ${noun} — hauteur non publiée`,
       en: (noun) => `On ${noun} — height not published`,
-      sample: ['mobilier urbain'],
+      sample: ['street furniture'],
     },
     height: {
       fr: (height) => `, ${height} m`,

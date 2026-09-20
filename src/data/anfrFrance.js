@@ -194,7 +194,9 @@
 
 import { formatDate, formatNumber } from '../i18n/format.js';
 import { getLocale } from '../i18n/locale.js';
+import { labelFor } from '../i18n/messages.js';
 import { ANFR_BAND_LABELS } from './anfrFeed.i18n.js';
+import { ANFR_NATURE_LABELS } from './anfrFrance.i18n.js';
 import messages from './anfrFrance.i18n.js';
 import * as Cesium from 'cesium';
 import { profileCountBudget } from '../perfProfile.js';
@@ -1245,30 +1247,32 @@ export function anfrPlacementLine(nature, heightM) {
   const noun = String(nature || '').trim();
   const tall = Number.isFinite(heightM) && heightM > 0 ? m.height(fr(heightM)) : '';
   if (!noun) return tall ? m.unnamedWithHeight(tall) : m.unknown;
+  // The BRANCHES read the register's own French; only what is PRINTED moves.
   const lower = noun.toLocaleLowerCase('fr-FR');
+  const french = getLocale() === 'fr';
+  const shownLower = french ? lower : labelFor(ANFR_NATURE_LABELS, lower);
+  const shown = french ? noun : shownLower.charAt(0).toUpperCase() + shownLower.slice(1);
   // The 551 supports with no published height are all of them underground or
   // indoor — see the feed's Trap 3 — so this branch is the one that explains
   // the missing shaft rather than leaving it as a silence.
   if (/tunnel|intérieur|souterrain|sous-terrain|galerie/i.test(lower)) {
-    return m.underground(lower);
+    return m.underground(shownLower);
   }
   if (/pylône|pylone|mât|mat |tour|fût|fut |éolienne|eolienne|sémaphore|phare/i.test(lower)) {
-    return tall ? `${noun}${tall}` : m.noHeight(noun);
+    return tall ? `${shown}${tall}` : m.noHeight(shown);
   }
   if (/immeuble|bâtiment|batiment|monument|château|chateau|silo|local technique|dalle/i.test(lower)) {
-    // The French elision rides with the noun; the English message adds its own
-    // preposition and is handed the bare word.
     // i18n-ignore-next-line — the French elision, written onto the register's
-    // own noun; the English message adds its own preposition to the bare word.
-    const of = getLocale() === 'fr'
+    // own noun; the English message adds its own preposition to the named one.
+    const of = french
       ? (/^[aeiouâàéèêëîïôöûüh]/i.test(lower) ? `d’${lower}` : `de ${lower}`)
-      : lower;
+      : shownLower;
     return tall ? m.roof(of, tall) : m.roofNoHeight(of);
   }
   if (/mobilier|signalisation|ouvrage/i.test(lower)) {
-    return tall ? m.on(lower, tall) : m.onNoHeight(lower);
+    return tall ? m.on(shownLower, tall) : m.onNoHeight(shownLower);
   }
-  return tall ? `${noun}${tall}` : m.noHeight(noun);
+  return tall ? `${shown}${tall}` : m.noHeight(shown);
 }
 
 /** `les 4 opérateurs`, `Orange et SFR`, or a single name. */

@@ -97,7 +97,7 @@ test('the card leads with what it is and closes with its provenance', () => {
   const lines = raw.split('\n').map(norm);
   assert.equal(lines[0], 'Mobile antenna · 4 operators · 5G');
   assert.match(lines.at(-1), /^ANFR no\. 449714 · register of August 27, 2026 · Licence Ouverte 2\.0$/);
-  assert.match(norm(raw), /Roof of immeuble, 65 m/);
+  assert.match(norm(raw), /Roof of apartment building, 65 m/);
   assert.match(norm(raw), /5G 3\.5 GHz and 4G: all 4 operators · 3G and 2G: Orange and SFR/);
   // The three questions this register cannot answer stay unanswered.
   assert.doesNotMatch(norm(raw), /\bspeed\b|Mb\/s|covered|harmless|safe|no risk/i);
@@ -116,15 +116,19 @@ test('a mast that radiates nothing says so, and never as 5G', () => {
 
 test('a heightless support explains the missing shaft instead of leaving a hole', () => {
   const zero = norm(en(() => buildAnfrSelectionLabel({ support: support(325857) }, PACK)));
-  assert.match(zero, /Underground installation \(intérieur galerie\) — no mast/);
+  assert.match(zero, /Underground installation \(indoor gallery\) — no mast/);
   assert.match(zero, /No shaft drawn: 551 supports in the register publish no height/);
   assert.doesNotMatch(zero, / 0 m/);
 });
 
 test('the placement line keeps the preposition that tells a roof from a tower', () => {
-  assert.equal(en(() => anfrPlacementLine('Immeuble', 35)), 'Roof of immeuble, 35 m');
-  assert.equal(en(() => anfrPlacementLine('Pylône autostable', 42)), 'Pylône autostable, 42 m');
-  assert.equal(en(() => anfrPlacementLine('Mobilier urbain', 6)), 'On mobilier urbain, 6 m');
+  // The register's 38 natures are a closed vocabulary, so they are named
+  // rather than quoted: “Roof of immeuble” is not English.
+  assert.equal(en(() => anfrPlacementLine('Immeuble', 35)), 'Roof of apartment building, 35 m');
+  assert.equal(en(() => anfrPlacementLine('Pylône autostable', 42)), 'Free-standing pylon, 42 m');
+  assert.equal(en(() => anfrPlacementLine('Mobilier urbain', 6)), 'On street furniture, 6 m');
+  // One the table has never seen falls through to the register's own French.
+  assert.equal(en(() => anfrPlacementLine('Pylône martien', 12)), 'Pylône martien, 12 m');
   assert.equal(en(() => anfrPlacementLine(null, null)), 'Type and height not published');
   // French is untouched.
   assert.equal(anfrPlacementLine('Immeuble', 35), 'Toit d’immeuble, 35 m');
