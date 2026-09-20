@@ -385,7 +385,11 @@ async function main() {
     const aisChipHonest = aisControl.feedState === 'unavailable'
       && aisControl.name.length > 0
       && aisControl.ariaLabel === `${aisControl.name}: ${aisControl.label}`;
-    const aisMetaHonest = aisControl.meta.startsWith(`${aisControl.label} · AISStream · `)
+    // `AISStream` and not the whole source line: the layer's declared source
+    // gained its ANFR half and its licence in 2026, and this check is about
+    // the META NAMING THE ERROR, not about the exact publisher string.
+    const aisMetaHonest = aisControl.meta.startsWith(`${aisControl.label} · `)
+      && aisControl.meta.includes('AISStream')
       && aisStats.error
       && aisControl.meta.includes(aisStats.error);
     record(
