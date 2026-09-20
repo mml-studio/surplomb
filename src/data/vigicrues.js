@@ -5,6 +5,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { publishJoin } from './layerJoins.js';
+import messages from './vigicrues.i18n.js';
 
 /**
  * Vigicrues — France's official river-flood vigilance map.
@@ -112,6 +113,32 @@ const UPDATE_INTERVAL_MS = 300000;
  */
 
 /**
+ * One level: its drawing, and its words in the page's language.
+ *
+ * The three words are GETTERS on the frozen spec, never spread into it —
+ * `{...getters}` evaluates them at spread time, which would freeze every
+ * level in whichever language happened to load the module first.
+ *
+ * `legendLabel` is level 1's alone and reads `undefined` elsewhere, which is
+ * exactly what `spec.legendLabel || spec.label` already relied on.
+ *
+ * @param {?number} level 1 to 4, or null for a reach with no assessment.
+ * @param {'green'|'yellow'|'orange'|'red'|'unknown'} key
+ * @param {{color: string, stroke: string, alpha: number, width: number}} paint
+ * @returns {object} A frozen level spec.
+ */
+function levelSpec(level, key, paint) {
+  return Object.freeze({
+    level,
+    key,
+    ...paint,
+    get label() { return messages().levels[key].label; },
+    get legendLabel() { return messages().levels[key].legendLabel; },
+    get meaning() { return messages().levels[key].meaning; },
+  });
+}
+
+/**
  * The four vigilance levels, in the state's own vocabulary and colours.
  * `NivInfViCr` carries the level as a small integer; anything outside 1..4
  * (including the `null` the feed has been observed to emit for a reach with
@@ -129,14 +156,13 @@ const UPDATE_INTERVAL_MS = 300000;
  * findable and none of the weight that would make a calm country look like an
  * episode. The gap between green and yellow is therefore the widest step on
  * the ladder, on purpose: "something is happening" has to break the pattern.
+ *
+ * `label`, `legendLabel` and `meaning` are GETTERS. This table is read at
+ * import time by whoever pulls the layer in, and a word read then would
+ * freeze in whichever language the page started in (ratchet R5).
  */
 export const VIGICRUES_LEVELS = Object.freeze({
-  1: Object.freeze({
-    level: 1,
-    key: 'green',
-    label: 'VERT',
-    legendLabel: 'SANS VIGILANCE',
-    meaning: 'Pas de vigilance particulière requise',
+  1: levelSpec(1, 'green', {
     color: '#009245',
     // A river drawn as water, because at this level the line is the monitored
     // network and not a warning — see the section above. Cyan carries no
@@ -155,35 +181,14 @@ export const VIGICRUES_LEVELS = Object.freeze({
     alpha: 1,
     width: 3.2,
   }),
-  2: Object.freeze({
-    level: 2,
-    key: 'yellow',
-    label: 'JAUNE',
-    meaning: 'Risque de crue ou de montée rapide et dangereuse des eaux',
-    color: '#fcff19',
-    stroke: '#fcff19',
-    alpha: 1,
-    width: 5,
+  2: levelSpec(2, 'yellow', {
+    color: '#fcff19', stroke: '#fcff19', alpha: 1, width: 5,
   }),
-  3: Object.freeze({
-    level: 3,
-    key: 'orange',
-    label: 'ORANGE',
-    meaning: 'Risque de crue génératrice de débordements importants',
-    color: '#ee5e2e',
-    stroke: '#ee5e2e',
-    alpha: 1,
-    width: 6.2,
+  3: levelSpec(3, 'orange', {
+    color: '#ee5e2e', stroke: '#ee5e2e', alpha: 1, width: 6.2,
   }),
-  4: Object.freeze({
-    level: 4,
-    key: 'red',
-    label: 'ROUGE',
-    meaning: 'Risque de crue majeure — menace directe et généralisée',
-    color: '#ff0000',
-    stroke: '#ff0000',
-    alpha: 1,
-    width: 7.4,
+  4: levelSpec(4, 'red', {
+    color: '#ff0000', stroke: '#ff0000', alpha: 1, width: 7.4,
   }),
 });
 
@@ -193,15 +198,8 @@ export const VIGICRUES_LEVELS = Object.freeze({
  * Stays the narrowest and faintest thing on the map — narrower than green —
  * because "not published" must never out-shout "published as calm".
  */
-export const VIGICRUES_UNKNOWN_LEVEL = Object.freeze({
-  level: null,
-  key: 'unknown',
-  label: 'INCONNU',
-  meaning: 'Niveau non publié',
-  color: '#8a93a6',
-  stroke: '#8a93a6',
-  alpha: 0.7,
-  width: 2.2,
+export const VIGICRUES_UNKNOWN_LEVEL = levelSpec(null, 'unknown', {
+  color: '#8a93a6', stroke: '#8a93a6', alpha: 0.7, width: 2.2,
 });
 
 /** A reach at or above this level is an ALERT: wider stroke, label, counted. */
