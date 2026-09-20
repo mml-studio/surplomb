@@ -19,27 +19,20 @@ import {
   DELINQUANCE_CELL_LABELS,
   DELINQUANCE_COMMUNE_CELL_SLUGS,
   DELINQUANCE_COMMUNE_SLUGS,
-  DELINQUANCE_COMPLEMENT_RULE,
-  DELINQUANCE_DOCUMENTATION_SHORT,
-  DELINQUANCE_DOCUMENTATION_TITLE,
-  DELINQUANCE_ENREGISTREE_SHORT,
-  DELINQUANCE_MIS_EN_CAUSE_SHORT,
-  DELINQUANCE_PLAINTE_RULE,
-  DELINQUANCE_PLAINTE_SHORT,
   DELINQUANCE_SOURCE,
-  DELINQUANCE_SUPPRESSION_RULE,
-  DELINQUANCE_SUPPRESSION_SHORT,
-  DELINQUANCE_TOTAL_AFD_SHORT,
-  DELINQUANCE_TOTAL_AUTHORSHIP_SHORT,
   DELINQUANCE_TOTAL_COMMUNE_SLUGS,
   DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS,
   DELINQUANCE_TOTAL_EXCLUDED,
   DELINQUANCE_TOTAL_SLUG,
-  DELINQUANCE_TOTAL_UNITS_SHORT,
-  DELINQUANCE_ZERO_RULE,
+  delinquanceCaveatLine,
   delinquanceCountNoun,
+  delinquanceDocumentationTitle,
+  delinquanceIndicatorLabel,
   delinquanceIndicatorNote,
+  delinquanceIndicatorShort,
   delinquanceRateUnit,
+  delinquanceRule,
+  delinquanceUnitLabel,
   indicatorForSlug,
 } from './delinquanceFeed.js';
 import {
@@ -50,6 +43,8 @@ import {
   projectDelinquanceNational,
 } from './delinquanceDepartements.js';
 import { pickAt } from './pickAt.js';
+import { formatDecimal, formatNumber } from '../i18n/format.js';
+import messages from './delinquanceFrance.i18n.js';
 
 /**
  * Recorded delinquency in France, drawn with the publisher's own caution.
@@ -297,16 +292,9 @@ const SELECTED_COLOR = '#00ffff';
  * "measured" and starts meaning "measured floor", which is the whole reason
  * these three strings are not a reuse of the ones below.
  */
-const TOTAL_STATE_BLURBS = Object.freeze({
-  published: 'Somme des indicateurs DIFFUSÉS pour cette maille — total calculé par '
-    + 'Surplomb, pas publié par le SSMSI. Dès qu’un indicateur y est non diffusé, c’est un MINORANT : '
-    + 'le vrai total est plus élevé, d’un montant inconnu. Unités mélangées (victimes, '
-    + 'infractions, véhicules, mis en cause).',
-  zero: 'Aucun fait enregistré sur AUCUN des indicateurs, et aucun n’est non diffusé. Un zéro '
-    + 'complet et mesuré — 243 communes sur 34 920 en 2025.',
-  suppressed: 'Rien de publié et au moins un indicateur retenu au titre du secret statistique : '
-    + 'il n’y a pas de total honnête à afficher. Ce n’est ni zéro, ni « peu » — c’est inconnu.',
-});
+function totalStateBlurbs() {
+  return messages().totalStateBlurbs;
+}
 
 /**
  * One-line explanations behind each legend swatch.
@@ -316,21 +304,15 @@ const TOTAL_STATE_BLURBS = Object.freeze({
  * well as behind the `méthodo` chip. Whatever a card compresses, the panel
  * still says word for word.
  */
-const STATE_BLURBS = Object.freeze({
-  published: 'Taux publié par le SSMSI. C’est de la délinquance ENREGISTRÉE : ce que la police et '
-    + `la gendarmerie ont consigné, pas ce qui s’est produit. ${DELINQUANCE_PLAINTE_RULE}`,
-  zero: `Aucun fait enregistré. ${DELINQUANCE_ZERO_RULE} — c’est une valeur publiée, pas un trou.`,
-  // The rule, word for word, because the paraphrase this row used to carry
-  // ("entre 1 et 5 faits") is refuted by the register itself: 4 735 of the
-  // 251 145 suppressed 2025 cells published more than 5 facts in 2023 or 2024.
-  suppressed: `Non diffusé, au titre du secret statistique. ${DELINQUANCE_SUPPRESSION_RULE} `
-    + 'Le critère porte sur trois années, pas sur la valeur affichée : ce n’est NI zéro, NI '
-    + 'forcément une valeur basse — c’est inconnu.',
-  missing: 'Cette commune n’a aucune ligne pour cet indicateur dans cette édition. Ce n’est ni '
-    + 'zéro, ni un secret : le registre ne la mentionne pas. Le remplissage est volontairement '
-    + 'le plus sombre et le plus transparent de la carte — plus proche du fond que de la bande '
-    + 'la plus basse.',
-});
+function stateBlurbs() {
+  const m = messages();
+  return {
+    published: m.stateBlurbs.published(delinquanceRule('plainte')),
+    zero: m.stateBlurbs.zero(delinquanceRule('zero')),
+    suppressed: m.stateBlurbs.suppressed(delinquanceRule('suppression')),
+    missing: m.stateBlurbs.missing,
+  };
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -388,7 +370,7 @@ let _classificationType = Cesium.ClassificationType.BOTH;
 
 function fr(value) {
   const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString('fr-FR') : '—';
+  return Number.isFinite(number) ? formatNumber(number) : messages().noValue;
 }
 
 /**
@@ -405,14 +387,11 @@ export function formatDelinquanceRate(rate) {
   // which is the exact sentence the three-state model exists to prevent. An
   // explicit nullish test comes first; a real published zero (Ardèche recorded
   // no homicide in 2025) still formats as 0,000, because that one is a claim.
-  if (rate === null || rate === undefined || rate === '') return '—';
+  if (rate === null || rate === undefined || rate === '') return messages().noValue;
   const value = Number(rate);
-  if (!Number.isFinite(value)) return '—';
+  if (!Number.isFinite(value)) return messages().noValue;
   const decimals = value >= 10 ? 1 : (value >= 1 ? 2 : 3);
-  return value.toLocaleString('fr-FR', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  return formatDecimal(value, decimals, { minimumFractionDigits: decimals });
 }
 
 /**
@@ -428,7 +407,7 @@ export function formatDelinquanceRate(rate) {
  * @returns {string}
  */
 export function formatDelinquanceCount(slug, count) {
-  return `${fr(count)} ${delinquanceCountNoun(slug, count)}`;
+  return messages().value.count(fr(count), delinquanceCountNoun(slug, count));
 }
 
 /**
@@ -444,8 +423,11 @@ export function formatDelinquanceCount(slug, count) {
  * @returns {string}
  */
 export function delinquanceValueLine(slug, count, rate) {
-  return `${formatDelinquanceCount(slug, count)}, soit ${formatDelinquanceRate(rate)} `
-    + `pour ${delinquanceRateUnit(slug)}`;
+  return messages().value.line(
+    formatDelinquanceCount(slug, count),
+    formatDelinquanceRate(rate),
+    delinquanceRateUnit(slug),
+  );
 }
 
 /**
@@ -463,8 +445,7 @@ export function delinquanceValueLine(slug, count, rate) {
  * @returns {string}
  */
 export function delinquanceTotalValueLine(count, rate, contributors) {
-  return `${fr(count)} cumulés (${contributors} indicateurs), `
-    + `soit ${formatDelinquanceRate(rate)} pour 1 000 hab.`;
+  return messages().value.totalLine(fr(count), contributors, formatDelinquanceRate(rate));
 }
 
 // --- Colour ----------------------------------------------------------------
@@ -507,16 +488,17 @@ export function delinquanceFill(state, bin = -1) {
  * @returns {Array<string>}
  */
 export function delinquanceBinLabels(thresholds, slug) {
+  const m = messages();
   const bounds = (Array.isArray(thresholds) ? thresholds : []).map(Number).filter(Number.isFinite);
   const labels = [];
   let previous = 0;
   for (const bound of bounds) {
-    labels.push(`${formatDelinquanceRate(previous)}–${formatDelinquanceRate(bound)}`);
+    labels.push(m.bins.range(formatDelinquanceRate(previous), formatDelinquanceRate(bound)));
     previous = bound;
   }
-  labels.push(`> ${formatDelinquanceRate(previous)}`);
+  labels.push(m.bins.above(formatDelinquanceRate(previous)));
   const unit = delinquanceRateUnit(slug);
-  return labels.map((label) => `${label} / ${unit}`);
+  return labels.map((label) => m.bins.withUnit(label, unit));
 }
 
 // --- Camera ----------------------------------------------------------------
@@ -540,9 +522,11 @@ export function delinquanceViewSpanDeg(viewer) {
  */
 export function delinquanceRegimeFor(spanDeg, current = 'departements') {
   const span = Number(spanDeg);
+  // i18n-ignore-start — the two regime KEYS, compared and returned.
   if (!Number.isFinite(span)) return 'departements';
   if (current === 'communes') return span > COMMUNE_EXIT_SPAN_DEG ? 'departements' : 'communes';
   return span <= COMMUNE_ENTER_SPAN_DEG ? 'communes' : 'departements';
+  // i18n-ignore-end
 }
 
 /** The camera rectangle as a plain box, padded. */
@@ -623,7 +607,9 @@ export function delinquanceViewBox(viewer, padFraction = 0.08) {
  * @returns {string} One or more lines; the caller splits on `\n`.
  */
 export function delinquanceCaveat(slug, { state = null, methodo = _methodo } = {}) {
+  const m = messages();
   const meta = indicatorForSlug(slug);
+  // i18n-ignore-next-line — the register's own `unite` value, matched as published.
   const misEnCause = meta?.unite === 'Mis en cause';
   const total = slug === DELINQUANCE_TOTAL_SLUG;
   const lines = [];
@@ -633,52 +619,39 @@ export function delinquanceCaveat(slug, { state = null, methodo = _methodo } = {
     // here. None of them may be dropped: the first one is the only thing that
     // tells a reader this number is GEV's arithmetic and not the register's.
     if (total) {
-      lines.push(DELINQUANCE_TOTAL_AUTHORSHIP_SHORT);
-      lines.push(DELINQUANCE_TOTAL_UNITS_SHORT);
-      lines.push(DELINQUANCE_TOTAL_AFD_SHORT);
+      lines.push(delinquanceCaveatLine('totalAuthorship'));
+      lines.push(delinquanceCaveatLine('totalUnits'));
+      lines.push(delinquanceCaveatLine('totalAfd'));
     } else {
-      lines.push(misEnCause ? DELINQUANCE_MIS_EN_CAUSE_SHORT : DELINQUANCE_ENREGISTREE_SHORT);
+      lines.push(delinquanceCaveatLine(misEnCause ? 'misEnCause' : 'enregistree'));
     }
     const note = delinquanceIndicatorNote(slug, { short: true });
     if (note) lines.push(note);
-    if (state === CELL_SUPPRESSED) lines.push(DELINQUANCE_SUPPRESSION_SHORT);
-    lines.push(`${DELINQUANCE_PLAINTE_SHORT} · ${DELINQUANCE_DOCUMENTATION_SHORT}`);
+    if (state === CELL_SUPPRESSED) lines.push(delinquanceCaveatLine('suppression'));
+    lines.push(`${delinquanceCaveatLine('plainte')} · ${delinquanceCaveatLine('documentation')}`);
     return lines.join('\n');
   }
   if (total) {
     // The total is the one indicator on this layer that the SSMSI does not
     // publish, so its first line is not about crime — it is about authorship.
-    lines.push('⚠ Total CALCULÉ par Surplomb, pas publié par le SSMSI : somme des '
-      + `${DELINQUANCE_TOTAL_COMMUNE_SLUGS.length} indicateurs communaux `
-      + `(${DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS.length} au niveau départemental).`);
-    lines.push('Unités mélangées (victimes, infractions, véhicules, mis en cause), taux '
-      + 'recalculé sur la population — cambriolages compris, que le SSMSI publie, eux, pour '
-      + '1 000 logements.');
-    lines.push('« Usage de stupéfiants (AFD) » n’est pas recompté : il est déjà dans « Usage de '
-      + 'stupéfiants » (vérifié, 101 départements sur 101).');
-  } else if (misEnCause) {
-    lines.push('⚠ Délinquance ENREGISTRÉE, comptée en mis en cause : ce sont des personnes '
-      + 'interpellées. Cet indicateur mesure aussi l’activité des services.');
+    lines.push(m.methodo.totalAuthorship(
+      DELINQUANCE_TOTAL_COMMUNE_SLUGS.length,
+      DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS.length,
+    ));
+    lines.push(m.methodo.totalUnits);
+    lines.push(m.methodo.totalAfd);
   } else {
-    lines.push('⚠ Délinquance ENREGISTRÉE : ce que la police et la gendarmerie ont consigné, '
-      + 'pas ce qui s’est produit.');
+    lines.push(misEnCause ? m.methodo.misEnCause : m.methodo.enregistree);
   }
-  lines.push(`SSMSI : ${DELINQUANCE_PLAINTE_RULE}`);
+  lines.push(m.methodo.plainte(delinquanceRule('plainte')));
   const note = delinquanceIndicatorNote(slug);
   if (note) lines.push(note);
   if (state === CELL_SUPPRESSED) {
-    lines.push(`Règle de diffusion, mot pour mot — ${DELINQUANCE_SUPPRESSION_RULE}`);
-    lines.push('Le critère porte sur TROIS ANNÉES, pas sur la valeur de l’année affichée : '
-      + '4 735 cellules non diffusées en 2025 avaient publié plus de 5 faits en 2023 ou 2024. '
-      + '« Non diffusé » ne veut donc pas dire « peu ».');
+    lines.push(m.methodo.suppressionRule(delinquanceRule('suppression')));
+    lines.push(m.methodo.suppressionYears);
   }
-  lines.push(DELINQUANCE_DOCUMENTATION_TITLE);
+  lines.push(delinquanceDocumentationTitle());
   return lines.join('\n');
-}
-
-/** French plural agreement for the census counts. */
-function plural(count, word) {
-  return Math.abs(Number(count)) < 2 ? word : `${word}s`;
 }
 
 /**
@@ -691,10 +664,12 @@ function plural(count, word) {
  */
 function populationLine(pop, log, slug, methodo) {
   if (!(pop > 0)) return null;
+  // i18n-ignore-next-line — `per` is a column key of the indicator table.
   const wantsLog = methodo || indicatorForSlug(slug)?.per === 'logements';
+  const m = messages();
   return wantsLog && log > 0
-    ? `${fr(pop)} habitants · ${fr(log)} logements`
-    : `${fr(pop)} habitants`;
+    ? m.population.residentsAndDwellings(fr(pop), fr(log))
+    : m.population.residents(fr(pop));
 }
 
 /**
@@ -702,41 +677,48 @@ function populationLine(pop, log, slug, methodo) {
  * one, by saying how much of the finer map underneath is withheld.
  */
 function communeCensusLine(communes, methodo) {
+  const m = messages();
   const total = communes.published + communes.zero + communes.suppressed;
   const share = ((100 * communes.suppressed) / Math.max(1, total)).toFixed(0);
-  if (methodo) {
-    return `${fr(communes.suppressed)} des ${fr(total)} communes non diffusées (${share} %) · `
-      + `${fr(communes.published)} avec une valeur publiée`;
-  }
-  return `${fr(total)} communes : ${fr(communes.suppressed)} non `
-    + `${plural(communes.suppressed, 'diffusée')} (${share} %), `
-    + `${fr(communes.published)} ${plural(communes.published, 'publiée')}`;
+  return methodo
+    ? m.census.methodo(fr(communes.suppressed), fr(total), share, fr(communes.published))
+    : m.census.compact(
+      fr(total),
+      fr(communes.suppressed),
+      communes.suppressed,
+      share,
+      fr(communes.published),
+      communes.published,
+    );
 }
 
 /** Card copy for one département. */
 export function buildDelinquanceDepartementLabel(row, context = {}) {
+  const m = messages();
   const slug = context.indicator || _indicator;
   const methodo = context.methodo ?? _methodo;
-  const meta = indicatorForSlug(slug);
   const details = [];
-  details.push(`${meta?.label || slug} — ${context.year || _year || '—'}`);
+  details.push(m.departement.header(
+    delinquanceIndicatorLabel(slug),
+    context.year || _year || m.noValue,
+  ));
   if (slug === DELINQUANCE_TOTAL_SLUG && row.state === CELL_PUBLISHED) {
     // No `est_diffuse` column exists at this grain, so this total is complete
     // — the one place on this layer where a total is a value and not a floor.
     details.push(methodo
-      ? `${formatDelinquanceRate(row.rate)} pour 1 000 habitants · ${fr(row.count)} faits, `
-        + `victimes et mis en cause cumulés sur ${DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS.length} indicateurs`
+      ? m.departement.totalMethodo(
+        formatDelinquanceRate(row.rate),
+        fr(row.count),
+        DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS.length,
+      )
       : delinquanceTotalValueLine(row.count, row.rate, DELINQUANCE_TOTAL_DEPARTEMENT_SLUGS.length));
-    details.push(methodo
-      ? 'Total exact à cette échelle : la base départementale ne connaît pas le secret '
-        + 'statistique. C’est en zoomant sur les communes qu’il apparaît.'
-      : 'Total exact ici : pas de secret statistique au département');
+    details.push(methodo ? m.departement.totalExactMethodo : m.departement.totalExact);
   } else if (row.state === CELL_PUBLISHED) {
     details.push(delinquanceValueLine(slug, row.count, row.rate));
   } else if (row.state === CELL_ZERO) {
     details.push(DELINQUANCE_CELL_LABELS.zero);
   } else {
-    details.push('Aucune ligne pour ce département dans cette édition');
+    details.push(m.departement.noRow);
   }
   const population = populationLine(row.pop, row.log, slug, methodo);
   if (population) details.push(population);
@@ -774,6 +756,7 @@ const COMPACT_LINE_BUDGET = 60;
  * time inside a line that has sixty.
  */
 function otherIndicatorLines(record, slug, methodo, total = false) {
+  const m = messages();
   const published = [];
   const all = [];
   let suppressed = 0;
@@ -782,16 +765,16 @@ function otherIndicatorLines(record, slug, methodo, total = false) {
     if (other === slug) continue;
     const value = record?.cells?.[i];
     if (!value) continue;
-    const name = indicatorForSlug(other)?.short || other;
+    const name = delinquanceIndicatorShort(other);
     const marked = total && DELINQUANCE_TOTAL_EXCLUDED.includes(other)
-      ? `${name} (hors total)`
+      ? m.others.excluded(name)
       : name;
     if (value[0] === CELL_PUBLISHED) {
-      published.push(`${name} ${fr(value[1])}`);
-      all.push(`${marked} ${fr(value[1])}`);
+      published.push(m.others.value(name, fr(value[1])));
+      all.push(m.others.value(marked, fr(value[1])));
     } else if (value[0] === CELL_SUPPRESSED) {
       suppressed += 1;
-      all.push(`${marked} ✕`);
+      all.push(m.others.withheld(marked));
     }
   }
   if (methodo) return all.length ? [all.join(' · ')] : [];
@@ -804,25 +787,22 @@ function otherIndicatorLines(record, slug, methodo, total = false) {
       > COMPACT_LINE_BUDGET) shown.pop();
     lines.push(chipLine(shown, published.length - shown.length));
   }
-  if (suppressed) {
-    lines.push(`${suppressed} ${plural(suppressed, 'indicateur')} `
-      + `non ${plural(suppressed, 'diffusé')} ici`);
-  }
+  if (suppressed) lines.push(m.others.suppressedCount(fr(suppressed), suppressed));
   return lines;
 }
 
 /** One compact chip line, with the count of the chips it did not fit. */
 function chipLine(shown, hidden) {
-  return shown.join(' · ') + (hidden ? ` · +${hidden} ${plural(hidden, 'publié')}` : '');
+  return shown.join(' · ') + (hidden ? messages().others.more(fr(hidden), hidden) : '');
 }
 
 /** Card copy for one commune. */
 export function buildDelinquanceCommuneLabel(record, context = {}) {
+  const m = messages();
   const slug = record?.indicator || _indicator;
   const methodo = context.methodo ?? _methodo;
-  const meta = indicatorForSlug(slug);
   const details = [];
-  details.push(`${meta?.label || slug} — ${record?.year || '—'}`);
+  details.push(m.departement.header(delinquanceIndicatorLabel(slug), record?.year || m.noValue));
   const cell = record?.cell || null;
   const state = cell?.[0] ?? null;
   const total = slug === DELINQUANCE_TOTAL_SLUG;
@@ -834,66 +814,58 @@ export function buildDelinquanceCommuneLabel(record, context = {}) {
   const contributors = DELINQUANCE_TOTAL_COMMUNE_SLUGS.length;
   if (total && state === CELL_PUBLISHED) {
     details.push(methodo
-      ? `${formatDelinquanceRate(cell[2])} pour 1 000 habitants · ${fr(cell[1])} faits, `
-        + 'victimes et mis en cause cumulés'
+      ? m.commune.totalMethodo(formatDelinquanceRate(cell[2]), fr(cell[1]))
       : delinquanceTotalValueLine(cell[1], cell[2], contributors));
     if (withheld > 0) {
       details.push(methodo
-        ? `⚠ MINORANT : ${fr(withheld)} des ${contributors} indicateurs sont non diffusés ici, et `
-          + 'ne sont donc PAS dans ce total. Le vrai total est plus élevé, d’un montant inconnu.'
-        : `⚠ MINORANT : ${fr(withheld)} des ${contributors} indicateurs non diffusés ici`);
+        ? m.commune.lowerBoundMethodo(fr(withheld), contributors)
+        : m.commune.lowerBound(fr(withheld), contributors));
     } else {
       details.push(methodo
-        ? `Total complet : les ${contributors} indicateurs sont tous diffusés ici — le cas de `
-          + '178 communes sur 34 920 dans l’édition 2025.'
-        : `Total complet : les ${contributors} indicateurs sont diffusés ici`);
+        ? m.commune.completeMethodo(contributors)
+        : m.commune.complete(contributors));
     }
   } else if (total && state === CELL_ZERO) {
     details.push(methodo
-      ? `${DELINQUANCE_CELL_LABELS.zero} pour les ${contributors} indicateurs, et aucun `
-        + `n’est non diffusé — ${DELINQUANCE_ZERO_RULE}`
-      : `${DELINQUANCE_CELL_LABELS.zero} sur les ${contributors} indicateurs, aucun retenu`);
+      ? m.commune.totalZeroMethodo(
+        DELINQUANCE_CELL_LABELS.zero, contributors, delinquanceRule('zero'),
+      )
+      : m.commune.totalZero(DELINQUANCE_CELL_LABELS.zero, contributors));
   } else if (total && state === CELL_SUPPRESSED) {
+    details.push(methodo ? m.commune.totalSuppressedMethodo : m.commune.totalSuppressed);
     details.push(methodo
-      ? 'Aucun fait publié, et le registre en retient : rien à totaliser ici'
-      : 'Rien à totaliser : le registre en retient ici');
-    details.push(methodo
-      ? `${fr(withheld)} des ${contributors} indicateurs non diffusés — le total n’est `
-        + 'ni zéro ni petit, il est inconnu.'
-      : `${fr(withheld)} des ${contributors} indicateurs non diffusés — total inconnu`);
+      ? m.commune.totalUnknownMethodo(fr(withheld), contributors)
+      : m.commune.totalUnknown(fr(withheld), contributors));
   } else if (state === CELL_PUBLISHED) {
     details.push(delinquanceValueLine(slug, cell[1], cell[2]));
   } else if (state === CELL_ZERO) {
     // A published zero is a CLAIM, and the claim rests on the three-year
     // condition — which the compact line states and `méthodo` quotes.
     details.push(methodo
-      ? `${DELINQUANCE_CELL_LABELS.zero} (0 fait, publié comme tel) — ${DELINQUANCE_ZERO_RULE}`
-      : `${DELINQUANCE_CELL_LABELS.zero} (0 fait, publié comme tel), 3 ans`);
+      ? m.commune.zeroMethodo(DELINQUANCE_CELL_LABELS.zero, delinquanceRule('zero'))
+      : m.commune.zero(DELINQUANCE_CELL_LABELS.zero));
   } else if (state === CELL_SUPPRESSED) {
-    details.push(`${DELINQUANCE_CELL_LABELS.suppressed}`);
+    details.push(DELINQUANCE_CELL_LABELS.suppressed);
     const mean = record?.mean || null;
     if (mean && Number.isFinite(mean.rate)) {
       // `complement_info_taux` is a DÉPARTEMENTAL average over every withheld
       // commune, not this commune's value, and the label has to make that
       // impossible to misread — in either register. `méthodo` quotes the
       // column's own definition; the compact line names whose average it is.
-      const rate = `${formatDelinquanceRate(mean.rate)} pour ${delinquanceRateUnit(slug)}`;
       details.push(methodo
-        ? `Repère : ${rate} — ${DELINQUANCE_COMPLEMENT_RULE}, pas la valeur de cette commune`
-          + (mean.variants > 1 ? ' (deux moyennes coexistent ici : communes et arrondissements)' : '')
-        : `Repère : ${formatDelinquanceRate(mean.rate)} pour 1 000 — moyenne dép., `
-          + 'pas cette commune');
-      if (!methodo && mean.variants > 1) {
-        details.push('⚠ Deux moyennes coexistent : communes et arrondissements');
-      }
+        ? m.commune.meanMethodo(
+          m.commune.meanRate(formatDelinquanceRate(mean.rate), delinquanceRateUnit(slug)),
+          delinquanceRule('complement'),
+          mean.variants > 1 ? m.commune.meanVariants : '',
+        )
+        : m.commune.mean(formatDelinquanceRate(mean.rate)));
+      if (!methodo && mean.variants > 1) details.push(m.commune.meanVariantsWarning);
     }
   } else {
-    details.push('Aucune ligne pour cette commune dans cette édition');
+    details.push(m.commune.noRow);
   }
   if (record?.pop === 0) {
-    details.push(methodo
-      ? '⚠ Population municipale nulle — aucun taux pour 1 000 habitants n’est calculable ici'
-      : '⚠ Population municipale nulle — aucun taux calculable');
+    details.push(methodo ? m.commune.noPopulationMethodo : m.commune.noPopulation);
   } else if (record?.pop > 0) {
     const population = populationLine(record.pop, record.log, slug, methodo);
     if (population) details.push(population);
@@ -902,12 +874,10 @@ export function buildDelinquanceCommuneLabel(record, context = {}) {
   // A commune limit is a legal object and the drawn ring is not one. That
   // claim survives compression; only its sentence shortens.
   if (record?.simplified) {
-    details.push(methodo
-      ? 'Contour simplifié pour l’affichage — ce n’est pas une limite administrative'
-      : 'Contour simplifié — pas une limite administrative');
+    details.push(methodo ? m.commune.simplifiedMethodo : m.commune.simplified);
   }
   details.push(delinquanceCaveat(slug, { state, methodo }));
-  return [record?.name || record?.code || 'Commune', ...details].join('\n');
+  return [record?.name || record?.code || m.commune.untitled, ...details].join('\n');
 }
 
 function selectedOverlayEntry(id, position, copy) {
@@ -937,12 +907,13 @@ function selectedOverlayEntry(id, position, copy) {
 
 /** Ambient label for one département at national altitude. */
 export function createDelinquanceDepartementOverlayEntry(row, position) {
-  const value = row.state === CELL_PUBLISHED ? formatDelinquanceRate(row.rate) : '—';
+  const m = messages();
+  const value = row.state === CELL_PUBLISHED ? formatDelinquanceRate(row.rate) : m.noValue;
   return {
     id: `delinquance-fr:dep:${row.code}`,
     position,
     variant: 'label',
-    title: `${row.name} · ${value}`,
+    title: m.departementLabel(row.name, value),
     accent: delinquanceFill(row.state, row.bin).css,
     priority: Number(row.rate) || 0,
     collisionGroup: 'ambient-label',
@@ -1069,7 +1040,7 @@ async function ensureDepartementShapes() {
       stroke: Cesium.Color.TRANSPARENT,
       strokeWidth: 0,
     });
-    source.name = 'Délinquance enregistrée — taux par département';
+    source.name = messages().departementSourceName;
     source.show = _enabled;
     for (const entity of source.entities.values) {
       const code = String(entity.properties?.code?.getValue?.() ?? '').trim();
@@ -1194,7 +1165,7 @@ async function ensureBase() {
     .catch((error) => {
       if (error?.name !== 'AbortError') {
         console.warn('[Data:Délinquance-FR] base unavailable:', error?.message || error);
-        _error = 'base départementale indisponible';
+        _error = messages().errors.base;
       }
       return null;
     })
@@ -1205,6 +1176,7 @@ async function ensureBase() {
 async function ensurePack(dep) {
   if (_packs.has(dep)) return _packs.get(dep);
   if (_packPromises.has(dep)) return _packPromises.get(dep);
+  // i18n-ignore-next-line — a proxy route, not words.
   const promise = fetchJson(`/api/delinquance-fr/communes/${dep}`, (p) => Array.isArray(p?.communes))
     .then((payload) => {
       _packs.set(dep, payload);
@@ -1220,7 +1192,7 @@ async function ensurePack(dep) {
     .catch((error) => {
       if (error?.name !== 'AbortError') {
         console.warn(`[Data:Délinquance-FR] commune pack ${dep} unavailable:`, error?.message || error);
-        _packErrors.set(dep, error?.message || 'indisponible');
+        _packErrors.set(dep, error?.message || messages().errors.pack);
       }
       return null;
     })
@@ -1404,7 +1376,7 @@ async function loadViewport({ force = false } = {}) {
   try {
     await Promise.all([ensureBase(), ensureDepartementShapes().catch((error) => {
       console.warn('[Data:Délinquance-FR] département shapes unavailable:', error?.message || error);
-      _error = 'contours départementaux indisponibles';
+      _error = messages().errors.departementShapes;
       return null;
     })]);
     if (!_base) {
@@ -1445,7 +1417,7 @@ async function loadViewport({ force = false } = {}) {
     drawCommunes(records);
     _count = records.length;
     _status = records.length ? 'ok' : 'empty';
-    if (_packErrors.size && !records.length) _error = 'contours communaux indisponibles';
+    if (_packErrors.size && !records.length) _error = messages().errors.communeContours;
     _lastUpdate = new Date();
     void states;
   } finally {
@@ -1485,8 +1457,10 @@ export function buildDelinquanceLoadingLabel({
   loading = _loading, regime = _regime, base = _base,
 } = {}) {
   if (!loading) return null;
-  if (!base) return 'Chargement de la base départementale SSMSI…';
-  return regime === 'communes' ? 'Chargement des contours communaux…' : 'Mise à jour du fond départemental…';
+  const m = messages();
+  if (!base) return m.loading.base;
+  // i18n-ignore-next-line — a regime key, not a word.
+  return regime === 'communes' ? m.loading.communes : m.loading.departements;
 }
 
 // --- Layer ------------------------------------------------------------------
@@ -1650,32 +1624,32 @@ const delinquanceFranceLayer = {
     // The total leads the row, because it is the state the layer opens in and
     // because the alternative — a reader who must choose an offence before
     // seeing any map — is the thing it exists to remove.
+    const m = messages();
     const chipSlugs = [DELINQUANCE_TOTAL_SLUG, ...(_base.chips || [])];
     const chips = chipSlugs.map((slug) => ({
       id: slug,
-      label: indicatorForSlug(slug)?.short || slug,
+      label: delinquanceIndicatorShort(slug),
       active: slug === _indicator,
       state: slug === _indicator ? 'active' : 'idle',
       title: slug === DELINQUANCE_TOTAL_SLUG
-        ? `${DELINQUANCE_TOTAL_COMMUNE_SLUGS.length} indicateurs cumulés — total calculé par `
-          + 'Surplomb, pas publié par le SSMSI ; unités mélangées ; minorant dès qu’une '
-          + 'cellule est non diffusée'
-        : `${indicatorForSlug(slug)?.label || slug} — unité de compte : ${indicatorForSlug(slug)?.unite || '—'}`,
+        ? m.chips.totalTitle(DELINQUANCE_TOTAL_COMMUNE_SLUGS.length)
+        : m.chips.indicatorTitle(
+          delinquanceIndicatorLabel(slug),
+          delinquanceUnitLabel(slug) || m.noValue,
+        ),
       params: { indicator: slug },
     }));
     chips.push({
       id: METHODO_CHIP_ID,
-      label: 'Méthodo',
+      label: m.chips.methodoLabel,
       active: _methodo,
       state: _methodo ? 'active' : 'idle',
-      title: _methodo
-        ? 'Cartes compactes — masquer les règles du SSMSI citées mot pour mot'
-        : 'Citer sur les cartes les règles du SSMSI, mot pour mot',
+      title: _methodo ? m.chips.methodoOn : m.chips.methodoOff,
       params: { methodo: _methodo ? 'off' : 'on' },
     });
 
     const legend = [];
-    const blurbs = _indicator === DELINQUANCE_TOTAL_SLUG ? TOTAL_STATE_BLURBS : STATE_BLURBS;
+    const blurbs = _indicator === DELINQUANCE_TOTAL_SLUG ? totalStateBlurbs() : stateBlurbs();
     if (_regime === 'departements' && _national) {
       const labels = delinquanceBinLabels(_national.thresholds, _indicator);
       const counts = new Array(labels.length).fill(0);
@@ -1705,8 +1679,8 @@ const delinquanceFranceLayer = {
       if (states.published) {
         legend.push({
           label: _indicator === DELINQUANCE_TOTAL_SLUG
-            ? 'Total publié — minorant (1 000 habitants)'
-            : `Publié (${delinquanceRateUnit(_indicator)})`,
+            ? m.legend.totalPublished
+            : m.legend.published(delinquanceRateUnit(_indicator)),
           color: DELINQUANCE_RAMP[DELINQUANCE_RAMP.length - 2],
           count: states.published,
           blurb: blurbs.published,
@@ -1737,7 +1711,10 @@ const delinquanceFranceLayer = {
           label: DELINQUANCE_CELL_LABELS.missing,
           color: DELINQUANCE_MISSING_COLOR,
           count: states.missing,
-          blurb: STATE_BLURBS.missing,
+          // Always the register's own sentence, even under the computed
+          // total: "we have nothing here" means the same thing either way,
+          // and `totalStateBlurbs()` has no fourth entry by construction.
+          blurb: stateBlurbs().missing,
         });
       }
     }
@@ -1746,7 +1723,7 @@ const delinquanceFranceLayer = {
     const national = _base.census?.[_indicator];
     if (national && !legend.some((row) => row.label === DELINQUANCE_CELL_LABELS.suppressed)) {
       legend.push({
-        label: `${DELINQUANCE_CELL_LABELS.suppressed} (national)`,
+        label: m.legend.nationalSuppressed(DELINQUANCE_CELL_LABELS.suppressed),
         color: DELINQUANCE_SUPPRESSED_COLOR,
         count: national[CELL_SUPPRESSED] || 0,
         blurb: blurbs.suppressed,

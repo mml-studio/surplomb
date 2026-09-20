@@ -175,6 +175,29 @@ import {
   GEO_API_ROOT,
   communeContoursUrl,
 } from './communeContours.js';
+import messages from './delinquanceFeed.i18n.js';
+
+/**
+ * A leaf's French, read off the catalog's DEFINITION rather than resolved.
+ *
+ * The constants below are exported as strings and are read when this module
+ * loads, on a server that has no locale to consult (R5, and
+ * docs/i18n/CONVENTIONS.md, "Server-side modules"). They are therefore the
+ * French side of the catalog, byte for byte, exactly as they were typed here
+ * before — and the accessor next to each of them is what a BROWSER calls
+ * instead, at draw time, in the page's language. The same two-reader pattern
+ * as `rnbPivot.js`.
+ */
+function french(leaf) {
+  return leaf.fr;
+}
+
+/** The same, for a whole group: `{ slug: leaf }` becomes `{ slug: fr }`. */
+function frenchRegister(group) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(group).map(([key, leaf]) => [key, leaf.fr]),
+  ));
+}
 
 // ---------------------------------------------------------------------------
 // Provenance
@@ -198,15 +221,19 @@ export const DELINQUANCE_DATASET = '621df2954fa5a3b5a023e23c';
 export const DELINQUANCE_DATASET_URL = `https://${DELINQUANCE_PORTAL}/api/1/datasets/${DELINQUANCE_DATASET}/`;
 
 /** Short provenance line for the layer object and the cards. */
+// i18n-ignore-next-line — the dataset's own title and its publisher, as credited.
 export const DELINQUANCE_SOURCE = 'Délinquance enregistrée — SSMSI (ministère de l’Intérieur)';
 
 /** Licence, verbatim from the dataset payload's `license` field: `lov2`. */
 export const DELINQUANCE_LICENCE = 'Licence Ouverte 2.0 (Etalab)';
 
 /** Attribution string to carry wherever this data is shown. */
+// i18n-ignore-start — the publisher's own name for itself and for its files,
+// quoted as it asks. It is written by the SERVER onto every payload.
 export const DELINQUANCE_ATTRIBUTION = 'SSMSI — Service statistique ministériel de la sécurité '
   + 'intérieure, bases statistiques de la délinquance enregistrée par la police et la gendarmerie '
   + 'nationales (Licence Ouverte 2.0)';
+// i18n-ignore-end
 
 // ---------------------------------------------------------------------------
 // The publisher's own sentences
@@ -221,22 +248,21 @@ export const DELINQUANCE_ATTRIBUTION = 'SSMSI — Service statistique ministéri
 // being the rule and starts being this repo's opinion of it.
 // ---------------------------------------------------------------------------
 
-/** Where the four quotes below come from, so a card can cite it. */
-export const DELINQUANCE_DOCUMENTATION_TITLE = 'Documentation — bases statistiques de la '
-  + 'délinquance enregistrée, SSMSI, juillet 2026';
+/** Where the four quotes below come from, so a card can cite it, in French. */
+export const DELINQUANCE_DOCUMENTATION_TITLE = french(messages.definition.documentationTitle);
+/** The same citation in the page's language — only the month is translated. */
+export function delinquanceDocumentationTitle() {
+  return messages().documentationTitle;
+}
 
 /** The suppression rule, verbatim. The single most misquoted sentence here. */
-export const DELINQUANCE_SUPPRESSION_RULE = '« Les données diffusées sont limitées aux communes '
-  + 'pour lesquelles plus de 5 faits ont été enregistrés pendant 3 années successives. »';
+export const DELINQUANCE_SUPPRESSION_RULE = french(messages.definition.rules.suppression);
 
 /** The other half of the rule: a published 0 is a claim, not a gap. */
-export const DELINQUANCE_ZERO_RULE = '« La base de données diffusée fournit également '
-  + 'l’information sur l’absence de faits enregistrés lorsqu’elle se reproduit sur 3 années '
-  + 'successives. »';
+export const DELINQUANCE_ZERO_RULE = french(messages.definition.rules.zero);
 
 /** What `complement_info_taux` is, verbatim. It is not the commune's value. */
-export const DELINQUANCE_COMPLEMENT_RULE = '« Valeur pour 1 000 moyenne parmi les communes du '
-  + 'département sous secret statistique »';
+export const DELINQUANCE_COMPLEMENT_RULE = french(messages.definition.rules.complement);
 
 /**
  * The reporting-rate caveat, in the SSMSI's own words and with its own two
@@ -244,10 +270,22 @@ export const DELINQUANCE_COMPLEMENT_RULE = '« Valeur pour 1 000 moyenne parmi l
  * write. 12 % against 74 % means two indicators of this same layer are not on
  * a comparable scale at all.
  */
-export const DELINQUANCE_PLAINTE_RULE = '« La propension à déposer plainte a un impact sur le '
-  + 'niveau de la délinquance enregistrée […] en moyenne sur la période 2011-2018 seules 12 % '
-  + 'des victimes de violences sexuelles hors ménage portent plainte, contre 74 % pour les '
-  + 'victimes de cambriolages. »';
+export const DELINQUANCE_PLAINTE_RULE = french(messages.definition.rules.plainte);
+
+/**
+ * One of the four rules, in the page's language.
+ *
+ * French prints the extraction from the methodology PDF, character for
+ * character. English prints the same sentence translated, inside the same
+ * quotation marks: a French rule an English reader cannot read is decoration,
+ * not the check the `méthodo` register exists to offer.
+ *
+ * @param {'suppression'|'zero'|'complement'|'plainte'} key
+ * @returns {string}
+ */
+export function delinquanceRule(key) {
+  return messages().rules[key];
+}
 
 /**
  * Per-indicator warnings the register publishes and a generic card would drop.
@@ -260,25 +298,7 @@ export const DELINQUANCE_PLAINTE_RULE = '« La propension à déposer plainte a 
  *
  * Keyed by slug; a slug with no note gets none rather than a filler line.
  */
-export const DELINQUANCE_INDICATOR_NOTES = Object.freeze({
-  escroqueries: '⚠ Comptées au LIEU DE RÉSIDENCE de la victime, pas au lieu de commission '
-    + '(« une part importante de ces infractions a lieu sur internet »). Cette carte montre où '
-    + 'habitent les victimes déclarées.',
-  cambriolages: 'Taux pour 1 000 LOGEMENTS et non pour 1 000 habitants — cet indicateur ne se '
-    + 'compare à aucun autre de cette liste.',
-  'usage-stupefiants': 'Mis en cause élucidés. « Un mis en cause donné n’est compté qu’une seule '
-    + 'fois par unité spatiale » : le total départemental n’est pas la somme des communes.',
-  'usage-stupefiants-afd': 'Amendes forfaitaires délictuelles. La date retenue a changé en '
-    + 'juillet 2026 (+1 %, soit 2 614 mis en cause) — une rupture de série, pas une hausse.',
-  'usage-stupefiants-hors-afd': 'Publié au département et à la région seulement : il n’existe pas '
-    + 'de carte communale de cet indicateur.',
-  'trafic-stupefiants': 'Mis en cause élucidés. « Un mis en cause donné n’est compté qu’une seule '
-    + 'fois par unité spatiale » : le total départemental n’est pas la somme des communes.',
-  homicides: 'Publié au département et à la région seulement : il n’existe pas de carte communale '
-    + 'de cet indicateur.',
-  'tentatives-homicide': 'Publié au département et à la région seulement : il n’existe pas de '
-    + 'carte communale de cet indicateur.',
-});
+export const DELINQUANCE_INDICATOR_NOTES = frenchRegister(messages.definition.notes);
 
 /**
  * The same warnings, compressed to ONE card line each.
@@ -294,16 +314,7 @@ export const DELINQUANCE_INDICATOR_NOTES = Object.freeze({
  * Every line here is ≤ 60 characters, which is what the selected card fits
  * before the overlay wraps it.
  */
-export const DELINQUANCE_INDICATOR_NOTES_SHORT = Object.freeze({
-  escroqueries: '⚠ Comptées au domicile de la victime, pas au lieu du fait',
-  cambriolages: 'Rapporté aux LOGEMENTS — non comparable aux autres',
-  'usage-stupefiants': 'Mis en cause élucidés — mesure l’activité des services',
-  'usage-stupefiants-afd': 'Amendes forfaitaires — rupture de série en juillet 2026',
-  'usage-stupefiants-hors-afd': 'Publié au département seulement',
-  'trafic-stupefiants': 'Mis en cause élucidés — mesure l’activité des services',
-  homicides: 'Publié au département seulement',
-  'tentatives-homicide': 'Publié au département seulement',
-});
+export const DELINQUANCE_INDICATOR_NOTES_SHORT = frenchRegister(messages.definition.notesShort);
 
 /**
  * The note for one indicator, or null. Never a filler sentence.
@@ -313,7 +324,8 @@ export const DELINQUANCE_INDICATOR_NOTES_SHORT = Object.freeze({
  */
 export function delinquanceIndicatorNote(slug, { short = false } = {}) {
   const key = String(slug ?? '').trim();
-  const register = short ? DELINQUANCE_INDICATOR_NOTES_SHORT : DELINQUANCE_INDICATOR_NOTES;
+  const m = messages();
+  const register = short ? m.notesShort : m.notes;
   return register[key] || null;
 }
 
@@ -322,15 +334,15 @@ export function delinquanceIndicatorNote(slug, { short = false } = {}) {
  * of its long form — `Délinquance ENREGISTRÉE`, the 12 %/74 % pair, the
  * three-year condition — so nothing a card asserts today stops being asserted.
  */
-export const DELINQUANCE_ENREGISTREE_SHORT = '⚠ Délinquance ENREGISTRÉE — le déclaré, pas le réel';
+export const DELINQUANCE_ENREGISTREE_SHORT = french(messages.definition.caveats.enregistree);
 /** Its `Mis en cause` variant: a count of people stopped, not of reports. */
-export const DELINQUANCE_MIS_EN_CAUSE_SHORT = '⚠ Délinquance ENREGISTRÉE, comptée en mis en cause';
+export const DELINQUANCE_MIS_EN_CAUSE_SHORT = french(messages.definition.caveats.misEnCause);
 /** The reporting-rate scale, with the publisher's own two numbers. */
-export const DELINQUANCE_PLAINTE_SHORT = 'Plainte : 12 % à 74 % selon l’atteinte';
+export const DELINQUANCE_PLAINTE_SHORT = french(messages.definition.caveats.plainte);
 /** The suppression rule's CLAIM: a withheld cell is unknown, not small. */
-export const DELINQUANCE_SUPPRESSION_SHORT = 'Diffusé si > 5 faits 3 ans de suite — ni zéro, ni « peu »';
+export const DELINQUANCE_SUPPRESSION_SHORT = french(messages.definition.caveats.suppression);
 /** Provenance, short enough to ride at the end of another line. */
-export const DELINQUANCE_DOCUMENTATION_SHORT = 'SSMSI, juillet 2026';
+export const DELINQUANCE_DOCUMENTATION_SHORT = french(messages.definition.caveats.documentation);
 
 /**
  * The computed total's own three claims, compressed.
@@ -340,11 +352,24 @@ export const DELINQUANCE_DOCUMENTATION_SHORT = 'SSMSI, juillet 2026';
  * line of this whole file that may never be dropped for length: a reader who
  * loses it is reading GEV's arithmetic as the register's.
  */
-export const DELINQUANCE_TOTAL_AUTHORSHIP_SHORT = '⚠ Total CALCULÉ par Surplomb, non publié par le SSMSI';
+export const DELINQUANCE_TOTAL_AUTHORSHIP_SHORT = french(
+  messages.definition.caveats.totalAuthorship,
+);
 /** Why the number cannot be called « faits », and what its rate sits on. */
-export const DELINQUANCE_TOTAL_UNITS_SHORT = 'Unités mélangées, taux recalculé sur la population';
+export const DELINQUANCE_TOTAL_UNITS_SHORT = french(messages.definition.caveats.totalUnits);
 /** Why one indicator of the eighteen is not in it. */
-export const DELINQUANCE_TOTAL_AFD_SHORT = 'Usage stup. (AFD) non recompté : déjà dans son parent';
+export const DELINQUANCE_TOTAL_AFD_SHORT = french(messages.definition.caveats.totalAfd);
+
+/**
+ * One compressed caveat, in the page's language.
+ *
+ * @param {'enregistree'|'misEnCause'|'plainte'|'suppression'|'documentation'
+ *   |'totalAuthorship'|'totalUnits'|'totalAfd'} key
+ * @returns {string}
+ */
+export function delinquanceCaveatLine(key) {
+  return messages().caveats[key];
+}
 
 /**
  * What the numbers on a card actually COUNT, per indicator.
@@ -354,25 +379,23 @@ export const DELINQUANCE_TOTAL_AFD_SHORT = 'Usage stup. (AFD) non recompté : d�
  * counted in VICTIMES, cambriolages in INFRACTIONS, vols de véhicule in
  * VÉHICULES, stupéfiants in MIS EN CAUSE. The card used to print « faits » for
  * every one of them, which is a paraphrase for four of the five units and says
- * nothing for the fifth. Keyed by the `unite` column, singular then plural.
+ * nothing for the fifth. Keyed by the `unite` column, singular then plural,
+ * in `delinquanceFeed.i18n.js`.
  */
-const UNIT_NOUNS = Object.freeze({
-  Victime: Object.freeze(['victime', 'victimes']),
-  'Victime entendue': Object.freeze(['victime entendue', 'victimes entendues']),
-  Infraction: Object.freeze(['infraction', 'infractions']),
-  Véhicule: Object.freeze(['véhicule', 'véhicules']),
-  'Mis en cause': Object.freeze(['mis en cause', 'mis en cause']),
-});
-const DEFAULT_UNIT_NOUNS = Object.freeze(['fait', 'faits']);
-
 /**
  * The noun this indicator's counts are expressed in, agreed with the count.
+ *
+ * Looked up on the register's own `unite` — `Victime`, `Mis en cause` — which
+ * is a value in the file and stays one. An indicator whose unit this build
+ * has never met falls back on the register's own word for a row.
+ *
  * @param {string} slug
  * @param {number} [count] Drives the plural; 1 alone is singular.
  * @returns {string}
  */
 export function delinquanceCountNoun(slug, count = 2) {
-  const nouns = UNIT_NOUNS[indicatorForSlug(slug)?.unite] || DEFAULT_UNIT_NOUNS;
+  const units = messages().units;
+  const nouns = units[indicatorForSlug(slug)?.unite] || units.default;
   return Math.abs(Number(count)) < 2 ? nouns[0] : nouns[1];
 }
 
@@ -428,6 +451,7 @@ export function delinquanceContoursUrl(departement) {
   try {
     return communeContoursUrl(departement);
   } catch (error) {
+    // i18n-ignore-next-line — a developer message, thrown at the proxy, never a card.
     throw new Error(`delinquance: invalid département code ${departement}`, { cause: error });
   }
 }
@@ -454,6 +478,12 @@ export function delinquanceContoursUrl(departement) {
  * `grains` is which bases carry the indicator. Three of the eighteen are
  * département-and-above only, so a commune map of them does not exist.
  */
+// i18n-ignore-start — EVERY string in this table is data. `label` is the JOIN
+// KEY: the register publishes no code column, so `Cambriolages de logement`
+// is how a row finds its indicator, and retyping one is an empty map. `unite`
+// and `per` are the file's own column values. What a READER sees comes from
+// `delinquanceIndicatorLabel`, `delinquanceIndicatorShort` and
+// `delinquanceCountNoun`, which look these keys up in the catalog.
 export const DELINQUANCE_INDICATORS = Object.freeze([
   { slug: 'homicides', label: 'Homicides', short: 'Homicides', unite: 'Victime', per: 'habitants', grains: Object.freeze(['dep']) },
   { slug: 'tentatives-homicide', label: "Tentatives d'homicide", short: 'Tentatives d’homicide', unite: 'Victime', per: 'habitants', grains: Object.freeze(['dep']) },
@@ -474,6 +504,7 @@ export const DELINQUANCE_INDICATORS = Object.freeze([
   { slug: 'trafic-stupefiants', label: 'Trafic de stupéfiants', short: 'Trafic de stupéfiants', unite: 'Mis en cause', per: 'habitants', grains: Object.freeze(['dep', 'com']) },
   { slug: 'escroqueries', label: 'Escroqueries et fraudes aux moyens de paiement', short: 'Escroqueries', unite: 'Victime', per: 'habitants', grains: Object.freeze(['dep', 'com']) },
 ]);
+// i18n-ignore-end
 
 /** Slugs published at commune grain — 15 of the 18. */
 export const DELINQUANCE_COMMUNE_SLUGS = Object.freeze(
@@ -494,6 +525,7 @@ export const DELINQUANCE_DEPARTEMENT_SLUGS = Object.freeze(
  * no total, so this one is this repo's arithmetic and not the publisher's
  * claim. `computed: true` on the meta is what the cards test.
  */
+// i18n-ignore-next-line — a slug, and a share-link-shaped chip id.
 export const DELINQUANCE_TOTAL_SLUG = 'tous';
 
 /**
@@ -530,9 +562,13 @@ export const DELINQUANCE_TOTAL_EXCLUDED = Object.freeze([
  */
 export const DELINQUANCE_TOTAL_INDICATOR = Object.freeze({
   slug: DELINQUANCE_TOTAL_SLUG,
-  label: 'Tous les indicateurs — total calculé',
-  short: 'Tous',
-  unite: 'Victimes, infractions, véhicules et mis en cause confondus',
+  // The French of the same three catalog leaves the eighteen read from, so
+  // the total's row has the shape every other row has, and its words come
+  // from one place. No `unite` of the register matches it, by construction.
+  label: french(messages.definition.indicators.tous),
+  short: french(messages.definition.indicatorsShort.tous),
+  unite: french(messages.definition.totalUnit),
+  // i18n-ignore-next-line — a column key of the indicator table.
   per: 'habitants',
   grains: Object.freeze(['dep', 'com']),
   computed: true,
@@ -590,12 +626,52 @@ export function indicatorForSlug(slug) {
 }
 
 /**
+ * The indicator's full name, in the page's language.
+ *
+ * In French this is the register's own label, byte for byte — the `fr` side
+ * of the catalog repeats it, and `delinquanceFeed.test.mjs` compares the two.
+ * A slug this build has never met prints as itself, which is still
+ * information; an empty card header is not.
+ *
+ * @param {string} slug
+ * @returns {string}
+ */
+export function delinquanceIndicatorLabel(slug) {
+  const key = String(slug ?? '').trim();
+  return messages().indicators[key] || indicatorForSlug(key)?.label || key;
+}
+
+/** The same, short, for a chip. */
+export function delinquanceIndicatorShort(slug) {
+  const key = String(slug ?? '').trim();
+  return messages().indicatorsShort[key] || indicatorForSlug(key)?.short || key;
+}
+
+/**
+ * What one indicator's counts are expressed in, as a card names the unit.
+ *
+ * The computed total has no unit of the register's, and says so in a mouthful
+ * rather than borrowing one of the five it adds together.
+ * @param {string} slug
+ * @returns {?string}
+ */
+export function delinquanceUnitLabel(slug) {
+  if (String(slug ?? '').trim() === DELINQUANCE_TOTAL_SLUG) return messages().totalUnit;
+  const unite = indicatorForSlug(slug)?.unite;
+  if (!unite) return null;
+  const nouns = messages().units[unite];
+  return nouns ? nouns[1] : unite;
+}
+
+/**
  * The unit a rate is per, as a French noun for a card.
  * @param {string} slug
  * @returns {string}
  */
 export function delinquanceRateUnit(slug) {
-  return indicatorForSlug(slug)?.per === 'logements' ? '1 000 logements' : '1 000 habitants';
+  const units = messages().rateUnits;
+  // i18n-ignore-next-line — `per` is a column key of the indicator table.
+  return indicatorForSlug(slug)?.per === 'logements' ? units.logements : units.habitants;
 }
 
 // ---------------------------------------------------------------------------
@@ -616,17 +692,25 @@ export const CELL_SUPPRESSED = 2;
 /** Wire-order state names, for tests and for the legend. */
 export const DELINQUANCE_CELL_STATES = Object.freeze(['published', 'zero', 'suppressed']);
 
-/** French label for each state, written so neither can be read as the other. */
+/**
+ * The label of each state, written so no two can be read as each other.
+ *
+ * GETTERS, not values: a card is drawn long after this module loads, and a
+ * resolved string here would freeze the four states in whichever language
+ * booted first (docs/i18n/CONVENTIONS.md § 2). Reading one property resolves
+ * one label, in the page's language.
+ *
+ * The fourth state was drawn since the layer was written and never keyed: a
+ * commune with no line at all for this indicator in this edition. It is
+ * painted (DELINQUANCE_MISSING_COLOR at alpha 0.22) and it was counted, but
+ * the count never reached the legend — so the only cell state a reader could
+ * not name was the one that means "we have nothing".
+ */
 export const DELINQUANCE_CELL_LABELS = Object.freeze({
-  published: 'Valeur publiée',
-  zero: 'Aucun fait enregistré',
-  suppressed: 'Non diffusé — secret statistique',
-  // A FOURTH state, drawn since the layer was written and never keyed: a
-  // commune with no line at all for this indicator in this edition. It is
-  // painted (DELINQUANCE_MISSING_COLOR at alpha 0.22) and it was counted, but
-  // the count never reached the legend — so the only cell state a reader could
-  // not name was the one that means "we have nothing".
-  missing: 'Absent de cette édition',
+  get published() { return messages().cellStates.published; },
+  get zero() { return messages().cellStates.zero; },
+  get suppressed() { return messages().cellStates.suppressed; },
+  get missing() { return messages().cellStates.missing; },
 });
 
 /**
@@ -1079,6 +1163,8 @@ export function createCommuneFold({ year = DELINQUANCE_YEAR_FLOOR } = {}) {
   let zeroPopulation = 0;
 
   /** Column indices, resolved once from the header. */
+  // i18n-ignore-start — the commune base's own column names, and one
+  // developer message the proxy throws when the header is not what it was.
   function resolveColumns(names) {
     const at = (name) => names.indexOf(name);
     codeColumn = communeCodeColumn(names);
@@ -1104,6 +1190,7 @@ export function createCommuneFold({ year = DELINQUANCE_YEAR_FLOOR } = {}) {
         header = splitSsmsiLine(stripBom(line), NaN).map((name) => ssmsiText(name));
         columns = resolveColumns(header);
         if (columns.code < 0) throw new Error('delinquance: commune base has no CODGEO column');
+        // i18n-ignore-end
         return;
       }
       const fields = splitSsmsiLine(line, header.length);
