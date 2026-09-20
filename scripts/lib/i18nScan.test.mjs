@@ -7,6 +7,8 @@ import {
   compareToBaseline,
   hasInterfaceText,
   ignoredLines,
+  isCssClassList,
+  isResourceLocator,
   renderBaseline,
   rulesFor,
   scanHtml,
@@ -65,6 +67,34 @@ test('what counts as interface text', () => {
   assert.equal(hasInterfaceText('<div class="x"></div>'), false);
   assert.equal(hasInterfaceText('https://example.org/path'), false);
   assert.equal(hasInterfaceText('ON'), true);
+  // A CSS class interpolated into a row's markup is not copy.
+  assert.equal(hasInterfaceText(' has-glyph'), false);
+  assert.equal(hasInterfaceText('data-icon has-glyph'), false);
+  assert.equal(isCssClassList('has-glyph'), true);
+  assert.equal(isCssClassList('material-symbols-outlined'), true);
+  // One lowercase word on its own is copy, not a class: nothing hides here.
+  assert.equal(isCssClassList('erreur'), false);
+  assert.equal(isCssClassList('Aucun résultat'), false);
+  assert.equal(isCssClassList('has-glyph and more'), false);
+});
+
+test('an address is never text — no rule reads a URL or an asset path', () => {
+  assert.equal(isResourceLocator('https://overpass-api.de/api/interpreter'), true);
+  assert.equal(isResourceLocator('/landing/view-02-480-h264.1ce878e0.mp4'), true);
+  assert.equal(isResourceLocator('./local_data/velo_pulse/pulse.json'), true);
+  assert.equal(isResourceLocator('Ouverture du globe…'), false);
+  const source = `
+    const relay = 'https://overpass-api.de/api/interpreter';
+    const clip = '/landing/view-02-480-h264.1ce878e0.mp4';
+    el.src = 'https://tiles.example.de/x.png';
+    const real = 'Aucun résultat';
+  `;
+  // Only the sentence counts: `.de`, like `ce` in a content hash, is an
+  // accident of the address.
+  assert.deepEqual(
+    scanModule(source).findings.filter((f) => f.rule === 'R1').map((f) => f.text),
+    ['Aucun résultat'],
+  );
 });
 
 test('R4 counts pinned French display formatting, not case mapping or sorting', () => {
@@ -111,15 +141,53 @@ test('R5 counts message reads while the module loads, and nothing inside functio
   assert.equal(count(source, 'R5'), 6);
 });
 
-test('catalogs and the i18n layer are exempt from R1, R2 and R4 — never from R5', () => {
+test('catalogs, the i18n layer and the landing page are exempt from R1, R2 and R4 — never from R5', () => {
   assert.deepEqual(rulesFor('src/data/foo.i18n.js'), { R1: false, R2: false, R4: true, R5: true });
   assert.deepEqual(rulesFor('src/i18n/format.js'), { R1: false, R2: false, R4: false, R5: true });
   assert.deepEqual(rulesFor('src/data/foo.js'), { R1: true, R2: true, R4: true, R5: true });
+  // The showcase at `/` is French by decision D2, `Intl.NumberFormat('fr-FR')`
+  // counters included — the same decision that exempts `#vitrine` from R3.
+  assert.deepEqual(rulesFor('src/vitrine/vitrine.js'), { R1: false, R2: false, R4: false, R5: true });
+  assert.deepEqual(rulesFor('src/vitrine/counters.js'), { R1: false, R2: false, R4: false, R5: true });
 });
 
 test('the escape hatch covers single lines, next lines and blocks', () => {
   const lines = ignoredLines('a\nb // i18n-ignore-line\n// i18n-ignore-next-line\nc\n// i18n-ignore-start\nd\n// i18n-ignore-end\ne');
   assert.deepEqual([...lines].sort((x, y) => x - y), [2, 4, 5, 6, 7]);
+});
+
+test('a marker reaches past its own reason and over the statement it names', () => {
+  // The hatch asks for a reason, the reason wraps, and the declaration it
+  // points at wraps too. `src/data/anfrFrance.js`, verbatim: before this the
+  // exemption landed on the comment's second line and `de` stayed counted.
+  const source = [
+    '    // i18n-ignore-next-line — the French elision, written onto the',
+    '    // register’s own noun; the English adds its own preposition.',
+    '    const of = french',
+    '      ? (/^[aeiou]/i.test(lower) ? `d’${lower}` : `de ${lower}`)',
+    '      : shownLower;',
+    '    const counted = "Aucun résultat";',
+  ].join('\n');
+  assert.deepEqual([...ignoredLines(source)].sort((a, b) => a - b), [3]);
+  assert.deepEqual(
+    scanModule(source).findings.filter((f) => f.rule === 'R1').map((f) => f.text),
+    ['Aucun résultat'],
+  );
+});
+
+test('a marker never reaches into a function body', () => {
+  // Otherwise one comment at the top of a 200-line registration would exempt
+  // everything written into it afterwards. `i18n-ignore-start`/`end` is where
+  // an extent gets typed out and reviewed.
+  const source = [
+    '    // i18n-ignore-next-line — the id is a share-link token.',
+    "    const layer = { id: 'poste',",
+    '      render() {',
+    "        el.textContent = 'Aucun résultat';",
+    '      },',
+    '    };',
+  ].join('\n');
+  assert.equal(scanModule(source).counts.R1, 1);
 });
 
 test('R3 counts index.html text and attributes without data-i18n', () => {

@@ -58,6 +58,30 @@ test('every glossary proper noun is accepted inside English', () => {
   }
 });
 
+test('a proper noun is accepted with either apostrophe', () => {
+  // The glossary spells it curly, `src/data/urbanismeGpu.js` straight; a
+  // publisher that is English in one file and French in the other is a
+  // permanent false positive on the ratchet and on the English QA scan.
+  assert.deepEqual(findFrench('Géoportail de l’urbanisme — IGN'), []);
+  assert.deepEqual(findFrench("Géoportail de l'urbanisme — IGN"), []);
+  assert.deepEqual(findFrench("Vélib' stations", { allow: [] }), []);
+  assert.deepEqual(findFrench("A Pléiades' image", { allow: ['Pléiades’'] }), []);
+});
+
+test('an apostrophe that is not an elision binds one name', () => {
+  // `Hub'Eau` is a brand, and the layer's status lines are English around it.
+  // Split at the apostrophe it used to yield the French noun `eau`.
+  assert.deepEqual(findFrench("Hub'Eau stations HTTP 429"), []);
+  assert.deepEqual(findFrench('Hub’Eau network error'), []);
+  assert.deepEqual(findFrench("Hub'Eau / Eaufrance"), []);
+  // The elision prefixes still split, and both halves are still read.
+  assert.deepEqual(findFrench('l’heure'), [
+    { kind: 'elision', match: 'l’heure' },
+    { kind: 'word', match: 'heure' },
+  ]);
+  assert.equal(looksFrench("Cours d'eau"), true);
+});
+
 test('place names and sensors are accepted when the caller hands them over', () => {
   assert.equal(looksFrench('Fire at Saint-Médard-en-Jalles'), true);
   assert.equal(looksFrench('Fire at Saint-Médard-en-Jalles', { allow: ['Saint-Médard-en-Jalles'] }), false);
