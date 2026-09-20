@@ -2,8 +2,10 @@ import * as Cesium from 'cesium';
 import { addressMarkerGlyph } from './addressMarkerIcons.js';
 import { createAddressScanLayer } from './addressScanLayer.js';
 import { publishJoin } from './layerJoins.js';
-import { GPU_BOX_MAX_ALTITUDE_M, GPU_MAX_BOX_DEG } from './gpuFeed.js';
+import { GPU_BOX_MAX_ALTITUDE_M, GPU_MAX_BOX_DEG, supTypeLabel } from './gpuFeed.js';
+import { formatNumber } from '../i18n/format.js';
 import { pointInPolygons } from './ringGeometry.js';
+import messages from './urbanismeGpu.i18n.js';
 import { greatCircleKm } from './trafficBounds.js';
 import { cameraViewBox } from './viewGate.js';
 import { focusedViewBox } from './viewportBox.js';
@@ -235,20 +237,25 @@ const ZONE_LABEL_MIN_WIDTH_DEG = 0.0004;
  * national grammar that IS standard across every commune, so it is the one
  * part that can be spelled out without inventing.
  */
-export const ZONE_FAMILY_SENTENCES = Object.freeze({
-  U: 'zone urbaine — déjà bâtie et équipée',
-  AU: 'zone à urbaniser — constructible, aujourd\'hui non bâtie',
-  AUc: 'zone à urbaniser OUVERTE — constructible sous le PLU en vigueur',
-  AUs: 'zone à urbaniser FERMÉE — constructible seulement après modification ou révision du PLU',
-  A: 'zone agricole — construction très limitée',
-  Ah: 'secteur bâti dans la zone agricole — quelques constructions admises, à la différence du reste de la zone',
-  N: 'zone naturelle — construction très limitée',
-  Nh: 'secteur bâti dans la zone naturelle — quelques constructions admises, à la différence du reste de la zone',
-});
+export const ZONE_FAMILY_SENTENCES = Object.freeze(Object.fromEntries(
+  Object.entries(messages.definition.family).map(([kind, leaf]) => [kind, leaf.fr]),
+));
+
+/**
+ * The same table in the page's language, read when a card is drawn.
+ *
+ * Keyed on the register's OWN spelling upper-cased, because that is what
+ * `byUpperKey` was written for: `'AUc'.toUpperCase()` is `AUC`, and a table
+ * indexed by the literal key would miss every `AUc`, `AUs`, `Ah` and `Nh` the
+ * census actually found.
+ * @returns {Record<string, string>}
+ */
+function zoneSentenceIndex() {
+  return byUpperKey(messages().family);
+}
 
 const ZONE_COLOR_INDEX = byUpperKey(ZONE_COLORS);
 const ZONE_ALPHA_INDEX = byUpperKey(ZONE_FILL_ALPHA);
-const ZONE_SENTENCE_INDEX = byUpperKey(ZONE_FAMILY_SENTENCES);
 
 /** Servitude families worth pulling to the front of a reader's attention. */
 const LOUD_SUP_CODES = new Set(['t1', 't4', 't5', 't7', 'i1', 'i3', 'i4', 'pm1', 'pm3']);
@@ -285,20 +292,8 @@ const LOUD_SUP_CODES = new Set(['t1', 't4', 't5', 't7', 'i1', 'i3', 'i4', 'pm1',
  * `drawOnlyParams` in `addressScanLayer.js`.
  */
 export const GPU_HALVES = Object.freeze([
-  Object.freeze({
-    key: 'plu',
-    field: 'zoning',
-    label: 'Zonage PLU',
-    subject: 'le zonage du PLU',
-    blurb: 'l’aplat coloré, ses contours et les codes écrits au sol',
-  }),
-  Object.freeze({
-    key: 'sup',
-    field: 'servitudes',
-    label: 'Servitudes',
-    subject: 'les servitudes d’utilité publique',
-    blurb: 'les emprises tiretées rouges, posées par-dessus le zonage',
-  }),
+  Object.freeze({ key: 'plu', field: 'zoning' }),
+  Object.freeze({ key: 'sup', field: 'servitudes' }),
 ]);
 
 /** The value a chip carries: a closed pair, because it rides a share link. */
@@ -367,7 +362,7 @@ export function zoneFillAlpha(kind) {
  * @returns {?string}
  */
 export function zoneFamilySentence(kind) {
-  return ZONE_SENTENCE_INDEX[String(kind || '').toUpperCase()] ?? null;
+  return zoneSentenceIndex()[String(kind || '').toUpperCase()] ?? null;
 }
 
 /**
@@ -383,10 +378,8 @@ export function zoneFamilySentence(kind) {
 export function zoneApprovalDate(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
-  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(text);
-  if (compact) return `${compact[3]}/${compact[2]}/${compact[1]}`;
-  const dashed = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
-  if (dashed) return `${dashed[3]}/${dashed[2]}/${dashed[1]}`;
+  const parts = /^(\d{4})(\d{2})(\d{2})$/.exec(text) || /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (parts) return messages().zone.approvalDate(parts[1], parts[2], parts[3]);
   return text;
 }
 
@@ -492,16 +485,15 @@ export function drawGpuParts(dataSource, idPrefix, parts, style) {
  * @returns {string}
  */
 export function zoneDescription(entry) {
+  const m = messages();
   return [
     zoneFamilySentence(entry?.kind),
-    entry?.atPoint === false ? 'zone voisine — pas celle sous le repère' : null,
+    entry?.atPoint === false ? m.zone.neighbor : null,
     entry?.label,
-    entry?.approvedOn ? `PLU approuvé le ${zoneApprovalDate(entry.approvedOn)}` : null,
+    entry?.approvedOn ? m.zone.approvedOn(zoneApprovalDate(entry.approvedOn)) : null,
     entry?.regulationFile,
-    entry?.holes
-      ? `${entry.holes} enclave${entry.holes > 1 ? 's' : ''} découpée${entry.holes > 1 ? 's' : ''} dans la zone`
-      : null,
-    entry?.simplified ? `contour simplifié (${entry.sourceVertices} sommets à l'amont)` : null,
+    entry?.holes ? m.zone.enclaves(entry.holes) : null,
+    entry?.simplified ? m.zone.simplified(entry.sourceVertices) : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -537,9 +529,9 @@ export const GPU_REGISTER_RADIUS_M = 30;
  * `AUs` zone shows anyway — so a ground card is never wider than the layer's
  * own existing worst case.
  */
-const GROUND_CARD_MAX_LINE_CHARS = Math.max(
-  ...Object.values(ZONE_FAMILY_SENTENCES).map((sentence) => sentence.length),
-);
+function groundCardMaxLineChars() {
+  return Math.max(...Object.values(messages().family).map((sentence) => sentence.length));
+}
 
 /**
  * Rows a ground card may fill.
@@ -612,6 +604,24 @@ export function gpuAnswerAt(payload, lon, lat, scanPoint = null) {
 }
 
 /**
+ * The distinct easement FAMILIES an answer carries, named in the page's
+ * language.
+ *
+ * Read off the CODE rather than off the payload's `label`: `projectServitudes`
+ * also runs on the server, which has no language, so the sentence it published
+ * is French whatever the reader asked for. `supTypeLabel` relabels the same
+ * code here, and falls back to what the payload carried for a code this build
+ * does not know.
+ * @param {Array<object>} found
+ * @returns {string[]}
+ */
+function servitudeFamilies(found) {
+  return [...new Set(
+    found.map((entry) => supTypeLabel(entry?.code) || entry?.label || entry?.code).filter(Boolean),
+  )];
+}
+
+/**
  * The easement half of a ground card, in one sentence.
  *
  * THE ABSENCES ARE THREE DIFFERENT SENTENCES AND THAT IS THE POINT. "No
@@ -624,32 +634,34 @@ export function gpuAnswerAt(payload, lon, lat, scanPoint = null) {
  * @returns {string}
  */
 export function servitudeSentence(answer) {
+  const m = messages();
   const found = answer?.servitudes || [];
   if (found.length) {
-    const labels = [...new Set(found.map((entry) => entry.label || entry.code).filter(Boolean))];
-    const head = `${found.length} servitude${found.length > 1 ? 's' : ''} ici`;
+    const labels = servitudeFamilies(found);
+    const head = m.easements.countHere(found.length);
+    const maxLine = groundCardMaxLineChars();
     // Named until the line reaches the layer's own widest sentence, then
     // counted. The first family is always named even when it alone overruns:
     // "et 5 autres" on its own names nothing at all.
     const named = [];
     let width = head.length + 2;
     for (const label of labels) {
-      if (named.length && width + label.length + 2 > GROUND_CARD_MAX_LINE_CHARS) break;
+      if (named.length && width + label.length + 2 > maxLine) break;
       named.push(label);
       width += label.length + 2;
     }
     const rest = labels.length - named.length;
-    return `${head} : ${named.join(', ')}`
-      + (rest > 0 ? ` et ${rest} autre${rest > 1 ? 's' : ''}` : '');
+    return m.easements.named(head, named.join(', '))
+      + (rest > 0 ? m.easements.andMore(rest) : '');
   }
-  if (answer?.fromRegister) return 'aucune servitude à ce point';
+  if (answer?.fromRegister) return m.easements.noneAtPoint;
   if (answer?.servitudesScanned) {
     // "du repère" carries the whole caveat: these are the easements the
     // register returned for the marker, and they are the only ones that have
     // been looked for anywhere.
-    return `aucune des ${answer.servitudesScanned} servitudes du repère n'atteint ce point`;
+    return m.easements.noneReaches(answer.servitudesScanned);
   }
-  return 'aucune servitude relevée au repère — elles ne sont interrogées qu\'au repère';
+  return m.easements.noneScanned;
 }
 
 /**
@@ -668,24 +680,26 @@ export function servitudeSentence(answer) {
  * @returns {string[]}
  */
 export function servitudeLines(answer, budget = 3) {
+  const m = messages();
   const sentence = servitudeSentence(answer);
   const found = answer?.servitudes || [];
-  const labels = [...new Set(found.map((entry) => entry.label || entry.code).filter(Boolean))];
-  const head = `${found.length} servitude${found.length > 1 ? 's' : ''} ici`;
-  const oneLine = `${head} : ${labels.join(', ')}`;
+  const labels = servitudeFamilies(found);
+  const head = m.easements.countHere(found.length);
+  const oneLine = m.easements.named(head, labels.join(', '));
   // Rows for the families themselves, the count line taken off the top. Under
   // two there is no list worth making, and the counted sentence already fits.
   const room = budget - 1;
-  if (labels.length < 2 || room < 2 || oneLine.length <= GROUND_CARD_MAX_LINE_CHARS) {
+  if (labels.length < 2 || room < 2 || oneLine.length <= groundCardMaxLineChars()) {
     return [sentence];
   }
-  if (labels.length <= room) return [`${head} :`, ...labels.map((label) => `· ${label}`)];
+  const item = (label) => m.easements.listItem(label);
+  if (labels.length <= room) return [m.easements.listHead(head), ...labels.map(item)];
   const shown = labels.slice(0, room - 1);
   const rest = labels.length - shown.length;
   return [
-    `${head} :`,
-    ...shown.map((label) => `· ${label}`),
-    `· et ${rest} autre${rest > 1 ? 's' : ''}`,
+    m.easements.listHead(head),
+    ...shown.map(item),
+    m.easements.listMore(rest),
   ];
 }
 
@@ -701,32 +715,40 @@ export function servitudeLines(answer, budget = 3) {
  * @returns {{title: string, detail: ?string}}
  */
 export function zoningGapSentence(answer) {
-  /** Grouped the way France writes a number: 1 500, not 1500. */
-  const grouped = (value) => Number(value).toLocaleString('fr-FR');
+  const m = messages().gap;
+  /** Grouped the way the reader's language writes a number: 1 500 / 1,500. */
+  const grouped = (value) => formatNumber(value);
   if (answer?.zoningRefused) {
     return {
-      title: 'Zonage non dessiné',
-      detail: `${grouped(answer.zoningRefused.found)} zones dans ce cadre, au-delà des `
-        + `${grouped(answer.zoningRefused.limit)} que le service renvoie — zoome`,
+      title: m.refusedTitle,
+      detail: m.refused(grouped(answer.zoningRefused.found), grouped(answer.zoningRefused.limit)),
     };
   }
   if (answer?.insideBox === false) {
-    return {
-      title: 'Hors du bloc interrogé',
-      detail: 'le zonage n\'a été demandé que pour le bloc dessiné — recentrez la vue sur ce point',
-    };
+    return { title: m.outsideBoxTitle, detail: m.outsideBox };
   }
   if (answer?.insideBox === null) {
     return {
-      title: 'Zonage non interrogé ici',
-      detail: `au-dessus de ${grouped(GPU_BOX_MAX_ALTITUDE_M)} m le zonage n'est demandé`
-        + ' que pour le repère',
+      title: m.notQueriedTitle,
+      detail: m.notQueried(grouped(GPU_BOX_MAX_ALTITUDE_M)),
     };
   }
-  return {
-    title: 'Aucun zonage à ce point',
-    detail: 'le bloc a bien été interrogé : le document publié ne couvre pas ce point',
-  };
+  return { title: m.noneTitle, detail: m.none };
+}
+
+/**
+ * A zone's one-line title: its code, then what the register calls it.
+ *
+ * Four things print it — the ground card, the scan marker, the code written on
+ * the ground and every outline — and they must not disagree. Both halves are
+ * the register's own words; the fallbacks are what stands in when the register
+ * published neither.
+ * @param {object} zone
+ * @returns {string}
+ */
+function zoneTitle(zone) {
+  const m = messages().zone;
+  return m.title(zone?.code || m.fallbackCode, zone?.label || m.fallbackLabel);
 }
 
 /**
@@ -747,35 +769,30 @@ export function gpuGroundCard({
   // The zone's own rows, decided first: the easements then take what is left of
   // the six the overlay paints, rather than pushing the rule off the card.
   const family = zone ? zoneFamilySentence(zone.kind) : null;
+  const m = messages();
   const rest = [
     // The register contradicting itself, at the point the operator asked about
     // rather than at the marker: two communes digitise their shared limit
     // independently and the Géoportail stacks both documents.
-    overlapping > 1
-      ? `${overlapping} zonages se superposent ici — deux communes, deux tracés de la limite`
-      : null,
+    overlapping > 1 ? m.zone.overlapHere(overlapping) : null,
     gap?.detail ?? null,
     zone
       ? [
-        zone.approvedOn ? `PLU approuvé le ${zoneApprovalDate(zone.approvedOn)}` : null,
+        zone.approvedOn ? m.zone.approvedOn(zoneApprovalDate(zone.approvedOn)) : null,
         zone.regulationFile,
       ].filter(Boolean).join(' · ') || null
       : null,
     // Said here rather than in the header because THIS is where it bites: the
     // answer above was read off a decimated outline, and near a limit that
     // outline is wrong by exactly the tolerance the layer declares.
-    answer.simplified && !answer.fromRegister
-      ? 'contours simplifiés — près d\'une limite, c\'est le document qui fait foi'
-      : null,
+    answer.simplified && !answer.fromRegister ? m.zone.simplifiedNearLimit : null,
   ].filter(Boolean);
   const servitudes = servitudeLines(
     answer,
     GROUND_CARD_MAX_DETAILS - rest.length - (family ? 1 : 0),
   );
   return {
-    title: zone
-      ? `${zone.code || 'Zone'} — ${zone.label || 'zonage PLU'}`
-      : gap.title,
+    title: zone ? zoneTitle(zone) : gap.title,
     details: [family, ...servitudes, ...rest].filter(Boolean),
   };
 }
@@ -873,12 +890,14 @@ function publishZoneAt(payload, point) {
  *   note?: string}}
  */
 export function gpuRowControls(runtime, payload) {
+  const m = messages();
   const halves = gpuVisibleHalves(runtime);
   const chips = GPU_HALVES.map((half) => {
     const lit = halves[half.field];
+    const words = m.halves[half.key];
     return {
       id: `half:${half.key}`,
-      label: half.label,
+      label: words.label,
       active: lit,
       // The OPPOSITE value, computed from the runtime the strip was built
       // from: a chip is a switch, and the manager turns its `params` straight
@@ -886,7 +905,7 @@ export function gpuRowControls(runtime, payload) {
       params: { [half.key]: lit ? 'off' : 'on' },
       // Deliberately not `fanOut`: `plu` and `sup` are this layer's own keys,
       // and no other member of any row speaks them.
-      title: `${lit ? 'Masquer' : 'Afficher'} ${half.subject} — ${half.blurb}`,
+      title: `${lit ? m.hide : m.show} ${words.subject} — ${words.blurb}`,
     };
   });
   if (!payload) return { chips };
@@ -902,33 +921,25 @@ export function gpuRowControls(runtime, payload) {
     legend.push(...[...byKind.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([kind, count]) => ({
-        label: kind === '?' ? 'Famille non publiée' : kind,
+        label: kind === '?' ? m.legend.unknownFamily : kind,
         color: zoneColorCss(kind),
         count,
         // The national grammar, which IS standard across communes — the one
         // part of a PLU that can be spelled out without inventing.
-        blurb: zoneFamilySentence(kind)
-          || 'Le registre publie une lettre que cette grammaire ne connaît pas — '
-            + 'la zone est dessinée, pas expliquée.',
+        blurb: zoneFamilySentence(kind) || m.legend.unknownFamilyBlurb,
       })));
   }
   if (halves.servitudes && servitudes.length) {
     legend.push({
-      label: 'Servitude d’utilité publique',
+      label: m.legend.easement,
       color: SERVITUDE_COLOR,
       count: servitudes.length,
-      blurb: 'Contour tireté, sans aplat : une seule enveloppe mesurée fait '
-        + '759 polygones sur des kilomètres, et la remplir teinterait la vue '
-        + 'au lieu d’une parcelle.',
+      blurb: m.legend.easementBlurb,
     });
   }
   const hidden = [
-    !halves.zoning && zones.length
-      ? `${zones.length} zone${zones.length > 1 ? 's' : ''} de PLU masquée${zones.length > 1 ? 's' : ''}`
-      : null,
-    !halves.servitudes && servitudes.length
-      ? `${servitudes.length} servitude${servitudes.length > 1 ? 's' : ''} masquée${servitudes.length > 1 ? 's' : ''}`
-      : null,
+    !halves.zoning && zones.length ? m.legend.zonesHidden(zones.length) : null,
+    !halves.servitudes && servitudes.length ? m.legend.easementsHidden(servitudes.length) : null,
   ].filter(Boolean);
   return {
     chips,
@@ -937,9 +948,7 @@ export function gpuRowControls(runtime, payload) {
     // manager adds the shared note about the drape over the photorealistic
     // mesh — and only while there IS a wash to drape.
     surfaceFill: halves.zoning,
-    ...(hidden.length
-      ? { note: `${hidden.join(' · ')} — le repère porte toujours la réponse du registre.` }
-      : {}),
+    ...(hidden.length ? { note: m.legend.stillAnswered(hidden.join(' · ')) } : {}),
   };
 }
 
@@ -959,6 +968,7 @@ export function gpuRowControls(runtime, payload) {
 export function gpuRender({
   payload, dataSource, point, viewer, runtime,
 }) {
+  const m = messages();
   const classificationType = gpuClassificationTypeForScene(viewer?.scene);
   // WHAT IS PAINTED, NOT WHAT IS KNOWN. The chips govern the GEOMETRY —
   // the wash, the codes on the ground, the dashed envelopes — and nothing
@@ -992,48 +1002,43 @@ export function gpuRender({
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'plu-scan-point' },
-      name: zone ? `${zone.code || 'Zone'} — ${zone.label || 'zonage PLU'}` : 'Servitudes à cette adresse',
+      name: zone ? zoneTitle(zone) : m.easements.atAddress,
       description: [
         zoneFamilySentence(zone?.kind),
-        zone?.approvedOn ? `PLU approuvé le ${zoneApprovalDate(zone.approvedOn)}` : null,
+        zone?.approvedOn ? m.zone.approvedOn(zoneApprovalDate(zone.approvedOn)) : null,
         zone?.regulationFile,
         // The register contradicting itself, said plainly. Two communes
         // digitise their shared limit independently and the Géoportail
         // stacks both documents, so the strip between the two versions of
         // the boundary carries two zonings. Measured around Ustaritz: 17 of
         // 34 126 sampled points, every one at a commune limit.
-        here.length > 1
-          ? `${here.length} zonages se superposent ici — deux communes ne placent pas leur limite au même endroit`
-          : null,
+        here.length > 1 ? m.zone.overlapAtMarker(here.length) : null,
         // What is on screen BESIDES the answer, so a map of fifty polygons
         // is not mistaken for fifty answers about this address. Three lines
         // about the DRAW, so all three go quiet when the zoning is not drawn
         // — "12 autres zones autour" over an unpainted block names something
         // the reader cannot see.
         halves.zoning && boxed && zones.length > here.length
-          ? `${zones.length - here.length} autres zones autour, dans le bloc`
+          ? m.zone.neighborsInBlock(zones.length - here.length)
           : null,
         // Said out loud because the reader is about to see unpainted islands
         // inside a painted zone and deserves to know they are the register's,
         // not a gap in the draw.
-        halves.zoning && enclaves
-          ? `${enclaves} enclave${enclaves > 1 ? 's' : ''} découpée${enclaves > 1 ? 's' : ''} — un autre zonage s'y applique`
-          : null,
+        halves.zoning && enclaves ? m.zone.enclavesElsewhere(enclaves) : null,
         halves.zoning && payload.zoningRefused
-          ? `zonage non dessiné : ${payload.zoningRefused.found} zones dans ce cadre, au-delà des ${payload.zoningRefused.limit} que le service renvoie`
+          ? m.gap.refusedAtMarker(payload.zoningRefused.found, payload.zoningRefused.limit)
           : null,
         servitudes.length
-          ? `${servitudes.length} servitude${servitudes.length > 1 ? 's' : ''} : `
-            + [...new Set(servitudes.map((entry) => entry.label))].join(', ')
-          : 'aucune servitude relevée',
+          ? m.easements.listAtMarker(servitudes.length, servitudeFamilies(servitudes).join(', '))
+          : m.easements.noneFound,
         halves.servitudes && servitudes.some((entry) => entry.simplified)
-          ? 'contours simplifiés pour l\'affichage — voir le règlement' : null,
+          ? m.easements.simplifiedForDisplay : null,
         // WHY THE GROUND IS BARE. The register answered and the card above
         // says what it answered; without this line the reader reads "3
         // servitudes : PM1, AC1, T1" over a photograph with nothing on it
         // and takes the map for broken rather than for switched off.
-        !halves.zoning && zones.length ? 'zonage masqué sur la carte' : null,
-        !halves.servitudes && servitudes.length ? 'servitudes masquées sur la carte' : null,
+        !halves.zoning && zones.length ? m.zone.hiddenOnMap : null,
+        !halves.servitudes && servitudes.length ? m.easements.hiddenOnMap : null,
       ].filter(Boolean).join(' · '),
     });
     drawn += 1;
@@ -1051,7 +1056,7 @@ export function gpuRender({
         // also the only PICKABLE thing a zone has: clamped polylines are
         // ground primitives and `scene.pick` returns null on them, measured
         // at every one of 62 vertices of a ring on screen.
-        name: `${entry.code} — ${entry.label || 'zonage PLU'}`,
+        name: zoneTitle(entry),
         description: zoneDescription(entry),
         properties: { kind: 'plu-zone-label', zoneKind: entry.kind },
         label: {
@@ -1078,7 +1083,7 @@ export function gpuRender({
       width: ZONE_OUTLINE_WIDTH_PX,
       dashed: false,
       classificationType,
-      name: `${entry.code || 'Zone'} — ${entry.label || 'zonage PLU'}`,
+      name: zoneTitle(entry),
       properties: { kind: 'plu-zone', zoneKind: entry.kind, simplified: entry.simplified },
       description: zoneDescription(entry),
     });
@@ -1093,7 +1098,7 @@ export function gpuRender({
       width: LOUD_SUP_CODES.has(servitude.code) ? 5 : 4,
       dashed: true,
       classificationType,
-      name: servitude.label || servitude.code || 'Servitude',
+      name: supTypeLabel(servitude.code) || servitude.label || m.easements.fallbackName,
       properties: {
         kind: 'servitude',
         code: servitude.code,
@@ -1103,18 +1108,16 @@ export function gpuRender({
       description: [
         servitude.name,
         servitude.assietteType,
-        servitude.bufferM ? `zone tampon de ${servitude.bufferM} m` : null,
+        servitude.bufferM ? m.easements.buffer(servitude.bufferM) : null,
         // Two different simplifications, said apart. A dropped PIECE is a
         // part of the envelope that is not on screen at all; a decimated
         // ring is the whole shape, drawn straighter. Reporting "1/1 pièces"
         // for a shape that lost only vertices would name the wrong loss.
         servitude.servedParts < servitude.sourceParts
-          ? `${servitude.servedParts} des ${servitude.sourceParts} pièces de l'emprise dessinées`
+          ? m.easements.partsDrawn(servitude.servedParts, servitude.sourceParts)
           : null,
-        servitude.simplified
-          ? `contour simplifié (${servitude.sourceVertices} sommets à l'amont)`
-          : null,
-        servitude.regulationUrl ? `règlement : ${servitude.regulationUrl}` : null,
+        servitude.simplified ? m.zone.simplified(servitude.sourceVertices) : null,
+        servitude.regulationUrl ? m.easements.regulation(servitude.regulationUrl) : null,
       ].filter(Boolean).join(' · '),
     });
   }
@@ -1213,7 +1216,7 @@ const urbanismeGpuScanLayer = createAddressScanLayer({
       // The families a buyer would want named out loud rather than counted.
       notableServitudes: servitudes
         .filter((entry) => LOUD_SUP_CODES.has(entry.code))
-        .map((entry) => entry.label),
+        .map((entry) => supTypeLabel(entry.code) || entry.label),
       // True when any outline on screen is a decimation, not a boundary.
       simplified: [...zones, ...servitudes].some((entry) => entry.simplified),
       available: payload.available ?? null,

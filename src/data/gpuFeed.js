@@ -47,7 +47,9 @@
  * WHICH of several returned zones is the one under the operator's feet.
  */
 
+import { labelFor } from '../i18n/messages.js';
 import { pointInPolygons, ringLabelAnchor } from './ringGeometry.js';
+import messages from './gpuFeed.i18n.js';
 
 const APICARTO_ROOT = 'https://apicarto.ign.fr/api/gpu';
 
@@ -137,32 +139,62 @@ export const GPU_REQUEST_MAX_BOX_DEG = GPU_MAX_BOX_DEG + 3 * GPU_BOX_STEP_DEG;
 export const GPU_UPSTREAM_LIMIT = 5000;
 
 /**
- * The national servitude nomenclature, in the words a buyer would use.
+ * The national servitude nomenclature, in the words a buyer would use, AS THE
+ * SERVER PUBLISHES THEM.
  *
  * Only the families that actually change a purchase decision are spelled out.
  * An unmapped code is returned as-is — a servitude nobody has named is still a
  * servitude, and hiding it would be worse than showing a bare code.
+ *
+ * Built from the catalog's definition rather than from a locale: this module is
+ * imported by `vite.config.js`, and a server has no language to read
+ * (docs/i18n/CONVENTIONS.md). These are the words this table always carried,
+ * and {@link supTypeLabel} is what a browser calls instead.
  */
-export const SUP_TYPE_LABELS = Object.freeze({
-  ac1: 'Abords d\'un monument historique',
-  ac2: 'Site inscrit ou classé',
-  ac4: 'Secteur sauvegardé / site patrimonial remarquable',
-  as1: 'Protection d\'un captage d\'eau potable',
-  i1: 'Canalisation d\'hydrocarbures',
-  i3: 'Canalisation de gaz',
-  i4: 'Ligne électrique',
-  int1: 'Voisinage d\'un cimetière',
-  pm1: 'Plan de prévention des risques (naturels ou technologiques)',
-  pm3: 'Risque technologique',
-  pt1: 'Protection d\'une station radioélectrique',
-  pt2: 'Protection d\'un faisceau hertzien',
-  pt3: 'Réseau de télécommunication',
-  t1: 'Voie ferrée — zone de protection',
-  t4: 'Servitude aéronautique de balisage',
-  t5: 'Servitude aéronautique de dégagement (aérodrome)',
-  t7: 'Servitude aéronautique hors dégagement',
-  ep1: 'Alignement de voirie',
-});
+export const SUP_TYPE_LABELS = Object.freeze(Object.fromEntries(
+  Object.entries(messages.definition).map(([code, leaf]) => [code, leaf.fr]),
+));
+
+/**
+ * One easement family in the page's language, for a card being drawn.
+ *
+ * A code the nomenclature adds next month is shown the way the projection
+ * shows it — upper-cased, because a bare `pm4` on a card reads as a typo and
+ * `PM4` reads as a reference. Null when there is no code at all.
+ *
+ * @param {?string} code A `suptype` code, in any case.
+ * @returns {?string} The family sentence, or the code in capitals.
+ */
+export function supTypeLabel(code) {
+  const key = String(code ?? '').trim().toLowerCase();
+  if (!key) return null;
+  const label = labelFor(messages, key);
+  return label === key ? key.toUpperCase() : label;
+}
+
+/**
+ * One easement family the SERVER already named, relabelled for a reader.
+ *
+ * `projectServitudes()` runs in `vite.config.js` and bakes the French sentence
+ * into `label`; a consumer that only kept the label — `implantationFeed.js`
+ * does — has no code left to look up. The French sentence IS the payload's
+ * data value there, so it is the key: the reverse of {@link SUP_TYPE_LABELS}.
+ * A sentence this table does not know is shown exactly as it came.
+ *
+ * @param {?string} published A label from a projected easement.
+ * @returns {?string}
+ */
+export function supFamilyLabel(published) {
+  const text = String(published ?? '').trim();
+  if (!text) return null;
+  const code = SUP_CODE_BY_LABEL[text];
+  return code ? labelFor(messages, code) : text;
+}
+
+/** The reverse of {@link SUP_TYPE_LABELS}: a French family back to its code. */
+const SUP_CODE_BY_LABEL = Object.freeze(Object.fromEntries(
+  Object.entries(SUP_TYPE_LABELS).map(([code, label]) => [label, code]),
+));
 
 /**
  * Build one APIcarto URL for a point.

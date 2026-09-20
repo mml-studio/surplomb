@@ -1,4 +1,7 @@
 import { greatCircleKm } from './trafficBounds.js';
+import { formatDecimal, formatEuros, formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
+import messages, { COMPARABLE_REFUSALS } from './comparablesDossier.i18n.js';
 
 /**
  * Le dossier de comparables — ce que le conseiller a choisi, et rien d'autre.
@@ -80,6 +83,7 @@ export const COMPARABLES_STORAGE_KEY = 'godsEyeView.comparables.v1';
 export const COMPARABLES_SCHEMA_VERSION = 1;
 
 /** The two things a comparable can be, and they are not the same measurement. */
+// i18n-ignore-next-line — the kinds a stored dossier and an export name
 export const COMPARABLE_KINDS = Object.freeze(['vente', 'annonce']);
 
 /**
@@ -124,16 +128,14 @@ export const MAX_SURFACE_M2 = 100_000;
 /** Cap on the candidate sales the panel offers. Declared, per A5. */
 export const CANDIDATE_LIMIT = 24;
 
-const _fr = new Intl.NumberFormat('fr-FR');
-
 /** @param {?number} value */
 function money(value) {
-  return Number.isFinite(value) ? `${_fr.format(Math.round(value))} €` : '—';
+  return Number.isFinite(value) ? formatEuros(Math.round(value)) : '—';
 }
 
 /** @param {?number} value A whole quantity — people, rows, metres. */
 function count(value) {
-  return Number.isFinite(value) ? _fr.format(Math.round(value)) : '—';
+  return Number.isFinite(value) ? formatNumber(Math.round(value)) : '—';
 }
 
 /**
@@ -148,9 +150,7 @@ function count(value) {
  * @returns {string}
  */
 function amount(value) {
-  return Number.isFinite(value)
-    ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value)
-    : '—';
+  return Number.isFinite(value) ? formatDecimal(value, 1) : '—';
 }
 
 /**
@@ -263,7 +263,7 @@ export function frenchDate(isoDate) {
   const text = String(isoDate ?? '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
   const [year, month, day] = text.split('-');
-  return `${day}/${month}/${year}`;
+  return messages().date(year, month, day);
 }
 
 /**
@@ -318,7 +318,7 @@ export function ratioFor({
   price, surface, kind, given = null, lots = null, refused = null,
 }) {
   const inBounds = (value) => value >= PRIX_M2_BOUNDS.min && value <= PRIX_M2_BOUNDS.max;
-  if (kind === 'vente') {
+  if (kind === 'vente') { // i18n-ignore-line — a stored kind, basis or refusal key, not a word
     // THE LOT COUNT IS CHECKED BEFORE THE RATIO, not after. A supplied ratio
     // used to win outright, which is right for a payload DVF built — the
     // register only publishes one when the mutation bought exactly one
@@ -328,7 +328,7 @@ export function ratioFor({
     // register's rule is now enforced here rather than assumed upstream.
     if (Number.isFinite(lots) && lots !== 1) return { prixM2: null, refused: 'lots' };
     if (Number.isFinite(given) && Number.isFinite(price) && price <= 0) {
-      return { prixM2: null, refused: 'prix' };
+      return { prixM2: null, refused: 'prix' }; // i18n-ignore-line — a stored kind, basis or refusal key, not a word
     }
     if (Number.isFinite(given)) {
       // Bounds BEFORE rounding: 299,6 €/m² rounded to 300 used to slip past
@@ -345,7 +345,7 @@ export function ratioFor({
     if (refused) return { prixM2: null, refused };
     return { prixM2: null, refused: Number.isFinite(surface) && surface > 0 ? 'lots' : 'surface' };
   }
-  if (!Number.isFinite(price) || price <= 0) return { prixM2: null, refused: 'prix' };
+  if (!Number.isFinite(price) || price <= 0) return { prixM2: null, refused: 'prix' }; // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   if (!Number.isFinite(surface) || surface <= 0) return { prixM2: null, refused: 'surface' };
   const ratio = price / surface;
   if (!inBounds(ratio)) return { prixM2: null, refused: 'bornes' };
@@ -393,7 +393,7 @@ export function normaliseComparable(raw) {
   return {
     id: String(raw.id ?? '').trim() || derivedId({ kind, label, price, surface, date }),
     kind,
-    label: label || (kind === 'vente' ? 'Vente sans adresse publiée' : 'Annonce sans adresse'),
+    label: label || messages().fallbackLabel[kind === 'vente' ? 'vente' : 'annonce'], // i18n-ignore-line — a stored kind, basis or refusal key, not a word
     lat: Number.isFinite(lat) ? lat : null,
     lon: Number.isFinite(lon) ? lon : null,
     price: Number.isFinite(price) ? price : null,
@@ -411,7 +411,7 @@ export function normaliseComparable(raw) {
     // A row is in the estimate and on the map, or it is in neither. The default
     // is in: a comparable the reader added is one they meant to use.
     retained: raw.retained !== false,
-    source: kind === 'vente' ? 'DVF' : 'saisie',
+    source: kind === 'vente' ? 'DVF' : 'saisie', // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   };
 }
 
@@ -429,7 +429,7 @@ export function comparableFromDvfSale(sale) {
   if (!sale || typeof sale !== 'object') return null;
   return normaliseComparable({
     id: `dvf:${sale.id}`,
-    kind: 'vente',
+    kind: 'vente', // i18n-ignore-line — a stored kind, basis or refusal key, not a word
     label: sale.address ? `${sale.address}, ${sale.commune ?? ''}`.replace(/,\s*$/, '') : sale.commune,
     lat: sale.lat,
     lon: sale.lon,
@@ -526,13 +526,13 @@ export function dossierSummary(dossier, { now = Date.now() } = {}) {
   const subject = dossier?.subject ?? null;
   const all = Array.isArray(dossier?.comparables) ? dossier.comparables : [];
   const retained = all.filter((entry) => entry?.retained !== false);
-  const ventes = sampleStats(retained.filter((entry) => entry.kind === 'vente'));
+  const ventes = sampleStats(retained.filter((entry) => entry.kind === 'vente')); // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   const annonces = sampleStats(retained.filter((entry) => entry.kind === 'annonce'));
 
   const basis = ventes.withRatio >= MIN_RATIO_SAMPLE
-    ? 'ventes'
+    ? 'ventes' // i18n-ignore-line — a stored kind, basis or refusal key, not a word
     : (annonces.withRatio >= MIN_RATIO_SAMPLE ? 'annonces' : null);
-  const chosen = basis === 'ventes' ? ventes : (basis === 'annonces' ? annonces : null);
+  const chosen = basis === 'ventes' ? ventes : (basis === 'annonces' ? annonces : null); // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   const surface = parseNumber(subject?.surface);
   const usableSurface = Number.isFinite(surface) && surface > 0 && surface <= MAX_SURFACE_M2;
   const estimate = chosen && usableSurface && chosen.median !== null
@@ -620,13 +620,12 @@ function mergedRefusals(summary) {
  * @returns {string}
  */
 export function refusalWords(reason, n = 1) {
+  const words = COMPARABLE_REFUSALS();
   switch (reason) {
-    case 'surface': return 'sans surface';
-    case 'prix': return 'sans prix';
-    case 'lots': return `${agree(n, 'vente')} de plusieurs lots`;
+    case 'lots': return words.lots(n);
     case 'bornes':
-      return `hors bornes ${PRIX_M2_BOUNDS.min}–${_fr.format(PRIX_M2_BOUNDS.max)} €/m²`;
-    default: return reason;
+      return words.bornes(PRIX_M2_BOUNDS.min, formatNumber(PRIX_M2_BOUNDS.max));
+    default: return labelFor(COMPARABLE_REFUSALS, reason);
   }
 }
 
@@ -668,6 +667,7 @@ export function sanitiseLine(line) {
  * @returns {string[]}
  */
 export function dossierLines(dossier, { now = Date.now() } = {}) {
+  const m = messages().dossier;
   const summary = dossierSummary(dossier, { now });
   const lines = [];
   const subject = summary.subject;
@@ -675,42 +675,46 @@ export function dossierLines(dossier, { now = Date.now() } = {}) {
   if (subject) {
     const traits = [
       Number.isFinite(subject.surface) ? `${amount(subject.surface)} m²` : null,
-      Number.isFinite(subject.rooms) ? `${count(subject.rooms)} ${agree(subject.rooms, 'pièce')}` : null,
+      Number.isFinite(subject.rooms) ? m.rooms(count(subject.rooms), subject.rooms) : null,
       subject.type,
     ].filter(Boolean);
-    lines.push(`Bien étudié — ${subject.label || 'point posé sur la carte'}`
-      + (traits.length ? ` (${traits.join(', ')})` : ''));
+    lines.push(m.subject(
+      subject.label || m.subjectPoint,
+      traits.length ? m.subjectTraits(traits.join(', ')) : '',
+    ));
   } else {
-    lines.push('Aucun bien défini — posez le bien avant de retenir des comparables');
+    lines.push(m.noSubject);
   }
 
   if (summary.retained === 0) {
-    lines.push('Aucun comparable retenu — le dossier est vide');
+    lines.push(m.empty);
     return lines.map(sanitiseLine);
   }
 
   const dropped = summary.total - summary.retained;
-  lines.push(`${count(summary.retained)} ${agree(summary.retained, 'comparable')}`
-    + ` ${agree(summary.retained, 'retenu')}`
-    + ` — ${count(summary.ventes.count)} ${agree(summary.ventes.count, 'vente')} DVF`
-    + `, ${count(summary.annonces.count)} ${agree(summary.annonces.count, 'annonce')}`
-    + ` ${agree(summary.annonces.count, 'saisie')}`
-    + (dropped > 0 ? ` (${dropped} ${agree(dropped, 'écarté')} du calcul)` : ''));
+  lines.push(m.counts(
+    m.retained(summary.retained),
+    m.ventes(summary.ventes.count),
+    m.annonces(summary.annonces.count),
+    dropped > 0 ? m.dropped(dropped) : '',
+  ));
 
   // The two samples, apart, always in the same order: observed first.
   if (summary.ventes.withRatio > 0) {
-    lines.push(`Ventes DVF — ${count(summary.ventes.median)} €/m² médian`
-      + ` sur ${count(summary.ventes.withRatio)}`
-      + `, quartiles ${count(summary.ventes.p25)} à ${count(summary.ventes.p75)}`);
+    lines.push(m.salesMedian(
+      count(summary.ventes.median), count(summary.ventes.withRatio),
+      count(summary.ventes.p25), count(summary.ventes.p75),
+    ));
   } else if (summary.ventes.count > 0) {
-    lines.push(`Ventes DVF — ${count(summary.ventes.count)} retenues, aucune comparable en €/m²`);
+    lines.push(m.salesNoRatio(count(summary.ventes.count)));
   }
   if (summary.annonces.withRatio > 0) {
-    lines.push(`Annonces — ${count(summary.annonces.median)} €/m² médian demandé`
-      + ` sur ${count(summary.annonces.withRatio)}`
-      + `, quartiles ${count(summary.annonces.p25)} à ${count(summary.annonces.p75)}`);
+    lines.push(m.listingsMedian(
+      count(summary.annonces.median), count(summary.annonces.withRatio),
+      count(summary.annonces.p25), count(summary.annonces.p75),
+    ));
   } else if (summary.annonces.count > 0) {
-    lines.push(`Annonces — ${count(summary.annonces.count)} saisies, aucune comparable en €/m²`);
+    lines.push(m.listingsNoRatio(count(summary.annonces.count)));
   }
 
   if (summary.gapPercent !== null) {
@@ -719,48 +723,47 @@ export function dossierLines(dossier, { now = Date.now() } = {}) {
     // against a median of two sales is a legitimate thing to print and an
     // illegitimate thing to print alone: the reader has to see that the
     // headline rests on three rows before quoting it.
-    lines.push(`Écart affichage sur acte ${sign}${String(summary.gapPercent).replace('.', ',')} %`
-      + ` — ${count(summary.annonces.withRatio)} ${agree(summary.annonces.withRatio, 'annonce')}`
-      + ` contre ${count(summary.ventes.withRatio)} ${agree(summary.ventes.withRatio, 'vente')}`);
-    lines.push('Ce n’est pas une marge de négociation — ce sont d’autres biens,'
-      + ' à d’autres dates, et aucun ajustement temporel n’est appliqué');
+    lines.push(m.gap(
+      `${sign}${formatDecimal(summary.gapPercent, 1)}`,
+      m.gapAnnonces(summary.annonces.withRatio),
+      m.gapVentes(summary.ventes.withRatio),
+    ));
+    lines.push(m.gapCaveat);
   }
 
   if (summary.estimate) {
-    const basisWord = summary.estimate.basis === 'ventes'
-      ? 'sur les ventes actées'
-      : 'sur les prix demandés, faute de ventes en nombre';
-    lines.push(`Fourchette ${basisWord} — ${money(summary.estimate.low)}`
-      + ` à ${money(summary.estimate.high)}, médiane ${money(summary.estimate.mid)}`);
-    lines.push(`Écart interquartile sur ${count(summary.estimate.sample)} comparables`
-      + ' — une dispersion observée, pas un intervalle de confiance'
-      + (summary.estimate.short ? ', et l’échantillon est court' : ''));
+    const basisWord = summary.estimate.basis === 'ventes' ? m.basisSales : m.basisListings; // i18n-ignore-line — a stored kind, basis or refusal key, not a word
+    lines.push(m.range(
+      basisWord, money(summary.estimate.low),
+      money(summary.estimate.high), money(summary.estimate.mid),
+    ));
+    lines.push(m.spread(
+      count(summary.estimate.sample), summary.estimate.short ? m.spreadShort : '',
+    ));
   } else {
     // NAME EVERY BLOCKING REASON, not the first one found. A reader told the
     // surface is missing, who fills it in and still gets no range because the
     // sample was short all along, has been sent round a corner.
     const blocking = [];
     const surface = summary.subject?.surface ?? null;
-    if (!summary.subject) blocking.push('aucun bien défini');
-    else if (!Number.isFinite(surface)) blocking.push('surface du bien non renseignée');
-    else if (surface <= 0) blocking.push('surface du bien nulle ou négative');
+    if (!summary.subject) blocking.push(m.blockingNoSubject);
+    else if (!Number.isFinite(surface)) blocking.push(m.blockingNoSurface);
+    else if (surface <= 0) blocking.push(m.blockingBadSurface);
     else if (surface > MAX_SURFACE_M2) {
-      blocking.push(`surface du bien au-delà de ${count(MAX_SURFACE_M2)} m², probablement une faute de frappe`);
+      blocking.push(m.blockingHugeSurface(count(MAX_SURFACE_M2)));
     }
-    if (!summary.basis) blocking.push(`moins de ${MIN_RATIO_SAMPLE} comparables avec un €/m²`);
+    if (!summary.basis) blocking.push(m.blockingShortSample(MIN_RATIO_SAMPLE));
     // A refusal with no reason after the dash is the one thing worse than the
     // refusal: reproduced with a surface of 0, which passed the finiteness
     // check and named nothing.
-    lines.push(`Pas de fourchette — ${blocking.length ? blocking.join(', ') : 'raison indéterminée'}`);
+    lines.push(m.noRange(blocking.length ? blocking.join(', ') : m.blockingUnknown));
   }
 
   const refusals = mergedRefusals(summary);
   const refusalText = Object.entries(refusals)
-    .map(([reason, n]) => `${n} ${refusalWords(reason, n)}`)
+    .map(([reason, n]) => m.refusal(n, refusalWords(reason, n)))
     .join(', ');
-  if (refusalText) {
-    lines.push(`Écartés du calcul — ${refusalText}`);
-  }
+  if (refusalText) lines.push(m.excluded(refusalText));
   if (summary.unplaced > 0) {
     const n = summary.unplaced;
     const counted = summary.unplacedCounted;
@@ -768,18 +771,14 @@ export function dossierLines(dossier, { now = Date.now() } = {}) {
     // rows with no ratio at all — which the line above had just declared
     // excluded. Two different facts, so two different sentences.
     lines.push(counted === n
-      ? `${count(n)} ${agree(n, 'comparable')} sans position`
-        + ` — ${agree(n, 'compté')} dans les médianes, ${agree(n, 'absent')} de la carte`
-      : `${count(n)} ${agree(n, 'comparable')} sans position, dont ${count(counted)}`
-        + ` dans les médianes — ${agree(n, 'absent')} de la carte`);
+      ? m.unplacedAllCounted(m.unplacedCount(n), n)
+      : m.unplacedSomeCounted(m.unplacedCount(n), count(counted), n));
   }
   if (summary.staleListings > 0) {
-    const n = summary.staleListings;
-    lines.push(`${count(n)} ${agree(n, 'annonce')} de plus de ${STALE_LISTING_DAYS} jours`
-      + ' — une annonce ancienne est un prix que le marché a déjà refusé');
+    lines.push(m.stale(m.staleCount(summary.staleListings), STALE_LISTING_DAYS));
   }
   if (summary.maxDistanceM !== null) {
-    lines.push(`Comparable le plus éloigné à ${count(summary.maxDistanceM)} m du bien`);
+    lines.push(m.farthest(count(summary.maxDistanceM)));
   }
 
   return lines.map(sanitiseLine);
@@ -793,32 +792,31 @@ export function dossierLines(dossier, { now = Date.now() } = {}) {
  * @returns {{title: string, details: string[]}}
  */
 export function comparableLines(entry, subject = null, { now = Date.now() } = {}) {
+  const m = messages().comparable;
+  const rooms = messages().dossier.rooms;
   const details = [];
-  const kindWord = entry.kind === 'vente' ? 'Vente DVF' : 'Annonce saisie';
-  details.push(entry.kind === 'vente'
-    ? `${kindWord} — prix acté, source DGFiP`
-    : `${kindWord} — prix demandé, saisi par le conseiller`);
+  details.push(entry.kind === 'vente' ? m.sale : m.listing); // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   const traits = [
     Number.isFinite(entry.surface) ? `${amount(entry.surface)} m²` : null,
-    Number.isFinite(entry.rooms) ? `${count(entry.rooms)} ${agree(entry.rooms, 'pièce')}` : null,
+    Number.isFinite(entry.rooms) ? rooms(count(entry.rooms), entry.rooms) : null,
     entry.type,
   ].filter(Boolean);
-  details.push(`${money(entry.price)}${traits.length ? ` — ${traits.join(', ')}` : ''}`);
+  details.push(m.price(money(entry.price), traits.length ? m.priceTraits(traits.join(', ')) : ''));
   details.push(Number.isFinite(entry.prixM2)
-    ? `${count(entry.prixM2)} €/m²`
-    : `Pas de €/m² — ${entry.ratioRefused ? refusalWords(entry.ratioRefused, 1) : 'donnée manquante'}`);
+    ? m.prixM2(count(entry.prixM2))
+    : m.noPrixM2(entry.ratioRefused ? refusalWords(entry.ratioRefused, 1) : m.missingData));
   const distance = distanceMetres(subject, entry);
   const age = ageDays(entry.date, now);
   const when = frenchDate(entry.date);
   if (when) {
-    details.push(entry.kind === 'vente'
-      ? `Mutation du ${when}${age === null ? '' : ` (${count(Math.round(age / 30))} mois)`}`
-      : `Relevée le ${when}${age === null ? '' : ` (${count(Math.round(age / 30))} mois)`}`);
+    const months = age === null ? null : Math.round(age / 30);
+    const since = months === null ? '' : m.age(count(months), months);
+    details.push(entry.kind === 'vente' ? m.mutation(when, since) : m.collected(when, since)); // i18n-ignore-line — a stored kind, basis or refusal key, not a word
   } else {
-    details.push('Sans date — l’ancienneté de ce comparable est inconnue');
+    details.push(m.undated);
   }
-  if (distance !== null) details.push(`À ${count(distance)} m du bien étudié`);
-  if (entry.portal) details.push(`Vue sur ${entry.portal}`);
+  if (distance !== null) details.push(m.distance(count(distance)));
+  if (entry.portal) details.push(m.portal(entry.portal));
   if (entry.note) details.push(entry.note);
   return {
     title: sanitiseLine(entry.label),

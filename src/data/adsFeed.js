@@ -133,8 +133,20 @@ import { ringAreaM2, ringLabelAnchor, sanitisePolygonParts } from './ringGeometr
 import { ARRONDISSEMENT_COMMUNES, parcelParts, sitadelJoinCommune } from './sitadelFeed.js';
 import { ADS_LINEAGE_BASIS, insidePoint, sitadelParcelRefs } from './cadastreLineage.js';
 import { organisationApplicant } from './permitApplicant.js';
+import { labelFor } from '../i18n/messages.js';
+import {
+  ADS_KIND_WORDS, ADS_PRECISION_WORDS, ADS_PURPOSE_WORDS, ADS_STATE_WORDS,
+} from './adsFeed.i18n.js';
+
+/** A catalog's French side, flat, keyed by the value that rides the payload. */
+function frenchTable(catalog) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(catalog.definition).map(([key, leaf]) => [key, leaf.fr]),
+  ));
+}
 
 /** Attribution carried on every payload (see DATA_SOURCES.md). */
+// i18n-ignore-next-line — the registry owns a layer's source line (layerTaxonomy.i18n.js)
 export const ADS_SOURCE = 'Sitadel — SDES, + portails ADS métropolitains';
 
 /** DiDo's per-datafile JSON endpoint. Keyless, `access-control-allow-origin: *`. */
@@ -181,7 +193,7 @@ export const SITADEL_FILES = Object.freeze([
   Object.freeze({
     key: 'logements',
     rid: '8b35affb-55fc-4c1f-915b-7750f974446a',
-    label: 'autorisations créant des logements',
+    label: 'autorisations créant des logements', // i18n-ignore-line — DiDo's own datafile title
     // Shared with the non-residential file: one mixed operation, two rows.
     series: 'DAU',
     numberColumn: 'NUM_DAU',
@@ -198,7 +210,7 @@ export const SITADEL_FILES = Object.freeze([
   Object.freeze({
     key: 'locaux',
     rid: 'f8f0700f-806c-40a7-83b1-f21cf507e7c4',
-    label: 'autorisations créant des locaux non résidentiels',
+    label: 'autorisations créant des locaux non résidentiels', // i18n-ignore-line — DiDo's own datafile title
     series: 'DAU',
     numberColumn: 'NUM_DAU',
     stateColumn: 'ETAT_DAU',
@@ -214,7 +226,7 @@ export const SITADEL_FILES = Object.freeze([
   Object.freeze({
     key: 'amenager',
     rid: '96883f50-538b-41f9-a059-c6eb97e6a23a',
-    label: 'permis d’aménager',
+    label: 'permis d’aménager', // i18n-ignore-line — DiDo's own datafile title
     // Its OWN series, which collides with `NUM_DAU` on unrelated dossiers.
     series: 'PA',
     // No TYPE column at all: the file IS the type.
@@ -230,7 +242,7 @@ export const SITADEL_FILES = Object.freeze([
   Object.freeze({
     key: 'demolir',
     rid: '1a9a2f0c-56fe-4e69-84a7-fbbda2121f02',
-    label: 'permis de démolir',
+    label: 'permis de démolir', // i18n-ignore-line — DiDo's own datafile title
     series: 'PD',
     numberColumn: 'NUM_PD',
     stateColumn: 'ETAT_PD',
@@ -249,44 +261,115 @@ export const SITADEL_FILES = Object.freeze([
  * housing datafile lists exactly `[2, 4, 5, 6]`.
  */
 export const SITADEL_STATES = Object.freeze({
-  2: Object.freeze({ state: 'autorise', label: 'Autorisé' }),
-  4: Object.freeze({ state: 'annule', label: 'Annulé' }),
-  5: Object.freeze({ state: 'commence', label: 'Chantier ouvert' }),
-  6: Object.freeze({ state: 'termine', label: 'Travaux achevés' }),
+  2: Object.freeze({ state: 'autorise', label: adsStateFrench('autorise') }),
+  4: Object.freeze({ state: 'annule', label: adsStateFrench('annule') }),
+  5: Object.freeze({ state: 'commence', label: adsStateFrench('commence') }),
+  6: Object.freeze({ state: 'termine', label: adsStateFrench('termine') }),
 });
 
-/** `NATURE_PROJET_DECLAREE`, per the dictionary. Two values, both worth saying. */
+/** One state's FRENCH, which is what the payload carries whatever the reader. */
+function adsStateFrench(state) {
+  return ADS_STATE_WORDS.definition[state].fr;
+}
+
+/**
+ * One state in the page's language, for a card being drawn.
+ *
+ * Read off `permit.state` and not off `permit.stateLabel`: the server composed
+ * that label and it is French. A portal whose own wording this ladder did not
+ * recognise keeps its words — `localState()` returns them verbatim under
+ * `depose` — so the payload's label wins whenever it is NOT this table's own.
+ *
+ * @param {?object} permit A normalised permit.
+ * @returns {?string}
+ */
+export function adsStateLabel(permit) {
+  const state = String(permit?.state ?? '');
+  const published = permit?.stateLabel ?? null;
+  if (!Object.hasOwn(ADS_STATE_WORDS.definition, state)) return published;
+  return published === null || published === adsStateFrench(state)
+    ? labelFor(ADS_STATE_WORDS, state)
+    : published;
+}
+
+/**
+ * `NATURE_PROJET_DECLAREE`, per the dictionary. Two values, both worth saying.
+ *
+ * The arguments below are CATALOG KEYS, not prose: `purpose` is composed in
+ * French on the server and `adsPermitTarget()` matches on those exact words.
+ */
+// i18n-ignore-start — catalog keys, which are the payload's own data values
 const SITADEL_NATURES = Object.freeze({
-  1: 'nouvelle construction',
-  2: 'travaux sur construction existante',
+  1: purposeFrench('nouvelle construction'),
+  2: purposeFrench('travaux sur construction existante'),
 });
 
 /** `DESTINATION_PRINCIPALE` of a non-residential authorisation. */
 const SITADEL_DESTINATIONS = Object.freeze({
-  1: 'logements',
-  3: 'bureaux',
-  4: 'commerce',
-  6: 'industrie',
-  7: 'agriculture',
-  8: 'entrepôt',
-  9: 'service public',
+  1: purposeFrench('logements'),
+  3: purposeFrench('bureaux'),
+  4: purposeFrench('commerce'),
+  6: purposeFrench('industrie'),
+  7: purposeFrench('agriculture'),
+  8: purposeFrench('entrepôt'),
+  9: purposeFrench('service public'),
 });
 
 /** `ZONE_OP` of a permis d'aménager. */
 const SITADEL_ZONES = Object.freeze({
-  1: 'lotissement',
-  2: 'ZAC',
-  3: 'AFU',
+  1: purposeFrench('lotissement'),
+  2: purposeFrench('ZAC'),
+  3: purposeFrench('AFU'),
 });
+// i18n-ignore-end
+
+/** One purpose word's FRENCH — the value the payload carries. */
+function purposeFrench(word) {
+  return ADS_PURPOSE_WORDS.definition[word].fr;
+}
+
+/**
+ * One composed `purpose` in the page's language.
+ *
+ * The sentence arrives ` · `-joined and each part is looked up by its own
+ * French, which is what the payload carries. A part the table does not know is
+ * a portal's free-text `objet` and is shown exactly as published.
+ *
+ * @param {?string} purpose
+ * @returns {?string}
+ */
+export function adsPurposeLabel(purpose) {
+  const text = String(purpose ?? '').trim();
+  if (!text) return null;
+  return text.split(' · ')
+    .map((part) => {
+      if (Object.hasOwn(ADS_PURPOSE_WORDS.definition, part)) {
+        return labelFor(ADS_PURPOSE_WORDS, part);
+      }
+      return Object.hasOwn(ADS_KINDS_BY_LABEL, part)
+        ? labelFor(ADS_KIND_WORDS, ADS_KINDS_BY_LABEL[part])
+        : part;
+    })
+    .join(' · ');
+}
 
 /** Human label per authorisation family, for cards and the legend. */
-export const ADS_KINDS = Object.freeze({
-  PC: 'Permis de construire',
-  DP: 'Déclaration préalable',
-  PA: 'Permis d’aménager',
-  PD: 'Permis de démolir',
-  CU: 'Certificat d’urbanisme',
-});
+export const ADS_KINDS = frenchTable(ADS_KIND_WORDS);
+
+/** The reverse of {@link ADS_KINDS}: a French family name back to its letter. */
+const ADS_KINDS_BY_LABEL = Object.freeze(Object.fromEntries(
+  Object.entries(ADS_KINDS).map(([kind, label]) => [label, kind]),
+));
+
+/**
+ * One authorisation family in the page's language.
+ * @param {?string} kind `PC`, `DP`, `PA`, `PD`, `CU`.
+ * @returns {?string} The family, or the letter itself for one off the list.
+ */
+export function adsKindLabel(kind) {
+  const key = String(kind ?? '').trim();
+  return key ? labelFor(ADS_KIND_WORDS, key) : null;
+}
 
 /**
  * The three métropole portals, and what each one's columns are called.
@@ -301,7 +384,7 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     key: 'paris',
     portal: 'opendata.paris.fr',
     dataset: 'dossiers-recents-durbanisme',
-    label: 'Ville de Paris — Autorisations d’urbanisme (6 derniers mois)',
+    label: 'Ville de Paris — Autorisations d’urbanisme (6 derniers mois)', // i18n-ignore-line — the portal's own dataset title
     licence: 'ODbL 1.0',
     // Paris publishes at commune level (75056) and at arrondissement level
     // (75101–75120) depending on which referential a caller came through; both
@@ -321,7 +404,7 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     key: 'bordeaux',
     portal: 'opendata.bordeaux-metropole.fr',
     dataset: 'u_dosaos_s',
-    label: 'Bordeaux Métropole — Dossiers d’autorisation d’occupation du sol',
+    label: 'Bordeaux Métropole — Dossiers d’autorisation d’occupation du sol', // i18n-ignore-line — the portal's own dataset title
     licence: 'Licence Ouverte',
     communes: Object.freeze([
       '33003', '33004', '33013', '33032', '33039', '33056', '33063', '33065',
@@ -360,7 +443,7 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     key: 'nantes',
     portal: 'nantesmetropole.outscale-euw2.opendatasoft.com',
     dataset: '244400404_demandes-autorisations-decisions-urbanisme-nantes-metropole',
-    label: 'Nantes Métropole — Demandes et décisions d’urbanisme',
+    label: 'Nantes Métropole — Demandes et décisions d’urbanisme', // i18n-ignore-line — the portal's own dataset title
     licence: 'Licence Ouverte',
     communes: Object.freeze([
       '44009', '44018', '44020', '44024', '44026', '44035', '44047', '44074',
@@ -373,15 +456,18 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     // rows join the Sitadel rows in the same BAN batch, under the same
     // per-commune cache, instead of arriving pre-placed like the other two.
     geoColumn: null,
+    // i18n-ignore-next-line — a column name in the portal's schema
     communeColumn: 'code_insee_commune',
     // …and that column is an INTEGER here, so the filter is written unquoted.
     communeIsNumeric: true,
+    // i18n-ignore-start — column names in the portal's own schema
     select: Object.freeze([
       'numero_de_dossier', 'type_dossier', 'commune', 'code_insee_commune',
       'date_de_depot', 'date_decision', 'details_du_projet', 'surface_de_plancher',
       'demandeur', 'adresse_du_terrain', 'etat_dossier',
     ]),
     dateColumn: 'date_de_depot',
+    // i18n-ignore-end
   }),
 ]);
 
@@ -420,16 +506,22 @@ export const BAN_CSV_URL = 'https://api-adresse.data.gouv.fr/search/csv/';
  * has since been divided is a real, common thing — 37.3% of the same rows —
  * and the honest drawing of it is the parent, labelled as divided.
  */
-export const ADS_PRECISION = Object.freeze({
-  parcelle: { rank: 7, label: 'parcelle cadastrale' },
-  enfant: { rank: 6, label: 'lot issu de la parcelle citée' },
-  published: { rank: 5, label: 'coordonnée publiée' },
-  housenumber: { rank: 4, label: 'au numéro' },
-  mere: { rank: 3, label: 'parcelle divisée depuis' },
-  street: { rank: 2, label: 'à la rue' },
-  locality: { rank: 1, label: 'au lieu-dit' },
-  municipality: { rank: 0, label: 'à la commune' },
-});
+export const ADS_PRECISION = Object.freeze(Object.fromEntries(
+  ['municipality', 'locality', 'street', 'mere', 'housenumber', 'published', 'enfant', 'parcelle']
+    .map((key, rank) => [
+      key,
+      Object.freeze({ rank, label: ADS_PRECISION_WORDS.definition[key].fr }),
+    ]),
+));
+
+/**
+ * One placement outcome in the page's language.
+ * @param {?string} precision A key of {@link ADS_PRECISION}.
+ * @returns {string} The words, or the key itself when it is a new one.
+ */
+export function adsPrecisionLabel(precision) {
+  return labelFor(ADS_PRECISION_WORDS, precision);
+}
 
 /**
  * Fold an arrondissement code onto the commune Sitadel actually keys.
@@ -487,6 +579,7 @@ export function adsSince(months, now = Date.now()) {
  */
 export function buildSitadelUrl(file, { communeCode, since }) {
   const code = foldToSitadelCommune(communeCode);
+  // i18n-ignore-next-line — a developer error, never shown to a reader
   if (!code) throw new Error(`ads: invalid commune code ${communeCode}`);
   const params = new URLSearchParams({
     COMM: `eq:${code}`,
@@ -535,6 +628,7 @@ export function buildLocalAdsUrl(portal, {
     clauses.unshift(`distance(${portal.geoColumn}, geom'POINT(${lon} ${lat})', ${Math.round(radiusM)}m)`);
   } else if (portal.communeColumn) {
     const code = String(communeCode ?? '').trim();
+    // i18n-ignore-next-line — a developer error, never shown to a reader
     if (!code) throw new Error(`ads: ${portal.key} needs a commune code`);
     clauses.unshift(portal.communeIsNumeric
       ? `${portal.communeColumn} = ${Number.parseInt(code, 10)}`
@@ -758,6 +852,7 @@ export function normaliseSitadelRow(file, row) {
     precision: null,
     geocodeScore: null,
     source: 'sitadel',
+    // i18n-ignore-next-line — the register's own name, relayed as attribution
     sourceLabel: 'Sitadel — SDES',
   };
 }
@@ -765,9 +860,11 @@ export function normaliseSitadelRow(file, row) {
 /** The family letter a portal's free-text `type_dossier` is really naming. */
 function localKind(label, dossier) {
   const value = String(label ?? '').toLowerCase();
+  // i18n-ignore-start — the portals' own `type_dossier` wording, matched on
   if (value.includes('démolir') || value.includes('demolir')) return 'PD';
   if (value.includes('aménager') || value.includes('amenager')) return 'PA';
   if (value.includes('préalable') || value.includes('prealable')) return 'DP';
+  // i18n-ignore-end
   if (value.includes('certificat')) return 'CU';
   if (value.includes('construire')) return 'PC';
   const prefix = String(dossier ?? '').trim().toUpperCase().slice(0, 2);
@@ -789,10 +886,10 @@ function localKind(label, dossier) {
 export function localState(raw) {
   const value = String(raw ?? '').toLowerCase();
   if (!value) return { state: null, label: null };
-  if (value.includes('instruction')) return { state: 'instruction', label: 'En cours d’instruction' };
-  if (value.includes('refus')) return { state: 'refuse', label: 'Refusé' };
-  if (value.includes('accord') || value.includes('autoris')) return { state: 'accorde', label: 'Accordé' };
-  if (value.includes('annul') || value.includes('retir')) return { state: 'annule', label: 'Annulé' };
+  if (value.includes('instruction')) return { state: 'instruction', label: adsStateFrench('instruction') };
+  if (value.includes('refus')) return { state: 'refuse', label: adsStateFrench('refuse') };
+  if (value.includes('accord') || value.includes('autoris')) return { state: 'accorde', label: adsStateFrench('accorde') };
+  if (value.includes('annul') || value.includes('retir')) return { state: 'annule', label: adsStateFrench('annule') };
   return { state: 'depose', label: String(raw).trim() };
 }
 
@@ -912,7 +1009,7 @@ export function normaliseLocalRow(portal, record) {
   if (!dossier) return null;
   const kind = localKind(record.type_dossier ?? record.type_libelle, dossier);
   const status = portal.publishesDecision === false
-    ? { state: 'depose', label: 'Déposé' }
+    ? { state: 'depose', label: adsStateFrench('depose') }
     : localState(record.etat ?? record.etat_dossier);
   const { lon, lat } = localPoint(portal, record);
   const placed = Number.isFinite(lon) && Number.isFinite(lat)
@@ -1353,6 +1450,7 @@ export function mergeRegisters(sitadel, local) {
       stateLabel: permit.stateLabel ?? twin.stateLabel,
       siteState: twin.state,
       siteStateLabel: twin.stateLabel,
+      // i18n-ignore-next-line — two registers' own names, relayed as attribution
       sourceLabel: `${permit.sourceLabel} + Sitadel`,
       sources: [permit.source, 'sitadel'],
     });

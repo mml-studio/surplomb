@@ -3,10 +3,11 @@ import { addressMarkerGlyph } from './addressMarkerIcons.js';
 import { createAddressScanLayer } from './addressScanLayer.js';
 import { clampDvfRadius } from './dvfFeed.js';
 import { mountComparablesPanel } from './comparablesPanel.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './comparablesLayer.i18n.js';
 import {
   CANDIDATE_LIMIT,
   ageDays,
-  agree,
   comparableFromDvfSale,
   comparableLines,
   distanceMetres,
@@ -93,6 +94,7 @@ import {
 
 /** Layer id — share-link registry key and taxonomy key. */
 export const COMPARABLES_LAYER_ID = 'comparables-fr';
+// i18n-ignore-next-line — the registry owns a layer's name (layerTaxonomy.i18n.js)
 export const COMPARABLES_LAYER_NAME = 'Comparables (sélection conseiller)';
 
 /** A virtual endpoint. No server serves it; {@link comparablesFetch} answers. */
@@ -124,6 +126,7 @@ const DVF_MEMO_TTL_MS = 300_000;
 const MAX_ALTITUDE_M = 12_000;
 
 /** A sale that was observed. The register's own instrument. */
+// i18n-ignore-next-line — a hex colour, not a word
 export const VENTE_COLOR = '#3ce0c8';
 /** A price that is being asked. Never the same sign as one that was paid. */
 export const ANNONCE_COLOR = '#ff9f45';
@@ -336,7 +339,7 @@ export function renderComparables({ payload, dataSource, viewer }) {
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'comparables-bien' },
-      name: subject.label || 'Bien étudié',
+      name: subject.label || messages().subject,
       description: dossierLines(dossier).join(' · '),
     });
     drawn += 1;
@@ -348,14 +351,14 @@ export function renderComparables({ payload, dataSource, viewer }) {
     const days = ageDays(entry.date);
     const dated = Number.isFinite(days);
     const colour = Cesium.Color.fromCssColorString(
-      entry.kind === 'vente' ? VENTE_COLOR : ANNONCE_COLOR,
+      entry.kind === 'vente' ? VENTE_COLOR : ANNONCE_COLOR, // i18n-ignore-line — a stored kind key, not a word
     );
     const card = comparableLines(entry, subject);
     dataSource.entities.add({
       id: `${COMPARABLE_ENTITY_PREFIX}${entry.id}`,
       position: Cesium.Cartesian3.fromDegrees(entry.lon, entry.lat),
       billboard: {
-        image: addressMarkerGlyph(entry.kind === 'vente' ? 'euro' : 'tag'),
+        image: addressMarkerGlyph(entry.kind === 'vente' ? 'euro' : 'tag'), // i18n-ignore-line — a stored kind key, not a word
         width: 24,
         height: 24,
         color: colour.withAlpha(ageAlpha(days)),
@@ -409,24 +412,24 @@ export function renderComparables({ payload, dataSource, viewer }) {
  * @returns {Array<object>} Legend entries, in the panel's own shape.
  */
 export function comparablesLegend(summary) {
-  const euros = (value) => new Intl.NumberFormat('fr-FR').format(Math.round(value));
-  const on = (n) => `${n} ${agree(n, 'comparable')}`;
+  const m = messages().legend;
+  const euros = (value) => formatNumber(Math.round(value));
   return [
     {
-      label: 'Ventes actées (DVF)',
+      label: m.sales,
       color: VENTE_COLOR,
       count: summary?.ventes ?? 0,
       blurb: summary?.medianVentes
-        ? `${euros(summary.medianVentes)} €/m² médian sur ${on(summary.ventesWithRatio)}.`
-        : 'Mutations retenues dans le dossier — prix observés, source DGFiP.',
+        ? m.salesMedian(euros(summary.medianVentes), m.on(summary.ventesWithRatio))
+        : m.salesBlurb,
     },
     {
-      label: 'Annonces saisies',
+      label: m.listings,
       color: ANNONCE_COLOR,
       count: summary?.annonces ?? 0,
       blurb: summary?.medianAnnonces
-        ? `${euros(summary.medianAnnonces)} €/m² médian demandé sur ${on(summary.annoncesWithRatio)}.`
-        : 'Annonces relevées à la main — prix demandés, jamais collectés.',
+        ? m.listingsMedian(euros(summary.medianAnnonces), m.on(summary.annoncesWithRatio))
+        : m.listingsBlurb,
     },
   ];
 }
@@ -703,19 +706,16 @@ const comparablesLayer = {
 
   getStats() {
     const stats = base.getStats();
-    const result = {
-      ...stats,
-      feedSource: 'DGFiP DVF (candidats) · dossier local, jamais transmis',
-    };
+    const m = messages().row;
+    const result = { ...stats, feedSource: m.feedSource };
     if (stats.dormant) {
       result.status = 'ok';
-      result.loadingLabel = `Zoome sous ${Math.round(MAX_ALTITUDE_M / 1000)} km, `
-        + 'ou pose le bien pour épingler le dossier';
+      result.loadingLabel = m.dormant(Math.round(MAX_ALTITUDE_M / 1000));
     } else if (!stats.subjectLabel) {
-      result.loadingLabel = 'Aucun bien posé — ouvre le dossier pour en poser un';
+      result.loadingLabel = m.noSubject;
     } else if (stats.candidatesMissing) {
       result.degraded = true;
-      result.loadingLabel = 'DVF muet — le dossier est intact, la liste de candidats est vide';
+      result.loadingLabel = m.dvfSilent;
     }
     return result;
   },

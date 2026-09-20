@@ -57,6 +57,10 @@ export const MELODI_COG = '2026';
  * figure INSEE publishes for 2024, and it answers a different question
  * (see `TERRITORY_METRICS`).
  */
+import messages, {
+  TERRITORY_LEVEL_WORDS, TERRITORY_SCOPE_WORDS,
+} from './filosofiTerritoiresFeed.i18n.js';
+
 export const MELODI_DATASETS = Object.freeze({
   filosofi: 'DS_FILOSOFI_CC',
   population: 'DS_POPULATIONS_REFERENCE',
@@ -79,7 +83,12 @@ export const TERRITORY_VINTAGE = Object.freeze({
 });
 
 /** What `DS_FILOSOFI_CC` covers. Narrower than the carroyage — no Antilles, no Guyane, no Mayotte. */
-export const TERRITORY_SCOPE = 'France métropolitaine et La Réunion';
+export const TERRITORY_SCOPE = TERRITORY_SCOPE_WORDS.definition.scope.fr;
+
+/** The same scope, in the page's language. */
+export function territoryScope() {
+  return TERRITORY_SCOPE_WORDS().scope;
+}
 
 /**
  * The two levels the layer draws, widest first.
@@ -90,10 +99,30 @@ export const TERRITORY_SCOPE = 'France métropolitaine et La Réunion';
  * in their head and 13 régions is too coarse to locate anything. Régions take
  * over only when France itself is small on screen.
  */
-export const TERRITORY_LEVELS = Object.freeze({
-  DEP: Object.freeze({ id: 'DEP', label: 'Départements', short: 'DÉP.', maxBoxDeg: 12 }),
-  REG: Object.freeze({ id: 'REG', label: 'Régions', short: 'RÉG.', maxBoxDeg: Infinity }),
+const TERRITORY_LEVEL_SPECS = Object.freeze({
+  DEP: Object.freeze({ id: 'DEP', maxBoxDeg: 12 }),
+  REG: Object.freeze({ id: 'REG', maxBoxDeg: Infinity }),
 });
+
+/** The two levels in FRENCH; {@link territoryLevel} answers in the reader's. */
+export const TERRITORY_LEVELS = Object.freeze(Object.fromEntries(
+  Object.entries(TERRITORY_LEVEL_SPECS).map(([id, spec]) => [id, Object.freeze({
+    ...spec,
+    label: TERRITORY_LEVEL_WORDS.definition[id].label.fr,
+    short: TERRITORY_LEVEL_WORDS.definition[id].short.fr,
+  })]),
+));
+
+/**
+ * One level, named in the page's language. An id this build does not know is
+ * the département level, as it always was.
+ * @param {?string} id `DEP` or `REG`.
+ * @returns {{id: string, label: string, short: string, maxBoxDeg: number}}
+ */
+export function territoryLevel(id) {
+  const key = Object.hasOwn(TERRITORY_LEVEL_SPECS, String(id ?? '')) ? String(id) : 'DEP';
+  return Object.freeze({ ...TERRITORY_LEVEL_SPECS[key], ...TERRITORY_LEVEL_WORDS()[key] });
+}
 
 /**
  * Which level a viewport gets.
@@ -203,88 +232,58 @@ export const TERRITORY_RAMP_COLORS = Object.freeze([
  * layer can keep the operator's choice across the zoom threshold instead of
  * resetting it — and `null` marks the two that exist only here.
  */
-export const TERRITORY_METRICS = Object.freeze([
+const TERRITORY_METRIC_SPECS = Object.freeze([
   Object.freeze({
-    id: 'niveau',
-    label: 'Niveau de vie médian',
-    short: 'NIVEAU DE VIE',
-    unit: '€/an par personne',
-    field: 'niveau',
-    year: TERRITORY_VINTAGE.filosofi,
-    carreauChip: 'niveau',
-    reversed: false,
-    blurb: 'Médiane du niveau de vie des habitants du territoire — la moitié vit'
-      + ' au-dessus, la moitié en dessous. Le carroyage, lui, montre une MOYENNE par'
-      + ' carreau : ce ne sont pas la même statistique.',
+    id: 'niveau', field: 'niveau', year: TERRITORY_VINTAGE.filosofi, carreauChip: 'niveau', reversed: false,
   }),
   Object.freeze({
-    id: 'pauvrete',
-    label: 'Taux de pauvreté',
-    short: 'PAUVRETÉ',
-    unit: '% des personnes',
-    field: 'pauvrete',
-    year: TERRITORY_VINTAGE.filosofi,
-    carreauChip: 'pauvrete',
-    reversed: false,
-    blurb: 'Part des personnes vivant sous 60 % du niveau de vie médian national.'
-      + ' Au carreau, la même idée est comptée en MÉNAGES, pas en personnes.',
+    id: 'pauvrete', field: 'pauvrete', year: TERRITORY_VINTAGE.filosofi, carreauChip: 'pauvrete', reversed: false,
   }),
   Object.freeze({
-    id: 'population',
-    label: 'Population',
-    short: 'POPULATION',
-    unit: 'habitants',
-    field: 'population',
-    year: TERRITORY_VINTAGE.population,
-    carreauChip: 'population',
-    reversed: false,
-    blurb: 'Population municipale (recensement) — la seule grandeur qui s’additionne,'
-      + ' et celle qui donne sa taille à chaque disque.',
+    id: 'population', field: 'population', year: TERRITORY_VINTAGE.population, carreauChip: 'population', reversed: false,
   }),
   Object.freeze({
-    id: 'interdecile',
-    label: 'Écart D9/D1',
-    short: 'ÉCART D9/D1',
-    unit: 'rapport',
-    field: 'interdecile',
-    year: TERRITORY_VINTAGE.filosofi,
-    carreauChip: null,
-    reversed: false,
-    blurb: 'Combien de fois le niveau de vie des 10 % les plus aisés dépasse celui des'
-      + ' 10 % les plus modestes. N’existe pas au carreau : il faut une distribution'
-      + ' entière pour le calculer.',
+    id: 'interdecile', field: 'interdecile', year: TERRITORY_VINTAGE.filosofi, carreauChip: null, reversed: false,
   }),
   Object.freeze({
-    id: 'gini',
-    label: 'Indice de Gini',
-    short: 'GINI',
-    unit: '0 = égalité parfaite',
-    field: 'gini',
-    year: TERRITORY_VINTAGE.filosofi,
-    carreauChip: null,
-    reversed: false,
-    blurb: 'Concentration des niveaux de vie : 0 si tout le monde a le même, 1 si une'
-      + ' seule personne a tout. N’existe pas au carreau.',
+    id: 'gini', field: 'gini', year: TERRITORY_VINTAGE.filosofi, carreauChip: null, reversed: false,
   }),
   Object.freeze({
-    id: 'salaire',
-    label: 'Salaire net mensuel',
-    short: 'SALAIRE',
-    unit: '€/mois en équivalent temps plein',
-    field: 'salaire',
-    year: TERRITORY_VINTAGE.wages,
-    carreauChip: null,
-    reversed: false,
-    blurb: 'Salaire net moyen du secteur PRIVÉ, en équivalent temps plein. Ce n’est pas'
-      + ' un niveau de vie : c’est avant impôts et prestations, par emploi et non par'
-      + ' ménage, et la fonction publique en est absente.',
+    id: 'salaire', field: 'salaire', year: TERRITORY_VINTAGE.wages, carreauChip: null, reversed: false,
   }),
 ]);
 
-/** @type {Object<string, object>} */
-const METRIC_BY_ID = Object.freeze(Object.fromEntries(
-  TERRITORY_METRICS.map((metric) => [metric.id, metric]),
-));
+/** One spec plus one locale's four words. */
+function withWords(spec, words) {
+  return Object.freeze({ ...spec, ...words[spec.id] });
+}
+
+/**
+ * The six indicators, in FRENCH.
+ *
+ * The words come from `filosofiTerritoiresFeed.i18n.js`;
+ * {@link territoryMetrics} is the same table in the page's language, and
+ * {@link resolveTerritoryMetric} reads it.
+ */
+export const TERRITORY_METRICS = Object.freeze(TERRITORY_METRIC_SPECS.map((spec) => withWords(
+  spec,
+  Object.fromEntries(Object.entries(messages.definition).map(([id, group]) => [
+    id,
+    Object.fromEntries(Object.entries(group).map(([key, leaf]) => [key, leaf.fr])),
+  ])),
+)));
+
+/** The same six, named in the page's language. Built once per locale. */
+const _metricsByLocale = new Map([[TERRITORY_METRICS[0].label, TERRITORY_METRICS]]);
+export function territoryMetrics() {
+  const words = messages();
+  let table = _metricsByLocale.get(words.niveau.label);
+  if (!table) {
+    table = Object.freeze(TERRITORY_METRIC_SPECS.map((spec) => withWords(spec, words)));
+    _metricsByLocale.set(words.niveau.label, table);
+  }
+  return table;
+}
 
 /**
  * The territory metric a chip id names.
@@ -299,9 +298,10 @@ const METRIC_BY_ID = Object.freeze(Object.fromEntries(
  */
 export function resolveTerritoryMetric(id) {
   const key = String(id ?? '').trim();
-  if (METRIC_BY_ID[key]) return METRIC_BY_ID[key];
-  const viaCarreau = TERRITORY_METRICS.find((metric) => metric.carreauChip === key);
-  return viaCarreau || METRIC_BY_ID.niveau;
+  const table = territoryMetrics();
+  return table.find((metric) => metric.id === key)
+    || table.find((metric) => metric.carreauChip === key)
+    || table[0];
 }
 
 /** The Filosofi measure code behind each indicator, or null when it comes from elsewhere. */
@@ -410,6 +410,7 @@ export function foldTerritoryObservations({ filosofi, population, wages } = {}) 
   }
 
   for (const observation of wages?.observations || []) {
+    // i18n-ignore-next-line — Melodi's own measure code
     if (observation?.dimensions?.DERA_MEASURE !== 'SALAIRE_NET_EQTP_MENSUEL_MOYENNE') continue;
     const target = row(observation.dimensions.GEO);
     if (!target) continue;

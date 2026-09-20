@@ -61,6 +61,7 @@ function normalizeName(s) {
  * Common spoken aliases → the pack's canonical (normalized) names.
  * Keys and values are both in normalizeName() form.
  */
+// i18n-ignore-start — Natural Earth's own place names, matched on, never shown
 const ALIASES = {
   'rockies': 'rocky mountains',
   'himalaya': 'himalayas',
@@ -92,6 +93,7 @@ const ALIASES = {
   'kamchatka': 'kamchatka peninsula',
   'sierra nevada mountains': 'sierra nevada',
 };
+// i18n-ignore-end
 
 /** Generic suffix rewrites tried when there is no exact/alias hit. */
 function suffixVariants(norm) {

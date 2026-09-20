@@ -317,18 +317,20 @@ import { powerClassificationTypeForScene, powerClassificationTypeForStack } from
 import {
   SITADEL_BANDS,
   SITADEL_LICENCE,
-  SITADEL_OUTCOME_LABELS,
   SITADEL_SIZE_CEILING_LGT,
   SITADEL_SOURCE,
   buildSitadelPermitCard,
   finiteOrNull,
-  sitadelBand,
+  sitadelBandBlurb,
   sitadelBandColor,
+  sitadelBandLabel,
   sitadelLoadingLabel,
   sitadelPermitTitle,
   sitadelPointSize,
   sitadelUnplacedLines,
 } from './sitadelFeed.js';
+import { formatNumber, formatPercent } from '../i18n/format.js';
+import messages from './sitadelFrance.i18n.js';
 import { pickAt } from './pickAt.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
@@ -343,6 +345,7 @@ export const SITADEL_FR_OVERLAY_SOURCE_OPTIONS = Object.freeze({
 });
 
 /** Keyless, same-origin. See `sitadelFranceProxy` in vite.config.js. */
+// i18n-ignore-next-line — a route, not prose
 export const SITADEL_COMMUNE_URL = '/api/sitadel-fr/commune';
 
 /**
@@ -1443,14 +1446,14 @@ function applyClassification(next) {
 
 // --- Cards ------------------------------------------------------------------
 
-/** French thousands separator, matching the rest of the French packs. */
+/** A count, grouped the way the reader's language groups one. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
 function pct(part, whole) {
   if (!(whole > 0)) return null;
-  return `${((100 * part) / whole).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
+  return formatPercent((100 * part) / whole, { maximumFractionDigits: 1 });
 }
 
 /**
@@ -1470,17 +1473,21 @@ function pct(part, whole) {
 export function sitadelJoinLines(payload, permit = null) {
   const summary = payload?.summary;
   if (!summary) return [];
+  const m = messages().join;
   const lines = [];
-  const name = payload.commune || payload.insee || 'cette commune';
-  lines.push(`${name} : ${fr(summary.placed)} des ${fr(summary.permits)} autorisations posées`
-    + ` (${pct(summary.placed, summary.permits) || '—'}) — jointure cadastrale, aucune coordonnée publiée`);
+  const name = payload.commune || payload.insee || m.thisCommune;
+  lines.push(m.communeRate(
+    name, fr(summary.placed), fr(summary.permits),
+    pct(summary.placed, summary.permits) || '—',
+  ));
   const year = permit?.y;
   const tally = year ? (payload.years || []).find((entry) => entry.year === year) : null;
   if (tally && tally.permits > 0) {
-    lines.push(`Autorisations de ${year} ici : ${fr(tally.placed)} des ${fr(tally.permits)} posées`
-      + ` (${pct(tally.placed, tally.permits)}) — une parcelle est divisée quand on y construit`);
+    lines.push(m.yearRate(
+      year, fr(tally.placed), fr(tally.permits), pct(tally.placed, tally.permits),
+    ));
   }
-  lines.push(`Sitadel millésime ${payload.millesime || '—'} · cadastre Etalab ${payload.cadastreEdition || '—'}`);
+  lines.push(m.editions(payload.millesime || '—', payload.cadastreEdition || '—'));
   return lines;
 }
 
@@ -1508,12 +1515,9 @@ export function buildSitadelSelectionLabel(record, payload = _payload) {
   for (const slot of permit.px || []) {
     shared = Math.max(shared, (_owners.get(slot)?.permits || 1) - 1);
   }
-  if (shared > 0) {
-    details.push(`${fr(shared)} autre${shared > 1 ? 's' : ''} autorisation${shared > 1 ? 's' : ''}`
-      + ' sur cette parcelle depuis 2013');
-  }
+  if (shared > 0) details.push(messages().join.sharedPlot(fr(shared), shared));
   details.push(...sitadelJoinLines(payload, permit));
-  details.push(`SDES / CGDD — ${SITADEL_LICENCE} · parcelles DGFiP / Etalab`);
+  details.push(messages().join.credit(SITADEL_LICENCE));
   return [title, ...details.filter(Boolean)].join('\n');
 }
 
@@ -1745,9 +1749,7 @@ async function load({ force = false } = {}) {
     // A pack already in hand still describes the same commune — DiDo publishes
     // monthly. Keep drawing it and say the refresh failed rather than blanking
     // a city because one query timed out.
-    _error = _payload
-      ? 'rafraîchissement des autorisations d’urbanisme indisponible'
-      : 'autorisations d’urbanisme (Sitadel) indisponibles';
+    _error = _payload ? messages().error.refresh : messages().error.unavailable;
     _status = _payload ? 'ready' : 'unavailable';
     // Re-arm: the cell was never actually answered, so the next camera settle
     // must be allowed to ask again.
@@ -1827,7 +1829,7 @@ function collectDetectableObjects(options = {}) {
 /** The one line the DETECT callout shows for a permit. */
 export function sitadelDetectLabel(record) {
   const permit = record?.permit;
-  if (!permit) return 'Autorisation d’urbanisme';
+  if (!permit) return messages().detectFallback;
   const street = [permit.an, permit.av].filter(Boolean).join(' ');
   return street || permit.dem || sitadelPermitTitle(permit);
 }
@@ -1858,43 +1860,32 @@ export function sitadelDetectType(record) {
  */
 export function sitadelHeightLegend(tally) {
   if (!tally || !tally.parcels) return [];
+  const m = messages().height;
   const rows = [];
   const flat = tally.demolition + tally.noDwellings;
   if (tally.prisms) {
     rows.push({
-      label: `Hauteur = logements autorisés · 1 logement = ${SITADEL_METRES_PER_DWELLING} m`,
+      label: m.scale(SITADEL_METRES_PER_DWELLING),
       color: null,
       count: tally.prisms,
-      blurb: `Une colonne de ${SITADEL_PRISM_BASE_M} m de côté par dossier, plantée sur sa `
-        + `parcelle — la parcelle elle-même reste à plat, sa teinte est son état. Échelle `
-        + `linéaire — deux fois plus haut, deux fois plus de logements — plafonnée à `
-        + `${SITADEL_PRISM_MAX_M} m (${SITADEL_SIZE_CEILING_LGT} logements, `
-        + `99ᵉ centile mesuré à 190 sur 22 474 permis)`
-        + (tally.clipped
-          ? ` · ${fr(tally.clipped)} colonne${tally.clipped > 1 ? 's' : ''} écrêtée${tally.clipped > 1 ? 's' : ''}, la fiche garde le vrai compte.`
-          : ' · aucune colonne écrêtée ici.'),
+      blurb: m.scaleBlurb(SITADEL_PRISM_BASE_M, SITADEL_PRISM_MAX_M, SITADEL_SIZE_CEILING_LGT)
+        + (tally.clipped ? m.clipped(fr(tally.clipped), tally.clipped) : m.notClipped),
     });
   }
   if (flat) {
     rows.push({
-      label: 'Sans hauteur — parcelle à plat, bordée de sa propre couleur',
+      label: m.flat,
       color: null,
       count: flat,
-      blurb: `${fr(tally.demolition)} permis de démolir, dont le fichier a 33 colonnes et pas `
-        + `une qui compte un logement, et ${fr(tally.noDwellings)} autorisation`
-        + `${tally.noDwellings > 1 ? 's' : ''} ne créant aucun logement ou n'en publiant pas le `
-        + 'nombre — les deux arrivent ici confondues. Aucune hauteur nulle : un chiffre que le '
-        + 'fichier ne donne pas ne se dessine pas.',
+      blurb: m.flatBlurb(fr(tally.demolition), fr(tally.noDwellings), tally.noDwellings),
     });
   }
   if (tally.coldFloor) {
     rows.push({
-      label: 'Sol pas encore résolu — sans colonne en attendant',
+      label: m.coldFloor,
       color: null,
       count: tally.coldFloor,
-      blurb: 'État transitoire, pas une classe : la grille d’altitude partagée n’a pas encore '
-        + 'répondu sous ces dossiers. Une seule nouvelle tentative, trois secondes plus tard. '
-        + 'La bordure de leur parcelle reste neutre, parce qu’ils vont se lever.',
+      blurb: m.coldFloorBlurb,
     });
   }
   return rows;
@@ -1919,9 +1910,10 @@ export function buildSitadelLoadingLabel({
   commune = _communeName,
   tally = _prismTally,
 } = {}) {
+  const m = messages().row;
   if (loading) return sitadelLoadingLabel({ status: 'loading', commune });
   if (status === 'too-high') return sitadelLoadingLabel({ status: 'too-high' });
-  if (status === 'no-view') return 'Le centre de l’écran ne touche pas le sol — vise le terrain';
+  if (status === 'no-view') return m.noGround;
   if (status === 'no-commune') return sitadelLoadingLabel({ status: 'no-commune' });
   if (!payload?.summary) return null;
   const head = sitadelLoadingLabel({
@@ -1931,16 +1923,16 @@ export function buildSitadelLoadingLabel({
     millesime: payload.millesime,
   });
   const notes = [];
-  if (payload.summary.demolitionAvailable === false) notes.push('fichier des démolitions indisponible');
-  if (payload.outline?.simplified) notes.push('contour communal simplifié');
+  if (payload.summary.demolitionAvailable === false) notes.push(m.noDemolitionFile);
+  if (payload.outline?.simplified) notes.push(m.simplifiedOutline);
   // The scale, on the line that is visible without opening anything. A relief
   // whose unit is only in a panel is a relief nobody can read (D1).
   if (tally?.prisms) {
-    notes.push(`${fr(tally.prisms)} dossiers en volume · 1 logement = `
-      + `${SITADEL_METRES_PER_DWELLING} m sur une colonne de ${SITADEL_PRISM_BASE_M} m, `
-      + `plafond ${SITADEL_PRISM_MAX_M} m`);
+    notes.push(m.prisms(
+      fr(tally.prisms), SITADEL_METRES_PER_DWELLING, SITADEL_PRISM_BASE_M, SITADEL_PRISM_MAX_M,
+    ));
     const flat = tally.demolition + tally.noDwellings;
-    if (flat) notes.push(`${fr(flat)} sans hauteur, sans logement publié`);
+    if (flat) notes.push(m.flat(fr(flat)));
   }
   return notes.length ? `${head} · ${notes.join(' · ')}` : head;
 }
@@ -1994,7 +1986,7 @@ function publishByParcel() {
       count: bucket.length,
       newest: {
         date: newest.da || null,
-        label: [newest.t, band?.label].filter(Boolean).join(' · ') || null,
+        label: [newest.t, band ? sitadelBandLabel(band.id) : null].filter(Boolean).join(' · ') || null,
         dwellings: Number.isFinite(newest.lgt) ? newest.lgt : null,
       },
     };
@@ -2209,10 +2201,12 @@ const sitadelFranceLayer = {
     for (const band of bands) {
       if (!(band.count > 0)) continue;
       legend.push({
-        label: band.label,
+        // The band ID, not the `label` the server baked in French: the id is
+        // the stable key and the words are the reader's.
+        label: sitadelBandLabel(band.id),
         color: band.color,
         count: band.count,
-        blurb: band.blurb,
+        blurb: sitadelBandBlurb(band.id),
       });
     }
     legend.push(...sitadelHeightLegend(_prismTally));

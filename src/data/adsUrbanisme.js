@@ -1,7 +1,13 @@
 import * as Cesium from 'cesium';
 import { addressMarkerGlyph } from './addressMarkerIcons.js';
 import { createAddressScanLayer } from './addressScanLayer.js';
-import { ADS_DEFAULT_MONTHS, ADS_DEFAULT_RADIUS_M, ADS_MAX_MONTHS } from './adsFeed.js';
+import {
+  ADS_DEFAULT_MONTHS, ADS_DEFAULT_RADIUS_M, ADS_MAX_MONTHS,
+  adsKindLabel, adsPurposeLabel, adsStateLabel,
+} from './adsFeed.js';
+import { adsLineageBasisLabel } from './cadastreLineage.js';
+import { formatNumber } from '../i18n/format.js';
+import messages from './adsUrbanisme.i18n.js';
 import { clearBuildingTheme, registerBuildingTheme } from './buildingTheme.js';
 // The third urbanism layer takes the second one's surface rule rather than
 // writing a third copy of it; `urbanismeGpu.test.mjs` already pins it.
@@ -125,9 +131,9 @@ const UPDATE_INTERVAL_MS = 600_000;
  * here is reachable from a share link too.
  */
 export const ADS_WINDOWS = Object.freeze([
-  Object.freeze({ months: '36', label: '3 ANS' }),
-  Object.freeze({ months: '72', label: '6 ANS' }),
-  Object.freeze({ months: String(ADS_MAX_MONTHS), label: '13 ANS' }),
+  Object.freeze({ months: '36' }),
+  Object.freeze({ months: '72' }),
+  Object.freeze({ months: String(ADS_MAX_MONTHS) }),
 ]);
 
 /** The rung a reader who has chosen nothing is on. Unchanged from before. */
@@ -148,24 +154,24 @@ export const ADS_WINDOW_DEFAULT = String(ADS_DEFAULT_MONTHS);
  * @returns {Array<object>} Chip descriptors for the manager's row renderer.
  */
 export function adsWindowChips(months, summary = null) {
+  const m = messages().window;
   const current = String(months ?? ADS_WINDOW_DEFAULT);
   return ADS_WINDOWS.map((window) => {
     const active = window.months === current;
     const years = Math.round(Number(window.months) / 12);
-    let title = `Autorisations des ${years} dernières années`;
+    let title = m.title(years);
     if (active && summary?.truncated) {
-      title += ` — ${summary.permitsFound} dossiers servis sur `
-        + `${summary.permitsInRadius} dans le rayon, les plus proches d’abord`;
+      title += m.truncated(summary.permitsFound, summary.permitsInRadius);
     } else if (active && Number.isFinite(summary?.permitsFound)) {
-      title += ` — ${summary.permitsFound} dossiers sur ce bloc`;
+      title += m.counted(summary.permitsFound);
     } else if (window.months === ADS_WINDOW_DEFAULT) {
-      title += ' — le pipeline en cours';
+      title += m.pipeline;
     } else {
-      title += ', chantiers achevés compris';
+      title += m.finished;
     }
     return {
       id: `months:${window.months}`,
-      label: window.label,
+      label: m.years(years),
       active,
       state: active ? 'active' : 'idle',
       title,
@@ -260,10 +266,10 @@ export function adsStateStyle(state) {
   return STATE_STYLE[String(state ?? '')] ?? STATE_UNKNOWN;
 }
 
-/** `2026-08-31` → `31/08/2026`, the way a French reader expects to read it. */
-function frenchDate(iso) {
+/** `2026-08-31` → `31/08/2026` / `Aug 31, 2026`, per the reader's language. */
+function adsDate(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''));
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+  return match ? messages().date.format(match[1], match[2], match[3]) : null;
 }
 
 /**
@@ -278,13 +284,14 @@ function frenchDate(iso) {
  * @returns {?string}
  */
 export function adsDateLine(permit) {
-  if (permit.completedOn) return `achevé le ${frenchDate(permit.completedOn)}`;
-  if (permit.startedOn) return `chantier ouvert le ${frenchDate(permit.startedOn)}`;
+  const m = messages().date;
+  if (permit.completedOn) return m.completed(adsDate(permit.completedOn));
+  if (permit.startedOn) return m.started(adsDate(permit.startedOn));
   if (permit.state === 'instruction' || permit.state === 'depose') {
-    return permit.depositedOn ? `déposé le ${frenchDate(permit.depositedOn)}` : null;
+    return permit.depositedOn ? m.filed(adsDate(permit.depositedOn)) : null;
   }
-  if (permit.decidedOn) return `décidé le ${frenchDate(permit.decidedOn)}`;
-  return permit.depositedOn ? `déposé le ${frenchDate(permit.depositedOn)}` : null;
+  if (permit.decidedOn) return m.decided(adsDate(permit.decidedOn));
+  return permit.depositedOn ? m.filed(adsDate(permit.depositedOn)) : null;
 }
 
 /**
@@ -298,6 +305,7 @@ export function adsDateLine(permit) {
  * @returns {?string}
  */
 export function adsPrecisionLine(permit) {
+  const m = messages().precision;
   if (permit.precision === 'published') return null;
   if (permit.precision === 'housenumber') return null;
   // The dossier named this parcel and the cadastre still has it. The shape
@@ -310,19 +318,21 @@ export function adsPrecisionLine(permit) {
   // a record and a deduction, so the basis is printed rather than averaged
   // into a single confident sentence.
   if (permit.precision === 'enfant') {
-    const basis = permit.lineage?.basisLabel;
-    return basis ? `lot déduit — ${basis}` : 'lot déduit après division de la parcelle';
+    // The basis comes back through `cadastreLineage.js`, which publishes it in
+    // both languages; the payload's own `basisLabel` is the server's French.
+    const basis = permit.lineage?.basis
+      ? adsLineageBasisLabel(permit.lineage.basis)
+      : permit.lineage?.basisLabel;
+    return basis ? m.deducedLot(basis) : m.deducedLotPlain;
   }
   // No lot could be told from its siblings: two thirds of divisions, measured.
   // The parent is drawn instead, which is a true statement about the ground.
   if (permit.precision === 'mere') {
     const siblings = permit.lineage?.siblings;
-    return siblings > 1
-      ? `emprise avant division — ${siblings} lots depuis, non départagés`
-      : 'emprise avant division — le lot exact n’est pas déterminé';
+    return siblings > 1 ? m.parentWithSiblings(siblings) : m.parent;
   }
-  if (permit.precision === 'street') return 'position approchée — géocodée à la rue';
-  if (permit.precision === 'locality') return 'position approchée — géocodée au lieu-dit';
+  if (permit.precision === 'street') return m.street;
+  if (permit.precision === 'locality') return m.locality;
   return null;
 }
 
@@ -347,11 +357,13 @@ export function empriseStyle(permits) {
 
 /** `['063KE78', '063KE79']` → `parcelles 063KE78, 063KE79`. */
 function parcelTitle(parcels) {
+  const m = messages().emprise;
   const list = (parcels || []).filter(Boolean);
-  if (!list.length) return 'Emprise du dossier';
+  if (!list.length) return m.fallbackTitle;
   const shown = list.slice(0, 3).join(', ');
   const rest = list.length - 3;
-  return `${list.length > 1 ? 'Parcelles' : 'Parcelle'} ${shown}${rest > 0 ? ` +${rest}` : ''}`;
+  const more = rest > 0 ? ` +${rest}` : '';
+  return list.length > 1 ? m.manyParcels(shown, more) : m.oneParcel(`${shown}${more}`);
 }
 
 /**
@@ -398,12 +410,13 @@ export function empriseProvenanceLine(permits) {
     if (permit?.precision === 'parcelle' || permit?.precision === 'mere'
       || permit?.precision === 'enfant') cadastre = true;
   }
+  const m = messages().emprise;
   const lines = [];
-  for (const authority of portals) lines.push(`emprise publiée par ${authority}`);
+  for (const authority of portals) lines.push(m.publishedBy(authority));
   // Named as what it is: this shape was not published with the dossier, it is
   // the plot the dossier names, drawn from the cadastre this globe already
   // carries.
-  if (cadastre) lines.push('emprise cadastrale — la parcelle nommée par le dossier');
+  if (cadastre) lines.push(m.fromCadastre);
   return lines.length ? lines.join(' · ') : null;
 }
 
@@ -423,8 +436,9 @@ export function empriseProvenanceLine(permits) {
 export function adsEmpriseLine(permit) {
   if (!Number.isFinite(permit?.empriseId)) return null;
   if (permit.precision !== 'published') return null;
+  const m = messages().emprise;
   const authority = String(permit.sourceLabel ?? '').split('—')[0].trim();
-  return authority ? `emprise publiée par ${authority}` : 'emprise publiée avec le dossier';
+  return authority ? m.publishedBy(authority) : m.publishedWithFile;
 }
 
 /**
@@ -440,11 +454,15 @@ export function adsEmpriseLine(permit) {
  * @returns {{name: string, description: string}}
  */
 export function empriseCard(emprise, permits) {
+  const m = messages().emprise;
   const kinds = new Map();
   for (const permit of permits) {
-    kinds.set(permit.kindLabel, (kinds.get(permit.kindLabel) ?? 0) + 1);
+    // The family LETTER, relabelled here: `kindLabel` is what the server baked
+    // into the payload, and the server has no language.
+    const label = adsKindLabel(permit.kind) ?? permit.kindLabel;
+    kinds.set(label, (kinds.get(label) ?? 0) + 1);
   }
-  const tally = [...kinds].map(([label, n]) => (n > 1 ? `${n} × ${label}` : label)).join(', ');
+  const tally = [...kinds].map(([label, n]) => (n > 1 ? m.tally(n, label) : label)).join(', ');
   const latest = permits
     .map((permit) => permit.depositedOn)
     .filter(Boolean)
@@ -453,14 +471,14 @@ export function empriseCard(emprise, permits) {
   return {
     name: parcelTitle(emprise.parcels),
     description: [
-      permits.length > 1 ? `${permits.length} dossiers sur cette emprise` : null,
+      permits.length > 1 ? m.files(permits.length) : null,
       // Measured off the outline drawn, not copied from the row — see
       // `liftEmprises`, and the parcel where the two differ by 120×.
       Number.isFinite(emprise.areaM2) && emprise.areaM2 > 0
-        ? `${emprise.areaM2.toLocaleString('fr-FR')} m² au sol`
+        ? m.area(formatNumber(emprise.areaM2))
         : null,
       tally || null,
-      latest ? `dernier dépôt le ${frenchDate(latest)}` : null,
+      latest ? m.lastFiling(adsDate(latest)) : null,
       // Said out loud because a shape a layer DREW and a shape a counter
       // PUBLISHED are two different claims about the same ground — see
       // {@link empriseProvenanceLine}, which reads it off the dossiers.
@@ -583,7 +601,9 @@ export function drawAdsEmprises(dataSource, payload, classificationType) {
 export const ADS_BUILDING_THEME_ID = 'ads-fr';
 
 /** Shown to the reader wherever the paint has to name its owner (D1). */
-export const ADS_BUILDING_THEME_LABEL = 'Autorisations d’urbanisme';
+export function adsBuildingThemeLabel() {
+  return messages().theme.label;
+}
 
 /**
  * Lower wins. 30 puts this ahead of a €/m² or DPE theme on the same volumes:
@@ -601,7 +621,9 @@ export const ADS_BUILDING_THEME_PRECEDENCE = 30;
  * the circle this layer asked about — and those are different sentences (A4).
  * The row says both, in that order, because the second is the likelier one.
  */
-export const ADS_BUILDING_THEME_UNKNOWN_LABEL = `hors du rayon de ${ADS_DEFAULT_RADIUS_M} m, ou sans dossier`;
+export function adsBuildingThemeUnknownLabel() {
+  return messages().theme.unknown(ADS_DEFAULT_RADIUS_M);
+}
 
 /** What a permit can be about. */
 export const ADS_TARGET_EXISTING = 'existing';
@@ -617,8 +639,10 @@ export const ADS_TARGET_UNKNOWN = 'unknown';
  * wording change upstream fails a test here instead of silently reclassifying
  * every permit in France as "nature not published".
  */
+// i18n-ignore-start — the payload's own French values, matched on
 const NATURE_EXISTING_TEXT = 'travaux sur construction existante';
 const NATURE_NEW_TEXT = 'nouvelle construction';
+// i18n-ignore-end
 
 /**
  * Is this dossier about a building that stands, or about ground that does not
@@ -692,39 +716,33 @@ export function adsBuildingThemeReduce(permits) {
  * the volumes it really painted, which is the number a reader of the Bâti 3D
  * row needs — not the number of dossiers this layer holds.
  */
-export const ADS_BUILDING_THEME_LEGEND = Object.freeze([
-  Object.freeze({
-    label: 'Déposé ou en instruction',
-    color: '#3dd6c4',
-    blurb: 'Le dossier est encore au guichet et peut encore faire l’objet d’un recours. '
-      + 'Publié seulement par Paris, Bordeaux et Nantes : ailleurs cette classe est vide '
-      + 'parce que le registre national ne contient que des permis déjà accordés.',
-  }),
-  Object.freeze({
-    label: 'Accordé, chantier non ouvert',
-    color: '#ffb03d',
-    blurb: 'Autorisé, et aucune ouverture de chantier n’est remontée. Le bâtiment peint '
-      + 'est celui qui existe aujourd’hui, pas celui que le permis décrit.',
-  }),
-  Object.freeze({
-    label: 'Chantier ouvert',
-    color: '#ff6b4a',
-    blurb: 'Les travaux ont commencé sur ce volume.',
-  }),
-  Object.freeze({
-    label: 'Travaux achevés',
-    color: '#7ed957',
-    blurb: 'Achèvement déclaré. Le volume BD TOPO peut être antérieur aux travaux : '
-      + 'la peinture dit qu’un dossier s’est terminé ici, pas que le levé l’a vu.',
-  }),
-  Object.freeze({
-    label: 'Refusé ou annulé',
-    color: '#8c93a3',
-    blurb: 'Le dossier a existé, le projet non. Peint parce que « rien ne changera ici » '
-      + 'est une information sur le bâtiment ; la classe garde sa propre teinte et n’est '
-      + 'pas fondue dans les volumes sans dossier.',
-  }),
-]);
+export const ADS_BUILDING_THEME_LEGEND = Object.freeze(
+  [
+    ['filed', '#3dd6c4'],
+    ['granted', '#ffb03d'],
+    ['started', '#ff6b4a'],
+    ['completed', '#7ed957'],
+    ['refused', '#8c93a3'],
+  ].map(([key, color]) => Object.freeze({
+    key,
+    color,
+    // The French, read off the catalog's definition rather than retyped: the
+    // palette guards and the registry's conflict check read this table at load
+    // time, and a colour has no language.
+    label: messages.definition.theme[key].fr,
+    blurb: messages.definition.theme[`${key}Blurb`].fr,
+  })),
+);
+
+/** The same ramp in the page's language, one row per colour. */
+export function adsBuildingThemeLegend() {
+  const m = messages().theme;
+  return ADS_BUILDING_THEME_LEGEND.map((entry) => Object.freeze({
+    label: m[entry.key],
+    color: entry.color,
+    blurb: m[`${entry.key}Blurb`],
+  }));
+}
 
 /**
  * Split a served payload into what the theme may paint and what it may not.
@@ -803,13 +821,13 @@ export function syncAdsBuildingTheme(payload) {
   _themeLedger = ledger;
   registerBuildingTheme({
     id: ADS_BUILDING_THEME_ID,
-    label: ADS_BUILDING_THEME_LABEL,
+    label: adsBuildingThemeLabel(),
     precedence: ADS_BUILDING_THEME_PRECEDENCE,
     points: ledger.points,
     reduce: adsBuildingThemeReduce,
     colorFor: adsBuildingThemeColorFor,
-    legend: ADS_BUILDING_THEME_LEGEND,
-    unknownLabel: ADS_BUILDING_THEME_UNKNOWN_LABEL,
+    legend: adsBuildingThemeLegend(),
+    unknownLabel: adsBuildingThemeUnknownLabel(),
   });
   return ledger;
 }
@@ -825,9 +843,9 @@ export function adsBuildingThemeLedger() {
   return _themeLedger;
 }
 
-/** French thousands, matching the rest of the French packs. */
+/** A count, grouped the way the reader's language groups one. */
 function fr(value) {
-  return Number(value).toLocaleString('fr-FR');
+  return formatNumber(value);
 }
 
 /**
@@ -843,17 +861,15 @@ function fr(value) {
  */
 export function adsBuildingThemeLine(ledger = _themeLedger) {
   if (!ledger || !ledger.total) return null;
+  const m = messages().ledger;
   const held = [];
-  if (ledger.newBuild) held.push(`${fr(ledger.newBuild)} en construction neuve`);
-  if (ledger.land) held.push(`${fr(ledger.land)} permis d’aménager`);
-  if (ledger.unpublishedState) held.push(`${fr(ledger.unpublishedState)} sans état publié`);
-  if (ledger.unplaced) held.push(`${fr(ledger.unplaced)} sans coordonnée`);
-  const head = `${fr(ledger.offered)} des ${fr(ledger.total)} dossiers peignent le bâti 3D`
-    + (ledger.offeredInferred
-      ? ` (dont ${fr(ledger.offeredInferred)} sur nature non publiée)`
-      : '');
-  const tail = held.length ? ` · retenus : ${held.join(', ')}` : '';
-  return `${head}${tail} · compte des volumes peints sur la ligne Bâti 3D`;
+  if (ledger.newBuild) held.push(m.newBuild(fr(ledger.newBuild)));
+  if (ledger.land) held.push(m.land(fr(ledger.land)));
+  if (ledger.unpublishedState) held.push(m.noState(fr(ledger.unpublishedState)));
+  if (ledger.unplaced) held.push(m.unplaced(fr(ledger.unplaced)));
+  const head = m.head(fr(ledger.offered), fr(ledger.total))
+    + (ledger.offeredInferred ? m.inferred(fr(ledger.offeredInferred)) : '');
+  return m.line(head, held.length ? m.held(held.join(', ')) : '');
 }
 
 /**
@@ -874,19 +890,18 @@ export function adsRowControls(payload) {
     const color = adsStateStyle(permit?.state).color;
     counts.set(color, (counts.get(color) || 0) + 1);
   }
-  const legend = ADS_BUILDING_THEME_LEGEND.map((entry) => ({
+  const m = messages().theme;
+  const legend = adsBuildingThemeLegend().map((entry) => ({
     label: entry.label,
     color: entry.color,
     count: counts.get(entry.color) || 0,
     blurb: entry.blurb,
   }));
   legend.push({
-    label: 'État non publié',
+    label: m.unpublished,
     color: STATE_UNKNOWN.color,
     count: counts.get(STATE_UNKNOWN.color) || 0,
-    blurb: 'Ni Sitadel ni le portail n’a publié d’état pour ce dossier. Le marqueur est '
-      + 'dessiné, le volume ne l’est pas : ce gris est à ΔE 11 du gris de « refusé ou '
-      + 'annulé » et une toiture peinte ne pourrait pas les distinguer.',
+    blurb: m.unpublishedBlurb,
   });
   // The plot wash IS a ground-classified area fill, so on the photoreal stack it
   // climbs the façades and the manager's drape notice applies — wherever there
@@ -932,6 +947,7 @@ const adsScanLayer = createAddressScanLayer({
     // The volumes first, because the registry notifies the BD TOPO layer
     // synchronously and a repaint costs nothing while this data source is still
     // empty. Re-registering with the new points IS the data-changed signal.
+    const card = messages().card;
     syncAdsBuildingTheme(payload);
     // The ground next, the news on top of it. Emprises are counted separately
     // from the returned total: the number this callback reports is what the
@@ -968,17 +984,19 @@ const adsScanLayer = createAddressScanLayer({
         },
         name: permit.address || permit.commune || permit.dossier,
         description: [
-          permit.kindLabel,
-          permit.stateLabel,
+          // The three server-composed fields are relabelled from their KEYS:
+          // `/api/ads-fr` runs in Node and bakes French into the payload.
+          adsKindLabel(permit.kind) ?? permit.kindLabel,
+          adsStateLabel(permit),
           adsDateLine(permit),
           Number.isFinite(permit.housing) && permit.housing > 0
-            ? `${permit.housing} logement${permit.housing > 1 ? 's' : ''}`
+            ? card.dwellings(permit.housing)
             : null,
           Number.isFinite(permit.surfaceCreatedM2) && permit.surfaceCreatedM2 > 0
-            ? `${permit.surfaceCreatedM2.toLocaleString('fr-FR')} m² créés`
+            ? card.surfaceCreated(formatNumber(permit.surfaceCreatedM2))
             : null,
-          permit.purpose,
-          permit.parcels?.length ? `parcelle ${permit.parcels.join(', ')}` : null,
+          adsPurposeLabel(permit.purpose),
+          permit.parcels?.length ? card.parcel(permit.parcels.join(', ')) : null,
           // WHICH shape is under this marker, not merely that there is one: a
           // portal's own outline and a cadastral parcel joined on a reference
           // are two different claims, and the card that said « emprise
@@ -987,7 +1005,7 @@ const adsScanLayer = createAddressScanLayer({
           adsEmpriseLine(permit),
           permit.applicant,
           adsPrecisionLine(permit),
-          `${permit.distanceM} m`,
+          card.distance(permit.distanceM),
           permit.dossier,
         ].filter(Boolean).join(' · '),
       });
@@ -1101,7 +1119,7 @@ const adsUrbanismeLayer = {
     return {
       ...stats,
       theme: ADS_BUILDING_THEME_ID,
-      themeLabel: ADS_BUILDING_THEME_LABEL,
+      themeLabel: adsBuildingThemeLabel(),
       // The OFFER ledger. Every dossier of the served payload is in exactly one
       // of these, and they sum to `themeTotal` — see `adsBuildingThemePoints`.
       themeTotal: ledger.total,
