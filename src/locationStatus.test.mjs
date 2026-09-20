@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { addressSegments, locationMiniStatus } from './locationStatus.js';
+import { useTestLocale } from './i18n/testing.js';
 
 const NEW_YORK = {
   name: 'New York',
@@ -40,7 +41,14 @@ test('a free-text search reports the destination, never the empty placeholder', 
   );
 });
 
-test('a single-segment geocode says it was searched rather than inventing context', () => {
+test('a single-segment geocode says it was searched rather than inventing context', (t) => {
+  assert.deepEqual(
+    locationMiniStatus({ searchedLabel: 'Japan' }),
+    { city: '📍 Japan', poi: 'Lieu recherché' },
+  );
+  // The readout was English until the shell was translated; it still is, for
+  // an English reader.
+  useTestLocale('en', t);
   assert.deepEqual(
     locationMiniStatus({ searchedLabel: 'Japan' }),
     { city: '📍 Japan', poi: 'Searched location' },
@@ -55,11 +63,16 @@ test('a preset city outranks a stale searched label', () => {
 });
 
 test('nothing selected keeps the honest empty placeholder', () => {
-  const empty = { city: '📍 Location: --', poi: 'Landmark: --' };
+  const empty = { city: '📍 Lieu : --', poi: 'Point de repère : --' };
   assert.deepEqual(locationMiniStatus(), empty);
   assert.deepEqual(locationMiniStatus({ city: null, searchedLabel: '' }), empty);
   assert.deepEqual(locationMiniStatus({ searchedLabel: '   ,  , ' }), empty);
   assert.deepEqual(locationMiniStatus({ searchedLabel: null }), empty);
+  // Same placeholder, same shape, in the page's other language — and it is the
+  // one `index.html` ships, so the tray never contradicts the markup.
+  const restore = useTestLocale('en');
+  assert.deepEqual(locationMiniStatus(), { city: '📍 Location: --', poi: 'Landmark: --' });
+  restore();
 });
 
 test('a city record without a usable name is not treated as a preset', () => {

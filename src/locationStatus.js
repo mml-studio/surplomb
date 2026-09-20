@@ -10,7 +10,13 @@
  * readout reporting "Location: --" while the camera sat over the destination.
  */
 
-const EMPTY = Object.freeze({ city: '📍 Location: --', poi: 'Landmark: --' });
+import messages from './locationStatus.i18n.js';
+
+/** The empty readout, in the page's language. Read at call time, never at load. */
+const empty = () => {
+  const m = messages();
+  return { city: m.city, poi: m.poi };
+};
 
 /** Split a geocoder `formatted_address` into its trimmed, non-empty segments. */
 export function addressSegments(label) {
@@ -55,11 +61,11 @@ export function locationMiniStatus({
       // The remaining address is the place's context ("Japan", "Minato City,
       // Tokyo, Japan"); the readout is ellipsised in CSS, so a long tail is
       // safe. A one-segment geocode ("Japan") has no context to show.
-      poi: segments.length > 1 ? segments.slice(1).join(', ') : 'Searched location',
+      poi: segments.length > 1 ? segments.slice(1).join(', ') : messages().searched,
     };
   }
 
-  return { ...EMPTY };
+  return empty();
 }
 
 export default locationMiniStatus;

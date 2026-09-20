@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { StyleManager } from './ui.js';
+import mainMessages from './main.i18n.js';
 import { DEFAULT_CITY_VIEW, flyToDefaultCity } from './camera.js';
 import { beginBootFlight, endBootFlight, whenBootFlightEnds } from './bootFlight.js';
 import {
@@ -134,7 +135,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
   if (handoff) loadingScreen.classList.add('hidden');
 
   try {
-    loaderStatus.textContent = 'Configuring viewer...';
+    loaderStatus.textContent = mainMessages().configuring;
 
     // The page's one `/api/trial` read, started now: the voice crown needs it
     // at idle, and the first-run card needs it before it shows anything (it
@@ -339,9 +340,9 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // build.
     const canLoadPhotoreal = !photorealOff && !!(googleApiKey || cesiumToken);
     if (photorealOff) {
-      loaderStatus.textContent = 'Google 3D Tiles off for this session — starting on the globe...';
+      loaderStatus.textContent = mainMessages().photorealOff;
     } else if (!canLoadPhotoreal) {
-      loaderStatus.textContent = 'No Google key or ion token — starting keyless...';
+      loaderStatus.textContent = mainMessages().keyless;
     }
 
     // THE PURCHASE, DEFERRED. Handed to the controller rather than called here,
@@ -362,9 +363,8 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
         // ONLY route left to the 3D globe on an EEA-billed Google key.
         ionToken: cesiumToken,
         onAttempt: (source) => {
-          loaderStatus.textContent = source === 'ion'
-            ? 'Loading Google 3D Tiles via Cesium ion...'
-            : 'Loading Google 3D Tiles...';
+          const messages = mainMessages();
+          loaderStatus.textContent = source === 'ion' ? messages.photorealViaIon : messages.photoreal;
         },
       });
       if (photoreal.tileset) {
@@ -385,7 +385,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
       };
     } : null;
 
-    loaderStatus.textContent = 'Initializing systems...';
+    loaderStatus.textContent = mainMessages().systems;
 
     // DEV-ONLY terrain spike. Loud on purpose: with IGN RGE ALTI under the
     // globe, the repo's "terrain-globe means the Re:Earth prior IS the ground"
@@ -633,7 +633,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
       const immediate = phoneShell;
       loaderStatus.textContent = immediate
         ? DEFAULT_CITY_VIEW.label
-        : `Flying to ${DEFAULT_CITY_VIEW.label}...`;
+        : mainMessages().flyingTo(DEFAULT_CITY_VIEW.label);
       // Declared BEFORE the flight starts, because a layer restored from the
       // reader's last session is already asking the altimeter what to fetch.
       // See `bootFlight.js` for the four-times-slower arrival this avoids.
@@ -647,7 +647,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
         },
       });
     } else {
-      loaderStatus.textContent = 'Restoring shared view...';
+      loaderStatus.textContent = mainMessages().restoringShared;
       // A shared view IS the reader's choice of where to be, so their own
       // arrival counts: a link to a rooftop gets the 3D globe on landing.
       photorealAdoption?.arm();
@@ -1017,7 +1017,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
   } catch (error) {
     console.error("Surplomb initialization failed:", error);
     stopLoaderSun();
-    loaderStatus.textContent = `Error: ${describeError(error)}`;
+    loaderStatus.textContent = mainMessages().error(describeError(error));
     loaderStatus.style.color = '#ffb4a8'; // 6:1 on the veil's green; see src/boot.js
     // A hand-off that dies must not leave the reader in front of a frozen
     // picture: lifting it uncovers the loading screen's error line.
