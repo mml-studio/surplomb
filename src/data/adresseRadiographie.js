@@ -87,9 +87,56 @@ import {
   BAREME_SAMPLE,
   scoreIndicator,
 } from './baremeNational.js';
+import messages, {
+  AMENITY_FAMILIES,
+  AMENITY_FAMILY_COUNTS,
+  ARCEP_TECHNOLOGIES,
+  ATMO_BANDS,
+  ATMO_POLLUTANTS,
+  LOYERS_BASIS,
+  LOYERS_SEGMENTS,
+  RADON_LABELS,
+  RISK_GRADES,
+  RISK_LABELS,
+  RISK_VERDICTS,
+  SCHOOL_LEVELS,
+  SCHOOL_SECTORS,
+} from './adresseRadiographie.i18n.js';
+import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
+import { labelFor } from '../i18n/messages.js';
+import {
+  formatEuros,
+  formatEurosPerM2,
+  formatNumber,
+  formatPercent,
+  formatQuantity,
+  ordinal,
+} from '../i18n/format.js';
 
 /** Read from the barème rather than retyped, so the two cannot drift apart. */
 const BAREME_REASONS_GEOMETRY = BAREME_REASONS.GEOMETRY;
+
+/**
+ * A label the SERVER published, in the page's language.
+ *
+ * Seven of the seventeen routes compose their own French labels — the ATMO
+ * band, the ARCEP technology, the rent segment — and the server that composes
+ * them has no locale by design. So French prints what the payload carries,
+ * byte for byte, and any other language looks the STABLE KEY up in a table.
+ * An unknown key falls back to the published words: a category the producer
+ * added last week is better read in French than not at all.
+ *
+ * @param {ReturnType<typeof labelFor>} table A catalog keyed by the raw value.
+ * @param {string|number} key The stable key the payload carries.
+ * @param {?string} [publishedLabel] The words the payload printed, if any.
+ * @returns {string}
+ */
+function published(table, key, publishedLabel = null) {
+  if (getLocale() === DEFAULT_LOCALE && publishedLabel) return publishedLabel;
+  const translated = labelFor(table, key);
+  if (translated && translated !== String(key)) return translated;
+  return publishedLabel ?? translated;
+}
 
 /** How far around the point each bounded question looks. */
 export const RADIOGRAPHIE_RADIUS = Object.freeze({
@@ -120,19 +167,18 @@ export const RADIOGRAPHIE_LIST_CAP = 6;
  * below is coverage, speed or price.
  */
 export const RADIOGRAPHIE_THEMES = Object.freeze([
-  Object.freeze({ id: 'immobilier', label: 'Immobilier', question: 'Ce que le terrain vaut, et ce qu’il coûte à louer.' }),
-  Object.freeze({ id: 'transport', label: 'Transport', question: 'Ce qu’on atteint depuis cette porte, à pied et en voiture.' }),
-  Object.freeze({ id: 'education', label: 'Éducation', question: 'Quelles écoles, et lesquelles.' }),
-  Object.freeze({ id: 'commodites', label: 'Commodités', question: 'Les commerces et services du quotidien à portée de marche.' }),
-  Object.freeze({ id: 'nuisances', label: 'Nuisances', question: 'L’air qu’on y respire, et le bruit qui passe au-dessus.' }),
-  Object.freeze({ id: 'risques', label: 'Risques', question: 'Ce que l’État a inscrit au registre pour ce point.' }),
-  Object.freeze({ id: 'numerique', label: 'Numérique', question: 'Ce qu’une ligne fixe peut porter ici, et ce qui émet au-dessus.' }),
-  Object.freeze({ id: 'emploi', label: 'Emploi', question: 'L’activité des habitants, et son sens de marche.' }),
-  Object.freeze({ id: 'urbanisme', label: 'Urbanisme', question: 'Ce qui peut être bâti, et ce qui l’est déjà.' }),
-  Object.freeze({ id: 'voisinage', label: 'Voisinage', question: 'Qui habite autour, d’après le carroyage INSEE.' }),
-]);
-
-const _fr = new Intl.NumberFormat('fr-FR');
+  // i18n-ignore-start — theme IDS, not words: they key PROJECTORS, THEME_PARTS
+  // and the catalog, and `composeRadiographie` publishes them in `absent`.
+  'immobilier', 'transport', 'education', 'commodites', 'nuisances',
+  'risques', 'numerique', 'emploi', 'urbanisme', 'voisinage',
+  // i18n-ignore-end
+  // GETTERS, not values: the words are read when the sheet is composed, so one
+  // module answers in whichever language the page is in (CONVENTIONS § 2).
+].map((id) => Object.freeze({
+  id,
+  get label() { return messages().themes[id].label; },
+  get question() { return messages().themes[id].question; },
+})));
 
 /**
  * Minutes, as a reader says them.
@@ -149,21 +195,34 @@ export function minutesLabel(seconds) {
   return Number.isFinite(seconds) ? `${Math.round(seconds / 60)} min` : '—';
 }
 
-/** A whole number, French-spaced, or the em dash. */
+/** A whole number, grouped as the page's language groups them, or the em dash. */
 export function count(value) {
-  return Number.isFinite(value) ? _fr.format(Math.round(value)) : '—';
+  return Number.isFinite(value) ? formatNumber(Math.round(value)) : '—';
 }
 
-/** A decimal with a French comma, at the given precision. */
+/** Round to `digits` decimals the way this sheet has always rounded. */
+function rounded(value, digits) {
+  return Math.round(value * 10 ** digits) / 10 ** digits;
+}
+
+/** A decimal at the given precision: `5,6` in French, `5.6` in English. */
 export function decimal(value, digits = 1) {
-  return Number.isFinite(value)
-    ? _fr.format(Math.round(value * 10 ** digits) / 10 ** digits)
-    : '—';
+  return Number.isFinite(value) ? formatNumber(rounded(value, digits)) : '—';
 }
 
 /** A percentage, one decimal at most, with its sign kept. */
 function percent(value, digits = 1) {
-  return Number.isFinite(value) ? `${decimal(value, digits)} %` : '—';
+  return Number.isFinite(value) ? formatPercent(rounded(value, digits)) : '—';
+}
+
+/** An amount of euros, rounded as the row rounds it. */
+function euros(value, digits = 0) {
+  return Number.isFinite(value) ? formatEuros(rounded(value, digits)) : '—';
+}
+
+/** A price per square metre, rounded as the row rounds it. */
+function eurosPerM2(value, digits = 0) {
+  return Number.isFinite(value) ? formatEurosPerM2(rounded(value, digits)) : '—';
 }
 
 /** Great-circle metres between two points. */
@@ -194,8 +253,8 @@ function asHeading(label) {
 /** A distance as a reader says it. */
 export function distanceLabel(metres) {
   if (!Number.isFinite(metres)) return '—';
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
-  return `${decimal(metres / 1000, 1)} km`;
+  if (metres < 1000) return formatQuantity(Math.round(metres / 10) * 10, 'm');
+  return formatQuantity(rounded(metres / 1000, 1), 'km');
 }
 
 /**
@@ -227,6 +286,8 @@ export function radiographieRequests({ lat, lon }) {
   const bbox = `south=${box.south.toFixed(5)}&west=${box.west.toFixed(5)}`
     + `&north=${box.north.toFixed(5)}&east=${box.east.toFixed(5)}`;
   const at = `lat=${lat}&lon=${lon}`;
+  // i18n-ignore-start — request KEYS, matched against `THEME_PARTS` and printed
+  // by `fiche.js` as the identifier of a source that said nothing.
   return [
     { key: 'address', url: `https://api-adresse.data.gouv.fr/reverse/?lon=${lon}&lat=${lat}&limit=1` },
     { key: 'dvf', url: `/api/dvf?${at}&radius=${RADIOGRAPHIE_RADIUS.sales}` },
@@ -252,6 +313,7 @@ export function radiographieRequests({ lat, lon }) {
     { key: 'permis', url: `/api/ads-fr?${at}&radius=${RADIOGRAPHIE_RADIUS.permits}&months=36` },
     { key: 'carroyage', url: `/api/filosofi/carreaux?${bbox}&resolution=200` },
   ];
+  // i18n-ignore-end
 }
 
 /**
@@ -298,26 +360,33 @@ export async function fetchRadiographieParts(point, { fetchImpl = fetch, signal 
  * @returns {?object} A printable row, or null when there is nothing to say.
  */
 function rankRow(id, value, geometry, label) {
+  const m = messages();
   const score = scoreIndicator(id, value, { geometry });
   if (score.reason && score.percentile === null) {
     // Only worth a row when the refusal teaches something. "No scale at all"
     // for an indicator nobody expected to be graded is noise.
     if (score.reason !== BAREME_REASONS_GEOMETRY) return null;
-    return line(label, 'non classé', score.reason);
+    // The refusal is `baremeNational.js`'s sentence and the barème has no
+    // locale; the English sits in this sheet's catalog, and a test pins its
+    // French to the barème's own words so the two cannot drift.
+    return line(label, m.rank.unranked, m.rank.refusedGeometry);
   }
   if (score.percentile === null) return null;
-  const bracket = `${score.percentileLow}ᵉ à ${score.percentileHigh}ᵉ centile`;
+  const bracket = m.rank.bracket(ordinal(score.percentileLow), ordinal(score.percentileHigh));
   // The letter only when both ends of the bracket land in one band; otherwise
   // the honest answer is two letters, which is what `scoreIndicator` says.
   const letter = score.letter
-    ? `note ${score.letter}`
-    : (score.letterHigh && score.letterLow ? `note ${score.letterHigh} ou ${score.letterLow}` : null);
+    ? m.rank.letter(score.letter)
+    : (score.letterHigh && score.letterLow
+      ? m.rank.letterEither(score.letterHigh, score.letterLow)
+      : null);
   const head = [bracket, letter].filter(Boolean).join(' — ');
   // The direction note is a SENTENCE and the bracket is a figure; chaining both
   // on em dashes read as one run-on. It is printed only where there is no
   // letter, which is exactly where a reader needs to be told why.
-  const note = score.direction ? head : `${head}. ${score.directionNote}`;
-  return line(label, `${score.percentile}ᵉ centile national`, note);
+  const directionNote = m.rank.directionNote[score.id] ?? score.directionNote;
+  const note = score.direction ? head : `${head}. ${directionNote}`;
+  return line(label, m.rank.percentile(ordinal(score.percentile)), note);
 }
 
 /** Shorthand for one printed row. */
@@ -327,55 +396,60 @@ function line(label, value, note = null) {
 
 /** Immobilier — sales, rents, diagnostics. */
 function projectImmobilier({ dvf, loyers, dpe }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   const summary = dvf?.summary ?? null;
   if (summary) {
     lines.push(line(
-      `Prix médian dans ${RADIOGRAPHIE_RADIUS.sales} m`,
-      summary.medianPrixM2 === null ? '—' : `${count(summary.medianPrixM2)} €/m²`,
-      `${count(summary.comparableCount)} ventes comparables sur ${count(summary.count)} mutations`,
+      m.immobilier.medianPrice(RADIOGRAPHIE_RADIUS.sales),
+      summary.medianPrixM2 === null ? '—' : eurosPerM2(summary.medianPrixM2),
+      m.immobilier.comparables(count(summary.comparableCount), count(summary.count)),
     ));
     if (Number.isFinite(summary.p25PrixM2) && Number.isFinite(summary.p75PrixM2)) {
-      lines.push(line('Moitié centrale des ventes',
-        `${count(summary.p25PrixM2)} à ${count(summary.p75PrixM2)} €/m²`,
-        'premier et troisième quartiles — la moitié des ventes tient dans cet écart'));
+      lines.push(line(m.immobilier.middleHalf,
+        m.immobilier.priceRange(count(summary.p25PrixM2), count(summary.p75PrixM2)),
+        m.immobilier.quartiles));
     }
     // The 300 m radius above is `RADIOGRAPHIE_RADIUS.sales`, kept identical to
     // DVF's own — and identical to the disc the national scale was measured on,
     // which is what lets this one line carry a rank at all.
     const priceRank = rankRow('prixM2', summary.medianPrixM2, BAREME_GEOMETRIES.DISC_300,
-      'Ce prix dans le pays');
+      m.rank.priceLabel);
     if (priceRank) lines.push(priceRank);
     const reference = summary.reference ?? null;
     if (reference?.medianPrixM2) {
-      lines.push(line(`Référence ${reference.name || reference.code || ''}`.trim(),
-        `${count(reference.medianPrixM2)} €/m²`,
-        `${count(reference.comparableCount)} ventes comparables`));
+      lines.push(line(m.immobilier.reference(reference.name || reference.code || '').trim(),
+        eurosPerM2(reference.medianPrixM2),
+        m.immobilier.referenceSales(count(reference.comparableCount))));
     }
   } else {
-    notes.push('DVF n’a pas répondu — aucun prix de vente sur ce point.');
+    notes.push(m.immobilier.dvfSilent);
   }
 
   if (loyers?.segments?.length) {
     for (const segment of loyers.segments) {
       lines.push(line(
         // The published label verbatim: lower-casing it turned « T1-T2 » into
-        // « t1-t2 », which is not a thing the ministry publishes.
-        `Loyer — ${segment.label}`,
-        `${decimal(segment.eurM2, 2)} €/m²`,
-        `${decimal(segment.low, 2)} à ${decimal(segment.high, 2)} €/m² — `
-        + `environ ${count(segment.monthlyEur)} €/mois pour ${segment.surfaceM2} m², ${segment.basisLabel}`,
+        // « t1-t2 », which is not a thing the ministry publishes. In English
+        // the segment is named by its key, which is the same four segments.
+        m.immobilier.rent(published(LOYERS_SEGMENTS, segment.key, segment.label)),
+        eurosPerM2(segment.eurM2, 2),
+        m.immobilier.rentNote(
+          decimal(segment.low, 2),
+          decimal(segment.high, 2),
+          count(segment.monthlyEur),
+          segment.surfaceM2,
+          published(LOYERS_BASIS, segment.basis, segment.basisLabel),
+        ),
       ));
     }
-    notes.push('Loyers charges comprises, non meublé : c’est une prédiction du modèle du ministère '
-      + 'pour un bien-type, pas un loyer médian observé.');
+    notes.push(m.immobilier.rentModel);
     if (loyers.borrowedSegments > 0) {
-      notes.push(`${loyers.borrowedSegments} des ${loyers.segments.length} loyers ont été calculés `
-        + 'pour une maille de communes voisines, pas pour cette commune.');
+      notes.push(m.immobilier.rentBorrowed(loyers.borrowedSegments, loyers.segments.length));
     }
   } else {
-    notes.push('Carte des loyers muette pour cette commune.');
+    notes.push(m.immobilier.rentSilent);
   }
 
   if (dpe && Number.isFinite(dpe.total)) {
@@ -385,61 +459,59 @@ function projectImmobilier({ dvf, loyers, dpe }) {
       .filter(([, value]) => Number(value) > 0)
       .map(([label, value]) => `${label} ${value}`)
       .join(', ');
-    lines.push(line(`Diagnostics dans ${RADIOGRAPHIE_RADIUS.dpe} m`, count(dpe.total),
-      served ? `${best} — répartition sur les ${count(served)} diagnostics lus` : null));
+    lines.push(line(m.immobilier.dpe(RADIOGRAPHIE_RADIUS.dpe), count(dpe.total),
+      served ? m.immobilier.dpeSpread(best, count(served)) : null));
     if (Number.isFinite(dpe.medianCoutAnnuel)) {
-      lines.push(line('Coût énergétique annuel médian', `${count(dpe.medianCoutAnnuel)} €`,
-        'tous usages, tel que le DPE l’estime pour le logement diagnostiqué'));
+      lines.push(line(m.immobilier.dpeCost, euros(dpe.medianCoutAnnuel),
+        m.immobilier.dpeCostNote));
     }
     // Never averaged into a street grade: a DPE describes one dwelling.
-    notes.push('Les étiquettes ne sont pas moyennées : un DPE décrit une enveloppe, '
-      + 'et la moyenne des lettres d’une rue n’est pas une propriété de la rue.');
+    notes.push(m.immobilier.dpeNotAveraged);
   }
   return { lines, notes };
 }
 
 /** Transport — what the door actually reaches. */
 function projectTransport({ walk, drive }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   for (const ring of walk?.rings || []) {
-    lines.push(line(`${minutesLabel(ring.seconds)} à pied`,
-      `${decimal(ring.areaKm2, 2)} km²`,
-      'surface réellement atteignable par la voirie, pas un cercle'));
+    lines.push(line(m.transport.onFoot(minutesLabel(ring.seconds)),
+      formatQuantity(rounded(ring.areaKm2, 2), 'km²'),
+      m.transport.reachable));
     // ONLY the ten-minute ring, and only because the national scale was drawn
     // on exactly that shape. Ranking the five- or fifteen-minute ring against
     // it would give a plausible letter and a false one — the whole reason
     // `baremeNational.js` keys its scales on a geometry.
     if (ring.seconds === 600) {
       const rank = rankRow('acces', ring.areaKm2, BAREME_GEOMETRIES.RING_FOOT_600,
-        'Cet accès à pied dans le pays');
+        m.rank.walkLabel);
       if (rank) lines.push(rank);
     }
   }
   const driveRing = drive?.rings?.[0] ?? null;
   if (driveRing) {
-    lines.push(line(`${minutesLabel(driveRing.seconds)} en voiture`,
-      `${decimal(driveRing.areaKm2, 1)} km²`,
-      'hors trafic — l’isochrone IGN est calculée sur la voirie, pas sur le temps réel'));
+    lines.push(line(m.transport.byCar(minutesLabel(driveRing.seconds)),
+      formatQuantity(rounded(driveRing.areaKm2, 1), 'km²'),
+      m.transport.noTraffic));
   }
-  if (!lines.length) notes.push('Le service isochrone IGN n’a pas répondu.');
+  if (!lines.length) notes.push(m.transport.silent);
   else {
-    notes.push('Les réseaux de transport en commun ne sont pas encore comptés ici : '
-      + 'la couche Transit FR les dessine en direct sur le globe.');
-    notes.push('Seul l’anneau de dix minutes est situé dans le pays : le barème national '
-      + 'a été mesuré sur cette forme-là, et une valeur ne se classe que dans une '
-      + 'distribution mesurée sur la même géométrie.');
+    notes.push(m.transport.noTransit);
+    notes.push(m.transport.onlyTenMinutes);
   }
   return { lines, notes };
 }
 
 /** Éducation — the schools, and the index Cityscan does not print. */
 function projectEducation({ schools, point }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   const sites = Array.isArray(schools?.sites) ? schools.sites : [];
   if (!schools) {
-    notes.push('L’annuaire de l’éducation n’a pas répondu.');
+    notes.push(m.education.silent);
     return { lines, notes };
   }
   const ranked = sites
@@ -448,11 +520,13 @@ function projectEducation({ schools, point }) {
     .sort((a, b) => a.distance - b.distance);
   const byLevel = new Map();
   for (const { site } of ranked) {
-    const level = site.level || 'autre';
+    const level = site.level || 'autre'; // i18n-ignore-line — the register's own key
     byLevel.set(level, (byLevel.get(level) || 0) + 1);
   }
-  lines.push(line('Établissements dans la boîte de scan', count(ranked.length),
-    [...byLevel.entries()].map(([level, n]) => `${level} ${n}`).join(', ') || null));
+  lines.push(line(m.education.count, count(ranked.length),
+    [...byLevel.entries()]
+      .map(([level, n]) => m.education.byLevel(published(SCHOOL_LEVELS, level, level), n))
+      .join(', ') || null));
 
   let withIndex = 0;
   for (const { site, distance } of ranked.slice(0, RADIOGRAPHIE_LIST_CAP)) {
@@ -464,29 +538,32 @@ function projectEducation({ schools, point }) {
     // score. The sector is prefixed only when the register published one:
     // joining an empty string with an em dash produced rows opening on a dash.
     const index = value === null
-      ? 'IPS non publié'
-      : `IPS ${decimal(value, 1)}`
-        + (Number.isFinite(ips.national) ? ` contre ${decimal(ips.national, 1)} en France` : '');
-    lines.push(line(site.name || site.uai || 'Établissement',
+      ? m.education.noIps
+      : (Number.isFinite(ips.national)
+        ? m.education.ipsAgainst(decimal(value, 1), decimal(ips.national, 1))
+        : m.education.ips(decimal(value, 1)));
+    lines.push(line(site.name || site.uai || m.education.unnamed,
       distanceLabel(distance),
-      site.sector ? `${site.sector} — ${index}` : index));
+      site.sector
+        ? m.education.sectorAndIps(published(SCHOOL_SECTORS, site.sector, site.sector), index)
+        : index));
   }
   if (ranked.length > RADIOGRAPHIE_LIST_CAP) {
-    lines.push(line('…', `${count(ranked.length - RADIOGRAPHIE_LIST_CAP)} autres établissements`));
+    lines.push(line('…', m.education.more(count(ranked.length - RADIOGRAPHIE_LIST_CAP))));
   }
   if (ranked.length) {
-    notes.push(`IPS publié pour ${withIndex} des ${Math.min(ranked.length, RADIOGRAPHIE_LIST_CAP)} `
-      + 'établissements les plus proches — un IPS absent n’est jamais lu comme une moyenne.');
+    notes.push(m.education.ipsCoverage(withIndex, Math.min(ranked.length, RADIOGRAPHIE_LIST_CAP)));
   }
   return { lines, notes };
 }
 
 /** Commodités — the everyday registers, by family and by distance. */
 function projectCommodites({ amenities, point }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!amenities) {
-    notes.push('Le pack national BPE / FINESS n’a pas répondu.');
+    notes.push(m.commodites.silent);
     return { lines, notes };
   }
   const sites = Array.isArray(amenities.sites) ? amenities.sites : [];
@@ -505,54 +582,70 @@ function projectCommodites({ amenities, point }) {
     const held = nearest.get(family);
     if (!held || distance < held.distance) nearest.set(family, { distance, site });
   }
-  lines.push(line('Équipements dans la boîte de scan', count(amenities.rows ?? sites.length),
+  lines.push(line(m.commodites.count, count(amenities.rows ?? sites.length),
     amenities.capped
-      ? `${count(amenities.capped)} points au-delà du plafond de la réponse`
-      : `${count(amenities.dots ?? sites.length)} points distincts`));
+      ? m.commodites.capped(count(amenities.capped))
+      : m.commodites.dots(count(amenities.dots ?? sites.length))));
   for (const [family, entry] of [...nearest.entries()].sort((a, b) => a[1].distance - b[1].distance)) {
-    const nearestName = entry.site.names?.[0] || entry.site.kinds?.[0] || 'sans nom';
+    const nearestName = entry.site.names?.[0] || entry.site.kinds?.[0] || m.commodites.noName;
     const total = tally.get(family);
     // "1 commerces alimentaires" is the reason this is not a template string:
     // the plural head-word is the only one the vocabulary carries, and a rural
     // scan finds exactly one of most families.
     const many = total === 1
-      ? 'un seul dans la boîte'
-      : `${count(total)} ${AMENITY_FAMILY_PLURALS[family] || family} dans la boîte`;
-    lines.push(line(AMENITY_FAMILY_LABELS[family] || family, distanceLabel(entry.distance),
-      `${many} — le plus proche : ${nearestName}`));
+      ? m.commodites.onlyOne
+      : m.commodites.inBox(count(total),
+        published(AMENITY_FAMILY_COUNTS, family, AMENITY_FAMILY_PLURALS[family] || family));
+    lines.push(line(published(AMENITY_FAMILIES, family, AMENITY_FAMILY_LABELS[family] || family),
+      distanceLabel(entry.distance),
+      m.commodites.nearest(many, nearestName)));
   }
-  if (!nearest.size) notes.push('Aucun équipement de ces familles dans la boîte de scan.');
-  notes.push('La BPE ne publie ni bar ni café ni musée, et ses écoles sont écartées '
-    + 'au profit du registre du ministère — voir le thème Éducation.');
+  if (!nearest.size) notes.push(m.commodites.empty);
+  notes.push(m.commodites.bpeGaps);
   return { lines, notes };
 }
 
 /** Nuisances — today's air. */
 function projectNuisances({ atmo }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!atmo || atmo.uncovered) {
-    notes.push('Aucune AASQA ne publie d’indice pour cette commune ni autour d’elle.');
+    notes.push(m.nuisances.uncovered);
     return { lines, notes };
   }
-  lines.push(line('Indice ATMO du jour',
-    `${atmo.quality} sur 6 — ${atmo.band?.label ?? '—'}`,
-    atmo.driving?.length ? `tiré par : ${atmo.driving.join(', ')}` : null));
+  const band = (value) => (value?.code
+    ? published(ATMO_BANDS, value.code, value.label)
+    : (value?.label ?? '—'));
+  // The driving sub-indices arrive as LABELS; the key is what a catalog can
+  // translate, so it is read back off the pollutant list the same payload
+  // carries. A driver nobody listed keeps the agency's own word.
+  const pollutantKeys = new Map((atmo.pollutants || []).map((entry) => [entry.label, entry.key]));
+  const drivers = (atmo.driving || [])
+    .map((label) => published(ATMO_POLLUTANTS, pollutantKeys.get(label) ?? label, label));
+  lines.push(line(m.nuisances.index,
+    m.nuisances.indexValue(atmo.quality, band(atmo.band)),
+    drivers.length ? m.nuisances.drivenBy(drivers.join(', ')) : null));
   for (const pollutant of atmo.pollutants || []) {
     if (!Number.isFinite(pollutant.quality)) continue;
-    lines.push(line(asHeading(pollutant.label), `${pollutant.quality} — ${pollutant.band?.label ?? '—'}`));
+    lines.push(line(asHeading(published(ATMO_POLLUTANTS, pollutant.key, pollutant.label)),
+      m.nuisances.pollutantValue(pollutant.quality, band(pollutant.band))));
   }
   for (const day of atmo.forecast || []) {
-    lines.push(line(`Prévision ${day.date}`, `${day.quality} — ${day.band?.label ?? '—'}`));
+    lines.push(line(m.nuisances.forecast(day.date),
+      m.nuisances.pollutantValue(day.quality, band(day.band))));
   }
   if (atmo.borrowed && atmo.zone) {
-    notes.push(`Indice publié pour ${atmo.zone.name || atmo.zone.code} `
-      + `(${atmo.zone.scale === 'epci' ? 'intercommunalité' : 'commune voisine'})`
-      + (Number.isFinite(atmo.zone.distanceM) ? `, à ${distanceLabel(atmo.zone.distanceM)}` : '')
-      + ' — pas pour cette commune.');
+    notes.push(m.nuisances.borrowed(
+      atmo.zone.name || atmo.zone.code,
+      atmo.zone.scale === 'epci' ? m.nuisances.borrowedEpci : m.nuisances.borrowedCommune,
+      Number.isFinite(atmo.zone.distanceM)
+        ? m.nuisances.borrowedDistance(distanceLabel(atmo.zone.distanceM))
+        : '',
+    ));
   }
-  if (atmo.agency) notes.push(`Publié par ${atmo.agency}.`);
-  notes.push('L’indice global est le MAXIMUM des cinq sous-indices, pas leur moyenne.');
+  if (atmo.agency) notes.push(m.nuisances.agency(atmo.agency));
+  notes.push(m.nuisances.maximum);
   return { lines, notes };
 }
 
@@ -575,10 +668,11 @@ function projectNuisances({ atmo }) {
  * @returns {{lines: object[], notes: string[]}}
  */
 function projectBruit({ bruit }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!bruit) {
-    notes.push('Les plans d’exposition au bruit n’ont pas répondu.');
+    notes.push(m.bruit.silent);
     return { lines, notes };
   }
   const bands = [...(bruit.peb || []), ...(bruit.pgs || [])]
@@ -589,40 +683,60 @@ function projectBruit({ bruit }) {
   for (const band of bands) {
     const document = band.kind === 'pgs' ? 'PGS' : 'PEB';
     const airport = [band.airport, band.oaci ? `(${band.oaci})` : ''].filter(Boolean).join(' ');
-    const index = String(band.index || '').toLowerCase() === 'psophique' ? 'indice psophique' : 'Lden';
+    const index = String(band.index || '').toLowerCase() === 'psophique' ? m.bruit.psophic : 'Lden';
     const range = Number.isFinite(band.low) && Number.isFinite(band.high)
       ? `${index} ${band.low}–${band.high}`
       : index;
-    lines.push(line(`Zone ${band.zone} du ${document}`, range,
-      [airport, band.arreteDate ? `arrêté du ${band.arreteDate}` : ''].filter(Boolean).join(' · ')));
+    lines.push(line(m.bruit.zone(band.zone, document), range,
+      [airport, band.arreteDate ? m.bruit.order(band.arreteDate) : ''].filter(Boolean).join(' · ')));
   }
   if (!bands.length) {
     const nearest = bruit.nearest;
     if (nearest && Number.isFinite(nearest.distanceKm)) {
-      lines.push(line('Plan d’exposition au bruit', 'aucun à ce point',
-        `le plus proche : ${nearest.name || nearest.oaci} à ${decimal(nearest.distanceKm, 1)} km`));
+      lines.push(line(m.bruit.plan, m.bruit.none,
+        m.bruit.nearest(nearest.name || nearest.oaci, decimal(nearest.distanceKm, 1))));
     } else {
-      lines.push(line('Plan d’exposition au bruit', 'aucun à ce point'));
+      lines.push(line(m.bruit.plan, m.bruit.none));
     }
   }
   // The three refusals this theme owes, in the order they mislead.
-  notes.push('Un PEB est une CONTRAINTE D’URBANISME, pas une mesure : il décrit '
-    + 'une exposition prévue à long terme, jamais le bruit d’aujourd’hui.');
+  notes.push(m.bruit.planningConstraint);
   if (bands.some((band) => String(band.index || '').toLowerCase() === 'psophique')) {
-    notes.push('Certains arrêtés sont encore écrits en indice psophique, qui ne se '
-      + 'convertit pas en décibels — les deux échelles ne sont pas comparables.');
+    notes.push(m.bruit.psophicNote);
   }
-  notes.push('Bruit AÉRONAUTIQUE seulement. Il n’existe pas de carte de bruit '
-    + 'stratégique nationale ouverte pour la route et le rail (voir bruitFrance.js).');
+  notes.push(m.bruit.aircraftOnly);
   return { lines, notes };
+}
+
+/**
+ * One Géorisques verdict, in the page's language.
+ *
+ * The register answers a short closed vocabulary — `Risque Existant`,
+ * `Risque non Connu`, `Risque Concerne` — optionally graded after a dash
+ * (`Risque Existant - important`). The grade is split off rather than listed
+ * as a dozen combinations: the register grades a dozen hazards on four words,
+ * and a table of every pair is a table nobody keeps current. French prints
+ * what the register published, unchanged.
+ *
+ * @param {?string} verdict @returns {?string}
+ */
+function hazardVerdict(verdict) {
+  if (!verdict) return verdict ?? null;
+  if (getLocale() === DEFAULT_LOCALE) return verdict;
+  const match = /^(.*?)\s-\s*(.+)$/.exec(String(verdict).trim());
+  if (!match) return published(RISK_VERDICTS, verdict, verdict);
+  const [, head, grade] = match;
+  const translated = published(RISK_VERDICTS, head.trim(), head.trim());
+  return messages().risques.verdictGraded(translated, published(RISK_GRADES, grade, grade));
 }
 
 /** Risques — the statutory register, commune verdict and address verdict apart. */
 function projectRisques({ risques }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!risques) {
-    notes.push('Géorisques n’a pas répondu.');
+    notes.push(m.risques.silent);
     return { lines, notes };
   }
   // THE ROUTE ANSWERS EVEN WHEN THE REGISTER DID NOT. Géorisques fans out to
@@ -640,14 +754,11 @@ function projectRisques({ risques }) {
   ];
   const present = families.filter((risk) => risk.present);
   if (!reported || !families.length) {
-    lines.push(line('Risques inscrits pour ce point', 'non lus',
-      'le rapport Géorisques n’a pas répondu — ce n’est pas « aucun risque »'));
-    notes.push('L’état des risques n’a pas pu être lu pour ce point. '
-      + 'Les installations classées et le potentiel radon ci-dessous viennent '
-      + 'de deux autres appels, qui ont répondu.');
+    lines.push(line(m.risques.onRecord, m.risques.notRead, m.risques.notReadNote));
+    notes.push(m.risques.reportMissing);
   } else {
-    lines.push(line('Risques inscrits pour ce point', count(present.length),
-      `sur ${count(families.length)} familles interrogées dans ${RADIOGRAPHIE_RADIUS.risks} m`));
+    lines.push(line(m.risques.onRecord, count(present.length),
+      m.risques.families(count(families.length), RADIOGRAPHIE_RADIUS.risks)));
   }
   for (const risk of present) {
     // The disagreement is read from the two verdicts themselves, not from the
@@ -655,59 +766,65 @@ function projectRisques({ risques }) {
     // WITHIN the radius. A commune classed "Risque Existant - important" for
     // clay shrinkage above a point classed "Risque non Connu" is a
     // disagreement whatever that flag says.
-    lines.push(line(risk.label, risk.addressVerdict || risk.communeVerdict || '—',
+    lines.push(line(published(RISK_LABELS, risk.id, risk.label),
+      hazardVerdict(risk.addressVerdict || risk.communeVerdict) || '—',
       risk.communeVerdict && risk.addressVerdict && risk.communeVerdict !== risk.addressVerdict
-        ? `la commune est classée « ${risk.communeVerdict} » — les deux verdicts diffèrent`
+        ? m.risques.disagree(hazardVerdict(risk.communeVerdict))
         : null));
   }
   if (risques.radon?.label) {
     // Named apart from the `radon` risk family above, which answers a verdict:
     // two rows both titled "Radon" saying different things read as a bug.
-    lines.push(line('Potentiel radon de la commune', risques.radon.label,
-      Number.isFinite(risques.radon.class) ? `classe ${risques.radon.class} sur 3` : null));
+    lines.push(line(m.risques.radon,
+      published(RADON_LABELS, risques.radon.class, risques.radon.label),
+      Number.isFinite(risques.radon.class) ? m.risques.radonClass(risques.radon.class) : null));
   }
   if (Number.isFinite(risques.icpeTotal)) {
-    lines.push(line('Installations classées', count(risques.icpeTotal),
-      risques.icpeTruncated ? 'liste tronquée par la source' : `dans ${RADIOGRAPHIE_RADIUS.risks} m`));
+    lines.push(line(m.risques.icpe, count(risques.icpeTotal),
+      risques.icpeTruncated
+        ? m.risques.icpeTruncated
+        : m.risques.within(RADIOGRAPHIE_RADIUS.risks)));
   }
   if (reported && families.length) {
-    notes.push('Le registre publie un verdict pour la commune et un pour l’adresse ; '
-      + 'ils ne disent pas toujours la même chose, et c’est celui de l’adresse qui est affiché.');
+    notes.push(m.risques.twoVerdicts);
   }
   return { lines, notes };
 }
 
 /** Numérique — the fixed line. */
 function projectNumerique({ arcep }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!arcep) {
-    notes.push('Ma connexion internet n’a pas répondu.');
+    notes.push(m.numerique.silent);
     return { lines, notes };
   }
-  lines.push(line('Locaux dans la commune', count(arcep.premises),
-    arcep.edition ? `édition ${arcep.edition}` : null));
+  lines.push(line(m.numerique.premises, count(arcep.premises),
+    arcep.edition ? m.numerique.edition(arcep.edition) : null));
   for (const technology of arcep.technologies || []) {
-    lines.push(line(asHeading(technology.label), percent(technology.percent),
-      `${count(technology.premises)} locaux`));
+    lines.push(line(asHeading(published(ARCEP_TECHNOLOGIES, technology.key, technology.label)),
+      percent(technology.percent),
+      m.numerique.premisesCount(count(technology.premises))));
   }
   const gigabit = (arcep.speeds || []).find((speed) => speed.key === 'gigabit');
   if (gigabit) {
-    lines.push(line('Éligibles à 1 Gbit/s (filaire)', percent(gigabit.percent),
-      `${count(gigabit.premises)} locaux`));
+    lines.push(line(m.numerique.gigabit, percent(gigabit.percent),
+      m.numerique.premisesCount(count(gigabit.premises))));
   }
   if (arcep.wiredIneligible && arcep.wiredIneligible.premises > 0) {
-    lines.push(line('Sans offre haut débit filaire', count(arcep.wiredIneligible.premises),
+    lines.push(line(m.numerique.noWired, count(arcep.wiredIneligible.premises),
       percent(arcep.wiredIneligible.percent)));
   }
   if (arcep.copper) {
-    lines.push(line('Encore raccordables au cuivre', percent(arcep.copper.percent),
-      arcep.copper.premises === 0 ? 'le cuivre est déjà fermé ici' : `${count(arcep.copper.premises)} locaux`));
+    lines.push(line(m.numerique.copper, percent(arcep.copper.percent),
+      arcep.copper.premises === 0
+        ? m.numerique.copperClosed
+        : m.numerique.premisesCount(count(arcep.copper.premises))));
   }
-  notes.push('Débits filaires uniquement. Le fichier par défaut de l’ARCEP compte le satellite '
-    + 'et répond 100 % à la même question.');
+  notes.push(m.numerique.wiredOnly);
   if (arcep.commune?.folded) {
-    notes.push('L’ARCEP ne publie pas les arrondissements : ces parts décrivent la commune entière.');
+    notes.push(m.numerique.folded);
   }
   return { lines, notes };
 }
@@ -730,10 +847,11 @@ function projectNumerique({ arcep }) {
  * @returns {{lines: object[], notes: string[]}}
  */
 function projectAntennes({ anfr }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!anfr) {
-    notes.push('Le registre des supports ANFR n’a pas répondu.');
+    notes.push(m.antennes.silent);
     return { lines, notes };
   }
   const supports = Array.isArray(anfr.supports) ? anfr.supports : [];
@@ -744,14 +862,12 @@ function projectAntennes({ anfr }) {
   // about somebody's street, which is the one thing this sheet exists not to
   // do. It says which of the two it is looking at instead.
   if (!Number.isFinite(anfr.national?.count) || anfr.national.count === 0) {
-    notes.push('Le registre ANFR est vide dans cette édition'
-      + (anfr.edition ? ` (${anfr.edition})` : '')
-      + ' — aucun support n’y figure NULLE PART, donc l’absence ici ne dit rien de l’adresse.');
+    notes.push(m.antennes.emptyRegister(anfr.edition ? ` (${anfr.edition})` : ''));
     return { lines, notes };
   }
   const box = Math.round(RADIOGRAPHIE_RADIUS.boxDeg * 111_320);
-  lines.push(line('Supports ANFR autour', count(anfr.inBox ?? supports.length),
-    `dans ${box} m de côté${anfr.edition ? ` · édition ${anfr.edition}` : ''}`));
+  lines.push(line(m.antennes.around, count(anfr.inBox ?? supports.length),
+    m.antennes.boxSide(box, anfr.edition ? m.antennes.editionSuffix(anfr.edition) : '')));
   // One row per generation, from the newest down: 5G first is what a reader
   // came for, and an empty 2G row below it says the site is modern rather than
   // leaving them to infer it from an absence.
@@ -762,19 +878,17 @@ function projectAntennes({ anfr }) {
       ((Number(support?.plan) || 0) & bit) && !((Number(support?.live) || 0) & bit)
     )).length;
     if (!live && !planned) continue;
-    lines.push(line(`Supports ${ANFR_GENERATIONS[i]}`, count(live),
-      planned ? `${count(planned)} de plus autorisés, pas encore en service` : null));
+    lines.push(line(m.antennes.generation(ANFR_GENERATIONS[i]), count(live),
+      planned ? m.antennes.planned(count(planned)) : null));
   }
   if (supports.length && !supports.some((support) => Number(support?.live))) {
-    notes.push('Aucun support en service ici : tout ce qui est recensé est à l’état de projet.');
+    notes.push(m.antennes.noneLive);
   }
   if (anfr.truncated) {
-    notes.push(`Le registre a rendu ${count(supports.length)} supports sur `
-      + `${count(anfr.inBox)} dans la boîte — la liste est tronquée, le compte ne l’est pas.`);
+    notes.push(m.antennes.truncated(count(supports.length), count(anfr.inBox)));
   }
-  notes.push('Un support est un PYLÔNE, pas une antenne : plusieurs opérateurs '
-    + 'et plusieurs générations partagent le même mât.');
-  notes.push('Le registre ne dit rien de la couverture ressentie à l’intérieur d’un bâtiment.');
+  notes.push(m.antennes.mastNotAntenna);
+  notes.push(m.antennes.indoor);
   return { lines, notes };
 }
 
@@ -802,49 +916,72 @@ function mergeProjections(...projectors) {
   };
 }
 
+/**
+ * Why the census withheld the rates, in the page's language.
+ *
+ * `emploiFeed.js` composes the reason ON THE SERVER, which has no locale: it
+ * is either "the arithmetic identities do not check out" or "fewer than N
+ * economically active residents", with N in the sentence. The second is read
+ * back off the sentence rather than recomputed — the floor belongs to the
+ * feed, and a second copy of it here would be the number that goes stale.
+ *
+ * @param {?string} reason @returns {?string}
+ */
+function withheldReason(reason) {
+  if (!reason || getLocale() === DEFAULT_LOCALE) return reason ?? null;
+  const m = messages();
+  if (reason === m.emploi.withheldInconsistent) return m.emploi.withheldInconsistent;
+  const floor = /(\d+)/.exec(String(reason));
+  return floor ? m.emploi.withheldTooFew(floor[1]) : reason;
+}
+
 /** Emploi — the census, and its direction of travel. */
 function projectEmploi({ emploi }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (!emploi) {
-    notes.push('L’API Melodi n’a pas répondu.');
+    notes.push(m.emploi.silent);
     return { lines, notes };
   }
   if (emploi.outOfScope) {
-    notes.push('Le recensement publie ce jeu de données pour la France hors Mayotte.');
+    notes.push(m.emploi.outOfScope);
     return { lines, notes };
   }
   const current = emploi.current;
   if (!current) {
-    notes.push('Aucune observation du recensement pour cette commune.');
+    notes.push(m.emploi.noObservation);
     return { lines, notes };
   }
-  lines.push(line(`Population de 15 à 64 ans (${current.year})`, count(current.population)));
+  lines.push(line(m.emploi.population(current.year), count(current.population)));
   if (current.unemploymentRate === null) {
-    lines.push(line('Taux de chômage', 'non publié', current.ratesWithheld));
+    lines.push(line(m.emploi.unemployment, m.emploi.notPublished, withheldReason(current.ratesWithheld)));
   } else {
-    lines.push(line('Taux de chômage', percent(current.unemploymentRate),
-      `${count(current.unemployed)} chômeurs sur ${count(current.active)} actifs`));
-    lines.push(line('Taux d’activité', percent(current.activityRate)));
-    lines.push(line('Taux d’emploi', percent(current.employmentRate)));
+    lines.push(line(m.emploi.unemployment, percent(current.unemploymentRate),
+      m.emploi.unemployed(count(current.unemployed), count(current.active))));
+    lines.push(line(m.emploi.participation, percent(current.activityRate)));
+    lines.push(line(m.emploi.employment, percent(current.employmentRate)));
   }
   if (Number.isFinite(emploi.trend)) {
-    const sense = emploi.trend > 0 ? 'en hausse' : (emploi.trend < 0 ? 'en baisse' : 'stable');
-    lines.push(line('Depuis le recensement précédent',
-      `${emploi.trend > 0 ? '+' : ''}${decimal(emploi.trend, 1)} point`,
-      `chômage ${sense}`));
+    const sense = emploi.trend > 0
+      ? m.emploi.trendUp
+      : (emploi.trend < 0 ? m.emploi.trendDown : m.emploi.trendFlat);
+    lines.push(line(m.emploi.sincePrevious,
+      m.emploi.points(`${emploi.trend > 0 ? '+' : ''}${decimal(emploi.trend, 1)}`),
+      sense));
   }
   for (const year of emploi.series || []) {
     if (year.year === current.year) continue;
-    lines.push(line(`Recensement ${year.year}`,
-      year.unemploymentRate === null ? 'non publié' : percent(year.unemploymentRate)));
+    lines.push(line(m.emploi.census(year.year),
+      year.unemploymentRate === null ? m.emploi.notPublished : percent(year.unemploymentRate)));
   }
-  notes.push('Chômage au sens du recensement, à la résidence — pas le taux du BIT.');
+  notes.push(m.emploi.censusSense);
   return { lines, notes };
 }
 
 /** Urbanisme — the zoning and the live permits. */
 function projectUrbanisme({ gpu, permis }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   if (gpu) {
@@ -852,39 +989,40 @@ function projectUrbanisme({ gpu, permis }) {
     const atPoint = zones.filter((zone) => zone.atPoint);
     const shown = atPoint.length ? atPoint : zones.slice(0, 1);
     for (const zone of shown) {
-      lines.push(line('Zonage PLU', zone.code || '—', zone.label || zone.typezone || null));
+      // The zone's code and its label are the PLU document's own words —
+      // written by the municipality that drew it, not by any nomenclature a
+      // catalog could carry. They are printed as published, in both languages.
+      lines.push(line(m.urbanisme.zoning, zone.code || '—', zone.label || zone.typezone || null));
     }
-    if (!shown.length) lines.push(line('Zonage PLU', 'aucun zonage à ce point'));
+    if (!shown.length) lines.push(line(m.urbanisme.zoning, m.urbanisme.noZoning));
     if (Number.isFinite(gpu.zonesAtPoint) && gpu.zonesAtPoint > 1) {
-      notes.push(`${gpu.zonesAtPoint} zonages se superposent à ce point — `
-        + 'deux communes ne placent pas leur limite au même endroit.');
+      notes.push(m.urbanisme.overlap(gpu.zonesAtPoint));
     }
     const servitudes = Array.isArray(gpu.servitudes) ? gpu.servitudes : [];
     if (servitudes.length) {
-      lines.push(line('Servitudes d’utilité publique', count(servitudes.length)));
+      lines.push(line(m.urbanisme.easements, count(servitudes.length)));
     }
   } else {
-    notes.push('Le Géoportail de l’urbanisme n’a pas répondu.');
+    notes.push(m.urbanisme.silent);
   }
   if (permis?.summary) {
     const summary = permis.summary;
-    lines.push(line(`Autorisations dans ${RADIOGRAPHIE_RADIUS.permits} m`,
+    lines.push(line(m.urbanisme.permits(RADIOGRAPHIE_RADIUS.permits),
       count(summary.count),
-      'déposées sur les 36 derniers mois'));
+      m.urbanisme.permitsWindow));
     const kinds = Object.entries(summary.byKind || {})
       .filter(([, value]) => Number(value) > 0)
       .map(([kind, value]) => `${kind} ${value}`)
       .join(', ');
-    if (kinds) lines.push(line('Par nature', kinds, 'PC permis de construire, DP déclaration préalable, PA aménager, PD démolir'));
+    if (kinds) lines.push(line(m.urbanisme.byKind, kinds, m.urbanisme.kinds));
     if (Number.isFinite(summary.housing) && summary.housing > 0) {
-      lines.push(line('Logements autorisés', count(summary.housing), 'sur ces mêmes dossiers'));
+      lines.push(line(m.urbanisme.housing, count(summary.housing), m.urbanisme.housingNote));
     }
     if (Number.isFinite(summary.underInstruction) && summary.underInstruction > 0) {
-      lines.push(line('Encore en instruction', count(summary.underInstruction)));
+      lines.push(line(m.urbanisme.underInstruction, count(summary.underInstruction)));
     }
     if (Number.isFinite(permis.unplacedInCommune) && permis.unplacedInCommune > 0) {
-      notes.push(`${count(permis.unplacedInCommune)} autorisations de la commune n’ont pas pu être `
-        + 'positionnées faute de référence cadastrale résolue : elles ne sont ni dessinées ni comptées ici.');
+      notes.push(m.urbanisme.unplaced(count(permis.unplacedInCommune)));
     }
   }
   return { lines, notes };
@@ -892,15 +1030,16 @@ function projectUrbanisme({ gpu, permis }) {
 
 /** Voisinage — the 200 m grid. */
 function projectVoisinage({ carroyage }) {
+  const m = messages();
   const lines = [];
   const notes = [];
   const cells = Array.isArray(carroyage?.cells) ? carroyage.cells : [];
   if (!carroyage) {
-    notes.push('Le carroyage INSEE n’a pas répondu.');
+    notes.push(m.voisinage.silent);
     return { lines, notes };
   }
   if (!cells.length) {
-    notes.push('Aucun carreau habité dans la boîte de scan.');
+    notes.push(m.voisinage.empty);
     return { lines, notes };
   }
   // THE ANSWER IS WIDER THAN THE QUESTION, and the label has to say so. The
@@ -911,7 +1050,7 @@ function projectVoisinage({ carroyage }) {
   // the only figure that is true whatever the route snaps to.
   const resolution = Number(carroyage.resolution) || 200;
   const areaKm2 = (cells.length * resolution * resolution) / 1e6;
-  const extent = `${count(cells.length)} carreaux de ${resolution} m, soit ${decimal(areaKm2, 1)} km²`;
+  const extent = m.voisinage.extent(count(cells.length), resolution, decimal(areaKm2, 1));
   // The route publishes its own fold; recomputing it here would be a second
   // opinion nobody asked for, and the two would drift.
   const summary = carroyage.summary ?? null;
@@ -928,39 +1067,36 @@ function projectVoisinage({ carroyage }) {
     }
     return denominator > 0 ? numerator / denominator : null;
   };
-  lines.push(line('Habitants', count(summary?.people ?? sum('ind')), extent));
-  lines.push(line('Ménages', count(summary?.households ?? sum('men'))));
+  lines.push(line(m.voisinage.people, count(summary?.people ?? sum('ind')), extent));
+  lines.push(line(m.voisinage.households, count(summary?.households ?? sum('men'))));
   const niveau = summary?.niveau ?? weighted('niveau');
   if (Number.isFinite(niveau)) {
-    lines.push(line('Niveau de vie moyen', `${count(niveau)} €/an`, 'pondéré par la population du carreau'));
+    lines.push(line(m.voisinage.standardOfLiving, m.voisinage.perYear(count(niveau)),
+      m.voisinage.weighted));
   }
   const pauvrete = summary?.pauvrete ?? weighted('pauvrete');
-  if (Number.isFinite(pauvrete)) lines.push(line('Ménages pauvres', percent(pauvrete)));
+  if (Number.isFinite(pauvrete)) lines.push(line(m.voisinage.poverty, percent(pauvrete)));
   const solo = weighted('solo');
-  if (solo !== null) lines.push(line('Personnes seules', percent(solo)));
+  if (solo !== null) lines.push(line(m.voisinage.alone, percent(solo)));
   const aines = weighted('aines');
-  if (aines !== null) lines.push(line('65 ans et plus', percent(aines)));
+  if (aines !== null) lines.push(line(m.voisinage.elders, percent(aines)));
   const jeunes = weighted('jeunes');
-  if (jeunes !== null) lines.push(line('Moins de 18 ans', percent(jeunes)));
+  if (jeunes !== null) lines.push(line(m.voisinage.children, percent(jeunes)));
   const imputed = Number.isFinite(summary?.imputedCells)
     ? summary.imputedCells
     : cells.filter((cell) => Number(cell.est) === 1).length;
   if (imputed > 0) {
-    notes.push(`${count(imputed)} des ${count(cells.length)} carreaux portent des valeurs imputées `
-      + 'par l’INSEE — approchées, pas observées.');
+    notes.push(m.voisinage.imputed(count(imputed), count(cells.length)));
   }
   if (carroyage.truncated) {
-    notes.push('Le carroyage a renvoyé une page tronquée : ces totaux sont des planchers.');
+    notes.push(m.voisinage.truncated);
   }
-  notes.push('Ce sont des carreaux autour du point, pas une zone de chalandise : '
-    + 'la fiche implantation du globe calcule la même chose sur l’isochrone réelle.');
+  notes.push(m.voisinage.notACatchment);
   // The refusal, said where it applies. The barème has scales for every one of
   // these indicators — but measured on a ten-minute walking ring, and a
   // rectangle of carreaux is not that shape. Printing a rank here would be the
   // exact failure `baremeNational.js` was built to make impossible.
-  notes.push('Aucun de ces chiffres n’est situé dans le pays : le barème national les '
-    + 'mesure sur l’anneau piéton de dix minutes, pas sur un rectangle de carreaux. '
-    + 'C’est la fiche implantation du globe qui en porte les rangs.');
+  notes.push(m.voisinage.noRank);
   return { lines, notes };
 }
 
@@ -979,6 +1115,7 @@ const PROJECTORS = Object.freeze({
 });
 
 /** Which fetched parts each theme depends on, for the status verdict. */
+// i18n-ignore-start — the request keys of `radiographieRequests`, not words.
 const THEME_PARTS = Object.freeze({
   immobilier: ['dvf', 'loyers', 'dpe'],
   transport: ['walk', 'drive'],
@@ -991,6 +1128,7 @@ const THEME_PARTS = Object.freeze({
   urbanisme: ['gpu', 'permis'],
   voisinage: ['carroyage'],
 });
+// i18n-ignore-end
 
 /**
  * The address line, from the BAN's own reverse answer.
@@ -1057,11 +1195,9 @@ export function composeRadiographie({ point, parts = {}, at = Date.now() }) {
       marginPt: BAREME_SAMPLE.marginPt,
       ranked: ['acces', 'prixM2'],
     },
-    gradingNote: `Deux chiffres sont situés dans le pays — la surface atteignable à pied `
-      + `en dix minutes et le prix médian au m² — contre un barème tiré sur `
-      + `${count(BAREME_SAMPLE.rings)} résidents (±${decimal(BAREME_SAMPLE.marginPt, 1)} `
-      + `points de centile). Tout le reste est donné en valeur : une note exige une `
-      + `distribution nationale mesurée sur la même géométrie, et il n’en existe pas `
-      + `encore pour ces indicateurs-là.`,
+    gradingNote: messages().gradingNote(
+      count(BAREME_SAMPLE.rings),
+      decimal(BAREME_SAMPLE.marginPt, 1),
+    ),
   };
 }
