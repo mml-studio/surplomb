@@ -283,7 +283,11 @@
     `npm run landing:assets` réécrit les chemins `/landing/…` avec l'empreinte
     de leur contenu (`scripts/build-landing-assets.mjs`).
   -->
-  <div id="vitrine" class="landing" data-state="poster">
+  <!-- The showcase stays French for now: it gets its own English document
+       later (plan decision D2), so its root says so. Without `lang="fr"` an
+       English `<html lang>` would mislabel every French word below it for a
+       screen reader and for a translation tool. -->
+  <div id="vitrine" class="landing" data-state="poster" lang="fr">
     <a class="skip" href="#contenu">Aller au contenu</a>
     <div class="world" aria-hidden="true">
       <!--
@@ -496,7 +500,8 @@
   <div id="world-overlay-root" aria-hidden="true">
     <canvas id="world-overlay-canvas"></canvas>
   </div>
-  <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
+  <div id="world-overlay-actions" class="world-overlay-accessibility" role="region"
+       data-i18n-aria-label="overlay.actions" aria-label="Objets visibles sur la carte">
     <div id="world-overlay-action-list"></div>
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
   </div>
@@ -505,21 +510,27 @@
   <div id="title-bar">
     <div class="title-glow"></div>
     <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word">surplomb</span></h1>
-    <p class="subtitle">Aucun angle mort.</p>
+    <p class="subtitle" data-i18n="title.tagline">Aucun angle mort.</p>
   </div>
 
-  <!-- Style indicator -->
+  <!-- Style indicator. The style's own name is the same word in both
+       languages (NORMAL, CRT, NVG, FLIR…), so it carries `translate="no"`
+       rather than a catalog key it would only ever echo. -->
   <div id="style-indicator">
-    <span class="indicator-label">ACTIVE STYLE</span>
-    <span class="indicator-value" id="active-style-name">NORMAL</span>
+    <span class="indicator-label" data-i18n="style.activeLabel">STYLE ACTIF</span>
+    <span class="indicator-value" id="active-style-name" translate="no">NORMAL</span>
   </div>
 
   <!-- Top-center camera and share actions -->
-  <nav id="top-center-actions" aria-label="Globe actions">
-    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
+  <nav id="top-center-actions" data-i18n-aria-label="actions.nav" aria-label="Actions du globe">
+    <button id="clear-selected-layers" type="button"
+            data-i18n-aria-label="actions.clearLayers" aria-label="Éteindre les couches sélectionnées"
+            data-i18n-title="actions.clearLayersTitle" title="Éteindre toutes les couches sélectionnées">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
-    <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
+    <button id="share-btn" type="button"
+            data-i18n-aria-label="actions.share" aria-label="Copier le lien de partage"
+            data-i18n-title="actions.share" title="Copier le lien de partage">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
     <!--
@@ -530,10 +541,14 @@
       https — un bouton présent qui échoue toujours est pire que pas de bouton.
       Utile au portable aussi, donc il n'est pas gardé sur le tactile.
     -->
-    <button id="locate-me" type="button" hidden aria-label="Autour de moi" title="Centrer la carte sur ma position">
+    <button id="locate-me" type="button" hidden
+            data-i18n-aria-label="actions.locate" aria-label="Autour de moi"
+            data-i18n-title="actions.locateTitle" title="Centrer la carte sur ma position">
       <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
     </button>
-    <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
+    <button id="reset-globe-view" type="button"
+            data-i18n-aria-label="actions.resetGlobe" aria-label="Revenir au globe entier"
+            data-i18n-title="actions.resetGlobeTitle" title="Réinitialiser la caméra et revenir au globe entier">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
     <!--
@@ -544,7 +559,9 @@
       la fiche est peinte sur le canvas — donc le bouton vit ici, masqué tant
       que rien n'est suivi, et visible seulement au doigt.
     -->
-    <button id="tracking-release" type="button" hidden aria-label="Ne plus suivre" title="Ne plus suivre cet objet">
+    <button id="tracking-release" type="button" hidden
+            data-i18n-aria-label="actions.stopFollow" aria-label="Ne plus suivre"
+            data-i18n-title="actions.stopFollowTitle" title="Ne plus suivre cet objet">
       <span class="material-symbols-outlined" aria-hidden="true">close</span>
     </button>
   </nav>
@@ -563,15 +580,15 @@
   -->
   <div id="phone-status">
     <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <span id="global-loading-label">LOADING LIVE DATA</span>
+      <span id="global-loading-label" data-i18n="status.loading">CHARGEMENT DES DONNÉES EN DIRECT</span>
       <span id="global-loading-detail"></span>
     </div>
     <div id="traffic-sync-chip" aria-live="polite">
-      <span id="traffic-sync-label">syncing road network</span>
+      <span id="traffic-sync-label" data-i18n="status.trafficSync">synchronisation du réseau routier</span>
       <span id="traffic-sync-progress">0%</span>
     </div>
     <div id="cctv-sync-chip" aria-live="polite">
-      <span id="cctv-sync-label">loading frames</span>
+      <span id="cctv-sync-label" data-i18n="status.cctvSync">chargement des images</span>
       <span id="cctv-sync-progress">0/0</span>
     </div>
   </div>
