@@ -83,7 +83,7 @@ import { AMENITY_FAMILY_LABELS, AMENITY_FAMILY_PLURALS } from './amenitiesFamili
 import { ANFR_GENERATIONS } from './anfrFeed.js';
 import {
   BAREME_GEOMETRIES,
-  BAREME_REASONS,
+  BAREME_REASON_CODES,
   BAREME_SAMPLE,
   scoreIndicator,
 } from './baremeNational.js';
@@ -112,9 +112,6 @@ import {
   formatQuantity,
   ordinal,
 } from '../i18n/format.js';
-
-/** Read from the barème rather than retyped, so the two cannot drift apart. */
-const BAREME_REASONS_GEOMETRY = BAREME_REASONS.GEOMETRY;
 
 /**
  * A label the SERVER published, in the page's language.
@@ -364,12 +361,11 @@ function rankRow(id, value, geometry, label) {
   const score = scoreIndicator(id, value, { geometry });
   if (score.reason && score.percentile === null) {
     // Only worth a row when the refusal teaches something. "No scale at all"
-    // for an indicator nobody expected to be graded is noise.
-    if (score.reason !== BAREME_REASONS_GEOMETRY) return null;
-    // The refusal is `baremeNational.js`'s sentence and the barème has no
-    // locale; the English sits in this sheet's catalog, and a test pins its
-    // French to the barème's own words so the two cannot drift.
-    return line(label, m.rank.unranked, m.rank.refusedGeometry);
+    // for an indicator nobody expected to be graded is noise. The CODE is what
+    // is tested — it never moves with the language — and the sentence beside
+    // it is the barème's own, in the page's language.
+    if (score.reasonCode !== BAREME_REASON_CODES.GEOMETRY) return null;
+    return line(label, m.rank.unranked, score.reason);
   }
   if (score.percentile === null) return null;
   const bracket = m.rank.bracket(ordinal(score.percentileLow), ordinal(score.percentileHigh));
@@ -384,8 +380,9 @@ function rankRow(id, value, geometry, label) {
   // The direction note is a SENTENCE and the bracket is a figure; chaining both
   // on em dashes read as one run-on. It is printed only where there is no
   // letter, which is exactly where a reader needs to be told why.
-  const directionNote = m.rank.directionNote[score.id] ?? score.directionNote;
-  const note = score.direction ? head : `${head}. ${directionNote}`;
+  // The barème publishes the note in the reader's language, so nothing is
+  // repeated here: see `baremeNational.i18n.js`.
+  const note = score.direction ? head : `${head}. ${score.directionNote}`;
   return line(label, m.rank.percentile(ordinal(score.percentile)), note);
 }
 

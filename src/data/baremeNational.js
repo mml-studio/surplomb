@@ -57,6 +57,11 @@
  * @module data/baremeNational
  */
 
+import messages from './baremeNational.i18n.js';
+
+/** The French of one leaf, without resolving a locale — see {@link BAREME_REASONS}. */
+const frenchOf = (leaf) => leaf.fr;
+
 /**
  * The quantiles at which every scale is read.
  *
@@ -120,12 +125,35 @@ export const BAREME_LETTER_FLOORS = Object.freeze([
  * easiest one to score — it is only known from one side, which `beyond` says
  * separately.
  */
-export const BAREME_REASONS = Object.freeze({
-  NO_REFERENCE: 'aucune échelle nationale pour cet indicateur',
-  GEOMETRY: 'échelle mesurée sur une autre géométrie',
-  NOT_A_NUMBER: 'aucune valeur à situer',
-  NO_DIRECTION: 'pas de sens défendable — rang seulement, sans lettre',
+export const BAREME_REASON_CODES = Object.freeze({
+  NO_REFERENCE: 'no-reference',
+  GEOMETRY: 'geometry',
+  NOT_A_NUMBER: 'not-a-number',
+  NO_DIRECTION: 'no-direction',
 });
+
+/**
+ * The same four refusals as French SENTENCES, which is what this module has
+ * always published and what `implantationFiche.js` and the site report still
+ * compare against. Read off the catalog's definition rather than resolved, so
+ * importing this file never reads a locale: a caller that wants the reader's
+ * language calls {@link baremeReasonLabel}, or reads `reason` off a score.
+ */
+export const BAREME_REASONS = Object.freeze({
+  NO_REFERENCE: frenchOf(messages.definition.reasons['no-reference']),
+  GEOMETRY: frenchOf(messages.definition.reasons.geometry),
+  NOT_A_NUMBER: frenchOf(messages.definition.reasons['not-a-number']),
+  NO_DIRECTION: frenchOf(messages.definition.reasons['no-direction']),
+});
+
+/**
+ * One refusal in the page's language.
+ * @param {?string} code One of {@link BAREME_REASON_CODES}.
+ * @returns {?string} The sentence, or null when there is no refusal.
+ */
+export function baremeReasonLabel(code) {
+  return code ? (messages().reasons[code] ?? code) : null;
+}
 
 /**
  * What the report knows how to place, and on whose behalf.
@@ -143,9 +171,9 @@ export const BAREME_REASONS = Object.freeze({
 export const BAREME_INDICATORS = Object.freeze([
   Object.freeze({
     id: 'acces',
-    short: 'accès à pied',
-    label: 'Surface atteignable à pied',
-    unit: 'km² en 10 min',
+    get short() { return messages().indicators.acces.short; },
+    get label() { return messages().indicators.acces.label; },
+    get unit() { return messages().indicators.acces.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: 'up',
     round: 0.01,
@@ -154,14 +182,13 @@ export const BAREME_INDICATORS = Object.freeze([
     // it, for any reader. It is also a measure of the street grid — a
     // cul-de-sac subdivision and a village center at the same density do not
     // give the same area.
-    directionNote: 'Sens non contesté : plus de sol accessible à pied est plus '
-      + 'd’accès, pour tout lecteur.',
+    get directionNote() { return messages().indicators.acces.directionNote; },
   }),
   Object.freeze({
     id: 'niveau',
-    short: 'niveau de vie',
-    label: 'Niveau de vie du voisinage',
-    unit: '€/an par personne',
+    get short() { return messages().indicators.niveau.short; },
+    get label() { return messages().indicators.niveau.label; },
+    get unit() { return messages().indicators.niveau.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: 'up',
     round: 100,
@@ -172,46 +199,43 @@ export const BAREME_INDICATORS = Object.freeze([
     // down — and they would be right. The card therefore names the point of
     // view next to the letter instead of presenting it as a property of the
     // place.
-    directionNote: 'Point de vue du résident acheteur, et lui seul. Un bailleur '
-      + 'social ou une enseigne discount liraient l’échelle à l’envers.',
+    get directionNote() { return messages().indicators.niveau.directionNote; },
   }),
   Object.freeze({
     id: 'pauvrete',
-    short: 'pauvreté',
-    label: 'Ménages sous le seuil de pauvreté',
-    unit: '% des ménages',
+    get short() { return messages().indicators.pauvrete.short; },
+    get label() { return messages().indicators.pauvrete.label; },
+    get unit() { return messages().indicators.pauvrete.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: 'down',
     round: 0.1,
-    directionNote: 'Même point de vue, et donc même réserve, que le niveau de vie.',
+    get directionNote() { return messages().indicators.pauvrete.directionNote; },
   }),
   Object.freeze({
     id: 'habitants',
-    short: 'habitants',
-    label: 'Habitants dans l’anneau',
-    unit: 'habitants',
+    get short() { return messages().indicators.habitants.short; },
+    get label() { return messages().indicators.habitants.label; },
+    get unit() { return messages().indicators.habitants.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 10,
-    directionNote: 'La densité est une préférence, pas une qualité : elle est '
-      + 'la clientèle d’un commerce et le bruit d’un riverain.',
+    get directionNote() { return messages().indicators.habitants.directionNote; },
   }),
   Object.freeze({
     id: 'menages',
-    short: 'ménages',
-    label: 'Ménages dans l’anneau',
-    unit: 'ménages',
+    get short() { return messages().indicators.menages.short; },
+    get label() { return messages().indicators.menages.label; },
+    get unit() { return messages().indicators.menages.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 10,
-    directionNote: 'Même raison que les habitants : un nombre de ménages est '
-      + 'une clientèle ou une pression, selon qui lit.',
+    get directionNote() { return messages().indicators.menages.directionNote; },
   }),
   Object.freeze({
     id: 'social',
-    short: 'logement social',
-    label: 'Logement social',
-    unit: '% des ménages',
+    get short() { return messages().indicators.social.short; },
+    get label() { return messages().indicators.social.label; },
+    get unit() { return messages().indicators.social.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
@@ -219,66 +243,60 @@ export const BAREME_INDICATORS = Object.freeze([
     // social housing is the result of a public policy; scoring it amounts to
     // scoring the policy, and an E stuck on a social-housing neighborhood is
     // exactly the use this module does not want to make easy.
-    directionNote: 'Résultat d’une politique publique, pas une qualité du lieu — '
-      + 'rang seulement.',
+    get directionNote() { return messages().indicators.social.directionNote; },
   }),
   Object.freeze({
     id: 'jeunes',
-    short: 'moins de 18 ans',
-    label: 'Moins de 18 ans',
-    unit: '% des habitants',
+    get short() { return messages().indicators.jeunes.short; },
+    get label() { return messages().indicators.jeunes.label; },
+    get unit() { return messages().indicators.jeunes.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
-    directionNote: 'La part d’enfants décrit qui habite là, pas si le lieu est '
-      + 'bon : elle est une école pleine et une cour bruyante à la fois.',
+    get directionNote() { return messages().indicators.jeunes.directionNote; },
   }),
   Object.freeze({
     id: 'aines',
-    short: '65 ans et plus',
-    label: '65 ans et plus',
-    unit: '% des habitants',
+    get short() { return messages().indicators.aines.short; },
+    get label() { return messages().indicators.aines.label; },
+    get unit() { return messages().indicators.aines.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
-    directionNote: 'La part d’aînés décrit qui habite là. Elle est du calme pour '
-      + 'les uns et un marché qui se retire pour les autres.',
+    get directionNote() { return messages().indicators.aines.directionNote; },
   }),
   Object.freeze({
     id: 'solo',
-    short: 'personnes seules',
-    label: 'Personnes seules',
-    unit: '% des ménages',
+    get short() { return messages().indicators.solo.short; },
+    get label() { return messages().indicators.solo.label; },
+    get unit() { return messages().indicators.solo.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
-    directionNote: 'Vivre seul n’est ni bien ni mal ; c’est une structure de '
-      + 'ménages, et elle se lit différemment selon ce qu’on vient y faire.',
+    get directionNote() { return messages().indicators.solo.directionNote; },
   }),
   Object.freeze({
     id: 'proprietaires',
-    short: 'propriétaires',
-    label: 'Propriétaires',
-    unit: '% des ménages',
+    get short() { return messages().indicators.proprietaires.short; },
+    get label() { return messages().indicators.proprietaires.label; },
+    get unit() { return messages().indicators.proprietaires.unit; },
     geometry: BAREME_GEOMETRIES.RING_FOOT_600,
     direction: null,
     round: 0.1,
-    directionNote: 'La part de propriétaires est une stabilité pour un riverain '
-      + 'et un marché fermé pour un agent. Rang seulement.',
+    get directionNote() { return messages().indicators.proprietaires.directionNote; },
   }),
   Object.freeze({
     id: 'prixM2',
-    short: 'prix au m²',
-    label: 'Prix médian au m²',
-    unit: '€/m²',
+    get short() { return messages().indicators.prixM2.short; },
+    get label() { return messages().indicators.prixM2.label; },
+    get unit() { return messages().indicators.prixM2.unit; },
     geometry: BAREME_GEOMETRIES.DISC_300,
     direction: null,
     round: 10,
     // The textbook case of a direction that depends on the reader, and the
     // reason `direction` exists: a high price is good news for whoever sells
     // and bad news for whoever buys. The rank answers both.
-    directionNote: 'Bonne nouvelle pour un vendeur, mauvaise pour un acheteur — '
-      + 'la même mesure, deux lectures.',
+    get directionNote() { return messages().indicators.prixM2.directionNote; },
   }),
 ]);
 
@@ -519,22 +537,27 @@ export function scoreIndicator(id, value, options = {}) {
     letterHigh: null,
     ferme: false,
     beyond: null,
+    // TWO FIELDS FOR ONE REFUSAL. `reasonCode` is what a caller TESTS — it
+    // never moves with the language — and `reason` is what it PRINTS.
+    // Comparing the sentence was safe while there was one language.
     reason: null,
+    reasonCode: null,
   };
+  const refuse = (code) => ({ ...base, reasonCode: code, reason: baremeReasonLabel(code) });
   const scale = bareme?.[base.id] ?? null;
   if (!indicator || !scale || !Array.isArray(scale.ladder)) {
-    return { ...base, reason: BAREME_REASONS.NO_REFERENCE };
+    return refuse(BAREME_REASON_CODES.NO_REFERENCE);
   }
-  if (!Number.isFinite(value)) return { ...base, reason: BAREME_REASONS.NOT_A_NUMBER };
+  if (!Number.isFinite(value)) return refuse(BAREME_REASON_CODES.NOT_A_NUMBER);
   // THE COMPARISON THAT JUSTIFIES THE WHOLE MODULE. A caller that does not say
   // which shape it measured on gets no rank: silence is not agreement, it is
   // the absence of the only check that counts.
   if (geometry !== indicator.geometry) {
-    return { ...base, reason: BAREME_REASONS.GEOMETRY };
+    return refuse(BAREME_REASON_CODES.GEOMETRY);
   }
 
   const bracket = ladderBracket(value, scale.ladder);
-  if (!bracket) return { ...base, reason: BAREME_REASONS.NO_REFERENCE };
+  if (!bracket) return refuse(BAREME_REASON_CODES.NO_REFERENCE);
 
   const margin = percentileMarginPt((bracket.low + bracket.high) / 2, sampleSize);
   const low = Math.max(0, bracket.low * 100 - margin);
@@ -563,8 +586,9 @@ export function scoreIndicator(id, value, options = {}) {
     letterHigh,
     ferme: Boolean(letterLow) && letterLow === letterHigh,
     beyond: bracket.beyond,
+    reasonCode: indicator.direction ? null : BAREME_REASON_CODES.NO_DIRECTION,
     reason: indicator.direction
       ? null
-      : BAREME_REASONS.NO_DIRECTION,
+      : baremeReasonLabel(BAREME_REASON_CODES.NO_DIRECTION),
   };
 }

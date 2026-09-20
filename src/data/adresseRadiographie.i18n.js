@@ -281,12 +281,8 @@ export default defineMessages({
     priceLabel: { fr: 'Ce prix dans le pays', en: 'This price in the country' },
     walkLabel: { fr: 'Cet accès à pied dans le pays', en: 'This walking access in the country' },
     unranked: { fr: 'non classé', en: 'not ranked' },
-    /** Read from `baremeNational.js` in French; the English is here. */
-    refusedGeometry: {
-      fr: 'échelle mesurée sur une autre géométrie',
-      en: 'scale measured on a different geometry',
-      note: 'Must stay equal to BAREME_REASONS.GEOMETRY in French — a test says so.',
-    },
+    // The refusal itself and the direction notes come from
+    // `baremeNational.i18n.js`, which publishes them in both languages.
     bracket: {
       fr: (low, high) => `${low} à ${high} centile`,
       en: (low, high) => `${low} to ${high} percentile`,
@@ -304,15 +300,6 @@ export default defineMessages({
       en: (high, low) => `score ${high} or ${low}`,
       note: 'The two ends of the bracket fall in different bands, so there is no single letter.',
       sample: ['B', 'C'],
-    },
-    /** Why an indicator carries a rank and no letter, by indicator id. */
-    directionNote: {
-      prixM2: {
-        fr: 'Bonne nouvelle pour un vendeur, mauvaise pour un acheteur — '
-          + 'la même mesure, deux lectures.',
-        en: 'Good news for a seller, bad news for a buyer — one measurement, two readings.',
-        note: 'Must stay equal to the prixM2 indicator’s own directionNote in French.',
-      },
     },
   },
 
