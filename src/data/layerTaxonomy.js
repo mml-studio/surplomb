@@ -27,10 +27,16 @@
  *
  * `main.js` hands both tables to `finalizeRegistrations()`, and the Data Layers
  * panel renders one collapsible group per category, each row showing `label`
- * (the French name) plus a scope chip derived from `coverage`. `name` — the
- * English string on the layer module — stays the canonical id-adjacent name and
+ * (the display name) plus a scope chip derived from `coverage`. `name` — the
+ * string on the layer module — stays the canonical id-adjacent name and
  * is what the voice layer and the LLM scene context still report; only the
  * human-facing surfaces moved to `label`.
+ *
+ * WHERE THE WORDS ARE. `label`, `sourceLabel` and the group headers are GETTERS
+ * over `layerTaxonomy.i18n.js`, read at the moment a row is drawn: the same
+ * table answers in French and in English without the panel knowing there are
+ * two languages. Everything else here — ids, facets, order — is structure and
+ * has no language.
  *
  * A manager sealed WITHOUT these tables still renders the old flat list. That
  * is not dead code: `getAll()` already documents "null when sealed without a
@@ -40,16 +46,32 @@
 import { REGISTERED_LAYER_IDS } from './layerState.js';
 import { fusedIntoFor, fusionCompanionsFor } from './layerFusions.js';
 import { mapIconMask } from './mapIcons.js';
+import messages from './layerTaxonomy.i18n.js';
+
+/**
+ * One group header: its id and its icon are data, its label is a getter.
+ *
+ * The label is read when the header is drawn rather than stored, which is what
+ * lets one table head the panel in either language. In French it is UPPERCASE
+ * and ACCENTED (`ÉNERGIE`, not `ENERGIE`): `text-transform: uppercase`
+ * preserves an accent that is already there and invents none, so a plain
+ * `ENERGIE` would render as a typo forever.
+ *
+ * @param {string} id Category id, and its key in the catalog.
+ * @param {string} icon The glyph drawn beside the header.
+ * @returns {{id: string, icon: string, label: string}} Frozen entry.
+ */
+function categoryEntry(id, icon) {
+  return Object.freeze({
+    id,
+    icon,
+    get label() { return messages().categories[id]; },
+  });
+}
 
 /**
  * The groups, in panel order. Ordering is a product decision: the flagship
  * live-tracking layers open the panel, the bundled reference sets close it.
- *
- * Labels are French and UPPERCASE. They are stored ACCENTED (`ÉNERGIE`, not
- * `ENERGIE`) rather than relying on `text-transform: uppercase` to add accents,
- * because it does not — CSS uppercasing preserves an accent that is already
- * there and invents none. `Énergie` typed lowercase-accented would render
- * correctly, but a plain `Energie` would render as a typo forever.
  */
 export const LAYER_CATEGORIES = Object.freeze([
   // ONE group for the sky and the sea, and not three. DÉFENSE and MARITIME each
@@ -59,7 +81,7 @@ export const LAYER_CATEGORIES = Object.freeze([
   // uppercase, a disclosure triangle and a collapsed state to say what the row
   // already says. The id stays `air-space` so stored collapsed-state keys and
   // any test fixture keyed on it survive the rename.
-  Object.freeze({ id: 'air-space', label: 'CIEL & MER', icon: '✈️' }),
+  categoryEntry('air-space', '✈️'),
   // SECOND, and not last. This is the group that makes the fork: prices, DPE,
   // urbanism, buildings, population, health, schools, shops, parcels. It used to
   // close the panel as "base reference data", which is true of the DATA and
@@ -67,16 +89,16 @@ export const LAYER_CATEGORIES = Object.freeze([
   // visitor concludes the app has nothing for their street. What opens the panel
   // is still the live tracking (the reason anyone stays for the first minute);
   // what comes immediately after is France.
-  Object.freeze({ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }),
-  Object.freeze({ id: 'ground-mobility', label: 'MOBILITÉ TERRESTRE', icon: '🚗' }),
+  categoryEntry('built-environment', '▤'),
+  categoryEntry('ground-mobility', '🚗'),
   // Deliberately "ÉNERGIE" and not "ÉNERGIE & RÉSEAUX": `comms-sensors` below is
   // "RÉSEAUX & CAPTEURS", and two categories whose labels both lead with the same
   // noun are two categories nobody can tell apart at a glance. The six layers
   // here — mix, production groups, plants, HV grid, gas, dams — are all covered
   // honestly by the single word.
-  Object.freeze({ id: 'energy', label: 'ÉNERGIE', icon: '⚡' }),
-  Object.freeze({ id: 'hazards', label: 'RISQUES & ENVIRONNEMENT', icon: '⚠' }),
-  Object.freeze({ id: 'comms-sensors', label: 'RÉSEAUX & CAPTEURS', icon: '≋' }),
+  categoryEntry('energy', '⚡'),
+  categoryEntry('hazards', '⚠'),
+  categoryEntry('comms-sensors', '≋'),
   // The LAST group, and the only one that is empty at boot. It is where a
   // dataset lands when its manifest names no category — plugged from the
   // panel, or shipped in `datasets/*.json` without a stated home. Empty, it
@@ -84,7 +106,7 @@ export const LAYER_CATEGORIES = Object.freeze([
   // costs nothing until the first dataset is plugged. A manifest MAY name
   // any of the six groups above instead; this one says "the reader added
   // this", which is a fact about provenance the other six cannot carry.
-  Object.freeze({ id: 'plugged', label: 'JEUX BRANCHÉS', icon: '🔌' }),
+  categoryEntry('plugged', '🔌'),
 ]);
 
 /**
@@ -147,9 +169,12 @@ const VALID_COVERAGE = new Set(['global', 'fr', 'us', 'cities']);
  */
 export const COVERAGE_CHIPS = Object.freeze({
   global: null,
-  fr: 'FR',
-  us: 'US',
-  cities: 'VILLES',
+  // Getters, like every other word in this file: `FR` and `US` are the same in
+  // both languages, `VILLES` is not, and reading all three the same way keeps
+  // the table one table.
+  get fr() { return messages().coverageChips.france; },
+  get us() { return messages().coverageChips.unitedStates; },
+  get cities() { return messages().coverageChips.cities; },
 });
 
 /**
@@ -174,13 +199,19 @@ const VALID_CADENCE = new Set(['live', 'periodic', 'static']);
 const VALID_CATEGORY_IDS = new Set(LAYER_CATEGORIES.map((entry) => entry.id));
 
 /**
- * Category, display name and facets for every registered layer.
+ * Category and facets for every registered layer.
  *
  * Ordered by category, then by intended within-group order — this array IS the
  * panel order, so a layer's position here is the decision, not an artifact of
  * where it was appended.
  *
- * The `(FR)` suffixes that five names carry today are gone on purpose: the
+ * The DISPLAY NAME is not here: it is `labels.<id>` in `layerTaxonomy.i18n.js`,
+ * one entry per row of this table, and the projection below hangs it back on
+ * the entry as `label`. An id with no name there fails `validateLayerTaxonomy`
+ * at import, exactly as a layer with no category does — a row cannot ship
+ * nameless in either language.
+ *
+ * The `(FR)` suffixes that five names carried are gone on purpose: the
  * `coverage: 'fr'` facet renders as a scope chip on the row, which says the same
  * thing once instead of five times, and frees the width for a readable name
  * ("Groupes de production" rather than "Groupes de prod (FR)").
@@ -192,7 +223,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'flights',
     category: 'air-space',
-    label: 'Vols en direct',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -201,7 +231,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'satellites',
     category: 'air-space',
-    label: 'Satellites',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -216,7 +245,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'local-airports',
     category: 'air-space',
-    label: 'Aéroports',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -227,7 +255,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'rocket-launches',
     category: 'air-space',
-    label: 'Missions spatiales',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -238,7 +265,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'military',
     category: 'air-space',
-    label: 'Vols militaires',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -253,7 +279,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'military-installations',
     category: 'air-space',
-    label: 'Sites militaires',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -262,7 +287,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'military-awareness',
     category: 'air-space',
-    label: 'Contexte global',
     kind: 'coordinator',
     coverage: 'global',
     auth: 'none',
@@ -276,7 +300,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'ais-live-vessels',
     category: 'air-space',
-    label: 'Navires et ports',
     kind: 'dataset',
     coverage: 'global',
     auth: 'free-key',
@@ -299,7 +322,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'marine-buoys',
     category: 'air-space',
-    label: 'Bouées marines',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -308,7 +330,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'local-ports',
     category: 'air-space',
-    label: 'Ports',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -319,7 +340,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'traffic',
     category: 'ground-mobility',
-    label: 'Trafic routier',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -331,7 +351,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'road-status-fr',
     category: 'ground-mobility',
-    label: 'État du réseau routier',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -340,7 +359,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'transit-fr',
     category: 'ground-mobility',
-    label: 'Transports en commun',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -364,7 +382,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     // the difference between a layer that looks broken elsewhere and one that
     // declares its own edge.
     coverage: 'cities',
-    label: 'Réseau et fréquence IDFM (Paris)',
     kind: 'dataset',
     auth: 'none',
     cadence: 'periodic',
@@ -372,7 +389,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'bikeshare',
     category: 'ground-mobility',
-    label: 'Vélos et véhicules partagés',
     kind: 'dataset',
     coverage: 'cities',
     auth: 'none',
@@ -385,7 +401,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'shared-mobility-fr',
     category: 'ground-mobility',
-    label: 'Véhicules partagés',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -401,7 +416,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'velo-pulse-fr',
     category: 'ground-mobility',
-    label: 'Pouls vélo (semaine type)',
     kind: 'dataset',
     coverage: 'cities',
     auth: 'none',
@@ -420,7 +434,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'road-events-fr',
     category: 'ground-mobility',
-    label: 'Événements routiers',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -438,7 +451,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'comptages-fr',
     category: 'ground-mobility',
-    label: 'Comptages routiers',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -449,7 +461,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'france-energy',
     category: 'energy',
-    label: 'Mix électrique',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -461,7 +472,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'rte-generation',
     category: 'energy',
-    label: 'Groupes de production',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'free-key',
@@ -470,7 +480,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'edf-power-plants',
     category: 'energy',
-    label: 'Centrales électriques',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -501,7 +510,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'fr-hydro-plants',
     category: 'energy',
-    label: 'Centrales hydro',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -510,7 +518,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'power-grid',
     category: 'energy',
-    label: 'Réseau électrique',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -519,7 +526,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'gas-fr',
     category: 'energy',
-    label: 'Réseau gaz',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -532,7 +538,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'irve-fr',
     category: 'energy',
-    label: 'Bornes de recharge',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -548,7 +553,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'local-dams',
     category: 'energy',
-    label: 'Barrages & digues',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -559,7 +563,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'earthquakes',
     category: 'hazards',
-    label: 'Séismes (24 h)',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -568,7 +571,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'local-firms',
     category: 'hazards',
-    label: 'Feux actifs (FIRMS)',
     kind: 'dataset',
     coverage: 'global',
     auth: 'free-key',
@@ -577,7 +579,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'gironde-megafire-2026',
     category: 'hazards',
-    label: 'Mégafeu de Gironde (juil. 2026)',
     kind: 'dataset',
     coverage: 'fr',
     // `none` even though the pack was BUILT with a FIRMS key: the detections
@@ -591,7 +592,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'vigicrues',
     category: 'hazards',
-    label: "Cours d'eau",
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -600,7 +600,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'hubeau-hydro',
     category: 'hazards',
-    label: "Stations Hub'Eau",
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -609,7 +608,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'georisques',
     category: 'hazards',
-    label: 'Risques (Géorisques)',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -621,7 +619,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'meteofrance-vigilance',
     category: 'hazards',
-    label: 'Météo',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -646,7 +643,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'bruit-fr',
     category: 'hazards',
-    label: "Bruit des aéroports",
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -657,7 +653,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'fraicheur-fr',
     category: 'hazards',
-    label: 'Îlots de fraîcheur',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -667,7 +662,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'delinquance-fr',
     category: 'hazards',
-    label: 'Délinquance enregistrée',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -678,7 +672,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'telegeography-submarine-cables',
     category: 'comms-sensors',
-    label: 'Câbles sous-marins',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -694,7 +687,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'local-datacenters',
     category: 'comms-sensors',
-    label: 'Infrastructure numérique',
     iconGlyph: mapIconMask('maki', 'communications-tower'),
     kind: 'dataset',
     coverage: 'global',
@@ -706,7 +698,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'cctv',
     category: 'comms-sensors',
-    label: 'Caméras publiques',
     kind: 'dataset',
     coverage: 'cities',
     auth: 'none',
@@ -715,7 +706,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'radio',
     category: 'comms-sensors',
-    label: 'Radio',
     kind: 'dataset',
     coverage: 'global',
     auth: 'none',
@@ -734,7 +724,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'meteo-stations-fr',
     category: 'comms-sensors',
-    label: 'Stations météo',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -748,7 +737,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'anfr-fr',
     category: 'comms-sensors',
-    label: 'Antennes mobiles',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -771,7 +759,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'dvf-sales',
     category: 'built-environment',
-    label: 'Prix de l’immobilier',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -786,7 +773,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'avis-valeur',
     category: 'built-environment',
-    label: 'Estimation d’un bien',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -796,7 +782,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'dpe-fr',
     category: 'built-environment',
-    label: 'Performance énergétique (DPE)',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -810,7 +795,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'urbanisme-gpu',
     category: 'built-environment',
-    label: 'Urbanisme',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -825,7 +809,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'ads-fr',
     category: 'built-environment',
-    label: 'Autorisations d’urbanisme',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -842,7 +825,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'isochrone-fr',
     category: 'built-environment',
-    label: 'Zone de chalandise',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -858,7 +840,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'implantation-fr',
     category: 'built-environment',
-    label: 'Fiche implantation',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -878,7 +859,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'comparables-fr',
     category: 'built-environment',
-    label: 'Comparables (sélection conseiller)',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -888,7 +868,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'bdtopo-buildings',
     category: 'built-environment',
-    label: 'Bâti 3D',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -904,7 +883,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'filosofi-fr',
     category: 'built-environment',
-    label: 'Territoire (carroyage INSEE)',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -947,7 +925,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'medecins-fr',
     category: 'built-environment',
-    label: 'Santé & secours',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -956,7 +933,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'schools-fr',
     category: 'built-environment',
-    label: 'Enseignement',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -975,7 +951,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'amenities-fr',
     category: 'built-environment',
-    label: "Équipements du quotidien",
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -989,7 +964,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'sitadel-fr',
     category: 'built-environment',
-    label: "Autorisations d’urbanisme (Sitadel)",
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -1005,7 +979,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'sup-fr',
     category: 'built-environment',
-    label: 'Enseignement supérieur',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -1020,7 +993,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'petite-enfance-fr',
     category: 'built-environment',
-    label: 'Accueil du jeune enfant',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -1034,7 +1006,6 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   Object.freeze({
     id: 'cadastre-fr',
     category: 'built-environment',
-    label: 'Parcelles cadastrales',
     kind: 'dataset',
     coverage: 'fr',
     auth: 'none',
@@ -1055,7 +1026,16 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
  */
 export const LAYER_TAXONOMY = Object.freeze(LAYER_TAXONOMY_TABLE.map((entry) => Object.freeze({
   ...entry,
-  scopeChip: coverageChip(entry.coverage),
+  // The display name, read when a row is drawn. A getter and not a stored
+  // string because the panel is repainted on every camera stop and the page
+  // may be in either language; `messages()` resolves once per locale and
+  // caches, so this costs a property read.
+  get label() { return messages().labels[entry.id]; },
+  // The source line, for the thirteen layers whose own `source` is French
+  // WORDS rather than publisher names. `null` for the rest, and the manager
+  // then prints the module's `source` exactly as it always did.
+  get sourceLabel() { return messages().sources[entry.id] ?? null; },
+  get scopeChip() { return coverageChip(entry.coverage); },
   // Resolved here rather than typed into the rows, for the same reason the chip
   // is: `layerFusions.js` owns which rows are one subject, this table owns what
   // each dataset is, and a field copied into both would drift. `null` on the
@@ -1116,8 +1096,15 @@ export function validateLayerTaxonomy(
     if (!VALID_CATEGORY_IDS.has(entry.category)) {
       throw new Error(`Unknown category for layer: ${entry.id}`);
     }
+    // Reads the catalog through the getter: a layer whose id has no entry in
+    // `layerTaxonomy.i18n.js` is an unnamed row, and that is a boot failure
+    // rather than a blank line in the panel.
     if (!entry.label || typeof entry.label !== 'string') {
       throw new Error(`Layer taxonomy entry missing label: ${entry.id}`);
+    }
+    if (entry.sourceLabel !== undefined && entry.sourceLabel !== null
+        && (typeof entry.sourceLabel !== 'string' || !entry.sourceLabel.trim())) {
+      throw new Error(`Layer taxonomy sourceLabel must be a non-empty string: ${entry.id}`);
     }
     if (!VALID_KINDS.has(entry.kind)) throw new Error(`Invalid layer kind: ${entry.id}`);
     if (!VALID_COVERAGE.has(entry.coverage)) throw new Error(`Invalid layer coverage: ${entry.id}`);
@@ -1179,7 +1166,6 @@ export function layerTaxonomyFor(layerId) {
 export function groupLayerIdsByCategory(taxonomy = LAYER_TAXONOMY) {
   return LAYER_CATEGORIES.map((category) => Object.freeze({
     id: category.id,
-    label: category.label,
     icon: category.icon,
     layerIds: taxonomy
       .filter((entry) => entry.category === category.id

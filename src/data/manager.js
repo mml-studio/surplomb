@@ -2316,6 +2316,11 @@ export class DataLayerManager {
         // and the LLM scene context still read back.
         iconGlyph: taxonomy?.iconGlyph || null,
         source: entry.module.source,
+        // The registry's own wording for that source, when the taxonomy has
+        // one. Kept BESIDE `source` rather than replacing it, like `label`
+        // beside `name`: `source` is the string the module calls its feed, and
+        // `_buildMetaText` is the only place that prefers the registry's.
+        sourceLabel: taxonomy?.sourceLabel || null,
         showInTogglePanel: entry.module.showInTogglePanel !== false,
         category: taxonomy?.category || null,
         kind: taxonomy?.kind || null,
@@ -4226,11 +4231,36 @@ export class DataLayerManager {
     return parts.join(' · ');
   }
 
+  /**
+   * The source a row names, in the reader's language.
+   *
+   * THREE STRINGS, AND THEY ARE NOT INTERCHANGEABLE. `stats.source` is what the
+   * loaded module says it actually reached — `adsb.lol` when the civil flights
+   * fall back off OpenSky — and it always wins, because it is the only one
+   * that can be news. `sourceLabel` is the registry's wording for the layer's
+   * declared source, and it exists for the thirteen whose `source` is French
+   * words rather than publisher names ("cadastre PCI vecteur"). `source` is the
+   * module's own, and it is what everything else still prints.
+   *
+   * The equality test is what keeps the substitution honest: a module that
+   * merely echoes its declared source into its stats gets the translated line,
+   * and a module that names a different feed keeps its own word.
+   *
+   * @param {object} layer `getAll()` projection.
+   * @param {object} stats The layer's current stats.
+   * @returns {string} The source line.
+   */
+  _sourceLine(layer, stats) {
+    const live = typeof stats?.source === 'string' && stats.source.trim() ? stats.source.trim() : '';
+    if (live && live !== layer.source) return live;
+    return layer.sourceLabel || layer.source;
+  }
+
   _buildMetaText(layer) {
     const stats = layer.stats || {};
     const feedState = layerFeedState(stats);
     const stateLabel = FEED_STATE_LABELS[feedState];
-    const source = stats.source || layer.source;
+    const source = this._sourceLine(layer, stats);
     const lifecycleState = layer.lifecycleState || (layer.enabled ? 'enabled' : 'disabled');
     if (lifecycleState === 'enabling' || lifecycleState === 'disabling') {
       return `${lifecycleState.toUpperCase()} · ${source}`;
