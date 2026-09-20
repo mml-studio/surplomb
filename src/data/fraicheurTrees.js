@@ -107,14 +107,24 @@
  * `node --test`.
  */
 
+import { formatNumber } from '../i18n/format.js';
+import { labelFor } from '../i18n/messages.js';
 import { finiteOrNull, text, FRAICHEUR_DECIMALS, readPoint } from './fraicheurFeed.js';
+import messages, { TREE_DOMAINS, TREE_STAGES } from './fraicheurTrees.i18n.js';
 
 /** The register. 219 432 rows, ODbL, Direction des Espaces Verts et de l'Environnement. */
 export const FRAICHEUR_TREE_DATASET = 'les-arbres';
 
-/** Human-facing provenance for the tree half. */
+/**
+ * Human-facing provenance for the tree half.
+ *
+ * The producer's own credit line, reproduced word for word because the ODbL
+ * requires it. Not translated in either direction.
+ */
+// i18n-ignore-start — a licence attribution, reproduced verbatim.
 export const FRAICHEUR_TREE_SOURCE = 'Les arbres — Ville de Paris, Direction des Espaces Verts '
   + 'et de l’Environnement (opendata.paris.fr)';
+// i18n-ignore-end
 
 /**
  * Columns pulled from the register — 9 of its 16.
@@ -194,6 +204,43 @@ export const FRAICHEUR_TREE_BUDGET = 12_500;
 export const FRAICHEUR_TREE_HEIGHT_CEILING_M = 25;
 
 /**
+ * A register table, keyed as the register spells its values, read in the
+ * page's language when a label is ASKED for.
+ *
+ * Getters rather than a `{...catalog()}` spread: the spread would resolve
+ * every label at import time, which is ratchet R5 and would freeze the table
+ * in whichever language loaded first.
+ *
+ * @param {object} catalog A `defineMessages` table keyed by published value.
+ * @returns {Readonly<Record<string, string>>}
+ */
+function publishedLabels(catalog) {
+  const table = {};
+  for (const key of Object.keys(catalog.definition)) {
+    Object.defineProperty(table, key, { enumerable: true, get() { return catalog()[key]; } });
+  }
+  return Object.freeze(table);
+}
+
+/**
+ * One band: the colour is a constant of the palette, the two words are read
+ * in the page's language each time — this table is built at import time, and
+ * a label read then would freeze in whichever language loaded first.
+ *
+ * @param {'remarquable'|'mesure'|'sans-mesure'} id Band id, also the catalog key.
+ * @param {string} color CSS hex.
+ * @returns {{id: string, label: string, color: string, blurb: string}}
+ */
+function bandSpec(id, color) {
+  return Object.freeze({
+    id,
+    color,
+    get label() { return messages().bands[id].label; },
+    get blurb() { return messages().bands[id].blurb; },
+  });
+}
+
+/**
  * The three readings a tree dot carries.
  *
  * Deliberately NOT the five development stages. At five thousand dots in a
@@ -203,33 +250,19 @@ export const FRAICHEUR_TREE_HEIGHT_CEILING_M = 25;
  * destroy: whether the height it is drawn from was measured at all.
  */
 export const FRAICHEUR_TREE_BANDS = Object.freeze([
-  Object.freeze({
-    id: 'remarquable',
-    label: 'Arbre remarquable',
-    color: '#f0b429',
-    blurb: '183 arbres sur 219 432 portent remarquable = « OUI ». Le champ a trois états : « NON » 205 726, null 13 523 — le null n’est pas un non.',
-  }),
-  Object.freeze({
-    id: 'mesure',
-    label: 'Hauteur publiée',
-    // Brighter and more saturated than EVERY step of the canopy ramp in
-    // `fraicheurFeed.js`, which is the whole constraint: a tree dot is drawn
-    // ON TOP of a green-space polygon, and this band used to be #2f8b43 —
-    // exactly the ramp's `dense` (40-55 %) fill. A dot painted in its own
-    // background is not a dot, and 164 of the 984 spaces carry that fill.
-    color: '#7fe046',
-    blurb: 'Taille du point = hauteur publiée, plafonnée à 25 m (99ᵉ centile des 200 025 hauteurs relevées ; médiane 9 m, maximum 65 m).',
-  }),
-  Object.freeze({
-    id: 'sans-mesure',
-    label: 'Hauteur non mesurée',
-    // The SAME grey as `FRAICHEUR_CANOPY_UNKNOWN` and as the fountain whose
-    // availability was never published, and that is deliberate rather than a
-    // clash: across this whole layer grey means one thing only — the register
-    // did not measure this. No other channel may take it.
-    color: '#8a93a6',
-    blurb: 'hauteurenm = 0 sur 19 407 arbres — un zéro qui veut dire « non relevé ». Tracés à la taille minimale, jamais mis à l’échelle.',
-  }),
+  bandSpec('remarquable', '#f0b429'),
+  // Brighter and more saturated than EVERY step of the canopy ramp in
+  // `fraicheurFeed.js`, which is the whole constraint: a tree dot is drawn
+  // ON TOP of a green-space polygon, and this band used to be #2f8b43 —
+  // exactly the ramp's `dense` (40-55 %) fill. A dot painted in its own
+  // background is not a dot, and 164 of the 984 spaces carry that fill.
+  // i18n-ignore-next-line — a band ID, also its share-link token.
+  bandSpec('mesure', '#7fe046'),
+  // The SAME grey as `FRAICHEUR_CANOPY_UNKNOWN` and as the fountain whose
+  // availability was never published, and that is deliberate rather than a
+  // clash: across this whole layer grey means one thing only — the register
+  // did not measure this. No other channel may take it.
+  bandSpec('sans-mesure', '#8a93a6'),
 ]);
 
 export const FRAICHEUR_TREE_BAND_IDS = Object.freeze(FRAICHEUR_TREE_BANDS.map((band) => band.id));
@@ -243,18 +276,13 @@ export const FRAICHEUR_TREE_BAND_IDS = Object.freeze(FRAICHEUR_TREE_BANDS.map((b
  * the register; leaving it raw would print a bug on the card without saying it
  * is one. So it is named as what it is.
  */
-export const FRAICHEUR_TREE_STAGE_LABELS = Object.freeze({
-  'Jeune (arbre)': 'Jeune',
-  Adulte: 'Adulte',
-  Mature: 'Mature',
-  'Jeune (arbre)Adulte': 'Stade illisible (deux valeurs concaténées dans le registre)',
-});
+export const FRAICHEUR_TREE_STAGE_LABELS = publishedLabels(TREE_STAGES);
 
-/** The published stage in readable French, or null when nothing was published. */
+/** The published stage in readable words, or null when nothing was published. */
 export function fraicheurTreeStage(value) {
   const raw = text(value);
   if (!raw) return null;
-  return FRAICHEUR_TREE_STAGE_LABELS[raw] || raw;
+  return labelFor(TREE_STAGES, raw);
 }
 
 /**
@@ -266,29 +294,21 @@ export function fraicheurTreeStage(value) {
  * DAC 119, DASES 28, null 1. Five of those ten are internal acronyms, and
  * "DFPE" on a card is a worse answer than none.
  */
-export const FRAICHEUR_TREE_DOMAIN_LABELS = Object.freeze({
-  Alignement: 'Arbre d’alignement (voirie)',
-  Jardin: 'Jardin ou square',
-  CIMETIERE: 'Cimetière',
-  DASCO: 'École (DASCO)',
-  PERIPHERIQUE: 'Abords du périphérique',
-  DJS: 'Équipement sportif (DJS)',
-  DFPE: 'Crèche (DFPE)',
-  DAC: 'Équipement culturel (DAC)',
-  DASES: 'Établissement social (DASES)',
-});
+export const FRAICHEUR_TREE_DOMAIN_LABELS = publishedLabels(TREE_DOMAINS);
 
-/** The domain in readable French; an unmapped code is printed as published. */
+/** The domain in readable words; an unmapped code is printed as published. */
 export function fraicheurTreeDomain(value) {
   const raw = text(value);
   if (!raw) return null;
-  return FRAICHEUR_TREE_DOMAIN_LABELS[raw] || raw;
+  return labelFor(TREE_DOMAINS, raw);
 }
 
 /** The band one projected tree belongs to. */
 export function fraicheurTreeBand(tree) {
+  // i18n-ignore-start — band IDs, never shown; `bandSpec` holds their words.
   if (tree?.remarquable === true) return 'remarquable';
   return tree?.height === null || tree?.height === undefined ? 'sans-mesure' : 'mesure';
+  // i18n-ignore-end
 }
 
 /** The `where` clause for one box. Latitude first — that is the portal's order. */
@@ -502,35 +522,36 @@ export function summarizeFraicheurTrees(trees) {
  * @returns {{title:string, details:string[]}}
  */
 export function treeCardLines(tree) {
+  const m = messages().card;
   const details = [];
   const latin = [tree?.genus, tree?.species].filter(Boolean).join(' ');
   if (latin) details.push(latin);
 
   if (tree?.height === null || tree?.height === undefined) {
-    details.push('Hauteur non mesurée (le registre publie 0)');
+    details.push(m.noHeight);
   } else {
-    details.push(`${tree.height.toLocaleString('fr-FR')} m de haut`);
+    details.push(m.height(formatNumber(tree.height)));
   }
   if (tree?.girth) {
-    details.push(`${tree.girth.toLocaleString('fr-FR')} cm de circonférence`);
+    details.push(m.girth(formatNumber(tree.girth)));
     // The register contradicts itself on 136 trees nationally: a two-metre girth
     // on a six-metre trunk. Naming it beats drawing it as if it were consistent.
     if (tree.height !== null && tree.height !== undefined && tree.girth >= 200 && tree.height <= 8) {
-      details.push('⚠ Hauteur et circonférence publiées ne s’accordent pas');
+      details.push(m.inconsistent);
     }
   } else {
-    details.push('Circonférence non mesurée (le registre publie 0)');
+    details.push(m.noGirth);
   }
 
   const stage = fraicheurTreeStage(tree?.stage);
   if (stage) details.push(stage);
   const domain = fraicheurTreeDomain(tree?.domain);
   if (domain) details.push(domain);
-  if (tree?.remarquable === true) details.push('⭐ Arbre remarquable (Ville de Paris)');
-  else if (tree?.remarquable === null) details.push('Caractère remarquable non renseigné');
-  if (tree?.idbase !== null && tree?.idbase !== undefined) details.push(`idbase ${tree.idbase}`);
+  if (tree?.remarquable === true) details.push(m.remarkable);
+  else if (tree?.remarquable === null) details.push(m.remarkableUnknown);
+  if (tree?.idbase !== null && tree?.idbase !== undefined) details.push(m.idbase(tree.idbase));
 
-  return { title: tree?.name || 'Arbre (essence non publiée)', details };
+  return { title: tree?.name || m.unnamed, details };
 }
 
 /**
@@ -542,20 +563,21 @@ export function fraicheurTreeLabel({ status, totalInBox, drawn, budget = FRAICHE
   // Not a refusal and not a failure: the reader switched this register off, or
   // never switched it on. It is the DEFAULT state of the layer, so the line has
   // to say what the button is rather than sound like something went wrong.
-  if (status === 'off') return 'Arbres masqués — bouton ARBRES pour les charger';
+  const m = messages().status;
+  if (status === 'off') return m.off;
   if (status === 'too-high') {
-    return `Zoome sous ${FRAICHEUR_TREE_MAX_ALTITUDE_M.toLocaleString('fr-FR')} m pour charger les arbres`;
+    return m.tooHigh(formatNumber(FRAICHEUR_TREE_MAX_ALTITUDE_M));
   }
   if (status === 'too-dense') {
     const count = finiteOrNull(totalInBox);
     return count === null
-      ? 'Vue trop large pour les arbres — zoome'
-      : `${count.toLocaleString('fr-FR')} arbres dans cette vue — au-delà des ${budget.toLocaleString('fr-FR')} que cette couche trace. Zoome.`;
+      ? m.tooDense
+      : m.tooDenseCounted(formatNumber(count), formatNumber(budget));
   }
-  if (status === 'loading') return 'comptage des arbres…';
-  if (status === 'empty') return 'Aucun arbre référencé dans cette vue';
+  if (status === 'loading') return m.loading;
+  if (status === 'empty') return m.empty;
   if (status === 'ready' && Number.isFinite(drawn)) {
-    return `${drawn.toLocaleString('fr-FR')} arbres tracés`;
+    return m.drawn(formatNumber(drawn), drawn);
   }
   return null;
 }
