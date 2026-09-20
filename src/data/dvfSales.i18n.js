@@ -74,7 +74,7 @@ export default defineMessages({
       label: { fr: 'Appart.', en: 'Apartments' },
       title: {
         fr: 'Seulement les mutations qui portent un appartement, cave ou parking compris',
-        en: 'Only the sales that carry an apartment, cellar or parking space included',
+        en: 'Only the sales that carry an apartment — its cellar or parking space included',
       },
     },
     maison: {
