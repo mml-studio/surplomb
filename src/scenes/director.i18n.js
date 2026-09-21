@@ -117,6 +117,17 @@ export default defineMessages({
     note: '`layers` is an already-joined list of layer ids.',
     sample: ['flights, satellites'],
   },
+  noAircraft: {
+    fr: 'Aucun avion à suivre dans la zone de la scène — le plan garde sa caméra',
+    en: 'No aircraft to follow where the scene looks — the shot keeps its camera',
+    note: 'A scene shot follows a live aircraft; none was in the area when it played.',
+  },
+  cockpitRefused: {
+    fr: (reason) => `Cockpit refusé : ${reason}`,
+    en: (reason) => `Cockpit refused: ${reason}`,
+    note: '`reason` is the cockpit controller’s own sentence, already in the reader’s language or English.',
+    sample: ['Contacts must be active to enter Cockpit'],
+  },
   contextExitFailed: {
     fr: (mode) => `Impossible de quitter ${mode} — les couches de la scène risquent d’être refusées`,
     en: (mode) => `Could not exit ${mode} — scene layers may be refused`,

@@ -1,5 +1,5 @@
 /**
- * The seven built-in scene titles — see docs/i18n/CONVENTIONS.md.
+ * The eight built-in scene titles — see docs/i18n/CONVENTIONS.md.
  *
  * They came from upstream in English, so here the ENGLISH is the original,
  * kept verbatim, and the French is what is new. A title is the name of a
@@ -25,4 +25,9 @@ export default defineMessages({
     keep: ['Bordeaux'],
   },
   franceTransit: { fr: 'Vitrine des transports français', en: 'France Transit Showcase' },
+  roissyNoise: {
+    fr: 'Roissy : les départs et le plan de bruit',
+    en: 'Roissy Departures and Noise Exposure Plan',
+    keep: ['Roissy'],
+  },
 });

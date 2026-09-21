@@ -50,6 +50,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   of plant the mark already says: *Bugey · 3 418 MW / 3 580 MW*. The
   landing page's moving thumbnail for this view still shows the old daytime,
   straight-down take until it is re-recorded.
+- **A scene that rides a departure out of Roissy and lands on France's noise
+  law.** The Scenes panel gains *Roissy Departures and Noise Exposure Plan*:
+  Terminal 1 in the photorealistic mesh, turning slowly; a low move to the 09R
+  threshold and a take-off run down it, 15 m above the runway; a jump over the
+  runway end onto a live departure, followed, then ridden in Cockpit; a climb to
+  15 km where the noise exposure plan (PEB) and the noise nuisance plan (PGS)
+  light up under its track. To play it, scenes learned five things: a layer that
+  switches on mid-scene, a slow turn during a hold, a flight's easing and
+  ceiling, following a live aircraft, and entering Cockpit.
 - **The globe is bilingual, layer by layer, and the voice with it.** Every
   panel, card, legend, status and refusal now exists in French and in English:
   the shell, the 60-layer registry, the Address X-ray, real estate, transport,

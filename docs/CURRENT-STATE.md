@@ -981,6 +981,35 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   (a second call restores HUD `auto` rather than the operator's saved mode) —
 >   worst case is recording chrome staying up until the promise settles, which
 >   then restores correctly.
+> - **Scenes that do more than fly (2026-09-21):** a recipe keyframe may now
+>   carry its own `layers` (merged over the recipe's, so a layer switches on
+>   mid-scene), an `easing` (`inOut` default, `in`, `out`, `linear` — a
+>   continuous move needs its joins to keep their speed), a `maxHeightM`
+>   ceiling (Cesium arcs a 2.3 km hop between two poses 120 m above an apron
+>   up to ~1.5 km), an `orbitDegPerSec` slow turn during the hold (around the
+>   ground at the centre of the frame, bounded at 20°/s), and an `action`.
+>   `track` follows a live aircraft picked where the shot looks — nearest to
+>   `near` inside `radiusKm` and an altitude band, among the positions the
+>   layer draws — through the layer's own follow camera, announced first by a
+>   `shot_action_pending` event and taken after `leadInSec`; `cockpit` enters
+>   Contacts, then the upstream Cockpit, for the shot's duration and leaves
+>   both. This does NOT contradict (3): a captured tracking id is still
+>   stripped; a `track` shot is an explicit instruction to follow, and the
+>   next plain shot takes the camera back through the same
+>   `runImmediateNavigation('scene', …)` claim, as does the end of the run.
+>   `startScene(id, { targets })` names the aircraft outright for a caller
+>   that already knows (a filming harness that waited for a departure). No
+>   aircraft or a refused Cockpit is reported (`shot_action_failed`) and the
+>   run plays on. The built-in **Roissy Departures and Noise Exposure Plan**
+>   uses all of it: Terminal 1 turning slowly, a low move to the 09R
+>   threshold, a take-off run 15 m above the runway (the mesh stays sharp
+>   there) that accelerates and climbs, a jump over the runway end where OpenSky first
+>   reports a departure, that departure followed for 2.5 s then ridden in
+>   Cockpit, a climb to 15 km,
+>   and the noise layer switched on only there — below 12 km it paints the one
+>   zone under the reticle, above it every airport's whole plan. It is
+>   written for an east flow; OpenSky publishes no fix while an aircraft rolls,
+>   so a departure first appears airborne past the runway end.
 > - **Ambient contact labels (2026-08-20):** detection callsign callouts paint
 >   on the shared normal-blend world-overlay canvas as their own host lane
 >   (`detection-callouts`) — NOT on the screen-blended sensor surface. `screen`
