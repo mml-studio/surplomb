@@ -124,14 +124,17 @@ export const GALLERY_VIEWS = Object.freeze([
   {
     id: '04',
     label: 'Le réseau électrique et ce qu’il produit',
-    // The Rhône valley from Vienne to Romans, 110 km up: under the grid's
-    // 120 km ceiling (src/data/powerGrid.js), so the lines draw — from
-    // 1 400 km the view showed the plants and a card asking to zoom in.
-    // Saint-Alban and its production ring in the middle of the 400 kV.
-    pose: { lat: 45.25, lon: 4.95, alt: 110_000, heading: 0, pitch: -90 },
-    hash: 'v=2&lat=45.25&lon=4.95&alt=110000&heading=0&pitch=-90&l=2.3',
+    // The Rhône valley from Cruas to the Bugey, 180 km up and looking north
+    // at 58°: the stations stand in relief (70–800 km, src/data/rteGeneration.js)
+    // and the grid is the national pack, all four bands and no yard labels.
+    // Under the night atlas (`style=noir`, src/styles/nightAtlas.js): the
+    // ground dark, the grid in its night dress, the columns in their colour.
+    // Straight down, a column is a square: the scene is oblique on purpose.
+    pose: { lat: 44.15, lon: 4.95, alt: 180_000, heading: 0, pitch: -58 },
+    hash: 'v=2&lat=44.15&lon=4.95&alt=180000&heading=0&pitch=-58&l=2.3&style=noir',
     layers: ['power-grid', 'rte-generation'],
-    // Straight down: an orbit is a slow turn of the map.
+    // Nothing here moves on its own: the small orbit is what shows the
+    // columns as columns, in parallax against the ground.
     camera: { amplitudeDeg: 3 },
   },
   {

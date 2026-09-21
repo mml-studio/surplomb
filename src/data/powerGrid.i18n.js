@@ -1,16 +1,14 @@
 /**
  * Strings of src/data/powerGrid.js — the card a clicked line, pylon or
- * substation opens, the row's own sentence, and the two keys (the viewport
- * answer's and the pre-built national pack's).
+ * substation opens, the row's own sentence, and the key.
  *
- * THIS LAYER IS HALF-INHERITED AND THE CATALOG SHOWS IT. The card and the
- * viewport key were written in English upstream and have been printing
- * English on the French globe ever since; the national pack, added by this
- * fork, is French. A translation batch may not change what a French reader
- * sees, so every `fr` below is exactly the bytes that row printed before —
- * English where it was English — and the `en` is the English it should read.
- * The rows whose French is still English are listed in the pull request as a
- * defect of their own.
+ * THIS LAYER IS HALF-INHERITED AND THE CATALOG SHOWS IT. The card was written
+ * in English upstream and has been printing English on the French globe ever
+ * since. A translation batch may not change what a French reader sees, so
+ * every `fr` in the card is exactly the bytes it printed before — English where
+ * it was English — and the `en` is the English it should read. The KEY is the
+ * exception: it was rewritten in plain words on 2026-09-21 (`plainLegend`), and
+ * a French reader now gets French there.
  *
  * Operator names, route names, substation names and OpenStreetMap tag values
  * are data and stay as mapped.
@@ -189,112 +187,64 @@ export default defineMessages({
     },
   },
 
-  /** The key of the pre-built national pack. */
-  nationalLegend: {
-    mappedInFrance: {
-      fr: (km) => `${km} cartographiés en France`,
-      en: (km) => `${km} mapped in France`,
-      sample: ['48,200 km'],
-    },
-    underground: {
-      fr: (km) => `dont ${km} en souterrain, en tirets`,
-      en: (km) => `of which ${km} underground, drawn dashed`,
-      sample: ['1,900 km'],
-    },
-    substations: {
-      fr: (count) => `${count} postes`,
-      en: (count) => `${count} substations`,
-      sample: [239],
-    },
-    blurb: {
-      fr: (parts) => `${parts}. Tracé au sol : la route cartographiée, pas la hauteur des câbles.`,
-      en: (parts) => `${parts}. Drawn on the ground: the mapped route, not the height of the cables.`,
-      sample: ['The backbone: the 400 kV grid RTE runs the country on · 48,200 km mapped in France'],
-    },
-    noteBase: {
-      fr: (state, metres) => `Réseau national OpenStreetMap${state}, simplifié à ${metres} m près.`,
-      en: (state, metres) => `National OpenStreetMap grid${state}, simplified to within ${metres} m.`,
-      sample: [' (as of 2026-07-12)', '50'],
-    },
-    noteState: {
-      fr: (day, age) => ` (état du ${day}${age})`,
-      en: (day, age) => ` (as of ${day}${age})`,
-      note: 'The OSM base date, as the pack records it (ISO, not localized).',
-      sample: ['2026-07-12', ', 94 days'],
-    },
-    noteAge: {
-      fr: (days) => `, ${days} jours`,
-      en: (days) => `, ${days} days`,
-      note: 'Only shown past 60 days, where the age is worth a reader’s attention.',
-      sample: ['94'],
-    },
-    noteZoom: {
-      fr: (ceiling) => `Sous ${ceiling} km, la vue charge le tracé exact, les postes nommés et les pylônes.`,
-      en: (ceiling) => `Below ${ceiling} km, the view loads the exact route, the named substations and the pylons.`,
-      sample: ['120'],
-    },
-  },
-
   /**
-   * The line under the key that says what a pylon glyph means: how often one
-   * is drawn, and that it stands on a surveyed node. Inherited English.
+   * The key, in plain words (2026-09-21): one line per voltage band, one short
+   * sentence under it, no counts. The key is read by anyone who opens the
+   * scene, not by grid engineers; kilometres, yard counts and the drawing's
+   * caveats are on the cards, one click away.
+   *
+   * The LABEL names the band in words and the sentence gives the French
+   * voltage: the band thresholds are generic (`POWER_GRID_TIERS`), so abroad
+   * the words stay true where a French number would not.
    */
-  pylonNote: {
-    spacing: {
-      fr: (spacing) => `Pylons: one drawn per ${spacing} of mapped overhead route, `
-        + 'thinning as you climb and walking back down to every mapped vertex as you descend.',
-      en: (spacing) => `Pylons: one drawn per ${spacing} of mapped overhead route, `
-        + 'thinning as you climb and walking back down to every mapped vertex as you descend.',
-      sample: ['1.2 km'],
+  plainLegend: {
+    tiers: {
+      ehv: {
+        label: { fr: 'Très haute tension', en: 'Extra-high voltage' },
+        blurb: {
+          fr: '400 kV en France : les grands axes, d’une région à l’autre.',
+          en: '400 kV in France: the long-distance backbone, region to region.',
+        },
+      },
+      'hv-high': {
+        label: { fr: 'Haute tension', en: 'High voltage' },
+        blurb: {
+          fr: '225 kV : alimente les grandes villes et l’industrie.',
+          en: '225 kV: feeds large cities and industry.',
+        },
+      },
+      'hv-mid': {
+        label: { fr: 'Haute tension (rare)', en: 'High voltage (rare)' },
+        blurb: {
+          fr: '150 kV : quelques lignes seulement en France.',
+          en: '150 kV: only a few lines in France.',
+        },
+      },
+      'hv-low': {
+        label: { fr: 'Lignes régionales', en: 'Regional lines' },
+        blurb: {
+          fr: '63 et 90 kV : le dernier relais avant le réseau de quartier.',
+          en: '63 and 90 kV: the last step before the neighbourhood network.',
+        },
+      },
     },
-    surveyed: {
-      fr: 'Each one stands on a node OpenStreetMap has surveyed — never interpolated between two.',
-      en: 'Each one stands on a node OpenStreetMap has surveyed — never interpolated between two.',
-    },
-    records: {
-      fr: (count) => `${count} of the nodes in view also carry a pylon record `
-        + '(reference, design, height where it was measured); click one to read it.',
-      en: (count) => `${count} of the nodes in view also carry a pylon record `
-        + '(reference, design, height where it was measured); click one to read it.',
-      sample: [318],
+    dashed: {
+      fr: 'Pointillés : ligne enterrée.',
+      en: 'Dashed: underground line.',
     },
     allUnderground: {
-      fr: (percent) => 'No pylons here, and none are missing: '
-        + `${percent} of the mapped grid in this view runs `
-        + 'UNDERGROUND, which is how a dense city is fed. A cable has no pylons, '
-        + 'and the dashed strokes are the cable.',
-      en: (percent) => 'No pylons here, and none are missing: '
-        + `${percent} of the mapped grid in this view runs `
-        + 'UNDERGROUND, which is how a dense city is fed. A cable has no pylons, '
-        + 'and the dashed strokes are the cable.',
-      note: 'An absence with a reason is information; an absence on its own reads as a bug.',
-      sample: ['100%'],
+      fr: 'Ici, les lignes sont enterrées : il n’y a pas de pylône.',
+      en: 'Here the lines run underground: there are no pylons.',
     },
-  },
-
-  /** The key of the viewport answer — inherited English, see the header. */
-  legend: {
-    inView: {
-      fr: (km) => `${km} of mapped route in view`,
-      en: (km) => `${km} of mapped route in view`,
-      sample: ['1,240 km'],
+    source: {
+      fr: (day) => `Source : OpenStreetMap${day ? ` (${day})` : ''}.`,
+      en: (day) => `Source: OpenStreetMap${day ? ` (${day})` : ''}.`,
+      note: 'The OSM base date, as the national pack records it (ISO, not localized).',
+      sample: ['2026-09-19'],
     },
-    underground: {
-      fr: (km) => `${km} of it underground, drawn dashed`,
-      en: (km) => `${km} of it underground, drawn dashed`,
-      sample: ['86 km'],
-    },
-    substations: {
-      fr: (count) => `${count} substations`,
-      en: (count) => `${count} substations`,
-      sample: [42],
-    },
-    blurb: {
-      fr: (parts) => `${parts}. Routes are drawn on the ground — the mapped route, `
-        + 'not the conductor height, which OpenStreetMap does not publish.',
-      en: (parts) => `${parts}. Routes are drawn on the ground — the mapped route, `
-        + 'not the conductor height, which OpenStreetMap does not publish.',
-      sample: ['The backbone. In France this is the 400 kV grid RTE runs the country on'],
+    zoom: {
+      fr: 'Zoomez pour le tracé exact et les postes.',
+      en: 'Zoom in for the exact routes and the substations.',
     },
   },
 });

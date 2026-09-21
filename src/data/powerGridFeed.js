@@ -172,6 +172,55 @@ export const POWER_GRID_TIERS = Object.freeze([
 const TIER_BY_ID = new Map(POWER_GRID_TIERS.map((tier) => [tier.id, tier]));
 
 /**
+ * The four bands' NIGHT DRESS, worn under the night atlas (the Noir preset,
+ * `styles/nightAtlas.js`), where the basemap is dark and desaturated.
+ *
+ * The daylight palette above was chosen against an orthophoto: red, orange,
+ * yellow and green, each on a near-black casing, because a coloured line over
+ * fields and roofs has no reliable background. On a dark ground the problem is
+ * the opposite one — everything contrasts, so the palette can spend its range
+ * on HIERARCHY instead:
+ *
+ *   - the two transmission tiers are WARM and bright (ivory 400 kV, orange
+ *     225 kV): they carry the country's power and they are the ones the
+ *     preset's bloom picks up (`noir.js` blooms on the brightest channel);
+ *   - the two sub-transmission tiers are COOL and dimmer (steel blue 150 kV,
+ *     slate 63/90 kV): 11 600 of the 17 500 strokes France maps, and on a dark
+ *     ground a network that dense has to recede or it is all that is seen.
+ *
+ * Warm against cool also keeps the tiers apart from the generation classes of
+ * `rteGenerationFeed.js` that sit on the same map at the same time: the lime
+ * of nuclear, the blues of hydro and the orange of gas are drawn as columns
+ * and marks, never as lines, so shape separates them where hue alone would not.
+ *
+ * `haloAlpha` replaces the dark casing, which on a dark ground is a shadow of
+ * nothing: the stroke is drawn a second time, wider, in its OWN colour and
+ * mostly transparent. It fades with the band's rank for the same reason, and
+ * so does `strokeAlpha`, the core's own opacity.
+ */
+export const POWER_GRID_NIGHT_DRESS = Object.freeze({
+  ehv: Object.freeze({ color: '#fff0c8', haloAlpha: 0.3, strokeAlpha: 0.95 }),
+  'hv-high': Object.freeze({ color: '#ffa33a', haloAlpha: 0.26, strokeAlpha: 0.92 }),
+  'hv-mid': Object.freeze({ color: '#9cc3f0', haloAlpha: 0.16, strokeAlpha: 0.85 }),
+  'hv-low': Object.freeze({ color: '#5a82b0', haloAlpha: 0.1, strokeAlpha: 0.72 }),
+});
+
+/** How much wider than its core the night halo is drawn, in pixels. */
+export const POWER_GRID_NIGHT_HALO_PX = 6;
+
+/**
+ * The colour a band is drawn in, in the dress the map is wearing.
+ * @param {object|string|null|undefined} tierOrId A tier or its id.
+ * @param {{night?: boolean}} [options]
+ * @returns {?string} CSS colour, or null for an unknown band.
+ */
+export function powerTierColor(tierOrId, { night = false } = {}) {
+  const tier = typeof tierOrId === 'string' ? TIER_BY_ID.get(tierOrId) : tierOrId;
+  if (!tier?.id) return null;
+  return (night && POWER_GRID_NIGHT_DRESS[tier.id]?.color) || tier.color || null;
+}
+
+/**
  * `substation=*` values, mapped to what they mean on a card.
  *
  * Purely a LABEL table (trap 4): an unlisted or absent value produces the

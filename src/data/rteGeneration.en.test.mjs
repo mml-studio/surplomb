@@ -101,15 +101,14 @@ test('a unit row, with and without a reading', () => {
   assert.match(withLocale('en', () => buildUnitRow({})), /^unit · — · no reading$/);
 });
 
-test('the key leads with the ring-and-disc grammar, then one row per class', () => {
+test('the key reads one plain sentence per class, in English', () => {
   const sites = [station(), station({ id: 'VAUJA', class: 'hydro-pumped', mw: null, installedMw: 1690 })];
   const legend = withLocale('en', () => buildRteLegend(sites));
   assertNoFrench(legend.map(({ label, blurb }) => ({ label, blurb })), { allow: ['Rance'] });
   assert.equal(legend[0].label, 'Nuclear');
-  assert.match(legend[0].blurb, /^4,730 MW generated of 5,460 MW installed — Fission reactors\./);
+  assert.equal(legend[0].blurb, '4,730 MW generated right now, out of 5,460 MW possible.');
   const pumped = legend.find((row) => row.label === 'Hydro · pumped storage');
-  assert.match(pumped.blurb, /^1,690 MW installed, no output published — Pumped storage\./);
-  assert.match(pumped.blurb, /it generates AND it consumes/i);
+  assert.equal(pumped.blurb, '1,690 MW possible; output not published.');
   // French, same key.
   assert.equal(withLocale('fr', () => buildRteLegend(sites))[0].label, 'Nucléaire');
 });
