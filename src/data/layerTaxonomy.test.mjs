@@ -135,7 +135,9 @@ test('the French display names are what the panel renders', () => {
   assert.equal(layerTaxonomyFor('ais-live-vessels').label, 'Navires et ports');
   assert.equal(layerTaxonomyFor('local-datacenters').label, 'Infrastructure numérique');
   assert.equal(layerTaxonomyFor('bikeshare').label, 'Vélos et véhicules partagés');
-  assert.equal(layerTaxonomyFor('edf-power-plants').label, 'Centrales électriques');
+  assert.equal(layerTaxonomyFor('power-grid').label, 'Réseau électrique et centrales');
+  // …and the register that USED to keep the plants row is named for itself again.
+  assert.equal(layerTaxonomyFor('edf-power-plants').label, 'Centrales EDF');
   assert.equal(layerTaxonomyFor('schools-fr').label, 'Enseignement');
 });
 

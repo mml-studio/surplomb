@@ -120,7 +120,6 @@ export default defineMessages({
     vision: {
       nightVision: { fr: 'Vision nocturne', en: 'Night vision' },
       thermal: { fr: 'Thermique', en: 'Thermal' },
-      noir: { fr: 'Noir', en: 'Noir' },
       current: {
         fr: (name) => `Style de vision actuel : ${name}. Activer pour passer au suivant.`,
         en: (name) => `Current cockpit vision style: ${name}. Activate for next style.`,

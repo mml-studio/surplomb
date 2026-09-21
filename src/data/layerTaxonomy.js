@@ -500,9 +500,7 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
   // SET. France is complete, down to a 40 kW mill at Monteils. The 592 world
   // stations are one OSM snapshot against a real world population in the tens
   // of thousands — a tail, not a coverage, and `global` would promise a reader
-  // in Lima a register that does not exist. It would also fold a 'global'
-  // companion under the narrower 'fr' primary of the Centrales électriques
-  // row, which `layerFusions.test.mjs` refuses outright.
+  // in Lima a register that does not exist.
   //
   // What the world half gets instead is said where the question is actually
   // asked: its own colour, its own legend row (`échantillon … pas un

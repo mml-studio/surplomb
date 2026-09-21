@@ -3171,7 +3171,7 @@ test('an unknown layer comes back with the nearest names instead of a thrown err
   const runner = createGevActionRunner({ viewer, styleManager, dataManager: stubManager([]) });
   const result = await runner('set_layer_visibility', { layerId: 'bornes electriques', enabled: true });
   assert.equal(result.ok, false);
-  assert.deepEqual(result.suggestions.map((entry) => entry.id), ['irve-fr', 'edf-power-plants', 'power-grid']);
+  assert.deepEqual(result.suggestions.map((entry) => entry.id), ['irve-fr', 'power-grid']);
   assert.match(result.hint, /list_layers/);
 });
 

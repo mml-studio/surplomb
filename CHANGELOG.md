@@ -130,6 +130,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   (Clem', `renault-zoe`) is now filed under « Voitures » instead of
   « Vélos »; the row's sub-titles say « Vélos en station » and « Flottes
   partagées » instead of « Stations GBFS » and « Longue traîne FR ».
+- **The power grid and the power stations are one row, and switching it on
+  turns the map to night.** « Réseau électrique » and « Centrales électriques »
+  were two rows for the question the landing page's scene asks as one. The row
+  is now *Réseau électrique et centrales* (*Power grid and plants*): its switch
+  lights the grid and the stations' live output, as the scene link does, and
+  moves the visual preset to Night; switching it off gives back the preset it
+  replaced, unless the reader picked another one meanwhile. A share link or a
+  restored session never moves the preset. Four chips take the row apart —
+  *Réseau*, *Production*, *Registre EDF*, *Centrales hydro* — and the EDF and
+  hydro registers now wait for their chip: on this row they drew the same
+  stations a second time, a second icon on every nuclear site the relief
+  column already names. Asking the voice for « centrales électriques » reaches
+  the row.
+- **The Noir preset is called Night (« Nuit » on the French page).** « Noir »
+  was a French word on an English page, printed from the preset's internal id.
+  The button, the ACTIVE STYLE corner, the HUD and the cockpit's vision control
+  now say *Nuit* or *Night*; share links write `style=night`, and links that
+  say `style=noir` — the landing page's among them — still open at night.
 - **Airport noise zones read as contours, and each is named on its own
   line.** The four nested zones of a noise exposure plan used to be washed
   at 22 to 42 % opacity, which tinted the whole airport — Roissy's zone D alone

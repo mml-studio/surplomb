@@ -4,6 +4,8 @@ import { animeShader } from './styles/anime.js';
 import { noirShader } from './styles/noir.js';
 import { createNightBasemap } from './styles/nightBasemap.js';
 import { NIGHT_ATLAS_STYLE } from './styles/nightAtlas.js';
+import { styleDisplayName, styleSpelledName } from './styles/styleNames.js';
+import { createNightAtlasRowFollower } from './styles/nightAtlasRow.js';
 import { snowShader } from './styles/snow.js';
 import { nightVisionShader } from './styles/surveillance.js';
 import { thermalShader } from './styles/thermal.js';
@@ -288,15 +290,6 @@ const TRANSITION_DURATION_MS = 500;
 const LOCATION_TRAY_FADE_MS = 200;
 /** Map of style name to its GLSL shader module for post-process stages. */
 const STYLES = { retro: retroShader, surveillance: nightVisionShader, thermal: thermalShader, anime: animeShader, noir: noirShader, snow: snowShader };
-/** How each sensor pass is named to a reader when it invalidates the legend. */
-const STYLE_SENSOR_LABELS = Object.freeze({
-  retro: 'CRT',
-  surveillance: 'NVG',
-  thermal: 'FLIR',
-  anime: 'ANIME',
-  noir: 'NOIR',
-  snow: 'SNOW',
-});
 /** Versioned localStorage namespace prefix to invalidate stale panel layouts. */
 const PANEL_LAYOUT_STORAGE_VERSION = 'v6';
 const SHARE_PANEL_STATE_SPECS = Object.freeze([
@@ -459,16 +452,6 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#command-dock',
   '#gev-voice-control',
 ].join(', ');
-/** Display labels shown in the mini-status readout for each active style. */
-const STYLE_STATUS_LABELS = {
-  normal: 'NORMAL',
-  retro: 'CRT',
-  surveillance: 'NVG',
-  thermal: 'FLIR',
-  anime: 'ANIME',
-  noir: 'NOIR',
-  snow: 'SNOW',
-};
 /**
  * The tactical detection look: Dense at 75%.
  *
@@ -1220,8 +1203,8 @@ class CockpitViewController {
     const m = messages().cockpit.vision;
     // The four sensor passes keep their names in both languages (CRT, NVG,
     // FLIR are what the buttons say); only the spelled-out names translate.
-    const labels = { optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: 'NOIR' };
-    const names = { optical: inherited, crt: 'CRT', nvg: m.nightVision, thermal: m.thermal, noir: m.noir };
+    const labels = { optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: styleDisplayName('noir') };
+    const names = { optical: inherited, crt: 'CRT', nvg: m.nightVision, thermal: m.thermal, noir: styleSpelledName('noir') };
     if (this.visionCurrent) {
       this.visionCurrent.dataset.cockpitVision = next;
       this.visionCurrent.setAttribute('aria-label', m.current(names[next]));
@@ -2394,6 +2377,8 @@ export class StyleManager {
     this._clearSelectedLayersManagerPromise = null;
     this._clearSelectedLayersHandler = null;
     this._dataManager = null;
+    /** Moves the preset with the grid-and-plants row; see `attachDataManager`. */
+    this._nightAtlasRow = null;
     // Territorial controls: where the camera is, and the card that explains a
     // layer before it starts. See `_installCoverageWatch`.
     this._coverageWatchRemover = null;
@@ -2673,10 +2658,7 @@ export class StyleManager {
     this.cockpitView = new CockpitViewController(viewer, {
       onVisionChange: (mode, active, options) => this._setCockpitVision(mode, active, options),
       onCameraTakeover: () => this._stampNavigation({ cancelPendingSelection: false }),
-      getInheritedVisionLabel: () => (
-        STYLE_STATUS_LABELS[this.activeStyle]
-        || String(this.activeStyle || 'normal').toUpperCase()
-      ),
+      getInheritedVisionLabel: () => styleDisplayName(this.activeStyle),
       isEntryAllowed: () => cockpitEntryAllowed({
         contextMode: this._contextMode,
         contextModeChanging: this._contextModeChanging,
@@ -4726,6 +4708,18 @@ export class StyleManager {
       this._dataManagerVisibilityRequestUnsubscribe = null;
     }
     this._dataManager = dataManager || null;
+    // « Réseau électrique et centrales » brings the night atlas when a reader
+    // switches it on, and gives the previous preset back when it goes dark
+    // (`styles/nightAtlasRow.js`). Only the preset moves: `applyPreset: false`
+    // keeps a return to CRT or FLIR from re-applying their tactical HUD and
+    // detection, and the Parameters panel stays where the reader left it.
+    this._nightAtlasRow = this._dataManager
+      ? createNightAtlasRowFollower({
+        isEnabled: (layerId) => Boolean(this._dataManager?.isEnabled?.(layerId)),
+        getStyle: () => this.activeStyle,
+        setStyle: (style) => this.setStyle(style, { applyPreset: false }),
+      })
+      : null;
     // Point the module-level layer bindings at the registry before anything
     // below reads one — the detection overlay's register is the same nine, in
     // the order it was originally constructed with.
@@ -4738,6 +4732,7 @@ export class StyleManager {
     }
     if (typeof this._dataManager?.subscribe === 'function') {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
+        if (change?.type === 'visibility') this._nightAtlasRow?.onVisibility(change);
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
           // A layer that wants the brackets claims detection the moment it
@@ -9805,6 +9800,8 @@ export class StyleManager {
     const previousStyle = this.activeStyle;
     this.activeStyle = styleName;
     document.documentElement.dataset.gevStyle = styleName;
+    // A preset the night row did not set is the reader's: nothing to give back.
+    this._nightAtlasRow?.onStyleChange();
 
     // The celestial optics treatment belongs to the unfiltered globe only.
     // Leaving Normal turns it off; returning merely re-enables the control.
@@ -9830,8 +9827,7 @@ export class StyleManager {
     });
 
     // Update style indicator
-    const displayNames = { surveillance: 'NVG', thermal: 'FLIR', retro: 'CRT' };
-    this._styleIndicator.textContent = displayNames[styleName] || styleName.toUpperCase();
+    this._styleIndicator.textContent = styleDisplayName(styleName);
     this._updateStyleMiniStatus(styleName);
 
     // Update parameter sliders
@@ -9886,8 +9882,7 @@ export class StyleManager {
     block.classList.toggle('key-invalid', invalid);
     note.hidden = !invalid;
     if (invalid) {
-      const label = STYLE_SENSOR_LABELS[styleName] || styleName.toUpperCase();
-      note.textContent = messages().legend.keyInvalid(label);
+      note.textContent = messages().legend.keyInvalid(styleDisplayName(styleName));
     } else {
       note.textContent = '';
     }
@@ -10508,7 +10503,7 @@ export class StyleManager {
    */
   _updateStyleMiniStatus(styleName = this.activeStyle) {
     if (!this._styleMiniValue) return;
-    this._styleMiniValue.textContent = STYLE_STATUS_LABELS[styleName] || String(styleName || 'normal').toUpperCase();
+    this._styleMiniValue.textContent = styleDisplayName(styleName);
   }
 
   // ── Orbit Mode ──────────────────────────────

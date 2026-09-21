@@ -351,7 +351,7 @@
         <p class="public-copy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
         <ul class="examples" data-live="examples" aria-label="Des vues à explorer">
           <li><a href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv.cd" data-example="0">Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=noir" data-example="1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night" data-example="1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
           <li><a href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" data-example="2">Le bus qui arrive, en direct.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
           <li><a href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8" data-example="3">Les voitures qui roulent en ce moment, rue par rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
           <li><a href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k" data-example="4">Le vélo libre le plus proche.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
@@ -415,7 +415,7 @@
               <figcaption><span>Les voitures en direct dans les rues, avec les bouchons</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
             </figure>
           </a>
-          <a class="view" data-view="04" href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=noir">
+          <a class="view" data-view="04" href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night">
             <figure>
               <div class="view-image" data-media="view:04">
                 <picture><source media="(min-width: 700px)" srcset="/landing/view-04-480.080922a5.jpg 480w, /landing/view-04-960.ecc730b4.jpg 960w, /landing/view-04-1440.5790e75a.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-04-480.080922a5.jpg" srcset="/landing/view-04-480.080922a5.jpg 480w, /landing/view-04-960.ecc730b4.jpg 960w" sizes="calc(100vw - 44px)" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
@@ -513,9 +513,10 @@
     <p class="subtitle" data-i18n="title.tagline">Aucun angle mort.</p>
   </div>
 
-  <!-- Style indicator. The style's own name is the same word in both
-       languages (NORMAL, CRT, NVG, FLIR…), so it carries `translate="no"`
-       rather than a catalog key it would only ever echo. -->
+  <!-- Style indicator. Most style names are the same word in both languages
+       (NORMAL, CRT, NVG, FLIR…); the one that is not, NUIT / NIGHT, is written
+       by `src/styles/styleNames.js` in the page's language. Either way the
+       value carries `translate="no"`: it is already in the reader's language. -->
   <div id="style-indicator">
     <span class="indicator-label" data-i18n="style.activeLabel">STYLE ACTIF</span>
     <span class="indicator-value" id="active-style-name" translate="no">NORMAL</span>
@@ -1176,7 +1177,7 @@
         </button>
         <button class="style-btn" data-style="noir">
           <span class="btn-icon">◐</span>
-          <span class="btn-label" translate="no">Noir</span>
+          <span class="btn-label" data-i18n="presets.night">Nuit</span>
           <span class="btn-key">6</span>
         </button>
         <button class="style-btn" data-style="snow">

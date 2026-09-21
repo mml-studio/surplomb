@@ -34,6 +34,7 @@ const mgrs = mgrsModule.default ?? mgrsModule;
 import { CITY_POIS } from './locations.js';
 import messages from './hud.i18n.js';
 import { composeLocalityTag } from './hudLocality.js';
+import { styleDisplayName } from './styles/styleNames.js';
 import {
   cachedGeoidHeight,
   ellipsoidalToMslDisplayM,
@@ -856,8 +857,7 @@ export class IntelHUD {
     // Update mode label
     const modeEl = document.getElementById('hud-mode');
     if (modeEl) {
-      const modeNames = { surveillance: 'NVG', thermal: 'FLIR', retro: 'CRT' };
-      modeEl.textContent = modeNames[styleName] || styleName.toUpperCase();
+      modeEl.textContent = styleDisplayName(styleName);
     }
     // Update color scheme
     const colors = HUD_COLORS[styleName] || HUD_COLORS._default;

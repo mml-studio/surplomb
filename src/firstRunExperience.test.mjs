@@ -746,10 +746,16 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // `set_visual_style`, `get_entity_context`) still called the app "God's Eye
   // View" or "GEV" after the fork was renamed Surplomb on 2026-09-15. No enum,
   // no parameter, no tool moved. −3 bytes, one cache bust.
-  assert.equal(block.length, 38198, 'tool schema byte length drifted from the frozen baseline');
+  //
+  // Re-frozen an ELEVENTH time, for a preset's name: the night atlas's button
+  // reads « Nuit » / "Night" since 2026-09-21 while its id stays `noir`, and a
+  // model asked for "le mode nuit" had only the id to go on — and NVG's
+  // "night vision" beside it. `set_visual_style`'s `style` gained a
+  // six-word description. No enum moved. +59 bytes, one cache bust.
+  assert.equal(block.length, 38257, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '11ac6c78659ebab1e3095c016dad5a8bce34121025665a263f251e44b0697893',
+    'ca4584e2c93a276eff7279e6177a6ea05836a2413dea5d4a4ddb9f8c8c96731d',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 

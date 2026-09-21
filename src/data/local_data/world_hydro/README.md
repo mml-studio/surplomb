@@ -49,9 +49,8 @@ two are drawn as different things so a reader is never invited to compare them:
 The layer's taxonomy entry stays **`coverage: 'fr'`**, and that is deliberate.
 The chip says where the layer can be TRUSTED to have the set, and France is
 where it can: ODRÉ entire, down to the 40 kW mill. `global` would promise a
-reader in Lima a register that does not exist — and would fold a world
-companion under the narrower French primary of the *Centrales électriques* row,
-which `layerFusions.test.mjs` refuses outright.
+reader in Lima a register that does not exist. (It sits, since 2026-09-21, on
+the *Réseau électrique et centrales* row, whose primary is the world grid.)
 
 What DID go is the `(FR)` suffix in the row's name: it is **Centrales hydro**
 now, not *Petite hydro (FR)*, because neither half of that name was true.

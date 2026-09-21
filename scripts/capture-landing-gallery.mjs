@@ -127,11 +127,11 @@ export const GALLERY_VIEWS = Object.freeze([
     // The Rhône valley from Cruas to the Bugey, 180 km up and looking north
     // at 58°: the stations stand in relief (70–800 km, src/data/rteGeneration.js)
     // and the grid is the national pack, all four bands and no yard labels.
-    // Under the night atlas (`style=noir`, src/styles/nightAtlas.js): the
+    // Under the night atlas (`style=night`, src/styles/nightAtlas.js): the
     // ground dark, the grid in its night dress, the columns in their colour.
     // Straight down, a column is a square: the scene is oblique on purpose.
     pose: { lat: 44.15, lon: 4.95, alt: 180_000, heading: 0, pitch: -58 },
-    hash: 'v=2&lat=44.15&lon=4.95&alt=180000&heading=0&pitch=-58&l=2.3&style=noir',
+    hash: 'v=2&lat=44.15&lon=4.95&alt=180000&heading=0&pitch=-58&l=2.3&style=night',
     layers: ['power-grid', 'rte-generation'],
     // Nothing here moves on its own: the small orbit is what shows the
     // columns as columns, in parallax against the ground.

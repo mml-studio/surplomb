@@ -216,7 +216,12 @@ const SPOKEN_ALIASES = Object.freeze({
   'local-datacenters': ['datacenters', 'centres de données', 'centres de donnees', 'data centers'],
   'telegeography-submarine-cables': ['câbles sous marins', 'cables sous marins', 'câbles', 'cables', 'submarine cables', 'undersea cables'],
   'local-airports': ['aéroports', 'aeroports', 'aérodromes', 'aerodromes', 'pistes', 'airports', 'airfields', 'runways'],
-  'power-grid': ['réseau électrique', 'reseau electrique', 'lignes haute tension', 'postes électriques', 'postes electriques', 'pylônes', 'pylones', 'power grid', 'high voltage lines', 'substations'],
+  // The row since 2026-09-21: the grid is primary and the power stations are on
+  // it, so the name of the old plants row, « Centrales électriques », reaches
+  // it — the way the bare « météo » reaches the weather row. "Power plants" is
+  // not here: `gevActions.js`'s English table answers it first, with
+  // `rte-generation`, which is on this same row.
+  'power-grid': ['réseau électrique', 'reseau electrique', 'lignes haute tension', 'postes électriques', 'postes electriques', 'pylônes', 'pylones', 'centrales électriques', 'centrales electriques', 'power grid', 'high voltage lines', 'substations'],
   'irve-fr': ['bornes de recharge', 'bornes', 'borne de recharge', 'recharge', 'points de charge', 'irve', 'recharge électrique', 'recharge electrique', 'charge points', 'charging stations', 'ev chargers'],
   // Labelled « Santé & secours » since the GeoDAE defibrillators became a chip
   // on it. The doctors keep every word they had — the row is still mostly

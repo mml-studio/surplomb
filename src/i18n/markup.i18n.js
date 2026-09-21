@@ -454,6 +454,11 @@ export default defineMessages({
     pin: { fr: 'Épingler les styles visuels', en: 'Pin visual presets' },
     pinTitle: { fr: 'Garder les styles visuels ouverts', en: 'Keep visual presets open' },
     styleLabel: { fr: 'Style', en: 'Style' },
+    night: {
+      fr: 'Nuit',
+      en: 'Night',
+      note: 'Button of the night-atlas preset: dark basemap, data in full colour. Its neighbours are CRT, NVG, FLIR — keep it one short word.',
+    },
   },
   mapSource: {
     title: { fr: 'FOND DE CARTE', en: 'MAP SOURCE' },
