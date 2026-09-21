@@ -591,6 +591,17 @@ export function scanShiftNeeded(last, next, minShiftKm = ADDRESS_SCAN_MIN_SHIFT_
  *   ground, exactly like a click on one of its washes, and reaches
  *   `groundCard`; without it the click met an id nobody claimed and was
  *   ignored.
+ * @param {(card: ?object) => void} [config.onSelectionChange]
+ *   Called when the open card changes — a marker or a bare point selected
+ *   (`card`), or the selection dismissed (`null`). For a layer that shows the
+ *   selection somewhere other than on the card: a highlight on the ground, a
+ *   section of the map key. The shell then announces a draw change, so the key
+ *   repaints from the state the hook just wrote.
+ * @param {(card: object) => boolean} [config.compactCard]
+ *   Whether the card on the globe keeps only its title, because the layer
+ *   prints the details elsewhere. Asked each time the card is painted, so a
+ *   layer can answer from the page as it is at that moment — the map key
+ *   folded away or not.
  * @param {typeof fetch} [config.fetchImpl] Injection seam for tests.
  * @returns {object} A layer module.
  */
@@ -613,6 +624,8 @@ export function createAddressScanLayer(config) {
     selectionFor = null,
     onClear = null,
     ownsPick = null,
+    onSelectionChange = null,
+    compactCard = null,
     maxAltitudeM = ADDRESS_SCAN_MAX_ALTITUDE_M,
     // How far the answer actually reaches, in metres. Declared rather than
     // inferred, because only the layer knows: the ceiling says when a scan
@@ -742,12 +755,29 @@ export function createAddressScanLayer(config) {
     _selectedBase = null;
   }
 
+  /**
+   * Tell the layer what is selected now. A hook that throws must not leave the
+   * shell's own selection half-changed, so it is called last and contained.
+   * @param {?object} card
+   */
+  function notifySelection(card) {
+    if (typeof onSelectionChange !== 'function') return;
+    try {
+      onSelectionChange(card);
+    } catch (error) {
+      console.warn(`[Data:${id}] onSelectionChange`, error?.message || error);
+    }
+    announceDrawChanged(_dormant);
+  }
+
   function clearSelection() {
+    const hadSelection = _selectedId !== null;
     restoreSelectedStyle();
     _selectedId = null;
     _groundCard = null;
     clearOverlaySource(id);
     governorRequestRender(`${id}-deselect`);
+    if (hadSelection) notifySelection(null);
   }
 
   /**
@@ -775,9 +805,19 @@ export function createAddressScanLayer(config) {
     };
   }
 
+  /**
+   * The card as the globe paints it: whole, or reduced to its title when the
+   * layer prints the details beside the map (`config.compactCard`).
+   */
+  function overlayCard(card) {
+    const anchored = anchoredCard(card);
+    if (!anchored || typeof compactCard !== 'function' || compactCard(card) !== true) return anchored;
+    return { ...anchored, details: [] };
+  }
+
   /** Paint one card, whatever it was built from. */
   function paintCard(card) {
-    const entry = createAddressScanOverlayEntry(anchoredCard(card));
+    const entry = createAddressScanOverlayEntry(overlayCard(card));
     if (!entry) return false;
     setOverlaySourceVisible(id, true);
     setOverlayEntries(id, [entry], ADDRESS_SCAN_OVERLAY_OPTIONS);
@@ -820,6 +860,7 @@ export function createAddressScanLayer(config) {
     _selectedId = card.id;
     paintCard(card);
     governorRequestRender(`${id}-ground`);
+    notifySelection(card);
     return true;
   }
 
@@ -850,6 +891,7 @@ export function createAddressScanLayer(config) {
     _selectedId = targetId;
     paintCard(card);
     governorRequestRender(`${id}-select`);
+    notifySelection(card);
     return true;
   }
 
@@ -958,7 +1000,7 @@ export function createAddressScanLayer(config) {
     if (!_selectedId) return;
     const card = cardById(_selectedId);
     if (!card) { clearSelection(); return; }
-    const entry = createAddressScanOverlayEntry(anchoredCard(card));
+    const entry = createAddressScanOverlayEntry(overlayCard(card));
     if (entry) setOverlayEntries(id, [entry], ADDRESS_SCAN_OVERLAY_OPTIONS);
   }
 
@@ -1364,6 +1406,17 @@ export function createAddressScanLayer(config) {
      */
     selectCard(entityId) {
       return selectEntity(entityId);
+    },
+
+    /**
+     * Close the open card, as Escape does. For a control outside the globe —
+     * the map key's close button — that shows the same selection.
+     * @returns {boolean} True when a card was open.
+     */
+    clearSelectedCard() {
+      if (_selectedId === null) return false;
+      clearSelection();
+      return true;
     },
 
     /**

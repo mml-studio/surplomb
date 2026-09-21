@@ -24,6 +24,7 @@ import {
   dvfReference,
   dvfSaleCard,
   dvfSaleKindLine,
+  dvfSalePanel,
   dvfSectionCard,
   dvfVoiceSummary,
   dvfYearsLabel,
@@ -320,4 +321,24 @@ test('what the voice is handed is named in the reader’s language', () => {
   assert.equal(en.subject, 'property sales published in the DVF register');
   assert.equal(withLocale('fr', () => dvfVoiceSummary({ dormant: false, salesFound: 1 })).subject,
     'ventes immobilières publiées au registre DVF');
+});
+
+test('the key card of a selected sale, in English', () => {
+  const sale = {
+    id: '2024-816565', date: '2024-05-31', nature: 'Vente', valeur: 340_750,
+    types: ['Appartement'], prixM2: 9_465, dwellingSurface: 36, dwellingCount: 1,
+    address: '27 RUE PORT DU TEMPLE', parcelle: '69382000AI0008',
+  };
+  const reference = { medianPrixM2: 5_317, territory: 'Lyon 2e Arrondissement' };
+  const panel = withLocale('en', () => dvfSalePanel(sale, reference, { parcelId: sale.parcelle }));
+  assertNoFrench({ ...panel, title: null }, { allow: ['Lyon 2e Arrondissement'] });
+  assert.equal(panel.meta, 'Sale · May 31, 2024');
+  assert.equal(panel.headline, '€340,750');
+  assert.deepEqual(panel.lines, ['Apartment — 36 m²']);
+  assert.deepEqual(panel.metric.caption, [
+    '+25% and over',
+    '1.78 × the median of Lyon 2e Arrondissement (€5,317/m²)',
+  ]);
+  assert.equal(panel.footnote, 'Cadastral parcel 69382000AI0008');
+  assert.equal(panel.link.label, 'Source: geolocated property sales (DVF), data.gouv.fr');
 });

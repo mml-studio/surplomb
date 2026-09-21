@@ -20,6 +20,7 @@ import {
   legendBarWidths,
   legendScopeLabel,
   legendScopeOf,
+  legendSelectionOf,
 } from './manager.js';
 import {
   contextSnapshotLayerIds,
@@ -5011,6 +5012,97 @@ test('a block can carry BOTH asides, and they are never the same line', async ()
     mgr._refreshTogglePanel();
     assert.equal(collectByClass(items, 'map-legend-source').length, 0);
     assert.equal(collectByClass(items, 'map-legend-note').length, 0);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a legend selection needs a title, and a link must be https', () => {
+  assert.equal(legendSelectionOf(null), null);
+  assert.equal(legendSelectionOf({ title: '   ' }), null, 'a card with no name is not printed');
+  const card = legendSelectionOf({
+    title: ' 27 RUE PORT DU TEMPLE ',
+    headline: '340 750 €',
+    lines: ['Appartement — 36 m²', '', null],
+    metric: { color: '#ff6b4a', value: '9 465 €/m²', caption: '+25 % et plus' },
+    link: { href: 'javascript:alert(1)', label: 'Source' },
+  });
+  assert.equal(card.title, '27 RUE PORT DU TEMPLE');
+  assert.equal(card.key, '27 RUE PORT DU TEMPLE', 'the title keys a card that names no key');
+  assert.deepEqual(card.lines, ['Appartement — 36 m²']);
+  assert.deepEqual(card.metric.caption, ['+25 % et plus'], 'one caption is a list of one');
+  assert.equal(card.link, null, 'a URL a register could have written is refused whole');
+  assert.deepEqual(
+    legendSelectionOf({ title: 'x', link: { href: 'https://www.data.gouv.fr/', label: 'Source' } }).link,
+    { href: 'https://www.data.gouv.fr/', label: 'Source' },
+  );
+});
+
+test('the selected object prints under its own key block, with a close that reaches the layer', async () => {
+  // The card used to open over the middle of the map, on the block the reader
+  // was reading. It now sits under the classes its colour belongs to.
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => {
+      const fragment = makeControlElement();
+      fragment.isFragment = true;
+      return fragment;
+    },
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  let cleared = 0;
+  layer.module.clearSelectedCard = () => { cleared += 1; return true; };
+  let selection = {
+    key: 'sale:1',
+    title: '27 RUE PORT DU TEMPLE',
+    meta: 'Vente · 31 mai 2024',
+    headline: '340 750 €',
+    lines: ['Appartement — 36 m²'],
+    metric: { color: '#ff6b4a', value: '9 465 €/m²', caption: ['+25 % et plus', '1,78 × le médian'] },
+    footnote: 'Parcelle cadastrale 69382000AI0008',
+    link: { href: 'https://www.data.gouv.fr/', label: 'Source' },
+  };
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [{ label: 'NAV', color: '#4fd8ff', count: 2 }],
+    legendSelection: selection,
+  });
+  mgr.register(layer.module);
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+
+    const cards = collectByClass(items, 'map-legend-selection');
+    assert.equal(cards.length, 1);
+    const text = (className) => collectByClass(cards[0], className).map((node) => node.textContent);
+    assert.deepEqual(text('map-legend-selection-title'), ['27 RUE PORT DU TEMPLE']);
+    assert.deepEqual(text('map-legend-selection-headline'), ['340 750 €']);
+    assert.deepEqual(text('map-legend-selection-caption'), ['+25 % et plus', '1,78 × le médian']);
+    assert.equal(collectByClass(cards[0], 'map-legend-selection-swatch')[0].style.background, '#ff6b4a');
+    const link = collectByClass(cards[0], 'map-legend-selection-link')[0];
+    assert.equal(link.href, 'https://www.data.gouv.fr/');
+    assert.equal(link.rel, 'noopener');
+
+    // The close goes to the layer that owns the selection, through the one
+    // delegated listener the key already has.
+    const close = collectByClass(cards[0], 'map-legend-selection-close')[0];
+    assert.equal(close.dataset.selectionLayer, 'satellites');
+    items.listeners.click({ target: { closest: (selector) => (selector.startsWith('.map-legend-selection-close') ? close : null) } });
+    assert.equal(cleared, 1);
+
+    selection = null;
+    mgr._refreshTogglePanel();
+    assert.equal(collectByClass(items, 'map-legend-selection').length, 0, 'no selection, no card');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

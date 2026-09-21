@@ -3090,6 +3090,29 @@ surface used to be the seventh.
 `optIn` companion of `dvf-sales` since 2026-09-21, like `comparables-fr`: the
 *Estimer un bien* (“Value a property”) chip turns it on.
 
+**A selected sale is printed in the key, and its plot is lit** (2026-09-21).
+`createAddressScanLayer` gained two hooks: `onSelectionChange(card | null)`,
+called on every open and every dismissal (then a `gev:layer-draw-changed` so
+the key repaints), and `compactCard(card)`, asked at each paint, which keeps
+only the card's title on the globe. `dvf-sales` uses both: on a desktop with
+the key open and visible (`dvfKeyCarriesSelection`), the card on the globe is
+a one-line address tag and the whole card goes to the key through the new
+`legendSelection` slot of `getRowControls()` — title, meta line, headline,
+lines, a metric with swatch and captions, a footnote and an `https:` link,
+normalised by `manager.legendSelectionOf` and rendered under the block's
+classes, with a × that calls the layer's new `clearSelectedCard()`. A new
+selection is scrolled into view once. With the key folded, hidden by the
+clean view, or on a phone (`html[data-shell="phone"]` hides the section;
+`phoneSelection.js` keeps its tab), the globe card stays whole. The plot the
+sale bought — or, above 600 m, the plot or section under the click — is
+redrawn as an unpickable `GroundPrimitive` + `GroundPolylinePrimitive` pair
+in the class colour (fill 0.6, 3 px ring 0.95), which on the photoreal mesh
+paints the building's walls and roof; the ring is NOT the selection cyan,
+because a ground polyline drapes down every façade on the boundary.
+`selectionFor` redirects a washed plot's edge to the marker of the sale the
+wash is painted from. The bottom class of the ramp is `#0f8f55` (was the
+turquoise `#3dd6c4`): two greens apart by lightness, ΔE76 42.1.
+
 ### `avis-valeur` — the estimate, and the two uncertainties it never merges
 
 `avis-valeur` (`vv`, `/api/avis-valeur`, `src/data/avisValeurFeed.js` +

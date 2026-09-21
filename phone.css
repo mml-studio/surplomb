@@ -1224,6 +1224,13 @@ html[data-shell="phone"] #phone-sheet .data-active-strip {
   margin: 0 0 6px;
 }
 
+/* The phone keeps the selection in its own tab (`phoneSelection.js`) and the
+   card on the globe whole; a second copy under the key would be one more
+   screen of the same sale. */
+html[data-shell="phone"] .map-legend-selection {
+  display: none;
+}
+
 html[data-shell="phone"] #phone-sheet #map-legend {
   border: 0;
   background: none;

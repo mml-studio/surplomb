@@ -948,3 +948,83 @@ test('an anchor that answers nothing leaves the card on its marker', async (t) =
   assert.equal(entry.placement, 'above', 'and the shipped default side is kept');
   layer.disable();
 });
+
+// ── A selection shown somewhere other than on the card ──────────────────────
+
+test('onSelectionChange hears every open and every dismissal, once each', async (t) => {
+  withDocument(t);
+  const seen = [];
+  const { layer } = await scannedLayer({
+    render({ dataSource, point }) {
+      dataSource.entities.add({
+        id: 'centre',
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        name: 'Le titre',
+        description: 'une ligne · une autre',
+      });
+      return 1;
+    },
+    onSelectionChange: (card) => { seen.push(card ? card.id : null); },
+  });
+  assert.equal(layer.selectCard('centre'), true);
+  assert.equal(layer.selectCard('centre'), true, 'the same card again');
+  assert.deepEqual(seen, ['centre'], 'reselecting the open card is not a change');
+  assert.equal(layer.clearSelectedCard(), true);
+  assert.equal(layer.clearSelectedCard(), false, 'nothing left to close');
+  assert.deepEqual(seen, ['centre', null]);
+  assert.equal(layer.getStats().selectedId, null);
+  layer.disable();
+  assert.deepEqual(seen, ['centre', null], 'switching off with nothing open says nothing');
+});
+
+test('compactCard keeps the title on the globe and drops the details', async (t) => {
+  withDocument(t);
+  let compact = true;
+  const { layer } = await scannedLayer({
+    render({ dataSource, point }) {
+      dataSource.entities.add({
+        id: 'centre',
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        name: 'Le titre',
+        description: 'une ligne · une autre',
+      });
+      return 1;
+    },
+    compactCard: () => compact,
+  });
+  layer.selectCard('centre');
+  let entry = getOverlaySourceEntries('scan-test')[0];
+  assert.equal(entry.title, 'Le titre');
+  assert.deepEqual(entry.details, [], 'the details are printed elsewhere');
+  layer.clearSelectedCard();
+  // Asked at each paint: a key folded away gets the whole card back.
+  compact = false;
+  layer.selectCard('centre');
+  entry = getOverlaySourceEntries('scan-test')[0];
+  assert.deepEqual(entry.details, ['une ligne', 'une autre']);
+  layer.disable();
+});
+
+test('a selection hook that throws leaves the selection standing', async (t) => {
+  withDocument(t);
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => { warnings.push(args.join(' ')); };
+  t.after(() => { console.warn = warn; });
+  const { layer } = await scannedLayer({
+    render({ dataSource, point }) {
+      dataSource.entities.add({
+        id: 'centre',
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        name: 'Le titre',
+      });
+      return 1;
+    },
+    onSelectionChange: () => { throw new Error('boom'); },
+  });
+  assert.equal(layer.selectCard('centre'), true);
+  assert.equal(layer.getStats().selectedId, 'centre');
+  assert.equal(getOverlaySourceEntries('scan-test').length, 1, 'the card is painted all the same');
+  assert.ok(warnings.some((line) => line.includes('boom')));
+  layer.disable();
+});
