@@ -7,6 +7,7 @@ import {
   setMobilityDocksGrouped,
 } from './mobilityDockBridge.js';
 import bikeshareLayer, {
+  _bikeshareAltitudeGateForTest,
   _bikeshareDocksForGroupsForTest,
   bikeshareCoveredSystems,
   BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS,
@@ -274,4 +275,19 @@ test('from the city-wide view the groups count the docks, and the docks stop dra
   assert.ok([full, empty, closed].every((dock) => dock.point.show === true));
   _resetMobilityDockBridgeForTest();
   _setBikeshareStationsForTest();
+});
+
+test('while the groups count the docks, the docks are loaded as high as the groups are drawn', () => {
+  // The fleets' bubbles are drawn up to 250 km since 2026-09-21 and say
+  // « vélos en station compris »: a gate left at 50 km took the Vélib' bikes
+  // out of every bubble between the two.
+  _resetMobilityDockBridgeForTest();
+  assert.equal(_bikeshareAltitudeGateForTest(150_000), false, 'alone, the docks stop at 50 km');
+  setMobilityDocksGrouped(true);
+  assert.equal(_bikeshareAltitudeGateForTest(150_000), true);
+  assert.equal(_bikeshareAltitudeGateForTest(265_000), false, 'and not past the groups');
+  setMobilityDocksGrouped(false);
+  assert.equal(_bikeshareAltitudeGateForTest(40_000), true);
+  assert.equal(_bikeshareAltitudeGateForTest(150_000), false);
+  _resetMobilityDockBridgeForTest();
 });

@@ -18,7 +18,7 @@ import sharedMobilityFranceLayer, {
   cameraSharedMobilityBox,
   createSharedMobilitySelectedOverlayEntry,
   sharedMobilityOperator,
-  stationColor,
+  stationMark,
   stationFillLevel,
   stationPointSize,
   vehicleKindLabel,
@@ -35,6 +35,9 @@ import sharedMobilityFranceLayer, {
   _refreshSharedMobilityPinsForTest,
   _refreshSharedMobilityBubblesForTest,
   _sharedMobilityPinGeometryForTest,
+  _setSharedMobilityPlacesForTest,
+  _refreshSharedMobilityPlacesForTest,
+  sharedMobilityBoxDegForAltitude,
   SHARED_MOBILITY_KIND_FILTERS,
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID,
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_OPTIONS,
@@ -46,6 +49,7 @@ import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
 import {
   _resetMobilityDockBridgeForTest,
   mobilityDocksGrouped,
+  publishMobilityDockKey,
   publishMobilityDocks,
 } from './mobilityDockBridge.js';
 import { SHARED_MOBILITY_PIN_SPACING_PX } from './sharedMobilityPins.js';
@@ -114,7 +118,7 @@ function stationRecord(overrides = {}) {
     operator: resolveMobilityOperator(system.name),
     position: Cesium.Cartesian3.fromDegrees(object.lon, object.lat, 12),
     point: { color: null, pixelSize: 0, show: true },
-    baseColor: stationColor(object),
+    baseColor: stationMark(object).disc,
     baseSize: stationPointSize(object),
   };
 }
@@ -129,6 +133,43 @@ test('the camera gate answers a city view and refuses a regional one', () => {
   assert.ok(cameraSharedMobilityBox(viewerWithView({
     south: 44, west: 0, north: 44 + GBFS_MAX_BOX_DEG - 0.001, east: 1,
   })));
+});
+
+/**
+ * A camera the box rule can read: its view rectangle, the point the centre of
+ * the screen meets the globe (or none: sky), and its altitude.
+ */
+function tiltedViewer({ view, focus, altitude }) {
+  return {
+    scene: { canvas: { clientWidth: 1440, clientHeight: 900 }, globe: { ellipsoid: Cesium.Ellipsoid.WGS84 } },
+    camera: {
+      computeViewRectangle: () => Cesium.Rectangle.fromDegrees(view.west, view.south, view.east, view.north),
+      pickEllipsoid: () => (focus ? Cesium.Cartesian3.fromDegrees(focus.lon, focus.lat, 0) : undefined),
+      positionCartographic: { height: altitude },
+      pitch: Cesium.Math.toRadians(-18),
+    },
+    entities: { remove() {} },
+  };
+}
+
+test('a tilted view is asked about around what it looks at, not refused', () => {
+  // Memel's camera of 2026-09-21: 2.5 km over Paris's suburbs, pitched down
+  // 18°, the horizon on screen — a view rectangle far past the proxy's 3°.
+  // It printed « Zoome pour charger » over a street full of scooters.
+  const horizon = { south: 48.85, west: -1.5, north: 52.4, east: 6.3 };
+  const focus = { lat: 48.962, lon: 2.38 };
+  const box = cameraSharedMobilityBox(tiltedViewer({ view: horizon, focus, altitude: 2_500 }));
+  assert.ok(box, 'a box, not a refusal');
+  const span = sharedMobilityBoxDegForAltitude(2_500);
+  assert.ok(Math.abs(span - (2_500 * 6) / 111_320) < 1e-9, 'six altitudes of ground');
+  assert.ok(box.north - box.south <= span + 1e-9 && box.east - box.west <= span + 1e-9);
+  assert.ok(box.south < focus.lat && focus.lat < box.north && box.west < focus.lon && focus.lon < box.east,
+    'centred on what the screen centre shows');
+  // Never wider than the proxy answers, however high.
+  const high = cameraSharedMobilityBox(tiltedViewer({ view: { south: 40, west: -5, north: 52, east: 9 }, focus, altitude: 240_000 }));
+  assert.ok(high.north - high.south <= GBFS_MAX_BOX_DEG && high.east - high.west <= GBFS_MAX_BOX_DEG);
+  // Sky at the centre and a view too wide to take whole: nothing to ask about.
+  assert.equal(cameraSharedMobilityBox(tiltedViewer({ view: horizon, focus: null, altitude: 2_500 })), null);
 });
 
 test('every vehicle kind pins a distinct silhouette and keeps a readable label', () => {
@@ -170,18 +211,20 @@ test('a station with no availability data is neutral, not empty', () => {
   // the second one is actionable for someone deciding where to walk.
   assert.equal(stationFillLevel({ available: null, capacity: 20 }), 'unknown');
   assert.equal(stationFillLevel({ available: 0, capacity: 20 }), 'low');
-  const unknown = stationColor({ available: null, capacity: 20 }, '#4fd94f');
-  const empty = stationColor({ available: 0, capacity: 20 }, '#4fd94f');
-  assert.notEqual(unknown, empty);
-  // The level is the ring's own hue poured in: a full Clem' dock is Clem'
-  // emerald, never the green of another operator.
-  assert.equal(stationColor({ available: 20, capacity: 20 }, '#1fcf94'), 'rgba(31,207,148,1)');
-  assert.match(empty, /^rgba\(79,217,79,0\.1\)$/);
-  assert.equal(stationColor({ available: 18, capacity: 20 }), stationColor({ available: 20, capacity: 20 }));
-  assert.notEqual(stationColor({ available: 1, capacity: 20 }), stationColor({ available: 18, capacity: 20 }));
+  const unknown = stationMark({ available: null, capacity: 20 }, '#98e26a');
+  const empty = stationMark({ available: 0, capacity: 20 }, '#98e26a');
+  assert.notEqual(unknown.disc, empty.disc);
+  // The level is the SIZE of a core in the ring's own hue: a full Clem' dock
+  // holds Clem' orchid, never the green of another operator.
+  const full = stationMark({ available: 20, capacity: 20 }, '#e07acc');
+  assert.equal(full.core, '#e07acc');
+  assert.equal(full.ring, '#e07acc');
+  assert.equal(empty.core, null, 'an emptied dock is its ring alone');
+  assert.deepEqual(stationMark({ available: 18, capacity: 20 }), stationMark({ available: 20, capacity: 20 }));
+  assert.notDeepEqual(stationMark({ available: 1, capacity: 20 }), stationMark({ available: 18, capacity: 20 }));
   // A closed station reads closed whatever it holds.
-  assert.equal(stationColor({ available: 18, capacity: 20, renting: false }),
-    stationColor({ available: 0, capacity: 20, renting: false }));
+  assert.deepEqual(stationMark({ available: 18, capacity: 20, renting: false }),
+    stationMark({ available: 0, capacity: 20, renting: false }));
   // Size never collapses to nothing when capacity is missing.
   assert.ok(stationPointSize({ capacity: null }) > 0);
   assert.ok(stationPointSize({ capacity: 60 }) > stationPointSize({ capacity: 5 }));
@@ -840,6 +883,100 @@ test('the Vélib\' bikes join the group of their cell, and the docks are told th
   _setSharedMobilityPayloadForTest({ ...groupsPayload(), clusters: undefined });
   _refreshSharedMobilityBubblesForTest();
   assert.equal(mobilityDocksGrouped(), false);
+  _resetMobilityDockBridgeForTest();
+  clearKindFilter();
+});
+
+// --- The country view ----------------------------------------------------------
+//
+// Above 250 km the layer draws the places a network runs in, from the index:
+// a name and a bar of its operators, no number.
+
+function placesPayload() {
+  return {
+    places: [
+      {
+        id: 'paris', name: 'Paris', lat: 48.87, lon: 2.34, weight: 20_000,
+        bbox: { south: 48.74, west: 2.16, north: 48.98, east: 2.54 },
+        systems: [{ id: 'a', name: 'Lime Paris' }, { id: 'b', name: 'Voi Paris' }, { id: 'c', name: 'Vélib Paris et communes limitrophes' }],
+      },
+      {
+        id: 'versailles', name: 'Versailles', lat: 48.8, lon: 2.13, weight: 300,
+        bbox: { south: 48.78, west: 2.1, north: 48.82, east: 2.16 },
+        systems: [{ id: 'd', name: 'Voi Versailles' }],
+      },
+      {
+        id: 'lyon', name: 'Lyon', lat: 45.76, lon: 4.84, weight: 9_000,
+        bbox: { south: 45.7, west: 4.77, north: 45.82, east: 4.92 },
+        systems: [{ id: 'e', name: 'Dott Lyon' }],
+      },
+    ],
+  };
+}
+
+test('the country view labels its places, and a label that would overlap a heavier one yields', () => {
+  const sprites = fakeCollection();
+  const labels = fakeCollection();
+  // Paris and Versailles 15 px apart on screen, Lyon far off.
+  const screen = { paris: { x: 700, y: 300 }, versailles: { x: 690, y: 312 }, lyon: { x: 800, y: 600 } };
+  const byLon = new Map([[2.34, screen.paris], [2.13, screen.versailles], [4.84, screen.lyon]]);
+  _setSharedMobilityStateForTest({
+    viewer: {
+      scene: { canvas: { clientWidth: 1440, clientHeight: 900 } },
+      camera: { positionWC: Cesium.Cartesian3.fromDegrees(2.4, 46.6, 1_100_000) },
+    },
+    records: [],
+    groups: { sprites, labels },
+    chrome: [],
+    project: (scene, position) => {
+      const carto = Cesium.Cartographic.fromCartesian(position);
+      return byLon.get(Number(Cesium.Math.toDegrees(carto.longitude).toFixed(2)));
+    },
+  });
+  _setSharedMobilityPlacesForTest(placesPayload());
+  assert.deepEqual(_refreshSharedMobilityPlacesForTest(), ['Paris', 'Lyon'],
+    'Versailles yields to Paris rather than printing over it');
+  // A name and a bar, no count: none is counted at this scale.
+  assert.deepEqual([...labels.drawn].map((label) => label.text).sort(), ['Lyon', 'Paris']);
+  const controls = sharedMobilityFranceLayer.getRowControls();
+  const operators = controls.legend.filter((row) => row.channel === 'Fournisseurs');
+  assert.deepEqual(operators.map((row) => row.label), ['Voi', 'Dott', 'Lime', "Vélib'"],
+    'the operators of every place on screen, the one in two places first');
+  assert.ok(operators.every((row) => row.count === undefined), 'no number beside a name');
+  assert.ok(operators.every((row) => row.toggle?.param === 'operator'));
+  assert.equal(controls.legendSegments.length, 0, 'a place carries operators, not vehicle kinds');
+  assert.match(controls.note, /ville/);
+  // A focus narrows the labels to the places its operator runs in.
+  sharedMobilityFranceLayer.setParams({ operator: 'dott' });
+  assert.deepEqual(_refreshSharedMobilityPlacesForTest(), ['Lyon']);
+  sharedMobilityFranceLayer.setParams({ operator: 'all' });
+  _setSharedMobilityPlacesForTest(null, { countryView: false });
+  assert.deepEqual(_refreshSharedMobilityPlacesForTest(), [], 'out of the country view, no label is left');
+  _setSharedMobilityStateForTest({ viewer: null, records: [] });
+});
+
+test('under the groups a station is counted into its bubble, and the row prints one dock key', () => {
+  const sprites = fakeCollection();
+  const labels = fakeCollection();
+  _setSharedMobilityStateForTest({ viewer: null, records: [], groups: { sprites, labels } });
+  const payload = groupsPayload();
+  payload.clusters[0].id = gbfsClusterCellKey(48.86, 2.34, 0.008);
+  // A Lime-run dock in the first group's cell, holding 9.
+  payload.stations = [{ id: 'lime:dock', system: 'lime', lat: 48.86, lon: 2.34, available: 9, capacity: 20, byKind: { ebike: 9 } }];
+  _setSharedMobilityPayloadForTest(payload);
+  const drawn = _refreshSharedMobilityBubblesForTest();
+  assert.equal(drawn.find((bubble) => bubble.id === payload.clusters[0].id).n, 1_243, '1,234 parked and 9 docked');
+  // Under the groups no dock is drawn, so none is explained.
+  const underGroups = sharedMobilityFranceLayer.getRowControls().legend.map((row) => row.label);
+  assert.ok(!underGroups.includes('bien remplie'), JSON.stringify(underGroups));
+  // Back at the street: the fleets' block explains its docks — unless the
+  // Vélib' block above already does.
+  _setSharedMobilityPayloadForTest({ ...payload, clusters: undefined, clusterDeg: undefined });
+  _refreshSharedMobilityBubblesForTest();
+  assert.ok(sharedMobilityFranceLayer.getRowControls().legend.some((row) => row.label === 'bien remplie'));
+  publishMobilityDockKey(() => true);
+  assert.ok(!sharedMobilityFranceLayer.getRowControls().legend.some((row) => row.label === 'bien remplie'),
+    'the three dock lines once per row');
   _resetMobilityDockBridgeForTest();
   clearKindFilter();
 });

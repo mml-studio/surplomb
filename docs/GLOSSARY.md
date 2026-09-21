@@ -260,6 +260,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | VAE, Trottinette, Scooter | E-bike, E-scooter, Moped | |
 | Fournisseurs (mobilité partagée), Tout afficher | Operators, Show all | The shared-mobility key. |
 | bien remplie, à moitié, presque vide (station) | well stocked, half full, nearly empty | A dock's fill. |
+| ville équipée, vue France (mobilité partagée) | city with a network, country view | The shared-mobility layer above 250 km: one label per place. |
 | point de repère (PR) | kilometer post (PR) | |
 | tige (bouée) | stem | |
 | mer forte / grosse | Rough / High | WMO's own English. |

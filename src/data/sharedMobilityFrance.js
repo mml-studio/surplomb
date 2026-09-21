@@ -73,7 +73,7 @@ import { formatDecimal, formatList, formatNumber } from '../i18n/format.js';
 import messages from './sharedMobilityFrance.i18n.js';
 import {
   dockFillLegend,
-  mobilityDockFill,
+  mobilityDockMark,
   isMobilityOperatorId,
   curatedMobilityOperators,
   mobilityOperatorShortLabel,
@@ -83,6 +83,7 @@ import operatorMessages from './mobilityOperators.i18n.js';
 import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
 import { selectSharedMobilityPins, sharedMobilityPinRank } from './sharedMobilityPins.js';
 import {
+  mobilityDockKeyShown,
   onMobilityDocksChanged,
   readMobilityDocks,
   setMobilityDocksGrouped,
@@ -91,11 +92,14 @@ import {
   addDocksToSharedMobilityBubbles,
   foldSharedMobilityClusters,
   mergeSharedMobilityBubbles,
+  placeSharedMobilityLabels,
   sharedMobilityBubbleBar,
   sharedMobilityClusterCell,
 } from './sharedMobilityClusters.js';
 import { pickAt } from './pickAt.js';
 import { profileCountBudget } from '../perfProfile.js';
+import { cameraFocusPoint, cameraViewBox } from './viewGate.js';
+import { focusedViewBox } from './viewportBox.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const SHARED_MOBILITY_FR_LAYER_ID = 'shared-mobility-fr';
@@ -107,15 +111,48 @@ export const SHARED_MOBILITY_FR_OVERLAY_SOURCE_OPTIONS = Object.freeze({
   moving: false,
 });
 
-// --- Activation / load gating ----------------------------------------------
+// --- Scale / load gating ------------------------------------------------------
+//
+// THE LAYER ANSWERS AT EVERY SCALE — since 2026-09-21. It used to refuse two
+// cameras with a « Zoome pour charger » card: anything above 80 km, and any
+// view whose rectangle passed 3° — which a TILTED camera does from 2 km up as
+// soon as the horizon is on screen. Memel met the second over Paris's suburbs
+// and asked for « au moins certaines informations » instead. Three tiers now:
+//
+//   STREET   — dots and pins, the vehicles themselves (below `PIN_CEILING_M`
+//              of view range);
+//   CITY / REGION — the proxy's groups on its grid, a count per bubble, up to
+//              `COUNTRY_VIEW_ALTITUDE_M`;
+//   COUNTRY  — one label per place a network runs in, from the shipped index
+//              (`gbfsNetworkPlaces`): where and who, no number, one small
+//              request whatever the camera does. Pressed, it flies there.
 /**
- * Altitude (m) below which the layer loads. A parked scooter is a street-scale
- * object: above this it is a sub-pixel speck and the request would stop being
- * a viewport query.
+ * Camera altitude (m) above which the layer draws PLACES instead of fleets.
+ * From 250 km a desktop frames ~290 km of ground — a region; above it the
+ * 3° box the proxy answers is a corner of the screen, and a count for a corner
+ * would read as a count for France.
  */
-const ACTIVATION_ALTITUDE_M = 80_000;
-const ACTIVATION_ENTER_ALTITUDE_M = ACTIVATION_ALTITUDE_M - 4_000;
-const ACTIVATION_EXIT_ALTITUDE_M = ACTIVATION_ALTITUDE_M + 4_000;
+const COUNTRY_VIEW_ALTITUDE_M = 250_000;
+const COUNTRY_VIEW_ENTER_M = COUNTRY_VIEW_ALTITUDE_M + 10_000;
+const COUNTRY_VIEW_EXIT_M = COUNTRY_VIEW_ALTITUDE_M - 10_000;
+/**
+ * The request box: `focusedViewBox`, this many metres of ground per metre of
+ * altitude, around the point the screen centre is looking at.
+ *
+ * The view rectangle of a tilted camera reaches the horizon — Memel's view over
+ * Paris's suburbs, 2 km up, framed more than 3° of it — and the far half of
+ * that screen is where a parked bike is a tenth of a pixel. Six altitudes of
+ * ground is the near and middle distance: at the landing's 1,300 m the view
+ * itself is the smaller box and is asked for whole; from 2.5 km, pitched
+ * 18° down, it is 15 km around what the centre of the screen shows. Six and
+ * not the power grid's four: a fleet is dense, and the top of a tilted screen
+ * left empty reads as missing data.
+ */
+const VIEW_BOX_PER_ALTITUDE = 6;
+/** Never ask for less than the proxy's own snap step: a smaller box is free. */
+const VIEW_BOX_MIN_DEG = 0.03;
+/** Metres per degree of latitude. */
+const M_PER_DEG_LAT = 111_320;
 /** Debounce (ms) on camera-driven viewport reloads. */
 const CAMERA_DEBOUNCE_MS = 450;
 /**
@@ -168,32 +205,44 @@ const FLOOR_FILL_KM = 10;
 //          proxy counts the vehicles on its grid and each group is a bubble:
 //          the proxy's count and a bar of its operators
 //          (`sharedMobilityClusters.js`). Pressed, it zooms in.
-//   RING — A STATION is a dot RINGED in its operator's hue and filled with
-//          the same hue as far as it is full (`mobilityDockFill`): solid,
-//          tinted, or an empty ring — the one number a rider acts on, and one
-//          no vehicle has.
+//   RING — A STATION is a dark disc RINGED in its operator's hue, holding a
+//          core of the same hue as large as it is full (`mobilityDockMark`):
+//          large, small, or none — the one number a rider acts on, and one no
+//          vehicle has. The dark disc is also what tells it from a vehicle.
 //
 // The 20 px plate every vehicle wore until then — silhouette, operator hue
 // and, up close, a monogram — was the right mark for ONE vehicle and a carpet
 // for two thousand: over the landing's view it covered the street it stood on.
-/** Vehicle dot, in CSS px before the distance ramp: 6 of colour inside a 1 px rim. */
-const VEHICLE_DOT_PX = 6;
-/** The dot's rim: dark, so a pale hue keeps its edge on a pale map. */
-const VEHICLE_DOT_RIM_PX = 1;
-const VEHICLE_DOT_RIM_COLOR = 'rgba(0,0,0,0.6)';
 /**
- * Dot scale ramp: 8 px total up close, about 4.5 px at the gate altitude.
+ * Vehicle dot, in CSS px before the distance ramp: 7 of colour inside a 1.5 px
+ * rim — 10 px in all, the mock's dot.
+ *
+ * It was 6 inside 1 (8 px) under a 60 % rim until Memel's review of
+ * 2026-09-21 — « ça ne se voit pas du tout » over the photorealistic mesh,
+ * where a street is grey, a roof is grey and a pale hue on either has no edge.
+ * The mock's dots read because each is a saturated disc inside a near-black
+ * ring: the ring is what separates it from the roof, the hue from the others.
+ */
+const VEHICLE_DOT_PX = 7;
+/** The dot's rim: near-black, so every hue keeps its edge on a pale roof. */
+const VEHICLE_DOT_RIM_PX = 1.5;
+const VEHICLE_DOT_RIM_COLOR = 'rgba(8,13,11,0.9)';
+/**
+ * Dot scale ramp: 10 px total up close, 7 px far off.
  *
  * Cesium does NOT interpolate this linearly: `czm_nearFarScalar` works on
  * SQUARED distance and then takes `pow(t, 0.2)`, so most of the fall happens
  * just past `near`. That is the shape wanted here — the dot is at full size
- * only where a pin can stand beside it.
+ * only where a pin can stand beside it. The far value was 0.55, which put a
+ * 4.4 px speck on the far half of any tilted view: under the mock's floor.
  */
-const VEHICLE_DOT_SCALE = Object.freeze({ near: 1_500, nearValue: 1, far: 45_000, farValue: 0.55 });
+const VEHICLE_DOT_SCALE = Object.freeze({ near: 1_500, nearValue: 1, far: 45_000, farValue: 0.7 });
 /** A selected vehicle's dot, under its cyan pin. */
-const SELECTED_VEHICLE_DOT_PX = 9;
+const SELECTED_VEHICLE_DOT_PX = 10;
 /**
- * Camera altitude (m) at or below which pins are drawn.
+ * View range (m) at or below which pins are drawn — the camera's altitude for
+ * a nadir view, the distance to what the screen centre shows for a tilted one
+ * (`viewRangeM`).
  *
  * The landing's Paris view sits at 1,300 m. At 3,500 m a pin already stands
  * for a whole neighbourhood of dots, and above it a silhouette names one
@@ -241,8 +290,9 @@ const BAR_IMAGE = `data:image/svg+xml;base64,${toBase64(
 )}`;
 /** Ids of bubble primitives, apart from any record id. */
 const BUBBLE_ID_PREFIX = 'shared-mobility-fr-group:';
-const STATION_POINT_MIN_PX = 7;
-const STATION_POINT_MAX_PX = 15;
+/** A station's disc, inside its ring: the half-full core stays 3 px across. */
+const STATION_POINT_MIN_PX = 8;
+const STATION_POINT_MAX_PX = 14;
 /** Operator ring on a station dot. Two pixels is the thinnest that reads. */
 const STATION_RING_PX = 2;
 const SELECTED_POINT_PX = 18;
@@ -414,6 +464,14 @@ let _bubbleLabels = null;
 let _bubbles = new Map();
 /** Vehicles the drawn bubbles stand for, after the filters. */
 let _bubbleTotal = 0;
+/** The `/networks` answer — the country view's places — fetched once: the
+ *  index they come from only changes with a deploy. */
+let _placesPayload = null;
+let _placesRequest = null;
+/** Drawn place labels by id: `{id, name, lat, lon, bbox, position, bg, label, bars}`. */
+let _places = new Map();
+/** Every place on screen under the filters, drawn or yielded — what the key names. */
+let _placesInView = [];
 let _records = new Map();
 let _enabled = false;
 let _clickHandler = null;
@@ -431,7 +489,8 @@ let _lastUpdate = null;
 let _systems = [];
 let _systemsMatched = 0;
 let _truncated = false;
-let _altitudeGateOpen = false;
+/** Whether the country view — places, not fleets — is drawn. */
+let _countryView = false;
 let _lastBox = null;
 /** The last viewport answer, kept so a filter change repaints without a
  *  refetch — and so the chips can count the half they are hiding. */
@@ -469,6 +528,18 @@ export function sharedMobilityOperator(record) {
 /** The dot a record draws — every station and every vehicle has one. */
 function recordPrimitive(record) {
   return record?.point || null;
+}
+
+/**
+ * Show or hide a record's marks: the dot, a station's availability core, and
+ * the pin over a vehicle. The core only where its level draws one, and not
+ * under the selection's cyan.
+ */
+function setRecordShown(record, visible) {
+  const primitive = recordPrimitive(record);
+  if (primitive) primitive.show = visible;
+  if (record.core) record.core.show = visible && record.coreShown === true && record.id !== _selectedId;
+  if (record.pin) record.pin.show = visible;
 }
 
 /** Display label for a vehicle kind. */
@@ -589,14 +660,15 @@ export function stationFillLevel(station) {
 }
 
 /**
- * A station's fill, as CSS: its operator's hue poured in as far as it is full
- * (`mobilityDockFill`), so the level never borrows another operator's hue.
+ * A station's mark, as CSS: a dark disc in its operator's ring, with a core as
+ * large as it is full (`mobilityDockMark`) — the same mark the Vélib' docks of
+ * the row wear.
  * @param {Object} station Wire station.
  * @param {string} [operatorColor] The ring's hue.
- * @returns {string} `rgba(…)`.
+ * @returns {{disc: string, ring: string, core: ?string, coreScale: number}}
  */
-export function stationColor(station, operatorColor) {
-  return mobilityDockFill(stationFillLevel(station), operatorColor);
+export function stationMark(station, operatorColor) {
+  return mobilityDockMark(stationFillLevel(station), operatorColor);
 }
 
 /** Rendered size for a station, scaled by capacity. */
@@ -610,23 +682,37 @@ export function stationPointSize(station) {
 }
 
 /**
- * Camera view box, clamped to the proxy's ceiling.
- * A wider view returns null and the layer reports zoom-in guidance instead of
- * a quietly cropped answer.
+ * The box span a camera at this altitude asks for, in degrees — see
+ * {@link VIEW_BOX_PER_ALTITUDE}.
+ * @param {number} altitudeM
+ * @returns {number}
+ */
+export function sharedMobilityBoxDegForAltitude(altitudeM) {
+  if (!Number.isFinite(altitudeM) || altitudeM <= 0) return GBFS_MAX_BOX_DEG;
+  const span = (altitudeM * VIEW_BOX_PER_ALTITUDE) / M_PER_DEG_LAT;
+  return Math.min(GBFS_MAX_BOX_DEG, Math.max(VIEW_BOX_MIN_DEG, span));
+}
+
+/**
+ * The box the layer asks for: the view, bounded around what the camera is
+ * looking AT (`focusedViewBox`), never wider than the proxy answers.
+ *
+ * It used to be the view rectangle or nothing: a rectangle over 3° returned
+ * null and the layer printed « Zoome pour charger les véhicules partagés ».
+ * A tilted camera's rectangle reaches the horizon, so that was every oblique
+ * view from about 2 km up — the camera this globe hands its reader. Null now
+ * only when there is no ground to ask about: the centre of the screen is sky
+ * and the view does not fit, or the view straddles the antimeridian, which the
+ * proxy refuses.
  * @param {Cesium.Viewer} viewer
  * @returns {?{south:number, west:number, north:number, east:number}}
  */
 export function cameraSharedMobilityBox(viewer) {
-  const rectangle = viewer?.camera?.computeViewRectangle?.();
-  if (!rectangle) return null;
-  const south = Cesium.Math.toDegrees(rectangle.south);
-  const north = Cesium.Math.toDegrees(rectangle.north);
-  const west = Cesium.Math.toDegrees(rectangle.west);
-  const east = Cesium.Math.toDegrees(rectangle.east);
-  if (![south, west, north, east].every(Number.isFinite)) return null;
-  if (west >= east || south >= north) return null;
-  if (north - south > GBFS_MAX_BOX_DEG || east - west > GBFS_MAX_BOX_DEG) return null;
-  return { south, west, north, east };
+  const view = cameraViewBox(viewer);
+  if (!view) return null;
+  const box = focusedViewBox(view, cameraFocusPoint(viewer), sharedMobilityBoxDegForAltitude(cameraAltitudeM(viewer)));
+  if (!box || box.west < -180 || box.east > 180) return null;
+  return box;
 }
 
 function cameraAltitudeM(viewer) {
@@ -634,14 +720,32 @@ function cameraAltitudeM(viewer) {
   return Number.isFinite(carto?.height) ? carto.height : Infinity;
 }
 
-function updateAltitudeGate(viewer) {
+/**
+ * Ground distance to what the screen centre shows, in metres: the altitude
+ * over the sine of the pitch, held at 20° off the horizon like
+ * `metresPerPixel`. Straight down it IS the altitude — so every ceiling that
+ * was an altitude keeps its value for a nadir camera — and a camera pitched
+ * 18° down from 2.5 km is 7 km from what it looks at, which is a city view,
+ * not a street one.
+ * @param {?Cesium.Viewer} viewer
+ * @returns {number}
+ */
+function viewRangeM(viewer) {
   const altitude = cameraAltitudeM(viewer);
-  if (_altitudeGateOpen) {
-    if (altitude > ACTIVATION_EXIT_ALTITUDE_M) _altitudeGateOpen = false;
-  } else if (altitude < ACTIVATION_ENTER_ALTITUDE_M) {
-    _altitudeGateOpen = true;
+  const pitch = viewer?.camera?.pitch;
+  const sinPitch = Math.max(Math.sin(Math.PI * 20 / 180), Math.abs(Math.sin(Number.isFinite(pitch) ? pitch : -Math.PI / 2)));
+  return altitude / sinPitch;
+}
+
+/** Whether the camera is high enough for the country view, with hysteresis. */
+function updateCountryView(viewer) {
+  const altitude = cameraAltitudeM(viewer);
+  if (_countryView) {
+    if (altitude < COUNTRY_VIEW_EXIT_M) _countryView = false;
+  } else if (altitude > COUNTRY_VIEW_ENTER_M) {
+    _countryView = true;
   }
-  return _altitudeGateOpen;
+  return _countryView;
 }
 
 /**
@@ -751,7 +855,7 @@ export function buildSharedMobilitySelectionLabel(record, nowMs = Date.now()) {
     const available = Number.isFinite(object.available) ? object.available : null;
     const inventory = stationInventory(object.byKind);
     if (available === null) {
-      // Stated, for the same reason `stationColor` paints this case neutral:
+      // Stated, for the same reason `stationMark` paints this case neutral:
       // « on ne sait pas » and « il n'y a rien » are different facts, and only
       // the second one is worth walking to.
       details.push(card.noInventory);
@@ -859,6 +963,8 @@ function restoreRecordStyle(record) {
   if (!record?.point) return;
   record.point.color = Cesium.Color.fromCssColorString(record.baseColor || SELECTED_COLOR);
   record.point.pixelSize = record.baseSize;
+  // Called while the record is still the selected one: its core comes back.
+  if (record.core) record.core.show = record.point.show && record.coreShown === true;
 }
 
 function clearSelection({ repin = true } = {}) {
@@ -885,6 +991,9 @@ function selectObject(id) {
   // says it with its pin, which the pass below forces and draws in cyan.
   record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
   record.point.pixelSize = record.type === 'vehicle' ? SELECTED_VEHICLE_DOT_PX : SELECTED_POINT_PX;
+  // A selected dock is one cyan disc in its ring: its core would sit on the
+  // highlight as a second, smaller dock.
+  if (record.core) record.core.show = false;
   refreshPins();
   const entry = createSharedMobilitySelectedOverlayEntry(record);
   if (entry) {
@@ -909,6 +1018,11 @@ function installClickHandler(viewer) {
     const bubble = pickedBubble(picked);
     if (bubble) {
       flyToBubble(bubble);
+      return;
+    }
+    const place = pickedPlace(picked);
+    if (place) {
+      flyToPlace(place);
       return;
     }
     if (picked) {
@@ -936,22 +1050,21 @@ function installClickHandler(viewer) {
  * not move — so this is the layer's only per-frame work.
  */
 function onPreRender() {
-  if (!_enabled || (!_records.size && !_bubbles.size)) return;
+  if (!_enabled || (!_records.size && !_bubbles.size && !_places.size)) return;
   const camera = _viewer?.camera;
   if (!camera) return;
   const occluder = horizonOccluder(camera);
   for (const record of _records.values()) {
-    const primitive = recordPrimitive(record);
-    if (!primitive) continue;
-    const visible = occluder.isPointVisible(record.position);
-    primitive.show = visible;
-    if (record.pin) record.pin.show = visible;
+    if (!recordPrimitive(record)) continue;
+    setRecordShown(record, occluder.isPointVisible(record.position));
   }
-  for (const entry of _bubbles.values()) {
-    const visible = occluder.isPointVisible(entry.position);
-    entry.bg.show = visible;
-    entry.label.show = visible;
-    for (const bar of entry.bars) bar.show = visible;
+  for (const map of [_bubbles, _places]) {
+    for (const entry of map.values()) {
+      const visible = occluder.isPointVisible(entry.position);
+      entry.bg.show = visible;
+      entry.label.show = visible;
+      for (const bar of entry.bars) bar.show = visible;
+    }
   }
 }
 
@@ -1032,7 +1145,9 @@ function pinImageFor(record) {
  */
 function refreshPins() {
   if (!_pins) return 0;
-  const close = cameraAltitudeM(_viewer) <= PIN_CEILING_M;
+  // Close to the street AND answered in vehicles: a pin names one vehicle, and
+  // under the groups the few loose vehicles of a sparse cell are not a street.
+  const close = viewRangeM(_viewer) <= PIN_CEILING_M && !Array.isArray(_lastPayload?.clusters);
   let wanted;
   if (close) {
     wanted = selectSharedMobilityPins(pinCandidates(), {
@@ -1111,9 +1226,14 @@ function metresPerPixel(viewer) {
   return (2 * (altitude / sinPitch) * Math.tan(fovy / 2)) / height;
 }
 
-/** The grid step to ask the proxy for, or null for the dots-and-pins view. */
+/**
+ * The grid step to ask the proxy for, or null for the dots-and-pins view.
+ * Decided on the view RANGE, not the altitude: a camera 2 km up that looks at
+ * the horizon is looking at a city, and the street view's dots, thinned to
+ * the cap over 15 km of it, were the one reading it could not give.
+ */
 function clusterCellForView() {
-  if (cameraAltitudeM(_viewer) <= PIN_CEILING_M) return null;
+  if (viewRangeM(_viewer) <= PIN_CEILING_M) return null;
   return sharedMobilityClusterCell(metresPerPixel(_viewer));
 }
 
@@ -1153,10 +1273,14 @@ function drawBubble(bubble, existing) {
       pixelOffset: new Cesium.Cartesian2(0, BUBBLE_TEXT_OFFSET_PX),
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
+    settleGlyphs();
   } else {
     entry.bg.position = position;
     entry.label.position = position;
-    if (entry.label.text !== text) entry.label.text = text;
+    if (entry.label.text !== text) {
+      entry.label.text = text;
+      settleGlyphs();
+    }
   }
   // Segments are few (five at most) and cheap: rewritten whole.
   for (const bar of entry.bars) _bubbleSprites.remove(bar);
@@ -1179,6 +1303,46 @@ function removeBubble(entry) {
   if (entry.bg) _bubbleSprites?.remove(entry.bg);
   if (entry.label) _bubbleLabels?.remove(entry.label);
   for (const bar of entry.bars) _bubbleSprites?.remove(bar);
+}
+
+/**
+ * Frames after a label's text changes, in ms, when one more is asked for.
+ *
+ * A label's glyphs reach the texture atlas a frame or two AFTER the label is
+ * drawn, and in request-render mode nothing asks for that frame: measured
+ * 2026-09-21 on the country view, « Grenoble » painted as « reno e » and stayed
+ * so until the camera moved. Three late requests cost three frames and cover
+ * the atlas's own pace on a slow device.
+ */
+const GLYPH_SETTLE_MS = Object.freeze([120, 350, 800]);
+let _glyphTimers = [];
+
+/** Ask for the frames a new label's glyphs need — see {@link GLYPH_SETTLE_MS}. */
+function settleGlyphs() {
+  for (const timer of _glyphTimers) clearTimeout(timer);
+  _glyphTimers = GLYPH_SETTLE_MS.map((ms) => setTimeout(() => {
+    if (_enabled) governorRequestRender('shared-mobility-fr-glyphs');
+  }, ms));
+}
+
+/**
+ * The answer's own stations as docks for the groups: under the row's filters,
+ * with what they hold now. The same shape the Vélib' layer publishes
+ * (`mobilityDockBridge.js`), so both fold into the bubbles by one rule.
+ * @param {?Object} payload
+ * @returns {Array<{lat:number, lon:number, bikes:number, operator:{id:string, color:string}}>}
+ */
+function answerDocks(payload) {
+  const out = [];
+  for (const station of Array.isArray(payload?.stations) ? payload.stations : []) {
+    const bikes = Number(station?.available);
+    if (!(bikes > 0) || station.renting === false) continue;
+    if (!matchesKindFilter(_kindFilter, 'station', station)) continue;
+    if (!matchesOperatorFilter(payload, station)) continue;
+    const operator = payloadOperator(payload, station.system);
+    out.push({ lat: station.lat, lon: station.lon, bikes, operator: { id: operator.id, color: operator.color } });
+  }
+  return out;
 }
 
 /**
@@ -1207,7 +1371,8 @@ function refreshBubbles() {
   // stop drawing themselves — see `mobilityDockBridge.js`. They arrive already
   // under the row's filters, which `bikeshare.js` holds too.
   const box = _viewer ? cameraSharedMobilityBox(_viewer) : null;
-  const folded = addDocksToSharedMobilityBubbles(fleets, readMobilityDocks(), payload.clusterDeg, box);
+  const docks = [...readMobilityDocks(), ...answerDocks(payload)];
+  const folded = addDocksToSharedMobilityBubbles(fleets, docks, payload.clusterDeg, box);
   const scene = _viewer?.scene;
   const projected = [];
   for (const bubble of folded) {
@@ -1281,6 +1446,249 @@ function flyToBubble(entry) {
   });
 }
 
+// --- Places, for the country view -------------------------------------------
+
+/** Ids of place primitives, apart from any record or group id. */
+const PLACE_ID_PREFIX = 'shared-mobility-fr-place:';
+/** A place label: the bubble's height, its name padded either side. */
+const PLACE_HEIGHT_PX = BUBBLE_HEIGHT_PX;
+const PLACE_PAD_PX = 12;
+const PLACE_MAX_WIDTH_PX = 184;
+/** Widths are stepped so the labels share a handful of background images. */
+const PLACE_WIDTH_STEP_PX = 8;
+const _placeImages = new Map();
+
+/**
+ * The label's glass, at its own width: the bubble's rounded rectangle, drawn
+ * per width step rather than stretched, which would oval its corners.
+ * @param {number} widthPx
+ * @returns {string}
+ */
+function placeImage(widthPx) {
+  let image = _placeImages.get(widthPx);
+  if (!image) {
+    const w = widthPx * 2;
+    image = `data:image/svg+xml;base64,${toBase64(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="56" viewBox="0 0 ${w} 56">`
+      + `<rect x="1.5" y="1.5" width="${w - 3}" height="53" rx="14" fill="rgba(20,32,28,0.92)"`
+      + ' stroke="rgba(255,255,255,0.32)" stroke-width="2"/></svg>',
+    )}`;
+    _placeImages.set(widthPx, image);
+  }
+  return image;
+}
+
+let _measureContext;
+/** A name's width in the bubble's font, in CSS px; estimated without a DOM. */
+function placeTextWidth(text) {
+  if (_measureContext === undefined) {
+    try {
+      _measureContext = typeof document !== 'undefined' && typeof document.createElement === 'function'
+        ? document.createElement('canvas').getContext?.('2d') || null
+        : null;
+    } catch {
+      _measureContext = null;
+    }
+    if (_measureContext) _measureContext.font = BUBBLE_FONT;
+  }
+  return _measureContext ? _measureContext.measureText(text).width : text.length * 7.4;
+}
+
+function placeWidth(name) {
+  const raw = Math.ceil(placeTextWidth(name)) + 2 * PLACE_PAD_PX;
+  const stepped = Math.ceil(raw / PLACE_WIDTH_STEP_PX) * PLACE_WIDTH_STEP_PX;
+  return Math.min(PLACE_MAX_WIDTH_PX, Math.max(BUBBLE_WIDTH_PX, stepped));
+}
+
+/** The operators of a place, one each, biggest network first. */
+function placeOperators(place) {
+  const byId = new Map();
+  for (const system of place?.systems || []) {
+    const operator = resolveMobilityOperator(system.name);
+    if (!byId.has(operator.id)) byId.set(operator.id, { id: operator.id, color: operator.color, n: 1, operator });
+  }
+  return [...byId.values()];
+}
+
+/** Put one place on screen, or rewrite the one already there. */
+function drawPlace(place, existing) {
+  const position = objectPosition(place);
+  const id = `${PLACE_ID_PREFIX}${place.id}`;
+  const image = placeImage(place.w);
+  const entry = existing || { id: place.id, bg: null, label: null, bars: [] };
+  entry.name = place.name;
+  entry.lat = place.lat;
+  entry.lon = place.lon;
+  entry.bbox = place.bbox;
+  entry.position = position;
+  if (!entry.bg) {
+    entry.bg = _bubbleSprites.add({
+      id,
+      position,
+      image,
+      width: place.w,
+      height: PLACE_HEIGHT_PX,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    });
+    entry.label = _bubbleLabels.add({
+      id,
+      position,
+      text: place.name,
+      font: BUBBLE_FONT,
+      fillColor: Cesium.Color.WHITE,
+      horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      pixelOffset: new Cesium.Cartesian2(0, BUBBLE_TEXT_OFFSET_PX),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    });
+    settleGlyphs();
+  } else {
+    entry.bg.position = position;
+    if (entry.bg.image !== image) {
+      entry.bg.image = image;
+      entry.bg.width = place.w;
+    }
+    entry.label.position = position;
+  }
+  const barWidth = place.w - 2 * PLACE_PAD_PX;
+  for (const bar of entry.bars) _bubbleSprites.remove(bar);
+  // One segment per operator, equal: the place says WHO runs there, and a
+  // share would need the count this view deliberately does not have.
+  entry.bars = sharedMobilityBubbleBar(place.operators, barWidth).map((segment) => _bubbleSprites.add({
+    id,
+    position,
+    image: BAR_IMAGE,
+    width: Math.max(1, segment.w),
+    height: BUBBLE_BAR_HEIGHT_PX,
+    color: Cesium.Color.fromCssColorString(segment.color),
+    horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+    verticalOrigin: Cesium.VerticalOrigin.CENTER,
+    pixelOffset: new Cesium.Cartesian2(segment.x - barWidth / 2, BUBBLE_BAR_OFFSET_PX),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+  }));
+  return entry;
+}
+
+function clearPlaces() {
+  for (const entry of _places.values()) removeBubble(entry);
+  _places = new Map();
+  _placesInView = [];
+}
+
+/**
+ * Re-draw the country view's places for the camera as it is: the operator
+ * focus applied, the far side of the globe and the chrome left out, and a
+ * label that would overlap a heavier one yielded (`placeSharedMobilityLabels`).
+ * Runs on every arrival — a zoom makes room — and is a diff, like the groups.
+ * @returns {number} Labels drawn.
+ */
+function refreshPlaces() {
+  const places = _placesPayload?.places;
+  if (!_bubbleSprites || !_bubbleLabels || !_countryView || !Array.isArray(places)) {
+    clearPlaces();
+    return 0;
+  }
+  const scene = _viewer?.scene;
+  const width = scene?.canvas?.clientWidth || 0;
+  const height = scene?.canvas?.clientHeight || 0;
+  const occluder = _viewer?.camera ? horizonOccluder(_viewer.camera) : null;
+  const chrome = _readChrome();
+  const inView = [];
+  const candidates = [];
+  for (const place of places) {
+    const operators = placeOperators(place);
+    if (_operatorFilter && !operators.some((operator) => operator.id === _operatorFilter)) continue;
+    const ground = Cesium.Cartesian3.fromDegrees(place.lon, place.lat, 0);
+    if (occluder && !occluder.isPointVisible(ground)) continue;
+    const screen = scene ? _projectToWindow(scene, ground, _scratchWindow) : null;
+    const x = screen ? screen.x : place.lon * 1e7;
+    const y = screen ? screen.y : -place.lat * 1e7;
+    if (scene && (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > width || y > height)) continue;
+    const w = placeWidth(place.name);
+    const entry = { ...place, operators, x, y, w, h: PLACE_HEIGHT_PX };
+    inView.push(entry);
+    if (chrome.length && overlayRectIntersectsAny({ x: x - w / 2, y: y - PLACE_HEIGHT_PX / 2, w, h: PLACE_HEIGHT_PX }, chrome)) continue;
+    candidates.push(entry);
+  }
+  const next = new Map();
+  for (const place of placeSharedMobilityLabels(candidates)) {
+    next.set(place.id, drawPlace(place, _places.get(place.id)));
+  }
+  for (const [id, entry] of _places) {
+    if (!next.has(id)) removeBubble(entry);
+  }
+  _places = next;
+  _placesInView = inView;
+  // The row counts the labels drawn: a zoom that made room changes it.
+  _count = next.size;
+  governorRequestRender('shared-mobility-fr-places');
+  return next.size;
+}
+
+/** The place a pick landed on, or null. */
+function pickedPlace(picked) {
+  const id = typeof picked?.id === 'string' ? picked.id : picked?.primitive?.id;
+  if (typeof id !== 'string' || !id.startsWith(PLACE_ID_PREFIX)) return null;
+  return _places.get(id.slice(PLACE_ID_PREFIX.length)) || null;
+}
+
+/**
+ * Fly to a place: its networks' whole footprint in frame, pitched like the
+ * groups' own flight — low enough that the grid counts it on arrival.
+ */
+function flyToPlace(entry) {
+  const camera = _viewer?.camera;
+  const box = entry?.bbox;
+  if (!camera || !box) return;
+  const sphere = Cesium.BoundingSphere.fromRectangle3D(
+    Cesium.Rectangle.fromDegrees(box.west, box.south, box.east, box.north),
+  );
+  const pitch = Math.min(camera.pitch ?? -Math.PI / 2, Cesium.Math.toRadians(-50));
+  camera.flyToBoundingSphere(sphere, {
+    offset: new Cesium.HeadingPitchRange(camera.heading, pitch, Math.max(8_000, sphere.radius * 2.2)),
+    duration: 1.6,
+  });
+}
+
+/**
+ * The country view: the places, from the `/networks` answer fetched once.
+ * Clears the fleet — no fleet answer describes a view this wide.
+ */
+async function loadPlaces() {
+  if (_records.size || _bubbles.size) clearFleet();
+  _lastPayload = null;
+  _systems = [];
+  _systemsMatched = 0;
+  _truncated = false;
+  if (!_placesPayload) {
+    _loading = true;
+    try {
+      _placesRequest ??= fetch('/api/shared-mobility-fr/networks').then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      });
+      _placesPayload = await _placesRequest;
+    } catch (error) {
+      _placesRequest = null;
+      _loading = false;
+      if (!_enabled) return;
+      console.warn('[Data:SharedMobilityFR] places load failed:', error?.message || error);
+      _error = error?.message || 'shared-mobility places unavailable';
+      _status = 'error';
+      _rowControlsListener?.();
+      return;
+    }
+    _loading = false;
+    if (!_enabled || !_countryView) return;
+  }
+  refreshPlaces();
+  _count = _places.size;
+  _lastUpdate = Date.now();
+  _error = null;
+  _status = _places.size > 0 ? 'ready' : 'empty';
+  _rowControlsListener?.();
+}
+
 /**
  * Replace the rendered set with a viewport answer.
  *
@@ -1330,7 +1738,12 @@ function reconcile(payload) {
 
   const drawn = [];
   const seen = new Set();
-  for (const station of stations) {
+  // Under the groups a station is counted into its cell's bubble
+  // (`answerDocks`), like the Vélib' docks — not drawn beneath it. From 150 km
+  // over Paris the docks of Rouen and Beauvais were clumps of rings between
+  // the bubbles, counted nowhere.
+  const grouped = Array.isArray(payload.clusters);
+  for (const station of grouped ? [] : stations) {
     if (drawn.length >= MAX_RENDERED_OBJECTS) break;
     const id = station.id;
     if (!id || seen.has(id)) continue;
@@ -1364,22 +1777,34 @@ function reconcile(payload) {
     const position = objectPosition(object);
     const operator = operatorFor(object.system);
     if (entry.type === 'station') {
-      const color = stationColor(object, operator.color);
+      const mark = stationMark(object, operator.color);
       const size = stationPointSize(object);
       const point = _points.add({
         id,
         position,
-        color: Cesium.Color.fromCssColorString(color),
+        color: Cesium.Color.fromCssColorString(mark.disc),
         pixelSize: size,
-        // Fill answers "how full", ring answers "whose".
-        outlineColor: Cesium.Color.fromCssColorString(operator.color),
+        // The core answers "how full", the ring answers "whose".
+        outlineColor: Cesium.Color.fromCssColorString(mark.ring),
         outlineWidth: STATION_RING_PX,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 90_000, 0.35),
       });
+      // Its own point, the same id — a click on it is a click on the dock —
+      // added right after the disc, so it paints over it.
+      const core = mark.core
+        ? _points.add({
+          id,
+          position,
+          color: Cesium.Color.fromCssColorString(mark.core),
+          pixelSize: Math.max(2, size * mark.coreScale),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 90_000, 0.35),
+        })
+        : null;
       _records.set(id, {
         id, type: 'station', object, system: systemsById.get(object.system) || {},
-        operator, point, position, baseColor: color, baseSize: size,
+        operator, point, core, coreShown: Boolean(core), position, baseColor: mark.disc, baseSize: size,
       });
       continue;
     }
@@ -1451,6 +1876,7 @@ function reanchor() {
     record.position = next;
     const primitive = recordPrimitive(record);
     if (primitive) primitive.position = next;
+    if (record.core) record.core.position = next;
     // A pin stands on its dot; one left behind would point at the ellipsoid.
     if (record.pin) record.pin.position = next;
     moved += 1;
@@ -1538,21 +1964,34 @@ async function loadViewport({ force = false } = {}) {
   // `cameraSettle.js`: an arrival on any other view has to be read afresh.
   markViewportRead(_viewer, SHARED_MOBILITY_FR_LAYER_ID);
 
-  if (!updateAltitudeGate(_viewer)) {
-    _status = 'zoom-in';
-    _error = null;
-    _loading = false;
-    _lastPayload = null;
-    if (_records.size || _bubbles.size) clearFleet();
+  if (updateCountryView(_viewer)) {
+    // A fleet request still in flight describes a lower camera: drop it.
+    _requestGeneration += 1;
+    _inFlight?.abort?.();
+    _inFlight = null;
+    _lastBox = null;
+    await loadPlaces();
     return;
+  }
+  if (_places.size || _placesInView.length) {
+    // Down from the country view: its labels, count and key go now, not when
+    // the first fleet answer lands a few seconds later.
+    clearPlaces();
+    _count = 0;
+    _loading = true;
+    _rowControlsListener?.();
   }
   const box = cameraSharedMobilityBox(_viewer);
   if (!box) {
-    _status = 'zoom-in';
+    // No ground to ask about: the centre of the screen is sky. Not a « zoom
+    // in » — no altitude would help — so not the card either.
+    const changed = _status !== 'sky';
+    _status = 'sky';
     _error = null;
     _loading = false;
     _lastPayload = null;
     if (_records.size || _bubbles.size) clearFleet();
+    if (changed) _rowControlsListener?.();
     return;
   }
 
@@ -1570,6 +2009,7 @@ async function loadViewport({ force = false } = {}) {
   _inFlight = controller;
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   _loading = true;
+  let concluded = false;
 
   try {
     const params = new URLSearchParams({
@@ -1603,12 +2043,14 @@ async function loadViewport({ force = false } = {}) {
     _lastUpdate = Date.now();
     _error = null;
     _status = _count > 0 ? 'ready' : 'empty';
+    concluded = true;
   } catch (error) {
     if (error?.name === 'AbortError') return;
     if (generation !== _requestGeneration) return;
     console.warn('[Data:SharedMobilityFR] viewport load failed:', error?.message || error);
     _error = error?.message || 'shared-mobility feed unavailable';
     _status = 'error';
+    concluded = true;
   } finally {
     clearTimeout(timer);
     if (generation === _requestGeneration) {
@@ -1616,6 +2058,12 @@ async function loadViewport({ force = false } = {}) {
       _inFlight = null;
     }
   }
+  // THE KEY IS TOLD, NOW. The panel repaints on a toggle, on the 60 s poll and
+  // when the view changes territory — never because an answer landed — so the
+  // key printed the answer BEFORE this one: measured 2026-09-21 on the
+  // landing's link, the fleet was drawn at 15 s and the key appeared at 61 s,
+  // and after a pan it kept the previous view's operators.
+  if (concluded) _rowControlsListener?.();
 }
 
 function onCameraChanged() {
@@ -1656,6 +2104,8 @@ function onCameraSettled() {
   // are chosen again here, on arrival, and not only on the load path.
   refreshPins();
   refreshBubbles();
+  // A zoom inside the country view makes room for the labels that yielded.
+  if (_countryView) refreshPlaces();
   void loadViewport();
 }
 
@@ -1772,10 +2222,74 @@ function legendTally() {
 
 const fr = (value) => formatNumber(Number(value));
 
+/**
+ * The key of the country view: who runs where, among the places on screen.
+ *
+ * No count on a line — at this scale none is counted, and « Lime 12 » beside
+ * the fleets' « Lime 751 » would read as twelve bikes. The number of places
+ * goes in the tooltip, in words. Each line still focuses its operator, which
+ * here narrows the labels to the cities it runs in — « where is Lime in
+ * France » in one press. No family control: a place carries operators, not
+ * vehicle kinds.
+ * @returns {{chips: Array, legend: Array<object>, note: string, legendSegments: Array}}
+ */
+function countryRowControls() {
+  const om = operatorMessages().legend;
+  const byOperator = new Map();
+  for (const place of _placesInView) {
+    for (const { operator } of place.operators) {
+      const seen = byOperator.get(operator.id);
+      if (seen) seen.count += 1;
+      else byOperator.set(operator.id, { operator, count: 1 });
+    }
+  }
+  const ranked = [...byOperator.values()]
+    .sort((a, b) => b.count - a.count || a.operator.label.localeCompare(b.operator.label));
+  let listed = ranked.slice(0, MAX_OPERATOR_LEGEND_ROWS);
+  const focused = ranked.find(({ operator }) => operator.id === _operatorFilter);
+  if (focused && !listed.includes(focused)) listed = [...listed.slice(0, MAX_OPERATOR_LEGEND_ROWS - 1), focused];
+  const legend = listed.map(({ operator, count }) => {
+    const active = operator.id === _operatorFilter;
+    return {
+      label: operator.label,
+      color: operator.color,
+      channel: om.operators,
+      toggle: { param: 'operator', value: active ? 'all' : operator.id, fanOut: true },
+      off: Boolean(_operatorFilter) && !active,
+      blurb: active ? om.focused(operator.label) : messages().legend.placeOperator(operator.label, fr(count), count === 1),
+    };
+  });
+  const hidden = ranked.filter((entry) => !listed.includes(entry));
+  if (hidden.length) {
+    legend.push({
+      label: messages().legend.moreOperators(hidden.length),
+      color: TAIL_LEGEND_TINT,
+      channel: om.operators,
+      blurb: messages().legend.alsoInView(hidden.map((entry) => entry.operator.label).join(', ')),
+    });
+  }
+  if (_operatorFilter && !focused) {
+    legend.push({ label: om.showAll, action: true, channel: om.operators, toggle: { param: 'operator', value: 'all', fanOut: true } });
+  }
+  return {
+    chips: [],
+    legend,
+    note: messages().legend.placesNote,
+    legendSegments: [],
+    legendSegmentsLabel: messages().legend.segmentsLabel,
+  };
+}
+
 function buildLoadingLabel() {
   const m = messages().row;
-  if (_status === 'zoom-in') return m.zoomIn;
+  if (_status === 'sky') return m.lookDown;
   if (_loading) return _records.size ? m.refreshing : m.searching;
+  if (_countryView && _status !== 'error') {
+    const places = _placesInView.length;
+    const parts = [m.places(fr(places), places === 1)];
+    if (_operatorFilter) parts.push(m.operatorOnly(focusedOperatorLabel()));
+    return parts.join(' · ');
+  }
   if (_status === 'empty') {
     // A filter that hides everything has to own it: « aucun véhicule ne se
     // signale ici » would blame the feed for the reader's own choice.
@@ -1837,6 +2351,8 @@ const sharedMobilityFranceLayer = {
     registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _bubbleLabels);
     _pinnedIds = new Set();
     _bubbles = new Map();
+    _places = new Map();
+    _placesInView = [];
 
     _enabled = false;
     _records = new Map();
@@ -1849,7 +2365,7 @@ const sharedMobilityFranceLayer = {
     _systems = [];
     _systemsMatched = 0;
     _truncated = false;
-    _altitudeGateOpen = false;
+    _countryView = false;
     _lastBox = null;
     _lastPayload = null;
     resetFloorRetries();
@@ -1868,7 +2384,8 @@ const sharedMobilityFranceLayer = {
     _overlayHost.setVisible(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
     registerPickOwner(SHARED_MOBILITY_FR_LAYER_ID, (pickedId) => _records.has(pickedId)
-      || (typeof pickedId === 'string' && pickedId.startsWith(BUBBLE_ID_PREFIX)));
+      || (typeof pickedId === 'string'
+        && (pickedId.startsWith(BUBBLE_ID_PREFIX) || pickedId.startsWith(PLACE_ID_PREFIX))));
     _unsubscribeDocks?.();
     // New availability or a filter on the docks: the groups count again,
     // from the answer in hand.
@@ -1895,13 +2412,14 @@ const sharedMobilityFranceLayer = {
   disable(viewer) {
     _enabled = false;
     _requestGeneration += 1;
-    _altitudeGateOpen = false;
+    _countryView = false;
     clearTimeout(_cameraDebounceTimer);
     _cameraDebounceTimer = null;
     _inFlight?.abort?.();
     _inFlight = null;
 
     clearFleet();
+    clearPlaces();
     _unsubscribeDocks?.();
     _unsubscribeDocks = null;
     _overlayHost.setVisible(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID, false);
@@ -1971,7 +2489,13 @@ const sharedMobilityFranceLayer = {
     _operatorFilter = operator;
     // Repaint from the answer already in hand. A filter is a view of what
     // arrived, not a different question to ask the proxy.
-    if (_lastPayload) {
+    if (_countryView) {
+      // Places carry operators, not vehicle families: the focus narrows them,
+      // a family filter is held for the fleets below.
+      refreshPlaces();
+      _count = _places.size;
+      _status = _count > 0 ? 'ready' : 'empty';
+    } else if (_lastPayload) {
       reconcile(_lastPayload);
       _status = _count > 0 ? 'ready' : 'empty';
     } else {
@@ -2067,7 +2591,9 @@ const sharedMobilityFranceLayer = {
       count: _count,
       lastUpdate: _lastUpdate,
       loading: _loading,
-      status: _status === 'ready' ? 'ok' : _status,
+      // `sky` is guidance, not a state the manager knows: reported idle, so
+      // no « zoom in » card is raised for a camera no zoom would help.
+      status: _status === 'ready' ? 'ok' : (_status === 'sky' ? 'idle' : _status),
     };
     const label = buildLoadingLabel();
     if (label) stats.loadingLabel = label;
@@ -2109,6 +2635,7 @@ const sharedMobilityFranceLayer = {
    * @returns {{chips: Array, legend: Array<object>, legendSegments: Array<object>, legendScope: object}}
    */
   getRowControls() {
+    if (_countryView) return countryRowControls();
     const tally = legendTally();
     const om = operatorMessages().legend;
     const legend = [];
@@ -2158,7 +2685,10 @@ const sharedMobilityFranceLayer = {
         toggle: { param: 'operator', value: 'all', fanOut: true },
       });
     }
-    if (tally.stations > 0) legend.push(...dockFillLegend());
+    // One dock key per row: the Vélib' block above prints it when it has docks
+    // on screen (`mobilityDockKeyShown`), and a second copy was noise. None
+    // under the groups either: no dock is drawn there.
+    if (tally.stations > 0 && !_bubbles.size && !mobilityDockKeyShown()) legend.push(...dockFillLegend());
 
     const present = SHARED_MOBILITY_KIND_FILTERS
       .filter((filter) => tally.familiesAll[filter.id] > 0 || filter.id === _kindFilter);
@@ -2239,6 +2769,8 @@ const sharedMobilityFranceLayer = {
     _bubbleLabels = null;
     _bubbles = new Map();
     _bubbleTotal = 0;
+    _places = new Map();
+    _placesInView = [];
     resetFloorRetries();
     _records.clear();
     _lastPayload = null;
@@ -2263,6 +2795,10 @@ export function _setSharedMobilityStateForTest({ viewer, records, overlayHost, p
   _bubbleLabels = groups?.labels || null;
   _bubbles = new Map();
   _bubbleTotal = 0;
+  _places = new Map();
+  _placesInView = [];
+  _placesPayload = null;
+  _countryView = false;
   _projectToWindow = project || projectToWindow;
   _readChrome = chrome ? () => chrome : worldOverlayUiOcclusionRects;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
@@ -2272,6 +2808,18 @@ export function _setSharedMobilityStateForTest({ viewer, records, overlayHost, p
 export function _refreshSharedMobilityBubblesForTest() {
   refreshBubbles();
   return [..._bubbles.values()].map((entry) => ({ id: entry.id, n: entry.n, text: entry.label.text, bars: entry.bars.length }));
+}
+
+/** Seed the country view: the `/networks` answer, drawn or not. */
+export function _setSharedMobilityPlacesForTest(payload, { countryView = true } = {}) {
+  _placesPayload = payload;
+  _countryView = countryView === true;
+}
+
+/** Drive the production place pass; the names drawn, heaviest first. */
+export function _refreshSharedMobilityPlacesForTest() {
+  refreshPlaces();
+  return [..._places.values()].map((entry) => entry.name);
 }
 
 /** Drive the production pin pass over the seeded records. */

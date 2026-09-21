@@ -104,6 +104,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **The shared-vehicles key took up to a minute to appear, then described the
+  previous view.** The panel repainted on a toggle, on the 60 s poll or when
+  the view changed territory, never when an answer landed: on the landing
+  link the fleet was on the map at 15 s and its key at 61 s, and after a pan
+  the key kept the old view's operators. Both layers of the row now repaint
+  the key when their answer lands (0.8 ms a repaint, measured); the same view
+  shows its key the moment its fleet is drawn.
+- **With the landing link, not one Vélib' dock reached the photorealistic
+  map.** The docks took their height from a raw `sampleHeight`, which read the
+  depth the fleets' always-on-top dots write: all 1,518 docks stood 46 to
+  48 km under Paris. They now use the floor the fleets use — the DEM, or a
+  surface probe checked against a plausible band — and stand at street level
+  (92 m median, where Paris is).
+- **An oblique view said « Zoome pour charger » over streets full of
+  scooters.** The layer refused any view wider than 3°, which a tilted camera
+  is from 2 km up as soon as the horizon shows. It now asks for the ground
+  around what the centre of the screen shows (six altitudes of it), so the
+  same view 2.5 km over Seine-Saint-Denis draws its fleet.
 - **The Paris shared-bike view showed a third of the bikes, no Vélib', and
   promised scooters that Paris banned.** The proxy capped each answer at 6,000
   objects taken in feed order across a margin that covers most of the city, so
@@ -135,6 +153,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Shared vehicles answer at every scale.** Above 250 km the layer shows one
+  label per city with a network — its name over a bar of its operators'
+  colours, 81 cities over France — and pressing one flies there; between the
+  street and 250 km the fleets are counted in bubbles, which the proxy now
+  groups up to cells of ~28 km. No « zoom in » card is raised any more; a
+  camera aimed at the sky is told to aim at the ground. The Vélib' bikes stay
+  in the bubbles up to the same height, and the other networks' docks join
+  them too instead of being drawn underneath.
+- **The shared-vehicle marks follow the ChatGPT « Repères discrets » mock.**
+  The operator colours are the mock's own six, sampled from its pixels —
+  Dott blue, Lime green, YEGO yellow, Voi coral, Vélib' cyan — and eleven
+  more set at the same lightness, in place of seventeen full-strength hues. A
+  vehicle is a 10 px dot inside a near-black ring, which keeps its edge on the
+  photorealistic roofs where the 8 px dot got lost. A dock is a dark disc
+  ringed in its operator's colour, holding a core as large as it is full — no
+  more translucent tint — and the key prints its three levels once per row.
 - **The map key is printed large enough to read.** A clicked sale's card in
   the key set its notes at 9 px and the class rows at 10.5 px, small enough
   that the operator squinted at the figures. Every line of the key grows: a

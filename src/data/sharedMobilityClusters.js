@@ -231,3 +231,34 @@ export function sharedMobilityBubbleBar(operators, widthPx, { max = 4, minPx = 2
     return segment;
   });
 }
+
+/** Clear space kept around a place label, in CSS px. */
+export const SHARED_MOBILITY_PLACE_GAP_PX = 6;
+
+/**
+ * The place labels of the country view that fit, heaviest first.
+ *
+ * A label is a name, and two names cannot be summed the way two counts can —
+ * so where {@link mergeSharedMobilityBubbles} folds, this one yields: a label
+ * that would overlap one already kept is not drawn at all, the way a map drops
+ * the smaller town's name. Zoomed in, it has the room and comes back.
+ *
+ * @param {Array<{id:string, x:number, y:number, w:number, h:number, weight:number}>} labels
+ *   Projected, centred on `x`/`y`, in CSS px.
+ * @param {{gapPx?: number}} [options]
+ * @returns {Array<Object>} The labels kept, heaviest first.
+ */
+export function placeSharedMobilityLabels(labels, { gapPx = SHARED_MOBILITY_PLACE_GAP_PX } = {}) {
+  const ordered = (Array.isArray(labels) ? labels : [])
+    .filter((label) => Number.isFinite(label?.x) && Number.isFinite(label?.y))
+    .sort((a, b) => (b.weight || 0) - (a.weight || 0) || (a.id < b.id ? -1 : 1));
+  const kept = [];
+  for (const label of ordered) {
+    const clash = kept.some((other) => (
+      Math.abs(other.x - label.x) * 2 < other.w + label.w + 2 * gapPx
+      && Math.abs(other.y - label.y) * 2 < other.h + label.h + 2 * gapPx
+    ));
+    if (!clash) kept.push(label);
+  }
+  return kept;
+}

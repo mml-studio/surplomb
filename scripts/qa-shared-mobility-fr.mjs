@@ -6,8 +6,9 @@
  * `/api/shared-mobility-fr/*` with a fixture and proves the four things the
  * feeds themselves cannot:
  *
- *   i.   the altitude gate does not fetch — a regional view issues NO request
- *        and reports zoom-in guidance rather than an empty map
+ *   i.   the country view fetches no fleet — from 400 km the layer asks for
+ *        the PLACES a network runs in (`/networks`), draws one label per
+ *        place, and raises no « zoom in » card
  *   ii.  a city view draws one object per object, and a station with NO
  *        availability data is coloured neutral rather than empty
  *   iii. the row legend counts what is on screen, by kind, omitting zeroes
@@ -17,10 +18,11 @@
  *        a few of them, never two within 200 px, wear a pin with their kind's
  *        silhouette; no two kinds share one
  *   vi.  COLOUR says who runs it — a vehicle is drawn in its operator's hue and
- *        a station is RINGED in it and filled with it as far as it is full,
- *        so two operators in one street are tellable apart
+ *        a station is a dark disc RINGED in it, holding a core of it as large
+ *        as it is full, so two operators in one street are tellable apart
  *   vii. from the city-wide view the layer asks for GROUPS, and draws the
- *        proxy's counts — every vehicle in exactly one bubble or one dot
+ *        proxy's counts — every vehicle in exactly one bubble or one dot, and
+ *        the docks' available vehicles counted into the bubbles
  *
  * Run: node scripts/qa-shared-mobility-fr.mjs --url http://localhost:4173
  */
@@ -237,6 +239,10 @@ function probe(page) {
             image: item.image || null,
             color: item.color?.toCssHexString?.() || null,
             outline: item.outlineColor?.toCssHexString?.() || null,
+            // A dock is TWO points under one id since 2026-09-21: the ringed
+            // disc, and the availability core with no ring at all.
+            core: !item.image && item.outlineWidth === 0,
+            pixelSize: item.pixelSize ?? null,
             height: carto ? carto.height : null,
             screen: screen ? { x: screen.x, y: screen.y } : null,
           });
@@ -256,10 +262,28 @@ function probe(page) {
       segments: (module.getRowControls().legendSegments || []).map((segment) => segment.label),
       detections: module.getDetectableObjects({ maxCount: 100000 }).map((entry) => entry.id),
       rendered: module.getDetectableObjects({ maxCount: 100000 }).length,
-      glyphs: scan('gbfs-float').filter((item) => !item.image && !item.id.includes('bay')),
+      glyphs: scan('gbfs-float').filter((item) => !item.image && !item.core && !item.id.includes('bay')),
       pins: scan('gbfs-float').filter((item) => item.image),
-      bays: scan('gbfs-float').filter((item) => !item.image && item.id.includes('bay')),
-      dots: scan('gbfs-dock'),
+      bays: scan('gbfs-float').filter((item) => !item.image && !item.core && item.id.includes('bay')),
+      dots: scan('gbfs-dock').filter((item) => !item.core),
+      cores: scan('gbfs-dock').filter((item) => item.core),
+      places: (() => {
+        const primitives = gev.viewer.scene.primitives;
+        const names = [];
+        for (let i = 0; i < primitives.length; i++) {
+          const collection = primitives.get(i);
+          if (typeof collection?.get !== 'function') continue;
+          for (let n = 0; n < collection.length; n++) {
+            const item = collection.get(n);
+            if (typeof item?.text === 'string' && String(item.id).startsWith('shared-mobility-fr-place:')) names.push(item.text);
+          }
+        }
+        return names;
+      })(),
+      zoomCard: (() => {
+        const card = document.getElementById('zoom-prompt');
+        return Boolean(card && !card.hidden && card.offsetParent);
+      })(),
     };
   });
 }
@@ -284,6 +308,7 @@ async function main() {
     const payload = objectsPayload();
     let objectRequests = 0;
     let clusterRequests = 0;
+    let networkRequests = 0;
     // The fixture's 20 vehicles are far under the proxy's density rule, which
     // is the point of sections i–vi: a sparse city keeps its dots. Section vii
     // lowers the rule to what the fixture holds, to see the groups drawn.
@@ -302,12 +327,31 @@ async function main() {
           id: system.id,
           vehicles: payload.vehicles.filter((vehicle) => vehicle.system === system.id),
         }));
-        if (GBFS_CLUSTER_CELLS_DEG.includes(cell) && gbfsBoxWantsClusters(parts, box, clusterAbove)) {
+        if (GBFS_CLUSTER_CELLS_DEG.includes(cell) && gbfsBoxWantsClusters(parts, box, clusterAbove, cell)) {
           clusterRequests += 1;
           const { clusters, vehicles, counted } = clusterGbfsVehicles(parts, box, cell);
           body = { ...payload, vehicles, clusters, clusterDeg: cell, vehiclesCounted: counted };
         }
         void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+        return;
+      }
+      if (url.origin === APP_ORIGIN && url.pathname === '/api/shared-mobility-fr/networks') {
+        networkRequests += 1;
+        void request.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            places: [{
+              id: 'gbfs-dock',
+              name: 'Nantes',
+              lat: CITY.lat,
+              lon: CITY.lon,
+              bbox: { south: CITY.lat - 0.1, west: CITY.lon - 0.15, north: CITY.lat + 0.1, east: CITY.lon + 0.15 },
+              systems: [{ id: 'gbfs-dock', name: 'Naolib Nantes' }, { id: 'gbfs-float', name: 'Pony Nantes' }],
+              weight: 1,
+            }],
+          }),
+        });
         return;
       }
       if (url.origin === APP_ORIGIN && url.pathname === '/api/shared-mobility-fr/systems') {
@@ -329,17 +373,30 @@ async function main() {
     );
     await sleep(2000);
 
-    // ── i. the altitude gate does not fetch ────────────────────────────────
-    console.log('[qa] i. altitude gate');
+    // ── i. the country view draws places, not fleets ───────────────────────
+    //
+    // Until 2026-09-21 this view was a « Zoome pour charger » card and an empty
+    // map. It is now the places a network runs in, from one small request.
+    console.log('[qa] i. country view');
     await setView(page, CITY.lon, CITY.lat, 400_000);
     await page.evaluate(() => window.__godsEyeView.dataManager.setEnabled('shared-mobility-fr', true));
-    await pump(page, 8);
-    await sleep(1500);
-    const gated = await probe(page);
-    check('a regional view issues no viewport request', objectRequests === 0, `${objectRequests} request(s)`);
-    check('and reports zoom-in guidance', gated.stats.status === 'zoom-in', `status=${gated.stats.status}`);
-    check('with nothing rendered', gated.rendered === 0, `${gated.rendered} points`);
-    await shoot(page, '01-gated.png');
+    let gated = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await pump(page, 3, 60);
+      await sleep(300);
+      gated = await probe(page);
+      if (gated.places.length) break;
+    }
+    check('a country view issues no fleet request', objectRequests === 0, `${objectRequests} request(s)`);
+    check('but asks where the networks run, once', networkRequests === 1, `${networkRequests} request(s)`);
+    check('and labels the place with its name', JSON.stringify(gated.places) === '["Nantes"]', JSON.stringify(gated.places));
+    check('with no vehicle drawn and no « zoom in » card',
+      gated.rendered === 0 && !gated.zoomCard && gated.stats.status === 'ok',
+      `${gated.rendered} points, card=${gated.zoomCard}, status=${gated.stats.status}`);
+    check('while the key names its operators without a count',
+      gated.legendRows.some((row) => row.label === 'Naolib') && gated.legend.every(([, count]) => count === undefined || count === null),
+      JSON.stringify(gated.legend));
+    await shoot(page, '01-country.png');
 
     // ── ii. a city view draws the inventory ────────────────────────────────
     console.log('[qa] ii. city view');
@@ -523,10 +580,13 @@ async function main() {
     check('a station is RINGED in its operator hue',
       dockDots.length === 12 && stationHues.size === 1 && stationHues.has([...stationHues][0]),
       JSON.stringify([...stationHues]));
-    check('while its FILL still answers availability, in its own hue',
-      new Set(dockDots.map((dot) => dot.color)).size >= 3
-        && dockDots.some((dot) => dot.color?.slice(0, 7) === dot.outline?.slice(0, 7)),
-      JSON.stringify([...new Set(dockDots.map((dot) => dot.color))]));
+    const ring = [...stationHues][0]?.slice(0, 7);
+    const dockCores = loaded.cores.filter((core) => core.id.startsWith('gbfs-dock:'));
+    check('while a CORE in the ring\'s own hue answers availability — and an emptied dock has none',
+      dockCores.length > 0 && dockCores.length < dockDots.length
+        && dockCores.every((core) => core.color?.slice(0, 7) === ring)
+        && new Set(dockCores.map((core) => core.pixelSize)).size >= 1,
+      `${dockCores.length} core(s) for ${dockDots.length} docks, hues ${JSON.stringify([...new Set(dockCores.map((core) => core.color))])}`);
     const operatorRows = loaded.legendRows.filter((row) => row.channel === 'Fournisseurs');
     check('every named operator line is a switch offered to the whole row',
       operatorRows.length >= 3 && operatorRows.every((row) => row.toggle?.param === 'operator' && row.toggle.fanOut),
@@ -570,9 +630,13 @@ async function main() {
     const grouped = groups.labels.reduce((sum, text) => sum + Number(text.replace(/\D/g, '')), 0);
     check('a dense city-wide view is answered in groups', clusterRequests >= 1, `${clusterRequests} grouped answer(s)`);
     check('and draws them as bubbles', groups.labels.length >= 1, `${groups.labels.length} bubble(s)`);
-    check('every vehicle is in exactly one bubble or one dot',
-      grouped + groups.vehicleDots === payload.vehicles.length,
-      `${grouped} grouped + ${groups.vehicleDots} alone for ${payload.vehicles.length}`);
+    // Under the groups a station is not drawn: its available vehicles join the
+    // bubble of its cell, as the Vélib' docks do (since 2026-09-21).
+    const docked = payload.stations.reduce((sum, station) => (
+      sum + (Number(station.available) > 0 && station.renting !== false ? Number(station.available) : 0)), 0);
+    check('every vehicle is in exactly one bubble or one dot, and every docked one in a bubble',
+      grouped + groups.vehicleDots === payload.vehicles.length + docked,
+      `${grouped} grouped + ${groups.vehicleDots} alone for ${payload.vehicles.length} + ${docked} docked`);
     await shoot(page, '05-groups.png');
 
     const relevant = consoleErrors.filter((entry) => !/favicon|Failed to load resource/i.test(entry));
