@@ -81,6 +81,55 @@ export const MOBILITY_OPERATOR_PALETTE = Object.freeze([
 export const MOBILITY_OPERATOR_UNKNOWN_COLOR = '#6b7a8a';
 
 /**
+ * A dock's FILL: how full it is, read the same way by both layers.
+ *
+ * The ring carries the operator (above); the fill carries the one number a
+ * rider acts on. `bikeshare.js` and `sharedMobilityFrance.js` both paint it,
+ * and over Paris both are on screen at once, so the thresholds and the hues
+ * live here once. `full` is above 60 %, `half` from 30 %, `low` under it.
+ */
+export const MOBILITY_DOCK_FILL = Object.freeze({
+  full: '#00ff88',
+  half: '#ffaa00',
+  low: '#ff4444',
+  unknown: '#91a4b4',
+  closed: '#687581',
+});
+
+/**
+ * The three dock-fill lines of the key, in the page's language.
+ *
+ * Only the three a rider acts on: « unknown » and « closed » are greys that
+ * read as absence without a key, and every line spent on them pushes the
+ * operators down the card.
+ * @returns {Array<{label:string, color:string, channel:string}>}
+ */
+export function dockFillLegend() {
+  const m = messages().legend;
+  return [
+    { label: m.full, color: MOBILITY_DOCK_FILL.full, channel: m.docks },
+    { label: m.half, color: MOBILITY_DOCK_FILL.half, channel: m.docks },
+    { label: m.low, color: MOBILITY_DOCK_FILL.low, channel: m.docks },
+  ];
+}
+
+/**
+ * Whether a string can name an operator — a curated id (`lime`,
+ * `leo-and-go`) or a derived one (`derived:velo modalis`).
+ *
+ * A FORM, not a registry lookup: an operator focus is fanned out across a
+ * row, and a docked network the bikeshare layer draws is an operator the
+ * shared-fleet layer has never seen. Focusing it there is still a valid
+ * question — the answer is "none of mine" — so the check is only that the id
+ * could have come from {@link resolveMobilityOperator}.
+ * @param {*} id
+ * @returns {boolean}
+ */
+export function isMobilityOperatorId(id) {
+  return typeof id === 'string' && /^(derived:)?[a-z0-9][a-z0-9 -]{0,79}$/.test(id);
+}
+
+/**
  * Operators pinned to a palette slot.
  *
  * `match` entries are whole-WORD sequences tested against the normalized

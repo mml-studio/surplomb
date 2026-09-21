@@ -7034,6 +7034,72 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   opacity: 0.8;
 }
 
+/* A SEGMENTED CONTROL OVER THE KEY — « Tous · Vélos · Scooters ». A filter,
+   so it reads as one: pills with the lit one filled, the way the Mobilités
+   partagées mock drew it. It wraps rather than scrolls on a narrow rail, and
+   a coarse pointer gets a 32 px target. */
+.map-legend-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 3px 0 4px;
+}
+
+.map-legend-segment {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 3px 9px;
+  min-height: 22px;
+  border: 1px solid rgba(251, 214, 190, 0.26);
+  border-radius: 999px;
+  background: rgba(6, 11, 9, 0.35);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: rgba(247, 244, 234, 0.82);
+  text-shadow: none;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.map-legend-segment:hover,
+.map-legend-segment:focus-visible {
+  background: rgba(251, 214, 190, 0.14);
+}
+
+.map-legend-segment:focus-visible {
+  outline: 1px solid rgba(251, 214, 190, 0.6);
+  outline-offset: 1px;
+}
+
+.map-legend-segment[aria-pressed="true"] {
+  background: rgba(247, 244, 234, 0.9);
+  border-color: rgba(247, 244, 234, 0.9);
+  color: #0b1210;
+}
+
+.map-legend-segment:disabled {
+  cursor: default;
+}
+
+@media (pointer: coarse) {
+  .map-legend-segment {
+    min-height: 32px;
+    padding: 6px 12px;
+  }
+}
+
+/* An ACTION in the key (« Tout afficher »): no swatch, so it cannot be read
+   as one more class, and underlined so it reads as something to press. */
+.map-legend-entry.is-toggle.is-action {
+  width: auto;
+  margin-left: 0;
+  color: rgba(251, 214, 190, 0.9);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .map-legend-swatch {
   width: 8px;
   height: 8px;

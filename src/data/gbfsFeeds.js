@@ -382,6 +382,30 @@ export function vehicleKindLookup(payload) {
   return lookup;
 }
 
+/**
+ * A station's inventory in this app's kinds.
+ *
+ * GBFS 3.0 counts a dock's vehicles by the system's OWN `vehicle_type_id`s
+ * (`renault-zoe`, `vt-9f3a`), which say nothing until they are looked up in
+ * the same system's `vehicle_types.json`. Clem' publishes its Paris cars as
+ * `renault-zoe: 1`, which the key filed under « Vélos » by the GBFS default
+ * until 2026-09-21. Keys already in {@link VEHICLE_KINDS} pass through, known
+ * type ids become their kind, and an id the lookup does not know is kept as it
+ * came — the layer then applies the default itself.
+ * @param {?Object<string, number>} byKind As parsed from `station_status`.
+ * @param {Object<string, string>} [kinds] `vehicle_type_id → kind` lookup.
+ * @returns {?Object<string, number>}
+ */
+export function resolveStationKinds(byKind, kinds = {}) {
+  if (!byKind) return byKind;
+  const resolved = {};
+  for (const [key, count] of Object.entries(byKind)) {
+    const kind = VEHICLE_KINDS.includes(key) ? key : (kinds[key] || key);
+    resolved[kind] = (resolved[kind] || 0) + (Number(count) || 0);
+  }
+  return resolved;
+}
+
 /** Coerce a GBFS boolean, which appears as `true`, `1` or `"true"` across feeds. */
 function gbfsBool(value, fallback = true) {
   if (value === true || value === 1 || value === '1' || value === 'true') return true;

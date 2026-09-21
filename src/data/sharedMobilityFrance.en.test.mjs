@@ -1,11 +1,6 @@
-// Shared vehicles in English: the station card, the vehicle card, the two
-// filter chips and the two-channel key.
-//
-// Two properties have to survive the translation. The chips are a PARTITION
-// and say what they cost — an e-bike is a bike, a dock with no published
-// inventory counts as a bike dock, and the tooltip states both. And the key
-// names its two channels (shape = what, color = who) and closes by refusing
-// the sum: the two lists are one population counted twice.
+// Shared vehicles in English: the station card, the vehicle card, and the
+// « Mobilités partagées » key — its family control and the words it shares
+// with the Vélib' block of the same row.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -17,6 +12,7 @@ import {
 import { gbfsVehicleKindLabel } from './gbfsFeeds.js';
 import { resolveMobilityOperator } from './mobilityOperators.js';
 import messages from './sharedMobilityFrance.i18n.js';
+import operatorMessages from './mobilityOperators.i18n.js';
 import { assertNoFrench, withLocale } from '../i18n/testing.js';
 
 // Operators, systems and station names are data.
@@ -89,31 +85,33 @@ test('the six vehicle kinds keep the false friends apart', () => {
   assert.equal(withLocale('en', () => vehicleKindLabel('hovercraft')), 'hovercraft');
 });
 
-test('the two chips are a partition, and say what they cost', () => {
+test('the family control speaks the glossary: a scooter is a moped', () => {
   const labels = withLocale('en', () => SHARED_MOBILITY_KIND_FILTERS.map((filter) => filter.label));
   assertNoFrench(labels);
-  assert.deepEqual(labels, ['Bikes', 'Everything else']);
-  const m = withLocale('en', () => messages().chipTitles);
-  assertNoFrench([m.bikes(' — 84 objects of 168'), m.rest(''), m.active('Bikes', '')]);
-  assert.match(m.bikes(''), /^Keep only the bikes\. Pedal bikes and e-bikes, plus the docks that hold them;/);
-  assert.match(m.bikes(''), /as GBFS’s own default has it\.$/);
-  assert.match(m.rest(''), /^Keep only the rest\. E-scooters, mopeds, shared cars and unnamed form factors/);
-  assert.equal(m.active('Bikes', ' — 84 objects of 168'),
-    'Bikes only — 84 objects of 168. Press again to see everything.');
+  assert.deepEqual(labels, ['Bikes', 'E-scooters', 'Mopeds', 'Cars']);
   assert.deepEqual(withLocale('fr', () => SHARED_MOBILITY_KIND_FILTERS.map((filter) => filter.label)),
-    ['Vélos', 'Le reste']);
+    ['Vélos', 'Trottinettes', 'Scooters', 'Voitures']);
+  const m = withLocale('en', () => messages());
+  assertNoFrench([m.filters.all, m.legend.segmentsLabel, m.legend.familyTitle('1,540'),
+    m.row.filteredOut, m.row.familyOnly('Mopeds'), m.row.operatorOnly('Lime')]);
+  assert.equal(m.filters.all, 'All');
+  assert.equal(m.legend.familyTitle('1,540'), '1,540 on screen');
+  assert.equal(m.legend.moreOperators(3), '+3 operators');
+  assert.equal(withLocale('fr', () => messages().legend.moreOperators(3)), '+3 fournisseurs');
 });
 
-test('the key names both channels, and refuses the sum', () => {
-  const m = withLocale('en', () => messages());
-  assertNoFrench([m.channels.shape, m.channels.operator, m.legend.note, m.legend.stationsBlurb]);
-  assert.equal(m.channels.shape, 'shape = what');
-  assert.equal(m.channels.operator, 'color + letter = who');
-  assert.equal(m.legend.note, 'The same set, counted twice.');
-  assert.equal(m.legend.stations, 'Docks');
-  assert.match(m.legend.vehiclesBlurb, /^Parked and available — GBFS never publishes a vehicle during a rental\.$/);
-  assert.equal(m.legend.moreOperators(3), '+3 operators');
+test('the key shared with the Vélib\' block reads the same in both languages', () => {
+  const m = withLocale('en', () => operatorMessages().legend);
+  assertNoFrench([m.operators, m.docks, m.full, m.half, m.low, m.showAll, m.focus('Lime', '608'), m.focused('Lime')]);
+  assert.equal(m.operators, 'Operators');
+  assert.equal(m.docks, 'Docks');
+  assert.equal(m.showAll, 'Show all');
+  assert.equal(m.focus('Lime', '608'), 'Show only Lime — 608 here');
+  assert.equal(m.focused('Lime'), 'Only Lime on screen. Press again to see everything.');
+  assert.deepEqual(withLocale('fr', () => {
+    const fr = operatorMessages().legend;
+    return [fr.operators, fr.docks, fr.full, fr.half, fr.low, fr.showAll];
+  }), ['Fournisseurs', 'Stations', 'bien remplie', 'à moitié', 'presque vide', 'Tout afficher']);
   // An operator with no title at all keeps the label it always had.
   assert.equal(withLocale('en', () => resolveMobilityOperator('').label), 'Unknown operator');
-  assert.equal(withLocale('fr', () => messages().legend.note), 'Le même ensemble, compté deux fois.');
 });

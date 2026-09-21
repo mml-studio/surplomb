@@ -240,7 +240,9 @@ function probe(page) {
       legend: module.getRowControls().legend.map((item) => [item.label, item.count]),
       legendRows: module.getRowControls().legend.map((item) => ({
         label: item.label, color: item.color, glyph: item.glyph || null, channel: item.channel,
+        toggle: item.toggle || null,
       })),
+      segments: (module.getRowControls().legendSegments || []).map((segment) => segment.label),
       detections: module.getDetectableObjects({ maxCount: 100000 }).map((entry) => entry.id),
       rendered: module.getDetectableObjects({ maxCount: 100000 }).length,
       glyphs: scan('gbfs-float'),
@@ -361,16 +363,18 @@ async function main() {
 
     // ── iii. the legend counts what is on screen ───────────────────────────
     console.log('[qa] iii. row legend');
+    // Since 2026-09-21 the key counts by OPERATOR (and names families in its
+    // segmented control), so the fixture's 33 objects are read per operator:
+    // 13 Pony (12 vehicles + the Pony bay), 12 Naolib docks, 8 Lime.
     const byLabel = Object.fromEntries(loaded.legend);
-    check('the legend has a Stations entry matching the fixture', byLabel.Stations === 13, JSON.stringify(loaded.legend));
-    // The two false friends are spelled out on purpose: GBFS `scooter` is the
-    // kick one and reads « Trottinette », GBFS `moped` is the seated one and
-    // reads « Scooter ». A literal rename of the old keys would have moved
-    // this check onto the wrong silhouette.
-    check('and one entry per vehicle kind in view',
-      byLabel.VAE === 5 && byLabel.Trottinette === 5 && byLabel['Vélo'] === 5 && byLabel.Scooter === 5,
+    check('the key counts every operator in view, and the counts add up to the screen',
+      byLabel.Pony === 13 && byLabel.Naolib === 12 && byLabel.Lime === 8,
       JSON.stringify(loaded.legend));
-    check('with no zero-count entries', loaded.legend.every(([, count]) => count > 0), JSON.stringify(loaded.legend));
+    check('the docks on screen bring their fill key with them',
+      ['bien remplie', 'à moitié', 'presque vide'].every((label) => label in byLabel),
+      JSON.stringify(loaded.legend));
+    check('with no zero-count operator',
+      loaded.legend.every(([, count]) => count === null || count > 0), JSON.stringify(loaded.legend));
 
     // ── iv. the merged-out bays are reported ───────────────────────────────
     console.log('[qa] iv. merged bays are declared');
@@ -409,14 +413,11 @@ async function main() {
       byKind.size === 4, `${byKind.size} distinct image(s)`);
     check('and five of each, so no kind borrowed another\'s shape',
       [...byKind.values()].every((count) => count === 5), JSON.stringify([...byKind.values()]));
-    // Discriminated by CHANNEL, not by carrying a glyph: since 2026-09-14 the
-    // operator rows carry their monogram too, so both halves of the key have
-    // one and `row.glyph` no longer tells them apart.
-    const kindRows = loaded.legendRows.filter((row) => row.channel === 'forme = quoi');
-    check('the legend shows the same silhouettes it draws',
-      kindRows.length === 5 && kindRows.every((row) => row.glyph)
-        && new Set(kindRows.map((row) => row.glyph)).size === 5,
-      `${kindRows.length} shape row(s)`);
+    // Since 2026-09-21 the key names FAMILIES as a segmented control rather
+    // than reprinting the silhouettes: e-bike and bike are one « Vélos ».
+    check('the key offers one segment per family on screen, after « Tous »',
+      JSON.stringify(loaded.segments) === JSON.stringify(['Tous', 'Vélos', 'Trottinettes', 'Scooters']),
+      JSON.stringify(loaded.segments));
 
     // ── vi. COLOUR says who runs it ────────────────────────────────────────
     console.log('[qa] vi. operator channel');
@@ -443,10 +444,9 @@ async function main() {
     check('while its FILL still answers availability, not ownership',
       new Set(dockDots.map((dot) => dot.color)).size >= 3,
       JSON.stringify([...new Set(dockDots.map((dot) => dot.color))]));
-    const operatorRows = loaded.legendRows.filter((row) => row.channel === 'couleur + lettre = qui');
-    check('every named operator row carries its monogram, and no two share a letter',
-      operatorRows.length >= 3 && operatorRows.every((row) => row.glyph)
-        && new Set(operatorRows.map((row) => row.glyph)).size === operatorRows.length,
+    const operatorRows = loaded.legendRows.filter((row) => row.channel === 'Fournisseurs');
+    check('every named operator line is a switch offered to the whole row',
+      operatorRows.length >= 3 && operatorRows.every((row) => row.toggle?.param === 'operator' && row.toggle.fanOut),
       JSON.stringify(operatorRows.map((row) => row.label)));
     check('the legend names every operator in view',
       ['Naolib', 'Pony', 'Lime'].every((name) => loaded.legendRows.some((row) => row.label === name)),

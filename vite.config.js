@@ -631,6 +631,7 @@ import {
   parseGbfsStationStatus,
   parseGbfsStations,
   parseGbfsVehicles,
+  resolveStationKinds,
   selectSystemsForBox,
   snapGbfsBox,
   systemDrawsStations,
@@ -15494,7 +15495,9 @@ async function gbfsFrSystemObjects(system, clip) {
       docks: availability?.docks ?? null,
       capacity: station.capacity ?? null,
       renting: availability ? availability.renting : null,
-      byKind: availability?.byKind && Object.keys(availability.byKind).length ? availability.byKind : null,
+      byKind: availability?.byKind && Object.keys(availability.byKind).length
+        ? resolveStationKinds(availability.byKind, kinds)
+        : null,
     });
   }
 

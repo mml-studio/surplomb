@@ -112,6 +112,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The shared-bike key became « Mobilités partagées »: a family control,
+  operators by name, and one press that focuses the whole row.** The key over
+  Paris used to print the same population twice (`VAE 5.2K · Scooter 797`,
+  then `Lime 1.7K · Voi 1.7K`) under captions a rider does not use (« forme =
+  quoi », « couleur + lettre = qui ») and a note apologising for it. It now
+  opens on a segmented control — Tous · Vélos · Trottinettes · Scooters ·
+  Voitures, with a segment only for a family on screen, so Paris offers no
+  trottinette — then lists the operators as a dot in their map colour and
+  their name. Pressing an operator shows only that operator, and the press is
+  offered to the other layer of the row: « Lime » also takes the Vélib' docks
+  off the map, « Vélib' » keeps only them, and pressing again brings
+  everything back. Nothing is refetched — the filters hide what is already
+  loaded, which is what a phone can afford on every press. The Vélib' docks
+  get a block of their own in the same key, with what a dock's fill means.
+  Counts are the objects on screen, not the prefetch margin; a car-share dock
+  (Clem', `renault-zoe`) is now filed under « Voitures » instead of
+  « Vélos »; the row's sub-titles say « Vélos en station » and « Flottes
+  partagées » instead of « Stations GBFS » and « Longue traîne FR ».
 - **Airport noise zones read as contours, and each is named on its own
   line.** The four nested zones of a noise exposure plan used to be washed
   at 22 to 42 % opacity, which tinted the whole airport — Roissy's zone D alone

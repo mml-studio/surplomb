@@ -61,6 +61,7 @@ import {
 import {
   GBFS_MAX_BOX_DEG,
   GBFS_MAX_OBJECTS,
+  gbfsBoxContains,
   VEHICLE_KINDS,
   gbfsPayloadLabel,
   gbfsVehicleKindLabel,
@@ -68,12 +69,16 @@ import {
 } from './gbfsFeeds.js';
 import { formatDecimal, formatList, formatNumber } from '../i18n/format.js';
 import messages from './sharedMobilityFrance.i18n.js';
-import { mobilityOperatorShortLabel, resolveMobilityOperator } from './mobilityOperators.js';
 import {
-  sharedMobilityGlyph,
-  sharedMobilityGlyphKind,
-  sharedMobilityMonogramGlyph,
-} from './sharedMobilityIcons.js';
+  MOBILITY_DOCK_FILL,
+  dockFillLegend,
+  isMobilityOperatorId,
+  curatedMobilityOperators,
+  mobilityOperatorShortLabel,
+  resolveMobilityOperator,
+} from './mobilityOperators.js';
+import operatorMessages from './mobilityOperators.i18n.js';
+import { sharedMobilityGlyph } from './sharedMobilityIcons.js';
 import { pickAt } from './pickAt.js';
 import { profileCountBudget } from '../perfProfile.js';
 
@@ -189,115 +194,114 @@ const STATION_POINT_MAX_PX = 15;
 const STATION_RING_PX = 2;
 const SELECTED_POINT_PX = 18;
 const SELECTED_GLYPH_PX = 28;
-/** Legend glyph raster — small, and never tinted by an operator. */
-const LEGEND_GLYPH_PX = 32;
-/**
- * Legend tint for the SHAPE half of the key. Neutral on purpose: those rows
- * answer "what", and painting them a hue would claim an operator they do not
- * stand for.
- */
-const KIND_LEGEND_TINT = '#cbd5e1';
-/**
- * The two channel names the key prints over its own entries.
- *
- * SHAPE says what an object is, COLOUR says who runs it — the layer has drawn
- * both since its first cut and the key named neither, so it read as two
- * unrelated lists of the same total.
- */
-const shapeChannel = () => messages().channels.shape;
-// The operator channel gained a second carrier on 2026-09-14: the plate's hue
-// AND, below `monogramAltitudeCeilingM()`, the operator's initial. The label
-// names both, because a reader who has only ever seen the wide view would
-// otherwise meet a letter the key never mentioned.
-const operatorChannel = () => messages().channels.operator;
-/** Operators listed by name in the row legend before the tail is summarised. */
+/** Operators listed by name in the key before the tail is summarised. */
 const MAX_OPERATOR_LEGEND_ROWS = 6;
+/** Swatch of the tail line that stands for several operators at once. */
+const TAIL_LEGEND_TINT = '#cbd5e1';
 
 const SELECTED_COLOR = '#00ffff';
 
-/** Station fill-rate palette, matching the bikeshare layer's reading. */
-const STATION_FULL = '#00ff88';
-const STATION_MID = '#ffaa00';
-const STATION_LOW = '#ff4444';
-const STATION_UNKNOWN = '#91a4b4';
-const STATION_CLOSED = '#687581';
+/** Station fill-rate palette — the one `bikeshare.js` reads too. */
+const STATION_FULL = MOBILITY_DOCK_FILL.full;
+const STATION_MID = MOBILITY_DOCK_FILL.half;
+const STATION_LOW = MOBILITY_DOCK_FILL.low;
+const STATION_UNKNOWN = MOBILITY_DOCK_FILL.unknown;
+const STATION_CLOSED = MOBILITY_DOCK_FILL.closed;
 
 // --- Filtering --------------------------------------------------------------
 /**
- * THE TWO HALVES OF THE FLEET, AS A FILTER.
+ * THE FLEET BY FAMILY, AS A FILTER.
  *
  * A city viewport holds bikes, e-bikes, trottinettes, scooters and shared cars
- * in the same streets, and the reader who came for one of those reads the
- * other four as noise. The shape channel already says which is which; these
- * two chips are what let someone act on it.
+ * in the same streets, and the reader who came for one of them reads the rest
+ * as noise. The key's segmented control — « Tous · Vélos · Trottinettes ·
+ * Scooters · Voitures » — is what lets them act on it.
  *
- * A PARTITION, NOT TWO OVERLAPPING SETS. Every object belongs to exactly one
- * side, so pressing one chip and then the other shows the whole fleet with
- * nothing invisible under both. That is the property that makes the pair
- * trustworthy, and it is why `other` — a form factor GBFS declines to name —
- * sits with the rest rather than nowhere.
+ * FAMILIES, NOT HALVES. Until 2026-09-21 this was a pair, « Vélos » and « Le
+ * reste », which over Paris put 36 YEGO scooters and a handful of Clem' cars
+ * under one word. A family is the silhouette the map already draws, so the
+ * control and the marks agree. A VAE is still a bike: `vehicleKindFromType()`
+ * splits `bicycle` by propulsion, and a « Vélos » that hid every e-bike would
+ * be lying about its own name.
  *
- * A VAE IS A BIKE. `vehicleKindFromType()` splits `bicycle` by propulsion, so
- * `bike` and `ebike` are the same silhouette on two power sources; a chip
- * labelled "Vélos" that hid every Vélib' électrique would be lying about its
- * own name. The tooltip says both are in there.
+ * `other` — a form factor GBFS declines to name — belongs to no family: it is
+ * drawn under « Tous » and under nothing else, rather than filed wrong.
  *
- * There is no third "everything" chip: pressing the lit one releases the
- * filter, and a row with neither lit already reads as unfiltered. The strip
- * this shares with the fusion chips is a control strip, not a second list of
- * names, and a third chip would have spent a quarter of it saying "no".
+ * The key shows a segment only for a family that has something on screen:
+ * Paris has no trottinette since 2023, and a « Trottinettes » that blanks the
+ * map is a control that looks broken.
  */
+// i18n-ignore-start — family ids are param values, not copy.
 export const SHARED_MOBILITY_KIND_FILTERS = Object.freeze([
   Object.freeze({
     id: 'velo',
     get label() { return messages().filters.velo; },
-    /** Vehicle kinds on this side of the split. */
     kinds: Object.freeze(['bike', 'ebike']),
   }),
   Object.freeze({
-    // The filter ids are SHARE-LINK tokens (`kinds=autres`): data, not words.
-    // i18n-ignore-next-line
-    id: 'autres',
-    get label() { return messages().filters.autres; },
-    kinds: Object.freeze(['scooter', 'moped', 'car', 'other']),
+    id: 'trottinette',
+    get label() { return messages().filters.trottinette; },
+    kinds: Object.freeze(['scooter']),
+  }),
+  Object.freeze({
+    id: 'scooter',
+    get label() { return messages().filters.scooter; },
+    kinds: Object.freeze(['moped']),
+  }),
+  Object.freeze({
+    id: 'voiture',
+    get label() { return messages().filters.voiture; },
+    kinds: Object.freeze(['car']),
   }),
 ]);
+// i18n-ignore-end
 
-/**
- * Whether a station holds bicycles.
- *
- * Three cases, and the middle one is the reason this is a function rather than
- * a lookup. A 2.x feed publishes a mechanical/ebike split that
- * `parseGbfsStationStatus` normalises to `bike`/`ebike`, so it answers
- * directly. A 3.0 feed publishes `vehicle_types_available`, whose keys are the
- * system's OWN vehicle_type_ids — opaque strings this layer cannot resolve —
- * so a station carrying only those tells us nothing about what is in it. And a
- * station with no availability breakdown at all tells us nothing either.
- *
- * Both of those unknowns fall back to YES, following the GBFS spec's own
- * default: a system that publishes no vehicle types "is assumed to operate
- * non-motorized bicycles" (the same fallback `vehicleKindLookup` documents).
- * A dock that turns out to hold scooters is then shown under "Vélos", which is
- * the failure worth having — the alternative hides half the docks in France
- * from the chip that names them.
- *
- * @param {{byKind?: ?Object<string, number>}} station Wire station.
- * @returns {boolean}
- */
-export function stationHoldsBikes(station) {
-  const byKind = station?.byKind;
-  if (!byKind) return true;
-  let recognised = false;
-  for (const [key, count] of Object.entries(byKind)) {
-    if (!(Number(count) > 0)) continue;
-    if (key === 'bike' || key === 'ebike') return true;
-    if (VEHICLE_KINDS.includes(key)) recognised = true;
+/** The family a vehicle kind belongs to, or null for `other`. */
+function familyOfKind(kind) {
+  for (const filter of SHARED_MOBILITY_KIND_FILTERS) {
+    if (filter.kinds.includes(kind)) return filter.id;
   }
-  return !recognised;
+  return null;
 }
 
 /**
- * Whether one wire object survives a filter. A null filter keeps everything.
+ * The families a station holds.
+ *
+ * A dock publishes what is in it, and that is what files it — a car-share
+ * station is under « Voitures », not « Vélos ». Two unknowns fall back to
+ * BIKES, following the GBFS spec's own default: a system that publishes no
+ * vehicle types "is assumed to operate non-motorized bicycles". One is a
+ * station with no breakdown at all; the other a GBFS 3.0 station whose
+ * `vehicle_type_id`s the proxy could not resolve against the system's own
+ * `vehicle_types.json` (`resolveStationKinds`). A dock that turns out to hold
+ * scooters then shows under « Vélos », which is the failure worth having — the
+ * alternative hides half the docks in France from the control that names them.
+ *
+ * An empty dock is still a bike dock: `{bike: 0}` is a stand with nothing in
+ * it, not a car park.
+ *
+ * @param {{byKind?: ?Object<string, number>}} station Wire station.
+ * @returns {Set<string>}
+ */
+export function stationFamilies(station) {
+  const families = new Set();
+  for (const [key, count] of Object.entries(station?.byKind || {})) {
+    if (!(Number(count) > 0)) continue;
+    const family = familyOfKind(key);
+    if (family) families.add(family);
+  }
+  if (!families.size) families.add('velo');
+  return families;
+}
+
+/** Whether a station holds bicycles — see {@link stationFamilies}. */
+export function stationHoldsBikes(station) {
+  return stationFamilies(station).has('velo');
+}
+
+/**
+ * Whether one wire object survives a family filter. A null filter keeps
+ * everything, `other` included.
  * @param {?string} filterId One of {@link SHARED_MOBILITY_KIND_FILTERS}' ids.
  * @param {'station'|'vehicle'} type
  * @param {object} object Wire station or vehicle.
@@ -305,13 +309,39 @@ export function stationHoldsBikes(station) {
  */
 export function matchesKindFilter(filterId, type, object) {
   if (!filterId) return true;
-  const bike = type === 'station' ? stationHoldsBikes(object) : isBikeKind(object?.kind);
-  return filterId === 'velo' ? bike : !bike;
+  return type === 'station'
+    ? stationFamilies(object).has(filterId)
+    : familyOfKind(object?.kind) === filterId;
 }
 
-/** A bicycle form factor, powered either way. */
-function isBikeKind(kind) {
-  return kind === 'bike' || kind === 'ebike';
+/**
+ * A param value for the family filter: a family id, or null for all.
+ * `undefined` means the value is refused.
+ */
+function parseKindParam(value) {
+  if (value === null || value === 'all') return null;
+  const id = String(value);
+  return SHARED_MOBILITY_KIND_FILTERS.some((filter) => filter.id === id) ? id : undefined;
+}
+
+/** Same, for the operator focus. */
+function parseOperatorParam(value) {
+  if (value === null || value === 'all') return null;
+  return isMobilityOperatorId(value) ? value : undefined;
+}
+
+/**
+ * The focused operator's name. It may have nothing in this answer — the focus
+ * can come from the Vélib' line of the same row — so the curated table and,
+ * last, the id itself answer when the payload cannot.
+ */
+function focusedOperatorLabel() {
+  if (!_operatorFilter) return '';
+  for (const operator of _operatorsBySystem.values()) {
+    if (operator.id === _operatorFilter) return operator.label;
+  }
+  const curated = curatedMobilityOperators().find((entry) => entry.id === _operatorFilter);
+  return curated?.label || _operatorFilter.replace(/^derived:/, '');
 }
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
@@ -351,11 +381,17 @@ let _lastBox = null;
 /** The last viewport answer, kept so a filter change repaints without a
  *  refetch — and so the chips can count the half they are hiding. */
 let _lastPayload = null;
-/** Active kind filter id, or null for the whole fleet. */
+/** Active family filter id, or null for the whole fleet. */
 let _kindFilter = null;
-/** Memo of `kindFilterTally()`, keyed on the payload it was counted from. */
+/** Focused operator id, or null for every operator. */
+let _operatorFilter = null;
+/** Memo of `legendTally()`: the payload, filters and screen it was counted on. */
 let _tallyPayload = null;
-let _tally = { velo: 0, autres: 0 };
+let _tallyKey = '';
+let _tally = null;
+/** Operator per system id, resolved once per payload. */
+let _operatorsPayload = null;
+let _operatorsBySystem = new Map();
 let _rowControlsListener = null;
 /** Deferred floor pass: timer handle and retries already spent (see
  *  `scheduleFloorRetry`). */
@@ -956,6 +992,32 @@ function onPreRender() {
  * the FLOOR pass runs before any position is computed, because a position is
  * written into a primitive once and nothing recomputes it per frame.
  */
+/**
+ * The operator behind a system of this payload.
+ *
+ * One resolve per system, not per object — a Paris viewport holds thousands
+ * of vehicles across a handful of operators — and memoised on the payload, so
+ * the key and the reconcile share the answer.
+ */
+function payloadOperator(payload, systemId) {
+  if (_operatorsPayload !== payload) {
+    _operatorsPayload = payload;
+    _operatorsBySystem = new Map();
+  }
+  let operator = _operatorsBySystem.get(systemId);
+  if (!operator) {
+    const system = (payload?.systems || []).find((entry) => entry.id === systemId);
+    operator = resolveMobilityOperator(system?.name);
+    _operatorsBySystem.set(systemId, operator);
+  }
+  return operator;
+}
+
+/** Whether a wire object belongs to the focused operator, or no focus is set. */
+function matchesOperatorFilter(payload, object) {
+  return !_operatorFilter || payloadOperator(payload, object?.system).id === _operatorFilter;
+}
+
 function reconcile(payload) {
   const stations = Array.isArray(payload.stations) ? payload.stations : [];
   const vehicles = Array.isArray(payload.vehicles) ? payload.vehicles : [];
@@ -975,6 +1037,7 @@ function reconcile(payload) {
     const id = station.id;
     if (!id || seen.has(id)) continue;
     if (!matchesKindFilter(_kindFilter, 'station', station)) continue;
+    if (!matchesOperatorFilter(payload, station)) continue;
     seen.add(id);
     drawn.push({ type: 'station', id, object: station });
   }
@@ -983,6 +1046,9 @@ function reconcile(payload) {
     const id = vehicle.id || `${vehicle.system}:${vehicle.lat},${vehicle.lon}`;
     if (seen.has(id)) continue;
     if (!matchesKindFilter(_kindFilter, 'vehicle', vehicle)) continue;
+    // A focused operator's rivals are not drawn at all — not hidden, not
+    // dimmed: on a phone the plates that are not asked for are the cheapest.
+    if (!matchesOperatorFilter(payload, vehicle)) continue;
     seen.add(id);
     drawn.push({ type: 'vehicle', id, object: vehicle });
   }
@@ -997,17 +1063,7 @@ function reconcile(payload) {
   // nothing at all above 25 km of camera (`provisionalFloor.js`).
   const { pending } = sampleProvisionalFloors(_viewer?.scene, objects, { fillKm: FLOOR_FILL_KM });
 
-  // One resolve per system, not per object: a Paris viewport holds ~6,000
-  // vehicles across a handful of operators.
-  const operatorsBySystem = new Map();
-  const operatorFor = (systemId) => {
-    let operator = operatorsBySystem.get(systemId);
-    if (!operator) {
-      operator = resolveMobilityOperator(systemsById.get(systemId)?.name);
-      operatorsBySystem.set(systemId, operator);
-    }
-    return operator;
-  };
+  const operatorFor = (systemId) => payloadOperator(payload, systemId);
 
   for (const entry of drawn) {
     const { id, object } = entry;
@@ -1319,71 +1375,90 @@ function collectDetectableObjects(options = {}) {
 }
 
 /**
- * How many objects sit on each side of the split, in the answer currently
- * held — INCLUDING the half a chip is hiding. A control that says what it
- * costs is the difference between a filter and a disappearance.
- * @returns {{velo: number, autres: number}}
+ * What the key counts: the objects ON SCREEN, per family and per operator —
+ * INCLUDING what a filter is hiding. A control that says what it costs is the
+ * difference between a filter and a disappearance.
+ *
+ * FACETED, the way a shop's filters are. Families are counted under the
+ * operator focus and operators under the family filter, so « Scooters » with
+ * Lime focused says how many Lime scooters there are, and a segment or a dot
+ * that would blank the map shows as empty rather than looking broken.
+ *
+ * ON SCREEN, NOT IN THE ANSWER. The proxy adds a margin around the view so a
+ * short pan lands on objects already drawn (`capGbfsObjects`); a key that
+ * counted it said « 3 673 ici » over a screen holding 2,175. No viewer (the
+ * unit tests) means no screen, and everything is counted.
+ *
+ * Memoised on payload, filters and screen: the panel asks about once a second
+ * and this walks up to 6,000 objects.
+ * @returns {{families: Object<string, number>, familiesAll: Object<string, number>,
+ *   operators: Map<string, {operator: object, count: number}>, stations: number, shown: number}}
  */
-function kindFilterTally() {
+function legendTally() {
   const payload = _lastPayload;
-  if (!payload) return { velo: 0, autres: 0 };
-  // Memoised on the payload's own identity: the panel asks for the row's
-  // controls on every refresh, and this walks up to 6,000 objects for an
-  // answer that cannot change until the next viewport answer replaces them.
-  if (_tallyPayload === payload) return _tally;
-  // i18n-ignore-start — the two filter ids, which are share-link tokens.
-  const tally = { velo: 0, autres: 0 };
-  for (const station of Array.isArray(payload.stations) ? payload.stations : []) {
-    tally[stationHoldsBikes(station) ? 'velo' : 'autres'] += 1;
-  }
-  for (const vehicle of Array.isArray(payload.vehicles) ? payload.vehicles : []) {
-    tally[isBikeKind(vehicle?.kind) ? 'velo' : 'autres'] += 1;
-  }
-  // i18n-ignore-end
+  const box = _viewer ? cameraSharedMobilityBox(_viewer) : null;
+  const key = [_kindFilter, _operatorFilter, box ? [box.south, box.west, box.north, box.east].map((v) => v.toFixed(4)).join(',') : '']
+    .join('|');
+  if (_tally && _tallyPayload === payload && _tallyKey === key) return _tally;
+
+  const families = Object.fromEntries(SHARED_MOBILITY_KIND_FILTERS.map((filter) => [filter.id, 0]));
+  // The same, blind to the operator focus: which segments EXIST. A control
+  // that lost two of its three segments the moment « Lime » was pressed would
+  // move under the reader's hand; a segment Lime has nothing in greys instead.
+  const familiesAll = { ...families };
+  const operators = new Map();
+  let stations = 0;
+  let shown = 0;
+  const visit = (type, object) => {
+    if (box && !gbfsBoxContains(box, object?.lat, object?.lon)) return;
+    const operator = payloadOperator(payload, object?.system);
+    const ownFocus = !_operatorFilter || operator.id === _operatorFilter;
+    const ownFamily = matchesKindFilter(_kindFilter, type, object);
+    const objectFamilies = type === 'station'
+      ? [...stationFamilies(object)]
+      : [familyOfKind(object?.kind)].filter(Boolean);
+    for (const family of objectFamilies) {
+      familiesAll[family] += 1;
+      if (ownFocus) families[family] += 1;
+    }
+    if (ownFamily) {
+      const seen = operators.get(operator.id);
+      if (seen) seen.count += 1;
+      else operators.set(operator.id, { operator, count: 1 });
+    }
+    if (ownFocus && ownFamily) {
+      shown += 1;
+      if (type === 'station') stations += 1;
+    }
+  };
+  for (const station of Array.isArray(payload?.stations) ? payload.stations : []) visit('station', station);
+  for (const vehicle of Array.isArray(payload?.vehicles) ? payload.vehicles : []) visit('vehicle', vehicle);
+
   _tallyPayload = payload;
-  _tally = tally;
-  return tally;
+  _tallyKey = key;
+  _tally = { families, familiesAll, operators, stations, shown };
+  return _tally;
 }
 
 const fr = (value) => formatNumber(Number(value));
-
-/**
- * The tooltip for one filter chip.
- *
- * It carries the count on BOTH sides, and — on the bikes chip — the one place
- * the split is a judgement rather than a reading: a dock that publishes no
- * inventory is counted as a bike dock, following the GBFS default.
- * @param {{id: string}} filter
- * @param {number} kept Objects this chip would keep.
- * @param {number} total Objects in the answer.
- * @param {boolean} active Whether this chip is the lit one.
- * @returns {string}
- */
-function kindFilterChipTitle(filter, kept, total, active) {
-  const m = messages().chipTitles;
-  // Nothing has arrived yet, so there is no share to quote — and a chip that
-  // said "0 sur 0" would look like an answer instead of an absence.
-  const share = total > 0 ? m.share(fr(kept), fr(total)) : '';
-  if (active) return m.active(filter.label, share);
-  return filter.id === 'velo' ? m.bikes(share) : m.rest(share);
-}
 
 function buildLoadingLabel() {
   const m = messages().row;
   if (_status === 'zoom-in') return m.zoomIn;
   if (_loading) return _records.size ? m.refreshing : m.searching;
   if (_status === 'empty') {
-    // A chip that hides everything has to own it: « aucun véhicule ne se
-    // signale ici » would blame the feed for the reader's own filter.
-    const tally = kindFilterTally();
-    if (_kindFilter && tally.velo + tally.autres > 0) {
-      return _kindFilter === 'velo' ? m.noBikes : m.onlyBikes;
-    }
+    // A filter that hides everything has to own it: « aucun véhicule ne se
+    // signale ici » would blame the feed for the reader's own choice.
+    const held = (_lastPayload?.stations?.length || 0) + (_lastPayload?.vehicles?.length || 0);
+    if ((_kindFilter || _operatorFilter) && held > 0) return m.filteredOut;
     return _systemsMatched > 0 ? m.nothingReporting : m.noSystem;
   }
   const active = _systems.filter((s) => s.stationsInView > 0 || s.vehiclesInView > 0).length;
   const parts = [m.operators(fr(active), active === 1)];
-  if (_kindFilter) parts.push(_kindFilter === 'velo' ? m.bikesOnly : m.bikesHidden);
+  if (_kindFilter) {
+    parts.push(m.familyOnly(SHARED_MOBILITY_KIND_FILTERS.find((filter) => filter.id === _kindFilter)?.label || _kindFilter));
+  }
+  if (_operatorFilter) parts.push(m.operatorOnly(focusedOperatorLabel()));
   if (_truncated) parts.push(m.capped);
   const suppressed = _systems.reduce((sum, s) => sum + (s.stationsSuppressed || 0), 0);
   if (suppressed) parts.push(m.mergedStations(fr(suppressed), suppressed > 1 ? 's' : ''));
@@ -1511,25 +1586,34 @@ const sharedMobilityFranceLayer = {
   },
 
   /**
-   * Runtime params. `kinds` hides half the fleet without losing it: the
-   * viewport answer is kept whole, so the chips keep counting what they hide
-   * and releasing the filter costs no request.
+   * Runtime params, both DRAW-ONLY: the viewport answer is kept whole, so the
+   * key keeps counting what a filter hides and releasing it costs no request.
+   *
+   *   `kinds`    — a family id (`velo`, `trottinette`, `scooter`, `voiture`)
+   *                or `all`/null.
+   *   `operator` — an operator id (`lime`, `derived:velo modalis`) or
+   *                `all`/null. The key FANS IT OUT to the other layers of the
+   *                row, so pressing « Lime » over Paris also takes the Vélib'
+   *                docks off the map (`bikeshare.js` takes the same param).
    *
    * DECLARATIVE, NOT A TOGGLE. `velo` always means "show bikes" and never
-   * "show bikes unless you already were" — the lit chip publishes `all` as its
-   * own params, so the release is a value and not a repeat. A parameter that
-   * inverted on re-application would flip the filter off the moment anything
-   * replayed it (`lazyLayer`'s buffered calls, a params intent re-applied on
-   * enable), and nothing about that would look like a bug from the outside.
-   * @param {{kinds?: ?string}} [params] `velo`, `autres`, `all`/null to clear.
+   * "show bikes unless you already were" — the lit control publishes `all` as
+   * its own params, so the release is a value and not a repeat. A parameter
+   * that inverted on re-application would flip the filter off the moment
+   * anything replayed it (`lazyLayer`'s buffered calls, a params intent
+   * re-applied on enable), and nothing about that would look like a bug.
+   *
+   * All or nothing: one refused value leaves both filters as they were.
+   * @param {{kinds?: ?string, operator?: ?string}} [params]
    * @returns {boolean} Whether anything changed.
    */
   setParams(params = {}) {
-    if (params.kinds === undefined) return false;
-    const next = params.kinds === null || params.kinds === 'all' ? null : String(params.kinds);
-    if (next !== null && !SHARED_MOBILITY_KIND_FILTERS.some((f) => f.id === next)) return false;
-    if (next === _kindFilter) return false;
-    _kindFilter = next;
+    const kinds = params.kinds === undefined ? _kindFilter : parseKindParam(params.kinds);
+    const operator = params.operator === undefined ? _operatorFilter : parseOperatorParam(params.operator);
+    if (kinds === undefined || operator === undefined) return false;
+    if (kinds === _kindFilter && operator === _operatorFilter) return false;
+    _kindFilter = kinds;
+    _operatorFilter = operator;
     // Repaint from the answer already in hand. A filter is a view of what
     // arrived, not a different question to ask the proxy.
     if (_lastPayload) {
@@ -1542,9 +1626,24 @@ const sharedMobilityFranceLayer = {
     return true;
   },
 
-  /** @returns {{kinds: ?string}} */
+  /**
+   * Whether a fanned-out param is one this layer takes. Asked, not attempted:
+   * declining is the normal answer for a neighbour's key, and a refused
+   * `setParams` would be logged as a failure.
+   * @param {object} params
+   * @returns {boolean}
+   */
+  acceptsParams(params = {}) {
+    const keys = Object.keys(params || {});
+    if (!keys.length || keys.some((key) => key !== 'kinds' && key !== 'operator')) return false;
+    if (params.kinds !== undefined && parseKindParam(params.kinds) === undefined) return false;
+    if (params.operator !== undefined && parseOperatorParam(params.operator) === undefined) return false;
+    return true;
+  },
+
+  /** @returns {{kinds: ?string, operator: ?string}} */
   getParams() {
-    return { kinds: _kindFilter };
+    return { kinds: _kindFilter, operator: _operatorFilter };
   },
 
   setRowControlsListener(listener) {
@@ -1598,121 +1697,121 @@ const sharedMobilityFranceLayer = {
   },
 
   /**
-   * The row's controls and the key to both channels.
+   * The key: « Mobilités partagées », as Memel adopted it on 2026-09-21.
    *
-   * TWO CHIPS, which are a filter and not a second legend: a city viewport
-   * holds bikes, trottinettes, scooters and shared cars in the same streets,
-   * and the reader who came for one of them reads the other three as noise.
-   * They partition the fleet, so pressing one and then the other shows
-   * everything; pressing the lit one releases the filter. There is no third
-   * "everything" chip — a row with neither lit already reads as unfiltered.
+   * THREE THINGS, IN READING ORDER.
    *
-   * Two legend groups, because the map is saying two things at once:
+   *   A segmented control — « Tous · Vélos · Trottinettes · Scooters ·
+   *     Voitures » — with a segment only for a family on screen, and none at
+   *     all while a single family is. It replaces the two row chips (« Vélos »,
+   *     « Le reste »): one control for one question, where the reader looks.
+   *   « Fournisseurs » — a dot in the operator's hue and its NAME. The dot
+   *     alone was the ChatGPT mock's; 84 operators share 17 hues, and a key
+   *     that makes the reader guess is not a key. Each line is its own switch:
+   *     pressing it shows that operator only, on this layer and — fanned out —
+   *     on the Vélib' docks of the same row; pressing it again brings
+   *     everything back, and « Tout afficher » does when the focus came from
+   *     the other block. No request: the filter is drawn from the answer in
+   *     hand.
+   *   « Stations » — the fill of a dock, only when a dock is on screen.
    *
-   *   SHAPE rows — what is on screen, by kind, each showing its own silhouette
-   *     in a neutral tint. Kinds with nothing in view are omitted rather than
-   *     listed as zero.
-   *   COLOUR rows — the operators in view, each in the hue it is drawn in.
-   *     This is the half a colour cannot explain by itself, and it is also the
-   *     answer to two municipal networks that happen to hash to one hue: the
-   *     names are the authority, the hue only groups.
+   * WHAT WENT. The SHAPE rows (« VAE 5.2K · Scooter 797 ») — a silhouette is
+   * read without a key, and the segments now name the families; the channel
+   * captions « forme = quoi » / « couleur + lettre = qui »; and the note « Le
+   * même ensemble, compté deux fois », which only existed because the key
+   * printed the same population twice.
    *
-   * @returns {{ chips: Array<object>, legend: Array<object> }}
+   * @returns {{chips: Array, legend: Array<object>, legendSegments: Array<object>, legendScope: object}}
    */
   getRowControls() {
-    const kinds = new Map();
-    const operators = new Map();
-    for (const record of _records.values()) {
-      const kind = record.type === 'station' ? 'station' : (record.object?.kind || 'other');
-      kinds.set(kind, (kinds.get(kind) || 0) + 1);
-      const operator = sharedMobilityOperator(record);
-      const seen = operators.get(operator.id);
-      if (seen) seen.count += 1;
-      else operators.set(operator.id, { operator, count: 1 });
-    }
+    const tally = legendTally();
+    const om = operatorMessages().legend;
+    const legend = [];
 
-    const shapes = [...kinds.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([kind, count]) => ({
-        label: kind === 'station' ? messages().legend.stations : vehicleKindLabel(kind),
-        color: KIND_LEGEND_TINT,
-        // The legend swatch IS the map glyph, at legend size.
-        // The legend swatch IS the map plate, at legend size and with no
-        // monogram: these rows answer "what", and a letter on them would claim
-        // an operator they do not stand for.
-        glyph: sharedMobilityGlyph(kind === 'station' ? 'station' : sharedMobilityGlyphKind(kind), { px: LEGEND_GLYPH_PX }),
-        count,
-        channel: shapeChannel(),
-        blurb: kind === 'station'
-          ? messages().legend.stationsBlurb
-          : messages().legend.vehiclesBlurb,
-      }));
-
-    const ranked = [...operators.values()]
+    const ranked = [...tally.operators.values()]
+      .filter(({ operator, count }) => count > 0 || operator.id === _operatorFilter)
       .sort((a, b) => b.count - a.count || a.operator.label.localeCompare(b.operator.label));
-    // ONE SENTENCE FOR THE RULE, NOT ONE PER OPERATOR. Every curated row used to
-    // repeat "one hue nationwide" verbatim, so a view holding six operators
-    // printed the same clause six times. It is a property of the CHANNEL and it
-    // is stated once, below, in `legendNote`.
-    const listed = ranked.slice(0, MAX_OPERATOR_LEGEND_ROWS).map(({ operator, count }) => ({
-      label: operator.label,
-      color: operator.color,
-      // Two channels on ONE row: the hue names the operator and the badge shows
-      // the letter its plates carry up close, so the key explains a mark the
-      // reader may only ever have seen at a zoom where it was a bare disc. This
-      // is not a second list by shape — the row is the operator's colour row,
-      // and `manager.js` masks and tints this swatch with that colour.
-      glyph: sharedMobilityMonogramGlyph(operator.initial, { px: LEGEND_GLYPH_PX }),
-      count,
-      channel: operatorChannel(),
-      blurb: operator.curated ? null : messages().legend.derivedHue(operator.label),
-    }));
-    // Never silently truncate: say how many operators the row is not naming.
-    const hidden = ranked.slice(MAX_OPERATOR_LEGEND_ROWS);
+    let listed = ranked.slice(0, MAX_OPERATOR_LEGEND_ROWS);
+    // The focused operator is always named: its line is the way back.
+    const focused = ranked.find(({ operator }) => operator.id === _operatorFilter);
+    if (focused && !listed.includes(focused)) {
+      listed = [...listed.slice(0, MAX_OPERATOR_LEGEND_ROWS - 1), focused];
+    }
+    for (const { operator, count } of listed) {
+      const active = operator.id === _operatorFilter;
+      legend.push({
+        label: operator.label,
+        color: operator.color,
+        count,
+        channel: om.operators,
+        toggle: { param: 'operator', value: active ? 'all' : operator.id, fanOut: true },
+        off: Boolean(_operatorFilter) && !active,
+        // Side by side there is no column for a sentence: the manager hangs
+        // this on the line's tooltip.
+        blurb: active ? om.focused(operator.label) : om.focus(operator.label, fr(count)),
+      });
+    }
+    // Never silently truncate: say how many operators the key is not naming.
+    const hidden = ranked.filter((entry) => !listed.includes(entry));
     if (hidden.length) {
-      listed.push({
+      legend.push({
         label: messages().legend.moreOperators(hidden.length),
-        color: KIND_LEGEND_TINT,
-        // A row that stands for SEVERAL operators badges none of them: a
-        // letter here would name one of the ones it is summarising.
-        glyph: null,
+        color: TAIL_LEGEND_TINT,
         count: hidden.reduce((sum, entry) => sum + entry.count, 0),
-        channel: operatorChannel(),
+        channel: om.operators,
         blurb: messages().legend.alsoInView(hidden.map((entry) => entry.operator.label).join(', ')),
       });
     }
+    // « Tout afficher » only when the focus has no line here to press again —
+    // a focus on Vélib', set from the block above — so the card never prints
+    // two ways back.
+    if (_operatorFilter && !focused) {
+      legend.push({
+        label: om.showAll,
+        action: true,
+        channel: om.operators,
+        toggle: { param: 'operator', value: 'all', fanOut: true },
+      });
+    }
+    if (tally.stations > 0) legend.push(...dockFillLegend());
 
-    const tally = kindFilterTally();
-    const total = tally.velo + tally.autres;
-    const chips = SHARED_MOBILITY_KIND_FILTERS.map((filter) => {
-      const active = _kindFilter === filter.id;
-      const kept = tally[filter.id];
-      return {
-        id: filter.id,
-        label: filter.label,
-        active,
-        state: active ? 'active' : 'idle',
-        // A chip that would blank the map is refused rather than allowed to
-        // look broken — but never the lit one, which is the way back.
-        disabled: kept === 0 && !active,
-        title: kindFilterChipTitle(filter, kept, total, active),
-        // The lit chip IS the way back, and it says so as a value rather than
-        // as "press me twice" — see `setParams`.
-        params: { kinds: active ? 'all' : filter.id },
-      };
-    });
+    const present = SHARED_MOBILITY_KIND_FILTERS
+      .filter((filter) => tally.familiesAll[filter.id] > 0 || filter.id === _kindFilter);
+    const legendSegments = present.length > 1 || _kindFilter
+      ? [
+        {
+          id: 'all',
+          label: messages().filters.all,
+          active: !_kindFilter,
+          // « Tous » while nothing is filtered is where the reader already is.
+          toggle: _kindFilter ? { param: 'kinds', value: 'all', fanOut: true } : null,
+        },
+        ...present.map((filter) => {
+          const active = filter.id === _kindFilter;
+          return {
+            id: filter.id,
+            label: filter.label,
+            active,
+            // Refused rather than allowed to blank the map — never the lit one.
+            disabled: !active && tally.families[filter.id] === 0,
+            title: messages().legend.familyTitle(fr(tally.families[filter.id])),
+            toggle: { param: 'kinds', value: active ? 'all' : filter.id, fanOut: true },
+          };
+        }),
+      ]
+      : [];
 
     return {
-      chips,
-      legend: [...shapes, ...listed],
-      // WHY THE TWO LISTS DO NOT ADD UP. They are the same population counted
-      // twice — 76 stations + 8 e-bikes is the same 84 objects as 77 Pony + 7
-      // Citiz — and a key that names neither channel invites the reader to sum
-      // them to 168. The channel names above the entries already say WHAT each
-      // list answers, so this says only the thing neither of them can: it is
-      // one set, read twice.
-      legendNote: messages().legend.note,
-      legendScope: { inView: _count, where: null },
+      chips: [],
+      legend,
+      legendSegments,
+      legendSegmentsLabel: messages().legend.segmentsLabel,
+      // A block a filter emptied is not « hors de cette vue »: its objects are
+      // here, the reader asked not to see them. No extent claim then — which
+      // also keeps it in place instead of sinking below its neighbour.
+      legendScope: tally.shown > 0 || !(_kindFilter || _operatorFilter)
+        ? { inView: tally.shown, where: null }
+        : null,
     };
   },
 
