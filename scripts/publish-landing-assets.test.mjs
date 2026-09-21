@@ -38,3 +38,12 @@ test('a gallery loop\'s name is a reference the rewriter and the cache rule both
   assert.equal(html, '<img src="/landing/view-01-480.89abcdef.jpg">');
   assert.deepEqual(missing, []);
 });
+
+test('the gallery module lists its boxes in order, whichever directory staged each', () => {
+  const loop = (file) => ({ aspect: 1.65, fps: 30, durationS: 6, sources: [{ file, codec: 'av1', width: 480, height: 290 }] });
+  const published = new Map([['view-04.mp4', 'view-04.0123abcd.mp4'], ['view-02.mp4', 'view-02.0123abcd.mp4'],
+    ['voice.mp4', 'voice.0123abcd.mp4']]);
+  const merged = mergeManifests([{ gallery: { 'view:04': loop('view-04.mp4') } },
+    { gallery: { 'voice-response': loop('voice.mp4'), 'view:02': loop('view-02.mp4'), 'view:04': loop('x.mp4') } }]);
+  assert.deepEqual(Object.keys(galleryModuleData(merged.gallery, published)), ['view:02', 'view:04', 'voice-response']);
+});

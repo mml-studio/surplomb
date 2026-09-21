@@ -3,20 +3,33 @@
  * Encode a finished film for a box of the gallery, in place of its recorded
  * loop.
  *
- *     node scripts/build-landing-film.mjs --src ~/Downloads/surplomb-roissy-v9b.mp4
- *     node scripts/publish-landing-assets.mjs        # film/out is first in its --from
+ *     node scripts/build-landing-film.mjs --view 01 --src ~/Downloads/surplomb-roissy-v9b.mp4
+ *     node scripts/build-landing-film.mjs --view 04 --src ~/Downloads/surplomb-grid-v4.mp4 --start 3
+ *     node scripts/publish-landing-assets.mjs        # film/view-<nn> come first in its --from
  *
  * The gallery's loops are six seconds of a fixed camera
  * (scripts/capture-landing-gallery.mjs); from a few metres away they read as
  * stills. A film is cut elsewhere, from the app: the Roissy scene (#315) is
  * 29 s at 1920×1080 that takes off down runway 09R, follows a departure into
- * its Cockpit and climbs to the noise plan. It replaces view 01's loop under
- * the SAME names (`view-01-{480,960,1440}-<codec>.mp4`, `view-01-<width>.jpg`),
- * so `scripts/publish-landing-assets.mjs` serves it wherever it finds this
+ * its Cockpit and climbs to the noise plan; the power grid's (view 04) is
+ * 14.7 s that lights France up inside a dark Europe, fills the nuclear plants'
+ * columns, dives onto Cruas and switches the country off again. A film
+ * replaces its view's loop under the SAME names
+ * (`view-<nn>-{480,960,1440}-<codec>.mp4`, `view-<nn>-<width>.jpg`), so
+ * `scripts/publish-landing-assets.mjs` serves it wherever it finds this
  * directory's manifest before the gallery's.
  *
  * What changes from the gallery's recipe (scripts/build-landing-gallery.mjs):
  *
+ *   - THE FIRST FRAME. The still is frame 0 of the file, and it is all a
+ *     reader with reduced motion, data saver or an iPhone in Low Power Mode
+ *     ever sees. The grid film opens on Europe unlit, which says nothing of a
+ *     power grid, so `--start` turns the film round instead of picking
+ *     another still: the file starts at that second, runs to the end and
+ *     wraps to the opening. Its last frame is the source frame just before
+ *     `--start`, so the loop point is as continuous as any other pair of
+ *     frames, and the film's own end-to-start cut stays inside the file,
+ *     where the loop would have put it anyway.
  *   - THE SHAPE. The box is 1.65:1 (landing.css, `.view-image`) and the film
  *     16:9. It is cropped to the box here, centred, rather than by
  *     `object-fit: cover` in the page: the files are 7 % lighter, and the
@@ -63,17 +76,39 @@ const RECIPE = 'landing-film-v1';
 /** `.view-image { aspect-ratio: 1.65 }` (landing.css). */
 export const BOX_ASPECT = 1.65;
 
-/** The box the film plays in, the stem of its files, and the codecs of each width. */
-export const FILM = Object.freeze({
-  key: 'view:01',
-  stem: 'view-01',
-  view: '01',
-  codecsByWidth: Object.freeze({
-    480: Object.freeze(['av1', 'hevc', 'h264']),
-    960: Object.freeze(['av1', 'hevc']),
-    1440: Object.freeze(['av1', 'hevc']),
-  }),
+/** The codecs of each width a film is encoded at. */
+export const CODECS_BY_WIDTH = Object.freeze({
+  480: Object.freeze(['av1', 'hevc', 'h264']),
+  960: Object.freeze(['av1', 'hevc']),
+  1440: Object.freeze(['av1', 'hevc']),
 });
+
+/**
+ * The box a film plays in and the stem of its files: the `data-view` and
+ * `data-media` of that box in index.html, and the names its loop already had.
+ * @param {string} view two digits, `01` to `06`
+ */
+export function filmFor(view) {
+  if (!/^0[1-6]$/.test(view)) throw new Error(`--view takes 01 to 06, not ${view}`);
+  return Object.freeze({ key: `view:${view}`, stem: `view-${view}`, view, codecsByWidth: CODECS_BY_WIDTH });
+}
+
+/**
+ * The filter that makes a width's reference from the source film: turned
+ * round to begin at `startFrame` (see THE FIRST FRAME above), then cropped to
+ * the box and scaled. Frame numbers, not seconds, so no frame is dropped or
+ * repeated at the join.
+ * @param {{crop: {x: number, y: number, width: number, height: number}, width: number, startFrame: number}} args
+ */
+export function referenceFilter({ crop, width, startFrame }) {
+  const shape = `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:-2:flags=lanczos,`
+    + `format=yuv420p,${COLOUR_PARAMS}`;
+  if (!startFrame) return `[0:v]${shape}[v]`;
+  return `[0:v]split[head][tail];`
+    + `[tail]trim=start_frame=${startFrame},setpts=PTS-STARTPTS[late];`
+    + `[head]trim=end_frame=${startFrame},setpts=PTS-STARTPTS[early];`
+    + `[late][early]concat=n=2:v=1:a=0,${shape}[v]`;
+}
 
 /**
  * Constant-quality ladders, lightest first. The gallery's start at CRF 63,
@@ -119,57 +154,66 @@ function parseCli(argv) {
     args: argv,
     options: {
       src: { type: 'string' },
-      out: { type: 'string', default: '.context/landing-assets/film/out' },
+      view: { type: 'string', default: '01' },
+      start: { type: 'string', default: '0' },
+      out: { type: 'string' },
       work: { type: 'string' },
       reencode: { type: 'boolean', default: false },
       target: { type: 'string' },
     },
   });
   if (!values.src) throw new Error('--src <film.mp4> is required');
-  const out = path.resolve(ROOT, values.out);
+  const film = filmFor(values.view);
+  const startS = Number(values.start);
+  if (!(startS >= 0)) throw new Error(`--start takes seconds, not ${values.start}`);
+  const outArg = values.out || `.context/landing-assets/film/${film.stem}`;
   return {
+    film,
+    startS,
     src: path.resolve(values.src.replace(/^~(?=\/)/, process.env.HOME || '~')),
-    out,
-    work: path.resolve(ROOT, values.work || path.join(values.out, 'work')),
+    out: path.resolve(ROOT, outArg),
+    work: path.resolve(ROOT, values.work || path.join(outArg, 'work')),
     reencode: values.reencode,
     target: values.target ? Number(values.target) : VMAF_TARGET,
   };
 }
 
 /** The lossless reference a width is encoded from and scored against. */
-function reference({ src, width, work, crop }) {
-  const file = path.join(work, `ref-${FILM.stem}-${width}-x${crop.x}w${crop.width}.mkv`);
+function reference({ src, film, width, work, crop, startFrame }) {
+  const file = path.join(work, `ref-${film.stem}-${width}-x${crop.x}w${crop.width}-s${startFrame}.mkv`);
   if (existsSync(file) && statSync(file).mtimeMs > statSync(src).mtimeMs) return file;
-  ffmpeg(['-i', src, '-vf',
-    `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:-2:flags=lanczos,format=yuv420p,${COLOUR_PARAMS}`,
+  ffmpeg(['-i', src, '-filter_complex', referenceFilter({ crop, width, startFrame }), '-map', '[v]',
     '-c:v', 'libx264', '-qp', '0', '-preset', 'veryfast', '-an', ...COLOUR_TAGS, file]);
   return file;
 }
 
 async function main() {
   const options = parseCli(process.argv.slice(2));
-  const { src, out, work, reencode, target } = options;
+  const { film, startS, src, out, work, reencode, target } = options;
   if (!existsSync(src)) throw new Error(`no film at ${src}`);
   for (const dir of [out, work]) mkdirSync(dir, { recursive: true });
-  // A codec dropped from FILM must not linger here for the publish step to find.
+  // A codec dropped from CODECS_BY_WIDTH must not linger here for the publish step to find.
   for (const file of readdirSync(out)) {
-    if (file.startsWith(`${FILM.stem}-`) && file.endsWith('.mp4')) rmSync(path.join(out, file));
+    if (file.startsWith(`${film.stem}-`) && file.endsWith('.mp4')) rmSync(path.join(out, file));
   }
   const started = Date.now();
   const info = probe(src);
   const crop = boxCrop(info, BOX_ASPECT);
   const durationS = info.durationS;
+  const startFrame = Math.round(startS * info.fps);
+  if (startFrame >= Math.round(durationS * info.fps)) throw new Error(`--start ${startS} s is past the film's end`);
   log(`${path.basename(src)}: ${info.width}×${info.height}, ${info.fps} fps, ${round2(durationS)} s; `
-    + `box crop ${crop.width}×${crop.height} at x=${crop.x}`);
+    + `box crop ${crop.width}×${crop.height} at x=${crop.x}; ${film.key}`
+    + (startFrame ? `, turned round to begin at frame ${startFrame} (${round2(startFrame / info.fps)} s)` : ''));
 
   const sources = [];
   const ladders = {};
-  for (const [widthKey, codecs] of Object.entries(FILM.codecsByWidth)) {
+  for (const [widthKey, codecs] of Object.entries(film.codecsByWidth)) {
     const width = Number(widthKey);
     if (width > crop.width) throw new Error(`${width} px asked of a ${crop.width} px crop`);
-    const ref = reference({ src, width, work, crop });
+    const ref = reference({ src, film, width, work, crop, startFrame });
     for (const codec of codecs) {
-      const name = `${FILM.stem}-${width}-${codec}`;
+      const name = `${film.stem}-${width}-${codec}`;
       const encode = async (crf) => {
         const output = path.join(work, `${name}-crf${crf}.mp4`);
         const recipe = `${RECIPE} ${codec} crf=${crf} g=${GOP}`;
@@ -204,13 +248,13 @@ async function main() {
 
   // The stills: frame 0 of the best file at the largest width, as a browser
   // decodes it — the page fades the film in over its still.
-  const widths = Object.keys(FILM.codecsByWidth).map(Number);
+  const widths = Object.keys(film.codecsByWidth).map(Number);
   const top = sources.filter((s) => s.width === Math.max(...widths))
     .sort((a, b) => PREFERENCE.indexOf(a.codec) - PREFERENCE.indexOf(b.codec))[0];
-  const frame0 = frameAsPng({ file: path.join(out, top.file), index: 0, output: path.join(work, `${FILM.stem}-frame0.png`) });
+  const frame0 = frameAsPng({ file: path.join(out, top.file), index: 0, output: path.join(work, `${film.stem}-frame0.png`) });
   const stills = [];
   for (const width of widths) {
-    const written = await writeImage({ out, name: `${FILM.stem}-${width}`,
+    const written = await writeImage({ out, name: `${film.stem}-${width}`,
       make: () => sharp(frame0).resize({ width, kernel: 'lanczos3' }) });
     for (const entry of written) {
       if (entry.file.endsWith('.webp')) rmSync(path.join(out, entry.file), { force: true });
@@ -230,13 +274,15 @@ async function main() {
       width: info.width,
       height: info.height,
       crop,
+      // Where the file begins in the film (THE FIRST FRAME above).
+      startS: round2(startFrame / info.fps),
     },
     // The shape scripts/publish-landing-assets.mjs merges with the gallery's.
     capture: { capturedAt: new Date(statSync(src).mtimeMs).toISOString() },
     gallery: {
-      [FILM.key]: {
-        stem: FILM.stem,
-        view: FILM.view,
+      [film.key]: {
+        stem: film.stem,
+        view: film.view,
         durationS: round2(durationS),
         fps: info.fps,
         aspect: round2(sources[0].width / sources[0].height),
