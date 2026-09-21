@@ -55,11 +55,20 @@ export const ACTION_B_LICENCE = 'action-b';
 export const ACTION_B_POLL_MS = 5 * 60_000;
 
 /**
- * Pause between two file downloads: at most two requests a second, one at a
- * time. It only matters on a cold start, when the whole ~2 200-file window is
- * replayed (~20 min); in steady state a poll finds seven or eight new files.
+ * Pause between two file downloads: at most one request a second, one at a
+ * time — the ceiling public services most often publish for an automated
+ * client (Nominatim's usage policy is the canonical one), chosen while Bison
+ * Futé has not named its own. It only matters on a cold start, when the whole
+ * ~2 200-file window is replayed (~40 min); in steady state a poll finds seven
+ * or eight new files.
  */
-export const ACTION_B_FILE_SPACING_MS = 500;
+export const ACTION_B_FILE_SPACING_MS = 1_000;
+
+/**
+ * Who is asking, so the operator of the access point can tell this client
+ * apart and reach its maintainers rather than block an anonymous address.
+ */
+export const ACTION_B_USER_AGENT = 'surplomb/1.0 (+https://github.com/mml-studio/surplomb; Bison Futé Action b licensee)';
 
 /**
  * A store not polled for this long is discarded and replayed from scratch.
@@ -317,7 +326,7 @@ export function createActionBPoller({
     const cred = credentials();
     if (!cred) return null;
     const token = btoa(`${cred.user}:${cred.password}`);
-    return { Authorization: `Basic ${token}`, 'Accept-Encoding': 'gzip' };
+    return { Authorization: `Basic ${token}`, 'Accept-Encoding': 'gzip', 'User-Agent': ACTION_B_USER_AGENT };
   };
 
   async function get(url, auth) {

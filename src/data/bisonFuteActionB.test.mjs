@@ -12,7 +12,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACTION_B_AUTH_BACKOFF_MS,
+  ACTION_B_FILE_SPACING_MS,
   ACTION_B_LICENCE,
+  ACTION_B_USER_AGENT,
   ACTION_B_RESYNC_AFTER_MS,
   countRoadEvents,
   createActionBPoller,
@@ -224,7 +226,12 @@ const BASE = 'https://tipi.example/ACTION-B/';
 function fakeOrigin(files) {
   const origin = { files: new Map(Object.entries(files)), requests: [], status: 200 };
   origin.fetch = async (url, init) => {
-    origin.requests.push({ url, auth: init?.headers?.Authorization, encoding: init?.headers?.['Accept-Encoding'] });
+    origin.requests.push({
+      url,
+      auth: init?.headers?.Authorization,
+      encoding: init?.headers?.['Accept-Encoding'],
+      agent: init?.headers?.['User-Agent'],
+    });
     if (origin.status !== 200) return new Response('', { status: origin.status });
     if (url === BASE) return new Response(listing([...origin.files.keys()].map(Number)));
     const name = url.slice(BASE.length).replace('.xml', '');
@@ -244,13 +251,12 @@ function makePoller(origin, { clock = { t: NOW }, credentials = { user: 'u', pas
     fetchImpl: origin.fetch,
     sleep: async (ms) => { sleeps.push(ms); },
     now: () => clock.t,
-    spacingMs: 500,
     log: { log() {}, warn() {} },
   });
   return { store, poller, sleeps, clock };
 }
 
-test('a poll reads the index, then each file once, one at a time, with Basic auth and gzip', async () => {
+test('a poll reads the index, then each file once, one a second, identified, with Basic auth and gzip', async () => {
   const origin = fakeOrigin({
     101: message({ id: '260921-000001' }),
     102: message({ id: '260921-000002', source: 'APRR' }),
@@ -261,7 +267,9 @@ test('a poll reads the index, then each file once, one at a time, with Basic aut
   assert.deepEqual(origin.requests.map((request) => request.url), [BASE, `${BASE}101.xml`, `${BASE}102.xml`]);
   assert.ok(origin.requests.every((request) => request.auth === `Basic ${btoa('u:p')}`));
   assert.ok(origin.requests.every((request) => request.encoding === 'gzip'));
-  assert.deepEqual(sleeps, [500], 'one pause between two files, none before the first');
+  assert.ok(origin.requests.every((request) => request.agent === ACTION_B_USER_AGENT));
+  assert.equal(ACTION_B_FILE_SPACING_MS, 1_000, 'one request a second at most');
+  assert.deepEqual(sleeps, [1_000], 'one pause between two files, none before the first');
   assert.equal(store.state.synced, true);
   assert.equal(store.state.lastPollAt, NOW);
   assert.equal(store.snapshot(NOW).length, 2);
