@@ -9,23 +9,19 @@ import {
 
 /**
  * A page with a layer registry and a preset, wired the way `ui.js` wires it:
- * every settled visibility change reaches `onVisibility`, every preset change
- * reaches `onStyleChange` — including the ones the follower makes itself.
+ * every settled visibility change reaches `onVisibility`.
  */
 function page({ style = 'normal', lit = [] } = {}) {
   const enabled = new Set(lit);
   const calls = [];
   const state = { style };
-  let follower = null;
-  const setStyle = (next) => {
-    calls.push(next);
-    state.style = next;
-    follower.onStyleChange();
-  };
-  follower = createNightAtlasRowFollower({
+  const follower = createNightAtlasRowFollower({
     isEnabled: (id) => enabled.has(id),
     getStyle: () => state.style,
-    setStyle,
+    setStyle: (next) => {
+      calls.push(next);
+      state.style = next;
+    },
   });
   const move = (ids, on, origin) => {
     for (const id of ids) {
@@ -35,19 +31,16 @@ function page({ style = 'normal', lit = [] } = {}) {
     }
   };
   return {
-    follower,
     calls,
     state,
-    // What the row's own switch does: the primary and its followers.
+    // What the row's own switch does: on carries the primary and its
+    // followers, off takes every member down.
     row: (on, origin = 'user') => move(on
       ? fusionToggleGroupFor('power-grid')
       : nightAtlasRowMembers('power-grid'), on, origin),
     layer: (id, on, origin = 'user') => move([id], on, origin),
-    pick: (next) => {
-      // The reader presses a preset button.
-      state.style = next;
-      follower.onStyleChange();
-    },
+    // The reader presses a preset button.
+    pick: (next) => { state.style = next; },
   };
 }
 
@@ -57,54 +50,70 @@ test('the grid-and-plants row is the one that brings the night', () => {
     ['power-grid', 'rte-generation', 'edf-power-plants', 'fr-hydro-plants']);
 });
 
-test('switching the row on moves the preset to Night, and off gives the old one back', () => {
+test('on, Night; off, Normal', () => {
   const p = page({ style: 'normal' });
   p.row(true);
   // Once, although two layers came on: the row flipped once.
   assert.deepEqual(p.calls, ['noir']);
-  assert.equal(p.follower.owedStyle, 'normal');
   p.row(false);
   assert.deepEqual(p.calls, ['noir', 'normal']);
-  assert.equal(p.follower.owedStyle, null);
+});
+
+test('arriving from the landing page, switching the row off goes back to Normal', () => {
+  // The scene link lit the row itself and asked for Night: the row replaced
+  // no preset. The first version owed nothing here and left the reader in
+  // the dark.
+  const p = page({ style: 'normal' });
+  p.pick('noir');
+  p.row(true, 'share-restore');
+  assert.deepEqual(p.calls, [], 'the link sets its own preset; the row adds nothing');
+  p.row(false);
+  assert.deepEqual(p.calls, ['normal']);
+});
+
+test('off means Normal even when the row replaced another preset', () => {
+  const p = page({ style: 'retro' });
+  p.row(true);
+  p.row(false);
+  assert.deepEqual(p.calls, ['noir', 'normal']);
+});
+
+test('a reader who chose Night before the row still gets Normal when it goes off', () => {
+  const p = page({ style: 'noir' });
+  p.row(true);
+  assert.deepEqual(p.calls, [], 'already at night: nothing to switch on');
+  p.row(false);
+  assert.deepEqual(p.calls, ['normal']);
+});
+
+test('a preset the reader picks while the row is on is theirs to keep', () => {
+  const p = page({ style: 'normal' });
+  p.row(true);
+  p.pick('thermal');
+  p.row(false);
+  assert.deepEqual(p.calls, ['noir'], 'only Night goes away with the row, never FLIR');
+  assert.equal(p.state.style, 'thermal');
 });
 
 test('the voice switches the row the way a hand does', () => {
-  const p = page({ style: 'thermal' });
+  const p = page({ style: 'normal' });
   p.layer('power-grid', true, 'voice');
-  assert.deepEqual(p.calls, ['noir']);
   p.layer('power-grid', false, 'voice');
-  assert.deepEqual(p.calls, ['noir', 'thermal']);
+  assert.deepEqual(p.calls, ['noir', 'normal']);
 });
 
 test('a share link, a stored session or a context mode never moves the preset', () => {
   for (const origin of ['share-restore', 'local-restore', 'context-restore', 'scene', 'programmatic']) {
     const p = page({ style: 'normal' });
     p.row(true, origin);
-    assert.deepEqual(p.calls, [], origin);
-    p.row(false, 'user');
-    assert.deepEqual(p.calls, [], `${origin}: nothing was owed, so nothing is given back`);
+    assert.deepEqual(p.calls, [], `${origin} on`);
+    p.pick('noir');
+    p.row(false, origin);
+    assert.deepEqual(p.calls, [], `${origin} off`);
   }
 });
 
-test('a preset the reader picks while the row is on is theirs to keep', () => {
-  const p = page({ style: 'normal' });
-  p.row(true);
-  p.pick('retro');
-  assert.equal(p.follower.owedStyle, null);
-  p.row(false);
-  assert.deepEqual(p.calls, ['noir'], 'turning the row off must not undo CRT');
-  assert.equal(p.state.style, 'retro');
-});
-
-test('a reader already under Night keeps it when the row goes off', () => {
-  const p = page({ style: 'noir' });
-  p.row(true);
-  p.row(false);
-  assert.deepEqual(p.calls, []);
-  assert.equal(p.state.style, 'noir');
-});
-
-test('the row is lit by any of its layers, so one chip counts and the last one out restores', () => {
+test('the row is lit by any of its layers, and the last one out brings Normal', () => {
   const p = page({ style: 'normal' });
   // The reader presses only the EDF register's chip.
   p.layer('edf-power-plants', true);
@@ -117,19 +126,20 @@ test('the row is lit by any of its layers, so one chip counts and the last one o
   assert.deepEqual(p.calls, ['noir', 'normal']);
 });
 
-test('a row parked by a context mode keeps its debt until the reader turns it off', () => {
-  const p = page({ style: 'anime' });
+test('a row parked by a context mode stays at night until the reader turns it off', () => {
+  const p = page({ style: 'normal' });
   p.row(true);
   p.row(false, 'context-restore');
   assert.deepEqual(p.calls, ['noir'], 'a context mode is not the reader asking for daylight');
   p.row(true, 'context-restore');
   p.row(false, 'user');
-  assert.deepEqual(p.calls, ['noir', 'anime']);
+  assert.deepEqual(p.calls, ['noir', 'normal']);
 });
 
 test('layers on no night row are ignored', () => {
-  const p = page({ style: 'normal' });
+  const p = page({ style: 'noir' });
   p.layer('traffic', true);
+  p.layer('traffic', false);
   p.layer('gas-fr', true);
   assert.deepEqual(p.calls, []);
 });

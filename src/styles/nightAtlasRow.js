@@ -1,14 +1,15 @@
 /**
  * @module styles/nightAtlasRow
  *
- * The panel row that brings the night atlas with it.
+ * The panel row that brings the night atlas with it, and takes it away.
  *
  * « Réseau électrique et centrales » is drawn for a dark ground: under the
  * night atlas the grid wears its night dress (`powerGridFeed.js`) and the
  * stations' columns glow, and the landing page's scene opens the two together
  * with `style=night`. A reader who switched the same row on by hand got the
  * daylight version and had to know to press Night as well. Switching the row
- * on now moves the preset to Night, the way the link does.
+ * on now moves the preset to Night, the way the link does — and switching it
+ * off puts a night map back to Normal.
  *
  * THREE RULES, each one a case the obvious version gets wrong.
  *
@@ -17,15 +18,18 @@
  *     session comes back the way the reader left it, and a context mode that
  *     parks layers and restores them is not asking for a look. None of them
  *     may override the preset.
- *  2. Switching the row off gives back the preset it replaced — unless the
- *     reader picked another one in the meantime. A preset chosen while the row
- *     was on is the reader's, and it stays.
- *  3. A row switched on under Night owes nothing: the reader who chose Night
- *     keeps it when the row goes off.
+ *  2. Off means Normal, whoever lit the row. The first version gave back the
+ *     preset the row had REPLACED, and owed nothing when it had replaced
+ *     nothing — which is every arrival from the landing page, where the link
+ *     lit the row and asked for Night itself. A reader switched the row off
+ *     there and stayed in the dark. The operator asked for the plain rule:
+ *     on, Night; off, Normal.
+ *  3. Only NIGHT is put back. A preset the reader picked while the row was on
+ *     — CRT, FLIR — is theirs, and the row going dark leaves it alone.
  *
  * The row is LIT while any of its layers draws (`layerFusions.js`): a share
  * link can light a companion alone, and a row lit through one of its chips is
- * still the row.
+ * still the row. It goes DARK when the last of them stops.
  *
  * Cesium-free and DOM-free, so the rules above are tested under `node --test`
  * against the same code `ui.js` runs.
@@ -58,11 +62,7 @@ export function nightAtlasRowMembers(rowId) {
  * @param {() => ?string} deps.getStyle The preset on screen.
  * @param {(style: string) => void} deps.setStyle Switch the preset.
  * @param {ReadonlyArray<string>} [deps.rows] Rows to follow.
- * @returns {{
- *   onVisibility: (change: {layerId?: string, origin?: string}) => void,
- *   onStyleChange: () => void,
- *   readonly owedStyle: ?string,
- * }}
+ * @returns {{onVisibility: (change: {layerId?: string, origin?: string}) => void}}
  */
 export function createNightAtlasRowFollower({
   isEnabled,
@@ -78,18 +78,6 @@ export function createNightAtlasRowFollower({
   // Read, not assumed dark: a row a stored session lit before this follower
   // existed would otherwise "light up" on the reader's first chip press.
   const lit = new Map(rows.map((rowId) => [rowId, rowLit(rowId)]));
-  // The preset to give back when the rows go dark; null when nothing is owed.
-  let restoreTo = null;
-  let switching = false;
-
-  const apply = (style) => {
-    switching = true;
-    try {
-      setStyle(style);
-    } finally {
-      switching = false;
-    }
-  };
 
   return {
     /**
@@ -104,33 +92,14 @@ export function createNightAtlasRowFollower({
       const now = rowLit(rowId);
       lit.set(rowId, now);
       if (now === was || !READER_ORIGINS.has(change?.origin)) return;
-      const style = getStyle() || 'normal';
+      const night = (getStyle() || 'normal') === NIGHT_ATLAS_STYLE;
       if (now) {
-        if (style === NIGHT_ATLAS_STYLE) return;
-        apply(NIGHT_ATLAS_STYLE);
-        // After `apply`, not before: the switch announces itself through
-        // `onStyleChange`, and a debt written first would be the first thing
-        // it cleared.
-        restoreTo = style;
+        if (!night) setStyle(NIGHT_ATLAS_STYLE);
         return;
       }
+      // Another night row still drawing keeps the ground dark.
       if ([...lit.values()].some(Boolean)) return;
-      const back = restoreTo;
-      restoreTo = null;
-      if (back && style === NIGHT_ATLAS_STYLE) apply(back);
-    },
-
-    /**
-     * Every preset change on the page. One this follower did not make is the
-     * reader's choice, and there is no longer anything to give back.
-     */
-    onStyleChange() {
-      if (!switching) restoreTo = null;
-    },
-
-    /** The preset a dark row would give back, for tests and the console. */
-    get owedStyle() {
-      return restoreTo;
+      if (night) setStyle('normal');
     },
   };
 }

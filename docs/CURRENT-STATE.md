@@ -2849,10 +2849,10 @@ time. The row's switch therefore lights what the landing page's scene lights.
 It also moves the visual preset (`src/styles/nightAtlasRow.js`, fed from the
 manager's settled `visibility` events in `ui.js`): when the row goes from dark to
 lit by a reader — origin `user` or `voice` — the preset becomes Night, and when
-it goes dark again by a reader the preset it replaced comes back, unless the
-reader picked another one meanwhile or was already under Night. A share link, a
-restored session, a scene or a context mode moves layers without moving the
-preset. The switch lands when the first of the row's layers settles: 1.8 to
+a reader turns it dark again a night map goes back to Normal, whoever lit the
+row — the landing page's link included. A preset the reader picked while the
+row was on (CRT, FLIR…) stays. A share link, a restored session, a scene or a
+context mode moves layers without moving the preset. The switch lands when the first of the row's layers settles: 1.8 to
 2.8 s after the click in headless SwiftShader runs against the dev server.
 
 **What the fusion does NOT do**, and is owed separately: deduplicate the 56
