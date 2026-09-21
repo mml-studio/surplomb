@@ -149,9 +149,14 @@ const SHARE_STYLE_PARAM_REGISTRY = Object.freeze({
     { key: 'saturation', token: 's', min: 0, max: 2 },
     { key: 'edgeThick', token: 'e', min: 0, max: 1 },
   ]),
+  // The night atlas since 2026-09-21 (`styles/nightAtlas.js`). The film-noir
+  // tokens `c` and `g` are gone with the controls they carried: an older link
+  // that holds them restores Noir at its defaults, which is the look its
+  // sender can no longer produce either.
   noir: Object.freeze([
-    { key: 'contrastAmt', token: 'c', min: 0, max: 2 },
-    { key: 'grainAmt', token: 'g', min: 0, max: 1 },
+    { key: 'dimAmt', token: 'd', min: 0, max: 1 },
+    { key: 'desatAmt', token: 's', min: 0, max: 1 },
+    { key: 'glowAmt', token: 'b', min: 0, max: 1 },
     { key: 'vignetteAmt', token: 'v', min: 0, max: 1 },
   ]),
   snow: Object.freeze([

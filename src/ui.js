@@ -2,6 +2,8 @@ import * as Cesium from 'cesium';
 import { retroShader } from './styles/retro.js';
 import { animeShader } from './styles/anime.js';
 import { noirShader } from './styles/noir.js';
+import { createNightBasemap } from './styles/nightBasemap.js';
+import { NIGHT_ATLAS_STYLE } from './styles/nightAtlas.js';
 import { snowShader } from './styles/snow.js';
 import { nightVisionShader } from './styles/surveillance.js';
 import { thermalShader } from './styles/thermal.js';
@@ -3257,6 +3259,36 @@ export class StyleManager {
     // Frozen after init — cached so the per-frame animation loop doesn't
     // rebuild Object.entries arrays every frame.
     this._stageEntries = Object.entries(this.stages);
+    this._initNightBasemap();
+  }
+
+  /**
+   * The night atlas's dark ground, which no post-process pass can paint
+   * without also darkening the data — see `styles/nightBasemap.js`.
+   *
+   * It follows the Noir stage's own intensity rather than `setStyle`, so the
+   * crossfade, a share-link restore and Cockpit's vision override all dim the
+   * ground on the same frames they fade the bloom in.
+   * @returns {void}
+   */
+  _initNightBasemap() {
+    const stage = this.stages[NIGHT_ATLAS_STYLE];
+    const stacks = this.mapStackController;
+    if (!stage || !this.viewer?.scene) return;
+    this._nightBasemap = createNightBasemap({
+      scene: this.viewer.scene,
+      readState: () => ({
+        intensity: stage.enabled ? stage.uniforms.intensity : 0,
+        dim: stage.uniforms.dimAmt,
+        desat: stage.uniforms.desatAmt,
+      }),
+      // The photoreal tileset outlives its stack (it is kept warm while a 2D
+      // stack shows), so it is only dimmed while it is the ground.
+      getTileset: () => (stacks?.getActiveId?.() === 'photoreal'
+        ? stacks.getPhotorealTileset?.() || null
+        : null),
+      getImageryLayers: () => stacks?.getBasemapImageryLayers?.() || [],
+    });
   }
 
   /**
@@ -9846,7 +9878,11 @@ export class StyleManager {
     const block = document.getElementById('map-legend');
     const note = document.getElementById('map-legend-key-note');
     if (!block || !note) return;
-    const invalid = styleName !== 'normal' && Object.hasOwn(STYLES, styleName);
+    // The night atlas darkens the BASEMAP inside the scene and leaves every
+    // layer its own colour (`styles/nightAtlas.js`), so its key still decodes.
+    const invalid = styleName !== 'normal'
+      && styleName !== NIGHT_ATLAS_STYLE
+      && Object.hasOwn(STYLES, styleName);
     block.classList.toggle('key-invalid', invalid);
     note.hidden = !invalid;
     if (invalid) {

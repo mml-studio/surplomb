@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
+import { withLocale } from '../i18n/testing.js';
 import {
   POWER_GRID_MAX_BOX_DEG,
   POWER_GRID_TIERS,
@@ -369,36 +370,35 @@ test('ambient labels name the highest-voltage NAMED yards and nothing else', () 
   assert.deepEqual(selectPowerOverlayCohort(null), []);
 });
 
-test('the legend is by voltage band and carries the ground-route limit on every row', () => {
+test('the legend is by voltage band, in plain words, with no counts', () => {
   seedRenderState();
   const { chips, legend } = _powerRowControlsForTest();
   assert.deepEqual(chips, []);
   assert.ok(legend.length >= 2);
   // Bands in fixed order, so panning never reshuffles the key.
-  const order = POWER_GRID_TIERS.map((tier) => tier.label);
-  assert.deepEqual(
-    legend.filter((row) => order.includes(row.label)).map((row) => row.label),
-    order.filter((label) => legend.some((row) => row.label === label)),
-  );
-  // The limit that would otherwise be invisible, on every band row.
-  for (const row of legend.filter((r) => order.includes(r.label))) {
-    assert.match(row.blurb, /not the conductor height, which OpenStreetMap does not publish/);
-    assert.ok(row.count > 0);
+  const order = withLocale('fr', () => POWER_GRID_TIERS.map((tier) => ({
+    'ehv': 'Très haute tension',
+    'hv-high': 'Haute tension',
+    'hv-mid': 'Haute tension (rare)',
+    'hv-low': 'Lignes régionales',
+  })[tier.id]));
+  const labels = withLocale('fr', () => _powerRowControlsForTest().legend.map((row) => row.label));
+  assert.deepEqual(labels, order.filter((label) => labels.includes(label)));
+  for (const row of legend) {
+    // The reader this key is for gets one sentence per band and no total: a
+    // stroke-plus-yard count means nothing to them, and the kilometres are on
+    // the cards.
+    assert.equal(row.count, undefined);
+    assert.ok(row.blurb.length < 80, row.blurb);
     assert.match(row.color, /^#[0-9a-f]{6}$/i);
   }
   // The pylons get NO row: `#map-legend` carries the colour channel, a picture
   // of a pylon is decoded without a key, and a row would have to invent a
-  // swatch colour for a mark that wears four. What the shape cannot say goes in
-  // the block's note instead.
-  assert.equal(legend.some((row) => row.label === 'Pylons'), false);
-  const { note } = _powerRowControlsForTest();
-  assert.match(note, /one drawn per 600 m of mapped overhead route/i);
-  assert.match(note, /never interpolated between two/i);
-  assert.match(note, /also carry a pylon record/i);
-
-  // Nothing drawn: the note goes with it rather than describing an empty map.
-  seedRenderState({ towersShown: false });
-  assert.equal(_powerRowControlsForTest().note, '');
+  // swatch colour for a mark that wears four.
+  assert.equal(legend.some((row) => /pylon|pylône/i.test(row.label)), false);
+  const { note } = withLocale('fr', () => _powerRowControlsForTest());
+  assert.match(note, /Source : OpenStreetMap\./);
+  assert.doesNotMatch(note, /Pylons: one drawn per/, 'the spacing rule left the key');
 });
 
 test('a pylon spacing is written the way a distance on a map is read', () => {
@@ -691,7 +691,7 @@ test('a view with nothing overhead in it SAYS so, instead of just drawing no pyl
   // pylon. That was right: a cable has none. But the key said nothing at all,
   // so the only reasonable reading left was "the pylons are broken". An
   // absence with a reason is information; an absence on its own is a bug
-  // report, and this one cost a round trip.
+  // report, and this one cost a round trip. The plain key keeps the sentence.
   const allUnderground = {
     strokes: [], substations: [], towers: [], voltages: [], tiers: [],
     stats: { lengthKm: 126.2, overheadKm: 0, undergroundKm: 126.2, strokes: 41, substations: 21 },
@@ -699,16 +699,10 @@ test('a view with nothing overhead in it SAYS so, instead of just drawing no pyl
   _setPowerGridStateForTest({
     payload: allUnderground, records: new Map(), pylonIds: [], enabled: true,
   });
-  const note = _powerRowControlsForTest().note;
-  assert.match(note, /none are missing/i, 'the absence must be explained, not merely true');
-  assert.match(note, /100% of the mapped grid in this view runs UNDERGROUND/);
-  assert.match(note, /a cable has no pylons/i);
+  const note = withLocale('fr', () => _powerRowControlsForTest().note);
+  assert.match(note, /lignes sont enterrées : il n’y a pas de pylône/, 'the absence must be explained');
 
-  // The guard that broke this on the first attempt: `overheadKm <= 0` is the
-  // case the sentence EXISTS for, so it must never be the reason to skip it.
-  assert.notEqual(note, '');
-
-  // A view that is mostly overhead says nothing here — the pylons speak for
+  // A view that is mostly overhead says nothing about pylons — they speak for
   // themselves, and a note about their absence would be about nothing.
   _setPowerGridStateForTest({
     payload: {
@@ -719,7 +713,7 @@ test('a view with nothing overhead in it SAYS so, instead of just drawing no pyl
     pylonIds: [],
     enabled: true,
   });
-  assert.equal(_powerRowControlsForTest().note, '');
+  assert.doesNotMatch(withLocale('fr', () => _powerRowControlsForTest().note), /pylône/);
 
   // And an empty payload has nothing to say either way.
   _setPowerGridStateForTest({ payload: null, records: new Map(), pylonIds: [], enabled: true });
@@ -789,27 +783,22 @@ test('outside France the pack says where it applies, and the prompt still flies 
   assert.match(stats.loadingLabel, /120 km/);
 });
 
-test('the national key shows the bands on screen, in French figures, and states the simplification', () => {
+test('the national key shows the bands on screen, dates the map, and says where the detail is', () => {
   const pack = nationalPack();
   _setPowerGridStateForTest({ payload: null, records: new Map(), national: pack, nationalBandId: 'national' });
-  const controls = _powerRowControlsForTest();
+  const controls = withLocale('fr', () => _powerRowControlsForTest());
   const labels = controls.legend.map((row) => row.label);
-  assert.deepEqual(labels, ['≥ 300 kV', '180–299 kV'], 'from space the key is the backbone the map draws');
-  for (const row of controls.legend) {
-    assert.match(row.blurb, /cartographiés en France/);
-    assert.match(row.blurb, /pas la hauteur des câbles/, 'the ground-route limit survives the translation');
-  }
-  assert.match(controls.note, /simplifié à 50 m/);
+  assert.deepEqual(labels, ['Très haute tension', 'Haute tension'], 'from space the key is the backbone the map draws');
   assert.match(controls.note, /2026-09-19/, 'the key says how old the map is');
-  assert.match(controls.note, /120 km/, 'and where the exact detail is');
+  assert.match(controls.note, /Zoomez pour le tracé exact/, 'and where the exact detail is');
 
   _setPowerGridStateForTest({ payload: null, records: new Map(), national: pack, nationalBandId: 'regional' });
-  assert.ok(_powerRowControlsForTest().legend.some((row) => row.label === '50–99 kV'),
+  assert.ok(withLocale('fr', () => _powerRowControlsForTest()).legend.some((row) => row.label === 'Lignes régionales'),
     'below 600 km the 63/90 kV mesh has a row, because it has a line on screen');
 
-  // A viewport answer on screen takes the key back: its figures are the view's.
+  // A viewport answer on screen takes the key back: no zoom hint, it IS the detail.
   _setPowerGridStateForTest({ payload: PAYLOAD, records: new Map(), national: pack, nationalBandId: 'local' });
-  assert.match(_powerRowControlsForTest().legend[0].blurb, /of mapped route in view/);
+  assert.doesNotMatch(withLocale('fr', () => _powerRowControlsForTest()).note, /Zoomez/);
 });
 
 test('French figures read as French: 89 058 km, never 89,058', () => {

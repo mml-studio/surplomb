@@ -14,14 +14,16 @@
  * dots" — a luminance RAMP failed in the field because dim free-flow dots
  * read as dark holes on NVG-bright roads; classification is the detection
  * brackets' job via `trafficBucketTier`, presence is the dots' job):
- *  - `mono` (surveillance/NVG, thermal/FLIR, noir): every colored dot is a
+ *  - `mono` (surveillance/NVG, thermal/FLIR): every colored dot is a
  *    bright white core with a thin black halo (local contrast survives any
  *    luma mapping, including Ironbow where white stays the hottest end);
  *    jam keeps a size bump so queues read as fat beads.
  *  - `crt` (retro): saturated primaries that survive 10-level posterization
  *    plus an all-bucket size boost to out-shout the pixel grid.
- *  - `normal` (normal/anime/snow/unknown): every lookup returns null/0 —
- *    the shipped palette and sizing apply untouched.
+ *  - `normal` (normal/anime/snow/noir/unknown): every lookup returns null/0 —
+ *    the shipped palette and sizing apply untouched. Noir was `mono` while it
+ *    desaturated the whole frame; since it became the night atlas it darkens
+ *    the basemap only (`styles/nightAtlas.js`) and the dots keep their hue.
  *
  * Sim/uncovered dots (bucket null/'sim') are NEVER restyled under any
  * style: the keyless simulation path stays byte-identical (qa-traffic
@@ -37,7 +39,6 @@
 const PROFILE_BY_STYLE = {
   surveillance: 'mono', // NVG — P43 phosphor × luma
   thermal: 'mono',      // FLIR — grayscale/ironbow × luma
-  noir: 'mono',         // full desaturation
   retro: 'crt',         // CRT — hue survives, small dots don't
 };
 

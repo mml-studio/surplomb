@@ -12,10 +12,11 @@ import {
 const luma = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
 const BUCKETS = ['free', 'slow', 'jam'];
-const MONO_STYLES = ['surveillance', 'thermal', 'noir'];
-const NORMAL_STYLES = ['normal', 'anime', 'snow', 'does-not-exist', '', undefined, null];
+const MONO_STYLES = ['surveillance', 'thermal'];
+// Noir is the night atlas: it darkens the basemap and leaves the dots their hue.
+const NORMAL_STYLES = ['normal', 'anime', 'snow', 'noir', 'does-not-exist', '', undefined, null];
 
-test('profile mapping: NVG/FLIR/noir are mono, retro is crt, everything else normal', () => {
+test('profile mapping: NVG/FLIR are mono, retro is crt, everything else normal', () => {
   for (const s of MONO_STYLES) assert.equal(trafficStyleProfile(s), 'mono', s);
   assert.equal(trafficStyleProfile('retro'), 'crt');
   for (const s of NORMAL_STYLES) assert.equal(trafficStyleProfile(s), 'normal', String(s));

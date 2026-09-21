@@ -105,7 +105,9 @@ export default defineMessages({
 
     // ── ENERGY ──
     'france-energy': { fr: 'Mix électrique', en: 'Electricity mix' },
-    'rte-generation': { fr: 'Groupes de production', en: 'Generating units' },
+    // Plain words since 2026-09-21: « groupes de production » is RTE's term,
+    // and the key titles its block with this name.
+    'rte-generation': { fr: 'Production des centrales', en: 'Power station output' },
     'edf-power-plants': { fr: 'Centrales électriques', en: 'Power plants' },
     'fr-hydro-plants': { fr: 'Centrales hydro', en: 'Hydro plants' },
     'power-grid': { fr: 'Réseau électrique', en: 'Power grid' },

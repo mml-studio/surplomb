@@ -21,6 +21,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   read at most once a second, under a User-Agent that names the project, and
   its index every five minutes (22 KB gzipped). Without the login nothing changes: the open-source build draws the
   State-run network, as before.
+- **« Le réseau électrique et ce qu'il produit » opens on a night map, with
+  the power stations standing in relief.** The scene link now looks north up
+  the Rhône valley from 180 km at 58° instead of straight down from 110 km,
+  and asks for the Noir preset. Between 70 and 800 km of altitude each station
+  is a translucent CAGE as tall as its installed power with a solid COLUMN
+  inside as tall as its output, on one fixed scale (10 m per MW: Cruas's
+  3,660 MW stand 36.6 km tall), and the filière's mark stands on top — for
+  nuclear, the cooling tower with the trefoil punched through it, never the
+  bare trefoil, which is a hazard sign. The ring's grammar survives the change
+  of shape: a faint empty cage is unmeasured, a crisp empty cage is stopped, a
+  pink column is a station drawing from the grid. Closer than 70 km or past
+  800 km the stations turn back into rings. In relief the labels drop the kind
+  of plant the mark already says: *Bugey · 3 418 MW / 3 580 MW*. The
+  landing page's moving thumbnail for this view still shows the old daytime,
+  straight-down take until it is re-recorded.
 - **The globe is bilingual, layer by layer, and the voice with it.** Every
   panel, card, legend, status and refusal now exists in French and in English:
   the shell, the 60-layer registry, the Address X-ray, real estate, transport,
@@ -101,6 +116,32 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   is the zone's letter or figure, as on the map's badges; the official plan
   names are one hover away on the headings, and the unexplained counts are
   gone.
+- **Noir is now a night atlas: the ground goes dark, the data keeps its
+  colour.** It used to desaturate the whole frame, which turned every colour
+  ramp on the map grey and made the key print that it no longer decoded the
+  map. The darkening moved into the scene, onto the basemap alone — the
+  imagery layers of the active stack and the photorealistic tiles — and the
+  pass that remains adds a bloom around bright pixels and a vignette. Its
+  sliders are Darkness, Desaturation, Bloom and Vignette; a share link from
+  before keeps its vignette and restores the rest at their defaults. Traffic
+  keeps its colours under Noir, and the key stays valid.
+- **The power grid wears a night dress under Noir.** Ivory 400 kV and orange
+  225 kV that glow, steel-blue 150 kV and slate 63/90 kV that recede, each on a
+  halo of its own colour instead of a dark casing that shadowed a dark ground.
+  The daylight palette is unchanged everywhere else.
+- **The keys of the power grid and of the power stations speak plainly.** One
+  line per voltage band in words (*Très haute tension*, *Lignes régionales*)
+  with one short sentence each, no counts, and a note that only says what a
+  reader could misread — dashes are underground lines — and where the lines
+  come from. The stations' key says how to read a station (*Hauteur de la
+  colonne = production en ce moment*) and lists only the filières on screen,
+  each with what it makes now against what it could; a filière drawing from
+  the grid is said to consume rather than to produce a negative. Over the
+  scene's view the key went from 14 rows, most of them paragraphs, to 10 rows
+  of one sentence each. The grid's key was still inherited English on the
+  French page; it is French now. The stations' layer is renamed
+  *Production des centrales* (*Power station output*): « groupes de
+  production » is RTE's word.
 - **Property prices paint the parcels from altitude, not discs.** Between
   600 m and 1,800 m the layer now draws every parcel sold in the view,
   coloured by its latest sale against its own municipality's median — the same

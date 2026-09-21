@@ -22,6 +22,7 @@ import {
   rteGenerationClass,
 } from './rteGenerationFeed.js';
 import { pickAt } from './pickAt.js';
+import { plantMarkGlyph } from './plantFiliereIcons.js';
 import { formatDecimal, formatInteger, formatTime } from '../i18n/format.js';
 import messages from './rteGeneration.i18n.js';
 
@@ -68,6 +69,24 @@ import messages from './rteGeneration.i18n.js';
  *
  * That distinction between "unknown" and "zero" is the whole reason the ring
  * and the disc are two primitives rather than one coloured point.
+ *
+ * ── In relief, at regional scale ────────────────────────────────────────────
+ *
+ * Between 70 and 800 km of camera altitude the same grammar stands up: the
+ * ring becomes a CAGE, a translucent box as tall as the installed power, and
+ * the disc becomes a solid COLUMN inside it, as tall as the output. Height
+ * reads more exactly than area — 1 231 of 2 670 MW is a column filling 46 % of
+ * its cage, where a disc of 68 % of the ring's diameter says the same thing to
+ * nobody — and the scale is one fixed number, `RTE_RELIEF_M_PER_MW`, so every
+ * station on screen is read against every other. Every state keeps its
+ * meaning: a pale empty cage is unmeasured, a crisp empty cage is stopped, a
+ * magenta column is a station drawing from the grid.
+ *
+ * On top of each cage sits the filière's mark from `plantFiliereIcons.js` —
+ * for nuclear, Temaki's cooling tower with the trefoil punched through it,
+ * never the bare trefoil, which is a hazard sign — and the station's label
+ * hangs off that mark. Closer than 70 km a 36 km column is a wall across the
+ * view, and past 800 km it is a needle: both ends fall back to the rings.
  *
  * ── What this layer refuses to do ───────────────────────────────────────────
  *
@@ -173,6 +192,71 @@ export const RTE_PUMPING_COLOR = '#ff4dd2';
 
 const SELECTED_COLOR = '#00ffff';
 
+/**
+ * Relief scale: metres of column per megawatt. Fixed, never fitted to the view,
+ * so the same station is the same height in every session and every share
+ * link. Cruas's 3 660 MW stand 36.6 km tall; Gravelines, the largest, 54.6 km
+ * — about a hundred pixels for Cruas from the 180 km the scene link opens at.
+ */
+export const RTE_RELIEF_M_PER_MW = 10;
+
+/**
+ * Camera altitudes between which stations stand as columns. Below 70 km a
+ * 36 km column is a wall across the view; above 800 km it is a needle.
+ */
+export const RTE_RELIEF_MIN_ALT_M = 70_000;
+export const RTE_RELIEF_MAX_ALT_M = 800_000;
+
+/** Relative slack on both bounds, so a camera parked on one does not flicker. */
+const RELIEF_HYSTERESIS = 0.1;
+
+/** Footprint side of a cage, metres: ~22 px from the scene link's 180 km. */
+const CAGE_SIDE_M = 3_600;
+const COLUMN_SIDE_RATIO = 0.8;
+
+/** A cage stands on the ground floor, sunk a little so relief never lifts it off. */
+const COLUMN_SINK_M = 60;
+
+/** Cage face opacity, measured vs unmeasured — the ring's fill, stood up. */
+const CAGE_FACE_ALPHA_MEASURED = 0.14;
+const CAGE_FACE_ALPHA_UNMEASURED = 0.04;
+
+/** A mark on a cage is never drawn below the size its punched glyph survives. */
+const RELIEF_ICON_MIN_PX = 20;
+const RELIEF_ICON_MAX_PX = 34;
+
+/** Suffixes of the relief primitives' pick ids, after the station's render id. */
+export const RTE_GEN_COLUMN_SUFFIX = ':col';
+export const RTE_GEN_CAGE_SUFFIX = ':cage';
+export const RTE_GEN_EDGE_SUFFIX = ':edge';
+export const RTE_GEN_ICON_SUFFIX = ':icon';
+const RTE_PICK_SUFFIXES = Object.freeze([
+  RTE_GEN_OUTPUT_SUFFIX,
+  RTE_GEN_COLUMN_SUFFIX,
+  RTE_GEN_CAGE_SUFFIX,
+  RTE_GEN_EDGE_SUFFIX,
+  RTE_GEN_ICON_SUFFIX,
+]);
+
+/**
+ * The column's fragment shader: a key light fixed to the SCREEN (upper left,
+ * towards the reader) instead of the sun, so a column is modelled the same way
+ * at noon, at night and on the far side of the planet, and no face goes black.
+ */
+const COLUMN_FRAGMENT_SHADER = /* glsl */ `
+  in vec3 v_positionEC;
+  in vec3 v_normalEC;
+  in vec4 v_color;
+
+  void main() {
+    vec3 normalEC = normalize(v_normalEC);
+    vec3 keyLight = normalize(vec3(-0.55, 0.5, 0.67));
+    float diffuse = max(dot(normalEC, keyLight), 0.0);
+    vec4 color = czm_gammaCorrect(v_color);
+    out_FragColor = vec4(color.rgb * (0.42 + 0.7 * diffuse), color.a);
+  }
+`;
+
 /** Unit rows printed on a station card before the tail is summarised. */
 const CARD_UNIT_ROWS = 8;
 
@@ -234,6 +318,120 @@ export function rteDiscSize(ringPx, load) {
   if (!Number.isFinite(load) || load === 0) return 0;
   const ratio = Math.min(1, Math.sqrt(Math.abs(load)));
   return Math.max(DISC_MIN_PX, Math.round(ringPx * ratio));
+}
+
+/**
+ * Whether stations stand as columns at this camera altitude.
+ *
+ * The band widens by {@link RELIEF_HYSTERESIS} on both sides once it is on,
+ * and narrows by as much while it is off, so a camera parked on a bound does
+ * not swap cages for rings on every frame of a slow zoom.
+ * @param {number} altitudeM Camera height above the ellipsoid.
+ * @param {boolean} [wasOn]
+ * @returns {boolean}
+ */
+export function rteReliefWanted(altitudeM, wasOn = false) {
+  if (!Number.isFinite(altitudeM)) return false;
+  const slack = wasOn ? RELIEF_HYSTERESIS : -RELIEF_HYSTERESIS;
+  return altitudeM >= RTE_RELIEF_MIN_ALT_M * (1 - slack)
+    && altitudeM <= RTE_RELIEF_MAX_ALT_M * (1 + slack);
+}
+
+/**
+ * How tall one station's cage and column stand. Pure.
+ *
+ * The cage is the installed power; a station that publishes none gets the
+ * floor of a 100 MW cage, present and visibly unquantified, as its ring gets
+ * the floor size. The column is the output's magnitude — the SIGN is carried
+ * by the colour, as it is for the disc — and an output above the nameplate is
+ * drawn above the cage rather than clipped into it, because the two numbers
+ * come from two administrations and this layer never reconciles them.
+ * @param {object} site Joined site.
+ * @param {number} [mPerMw]
+ * @returns {{cageM: number, columnM: number, topM: number, measured: boolean, pumping: boolean}}
+ */
+export function rteColumnHeights(site, mPerMw = RTE_RELIEF_M_PER_MW) {
+  const installed = Number.isFinite(site?.installedMw) && site.installedMw > 0
+    ? site.installedMw
+    : 100;
+  const measured = Number.isFinite(site?.mw);
+  const cageM = installed * mPerMw;
+  const columnM = measured ? Math.abs(site.mw) * mPerMw : 0;
+  return {
+    cageM,
+    columnM,
+    topM: Math.max(cageM, columnM),
+    measured,
+    pumping: measured && site.mw < 0,
+  };
+}
+
+/** RTE generation class → the filière a mark in `plantFiliereIcons.js` pictures. */
+const FILIERE_BY_CLASS = Object.freeze({
+  nuclear: 'nucleaire',
+  'hydro-reservoir': 'hydraulique',
+  'hydro-run-of-river': 'hydraulique',
+  'hydro-pumped': 'hydraulique',
+  'fossil-gas': 'thermique',
+  'fossil-coal': 'thermique',
+  'fossil-oil': 'thermique',
+});
+
+/**
+ * The filière whose silhouette marks a station of this class, or null for the
+ * classes no vetted glyph pictures (wind, solar, marine, battery, biomass),
+ * which draw the bare plate in their colour.
+ * @param {?string} klass
+ * @returns {?string}
+ */
+export function rteStationFiliere(klass) {
+  return FILIERE_BY_CLASS[klass] || null;
+}
+
+/** Pixel side of a station's mark on its cage: the ring's ramp, with a floor. */
+export function rteReliefIconSize(installedMw) {
+  return Math.max(RELIEF_ICON_MIN_PX, Math.min(RELIEF_ICON_MAX_PX, rteRingSize(installedMw) + 4));
+}
+
+const STATION_KIND_PREFIX = /^(?:centrale\s+(?:nucl[ée]aire|thermique|hydraulique|hydro[ée]lectrique)|station\s+de\s+pompage|ferme\s+[ée]olienne|parc\s+[ée]olien)\s+/i;
+
+/**
+ * The article a register name keeps once its kind is dropped: `de la Coche` →
+ * `La Coche`. French because the NAMES are French: they are the register's
+ * data, printed as published on a page in either language.
+ */
+const STATION_ARTICLES = Object.freeze([
+  [/^de\s+la\s+/i, 'La '], // i18n-ignore-line — part of a French place name (data).
+  [/^de\s+l[’']/i, 'L’'],
+  [/^des\s+/i, 'Les '], // i18n-ignore-line — part of a French place name (data).
+  [/^du\s+/i, ''],
+  [/^de\s+/i, ''],
+  [/^d[’']/i, ''],
+]);
+
+/**
+ * A station's name without the kind of plant it is — `Centrale nucléaire de
+ * St-Alban-St-Maurice` → `St-Alban-St-Maurice`, `Station de pompage de la
+ * Coche` → `La Coche`.
+ *
+ * Used where the mark beside the name already says the kind: in relief, the
+ * cooling tower on the cage IS « centrale nucléaire », and a label that
+ * repeats it pushes the number the reader came for off the end of the line.
+ * The card keeps the register's full name.
+ * @param {?string} name
+ * @returns {string}
+ */
+export function rteShortName(name) {
+  const full = String(name ?? '').trim();
+  if (!STATION_KIND_PREFIX.test(full)) return full;
+  let rest = full.replace(STATION_KIND_PREFIX, '');
+  for (const [pattern, article] of STATION_ARTICLES) {
+    if (pattern.test(rest)) {
+      rest = article + rest.replace(pattern, '');
+      break;
+    }
+  }
+  return rest.trim() || full;
 }
 
 /**
@@ -451,7 +649,7 @@ export function createRteSelectedOverlayEntry(record, now = Date.now()) {
  * @param {Cesium.Cartesian3} position
  * @returns {object}
  */
-export function createRteStationOverlayEntry(site, position) {
+export function createRteStationOverlayEntry(site, position, { relief = false, iconPx = 0 } = {}) {
   const klass = rteGenerationClass(site.class);
   const value = Number.isFinite(site.mw)
     ? `${formatGenMw(site.mw)} / ${formatGenMw(site.installedMw)}`
@@ -460,7 +658,8 @@ export function createRteStationOverlayEntry(site, position) {
     id: `${RTE_GEN_LABEL_PREFIX}${site.id}`,
     position,
     variant: 'label',
-    title: `${site.name} · ${value}`,
+    // In relief the mark on the cage names the kind of plant; see `rteShortName`.
+    title: `${relief ? rteShortName(site.name) : site.name} · ${value}`,
     accent: Number.isFinite(site.mw) && site.mw < 0 ? RTE_PUMPING_COLOR : klass.color,
     // The biggest machine wins the collision; ties break on id in the selector.
     priority: Math.round(Number.isFinite(site.installedMw) ? site.installedMw : 0),
@@ -472,7 +671,8 @@ export function createRteStationOverlayEntry(site, position) {
     edgeFade: 'keyhole',
     horizonCull: true,
     terrainOcclusion: false,
-    gapPx: 15,
+    // Clear of the station's mark when one stands at the anchor.
+    gapPx: relief ? Math.round(iconPx / 2) + 8 : 15,
     verticalOnly: true,
     placement: 'above',
   };
@@ -522,6 +722,22 @@ export function mapRteAnalystRecord(site, index = 0) {
 }
 
 /**
+ * One filière's sentence: what it makes now against what it could, or — when
+ * the filière as a whole is DRAWING from the grid, which is what pumped
+ * storage does while it refills its upper lake — what it consumes. A reader
+ * with no word for a negative megawatt reads « −644 MW produits » as nonsense.
+ * @param {{mw: number, installedMw: number, reporting: number}} bucket
+ * @param {object} m The `legend` catalog.
+ * @returns {string}
+ */
+function legendReading(bucket, m) {
+  const installed = formatGenMw(bucket.installedMw);
+  if (!bucket.reporting) return m.installedOnly(installed);
+  if (bucket.mw < 0) return m.consuming(formatGenMw(-bucket.mw), installed);
+  return m.measured(formatGenMw(bucket.mw), installed);
+}
+
+/**
  * Per-class legend rows for whatever is on screen.
  * @param {Array<object>} sites - Joined sites.
  * @returns {Array<object>}
@@ -543,14 +759,12 @@ export function buildRteLegend(sites) {
     const klass = RTE_GENERATION_CLASSES[id];
     const words = rteClassWords(id);
     const m = messages().legend;
-    const live = bucket.reporting
-      ? m.measured(formatGenMw(bucket.mw), formatGenMw(bucket.installedMw))
-      : m.installedOnly(formatGenMw(bucket.installedMw));
+    // Plain words: what this filière is making now, against what it could. The
+    // filière's own paragraph and the station count are the card's business.
     legend.push({
       label: words.label,
       color: klass.color,
-      count: bucket.sites,
-      blurb: live + words.blurb,
+      blurb: legendReading(bucket, m),
     });
   }
   return legend;
@@ -561,6 +775,12 @@ export function buildRteLegend(sites) {
 let _viewer = null;
 let _rings = null;
 let _discs = null;
+/** The marks that stand on the cages in relief. */
+let _icons = null;
+/** @type {?{cages: ?Cesium.Primitive, edges: ?Cesium.Primitive, columns: ?Cesium.Primitive}} */
+let _relief = null;
+/** Whether stations stand as columns right now — see `rteReliefWanted`. */
+let _reliefOn = false;
 let _overlayHost = DEFAULT_OVERLAY_HOST;
 let _enabled = false;
 let _clickHandler = null;
@@ -738,10 +958,210 @@ function buildStations(sites) {
     warm.push({ lat: site.lat, lon: site.lon });
   }
   _sites = sites;
+  buildRelief();
   publishFleetJoin();
   warmGroundFloor(warm.slice(0, 300));
   if (previouslySelected && _records.has(previouslySelected)) selectObject(previouslySelected);
   publishOverlay();
+}
+
+function removeRelief() {
+  for (const primitive of Object.values(_relief || {})) {
+    if (primitive) _viewer?.scene?.primitives?.remove?.(primitive);
+  }
+  _relief = null;
+  _icons?.removeAll();
+  for (const record of _records.values()) {
+    record.icon = null;
+    record.top = null;
+  }
+}
+
+/**
+ * Stand every drawn station up as a cage and a column, with its mark on top.
+ *
+ * Three batched primitives for the whole fleet — translucent cage faces, cage
+ * edges, solid columns — built SYNCHRONOUSLY: a hundred boxes are a few
+ * milliseconds of main-thread work, and a synchronous build swaps in on the
+ * frame it is asked for, where a worker build would leave a poll's worth of
+ * frames with no relief at all. Rebuilt with the stations, never per frame.
+ */
+function buildRelief() {
+  removeRelief();
+  const scene = _viewer?.scene;
+  if (!scene?.primitives || !_records.size) return;
+  const cages = [];
+  const edges = [];
+  const columns = [];
+  const side = CAGE_SIDE_M;
+  for (const record of _records.values()) {
+    const site = record.site;
+    const heights = rteColumnHeights(site);
+    const base = Cesium.Color.fromCssColorString(rteGenerationClass(site.class).color);
+    const floor = cachedGroundFloor(site.lat, site.lon);
+    const ground = Cesium.Cartesian3.fromDegrees(
+      site.lon,
+      site.lat,
+      (Number.isFinite(floor) ? floor : 0) - COLUMN_SINK_M,
+    );
+    const frame = Cesium.Transforms.eastNorthUpToFixedFrame(ground);
+    const standing = (heightM) => Cesium.Matrix4.multiplyByTranslation(
+      frame,
+      new Cesium.Cartesian3(0, 0, heightM / 2),
+      new Cesium.Matrix4(),
+    );
+    const cageHeight = heights.cageM + COLUMN_SINK_M;
+    const edgeColor = base.withAlpha(heights.measured ? RING_ALPHA_MEASURED : RING_ALPHA_UNMEASURED);
+    cages.push(new Cesium.GeometryInstance({
+      id: `${record.id}${RTE_GEN_CAGE_SUFFIX}`,
+      geometry: Cesium.BoxGeometry.fromDimensions({
+        dimensions: new Cesium.Cartesian3(side, side, cageHeight),
+        vertexFormat: Cesium.PerInstanceColorAppearance.FLAT_VERTEX_FORMAT,
+      }),
+      modelMatrix: standing(cageHeight),
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(base.withAlpha(
+          heights.measured ? CAGE_FACE_ALPHA_MEASURED : CAGE_FACE_ALPHA_UNMEASURED,
+        )),
+      },
+    }));
+    edges.push(new Cesium.GeometryInstance({
+      id: `${record.id}${RTE_GEN_EDGE_SUFFIX}`,
+      geometry: Cesium.BoxOutlineGeometry.fromDimensions({
+        dimensions: new Cesium.Cartesian3(side, side, cageHeight),
+      }),
+      modelMatrix: standing(cageHeight),
+      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(edgeColor) },
+    }));
+    // No output, no column — not a zero-height one: the empty cage IS the
+    // reading, crisp when measured at zero, pale when never measured.
+    if (heights.columnM > 0) {
+      const columnHeight = heights.columnM + COLUMN_SINK_M;
+      const color = heights.pumping ? Cesium.Color.fromCssColorString(RTE_PUMPING_COLOR) : base;
+      columns.push(new Cesium.GeometryInstance({
+        id: `${record.id}${RTE_GEN_COLUMN_SUFFIX}`,
+        geometry: Cesium.BoxGeometry.fromDimensions({
+          dimensions: new Cesium.Cartesian3(side * COLUMN_SIDE_RATIO, side * COLUMN_SIDE_RATIO, columnHeight),
+          vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+        }),
+        modelMatrix: standing(columnHeight),
+        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(color) },
+      }));
+    }
+    record.top = Cesium.Matrix4.multiplyByPoint(
+      frame,
+      new Cesium.Cartesian3(0, 0, heights.topM + COLUMN_SINK_M),
+      new Cesium.Cartesian3(),
+    );
+    record.heights = heights;
+    record.baseEdgeColor = edgeColor;
+    const iconPx = rteReliefIconSize(site.installedMw);
+    record.iconPx = iconPx;
+    record.icon = _icons?.add({
+      id: `${record.id}${RTE_GEN_ICON_SUFFIX}`,
+      position: record.top,
+      image: plantMarkGlyph(rteStationFiliere(site.class), iconPx),
+      width: iconPx,
+      height: iconPx,
+      // The plate is white, so it takes the class colour exactly; the punched
+      // silhouette shows the black ring behind it — see `plantFiliereIcons.js`.
+      color: base,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    }) || null;
+  }
+  const add = (instances, appearance) => (instances.length
+    ? scene.primitives.add(new Cesium.Primitive({
+      geometryInstances: instances,
+      appearance,
+      asynchronous: false,
+      show: false,
+    }))
+    : null);
+  _relief = {
+    columns: add(columns, new Cesium.PerInstanceColorAppearance({
+      closed: true,
+      translucent: false,
+      fragmentShaderSource: COLUMN_FRAGMENT_SHADER,
+    })),
+    cages: add(cages, new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true, closed: true })),
+    edges: add(edges, new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true })),
+  };
+  syncReliefVisibility();
+}
+
+/**
+ * The stations whose mark is on screen now, for the key.
+ *
+ * The key names the filières the reader can SEE: over the Rhône valley that is
+ * nuclear and hydro, and a list of nine national rows — coal, oil, biomass —
+ * was a key to a map somewhere else. The shell repaints the key on every
+ * camera stop, so the list follows the view. With no scene to project into (a
+ * unit test, a layer not yet drawn) every station counts, as before.
+ * @returns {Array<object>}
+ */
+function sitesOnScreen() {
+  const scene = _viewer?.scene;
+  const canvas = scene?.canvas;
+  const camera = _viewer?.camera;
+  if (!scene || !canvas || !camera || !_records.size) return _sites;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!(width > 0) || !(height > 0)) return _sites;
+  const occluder = horizonOccluder(camera);
+  const onScreen = [];
+  for (const record of _records.values()) {
+    const anchor = anchorOf(record);
+    if (!anchor || !occluder.isPointVisible(anchor)) continue;
+    const at = Cesium.SceneTransforms.worldToWindowCoordinates(scene, anchor, SCRATCH_WINDOW);
+    if (!at || at.x < 0 || at.y < 0 || at.x > width || at.y > height) continue;
+    onScreen.push(record.site);
+  }
+  return onScreen;
+}
+
+const SCRATCH_WINDOW = new Cesium.Cartesian2();
+
+/**
+ * Ask the shell to repaint the key: its first row reads « disc » or « column »
+ * after the shape on screen, and this layer's own repaint is its three-minute
+ * poll away. The event name is the literal `addressScanLayer.js` exports as
+ * `LAYER_DRAW_CHANGED_EVENT`; importing it would pull that module in for a
+ * string, and `rteGenerationRelief.test.mjs` fails if the two drift apart.
+ */
+function announceDrawChanged() {
+  if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+    detail: { layerId: RTE_GEN_LAYER_ID, relief: _reliefOn },
+  }));
+}
+
+/** Rings or columns, whichever the camera's altitude calls for. */
+function syncReliefVisibility() {
+  const rings = _enabled && !_reliefOn;
+  const relief = _enabled && _reliefOn;
+  if (_rings) _rings.show = rings;
+  if (_discs) _discs.show = rings;
+  if (_icons) _icons.show = relief;
+  for (const primitive of Object.values(_relief || {})) {
+    if (primitive) primitive.show = relief;
+  }
+}
+
+/** Where a station's label and card hang: the top of its cage in relief. */
+function anchorOf(record) {
+  return (_reliefOn && record?.top) || record?.position || null;
+}
+
+/** Recolour one cage's edges without rebuilding the batch. */
+function setEdgeColor(record, color) {
+  const edges = _relief?.edges;
+  if (!edges || !record || !color) return;
+  try {
+    const attributes = edges.getGeometryInstanceAttributes(`${record.id}${RTE_GEN_EDGE_SUFFIX}`);
+    if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color, attributes.color);
+  } catch {
+    // Not yet updated once: the next build carries the base colour anyway.
+  }
 }
 
 /** Ambient labels: the biggest stations. 108 labels is not a map. */
@@ -753,8 +1173,12 @@ function publishOverlay() {
   const entries = [];
   for (const site of _sites) {
     const record = _records.get(rteRenderId(site.id));
-    if (!record?.position) continue;
-    entries.push(createRteStationOverlayEntry(site, record.position));
+    const anchor = anchorOf(record);
+    if (!anchor) continue;
+    entries.push(createRteStationOverlayEntry(site, anchor, {
+      relief: _reliefOn,
+      iconPx: _reliefOn ? record.iconPx || 0 : 0,
+    }));
   }
   _overlayHost.setEntries(
     RTE_GEN_OVERLAY_SOURCE_ID,
@@ -768,7 +1192,13 @@ function publishOverlay() {
 }
 
 function restoreRecordStyle(record) {
-  if (!record?.ring) return;
+  if (!record) return;
+  setEdgeColor(record, record.baseEdgeColor);
+  if (record.icon) {
+    record.icon.width = record.iconPx;
+    record.icon.height = record.iconPx;
+  }
+  if (!record.ring) return;
   record.ring.color = record.baseRingColor;
   record.ring.outlineColor = record.baseRingOutline;
   record.ring.pixelSize = record.baseRingSize;
@@ -791,7 +1221,12 @@ function selectObject(id) {
     record.ring.color = selected.withAlpha(RING_FILL_ALPHA);
     record.ring.pixelSize = record.baseRingSize + 6;
   }
-  const entry = createRteSelectedOverlayEntry(record);
+  setEdgeColor(record, selected);
+  if (record.icon) {
+    record.icon.width = record.iconPx + 6;
+    record.icon.height = record.iconPx + 6;
+  }
+  const entry = createRteSelectedOverlayEntry({ ...record, position: anchorOf(record) });
   if (entry) {
     _overlayHost.setEntries(
       RTE_GEN_SELECTED_OVERLAY_SOURCE_ID,
@@ -817,9 +1252,8 @@ export function resolveRtePickId(picked, has = (id) => _records.has(id)) {
   const candidate = (value) => {
     if (typeof value !== 'string' || !value.startsWith(RTE_GEN_RENDER_PREFIX)) return null;
     if (has(value)) return value;
-    const station = value.endsWith(RTE_GEN_OUTPUT_SUFFIX)
-      ? value.slice(0, -RTE_GEN_OUTPUT_SUFFIX.length)
-      : null;
+    const suffix = RTE_PICK_SUFFIXES.find((candidateSuffix) => value.endsWith(candidateSuffix));
+    const station = suffix ? value.slice(0, -suffix.length) : null;
     return station && has(station) ? station : null;
   };
   if (!picked) return null;
@@ -861,11 +1295,21 @@ function onPreRender() {
   if (!_enabled || !_records.size) return;
   const camera = _viewer?.camera;
   if (!camera) return;
+  const relief = rteReliefWanted(camera.positionCartographic?.height, _reliefOn);
+  if (relief !== _reliefOn) {
+    _reliefOn = relief;
+    syncReliefVisibility();
+    // The labels and the card move between the ground and the cage tops.
+    publishOverlay();
+    if (_selectedId) selectObject(_selectedId);
+    announceDrawChanged();
+  }
   const occluder = horizonOccluder(camera);
   for (const record of _records.values()) {
     const visible = occluder.isPointVisible(record.position);
     if (record.ring) record.ring.show = visible;
     if (record.disc) record.disc.show = visible;
+    if (record.icon) record.icon.show = visible;
   }
 }
 
@@ -971,7 +1415,8 @@ function collectDetectableObjects(options = {}) {
   if (!_enabled) return [];
   const stations = [];
   for (const record of _records.values()) {
-    if (!record.ring?.show && record.id !== _selectedId) continue;
+    const shown = _reliefOn ? record.icon?.show : record.ring?.show;
+    if (!shown && record.id !== _selectedId) continue;
     stations.push(record);
   }
   if (!stations.length) return [];
@@ -987,7 +1432,7 @@ function collectDetectableObjects(options = {}) {
   for (let i = start; i < stations.length; i += stride) {
     const record = stations[i];
     result.push({
-      position: record.position,
+      position: anchorOf(record),
       sourceId: record.id,
       // i18n-ignore-next-line — a synthetic id for the detection rail, not a label.
       id: String(record.site?.name || 'CENTRALE').toUpperCase().slice(0, 24),
@@ -1076,6 +1521,13 @@ const rteGenerationLayer = {
     viewer.scene.primitives.add(_discs);
     registerSpriteCollection(RTE_GEN_LAYER_ID, _discs);
 
+    _icons = new Cesium.BillboardCollection({ scene: viewer.scene });
+    _icons.show = false;
+    viewer.scene.primitives.add(_icons);
+    registerSpriteCollection(RTE_GEN_LAYER_ID, _icons);
+    _relief = null;
+    _reliefOn = false;
+
     _enabled = false;
     _records = new Map();
     _sites = [];
@@ -1103,8 +1555,8 @@ const rteGenerationLayer = {
   enable(viewer) {
     _enabled = true;
     _error = null;
-    if (_rings) _rings.show = true;
-    if (_discs) _discs.show = true;
+    _reliefOn = rteReliefWanted(viewer?.camera?.positionCartographic?.height, false);
+    syncReliefVisibility();
     _overlayHost.setVisible(RTE_GEN_OVERLAY_SOURCE_ID, true);
     _overlayHost.setVisible(RTE_GEN_SELECTED_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
@@ -1136,8 +1588,7 @@ const rteGenerationLayer = {
     _unwatchEdf = null;
     publishFleetJoin();
     clearSelection();
-    if (_rings) _rings.show = false;
-    if (_discs) _discs.show = false;
+    syncReliefVisibility();
     _overlayHost.clearSource(RTE_GEN_OVERLAY_SOURCE_ID);
     _overlayHost.setVisible(RTE_GEN_OVERLAY_SOURCE_ID, false);
     _overlayHost.setVisible(RTE_GEN_SELECTED_OVERLAY_SOURCE_ID, false);
@@ -1199,6 +1650,11 @@ const rteGenerationLayer = {
         discColor: hex(record.disc?.color),
         shown: record.ring?.show !== false,
         collectionShown: _rings?.show !== false,
+        relief: _reliefOn,
+        cageM: record.heights?.cageM ?? null,
+        columnM: record.heights?.columnM ?? null,
+        iconPx: record.icon ? record.iconPx : null,
+        iconShown: Boolean(record.icon?.show && _icons?.show),
       });
     }
     return rows;
@@ -1223,22 +1679,25 @@ const rteGenerationLayer = {
   /**
    * The key to what is on screen.
    *
-   * The first row is not a filière: it is the ring-and-disc grammar, because a
+   * The first row is not a filière: it says how to READ a station, because a
    * reader who does not know that a faint empty ring means "unmeasured" and a
-   * crisp empty ring means "stopped" will read half this map backwards.
+   * crisp empty ring means "stopped" will read half this map backwards. In
+   * plain words since 2026-09-21, and in the shape on screen: the column and
+   * its cage in relief, the disc and its ring otherwise.
    * @returns {{chips: Array<object>, legend: Array<object>}}
    */
   getRowControls() {
     const legend = [];
     const m = messages().legend;
     const measured = _joinStats?.placedUnits || 0;
-    legend.push({
-      label: measured ? m.ringAndDisc : m.ringOnly,
-      color: '#dfe7ef',
-      count: _sites.length,
-      blurb: measured ? m.grammar : m.keyless,
-    });
-    legend.push(...buildRteLegend(_sites));
+    let label = m.readCapacity;
+    let blurb = m.keyless;
+    if (measured) {
+      label = _reliefOn ? m.readColumn : m.readDisc;
+      blurb = _reliefOn ? m.readColumnHow : m.readDiscHow;
+    }
+    legend.push({ label, color: '#dfe7ef', blurb });
+    legend.push(...buildRteLegend(sitesOnScreen()));
     return { chips: [], legend };
   },
 
@@ -1292,13 +1751,15 @@ const rteGenerationLayer = {
       _preRenderRemover();
       _preRenderRemover = null;
     }
-    for (const collection of [_rings, _discs]) {
+    removeRelief();
+    for (const collection of [_rings, _discs, _icons]) {
       if (!collection) continue;
       unregisterSpriteCollection(RTE_GEN_LAYER_ID, collection);
       viewer?.scene?.primitives?.remove?.(collection);
     }
     _rings = null;
     _discs = null;
+    _icons = null;
     _records.clear();
     _sites = [];
     _unplaced = [];

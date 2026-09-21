@@ -28,7 +28,8 @@ test('every slider keeps the English it shipped with', () => {
   const english = withLocale('en', () => Object.fromEntries(SHADERS.map((s) => [s.name, labels(s)])));
   assert.deepEqual(english, {
     anime: ['Saturation', 'Edge Thickness'],
-    noir: ['Contrast', 'Grain', 'Vignette'],
+    // The night atlas's own controls (`nightAtlas.js`); `Vignette` is upstream's.
+    noir: ['Darkness', 'Desaturation', 'Bloom', 'Vignette'],
     retro: ['Pixelation', 'Distortion', 'Instability'],
     snow: ['Density', 'Wind'],
     surveillance: ['Gain', 'Bloom', 'Scanlines', 'Pixelation'],
@@ -41,16 +42,16 @@ test('every slider now has a French one, and one control keeps one name', () => 
   const french = withLocale('fr', () => Object.fromEntries(SHADERS.map((s) => [s.name, labels(s)])));
   assert.deepEqual(french, {
     anime: ['Saturation', 'Épaisseur du trait'],
-    noir: ['Contraste', 'Grain', 'Vignettage'],
+    noir: ['Assombrissement', 'Désaturation', 'Halo', 'Vignettage'],
     retro: ['Pixellisation', 'Distorsion', 'Instabilité'],
     snow: ['Densité', 'Vent'],
     surveillance: ['Gain', 'Halo', 'Lignes de balayage', 'Pixellisation'],
     // The instrument's own switches stay as they are, the way a brand does.
     thermal: ['Sensibilité', 'Halo', 'WHOT/BHOT', 'Pixellisation', 'Ironbow'],
   });
-  // Four styles expose a pixel grid and two a bloom: one control, one word.
+  // Four styles expose a pixel grid and three a bloom: one control, one word.
   assert.equal(new Set([french.retro[0], french.surveillance[3], french.thermal[3]]).size, 1);
-  assert.equal(new Set([french.surveillance[1], french.thermal[1]]).size, 1);
+  assert.equal(new Set([french.surveillance[1], french.thermal[1], french.noir[2]]).size, 1);
 });
 
 test('a shader’s own id never follows the language', () => {

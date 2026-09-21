@@ -683,6 +683,19 @@ export class MapStackController {
   }
 
   /**
+   * The imagery layers this controller put on the globe for the active stack.
+   *
+   * The live array, not a copy: the night atlas (`styles/nightBasemap.js`)
+   * reads it every frame, and a stack switch or `_degradeWorldImagery` edits
+   * it in place. Overlays a data layer adds to `viewer.imageryLayers` are not
+   * in it, which is the point — they are data, not ground.
+   * @returns {ReadonlyArray<object>}
+   */
+  getBasemapImageryLayers() {
+    return this._imageryLayers;
+  }
+
+  /**
    * Where an UNRECOGNIZED stack id lands.
    *
    * `photoreal` when it can actually be shown, else the first stack that can.

@@ -160,40 +160,59 @@ export default defineMessages({
   },
 
   /** The key: the grammar first, then one row per generation class. */
+  /**
+   * The key, in plain words (2026-09-21). It is read by anyone who opens « Le
+   * réseau électrique et ce qu'il produit », not by the grid's operators: one
+   * line that says how to read a station, one sentence per filière, and no
+   * counts. What RTE publishes and when, the units behind a station, the
+   * placement of each mark: the card, one click away.
+   */
   legend: {
-    ringAndDisc: {
-      fr: 'Anneau = puissance installée · disque = production',
-      en: 'Ring = installed capacity · disc = output',
+    readColumn: {
+      fr: 'Hauteur de la colonne = production en ce moment',
+      en: 'Column height = output right now',
     },
-    ringOnly: {
-      fr: 'Anneau = puissance installée',
-      en: 'Ring = installed capacity',
+    readColumnHow: {
+      fr: 'La cage autour montre le maximum possible. Cage vide : à l’arrêt. '
+        + 'Cage pâle : pas de mesure. Rose : la centrale consomme.',
+      en: 'The cage around it shows the most it can produce. Empty cage: stopped. '
+        + 'Faint cage: no reading. Pink: the plant is using power.',
     },
-    grammar: {
-      fr: 'Un anneau pâle et vide : RTE n’a rien publié pour cette centrale. Un anneau net et '
-        + 'vide : elle a été mesurée à zéro, elle est à l’arrêt. Un disque magenta : elle PREND '
-        + 'du courant au réseau — un réacteur arrêté fait encore tourner ses pompes, et pèse '
-        + 'une cinquantaine de MW de consommation.',
-      en: 'A pale empty ring: RTE published nothing for this plant. A crisp empty ring: it was '
-        + 'measured at zero, it is stopped. A magenta disc: it is TAKING power from the grid — '
-        + 'a stopped reactor still runs its pumps, and that is worth some fifty MW of '
-        + 'consumption.',
+    readDisc: {
+      fr: 'Disque plein = production en ce moment',
+      en: 'Filled disc = output right now',
     },
+    readDiscHow: {
+      fr: 'L’anneau montre le maximum possible. Anneau vide : à l’arrêt. '
+        + 'Anneau pâle : pas de mesure. Rose : la centrale consomme.',
+      en: 'The ring shows the most it can produce. Empty ring: stopped. '
+        + 'Faint ring: no reading. Pink: the plant is using power.',
+    },
+    readCapacity: {
+      fr: 'Taille = puissance maximale',
+      en: 'Size = maximum capacity',
+    },
+    // Only a self-hosted copy without a key ever shows this, and the person
+    // reading it is the one who can fix it: the variables keep their names.
     keyless: {
-      fr: 'Aucune clé RTE, donc aucune production dessinée. Renseignez RTE_CLIENT_ID et '
-        + 'RTE_CLIENT_SECRET depuis un compte gratuit data.rte-france.com et les anneaux se '
-        + 'remplissent.',
-      en: 'No RTE credential, so no output is drawn. Set RTE_CLIENT_ID and RTE_CLIENT_SECRET '
-        + 'from a free data.rte-france.com account and the rings fill in.',
+      fr: 'Production en direct indisponible : renseignez RTE_CLIENT_ID et RTE_CLIENT_SECRET '
+        + '(compte gratuit data.rte-france.com).',
+      en: 'Live output unavailable: set RTE_CLIENT_ID and RTE_CLIENT_SECRET '
+        + '(free data.rte-france.com account).',
     },
     measured: {
-      fr: (output, installed) => `${output} produits sur ${installed} installés — `,
-      en: (output, installed) => `${output} generated of ${installed} installed — `,
+      fr: (output, installed) => `${output} produits en ce moment, sur ${installed} possibles.`,
+      en: (output, installed) => `${output} generated right now, out of ${installed} possible.`,
       sample: ['7,730 MW', '10.8 GW'],
     },
+    consuming: {
+      fr: (power, installed) => `Consomme ${power} en ce moment (${installed} possibles en production).`,
+      en: (power, installed) => `Using ${power} right now (${installed} possible when generating).`,
+      sample: ['644 MW', '5,019 MW'],
+    },
     installedOnly: {
-      fr: (installed) => `${installed} installés, aucune production publiée — `,
-      en: (installed) => `${installed} installed, no output published — `,
+      fr: (installed) => `${installed} possibles ; production non publiée.`,
+      en: (installed) => `${installed} possible; output not published.`,
       sample: ['4.2 GW'],
     },
   },

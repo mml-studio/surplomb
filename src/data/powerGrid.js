@@ -13,6 +13,7 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { mapIconGlyph } from './mapIcons.js';
+import { nightAtlasActive, watchNightAtlas } from '../styles/nightAtlas.js';
 import {
   POWER_GRID_CASING_COLOR,
   POWER_GRID_CASING_PX,
@@ -25,7 +26,9 @@ import {
   powerPylonMarks,
   powerPylonSpacingM,
   powerTierById,
-  powerTierBlurb,
+  powerTierColor,
+  POWER_GRID_NIGHT_DRESS,
+  POWER_GRID_NIGHT_HALO_PX,
   powerTowerIndex,
   substationRoleLabel,
 } from './powerGridFeed.js';
@@ -37,15 +40,13 @@ import {
   POWER_GRID_NATIONAL_TIER_BLURBS,
   POWER_GRID_NATIONAL_WIDTH_PX,
   hydratePowerGridNationalPack,
-  powerGridNationalAgeDays,
   powerGridNationalBand,
   powerGridStrokeIds,
-  nationalTierBlurb,
 } from './powerGridNational.js';
 import { applyViewGate, cameraViewBox } from './viewGate.js';
 import { boxesIntersect, focusedViewBox } from './viewportBox.js';
 import { pickAt } from './pickAt.js';
-import { formatDecimal, formatInteger, formatNumber, formatPercent } from '../i18n/format.js';
+import { formatDecimal, formatInteger, formatNumber } from '../i18n/format.js';
 import messages from './powerGrid.i18n.js';
 
 /**
@@ -564,7 +565,7 @@ export function createPowerSelectedOverlayEntry(record, payload) {
  * @param {object} payload
  * @returns {object}
  */
-export function createSubstationOverlayEntry(substation, position, payload = {}) {
+export function createSubstationOverlayEntry(substation, position, payload = {}, { night = false } = {}) {
   const voltage = payload.voltages?.[substation.vi] || {};
   const tier = powerTierById(voltage.tier);
   const name = substation.name || messages().substationFallbackLabel(substation.ref || '').trim();
@@ -573,7 +574,7 @@ export function createSubstationOverlayEntry(substation, position, payload = {})
     position,
     variant: 'label',
     title: `${name} · ${formatKilovolts(voltage.v)}`,
-    accent: tier?.color || POWER_GRID_TIERS.at(-1).color,
+    accent: powerTierColor(tier, { night }) || powerTierColor(POWER_GRID_TIERS.at(-1), { night }),
     // The highest-voltage yard wins the collision; ties break on id.
     priority: Number.isFinite(voltage.v) ? Math.round(voltage.v) : 0,
     collisionGroup: 'ambient-label',
@@ -659,6 +660,10 @@ let _pylonSpacingM = 0;
 let _overlayHost = DEFAULT_OVERLAY_HOST;
 let _enabled = false;
 let _classificationType = Cesium.ClassificationType.BOTH;
+/** Whether the bands wear their night dress — see `POWER_GRID_NIGHT_DRESS`. */
+let _night = false;
+/** Stop following the night atlas. Null while this layer is off. */
+let _unwatchNight = null;
 let _mapStackListener = null;
 let _clickHandler = null;
 let _preRenderRemover = null;
@@ -791,6 +796,43 @@ let _pylonGlyph;
  * overhead routes. `provisionalFloor.js` reads the rendered surface
  * synchronously and is always overridden by the DEM.
  */
+/**
+ * The colour a band is drawn in right now, in the dress the map is wearing.
+ * An unknown band draws as the lowest one, as it always has.
+ * @param {object|string|null|undefined} tierOrId
+ * @returns {string}
+ */
+function tierColor(tierOrId) {
+  return powerTierColor(tierOrId, { night: _night })
+    || powerTierColor(POWER_GRID_TIERS.at(-1), { night: _night });
+}
+
+/** The core's opacity: one value by day, fading with the band's rank at night. */
+function tierStrokeAlpha(tier) {
+  return (_night && POWER_GRID_NIGHT_DRESS[tier?.id]?.strokeAlpha) || STROKE_ALPHA;
+}
+
+/**
+ * What is drawn under a band's core: a near-black casing by day, a halo of the
+ * band's own colour at night, where a dark casing would shadow a dark ground.
+ * @param {?object} tier
+ * @param {number} casingPx The daylight casing's extra width for this batch.
+ * @returns {{color: Cesium.Color, extraPx: number}}
+ */
+function tierUnderStroke(tier, casingPx) {
+  if (_night) {
+    return {
+      color: Cesium.Color.fromCssColorString(tierColor(tier))
+        .withAlpha(POWER_GRID_NIGHT_DRESS[tier?.id]?.haloAlpha ?? 0.12),
+      extraPx: POWER_GRID_NIGHT_HALO_PX,
+    };
+  }
+  return {
+    color: Cesium.Color.fromCssColorString(POWER_GRID_CASING_COLOR).withAlpha(CASING_ALPHA),
+    extraPx: casingPx,
+  };
+}
+
 function pointPosition(lat, lon) {
   const floor = cachedGroundFloor(lat, lon);
   const resolved = Number.isFinite(floor) ? floor : provisionalFloor(lat, lon);
@@ -862,8 +904,6 @@ function buildStrokes(payload) {
   const overheadIds = [];
   const undergroundIds = new Map();
   const overheadWidths = new Map();
-  const casingColor = Cesium.Color.fromCssColorString(POWER_GRID_CASING_COLOR)
-    .withAlpha(CASING_ALPHA);
 
   for (let i = 0; i < strokes.length; i += 1) {
     const stroke = strokes[i];
@@ -874,15 +914,16 @@ function buildStrokes(payload) {
     if (!tier) continue;
     const id = `power-grid:stroke:${stroke.id || i}`;
     const positions = Cesium.Cartesian3.fromDegreesArray(coords);
+    const under = tierUnderStroke(tier, POWER_GRID_CASING_PX);
     // The casing carries NO id: it is the same object as the core drawn wider,
     // and giving it one would put two pick answers on one stroke — the second
     // of which has no record behind it.
     casing.push(new Cesium.GeometryInstance({
       geometry: new Cesium.GroundPolylineGeometry({
         positions,
-        width: tier.widthPx + POWER_GRID_CASING_PX,
+        width: tier.widthPx + under.extraPx,
       }),
-      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(casingColor) },
+      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(under.color) },
     }));
     casingIds.push(id);
     const instance = new Cesium.GeometryInstance({
@@ -893,7 +934,7 @@ function buildStrokes(payload) {
       }),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.fromCssColorString(tier.color).withAlpha(STROKE_ALPHA),
+          Cesium.Color.fromCssColorString(tierColor(tier)).withAlpha(tierStrokeAlpha(tier)),
         ),
       },
     });
@@ -928,8 +969,12 @@ function buildStrokes(payload) {
       tierId: null,
       underground: false,
       casing: true,
-      widthPx: [...new Set(POWER_GRID_TIERS.map((tier) => tier.widthPx + POWER_GRID_CASING_PX))],
-      color: POWER_GRID_CASING_COLOR,
+      widthPx: [...new Set(POWER_GRID_TIERS.map((tier) => (
+        tier.widthPx + (_night ? POWER_GRID_NIGHT_HALO_PX : POWER_GRID_CASING_PX)
+      )))],
+      // At night each halo wears its band's colour, so the batch is mixed.
+      color: _night ? null : POWER_GRID_CASING_COLOR,
+      night: _night,
       strokeIds: casingIds,
     });
   }
@@ -963,7 +1008,7 @@ function buildStrokes(payload) {
       classificationType: _classificationType,
       appearance: new Cesium.PolylineMaterialAppearance({
         material: Cesium.Material.fromType('PolylineDash', {
-          color: Cesium.Color.fromCssColorString(tier.color).withAlpha(UNDERGROUND_ALPHA),
+          color: Cesium.Color.fromCssColorString(tierColor(tier)).withAlpha(UNDERGROUND_ALPHA),
           dashLength: UNDERGROUND_DASH_LENGTH,
         }),
       }),
@@ -975,7 +1020,7 @@ function buildStrokes(payload) {
       underground: true,
       casing: false,
       widthPx: [tier.widthPx],
-      color: tier.color,
+      color: tierColor(tier),
       strokeIds: undergroundIds.get(tierId) || [],
     });
   }
@@ -998,7 +1043,7 @@ function buildPoints(payload) {
     const position = pointPosition(substation.lat, substation.lon);
     const tier = powerTierById(voltages[substation.vi]?.tier);
     const size = substationPointSize(tier?.id);
-    const color = Cesium.Color.fromCssColorString(tier?.color || POWER_GRID_TIERS.at(-1).color);
+    const color = Cesium.Color.fromCssColorString(tierColor(tier));
     const point = _points.add({
       id,
       position,
@@ -1079,7 +1124,7 @@ function indexNational(pack) {
     const id = `${NATIONAL_SUBSTATION_PREFIX}${substation.id}`;
     const position = nationalPointPosition(substation.lat, substation.lon);
     const size = POWER_GRID_NATIONAL_POINT_PX[tier.id] ?? POWER_GRID_NATIONAL_POINT_PX['hv-low'];
-    const color = Cesium.Color.fromCssColorString(tier.color);
+    const color = Cesium.Color.fromCssColorString(tierColor(tier));
     const point = _nationalPoints.add({
       id,
       position,
@@ -1127,11 +1172,10 @@ function buildNationalTier(tierId) {
   const strokes = _nationalByTier.get(tierId) || [];
   if (!tier || !strokes.length) return;
   const width = POWER_GRID_NATIONAL_WIDTH_PX[tierId] ?? POWER_GRID_NATIONAL_WIDTH_PX['hv-low'];
-  const casingColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
-    Cesium.Color.fromCssColorString(POWER_GRID_CASING_COLOR).withAlpha(CASING_ALPHA),
-  );
+  const under = tierUnderStroke(tier, POWER_GRID_NATIONAL_CASING_PX);
+  const casingColor = Cesium.ColorGeometryInstanceAttribute.fromColor(under.color);
   const coreColor = Cesium.ColorGeometryInstanceAttribute.fromColor(
-    Cesium.Color.fromCssColorString(tier.color).withAlpha(STROKE_ALPHA),
+    Cesium.Color.fromCssColorString(tierColor(tier)).withAlpha(tierStrokeAlpha(tier)),
   );
   const casing = [];
   const overhead = [];
@@ -1144,7 +1188,7 @@ function buildNationalTier(tierId) {
     const visible = !_nationalHideTarget.has(stroke.id);
     casing.push(new Cesium.GeometryInstance({
       id: casingId,
-      geometry: new Cesium.GroundPolylineGeometry({ positions, width: width + POWER_GRID_NATIONAL_CASING_PX }),
+      geometry: new Cesium.GroundPolylineGeometry({ positions, width: width + under.extraPx }),
       attributes: {
         color: casingColor,
         show: new Cesium.ShowGeometryInstanceAttribute(visible),
@@ -1182,7 +1226,7 @@ function buildNationalTier(tierId) {
     overhead: add(overhead, new Cesium.PolylineColorAppearance({ translucent: true })),
     underground: add(underground, new Cesium.PolylineMaterialAppearance({
       material: Cesium.Material.fromType('PolylineDash', {
-        color: Cesium.Color.fromCssColorString(tier.color).withAlpha(UNDERGROUND_ALPHA),
+        color: Cesium.Color.fromCssColorString(tierColor(tier)).withAlpha(UNDERGROUND_ALPHA),
         dashLength: UNDERGROUND_DASH_LENGTH,
       }),
     })),
@@ -1509,7 +1553,7 @@ function buildPylons() {
     // by its own id could still collide with itself across a rebuild.
     if (_records.has(id)) continue;
     const position = pointPosition(mark.lat, mark.lon);
-    const color = Cesium.Color.fromCssColorString(tier?.color || POWER_GRID_TIERS.at(-1).color)
+    const color = Cesium.Color.fromCssColorString(tierColor(tier))
       .withAlpha(PYLON_ALPHA);
     const billboard = _pylons.add({
       id,
@@ -1554,7 +1598,7 @@ function publishOverlay() {
     if (!substation.name) continue;
     const record = _records.get(`power-grid:substation:${substation.id}`);
     if (!record?.position) continue;
-    entries.push(createSubstationOverlayEntry(substation, record.position, _payload));
+    entries.push(createSubstationOverlayEntry(substation, record.position, _payload, { night: _night }));
   }
   _overlayHost.setEntries(
     POWER_GRID_OVERLAY_SOURCE_ID,
@@ -1592,6 +1636,45 @@ function applyClassification(next) {
     applyNationalBand(true);
   }
   _viewer?.scene?.requestRender?.();
+}
+
+/**
+ * Put the bands in their night dress, or take it off.
+ *
+ * Same shape as `applyClassification`, for the same reason: a colour is baked
+ * into a built batch, so the batches are rebuilt from the geometry already in
+ * hand rather than mutated. Substations and pylons are rebuilt with them, the
+ * pack's points are recoloured in place, and the labels re-published so their
+ * accent follows. Runs only while the layer is on; `enable()` catches up with
+ * a preset changed while it was off.
+ * @param {boolean} next
+ */
+function applyNightDress(next) {
+  if (Boolean(next) === _night) return;
+  _night = Boolean(next);
+  if (!_viewer) return;
+  const selected = _selectedId;
+  clearSelection();
+  if (_payload) {
+    buildStrokes(_payload);
+    buildPoints(_payload);
+    buildPylons();
+  }
+  for (const record of _nationalPointRecords) {
+    const color = Cesium.Color.fromCssColorString(tierColor(record.tierId));
+    record.baseColor = color;
+    if (record.point) record.point.color = color;
+  }
+  if (_nationalBatches.size) {
+    const built = [..._nationalBatches.keys()];
+    clearNationalBatches();
+    for (const tierId of built) buildNationalTier(tierId);
+  }
+  restackGroundPrimitives();
+  applyNationalBand(true);
+  publishOverlay();
+  if (selected && hasRecord(selected)) selectObject(selected);
+  governorRequestRender('power-grid-night');
 }
 
 function restoreRecordStyle(record) {
@@ -2067,42 +2150,25 @@ function buildLoadingLabel() {
 }
 
 /**
- * What the pylon glyphs mean, for the line under the key.
+ * Whether the mapped grid in view is (almost) all underground.
  *
- * Two facts, and neither is decodable from the picture: the SPACING is set by
- * the camera rather than by the grid, and the position is a node somebody
- * surveyed rather than a point divided out of a line. Both would be silently
- * assumed the other way round.
- * @returns {string}
+ * SILENCE IS THE WRONG ANSWER HERE, and it is the one the operator got. Over
+ * the Trocadéro on 2026-09-14 the layer drew 126 km of mapped grid, every
+ * metre of it underground, and no pylon — correctly, because a cable has none.
+ * But the key said nothing at all, so the reasonable reading was "the pylons
+ * are broken". An absence with a reason is information; an absence on its own
+ * is a bug report. The key says it in one line (`plainLegend.allUnderground`).
+ *
+ * NOT `overheadKm <= 0`: that is the very case the sentence exists for — a
+ * view with nothing overhead in it. Only an absent or empty payload has
+ * nothing to say.
+ * @returns {boolean}
  */
-function pylonLegendNote() {
-  if (!_pylonIds.length) {
-    // SILENCE IS THE WRONG ANSWER HERE, and it is the one the operator got.
-    // Over the Trocadéro on 2026-09-14 the layer drew 126 km of mapped grid,
-    // every metre of it underground, and no pylon — correctly, because a cable
-    // has none. But the key said nothing at all, so the reasonable reading was
-    // "the pylons are broken". An absence with a reason is information; an
-    // absence on its own is a bug report.
-    const stats = _payload?.stats;
-    // NOT `overheadKm <= 0`: that is the very case this sentence exists for —
-    // a view with nothing overhead in it — and guarding on it silenced the
-    // Trocadéro, where overheadKm is exactly 0.0. Only an absent or empty
-    // payload has nothing to say.
-    if (!stats || !(stats.lengthKm > 0) || !Number.isFinite(stats.undergroundKm)) return '';
-    const undergroundShare = stats.undergroundKm / stats.lengthKm;
-    if (undergroundShare >= 0.98) {
-      return messages().pylonNote.allUnderground(
-        formatPercent(Math.round(undergroundShare * 100), { locale: 'en' }),
-      );
-    }
-    return '';
-  }
-  const m = messages().pylonNote;
-  const parts = [m.spacing(formatSpacing(_pylonSpacingM)), m.surveyed];
-  if (_towersShown && Number.isFinite(_payload?.stats?.towers) && _payload.stats.towers > 0) {
-    parts.push(m.records(formatInteger(_payload.stats.towers, { locale: 'en' })));
-  }
-  return parts.join(' ');
+function viewIsAllUnderground() {
+  if (_pylonIds.length) return false;
+  const stats = _payload?.stats;
+  if (!stats || !(stats.lengthKm > 0) || !Number.isFinite(stats.undergroundKm)) return false;
+  return stats.undergroundKm / stats.lengthKm >= 0.98;
 }
 
 /**
@@ -2156,38 +2222,36 @@ function renderDiagnostics() {
 }
 
 /**
- * The key while the pack is what is on screen: the bands the current altitude
- * draws, with the country-wide figures, and a note that says the three things
- * the picture cannot — how simplified it is, how old, and where the detail is.
+ * One key row per voltage band, in plain words — see `plainLegend` in the
+ * catalog. No counts: a stroke-plus-yard total means nothing to the reader
+ * this key is for, and the kilometres are on the cards.
+ * @param {Array<{id: string}>} tiers Bands present, highest first.
+ * @returns {Array<object>}
+ */
+function plainTierRows(tiers) {
+  const words = messages().plainLegend.tiers;
+  return tiers.filter((tier) => words[tier.id]).map((tier) => ({
+    label: words[tier.id].label,
+    color: tierColor(tier.id),
+    blurb: words[tier.id].blurb,
+  }));
+}
+
+/**
+ * The key while the national pack is what is drawn: the bands the camera's
+ * altitude shows, where the lines come from, and that zooming in brings the
+ * exact route.
  * @returns {{chips: Array<object>, legend: Array<object>, note: string}}
  */
 function nationalRowControls() {
   const shown = _nationalBand?.strokeTiers || [];
-  const legend = [];
-  const m = messages().nationalLegend;
-  for (const tier of _national?.tiers || []) {
-    if (shown.length && !shown.includes(tier.id)) continue;
-    const parts = [nationalTierBlurb(tier.id) || tier.blurb];
-    if (tier.lengthKm) parts.push(m.mappedInFrance(formatGridKmFr(tier.lengthKm)));
-    if (tier.undergroundKm) parts.push(m.underground(formatGridKmFr(tier.undergroundKm)));
-    if (tier.substations) parts.push(m.substations(formatInteger(tier.substations)));
-    legend.push({
-      label: tier.label,
-      color: tier.color,
-      count: tier.strokes + tier.substations,
-      blurb: m.blurb(parts.join(' · ')),
-    });
-  }
-  const age = powerGridNationalAgeDays(_national);
+  const tiers = (_national?.tiers || []).filter((tier) => !shown.length || shown.includes(tier.id));
+  const m = messages().plainLegend;
   const base = _national?.osmBase ? String(_national.osmBase).slice(0, 10) : null;
-  const note = [
-    m.noteBase(
-      base ? m.noteState(base, Number.isFinite(age) && age > 60 ? m.noteAge(formatInteger(age)) : '') : '',
-      formatInteger(_national?.toleranceM ?? 50),
-    ),
-    m.noteZoom(formatInteger(Math.round(POWER_GRID_MAX_ALTITUDE_M / 1000))),
-  ];
-  return { chips: [], legend, note: note.join(' ') };
+  const note = [];
+  if (tiers.some((tier) => tier.undergroundKm > 0)) note.push(m.dashed);
+  note.push(m.source(base), m.zoom);
+  return { chips: [], legend: plainTierRows(tiers), note: note.join(' ') };
 }
 
 /** `getStats` while the pack is what is on screen. @returns {object} */
@@ -2331,6 +2395,10 @@ const powerGridLayer = {
     // The boot-time stack settle fires no event, so re-derive on every enable
     // rather than trusting whatever the last event left behind.
     applyClassification(powerClassificationTypeForScene(viewer?.scene || _viewer?.scene));
+    // The night atlas may have come on or gone off while this layer was off.
+    applyNightDress(nightAtlasActive());
+    _unwatchNight?.();
+    _unwatchNight = watchNightAtlas((night) => applyNightDress(night));
     _overlayHost.setVisible(POWER_GRID_OVERLAY_SOURCE_ID, true);
     _overlayHost.setVisible(POWER_GRID_SELECTED_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
@@ -2354,6 +2422,8 @@ const powerGridLayer = {
 
   disable() {
     _enabled = false;
+    _unwatchNight?.();
+    _unwatchNight = null;
     clearSelection();
     clearUnavailableRetry();
     clearTimeout(_debounceTimer);
@@ -2454,39 +2524,32 @@ const powerGridLayer = {
    * The key to what is on screen: the voltage bands, in order.
    *
    * Bands rather than feature types, because voltage is what this layer filters
-   * on and therefore the only thing the colours can honestly mean. The rows
-   * carry the two limits that matter — the routes are drawn on the ground and
-   * are not at conductor height, and an empty band means nothing MAPPED at that
-   * voltage here.
+   * on and therefore the only thing the colours can honestly mean.
    *
    * THE PYLONS GET NO ROW OF THEIR OWN, and that is the house rule rather than
    * an omission. `#map-legend` carries the COLOUR channel: a shape a reader
    * decodes without a key does not earn a line, and a picture of a pylon is a
    * pylon. A row would also have to invent a swatch colour, because a pylon
    * wears the colour of the route it stands on — four different ones on screen
-   * at once. What the shape does NOT say goes in the block's `note`: how often
-   * one is drawn, and that it sits on a node somebody surveyed.
+   * at once.
+   *
+   * IN PLAIN WORDS since 2026-09-21: the key is read by anyone who opens the
+   * scene. The rows name the bands in words with one sentence each, and the
+   * note says only what a reader could misread — dashes are underground, an
+   * all-underground view has no pylons — and where the lines come from. The
+   * kilometres, the yard counts and the drawing's caveats are on the cards.
    * @returns {{chips: Array<object>, legend: Array<object>, note: string}}
    */
   getRowControls() {
     if (!_payload && _national) return nationalRowControls();
-    const legend = [];
-    const m = messages().legend;
-    for (const tier of _payload?.tiers || []) {
-      // The tier's own sentence is labelled by the feed when the payload is
-      // projected; re-read here so an English page gets the English one.
-      const parts = [powerTierBlurb(tier.id) || tier.blurb];
-      if (tier.lengthKm) parts.push(m.inView(formatGridKm(tier.lengthKm)));
-      if (tier.undergroundKm) parts.push(m.underground(formatGridKm(tier.undergroundKm)));
-      if (tier.substations) parts.push(m.substations(formatInteger(tier.substations, { locale: 'en' })));
-      legend.push({
-        label: tier.label,
-        color: tier.color,
-        count: tier.strokes + tier.substations,
-        blurb: m.blurb(parts.join(' · ')),
-      });
-    }
-    return { chips: [], legend, note: pylonLegendNote() };
+    const m = messages().plainLegend;
+    const tiers = _payload?.tiers || [];
+    const note = [];
+    if (tiers.some((tier) => tier.undergroundKm > 0)) note.push(m.dashed);
+    if (viewIsAllUnderground()) note.push(m.allUnderground);
+    // An empty answer has nothing to attribute: the note goes with the map.
+    if (tiers.length || note.length) note.push(m.source(null));
+    return { chips: [], legend: plainTierRows(tiers), note: note.join(' ') };
   },
 
   /**

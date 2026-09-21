@@ -141,19 +141,21 @@ test('a station with no published output is not a station producing zero', () =>
   assert.doesNotMatch(stoppedCard, /published no output/);
 });
 
-test('the legend leads with the ring-and-disc grammar, not with a filière', () => {
+test('the legend leads with how to read a station, not with a filière', () => {
   seed([station()], { joinStats: { placedUnits: 6, placedMw: 4730 } });
   const { legend } = _rteRowControlsForTest();
-  assert.match(legend[0].label, /Anneau/);
-  assert.match(legend[0].blurb, /anneau pâle et vide/);
-  assert.match(legend[0].blurb, /anneau net et vide/);
-  assert.match(legend[0].blurb, /PREND du courant au réseau/);
+  assert.match(legend[0].label, /Disque plein = production en ce moment/);
+  assert.match(legend[0].blurb, /Anneau vide : à l’arrêt/);
+  assert.match(legend[0].blurb, /Anneau pâle : pas de mesure/);
+  assert.match(legend[0].blurb, /Rose : la centrale consomme/);
+  assert.equal(legend[0].count, undefined, 'no count: the reader wants the reading, not a total');
 
   // With no key at all the first row says what to do about it instead.
   seed([station({ mw: null, load: null, reporting: 0 })], { joinStats: { placedUnits: 0 } });
   const keyless = _rteRowControlsForTest().legend;
+  assert.match(keyless[0].label, /Taille = puissance maximale/);
   assert.match(keyless[0].blurb, /RTE_CLIENT_ID/);
-  assert.doesNotMatch(keyless[0].blurb, /anneau net et vide/);
+  assert.doesNotMatch(keyless[0].blurb, /à l’arrêt/);
 });
 
 // --- Consumption ------------------------------------------------------------
@@ -368,17 +370,17 @@ test('the detection subsample is deterministic and bounded', () => {
 
 // --- Legend, stats, analyst --------------------------------------------------
 
-test('the legend counts stations per filière and reports live against installed', () => {
+test('the legend says per filière what is made now against what could be', () => {
   const legend = buildRteLegend([
     station(),
     station({ id: 'PALUE', mw: 3000, installedMw: 5320 }),
     station({ id: 'VAUJA', class: 'hydro-pumped', mw: null, installedMw: 1690 }),
   ]);
   const nuclear = legend.find((row) => row.label === RTE_GENERATION_CLASSES.nuclear.label);
-  assert.equal(nuclear.count, 2);
-  assert.match(nuclear.blurb, /7 730 MW produits sur 10,8 GW installés/);
+  assert.equal(nuclear.count, undefined);
+  assert.equal(nuclear.blurb, '7 730 MW produits en ce moment, sur 10,8 GW possibles.');
   const pumped = legend.find((row) => row.label === RTE_GENERATION_CLASSES['hydro-pumped'].label);
-  assert.match(pumped.blurb, /aucune production publiée/);
+  assert.equal(pumped.blurb, '1 690 MW possibles ; production non publiée.');
   // Legend order is the class order, not insertion order.
   assert.deepEqual(legend.map((row) => row.label), [
     RTE_GENERATION_CLASSES.nuclear.label,

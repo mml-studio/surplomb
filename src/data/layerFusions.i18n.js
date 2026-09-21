@@ -122,8 +122,8 @@ export default defineMessages({
       en: 'Météo-France — the 190 stations that publish their readings',
     },
     'rte-generation': {
-      fr: 'Groupes de production RTE — production temps réel avec une clé',
-      en: 'RTE generating units — real-time output, with a key',
+      fr: 'Production des centrales (RTE) — en temps réel, avec une clé',
+      en: 'Power station output (RTE) — real time, with a key',
     },
     'fr-hydro-plants': {
       fr: 'Registre ODRÉ — toute la filière hydraulique française, '

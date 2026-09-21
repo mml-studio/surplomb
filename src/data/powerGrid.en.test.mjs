@@ -87,7 +87,7 @@ test('an unnamed yard’s ambient label says “Substation” in English', () =>
   assert.match(french.title, /^Poste VLEJU · /);
 });
 
-test('the national key names each band and dates the pack, in English', () => {
+test('the national key names each band in plain words, in both languages', () => {
   _setPowerGridStateForTest({
     payload: null, records: new Map(), enabled: true, national: PACK,
     nationalBandId: 'national',
@@ -95,53 +95,26 @@ test('the national key names each band and dates the pack, in English', () => {
   const { legend, note } = withLocale('en', () => _powerRowControlsForTest());
   assertNoFrench([...legend.map(({ label, blurb }) => ({ label, blurb })), note], { allow: DATA });
   assert.ok(legend.length, 'the pack draws at least one band');
-  assert.match(legend[0].blurb, /^The backbone: the 400 kV grid RTE runs the country on/);
-  assert.match(legend[0].blurb, /mapped in France/);
-  assert.match(legend[0].blurb, /Drawn on the ground: the mapped route, not the height of the cables\.$/);
-  assert.match(note, /^National OpenStreetMap grid \(as of 2026-07-12(, \d+ days)?\), simplified to within \d+ m\./);
-  assert.match(note, /Below 120 km, the view loads the exact route, the named substations and the pylons\.$/);
+  assert.equal(legend[0].label, 'Extra-high voltage');
+  assert.equal(legend[0].blurb, '400 kV in France: the long-distance backbone, region to region.');
+  assert.match(note, /Source: OpenStreetMap \(2026-07-12\)\./);
+  assert.match(note, /Zoom in for the exact routes and the substations\.$/);
 
-  // French, same pack: what the key printed before.
+  // French, same pack: the key a French reader now gets is French.
   const french = withLocale('fr', () => _powerRowControlsForTest());
-  assert.match(french.legend[0].blurb, /^La colonne vertébrale : le 400 kV sur lequel RTE fait tourner le pays/);
-  assert.match(french.legend[0].blurb, /cartographiés en France/);
-  assert.match(french.note, /^Réseau national OpenStreetMap \(état du 2026-07-12(, \d+ jours)?\), simplifié à \d+ m près\./);
+  assert.equal(french.legend[0].label, 'Très haute tension');
+  assert.equal(french.legend[0].blurb, '400 kV en France : les grands axes, d’une région à l’autre.');
+  assert.match(french.note, /Source : OpenStreetMap \(2026-07-12\)\./);
 });
 
-test('the row’s sentence over the national pack reads in English', () => {
-  _setPowerGridStateForTest({
-    payload: null, records: new Map(), enabled: true, national: PACK,
-    nationalBandId: 'national',
-  });
-  const label = withLocale('en', () => _powerStatsForTest().loadingLabel);
-  assertNoFrench(label, { allow: DATA });
-  assert.match(label, /^National grid · [\d,.]+ km of 400 and 225 kV lines · 63\/90 kV appears below 600 km$/);
-  assert.match(withLocale('fr', () => _powerStatsForTest().loadingLabel),
-    /^Réseau national · [\d\s,]+ km de lignes 400 et 225 kV · le 63\/90 kV apparaît sous 600 km$/);
-
-  // Zoomed out over another country, the row says where the pack stops.
-  _setPowerGridStateForTest({
-    payload: null, records: new Map(), enabled: true, national: PACK,
-    nationalBandId: 'national', status: 'zoom-in',
-  });
-  assert.equal(withLocale('en', () => _powerStatsForTest().loadingLabel),
-    'National grid: France only. Anywhere else, zoom below 120 km');
-});
-
-test('the row’s sentence over a viewport answer keeps its inherited English', () => {
-  _setPowerGridStateForTest({ payload: PAYLOAD, records: new Map(), enabled: true, national: null });
-  const label = withLocale('en', () => _powerStatsForTest().loadingLabel);
-  assertNoFrench(label, { allow: DATA });
-  assert.match(label, /of mapped route/);
-  assert.equal(label, withLocale('fr', () => _powerStatsForTest().loadingLabel));
-});
-
-test('the viewport key keeps its inherited English in both languages', () => {
+test('the viewport key is plain words too, and French on a French page', () => {
   _setPowerGridStateForTest({ payload: PAYLOAD, records: new Map(), enabled: true, national: null });
   const en = withLocale('en', () => _powerRowControlsForTest().legend);
   const fr = withLocale('fr', () => _powerRowControlsForTest().legend);
   assertNoFrench(en.map(({ label, blurb }) => ({ label, blurb })), { allow: DATA });
-  assert.deepEqual(en.map((row) => row.blurb), fr.map((row) => row.blurb));
+  assert.equal(en.length, fr.length);
+  assert.notDeepEqual(en.map((row) => row.blurb), fr.map((row) => row.blurb));
+  // The band sentences of the feed are still there for the cards.
   assert.equal(withLocale('en', () => powerTierBlurb('ehv')),
     'The backbone. In France this is the 400 kV grid RTE runs the country on.');
 });
