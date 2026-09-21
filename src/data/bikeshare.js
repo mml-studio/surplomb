@@ -17,7 +17,7 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import {
-  mobilityDockFill,
+  mobilityDockMark,
   dockFillLegend,
   isMobilityOperatorId,
   mobilityOperatorColor,
@@ -31,10 +31,17 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickAt } from './pickAt.js';
+import { cachedGroundFloor, warmGroundFloor } from './groundFloor.js';
+import {
+  provisionalFloor,
+  provisionalFloorRetryDelayMs,
+  sampleProvisionalFloors,
+} from './provisionalFloor.js';
 import {
   mobilityDocksGrouped,
   notifyMobilityDocksChanged,
   onMobilityDocksGrouped,
+  publishMobilityDockKey,
   publishMobilityDocks,
 } from './mobilityDockBridge.js';
 
@@ -57,6 +64,15 @@ let _overlayHost = DEFAULT_OVERLAY_HOST;
 const ACTIVATION_ALTITUDE_M = 50000;
 /** Hysteresis enter threshold — layer activates when camera drops below this. */
 const ACTIVATION_ENTER_ALTITUDE_M = ACTIVATION_ALTITUDE_M - 2000;
+/**
+ * The ceiling while the shared fleets' groups are counting the docks
+ * (`mobilityDockBridge.js`). Since 2026-09-21 those groups are drawn up to
+ * 250 km, where the key says « vélos en station compris »; a gate left at
+ * 50 km took the Vélib' bikes out of every bubble between the two without a
+ * word. Nothing is DRAWN higher — a grouped dock never is — so the docks cost
+ * one station list per city and no point on screen.
+ */
+const GROUPED_ACTIVATION_ALTITUDE_M = 250_000;
 /** Hysteresis exit threshold — layer deactivates when camera rises above this. */
 const ACTIVATION_EXIT_ALTITUDE_M = ACTIVATION_ALTITUDE_M + 2000;
 /** Debounce interval (ms) for camera-change proximity checks. */
@@ -67,13 +83,12 @@ const CITY_RANGE_BASE_KM = 100;
 const STATUS_POLL_MS = 60000;
 
 // --- Point rendering constants ---
-/** Minimum rendered point size in pixels. Sized so the operator ring below
- *  leaves a readable availability core: a 4 px dot minus a 2 px ring is a
- *  ring. */
-const POINT_SIZE_MIN = 7;
-/** Maximum rendered point size in pixels. */
+/** Minimum rendered disc size in pixels, inside the ring. Sized so the core a
+ *  half-full dock holds (`MOBILITY_DOCK_CORE_SCALE`) is still 3 px across. */
+const POINT_SIZE_MIN = 8;
+/** Maximum rendered disc size in pixels. */
 const POINT_SIZE_MAX = 14;
-/** Operator ring width, in pixels. Cesium draws the outline INSIDE pixelSize. */
+/** Operator ring width, in pixels. Cesium draws the outline OUTSIDE pixelSize. */
 const POINT_RING_PX = 2;
 /** Fallback station capacity when real data is unavailable. */
 const DEFAULT_CAPACITY = 15;
@@ -82,19 +97,25 @@ const POINT_HEIGHT_OFFSET_M = 2.0;
 /** Hard cap on total rendered station points across all cities. */
 const MAX_TOTAL_POINTS = 8000;
 
-// --- Availability fill ---
-// A dock is filled with its own ring's hue as far as it is full — see
-// `MOBILITY_DOCK_LEVEL_ALPHA`. Memoised per hue and level: a city holds one
-// operator, so this is a handful of colours for 1,500 docks.
-const _dockFillCache = new Map();
-function dockFill(level, operatorColor) {
+// --- Availability mark ---
+// A dock is a dark disc in its operator's ring, holding a core as large as it
+// is full — see `mobilityDockMark`. Memoised per hue and level: a city holds
+// one operator, so this is a handful of colours for 1,500 docks.
+const _dockMarkCache = new Map();
+function dockMark(level, operatorColor) {
   const key = `${level}|${operatorColor || ''}`;
-  let color = _dockFillCache.get(key);
-  if (!color) {
-    color = Cesium.Color.fromCssColorString(mobilityDockFill(level, operatorColor));
-    _dockFillCache.set(key, color);
+  let mark = _dockMarkCache.get(key);
+  if (!mark) {
+    const css = mobilityDockMark(level, operatorColor);
+    mark = {
+      disc: Cesium.Color.fromCssColorString(css.disc),
+      ring: Cesium.Color.fromCssColorString(css.ring),
+      core: css.core ? Cesium.Color.fromCssColorString(css.core) : null,
+      coreScale: css.coreScale,
+    };
+    _dockMarkCache.set(key, mark);
   }
-  return color;
+  return mark;
 }
 /** Outline color for all station points. */
 const COLOR_OUTLINE = Cesium.Color.BLACK.withAlpha(0.25);
@@ -648,9 +669,41 @@ function applyStationFilters() {
   for (const record of _stationRenderMap.values()) {
     // The selected dock stays hidden under its highlight entity.
     if (record.key === _selectedKey) continue;
-    if (record.point) record.point.show = stationDrawn(record);
+    showDock(record, stationDrawn(record));
   }
   governorRequestRender('bikeshare-filter');
+}
+
+/**
+ * The docks on screen: per operator, and how many the filters leave drawn.
+ * @returns {{operators: Map<string, {operator: object, count: number}>, shown: number}}
+ */
+function docksInView() {
+  const box = viewBoxDegrees(_viewer);
+  const operators = new Map();
+  let shown = 0;
+  for (const record of _stationRenderMap.values()) {
+    if (box && !(record.lat >= box.south && record.lat <= box.north
+      && record.lon >= box.west && record.lon <= box.east)) continue;
+    const operator = CITY_OPERATOR.get(record.cityId);
+    if (!operator) continue;
+    const seen = operators.get(operator.id);
+    if (seen) seen.count += 1;
+    else operators.set(operator.id, { operator, count: 1 });
+    if (stationVisible(record)) shown += 1;
+  }
+  return { operators, shown };
+}
+
+/**
+ * Whether this block prints the dock lines of the key: some dock is drawn on
+ * screen, and no group is counting them instead. The fleets' block reads the
+ * same answer (`mobilityDockKeyShown`) and leaves its copy out.
+ * @param {number} [shown] {@link docksInView}'s count, when already taken.
+ * @returns {boolean}
+ */
+function docksKeyed(shown = docksInView().shown) {
+  return shown > 0 && !mobilityDocksGrouped();
 }
 
 /** The camera's view box in degrees, or null when it has none. */
@@ -862,10 +915,15 @@ function shouldActivateAtAltitude(altitude) {
     _altitudeGateEnabled = false;
     return false;
   }
+  // While the fleets' groups count the docks, the docks are loaded as high as
+  // the groups are drawn — see `GROUPED_ACTIVATION_ALTITUDE_M`.
+  const grouped = mobilityDocksGrouped();
+  const exit = grouped ? GROUPED_ACTIVATION_ALTITUDE_M + 10_000 : ACTIVATION_EXIT_ALTITUDE_M;
+  const enter = grouped ? GROUPED_ACTIVATION_ALTITUDE_M - 10_000 : ACTIVATION_ENTER_ALTITUDE_M;
   if (_altitudeGateEnabled) {
     // Deactivate only after crossing the higher exit threshold
-    if (altitude >= ACTIVATION_EXIT_ALTITUDE_M) _altitudeGateEnabled = false;
-  } else if (altitude <= ACTIVATION_ENTER_ALTITUDE_M) {
+    if (altitude >= exit) _altitudeGateEnabled = false;
+  } else if (altitude <= enter) {
     // Activate when dropping below the lower enter threshold
     _altitudeGateEnabled = true;
   }
@@ -1161,30 +1219,59 @@ function capacityToPixelSize(capacity) {
 }
 
 /**
- * Determine the display color for a station based on its availability ratio,
- * poured in the hue of the ring it sits in (`mobilityDockFill`).
- * - No status data: faded grey.
- * - Offline (not installed/renting/returning): fainter grey.
- * - >60% bikes available: solid.
- * - 30-60% bikes available: tinted.
- * - <30% bikes available: an empty ring.
+ * How full a station is, as the dock mark reads it (`mobilityDockMark`).
+ * - No status data: `unknown`, a grey disc.
+ * - Offline (not installed/renting/returning): `closed`, a fainter grey.
+ * - >60% bikes available: `full`, a large core.
+ * - 30-60% bikes available: `half`, a small core.
+ * - <30% bikes available: `low`, an empty ring.
  * @param {Object|null} status - Station status object.
  * @param {number} capacity - Resolved station capacity.
- * @param {string} [operatorColor] - The ring's hue, `#rrggbb`.
- * @returns {Cesium.Color} Color to apply to the station point.
+ * @returns {'full'|'half'|'low'|'unknown'|'closed'}
  */
-function statusToColor(status, capacity, operatorColor) {
-  if (!status) return dockFill('unknown');
-  if (!status.isInstalled || !status.isRenting || !status.isReturning) return dockFill('closed');
+function statusToLevel(status, capacity) {
+  if (!status) return 'unknown';
+  if (!status.isInstalled || !status.isRenting || !status.isReturning) return 'closed';
 
   const bikes = toNonNegativeInteger(status.bikesAvailable);
-  if (!Number.isFinite(bikes)) return dockFill('unknown');
+  if (!Number.isFinite(bikes)) return 'unknown';
 
   const cap = Math.max(1, Number(capacity) || DEFAULT_CAPACITY);
   const ratio = bikes / cap;
-  if (ratio > 0.6) return dockFill('full', operatorColor);
-  if (ratio >= 0.3) return dockFill('half', operatorColor);
-  return dockFill('low', operatorColor);
+  if (ratio > 0.6) return 'full';
+  if (ratio >= 0.3) return 'half';
+  return 'low';
+}
+
+/**
+ * Paint a dock's disc and core for its level and size. The core is its own
+ * point, added right after the disc so it paints over it; it is hidden, not
+ * removed, when the level has none.
+ * @param {Object} record - Render record.
+ * @param {string} level - {@link statusToLevel}.
+ * @param {number} size - Disc size in pixels.
+ */
+function paintDock(record, level, size) {
+  const mark = dockMark(level, CITY_OPERATOR.get(record.cityId)?.color);
+  record.level = level;
+  record.point.pixelSize = size;
+  record.point.color = mark.disc;
+  record.point.outlineColor = mark.ring;
+  if (!record.core) return;
+  record.core.pixelSize = Math.max(2, size * mark.coreScale);
+  if (mark.core) record.core.color = mark.core;
+  record.core.show = record.point.show && Boolean(mark.core);
+}
+
+/**
+ * Show or hide a dock, core and all. The core follows the disc, and stays off
+ * where the level draws none.
+ * @param {Object} record - Render record.
+ * @param {boolean} show
+ */
+function showDock(record, show) {
+  if (record.point) record.point.show = show;
+  if (record.core) record.core.show = show && (dockMark(record.level || 'unknown').coreScale > 0);
 }
 
 /**
@@ -1260,7 +1347,7 @@ function _clearSelection() {
     if (record?.point) {
       // Back to what the filters say, not to "shown": a dock selected before
       // a focus that excludes it must not reappear when it is released.
-      record.point.show = stationDrawn(record);
+      showDock(record, stationDrawn(record));
     }
   }
 
@@ -1286,7 +1373,7 @@ function _selectStation(key) {
 
   _selectedKey = key;
   // Hide the base point so the highlight entity replaces it visually
-  record.point.show = false;
+  showDock(record, false);
 
   _selectedEntity = _viewer.entities.add({
     position: record.point.position,
@@ -1354,18 +1441,100 @@ function createStationPosition(station) {
   const lon = Number(station?.lon);
   const lat = Number(station?.lat);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const floor = dockFloor(lat, lon);
+  return Cesium.Cartesian3.fromDegrees(lon, lat, (floor ?? 0) + POINT_HEIGHT_OFFSET_M);
+}
 
-  let height = POINT_HEIGHT_OFFSET_M;
-  // Sample terrain height so points sit on ground rather than at ellipsoid level
-  if (_viewer?.scene?.sampleHeightSupported) {
-    const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-    const sampled = _viewer.scene.sampleHeight(carto);
-    if (Number.isFinite(sampled)) {
-      height = sampled + POINT_HEIGHT_OFFSET_M;
-    }
+/**
+ * The floor a dock stands on: the shared DEM cell when it is warm, the
+ * PROVISIONAL rendered-surface read when it is not (`provisionalFloor.js`),
+ * null when neither has an answer — the rule the fleets of the same row
+ * follow (`sharedMobilityFrance.js`).
+ *
+ * IT WAS A RAW `scene.sampleHeight`, AND IT LIED. Measured 2026-09-21 over the
+ * landing's Paris view on the photorealistic mesh, with the fleets' layer on
+ * as the landing's link turns it on: all 1,518 Vélib' docks at -46 to -48 km
+ * of height — the probe reads the depth the other layer's always-on-top dots
+ * write, and nothing checked its answer — so not one dock reached the screen.
+ * With the Vélib' layer alone they stood at 2 m on the ellipsoid, 80 m under
+ * the street. The provisional store probes through a plausibility band and
+ * refuses such a reading; the DEM corrects it when it lands.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {?number} Ellipsoidal floor in metres, or null.
+ */
+function dockFloor(lat, lon) {
+  const floor = cachedGroundFloor(lat, lon);
+  if (Number.isFinite(floor)) return floor;
+  const provisional = provisionalFloor(lat, lon);
+  return Number.isFinite(provisional) ? provisional : null;
+}
+
+/** How far a dock the probes did not reach may borrow a floor from, in km. */
+const DOCK_FLOOR_FILL_KM = 10;
+/** Docks whose DEM floor is requested per city, nearest the list's head. */
+const DOCK_FLOOR_WARM_MAX = 600;
+let _floorRetryTimer = null;
+let _floorRetries = 0;
+
+/** The loaded docks as the floor passes read them. */
+function dockPoints() {
+  const points = [];
+  for (const record of _stationRenderMap.values()) points.push({ lat: record.lat, lon: record.lon });
+  return points;
+}
+
+/**
+ * Re-place every dock on the best floor now known for its cell. A position is
+ * baked into a primitive once, so a floor that lands later changes nothing
+ * until something walks the docks — this.
+ * @returns {number} Docks moved.
+ */
+function reanchorDocks() {
+  let moved = 0;
+  for (const record of _stationRenderMap.values()) {
+    if (!record.point) continue;
+    const next = createStationPosition(record);
+    if (!next || Cesium.Cartesian3.equalsEpsilon(record.point.position, next, 0, 0.05)) continue;
+    record.point.position = next;
+    if (record.core) record.core.position = next;
+    moved += 1;
   }
+  if (moved && _selectedEntity && _selectedKey) {
+    const selected = _stationRenderMap.get(_selectedKey);
+    if (selected?.point) _selectedEntity.position = selected.point.position;
+  }
+  return moved;
+}
 
-  return Cesium.Cartesian3.fromDegrees(lon, lat, height);
+/** One deferred floor pass: sample again, re-place, decide whether to come back. */
+function refreshDockFloors() {
+  _floorRetryTimer = null;
+  if (!_enabled || !_viewer || !_stationRenderMap.size) return;
+  const points = dockPoints();
+  const { pending } = sampleProvisionalFloors(_viewer.scene, points, { fillKm: DOCK_FLOOR_FILL_KM });
+  if (reanchorDocks()) governorRequestRender('bikeshare-reanchor');
+  if (pending || points.some((point) => dockFloor(point.lat, point.lon) == null)) scheduleDockFloorRetry();
+}
+
+/**
+ * Come back for the docks the surface could not place yet — the tiles under
+ * them had not streamed, or the DEM had not answered. Bounded like the
+ * fleets' own passes (`provisionalFloorRetryDelayMs`), refilled whenever the
+ * camera settles somewhere new.
+ */
+function scheduleDockFloorRetry() {
+  if (_floorRetryTimer != null) return;
+  const delay = provisionalFloorRetryDelayMs(_floorRetries);
+  if (delay == null) return;
+  _floorRetries += 1;
+  _floorRetryTimer = setTimeout(refreshDockFloors, delay);
+}
+
+function resetDockFloorRetries() {
+  if (_floorRetryTimer != null) clearTimeout(_floorRetryTimer);
+  _floorRetryTimer = null;
+  _floorRetries = 0;
 }
 
 /**
@@ -1392,6 +1561,14 @@ function ensureCityPoints(cityId, stationMap) {
   // camera settled — each commit needs one frame in idle mode. (perf wave 2 fix)
   governorRequestRender('bikeshare-points');
   const runtime = ensureCityRuntime(cityId);
+  // Ground the docks against the surface actually drawn BEFORE any position
+  // is taken — synchronous, ≤40 probes, nothing above 25 km of camera — and
+  // ask the DEM for the rest; `refreshDockFloors` re-places them as it lands.
+  const stations = [...stationMap.values()];
+  const { pending } = sampleProvisionalFloors(_viewer?.scene, stations, { fillKm: DOCK_FLOOR_FILL_KM });
+  warmGroundFloor(stations.slice(0, DOCK_FLOOR_WARM_MAX));
+  resetDockFloorRetries();
+  if (pending || stations.some((station) => dockFloor(station.lat, station.lon) == null)) scheduleDockFloorRetry();
 
   for (const station of stationMap.values()) {
     const key = stationKey(cityId, station.stationId);
@@ -1423,16 +1600,31 @@ function ensureCityPoints(cityId, stationMap) {
     // on screen was the inverse of the data. The sibling layer
     // `sharedMobilityFrance.js` has always sized by capacity with
     // `translucencyByDistance` alone; this is the same rule, one line removed.
+    const drawn = stationDrawn({ cityId });
+    const unknown = dockMark('unknown', CITY_OPERATOR.get(cityId)?.color);
     const point = _pointCollection.add({
       position,
       pixelSize: capacityToPixelSize(station.capacity),
-      color: dockFill('unknown'),
+      color: unknown.disc,
       outlineColor: cityRingColor(cityId),
       outlineWidth: POINT_RING_PX,
       translucencyByDistance: new Cesium.NearFarScalar(200, 1.0, 180000, 0.15),
       disableDepthTestDistance: 2500,
       id: key,
-      show: stationDrawn({ cityId }),
+      show: drawn,
+    });
+    // The availability core: the same id, so a click on it is a click on the
+    // dock, and added right after the disc so it paints over it (the
+    // collection blends without writing depth, in insertion order). Hidden
+    // until a status says the dock holds something.
+    const core = _pointCollection.add({
+      position,
+      pixelSize: 2,
+      color: unknown.ring,
+      translucencyByDistance: new Cesium.NearFarScalar(200, 1.0, 180000, 0.15),
+      disableDepthTestDistance: 2500,
+      id: key,
+      show: false,
     });
 
     _stationRenderMap.set(key, {
@@ -1441,6 +1633,8 @@ function ensureCityPoints(cityId, stationMap) {
       stationId: station.stationId,
       stationName: station.name,
       point,
+      core,
+      level: 'unknown',
       // Kept alongside the primitive so a spoken "which station is nearest"
       // never has to unproject a Cartesian back to degrees.
       lat: station.lat,
@@ -1478,6 +1672,7 @@ function removeCityPoints(cityId) {
     const record = _stationRenderMap.get(key);
     if (!record) continue;
     _pointCollection.remove(record.point);
+    if (record.core) _pointCollection.remove(record.core);
     _stationRenderMap.delete(key);
   }
 
@@ -1518,8 +1713,7 @@ function applyStatusToPoints(cityId, statusMap) {
       : null;
 
     // Update visual properties based on current status
-    record.point.pixelSize = capacityToPixelSize(capacity);
-    record.point.color = statusToColor(status, capacity, CITY_OPERATOR.get(record.cityId)?.color);
+    paintDock(record, statusToLevel(status, capacity), capacityToPixelSize(capacity));
   }
   // The groups count these bikes; they have changed.
   notifyMobilityDocksChanged();
@@ -1661,7 +1855,9 @@ async function runProximityCheck() {
   const altitude = getCameraAltitude(_viewer);
   // Altitude gate: disable all cities when camera is too high
   if (!shouldActivateAtAltitude(altitude)) {
+    const had = _stationRenderMap.size > 0;
     deactivateAllCities();
+    if (had) _rowControlsListener?.();
     return;
   }
 
@@ -1679,6 +1875,7 @@ async function runProximityCheck() {
   _activeCityIds = nextActive;
   if (_activeCityIds.size === 0) {
     _count = 0;
+    _rowControlsListener?.();
     return;
   }
 
@@ -1687,9 +1884,13 @@ async function runProximityCheck() {
   for (const cityId of _activeCityIds) {
     if (!_cityRuntime.has(cityId)) toActivate.push(cityId);
   }
-  if (toActivate.length === 0) return;
-
-  await Promise.all(toActivate.map((cityId) => activateCity(cityId, generation)));
+  if (toActivate.length) {
+    await Promise.all(toActivate.map((cityId) => activateCity(cityId, generation)));
+  }
+  // The key counts the docks ON SCREEN, so every settled view is new to it —
+  // and the panel repaints on a toggle or a poll, never on its own when docks
+  // land. Without this the Vélib' block kept the previous view's count.
+  if (_enabled && generation === _proximityGeneration) _rowControlsListener?.();
 }
 
 /** Schedule a debounced proximity check after camera movement. */
@@ -1723,6 +1924,9 @@ function onCameraSettled() {
   if (!_enabled) return;
   clearTimeout(_cameraDebounceTimer);
   _cameraDebounceTimer = null;
+  // Closer tiles read finer: a new view is a new chance for the floors.
+  resetDockFloorRetries();
+  scheduleDockFloorRetry();
   void runProximityCheck();
 }
 
@@ -1849,10 +2053,13 @@ const bikeshareLayer = {
     // Pick-ownership (H2): station point ids are string render-map keys.
     registerPickOwner('bikeshare', (pickedId) => _stationRenderMap.has(pickedId));
     publishMobilityDocks(docksForGroups);
+    publishMobilityDockKey(() => docksKeyed());
     _unsubscribeGrouped?.();
     _unsubscribeGrouped = onMobilityDocksGrouped(() => {
       applyStationFilters();
       _rowControlsListener?.();
+      // The gate's ceiling moves with the groups: ask again.
+      scheduleProximityCheck();
     });
     applyStationFilters();
 
@@ -1879,6 +2086,7 @@ const bikeshareLayer = {
     _altitudeGateEnabled = false;
     clearTimeout(_cameraDebounceTimer);
     _cameraDebounceTimer = null;
+    resetDockFloorRetries();
     _clearSelection();
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1902,6 +2110,7 @@ const bikeshareLayer = {
     _pointCollection.show = false;
     // No docks left to count: the groups count the fleets alone.
     publishMobilityDocks(null);
+    publishMobilityDockKey(null);
     _unsubscribeGrouped?.();
     _unsubscribeGrouped = null;
     notifyMobilityDocksChanged();
@@ -1999,19 +2208,7 @@ const bikeshareLayer = {
    */
   getRowControls() {
     const om = operatorMessages().legend;
-    const box = viewBoxDegrees(_viewer);
-    const operators = new Map();
-    let shown = 0;
-    for (const record of _stationRenderMap.values()) {
-      if (box && !(record.lat >= box.south && record.lat <= box.north
-        && record.lon >= box.west && record.lon <= box.east)) continue;
-      const operator = CITY_OPERATOR.get(record.cityId);
-      if (!operator) continue;
-      const seen = operators.get(operator.id);
-      if (seen) seen.count += 1;
-      else operators.set(operator.id, { operator, count: 1 });
-      if (stationVisible(record)) shown += 1;
-    }
+    const { operators, shown } = docksInView();
     const legend = [];
     const docksHidden = Boolean(_kindFilter && _kindFilter !== 'velo');
     const ranked = [...operators.values()]
@@ -2037,7 +2234,7 @@ const bikeshareLayer = {
       });
     }
     // While a group counts the docks, none is drawn: no fill to explain.
-    if (shown > 0 && !mobilityDocksGrouped()) legend.push(...dockFillLegend());
+    if (docksKeyed(shown)) legend.push(...dockFillLegend());
     // Emptied by a filter is not « hors de cette vue » — see the same line in
     // `sharedMobilityFrance.js`.
     const filtered = Boolean(_operatorFilter || _kindFilter);
@@ -2161,6 +2358,11 @@ export function _setBikeshareSelectionStateForTest({ viewer, key, record, overla
  * Seed loaded docks (and, optionally, a camera) for the key and filter tests,
  * and put both filters back to none.
  */
+/** Drive the production altitude gate, hysteresis and all. */
+export function _bikeshareAltitudeGateForTest(altitude) {
+  return shouldActivateAtAltitude(altitude);
+}
+
 export function _setBikeshareStationsForTest({ viewer = null, records = [] } = {}) {
   _viewer = viewer;
   _stationRenderMap = new Map(records.map((record) => [record.key, record]));

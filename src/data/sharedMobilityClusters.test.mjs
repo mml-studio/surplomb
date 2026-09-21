@@ -8,11 +8,13 @@ import {
   addDocksToSharedMobilityBubbles,
   foldSharedMobilityClusters,
   mergeSharedMobilityBubbles,
+  placeSharedMobilityLabels,
   sharedMobilityBubbleBar,
   sharedMobilityClusterCell,
 } from './sharedMobilityClusters.js';
 import {
-  GBFS_CLUSTER_ABOVE, GBFS_CLUSTER_CELLS_DEG, clusterGbfsVehicles, gbfsBoxWantsClusters, gbfsClusterCellKey,
+  GBFS_CLUSTER_ABOVE, GBFS_CLUSTER_ALWAYS_DEG, GBFS_CLUSTER_CELLS_DEG, clusterGbfsVehicles, gbfsBoxWantsClusters,
+  gbfsClusterCellKey,
 } from './gbfsFeeds.js';
 
 const OPERATORS = {
@@ -132,4 +134,29 @@ test('a dock\'s bikes join the group of its cell, the proxy\'s own key', () => {
   // No docks, or no grid: the fleets' groups untouched.
   assert.equal(addDocksToSharedMobilityBubbles(bubbles, [], cell, box), bubbles);
   assert.equal(addDocksToSharedMobilityBubbles(bubbles, [{ lat: 48.86, lon: 2.34, bikes: 3, operator: velib }], null), bubbles);
+});
+
+test('from the regional view a sparse box is grouped too, and the grid reaches it', () => {
+  // Rennes' 300 vehicles from 150 km were one smudge of 300 dots: past the
+  // step a regional view asks for, groups are the answer whatever the count.
+  const box = { south: 48.0, west: -1.8, north: 48.2, east: -1.5 };
+  const parts = [{ id: 'star', vehicles: [{ lat: 48.11, lon: -1.68, kind: 'bike' }] }];
+  assert.equal(gbfsBoxWantsClusters(parts, box, GBFS_CLUSTER_ABOVE, 0.008), false, 'a sparse city keeps its dots');
+  assert.equal(gbfsBoxWantsClusters(parts, box, GBFS_CLUSTER_ABOVE, GBFS_CLUSTER_ALWAYS_DEG), true);
+  // 200 m/px is what a desktop sees from 250 km: a step the proxy shares.
+  assert.equal(sharedMobilityClusterCell(200), 0.256);
+  assert.ok(GBFS_CLUSTER_CELLS_DEG.includes(0.256));
+});
+
+test('place labels yield to heavier ones instead of overlapping them', () => {
+  const label = (id, x, y, weight, w = 80) => ({ id, x, y, w, h: 28, weight });
+  const kept = placeSharedMobilityLabels([
+    label('versailles', 505, 205, 300),
+    label('paris', 500, 200, 20_000),
+    label('lyon', 700, 500, 9_000),
+    // Clear of Paris by more than the gap: kept.
+    label('meaux', 600, 200, 100),
+    label('nowhere', Number.NaN, 0, 1),
+  ]);
+  assert.deepEqual(kept.map((entry) => entry.id), ['paris', 'lyon', 'meaux']);
 });

@@ -111,6 +111,35 @@ export function cameraViewBox(viewer) {
   return { south, west, north, east };
 }
 
+/**
+ * The point on the globe the middle of the screen is looking at, or null when
+ * the middle of the screen is sky.
+ *
+ * `pickEllipsoid` and not `globe.pick`: the ellipsoid always answers, terrain
+ * may not have streamed yet, and a request box does not need centimetres — it
+ * needs to be in the right kilometre. The same arithmetic four layers carry a
+ * copy of (`cadastreFocusPoint`, `powerFocusPoint`, …); a new caller takes
+ * this one.
+ * @param {?Cesium.Viewer} viewer
+ * @returns {?{lat:number, lon:number}}
+ */
+export function cameraFocusPoint(viewer) {
+  const scene = viewer?.scene;
+  const camera = viewer?.camera;
+  if (!scene || typeof camera?.pickEllipsoid !== 'function') return null;
+  const width = scene.canvas?.clientWidth;
+  const height = scene.canvas?.clientHeight;
+  if (!width || !height) return null;
+  const ellipsoid = scene.globe?.ellipsoid || Cesium.Ellipsoid.WGS84;
+  const hit = camera.pickEllipsoid(new Cesium.Cartesian2(width / 2, height / 2), ellipsoid);
+  if (!hit) return null;
+  const carto = ellipsoid.cartesianToCartographic(hit);
+  if (!carto) return null;
+  const lat = toDeg(carto.latitude);
+  const lon = toDeg(carto.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
 /** Longitude folded back into [-180, 180). */
 export function normalizeLon(lon) {
   return ((lon + 540) % 360) - 180;

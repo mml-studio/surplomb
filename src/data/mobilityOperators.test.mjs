@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import {
   curatedMobilityOperators,
   dockFillLegend,
-  mobilityDockFill,
+  mobilityDockMark,
+  MOBILITY_DOCK_DISC,
   mobilityOperatorColor,
   mobilityOperatorShortLabel,
   normalizeOperatorText,
@@ -167,28 +168,36 @@ test('resolution is stable and cached — the same title never changes colour mi
   assert.throws(() => { first.color = '#000000'; }, TypeError);
 });
 
-test('a dock is filled with its own hue, and an emptied dock spends the least ink', () => {
-  // The traffic light this replaced put a « bien remplie » green beside Lime's
-  // lime and Vélib's ring, and a « presque vide » red beside Voi. A level made
-  // of the ring's own hue cannot collide with another operator.
+test('a dock is a dark disc in its own ring, with a core as large as it is full', () => {
+  // The tint this replaced — the ring's hue at 100, 42 and 10 % — left every
+  // half-full dock a smudge the photorealistic roof showed through. Nothing is
+  // translucent now: the level is the SIZE of an opaque core.
   const vélib = resolveMobilityOperator("Vélib' Métropole").color;
-  const alpha = (css) => Number(css.match(/,([\d.]+)\)$/)[1]);
-  const full = mobilityDockFill('full', vélib);
-  const half = mobilityDockFill('half', vélib);
-  const low = mobilityDockFill('low', vélib);
-  for (const css of [full, half, low]) {
-    assert.ok(css.startsWith(`rgba(${[1, 3, 5].map((i) => parseInt(vélib.slice(i, i + 2), 16)).join(',')},`), css);
+  const full = mobilityDockMark('full', vélib);
+  const half = mobilityDockMark('half', vélib);
+  const low = mobilityDockMark('low', vélib);
+  for (const mark of [full, half, low]) {
+    assert.equal(mark.disc, MOBILITY_DOCK_DISC, 'the dark disc is what tells a dock from a vehicle');
+    assert.equal(mark.ring, vélib, 'the ring says whose, at every level');
   }
-  assert.ok(alpha(full) > alpha(half) && alpha(half) > alpha(low));
-  // Never zero: a fully transparent fragment is discarded, and the middle of an
-  // empty ring would stop answering a click.
-  assert.ok(alpha(low) > 0);
-  // « We do not know » is a grey, not a level, whatever the ring.
-  assert.equal(mobilityDockFill('unknown', vélib), mobilityDockFill('unknown', '#ff4d4d'));
-  // The key says it in the same three steps.
+  assert.equal(full.core, vélib);
+  assert.equal(half.core, vélib);
+  assert.ok(full.coreScale > half.coreScale && half.coreScale > 0);
+  // An emptied dock holds nothing: its ring alone.
+  assert.equal(low.core, null);
+  assert.equal(low.coreScale, 0);
+  // « We do not know » and « closed » are greys, not levels — and never the
+  // dark « empty » disc, whatever the ring.
+  const unknown = mobilityDockMark('unknown', vélib);
+  assert.notEqual(unknown.disc, MOBILITY_DOCK_DISC);
+  assert.equal(unknown.core, null);
+  assert.equal(unknown.ring, vélib);
+  assert.notEqual(mobilityDockMark('closed', vélib).disc, unknown.disc);
+  // The key says it in the same three steps, each its own shape.
   const legend = dockFillLegend();
   assert.deepEqual(legend.map((row) => row.label), ['bien remplie', 'à moitié', 'presque vide']);
-  assert.ok(alpha(legend[0].color) > alpha(legend[1].color) && alpha(legend[1].color) > alpha(legend[2].color));
+  assert.equal(new Set(legend.map((row) => row.glyph)).size, 3);
+  assert.ok(legend.every((row) => row.glyph.startsWith('data:image/svg+xml;base64,')));
 });
 
 test("Vélib' is no longer a third green beside Lime and Clem'", () => {
@@ -196,5 +205,18 @@ test("Vélib' is no longer a third green beside Lime and Clem'", () => {
   const vélib = colorOf("Vélib' Métropole");
   for (const other of ['Lime Paris', 'Clem', 'Voi Paris', 'Dott Paris', 'YEGO Paris', 'Citiz Développement']) {
     assert.ok(colorDistance(vélib, colorOf(other)) >= 150, `Vélib' vs ${other}`);
+  }
+});
+
+test('Paris wears the mock\'s own hues, one operator each', () => {
+  // The « Repères discrets » mock, sampled off its pixels on 2026-09-21. The
+  // five operators of the landing's Paris view take five of its six hues.
+  const colorOf = (name) => resolveMobilityOperator(name).color;
+  assert.deepEqual(
+    ['Dott Paris', 'Lime Paris', 'YEGO Paris', 'Voi Paris', "Vélib' Métropole"].map(colorOf),
+    ['#3c8cf6', '#98e26a', '#fcd73e', '#fb6759', '#40d4d9'],
+  );
+  for (const hex of ['#3c8cf6', '#98e26a', '#fcd73e', '#fb6759', '#40d4d9', '#a765df']) {
+    assert.ok(MOBILITY_OPERATOR_PALETTE.includes(hex), `${hex} is a slot`);
   }
 });

@@ -1069,10 +1069,25 @@ export function capGbfsObjects(systems, box, budget = GBFS_MAX_OBJECTS, { margin
  * every group, and a zoom across it splits each group into four.
  *
  * The finest step, 0.001° (~110 m), is under what a group is drawn at from the
- * lowest altitude groups are shown at; the coarsest, 0.064° (~7 km), still
- * leaves a few groups on the widest view the proxy answers.
+ * lowest altitude groups are shown at. The coarsest, 0.256° (~28 km), is what a
+ * 160 px group spans from 250 km up — the regional view, which since
+ * 2026-09-21 is answered in groups instead of a « zoom in » card: the grid
+ * stopped at 0.064° while the layer stopped at 80 km.
  */
-export const GBFS_CLUSTER_CELLS_DEG = Object.freeze([0.001, 0.002, 0.004, 0.008, 0.016, 0.032, 0.064]);
+export const GBFS_CLUSTER_CELLS_DEG = Object.freeze([
+  0.001, 0.002, 0.004, 0.008, 0.016, 0.032, 0.064, 0.128, 0.256,
+]);
+
+/**
+ * From this step up the answer is groups whatever the box holds.
+ *
+ * {@link GBFS_CLUSTER_ABOVE} keeps a sparse CITY as dots, which is right from
+ * a few kilometres up: every dot is a vehicle and the streets read. From the
+ * height a 0.032° cell is chosen at (~25 km on a desktop) the same rule drew
+ * Rennes' 300 vehicles as one smudge of 300 overlapping dots; a group that
+ * says « 300 » is the legible mark there.
+ */
+export const GBFS_CLUSTER_ALWAYS_DEG = 0.032;
 
 /**
  * A cell is a graticule rectangle this many times wider in longitude than in
@@ -1113,13 +1128,16 @@ export function gbfsClusterCellKey(lat, lon, cellDeg) {
 export const GBFS_CLUSTER_ABOVE = 1500;
 
 /**
- * Whether a viewport is dense enough to be answered in groups.
+ * Whether a viewport is dense enough to be answered in groups — or seen from
+ * high enough that it is answered in groups anyway ({@link GBFS_CLUSTER_ALWAYS_DEG}).
  * @param {Array<{vehicles:Array<Object>}>} systems The cached clip.
  * @param {{south:number, west:number, north:number, east:number}} box
  * @param {number} [above]
+ * @param {?number} [cellDeg] The step the client asked for.
  * @returns {boolean}
  */
-export function gbfsBoxWantsClusters(systems, box, above = GBFS_CLUSTER_ABOVE) {
+export function gbfsBoxWantsClusters(systems, box, above = GBFS_CLUSTER_ABOVE, cellDeg = null) {
+  if (Number(cellDeg) >= GBFS_CLUSTER_ALWAYS_DEG) return true;
   let inside = 0;
   for (const system of systems) {
     for (const vehicle of system.vehicles || []) {
@@ -1202,4 +1220,165 @@ export function clusterGbfsVehicles(systems, box, cellDeg, { min = GBFS_CLUSTER_
   }
   clusters.sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1));
   return { clusters, vehicles, counted };
+}
+
+// --- Places, for the country view ---------------------------------------------
+
+/**
+ * Two networks whose footprints are centred closer than this are one PLACE on
+ * the country view. 25 km keeps Paris one place with its inner suburbs, and
+ * Saint-Quentin-en-Yvelines (27 km out) its own.
+ */
+export const GBFS_PLACE_RADIUS_KM = 25;
+
+/**
+ * A network whose footprint spans more than this, in degrees, has no one place
+ * to stand on: « Grand Est », « France », a regional operator from Albi to
+ * Tarbes. It is left out of the country view rather than pinned to the middle
+ * of its bounding box, which is usually a field.
+ */
+export const GBFS_PLACE_MAX_SPAN_DEG = 1;
+
+/**
+ * The index's `area` as a place name: the town, not the institution.
+ *
+ * The catalogue names the PUBLISHER's territory — « CA du Pays de
+ * Landerneau-Daoulas », « Métropole Européenne de Lille », « Nantes
+ * Métropole », a list of communes joined with « · ». The country view prints
+ * where a network runs, and « Lille » is what a reader looks for. A heuristic
+ * over human-written titles, so the result is only ever a label: nothing keys
+ * on it.
+ * @param {?string} area
+ * @returns {string}
+ */
+export function gbfsPlaceName(area) {
+  let name = String(area ?? '').split(' · ')[0].replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  const prefix = /^(?:CA|CC|CU|Communauté (?:d['’]agglomération|de communes|urbaine)|Métropole Européenne|Métropole|Eurométropole|Agglomération|Agglo)\s+(?:(?:du|des|de)\s+|d['’])?/;
+  const suffix = /\s+(?:-\s+)?(?:Métropole|Agglomération|Agglo|Communauté|Méditerranée|Normandie|Loire)$/;
+  for (let pass = 0; pass < 3; pass++) {
+    const next = name.replace(prefix, '').replace(suffix, '').replace(/\s+-$/, '').trim();
+    if (next === name || !next) break;
+    name = next;
+  }
+  name = name.charAt(0).toUpperCase() + name.slice(1);
+  // i18n-ignore-next-line — an ellipsis, not copy.
+  return name.length > 22 ? `${name.slice(0, 21).trimEnd()}…` : name;
+}
+
+/**
+ * Areas that name a region or the country rather than a place — « France »
+ * is what Dott's Bordeaux feed calls its area. Never a place's name.
+ */
+// i18n-ignore-start — catalogue values, compared, never shown.
+const GBFS_REGION_AREAS = new Set([
+  'france', 'grand est', 'auvergne-rhône-alpes', 'île-de-france', 'occitanie', 'nouvelle-aquitaine',
+  'hauts-de-france', 'bretagne', 'normandie', "provence-alpes-côte d'azur", 'bourgogne-franche-comté',
+  'centre-val de loire', 'pays de la loire', 'corse',
+]);
+// i18n-ignore-end
+
+/** Whether an area names ONE place: not a list of communes, not a region. */
+function isPlaceArea(area) {
+  const text = String(area ?? '').trim();
+  return Boolean(text) && !text.includes(' · ') && !GBFS_REGION_AREAS.has(text.toLowerCase());
+}
+
+function bboxOf(system) {
+  const box = system?.bbox;
+  if (!box) return null;
+  const parsed = typeof box === 'string' ? JSON.parse(box) : box;
+  return ['south', 'west', 'north', 'east'].every((edge) => Number.isFinite(parsed?.[edge])) ? parsed : null;
+}
+
+function haversineKmBetween(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * The places France's shared fleets run in — the country view's marks.
+ *
+ * From the shipped index alone: no feed is read, so the country view costs one
+ * small request whatever the camera does, and it says WHERE and WHO without a
+ * number. A count here would have to come from all 135 systems at once, which
+ * no viewport request fetches; the grid's counts start one zoom lower.
+ *
+ * Which systems: every live one, plus the four the Vélib' row draws itself
+ * (`bikeshare.js`), which the index marks redundant for the viewport answer
+ * only — on this view they are the same row's networks and belong in its
+ * places. Mirrors and unreachable feeds stay out, and so does a network whose
+ * footprint has no one place ({@link GBFS_PLACE_MAX_SPAN_DEG}).
+ *
+ * Biggest network first, so a metropolis seeds its own place and the towns
+ * within {@link GBFS_PLACE_RADIUS_KM} join it; the place is named after its
+ * heaviest member whose area names one place ({@link gbfsPlaceName}).
+ *
+ * @param {Array<Object>} systems Index entries.
+ * @returns {Array<{id:string, name:string, lat:number, lon:number,
+ *   bbox:{south:number, west:number, north:number, east:number},
+ *   systems:Array<{id:string, name:string}>, weight:number}>} Heaviest first.
+ */
+export function gbfsNetworkPlaces(systems, { radiusKm = GBFS_PLACE_RADIUS_KM, maxSpanDeg = GBFS_PLACE_MAX_SPAN_DEG } = {}) {
+  const candidates = [];
+  for (const system of Array.isArray(systems) ? systems : []) {
+    if (!system?.id || system.probeError) continue;
+    const redundantWith = String(system.redundant?.with ?? '');
+    if (system.redundant && !redundantWith.startsWith('bikeshare:')) continue;
+    const bbox = bboxOf(system);
+    if (!bbox) continue;
+    if (bbox.north - bbox.south > maxSpanDeg || bbox.east - bbox.west > maxSpanDeg) continue;
+    candidates.push({
+      system,
+      bbox,
+      center: { lat: (bbox.south + bbox.north) / 2, lon: (bbox.west + bbox.east) / 2 },
+      weight: Math.max(0, Number(system.objectSample) || 0),
+    });
+  }
+  candidates.sort((a, b) => b.weight - a.weight || a.system.id.localeCompare(b.system.id));
+  const places = [];
+  for (const candidate of candidates) {
+    let place = null;
+    for (const existing of places) {
+      if (haversineKmBetween(existing.center, candidate.center) <= radiusKm) {
+        place = existing;
+        break;
+      }
+    }
+    if (!place) {
+      place = { center: candidate.center, bbox: { ...candidate.bbox }, members: [], weight: 0 };
+      places.push(place);
+    } else {
+      place.bbox.south = Math.min(place.bbox.south, candidate.bbox.south);
+      place.bbox.west = Math.min(place.bbox.west, candidate.bbox.west);
+      place.bbox.north = Math.max(place.bbox.north, candidate.bbox.north);
+      place.bbox.east = Math.max(place.bbox.east, candidate.bbox.east);
+    }
+    place.members.push(candidate.system);
+    place.weight += candidate.weight;
+  }
+  return places
+    .map((place) => {
+      // The heaviest member that names one place names it: « Paris » for
+      // Lime Paris, never « France » for Dott's Bordeaux feed, nor « Albi »,
+      // the first commune of a regional car-share's list, for Toulouse.
+      const namer = place.members.find((system) => isPlaceArea(system.area));
+      // A place none of whose networks names a town — one national feed seen
+      // in one suburb — has no label to print, and a pill reading « France »
+      // over Isère would be wrong. The regional view still draws its fleet.
+      if (!namer) return null;
+      return {
+        id: place.members[0].id,
+        name: gbfsPlaceName(namer.area),
+        lat: Number(place.center.lat.toFixed(4)),
+        lon: Number(place.center.lon.toFixed(4)),
+        bbox: place.bbox,
+        systems: place.members.map((system) => ({ id: system.id, name: String(system.name || system.id) })),
+        weight: place.weight,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.weight - a.weight || a.id.localeCompare(b.id));
 }

@@ -51,29 +51,42 @@ import { interCapitalFor } from './interCapitals.js';
 import messages from './mobilityOperators.i18n.js';
 
 /**
- * Operator hues, chosen for pairwise separability on a dark globe.
+ * Operator hues: the ChatGPT « Repères discrets » mock's six, and eleven more
+ * drawn in the same key.
  *
- * Ordered around the hue circle so neighbouring indices are the CLOSEST pair
- * in the set; the curated assignments below deliberately spread across it
- * rather than taking a contiguous run.
+ * WHY THESE, SINCE 2026-09-21. The first palette was seventeen hues at full
+ * chroma — `#ff4d4d`, `#4fd94f`, `#b6f03c` — and Memel's review of it was
+ * that it read like « une palette très basique des années 90 » beside the
+ * mock. Measured on the mock's own pixels, its six sit at OKLCH lightness
+ * 0.63-0.89 and chroma 0.12-0.18: bright, but a step off the screen primaries,
+ * which is what reads as designed rather than default. Those six are kept to
+ * the digit (slots 0, 3, 4, 7, 9, 10). The other eleven were set by hand in
+ * the same key, softer where the hue circle is crowded (teal, steel, cream),
+ * so the whole set clears the redmean floor the tests pin (92 at worst) and
+ * never falls under 0.083 in OKLab — the old palette's worst was 0.075.
+ *
+ * Ordered around the hue circle, so neighbouring indices are the CLOSEST pair
+ * in the set; the curated assignments below spread across it, and were
+ * checked city by city — the operators that meet in one street never sit
+ * closer than 0.10 in OKLab (Paris: 0.125, the mock's own green and yellow).
  */
 export const MOBILITY_OPERATOR_PALETTE = Object.freeze([
-  '#ff4d4d', //  0 red
-  '#ff8c2b', //  1 orange
-  '#ffc21f', //  2 amber
-  '#f2e94e', //  3 yellow
-  '#b6f03c', //  4 lime
-  '#4fd94f', //  5 green
-  '#1fcf94', //  6 emerald
-  '#1fc9c9', //  7 teal
-  '#35a9f0', //  8 sky
-  '#5b7cf5', //  9 blue
-  '#9166f2', // 10 violet
-  '#c964f0', // 11 purple
-  '#f45fc4', // 12 magenta
-  '#ff6f91', // 13 pink
-  '#d9a066', // 14 tan
-  '#9fb0c4', // 15 slate
+  '#fb6759', //  0 coral       (mock)
+  '#f99e65', //  1 apricot
+  '#fac787', //  2 cream
+  '#fcd73e', //  3 yellow      (mock)
+  '#98e26a', //  4 green       (mock)
+  '#42c070', //  5 emerald
+  '#1d9999', //  6 teal
+  '#40d4d9', //  7 cyan        (mock)
+  '#5aa0d0', //  8 steel
+  '#3c8cf6', //  9 blue        (mock)
+  '#a765df', // 10 violet      (mock)
+  '#9792ec', // 11 periwinkle
+  '#e07acc', // 12 orchid
+  '#ff9cb3', // 13 pink
+  '#c6a483', // 14 sand
+  '#a3b3c4', // 15 slate
   '#eef3f8', // 16 white
 ]);
 
@@ -81,75 +94,88 @@ export const MOBILITY_OPERATOR_PALETTE = Object.freeze([
 export const MOBILITY_OPERATOR_UNKNOWN_COLOR = '#6b7a8a';
 
 /**
- * A dock's FILL: how full it is, read the same way by both layers.
+ * A dock's MARK, read the same way by both layers: a dark disc, ringed in its
+ * operator's hue, holding a core of the same hue as large as the dock is full.
  *
- * The ring carries the operator (above); the fill carries the one number a
- * rider acts on. `bikeshare.js` and `sharedMobilityFrance.js` both paint it,
- * and over Paris both are on screen at once, so the thresholds and the tones
+ * The ring carries the operator (above); the core carries the one number a
+ * rider acts on. `bikeshare.js` and `sharedMobilityFrance.js` both draw it,
+ * and over Paris both are on screen at once, so the thresholds and the shapes
  * live here once. `full` is above 60 %, `half` from 30 %, `low` under it.
  *
- * THE OPERATOR'S OWN HUE, POURED IN — SINCE 2026-09-21. The fill was a
- * traffic light, green, orange, red, on a map where every hue already names an
- * operator: over the landing's Paris view that put three greens side by side
- * (Lime's vehicles, Vélib's ring and a « bien remplie » dock), Voi's red
- * beside « presque vide » and YEGO's yellow beside « à moitié ». A dock is
- * now filled with its OWN ring's hue, as far as it is full: a solid disc when
- * it is well stocked, a tint at half, and an empty ring when there is nearly
- * nothing to rent. No level borrows a hue, and an emptied dock spends the
- * least ink of all — a lightness ramp measured first gave the dark « empty »
- * core the most weight on the map, and a white « full » core that read as
- * hollow on the light basemap.
+ * A CORE, NOT A TINT — SINCE 2026-09-21, THE SECOND TIME THAT DAY. The level
+ * was the ring's hue poured in at 100 %, 42 % or 10 % opacity. Over the
+ * photorealistic city that made every half-full Vélib' dock a violet smudge
+ * the roof showed through, and Memel's review put it plainly: « ça ne se voit
+ * pas du tout ». Nothing is translucent now. The disc is the cockpit's dark
+ * glass, the pins' own, so a dock keeps its edge on a pale roof; the ring
+ * keeps it on a dark street; and the core — solid, or small, or absent —
+ * says how many bikes are left in a shape, where the tint said it in an
+ * opacity nobody could read at 12 px.
+ *
+ * The dark disc is also what tells a dock from a vehicle: a vehicle is a
+ * solid dot, a dock always has the dark ring inside its coloured one.
  */
-export const MOBILITY_DOCK_LEVEL_ALPHA = Object.freeze({
-  full: 1,
-  half: 0.42,
-  // Not zero: a fragment that transparent is discarded, pick pass included,
-  // and the middle of an empty ring would stop answering a click.
-  low: 0.1,
+export const MOBILITY_DOCK_DISC = 'rgba(18,27,24,0.94)';
+
+/** The core's diameter as a share of the disc's, per level. */
+export const MOBILITY_DOCK_CORE_SCALE = Object.freeze({
+  full: 0.62,
+  half: 0.36,
+  low: 0,
 });
 
 /**
- * The two states that are NOT a level — no data, and closed. Greys, faded, so
- * « we do not know » never reads as « empty ».
+ * The two states that are NOT a level — no data, and closed. The disc goes
+ * grey instead of dark, and faded, so « we do not know » never reads as
+ * « empty »; the ring still says whose it is.
  */
-export const MOBILITY_DOCK_FILL = Object.freeze({
-  unknown: '#91a4b4',
-  closed: '#687581',
+export const MOBILITY_DOCK_STATE_DISC = Object.freeze({
+  unknown: 'rgba(145,164,180,0.6)',
+  closed: 'rgba(104,117,129,0.45)',
 });
-const DOCK_STATE_ALPHA = Object.freeze({ unknown: 0.6, closed: 0.45 });
 
 /**
- * The CSS fill of one dock.
+ * The mark of one dock.
  * @param {'full'|'half'|'low'|'unknown'|'closed'} level
  * @param {string} operatorColor The ring's hue, `#rrggbb`.
- * @returns {string} `rgba(…)`.
+ * @returns {{disc: string, ring: string, core: ?string, coreScale: number}}
+ *   CSS colours; `core` is null when nothing is drawn inside the ring.
  */
-export function mobilityDockFill(level, operatorColor) {
-  const state = MOBILITY_DOCK_FILL[level];
-  const alpha = state ? DOCK_STATE_ALPHA[level] : (MOBILITY_DOCK_LEVEL_ALPHA[level] ?? DOCK_STATE_ALPHA.unknown);
-  const hex = state || (/^#[0-9a-f]{6}$/i.test(operatorColor || '') ? operatorColor : MOBILITY_DOCK_FILL.unknown);
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return `rgba(${r},${g},${b},${alpha})`;
+export function mobilityDockMark(level, operatorColor) {
+  const ring = /^#[0-9a-f]{6}$/i.test(operatorColor || '') ? operatorColor : MOBILITY_OPERATOR_UNKNOWN_COLOR;
+  const state = MOBILITY_DOCK_STATE_DISC[level];
+  if (state) return { disc: state, ring, core: null, coreScale: 0 };
+  const coreScale = MOBILITY_DOCK_CORE_SCALE[level] ?? 0;
+  return { disc: MOBILITY_DOCK_DISC, ring, core: coreScale > 0 ? ring : null, coreScale };
 }
 
-/** Swatch tone of the fill key: the levels are a property of every ring, not of one operator. */
+/** A 14 px key glyph: the ring, and a core of `scale` — masked, so one colour. */
+function dockGlyph(scale) {
+  const core = scale > 0 ? `<circle cx="7" cy="7" r="${(5 * scale).toFixed(2)}"/>` : '';
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14">'
+    + `<circle cx="7" cy="7" r="5.9" fill="none" stroke="#000" stroke-width="2.2"/>${core}</svg>`;
+  const base64 = typeof btoa === 'function' ? btoa(svg) : Buffer.from(svg, 'utf8').toString('base64');
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
+/** Swatch tone of the dock key: the levels are a property of every ring, not of one operator. */
 const DOCK_LEGEND_TONE = '#eef3f8';
 
 /**
- * The three dock-fill lines of the key, in the page's language.
+ * The three dock lines of the key, in the page's language.
  *
  * Only the three a rider acts on: « unknown » and « closed » are greys that
  * read as absence without a key, and every line spent on them pushes the
- * operators down the card. Drawn in a neutral tone at each level's opacity —
- * solid, tinted, all but empty — because the map pours each operator's own hue.
- * @returns {Array<{label:string, color:string, channel:string}>}
+ * operators down the card. Each swatch is the mark's own shape — the ring and
+ * its core — in a neutral tone, because the map draws every operator's hue.
+ * @returns {Array<{label:string, color:string, glyph:string, channel:string}>}
  */
 export function dockFillLegend() {
   const m = messages().legend;
   return [
-    { label: m.full, color: mobilityDockFill('full', DOCK_LEGEND_TONE), channel: m.docks },
-    { label: m.half, color: mobilityDockFill('half', DOCK_LEGEND_TONE), channel: m.docks },
-    { label: m.low, color: mobilityDockFill('low', DOCK_LEGEND_TONE), channel: m.docks },
+    { label: m.full, color: DOCK_LEGEND_TONE, glyph: dockGlyph(MOBILITY_DOCK_CORE_SCALE.full), channel: m.docks },
+    { label: m.half, color: DOCK_LEGEND_TONE, glyph: dockGlyph(MOBILITY_DOCK_CORE_SCALE.half), channel: m.docks },
+    { label: m.low, color: DOCK_LEGEND_TONE, glyph: dockGlyph(MOBILITY_DOCK_CORE_SCALE.low), channel: m.docks },
   ];
 }
 
@@ -184,30 +210,38 @@ export function isMobilityOperatorId(id) {
 // data, matched against published titles and never translated.
 const CURATED_OPERATORS = Object.freeze([
   // ── Free-floating majors (the ones that overlap each other in one city) ──
+  // Paris holds Voi, Dott, Lime, YEGO and the Vélib' docks: the mock's coral,
+  // blue, green, yellow and cyan, one each.
   { id: 'lime', label: 'Lime', slot: 4, match: ['lime'] },
   { id: 'voi', label: 'Voi', slot: 0, match: ['voi'] },
-  { id: 'dott', label: 'Dott', slot: 8, match: ['dott'] },
-  { id: 'tier', label: 'Tier', slot: 7, match: ['tier'] },
+  { id: 'dott', label: 'Dott', slot: 9, match: ['dott'] },
+  { id: 'tier', label: 'Tier', slot: 11, match: ['tier'] },
   { id: 'bird', label: 'Bird', slot: 16, match: ['bird'] },
-  { id: 'pony', label: 'Pony', slot: 11, match: ['pony'] },
+  // The mock's violet: Pony meets Dott's blue and YEGO's yellow in Bordeaux
+  // and Nice, and violet is the hue furthest from both.
+  { id: 'pony', label: 'Pony', slot: 10, match: ['pony'] },
   { id: 'yego', label: 'YEGO', slot: 3, match: ['yego'] },
-  // Green, where Vélib' stood until 2026-09-21: Cityscoot went bankrupt in
-  // 2024 and none of the 165 catalogued systems is still its own.
-  { id: 'cityscoot', label: 'Cityscoot', slot: 5, match: ['cityscoot'] },
+  // Cityscoot went bankrupt in 2024 and none of the 165 catalogued systems is
+  // still its own: a quiet slot.
+  { id: 'cityscoot', label: 'Cityscoot', slot: 14, match: ['cityscoot'] },
 
   // ── Carsharing ──────────────────────────────────────────────────────────
   { id: 'citiz', label: 'Citiz', slot: 1, match: ['citiz'] },
-  { id: 'clem', label: "Clem'", slot: 6, match: ['clem'] },
-  { id: 'leo-and-go', label: 'Leo&Go', slot: 14, match: ['leo go', 'leoandgo', 'leogo'] },
+  // Orchid, off the five Paris hues its cars park among.
+  { id: 'clem', label: "Clem'", slot: 12, match: ['clem'] },
+  // Teal, not sand: sand sat 0.10 from Citiz's apricot in Lyon, where both run.
+  { id: 'leo-and-go', label: 'Leo&Go', slot: 6, match: ['leo go', 'leoandgo', 'leogo'] },
 
   // ── The four docked networks the Bikeshare layer draws ──────────────────
-  // Violet, not the green of its bikes: Vélib' shares every Paris street with
-  // Lime's lime and Clem's emerald, and three greens in one key is two
-  // operators too many. Separability wins, as the header says.
-  { id: 'velib', label: "Vélib'", slot: 10, match: ['velib', 'velib metropole'] },
-  { id: 'velov', label: "Vélo'v", slot: 12, match: ['velov'] },
-  { id: 'velotoulouse', label: 'VélÔToulouse', slot: 2, match: ['velotoulouse'] },
-  { id: 'levelo-tbm', label: 'Le Vélo (TBM)', slot: 9, match: ['tbm', 'le velo tbm'] },
+  // Cyan, the mock's fifth hue and the nearest to Vélib's own turquoise. It
+  // was a saturated violet from 2026-09-21 — chosen to part it from Lime's
+  // green — and Memel found it « moche » over the photorealistic city; cyan
+  // parts it from green just as well.
+  { id: 'velib', label: "Vélib'", slot: 7, match: ['velib', 'velib metropole'] },
+  { id: 'velov', label: "Vélo'v", slot: 13, match: ['velov'] },
+  // Steel, not cream: YEGO's yellow and Citiz's apricot run in Toulouse too.
+  { id: 'velotoulouse', label: 'VélÔToulouse', slot: 8, match: ['velotoulouse'] },
+  { id: 'levelo-tbm', label: 'Le Vélo (TBM)', slot: 5, match: ['tbm', 'le velo tbm'] },
 ]);
 // i18n-ignore-end
 

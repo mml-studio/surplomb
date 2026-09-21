@@ -115,6 +115,16 @@ export default defineMessages({
       en: (count) => `+${count} operators`,
       sample: [3],
     },
+    placesNote: {
+      fr: 'Vue France : une étiquette par ville équipée, avec la barre de ses fournisseurs. La toucher y amène ; les véhicules se comptent plus près.',
+      en: 'Country view: one label per city with a network, over a bar of its operators. Tap it to go there; vehicles are counted closer in.',
+      note: 'Shown while the country view is drawn. No number on purpose: none is counted at this scale.',
+    },
+    placeOperator: {
+      fr: (operator, count, one) => `Ne montrer que les villes de ${operator} — ${count} à l’écran`,
+      en: (operator, count, one) => `Show only ${operator}'s ${one ? 'city' : 'cities'} — ${count} on screen`,
+      sample: ['Lime', '12', false],
+    },
     alsoInView: {
       fr: (operators) => `Également dans la vue : ${operators}.`,
       en: (operators) => `Also in view: ${operators}.`,
@@ -123,9 +133,16 @@ export default defineMessages({
   },
 
   row: {
-    zoomIn: {
-      fr: 'Zoome pour charger les véhicules partagés',
-      en: 'Zoom in to load shared vehicles',
+    lookDown: {
+      fr: 'Vise le sol pour charger les véhicules partagés',
+      en: 'Aim at the ground to load shared vehicles',
+      note: 'The centre of the screen shows sky: there is no ground to ask about.',
+    },
+    places: {
+      fr: (count, one) => `${count} ville${one ? '' : 's'} équipée${one ? '' : 's'} · zoome sur une ville pour voir ses véhicules`,
+      en: (count, one) => `${count} ${one ? 'city' : 'cities'} with a network · zoom in on one to see its vehicles`,
+      sample: ['72', false],
+      note: 'The country view: one label per place a shared-mobility network runs in.',
     },
     refreshing: { fr: 'actualisation des opérateurs…', en: 'refreshing operators…' },
     searching: { fr: 'recherche des opérateurs…', en: 'looking for operators…' },

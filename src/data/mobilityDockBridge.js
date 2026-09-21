@@ -80,9 +80,39 @@ export function onMobilityDocksGrouped(listener) {
   return () => _groupedListeners.delete(listener);
 }
 
+/** @type {?() => boolean} */
+let _keyProvider = null;
+
+/**
+ * `bikeshare.js`: say whether its block of the key prints the docks' three
+ * lines right now.
+ *
+ * ONE ROW, ONE DOCK KEY. Both layers draw docks in the same mark, and both
+ * printed « bien remplie · à moitié · presque vide » under their own block —
+ * Memel's capture of 2026-09-21 over Seine-Saint-Denis had the three lines
+ * twice, one block apart. The Vélib' block is the upper one, so it keeps
+ * them; the fleets' block asks here and leaves them out.
+ * @param {?Function} provider
+ * @returns {void}
+ */
+export function publishMobilityDockKey(provider) {
+  _keyProvider = typeof provider === 'function' ? provider : null;
+}
+
+/** Whether the row's key already explains the docks. */
+export function mobilityDockKeyShown() {
+  if (!_keyProvider) return false;
+  try {
+    return _keyProvider() === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Back to nothing published and nothing grouped — for the unit tests. */
 export function _resetMobilityDockBridgeForTest() {
   _provider = null;
+  _keyProvider = null;
   _grouped = false;
   _groupedListeners.clear();
   _changedListeners.clear();

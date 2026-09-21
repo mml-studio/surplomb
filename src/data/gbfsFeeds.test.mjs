@@ -32,6 +32,8 @@ import {
   setsEqual,
   snapGbfsBox,
   validGbfsBox,
+  gbfsNetworkPlaces,
+  gbfsPlaceName,
   vehicleKindFromType,
   vehicleKindLookup,
   GBFS_MAX_BOX_DEG,
@@ -485,4 +487,42 @@ test('a dock\'s own vehicle type ids are read through its vehicle_types', () => 
   // the default itself.
   assert.deepEqual(resolveStationKinds({ 'vt-9f3a': 4 }, kinds), { 'vt-9f3a': 4 });
   assert.equal(resolveStationKinds(null, kinds), null);
+});
+
+test('a place is named after the town, not the institution that publishes it', () => {
+  assert.equal(gbfsPlaceName('Nantes Métropole'), 'Nantes');
+  assert.equal(gbfsPlaceName('Métropole Européenne de Lille'), 'Lille');
+  assert.equal(gbfsPlaceName("CA de l'Auxerrois"), "L'Auxerrois");
+  assert.equal(gbfsPlaceName('CA de La Rochelle'), 'La Rochelle');
+  assert.equal(gbfsPlaceName('CA La Roche-sur-Yon - Agglomération'), 'La Roche-sur-Yon');
+  assert.equal(gbfsPlaceName('Montpellier Méditerranée Métropole'), 'Montpellier');
+  assert.equal(gbfsPlaceName('Le Havre · Octeville-sur-Mer'), 'Le Havre');
+  assert.equal(gbfsPlaceName('CA de la Région Nazairienne et de l\'Estuaire (CARENE)').length <= 22, true);
+});
+
+test('the country view groups the networks by place, from the index alone', () => {
+  const system = (id, name, area, bbox, extra = {}) => ({
+    id, name, area, bbox: JSON.stringify(bbox), objectSample: 100, ...extra,
+  });
+  const paris = { south: 48.8, west: 2.25, north: 48.92, east: 2.42 };
+  const places = gbfsNetworkPlaces([
+    system('lime', 'Lime Paris', 'Paris', paris, { objectSample: 6_000 }),
+    system('voi', 'Voi Paris', 'Paris', paris, { objectSample: 5_000 }),
+    // Drawn by the Vélib' layer, so redundant for the fleets — but a network
+    // of the same row, and on this view it belongs to Paris.
+    system('velib', 'Vélib Paris et communes limitrophes', 'Paris', paris, {
+      redundant: { with: 'bikeshare:paris-velib', reason: 'identical-url' },
+    }),
+    // A mirror of another system: counted once, already.
+    system('mirror', 'Voi Paris (copie)', 'Paris', paris, { redundant: { with: 'voi', reason: 'mirrored-system' } }),
+    // Dott's own feed calls its area « France »: it joins Paris, never names it.
+    system('dott', 'Dott France', 'France', { south: 48.84, west: 2.3, north: 48.88, east: 2.36 }, { objectSample: 7_000 }),
+    // A regional feed has no one place: left out.
+    system('region', 'Citiz Grand Est', 'Grand Est', { south: 47.4, west: 4.9, north: 49.6, east: 8.2 }),
+    system('broken', 'Vélo Nulle Part', 'Nulle Part', paris, { probeError: 'HTTP 404' }),
+    system('lyon', 'Vélo\'v', 'Métropole de Lyon', { south: 45.7, west: 4.77, north: 45.82, east: 4.92 }),
+  ]);
+  assert.deepEqual(places.map((place) => place.name), ['Paris', 'Lyon']);
+  assert.deepEqual(places[0].systems.map((entry) => entry.id), ['dott', 'lime', 'voi', 'velib']);
+  assert.ok(places[0].bbox.south <= paris.south && places[0].bbox.north >= paris.north);
 });

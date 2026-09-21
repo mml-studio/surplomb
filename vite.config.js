@@ -642,6 +642,7 @@ import {
   vehicleKindLookup,
   GBFS_MAX_BOX_DEG,
   GBFS_MAX_OBJECTS,
+  gbfsNetworkPlaces,
 } from './src/data/gbfsFeeds.js';
 import {
   boxContains,
@@ -15633,8 +15634,9 @@ async function refreshGbfsFrViewport(box, key) {
  * the smaller answer is what it draws.
  */
 function cappedGbfsFrPayload(view, requested, limit = GBFS_MAX_OBJECTS, clusterDeg = null) {
-  // Groups only where the dots would crowd: a sparse view keeps its vehicles.
-  if (clusterDeg && gbfsBoxWantsClusters(view.parts, requested)) {
+  // Groups only where the dots would crowd — a sparse city keeps its vehicles
+  // — or from high enough that a city is a smudge of dots anyway.
+  if (clusterDeg && gbfsBoxWantsClusters(view.parts, requested, undefined, clusterDeg)) {
     return clusteredGbfsFrPayload(view, requested, limit, clusterDeg);
   }
   const { kept, boxTruncated, marginTruncated } = capGbfsObjects(view.parts, requested, limit);
@@ -15687,6 +15689,7 @@ function clusteredGbfsFrPayload(view, requested, limit, clusterDeg) {
  * Vite plugin: viewport-bounded French shared-mobility proxy.
  *
  *   GET /api/shared-mobility-fr/systems             — index summary
+ *   GET /api/shared-mobility-fr/networks            — places, for the country view
  *   GET /api/shared-mobility-fr/objects?south&…     — stations + vehicles in box
  *       …&cluster=<deg>                             — the vehicles as groups
  *
@@ -15752,6 +15755,16 @@ function gbfsFranceProxy() {
           licences,
           kinds,
           maxBoxDeg: GBFS_MAX_BOX_DEG,
+        }, { 'Cache-Control': 'public, max-age=300' });
+        return;
+      }
+
+      if (route === '/networks') {
+        // The country view: where the networks run, from the index alone —
+        // no feed is read, whatever the camera does (`gbfsNetworkPlaces`).
+        json(200, {
+          generatedAt: index.generatedAt || null,
+          places: gbfsNetworkPlaces(index.systems),
         }, { 'Cache-Control': 'public, max-age=300' });
         return;
       }
