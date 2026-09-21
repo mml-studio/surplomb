@@ -363,29 +363,57 @@ export default defineMessages({
     },
   },
 
-  /** The colour key of the toggle row. */
+  /**
+   * The colour key on the map, written for a reader who has never heard of a
+   * PEB or a PGS. Each document is named by what it is FOR, each zone by how
+   * loud it is and — for the PEB — what that means for a home. The official
+   * names and their acronyms stay one hover away, on the two headings.
+   */
   legend: {
-    pebZone: {
-      fr: (zone) => `PEB zone ${zone}`,
-      en: (zone) => `PEB zone ${zone}`,
-      sample: ['A'],
+    pebHeading: { fr: 'Ce qu’on peut construire', en: 'What can be built' },
+    pebHeadingTitle: {
+      fr: 'Plan d’exposition au bruit (PEB) : la règle d’urbanisme autour de l’aéroport',
+      en: 'Noise exposure plan (PEB): the planning rule around the airport',
     },
-    pgsZone: {
-      fr: (zone) => `PGS zone ${zone}`,
-      en: (zone) => `PGS zone ${zone}`,
-      sample: ['1'],
+    pgsHeading: { fr: 'Aide pour isoler son logement', en: 'Help to soundproof a home' },
+    pgsHeadingTitle: {
+      fr: 'Plan de gêne sonore (PGS) : les logements dont l’isolation peut être financée',
+      en: 'Noise nuisance plan (PGS): the homes whose soundproofing can be funded',
     },
-    pebUnknown: { fr: 'PEB zone inconnue', en: 'PEB zone unknown' },
-    pgsUnknown: { fr: 'PGS zone inconnue', en: 'PGS zone unknown' },
+    /** How loud each zone is, in words. PEB letters, then PGS figures. */
+    loudness: {
+      A: { fr: 'Bruit très fort', en: 'Very loud' },
+      B: { fr: 'Bruit fort', en: 'Loud' },
+      C: { fr: 'Bruit modéré', en: 'Moderate noise' },
+      D: {
+        fr: 'Bruit plus faible',
+        en: 'Quieter',
+        note: 'The law grades zones A and B as loud and C as moderate, and gives '
+          + 'zone D no grade at all: it is only the plan’s outermost ring. '
+          + '“Quieter” is relative on purpose.',
+      },
+      1: { fr: 'Bruit très fort', en: 'Very loud' },
+      2: { fr: 'Bruit fort', en: 'Loud' },
+      3: { fr: 'Bruit modéré', en: 'Moderate noise' },
+    },
+    /** What a PEB zone means for a new home, in a few words. */
+    pebRule: {
+      A: { fr: 'pas de nouveaux logements', en: 'no new homes' },
+      B: { fr: 'presque pas de nouveaux logements', en: 'almost no new homes' },
+      C: {
+        fr: 'quelques logements neufs, isolation obligatoire',
+        en: 'a few new homes, insulation required',
+      },
+      D: { fr: 'construction libre, isolation obligatoire', en: 'building allowed, insulation required' },
+    },
+    unknown: { fr: 'Zone non précisée', en: 'Zone not given' },
     unknownBlurb: {
-      fr: 'lettre de zone absente ou inconnue du registre — jamais retenue comme réponse',
-      en: 'zone letter missing or unknown to the register — never chosen as the answer',
+      fr: 'le plan officiel ne dit pas laquelle',
+      en: 'the official plan does not say which',
     },
     aside: {
-      fr: (count) => `${count} dessinée${count > 1 ? 's' : ''} en tirets : `
-        + `renvoyée${count > 1 ? 's' : ''} par le service à côté du repère, pas dessous`,
-      en: (count) => `${count} drawn dashed: returned by the service beside the marker, `
-        + 'not under it',
+      fr: (count) => `${count} en pointillés : à côté du repère, pas dessous`,
+      en: (count) => `${count} dashed: beside the marker, not under it`,
       sample: [2],
     },
   },

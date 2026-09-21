@@ -134,12 +134,13 @@ test('a date spells its month in English, and stays DD/MM/YYYY in French', () =>
   assert.equal(bruitDayText('hier'), null);
 });
 
-test('the key names each zone and what it means for the ground under it', () => {
+test('the key names each zone and what it means for a home, in plain English', () => {
   const legend = bruitLegend(LEBOURGET);
   assert.ok(legend.length > 0);
-  assert.equal(legend[0].label, 'PEB zone A');
-  assert.equal(legend[0].blurb.split(' — ')[0], 'very strong nuisance: no new housing');
-  assertNoFrench(legend.map((row) => `${row.label} — ${row.blurb}`), { allow: ALLOW });
+  assert.equal(legend[0].label, 'What can be built');
+  assert.equal(legend[1].label, 'Very loud');
+  assert.equal(legend[1].blurb.split(' — ')[0], 'no new homes');
+  assertNoFrench(legend.map((row) => `${row.label} — ${row.blurb ?? ''}`), { allow: ALLOW });
 });
 
 test('the caveat still says what is NOT in the layer, and how coarse it is drawn', () => {

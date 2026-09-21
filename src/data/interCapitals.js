@@ -111,8 +111,23 @@ export function interCapitalFor(text) {
  * @param {number} options.baseline Baseline in the caller's box units.
  * @returns {?string} `<g transform=…><path d=…/></g>`, or null if unknown.
  */
-export function interCapitalMarkup(letter, { capPx, cx, baseline }) {
-  const glyph = INTER_CAPITALS[letter];
+export function interCapitalMarkup(letter, options) {
+  return interOutlineMarkup(INTER_CAPITALS[letter], options);
+}
+
+/**
+ * Any vendored Inter outline placed as SVG markup — the placement
+ * {@link interCapitalMarkup} makes, for a glyph from any table cut from the
+ * same instance (`interDigits.js` holds the figures).
+ *
+ * @param {?{cx:number, d:string}} glyph One entry of such a table.
+ * @param {Object} options
+ * @param {number} options.capPx Cap height in the caller's box units.
+ * @param {number} options.cx Horizontal centre in the caller's box units.
+ * @param {number} options.baseline Baseline in the caller's box units.
+ * @returns {?string} `<g transform=…><path d=…/></g>`, or null without a glyph.
+ */
+export function interOutlineMarkup(glyph, { capPx, cx, baseline }) {
   if (!glyph) return null;
   const scale = capPx / INTER_CAP_HEIGHT;
   // The outline grows upward from its baseline in font space and SVG's y grows
