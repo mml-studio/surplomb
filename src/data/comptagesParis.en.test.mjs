@@ -152,16 +152,24 @@ test('the TomTom flow key prints its thresholds and refuses to invent a feed', (
   assertNoFrench({
     buckets: [m.buckets.jam(55), m.buckets.slow(55, 85), m.buckets.free(85)],
     legend: m.legend,
-    note: m.legendNote,
-    chips: [m.chips.measuredOnly.label, m.chips.measuredOnly.hideSimulated, m.chips.flowRibbon.show],
+    note: [m.legendNote.receivedAt('12:16', null), m.legendNote.receivedAt('2:16 PM', 'Sep 20'), m.legendNote.receiving, m.legendNote.keyless],
+    chips: [
+      m.chips.measuredOnly.label, m.chips.measuredOnly.hideSimulated, m.chips.flowRibbon.show,
+      m.chips.vehicleFrames.label, m.chips.vehicleFrames.show, m.chips.vehicleFrames.hide,
+    ],
+    card: [m.card.ratio(62), m.card.closed, m.card.received('12:16', null), m.card.simulated],
+    roadClass: m.roadClass,
   });
-  assert.equal(m.buckets.jam(55), 'under 55% of free-flow speed');
-  assert.equal(m.buckets.slow(55, 85), '55 to 85% of free-flow speed');
-  assert.equal(m.legendNote, 'flow modeled by TomTom, refreshed every 60 s');
-  assert.equal(m.legend.simulated, 'Simulated speed');
-  assert.equal(m.legend.simulatedBlurb, 'an invented speed, nothing published — “MEASURED ONLY” removes them');
+  assert.equal(m.buckets.jam(55), 'under 55% of its free-flow speed');
+  assert.equal(m.buckets.slow(55, 85), '55 to 85% of its free-flow speed');
+  assert.equal(m.legendNote.receivedAt('12:16', null), 'Simulated vehicles, driven by the speeds received from TomTom at 12:16');
+  assert.equal(m.legendNote.receivedAt('2:16 PM', 'Sep 20'), 'Simulated vehicles, driven by the speeds received from TomTom on Sep 20 at 2:16 PM');
+  assert.equal(m.legend.unmeasured, 'Not measured');
   assert.equal(m.chips.measuredOnly.label, 'MEASURED ONLY');
   // A keyless session must never read as live.
   assert.match(m.status.keyless, /^SIMULATED — /);
-  assert.equal(withLocale('fr', () => trafficMessages().legend.simulated), 'Vitesse simulée');
+  assert.equal(m.legendNote.keyless, 'Simulated vehicles: no speed is measured here');
+  const fr = withLocale('fr', () => trafficMessages());
+  assert.equal(fr.legend.unmeasured, 'Non mesuré');
+  assert.equal(fr.buckets.free(85), '85 % ou plus de sa vitesse sans trafic');
 });

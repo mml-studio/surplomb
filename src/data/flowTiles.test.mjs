@@ -11,6 +11,7 @@ import {
   getFlowSessionStats,
   resetFlowTileCache,
   retryAfterMs,
+  tileFetchedAt,
 } from './flowTiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -301,5 +302,39 @@ test('fetchFlowForBounds: a cooldown serves the stale decode rather than failing
   } finally {
     restore();
     resetFlowTileCache();
+  }
+});
+
+// ── when the origin took the tile (x-tomtom-fetched-at) ────
+
+test('tileFetchedAt: the proxy absolute time wins over our arrival time', () => {
+  const at = Date.UTC(2026, 8, 21, 10, 0, 0);
+  const fetched = at - 95_000;
+  const res = new Response(null, { headers: { 'x-tomtom-fetched-at': String(fetched) } });
+  assert.equal(tileFetchedAt(res, at), fetched);
+});
+
+test('tileFetchedAt: no header, a zero or a garbage one falls back to arrival', () => {
+  const at = Date.UTC(2026, 8, 21, 10, 0, 0);
+  assert.equal(tileFetchedAt(new Response(null), at), at);
+  assert.equal(tileFetchedAt(new Response(null, { headers: { 'x-tomtom-fetched-at': '0' } }), at), at);
+  assert.equal(tileFetchedAt(new Response(null, { headers: { 'x-tomtom-fetched-at': 'soon' } }), at), at);
+  assert.equal(tileFetchedAt(null, at), at);
+});
+
+test('fetchFlowForBounds: every segment carries when its tile left TomTom', async () => {
+  resetFlowTileCache();
+  // A budget-stale tile from this morning: the stamp is what keeps it honest.
+  const morning = Date.now() - 5_400_000;
+  const restore = stubFetch(async () => new Response(loadFixture(), {
+    status: 200,
+    headers: { 'Content-Type': 'application/x-protobuf', 'x-tomtom-fetched-at': String(morning) },
+  }));
+  try {
+    const segments = await fetchFlowForBounds(FIXTURE_BOUNDS);
+    assert.ok(segments.length > 50);
+    for (const segment of segments) assert.equal(segment.fetchedAt, morning);
+  } finally {
+    restore();
   }
 });

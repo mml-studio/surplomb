@@ -274,10 +274,11 @@ test('re-entrancy is decided by the saved snapshot, not the engine state', () =>
 });
 
 test('a layer that wants the brackets claims the SAME snapshot Contacts uses', () => {
-  // Road traffic renders ~2 000 bare points; the bracket is what makes one
-  // readable. Asked for directly: the frame should be on by default for that
-  // layer. It rides the Contacts mechanism rather than a second one — two
-  // owners each holding their own pre-state would restore each other's.
+  // Road traffic renders ~2 000 bare points and can ask for the bracket. Since
+  // 2026-09-21 it asks only through its `CADRES` chip (the diagnostic view):
+  // the cars are simulated, and a default frame + id claimed a tracked object.
+  // It rides the Contacts mechanism rather than a second one — two owners each
+  // holding their own pre-state would restore each other's.
   assert.match(
     uiSource,
     /const DETECTION_DEMANDING_LAYERS = new Set\(\['traffic'\]\)/,
@@ -306,6 +307,18 @@ test('a layer that wants the brackets claims the SAME snapshot Contacts uses', (
     uiSource.indexOf('_applyDetectionPreset(det) {'),
   );
   assert.match(predicate, /isEffectivelyEnabled/);
+  // Being on is not a claim: the layer has to say so, and for traffic that is
+  // the chip. A regression here switches detection back on — under tactical
+  // Dense @ 75 % — for every reader who had turned it off, the moment the
+  // default traffic layer loads.
+  assert.match(predicate, /demandsDetection\?\.\(\) === true/);
+  // The chip moves without any visibility event, so its params change has to
+  // drive the same sync.
+  assert.match(
+    uiSource,
+    /change\?\.type === 'params' && DETECTION_DEMANDING_LAYERS\.has\(change\?\.layerId\)[\s\S]{0,160}?this\._syncContactsDetection\(\);/,
+    'the layer params stream drives the sync too',
+  );
 });
 
 test('detection is wired to the Contacts transaction, and cockpit no longer touches it', () => {

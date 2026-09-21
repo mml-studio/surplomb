@@ -3290,6 +3290,15 @@ function tomtomProxy() {
          * The max-age is what is LEFT of this copy's 120 s, floored at 15 s so
          * a tile served at 119 s old still spares the double fetch, and 0 for a
          * stale body, which by definition has no freshness left to promise.
+         *
+         * `x-tomtom-fetched-at` is WHEN this origin took the tile from TomTom,
+         * as epoch milliseconds — the one fact the max-age cannot give back
+         * (it is floored, and 0 on every stale copy). The globe prints it: the
+         * traffic key and a road's card say when the speeds were received, and
+         * a budget-stale tile from this morning must not read as current. An
+         * absolute time rather than an age, because the browser's own HTTP
+         * cache replays this response for up to 120 s with its headers frozen,
+         * and an age read back later would make the tile look younger.
          */
         const sendTile = (buf, cacheStatus, ageMs = 0) => {
           if (res.headersSent) return;
@@ -3299,6 +3308,7 @@ function tomtomProxy() {
             'Content-Type': 'application/x-protobuf',
             'Cache-Control': fresh ? `private, max-age=${remainingSec}` : 'private, max-age=0',
             'x-tomtom-cache': cacheStatus,
+            'x-tomtom-fetched-at': String(Date.now() - Math.max(0, ageMs)),
           });
           res.end(buf);
         };
@@ -3348,7 +3358,7 @@ function tomtomProxy() {
           // Budget governor: over the soft cap, last-good data beats a dead layer.
           if (isTomTomOverBudget(currentBudget(), dailyBudgetLimit())) {
             if (entry) {
-              sendTile(entry.buf, 'STALE-BUDGET');
+              sendTile(entry.buf, 'STALE-BUDGET', now - entry.at);
             } else {
               // `x-tomtom-limit` is how the client tells THIS 429 from one
               // raised in front of us. Nothing between the browser and this
@@ -3383,7 +3393,7 @@ function tomtomProxy() {
           if (fresh) {
             sendTile(fresh.buf, 'MISS', Date.now() - fresh.at);
           } else if (entry) {
-            sendTile(entry.buf, 'STALE-ERROR'); // upstream down — stale beats empty
+            sendTile(entry.buf, 'STALE-ERROR', Date.now() - entry.at); // upstream down — stale beats empty
           } else {
             sendJson(502, { error: 'upstream' });
           }

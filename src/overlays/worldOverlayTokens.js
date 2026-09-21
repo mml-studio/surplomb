@@ -180,7 +180,7 @@ export const DETECTION_THEME_MAP = Object.freeze({
     scanline: 0.04,
     tiers: {
       civil: '#ffffff', military: '#ff7a5c', sea: '#ffd0b0', space: '#d0e0ff', vehicle: '#ffcf9f',
-      veh_jam: '#ff4538', veh_slow: '#ffc24a', veh_free: '#2ecc71', veh_nodata: '#d8d8d8',
+      veh_jam: '#ff4538', veh_slow: '#ffc24a', veh_free: '#8fd4ab', veh_nodata: '#d8d8d8',
     },
   },
   // The normal style's chrome follows the Belvédère palette; its TIERS below
@@ -201,7 +201,7 @@ export const DETECTION_THEME_MAP = Object.freeze({
     scanline: 0.05,
     tiers: {
       civil: '#22e0ff', military: '#ffb347', sea: '#3fe0c8', space: '#bda4ff', vehicle: '#8fa6b4',
-      veh_jam: '#e05252', veh_slow: '#f0b23e', veh_free: '#2ecc71', veh_nodata: '#c9c9c9',
+      veh_jam: '#e05252', veh_slow: '#f0b23e', veh_free: '#8fd4ab', veh_nodata: '#c9c9c9',
     },
   },
 });

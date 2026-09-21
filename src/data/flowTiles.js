@@ -229,8 +229,36 @@ async function fetchTile(key, z, x, y) {
   const res = await fetch(`/api/tomtom/flow/${z}/${x}/${y}.pbf`);
   if (!res.ok) throw await tileFailure(key, res);
   const segments = decodeFlowTile(await res.arrayBuffer(), z, x, y);
-  cacheSet(key, { at: Date.now(), segments });
+  const receivedAt = Date.now();
+  const fetchedAt = tileFetchedAt(res, receivedAt);
+  for (const segment of segments) segment.fetchedAt = fetchedAt;
+  cacheSet(key, { at: receivedAt, segments });
   return segments;
+}
+
+/**
+ * When the origin took a tile from TomTom, as a ms timestamp.
+ *
+ * The proxy stamps it (`x-tomtom-fetched-at`, epoch ms). Without that header —
+ * an origin deployed before it, or a test double — the honest floor is the
+ * moment the tile reached us: the data is at least that old.
+ *
+ * It is when the tile was RECEIVED from TomTom, not when TomTom measured the
+ * road — TomTom's flow is a model it refreshes about once a minute and the
+ * tile does not say when — and the words printed from it say "reçues".
+ *
+ * Stamped on every decoded segment (`segment.fetchedAt`) so the layer can print
+ * the time of what is actually on screen, tile by tile, rather than the time
+ * of its own last request.
+ *
+ * @param {Response} res - The tile response.
+ * @param {number} receivedAt - `Date.now()` when it arrived.
+ * @returns {number}
+ */
+export function tileFetchedAt(res, receivedAt) {
+  const raw = res?.headers?.get?.('x-tomtom-fetched-at');
+  const at = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(at) && at > 0 ? at : receivedAt;
 }
 
 /**
@@ -303,8 +331,9 @@ function tileSegments(z, x, y, signal, now) {
  * @param {number} [opts.zoom=12] - Flow tile zoom level. Callers that know the
  *   camera band should pass its `flowZoom`: a 0.30° box needs 30 tiles at z12
  *   and 4 at z10, for arterials that are a few pixels wide either way.
- * @returns {Promise<Array<{coords:number[][], trafficLevel:number, roadType:string, closure:boolean}>>}
- *   Flat array of flow segments across all covering tiles.
+ * @returns {Promise<Array<{coords:number[][], trafficLevel:number, roadType:string, closure:boolean, fetchedAt:number}>>}
+ *   Flat array of flow segments across all covering tiles. `fetchedAt` is
+ *   when the origin took the tile from TomTom (see `tileFetchedAt`).
  */
 export async function fetchFlowForBounds(bounds, { signal, zoom = 12 } = {}) {
   const tiles = tilesForBounds(bounds, zoom);

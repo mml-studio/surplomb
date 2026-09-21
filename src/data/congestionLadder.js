@@ -54,10 +54,19 @@ import messages from './congestionLadder.i18n.js';
  * about one segment: the worse rung wins, because a road one centre calls
  * congested and another calls free is not a road anyone should be told is
  * free.
+ *
+ * FREE FLOW IS A PALE MINT, NOT A TRAFFIC-LIGHT GREEN (2026-09-21). Colour is
+ * for trouble: amber and coral are what a reader scans a city for, and a
+ * saturated `#2ecc71` painted over most of the network spoke in the same voice
+ * as the jams — over Paris at 3.5 km it was 461 green dots and a green ribbon
+ * on every arterial. The mint still reads as "moving" and still has to be
+ * there (a map that only appears when something is wrong looks broken), but it
+ * separates from amber by lightness and saturation rather than by hue alone,
+ * which is also the pair a red-green colour-blind reader can tell apart.
  */
 export const CONGESTION_RUNGS = Object.freeze({
   free: Object.freeze({
-    id: 'free', rank: 0, color: '#2ecc71',
+    id: 'free', rank: 0, color: '#8fd4ab',
     get label() { return messages().free; },
   }),
   slow: Object.freeze({

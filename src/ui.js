@@ -494,17 +494,23 @@ const MILITARY_DETECTION_PRESET = Object.freeze({ mode: 'dense', densityPct: 75 
 const FIRST_RUN_DETECTION_PRESET = Object.freeze({ mode: 'balanced', densityPct: 50 });
 
 /**
- * Layers whose whole point is the bracketed contact, not the dot.
+ * Layers that can ask for the bracketed contact, not just the dot.
  *
- * Road traffic renders as ~2 000 bare points; the detection overlay is what
- * turns one into a READ object — a bracket, an id, and in live mode a
- * congestion-tiered frame whose canvas sits above the post-FX chain. Asked for
- * directly: "je voudrais que le cadre soit par défaut sur ce datalayer."
+ * Road traffic renders as ~2 000 bare points, and the detection overlay can
+ * turn one into a READ object — a bracket, an id, and in live mode a
+ * congestion-tiered frame whose canvas sits above the post-FX chain. It was
+ * asked for as the default on 2026-09-14 ("je voudrais que le cadre soit par
+ * défaut sur ce datalayer"), and withdrawn on 2026-09-21: the cars are
+ * simulated, so a frame and a `VEH-0412` over one claimed a tracked identity
+ * that does not exist, and it was the loudest mark on the layer. The claim now
+ * belongs to the layer's `CADRES` chip — the diagnostic view — read through the
+ * module's `demandsDetection()`.
  *
- * The mechanism is the one Contacts already uses, unchanged: enabling takes a
- * snapshot and applies the tactical preset, disabling replays the snapshot. So
- * a viewer who turns traffic on gets the brackets, and turning it off gives
- * back exactly the detection state they had before — including OFF.
+ * The mechanism is the one Contacts already uses, unchanged: claiming takes a
+ * snapshot and applies the tactical preset, releasing replays the snapshot. So
+ * a viewer who turns the frames on gets the brackets, and turning them off (or
+ * the layer) gives back exactly the detection state they had before —
+ * including OFF.
  * @type {Set<string>}
  */
 const DETECTION_DEMANDING_LAYERS = new Set(['traffic']);
@@ -4012,14 +4018,17 @@ export class StyleManager {
    *
    * Reads EFFECTIVE visibility, not the user's toggle: a layer switched on as
    * another mode's dependency draws the same dots and deserves the same
-   * brackets.
+   * brackets. And then asks the layer itself: being on is not a claim, only
+   * its `demandsDetection()` is — for traffic, the `CADRES` chip.
    * @returns {boolean}
    */
   _layerDemandsDetection() {
     const dm = this._dataManager;
     if (!dm?.isEffectivelyEnabled) return false;
     for (const layerId of DETECTION_DEMANDING_LAYERS) {
-      if (dm.isEffectivelyEnabled(layerId)) return true;
+      if (!dm.isEffectivelyEnabled(layerId)) continue;
+      const module = dm.layers?.get?.(layerId)?.module;
+      if (module?.demandsDetection?.() === true) return true;
     }
     return false;
   }
@@ -4740,6 +4749,9 @@ export class StyleManager {
           if (DETECTION_DEMANDING_LAYERS.has(change?.layerId)) {
             this._syncContactsDetection();
           }
+        } else if (change?.type === 'params' && DETECTION_DEMANDING_LAYERS.has(change?.layerId)) {
+          // …and when its own switch for them (the `CADRES` chip) moves.
+          this._syncContactsDetection();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());

@@ -35,6 +35,7 @@ import { renderFlowRibbons, clearFlowRibbons } from './flowRibbons.js';
 import {
   trafficStyleProfile,
   presetDotRgba,
+  presetUnmeasuredRgba,
   presetSizeDelta,
   presetDotOutline,
   trafficBucketTier,
@@ -58,6 +59,24 @@ import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor
 import { claimCameraSensitivity, releaseCameraSensitivity } from './cameraSensitivity.js';
 import { markViewportRead, releaseCameraSettle, watchCameraSettle } from './cameraSettle.js';
 import messages from './traffic.i18n.js';
+import { markDetectionSourcesChanged } from './detection.js';
+import { isWorldPick } from './pickRegistry.js';
+import { isCoarseInput } from '../inputMode.js';
+import { pickAt } from './pickAt.js';
+import { cachedGroundFloor, warmGroundFloor } from './groundFloor.js';
+import { powerClassificationTypeForScene } from './powerGrid.js';
+import {
+  clearOverlaySource,
+  setOverlayEntries,
+  setOverlaySourceVisible,
+} from '../overlays/worldOverlay.js';
+import {
+  buildFlowCard,
+  flowClockTime,
+  flowSegmentKey,
+  flowSegmentMidpoint,
+  nearestFlowStretch,
+} from './trafficFlowCard.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -305,22 +324,49 @@ const SIZE_BY_TYPE = {
 };
 
 /**
- * Live-flow bucket colors (thresholds live in `trafficFlowStyle.js`):
- * green free flow / amber slow / red jam, all at 0.9 alpha.
- * Roads without flow data (`road.flow == null`) keep the sim's white.
+ * Live-flow bucket colors (thresholds live in `trafficFlowStyle.js`), read
+ * from the shared ladder rather than retyped: `road-status-fr` draws the same
+ * rungs on the same row, and this file used to hold a private hex copy of them.
+ *
+ * Free flow is the quiet one, twice over: the ladder gives it a pale mint, and
+ * its dots sit a step more transparent than the amber and coral ones. Colour
+ * is kept for trouble.
  * @const {Object<string, Cesium.Color>}
  */
 const FLOW_BUCKET_COLORS = {
-  free: Cesium.Color.fromCssColorString('#2ecc71').withAlpha(0.9),
-  slow: Cesium.Color.fromCssColorString('#f0b23e').withAlpha(0.9),
-  jam: Cesium.Color.fromCssColorString('#e05252').withAlpha(0.9),
+  free: Cesium.Color.fromCssColorString(CONGESTION_RUNGS.free.color).withAlpha(0.8),
+  slow: Cesium.Color.fromCssColorString(CONGESTION_RUNGS.slow.color).withAlpha(0.9),
+  jam: Cesium.Color.fromCssColorString(CONGESTION_RUNGS.jam.color).withAlpha(0.9),
 };
 
 /**
- * Legend rows for the three measured buckets, worst first — the order a reader
- * scans for. Colours are NOT stored here: the key reads `_activeBucketColors`
- * so it follows the preset-aware restyle instead of describing the shipped
- * palette under a shader that has replaced it.
+ * A dot on a road nobody measures: a light neutral grey, where it used to be
+ * pure white at 0.85.
+ *
+ * White was the brightest mark in the layer, so the one dot that carries NO
+ * information outshone the ones that did — over Paris at 3.5 km, 1 500 white
+ * dots against 1 580 coloured ones. Grey keeps the street alive (these are
+ * still the cars that make it a city) and lets the measured rungs lead. It has
+ * to stay apart from the free-flow mint: the red channel does that (208
+ * against 143), and so does the alpha.
+ *
+ * Keyless, every dot is this colour, which is the truth there too. Under
+ * NVG/FLIR/CRT the dot stays white (`presetUnmeasuredRgba`): a dim dot reads
+ * as a hole on a bright road once the shader has thrown the hue away.
+ * @const {string}
+ */
+const UNMEASURED_DOT_CSS = '#d0d6d9';
+/** @const {Cesium.Color} */
+const UNMEASURED_DOT_COLOR = Cesium.Color.fromCssColorString(UNMEASURED_DOT_CSS).withAlpha(0.7);
+
+/**
+ * Legend rows for the three measured buckets, in the ladder's order — best
+ * first, the way the design this key follows lists them and the way
+ * `road-status-fr` already lists the same three words on the same row. The key
+ * used to read worst-first here and best-first one block below, which made one
+ * scale read as two. Colours are NOT stored here: the key reads
+ * `_activeBucketColors` so it follows the preset-aware restyle instead of
+ * describing the shipped palette under a shader that has replaced it.
  *
  * THE WORDS COME FROM THE SHARED LADDER, and the reason is the fused row.
  * `road-status-fr` sits under the same panel row, draws the same three inks for
@@ -330,18 +376,17 @@ const FLOW_BUCKET_COLORS = {
  * printed, in one block, `● Circulation fluide 1,0 k` above `● Fluide 27` — one
  * colour, two names, and no way to see that they answer one question.
  *
- * THE BLURB IS THE CUT AND NOTHING ELSE. It used to repeat "Débit mesuré par
- * TomTom" on each of the three rows — the provenance of the whole block, three
- * times — and then gesture at the threshold ("très en dessous de la vitesse
- * libre") without giving it. The provenance moved to the block note, and the
- * threshold is now printed, derived from {@link FLOW_THRESHOLDS} so it cannot
- * disagree with the classifier that applies it (C1).
+ * THE BLURB IS THE CUT AND NOTHING ELSE, in plain words: a share of the road's
+ * own speed without traffic, derived from {@link FLOW_THRESHOLDS} so it cannot
+ * disagree with the classifier that applies it (C1). No count: "Bloqué 409"
+ * counted dots, and how many dots a road gets is a rendering budget, not a
+ * fact about the traffic.
  */
 const FLOW_BUCKET_ORDER = Object.freeze([
   {
-    id: 'jam',
-    get label() { return CONGESTION_RUNGS.jam.label; },
-    get blurb() { return messages().buckets.jam(Math.round(FLOW_THRESHOLDS.slow * 100)); },
+    id: 'free',
+    get label() { return CONGESTION_RUNGS.free.label; },
+    get blurb() { return messages().buckets.free(Math.round(FLOW_THRESHOLDS.free * 100)); },
   },
   {
     id: 'slow',
@@ -354,22 +399,55 @@ const FLOW_BUCKET_ORDER = Object.freeze([
     },
   },
   {
-    id: 'free',
-    get label() { return CONGESTION_RUNGS.free.label; },
-    get blurb() { return messages().buckets.free(Math.round(FLOW_THRESHOLDS.free * 100)); },
+    id: 'jam',
+    get label() { return CONGESTION_RUNGS.jam.label; },
+    get blurb() { return messages().buckets.jam(Math.round(FLOW_THRESHOLDS.slow * 100)); },
   },
 ]);
 
 /**
- * The one sentence this block owes a reader: who says it, and how often.
+ * The one sentence this block owes a reader: that the vehicles are simulated,
+ * where the speeds they move at come from, and WHEN.
  *
  * E1, and the fused row makes it P0 rather than nice-to-have. Four blocks land
- * under « Trafic routier » and they run on four different clocks — this one at
- * 60 s, `road-status-fr` at 60–360 s, `road-events-fr` on an hourly snapshot,
- * and `comptages-fr` on an ARCHIVED typical week. Until each block named its
- * own, a reader had no way to tell the last minute from last month.
+ * under « Trafic routier » and they run on four different clocks —
+ * `road-status-fr` at 60–360 s, `road-events-fr` on an hourly snapshot, and
+ * `comptages-fr` on an ARCHIVED typical week. This one used to say "rafraîchi
+ * toutes les 60 s", which was never true: nothing re-fetched the flow while the
+ * camera stood still. It now prints when the oldest TomTom tile on screen left
+ * TomTom (`segment.fetchedAt`, stamped by the proxy), which is true whatever
+ * the refresh does, and stable between two refreshes — the panel reads this
+ * ~1 Hz, and a line that ticked every second would be churn.
+ *
+ * @param {Object} input
+ * @param {boolean} input.liveMode - A TomTom key is configured.
+ * @param {?number} input.fetchedAt - When the oldest tile on screen left TomTom (ms), or null.
+ * @param {number} [input.now]
+ * @param {string} [input.timeZone] - Tests only; the reader's own clock otherwise.
+ * @returns {string}
  */
-const flowLegendNote = () => messages().legendNote;
+export function trafficLegendNote({
+  liveMode, fetchedAt, now = Date.now(), timeZone,
+} = {}) {
+  const m = messages().legendNote;
+  if (!liveMode) return m.keyless;
+  const clock = flowClockTime(fetchedAt, { now, timeZone });
+  return clock ? m.receivedAt(clock.time, clock.day) : m.receiving;
+}
+
+/**
+ * When the oldest tile among a set of decoded flow segments left TomTom.
+ * @param {Array<{fetchedAt?:number}>} segments
+ * @returns {?number} ms timestamp, or null when none carries one.
+ */
+export function oldestFetchedAt(segments) {
+  let oldest = null;
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const at = segment?.fetchedAt;
+    if (Number.isFinite(at) && (oldest === null || at < oldest)) oldest = at;
+  }
+  return oldest;
+}
 
 // ─── Jam-viz prototype (live mode only — see 2026-07-21 design doc) ────────
 /** @const {number} Max congestion heat-line polylines per render (jam first). */
@@ -603,6 +681,25 @@ let _ribbonCounts = { closure: 0, jam: 0, slow: 0, free: 0 };
 let _ribbonSegments = [];
 /** @type {'on'|'off'} User control over the ribbon (`FLUX TOMTOM` chip). */
 let _flowRibbon = 'on';
+/**
+ * When the oldest TomTom tile behind the current ribbon was measured (ms), or
+ * null before any has landed. What the key's source line prints.
+ * @type {?number}
+ */
+let _flowFetchedAt = null;
+/**
+ * `CADRES` row chip: hand the dots to the detection overlay as `VEH-…`
+ * contacts. OFF by default since 2026-09-21.
+ *
+ * A bracket and an id say "this object is tracked". Nothing tracks these: they
+ * are simulated cars on a measured road, and a frame with `VEH-0412` over one
+ * was the loudest thing on the layer while being the least true. The frame is
+ * still one chip away for whoever wants to watch the simulation work — the
+ * diagnostic view — and turning it on still claims detection through the same
+ * snapshot Contacts uses (`ui.js` DETECTION_DEMANDING_LAYERS).
+ * @type {'on'|'off'}
+ */
+let _vehicleFrames = 'off';
 /** @type {boolean|null} GroundPolylinePrimitive.isSupported, checked once. */
 let _heatSupported = null;
 /** @type {number} Altitude of the last render, for late-flow heat rebuilds. */
@@ -689,6 +786,8 @@ let _styleListenerBound = false;
  * @type {{free:Cesium.Color, slow:Cesium.Color, jam:Cesium.Color}}
  */
 let _activeBucketColors = { ...FLOW_BUCKET_COLORS };
+/** Effective colour of an unmeasured dot — see {@link UNMEASURED_DOT_CSS}. */
+let _activeUnmeasuredColor = UNMEASURED_DOT_COLOR;
 /**
  * @const {number} Minimum base pixel size for COLORED dots while a styled
  * preset is active — residential-road dots spawn at 4 px and vanish into
@@ -732,6 +831,10 @@ function refreshBucketColors() {
       ? new Cesium.Color(rgba[0] / 255, rgba[1] / 255, rgba[2] / 255, rgba[3])
       : FLOW_BUCKET_COLORS[bucket];
   }
+  const unmeasured = _presetDots === 'on' ? presetUnmeasuredRgba(_stylePreset) : null;
+  _activeUnmeasuredColor = unmeasured
+    ? new Cesium.Color(unmeasured[0] / 255, unmeasured[1] / 255, unmeasured[2] / 255, unmeasured[3])
+    : UNMEASURED_DOT_COLOR;
 }
 
 /**
@@ -765,7 +868,11 @@ function restyleDotsInPlace() {
   if (!_dots.length && !_heatLineCount) return;
   for (const dot of _dots) {
     const bucket = dot.bucket;
-    if (!bucket) continue; // sim/uncovered dots stay byte-identical
+    if (!bucket) {
+      // Unmeasured: white under a styled profile, grey under normal.
+      dot.point.color = _activeUnmeasuredColor;
+      continue;
+    }
     dot.point.color = _activeBucketColors[bucket];
     dot.point.pixelSize = baseDotSize(dot.road?.type, bucket)
       + (bucket === 'jam' ? 1 : 0)
@@ -1800,8 +1907,8 @@ function spawnDotsForRoad(road, altitude, budgetCount = null) {
     const point = _pointCollection.add({
       position: Cesium.Cartesian3.clone(_scratchLerp),
       pixelSize,
-      // No flow data → today's exact simulated white.
-      color: flowColor || Cesium.Color.WHITE.withAlpha(0.85),
+      // No flow data → the unmeasured colour (keyless: every dot).
+      color: flowColor || _activeUnmeasuredColor,
       scaleByDistance: new Cesium.NearFarScalar(100, 1.5, _fadeScaleFar, jamProminent ? JAM_DOT_FAR_SCALE : 0.3),
       translucencyByDistance: new Cesium.NearFarScalar(100, 1.0, _fadeTransFar, 0.0),
       // visible through tiles only when very close (jam: city-scale punch)
@@ -1900,6 +2007,8 @@ const QUEUE_SCAN_MS = 2000;
  */
 function animate() {
   const now = Date.now();
+  // Replaced ribbons and selection strokes leave once their successor built.
+  sweepRetiring();
   // Delta time in seconds, capped to avoid jumps when returning from background tab
   const dt = _lastAnimTime ? Math.min((now - _lastAnimTime) / 1000, 0.1) : 0.016;
   _lastAnimTime = now;
@@ -2861,27 +2970,452 @@ function ribbonMinClassFor(tier) {
 function paintFlowRibbon(segments, minClass = _ribbonMinClass) {
   if (!_viewer) return;
   _ribbonSegments = Array.isArray(segments) ? segments : [];
+  _flowFetchedAt = oldestFetchedAt(_ribbonSegments);
   _ribbonMinClass = minClass;
   if (!_enabled || !_liveMode || _flowRibbon === 'off') {
     _ribbonPrim = clearFlowRibbons(_viewer, _ribbonPrim);
+    flushRetiring();
     _ribbonCounts = { closure: 0, jam: 0, slow: 0, free: 0 };
+    _ribbonRecords = [];
+    clearRoadSelection();
     return;
   }
-  const { primitive, counts } = renderFlowRibbons(_viewer, _ribbonPrim, _ribbonSegments, {
+  // The previous batch stays on screen until this one has BUILT. A
+  // GroundPolylinePrimitive assembles in Cesium's workers over several frames,
+  // and removing the old one first left the streets bare for that long — once
+  // per camera move, where nobody sees it, but also once per quiet refresh,
+  // where the camera is still and everybody would.
+  const previous = _ribbonPrim;
+  const { primitive, counts, records } = renderFlowRibbons(_viewer, null, _ribbonSegments, {
     colorFor: ribbonColorFor,
     minClassRank: _ribbonMinClass,
+    withRecords: true,
   });
+  retireWhenReady(previous, primitive);
   _ribbonPrim = primitive;
   _ribbonCounts = counts;
+  _ribbonRecords = records || [];
+  followRoadSelection();
   _viewer.scene?.requestRender?.();
 }
 
 /** Drop the ribbon and everything it was built from. */
 function clearFlowRibbon() {
   _ribbonPrim = clearFlowRibbons(_viewer, _ribbonPrim);
+  flushRetiring();
   _ribbonCounts = { closure: 0, jam: 0, slow: 0, free: 0 };
   _ribbonSegments = [];
+  _ribbonRecords = [];
+  _flowFetchedAt = null;
   _ribbonMinClass = 0;
+  clearRoadSelection();
+}
+
+/**
+ * Ground primitives replaced but still on screen, each waiting for the one
+ * that replaces it to finish building.
+ * @type {Array<{old: object, successor: ?object}>}
+ */
+let _retiring = [];
+
+/**
+ * Remove `old` once `successor` can be drawn — at once when there is none.
+ * @param {?object} old
+ * @param {?object} successor
+ */
+function retireWhenReady(old, successor) {
+  if (!old) return;
+  if (!successor) {
+    _viewer?.scene?.groundPrimitives?.remove?.(old);
+    return;
+  }
+  _retiring.push({ old, successor });
+}
+
+/** Per frame: retire every primitive whose successor has built (or gone). */
+function sweepRetiring() {
+  if (!_retiring.length) return;
+  const ground = _viewer?.scene?.groundPrimitives;
+  _retiring = _retiring.filter(({ old, successor }) => {
+    const gone = successor.isDestroyed?.() || !ground?.contains?.(successor);
+    if (!gone && !successor.ready) return true;
+    ground?.remove?.(old);
+    return false;
+  });
+}
+
+/** Remove everything waiting to retire, now. */
+function flushRetiring() {
+  const ground = _viewer?.scene?.groundPrimitives;
+  for (const { old } of _retiring) ground?.remove?.(old);
+  _retiring = [];
+}
+
+// ─── A clicked stretch of the ribbon ───────────────────────
+//
+// The information attaches to the ROAD, because the road is what TomTom
+// measured: a click on a coloured stretch redraws it wider in its rung's
+// colour and opens a card on it (`trafficFlowCard.js`). The idiom is
+// `roadStatusFrance.js`'s selectSegment — a second stroke over the batch,
+// since one instance of a batched primitive cannot be restyled alone, and a
+// protected card on the world overlay. What differs is how the click finds
+// the stretch: the ribbon carries no pick id (see `nearestFlowStretch`).
+
+/** Selected-stretch card, on its own protected overlay source. */
+export const TRAFFIC_FLOW_OVERLAY_SOURCE_ID = 'traffic-flow-selected';
+const TRAFFIC_FLOW_OVERLAY_SOURCE_OPTIONS = Object.freeze({
+  cohortLimit: 1,
+  collisionCapacity: 0,
+  moving: false,
+});
+/** Metres above the road the card is anchored. */
+const FLOW_CARD_LIFT_M = 18;
+/** Extra width (px) the selected stretch is redrawn with over its own. */
+const FLOW_SELECTED_WIDTH_BONUS = 4;
+
+/**
+ * What the ribbon on screen was drawn from, one record per instance.
+ * @type {Array<{segment:object, style:object, flat:number[]}>}
+ */
+let _ribbonRecords = [];
+/**
+ * The open selection, by geometry key: the key survives a repaint, the
+ * record objects do not.
+ * @type {?{key:string, record:object}}
+ */
+let _selectedFlow = null;
+/** @type {?Cesium.GroundPolylinePrimitive} */
+let _selectionPrim = null;
+/** @type {?Cesium.ScreenSpaceEventHandler} */
+let _flowClickHandler = null;
+
+/** Close the card and drop the stroke. Safe to call with nothing open. */
+function clearRoadSelection() {
+  if (_selectionPrim) {
+    _viewer?.scene?.groundPrimitives?.remove?.(_selectionPrim);
+    _selectionPrim = null;
+  }
+  if (_selectedFlow) {
+    _selectedFlow = null;
+    clearOverlaySource(TRAFFIC_FLOW_OVERLAY_SOURCE_ID);
+    _viewer?.scene?.requestRender?.();
+  }
+}
+
+/**
+ * Where a stretch's card stands: halfway along it, on the surface the dots are
+ * seated on when this layer has measured it there, else the shared floor.
+ * @param {object} segment - Decoded flow segment.
+ * @returns {?Cesium.Cartesian3}
+ */
+function flowCardPosition(segment) {
+  const mid = flowSegmentMidpoint(segment?.coords);
+  if (!mid) return null;
+  const seated = borrowedFloorM([mid.lon, mid.lat]);
+  const shared = cachedGroundFloor(mid.lat, mid.lon);
+  const floor = seated || (Number.isFinite(shared) ? shared : 0);
+  return Cesium.Cartesian3.fromDegrees(mid.lon, mid.lat, floor + FLOW_CARD_LIFT_M);
+}
+
+/**
+ * Open (or re-open, after a repaint) the card for one ribbon record.
+ * @param {{segment:object, style:object, flat:number[]}} record
+ */
+function showRoadSelection(record) {
+  if (!_viewer || !record) return;
+  const key = flowSegmentKey(record.segment);
+  _selectedFlow = { key, record };
+  const card = buildFlowCard(record.segment);
+  const scene = _viewer.scene;
+  // Same hand-over as the ribbon: the previous stroke stays until this one has
+  // built, so a refresh that re-finds the stretch does not blink it.
+  const previous = _selectionPrim;
+  _selectionPrim = scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry: new Cesium.GroundPolylineGeometry({
+        positions: Cesium.Cartesian3.fromDegreesArray(record.flat),
+        width: record.style.width + FLOW_SELECTED_WIDTH_BONUS,
+      }),
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          Cesium.Color.fromCssColorString(card.accent).withAlpha(0.95),
+        ),
+      },
+    }),
+    classificationType: powerClassificationTypeForScene(scene),
+    appearance: new Cesium.PolylineColorAppearance({ translucent: true }),
+  }));
+  retireWhenReady(previous, _selectionPrim);
+  const mid = flowSegmentMidpoint(record.segment.coords);
+  if (mid) warmGroundFloor([mid]);
+  const position = flowCardPosition(record.segment);
+  if (position) {
+    setOverlayEntries(TRAFFIC_FLOW_OVERLAY_SOURCE_ID, [{
+      id: key,
+      position,
+      variant: 'selected',
+      selected: true,
+      protected: true,
+      paintLane: 'selected',
+      collisionGroup: 'ambient-card',
+      priority: Number.MAX_SAFE_INTEGER,
+      title: card.title,
+      details: card.details,
+      accent: card.accent,
+      interactive: false,
+      anchorRadiusPx: 10,
+      minAnchorGapPx: 12,
+      verticalOnly: true,
+      placement: 'above',
+      edgeFade: 'keyhole',
+      horizonCull: true,
+      terrainOcclusion: false,
+    }], TRAFFIC_FLOW_OVERLAY_SOURCE_OPTIONS);
+  }
+  scene.requestRender?.();
+}
+
+/**
+ * After a repaint, keep the open card on the SAME stretch — re-read, so it
+ * shows the new rung and the new time — or close it when the new ribbon no
+ * longer draws that stretch.
+ */
+function followRoadSelection() {
+  if (!_selectedFlow) return;
+  const record = _ribbonRecords.find((candidate) => flowSegmentKey(candidate.segment) === _selectedFlow.key);
+  if (record) showRoadSelection(record);
+  else clearRoadSelection();
+}
+
+/**
+ * The ground under a click, in degrees, and how many metres one CSS pixel
+ * covers there. `pickPosition` reads the depth buffer, so it answers on the
+ * photorealistic mesh as well as on the globe; the globe ray is the fallback
+ * where depth picking is unavailable.
+ * @param {Cesium.Scene} scene
+ * @param {Cesium.Cartesian2} position - Window position of the click.
+ * @returns {?{lon:number, lat:number, metresPerPixel:number}}
+ */
+function groundUnderClick(scene, position) {
+  let world = null;
+  try {
+    if (scene.pickPositionSupported) world = scene.pickPosition(position);
+  } catch { world = null; }
+  if (!world) {
+    const ray = scene.camera.getPickRay(position);
+    world = ray ? scene.globe?.pick?.(ray, scene) : null;
+  }
+  if (!world) return null;
+  const carto = Cesium.Cartographic.fromCartesian(world);
+  if (!carto) return null;
+  const distance = Cesium.Cartesian3.distance(scene.camera.positionWC, world);
+  const fovy = scene.camera.frustum?.fovy ?? (Math.PI / 3);
+  const height = scene.canvas?.clientHeight || 1;
+  return {
+    lon: Cesium.Math.toDegrees(carto.longitude),
+    lat: Cesium.Math.toDegrees(carto.latitude),
+    metresPerPixel: (2 * distance * Math.tan(fovy / 2)) / height,
+  };
+}
+
+/**
+ * Open the card of the coloured stretch at a ground point, or close the open
+ * one. Shared by the click handler and the QA seam.
+ * @param {?{lon:number, lat:number, metresPerPixel:number}} ground
+ * @returns {boolean} Whether a stretch was selected.
+ */
+function selectStretchAt(ground) {
+  const record = ground
+    ? nearestFlowStretch(ground, _ribbonRecords, ground.metresPerPixel, {
+      slackPx: isCoarseInput() ? 12 : 6,
+    })
+    : null;
+  if (record) {
+    showRoadSelection(record);
+    return true;
+  }
+  if (_selectedFlow) clearRoadSelection();
+  return false;
+}
+
+function onFlowKeyDown(event) {
+  if (event.key === 'Escape' && _selectedFlow) clearRoadSelection();
+}
+
+function installFlowClickHandler(viewer) {
+  if (_flowClickHandler || !viewer?.scene?.canvas) return;
+  // Node tests enable the layer on a stub viewer; Cesium's handler needs a DOM.
+  if (typeof document === 'undefined' || typeof viewer.scene.canvas.addEventListener !== 'function') return;
+  _flowClickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  _flowClickHandler.setInputAction((click) => {
+    if (!_ribbonRecords.length && !_selectedFlow) return;
+    const picked = pickAt(viewer.scene, click.position);
+    // Somebody's object — a plane, a station, another layer's segment — owns
+    // this click. Close ours and leave theirs alone.
+    if (!isWorldPick(picked)) {
+      if (_selectedFlow) clearRoadSelection();
+      return;
+    }
+    selectStretchAt(groundUnderClick(viewer.scene, click.position));
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  if (typeof document !== 'undefined') document.addEventListener?.('keydown', onFlowKeyDown);
+}
+
+function uninstallFlowClickHandler() {
+  if (_flowClickHandler) {
+    _flowClickHandler.destroy();
+    _flowClickHandler = null;
+  }
+  if (typeof document !== 'undefined') document.removeEventListener?.('keydown', onFlowKeyDown);
+}
+
+
+
+/**
+ * Attach a flow decode to parsed roads and publish the coverage it reached.
+ * @param {Array} roads - Parsed road objects (mutated: `road.flow`).
+ * @param {Array} segments - Decoded flow segments.
+ */
+function matchFlowOntoRoads(roads, segments) {
+  const { matches, matchedCount, candidateCount } = matchFlowToRoads(roads, segments);
+  for (let i = 0; i < roads.length; i++) {
+    roads[i].flow = matches[i];
+  }
+  _flowCoveragePct = candidateCount > 0
+    ? Math.round((matchedCount / candidateCount) * 100)
+    : 0;
+}
+
+// ─── Keeping the flow current while the camera stands still ─────────
+//
+// Every flow request used to hang off a camera move, so a reader who parked
+// over a city watched the colours of the minute they arrived, for as long as
+// they stayed — under a key that said "rafraîchi toutes les 60 s". This timer
+// re-asks for the same box once the caches behind it have expired, repaints
+// the ribbon and recolours the dots in place. Nothing respawns, nothing moves.
+
+/**
+ * Ms between two refreshes of a parked view.
+ *
+ * Just past 120 s, which is BOTH the proxy's tile TTL and this client's decode
+ * cache TTL (`flowTiles.js`): any sooner and the request is answered from a
+ * cache holding the very tiles already on screen, which costs an `/api` call
+ * and changes nothing. TomTom's own flow is a model refreshed about once a
+ * minute, so two minutes is the finest cadence that can actually show news.
+ */
+export const FLOW_REFRESH_MS = 125_000;
+/**
+ * Refreshes one parked view may spend before it stops asking: about ten
+ * minutes of watching.
+ *
+ * The TomTom budget is ONE daily allowance shared by every reader of the
+ * hosted globe (`TOMTOM_DAILY_TILE_BUDGET`, 40 000 tiles). A tab left open on a
+ * city costs up to four tiles per refresh, and without a cap a single
+ * forgotten tab would spend ~2 800 of them a day. After the cap the colours
+ * stay as they are and the key's clock time says how old they are; the next
+ * camera move re-arms the count.
+ */
+export const FLOW_REFRESH_MAX_PER_VIEW = 5;
+/** @type {?ReturnType<typeof setTimeout>} */
+let _flowRefreshTimer = null;
+/** Refreshes spent since the last camera load. */
+let _flowRefreshesSinceLoad = 0;
+/** Fetch box and band of the latest load — what a refresh asks for again. */
+let _flowBox = null;
+let _flowTier = null;
+/** The road set the last match was made on, and the box its flow came from. */
+let _matchedRoads = null;
+let _matchedBox = null;
+
+/**
+ * Whether a parked view is due a quiet flow refresh now, or should wait.
+ * Pure, so the gate is pinned by a unit test rather than by a two-minute wait.
+ * @param {Object} state
+ * @returns {'refresh'|'wait'|'stop'}
+ */
+export function flowRefreshDecision({
+  enabled, liveMode, hasBox, fetching, flowPending, hidden, spent = 0,
+} = {}) {
+  if (!enabled || !liveMode || !hasBox) return 'stop';
+  if (spent >= FLOW_REFRESH_MAX_PER_VIEW) return 'stop';
+  // A camera load already owns the next answer, or the tab is not being
+  // looked at: try again one period later rather than spend a request.
+  if (fetching || flowPending > 0 || hidden) return 'wait';
+  return 'refresh';
+}
+
+/**
+ * (Re)start the refresh countdown from now.
+ * @param {Object} [opts]
+ * @param {boolean} [opts.fromLoad=false] - A camera load: the view changed, so
+ *   the per-view allowance starts over.
+ */
+function armFlowRefresh({ fromLoad = false } = {}) {
+  if (fromLoad) _flowRefreshesSinceLoad = 0;
+  clearTimeout(_flowRefreshTimer);
+  _flowRefreshTimer = null;
+  if (!_enabled) return;
+  if (!_liveMode) {
+    // The status probe decides live mode once per session and may still be in
+    // flight at the first load. A keyless session never arms anything: a tab
+    // left open on a simulation must cost no timer at all.
+    _flowStatusPromise?.then(() => {
+      if (_enabled && _liveMode && !_flowRefreshTimer) armFlowRefresh();
+    });
+    return;
+  }
+  _flowRefreshTimer = setTimeout(() => { void refreshFlowQuietly(); }, FLOW_REFRESH_MS);
+}
+
+function disarmFlowRefresh() {
+  clearTimeout(_flowRefreshTimer);
+  _flowRefreshTimer = null;
+}
+
+/**
+ * Re-fetch the flow for the box on screen and restyle in place.
+ *
+ * QUIET on purpose: it does not claim `_flowPending`, so neither the loading
+ * chip nor the shared loading batch flashes every two minutes, and a failure
+ * here keeps the last good colours without raising an error — the measurement
+ * time in the key is what goes stale, which is the honest symptom. The next
+ * camera load re-derives feed health from its own request.
+ * @returns {Promise<void>}
+ */
+async function refreshFlowQuietly() {
+  _flowRefreshTimer = null;
+  const decision = flowRefreshDecision({
+    enabled: _enabled,
+    liveMode: _liveMode,
+    hasBox: Boolean(_flowBox),
+    fetching: _fetching,
+    flowPending: _flowPending,
+    hidden: typeof document !== 'undefined' && document.hidden === true,
+    spent: _flowRefreshesSinceLoad,
+  });
+  if (decision === 'stop') return;
+  if (decision === 'wait') { armFlowRefresh(); return; }
+  const generation = _loadGeneration;
+  const box = _flowBox;
+  const tier = _flowTier;
+  _flowRefreshesSinceLoad += 1;
+  try {
+    const segments = await fetchFlowForBounds(box, { zoom: flowZoomFor(tier) });
+    if (generation !== _loadGeneration || !_enabled) return;
+    paintFlowRibbon(segments, ribbonMinClassFor(tier));
+    // The dots only when they were matched against this very box: a load whose
+    // road graph failed leaves the previous view's roads on screen, and
+    // matching those against a new box would grey out every road outside it.
+    if (_roads.length && _matchedRoads === _roads && _matchedBox === box) {
+      matchFlowOntoRoads(_roads, segments);
+      recolorDotsInPlace('refresh');
+    }
+    _viewer?.scene?.requestRender?.();
+  } catch {
+    /* Quiet — see above. The key's measurement time says how old the colours are. */
+  } finally {
+    if (generation === _loadGeneration) armFlowRefresh();
+  }
 }
 
 /**
@@ -2958,13 +3492,9 @@ async function applyFlowToRoads(roads, clamped, generation, tier = null) {
       // path where the roads arrived first (a cached viewport) and is free —
       // same decode-cache entry, same segments, no second request.
       paintFlowRibbon(segments, ribbonMinClassFor(tier));
-      const { matches, matchedCount, candidateCount } = matchFlowToRoads(roads, segments);
-      for (let i = 0; i < roads.length; i++) {
-        roads[i].flow = matches[i];
-      }
-      _flowCoveragePct = candidateCount > 0
-        ? Math.round((matchedCount / candidateCount) * 100)
-        : 0;
+      matchFlowOntoRoads(roads, segments);
+      _matchedRoads = roads;
+      _matchedBox = clamped;
       _flowError = null;
     } catch (e) {
       if (e?.name === 'AbortError') return;
@@ -3056,30 +3586,34 @@ function recolorDotsInPlace(label) {
       closedDots += 1;
       continue;
     }
+    // EVERY field, every pass. This was written for one transition — a white
+    // dot turning coloured when late flow landed — and left the rest to the
+    // next respawn. The quiet refresh moves dots between ANY two states on a
+    // still camera, where no respawn follows: a road that went from jammed to
+    // free kept its fat, city-scale jam dots, and one that reopened after a
+    // closure stayed hidden.
+    dot.point.show = true;
     const bucket = flow ? flowBucket(flow.level) : null;
     dot.bucket = bucket;
-    dot.point.color = bucket ? _activeBucketColors[bucket] : Cesium.Color.WHITE.withAlpha(0.85);
-    if (bucket === 'jam') {
-      dot.point.pixelSize = baseDotSize(dot.road?.type, bucket) + 1 + activeSizeDelta('jam');
-    } else if (bucket && presetProfileActive()) {
-      // Preset profiles size-floor every bucket; the shipped normal path
-      // keeps its jam-only size touch (byte-identical behavior).
-      dot.point.pixelSize = baseDotSize(dot.road?.type, bucket) + activeSizeDelta(bucket);
-    }
-    // Late flow can move a dot between buckets — keep the preset halo in
-    // step (no-op writes under the normal profile, whose dots have none).
-    if (presetProfileActive()) applyOutline(dot.point, bucket);
+    dot.point.color = bucket ? _activeBucketColors[bucket] : _activeUnmeasuredColor;
+    dot.point.pixelSize = baseDotSize(dot.road?.type, bucket)
+      + (bucket === 'jam' ? 1 : 0)
+      + activeSizeDelta(bucket);
+    applyOutline(dot.point, bucket);
     dot.mps = dot.baseMps * (flow ? flowSpeedScale(flow.level) : 1);
-    // Late flow tags/untags stop-and-go creep + city-scale prominence the
-    // same way it rescales speed. Queue *positions* wait for the next
-    // natural re-render, like density bunching.
-    if (bucket === 'jam' && jamDensityOn()) {
+    // Stop-and-go creep and city-scale prominence follow the bucket the same
+    // way; the spawn values are the non-jam branch. Queue *positions* wait for
+    // the next natural re-render, like density bunching.
+    const prominent = bucket === 'jam' && jamDensityOn();
+    if (prominent) {
       if (!dot.creep) dot.creep = { moving: Math.random() < 0.4, until: now + Math.random() * 2000 };
-      dot.point.scaleByDistance = new Cesium.NearFarScalar(100, 1.5, _fadeScaleFar, JAM_DOT_FAR_SCALE);
-      dot.point.disableDepthTestDistance = JAM_DOT_DEPTH_PUNCH;
     } else {
       dot.creep = null;
     }
+    dot.point.scaleByDistance = new Cesium.NearFarScalar(
+      100, 1.5, _fadeScaleFar, prominent ? JAM_DOT_FAR_SCALE : 0.3,
+    );
+    dot.point.disableDepthTestDistance = prominent ? JAM_DOT_DEPTH_PUNCH : 2000;
     _bucketCounts[bucket || 'sim'] += 1;
   }
   _closedRoads = _roads.reduce((n, r) => n + (r.flow?.closure ? 1 : 0), 0);
@@ -3875,6 +4409,9 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   // showing the flow at all made the layer only as fast as its slowest feed,
   // which on the hosted origin meant 25 s and a 502.
   ensureFlowStatus().then(() => loadFlowRibbon(clamped, tier, generation));
+  _flowBox = clamped;
+  _flowTier = tier;
+  armFlowRefresh({ fromLoad: true });
 
   _fetching = true;
   // Only COMMIT these on success. Committing up-front means a failed Overpass
@@ -4180,6 +4717,10 @@ const trafficLayer = {
     // One status check per session decides sim vs live-TomTom mode.
     ensureFlowStatus();
 
+    // A click on a coloured stretch of the ribbon opens its card.
+    installFlowClickHandler(viewer);
+    setOverlaySourceVisible(TRAFFIC_FLOW_OVERLAY_SOURCE_ID, true);
+
     _preRenderRemover = viewer.scene.preRender.addEventListener(animate);
     if (TRAFFIC_TIMING_ENABLED) {
       clearTrafficTimingEntries();
@@ -4285,6 +4826,14 @@ const trafficLayer = {
     // transit's threshold alone.
     releaseCameraSensitivity(viewer, 'traffic');
     _pointCollection.show = false;
+    disarmFlowRefresh();
+    _flowBox = null;
+    _flowTier = null;
+    _matchedRoads = null;
+    _matchedBox = null;
+    clearRoadSelection();
+    uninstallFlowClickHandler();
+    setOverlaySourceVisible(TRAFFIC_FLOW_OVERLAY_SOURCE_ID, false);
   },
 
   /**
@@ -4338,7 +4887,18 @@ const trafficLayer = {
     if (params.flowRibbon === 'on' || params.flowRibbon === 'off') {
       if (params.flowRibbon !== _flowRibbon) {
         _flowRibbon = params.flowRibbon;
+        if (_flowRibbon === 'off') clearRoadSelection();
         paintFlowRibbon(_ribbonSegments);
+      }
+    }
+    // The diagnostic frames. Detection PULLS its candidates on every paint, so
+    // the dots appear or leave on the next frame; marking the solve dirty makes
+    // that frame re-solve instead of reusing a cohort from before the switch.
+    if (params.vehicleFrames === 'on' || params.vehicleFrames === 'off') {
+      if (params.vehicleFrames !== _vehicleFrames) {
+        _vehicleFrames = params.vehicleFrames;
+        markDetectionSourcesChanged('traffic-vehicle-frames');
+        _viewer?.scene?.requestRender?.();
       }
     }
   },
@@ -4355,7 +4915,69 @@ const trafficLayer = {
       jamViz: _jamViz,
       presetDots: _presetDots,
       flowRibbon: _flowRibbon,
+      vehicleFrames: _vehicleFrames,
     };
+  },
+
+  /**
+   * QA seam: the ribbon stretches on screen, one line each, so a harness can
+   * choose a stretch from the DATA rather than from a screenshot.
+   * @returns {Array<{id:string, rung:string, level:number, lon:number, lat:number}>}
+   */
+  qaFlowStretches() {
+    const out = [];
+    _ribbonRecords.forEach((record, index) => {
+      const mid = flowSegmentMidpoint(record.segment.coords);
+      if (!mid) return;
+      out.push({
+        index,
+        key: flowSegmentKey(record.segment),
+        rung: record.style.bucket,
+        level: record.segment.trafficLevel,
+        lon: mid.lon,
+        lat: mid.lat,
+      });
+    });
+    return out;
+  },
+
+  /**
+   * QA seam: run the click's own selection at a ground point, skipping only
+   * the screen-to-ground step (a synthetic click cannot pass the gesture
+   * budget reliably in a headless page).
+   * @param {number} lon @param {number} lat
+   * @param {number} [metresPerPixel=1]
+   * @returns {boolean} Whether a stretch was selected.
+   */
+  qaSelectStretchAt(lon, lat, metresPerPixel = 1) {
+    return selectStretchAt({ lon, lat, metresPerPixel });
+  },
+
+  /**
+   * QA seam: what the open card says, or null.
+   * @returns {?{key:string, title:string, details:string[], accent:string}}
+   */
+  qaSelectedStretch() {
+    if (!_selectedFlow) return null;
+    const card = buildFlowCard(_selectedFlow.record.segment);
+    return {
+      key: _selectedFlow.key, title: card.title, details: card.details, accent: card.accent,
+    };
+  },
+
+  /**
+   * Whether this layer is asking for the detection overlay right now.
+   *
+   * Read by `ui.js` for DETECTION_DEMANDING_LAYERS: the claim follows the
+   * `CADRES` chip, not the layer. A reader who had switched detection off no
+   * longer gets it switched back on — under the tactical Dense @ 75 % preset —
+   * because the default traffic layer loaded. (A first run already has
+   * detection on at Balanced; what removes the frames there is
+   * `getDetectableObjects` answering nothing.)
+   * @returns {boolean}
+   */
+  demandsDetection() {
+    return _enabled && _vehicleFrames === 'on';
   },
 
   /**
@@ -4371,7 +4993,8 @@ const trafficLayer = {
    * @returns {Array<{position:Cesium.Cartesian3, id:string, type:string}>}
    */
   getDetectableObjects(options = {}) {
-    if (!_enabled || _dots.length === 0) return [];
+    // Frames and `VEH-…` ids are the diagnostic view — see `_vehicleFrames`.
+    if (!_enabled || _vehicleFrames !== 'on' || _dots.length === 0) return [];
     const maxCount = Number.isFinite(options.maxCount)
       ? Math.max(1, Math.floor(options.maxCount))
       : _dots.length;
@@ -4501,6 +5124,12 @@ const trafficLayer = {
       // Overpass-down case the ribbon exists for, and the legend reads it.
       flowRibbon: _flowRibbon,
       ribbonCounts: { ..._ribbonCounts },
+      // Whether the ribbon on screen has built, or null when there is none.
+      // A refresh keeps the previous batch until this turns true, so a still
+      // camera never sees the streets go bare; harnesses sample it for that.
+      ribbonReady: _ribbonPrim ? Boolean(_ribbonPrim.ready || _retiring.length) : null,
+      flowFetchedAt: _flowFetchedAt,
+      flowRefreshesSinceLoad: _flowRefreshesSinceLoad,
       ...(TRAFFIC_TIMING_ENABLED ? { trafficTiming: getTrafficTimingDiagnostics() } : {}),
       // Per-bucket rendered-dot counts (sim = white ambient). Drives the
       // qa-traffic color assertions and the sync-chip mode label below.
@@ -4688,6 +5317,16 @@ const trafficLayer = {
         : messages().chips.flowRibbon.show,
       params: { flowRibbon: _flowRibbon === 'on' ? 'off' : 'on' },
       disabled: !_liveMode,
+    }, {
+      id: 'vehicle-frames',
+      label: messages().chips.vehicleFrames.label,
+      active: _vehicleFrames === 'on',
+      state: _vehicleFrames === 'on' ? 'active' : 'idle',
+      title: _vehicleFrames === 'on'
+        ? messages().chips.vehicleFrames.hide
+        : messages().chips.vehicleFrames.show,
+      params: { vehicleFrames: _vehicleFrames === 'on' ? 'off' : 'on' },
+      disabled: false,
     }];
     const legend = [];
     // The dots' tally normally. But the ribbon can be the ONLY thing on screen
@@ -4703,37 +5342,33 @@ const trafficLayer = {
     // luminance and size). Reading the ACTIVE colour is what keeps the key
     // decoding the map under every sensor preset instead of only under NORMAL.
     for (const bucket of FLOW_BUCKET_ORDER) {
-      const count = Number(buckets[bucket.id]) || 0;
-      if (!count) continue;
+      if (!(Number(buckets[bucket.id]) > 0)) continue;
       const color = _activeBucketColors[bucket.id] || FLOW_BUCKET_COLORS[bucket.id];
       legend.push({
         label: bucket.label,
         color: color.toCssColorString(),
-        count,
         blurb: bucket.blurb,
       });
     }
-    if (_liveMode && _uncoveredMode === 'sim') {
-      const simulated = Number(buckets.sim) || 0;
-      if (simulated) {
-        legend.push({
-          // A1: the row a fallback value owes the reader, and the only one in
-          // this block that keeps a sentence after the note took the rest. The
-          // swatch stays WHITE and un-hatched on purpose — the mark on the globe
-          // is a plain white dot, and a swatch that is the datum has to look
-          // like it. What makes the row honest is the word, not the texture.
-          label: messages().legend.simulated,
-          color: '#ffffff',
-          count: simulated,
-          blurb: messages().legend.simulatedBlurb,
-        });
-      }
+    // Keyless too: there every dot is unmeasured, and this row plus the
+    // source line are what tell a self-hosted reader the cars are invented.
+    if (_uncoveredMode === 'sim' && Number(buckets.sim) > 0) {
+      legend.push({
+        // A1: the row a fallback value owes the reader. The swatch IS the dot
+        // on the globe — the unmeasured grey — and the word says what it means.
+        label: messages().legend.unmeasured,
+        color: _activeUnmeasuredColor.toCssColorString(),
+        blurb: messages().legend.unmeasuredBlurb,
+      });
     }
-    const closed = _closedRoads || _ribbonCounts.closure;
-    if (closed) {
-      legend.push({ label: messages().legend.closedRoad, color: '#ff3b30', count: closed });
+    if (_closedRoads || _ribbonCounts.closure) {
+      legend.push({ label: messages().legend.closedRoad, color: '#ff3b30' });
     }
-    return { chips, legend, legendNote: flowLegendNote() };
+    return {
+      chips,
+      legend,
+      legendNote: trafficLegendNote({ liveMode: _liveMode, fetchedAt: _flowFetchedAt }),
+    };
   },
 };
 
