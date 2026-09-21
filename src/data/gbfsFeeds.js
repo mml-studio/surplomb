@@ -1089,6 +1089,19 @@ export const GBFS_CLUSTER_LON_FACTOR = 1.5;
 export const GBFS_CLUSTER_MIN = 3;
 
 /**
+ * The grid cell a point falls in, as the proxy keys it. Shared with the
+ * client, which counts the Vélib' docks into the same cells
+ * (`mobilityDockBridge.js`): two formulas would drift apart.
+ * @param {number} lat
+ * @param {number} lon
+ * @param {number} cellDeg One of {@link GBFS_CLUSTER_CELLS_DEG}.
+ * @returns {string}
+ */
+export function gbfsClusterCellKey(lat, lon, cellDeg) {
+  return `${Math.floor(lat / cellDeg)}:${Math.floor(lon / (cellDeg * GBFS_CLUSTER_LON_FACTOR))}`;
+}
+
+/**
  * Fewest vehicles inside the requested box for the answer to be groups.
  *
  * Under it the dots are drawn instead: nothing needs thinning, every dot is a
@@ -1151,7 +1164,7 @@ export function clusterGbfsVehicles(systems, box, cellDeg, { min = GBFS_CLUSTER_
   for (const system of systems) {
     for (const vehicle of system.vehicles || []) {
       if (!Number.isFinite(vehicle?.lat) || !Number.isFinite(vehicle?.lon)) continue;
-      const key = `${Math.floor(vehicle.lat / latStep)}:${Math.floor(vehicle.lon / lonStep)}`;
+      const key = gbfsClusterCellKey(vehicle.lat, vehicle.lon, cellDeg);
       let cell = cells.get(key);
       if (!cell) {
         cell = { n: 0, lat: 0, lon: 0, by: {}, members: [] };

@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
+import {
+  _resetMobilityDockBridgeForTest,
+  setMobilityDocksGrouped,
+} from './mobilityDockBridge.js';
 import bikeshareLayer, {
+  _bikeshareDocksForGroupsForTest,
   bikeshareCoveredSystems,
   BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS,
   _clearBikeshareSelectionForTest,
@@ -241,5 +246,32 @@ test('clearing a selection gives the dock back to the filters, not to "shown"', 
   assert.equal(viewer.entities.values.length, 0);
   _clearBikeshareSelectionForTest();
   assert.equal(dock.point.show, false, 'released selection, still filtered out');
+  _setBikeshareStationsForTest();
+});
+
+test('from the city-wide view the groups count the docks, and the docks stop drawing themselves', () => {
+  const full = { ...velibDock('1'), bikesAvailable: 12, isRenting: true };
+  const empty = { ...velibDock('2'), bikesAvailable: 0, isRenting: true };
+  const closed = { ...velibDock('3'), bikesAvailable: 5, isRenting: false };
+  _setBikeshareStationsForTest({ records: [full, empty, closed] });
+  // What the groups receive: the bikes that can be ridden away, in Vélib's hue.
+  const docks = _bikeshareDocksForGroupsForTest();
+  assert.deepEqual(docks.map((dock) => dock.bikes), [12]);
+  assert.equal(docks[0].operator.id, 'velib');
+  // A focus elsewhere in the row takes them out of the count as off the map.
+  bikeshareLayer.setParams({ operator: 'lime' });
+  assert.deepEqual(_bikeshareDocksForGroupsForTest(), []);
+  bikeshareLayer.setParams({ operator: 'all' });
+
+  // Grouped: no dock is drawn, and the key has no fill to explain.
+  setMobilityDocksGrouped(true);
+  bikeshareLayer.setParams({ kinds: 'velo' });
+  assert.ok([full, empty, closed].every((dock) => dock.point.show === false), 'counted in a bubble, not drawn');
+  assert.equal(bikeshareLayer.getRowControls().legend.some((item) => item.channel === 'Stations'), false);
+  // Released: back to what the filters say.
+  setMobilityDocksGrouped(false);
+  bikeshareLayer.setParams({ kinds: 'all' });
+  assert.ok([full, empty, closed].every((dock) => dock.point.show === true));
+  _resetMobilityDockBridgeForTest();
   _setBikeshareStationsForTest();
 });

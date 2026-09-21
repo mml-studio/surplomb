@@ -83,6 +83,12 @@ import operatorMessages from './mobilityOperators.i18n.js';
 import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
 import { selectSharedMobilityPins, sharedMobilityPinRank } from './sharedMobilityPins.js';
 import {
+  onMobilityDocksChanged,
+  readMobilityDocks,
+  setMobilityDocksGrouped,
+} from './mobilityDockBridge.js';
+import {
+  addDocksToSharedMobilityBubbles,
   foldSharedMobilityClusters,
   mergeSharedMobilityBubbles,
   sharedMobilityBubbleBar,
@@ -1192,11 +1198,16 @@ function refreshBubbles() {
     return 0;
   }
   const payload = _lastPayload;
-  const folded = foldSharedMobilityClusters(clusters, {
+  const fleets = foldSharedMobilityClusters(clusters, {
     keep: (system, kind) => (!_kindFilter || familyOfKind(kind) === _kindFilter)
       && (!_operatorFilter || payloadOperator(payload, system).id === _operatorFilter),
     operatorOf: (system) => payloadOperator(payload, system),
   });
+  // The docks of the row's other layer join the groups of their cells, and
+  // stop drawing themselves — see `mobilityDockBridge.js`. They arrive already
+  // under the row's filters, which `bikeshare.js` holds too.
+  const box = _viewer ? cameraSharedMobilityBox(_viewer) : null;
+  const folded = addDocksToSharedMobilityBubbles(fleets, readMobilityDocks(), payload.clusterDeg, box);
   const scene = _viewer?.scene;
   const projected = [];
   for (const bubble of folded) {
@@ -1216,18 +1227,30 @@ function refreshBubbles() {
   for (const [id, entry] of _bubbles) {
     if (!next.has(id)) removeBubble(entry);
   }
+  const appeared = next.size > 0 && _bubbles.size === 0;
   _bubbles = next;
   _bubbleTotal = total;
+  // Only now, with the bubbles drawn: the key the signal refreshes reads them.
+  setMobilityDocksGrouped(true);
+  // The key's note is there only while bubbles are.
+  if (appeared) _rowControlsListener?.();
   governorRequestRender('shared-mobility-fr-groups');
   return next.size;
 }
 
 function clearBubbles() {
+  const had = _bubbles.size > 0;
   _bubbleSprites?.removeAll();
   _bubbleLabels?.removeAll();
   _bubbles = new Map();
   _bubbleTotal = 0;
+  // No group counts the docks any more: they draw themselves again.
+  setMobilityDocksGrouped(false);
+  if (had) _rowControlsListener?.();
 }
+
+/** Unsubscribe from the docks' « count again » signal. */
+let _unsubscribeDocks = null;
 
 /** The answer's groups, the biggest first — the proxy already sorts them. */
 function groupedAnalystClusters() {
@@ -1846,6 +1869,14 @@ const sharedMobilityFranceLayer = {
     installClickHandler(viewer);
     registerPickOwner(SHARED_MOBILITY_FR_LAYER_ID, (pickedId) => _records.has(pickedId)
       || (typeof pickedId === 'string' && pickedId.startsWith(BUBBLE_ID_PREFIX)));
+    _unsubscribeDocks?.();
+    // New availability or a filter on the docks: the groups count again,
+    // from the answer in hand.
+    _unsubscribeDocks = onMobilityDocksChanged(() => {
+      if (!_enabled || !Array.isArray(_lastPayload?.clusters)) return;
+      refreshBubbles();
+      _count = _records.size + _bubbleTotal;
+    });
 
     if (!_cameraChangedAttached) {
       viewer.camera.changed.addEventListener(onCameraChanged);
@@ -1871,6 +1902,8 @@ const sharedMobilityFranceLayer = {
     _inFlight = null;
 
     clearFleet();
+    _unsubscribeDocks?.();
+    _unsubscribeDocks = null;
     _overlayHost.setVisible(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID, false);
 
     if (_clickHandler) {

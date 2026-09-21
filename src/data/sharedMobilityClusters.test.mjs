@@ -5,12 +5,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SHARED_MOBILITY_BUBBLE_MERGE_PX,
+  addDocksToSharedMobilityBubbles,
   foldSharedMobilityClusters,
   mergeSharedMobilityBubbles,
   sharedMobilityBubbleBar,
   sharedMobilityClusterCell,
 } from './sharedMobilityClusters.js';
-import { GBFS_CLUSTER_ABOVE, GBFS_CLUSTER_CELLS_DEG, clusterGbfsVehicles, gbfsBoxWantsClusters } from './gbfsFeeds.js';
+import {
+  GBFS_CLUSTER_ABOVE, GBFS_CLUSTER_CELLS_DEG, clusterGbfsVehicles, gbfsBoxWantsClusters, gbfsClusterCellKey,
+} from './gbfsFeeds.js';
 
 const OPERATORS = {
   lime: { id: 'lime', color: '#b6f03c' },
@@ -110,4 +113,23 @@ test('only a dense view is grouped: a sparse city keeps its dots', () => {
   // Counted inside the box only: the margin the proxy holds around it is not the view.
   const outside = [{ id: 'lime', vehicles: Array.from({ length: 5_000 }, () => ({ lat: 49.5, lon: 2.3 })) }];
   assert.equal(gbfsBoxWantsClusters(outside, box), false);
+});
+
+test('a dock\'s bikes join the group of its cell, the proxy\'s own key', () => {
+  const velib = { id: 'velib', color: '#9166f2' };
+  const cell = 0.004;
+  const fleetId = gbfsClusterCellKey(48.861, 2.341, cell);
+  const bubbles = [{ id: fleetId, lat: 48.861, lon: 2.341, n: 10, operators: [{ id: 'lime', color: '#b6f03c', n: 10 }] }];
+  const box = { south: 48.85, west: 2.33, north: 48.88, east: 2.37 };
+  const out = addDocksToSharedMobilityBubbles(bubbles, [
+    { lat: 48.861, lon: 2.341, bikes: 30, operator: velib },
+    { lat: 48.861, lon: 2.341, bikes: 0, operator: velib },
+    { lat: 48.99, lon: 2.60, bikes: 50, operator: velib },
+  ], cell, box);
+  assert.equal(out.length, 1, 'the empty dock adds nothing, the far one is off the box');
+  assert.equal(out[0].n, 40);
+  assert.deepEqual(out[0].operators.map((operator) => [operator.id, operator.n]), [['velib', 30], ['lime', 10]]);
+  // No docks, or no grid: the fleets' groups untouched.
+  assert.equal(addDocksToSharedMobilityBubbles(bubbles, [], cell, box), bubbles);
+  assert.equal(addDocksToSharedMobilityBubbles(bubbles, [{ lat: 48.86, lon: 2.34, bikes: 3, operator: velib }], null), bubbles);
 });
