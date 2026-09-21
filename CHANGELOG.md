@@ -81,6 +81,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **The Paris shared-bike view showed a third of the bikes, no Vélib', and
+  promised scooters that Paris banned.** The proxy capped each answer at 6,000
+  objects taken in feed order across a margin that covers most of the city, so
+  the landing page's view drew 737 of the 2,175 vehicles parked on screen. It
+  now serves the screen first — all 2,175 there — and gives the margin at most
+  a quarter of the budget; the same view weighs 624 KB and 3,673 objects
+  instead of 1 MB and 6,000. A light device asks for 60 % of the budget and
+  loses margin, not screen. When the screen itself holds more than the cap,
+  the thinning is even and keeps the same bikes from one poll to the next.
+  The landing link now switches Vélib' on with the shared fleets, and the
+  gallery says *vélos et scooters*: the feeds publish no trottinette in Paris,
+  where renting them has been banned since September 2023.
 - **A sale's card now says how big the property is.** The surface was the
   seventh line of the card and the card shows six, so every sale that could be
   compared with its municipality — the ones a reader clicks for their price —

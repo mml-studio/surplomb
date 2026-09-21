@@ -60,6 +60,7 @@ import {
 } from '../overlays/worldOverlay.js';
 import {
   GBFS_MAX_BOX_DEG,
+  GBFS_MAX_OBJECTS,
   VEHICLE_KINDS,
   gbfsPayloadLabel,
   gbfsVehicleKindLabel,
@@ -74,6 +75,7 @@ import {
   sharedMobilityMonogramGlyph,
 } from './sharedMobilityIcons.js';
 import { pickAt } from './pickAt.js';
+import { profileCountBudget } from '../perfProfile.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const SHARED_MOBILITY_FR_LAYER_ID = 'shared-mobility-fr';
@@ -1201,6 +1203,9 @@ async function loadViewport({ force = false } = {}) {
       west: box.west.toFixed(5),
       north: box.north.toFixed(5),
       east: box.east.toFixed(5),
+      // § 3.5 — see `profileCountBudget`. The proxy serves the screen first,
+      // so a light device loses margin and even thinning, not the view.
+      limit: String(profileCountBudget(GBFS_MAX_OBJECTS)),
     });
     const response = await fetch(`/api/shared-mobility-fr/objects?${params}`, { signal: controller.signal });
     if (generation !== _requestGeneration) return;
