@@ -7096,6 +7096,61 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   }
 }
 
+/* SWATCH SEGMENTS — the classes themselves as the filter (the DPE's seven
+   lettered plates). One line that never wraps, each plate the width of a
+   seventh of the rail, the letter in dark ink as it is on the map. The
+   inline colour outranks the pill's pressed white. A class pressed off is
+   dimmed, never emptied, so its colour stays findable; while any class is
+   off, the ones still shown take a light ring, so the filter reads as a
+   selection rather than as a dimmed key. */
+.map-legend-segments.is-swatches {
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin: 4px 0 6px;
+}
+
+.map-legend-segment.is-swatch {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #0b1210;
+  transition: opacity 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.map-legend-segment.is-swatch:hover,
+.map-legend-segment.is-swatch:focus-visible {
+  filter: brightness(1.12);
+}
+
+.map-legend-segment.is-swatch[aria-pressed="false"] {
+  opacity: 0.3;
+}
+
+.map-legend-segment.is-swatch[aria-pressed="false"]:hover,
+.map-legend-segment.is-swatch[aria-pressed="false"]:focus-visible {
+  opacity: 0.7;
+}
+
+.map-legend-segments.is-swatches:has(.is-swatch[aria-pressed="false"]) .is-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px rgba(247, 244, 234, 0.92);
+}
+
+/* Entries laid out in columns, filled DOWN first (`grid-auto-flow: column`),
+   so a ladder still reads in its own order: A to D, then E to G. The row
+   count is set inline from the number of entries. */
+.map-legend-inline.is-columns {
+  display: grid;
+  grid-auto-flow: column;
+  column-gap: 14px;
+  row-gap: 5px;
+}
+
 /* An ACTION in the key (« Tout afficher »): no swatch, so it cannot be read
    as one more class, and underlined so it reads as something to press. */
 .map-legend-entry.is-toggle.is-action {
@@ -7275,6 +7330,123 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-selection-link::after {
   content: ' ↗';
   text-decoration: none;
+}
+
+/* The classes a selection holds, as the plates the map draws, with their
+   range beside them — « C D E  De C à E ». */
+.map-legend-selection-caption.is-heading {
+  margin-top: 8px;
+}
+
+.map-legend-selection-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.map-legend-selection-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  background: #7c8aa0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: #0b1210;
+  flex: none;
+}
+
+.map-legend-selection-chip.is-small {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.map-legend-selection-chips-text {
+  margin-left: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(247, 244, 234, 0.95);
+}
+
+/* The records behind a selection, folded under one full-width button. */
+.map-legend-selection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(247, 171, 124, 0.16);
+}
+
+.map-legend-selection-list summary {
+  list-style: none;
+  padding: 8px 12px;
+  border: 1px solid rgba(247, 171, 124, 0.32);
+  border-radius: 8px;
+  background: rgba(6, 11, 9, 0.35);
+  font-size: 13.5px;
+  letter-spacing: 0.3px;
+  text-align: center;
+  color: rgba(247, 244, 234, 0.92);
+  cursor: pointer;
+}
+
+.map-legend-selection-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.map-legend-selection-list summary::after {
+  content: ' ▾';
+}
+
+.map-legend-selection-list details[open] summary::after {
+  content: ' ▴';
+}
+
+.map-legend-selection-list summary:hover,
+.map-legend-selection-list summary:focus-visible {
+  border-color: rgba(247, 171, 124, 0.6);
+  background: rgba(251, 214, 190, 0.1);
+}
+
+.map-legend-selection-list ol {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-legend-selection-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(247, 244, 234, 0.86);
+}
+
+.map-legend-selection-list a.map-legend-selection-list-text {
+  color: rgba(247, 244, 234, 0.9);
+  text-decoration: underline;
+  text-decoration-color: rgba(247, 171, 124, 0.5);
+  text-underline-offset: 2px;
+}
+
+.map-legend-selection-list a.map-legend-selection-list-text::after {
+  content: ' ↗';
+  color: rgba(247, 171, 124, 0.85);
 }
 
 .map-legend-selection-close {

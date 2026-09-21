@@ -89,7 +89,7 @@ test('the seven letters keep their bounds and their caveat', () => {
   const legend = withLocale('en', () => dpeRowControls({ distribution: { D: 3, F: 1 } }).legend);
   assertNoFrench(legend, { allow: KEEP });
   assert.deepEqual(legend.map((entry) => entry.label),
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'label not published']);
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'no label']);
   assert.equal(legend[3].blurb, '181 to 250 kWh/m²/yr — the published class is the worse of '
     + 'the two axes, energy and greenhouse gas.');
   assert.match(legend.at(-1).blurb, /^A rating present in the register with no usable label/);

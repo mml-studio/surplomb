@@ -6,11 +6,14 @@ import {
   DPE_POOR_SHARE_NATIONAL,
 } from './dpeFeed.js';
 import { addressMarkerGlyph, dpeLetterKind } from './addressMarkerIcons.js';
-import { ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer } from './addressScanLayer.js';
+import {
+  ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer, mapKeyCarriesSelection,
+} from './addressScanLayer.js';
 import { drawScanBoundary } from './scanBoundary.js';
 import { cellDiscRadiusM, discRing } from './scanCells.js';
 import { SCAN_CELL_MIN_ALTITUDE_M, scanCellParams } from './scanRegime.js';
 import { bdtopoLoadedFootprints } from './bdtopoBuildings.js';
+import { drawGroundHighlight } from './groundHighlight.js';
 import {
   clearBuildingTheme,
   joinPointsToBuildings,
@@ -24,7 +27,7 @@ import {
 } from './dpeSites.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
 import { governorRequestRender } from '../renderGovernor.js';
-import { formatDecimal, formatNumber } from '../i18n/format.js';
+import { formatDate, formatDecimal, formatNumber } from '../i18n/format.js';
 import messages from './dpeFrance.i18n.js';
 
 /**
@@ -146,7 +149,7 @@ import messages from './dpeFrance.i18n.js';
  *   into a single vote. A double vote is a smaller error than a deleted one.
  *
  * • **A site whose diagnostics disagree must not look homogeneous.** A badge
- *   goes QUIET (12 px instead of 20) when the volume under it already says its
+ *   goes QUIET (14 px instead of 22) when the volume under it already says its
  *   own letter, and keeps its full size otherwise. One rule, one meaning (A3):
  *   the size of a badge is how much of it is NOT already said by the volume.
  *   The two can genuinely differ, and the case is not hypothetical — a site is
@@ -154,7 +157,7 @@ import messages from './dpeFrance.i18n.js';
  *   buckets by FOOTPRINT, so a courtyard building whose BAN geocode lands on
  *   the street building in front of it paints that footprint with letters no
  *   badge on it claims. A site with no published letter never agrees with
- *   anything, so it keeps its full 16 px — it is the one thing the paint cannot
+ *   anything, so it keeps its full 18 px — it is the one thing the paint cannot
  *   express. The card states the range in words on top of that.
  *
  * • **The palette is safe against "not measured", and fails the greyscale
@@ -234,13 +237,14 @@ const SCAN_RADIUS_M = 200;
 const SCAN_LIMIT = 200;
 
 /**
- * Marker size, in CSS px. A letter needs more pixels than a dot did — 20 is
- * where A, B and G stop trading places at a glance, measured on the proof
- * sheet. A diagnostic with no published grade draws smaller: it is a marker
- * that something exists here, not a grade.
+ * Marker size, in CSS px. A letter needs more pixels than a dot did — 20 was
+ * where A, B and G stopped trading places at a glance on the proof sheet, and
+ * the filled plate (2026-09-21) takes 22 so its letter reads at the cap height
+ * a sale listing prints it at. A diagnostic with no published grade draws
+ * smaller: it is a marker that something exists here, not a grade.
  */
-const SIZE_LABELLED_PX = 20;
-const SIZE_UNLABELLED_PX = 16;
+const SIZE_LABELLED_PX = 22;
+const SIZE_UNLABELLED_PX = 18;
 
 /**
  * A badge whose volume already says its letter.
@@ -248,10 +252,10 @@ const SIZE_UNLABELLED_PX = 16;
  * Not hidden: it is still the click target and the only way to the card, and a
  * volume carries ONE letter while a block carries many diagnostics. 12 px is
  * above the 10 px this repo draws its smallest markers at (`datacentersPack`),
- * and a selection grows it back to 18 px, so the handle never gets smaller than
+ * and a selection grows it back to 20 px, so the handle never gets smaller than
  * what is already shipped elsewhere.
  */
-const SIZE_QUIET_PX = 12;
+const SIZE_QUIET_PX = 14;
 
 /** The official DPE scale, A (best) to G (worst). */
 export const DPE_COLORS = Object.freeze({
@@ -490,6 +494,11 @@ let _entries = [];
  * sites.
  */
 let _sites = [];
+/**
+ * Every site of the last answer, before the class filter — what `_sites` is
+ * cut from, and what the key counts as the scan's addresses.
+ */
+let _allSites = [];
 /** The last join: summaries by building, by point, and the honesty counters. */
 let _join = null;
 /** True while a badge re-sync is already queued behind a theme repaint. */
@@ -709,36 +718,104 @@ function withdrawTheme() {
 /* ── the row, and the stats ────────────────────────────────────────────── */
 
 /**
- * The badge ramp, which is this layer's own channel.
+ * The key's block in the building regime: the seven classes as a filter, the
+ * diagnostics loaded per class, and one line on what the scan reached.
+ *
+ * ── Redrawn on 2026-09-21 ───────────────────────────────────────────────────
+ *
+ * The block printed seven letters each under the same two-line sentence — the
+ * energy bounds, then "the published class is the worse of the two axes" seven
+ * times — and a reader had to scroll the key to reach the eighth row. The rule
+ * is now said ONCE, above the classes (`legendNote`); the bounds stay on each
+ * letter as its tooltip; and the counts sit two to a line.
+ *
+ * THE LETTERS ARE THE FILTER. The seven plates above the counts are the key's
+ * segmented control: a press shows only that class, the next presses add or
+ * remove one (see {@link dpeClassFilterToggle}). A filter over diagnostics
+ * already served, so it redraws without a request (`drawOnlyParams`).
  *
  * The seven letters count DIAGNOSTICS, because that is what this layer draws.
  * When the theme is painting, the `Bâti 3D` row publishes the same seven
  * colours counting VOLUMES — a different population of the same classes — and
  * the two are not merged: one legend per channel, and neither row invents a
- * count for a mark it does not draw.
+ * count for a mark it does not draw. The counts are the whole answer, not the
+ * filtered one: the dimmed plates say what is hidden, and how much.
  *
  * The eighth row is the one A1 has always been owed here: a diagnostic with no
- * published letter draws a grey badge and had no legend entry at all.
+ * published letter draws a grey badge and needs its own entry.
  *
  * @param {object} payload The answer that is actually on screen.
- * @returns {{legend: Array<object>}}
+ * @param {Record<string, string>} [runtime] The runtime params in force.
+ * @returns {object} Row controls: the key and its filter.
  */
-export function dpeRowControls(payload) {
+export function dpeRowControls(payload, runtime = {}) {
   const m = messages().legend;
+  const k = messages().key;
   const distribution = payload?.distribution || {};
+  const filter = runtime?.classes ?? DPE_CLASS_FILTER_ALL;
+  const shown = new Set(dpeClassFilterLetters(filter));
+  const filtering = shown.size < DPE_LABELS.length;
   const legend = DPE_LABELS.map((letter) => ({
     label: letter,
     color: DPE_COLORS[letter],
     count: distribution[letter] || 0,
     blurb: m.letterBlurbShort(gradeEnergy(letter)),
+    channel: k.loaded,
   }));
   legend.push({
     label: m.ungraded.label,
     color: COLOR_UNLABELLED_CSS,
-    count: _join?.ungradedPoints ?? 0,
+    count: (payload?.entries || []).filter((entry) => !dpeGradeOf(entry)).length,
     blurb: m.ungraded.blurb,
+    channel: k.loaded,
   });
-  return { legend };
+  let title = (letter) => k.showOnly(letter, gradeEnergy(letter));
+  if (filtering) title = (letter) => (shown.has(letter) ? k.hide(letter) : k.showToo(letter));
+  return {
+    legend,
+    legendNote: k.source,
+    legendColumns: 2,
+    legendSegmentsLabel: k.filterLabel,
+    legendSegments: DPE_LABELS.map((letter) => ({
+      label: letter,
+      color: DPE_COLORS[letter],
+      active: shown.has(letter),
+      title: title(letter),
+      toggle: { param: 'classes', value: dpeClassFilterToggle(filter, letter) },
+    })),
+    note: dpeKeyNote(payload, filter),
+    legendSelection: dpeSelectionPanel(),
+  };
+}
+
+/**
+ * The key's one line on what the scan reached: `200 / 1 257 diagnostics ·
+ * rayon 200 m · 39 adresses`, and the filter when one is on.
+ *
+ * Shorter than the row's coverage line on purpose — that one keeps the
+ * outlines and the volumes; this one says how far the answer goes.
+ *
+ * @param {object} payload
+ * @param {?string} filter
+ * @returns {string}
+ */
+export function dpeKeyNote(payload, filter = DPE_CLASS_FILTER_ALL) {
+  const k = messages().key;
+  const served = (payload?.entries || []).length;
+  const total = payload?.total ?? null;
+  const parts = [
+    total !== null && total > served
+      ? k.scanTruncated(formatNumber(served), formatNumber(total), SCAN_RADIUS_M)
+      : k.scanWhole(ratings(served), SCAN_RADIUS_M),
+  ];
+  const all = Array.isArray(payload?.sites) && payload.sites.length
+    ? payload.sites.length : _allSites.length;
+  if (all) parts.push(k.sites(all));
+  const letters = dpeClassFilterLetters(filter);
+  if (letters.length < DPE_LABELS.length) {
+    parts.push(k.filtered(letters.join(', '), _sites.length));
+  }
+  return parts.join(' · ');
 }
 
 /**
@@ -1009,6 +1086,673 @@ function drawSiteGround(dataSource, site, classificationType) {
   return added;
 }
 
+/* ── the class filter ──────────────────────────────────────────────────── */
+
+/**
+ * The runtime value that shows every class: the ladder's letters, in order.
+ *
+ * The filter is carried as the LETTERS SHOWN, so "everything" is the full set
+ * rather than a special token, and a share link reads as what is on screen.
+ */
+export const DPE_CLASS_FILTER_ALL = DPE_LABELS.join('');
+
+/**
+ * Every value the filter may take: the 127 non-empty subsets of the ladder,
+ * each written in ladder order.
+ *
+ * ENUMERATED because the scan shell rejects any value it was not given — a
+ * share link is a stranger's URL. The EMPTY set is deliberately not one of
+ * them: a filter that hides all seven classes is a blank map that looks like
+ * a street with no diagnostic, and the key's toggle falls back to everything
+ * rather than send it.
+ */
+export const DPE_CLASS_FILTER_VALUES = Object.freeze(
+  Array.from({ length: (2 ** DPE_LABELS.length) - 1 }, (_, index) => DPE_LABELS
+    .filter((_letter, bit) => ((index + 1) >> bit) & 1)
+    .join('')),
+);
+
+/**
+ * The letters a filter value shows, or all seven for anything unrecognised.
+ * @param {?string} value
+ * @returns {string[]}
+ */
+export function dpeClassFilterLetters(value) {
+  const text = String(value ?? '');
+  return DPE_CLASS_FILTER_VALUES.includes(text) ? [...text] : [...DPE_LABELS];
+}
+
+/**
+ * What pressing one letter of the key does to the filter.
+ *
+ * From "everything", a press means "only this one" — the reader pointed at a
+ * class and asked to see it. Once filtering, a press adds or removes that one
+ * letter, so F then G is the *passoires* in two presses. Removing the last
+ * letter shows everything again rather than nothing.
+ *
+ * @param {?string} value The filter in force.
+ * @param {string} letter A–G.
+ * @returns {string} The next value, always one of {@link DPE_CLASS_FILTER_VALUES}.
+ */
+export function dpeClassFilterToggle(value, letter) {
+  const shown = dpeClassFilterLetters(value);
+  if (!DPE_LABELS.includes(letter)) return shown.join('');
+  let next;
+  if (shown.length === DPE_LABELS.length) next = [letter];
+  else if (shown.includes(letter)) next = shown.filter((kept) => kept !== letter);
+  else next = [...shown, letter];
+  return next.length ? DPE_LABELS.filter((kept) => next.includes(kept)).join('') : DPE_CLASS_FILTER_ALL;
+}
+
+/**
+ * The sites a filter leaves on the map, each re-summarised on the diagnostics
+ * it still shows.
+ *
+ * THE FILTER IS OVER DIAGNOSTICS, NOT OVER BADGES. Asked for E, a building
+ * holding C, D and E stays — it has E diagnostics — and its badge becomes E,
+ * with the count of E. Filtering on the badge's own letter instead would hide
+ * the E flats of every block whose majority is something else, which is most
+ * of the ones a reader filtering for E is looking for. A diagnostic with no
+ * published letter is in no class, so any filter hides it.
+ *
+ * @param {Array<object>} sites
+ * @param {?string} value
+ * @returns {Array<object>} The same array when nothing is filtered; otherwise
+ *   copies carrying `unfiltered`, the site's whole summary, for the card.
+ */
+export function dpeFilterSites(sites, value) {
+  const list = Array.isArray(sites) ? sites : [];
+  const letters = dpeClassFilterLetters(value);
+  if (letters.length === DPE_LABELS.length) return list;
+  const keep = new Set(letters);
+  const out = [];
+  for (const site of list) {
+    const points = (site?.points || []).filter((point) => keep.has(dpeGradeOf(point)));
+    if (!points.length) continue;
+    out.push({
+      ...site,
+      points,
+      summary: dpeBuildingSummary(points),
+      unfiltered: site.summary || dpeBuildingSummary(site.points),
+    });
+  }
+  return out;
+}
+
+/* ── the selected site: a tag on the map, a card in the key ────────────── */
+
+/** The register a card's source line opens — the page `dataCredits.js` credits. */
+export const DPE_SOURCE_URL = 'https://data.ademe.fr/datasets/dpe03existant';
+
+/**
+ * One diagnostic's own page on the ADEME observatory. Checked 2026-09-21 in a
+ * browser: `…/afficher-dpe/2569E2000837C` opens that diagnostic, its labels and
+ * its attestation. Behind a bot challenge, so a plain `curl` sees a 403.
+ */
+export const DPE_OBSERVATORY_URL = 'https://observatoire-dpe-audit.ademe.fr/afficher-dpe/';
+
+/**
+ * The observatory page of one diagnostic, or null for a number that is not
+ * one — the page only accepts the 2021 format, four digits, a letter, seven
+ * digits, a letter. A made-up id (`dpe-3`) gets no link rather than a dead one.
+ * @param {?string} id `numero_dpe`.
+ * @returns {?string}
+ */
+export function dpeObservatoryUrl(id) {
+  const number = String(id ?? '').trim().toUpperCase();
+  return /^\d{4}[A-Z]\d{7}[A-Z]$/.test(number) ? `${DPE_OBSERVATORY_URL}${number}` : null;
+}
+
+/**
+ * The BAN address split into its street and its locality — `30 Rue de la
+ * République` over `69002 Lyon`, as the card prints them.
+ * @param {?string} address `adresse_ban`.
+ * @returns {{street: ?string, locality: ?string}}
+ */
+export function dpeSplitAddress(address) {
+  const text = String(address ?? '').trim();
+  const match = text.match(/^(.*\S)\s+(\d{5}\s+\S.*)$/);
+  return match ? { street: match[1], locality: match[2] } : { street: text || null, locality: null };
+}
+
+/**
+ * The site's tag on the map while its card is in the key: the letters, then
+ * how many diagnostics — `C–E · 16`, `D · 2`, `F`.
+ *
+ * The RANGE, not the mode: a building holding C, D and E is not a D building,
+ * and a tag that said D would be the neighbourhood grade this layer refuses,
+ * shrunk to one address. The mode is in the card, named as what it is.
+ *
+ * @param {object} site
+ * @returns {string}
+ */
+export function dpeSiteTag(site) {
+  const summary = site?.summary || dpeBuildingSummary(site?.points);
+  let letters = '?';
+  if (summary.graded) letters = summary.mixed ? `${summary.best}–${summary.worst}` : summary.grade;
+  return summary.total > 1 ? `${letters} · ${formatNumber(summary.total)}` : letters;
+}
+
+/** The day a diagnostic was issued, `18 juin 2025`, read and printed in UTC. */
+function issuedOn(iso) {
+  const text = String(iso || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text || null;
+  return formatDate(`${text}T00:00:00Z`, { dateStyle: 'medium', timeZone: 'UTC' });
+}
+
+/**
+ * The selected site as the map key prints it (`legendSelection`).
+ *
+ * THE CARD ANSWERS FOR AN ADDRESS AND THE DIAGNOSTICS FILED THERE, never for
+ * the building. Sixteen flats at one address are sixteen ratings, so the
+ * headline is the count, the letters present come as a row of plates with
+ * their range spelled out, and the mode is printed as what it is — «classe la
+ * plus fréquente» — with a tie named rather than hidden behind the worse
+ * letter it resolves to. Every diagnostic is listed, newest first, each with a
+ * link to its own page on the ADEME observatory.
+ *
+ * @param {object} site A drawn site.
+ * @returns {object} The key's `legendSelection` slot.
+ */
+export function dpeSitePanel(site) {
+  const m = messages().panel;
+  const s = messages().site;
+  const points = site?.points || [];
+  const summary = site?.summary || dpeBuildingSummary(points);
+  const { street, locality } = dpeSplitAddress(site?.address);
+  const counts = new Map();
+  for (const point of points) {
+    const letter = dpeGradeOf(point);
+    if (letter) counts.set(letter, (counts.get(letter) || 0) + 1);
+  }
+  const tied = summary.grade
+    ? summary.letters.filter((letter) => letter !== summary.grade && counts.get(letter) === summary.votes)
+    : [];
+  const poor = (counts.get('F') || 0) + (counts.get('G') || 0);
+  const costs = points.map((point) => point?.annualCostEur)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  const median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : null;
+  let range = null;
+  if (summary.graded) {
+    if (summary.mixed) range = m.range(summary.best, summary.worst);
+    else range = summary.graded > 1 ? m.all(summary.grade) : m.one(summary.grade);
+  }
+  const whole = site?.unfiltered?.total;
+  const items = [...points]
+    .sort((a, b) => String(b?.issuedOn || '').localeCompare(String(a?.issuedOn || '')))
+    .map((point) => {
+      const letter = dpeGradeOf(point);
+      const href = dpeObservatoryUrl(point?.id);
+      return {
+        label: letter || '?',
+        color: letter ? DPE_COLORS[letter] : COLOR_UNLABELLED_CSS,
+        text: [
+          Number.isFinite(point?.surfaceM2)
+            ? m.surface(formatNumber(point.surfaceM2, { maximumFractionDigits: 1 })) : null,
+          issuedOn(point?.issuedOn),
+        ].filter(Boolean).join(' · ') || String(point?.id ?? ''),
+        href,
+        title: href ? m.openRating(point.id) : null,
+      };
+    });
+  let mode = null;
+  if (summary.mixed) mode = tied.length ? m.modeTie(summary.grade, tied.join(', ')) : m.mode(summary.grade);
+  return {
+    key: `dpe-site:${site?.key}:${points.length}`,
+    title: street || s.noAddress,
+    meta: locality,
+    headline: m.count(summary.total),
+    chips: summary.letters.length
+      ? {
+        caption: m.present,
+        items: summary.letters.map((letter) => ({ label: letter, color: DPE_COLORS[letter] })),
+        text: range,
+      }
+      : null,
+    lines: [
+      mode,
+      summary.ungraded ? s.ungraded(summary.ungraded) : null,
+      poor ? s.poor(poor) : null,
+      median !== null ? s.cost(formatNumber(Math.round(median))) : null,
+      Number.isFinite(whole) && whole > summary.total ? m.filtered(summary.total, whole) : null,
+    ].filter(Boolean),
+    footnote: [
+      summary.total > 1 ? m.perDwelling : null,
+      dpeSitePlacementLine(site),
+      site?.parcel?.idu ? s.parcel(site.parcel.idu) : null,
+    ].filter(Boolean).join(' · ') || null,
+    list: items.length ? { caption: m.listCaption, summary: m.seeAll(items.length), items } : null,
+    link: { href: DPE_SOURCE_URL, label: m.source },
+  };
+}
+
+/**
+ * THE SELECTED SITE, OUTLINED IN WHITE (2026-09-21).
+ *
+ * Every drawn site already washes its building in its letter and rings its
+ * parcel in a dashed grey. A click lifts ONE of them out: the building's
+ * outline and its parcel's go white and solid, and the building's wash doubles
+ * in strength — so the answer to «which building is this card about» is on the
+ * map, not only in the key.
+ *
+ * WHITE, WHERE THE DVF CHOSE THE CLASS COLOUR. A ring on the photoreal mesh
+ * drapes down the walls on its boundary, and the DVF's cyan painted a street
+ * front a colour its key did not name. Here the class colour is already on
+ * every building of the layer — a ring in it would say nothing new — while
+ * white is spent on nothing else in this layer, and a white street front reads
+ * as what it is: the building the card is about.
+ */
+const SELECTED_FILL_ALPHA = 0.55;
+const SELECTED_OUTLINE = Object.freeze({ alpha: 0.95, widthPx: 3 });
+const SELECTED_PARCEL = Object.freeze({ alpha: 0.8, widthPx: 2 });
+
+/** The lit building and parcel, as `drawGroundHighlight` handed them back. */
+let _highlight = null;
+/** The viewer the last draw went to — the highlight is drawn on the same one. */
+let _drawViewer = null;
+/** The key of the site whose card is open, or null. */
+let _selectedSiteKey = null;
+/** The open card when it is not a site's — a cell's, above 600 m. */
+let _selectedCard = null;
+
+/** Take the lit site off the globe. Idempotent. */
+function clearSiteHighlight() {
+  _highlight?.clear();
+  _highlight = null;
+}
+
+/**
+ * Light one site: its building filled and ringed, its parcel ringed.
+ * @param {object} viewer
+ * @param {object} site
+ * @returns {boolean} True when something was drawn.
+ */
+function drawSiteHighlight(viewer, site) {
+  clearSiteHighlight();
+  const white = Cesium.Color.WHITE;
+  const shapes = [];
+  if (site?.parcel?.parts?.length) {
+    shapes.push({
+      parts: site.parcel.parts,
+      stroke: white.withAlpha(SELECTED_PARCEL.alpha),
+      widthPx: SELECTED_PARCEL.widthPx,
+    });
+  }
+  if (site?.shape?.parts?.length) {
+    shapes.push({
+      parts: site.shape.parts,
+      fill: dpeColor(site.summary?.grade ?? null).withAlpha(SELECTED_FILL_ALPHA),
+      stroke: white.withAlpha(SELECTED_OUTLINE.alpha),
+      widthPx: SELECTED_OUTLINE.widthPx,
+    });
+  }
+  _highlight = shapes.length ? drawGroundHighlight(viewer, shapes, 'dpe-highlight') : null;
+  return _highlight !== null;
+}
+
+/** The drawn site a card id names, or null. */
+function siteForCard(card) {
+  const id = String(card?.id ?? '');
+  if (!id.startsWith('dpe:')) return null;
+  return _sites.find((site) => `dpe:${site.key}` === id) || null;
+}
+
+/**
+ * The shell's selection hook: remember the site, light its ground, and keep
+ * its plate in its own colour.
+ *
+ * The shell tints a selected marker in its selection cyan, which on a filled
+ * plate paints over the one thing the plate says. The plate keeps its class
+ * colour and the growth the shell gave it; the white outline and the tag carry
+ * the selection instead.
+ * @param {?object} card
+ */
+function onDpeSelectionChange(card) {
+  clearSiteHighlight();
+  const wasPinned = _selectedSiteKey !== null;
+  const site = card ? siteForCard(card) : null;
+  _selectedSiteKey = site ? site.key : null;
+  _selectedCard = card && !site ? card : null;
+  if (!site) {
+    // The plate it pinned may fold back into its neighbours' pill.
+    if (wasPinned) declutter();
+    return;
+  }
+  const badge = _dataSource?.entities?.getById?.(`dpe:${site.key}`);
+  if (badge?.billboard) badge.billboard.color = dpeColor(site.summary?.grade ?? null);
+  if (_drawViewer) drawSiteHighlight(_drawViewer, site);
+  // Out of any pill it was folded into: the reader is looking at this one.
+  declutter();
+}
+
+/**
+ * The key's selection slot for whatever is open, or null.
+ * @returns {?object}
+ */
+export function dpeSelectionPanel() {
+  if (_selectedSiteKey !== null) {
+    const site = _sites.find((entry) => entry.key === _selectedSiteKey);
+    if (site) return dpeSitePanel(site);
+  }
+  if (_selectedCard?.title) {
+    // A cell, or a card this layer cannot resolve: its own lines, as the card
+    // on the globe would have printed them.
+    return {
+      key: `card:${_selectedCard.id}:${_selectedCard.title}`,
+      title: _selectedCard.title,
+      lines: Array.isArray(_selectedCard.details) ? _selectedCard.details.filter(Boolean) : [],
+      link: { href: DPE_SOURCE_URL, label: messages().panel.source },
+    };
+  }
+  return null;
+}
+
+/**
+ * The globe's half of the card: a tag while the key carries the rest, the
+ * whole card otherwise.
+ * @param {object} card
+ * @returns {boolean|string}
+ */
+function dpeCompactCard(card) {
+  if (!mapKeyCarriesSelection()) return false;
+  const site = siteForCard(card);
+  return site ? dpeSiteTag(site) : true;
+}
+
+/* ── plates that overlap, grouped ──────────────────────────────────────── */
+
+/**
+ * WHERE PLATES MEET, ONE PILL (2026-09-21).
+ *
+ * A street of flats seen at a slant stacks its addresses on screen: measured
+ * over Lyon 2e at 350 m and −35°, eight plates of rue de la République stood
+ * on one another in a column, and only the top one could be read or clicked.
+ * So plates that touch are grouped into one pill that says what the group
+ * holds — its letters' RANGE, each letter in its class colour, and how many
+ * diagnostics: `D–F · 38`, the same grammar as a selected site's tag. A click
+ * on the pill brings the camera closer until the plates part; nothing is
+ * averaged, and every site stays one click away.
+ *
+ * NOT CESIUM'S `EntityCluster`, which was tried first and measured: it groups
+ * each seed with the neighbours of its own ORIGINAL box, so the pills it
+ * produces — wider than the plates they replace — landed on each other, eight
+ * overlapping pairs among 26 marks on that same view; and it re-clusters on a
+ * camera change of half the view, so plates lifted onto the surface after the
+ * first pass kept their stale groups. The grouping below is greedy in screen
+ * space, sizes each group by the pill it will actually draw, merges groups
+ * until no two marks touch, and runs when the camera settles or a plate moves.
+ */
+/** Height of the pill, CSS px — about the plate's own size, so a pill reads as one. */
+const CLUSTER_PILL_PX = 24;
+/** Raster scale, for a crisp pill on a Retina screen. */
+const CLUSTER_RASTER_SCALE = 2;
+/** Clear space kept between two marks, px. */
+const CLUSTER_GAP_PX = 2;
+
+/**
+ * What a group of sites holds, as its pill says it.
+ * @param {Array<object>} sites
+ * @returns {{best: ?string, worst: ?string, total: number, sites: number}}
+ */
+export function dpeClusterSummary(sites) {
+  let best = null;
+  let worst = null;
+  let total = 0;
+  for (const site of sites || []) {
+    const summary = site?.summary || dpeBuildingSummary(site?.points);
+    total += summary.total || 0;
+    if (summary.best && (best === null || DPE_LABELS.indexOf(summary.best) < DPE_LABELS.indexOf(best))) {
+      best = summary.best;
+    }
+    if (summary.worst && (worst === null || DPE_LABELS.indexOf(summary.worst) > DPE_LABELS.indexOf(worst))) {
+      worst = summary.worst;
+    }
+  }
+  return { best, worst, total, sites: (sites || []).length };
+}
+
+/** The pill's text, as coloured runs: `[{text: 'D', color}, {text: '–'}, …]`. */
+export function dpeClusterRuns(summary) {
+  const runs = [];
+  if (summary.best) {
+    runs.push({ text: summary.best, color: DPE_COLORS[summary.best] });
+    if (summary.worst && summary.worst !== summary.best) {
+      runs.push({ text: '–' }, { text: summary.worst, color: DPE_COLORS[summary.worst] });
+    }
+  } else {
+    runs.push({ text: '?', color: COLOR_UNLABELLED_CSS });
+  }
+  runs.push({ text: ` · ${formatNumber(summary.total)}` });
+  return runs;
+}
+
+/**
+ * A pill's width, estimated from its characters — the drawing measures the
+ * real one. Deliberately generous, so a group is never sized smaller than it
+ * draws and cannot land on a neighbour.
+ * @param {Array<{text: string}>} runs
+ * @returns {number} CSS px.
+ */
+export function dpeClusterPillWidth(runs) {
+  const chars = runs.reduce((sum, run) => sum + String(run.text).length, 0);
+  return Math.ceil(chars * 9 + 18);
+}
+
+/**
+ * Group the marks on screen so that none touches another.
+ *
+ * GREEDY, BIGGEST FIRST. Marks are taken by how many diagnostics they carry,
+ * so the address a group is anchored on — and named after on screen — is the
+ * one that says the most. A mark that touches an existing group joins it;
+ * then groups are re-sized to the mark they will actually draw (a plate for
+ * one site, a pill for more) and merged while any two still touch, because a
+ * pill is wider than the plates it replaces.
+ *
+ * Pure: marks in, groups out, no Cesium.
+ *
+ * @param {Array<{key: string, x: number, y: number, size: number, weight: number,
+ *   site: object, pinned?: boolean}>} marks Screen positions, CSS px.
+ * @param {{gapPx?: number, pillWidth?: (runs: Array<object>) => number}} [options]
+ * @returns {Array<{seed: object, members: Array<object>}>} In seed order.
+ */
+export function dpeDeclutterGroups(marks, { gapPx = CLUSTER_GAP_PX, pillWidth = dpeClusterPillWidth } = {}) {
+  const sorted = [...(marks || [])]
+    .filter((mark) => Number.isFinite(mark?.x) && Number.isFinite(mark?.y))
+    .sort((a, b) => (b.pinned === true) - (a.pinned === true) || b.weight - a.weight);
+  const boxOf = (group) => {
+    if (group.members.length === 1) {
+      const { size } = group.seed;
+      return { x: group.seed.x, y: group.seed.y, w: size, h: size };
+    }
+    const runs = dpeClusterRuns(dpeClusterSummary(group.members.map((mark) => mark.site)));
+    return { x: group.seed.x, y: group.seed.y, w: pillWidth(runs), h: CLUSTER_PILL_PX };
+  };
+  const touches = (a, b) => Math.abs(a.x - b.x) * 2 < a.w + b.w + gapPx * 2
+    && Math.abs(a.y - b.y) * 2 < a.h + b.h + gapPx * 2;
+  let groups = [];
+  for (const mark of sorted) {
+    const box = { x: mark.x, y: mark.y, w: mark.size, h: mark.size };
+    // A pinned mark — the selected site — is never folded into a pill: the
+    // reader is looking at it, and its tag is anchored on it.
+    const host = mark.pinned ? null : groups.find((group) => !group.seed.pinned && touches(boxOf(group), box));
+    if (host) host.members.push(mark);
+    else groups.push({ seed: mark, members: [mark] });
+  }
+  for (let pass = 0; pass < 8; pass += 1) {
+    let merged = false;
+    const next = [];
+    for (const group of groups) {
+      const host = group.seed.pinned
+        ? null
+        : next.find((kept) => !kept.seed.pinned && touches(boxOf(kept), boxOf(group)));
+      if (host) {
+        host.members.push(...group.members);
+        merged = true;
+      } else {
+        next.push(group);
+      }
+    }
+    groups = next;
+    if (!merged) break;
+  }
+  return groups;
+}
+
+/** @type {Map<string, {image: string, width: number, height: number}>} */
+const _clusterPills = new Map();
+
+/**
+ * The pill as a billboard image, drawn once per text and reused — each
+ * distinct image is an atlas entry, and a re-group on every camera settle
+ * would otherwise grow the atlas without bound.
+ * @param {Array<{text: string, color?: string}>} runs
+ * @returns {?{image: string, width: number, height: number}}
+ */
+function clusterPill(runs) {
+  const key = runs.map((run) => `${run.text}${run.color || ''}`).join('|');
+  const cached = _clusterPills.get(key);
+  if (cached) return cached;
+  if (typeof document === 'undefined') return null;
+  const scale = CLUSTER_RASTER_SCALE;
+  const height = CLUSTER_PILL_PX * scale;
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  const font = `700 ${14 * scale}px 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif`; // i18n-ignore-line — a CSS font, not copy.
+  context.font = font;
+  const padding = 9 * scale;
+  const widths = runs.map((run) => context.measureText(run.text).width);
+  const width = Math.ceil(widths.reduce((sum, value) => sum + value, 0) + (padding * 2));
+  canvas.width = width;
+  canvas.height = height;
+  const rim = 1.5 * scale;
+  const radius = 7 * scale;
+  context.beginPath();
+  context.roundRect(rim / 2, rim / 2, width - rim, height - rim, radius);
+  context.fillStyle = 'rgba(11, 18, 16, 0.92)';
+  context.fill();
+  context.lineWidth = rim;
+  context.strokeStyle = 'rgba(247, 244, 234, 0.9)';
+  context.stroke();
+  context.font = font;
+  context.textBaseline = 'middle';
+  let x = padding;
+  runs.forEach((run, index) => {
+    context.fillStyle = run.color || 'rgba(247, 244, 234, 0.96)';
+    context.fillText(run.text, x, height / 2 + scale);
+    x += widths[index];
+  });
+  const pill = { image: canvas.toDataURL('image/png'), width: width / scale, height: CLUSTER_PILL_PX };
+  _clusterPills.set(key, pill);
+  return pill;
+}
+
+/** The pills on the globe: one primitive collection, rebuilt on each grouping. */
+let _pills = null;
+/** Remover of the camera-settle listener that re-groups. */
+let _removeMoveEnd = null;
+
+/** Take the pills off the globe. Idempotent. */
+function clearPills() {
+  if (!_pills) return;
+  const primitives = _pills.viewer?.scene?.primitives;
+  if (primitives && !primitives.isDestroyed?.()) primitives.remove(_pills.collection);
+  _pills = null;
+}
+
+/**
+ * Group the plates on screen now, hiding the ones a pill stands for.
+ *
+ * Run when the camera settles, after every draw and every seating pass that
+ * moved a plate, and when the selection changes. During a camera move the
+ * groups hold — they are anchored in the world, so they travel with the map,
+ * and the next settle re-groups for the new view.
+ *
+ * @returns {number} Pills drawn.
+ */
+function declutter() {
+  const scene = _drawViewer?.scene;
+  if (!scene || !_dataSource || _cellMode || !_enabled) {
+    clearPills();
+    return 0;
+  }
+  const now = _drawViewer.clock?.currentTime ?? Cesium.JulianDate.now();
+  const selectedKey = _selectedSiteKey;
+  const marks = [];
+  for (const site of _sites) {
+    const entity = _dataSource.entities.getById?.(`dpe:${site.key}`);
+    if (!entity?.billboard) continue;
+    entity.billboard.show = true;
+    const position = entity.position?.getValue?.(now);
+    const point = position ? scene.cartesianToCanvasCoordinates(position) : null;
+    if (!point || !Number.isFinite(point.x)) continue;
+    marks.push({
+      key: site.key,
+      x: point.x,
+      y: point.y,
+      size: billboardNumber(entity.billboard.width) || SIZE_LABELLED_PX,
+      weight: site.summary?.total ?? site.points?.length ?? 0,
+      pinned: site.key === selectedKey,
+      site,
+      entity,
+      position,
+    });
+  }
+  const groups = dpeDeclutterGroups(marks);
+  clearPills();
+  let collection = null;
+  let drawn = 0;
+  for (const group of groups) {
+    if (group.members.length < 2) continue;
+    const pill = clusterPill(dpeClusterRuns(dpeClusterSummary(group.members.map((mark) => mark.site))));
+    if (!pill) continue;
+    if (!collection) collection = new Cesium.BillboardCollection({ scene });
+    for (const mark of group.members) mark.entity.billboard.show = false;
+    collection.add({
+      position: group.seed.position,
+      image: pill.image,
+      width: pill.width,
+      height: pill.height,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      // The entities it stands for, as a Cesium cluster files them: the shell
+      // hands a click on an entity ARRAY to `clusterClick`.
+      id: group.members.map((mark) => mark.entity),
+    });
+    drawn += 1;
+  }
+  if (collection) {
+    scene.primitives.add(collection);
+    _pills = { viewer: _drawViewer, collection };
+  }
+  governorRequestRender('dpe-declutter');
+  return drawn;
+}
+
+/**
+ * A click on a pill: fly closer, keeping the heading and the tilt, until the
+ * plates it groups can part — a third of the way in, never nearer than 60 m.
+ * @param {Array<object>} entities
+ * @param {{viewer: object}} context
+ * @returns {boolean}
+ */
+function zoomIntoCluster(entities, { viewer }) {
+  const camera = viewer?.camera;
+  const now = viewer?.clock?.currentTime;
+  const positions = (entities || [])
+    .map((entity) => entity?.position?.getValue?.(now))
+    .filter(Boolean);
+  if (!camera || !positions.length) return false;
+  const sphere = Cesium.BoundingSphere.fromPoints(positions);
+  const distance = Cesium.Cartesian3.distance(camera.positionWC, sphere.center);
+  const range = Math.max(60, sphere.radius * 4, distance / 3);
+  camera.flyToBoundingSphere(sphere, {
+    offset: new Cesium.HeadingPitchRange(camera.heading, camera.pitch, range),
+    duration: 0.8,
+  });
+  return true;
+}
+
 /* ── the layer ─────────────────────────────────────────────────────────── */
 
 /* ── the cell regime ───────────────────────────────────────────────────── */
@@ -1260,9 +2004,31 @@ const dpeScanLayer = createAddressScanLayer({
       : { radius: String(SCAN_RADIUS_M), limit: String(SCAN_LIMIT) };
   },
   minShiftKm: () => (_cellMode ? 0.6 : ADDRESS_SCAN_MIN_SHIFT_KM),
+  // The classes the key shows. A filter over diagnostics already served, so it
+  // redraws from the answer in hand and never reaches `params` — see
+  // `dpeClassFilterToggle` and `DPE_CLASS_FILTER_VALUES`.
+  runtimeParams: {
+    classes: { values: DPE_CLASS_FILTER_VALUES, defaultValue: DPE_CLASS_FILTER_ALL },
+  },
+  drawOnlyParams: ['classes'],
+  // The card goes to the key and the globe keeps a tag over the site, lit in
+  // white on the ground — see the section above `dpeScanLayer`.
+  onSelectionChange: onDpeSelectionChange,
+  compactCard: dpeCompactCard,
+  onClear: () => {
+    clearSiteHighlight();
+    clearPills();
+    _selectedSiteKey = null;
+    _selectedCard = null;
+  },
+  // Plates that touch are grouped into one pill — see the section above.
+  clusterClick: zoomIntoCluster,
+  onSeat: () => { declutter(); },
+  afterDraw: () => { declutter(); },
 
-  render({ payload, dataSource, viewer, point }) {
+  render({ payload, dataSource, viewer, point, runtime }) {
     _dataSource = dataSource;
+    _drawViewer = viewer || _drawViewer;
     // The payload decides, not the camera — see `dvfSales.js`.
     _cellMode = Array.isArray(payload?.cells);
     if (_cellMode) {
@@ -1272,6 +2038,7 @@ const dpeScanLayer = createAddressScanLayer({
       // for, reached by a different road.
       _entries = [];
       _sites = [];
+      _allSites = [];
       _join = null;
       _themeDirty = false;
       withdrawTheme();
@@ -1279,15 +2046,24 @@ const dpeScanLayer = createAddressScanLayer({
       drawScanBoundary(dataSource, { id: 'dpe:scan-edge', box: payload.box });
       return drawn;
     }
-    _entries = payload.entries || [];
+    // The class filter from the key, applied to what is DRAWN and PAINTED and
+    // never to what is counted: the key's counts and the row's coverage stay
+    // the whole answer, so a reader can see what the filter is hiding.
+    const filter = runtime?.classes ?? DPE_CLASS_FILTER_ALL;
+    const shown = new Set(dpeClassFilterLetters(filter));
+    const everything = shown.size === DPE_LABELS.length;
+    _entries = everything
+      ? (payload.entries || [])
+      : (payload.entries || []).filter((entry) => shown.has(dpeGradeOf(entry)));
     // The proxy resolves the sites, because it is the only side that can buy
     // their shapes. `groupDpeSites` is run here anyway when it could not — an
     // RNB outage, a stale payload cached before this change — so the grouping
     // that stops forty-two badges sharing one pixel never depends on an
     // upstream. Those sites simply have no outline.
-    _sites = Array.isArray(payload.sites) && payload.sites.length
+    _allSites = Array.isArray(payload.sites) && payload.sites.length
       ? payload.sites
-      : groupDpeSites(_entries);
+      : groupDpeSites(payload.entries || []);
+    _sites = dpeFilterSites(_allSites, filter);
     // Before the first billboard: the badge's size and its card both depend on
     // which volume the site landed on, and a marker drawn at 20 px and shrunk a
     // frame later is a flicker the reader has to interpret.
@@ -1374,9 +2150,9 @@ const dpeScanLayer = createAddressScanLayer({
     return null;
   },
 
-  rowControls: (_runtime, _summary, payload) => (Array.isArray(payload?.cells)
-    ? dpeCellRowControls(payload)
-    : dpeRowControls(payload)),
+  rowControls: (runtime, _summary, payload) => (Array.isArray(payload?.cells)
+    ? { ...dpeCellRowControls(payload), legendSelection: dpeSelectionPanel() }
+    : dpeRowControls(payload, runtime)),
 
   summarize: dpeSummarize,
 });
@@ -1403,10 +2179,14 @@ const dpeFranceLayer = {
     // exactly the lie the wash is there to prevent.
     _entries = [];
     _sites = [];
+    _allSites = [];
     _join = null;
     _themeDirty = false;
     _cellMode = false;
     withdrawTheme();
+    // A settle is finer than the half-view change Cesium re-clusters on.
+    _removeMoveEnd?.();
+    _removeMoveEnd = args[0]?.camera?.moveEnd?.addEventListener?.(() => { declutter(); }) || null;
     return dpeScanLayer.enable(...args);
   },
 
@@ -1414,12 +2194,19 @@ const dpeFranceLayer = {
     _enabled = false;
     _entries = [];
     _sites = [];
+    _allSites = [];
+    clearSiteHighlight();
+    _selectedSiteKey = null;
+    _selectedCard = null;
     _join = null;
     _themeDirty = false;
     _cellMode = false;
     // Before the shell hides the markers, so the volumes and the badges leave
     // together rather than the city staying painted by a layer that is off.
     withdrawTheme();
+    _removeMoveEnd?.();
+    _removeMoveEnd = null;
+    clearPills();
     return dpeScanLayer.disable(...args);
   },
 
@@ -1427,9 +2214,17 @@ const dpeFranceLayer = {
     _enabled = false;
     _entries = [];
     _sites = [];
+    _allSites = [];
+    clearSiteHighlight();
+    _selectedSiteKey = null;
+    _selectedCard = null;
+    _drawViewer = null;
     _join = null;
     _themeDirty = false;
     _cellMode = false;
+    _removeMoveEnd?.();
+    _removeMoveEnd = null;
+    clearPills();
     _dataSource = null;
     _rowControlsListener = null;
     withdrawTheme();
@@ -1444,6 +2239,7 @@ const dpeFranceLayer = {
     if (dpeScanLayer.getStats().dormant) {
       _entries = [];
       _sites = [];
+      _allSites = [];
       _join = null;
       _themeDirty = false;
       withdrawTheme();
@@ -1488,6 +2284,7 @@ export function _seedDpeThemeForTest(entries, {
   // test that seeds raw diagnostics exercises the same badge keys the layer
   // draws rather than a shape only the test knows about.
   _sites = sites || groupDpeSites(_entries);
+  _allSites = _sites;
   _join = computeJoin(_entries);
   _themeDirty = true;
   publishTheme();
@@ -1504,6 +2301,9 @@ export function _resetDpeThemeForTest() {
   _enabled = false;
   _entries = [];
   _sites = [];
+  _allSites = [];
+  _selectedSiteKey = null;
+  _selectedCard = null;
   _join = null;
   _themeDirty = false;
   _dataSource = null;

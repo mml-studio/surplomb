@@ -836,22 +836,21 @@ const CASES = {
     const notNear = Object.entries(items).filter(([, item]) => !item.near && item.state !== 'still');
     check('gallery: a box far from the screen is not fetched', notNear.length === 0, notNear.map(([k]) => k).join(', '));
 
-    // Each film (`data-expand`: Roissy, the power grid): the pointer rests on
-    // it, it grows on screen over dimmed neighbours, swaps to a wider file
-    // without stopping, and shrinks back when the pointer leaves. Pointer
-    // events are dispatched (puppeteer's mouse hangs on this page).
-    const films = await page.evaluate(() => [...document.querySelectorAll('#vitrine .view[data-expand] [data-media]')]
-      .map((box) => box.dataset.media));
-    check('gallery: every enlarging view holds a film', films.length >= 2, JSON.stringify(films));
-    for (const film of films) {
-      await page.evaluate((key) => {
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
-        view.scrollIntoView({ block: 'center', behavior: 'instant' });
-        view.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
-      }, film);
+    // The Roissy film (`data-expand`): the pointer rests on it, it grows on
+    // screen over dimmed neighbours, swaps to a wider file without stopping,
+    // and shrinks back when the pointer leaves. Pointer events are dispatched
+    // (puppeteer's mouse hangs on this page).
+    const film = await page.evaluate(() => {
+      const view = document.querySelector('#vitrine .view[data-expand]');
+      if (!view) return null;
+      view.scrollIntoView({ block: 'center', behavior: 'instant' });
+      view.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      return view.querySelector('[data-media]').dataset.media;
+    });
+    if (film) {
       const grown = await waitFor(page, (key) => {
         const item = window.__gevVitrine.getDiagnostics().gallery.items[key];
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
+        const view = document.querySelector('#vitrine .view[data-expand]');
         if (!item?.expanded) return null;
         const box = view.querySelector('.view-image').getBoundingClientRect();
         if (box.width < view.getBoundingClientRect().width * 1.19) return null; // still growing
@@ -860,7 +859,7 @@ const CASES = {
           screen: { width: document.documentElement.clientWidth, height: innerHeight },
           dimmed: Number(getComputedStyle(other).opacity), rendition: item.rendition };
       }, { arg: film, timeout: 15_000 });
-      check(`gallery: ${film}, a film, grows when the pointer rests on it, on screen, over dimmed neighbours`,
+      check('gallery: the film grows when the pointer rests on it, on screen, over dimmed neighbours',
         grown && grown.box.left >= 0 && grown.box.top >= 0 && grown.box.right <= grown.screen.width
           && grown.box.bottom <= grown.screen.height && grown.dimmed < 0.5, JSON.stringify(grown));
       const wider = await waitFor(page, (key) => {
@@ -870,22 +869,21 @@ const CASES = {
       const t0 = await page.evaluate((key) => window.__gevVitrine.getDiagnostics().gallery.items[key].currentTime, film);
       await sleep(800);
       const t1 = await page.evaluate((key) => window.__gevVitrine.getDiagnostics().gallery.items[key].currentTime, film);
-      check(`gallery: ${film} enlarged plays a file that covers the enlarged box, and keeps moving`,
+      check('gallery: enlarged, the film plays a file that covers the enlarged box, and keeps moving',
         Boolean(wider) && t1 > t0 + 0.3, `${JSON.stringify(wider)}; ${t0?.toFixed(2)} → ${t1?.toFixed(2)} s`);
-      await shot(page, `gallery-film-enlarged-${film.replace(':', '-')}`);
-      await page.evaluate((key) => document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view')
-        .dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' })), film);
+      await shot(page, 'gallery-film-enlarged');
+      await page.evaluate(() => document.querySelector('#vitrine .view[data-expand]')
+        .dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' })));
       await sleep(700);
-      const back = await page.evaluate((key) => {
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
+      const back = await page.evaluate(() => {
+        const view = document.querySelector('#vitrine .view[data-expand]');
         return { expanded: view.hasAttribute('data-expanded'),
           ratio: view.querySelector('.view-image').getBoundingClientRect().width / view.getBoundingClientRect().width };
-      }, film);
-      check(`gallery: ${film}, the pointer gone, shrinks back`, !back.expanded && Math.abs(back.ratio - 1) < 0.01,
-        JSON.stringify(back));
+      });
+      check('gallery: the pointer gone, the film shrinks back', !back.expanded && Math.abs(back.ratio - 1) < 0.01, JSON.stringify(back));
+      await page.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+      await sleep(600);
     }
-    await page.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
-    await sleep(600);
 
     // « Image fixe »: everything stops where it is, and starts again.
     await page.evaluate(() => document.querySelector('#vitrine-still').click());

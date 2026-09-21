@@ -151,7 +151,11 @@ export default defineMessages({
       sample: [2, 'E'],
     },
     ungraded: {
-      label: { fr: 'étiquette non publiée', en: 'label not published' },
+      label: {
+        fr: 'sans étiquette',
+        en: 'no label',
+        note: 'Short: it shares a two-column key with the seven letters.',
+      },
       blurb: {
         fr: 'Diagnostic présent dans le registre sans étiquette exploitable. Il ne peut '
           + 'peindre aucun volume et n\'est jamais rapproché de la lettre la plus proche.',
@@ -159,6 +163,124 @@ export default defineMessages({
           + 'and is never rounded to the nearest letter.',
       },
     },
+  },
+
+  /**
+   * The map key's block in the building regime: the seven classes as a filter,
+   * the diagnostics loaded per class, and one line on what the scan reached.
+   * The energy bounds and the "worse of two axes" rule are said once, here,
+   * rather than under each of the seven letters.
+   */
+  key: {
+    source: {
+      fr: 'Classes publiées par l’ADEME : la pire des deux notes, énergie et gaz à effet de serre',
+      en: 'Classes published by the ADEME: the worse of the two grades, energy and greenhouse gas',
+    },
+    filterLabel: { fr: 'Filtrer par classe', en: 'Filter by class' },
+    showOnly: {
+      fr: (letter, energy) => `N’afficher que ${letter} (${energy})`,
+      en: (letter, energy) => `Show only ${letter} (${energy})`,
+      sample: ['D', '181 to 250 kWh/m²/yr'],
+    },
+    hide: {
+      fr: (letter) => `Masquer ${letter}`,
+      en: (letter) => `Hide ${letter}`,
+      sample: ['D'],
+    },
+    showToo: {
+      fr: (letter) => `Afficher aussi ${letter}`,
+      en: (letter) => `Show ${letter} too`,
+      sample: ['D'],
+    },
+    loaded: { fr: 'Diagnostics chargés', en: 'Ratings loaded' },
+    scanTruncated: {
+      fr: (served, total, radius) => `${served} / ${total} diagnostics · rayon ${radius} m`,
+      en: (served, total, radius) => `${served} / ${total} ratings · ${radius} m radius`,
+      note: 'The nearest `served` of `total` known within the radius.',
+      sample: ['200', '1,257', 200],
+    },
+    scanWhole: {
+      fr: (ratings, radius) => `${ratings} · rayon ${radius} m`,
+      en: (ratings, radius) => `${ratings} · ${radius} m radius`,
+      note: '`ratings` is already counted and named (`39 ratings`).',
+      sample: ['39 ratings', 200],
+    },
+    sites: {
+      fr: (count) => countNoun(count, 'adresse', 'adresses', FR),
+      en: (count) => countNoun(count, 'address', 'addresses', EN),
+      sample: [25],
+    },
+    filtered: {
+      fr: (letters, shown) => `filtre ${letters} : ${countNoun(shown, 'adresse affichée', 'adresses affichées', FR)}`,
+      en: (letters, shown) => `filter ${letters}: ${countNoun(shown, 'address shown', 'addresses shown', EN)}`,
+      sample: ['D, E', 12],
+    },
+  },
+
+  /**
+   * The selected site, printed in the map key. It answers for an ADDRESS and
+   * the diagnostics filed there — never for the building as a whole.
+   */
+  panel: {
+    count: {
+      fr: (count) => countNoun(count, 'diagnostic', 'diagnostics', FR),
+      en: (count) => countNoun(count, 'rating', 'ratings', EN),
+      sample: [16],
+    },
+    present: { fr: 'Classes présentes', en: 'Classes present' },
+    range: {
+      fr: (best, worst) => `De ${best} à ${worst}`,
+      en: (best, worst) => `From ${best} to ${worst}`,
+      sample: ['C', 'E'],
+    },
+    all: {
+      fr: (letter) => `Tous ${letter}`,
+      en: (letter) => `All ${letter}`,
+      sample: ['D'],
+    },
+    one: {
+      fr: (letter) => `Classe ${letter}`,
+      en: (letter) => `Class ${letter}`,
+      sample: ['D'],
+    },
+    mode: {
+      fr: (letter) => `Classe la plus fréquente : ${letter}`,
+      en: (letter) => `Most frequent class: ${letter}`,
+      sample: ['D'],
+    },
+    modeTie: {
+      fr: (letter, others) => `Classe la plus fréquente : ${letter}, à égalité avec ${others} `
+        + '(la plus mauvaise est retenue)',
+      en: (letter, others) => `Most frequent class: ${letter}, tied with ${others} `
+        + '(the worse one is kept)',
+      sample: ['E', 'C'],
+    },
+    perDwelling: {
+      fr: 'Chaque DPE décrit un logement, pas l’immeuble entier',
+      en: 'Each rating describes one dwelling, not the whole building',
+    },
+    filtered: {
+      fr: (shown, total) => `Filtre actif : ${shown} sur ${total} affichés`,
+      en: (shown, total) => `Filter on: ${shown} of ${total} shown`,
+      sample: [3, 16],
+    },
+    listCaption: { fr: 'Diagnostics associés à cette adresse', en: 'Ratings filed at this address' },
+    seeAll: {
+      fr: (count) => (count > 1 ? `Voir les ${count} diagnostics` : 'Voir le diagnostic'),
+      en: (count) => (count > 1 ? `See the ${count} ratings` : 'See the rating'),
+      sample: [16],
+    },
+    surface: {
+      fr: (area) => `${area} m²`,
+      en: (area) => `${area} m²`,
+      sample: ['39.7'],
+    },
+    openRating: {
+      fr: (id) => `Ouvrir le DPE ${id} sur l’observatoire de l’ADEME`,
+      en: (id) => `Open rating ${id} on the ADEME observatory`,
+      sample: ['2569E2000837C'],
+    },
+    source: { fr: 'Source ADEME', en: 'Source: ADEME' },
   },
 
   /** The coverage line on the row: what was served, painted and outlined. */

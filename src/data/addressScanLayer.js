@@ -217,6 +217,23 @@ export function seatEntitiesOnGround(entities, scene, fallbackHeightM = null) {
   return { moved, pending };
 }
 
+/**
+ * Whether the map key is on screen to carry a selection card, so the globe can
+ * keep only a tag over the object. Not on a phone — the key lives in a sheet
+ * tab there, and the selection has a tab of its own — and not while the key is
+ * folded away or hidden by the clean view: a reader must never click an
+ * object and get its title alone. Written for the DVF sale card (#312); the
+ * DPE site card asks the same question.
+ * @returns {boolean}
+ */
+export function mapKeyCarriesSelection() {
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
+  if (document.documentElement?.dataset?.shell === 'phone') return false;
+  const key = document.getElementById('map-legend');
+  if (!key || key.hidden || key.classList?.contains('collapsed')) return false;
+  return typeof key.getClientRects !== 'function' || key.getClientRects().length > 0;
+}
+
 /** Accent of a selected marker and of the card it opens. */
 export const ADDRESS_SCAN_SELECTED_COLOR = '#7fd7ff';
 
@@ -435,8 +452,29 @@ export function addressScanClickIntent({
 
 /**
  * Read the ground point the camera is looking at.
+ *
+ * ── THE SURFACE, NOT THE ELLIPSOID (2026-09-21) ────────────────────────────
+ *
+ * This used to be `camera.pickEllipsoid` at the canvas centre, and the
+ * ellipsoid is not where the city is. Lyon's Presqu'île stands at about 220 m
+ * of ellipsoidal height — 170 m above sea level plus 50 m of geoid — so a ray
+ * that meets the street goes on another 220 m DOWN before it meets height
+ * zero, and at a pitch of −35° that is 314 m further along the ground. The
+ * scan disc is 200 m wide for the DPE and 300 m for DVF, so the whole disc
+ * landed BEHIND the block at the centre of the screen: the reported symptom
+ * was diagnostics drawn "à l'extrémité" of the view, over the buildings at its
+ * top edge, and none on the block the reader was looking at.
+ *
+ * `sceneGroundPoint` answers from the surface the app is drawing — the terrain
+ * when the globe is shown, the depth buffer on the photoreal stack — and only
+ * falls back to the ellipsoid when neither answers, which is the old
+ * behaviour and no worse than it.
+ *
+ * `surface` says which one answered: false when the ellipsoid stood in, so a
+ * later pass under the same camera knows the centre is still owed a reading.
+ *
  * @param {object} viewer Cesium viewer.
- * @returns {{lat: number, lon: number, altitudeM: number}|null}
+ * @returns {{lat: number, lon: number, altitudeM: number, surface: boolean}|null}
  */
 export function cameraScanPoint(viewer) {
   const camera = viewer?.camera;
@@ -449,23 +487,69 @@ export function cameraScanPoint(viewer) {
 
   let hitLat;
   let hitLon;
+  let surface = false;
   const canvas = viewer.scene?.canvas;
   const width = canvas?.clientWidth || canvas?.width || 0;
   const height = canvas?.clientHeight || canvas?.height || 0;
-  if (width > 0 && height > 0 && typeof camera.pickEllipsoid === 'function') {
-    const hit = camera.pickEllipsoid(
-      new Cesium.Cartesian2(width / 2, height / 2),
-      Cesium.Ellipsoid.WGS84,
-    );
+  if (width > 0 && height > 0) {
+    const middle = new Cesium.Cartesian2(width / 2, height / 2);
+    const hit = sceneGroundPoint(viewer, middle);
     if (hit) {
-      const hitCarto = Cesium.Cartographic.fromCartesian(hit);
-      hitLat = Cesium.Math.toDegrees(hitCarto.latitude);
-      hitLon = Cesium.Math.toDegrees(hitCarto.longitude);
+      hitLat = hit.lat;
+      hitLon = hit.lon;
+      // The ground pick falls back to the ellipsoid itself; landing on exactly
+      // the ellipsoid's answer means no surface did.
+      let ellipsoid = null;
+      try {
+        ellipsoid = camera.pickEllipsoid?.(middle, viewer.scene?.globe?.ellipsoid || Cesium.Ellipsoid.WGS84);
+      } catch { /* no ellipsoid under the centre */ }
+      const flat = ellipsoid ? Cesium.Cartographic.fromCartesian(ellipsoid) : null;
+      surface = !flat
+        || Math.abs(Cesium.Math.toDegrees(flat.latitude) - hit.lat) > 1e-9
+        || Math.abs(Cesium.Math.toDegrees(flat.longitude) - hit.lon) > 1e-9;
     }
   }
   const centre = deriveFetchCenter({ nadirLat, nadirLon, hitLat, hitLon, maxPullKm: 6 });
   if (!centre || !Number.isFinite(centre.lat) || !Number.isFinite(centre.lon)) return null;
-  return { lat: centre.lat, lon: centre.lon, altitudeM };
+  return { lat: centre.lat, lon: centre.lon, altitudeM, surface };
+}
+
+/**
+ * The camera's pose as a key: position to the centimetre, heading and pitch to
+ * a hundred-thousandth of a radian. Two scans under one key were asked from a
+ * camera that did not move.
+ * @param {?object} camera
+ * @returns {?string}
+ */
+export function cameraPoseKey(camera) {
+  const position = camera?.positionWC || camera?.position;
+  if (!position || ![position.x, position.y, position.z].every(Number.isFinite)) return null;
+  const heading = Number(camera.heading);
+  const pitch = Number(camera.pitch);
+  return [position.x, position.y, position.z].map((value) => value.toFixed(2))
+    .concat([heading, pitch].map((value) => (Number.isFinite(value) ? value.toFixed(5) : '')))
+    .join('|');
+}
+
+/**
+ * The scan centre to use for this pass.
+ *
+ * A CAMERA THAT DID NOT MOVE ASKS THE SAME QUESTION. Seen once on 2026-09-21,
+ * on the photoreal stack and not reproduced since: with the camera still over
+ * Lyon, the DPE layer re-centred and drew a block of 64 ratings instead of the
+ * 904 it had just drawn, and the reader's open card went with it. The cause
+ * was not caught; the depth buffer the surface pick reads there is the one
+ * input that can change under a still camera, as its tiles stream. So a centre
+ * already read ON THE SURFACE is kept while the pose is unchanged. A centre the
+ * ellipsoid stood in for is not kept — the tiles may have arrived since, and
+ * that reading is the one still owed.
+ *
+ * @param {{fresh: ?object, last: ?object, lastOnSurface: boolean, samePose: boolean}} input
+ * @returns {?object} The point to scan around.
+ */
+export function heldScanPoint({ fresh, last, lastOnSurface, samePose }) {
+  if (!fresh || !last || !lastOnSurface || !samePose) return fresh;
+  return { ...fresh, lat: last.lat, lon: last.lon, surface: true };
 }
 
 /**
@@ -597,11 +681,21 @@ export function scanShiftNeeded(last, next, minShiftKm = ADDRESS_SCAN_MIN_SHIFT_
  *   selection somewhere other than on the card: a highlight on the ground, a
  *   section of the map key. The shell then announces a draw change, so the key
  *   repaints from the state the hook just wrote.
- * @param {(card: object) => boolean} [config.compactCard]
+ * @param {(card: object) => (boolean|string)} [config.compactCard]
  *   Whether the card on the globe keeps only its title, because the layer
  *   prints the details elsewhere. Asked each time the card is painted, so a
  *   layer can answer from the page as it is at that moment — the map key
- *   folded away or not.
+ *   folded away or not. A STRING answers yes and replaces the title too: the
+ *   DPE tags its site `C–E · 16`, which says on the map what the key says in
+ *   full.
+ * @param {(entities: Array<object>, context: {viewer: object}) => boolean} [config.clusterClick]
+ *   What a click on one of this layer's Cesium CLUSTERS does. A cluster's pick
+ *   id is the array of entities it stands for, which no card is filed under,
+ *   so without this hook the click is ignored. Returning true consumes it.
+ * @param {() => void} [config.onSeat]
+ *   Called when a seating pass has moved markers. For a layer that clusters
+ *   them: Cesium re-clusters on camera moves, and a cluster placed before the
+ *   marker was lifted onto the surface would hang where the marker used to be.
  * @param {typeof fetch} [config.fetchImpl] Injection seam for tests.
  * @returns {object} A layer module.
  */
@@ -626,6 +720,8 @@ export function createAddressScanLayer(config) {
     ownsPick = null,
     onSelectionChange = null,
     compactCard = null,
+    clusterClick = null,
+    onSeat = null,
     maxAltitudeM = ADDRESS_SCAN_MAX_ALTITUDE_M,
     // How far the answer actually reaches, in metres. Declared rather than
     // inferred, because only the layer knows: the ceiling says when a scan
@@ -657,6 +753,10 @@ export function createAddressScanLayer(config) {
   let _dataSource = null;
   let _enabled = false;
   let _lastPoint = null;
+  /** The camera pose the last draw was scanned from — see `heldScanPoint`. */
+  let _lastPose = null;
+  /** Whether that draw's centre was read on the surface, not the ellipsoid. */
+  let _lastPointOnSurface = false;
   let _lastUpdate = null;
   let _lastError = null;
   let _count = 0;
@@ -811,8 +911,12 @@ export function createAddressScanLayer(config) {
    */
   function overlayCard(card) {
     const anchored = anchoredCard(card);
-    if (!anchored || typeof compactCard !== 'function' || compactCard(card) !== true) return anchored;
-    return { ...anchored, details: [] };
+    if (!anchored || typeof compactCard !== 'function') return anchored;
+    const compact = compactCard(card);
+    if (typeof compact === 'string' && compact.trim()) {
+      return { ...anchored, title: compact.trim(), details: [] };
+    }
+    return compact === true ? { ...anchored, details: [] } : anchored;
   }
 
   /** Paint one card, whatever it was built from. */
@@ -936,6 +1040,10 @@ export function createAddressScanLayer(config) {
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((click) => {
       const picked = pickAt(viewer.scene, click.position);
+      // A CLUSTER of this layer's markers: its pick id is the entity array.
+      if (Array.isArray(picked?.id) && typeof clusterClick === 'function'
+        && picked.id.some((entity) => _dataSource?.entities?.getById?.(entity?.id) === entity)
+        && clusterClick(picked.id, { viewer }) === true) return;
       // Entity-backed primitives hand back the Entity itself as `picked.id`.
       const pickedId = typeof picked?.id === 'string' ? picked.id : picked?.id?.id;
       const intent = addressScanClickIntent({
@@ -1045,7 +1153,16 @@ export function createAddressScanLayer(config) {
     // when the click landed, and the tile under it refines as the camera flies
     // in. Left alone, the card slides off the plot it names.
     const cardMoved = reseatGroundCard(scene);
-    if (moved > 0) indexCards();
+    if (moved > 0) {
+      indexCards();
+      if (typeof onSeat === 'function') {
+        try {
+          onSeat();
+        } catch (error) {
+          console.warn(`[Data:${id}] onSeat`, error?.message || error);
+        }
+      }
+    }
     if (moved > 0 || cardMoved) {
       refreshSelectionAnchor();
       governorRequestRender(`${id}-seat`);
@@ -1155,7 +1272,13 @@ export function createAddressScanLayer(config) {
     _scanning = true;
     try {
       if (!_enabled || !_dataSource) return false;
-      const camera = cameraScanPoint(viewer);
+      const pose = cameraPoseKey(viewer?.camera);
+      const camera = heldScanPoint({
+        fresh: cameraScanPoint(viewer),
+        last: _lastPoint,
+        lastOnSurface: _lastPointOnSurface,
+        samePose: pose !== null && pose === _lastPose,
+      });
       // A pin still reports the CAMERA's altitude, because that is what the
       // altitude means to everything downstream — how far away the reader is
       // standing — and it is only the gate below that stops consulting it.
@@ -1178,6 +1301,8 @@ export function createAddressScanLayer(config) {
           _payload = null;
           _dormant = true;
           _lastPoint = null;
+          _lastPose = null;
+          _lastPointOnSurface = false;
           _lastParamsSignature = null;
           _seatPending = false;
           // AFTER the state is consistent, never before: a listener that
@@ -1245,6 +1370,8 @@ export function createAddressScanLayer(config) {
         indexCards();
         _payload = payload;
         _lastPoint = point;
+        _lastPose = pose;
+        _lastPointOnSurface = point.surface === true && !point.pinned;
         _lastParamsSignature = paramsSignature;
         _lastUpdate = Date.now();
         _stale = payload.stale === true;
@@ -1317,6 +1444,8 @@ export function createAddressScanLayer(config) {
       setOverlaySourceVisible(id, false);
       _enabled = false;
       _lastPoint = null;
+      _lastPose = null;
+      _lastPointOnSurface = false;
       _lastParamsSignature = null;
       _lastUpdate = null;
       _lastError = null;
@@ -1352,6 +1481,8 @@ export function createAddressScanLayer(config) {
       // Force the next update to scan: the camera may have travelled a
       // continent while the layer was off.
       _lastPoint = null;
+      _lastPose = null;
+      _lastPointOnSurface = false;
       _lastParamsSignature = null;
     },
 

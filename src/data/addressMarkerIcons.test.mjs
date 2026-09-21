@@ -126,16 +126,25 @@ test('the halo is drawn under the art, never over it', () => {
     'the dark pass comes first in document order');
 });
 
-test('a DPE badge frames its letter, and the frame never outweighs the grade', () => {
+test('a DPE badge is a filled plate, with the letter in dark ink', () => {
   const svg = svgOf(addressMarkerGlyph('dpe:F'));
-  assert.match(svg, /<rect x="13" y="13" width="70" height="70" rx="17"\/>/);
-  // The frame is a thin STROKE and the letter is a solid FILL, which is what
-  // keeps the grade the heaviest thing in the badge whatever the letter is.
-  const frameWidth = Number(svg.match(/stroke="#ffffff" stroke-width="(\d+)"[^>]*><rect/)?.[1]);
-  assert.ok(frameWidth > 0 && frameWidth <= 6, `frame stroke ${frameWidth} is a hairline`);
-  assert.match(svg, /<g transform="translate\([^"]+\)" fill="#ffffff" stroke="none">/,
-    'the letter is filled artwork, not stroked line-art');
-  // No other register wears the frame; it is what says "this is a label".
+  // Two rounded squares on the same box: the dark rim, then the white surface
+  // the class colour lands on — the € pastille's inversion, on a plate.
+  const plates = [...svg.matchAll(/<rect x="(\d+)" y="\d+" width="(\d+)"[^>]*fill="([^"]+)"/g)]
+    .map((match) => ({ x: Number(match[1]), size: Number(match[2]), fill: match[3] }));
+  assert.equal(plates.length, 2, 'a rim and a surface');
+  assert.equal(plates[0].fill, 'rgba(0,0,0,0.62)', 'the rim is drawn first, and is dark');
+  assert.equal(plates[1].fill, '#ffffff', 'the surface is white, so the tint lands on it');
+  // The rim is a stroke on the plate's own edge; half of it falls outside, and
+  // it must still land inside the 96-unit box or the corners clip square.
+  const rim = Number(svg.match(/stroke-width="(\d+)"\/>/)?.[1]);
+  assert.ok(plates[0].x - rim / 2 >= 0 && plates[0].x + plates[0].size + rim / 2 <= 96,
+    'the rim stays inside the raster');
+  // The letter is DARK on every class: white on a D plate is the combination
+  // that disappears, and dark ink survives the multiply (0 × c = 0).
+  assert.match(svg, /<g transform="translate\([^"]+\)" fill="rgba\(0,0,0,0\.\d+\)" stroke="none">/);
+  assert.ok(!/stroke="#ffffff"/.test(svg), 'nothing is stroked in white on a plate');
+  // The plate is the DPE's alone; no other register wears a square.
   assert.ok(!svgOf(addressMarkerGlyph('euro')).includes('<rect'));
 });
 
@@ -181,17 +190,19 @@ test('every letter shares one baseline and one cap height', () => {
   assert.ok(new Set(transforms.map((t) => t.tx)).size > 1, 'each letter is centred on itself');
 });
 
-test("the letter halo is narrower than the pack's, or the counters close", () => {
-  // The halo strokes the outline, so half of it falls INSIDE the letter. At the
-  // pack's 12 the bowl of the A fills in and the badge reads as a triangle.
+test('the letter fills the plate without touching its rim', () => {
+  // Cap height against the plate: big enough to read at 20 px, and clear of
+  // the rounded corners so an A's feet and a G's spur never meet the rim.
   const svg = svgOf(addressMarkerGlyph('dpe:A'));
-  const haloFontUnits = Number(svg.match(/stroke-width="([\d.]+)" stroke-linejoin="round">/)?.[1]);
-  const scale = Number(svg.match(/scale\(([\d.]+) -/)?.[1]);
-  assert.ok(haloFontUnits > 0 && scale > 0);
-  const haloBoxUnits = haloFontUnits * scale;
-  assert.ok(haloBoxUnits < 12,
-    `letter halo ${haloBoxUnits.toFixed(1)} must stay under the pack's 12`);
-  assert.ok(haloBoxUnits >= 3, 'and wide enough to lift white art off pale ground');
+  const match = svg.match(/translate\(([-\d.]+) ([\d.]+)\) scale\(([\d.]+) -/);
+  assert.ok(match, 'the letter is placed by a transform');
+  const baseline = Number(match[2]);
+  const capTop = baseline - 1490 * Number(match[3]);
+  const plate = svg.match(/<rect x="(\d+)" y="\d+" width="(\d+)"/);
+  const top = Number(plate[1]);
+  const bottom = top + Number(plate[2]);
+  assert.ok(capTop > top + 8 && baseline < bottom - 8, 'a margin inside the plate');
+  assert.ok(baseline - capTop >= 40, `cap height ${(baseline - capTop).toFixed(1)} reads at badge size`);
 });
 
 test("Inter's licence and notice ship with the letterforms", () => {

@@ -6,14 +6,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
-- **The landing page's power-grid view is the power-grid film, and it grows
-  under the pointer.** « Le réseau électrique et ce qu'il produit » showed a
-  daytime take from before the view's night rework; it now plays the
-  14.7-second film: France lighting up inside a dark Europe, the nuclear
-  plants' columns filling to their live output, the dive onto Cruas and its
-  card, and the country switching off. The thumbnail opens on the filled
-  columns, so a reader who keeps still images sees the grid lit, not an
-  unlit Europe. It enlarges like the Roissy film.
+- **The energy ratings read like the label on a listing, and a click on one
+  opens its card in the map key.** Each address carries a filled plate in its
+  class colour with the letter in dark ink, and plates that would stand on one
+  another fold into one pill that gives the group's range and count — « C–G ·
+  33 »; clicking a pill brings the camera closer until they part. Clicking an
+  address outlines its building and parcel in white, tags it « C–E · 16 » on
+  the map, and prints in the key the street, the number of ratings, the classes
+  present and their range, the most frequent class (a tie is named), and every
+  rating filed there, each linked to its page on the ADEME observatory. The
+  key's seven letters are now a filter: one press shows that class alone, the
+  next ones add or remove a class, and the counts stay those of everything
+  loaded.
 - **The landing page's Roissy view is the Roissy film, and it grows under the
   pointer.** The « Roissy et les avions en approche » thumbnail played six
   seconds of a nearly still camera; it now plays the 29-second scene cut from
@@ -122,6 +126,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **Under a tilted camera the energy ratings, sales and other address layers
+  answered for the blocks at the top of the screen, not the one in the
+  middle.** They scanned around the point where the centre of the screen meets
+  height zero, and a city stands higher: over Lyon's Presqu'île that point was
+  328 m beyond the street being looked at, so the 200 m ratings disc missed the
+  middle of the view entirely. They now scan around the street actually drawn
+  under the centre of the screen; on the same view every rating badge falls in
+  the middle half of the screen, against none before.
 - **The shared-vehicles key took up to a minute to appear, then described the
   previous view.** The panel repainted on a toggle, on the 60 s poll or when
   the view changed territory, never when an answer landed: on the landing
