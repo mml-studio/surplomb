@@ -126,6 +126,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **From the city-wide view the shared fleets are bubbles that count.** Above
+  3.5 km over a view holding at least 1,500 vehicles, the globe no longer
+  draws thousands of dots — or rather the 6,000 the server could send, which
+  over Paris from 7 km left Lime, Voi and Dott all at « 987 ». The server now
+  counts every vehicle it holds on a fixed grid, and each group is a bubble
+  with its count and a bar of its operators' colours: 87 bubbles for 14,110
+  vehicles over central Paris, in a 21 KB answer where the dots took 1 MB. The
+  key's counts are those true numbers, the family filter and the operator
+  focus re-count the bubbles without a request, and pressing a bubble zooms in
+  until it splits — into smaller bubbles, then into dots and pins. A city with
+  fewer vehicles keeps its dots, and so does the landing page's Paris view.
 - **Shared vehicles are dots, and a few of them wear a pin.** Over the landing
   page's Paris view the globe drew 2,175 parked vehicles as 20 px plates, a
   carpet that covered the street it stood on. Every vehicle is now a dot of

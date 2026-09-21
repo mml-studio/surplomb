@@ -82,6 +82,12 @@ import {
 import operatorMessages from './mobilityOperators.i18n.js';
 import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
 import { selectSharedMobilityPins, sharedMobilityPinRank } from './sharedMobilityPins.js';
+import {
+  foldSharedMobilityClusters,
+  mergeSharedMobilityBubbles,
+  sharedMobilityBubbleBar,
+  sharedMobilityClusterCell,
+} from './sharedMobilityClusters.js';
 import { pickAt } from './pickAt.js';
 import { profileCountBudget } from '../perfProfile.js';
 
@@ -152,6 +158,10 @@ const FLOOR_FILL_KM = 10;
 //          on screen, wear a pin over their dot with their silhouette
 //          (`sharedMobilityPins.js`, `sharedMobilityIcons.js`). Pins only come
 //          in close to the street; from higher up the dots say it all.
+//   GROUP — HOW MANY, from the city-wide view. Where the view is dense the
+//          proxy counts the vehicles on its grid and each group is a bubble:
+//          the proxy's count and a bar of its operators
+//          (`sharedMobilityClusters.js`). Pressed, it zooms in.
 //   RING — A STATION is a dot RINGED in its operator's hue and filled with
 //          the same hue as far as it is full (`mobilityDockFill`): solid,
 //          tinted, or an empty ring — the one number a rider acts on, and one
@@ -182,8 +192,8 @@ const SELECTED_VEHICLE_DOT_PX = 9;
  * The landing's Paris view sits at 1,300 m. At 3,500 m a pin already stands
  * for a whole neighbourhood of dots, and above it a silhouette names one
  * vehicle among hundreds — so the dots alone carry the view, which is what
- * the mock asks of a wide shot. Clustering, for the city-wide view, is a
- * later step.
+ * the mock asks of a wide shot — and where the view is dense, the proxy
+ * answers in groups instead (`sharedMobilityClusters.js`).
  */
 const PIN_CEILING_M = 3_500;
 /** Pin footprint, CSS px: the 96 × 124 artwork drawn 32 wide. */
@@ -191,6 +201,40 @@ const PIN_WIDTH_PX = 32;
 const PIN_HEIGHT_PX = Math.round((32 * 124) / 96);
 /** The pin's tip stops this far above the dot's centre: the dot stays visible. */
 const PIN_TIP_GAP_PX = VEHICLE_DOT_PX / 2 + VEHICLE_DOT_RIM_PX + 1;
+/**
+ * Above the pins' ceiling, over a view holding at least 1,500 vehicles
+ * (`GBFS_CLUSTER_ABOVE`), the fleets are drawn as GROUPS
+ * (`sharedMobilityClusters.js`): a bubble per cell of the proxy's grid, its
+ * count the proxy's own over every vehicle, and a bar of its operators. A
+ * sparser view keeps its dots.
+ * 46 × 28 CSS px — room for « 1,2 k » in 13 px over a 30 px bar.
+ */
+const BUBBLE_WIDTH_PX = 46;
+const BUBBLE_HEIGHT_PX = 28;
+const BUBBLE_BAR_WIDTH_PX = 30;
+const BUBBLE_BAR_HEIGHT_PX = 3;
+/** The bar sits this far below the bubble's centre, the count this far above. */
+const BUBBLE_BAR_OFFSET_PX = 8;
+const BUBBLE_TEXT_OFFSET_PX = -3;
+const BUBBLE_FONT = '600 13px "DM Sans", system-ui, sans-serif'; // i18n-ignore-line — a CSS font, not copy.
+/**
+ * The bubble: the cockpit's glass as a rounded rectangle with a hairline.
+ * ONE image for every bubble — the count is a label and the bar is tinted
+ * segments of one white image — so a session panning across France adds no
+ * atlas entry per number, which a baked « 156 » per bubble would.
+ */
+const toBase64 = (text) => (typeof btoa === 'function' ? btoa(text) : Buffer.from(text, 'utf8').toString('base64'));
+const BUBBLE_IMAGE = `data:image/svg+xml;base64,${toBase64(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="92" height="56" viewBox="0 0 92 56">'
+  + '<rect x="1.5" y="1.5" width="89" height="53" rx="14" fill="rgba(20,32,28,0.92)"'
+  + ' stroke="rgba(255,255,255,0.32)" stroke-width="2"/></svg>',
+)}`;
+/** A white square the bar segments tint and stretch: one atlas entry for all. */
+const BAR_IMAGE = `data:image/svg+xml;base64,${toBase64(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#fff"/></svg>',
+)}`;
+/** Ids of bubble primitives, apart from any record id. */
+const BUBBLE_ID_PREFIX = 'shared-mobility-fr-group:';
 const STATION_POINT_MIN_PX = 7;
 const STATION_POINT_MAX_PX = 15;
 /** Operator ring on a station dot. Two pixels is the thinnest that reads. */
@@ -357,6 +401,13 @@ let _points = null;
 let _pins = null;
 /** Ids pinned by the last pin pass, offered first to the next one. */
 let _pinnedIds = new Set();
+/** The group bubbles: backgrounds and operator bars, then the counts. */
+let _bubbleSprites = null;
+let _bubbleLabels = null;
+/** Drawn bubbles by id: `{id, lat, lon, n, position, bg, label, bars}`. */
+let _bubbles = new Map();
+/** Vehicles the drawn bubbles stand for, after the filters. */
+let _bubbleTotal = 0;
 let _records = new Map();
 let _enabled = false;
 let _clickHandler = null;
@@ -849,6 +900,11 @@ function installClickHandler(viewer) {
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
     const picked = pickAt(viewer.scene, click.position);
+    const bubble = pickedBubble(picked);
+    if (bubble) {
+      flyToBubble(bubble);
+      return;
+    }
     if (picked) {
       const primitiveId = picked.primitive?.id;
       if (typeof primitiveId === 'string' && _records.has(primitiveId)) {
@@ -874,7 +930,7 @@ function installClickHandler(viewer) {
  * not move — so this is the layer's only per-frame work.
  */
 function onPreRender() {
-  if (!_enabled || !_records.size) return;
+  if (!_enabled || (!_records.size && !_bubbles.size)) return;
   const camera = _viewer?.camera;
   if (!camera) return;
   const occluder = horizonOccluder(camera);
@@ -884,6 +940,12 @@ function onPreRender() {
     const visible = occluder.isPointVisible(record.position);
     primitive.show = visible;
     if (record.pin) record.pin.show = visible;
+  }
+  for (const entry of _bubbles.values()) {
+    const visible = occluder.isPointVisible(entry.position);
+    entry.bg.show = visible;
+    entry.label.show = visible;
+    for (const bar of entry.bars) bar.show = visible;
   }
 }
 
@@ -1024,6 +1086,178 @@ function clearPins() {
   _pinnedIds = new Set();
 }
 
+// --- Groups -----------------------------------------------------------------
+
+/**
+ * Ground metres per CSS px at the screen centre: the distance along the view
+ * ray to the ground, from altitude and pitch, over the frustum's own angle.
+ * An estimate, and a coarse one is enough — the grid it picks only doubles.
+ * @returns {?number}
+ */
+function metresPerPixel(viewer) {
+  const camera = viewer?.camera;
+  const height = viewer?.scene?.canvas?.clientHeight || 0;
+  const fovy = camera?.frustum?.fovy;
+  const altitude = cameraAltitudeM(viewer);
+  if (!height || !Number.isFinite(fovy) || !Number.isFinite(altitude)) return null;
+  // Past 70° off the vertical the ray skims the ground; hold it there.
+  const sinPitch = Math.max(Math.sin(Math.PI * 20 / 180), Math.abs(Math.sin(camera.pitch ?? -Math.PI / 2)));
+  return (2 * (altitude / sinPitch) * Math.tan(fovy / 2)) / height;
+}
+
+/** The grid step to ask the proxy for, or null for the dots-and-pins view. */
+function clusterCellForView() {
+  if (cameraAltitudeM(_viewer) <= PIN_CEILING_M) return null;
+  return sharedMobilityClusterCell(metresPerPixel(_viewer));
+}
+
+/** A count as the bubble prints it: « 156 », « 1,2 k ». */
+function bubbleCount(n) {
+  return n < 1000 ? fr(n) : messages().bubble.thousands(formatDecimal(n / 1000, n < 10_000 ? 1 : 0));
+}
+
+/** Put one bubble on screen, or rewrite the one already there. */
+function drawBubble(bubble, existing) {
+  const position = objectPosition(bubble);
+  const text = bubbleCount(bubble.n);
+  const segments = sharedMobilityBubbleBar(bubble.operators, BUBBLE_BAR_WIDTH_PX);
+  const id = `${BUBBLE_ID_PREFIX}${bubble.id}`;
+  const entry = existing || { id: bubble.id, bg: null, label: null, bars: [] };
+  entry.lat = bubble.lat;
+  entry.lon = bubble.lon;
+  entry.n = bubble.n;
+  entry.position = position;
+  if (!entry.bg) {
+    entry.bg = _bubbleSprites.add({
+      id,
+      position,
+      image: BUBBLE_IMAGE,
+      width: BUBBLE_WIDTH_PX,
+      height: BUBBLE_HEIGHT_PX,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    });
+    entry.label = _bubbleLabels.add({
+      id,
+      position,
+      text,
+      font: BUBBLE_FONT,
+      fillColor: Cesium.Color.WHITE,
+      horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      pixelOffset: new Cesium.Cartesian2(0, BUBBLE_TEXT_OFFSET_PX),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    });
+  } else {
+    entry.bg.position = position;
+    entry.label.position = position;
+    if (entry.label.text !== text) entry.label.text = text;
+  }
+  // Segments are few (five at most) and cheap: rewritten whole.
+  for (const bar of entry.bars) _bubbleSprites.remove(bar);
+  entry.bars = segments.map((segment) => _bubbleSprites.add({
+    id,
+    position,
+    image: BAR_IMAGE,
+    width: Math.max(1, segment.w),
+    height: BUBBLE_BAR_HEIGHT_PX,
+    color: Cesium.Color.fromCssColorString(segment.color),
+    horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+    verticalOrigin: Cesium.VerticalOrigin.CENTER,
+    pixelOffset: new Cesium.Cartesian2(segment.x - BUBBLE_BAR_WIDTH_PX / 2, BUBBLE_BAR_OFFSET_PX),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+  }));
+  return entry;
+}
+
+function removeBubble(entry) {
+  if (entry.bg) _bubbleSprites?.remove(entry.bg);
+  if (entry.label) _bubbleLabels?.remove(entry.label);
+  for (const bar of entry.bars) _bubbleSprites?.remove(bar);
+}
+
+/**
+ * Re-draw the groups for the view the camera is showing.
+ *
+ * The groups of the answer are folded through the row's filters, projected,
+ * and merged where two would touch — so it runs on every arrival, since a zoom
+ * inside one grid step moves the groups closer or apart without a request. A
+ * DIFF by id, like the pins: a group that survives keeps its primitives and
+ * only rewrites what changed.
+ * @returns {number} Bubbles drawn.
+ */
+function refreshBubbles() {
+  const clusters = _lastPayload?.clusters;
+  if (!_bubbleSprites || !_bubbleLabels || !Array.isArray(clusters)) {
+    clearBubbles();
+    return 0;
+  }
+  const payload = _lastPayload;
+  const folded = foldSharedMobilityClusters(clusters, {
+    keep: (system, kind) => (!_kindFilter || familyOfKind(kind) === _kindFilter)
+      && (!_operatorFilter || payloadOperator(payload, system).id === _operatorFilter),
+    operatorOf: (system) => payloadOperator(payload, system),
+  });
+  const scene = _viewer?.scene;
+  const projected = [];
+  for (const bubble of folded) {
+    const screen = scene
+      ? _projectToWindow(scene, Cesium.Cartesian3.fromDegrees(bubble.lon, bubble.lat, 0), _scratchWindow)
+      : null;
+    // Without a screen (a test, a torn-down scene) nothing merges.
+    projected.push({ ...bubble, x: screen ? screen.x : bubble.lon * 1e7, y: screen ? screen.y : bubble.lat * 1e7 });
+  }
+  const merged = mergeSharedMobilityBubbles(projected);
+  const next = new Map();
+  let total = 0;
+  for (const bubble of merged) {
+    next.set(bubble.id, drawBubble(bubble, _bubbles.get(bubble.id)));
+    total += bubble.n;
+  }
+  for (const [id, entry] of _bubbles) {
+    if (!next.has(id)) removeBubble(entry);
+  }
+  _bubbles = next;
+  _bubbleTotal = total;
+  governorRequestRender('shared-mobility-fr-groups');
+  return next.size;
+}
+
+function clearBubbles() {
+  _bubbleSprites?.removeAll();
+  _bubbleLabels?.removeAll();
+  _bubbles = new Map();
+  _bubbleTotal = 0;
+}
+
+/** The answer's groups, the biggest first — the proxy already sorts them. */
+function groupedAnalystClusters() {
+  return Array.isArray(_lastPayload?.clusters) ? _lastPayload.clusters : [];
+}
+
+/** The bubble a pick landed on, or null. */
+function pickedBubble(picked) {
+  const id = typeof picked?.id === 'string' ? picked.id : picked?.primitive?.id;
+  if (typeof id !== 'string' || !id.startsWith(BUBBLE_ID_PREFIX)) return null;
+  return _bubbles.get(id.slice(BUBBLE_ID_PREFIX.length)) || null;
+}
+
+/**
+ * « Zoomer sur le groupe »: fly to the group, close enough for its cell to
+ * split — into finer groups, or into dots and pins below the ceiling — and
+ * keep the heading, with the pitch held off the horizon.
+ */
+function flyToBubble(entry) {
+  const camera = _viewer?.camera;
+  if (!camera || !entry?.position) return;
+  const cellM = (_lastPayload?.clusterDeg || 0.004) * 111_320;
+  const range = Math.min(40_000, Math.max(1_500, cellM * 1.5));
+  const pitch = Math.min(camera.pitch ?? -Math.PI / 2, Cesium.Math.toRadians(-40));
+  camera.flyToBoundingSphere(new Cesium.BoundingSphere(entry.position, 1), {
+    offset: new Cesium.HeadingPitchRange(camera.heading, pitch, range),
+    duration: 1.2,
+  });
+}
+
 /**
  * Replace the rendered set with a viewport answer.
  *
@@ -1148,8 +1382,15 @@ function reconcile(payload) {
     });
   }
 
-  _count = _records.size;
-  warmGroundFloor(objects.slice(0, MAX_FLOOR_WARM));
+  // The groups stand on the ground like the dots, and are grounded with them.
+  const groundedClusters = Array.isArray(payload.clusters) ? payload.clusters : [];
+  if (groundedClusters.length) {
+    const probed = sampleProvisionalFloors(_viewer?.scene, groundedClusters, { fillKm: FLOOR_FILL_KM });
+    if (probed.pending) scheduleFloorRetry();
+  }
+  refreshBubbles();
+  _count = _records.size + _bubbleTotal;
+  warmGroundFloor([...groundedClusters, ...objects].slice(0, MAX_FLOOR_WARM));
   // Two reasons to come back, and neither of them produces a frame on its own:
   // the tiles under a cell may not have streamed yet, and the DEM warm above
   // is fire-and-forget — nothing repositions what it resolves.
@@ -1191,6 +1432,15 @@ function reanchor() {
     if (record.pin) record.pin.position = next;
     moved += 1;
   }
+  for (const entry of _bubbles.values()) {
+    const next = objectPosition(entry);
+    if (Cesium.Cartesian3.equalsEpsilon(entry.position, next, 0, 0.05)) continue;
+    entry.position = next;
+    entry.bg.position = next;
+    entry.label.position = next;
+    for (const bar of entry.bars) bar.position = next;
+    moved += 1;
+  }
   // The selected card is anchored on the record's position, so it has to be
   // told too — otherwise the card stays where the buried point used to be.
   if (moved && _selectedId) {
@@ -1209,9 +1459,10 @@ function reanchor() {
 /** One deferred floor pass: sample again, re-place, and decide whether to
  *  come back. Never fetches — the DEM warm runs on its own underneath. */
 function refreshFloors() {
-  if (!_enabled || !_viewer || !_records.size) return;
+  if (!_enabled || !_viewer || (!_records.size && !_bubbles.size)) return;
   const objects = [];
   for (const record of _records.values()) objects.push(record.object);
+  for (const entry of _bubbles.values()) objects.push(entry);
   const { pending } = sampleProvisionalFloors(_viewer.scene, objects, { fillKm: FLOOR_FILL_KM });
   if (reanchor()) governorRequestRender('shared-mobility-fr-reanchor');
   if (pending || hasColdFloor(objects)) scheduleFloorRetry();
@@ -1251,6 +1502,7 @@ function clearFleet() {
   clearSelection({ repin: false });
   resetFloorRetries();
   clearPins();
+  clearBubbles();
   if (_points) _points.removeAll();
   _records.clear();
   _count = 0;
@@ -1268,7 +1520,7 @@ async function loadViewport({ force = false } = {}) {
     _error = null;
     _loading = false;
     _lastPayload = null;
-    if (_records.size) clearFleet();
+    if (_records.size || _bubbles.size) clearFleet();
     return;
   }
   const box = cameraSharedMobilityBox(_viewer);
@@ -1277,11 +1529,15 @@ async function loadViewport({ force = false } = {}) {
     _error = null;
     _loading = false;
     _lastPayload = null;
-    if (_records.size) clearFleet();
+    if (_records.size || _bubbles.size) clearFleet();
     return;
   }
 
-  const boxKey = [box.south, box.west, box.north, box.east].map((v) => v.toFixed(3)).join(',');
+  // Above the pins' ceiling the proxy is asked for GROUPS on its grid instead
+  // of objects — the numbers are then its own, over every vehicle it holds.
+  const cluster = clusterCellForView();
+  const boxKey = [box.south, box.west, box.north, box.east].map((v) => v.toFixed(3)).join(',')
+    + (cluster ? `@${cluster}` : '');
   if (!force && boxKey === _lastBox && _inFlight) return;
   _lastBox = boxKey;
 
@@ -1302,6 +1558,7 @@ async function loadViewport({ force = false } = {}) {
       // so a light device loses margin and even thinning, not the view.
       limit: String(profileCountBudget(GBFS_MAX_OBJECTS)),
     });
+    if (cluster) params.set('cluster', String(cluster));
     const response = await fetch(`/api/shared-mobility-fr/objects?${params}`, { signal: controller.signal });
     if (generation !== _requestGeneration) return;
     if (!response.ok) {
@@ -1375,6 +1632,7 @@ function onCameraSettled() {
   // and it is exactly what moves the vehicles across the screen. So the pins
   // are chosen again here, on arrival, and not only on the load path.
   refreshPins();
+  refreshBubbles();
   void loadViewport();
 }
 
@@ -1448,7 +1706,9 @@ function legendTally() {
   const operators = new Map();
   let stations = 0;
   let shown = 0;
-  const visit = (type, object) => {
+  // `weight` is how many vehicles the object stands for: one, or a group's
+  // share of one system and kind.
+  const visit = (type, object, weight = 1) => {
     if (box && !gbfsBoxContains(box, object?.lat, object?.lon)) return;
     const operator = payloadOperator(payload, object?.system);
     const ownFocus = !_operatorFilter || operator.id === _operatorFilter;
@@ -1457,21 +1717,29 @@ function legendTally() {
       ? [...stationFamilies(object)]
       : [familyOfKind(object?.kind)].filter(Boolean);
     for (const family of objectFamilies) {
-      familiesAll[family] += 1;
-      if (ownFocus) families[family] += 1;
+      familiesAll[family] += weight;
+      if (ownFocus) families[family] += weight;
     }
     if (ownFamily) {
       const seen = operators.get(operator.id);
-      if (seen) seen.count += 1;
-      else operators.set(operator.id, { operator, count: 1 });
+      if (seen) seen.count += weight;
+      else operators.set(operator.id, { operator, count: weight });
     }
     if (ownFocus && ownFamily) {
-      shown += 1;
-      if (type === 'station') stations += 1;
+      shown += weight;
+      if (type === 'station') stations += weight;
     }
   };
   for (const station of Array.isArray(payload?.stations) ? payload.stations : []) visit('station', station);
   for (const vehicle of Array.isArray(payload?.vehicles) ? payload.vehicles : []) visit('vehicle', vehicle);
+  // Groups count by their centroid: a group straddling the screen edge is
+  // counted whole or not at all, as it is drawn.
+  for (const cluster of Array.isArray(payload?.clusters) ? payload.clusters : []) {
+    for (const [tag, count] of Object.entries(cluster.by || {})) {
+      const cut = tag.lastIndexOf('|');
+      visit('vehicle', { lat: cluster.lat, lon: cluster.lon, system: tag.slice(0, cut), kind: tag.slice(cut + 1) }, count);
+    }
+  }
 
   _tallyPayload = payload;
   _tallyKey = key;
@@ -1532,11 +1800,20 @@ const sharedMobilityFranceLayer = {
     _pins = new Cesium.BillboardCollection({ scene: viewer.scene });
     _pins.show = false;
     viewer.scene.primitives.add(_pins);
+    _bubbleSprites = new Cesium.BillboardCollection({ scene: viewer.scene });
+    _bubbleSprites.show = false;
+    viewer.scene.primitives.add(_bubbleSprites);
+    _bubbleLabels = new Cesium.LabelCollection({ scene: viewer.scene });
+    _bubbleLabels.show = false;
+    viewer.scene.primitives.add(_bubbleLabels);
     // Registered in this order so a pin paints OVER the dots it stands among,
-    // and both stay inside this layer's sprite slot.
+    // a group's count over its bubble, and all stay inside this layer's slot.
     registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _points);
     registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _pins);
+    registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _bubbleSprites);
+    registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _bubbleLabels);
     _pinnedIds = new Set();
+    _bubbles = new Map();
 
     _enabled = false;
     _records = new Map();
@@ -1563,9 +1840,12 @@ const sharedMobilityFranceLayer = {
     _error = null;
     _points.show = true;
     _pins.show = true;
+    _bubbleSprites.show = true;
+    _bubbleLabels.show = true;
     _overlayHost.setVisible(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
-    registerPickOwner(SHARED_MOBILITY_FR_LAYER_ID, (pickedId) => _records.has(pickedId));
+    registerPickOwner(SHARED_MOBILITY_FR_LAYER_ID, (pickedId) => _records.has(pickedId)
+      || (typeof pickedId === 'string' && pickedId.startsWith(BUBBLE_ID_PREFIX)));
 
     if (!_cameraChangedAttached) {
       viewer.camera.changed.addEventListener(onCameraChanged);
@@ -1613,6 +1893,8 @@ const sharedMobilityFranceLayer = {
 
     _points.show = false;
     _pins.show = false;
+    _bubbleSprites.show = false;
+    _bubbleLabels.show = false;
     _loading = false;
     _status = 'idle';
     _systems = [];
@@ -1713,6 +1995,36 @@ const sharedMobilityFranceLayer = {
       if (out.length >= limit) break;
       const readout = sharedMobilityReadout(record);
       if (readout && Number.isFinite(readout.lat) && Number.isFinite(readout.lon)) out.push(readout);
+    }
+    // While the groups are drawn the answer carries numbers, not vehicles, and
+    // the engine counts ROWS: without these it would have said « 20 » over a
+    // view of 14,000. One row per counted vehicle, placed at its group's
+    // centroid and SAYING so (`grouped`), so a count is right up to the cap and
+    // a « nearest » is never read as a parking spot.
+    for (const cluster of groupedAnalystClusters()) {
+      for (const [tag, count] of Object.entries(cluster.by || {})) {
+        const cut = tag.lastIndexOf('|');
+        const system = tag.slice(0, cut);
+        const kind = tag.slice(cut + 1);
+        if (_kindFilter && familyOfKind(kind) !== _kindFilter) continue;
+        const operator = payloadOperator(_lastPayload, system);
+        if (_operatorFilter && operator.id !== _operatorFilter) continue;
+        const systemName = (_lastPayload?.systems || []).find((entry) => entry.id === system)?.name || null;
+        for (let i = 0; i < count && out.length < limit; i++) {
+          out.push({
+            id: `group:${cluster.id}:${tag}:${i}`,
+            lat: cluster.lat,
+            lon: cluster.lon,
+            operator: operator.id === 'unknown' ? null : operator.label,
+            system: systemName,
+            source: 'GBFS (transport.data.gouv.fr)',
+            kind: 'shared-mobility-vehicle',
+            vehicleKind: vehicleKindLabel(kind),
+            grouped: true,
+          });
+        }
+      }
+      if (out.length >= limit) break;
     }
     return out;
   },
@@ -1844,6 +2156,9 @@ const sharedMobilityFranceLayer = {
     return {
       chips: [],
       legend,
+      // Only while the groups are drawn: a bubble is the one mark here that
+      // does not say what it is, and « 156 » alone could be anything.
+      note: _bubbles.size ? messages().legend.groupsNote : undefined,
       legendSegments,
       legendSegmentsLabel: messages().legend.segmentsLabel,
       // A block a filter emptied is not « hors de cette vue »: its objects are
@@ -1882,6 +2197,15 @@ const sharedMobilityFranceLayer = {
       _pins = null;
     }
     _pinnedIds = new Set();
+    for (const collection of [_bubbleSprites, _bubbleLabels]) {
+      if (!collection) continue;
+      unregisterSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, collection);
+      viewer.scene.primitives.remove(collection);
+    }
+    _bubbleSprites = null;
+    _bubbleLabels = null;
+    _bubbles = new Map();
+    _bubbleTotal = 0;
     resetFloorRetries();
     _records.clear();
     _lastPayload = null;
@@ -1895,15 +2219,26 @@ const sharedMobilityFranceLayer = {
  * `pins` stands in for the billboard collection, `project` for Cesium's
  * world-to-window transform and `chrome` for the overlay host's UI rectangles.
  */
-export function _setSharedMobilityStateForTest({ viewer, records, overlayHost, pins, project, chrome }) {
+export function _setSharedMobilityStateForTest({ viewer, records, overlayHost, pins, project, chrome, groups, enabled = false }) {
   _viewer = viewer || null;
+  _enabled = enabled === true;
   _records = new Map((records || []).map((record) => [record.id, record]));
   _selectedId = null;
   _pinnedIds = new Set();
   _pins = pins || null;
+  _bubbleSprites = groups?.sprites || null;
+  _bubbleLabels = groups?.labels || null;
+  _bubbles = new Map();
+  _bubbleTotal = 0;
   _projectToWindow = project || projectToWindow;
   _readChrome = chrome ? () => chrome : worldOverlayUiOcclusionRects;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
+}
+
+/** Drive the production group pass over the seeded answer. */
+export function _refreshSharedMobilityBubblesForTest() {
+  refreshBubbles();
+  return [..._bubbles.values()].map((entry) => ({ id: entry.id, n: entry.n, text: entry.label.text, bars: entry.bars.length }));
 }
 
 /** Drive the production pin pass over the seeded records. */
