@@ -1,10 +1,13 @@
 import * as Cesium from 'cesium';
 import { addressMarkerGlyph } from './addressMarkerIcons.js';
-import { ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer } from './addressScanLayer.js';
+import {
+  ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer, mapKeyCarriesSelection,
+} from './addressScanLayer.js';
 import { clearBuildingTheme, registerBuildingTheme } from './buildingTheme.js';
 import {
   DVF_SECTION_MIN_PRICED, decodeParts, mostRecentMutation, saleKind,
 } from './dvfFeed.js';
+import { drawGroundHighlight } from './groundHighlight.js';
 import { publishJoin } from './layerJoins.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { pointInPolygons, polygonsBounds } from './ringGeometry.js';
@@ -1678,7 +1681,7 @@ const HIGHLIGHT_FILL_ALPHA = 0.6;
 const HIGHLIGHT_OUTLINE_ALPHA = 0.95;
 const HIGHLIGHT_OUTLINE_WIDTH_PX = 3;
 
-/** @type {?{viewer: object, fill: ?object, outline: ?object, stop: ?Function}} */
+/** The lit plot, as `drawGroundHighlight` handed it back — see `groundHighlight.js`. */
 let _highlight = null;
 
 /** The viewer the last draw went to — the highlight is drawn on the same one. */
@@ -1704,15 +1707,8 @@ const _saleByParcel = new Map();
 
 /** Take the lit plot off the globe. Idempotent. */
 function clearSaleHighlight() {
-  if (!_highlight) return;
-  _highlight.stop?.();
-  const primitives = _highlight.viewer?.scene?.primitives;
-  if (primitives && !primitives.isDestroyed?.()) {
-    if (_highlight.fill) primitives.remove(_highlight.fill);
-    if (_highlight.outline) primitives.remove(_highlight.outline);
-  }
+  _highlight?.clear();
   _highlight = null;
-  governorRequestRender('dvf-highlight-clear');
 }
 
 /**
@@ -1724,80 +1720,15 @@ function clearSaleHighlight() {
  */
 function drawSaleHighlight(viewer, parts, css) {
   clearSaleHighlight();
-  const scene = viewer?.scene;
-  if (!scene?.primitives || !Array.isArray(parts) || !parts.length) return false;
-  const classificationType = gpuClassificationTypeForScene(scene);
-  const fill = Cesium.Color.fromCssColorString(css).withAlpha(HIGHLIGHT_FILL_ALPHA);
-  const stroke = Cesium.Color.fromCssColorString(css).withAlpha(HIGHLIGHT_OUTLINE_ALPHA);
-  const fills = [];
-  const outlines = [];
-  for (const rings of parts) {
-    const outer = areaRingPositions(rings?.[0] || []);
-    if (!outer) continue;
-    const holes = [];
-    for (let h = 1; h < rings.length; h += 1) {
-      const hole = areaRingPositions(rings[h] || []);
-      if (hole) holes.push(new Cesium.PolygonHierarchy(hole));
-    }
-    fills.push(new Cesium.GeometryInstance({
-      geometry: new Cesium.PolygonGeometry({
-        polygonHierarchy: new Cesium.PolygonHierarchy(outer, holes),
-        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-      }),
-      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(fill) },
-    }));
-    for (const ring of rings) {
-      const positions = areaRingPositions(ring || []);
-      if (!positions) continue;
-      outlines.push(new Cesium.GeometryInstance({
-        geometry: new Cesium.GroundPolylineGeometry({
-          positions: [...positions, positions[0]],
-          width: HIGHLIGHT_OUTLINE_WIDTH_PX,
-        }),
-        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(stroke) },
-      }));
-    }
-  }
-  if (!fills.length) return false;
-  const primitives = scene.primitives;
-  const highlight = { viewer, fill: null, outline: null, stop: null };
-  highlight.fill = primitives.add(new Cesium.GroundPrimitive({
-    geometryInstances: fills,
-    appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
-    classificationType,
-    allowPicking: false,
-    asynchronous: true,
-  }));
-  if (outlines.length) {
-    highlight.outline = primitives.add(new Cesium.GroundPolylinePrimitive({
-      geometryInstances: outlines,
-      appearance: new Cesium.PolylineColorAppearance({ translucent: true }),
-      classificationType,
-      allowPicking: false,
-      asynchronous: true,
-    }));
-  }
-  // Same reason as `pumpAreaUntilReady`: the globe renders on demand, and the
-  // frame in which an asynchronous ground primitive becomes ready is one
-  // nobody else asks for.
-  if (scene.postRender) {
-    let framesLeft = AREA_BUILD_FRAME_CAP;
-    const stop = scene.postRender.addEventListener(() => {
-      const pending = (highlight.fill && !highlight.fill.ready)
-        || (highlight.outline && !highlight.outline.ready);
-      framesLeft -= 1;
-      if (!pending || framesLeft <= 0) {
-        stop();
-        highlight.stop = null;
-        return;
-      }
-      governorRequestRender('dvf-highlight-build');
-    });
-    highlight.stop = stop;
-  }
-  _highlight = highlight;
-  governorRequestRender('dvf-highlight');
-  return true;
+  if (!Array.isArray(parts) || !parts.length) return false;
+  const color = Cesium.Color.fromCssColorString(css);
+  _highlight = drawGroundHighlight(viewer, [{
+    parts,
+    fill: color.withAlpha(HIGHLIGHT_FILL_ALPHA),
+    stroke: color.withAlpha(HIGHLIGHT_OUTLINE_ALPHA),
+    widthPx: HIGHLIGHT_OUTLINE_WIDTH_PX,
+  }], 'dvf-highlight');
+  return _highlight !== null;
 }
 
 /**
@@ -1917,19 +1848,12 @@ export function dvfSelectionPanel(selection, payload) {
 }
 
 /**
- * Whether the map key is on screen to carry the card, so the globe can keep
- * only the card's title. Not on a phone — the key lives in a sheet tab there,
- * and the selection has a tab of its own — and not while the key is folded
- * away or hidden by the clean view: a reader must never click a sale and get
- * its address alone.
+ * Whether the map key is on screen to carry the card — see
+ * `mapKeyCarriesSelection`, which the DPE shares.
  * @returns {boolean}
  */
 export function dvfKeyCarriesSelection() {
-  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
-  if (document.documentElement?.dataset?.shell === 'phone') return false;
-  const key = document.getElementById('map-legend');
-  if (!key || key.hidden || key.classList?.contains('collapsed')) return false;
-  return typeof key.getClientRects !== 'function' || key.getClientRects().length > 0;
+  return mapKeyCarriesSelection();
 }
 
 /**

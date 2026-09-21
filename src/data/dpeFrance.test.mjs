@@ -177,7 +177,7 @@ function fakeDataSource(entries) {
   const byId = new Map();
   for (const site of groupDpeSites(entries)) {
     if (!Number.isFinite(site.lon)) continue;
-    const size = site.summary.grade ? 20 : 16;
+    const size = site.summary.grade ? 22 : 18;
     byId.set(`dpe:${site.key}`, new Cesium.Entity({
       id: `dpe:${site.key}`,
       billboard: { width: size, height: size },
@@ -442,7 +442,7 @@ test('one address draws one badge, however many diagnostics stand behind it', (t
   // billboards on 14 coordinates, nine of them inside one block.
   assert.equal(entries.length, 15);
   assert.equal(source.byId.size, 4, 'one badge per placed address');
-  assert.equal(widthOf(source, 'ban-A'), 20);
+  assert.equal(widthOf(source, 'ban-A'), 22);
   assert.equal(source.byId.has('dpe:ban:ban-nowhere'), false, 'nothing is sent to sea');
   // The rows are all still there: grouping draws fewer marks, it never drops a
   // diagnostic. Nine of the fifteen are inside BLOCK_A alone.
@@ -461,9 +461,9 @@ test('with the volumes off, every badge keeps the size it always had', (t) => {
   _applyDpeBadgesForTest();
 
   assert.equal(join.buildings, 0);
-  assert.equal(widthOf(source, 'ban-A'), 20, 'a published letter still draws at 20 px');
-  assert.equal(widthOf(source, 'ban-A2'), 20, 'and so does the one that agreed with a roof');
-  assert.equal(widthOf(source, 'ban-B'), 20);
+  assert.equal(widthOf(source, 'ban-A'), 22, 'a published letter still draws at 22 px');
+  assert.equal(widthOf(source, 'ban-A2'), 22, 'and so does the one that agreed with a roof');
+  assert.equal(widthOf(source, 'ban-B'), 22);
 });
 
 test('a site whose diagnostics published no letter draws the smaller grey badge', (t) => {
@@ -476,7 +476,7 @@ test('a site whose diagnostics published no letter draws the smaller grey badge'
   const source = fakeDataSource(entries);
   _seedDpeThemeForTest(entries, { dataSource: source });
   _applyDpeBadgesForTest();
-  assert.equal(widthOf(source, 'ban-U'), 16, 'the one thing no paint can express');
+  assert.equal(widthOf(source, 'ban-U'), 18, 'the one thing no paint can express');
 });
 
 test('a badge goes quiet only where the volume already says its letter', (t) => {
@@ -491,13 +491,13 @@ test('a badge goes quiet only where the volume already says its letter', (t) => 
   // BLOCK_A holds both addresses: four G against three D, so the footprint is
   // painted G. The courtyard address agrees with it and falls silent; the
   // street address does not and keeps every pixel it had.
-  assert.equal(widthOf(source, 'ban-A2'), 12, 'agrees with the roof');
-  assert.equal(widthOf(source, 'ban-A'), 20, 'a D site on a G volume is the disagreement');
+  assert.equal(widthOf(source, 'ban-A2'), 14, 'agrees with the roof');
+  assert.equal(widthOf(source, 'ban-A'), 22, 'a D site on a G volume is the disagreement');
   // Block B is painted E — the tie, resolved pessimistically — and its one
   // address holds exactly the rows that painted it.
-  assert.equal(widthOf(source, 'ban-B'), 12);
+  assert.equal(widthOf(source, 'ban-B'), 14);
   // Off every footprint: the volume says nothing about it.
-  assert.equal(widthOf(source, 'ban-street'), 20);
+  assert.equal(widthOf(source, 'ban-street'), 22);
 });
 
 test('the selected badge is left exactly as the operator enlarged it', (t) => {
@@ -512,16 +512,16 @@ test('the selected badge is left exactly as the operator enlarged it', (t) => {
 
   _applyDpeBadgesForTest('dpe:ban:ban-A2');
   assert.equal(widthOf(source, 'ban-A2'), 26, 'a selection outranks the theme until Escape');
-  assert.equal(widthOf(source, 'ban-B'), 12, 'its neighbours are still re-sized');
+  assert.equal(widthOf(source, 'ban-B'), 14, 'its neighbours are still re-sized');
 });
 
 test('the size rule is one statement and reads the same everywhere', () => {
-  assert.equal(dpeMarkerSizePx('D', null), 20);
-  assert.equal(dpeMarkerSizePx('D', 'D'), 12);
-  assert.equal(dpeMarkerSizePx('F', 'D'), 20);
-  assert.equal(dpeMarkerSizePx(null, 'D'), 16);
-  assert.equal(dpeMarkerSizePx(null, null), 16);
-  assert.equal(dpeMarkerSizePx('Z', null), 16, 'a letter outside A–G is not a grade');
+  assert.equal(dpeMarkerSizePx('D', null), 22);
+  assert.equal(dpeMarkerSizePx('D', 'D'), 14);
+  assert.equal(dpeMarkerSizePx('F', 'D'), 22);
+  assert.equal(dpeMarkerSizePx(null, 'D'), 18);
+  assert.equal(dpeMarkerSizePx(null, null), 18);
+  assert.equal(dpeMarkerSizePx('Z', null), 18, 'a letter outside A–G is not a grade');
 });
 
 /* ── the card answers for the BUILDING, not for one flat ───────────────── */
@@ -666,10 +666,13 @@ test('the row legend gives the grey badge the entry it never had', (t) => {
   seedBuildings();
   _seedDpeThemeForTest(scanEntries());
 
-  const { legend } = dpeRowControls({ distribution: { D: 3, F: 1, C: 2, E: 2, G: 2 } });
+  const { legend } = dpeRowControls({
+    distribution: { D: 3, F: 1, C: 2, E: 2, G: 2 },
+    entries: scanEntries(),
+  });
   assert.equal(legend.length, 8, 'seven rungs and the absence of a rung');
   assert.equal(legend.find((row) => row.label === 'D').count, 3, 'this row counts DIAGNOSTICS');
-  const ungraded = legend.find((row) => row.label === 'étiquette non publiée');
+  const ungraded = legend.find((row) => row.label === 'sans étiquette');
   assert.equal(ungraded.count, 1);
   assert.equal(ungraded.color, '#7c8aa0');
 });

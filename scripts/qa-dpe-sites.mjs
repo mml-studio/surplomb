@@ -541,13 +541,16 @@ async function openCard() {
     const now = window.__godsEyeView.viewer.clock.currentTime;
     const colour = entity?.billboard?.color?.getValue?.(now) ?? entity?.billboard?.color;
     const badgeColor = colour ? `${colour.red?.toFixed?.(2)},${colour.green?.toFixed?.(2)},${colour.blue?.toFixed?.(2)}` : null;
+    const width = Number(entity?.billboard?.width?.getValue?.(now) ?? entity?.billboard?.width);
     return {
       selectedId,
       painted: Object.keys(painted),
       badgeColor,
-      // `ADDRESS_SCAN_SELECTED_COLOR` is #7fd7ff — the cyan every one of these
-      // layers raises a selection to.
-      emphasised: Boolean(colour && colour.blue > 0.9 && colour.green > 0.7 && colour.red < 0.6),
+      badgeWidth: width,
+      // Since 2026-09-21 the DPE plate keeps its CLASS colour when selected —
+      // a cyan plate would hide the one thing it says — and is raised by the
+      // shell's growth (22 → 28 px) while its building is ringed in white.
+      emphasised: Number.isFinite(width) && width >= 26,
     };
   });
 }
@@ -578,7 +581,7 @@ if (target) {
   note(
     opened.emphasised === true,
     'the selected badge is visibly raised, so the reader can see what they opened',
-    `badge colour ${opened.badgeColor ?? 'unreadable'}`,
+    `badge ${opened.badgeWidth} px, colour ${opened.badgeColor ?? 'unreadable'}`,
   );
 }
 

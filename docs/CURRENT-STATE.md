@@ -270,7 +270,9 @@ Updated: September 19, 2026
 >   `src/vitrine/gallery.js` — itself fetched only as the gallery nears the
 >   screen — fetches a box's loop half a screen ahead, plays it on screen,
 >   pauses it off screen, and obeys the hero's policy and *Image fixe* (Still image).
->   Views 01 and 04 play films in place of their recorded loops (below).
+>   View 04's loop predates the 2026-09-21 scene (night atlas, stations in
+>   relief, oblique camera): it still shows the daytime straight-down take
+>   until `landing:gallery:capture --only 04` and the build are run again.
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
@@ -291,21 +293,7 @@ Updated: September 19, 2026
 >   enlarged box needs more pixels than the tile's file, the wider rendition
 >   is parked 0.8 s ahead, started when the film reaches it, and the old file
 >   dropped on its first frame (`swapForWider`; kept for the visit).
->   `qa:landing` case `gallery` asserts grow, dim, swap and shrink, for every
->   `data-expand` view.
-> - **View 04 is the power-grid film** (2026-09-21), enlarged the same way. The
->   14.7 s `surplomb-grid-v4.mp4` (Europe dark, France lit alone, the nuclear
->   columns filling, the dive onto Cruas and its card, the switch-off) is
->   encoded by `build-landing-film.mjs --view 04 --start 3` into
->   `.context/landing-assets/film/view-04`. `--start` turns the file round: it
->   begins on the filled columns (source 3.0 s), runs to the black end, wraps
->   to the dark opening and stops one frame before 3.0 s, so the loop point is
->   continuous and the still — all a reader with reduced motion, data saver or
->   Low Power Mode sees — shows the grid lit, not an unlit Europe. A night
->   scene weighs far less than Roissy at the same VMAF ≈ 90: AV1 345 kB /
->   773 kB / 1.8 MB, HEVC 474 kB / 1.4 MB / 2.7 MB, H.264 480 545 kB. The
->   publish step reads every `film/*` directory holding a manifest before the
->   gallery's, and writes `galleryLoops.js` in key order.
+>   `qa:landing` case `gallery` asserts grow, dim, swap and shrink.
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the
@@ -3025,10 +3013,24 @@ cannot even name. They go dormant and clear their draw above 12 km
 (`idfm-network`: 20 km), and report `dormant` in `getStats()` so an empty screen
 is never ambiguous between "too high to scan" and "this address is clear".
 
+**The looked-at point is read on the drawn surface, not on the ellipsoid**
+(`cameraScanPoint`, since 2026-09-21). It was `camera.pickEllipsoid` at the
+canvas centre, and a city is not at height zero: Lyon's Presqu'île stands at
+229 m of ellipsoidal height, so under a tilted camera the centre ray met the
+street and went on down to the ellipsoid, 328 m further along the ground
+(measured at 350 m above the street, −35°). The 200 m DPE disc and the 300 m DVF
+disc were drawn wholly beyond the block at the middle of the screen — 0 of 27
+DPE badges in the middle half of the view, 264 px above the centre line on
+average. `sceneGroundPoint` answers instead — terrain when the globe is shown,
+the depth buffer on the photoreal stack, the ellipsoid only when neither
+answers — and the same view now puts the scan centre 0 m from the looked-at
+street and 39 of 39 badges in the middle half. The box regimes above 600 m are
+built from the same point. `scripts/qa-dpe-focus.mjs` measures it.
+
 **Three of the six now paint the BD TOPO volumes instead of only pinning them**
 (2026-09-03, via `src/data/buildingTheme.js` — see the Bâti 3D row above for the
 registry contract). `dpe-fr` reduces a building to the MODE of its diagnostics,
-ties broken by the worst letter, and its badge goes QUIET (12 px instead of 20)
+ties broken by the worst letter, and its badge goes QUIET (14 px instead of 22)
 only where the volume underneath already says the letter — so a unanimous block
 falls silent and a B→F block keeps every dissenting badge on its roof.
 `dvf-sales` takes the MOST RECENT mutation, never a median: the editions span up
@@ -3654,7 +3656,7 @@ answer a question about the same building, and drawn as discs they were
 indistinguishable from each other on screen. Colour could not carry the source
 — DVF spends it on the price ratio, DPE on the official A–G scale, Géorisques
 on severity, IDFM on the mode family — so the shape does: **€** for a sale,
-**the A–G letter framed** for a diagnostic, a **hazard triangle**, a **plan
+**the A–G letter on a plate of its class colour** for a diagnostic, a **hazard triangle**, a **plan
 sheet**, and the **mode pictogram** (reused from `transitVehicleIcons.js`,
 because a stop is signed in the street with its mode's own symbol). The DPE
 marker being the label itself means a grade is readable without a click.
@@ -3740,6 +3742,42 @@ Measured on the live app, 1400 × 900, nadir at 420 m, before and after:
 25.5 px → 0.0 px, worst slide across a 250 m pan **72.6 px → 0.0 px**.
 `scripts/qa-dpe-sites.mjs` recomputes all of it, plus the thing that caused it
 (how many badges share a coordinate) and the card's four placement sentences.
+
+**Plates, pills, a card in the key, and a filter** (2026-09-21). A site's badge
+is a filled **plate** in its class colour with the letter in dark ink
+(`addressMarkerIcons.js`), 22 px, 14 px when the volume under it already says
+the letter. Plates that touch on screen fold into one **pill** that prints the
+group's letter RANGE, each letter in its colour, and its diagnostics — `C–G ·
+33` — grouped greedily in screen space by the pill each group will actually
+draw, re-grouped when the camera settles or a plate is re-seated, the selected
+plate never folded; a click on a pill flies the camera a third of the way in
+(measured 625 m → 216 m) until its plates part. Cesium's `EntityCluster` was
+tried first and left 8 overlapping pairs among 26 marks on the reference view,
+because its pills are wider than the boxes it groups by; the greedy grouping
+leaves none.
+
+A click on a site moves its card into the map key (the #312 hooks, shared with
+the DVF): the street and the locality, the diagnostic count large, the classes
+present as plates with their range (« De C à E »), « Classe la plus fréquente :
+D » with a tie named, the passoires and the median cost, a footnote saying each
+rating describes one dwelling and not the building, and a folded list of every
+diagnostic, newest first, each linked to its page on the ADEME observatory
+(`observatoire-dpe-audit.ademe.fr/afficher-dpe/<numéro>`). The list's open
+state survives the key's once-a-second repaint. The globe keeps a tag with the
+range and the count (`C–E · 16`); the building is refilled in its class colour
+at 0.55 and ringed in white, its parcel ringed in white (`groundHighlight.js`,
+now shared with the DVF plot highlight).
+
+The key's DPE block prints the « worse of the two grades » rule once, then the
+seven letters as coloured plates that FILTER the map, then the loaded counts
+two to a column, then one line — `200 / 904 diagnostics · rayon 200 m · 39
+adresses`. A press shows that class alone; the next presses add or remove one;
+removing the last shows everything. The runtime param `classes` carries the
+letters shown (127 legal values, `ABCDEFG` by default) and is draw-only: no
+request. The filter is over DIAGNOSTICS — a building holding C, D and E stays
+under an E filter and its plate becomes E with the count of E — and hides
+unlabelled ones; the key's counts stay the whole answer. Not in share links
+(`enabled-only`, like the DVF's `type`).
 
 **Urbanisme answers a BLOCK below 1 500 m and a POINT above it.** It is the one
 layer of the five whose question depends on the camera as well as on where the

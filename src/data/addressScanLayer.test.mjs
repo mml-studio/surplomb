@@ -6,8 +6,11 @@ import { getOverlaySourceEntries } from '../overlays/worldOverlay.js';
 import {
   SEAT_EPSILON_M,
   addressScanClickIntent,
+  cameraPoseKey,
+  cameraScanPoint,
   cardFromEntity,
   createAddressScanLayer,
+  heldScanPoint,
   renderedGroundM,
   scanShiftNeeded,
   seatEntitiesOnGround,
@@ -1003,6 +1006,96 @@ test('compactCard keeps the title on the globe and drops the details', async (t)
   entry = getOverlaySourceEntries('scan-test')[0];
   assert.deepEqual(entry.details, ['une ligne', 'une autre']);
   layer.disable();
+});
+
+test('a compactCard that answers a string tags the object with it', async (t) => {
+  // The DPE tags its site `C–E · 16` on the map while the key carries the card.
+  withDocument(t);
+  const { layer } = await scannedLayer({
+    render({ dataSource, point }) {
+      dataSource.entities.add({
+        id: 'centre',
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        name: '30 Rue de la République — 16 DPE',
+        description: 'une ligne · une autre',
+      });
+      return 1;
+    },
+    compactCard: () => ' C–E · 16 ',
+  });
+  layer.selectCard('centre');
+  const entry = getOverlaySourceEntries('scan-test')[0];
+  assert.equal(entry.title, 'C–E · 16');
+  assert.deepEqual(entry.details, []);
+  layer.disable();
+});
+
+// ── Where the scan is centred ───────────────────────────────────────────────
+
+/**
+ * A tilted camera over Lyon's Presqu'île, as measured on 2026-09-21: the
+ * street under the middle of the screen stands at 229 m of ellipsoidal height,
+ * and the ellipsoid pick lands 328 m further along the ground.
+ */
+function tiltedViewer({ surface = true } = {}) {
+  const street = Cesium.Cartesian3.fromDegrees(4.8366, 45.7637, 229);
+  const ellipsoidHit = Cesium.Cartesian3.fromDegrees(4.8366, 45.76665, 0);
+  const camera = {
+    positionCartographic: Cesium.Cartographic.fromDegrees(4.8366, 45.7592, 579),
+    pickEllipsoid: () => ellipsoidHit,
+    getPickRay: () => ({}),
+  };
+  return {
+    camera,
+    scene: {
+      camera,
+      canvas: { clientWidth: 1400, clientHeight: 900 },
+      // The photoreal stack: the globe is hidden, the depth buffer answers.
+      globe: { show: false, ellipsoid: Cesium.Ellipsoid.WGS84 },
+      pickPositionSupported: surface,
+      pickPosition: () => street,
+    },
+  };
+}
+
+test('the scan is centred on the drawn street, not on the ellipsoid under it', () => {
+  const point = cameraScanPoint(tiltedViewer());
+  assert.ok(Math.abs(point.lat - 45.7637) < 1e-6, `centred at ${point.lat}, the street is at 45.7637`);
+  assert.equal(point.altitudeM, 579, 'the altitude gate still reads the camera');
+});
+
+test('with no surface to read, the ellipsoid is still a floor, and says so', () => {
+  const point = cameraScanPoint(tiltedViewer({ surface: false }));
+  assert.ok(Math.abs(point.lat - 45.76665) < 1e-6);
+  assert.equal(point.surface, false, 'the centre is still owed a reading');
+  assert.equal(cameraScanPoint(tiltedViewer()).surface, true);
+});
+
+test('a camera that did not move keeps the centre it read on the surface', () => {
+  const last = { lat: 45.7637, lon: 4.8366, altitudeM: 579, surface: true };
+  const fresh = { lat: 45.81, lon: 4.85, altitudeM: 579, surface: true };
+  const held = heldScanPoint({ fresh, last, lastOnSurface: true, samePose: true });
+  assert.deepEqual([held.lat, held.lon], [last.lat, last.lon], 'a still camera asks the same question');
+  assert.equal(heldScanPoint({ fresh, last, lastOnSurface: true, samePose: false }), fresh,
+    'a camera that moved asks a new one');
+  assert.equal(heldScanPoint({ fresh, last, lastOnSurface: false, samePose: true }), fresh,
+    'a centre the ellipsoid stood in for is read again');
+  assert.equal(heldScanPoint({ fresh: null, last, lastOnSurface: true, samePose: true }), null);
+});
+
+test('the pose key changes with the camera and only with it', () => {
+  const camera = {
+    positionWC: new Cesium.Cartesian3(4_470_000.123, 378_000.456, 4_548_000.789),
+    heading: 0.1,
+    pitch: -0.61,
+  };
+  const key = cameraPoseKey(camera);
+  assert.equal(cameraPoseKey({ ...camera }), key);
+  assert.notEqual(cameraPoseKey({ ...camera, pitch: -0.62 }), key);
+  assert.notEqual(cameraPoseKey({
+    ...camera, positionWC: new Cesium.Cartesian3(4_470_000.2, 378_000.456, 4_548_000.789),
+  }), key);
+  assert.equal(cameraPoseKey(null), null);
 });
 
 test('a selection hook that throws leaves the selection standing', async (t) => {

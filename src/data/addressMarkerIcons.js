@@ -18,7 +18,7 @@
  * ONE SILHOUETTE PER REGISTER, and each one is what the register is about:
  *
  *   - **€** for DVF. What a sale is. Asked for by name.
- *   - **A letter in a frame** for the ADEME DPE — the diagnostic's own label,
+ *   - **A letter on a plate** for the ADEME DPE — the diagnostic's own label,
  *     so the marker states the grade without being clicked.
  *   - **A warning triangle** for Géorisques.
  *   - **A plan sheet** for the Géoportail de l'urbanisme: a zoning rule is a
@@ -54,10 +54,10 @@
  * The second exists because the first was measured and lost where it had to
  * win: over Google's photoreal tileset, a 19 px euro puts roughly 7 % of its
  * box in ink, and 7 % of amber over a field of terracotta roofs is nothing.
- * Only `euro` carries it today — it is the pack's one glyph that is routinely
- * drawn four hundred at a time over a city seen obliquely. Adding it to
- * another kind is a decision to be made the same way: by looking at that
- * layer over photoreal, not by symmetry with this one.
+ * `euro` carries it, and since 2026-09-21 so do the DPE letters, as a rounded
+ * PLATE rather than a disc — the shape a reader knows from the label on a sale
+ * listing. Both were decided the same way: by looking at the layer over
+ * photoreal, not by symmetry with each other. The other kinds stay line-art.
  */
 
 /** Glyph coordinate space; every body is drawn to this 96×96 box. */
@@ -94,8 +94,26 @@ const DISC_RIM_PX = 8;
 const DISC_GLYPH_INK = 'rgba(0,0,0,0.78)';
 /** Glyph pass: the visible white line weight. */
 const LINE_STROKE_PX = 7;
-/** Frame around a DPE letter — thinner, so the letter keeps the ink. */
-const FRAME_STROKE_PX = 5;
+
+/**
+ * The DPE plate, in box units: a rounded square filled with the class colour,
+ * the letter punched through it in dark ink — the label a reader already knows
+ * from a sale listing, rather than a letter drawn in the class colour.
+ *
+ * WHY THE LETTERS LEFT THE LINE-ART (2026-09-21). A yellow D in line-art over
+ * Lyon's roofs put a few pixels of yellow on terracotta, and a D badge and an
+ * E badge were told apart by hue alone at 20 px: the reported view showed the
+ * volumes lit and the badges barely there. Filled, the class colour covers the
+ * whole plate — the same inversion the € pastille made for the same reason —
+ * and the letter is dark on every class, which the tint cannot undo (0 × c = 0).
+ *
+ * `DPE_PLATE_RIM_PX` is a stroke on the plate's own edge, so half of it falls
+ * outside: 6 + 84 + 4 = 94, inside the 96-unit box, no clipped corner.
+ */
+const DPE_PLATE = Object.freeze({ x: 6, size: 84, rx: 20 });
+const DPE_PLATE_RIM_PX = 8;
+/** Letter ink on a plate — darker than the €'s, because a letter has no counter to keep open. */
+const DPE_PLATE_INK = 'rgba(0,0,0,0.84)';
 
 /**
  * The seven letters of the official DPE ladder, plus the case the register
@@ -154,22 +172,12 @@ const INTER_CAP_HEIGHT = 1490;
  * round and overshoots, an E is flat and does not, and forcing both to the same
  * box would undo the compensation the type designer built in.
  */
-const DPE_CAP_PX = 42;
+const DPE_CAP_PX = 46;
 /** Baseline, and the horizontal centre every letter is centred on. */
-const DPE_BASELINE_Y = 70;
+const DPE_BASELINE_Y = 71;
 const DPE_CENTRE_X = 48;
 /** Font units per box unit — the scale the outlines are placed at. */
 const DPE_SCALE = DPE_CAP_PX / INTER_CAP_HEIGHT;
-
-/**
- * Halo width for a letter, in box units.
- *
- * Deliberately narrower than {@link HALO_STROKE_PX}. The halo strokes the
- * outline, so half of it falls INSIDE the letter and eats into the counters —
- * at 12 the bowl of the A closes and the badge reads as a filled triangle. At 5
- * every counter survives, checked at 15 px, which is the size that decides it.
- */
-const DPE_LETTER_HALO_PX = 5;
 
 /**
  * Bodies, as pure geometry, all authored to the 96-unit box.
@@ -284,7 +292,7 @@ const BODIES = Object.freeze({
 });
 
 /**
- * The two passes that draw one badge letter, placed from the stored outline.
+ * One badge letter, placed from the stored outline.
  *
  * The transform is where the font's em space becomes the 96-unit box, and it
  * lives here rather than in the stored `d` so that what is vendored stays
@@ -293,29 +301,37 @@ const BODIES = Object.freeze({
  * takes cap height to {@link DPE_CAP_PX} and flips y, because a font measures
  * upward from its baseline and SVG measures downward from the top.
  *
- * The halo width is divided by the scale for the same reason it exists at all:
- * a stroke inside a scaled group is scaled with it, so the number written into
- * the markup is in FONT units and {@link DPE_LETTER_HALO_PX} is what lands.
- *
  * @param {string} letter A key of {@link DPE_LETTER_OUTLINES}.
- * @returns {{halo: string, fill: string}} Two `<g>` elements.
+ * @returns {{transform: string, path: string}}
  */
-function dpeLetterPasses(letter) {
+function dpeLetterPlacement(letter) {
   const outline = DPE_LETTER_OUTLINES[letter] || DPE_LETTER_OUTLINES.unknown;
   const tx = DPE_CENTRE_X - outline.cx * DPE_SCALE;
   const transform = `translate(${tx.toFixed(3)} ${DPE_BASELINE_Y})`
     + ` scale(${DPE_SCALE.toFixed(8)} ${(-DPE_SCALE).toFixed(8)})`;
   const path = `<path d="${outline.d}"/>`;
-  const haloFontUnits = (DPE_LETTER_HALO_PX / DPE_SCALE).toFixed(1);
-  return {
-    // Filled AND stroked: the fill is the letter, the stroke is the halo that
-    // grows out of its edge. Multiplying a tint into black leaves black, so
-    // both survive `billboard.color`.
-    halo: `<g transform="${transform}" fill="rgba(0,0,0,0.62)"`
-      + ` stroke="rgba(0,0,0,0.62)" stroke-width="${haloFontUnits}"`
-      + ` stroke-linejoin="round">${path}</g>`,
-    fill: `<g transform="${transform}" fill="#ffffff" stroke="none">${path}</g>`,
-  };
+  return { transform, path };
+}
+
+/**
+ * One DPE plate: the dark rim, the white surface the class colour lands on,
+ * and the letter in dark ink.
+ * @param {string} letter A key of {@link DPE_LETTER_OUTLINES}.
+ * @param {number} px Raster size.
+ * @returns {string} SVG markup.
+ */
+function dpePlateSvg(letter, px) {
+  const { transform, path } = dpeLetterPlacement(letter);
+  const plate = `x="${DPE_PLATE.x}" y="${DPE_PLATE.x}" width="${DPE_PLATE.size}"`
+    + ` height="${DPE_PLATE.size}" rx="${DPE_PLATE.rx}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${VIEW} ${VIEW}">`
+    // The rim, a stroke on the plate's own edge: dark, so it survives the tint
+    // and holds a yellow plate off a pale roof.
+    + `<rect ${plate} fill="rgba(0,0,0,0.62)" stroke="rgba(0,0,0,0.62)" stroke-width="${DPE_PLATE_RIM_PX}"/>`
+    // The surface. White is the multiplicative identity, so this IS the class.
+    + `<rect ${plate} fill="#ffffff"/>`
+    + `<g transform="${transform}" fill="${DPE_PLATE_INK}" stroke="none">${path}</g>`
+    + '</svg>';
 }
 
 /** @type {Map<string, string>} cache key → data URI. */
@@ -380,24 +396,14 @@ export function addressMarkerGlyph(kind, { px = ADDRESS_GLYPH_RASTER_PX } = {}) 
   const cached = _cache.get(cacheKey);
   if (cached) return cached;
 
-  let frame = '';
-  let strokes = '';
-  let fills = '';
-  let letterHalo = '';
-  let letterFill = '';
-  let disc = false;
   if (key.startsWith('dpe:')) {
-    // The frame is what makes a bare letter read as a LABEL rather than as a
-    // stray character over a roof, and it is drawn as a THIN stroke while the
-    // letter is a solid fill, so the grade still owns the glyph at 16 px.
-    frame = '<rect x="13" y="13" width="70" height="70" rx="17"/>';
-    ({ halo: letterHalo, fill: letterFill } = dpeLetterPasses(dpeLetterKind(key.slice(4))));
-  } else {
-    const body = BODIES[key] || BODIES.plan;
-    strokes = body.strokes;
-    fills = body.fills;
-    disc = body.disc === true;
+    const uri = `data:image/svg+xml;base64,${_b64(dpePlateSvg(dpeLetterKind(key.slice(4)), px))}`;
+    _cache.set(cacheKey, uri);
+    return uri;
   }
+  const body = BODIES[key] || BODIES.plan;
+  const { strokes, fills } = body;
+  const disc = body.disc === true;
   const strokePath = strokes ? `<path d="${strokes}"/>` : '';
 
   // THE PASTILLE INVERTS THE TWO PASSES rather than adding a third. The disc
@@ -424,16 +430,10 @@ export function addressMarkerGlyph(kind, { px = ADDRESS_GLYPH_RASTER_PX } = {}) 
       // Multiplying a tint into black leaves black, so this survives
       // `billboard.color` and keeps white line-art off a white roof.
       + `<g fill="none" stroke="rgba(0,0,0,0.62)" stroke-width="${HALO_STROKE_PX}"`
-      + ` stroke-linecap="round" stroke-linejoin="round">${frame}${strokePath}${fills}</g>`
-      + letterHalo
-      + (frame
-        ? `<g fill="none" stroke="#ffffff" stroke-width="${FRAME_STROKE_PX}"`
-          + ` stroke-linejoin="round">${frame}</g>`
-        : '')
+      + ` stroke-linecap="round" stroke-linejoin="round">${strokePath}${fills}</g>`
       + `<g fill="none" stroke="#ffffff" stroke-width="${LINE_STROKE_PX}"`
       + ` stroke-linecap="round" stroke-linejoin="round">${strokePath}</g>`
       + `<g fill="#ffffff" stroke="none">${fills}</g>`
-      + letterFill
       + '</svg>';
 
   const uri = `data:image/svg+xml;base64,${_b64(svg)}`;

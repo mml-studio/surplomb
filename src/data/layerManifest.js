@@ -212,7 +212,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '▤',
     source: 'ADEME — Observatoire DPE',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({  }),
+    defaultParams: Object.freeze({ classes: 'ABCDEFG' }),
     load: () => import('./dpeFrance.js').then((module) => module.default),
   }),
   Object.freeze({

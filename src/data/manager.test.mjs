@@ -5154,6 +5154,110 @@ test('the selected object prints under its own key block, with a close that reac
   }
 });
 
+test('a legend selection carries its classes and its records, and only https links', () => {
+  const card = legendSelectionOf({
+    key: 'dpe-site:rnb:X:16',
+    title: '30 Rue de la République',
+    chips: { caption: 'Classes présentes', items: [{ label: 'C', color: '#cbfc34' }, { label: '' }], text: 'De C à E' },
+    list: {
+      caption: 'Diagnostics associés à cette adresse',
+      summary: 'Voir les 2 diagnostics',
+      items: [
+        { label: 'D', color: '#fbfe06', text: '39,7 m² · 18 juin 2025', href: 'https://observatoire-dpe-audit.ademe.fr/afficher-dpe/2569E2000837C' },
+        { label: 'E', text: '52 m²', href: 'javascript:alert(1)' },
+        { label: null, text: '' },
+      ],
+    },
+  });
+  assert.deepEqual(card.chips, {
+    caption: 'Classes présentes',
+    items: [{ label: 'C', color: '#cbfc34' }],
+    text: 'De C à E',
+  }, 'a chip with no label is dropped');
+  assert.equal(card.list.items.length, 2, 'a record with nothing to print is dropped');
+  assert.equal(card.list.items[0].href, 'https://observatoire-dpe-audit.ademe.fr/afficher-dpe/2569E2000837C');
+  assert.equal(card.list.items[1].href, null, 'a register-written URL that is not https is refused');
+  assert.equal(legendSelectionOf({ title: 'x', list: { items: [{ text: 'a' }] } }).list, null,
+    'a list with no button to open it is not printed');
+});
+
+test('the DPE key: coloured plates that filter, counts in columns, and a folded list that stays open', async () => {
+  const originalDocument = globalThis.document;
+  const rich = () => {
+    const element = makeControlElement();
+    element.classList = {
+      add: (name) => { element.className = `${element.className} ${name}`.trim(); },
+      toggle() {},
+    };
+    return element;
+  };
+  const host = rich();
+  const items = rich();
+  globalThis.document = {
+    createElement: rich,
+    createDocumentFragment: () => {
+      const fragment = rich();
+      fragment.isFragment = true;
+      return fragment;
+    },
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  const letters = ['A', 'B', 'C'];
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: letters.map((label) => ({ label, color: '#ffffff', count: 1, channel: 'Diagnostics chargés' })),
+    legendColumns: 2,
+    legendSegmentsLabel: 'Filtrer par classe',
+    legendSegments: letters.map((label) => ({
+      label, color: '#319834', active: label !== 'B', toggle: { param: 'classes', value: label },
+    })),
+    legendSelection: {
+      key: 'dpe-site:x',
+      title: '30 Rue de la République',
+      chips: { caption: 'Classes présentes', items: [{ label: 'C', color: '#cbfc34' }], text: 'Classe C' },
+      list: { summary: 'Voir le diagnostic', items: [{ label: 'C', color: '#cbfc34', text: '40 m²' }] },
+    },
+  });
+  mgr.register(layer.module);
+  try {
+    mgr.buildTogglePanel(rich());
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+
+    const plates = collectByClass(items, 'is-swatch');
+    assert.equal(plates.length, 3);
+    assert.equal(plates[0].style.background, '#319834', 'the plate is its class colour');
+    assert.equal(plates[1].attributes['aria-pressed'], 'false', 'a hidden class is pressed off');
+    assert.equal(collectByClass(items, 'is-swatches').length, 1);
+
+    const columns = collectByClass(items, 'is-columns')[0];
+    assert.equal(columns.style.gridTemplateColumns, 'repeat(2, minmax(0, 1fr))');
+    assert.equal(columns.style.gridTemplateRows, 'repeat(2, auto)', 'three entries fill two rows, down first');
+
+    const chip = collectByClass(items, 'map-legend-selection-chip')[0];
+    assert.equal(chip.textContent, 'C');
+    assert.equal(chip.style.background, '#cbfc34');
+
+    // The reader opens the list; the key repaints about once a second and
+    // must not fold it back.
+    const list = collectByClass(items, 'map-legend-selection-list')[0];
+    const details = list.children.find((node) => node.listeners?.toggle);
+    assert.equal(details.open, false, 'a new selection starts folded');
+    details.open = true;
+    details.listeners.toggle();
+    mgr._refreshTogglePanel();
+    const again = collectByClass(items, 'map-legend-selection-list')[0]
+      .children.find((node) => node.listeners?.toggle);
+    assert.equal(again.open, true, 'the list stays open across a repaint');
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
 test('a repaint the panel declined is not recorded as one', async () => {
   // `_refreshTogglePanel` defers while the document is hidden. Committing the
   // coverage signature anyway would tell the NEXT call "nothing changed", so a

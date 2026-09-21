@@ -125,10 +125,18 @@ export const LEGEND_SELECTION_REVEAL_MS = 3000;
  * @param {*} selection
  * @returns {?{key: string, title: string, meta: ?string, headline: ?string,
  *   lines: string[], metric: ?{color: ?string, value: string, caption: string[]},
- *   footnote: ?string, link: ?{href: string, label: string}}}
+ *   chips: ?{caption: ?string, items: Array<{label: string, color: ?string}>, text: ?string},
+ *   footnote: ?string,
+ *   list: ?{caption: ?string, summary: string, items: Array<{label: ?string,
+ *     color: ?string, text: ?string, href: ?string, title: ?string}>},
+ *   link: ?{href: string, label: string}}}
  */
 export function legendSelectionOf(selection) {
   const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+  const https = (value) => {
+    const href = text(value);
+    return href && /^https:\/\//.test(href) ? href : null;
+  };
   const title = text(selection?.title);
   if (!title) return null;
   const metricValue = text(selection.metric?.value);
@@ -137,6 +145,21 @@ export function legendSelectionOf(selection) {
     : [selection.metric?.caption];
   const href = text(selection.link?.href);
   const linkLabel = text(selection.link?.label);
+  // A row of labelled swatches — the classes a selected object holds.
+  const chipItems = (Array.isArray(selection.chips?.items) ? selection.chips.items : [])
+    .map((item) => ({ label: text(item?.label), color: text(item?.color) }))
+    .filter((item) => item.label);
+  // A folded list — the records behind the object, one line each.
+  const listItems = (Array.isArray(selection.list?.items) ? selection.list.items : [])
+    .map((item) => ({
+      label: text(item?.label),
+      color: text(item?.color),
+      text: text(item?.text),
+      href: https(item?.href),
+      title: text(item?.title),
+    }))
+    .filter((item) => item.text || item.label);
+  const listSummary = text(selection.list?.summary);
   return {
     key: text(selection.key) || title,
     title,
@@ -150,7 +173,13 @@ export function legendSelectionOf(selection) {
         caption: captions.map(text).filter(Boolean),
       }
       : null,
+    chips: chipItems.length
+      ? { caption: text(selection.chips.caption), items: chipItems, text: text(selection.chips.text) }
+      : null,
     footnote: text(selection.footnote),
+    list: listItems.length && listSummary
+      ? { caption: text(selection.list.caption), summary: listSummary, items: listItems }
+      : null,
     link: href && linkLabel && /^https:\/\//.test(href) ? { href, label: linkLabel } : null,
   };
 }
@@ -3645,6 +3674,10 @@ export class DataLayerManager {
           // A segmented control over the key, when the layer has one.
           segments: Array.isArray(controls.legendSegments) ? controls.legendSegments : [],
           segmentsLabel: typeof controls.legendSegmentsLabel === 'string' ? controls.legendSegmentsLabel : '',
+          // Side-by-side entries laid out in this many columns, filled down
+          // first, so a ladder still reads top to bottom — see the DPE key.
+          columns: Number.isInteger(controls.legendColumns) && controls.legendColumns > 1
+            ? Math.min(controls.legendColumns, 3) : 1,
           // WHERE these classes are, and whether any of them is on screen.
           // A layer whose whole dataset sits 800 km away was still printing a
           // six-class key above the layer the reader was actually looking at.
@@ -3966,6 +3999,7 @@ export class DataLayerManager {
         bar: group.bar === true,
         segments: group.segments || [],
         segmentsLabel: group.segmentsLabel || '',
+        columns: group.columns || 1,
         scope: group.scope || null,
         selection: group.selection || null,
         subtitle: fusionMemberChipFor(rowId, group.layer.id) || this._displayName(group.layer),
@@ -4114,7 +4148,7 @@ export class DataLayerManager {
         rowNode.appendChild(rowTitle);
       }
       for (const {
-        layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel, selection,
+        layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel, selection, columns,
       } of row.members) {
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
@@ -4160,11 +4194,22 @@ export class DataLayerManager {
           strip.className = 'map-legend-segments';
           strip.setAttribute('role', 'group');
           if (segmentsLabel) strip.setAttribute('aria-label', segmentsLabel);
+          // SWATCH SEGMENTS: a segment carrying `color` is drawn filled in it,
+          // with its label in dark ink — the DPE's seven lettered plates. The
+          // strip then reads as the classes themselves, and a class pressed
+          // off is dimmed rather than emptied, so its colour stays findable.
+          if (segments.some((segment) => typeof segment.color === 'string' && segment.color)) {
+            strip.classList.add('is-swatches');
+          }
           for (const segment of segments) {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'map-legend-segment';
             button.textContent = segment.label;
+            if (typeof segment.color === 'string' && segment.color) {
+              button.classList.add('is-swatch');
+              button.style.background = segment.color;
+            }
             button.setAttribute('aria-pressed', segment.active ? 'true' : 'false');
             if (segment.title) button.title = segment.title;
             const toggle = segment.toggle && typeof segment.toggle.param === 'string' ? segment.toggle : null;
@@ -4232,6 +4277,16 @@ export class DataLayerManager {
             }
             channelList = document.createElement('div');
             channelList.className = 'map-legend-inline';
+            // COLUMNS, FILLED DOWN FIRST. A ladder of eight classes side by side
+            // wraps at whatever the rail's width allows and reads left to
+            // right; in two columns of four it reads A to D, then E to G, the
+            // way the classes rise.
+            if (columns > 1) {
+              const count = entries.filter((entry) => (entry.channel || null) === (channel || null)).length;
+              channelList.classList.add('is-columns');
+              channelList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+              channelList.style.gridTemplateRows = `repeat(${Math.max(1, Math.ceil(count / columns))}, auto)`;
+            }
             group.appendChild(channelList);
           }
         } else {
@@ -4435,6 +4490,25 @@ export class DataLayerManager {
     add('map-legend-selection-title', selection.title);
     if (selection.meta) add('map-legend-selection-meta', selection.meta);
     if (selection.headline) add('map-legend-selection-headline', selection.headline);
+    if (selection.chips) {
+      if (selection.chips.caption) add('map-legend-selection-caption is-heading', selection.chips.caption);
+      const strip = document.createElement('div');
+      strip.className = 'map-legend-selection-chips';
+      for (const item of selection.chips.items) {
+        const chip = document.createElement('span');
+        chip.className = 'map-legend-selection-chip';
+        chip.textContent = item.label;
+        if (item.color) chip.style.background = item.color;
+        strip.appendChild(chip);
+      }
+      if (selection.chips.text) {
+        const range = document.createElement('span');
+        range.className = 'map-legend-selection-chips-text';
+        range.textContent = selection.chips.text;
+        strip.appendChild(range);
+      }
+      section.appendChild(strip);
+    }
     for (const line of selection.lines) add('map-legend-selection-line', line);
     if (selection.metric) {
       const metric = document.createElement('div');
@@ -4458,6 +4532,7 @@ export class DataLayerManager {
       section.appendChild(metric);
     }
     if (selection.footnote) add('map-legend-selection-footnote', selection.footnote);
+    if (selection.list) section.appendChild(this._legendSelectionList(selection));
     if (selection.link) {
       const link = add('map-legend-selection-link', selection.link.label, 'a');
       link.href = selection.link.href;
@@ -4465,6 +4540,68 @@ export class DataLayerManager {
       link.rel = 'noopener';
     }
     return section;
+  }
+
+  /**
+   * The records behind a selection, folded under one button — the DPE's
+   * « Voir les 16 diagnostics ».
+   *
+   * A `<details>`, so it opens by keyboard and says whether it is open without
+   * a line of script. Its OPEN STATE OUTLIVES THE REPAINT: the key is rebuilt
+   * about once a second, and a list that folded itself back every second would
+   * be a list nobody could read. The manager remembers which selection's list
+   * the reader opened, and a new selection starts folded.
+   *
+   * Every line is `textContent`, and a link is an `https:` URL or nothing —
+   * {@link legendSelectionOf} has already dropped the rest.
+   *
+   * @param {object} selection From {@link legendSelectionOf}.
+   * @returns {HTMLElement}
+   */
+  _legendSelectionList(selection) {
+    const { list } = selection;
+    const block = document.createElement('div');
+    block.className = 'map-legend-selection-list';
+    if (list.caption) {
+      const caption = document.createElement('div');
+      caption.className = 'map-legend-selection-caption is-heading';
+      caption.textContent = list.caption;
+      block.appendChild(caption);
+    }
+    const details = document.createElement('details');
+    details.open = this._legendSelectionListOpen === selection.key;
+    details.addEventListener('toggle', () => {
+      if (details.open) this._legendSelectionListOpen = selection.key;
+      else if (this._legendSelectionListOpen === selection.key) this._legendSelectionListOpen = null;
+    });
+    const summary = document.createElement('summary');
+    summary.textContent = list.summary;
+    details.appendChild(summary);
+    const items = document.createElement('ol');
+    for (const item of list.items) {
+      const row = document.createElement('li');
+      if (item.label) {
+        const chip = document.createElement('span');
+        chip.className = 'map-legend-selection-chip is-small';
+        chip.textContent = item.label;
+        if (item.color) chip.style.background = item.color;
+        row.appendChild(chip);
+      }
+      const text = document.createElement(item.href ? 'a' : 'span');
+      text.className = 'map-legend-selection-list-text';
+      text.textContent = item.text || '';
+      if (item.href) {
+        text.href = item.href;
+        text.target = '_blank';
+        text.rel = 'noopener';
+        if (item.title) text.title = item.title;
+      }
+      row.appendChild(text);
+      items.appendChild(row);
+    }
+    details.appendChild(items);
+    block.appendChild(details);
+    return block;
   }
 
   /**

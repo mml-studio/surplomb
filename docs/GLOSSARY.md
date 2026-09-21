@@ -132,6 +132,8 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | étiquette énergie A à G | energy label A to G | |
 | étiquette climat, GES | greenhouse-gas label | |
 | passoire thermique | energy-inefficient home (F or G) | |
+| diagnostic (un DPE déposé) | rating | *16 diagnostics* → *16 ratings*; one per dwelling, never per building. |
+| classe (DPE), classe la plus fréquente | class, most frequent class | The mode of an address's ratings — never « the building's class ». |
 | loyer, encadrement des loyers | rent, rent control | |
 | copropriété | condominium building | |
 | logement social, HLM, bailleur social | social housing (HLM), social landlord | |
