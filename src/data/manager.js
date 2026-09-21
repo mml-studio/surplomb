@@ -4118,6 +4118,9 @@ export class DataLayerManager {
       } of row.members) {
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
+        // Which layer this block keys: a filming harness keeps one block on
+        // screen, and a test can find it without matching translated titles.
+        if (layer?.id) group.dataset.layer = layer.id;
 
         // A sub-title that would only repeat the row's says nothing, so it is
         // dropped rather than printed — the rule and the indent already say

@@ -8206,6 +8206,14 @@ body.recording-mode #scene-runtime.active {
   visibility: visible;
 }
 
+/* A scene shot that explains a layer brings its key back (`legend: true`,
+   src/scenes/director.js). One class more than the rule above wins it. */
+body.recording-mode.scene-legend-visible #map-legend {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
 body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
   display: none !important;

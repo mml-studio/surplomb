@@ -2,7 +2,7 @@
  * Scene recipes optimized for short social clips.
  * Each recipe is deterministic so repeated runs produce similar footage.
  *
- * THE TWO FRENCH GROUND-TRANSPORT RECIPES AT THE END OF THIS LIST exist
+ * THE TWO FRENCH GROUND-TRANSPORT RECIPES AFTER THE UPSTREAM FIVE exist
  * because of a measurement, not a mood. France's national access point obliges
  * operators to publish timetables, not vehicle positions, and the largest
  * networks publish none: on 2026-08-31 at a Monday peak, Paris intra-muros,
@@ -246,6 +246,102 @@ export const SCENE_RECIPES = [
       { lat: 48.1173, lon: -1.6778, alt: 16000, heading: 55, pitch: -48, roll: 0, duration: 5, hold: 2 },
       { lat: 43.6108, lon: 3.8767, alt: 15000, heading: 75, pitch: -46, roll: 0, duration: 5, hold: 2 },
       { lat: 43.1242, lon: 5.9280, alt: 14000, heading: 95, pitch: -44, roll: 0, duration: 4, hold: 0 },
+    ],
+  },
+  {
+    // Roissy in one continuous move: what the upstream globe already does —
+    // the photorealistic airport, a take-off run down 09R, live flights,
+    // following an aircraft, its Cockpit — and then what France publishes under the departure track: the
+    // noise exposure plan (PEB) and the noise nuisance plan (PGS), zone by
+    // zone, from the DGAC's WMS.
+    //
+    // Written for an EAST flow, Roissy's usual one: departures roll on 09R.
+    // The poses were scouted on the photorealistic mesh (2026-09-21): Terminal
+    // 1 and its satellites carry real aircraft at the gates, and the 09R
+    // threshold reads its own painted number.
+    //
+    // The noise layer switches on only in the LAST shot, at 15 km, because it
+    // asks a different question by altitude (src/data/bruitFrance.js): under
+    // 12 km it probes the point under the reticle and paints that one zone
+    // across the frame; from 12 to 30 km it draws every airport's whole plan.
+    id: 'roissy-noise-plan',
+    get title() { return messages().roissyNoise; },
+    durationSec: 37,
+    style: 'normal',
+    ui: { hidePanels: true, hudMode: 'off', safeFrame: '16:9' },
+    layers: {
+      flights: true,
+      'bruit-fr': false,
+      traffic: false,
+      satellites: false,
+      earthquakes: false,
+    },
+    post: {
+      sharpen: false,
+      detectionMode: 'OFF',
+    },
+    cameraPath: [
+      // Terminal 1 from the south-west, 120 m above the apron, turning slowly.
+      {
+        lat: 49.0127, lon: 2.5371, alt: 280, heading: 60, pitch: -25, roll: 0,
+        duration: 3, hold: 2.5, orbitDegPerSec: 3,
+      },
+      // Back across the apron to the 09R threshold, the runway to the horizon —
+      // low all the way: uncapped, Cesium arcs this hop up to ~1.5 km.
+      {
+        lat: 49.0203, lon: 2.5080, alt: 260, heading: 85, pitch: -9, roll: 0,
+        duration: 4.5, hold: 0, maxHeightM: 330,
+      },
+      // The camera takes off. Lined up 15 m above the runway (the mesh is
+      // still sharp there: scouted at 15, 25 and 40 m, 2026-09-21; the
+      // runway surface sits at 156 m), a roll that accelerates, then a
+      // rotation into the sky where the departures climb. The roll ends at
+      // ~225 m/s and the climb starts at the same speed, so the join holds.
+      {
+        lat: 49.02069, lon: 2.51443, alt: 172, heading: 85.3, pitch: -3, roll: 0,
+        duration: 1.6, hold: 0, maxHeightM: 265,
+      },
+      {
+        lat: 49.020825, lon: 2.516884, alt: 172, heading: 85.3, pitch: -2, roll: 0,
+        duration: 2.4, hold: 0, easing: 'in', maxHeightM: 175,
+      },
+      {
+        lat: 49.020949, lon: 2.5192, alt: 267, heading: 85.3, pitch: 6, roll: 0,
+        duration: 2.6, hold: 0, easing: 'out', maxHeightM: 270,
+      },
+      // Up behind the runway, looking down the climb-out where OpenSky first
+      // reports a departure: 110–370 m, 3.7–5.8 km past the threshold
+      // (measured over 8 departures, 2026-09-21). The frame spans ~3 to 12 km
+      // past the threshold, so all of them are in it.
+      {
+        lat: 49.021717, lon: 2.533503, alt: 1600, heading: 85.3, pitch: -25, roll: 0,
+        duration: 1.4, hold: 0, maxHeightM: 1650,
+      },
+      // A real departure below, just after lift-off, followed by the layer's
+      // own camera.
+      {
+        lat: 49.021717, lon: 2.533503, alt: 1600, heading: 85.3, pitch: -25, roll: 0, duration: 2.5, hold: 0,
+        action: {
+          kind: 'track', layer: 'flights', near: { lat: 49.0240, lon: 2.5600 },
+          radiusKm: 5, minAltM: null, maxAltM: 1500, leadInSec: 0.8,
+        },
+      },
+      // Inside it: the upstream Cockpit.
+      {
+        lat: 49.021717, lon: 2.533503, alt: 1600, heading: 85.3, pitch: -25, roll: 0, duration: 4, hold: 0,
+        action: { kind: 'cockpit' },
+      },
+      // Out of the aircraft and up to 15 km, where the whole plan fits.
+      { lat: 48.8748, lon: 2.5479, alt: 15000, heading: 0, pitch: -45, roll: 0, duration: 4, hold: 0 },
+      {
+        lat: 48.8748, lon: 2.5479, alt: 15000, heading: 0, pitch: -45, roll: 0, duration: 0.2, hold: 2.4,
+        orbitDegPerSec: 2.5, layers: { 'bruit-fr': true },
+      },
+      // The turn carries on; the key comes back to say what the colours mean.
+      {
+        lat: 48.8748, lon: 2.5479, alt: 15000, heading: 0, pitch: -45, roll: 0, duration: 0.2, hold: 3.3,
+        orbitDegPerSec: 2.5, layers: { 'bruit-fr': true }, legend: true, action: { kind: 'still' },
+      },
     ],
   },
 ];

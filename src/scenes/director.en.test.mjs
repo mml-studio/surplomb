@@ -49,7 +49,7 @@ function freshDirector(locale) {
   });
 }
 
-test('the seven built-in scenes keep their English names and gain French ones', () => {
+test('the built-in scenes keep their English names and gain French ones', () => {
   const english = withLocale('en', () => SCENE_RECIPES.map((recipe) => recipe.title));
   assert.deepEqual(english, [
     'Global Flights Radar',
@@ -59,8 +59,9 @@ test('the seven built-in scenes keep their English names and gain French ones', 
     'Omniscience Pullback',
     'Bordeaux Transport Pulse',
     'France Transit Showcase',
+    'Roissy Departures and Noise Exposure Plan',
   ]);
-  assertNoFrench(english, { allow: ['Bordeaux', 'France'] });
+  assertNoFrench(english, { allow: ['Bordeaux', 'France', 'Roissy'] });
 
   const french = withLocale('fr', () => SCENE_RECIPES.map((recipe) => recipe.title));
   assert.equal(french[0], 'Radar des vols mondiaux');

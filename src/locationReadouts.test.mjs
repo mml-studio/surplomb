@@ -112,7 +112,7 @@ test('a deferred lookup that never flies leaves the readout standing', () => {
 
 test('scene playback invalidates the search label on every shot', () => {
   // The director drives viewer.camera itself and never reaches _stampNavigation.
-  const start = director.indexOf('  async _flyCamera(cameraState, durationSec, token) {');
+  const start = director.indexOf('  async _flyCamera(cameraState, durationSec, token');
   assert.ok(start > 0, 'scene camera flight is missing');
   assert.match(
     director.slice(start, start + 700),

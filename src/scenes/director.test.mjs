@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { SceneDirector } from './director.js';
+import { SceneDirector, pickAircraft, recipeToScene } from './director.js';
 import { SCENE_TRACKING_PARAM_KEYS } from './scenePolicy.js';
 import { SCENE_RECIPES } from './recipes.js';
 
@@ -205,6 +205,56 @@ test('the director reconciles only the layers a shot declares', async () => {
   } finally {
     restore();
   }
+});
+
+test('a recipe keyframe can switch a layer on mid-scene', () => {
+  // Every keyframe used to inherit the recipe's one layer map, so a layer
+  // could only be there from the first frame. A keyframe's own map is merged
+  // over it, and only for that shot.
+  const scene = recipeToScene({
+    id: 'reveal',
+    title: 'Reveal',
+    layers: { flights: true, 'bruit-fr': false },
+    cameraPath: [
+      { lat: 49, lon: 2.6, alt: 3500, duration: 2 },
+      { lat: 49, lon: 2.6, alt: 15000, duration: 2, layers: { 'bruit-fr': { enabled: true, params: { a: 1 } } } },
+    ],
+  });
+  assert.deepEqual(scene.shots.map((shot) => shot.layers), [
+    { flights: { enabled: true }, 'bruit-fr': { enabled: false } },
+    { flights: { enabled: true }, 'bruit-fr': { enabled: true, params: { a: 1 } } },
+  ]);
+});
+
+test('the Roissy recipe takes off, rides a departure, then draws the noise plan from above', () => {
+  const recipe = SCENE_RECIPES.find((item) => item.id === 'roissy-noise-plan');
+  const shots = recipeToScene(recipe).shots;
+  assert.deepEqual(
+    shots.map((shot) => shot.action?.kind ?? null),
+    [null, null, null, null, null, null, 'track', 'cockpit', null, null, 'still'],
+  );
+  assert.deepEqual(
+    shots.map((shot) => shot.layers['bruit-fr'].enabled),
+    [false, false, false, false, false, false, false, false, false, true, true],
+  );
+  // Above 12 km the layer draws each airport's whole plan (bruitFrance.js).
+  assert.ok(shots.at(-1).camera.alt >= 12_000);
+  assert.ok(shots.every((shot) => shot.layers.flights.enabled));
+  // The terminal and the plan turn slowly; nothing else does.
+  assert.deepEqual(
+    shots.map((shot) => shot.motion.orbitDegPerSec > 0),
+    [true, false, false, false, false, false, false, false, false, true, true],
+  );
+  // The key comes back only for the last shot, once the plan is drawn.
+  assert.deepEqual(shots.map((shot) => shot.legend), [false, false, false, false, false, false, false, false, false, false, true]);
+  // The departure is followed for 2.5 s before Cockpit.
+  assert.equal(shots.find((shot) => shot.action?.kind === 'track').durationSec, 2.5);
+  // The take-off run: 15 m above the runway, level, then a climb.
+  const [lineUp, roll, climb] = shots.slice(2, 5);
+  assert.equal(lineUp.camera.alt, roll.camera.alt);
+  assert.ok(roll.camera.alt - 156 <= 20);
+  assert.ok(climb.camera.alt > roll.camera.alt + 50);
+  assert.deepEqual([roll.motion.easing, climb.motion.easing], ['in', 'out']);
 });
 
 test('a shot captured while tracking never re-establishes tracking on playback', async () => {
@@ -619,6 +669,170 @@ test('a scene run supersedes a LOAD still suspended on its visual await', async 
       dataManager.setEnabledCalls.map((call) => call.id),
       ['flights', 'traffic'],
     );
+  } finally {
+    restore();
+  }
+});
+
+// ── Shots that do more than fly: easing, a slow turn, a live aircraft ──────
+
+/** A project of one scene: follow an aircraft, ride it, then fly away. */
+const ACTION_PROJECT = {
+  version: 3,
+  scenes: [{
+    id: 'ride',
+    title: 'Ride',
+    shots: [
+      {
+        id: 'follow', durationSec: 0.2, holdSec: 0,
+        camera: { lat: 49, lon: 2.5, alt: 500, heading: 85, pitch: -10, roll: 0 },
+        visual: { style: 'normal' }, layers: { flights: { enabled: true } },
+        action: { kind: 'track', near: { lat: 49.02, lon: 2.53 }, radiusKm: 4, maxAltM: 800, leadInSec: 0 },
+      },
+      {
+        id: 'inside', durationSec: 0.2, holdSec: 0,
+        camera: { lat: 49, lon: 2.5, alt: 500, heading: 85, pitch: -10, roll: 0 },
+        visual: { style: 'normal' }, layers: {}, action: { kind: 'cockpit' },
+      },
+      {
+        id: 'away', durationSec: 0.2, holdSec: 0,
+        camera: { lat: 48.87, lon: 2.55, alt: 15000, heading: 0, pitch: -45, roll: 0 },
+        visual: { style: 'normal' }, layers: {}, motion: { easing: 'out' },
+      },
+    ],
+  }],
+};
+
+/** A flights layer double: three drawn aircraft and a follow camera. */
+function fakeFlightsLayer() {
+  const tracked = [];
+  return {
+    tracked,
+    module: {
+      getAllPositions: () => [
+        { id: 'far', latitude: 49.3, longitude: 2.9, altitudeM: 300 },
+        { id: 'high', latitude: 49.021, longitude: 2.531, altitudeM: 9000 },
+        { id: 'climbing', label: 'AFR376V', latitude: 49.023, longitude: 2.56, altitudeM: 312 },
+      ],
+      trackById: (id) => { tracked.push(id); return true; },
+    },
+  };
+}
+
+test('easing and a slow turn survive a recipe and a stored project', () => {
+  const scene = recipeToScene({
+    id: 'motion',
+    cameraPath: [
+      { lat: 49, lon: 2.5, alt: 300, duration: 2, easing: 'linear', orbitDegPerSec: 2.5, maxHeightM: 330 },
+      { lat: 49, lon: 2.5, alt: 300, duration: 2, easing: 'sideways', orbitDegPerSec: 400, maxHeightM: -1 },
+    ],
+  });
+  assert.deepEqual(scene.shots.map((shot) => shot.motion), [
+    { easing: 'linear', orbitDegPerSec: 2.5, maxHeightM: 330 },
+    // An unknown easing is the historical one; a runaway turn is bounded;
+    // a ceiling below the ground is no ceiling.
+    { easing: 'inOut', orbitDegPerSec: 20, maxHeightM: null },
+  ]);
+  const { director, restore } = makeDirector({ project: { version: 3, scenes: [scene] } });
+  try {
+    assert.deepEqual(director._project.scenes[0].shots[0].motion, { easing: 'linear', orbitDegPerSec: 2.5, maxHeightM: 330 });
+  } finally {
+    restore();
+  }
+});
+
+test('a track shot follows the drawn aircraft nearest the point, inside its altitude band', () => {
+  const layer = fakeFlightsLayer();
+  const action = { near: { lat: 49.02, lon: 2.53 }, radiusKm: 4, minAltM: null, maxAltM: 800 };
+  // `high` is nearer but above the band; `far` is outside the radius.
+  assert.equal(pickAircraft(layer.module.getAllPositions(), action).id, 'climbing');
+  assert.equal(pickAircraft(layer.module.getAllPositions(), { ...action, maxAltM: 100 }), null);
+});
+
+test('a scene follows an aircraft, rides it in Cockpit, and takes the camera back to fly', async () => {
+  const { director, viewer, styleManager, dataManager, restore } = makeDirector({ project: ACTION_PROJECT });
+  const layer = fakeFlightsLayer();
+  dataManager.layers = new Map([['flights', layer]]);
+  const cockpit = [];
+  const contexts = [];
+  const claims = [];
+  styleManager.controlCockpit = (verb) => { cockpit.push(verb); return { ok: true }; };
+  styleManager.setContextMode = async (mode) => { contexts.push(mode); return { ok: true }; };
+  styleManager.runImmediateNavigation = (noun, navigate) => { claims.push(noun); return navigate(); };
+  try {
+    await director.startScene('ride', { single: true });
+    assert.deepEqual(layer.tracked, ['climbing']);
+    assert.deepEqual(cockpit, ['enter', 'exit']);
+    assert.deepEqual(contexts, ['contacts', 'off']);
+    // Once to start the run, once to take the camera back before `away` flies.
+    assert.deepEqual(claims, ['scene', 'scene']);
+    // Only `away` is a camera flight; it has no ceiling, so Cesium gets none.
+    assert.equal(viewer.flights.length, 1);
+    assert.equal(viewer.flights[0].duration, 0.2);
+    assert.equal(Object.hasOwn(viewer.flights[0], 'maximumHeight'), false);
+    const events = director._lastRun.events.map((event) => event.type);
+    assert.ok(events.includes('shot_action_pending'));
+    assert.equal(director._lastRun.events.find((event) => event.type === 'shot_action').payload.id, 'climbing');
+  } finally {
+    restore();
+  }
+});
+
+test('no aircraft where the shot looks is reported, and Cockpit is not entered on nothing', async () => {
+  const { director, styleManager, dataManager, restore } = makeDirector({ project: ACTION_PROJECT });
+  dataManager.layers = new Map([['flights', { module: { getAllPositions: () => [], trackById: () => true } }]]);
+  const cockpit = [];
+  styleManager.controlCockpit = (verb) => {
+    cockpit.push(verb);
+    return verb === 'enter' ? { ok: false, error: 'No aircraft is being tracked' } : { ok: true };
+  };
+  styleManager.setContextMode = async () => ({ ok: true });
+  try {
+    await director.startScene('ride', { single: true });
+    const events = director._lastRun.events;
+    assert.ok(events.some((event) => event.type === 'shot_action_failed' && event.payload.reason === 'no-aircraft'));
+    assert.ok(events.some((event) => event.type === 'shot_action_failed' && event.payload.kind === 'cockpit'));
+    // A refused entry is never exited.
+    assert.equal(cockpit.includes('exit'), false);
+  } finally {
+    restore();
+  }
+});
+
+test('a caller that already knows the aircraft names it, and the pick steps aside', async () => {
+  const { director, styleManager, dataManager, restore } = makeDirector({ project: ACTION_PROJECT });
+  const layer = fakeFlightsLayer();
+  dataManager.layers = new Map([['flights', layer]]);
+  styleManager.controlCockpit = () => ({ ok: true });
+  styleManager.setContextMode = async () => ({ ok: true });
+  try {
+    await director.startScene('ride', { single: true, targets: ['far'] });
+    assert.deepEqual(layer.tracked, ['far']);
+  } finally {
+    restore();
+  }
+});
+
+test('a still shot leaves the camera where the previous shot put it', async () => {
+  const project = {
+    version: 3,
+    scenes: [{
+      id: 'still',
+      title: 'Still',
+      shots: [
+        { id: 'fly', durationSec: 0.2, holdSec: 0, camera: { lat: 1, lon: 2, alt: 500 }, visual: {}, layers: {} },
+        {
+          id: 'stay', durationSec: 0.2, holdSec: 0, camera: { lat: 9, lon: 9, alt: 500 }, visual: {}, layers: {},
+          action: { kind: 'still' }, legend: true,
+        },
+      ],
+    }],
+  };
+  const { director, viewer, restore } = makeDirector({ project });
+  try {
+    assert.equal(director._project.scenes[0].shots[1].legend, true);
+    await director.startScene('still', { single: true });
+    assert.equal(viewer.flights.length, 1);
   } finally {
     restore();
   }
