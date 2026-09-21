@@ -2383,7 +2383,7 @@ export class StyleManager {
     this._clearSelectedLayersManagerPromise = null;
     this._clearSelectedLayersHandler = null;
     this._dataManager = null;
-    /** Moves the preset with the grid-and-plants row; see `attachDataManager`. */
+    /** Night on, Normal off, with the grid-and-plants row; see `attachDataManager`. */
     this._nightAtlasRow = null;
     // Territorial controls: where the camera is, and the card that explains a
     // layer before it starts. See `_installCoverageWatch`.
@@ -4718,10 +4718,9 @@ export class StyleManager {
     }
     this._dataManager = dataManager || null;
     // « Réseau électrique et centrales » brings the night atlas when a reader
-    // switches it on, and gives the previous preset back when it goes dark
+    // switches it on, and puts a night map back to Normal when it goes dark
     // (`styles/nightAtlasRow.js`). Only the preset moves: `applyPreset: false`
-    // keeps a return to CRT or FLIR from re-applying their tactical HUD and
-    // detection, and the Parameters panel stays where the reader left it.
+    // leaves the HUD, detection and the Parameters panel where they were.
     this._nightAtlasRow = this._dataManager
       ? createNightAtlasRowFollower({
         isEnabled: (layerId) => Boolean(this._dataManager?.isEnabled?.(layerId)),
@@ -9812,8 +9811,6 @@ export class StyleManager {
     const previousStyle = this.activeStyle;
     this.activeStyle = styleName;
     document.documentElement.dataset.gevStyle = styleName;
-    // A preset the night row did not set is the reader's: nothing to give back.
-    this._nightAtlasRow?.onStyleChange();
 
     // The celestial optics treatment belongs to the unfiltered globe only.
     // Leaving Normal turns it off; returning merely re-enables the control.

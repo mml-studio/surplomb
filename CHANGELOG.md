@@ -149,9 +149,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   were two rows for the question the landing page's scene asks as one. The row
   is now *Réseau électrique et centrales* (*Power grid and plants*): its switch
   lights the grid and the stations' live output, as the scene link does, and
-  moves the visual preset to Night; switching it off gives back the preset it
-  replaced, unless the reader picked another one meanwhile. A share link or a
-  restored session never moves the preset. Four chips take the row apart —
+  moves the visual preset to Night; switching it off puts a night map back to
+  Normal, also after arriving from the landing page's link. A preset picked
+  while the row is on (CRT, FLIR…) stays. A share link or a restored session
+  never moves the preset. Four chips take the row apart —
   *Réseau*, *Production*, *Registre EDF*, *Centrales hydro* — and the EDF and
   hydro registers now wait for their chip: on this row they drew the same
   stations a second time, a second icon on every nuclear site the relief
