@@ -379,69 +379,78 @@
         </dl>
       </section>
 
+      <!--
+        La galerie est une scène (maquette du 2026-09-21) : une vue à la fois,
+        pleine largeur, l'interface sur ses bords — le titre en haut à gauche,
+        le lieu en bas à gauche, la porte du globe en bas à droite, et six
+        onglets dessous. Les vues défilent seules (src/vitrine/stage.js) ;
+        sans JavaScript, elles s'empilent (landing.css, scripting: none).
+        Les images s'arrêtent à 960 px sous 700 px de large : un iPhone
+        (densité 3) prenait la 1440, 250 ko chacune, et les six vues sont
+        chargées ensemble puisqu'elles occupent la même place.
+      -->
       <section class="panel gallery" aria-labelledby="gallery-title">
-        <h2 class="section-title" id="gallery-title">Choisissez une vue.</h2>
-        <!--
-          Les vignettes s'arrêtent à 960 px sous 700 px de large : une vignette de
-          téléphone fait ~346 px, et un iPhone (densité 3) prenait la 1440 —
-          250 ko chacune, dont deux chargées d'office parce que Chrome anticipe
-          les images paresseuses à moins de 1 250 px de l'écran.
-        -->
-        <div class="gallery-grid">
-          <a class="view" data-view="01" data-expand href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t">
-            <figure>
+        <div class="stage">
+          <h2 class="section-title stage-title" id="gallery-title">Choisissez une vue.</h2>
+          <button class="stage-pause" type="button" data-stage-pause aria-pressed="false" hidden><svg class="icon-pause" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></g></svg><svg class="icon-play" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></g></svg><span data-stage-pause-label>Mettre en pause</span></button>
+          <div class="stage-views">
+            <article class="view" data-view="01" data-active>
               <div class="view-image" data-media="view:01">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w, /landing/view-01-1440.dda02268.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-01-480.4cdfdd33.jpg" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w" sizes="calc(100vw - 44px)" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w, /landing/view-01-1440.dda02268.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-01-480.4cdfdd33.jpg" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w" sizes="100vw" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Roissy et les avions en approche</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
-          <a class="view" data-view="02" href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv">
-            <figure>
+              <div class="view-text"><h3 class="view-title" id="vue-01-titre">Avions en approche</h3><p class="view-place">Roissy-Charles-de-Gaulle</p></div>
+              <a class="view-open" aria-describedby="vue-01-titre" href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+            <article class="view" data-view="02">
               <div class="view-image" data-media="view:02">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w, /landing/view-02-1440.c15ac1b1.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-02-480.5e04590d.jpg" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w" sizes="calc(100vw - 44px)" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w, /landing/view-02-1440.c15ac1b1.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-02-480.5e04590d.jpg" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w" sizes="100vw" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Une parcelle vendue à Lyon, et son prix</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
-          <a class="view" data-view="03" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8">
-            <figure>
+              <div class="view-text"><h3 class="view-title" id="vue-02-titre">Ventes immobilières</h3><p class="view-place">Une parcelle vendue à Lyon, et son prix</p></div>
+              <a class="view-open" aria-describedby="vue-02-titre" href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+            <article class="view" data-view="03">
               <div class="view-image" data-media="view:03">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w, /landing/view-03-1440.ab55a76b.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-03-480.e0f39b6c.jpg" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w" sizes="calc(100vw - 44px)" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w, /landing/view-03-1440.ab55a76b.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-03-480.e0f39b6c.jpg" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w" sizes="100vw" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Les voitures en direct dans les rues, avec les bouchons</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
-          <a class="view" data-view="04" data-expand href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night">
-            <figure>
+              <div class="view-text"><h3 class="view-title" id="vue-03-titre">Trafic routier</h3><p class="view-place">Les bouchons en direct, rue par rue</p></div>
+              <a class="view-open" aria-describedby="vue-03-titre" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+            <article class="view" data-view="04">
               <div class="view-image" data-media="view:04">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w, /landing/view-04-1440.b66a9bee.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-04-480.517e183e.jpg" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w" sizes="calc(100vw - 44px)" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w, /landing/view-04-1440.b66a9bee.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-04-480.517e183e.jpg" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w" sizes="100vw" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Le réseau électrique et ce qu’il produit</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
-          <a class="view" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t">
-            <figure>
+              <div class="view-text"><h3 class="view-title" id="vue-04-titre">Réseau électrique</h3><p class="view-place">La production en France</p></div>
+              <a class="view-open" aria-describedby="vue-04-titre" href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+            <article class="view" data-view="05">
               <div class="view-image" data-media="view:05">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w, /landing/view-05-1440.77bc4297.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-05-480.51fa5b6d.jpg" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w" sizes="calc(100vw - 44px)" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w, /landing/view-05-1440.77bc4297.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-05-480.51fa5b6d.jpg" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w" sizes="100vw" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Les bus de Bordeaux, en direct</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
-          <a class="view" data-view="06" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k">
-            <figure>
+              <div class="view-text"><h3 class="view-title" id="vue-05-titre">Bus en direct</h3><p class="view-place">Le réseau de Bordeaux</p></div>
+              <a class="view-open" aria-describedby="vue-05-titre" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+            <article class="view" data-view="06">
               <div class="view-image" data-media="view:06">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w, /landing/view-06-1440.6bc7c61f.jpg 1440w" sizes="(min-width: 1001px) calc((100vw - 260px) / 3), calc((100vw - 230px) / 2)" /><img src="/landing/view-06-480.6e149147.jpg" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w" sizes="calc(100vw - 44px)" alt="Les vélos et scooters partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w, /landing/view-06-1440.6bc7c61f.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-06-480.6e149147.jpg" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w" sizes="100vw" alt="Les vélos et scooters partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
                 <span class="image-credit">Cesium ion · Google Maps</span>
               </div>
-              <figcaption><span>Les vélos et scooters partagés de Paris</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></figcaption>
-            </figure>
-          </a>
+              <div class="view-text"><h3 class="view-title" id="vue-06-titre">Vélos et scooters</h3><p class="view-place">Les flottes partagées de Paris</p></div>
+              <a class="view-open" aria-describedby="vue-06-titre" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+            </article>
+          </div>
+          <div class="stage-tabs" aria-label="Vues">
+            <button class="stage-tab" type="button" data-tab="01" data-active><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></g></svg><span>Avions</span></button>
+            <button class="stage-tab" type="button" data-tab="02"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g></svg><span>Immobilier</span></button>
+            <button class="stage-tab" type="button" data-tab="03"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></g></svg><span>Trafic</span></button>
+            <button class="stage-tab" type="button" data-tab="04"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></g></svg><span>Énergie</span></button>
+            <button class="stage-tab" type="button" data-tab="05"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 2 7"/><path d="M10 6h4"/><path d="m22 7-2-1"/><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 21v-2"/></g></svg><span>Bus</span></button>
+            <button class="stage-tab" type="button" data-tab="06"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></g></svg><span>Vélos</span></button>
+          </div>
         </div>
       </section>
 

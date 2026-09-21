@@ -1,0 +1,42 @@
+Lucide
+Copyright (c) 2026 Lucide Icons and Contributors (ISC License)
+Copyright (c) 2013-present Cole Bemis (MIT License, for the icons Lucide
+derived from Feather, which it lists in its own licence)
+
+Both licences are reproduced in full in the `LICENSE` file next to this notice,
+exactly as Lucide publishes it.
+
+Source: https://github.com/lucide-icons/lucide
+        icons/<name>.svg
+        Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
+
+WHAT WAS TAKEN. Nine icons, inline in one file.
+
+`index.html`, the landing page's scene « Choisissez une vue. »
+(src/vitrine/stage.js), draws them in its tab bar, its pause control and its
+door to the globe:
+
+    plane           — the « Avions » tab,
+    house           — the « Immobilier » tab,
+    car             — the « Trafic » tab,
+    zap             — the « Énergie » tab,
+    bus-front       — the « Bus » tab,
+    bike            — the « Vélos » tab,
+    pause, play     — « Mettre en pause » / « Reprendre »,
+    arrow-up-right  — « Ouvrir dans le globe ».
+
+`arrow-up-right` is one of the icons Lucide derived from Feather, so the MIT
+notice covers it; the eight others are Lucide's own, under ISC.
+
+They are INTERFACE icons, drawn at 18-22 CSS px in a menu bar, which is the job
+Lucide authors for; nothing here is drawn on the globe, where the cartographic
+sets (Maki, Temaki) keep that role. They were chosen because the approved mock
+of the scene (2026-09-21) was drawn with exactly these six category glyphs.
+
+WHAT WAS CHANGED. No coordinate.
+
+Each icon's child elements (`<path>`, `<circle>`, `<rect>`) are copied
+verbatim into an inline `<svg viewBox="0 0 24 24">`, inside one `<g>` that
+sets the stroke. Lucide publishes a stroke width of 2; the page draws 1.8, the
+width of the arrows it already had, so the new glyphs sit at the same weight.
+That is a presentation attribute on the group, not an edit of the artwork.

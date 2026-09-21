@@ -1,7 +1,7 @@
 // The film encode's pure rules (scripts/build-landing-film.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOX_ASPECT, boxCrop, CAP_BYTES, CODECS_BY_WIDTH, filmFor, GOP, referenceFilter } from './build-landing-film.mjs';
+import { BOX_ASPECT, boxCrop, CAP_BYTES, CODECS_BY_WIDTH, filmFor, GOP, openingTime, referenceFilter } from './build-landing-film.mjs';
 
 test('a 16:9 film is cropped to the box\'s 1.65, centred, full height, even-sized', () => {
   const crop = boxCrop({ width: 1920, height: 1080 }, BOX_ASPECT);
@@ -41,4 +41,10 @@ test('a film turned round begins at its start frame and wraps to its opening, wi
   assert.match(turned, /\[head\]trim=end_frame=90,setpts=PTS-STARTPTS\[early\]/);
   assert.match(turned, /\[late\]\[early\]concat=n=2:v=1:a=0,crop=1782:1080:70:0,scale=960:-2/,
     'the late part first, and the crop applies to both');
+});
+
+test('a film turned round by --start says where its story now begins in the file', () => {
+  // The power-grid film: 14.67 s at 30 fps, turned to begin at 3.0 s.
+  assert.equal(openingTime({ durationS: 14.67, fps: 30, startFrame: 90 }), 11.67);
+  assert.equal(openingTime({ durationS: 28.97, fps: 30, startFrame: 0 }), 0, 'Roissy was not turned');
 });

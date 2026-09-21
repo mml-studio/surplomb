@@ -156,6 +156,8 @@ export function galleryModuleData(gallery, published) {
       aspect: loop.aspect,
       fps: loop.fps,
       durationS: loop.durationS,
+      // A film turned round by `--start` says where its story begins.
+      ...(loop.openingS > 0 ? { openingS: loop.openingS } : {}),
       renditions: sources.map((source) => ({
         src: `/landing/${published.get(source.file)}`,
         mime: source.mime,
