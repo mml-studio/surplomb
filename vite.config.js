@@ -622,6 +622,7 @@ import {
 } from './src/data/petiteEnfanceFeed.js';
 import { projectPeDepartements } from './src/data/petiteEnfanceDepartements.js';
 import {
+  capGbfsObjects,
   gbfsBoxKey,
   gbfsBoxContains,
   isEmptyVirtualBay,
@@ -15535,7 +15536,19 @@ async function gbfsFrSystemObjects(system, clip) {
   };
 }
 
-/** Build one viewport answer: select systems, read them, clip, cap. */
+/**
+ * Read one snapped box: select systems, read them, clip to the box and its
+ * margin. The answer is cached WHOLE — the cap is applied per request, by
+ * {@link cappedGbfsFrPayload}, against the box that request asked for.
+ *
+ * WHY NOT CAP HERE. The cache key is the snapped box, and a camera that
+ * straddles a grid line doubles it: the landing page's Paris view asks for
+ * 0.013° of latitude and snaps to 0.06°, which holds 8,035 vehicles for 2,175
+ * on screen (measured 2026-09-21). Capped against the snapped box, the screen
+ * got 1,646 of its 2,175; capped against the request, all of them. Holding the
+ * uncapped clip costs ~110 bytes an object — about 2 MB for the densest Paris
+ * box, and 24 entries at most (`GBFS_FR_VIEWPORT_CACHE_MAX`).
+ */
 async function refreshGbfsFrViewport(box, key) {
   const index = await loadGbfsFrIndex();
   const selection = selectSystemsForBox(index.systems, box);
@@ -15546,42 +15559,10 @@ async function refreshGbfsFrViewport(box, key) {
     outcome: await gbfsFrSystemObjects(system, clip),
   })));
 
-  const stations = [];
-  const vehicles = [];
+  const parts = [];
   const systems = [];
-  let truncated = false;
-  // Fair share, not first-come-first-served: Lime alone reports ~6,000
-  // vehicles over Paris, and a sequential fill would spend the whole budget on
-  // whichever system happened to rank first, leaving the other operators with
-  // nothing and the map looking like a monopoly. Systems under their share
-  // hand the remainder back, so the cap is never wasted.
-  const shares = new Map();
-  let remaining = GBFS_MAX_OBJECTS;
-  let claimants = results.length;
-  for (const { system, outcome } of [...results].sort(
-    (a, b) => (a.outcome.stations.length + a.outcome.vehicles.length)
-      - (b.outcome.stations.length + b.outcome.vehicles.length),
-  )) {
-    const wanted = outcome.stations.length + outcome.vehicles.length;
-    const share = Math.min(wanted, Math.floor(remaining / Math.max(1, claimants)));
-    shares.set(system.id, share);
-    remaining -= share;
-    claimants -= 1;
-  }
-
   for (const { system, outcome } of results) {
-    let budget = shares.get(system.id) ?? 0;
-    const room = () => budget > 0;
-    for (const station of outcome.stations) {
-      if (!room()) { truncated = true; break; }
-      stations.push(station);
-      budget -= 1;
-    }
-    for (const vehicle of outcome.vehicles) {
-      if (!room()) { truncated = true; break; }
-      vehicles.push(vehicle);
-      budget -= 1;
-    }
+    parts.push({ id: system.id, stations: outcome.stations, vehicles: outcome.vehicles });
     systems.push({
       id: system.id,
       name: system.name,
@@ -15603,27 +15584,56 @@ async function refreshGbfsFrViewport(box, key) {
   }
 
   const failed = systems.filter((s) => s.error).length;
-  const payload = {
-    status: failed && failed === systems.length && systems.length > 0 ? 'degraded' : 'ready',
-    retrievedAt: new Date().toISOString(),
-    box,
-    stations,
-    vehicles,
-    systems,
-    systemsMatched: selection.matched,
-    systemsFetched: systems.length,
-    systemsFailed: failed,
-    systemsTruncated: selection.truncated,
-    objectsTruncated: truncated,
-    // Provenance for the "why is my city not doubled" question.
-    redundantSystems: index.redundantCount ?? 0,
-    indexGeneratedAt: index.generatedAt || null,
+  const view = {
+    parts,
+    payload: {
+      status: failed && failed === systems.length && systems.length > 0 ? 'degraded' : 'ready',
+      retrievedAt: new Date().toISOString(),
+      box,
+      systems,
+      systemsMatched: selection.matched,
+      systemsFetched: systems.length,
+      systemsFailed: failed,
+      systemsTruncated: selection.truncated,
+      // Provenance for the "why is my city not doubled" question.
+      redundantSystems: index.redundantCount ?? 0,
+      indexGeneratedAt: index.generatedAt || null,
+    },
   };
 
-  _gbfsFrViewportCache.set(key, { at: Date.now(), payload });
+  _gbfsFrViewportCache.set(key, { at: Date.now(), view });
   trimGbfsFrViewportCache();
   void flushGbfsFrBounds();
-  return payload;
+  return view;
+}
+
+/**
+ * One request's answer: the cached box, capped against what this request
+ * asked for — the screen first, then the rest nearest first. See
+ * `capGbfsObjects` for the Paris measurement behind the order.
+ *
+ * `limit` is the client's own budget, under the ceiling: a light device asks
+ * for fewer objects (`profileCountBudget` in `sharedMobilityFrance.js`) and
+ * the smaller answer is what it draws.
+ */
+function cappedGbfsFrPayload(view, requested, limit = GBFS_MAX_OBJECTS) {
+  const { kept, boxTruncated, marginTruncated } = capGbfsObjects(view.parts, requested, limit);
+  const stations = [];
+  const vehicles = [];
+  for (const part of view.parts) {
+    const share = kept.get(part.id);
+    stations.push(...share.stations);
+    vehicles.push(...share.vehicles);
+  }
+  return {
+    ...view.payload,
+    stations,
+    vehicles,
+    // The screen itself was cut: what the "capped" chip means. A margin
+    // trimmed around a complete screen is not a view the reader is missing.
+    objectsTruncated: boxTruncated,
+    marginTruncated,
+  };
 }
 
 /**
@@ -15719,21 +15729,24 @@ function gbfsFranceProxy() {
 
       const box = snapGbfsBox(requested);
       const key = gbfsBoxKey(box);
+      // Only ever LOWER than the ceiling: a missing or odd value is the ceiling.
+      const asked = Math.floor(Number(url.searchParams.get('limit')));
+      const limit = asked > 0 ? Math.min(asked, GBFS_MAX_OBJECTS) : GBFS_MAX_OBJECTS;
       const now = Date.now();
       const cached = _gbfsFrViewportCache.get(key);
       if (cached && now - cached.at <= GBFS_FR_VIEWPORT_CACHE_MS) {
-        json(200, { ...cached.payload, status: 'cached' }, { 'X-Shared-Mobility-FR': 'HIT' });
+        json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit), status: 'cached' }, { 'X-Shared-Mobility-FR': 'HIT' });
         return;
       }
 
       const request = coalesceProxyRequest(_gbfsFrViewportInFlight, key, () => refreshGbfsFrViewport(box, key));
       try {
-        const payload = await request.promise;
-        json(200, payload, { 'X-Shared-Mobility-FR': request.shared ? 'INFLIGHT' : 'MISS' });
+        const view = await request.promise;
+        json(200, cappedGbfsFrPayload(view, requested, limit), { 'X-Shared-Mobility-FR': request.shared ? 'INFLIGHT' : 'MISS' });
       } catch (error) {
         console.warn('[GBFS FR] viewport unavailable:', error?.message || error);
         if (cached) {
-          json(200, { ...cached.payload, status: 'stale' }, { 'X-Shared-Mobility-FR': 'STALE' });
+          json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit), status: 'stale' }, { 'X-Shared-Mobility-FR': 'STALE' });
           return;
         }
         json(503, { error: 'French shared-mobility data is temporarily unavailable' });

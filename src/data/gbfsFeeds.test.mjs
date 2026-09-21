@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  capGbfsObjects,
   containment,
   coordSignature,
   findRedundantSystems,
@@ -397,4 +398,78 @@ test('viewport selection ranks by how much of a system is on screen, and skips d
   const capped = selectSystemsForBox([national, city], box, { maxSystems: 1 });
   assert.deepEqual(capped.selected.map((s) => s.id), ['a']);
   assert.equal(capped.truncated, true);
+});
+
+// --- The object cap --------------------------------------------------------
+// Measured 2026-09-21 on the landing page's Paris view: the cap spent itself
+// across the margin in feed order and the screen showed 539 of 1,656 vehicles.
+
+/** `n` vehicles of one system on a row of latitudes starting at `lat0`. */
+function fleet(system, n, lat0, step = 0.001) {
+  return Array.from({ length: n }, (_, i) => ({ id: `${system}:${i}`, system, lat: lat0 + i * step, lon: 2.35 }));
+}
+
+const CAP_BOX = { south: 48.84, west: 2.31, north: 48.87, east: 2.37 };
+
+test('a box that fits under the cap is drawn whole, whatever the margin holds', () => {
+  // Inside first in the list order would hide the bug: put the margin first,
+  // as a feed that happens to list the suburbs before the centre does.
+  const lime = [...fleet('lime', 100, 48.80, -0.0001), ...fleet('lime', 10, 48.85)];
+  const voi = [...fleet('voi', 100, 48.90, 0.0001), ...fleet('voi', 5, 48.85)];
+  const { kept, boxTruncated, marginTruncated } = capGbfsObjects([
+    { id: 'lime', stations: [], vehicles: lime },
+    { id: 'voi', stations: [], vehicles: voi },
+  ], CAP_BOX, 30);
+
+  const inBox = (v) => v.lat >= CAP_BOX.south && v.lat <= CAP_BOX.north;
+  assert.equal(kept.get('lime').vehicles.filter(inBox).length, 10);
+  assert.equal(kept.get('voi').vehicles.filter(inBox).length, 5);
+  assert.equal(boxTruncated, false, 'the view is complete, so it is not "capped"');
+  assert.equal(marginTruncated, true);
+  const total = kept.get('lime').vehicles.length + kept.get('voi').vehicles.length;
+  assert.equal(total, 15 + 7, 'the margin takes what the box left, up to a quarter of the budget');
+});
+
+test('the margin never takes more than its share, even when the screen is empty', () => {
+  const { kept, marginTruncated } = capGbfsObjects([
+    { id: 'lime', stations: [], vehicles: fleet('lime', 100, 48.80, -0.0001) },
+  ], CAP_BOX, 40);
+  assert.equal(kept.get('lime').vehicles.length, 10, 'off-screen objects cost a phone as much as visible ones');
+  assert.equal(marginTruncated, true);
+});
+
+test('the margin keeps what sits nearest the box', () => {
+  const near = { id: 'x:near', lat: 48.875, lon: 2.35 };
+  const far = { id: 'x:far', lat: 48.899, lon: 2.35 };
+  const { kept } = capGbfsObjects([{ id: 'x', stations: [], vehicles: [far, near] }], CAP_BOX, 1, { marginShare: 1 });
+  assert.deepEqual(kept.get('x').vehicles.map((v) => v.id), ['x:near']);
+});
+
+test('a box over the cap is shared fairly and thinned the same way on every poll', () => {
+  const lime = fleet('lime', 100, 48.841, 0.0002);
+  const yego = fleet('yego', 5, 48.85);
+  const first = capGbfsObjects([
+    { id: 'lime', stations: [], vehicles: lime },
+    { id: 'yego', stations: [], vehicles: yego },
+  ], CAP_BOX, 20);
+  assert.equal(first.boxTruncated, true);
+  assert.equal(first.kept.get('yego').vehicles.length, 5, 'the small fleet is not starved');
+  assert.equal(first.kept.get('lime').vehicles.length, 15);
+
+  // The next poll lists the same fleet in another order: the same bikes stay.
+  const again = capGbfsObjects([
+    { id: 'lime', stations: [], vehicles: [...lime].reverse() },
+    { id: 'yego', stations: [], vehicles: yego },
+  ], CAP_BOX, 20);
+  const ids = (result) => result.kept.get('lime').vehicles.map((v) => v.id).sort();
+  assert.deepEqual(ids(again), ids(first));
+});
+
+test('docks go before vehicles when a system has to be cut', () => {
+  const dock = { id: 'v:dock', lat: 48.86, lon: 2.35 };
+  const { kept } = capGbfsObjects([
+    { id: 'v', stations: [dock], vehicles: fleet('v', 3, 48.85) },
+  ], CAP_BOX, 2);
+  assert.deepEqual(kept.get('v').stations, [dock]);
+  assert.equal(kept.get('v').vehicles.length, 1);
 });

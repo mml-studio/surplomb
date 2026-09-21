@@ -139,6 +139,16 @@ export const GBFS_MAX_SYSTEMS_PER_REQUEST = 14;
 export const GBFS_MAX_OBJECTS = 6000;
 
 /**
+ * Most of the budget the margin around the screen may take.
+ *
+ * The margin is only there so that a short pan lands on objects already drawn;
+ * the next settle refetches anyway. Left uncapped it took 4,000 of the 6,000
+ * objects on the landing page's Paris view — two thirds of the payload and of
+ * the plates, off screen, on a phone as on a workstation.
+ */
+export const GBFS_MARGIN_SHARE = 0.25;
+
+/**
  * Coordinate rounding used to build a system's identity signature.
  * Four decimals is ~11 m — tight enough that two different systems in one city
  * do not collide, loose enough that the same station published by two
@@ -901,4 +911,128 @@ export function selectSystemsForBox(systems, box, options = {}) {
     matched: scored.length,
     truncated: scored.length > maxSystems,
   };
+}
+
+/**
+ * Split a budget between claimants, smallest claim first.
+ *
+ * Fair share, not first-come-first-served: Lime alone reports ~6,000 vehicles
+ * over Paris, and a sequential fill would spend the whole budget on whichever
+ * system happened to rank first, leaving the other operators with nothing and
+ * the map looking like a monopoly. A claimant under its share hands the
+ * remainder back, so the budget is never wasted.
+ *
+ * @param {Map<string, number>} wanted Claim per system id.
+ * @param {number} budget
+ * @returns {Map<string, number>} Share per system id, never above its claim.
+ */
+export function fairGbfsShares(wanted, budget) {
+  const shares = new Map();
+  let remaining = Math.max(0, Math.floor(budget));
+  let claimants = wanted.size;
+  for (const [id, claim] of [...wanted.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))) {
+    const share = Math.min(claim, Math.floor(remaining / Math.max(1, claimants)));
+    shares.set(id, share);
+    remaining -= share;
+    claimants -= 1;
+  }
+  return shares;
+}
+
+/** FNV-1a over a string: a stable, position-blind rank for thinning. */
+function stableRank(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Keep at most `budget` objects for one viewport, the box before its margin.
+ *
+ * THE MARGIN USED TO EAT THE VIEW. The proxy reads every system over the
+ * snapped box grown by a margin, so that a short pan lands on objects already
+ * fetched. Over Paris that margin is most of the city: measured 2026-09-21 on
+ * the landing page's view, 16,843 vehicles in the grown box against 4,673 in
+ * the box itself. The cap took each system's objects in feed order across the
+ * whole of it, so the screen showed 539 of the 1,656 vehicles really parked
+ * there — a third, thinned at random, under a count that read as the fleet.
+ *
+ * Two passes now, each a fair share: the box first, with the whole budget,
+ * then the margin with what is left — up to {@link GBFS_MARGIN_SHARE} of the
+ * budget. A box that fits under the cap is drawn complete, whatever the margin
+ * holds.
+ *
+ * WHICH ONES, WHEN IT DOES NOT FIT. Inside the box, by a hash of the object's
+ * id: that thins evenly — the density still reads, where keeping the nearest
+ * would draw a full disc with nothing around it — and it keeps the same
+ * vehicles from one poll to the next, where feed order reshuffles them. In the
+ * margin, nearest first, because that is where the next pan goes.
+ *
+ * Stations go before vehicles in both passes: a dock is infrastructure the
+ * reader navigates by, and a system rarely has more than a few hundred.
+ *
+ * @param {Array<{id:string, stations:Array<Object>, vehicles:Array<Object>}>} systems
+ * @param {{south:number, west:number, north:number, east:number}} box The box
+ *   the viewport asked for, snapped but not grown.
+ * @param {number} [budget]
+ * @param {{marginShare?: number}} [options]
+ * @returns {{kept: Map<string, {stations:Array<Object>, vehicles:Array<Object>}>,
+ *   boxTruncated: boolean, marginTruncated: boolean}}
+ */
+export function capGbfsObjects(systems, box, budget = GBFS_MAX_OBJECTS, { marginShare = GBFS_MARGIN_SHARE } = {}) {
+  const midLat = (box.south + box.north) / 2;
+  const midLon = (box.west + box.east) / 2;
+  const lonScale = Math.cos((midLat * Math.PI) / 180);
+  const distance = (object) => Math.hypot(object.lat - midLat, (object.lon - midLon) * lonScale);
+  const rank = (object) => stableRank(String(object.id ?? `${object.lat},${object.lon}`));
+
+  const inner = new Map();
+  const outer = new Map();
+  for (const system of systems) {
+    const inside = [];
+    const around = [];
+    for (const [type, list] of [['station', system.stations || []], ['vehicle', system.vehicles || []]]) {
+      for (const object of list) {
+        const entry = { type, object };
+        if (boxContainsPoint(box, object.lat, object.lon)) {
+          entry.key = rank(object);
+          inside.push(entry);
+        } else {
+          entry.key = distance(object);
+          around.push(entry);
+        }
+      }
+    }
+    const order = (a, b) => (a.type === b.type ? a.key - b.key : (a.type === 'station' ? -1 : 1));
+    inner.set(system.id, inside.sort(order));
+    outer.set(system.id, around.sort(order));
+  }
+
+  const count = (tier) => new Map([...tier.entries()].map(([id, list]) => [id, list.length]));
+  const innerShares = fairGbfsShares(count(inner), budget);
+  let spent = 0;
+  for (const share of innerShares.values()) spent += share;
+  const outerShares = fairGbfsShares(count(outer), Math.min(budget - spent, Math.floor(budget * marginShare)));
+
+  const kept = new Map();
+  let boxTruncated = false;
+  let marginTruncated = false;
+  for (const system of systems) {
+    const inside = inner.get(system.id);
+    const around = outer.get(system.id);
+    const innerShare = innerShares.get(system.id) ?? 0;
+    const outerShare = outerShares.get(system.id) ?? 0;
+    if (innerShare < inside.length) boxTruncated = true;
+    if (outerShare < around.length) marginTruncated = true;
+    const stations = [];
+    const vehicles = [];
+    for (const { type, object } of [...inside.slice(0, innerShare), ...around.slice(0, outerShare)]) {
+      (type === 'station' ? stations : vehicles).push(object);
+    }
+    kept.set(system.id, { stations, vehicles });
+  }
+  return { kept, boxTruncated, marginTruncated };
 }

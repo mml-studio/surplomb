@@ -157,10 +157,10 @@ export const GALLERY_VIEWS = Object.freeze([
   },
   {
     id: '06',
-    label: 'Les vélos et trottinettes partagés de Paris',
+    label: 'Les vélos et scooters partagés de Paris',
     pose: { lat: 48.8575, lon: 2.351, alt: 1300, heading: 0, pitch: -55 },
-    hash: 'v=2&lat=48.8575&lon=2.3510&alt=1300&heading=0&pitch=-55&l=k',
-    layers: ['shared-mobility-fr'],
+    hash: 'v=2&lat=48.8575&lon=2.3510&alt=1300&heading=0&pitch=-55&l=b.k',
+    layers: ['bikeshare', 'shared-mobility-fr'],
     // Parked vehicles between two polls: the camera moves instead.
     camera: { amplitudeDeg: 2 },
   },
