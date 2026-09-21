@@ -47,3 +47,13 @@ test('the gallery module lists its boxes in order, whichever directory staged ea
     { gallery: { 'voice-response': loop('voice.mp4'), 'view:02': loop('view-02.mp4'), 'view:04': loop('x.mp4') } }]);
   assert.deepEqual(Object.keys(galleryModuleData(merged.gallery, published)), ['view:02', 'view:04', 'voice-response']);
 });
+
+test('a turned-round film carries its story\'s opening into the module; a loop carries none', () => {
+  const published = new Map([['view-04-480-av1.mp4', 'view-04-480-av1.12345678.mp4'], ['view-02-480-av1.mp4', 'view-02-480-av1.87654321.mp4']]);
+  const data = galleryModuleData({
+    'view:04': { aspect: 1.66, fps: 30, durationS: 14.67, openingS: 11.67, sources: [{ file: 'view-04-480-av1.mp4' }] },
+    'view:02': { aspect: 1.66, fps: 30, durationS: 6, openingS: 0, sources: [{ file: 'view-02-480-av1.mp4' }] },
+  }, published);
+  assert.equal(data['view:04'].openingS, 11.67);
+  assert.equal('openingS' in data['view:02'], false);
+});

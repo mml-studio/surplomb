@@ -3,15 +3,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  EXPAND,
-  EXPAND_DWELL_MS,
-  expandGeometry,
   initGalleryLoops,
   LOAD_AHEAD,
+  LOOP_MAX_DPR,
   nextStep,
+  openingOf,
   PLAY_THRESHOLD,
-  SWAP_LEAD_S,
-  timeUntil,
+  STAGE_ENTRY_HOLD_MS,
+  stageGate,
 } from './gallery.js';
 
 test('a box waits until it nears the screen, then fetches, then plays only while seen', () => {
@@ -51,7 +50,6 @@ function fakeVideo({ playable = ['av01', 'avc1'], refuse = false } = {}) {
     removeAttribute(name) { delete attrs[name]; if (name === 'src') this.src = ''; },
     addEventListener(type, fn) { (listeners[type] ??= []).push(fn); },
     emit(type, event = {}) { for (const fn of listeners[type] || []) fn(event); },
-    before(node) { this.inserted = [...(this.inserted || []), node]; },
     play() {
       if (refuse) return Promise.reject(Object.assign(new Error('refused'), { name: 'NotAllowedError' }));
       this.paused = false;
@@ -63,7 +61,7 @@ function fakeVideo({ playable = ['av01', 'avc1'], refuse = false } = {}) {
   };
 }
 
-function fakePage({ keys = ['view:01', 'voice-response'], video = {}, dpr = 2, expand = false } = {}) {
+function fakePage({ keys = ['view:01', 'voice-response'], video = {}, dpr = 2 } = {}) {
   const observers = [];
   class FakeObserver {
     constructor(callback, options) { this.callback = callback; this.options = options; this.targets = []; observers.push(this); }
@@ -82,15 +80,11 @@ function fakePage({ keys = ['view:01', 'voice-response'], video = {}, dpr = 2, e
     const inserted = [];
     const img = { currentSrc: `/landing/${key}-480.jpg`, getAttribute: () => null };
     const picture = { after: (node) => inserted.push(node) };
-    const view = fakeView(expand && key === 'view:01');
+    const view = { key };
     return {
       dataset: { media: key },
       inserted,
       view,
-      style: { vars: {}, setProperty(name, value) { this.vars[name] = value; } },
-      offsetWidth: 393,
-      offsetHeight: 238,
-      parentElement: { getBoundingClientRect: () => ({ left: 100, top: 300, width: 393, height: 238 }) },
       closest: () => view,
       getBoundingClientRect: () => ({ width: 393, height: 238 }),
       querySelector: (selector) => (selector === 'img' ? img : picture),
@@ -100,44 +94,34 @@ function fakePage({ keys = ['view:01', 'voice-response'], video = {}, dpr = 2, e
   const root = { ownerDocument: doc, querySelectorAll: () => boxes };
   // Every rendition decodes smoothly in hardware here; the codec order decides.
   const mediaCapabilities = { decodingInfo: async () => ({ supported: true, smooth: true, powerEfficient: true }) };
+  let clock = 0;
   const timers = [];
-  const frames = [];
   const win = {
     IntersectionObserver: FakeObserver, devicePixelRatio: dpr, navigator: { mediaCapabilities },
-    innerWidth: 1440, innerHeight: 900,
-    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+    performance: { now: () => clock },
+    setTimeout: (fn, ms) => timers.push({ fn, at: clock + ms }),
     clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
-    requestAnimationFrame: (fn) => frames.push(fn),
-    cancelAnimationFrame: (id) => { frames[id - 1] = null; },
     addEventListener() {},
     removeEventListener() {},
   };
-  const runTimers = (ms) => {
-    for (const timer of timers.splice(0)) if (timer.fn && timer.ms <= ms) timer.fn();
+  /** Move the clock on and fire what falls due. */
+  const advance = (ms) => {
+    clock += ms;
+    for (const timer of timers) {
+      if (timer.fn && timer.at <= clock) {
+        const { fn } = timer;
+        timer.fn = null;
+        fn();
+      }
+    }
   };
-  const runFrame = () => { for (const fn of frames.splice(0)) fn?.(); };
   // `near` is the observer with a margin, `seen` the one with a threshold.
   const near = () => observers.find((o) => o.options.rootMargin);
   const seen = () => observers.find((o) => o.options.threshold);
   const fire = (observer, box, isIntersecting, intersectionRatio = isIntersecting ? 1 : 0) => {
     observer().callback([{ target: box, isIntersecting, intersectionRatio }]);
   };
-  return { doc, boxes, root, win, videos, near, seen, fire, runTimers, runFrame };
-}
-
-function fakeView(expandable) {
-  const listeners = {};
-  const attrs = expandable ? { 'data-expand': '' } : {};
-  return {
-    attrs,
-    hasAttribute: (name) => name in attrs,
-    setAttribute(name, value) { attrs[name] = value; },
-    removeAttribute(name) { delete attrs[name]; },
-    addEventListener(type, fn) { (listeners[type] ??= []).push(fn); },
-    removeEventListener() {},
-    matches: () => true,
-    emit(type, event = {}) { for (const fn of listeners[type] || []) fn(event); },
-  };
+  return { doc, boxes, root, win, videos, near, seen, fire, advance };
 }
 
 const R = (codec, width, tag) => ({
@@ -265,111 +249,191 @@ test('no IntersectionObserver: stills only', async () => {
   assert.equal(page.videos.length, 0);
 });
 
-// ── The enlarged film ──────────────────────────────────────────────────────
-
-const SCREEN = { left: 24, top: 97, right: 1416, bottom: 876 };
-
-test('enlarged: twice the tile, centred where there is room, and the origin always inside the box', () => {
-  const box = { left: 523, top: 400, width: 393, height: 238 };
-  const g = expandGeometry({ box, bounds: SCREEN });
-  assert.equal(g.scale, 2);
-  assert.deepEqual([g.originX, g.originY], [196.5, 119]);
-});
-
-test('enlarged: pushed off the screen\'s edges, never past the box it grew from', () => {
-  // The left column, just under the header band: it grows right and down.
-  const g = expandGeometry({ box: { left: 100, top: 110, width: 393, height: 238 }, bounds: SCREEN });
-  assert.equal(g.scale, 2);
-  assert.ok(100 - g.originX >= 24, 'left edge on screen');
-  assert.ok(110 - g.originY >= 97, 'top edge under the band');
-  // Near the bottom of the screen: it grows up.
-  const low = expandGeometry({ box: { left: 523, top: 620, width: 393, height: 238 }, bounds: SCREEN });
-  assert.ok(620 + 238 * 2 - low.originY <= 876 + 0.01, 'bottom edge on screen');
-  // Half off the screen already: the origin stays in the box, whatever that costs.
-  const off = expandGeometry({ box: { left: 523, top: 780, width: 393, height: 238 }, bounds: SCREEN });
-  assert.equal(off.originY, 238);
-});
-
-test('enlarged: capped in width and by the screen, and not at all without room to grow', () => {
-  const wide = expandGeometry({ box: { left: 100, top: 200, width: 767, height: 465 }, bounds: { left: 24, top: 97, right: 2536, bottom: 1416 } });
-  assert.equal(wide.scale, Math.round((EXPAND.maxWidth / 767) * 100) / 100, '1040 px wide at most');
-  const short = expandGeometry({ box: { left: 100, top: 200, width: 393, height: 238 }, bounds: { left: 24, top: 97, right: 1416, bottom: 500 } });
-  assert.equal(short.scale, Math.round((403 / 238) * 100) / 100, 'the screen\'s height binds');
-  assert.equal(expandGeometry({ box: { left: 0, top: 0, width: 900, height: 545 }, bounds: SCREEN }), null);
-  assert.equal(expandGeometry({ box: { left: 0, top: 0, width: 0, height: 0 }, bounds: SCREEN }), null);
-});
-
-test('the time left to a point of the film counts across its loop point', () => {
-  assert.equal(timeUntil(10, 9.5, 29), 0.5);
-  assert.equal(Math.round(timeUntil(0.3, 28.9, 29) * 100) / 100, 0.4);
-  assert.equal(Math.round(timeUntil(10, 10.2, 29) * 100) / 100, 28.8, 'just passed: nearly a whole loop away');
-});
-
-const FILM_LOOPS = { 'view:01': { ...LOOPS['view:01'], durationS: 29 } };
-
-test('a film enlarges after the pointer rests on it, and swaps to the wider file at the same instant', async () => {
-  const page = fakePage({ expand: true, dpr: 2 });
-  const gallery = initGalleryLoops({ root: page.root, win: page.win, loops: FILM_LOOPS });
-  const [box] = page.boxes;
-  page.fire(page.near, box, true);
-  page.fire(page.seen, box, true);
+test('a phone is served for twice its CSS pixels, not three times', async () => {
+  const page = fakePage({ dpr: 3 });
+  initGalleryLoops({ root: page.root, win: page.win, loops: LOOPS });
+  page.fire(page.near, page.boxes[0], true);
   await tick();
-  const [tile] = page.videos;
-  assert.equal(tile.src, '/landing/view-01-960-av1.mp4');
-  tile.emit('playing');
-
-  box.view.emit('pointerenter', { pointerType: 'mouse' });
-  assert.equal(box.view.attrs['data-expanded'], undefined, 'not before the dwell');
-  page.runTimers(EXPAND_DWELL_MS);
-  assert.ok('data-expanded' in box.view.attrs);
-  assert.equal(box.style.vars['--expand-scale'], '2');
-  assert.equal(gallery.getDiagnostics().items['view:01'].expanded, true);
-
-  // 786 CSS px at DPR 2: the 1440, parked ahead of the film, under it.
-  const wider = page.videos[1];
-  assert.equal(wider.src, '/landing/view-01-1440-av1.mp4');
-  assert.deepEqual(tile.inserted, [wider]);
-  tile.currentTime = 12;
-  wider.duration = 29;
-  wider.emit('loadedmetadata');
-  assert.equal(wider.currentTime, 12 + SWAP_LEAD_S);
-  wider.emit('seeked');
-  page.runFrame();
-  assert.equal(wider.paused, true, 'waits for the film to get there');
-  tile.currentTime = 12 + SWAP_LEAD_S;
-  page.runFrame();
-  assert.equal(wider.paused, false);
-  wider.emit('playing');
-  assert.equal(tile.removed, true, 'the tile\'s file goes on the wider one\'s first frame');
-  assert.equal(gallery.getDiagnostics().items['view:01'].rendition.width, 1440);
-
-  box.view.emit('pointerleave');
-  assert.equal(box.view.attrs['data-expanded'], undefined);
-  box.view.emit('pointerenter', { pointerType: 'mouse' });
-  page.runTimers(EXPAND_DWELL_MS);
-  assert.equal(page.videos.length, 2, 'the wider file is kept: nothing fetched twice');
+  // 393 CSS px at DPR 3 would be 1 179 device px, the 1440; capped at 2, 786: the 960.
+  assert.equal(LOOP_MAX_DPR, 2);
+  assert.equal(page.videos[0].src, '/landing/view-01-960-av1.mp4');
 });
 
-test('a tap, a box without a film, or a film not playing yet never enlarges', async () => {
-  const page = fakePage({ expand: true });
-  initGalleryLoops({ root: page.root, win: page.win, loops: FILM_LOOPS });
-  const [box] = page.boxes;
-  box.view.emit('pointerenter', { pointerType: 'touch' });
-  page.runTimers(EXPAND_DWELL_MS);
-  assert.equal(box.view.attrs['data-expanded'], undefined, 'touch');
-  box.view.emit('pointerenter', { pointerType: 'mouse' });
-  page.runTimers(EXPAND_DWELL_MS);
-  assert.equal(box.view.attrs['data-expanded'], undefined, 'still loading');
-  page.fire(page.near, box, true);
-  page.fire(page.seen, box, true);
-  await tick();
-  page.videos[0].emit('playing');
-  page.runTimers(EXPAND_DWELL_MS);
-  assert.ok('data-expanded' in box.view.attrs, 'the pointer still resting on it when it starts');
+// ── The scene (src/vitrine/stage.js) ───────────────────────────────────────
 
-  const plain = fakePage({ expand: false });
-  initGalleryLoops({ root: plain.root, win: plain.win, loops: FILM_LOOPS });
-  plain.boxes[0].view.emit('pointerenter', { pointerType: 'mouse' });
-  plain.runTimers(EXPAND_DWELL_MS);
-  assert.equal(plain.boxes[0].view.attrs['data-expanded'], undefined, 'no data-expand');
+test('the scene: fetched on stage or next in line, played on stage and on screen only', () => {
+  const seen = { near: true, visible: true };
+  assert.deepEqual(stageGate(seen, 'active'), { near: true, visible: true });
+  assert.deepEqual(stageGate(seen, 'next'), { near: true, visible: false }, 'fetched ahead of its turn, not played');
+  assert.deepEqual(stageGate(seen, 'idle'), { near: false, visible: false }, 'waits for its turn');
+  assert.deepEqual(stageGate(seen, 'active', false), { near: true, visible: false }, 'the scene is off screen');
+  assert.deepEqual(stageGate({ near: false, visible: false }, 'active'), { near: false, visible: false });
+  assert.deepEqual(stageGate(seen, null), seen, 'the voice answer is not on stage');
+  assert.deepEqual(stageGate(seen, 'idle', true, true), { near: true, visible: false }, 'the reader reached for the bar');
+  assert.deepEqual(stageGate({ near: false, visible: false }, 'idle', true, true), { near: false, visible: false },
+    'browsing does not fetch a scene far off screen');
+});
+
+function fakeStage(boxes) {
+  const views = boxes.map((box) => box.view);
+  const subscribers = new Set();
+  const stage = {
+    current: 0,
+    paused: false,
+    onScreen: true,
+    browsing: false,
+    isBrowsing: () => stage.browsing,
+    roleOf(view) {
+      const index = views.indexOf(view);
+      if (index < 0) return null;
+      if (index === stage.current) return 'active';
+      return index === (stage.current + 1) % views.length ? 'next' : 'idle';
+    },
+    isPaused: () => stage.paused,
+    isOnScreen: () => stage.onScreen,
+    subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
+    select(index) {
+      stage.current = index;
+      for (const fn of subscribers) fn({ type: 'select', index, view: views[index] });
+    },
+    setPaused(value) {
+      stage.paused = value;
+      for (const fn of subscribers) fn({ type: 'pause', paused: value });
+    },
+    subscribers,
+  };
+  return stage;
+}
+
+const SCENE_KEYS = ['view:01', 'view:02', 'view:03'];
+const SCENE_LOOPS = Object.fromEntries(SCENE_KEYS.map((key, i) => [key, { ...LOOPS['view:01'], durationS: [29, 6, 14.67][i] }]));
+// The third is the power-grid film: turned round so its still shows the grid
+// lit, its story (Europe dark, France switching on) begins 11.67 s in.
+SCENE_LOOPS['view:03'].openingS = 11.67;
+
+async function scenePage() {
+  const page = fakePage({ keys: [...SCENE_KEYS, 'voice-response'] });
+  const scene = page.boxes.slice(0, 3);
+  const stage = fakeStage(scene);
+  const gallery = initGalleryLoops({ root: page.root, win: page.win, loops: SCENE_LOOPS, stage });
+  // The three boxes share one place: they near and show together.
+  for (const box of scene) {
+    page.fire(page.near, box, true);
+    page.fire(page.seen, box, true);
+  }
+  await tick();
+  const videoOf = (key) => page.videos.find((video) => video.src && gallery.getDiagnostics().items[key].rendition?.src === video.src
+    && page.boxes.find((box) => box.dataset.media === key).inserted.includes(video));
+  return { page, scene, stage, gallery, videoOf };
+}
+
+test('the scene: only the view on stage and the next one are fetched, and only the first plays', async () => {
+  const { page, gallery, videoOf } = await scenePage();
+  const items = gallery.getDiagnostics().items;
+  assert.equal(items['view:01'].role, 'active');
+  assert.equal(items['view:02'].role, 'next');
+  assert.equal(items['view:03'].state, 'still', 'the third waits for its turn');
+  assert.equal(page.videos.length, 2);
+  assert.equal(videoOf('view:01').paused, false);
+  assert.equal(videoOf('view:02').paused, true, 'fetched ahead, held');
+});
+
+test('the scene: a view that comes on stage starts from the beginning, the one leaving stops', async () => {
+  const { page, stage, gallery, videoOf } = await scenePage();
+  const second = videoOf('view:02');
+  second.currentTime = 4.2;
+  stage.select(1);
+  await tick();
+  assert.equal(second.currentTime, 0, 'from its start, so the clock and the film end together');
+  assert.equal(second.paused, true, 'its first frame waits for the fade');
+  page.advance(STAGE_ENTRY_HOLD_MS);
+  assert.equal(second.paused, false);
+  assert.equal(videoOf('view:01').paused, true);
+  assert.equal(gallery.getDiagnostics().items['view:03'].state, 'loading', 'the new next one is fetched');
+  assert.equal(page.videos.length, 3);
+});
+
+test('the scene: its pause and the scene off screen stop the picture, not the voice answer', async () => {
+  const { stage, videoOf } = await scenePage();
+  stage.setPaused(true);
+  assert.equal(videoOf('view:01').paused, true);
+  stage.setPaused(false);
+  assert.equal(videoOf('view:01').paused, false);
+  stage.onScreen = false;
+  stage.subscribers.forEach((fn) => fn({ type: 'screen', onScreen: false }));
+  assert.equal(videoOf('view:01').paused, true);
+});
+
+test('the scene is told each view\'s recording length, and none for a view that fell back to its still', async () => {
+  const { page, scene, gallery } = await scenePage();
+  assert.equal(gallery.durationOf(scene[0].view), 29);
+  assert.equal(gallery.durationOf(scene[2].view), 14.67, 'known before it is fetched');
+  assert.equal(gallery.durationOf({}), null);
+  page.videos[0].emit('error');
+  assert.equal(gallery.durationOf(scene[0].view), null);
+});
+
+test('disposed: the scene no longer drives the loops', async () => {
+  const { stage, gallery } = await scenePage();
+  assert.equal(stage.subscribers.size, 1);
+  gallery.dispose();
+  assert.equal(stage.subscribers.size, 0);
+});
+
+test('a recording\'s story begins at 0, or where a turned-round film says it does', () => {
+  assert.equal(openingOf({ durationS: 6 }), 0);
+  assert.equal(openingOf({ durationS: 14.67, openingS: 11.67 }), 11.67);
+  assert.equal(openingOf({ durationS: 6, openingS: 9 }), 0, 'past the end: ignored');
+  assert.equal(openingOf({ durationS: 6, openingS: -1 }), 0);
+  assert.equal(openingOf(null), 0);
+});
+
+test('the scene: pointed at, a view restarts from its story\'s beginning, not where it was left', async () => {
+  const { page, stage, videoOf } = await scenePage();
+  stage.select(1);
+  await tick();
+  const grid = videoOf('view:03');
+  assert.ok(grid, 'the power-grid film is fetched as the next in line');
+  assert.equal(grid.currentTime, 11.67, 'cued on Europe dark before it is ever shown');
+  grid.currentTime = 4;
+  stage.select(2);
+  assert.equal(grid.currentTime, 11.67, 'France switching on, not the middle of the film');
+  assert.equal(grid.paused, true, 'held on Europe dark while the view fades in');
+  page.advance(STAGE_ENTRY_HOLD_MS - 1);
+  assert.equal(grid.paused, true);
+  page.advance(1);
+  assert.equal(grid.paused, false, 'then the story plays');
+  const loop = videoOf('view:02');
+  loop.currentTime = 3.3;
+  stage.select(1);
+  assert.equal(loop.currentTime, 0, 'a loop starts at 0');
+});
+
+test('a film cued before its metadata is cued again once it has them, unless it already moved', async () => {
+  const { stage, videoOf } = await scenePage();
+  stage.select(1);
+  await tick();
+  const grid = videoOf('view:03');
+  grid.currentTime = 0; // the browser dropped the early seek
+  grid.emit('loadedmetadata');
+  assert.equal(grid.currentTime, 11.67);
+});
+
+test('the scene: the reader reaching for the bar fetches every view, each cued at its opening', async () => {
+  const { page, stage, gallery } = await scenePage();
+  assert.equal(page.videos.length, 2);
+  stage.browsing = true;
+  stage.subscribers.forEach((fn) => fn({ type: 'browse' }));
+  await tick();
+  assert.equal(page.videos.length, 3);
+  const grid = page.boxes[2].inserted[0];
+  assert.equal(grid.currentTime, 11.67, 'ready on Europe dark');
+  assert.equal(grid.paused, true, 'fetched, not played');
+  assert.ok('data-cut' in grid.attrs, 'its still is not its opening: it cuts in rather than fading over it');
+  assert.equal('data-cut' in page.boxes[1].inserted[0].attrs, false, 'a loop fades in over its own frame 0');
+  assert.equal(gallery.getDiagnostics().items['view:03'].state, 'loading');
+  // Shown on its opening frame before it plays, over the still (frame 0, the grid lit).
+  grid.readyState = 2;
+  grid.emit('seeked');
+  assert.ok('data-cued' in grid.attrs);
 });

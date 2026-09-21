@@ -17,12 +17,12 @@
  * rendition, refuses to autoplay (iOS in Low Power Mode) or fails a download
  * keeps that box's still, and the video element goes.
  *
- * A box whose view is marked `data-expand` (index.html) holds a film rather
- * than a loop — Roissy, 29 s — and grows to about twice its size while the
- * pointer rests on it or the keyboard focuses it: the neighbours dim, the film
- * keeps playing, and the file is swapped for a wider rendition at the same
- * instant if the tile's one would be blown up. A phone never enlarges it: a
- * tap there is the link.
+ * The six views of the gallery share one scene (src/vitrine/stage.js): only
+ * the view on stage plays, and only it and the next one in line are fetched —
+ * the others wait for their turn. A view comes up from the start of its
+ * story ({@link openingOf}) every time, never where it was left, so the
+ * scene's clock and the film agree on where it ends. The voice answer is not
+ * part of the scene and keeps the rules above.
  *
  * @module vitrine/gallery
  */
@@ -41,75 +41,55 @@ export const LOAD_AHEAD = '50% 0px 50% 0px';
 export const PLAY_THRESHOLD = 0.15;
 
 /**
- * How long the pointer rests on a film before it is enlarged: a pointer
- * crossing the gallery on its way elsewhere must not set it off.
+ * How long a view that comes on stage holds its first frame before it plays:
+ * the scene fades it in over 700 ms (landing.css), and a story that started
+ * under the fade would lose its opening — the power-grid film shows France
+ * dark for barely half a second before it switches on.
  */
-export const EXPAND_DWELL_MS = 280;
+export const STAGE_ENTRY_HOLD_MS = 400;
 
 /**
- * The enlarged box: at most twice the tile and {@link EXPAND}`.maxWidth` CSS
- * px (the 1440 rendition drawn at a device pixel ratio of ~1.4), inside the
- * screen by `margin`, and not at all when there is no room to grow by
- * `minScale`.
+ * The device pixel ratio a loop is chosen for, at most. The phone's scene is
+ * cropped to 4:3, so at its native 3 it asked for the 1440 — 5.2 MB for the
+ * Roissy film — for a sharpness a moving picture of 390 CSS px does not show;
+ * at 2 it takes the 960, like the phone's stills (index.html). A Retina
+ * laptop is 2 already and loses nothing.
  */
-export const EXPAND = Object.freeze({ maxScale: 2, maxWidth: 1040, minScale: 1.2, margin: 24 });
+export const LOOP_MAX_DPR = 2;
 
 /**
- * How far ahead of the playing film the wider rendition is parked before it
- * takes over: long enough to fetch and decode from the keyframe before it
- * (scripts/build-landing-film.mjs keeps them 4 s apart).
- */
-export const SWAP_LEAD_S = 0.8;
-
-/** A wider rendition that has not taken over by then is dropped. */
-export const SWAP_DEADLINE_MS = 20000;
-
-/**
- * Scale and transform origin of an enlarged box. Pure.
+ * What a box of the scene should be doing, from its role there
+ * (src/vitrine/stage.js `roleOf`): fetched only when it is on stage or next in
+ * line — or, once the reader has reached for the tab bar, all of them, so the
+ * view they point at is ready — and played only when it is on stage and the
+ * scene is on screen. A box outside the scene (role null) keeps its own
+ * reading. Pure.
  *
- * The origin is chosen inside the box, so the enlarged box always covers the
- * one it grew from — the pointer that enlarged it is still over it, and no
- * `pointerleave` fires on the way. Within that, it is centred when there is
- * room, and pushed off the screen's edges when there is not.
- *
- * @param {{box: {left: number, top: number, width: number, height: number},
- *   bounds: {left: number, top: number, right: number, bottom: number},
- *   maxScale?: number, maxWidth?: number, minScale?: number}} input
- * @returns {?{scale: number, originX: number, originY: number}} origin in px from the box's top-left.
+ * @param {{near: boolean, visible: boolean}} item
+ * @param {?('active'|'next'|'idle')} role
+ * @param {boolean} [stageOnScreen]
+ * @param {boolean} [browsing]
+ * @returns {{near: boolean, visible: boolean}}
  */
-export function expandGeometry({ box, bounds, maxScale = EXPAND.maxScale, maxWidth = EXPAND.maxWidth,
-  minScale = EXPAND.minScale }) {
-  const { left, top, width, height } = box || {};
-  if (!(width > 0 && height > 0)) return null;
-  const scale = Math.min(maxScale, maxWidth / width, (bounds.right - bounds.left) / width,
-    (bounds.bottom - bounds.top) / height);
-  if (!(scale >= minScale)) return null;
-  const grow = scale - 1;
-  // The enlarged start is `start - grow × origin`: keep it at or after `lo`,
-  // and its end at or before `hi`.
-  const axis = (start, size, lo, hi) => {
-    const least = (start + scale * size - hi) / grow;
-    const most = (start - lo) / grow;
-    return Math.min(size, Math.max(0, Math.min(most, Math.max(least, size / 2))));
-  };
-  const round = (v) => Math.round(v * 100) / 100;
+export function stageGate(item, role, stageOnScreen = true, browsing = false) {
+  if (role === null || role === undefined) return { near: item.near, visible: item.visible };
   return {
-    scale: round(scale),
-    originX: round(axis(left, width, bounds.left, bounds.right)),
-    originY: round(axis(top, height, bounds.top, bounds.bottom)),
+    near: item.near && (role !== 'idle' || Boolean(browsing)),
+    visible: item.visible && role === 'active' && Boolean(stageOnScreen),
   };
 }
 
 /**
- * How far the playing film still has to go to reach `target`, in seconds,
- * across its loop point. Pure.
- * @param {number} target
- * @param {number} current
- * @param {number} duration
+ * Where a recording's story begins, in seconds into its file. A loop begins
+ * at 0. The power-grid film was turned round so that its still — frame 0, all
+ * a reader on stills ever sees — shows the grid lit (scripts/build-landing-
+ * film.mjs `--start`); its story, Europe dark and France lighting up, begins
+ * `openingS` into the file. Pure.
+ * @param {?{durationS?: number, openingS?: number}} loop
  */
-export function timeUntil(target, current, duration) {
-  if (!(duration > 0)) return 0;
-  return (((target - current) % duration) + duration) % duration;
+export function openingOf(loop) {
+  const opening = Number(loop?.openingS) || 0;
+  return opening > 0 && !(opening >= Number(loop?.durationS)) ? opening : 0;
 }
 
 /**
@@ -134,13 +114,15 @@ export function nextStep(item, { still, hidden }) {
  * @param {Window} [deps.win]
  * @param {() => boolean} [deps.isStill] « Image fixe » is ticked.
  * @param {object} [deps.loops] `GALLERY_LOOPS.loops`, injectable for tests.
- * @returns {{sync: Function, dispose: Function, getDiagnostics: Function}}
+ * @param {?object} [deps.stage] The scene (src/vitrine/stage.js), or null.
+ * @returns {{sync: Function, dispose: Function, durationOf: Function, getDiagnostics: Function}}
  */
 export function initGalleryLoops({
   root,
   win = globalThis,
   isStill = () => false,
   loops = GALLERY_LOOPS.loops,
+  stage = null,
 } = {}) {
   const doc = root.ownerDocument;
   const items = [];
@@ -149,13 +131,16 @@ export function initGalleryLoops({
     if (!loop?.renditions?.length) continue;
     const view = box.closest?.('.view') || null;
     items.push({ key: box.dataset.media, box, loop, state: 'still', near: false, visible: false,
-      video: null, rendition: null, reason: null, probed: null,
-      view, expandable: Boolean(view?.hasAttribute?.('data-expand')), pointer: false, focus: false,
-      expanded: false, timer: null, swap: null, swapFailed: false });
+      video: null, rendition: null, reason: null, view, heldUntil: 0, holdTimer: null });
   }
   const Observer = win.IntersectionObserver;
   const cleanups = [];
-  const page = () => ({ still: Boolean(isStill()), hidden: Boolean(doc.hidden) });
+  const roleOf = (item) => stage?.roleOf?.(item.view) ?? null;
+  // « Mettre en pause » on the scene stops its picture, not the voice answer's.
+  const page = (item) => ({
+    still: Boolean(isStill()) || (roleOf(item) !== null && Boolean(stage?.isPaused?.())),
+    hidden: Boolean(doc.hidden),
+  });
 
   const drop = (video) => {
     video.pause?.();
@@ -168,8 +153,6 @@ export function initGalleryLoops({
     item.state = 'fallback';
     item.reason = reason;
     item.box.dataset.loop = 'fallback';
-    collapse(item);
-    abortSwap(item);
     const { video } = item;
     item.video = null;
     if (video) drop(video);
@@ -206,9 +189,13 @@ export function initGalleryLoops({
     });
   };
 
+  const now = () => win.performance?.now?.() ?? Date.now();
   const sync = (item) => {
-    const step = nextStep(item, page());
+    const gate = stageGate(item, roleOf(item), stage?.isOnScreen?.() ?? true, stage?.isBrowsing?.() ?? false);
+    const step = nextStep({ state: item.state, ...gate }, page(item));
     if (step === 'attach') void attach(item);
+    // Just on stage: its first frame waits for the fade (STAGE_ENTRY_HOLD_MS).
+    else if (step === 'play' && item.heldUntil > now()) item.video?.pause?.();
     else if (step === 'play') play(item);
     else if (step === 'pause') item.video?.pause?.();
   };
@@ -221,10 +208,13 @@ export function initGalleryLoops({
     const needed = neededVideoWidth({
       boxWidth: rect.width,
       boxHeight: rect.height,
-      dpr: win.devicePixelRatio,
+      dpr: Math.min(LOOP_MAX_DPR, Number(win.devicePixelRatio) || 1),
       videoAspect: item.loop.aspect,
     });
     const video = createVideo(null);
+    // Its still is frame 0, not its opening: a fade from one to the other
+    // would show the grid lit, dark and lit again. It cuts instead (landing.css).
+    if (openingOf(item.loop)) video.setAttribute('data-cut', '');
     let probed = [];
     try {
       probed = await probeRenditions(item.loop.renditions, {
@@ -240,7 +230,6 @@ export function initGalleryLoops({
       if (item.state === 'loading') fail(item, 'no-playable-source');
       return;
     }
-    item.probed = probed;
     item.rendition = { src: chosen.src, codec: chosen.codec, width: chosen.width, needed };
     const still = item.box.querySelector('img');
     const poster = still?.currentSrc || still?.getAttribute('src');
@@ -249,8 +238,6 @@ export function initGalleryLoops({
       if (item.state !== 'loading') return;
       item.state = 'live';
       item.box.dataset.loop = 'live';
-      // The pointer was already resting on the box while the film loaded.
-      if (item.pointer || item.focus) wantExpand(item, EXPAND_DWELL_MS);
     });
     video.addEventListener('error', () => { if (item.video === video) fail(item, 'error'); });
     // After the still (a `<picture>` or a bare `<img>`), before the credit.
@@ -259,168 +246,57 @@ export function initGalleryLoops({
     else item.box.prepend(video);
     item.video = video;
     video.src = chosen.src;
+    // A film whose story does not begin at frame 0 is cued there before its
+    // first frame is shown (a seek before the metadata is the start position).
+    const opening = openingOf(item.loop);
+    if (opening) {
+      cue(video, opening);
+      video.addEventListener('loadedmetadata', () => {
+        if (video.paused && video.currentTime < 0.05) cue(video, opening);
+      }, { once: true });
+      // Shown as soon as its opening frame is decoded, before it plays: the
+      // still under it is frame 0, the grid lit, and a view held on its first
+      // frame while it fades in (STAGE_ENTRY_HOLD_MS) must hold on Europe dark.
+      const shown = () => {
+        if (video.readyState >= 2 && Math.abs(video.currentTime - opening) < 0.25) video.setAttribute('data-cued', '');
+      };
+      video.addEventListener('seeked', shown);
+      video.addEventListener('loadeddata', shown);
+    }
     sync(item);
   }
 
-  // ── The enlarged film ────────────────────────────────────────────────
-  // The box itself is scaled (landing.css, `[data-expanded]`), about an
-  // origin that keeps it on screen; the vars stay set on the way back so it
-  // shrinks toward the same point.
-
-  /**
-   * Where the enlarged box may go: the screen, less the header band and a
-   * docked form, and no closer to the edges of its panel than to the screen's.
-   */
-  function screenBounds(item) {
-    const { margin } = EXPAND;
-    const width = doc.documentElement?.clientWidth || win.innerWidth || 0;
-    const bounds = { left: margin, top: margin, right: width - margin, bottom: (win.innerHeight || 0) - margin };
-    const panel = item.view?.closest?.('.panel')?.getBoundingClientRect?.();
-    if (panel && panel.width) {
-      bounds.left = Math.max(bounds.left, panel.left + margin);
-      bounds.right = Math.min(bounds.right, panel.right - margin);
+  function cue(video, seconds) {
+    try {
+      video.currentTime = seconds;
+    } catch {
+      // Not seekable yet: `loadedmetadata` cues it again.
     }
-    const band = root.querySelector?.('.top')?.getBoundingClientRect?.();
-    if (band && band.bottom > 0) bounds.top = Math.max(bounds.top, band.bottom + margin);
-    const dock = root.querySelector?.('form.dock')?.getBoundingClientRect?.();
-    if (dock && dock.height && dock.top > bounds.bottom / 2) bounds.bottom = Math.min(bounds.bottom, dock.top - margin);
-    return bounds;
   }
 
-  function wantExpand(item, delay) {
-    if (!item.expandable) return;
-    win.clearTimeout(item.timer);
-    item.timer = win.setTimeout(() => expand(item), delay);
-  }
-
-  function expand(item) {
-    item.timer = null;
-    if (!(item.pointer || item.focus) || item.state !== 'live' || item.expanded) return;
-    // The layout box, not the painted one: a box still shrinking back would
-    // otherwise measure as its transformed self.
-    const frame = item.box.parentElement?.getBoundingClientRect?.();
-    if (!frame) return;
-    const geometry = expandGeometry({
-      box: { left: frame.left, top: frame.top, width: item.box.offsetWidth, height: item.box.offsetHeight },
-      bounds: screenBounds(item),
-    });
-    if (!geometry) return;
-    item.box.style.setProperty('--expand-scale', String(geometry.scale));
-    item.box.style.setProperty('--expand-origin', `${geometry.originX}px ${geometry.originY}px`);
-    item.view.setAttribute('data-expanded', '');
-    item.expanded = true;
-    swapForWider(item, geometry.scale);
-  }
-
-  function collapse(item) {
-    win.clearTimeout(item.timer);
-    item.timer = null;
-    if (!item.expanded) return;
-    item.expanded = false;
-    item.view?.removeAttribute('data-expanded');
-  }
-
-  /**
-   * The tile's rendition blown up to the enlarged box would be soft: fetch
-   * the one that covers it, park it {@link SWAP_LEAD_S} ahead of the playing
-   * film, start it when the film gets there, and drop the old one on its
-   * first frame. It stays for the rest of the visit — the bytes are paid.
-   */
-  function swapForWider(item, scale) {
-    const current = item.video;
-    if (item.swap || item.swapFailed || !current || !item.probed?.length) return;
-    const needed = neededVideoWidth({
-      boxWidth: item.box.offsetWidth * scale,
-      boxHeight: item.box.offsetHeight * scale,
-      dpr: win.devicePixelRatio,
-      videoAspect: item.loop.aspect,
-    });
-    const chosen = chooseRendition(item.probed, needed);
-    if (!chosen || chosen.width <= (item.rendition?.width || 0)) return;
-    const next = createVideo(chosen.src);
-    const swap = { next, raf: 0, deadline: 0, target: 0, rendition: { src: chosen.src, codec: chosen.codec, width: chosen.width, needed } };
-    item.swap = swap;
-    const length = () => next.duration || current.duration || item.loop.durationS || 0;
-    const takeOver = () => {
-      if (item.swap !== swap) return;
-      win.clearTimeout(swap.deadline);
-      item.swap = null;
-      item.video = next;
-      item.rendition = swap.rendition;
-      next.addEventListener('error', () => { if (item.video === next) fail(item, 'error'); });
-      drop(current);
-      sync(item);
-    };
-    const wait = () => {
-      swap.raf = 0;
-      if (item.swap !== swap) return;
-      if (current.paused) {
-        // Nothing is moving: meet the film where it stopped, and let `sync` start it.
-        next.addEventListener('seeked', takeOver, { once: true });
-        next.currentTime = current.currentTime;
-        return;
+  // ── The scene ─────────────────────────────────────────────────────────
+  // A view that comes on stage — picked by the pointer, a tap, the keyboard
+  // or the clock — starts from the beginning of its story, never where it was
+  // left: the scene's clock counts whole passes (src/vitrine/stage.js), and a
+  // reader who points at « Énergie » is shown France switching on.
+  if (stage?.subscribe) {
+    const off = stage.subscribe((event) => {
+      if (event.type === 'select') {
+        const item = items.find((candidate) => candidate.view === event.view);
+        if (item) {
+          if (item.video) cue(item.video, openingOf(item.loop));
+          item.heldUntil = now() + STAGE_ENTRY_HOLD_MS;
+          win.clearTimeout?.(item.holdTimer);
+          item.holdTimer = win.setTimeout?.(() => {
+            item.holdTimer = null;
+            sync(item);
+          }, STAGE_ENTRY_HOLD_MS);
+        }
       }
-      const ahead = timeUntil(swap.target, current.currentTime, length());
-      if (ahead <= 0.05 || ahead > length() / 2) {
-        next.addEventListener('playing', takeOver, { once: true });
-        next.play?.()?.catch?.(() => abortSwap(item));
-        return;
-      }
-      swap.raf = win.requestAnimationFrame(wait);
-    };
-    next.addEventListener('error', () => { if (item.swap === swap) abortSwap(item); });
-    next.addEventListener('loadedmetadata', () => {
-      if (item.swap !== swap) return;
-      swap.target = (current.currentTime + SWAP_LEAD_S) % length();
-      next.addEventListener('seeked', wait, { once: true });
-      next.currentTime = swap.target;
-    }, { once: true });
-    swap.deadline = win.setTimeout(() => abortSwap(item), SWAP_DEADLINE_MS);
-    // Under the playing film: it covers the new one until it is dropped.
-    current.before?.(next);
-  }
-
-  function abortSwap(item) {
-    const { swap } = item;
-    if (!swap) return;
-    item.swap = null;
-    item.swapFailed = true;
-    win.clearTimeout(swap.deadline);
-    if (swap.raf) win.cancelAnimationFrame?.(swap.raf);
-    drop(swap.next);
-  }
-
-  const onScreenChange = () => { for (const item of items) collapse(item); };
-  for (const item of items) {
-    if (!item.expandable || !item.view) continue;
-    const { view } = item;
-    const listen = (type, handler) => {
-      view.addEventListener(type, handler);
-      cleanups.push(() => view.removeEventListener(type, handler));
-    };
-    // A touch "enter" is a tap, and a tap is the link.
-    listen('pointerenter', (event) => {
-      if (event.pointerType === 'touch') return;
-      item.pointer = true;
-      wantExpand(item, EXPAND_DWELL_MS);
+      syncAll();
     });
-    listen('pointerleave', () => {
-      item.pointer = false;
-      if (!item.focus) collapse(item);
-    });
-    listen('focus', () => {
-      if (!view.matches?.(':focus-visible')) return;
-      item.focus = true;
-      wantExpand(item, 0);
-    });
-    listen('blur', () => {
-      item.focus = false;
-      if (!item.pointer) collapse(item);
-    });
-  }
-  if (items.some((item) => item.expandable)) {
-    win.addEventListener?.('resize', onScreenChange);
-    cleanups.push(() => win.removeEventListener?.('resize', onScreenChange));
+    cleanups.push(off);
+    cleanups.push(() => { for (const item of items) win.clearTimeout?.(item.holdTimer); });
   }
 
   if (typeof Observer === 'function' && items.length) {
@@ -454,22 +330,23 @@ export function initGalleryLoops({
     sync: syncAll,
     dispose() {
       for (const cleanup of cleanups.splice(0)) cleanup();
-      for (const item of items) {
-        collapse(item);
-        abortSwap(item);
-        item.video?.pause?.();
-      }
+      for (const item of items) item.video?.pause?.();
+    },
+    /** The recording length of a scene view's loop, in seconds, or null. */
+    durationOf(view) {
+      const item = items.find((candidate) => candidate.view === view);
+      return item && item.state !== 'fallback' ? (item.loop.durationS ?? null) : null;
     },
     getDiagnostics: () => ({
       available: items.length,
       items: Object.fromEntries(items.map((item) => [item.key, {
         state: item.state,
         reason: item.reason,
+        role: roleOf(item),
+        opening: openingOf(item.loop),
         near: item.near,
         visible: item.visible,
         rendition: item.rendition,
-        expanded: item.expanded,
-        swapping: item.swap ? item.swap.rendition : null,
         paused: item.video ? item.video.paused : null,
         currentTime: item.video ? item.video.currentTime : null,
       }])),

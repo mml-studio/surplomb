@@ -185,6 +185,7 @@ export const GALLERY_LOOPS = Object.freeze({
       "aspect": 1.66,
       "fps": 30,
       "durationS": 14.67,
+      "openingS": 11.67,
       "renditions": [
         {
           "src": "/landing/view-04-480-av1.079ac161.mp4",

@@ -73,7 +73,7 @@ function watchRequests(page) {
 
 const ENGINE_RE = /\/(?:src\/main\.js|src\/ui\.js|node_modules\/\.vite\/deps\/cesium\.js|assets\/(?:cesium-engine|main)-[^/]*\.js|cesium-[\d.]+\/(?:Cesium\.js|Workers\/))/;
 const ION_RE = /api\.cesium\.com|assets\.ion\.cesium\.com|tile\.googleapis\.com/;
-/** A gallery loop (src/vitrine/galleryLoops.js): six views and the voice answer. */
+/** A gallery loop (src/vitrine/galleryLoops.js): the scene's six views and the voice answer. */
 const GALLERY_LOOP_RE = /\/landing\/(?:view-\d\d|voice-bus)-\d+-(?:av1|hevc|h264)\.[0-9a-f]{8}\.mp4/;
 
 let browser;
@@ -791,9 +791,12 @@ const CASES = {
   },
 
   async gallery() {
-    // The six views and the voice answer move — recorded loops over their
-    // stills (src/vitrine/gallery.js). Nothing is fetched until a box nears
-    // the screen, nothing plays off screen, and « Image fixe » stops them.
+    // « Choisissez une vue. » is one scene (src/vitrine/stage.js): six views
+    // on one picture, a bar of tabs, and a clock that moves on by whole
+    // recordings. The loops (src/vitrine/gallery.js) follow it: only the view
+    // on stage plays, only it and the next one are fetched. Nothing is fetched
+    // until the scene nears the screen, nothing plays off screen, and « Image
+    // fixe » and the scene's own pause stop it.
     const page = await freshPage();
     const requests = watchRequests(page);
     await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
@@ -802,7 +805,20 @@ const CASES = {
     const early = requests.filter((r) => GALLERY_LOOP_RE.test(r.url) || /\/(?:assets\/gallery-[^/]*|src\/vitrine\/gallery)\.js/.test(r.url));
     check('gallery: neither a loop nor its code fetched while the reader is at the top', early.length === 0,
       early.map((r) => r.url.split('/').pop()).join(', '));
-    await page.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const atTop = await page.evaluate(() => window.__gevVitrine.getDiagnostics().stage);
+    check('gallery: the scene\'s clock waits while the reader is elsewhere', atTop && !atTop.running && atTop.index === 0,
+      JSON.stringify(atTop));
+    const toStage = () => page.evaluate(() => {
+      const stage = document.querySelector('#vitrine .stage');
+      window.scrollTo({ top: stage.getBoundingClientRect().top + window.scrollY - (innerHeight - stage.offsetHeight) / 2, behavior: 'instant' });
+    });
+    await toStage();
+    const fit = await page.evaluate(() => {
+      const box = document.querySelector('#vitrine .stage').getBoundingClientRect();
+      const band = document.querySelector('#vitrine .top').getBoundingClientRect();
+      return { height: Math.round(box.height), room: Math.round(innerHeight - band.height), width: Math.round(box.width) };
+    });
+    check('gallery: the scene and its bar fit the screen under the header band', fit.height <= fit.room, JSON.stringify(fit));
     const available = await waitFor(page, () => window.__gevVitrine.getDiagnostics().gallery.available || null, { timeout: 5000 });
     if (!available) {
       console.log('  \x1b[2m   gallery: no loop published (src/vitrine/galleryLoops.js is empty) — stills only\x1b[0m');
@@ -810,105 +826,121 @@ const CASES = {
       await page.close();
       return;
     }
-    const diag = () => page.evaluate(() => window.__gevVitrine.getDiagnostics().gallery.items);
-    const videos = () => page.evaluate(() => [...document.querySelectorAll('#vitrine .loop-video')].map((v) => ({
-      media: v.parentElement.dataset.media, paused: v.paused, t: v.currentTime, muted: v.muted, loop: v.loop,
-      inline: v.hasAttribute('playsinline'), poster: Boolean(v.poster), opacity: Number(getComputedStyle(v).opacity),
-    })));
+    const diag = () => page.evaluate(() => window.__gevVitrine.getDiagnostics());
+    const videoOf = (key) => page.evaluate((k) => {
+      const v = document.querySelector(`#vitrine [data-media="${k}"] .loop-video`);
+      return v && { paused: v.paused, t: v.currentTime, muted: v.muted, loop: v.loop, inline: v.hasAttribute('playsinline'),
+        poster: Boolean(v.poster), opacity: Number(getComputedStyle(v).opacity) };
+    }, key);
     const live = await waitFor(page, () => {
-      const items = window.__gevVitrine.getDiagnostics().gallery.items;
-      const on = Object.entries(items).filter(([, item]) => item.state === 'live' && item.visible).map(([key]) => key);
-      return on.length >= 2 ? on : null;
+      const { items } = window.__gevVitrine.getDiagnostics().gallery;
+      return items['view:01']?.state === 'live' && !items['view:01'].paused ? items : null;
     }, { timeout: 20_000 });
-    check('gallery: the thumbnails on screen play', Boolean(live), JSON.stringify(live ?? await diag()));
+    check('gallery: the view on stage plays', Boolean(live), JSON.stringify(live ?? (await diag()).gallery.items));
     if (!live) { await page.close(); return; }
-    const first = (await videos()).find((v) => v.media === live[0]);
+    const first = await videoOf('view:01');
     await sleep(1200);
-    const later = (await videos()).find((v) => v.media === live[0]);
+    const later = await videoOf('view:01');
     check('gallery: the picture moves (currentTime advances)', later.t > first.t + 0.5, `${first.t.toFixed(2)} → ${later.t.toFixed(2)} s`);
-    const shown = (await videos()).filter((v) => live.includes(v.media));
     check('gallery: muted, looping, inline, the still as poster, faded in',
-      shown.every((v) => v.muted && v.loop && v.inline && v.poster && v.opacity > 0.95), JSON.stringify(shown));
-    const items = await diag();
-    const renditions = live.map((key) => items[key].rendition);
-    check('gallery: each box gets a rendition that covers it', renditions.every((r) => r && r.width >= r.needed * 0.9),
-      JSON.stringify(renditions));
-    const notNear = Object.entries(items).filter(([, item]) => !item.near && item.state !== 'still');
-    check('gallery: a box far from the screen is not fetched', notNear.length === 0, notNear.map(([k]) => k).join(', '));
+      later.muted && later.loop && later.inline && later.poster && later.opacity > 0.95, JSON.stringify(later));
+    const fetched = await page.evaluate(() => Object.entries(window.__gevVitrine.getDiagnostics().gallery.items)
+      .filter(([key]) => key.startsWith('view:')).map(([key, item]) => [key, item.role, item.state, item.paused]));
+    check('gallery: only the view on stage and the next one are fetched; the next one waits',
+      fetched.every(([key, , state, paused]) => (key === 'view:01' ? state === 'live'
+        : key === 'view:02' ? state !== 'still' && paused !== false : state === 'still')), JSON.stringify(fetched));
+    const rendition = (await diag()).gallery.items['view:01'].rendition;
+    check('gallery: the view on stage gets a rendition that covers it', rendition && rendition.width >= Math.min(rendition.needed * 0.9, 1440),
+      JSON.stringify(rendition));
+    const clock = (await diag()).stage;
+    check('gallery: on screen, the clock runs, timed by the recording (Roissy: one whole pass)',
+      clock.running && Math.abs(clock.dwellMs - 28970) < 50, JSON.stringify(clock));
+    await shot(page, 'gallery-scene');
 
-    // Each film (`data-expand`: Roissy, the power grid): the pointer rests on
-    // it, it grows on screen over dimmed neighbours, swaps to a wider file
-    // without stopping, and shrinks back when the pointer leaves. Pointer
-    // events are dispatched (puppeteer's mouse hangs on this page).
-    const films = await page.evaluate(() => [...document.querySelectorAll('#vitrine .view[data-expand] [data-media]')]
-      .map((box) => box.dataset.media));
-    check('gallery: every enlarging view holds a film', films.length >= 2, JSON.stringify(films));
-    for (const film of films) {
-      await page.evaluate((key) => {
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
-        view.scrollIntoView({ block: 'center', behavior: 'instant' });
-        view.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
-      }, film);
-      const grown = await waitFor(page, (key) => {
-        const item = window.__gevVitrine.getDiagnostics().gallery.items[key];
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
-        if (!item?.expanded) return null;
-        const box = view.querySelector('.view-image').getBoundingClientRect();
-        if (box.width < view.getBoundingClientRect().width * 1.19) return null; // still growing
-        const other = document.querySelector('#vitrine .gallery-grid > .view:not([data-expand])');
-        return { box: { left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: box.width },
-          screen: { width: document.documentElement.clientWidth, height: innerHeight },
-          dimmed: Number(getComputedStyle(other).opacity), rendition: item.rendition };
-      }, { arg: film, timeout: 15_000 });
-      check(`gallery: ${film}, a film, grows when the pointer rests on it, on screen, over dimmed neighbours`,
-        grown && grown.box.left >= 0 && grown.box.top >= 0 && grown.box.right <= grown.screen.width
-          && grown.box.bottom <= grown.screen.height && grown.dimmed < 0.5, JSON.stringify(grown));
-      const wider = await waitFor(page, (key) => {
-        const item = window.__gevVitrine.getDiagnostics().gallery.items[key];
-        return item.rendition && !item.swapping && item.rendition.width >= item.rendition.needed * 0.9 ? item.rendition : null;
-      }, { arg: film, timeout: 25_000 });
-      const t0 = await page.evaluate((key) => window.__gevVitrine.getDiagnostics().gallery.items[key].currentTime, film);
-      await sleep(800);
-      const t1 = await page.evaluate((key) => window.__gevVitrine.getDiagnostics().gallery.items[key].currentTime, film);
-      check(`gallery: ${film} enlarged plays a file that covers the enlarged box, and keeps moving`,
-        Boolean(wider) && t1 > t0 + 0.3, `${JSON.stringify(wider)}; ${t0?.toFixed(2)} → ${t1?.toFixed(2)} s`);
-      await shot(page, `gallery-film-enlarged-${film.replace(':', '-')}`);
-      await page.evaluate((key) => document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view')
-        .dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' })), film);
-      await sleep(700);
-      const back = await page.evaluate((key) => {
-        const view = document.querySelector(`#vitrine [data-media="${key}"]`).closest('.view');
-        return { expanded: view.hasAttribute('data-expanded'),
-          ratio: view.querySelector('.view-image').getBoundingClientRect().width / view.getBoundingClientRect().width };
-      }, film);
-      check(`gallery: ${film}, the pointer gone, shrinks back`, !back.expanded && Math.abs(back.ratio - 1) < 0.01,
-        JSON.stringify(back));
-    }
-    await page.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    // The pointer reaches the bar: every view is fetched, each cued at the
+    // beginning of its story, so the one pointed at is ready.
+    await page.evaluate(() => document.querySelector('#vitrine .stage-tabs')
+      .dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' })));
+    const ready = await waitFor(page, () => {
+      const { items } = window.__gevVitrine.getDiagnostics().gallery;
+      const views = Object.entries(items).filter(([key]) => key.startsWith('view:'));
+      return views.every(([, item]) => item.state !== 'still') ? views.map(([key, item]) => [key, item.state]) : null;
+    }, { timeout: 10_000 });
+    check('gallery: reaching for the bar fetches every view', Boolean(ready), JSON.stringify(ready));
+    // A pointer resting on a tab: its view comes up from its start, the one
+    // leaving stops, and the next in line is fetched.
+    await page.evaluate(() => document.querySelector('#vitrine [data-tab="04"]')
+      .dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' })));
+    const hovered = await waitFor(page, () => {
+      const d = window.__gevVitrine.getDiagnostics();
+      const item = d.gallery.items['view:04'];
+      return d.stage.view === '04' && item?.state === 'live' && !item.paused ? { stage: d.stage, item, left: d.gallery.items['view:01'] } : null;
+    }, { timeout: 15_000 });
+    // The power-grid film is turned round so its still shows the grid lit; its
+    // story (Europe dark, France switching on) begins `openingS` into the file.
+    const opening = hovered?.item.opening ?? 0;
+    const startsAt = (t) => t >= opening - 0.2 && t < opening + 3;
+    check('gallery: resting on a tab shows its view from the start of its story, and the view it replaced stops',
+      hovered && startsAt(hovered.item.currentTime) && hovered.left.paused === true && hovered.stage.lastBy === 'hover',
+      JSON.stringify(hovered && { view: hovered.stage.view, t: hovered.item.currentTime, opening, left: hovered.left.paused }));
+    const selected = await page.evaluate(() => ({
+      tab: document.querySelector('#vitrine [data-tab="04"]').getAttribute('aria-selected'),
+      panel: document.querySelector('#vitrine .view[data-view="04"]').getAttribute('role'),
+      shown: [...document.querySelectorAll('#vitrine .stage-views > .view')].filter((v) => getComputedStyle(v).visibility === 'visible').map((v) => v.dataset.view),
+    }));
+    check('gallery: the tab says it is selected, and its view is the only one shown',
+      selected.tab === 'true' && selected.panel === 'tabpanel', JSON.stringify(selected));
+    const nextFetched = await waitFor(page, () => {
+      const item = window.__gevVitrine.getDiagnostics().gallery.items['view:05'];
+      return item && item.state !== 'still' ? item.state : null;
+    }, { timeout: 5000 });
+    check('gallery: the view after it is fetched ahead of its turn', Boolean(nextFetched), String(nextFetched));
+    await shot(page, 'gallery-scene-energie');
+
+    // The clock moves on by itself: a six-second loop stays two passes.
+    await page.evaluate(() => document.querySelector('#vitrine [data-tab="02"]').click());
+    const pickedAt = Date.now();
+    const moved = await waitFor(page, () => (window.__gevVitrine.getDiagnostics().stage.view === '03' ? true : null),
+      { timeout: 20_000, interval: 100 });
+    const after = (Date.now() - pickedAt) / 1000;
+    check('gallery: the scene moves on by itself after two passes of a six-second loop',
+      moved && after > 10.5 && after < 14.5, `${after.toFixed(1)} s`);
+
+    // « Mettre en pause »: the clock and the picture stop; « Reprendre » starts both.
+    await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').click());
     await sleep(600);
+    const pausedA = await diag();
+    await sleep(2000);
+    const pausedB = await diag();
+    const pauseLabel = await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').textContent.trim());
+    check('gallery: « Mettre en pause » stops the clock and the picture, and offers « Reprendre »',
+      pausedB.stage.paused && !pausedB.stage.running && pausedB.gallery.items['view:03'].paused !== false
+        && Math.abs((pausedB.gallery.items['view:03'].currentTime ?? 0) - (pausedA.gallery.items['view:03'].currentTime ?? 0)) < 0.05
+        && pauseLabel === 'Reprendre',
+      JSON.stringify({ stage: pausedB.stage, label: pauseLabel }));
+    await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').click());
+    const resumed = await waitFor(page, () => {
+      const d = window.__gevVitrine.getDiagnostics();
+      return d.stage.running && d.gallery.items['view:03'].paused === false ? true : null;
+    }, { timeout: 8000 });
+    check('gallery: « Reprendre » starts the clock and the picture again', Boolean(resumed));
 
-    // « Image fixe »: everything stops where it is, and starts again.
+    // « Image fixe » stops the scene too.
     await page.evaluate(() => document.querySelector('#vitrine-still').click());
-    await sleep(400);
-    const frozenA = await videos();
-    await sleep(1000);
-    // Every loop stops; the ones that were playing stay on screen, where they stopped.
-    const frozenB = await videos();
-    const wasLive = frozenB.filter((v) => live.includes(v.media));
-    check('gallery: « Image fixe » stops every loop on the frame shown',
-      frozenB.every((v) => v.paused) && wasLive.every((v) => v.opacity > 0.95)
-        && frozenB.every((v, i) => Math.abs(v.t - frozenA[i].t) < 0.05),
-      JSON.stringify(frozenB.map((v) => [v.media, v.paused, v.t.toFixed(2)])));
+    await sleep(500);
+    const still = await diag();
+    check('gallery: « Image fixe » stops the scene and its loop', still.stage.paused && still.gallery.items['view:03'].paused !== false,
+      JSON.stringify(still.stage));
     await page.evaluate(() => document.querySelector('#vitrine-still').click());
-    await sleep(1200);
-    const resumed = (await videos()).filter((v) => live.includes(v.media));
-    check('gallery: unticked, the loops on screen move again', resumed.every((v) => !v.paused), JSON.stringify(resumed.map((v) => [v.media, v.paused])));
+    await sleep(800);
 
-    // Off screen: paused.
+    // Off screen: paused, and the clock waits.
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await sleep(1000);
-    const away = await videos();
-    check('gallery: scrolled away, every loop is paused', away.every((v) => v.paused), JSON.stringify(away.map((v) => [v.media, v.paused])));
+    const away = await diag();
+    const playing = Object.entries(away.gallery.items).filter(([, item]) => item.paused === false).map(([key]) => key);
+    check('gallery: scrolled away, every loop is paused and the clock waits', playing.length === 0 && !away.stage.running,
+      JSON.stringify({ playing, stage: away.stage }));
     await page.close();
 
     // Reduced motion, data saver, and a download that fails: stills only.
@@ -926,41 +958,76 @@ const CASES = {
       const seen = watchRequests(other);
       await other.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 });
       await waitFor(other, () => (window.__gevVitrine ? true : null));
-      await other.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+      await other.evaluate(() => document.querySelector('#vitrine .stage').scrollIntoView({ block: 'center', behavior: 'instant' }));
       await sleep(3500);
-      const state = await other.evaluate(() => ({
-        videos: document.querySelectorAll('#vitrine .loop-video').length,
-        stills: [...document.querySelectorAll('#vitrine .view-image img')].filter((img) => img.getBoundingClientRect().bottom > 0
-          && img.getBoundingClientRect().top < innerHeight).map((img) => img.complete && img.naturalWidth > 0),
-        states: Object.values(window.__gevVitrine.getDiagnostics().gallery.items || {}).map((item) => item.state),
-      }));
-      const fetched = seen.filter((r) => GALLERY_LOOP_RE.test(r.url));
+      const state = await other.evaluate(() => {
+        const img = document.querySelector('#vitrine .view[data-active] .view-image img');
+        return {
+          videos: document.querySelectorAll('#vitrine .stage .loop-video').length,
+          still: img.complete && img.naturalWidth > 0,
+          states: Object.entries(window.__gevVitrine.getDiagnostics().gallery.items || {})
+            .filter(([key]) => key.startsWith('view:')).map(([, item]) => item.state),
+          stage: window.__gevVitrine.getDiagnostics().stage,
+        };
+      });
+      const fetched = seen.filter((r) => GALLERY_LOOP_RE.test(r.url) && !/voice-bus/.test(r.url));
       if (failLoops) {
         check(`gallery: ${label} — the still stays, the video goes`,
-          state.videos === 0 && state.stills.length > 0 && state.stills.every(Boolean) && state.states.includes('fallback'),
-          JSON.stringify(state));
+          state.videos === 0 && state.still && state.states.includes('fallback'), JSON.stringify(state));
       } else {
         check(`gallery: ${label} — stills only, no loop fetched`,
-          state.videos === 0 && fetched.length === 0 && state.stills.every(Boolean), JSON.stringify({ ...state, fetched: fetched.length }));
+          state.videos === 0 && fetched.length === 0 && state.still, JSON.stringify({ ...state, fetched: fetched.length }));
       }
-      await other.close();
+      return { other, state };
     };
-    await stillsOnly('reduced motion', { reducedMotion: true });
-    await stillsOnly('data saver', { saveData: true });
-    await stillsOnly('a loop that fails to download', { failLoops: true });
+    const reduced = await stillsOnly('reduced motion', { reducedMotion: true });
+    check('gallery: reduced motion — the scene starts paused, and the tabs still switch it',
+      reduced.state.stage.paused && !reduced.state.stage.running, JSON.stringify(reduced.state.stage));
+    await reduced.other.evaluate(() => document.querySelector('#vitrine [data-tab="05"]').click());
+    const switched = await reduced.other.evaluate(() => window.__gevVitrine.getDiagnostics().stage.view);
+    check('gallery: reduced motion — a click on a tab shows its view', switched === '05', String(switched));
+    await reduced.other.close();
+    const saver = await stillsOnly('data saver', { saveData: true });
+    check('gallery: data saver — the scene still moves on, on its stills', saver.state.stage.running
+      && saver.state.stage.dwellMs === 8000, JSON.stringify(saver.state.stage));
+    await saver.other.close();
+    await (await stillsOnly('a loop that fails to download', { failLoops: true })).other.close();
 
-    // A phone: the loop plays, and never at the desktop's 1440.
+    // A phone: the loop plays, never at the desktop's 1440, and a tap on a tab switches.
     const phone = await freshPage({ phone: true });
     await phone.goto(phoneUrl(`${BASE}/`), { waitUntil: 'load', timeout: 90_000 });
     await waitFor(phone, () => (window.__gevVitrine ? true : null));
-    await phone.evaluate(() => document.querySelector('#vitrine .gallery-grid').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await phone.evaluate(() => document.querySelector('#vitrine .stage').scrollIntoView({ block: 'center', behavior: 'instant' }));
     const phoneLive = await waitFor(phone, () => {
-      const entries = Object.values(window.__gevVitrine.getDiagnostics().gallery.items || {});
-      const on = entries.filter((item) => item.state === 'live');
-      return on.length ? on.map((item) => item.rendition) : null;
+      // The scene's views only: the voice answer is its own box, sized apart.
+      const entries = Object.entries(window.__gevVitrine.getDiagnostics().gallery.items || {})
+        .filter(([key]) => key.startsWith('view:')).map(([, item]) => item);
+      const on = entries.filter((item) => item.state === 'live' || item.state === 'loading');
+      return on.some((item) => item.state === 'live') ? on.map((item) => item.rendition) : null;
     }, { timeout: 20_000 });
-    check('gallery: a phone plays the view on screen, at most 960 px wide', Boolean(phoneLive)
-      && phoneLive.every((r) => r.width <= 960), JSON.stringify(phoneLive));
+    check('gallery: a phone plays the view on stage, at most 960 px wide', Boolean(phoneLive)
+      && phoneLive.every((r) => r && r.width <= 960), JSON.stringify(phoneLive));
+    const phoneFit = await phone.evaluate(() => {
+      const stage = document.querySelector('#vitrine .stage').getBoundingClientRect();
+      const tabs = [...document.querySelectorAll('#vitrine .stage-tab')].map((t) => t.getBoundingClientRect());
+      const door = document.querySelector('#vitrine .view[data-active] .view-open');
+      const open = door.getBoundingClientRect();
+      const label = door.querySelector('.view-open-label').getBoundingClientRect();
+      return { stage: Math.round(stage.height), screen: innerHeight, tabs: tabs.map((t) => Math.round(t.height)), open: Math.round(open.height),
+        overflow: document.documentElement.scrollWidth > innerWidth,
+        // The dock already says « Ouvrir le globe »: no second apricot button in the scene.
+        doorPaint: getComputedStyle(door).backgroundColor, labelWidth: Math.round(label.width), name: door.textContent.trim() };
+    });
+    check('gallery: a phone gets the scene on one screen, 44 px targets, no sideways scroll',
+      phoneFit.stage <= phoneFit.screen && phoneFit.tabs.every((h) => h >= 44) && phoneFit.open >= 44 && !phoneFit.overflow,
+      JSON.stringify(phoneFit));
+    check('gallery: a phone shows the door as an arrow on the picture, not a second « Ouvrir » button',
+      phoneFit.doorPaint === 'rgba(0, 0, 0, 0)' && phoneFit.labelWidth <= 1 && phoneFit.name === 'Ouvrir dans le globe',
+      JSON.stringify({ paint: phoneFit.doorPaint, label: phoneFit.labelWidth, name: phoneFit.name }));
+    await shot(phone, 'gallery-scene-phone');
+    await phone.evaluate(() => document.querySelector('#vitrine [data-tab="06"]').click());
+    const tapped = await phone.evaluate(() => window.__gevVitrine.getDiagnostics().stage.view);
+    check('gallery: a tap on a tab shows its view', tapped === '06', String(tapped));
     await phone.close();
   },
 

@@ -6,6 +6,25 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Choisissez une vue. » is one scene that moves on by itself.** The six
+  tiles in their ivory panel became one picture at the full width of the page,
+  straight on the city, with the interface on its edges: the heading top left,
+  the view's title and place bottom left, « Ouvrir dans le globe » bottom
+  right, and a bar of six tabs under it — Avions, Immobilier, Trafic, Énergie,
+  Bus, Vélos. Resting the pointer on a tab (or clicking, tapping, or using the
+  arrow keys) shows its view from the beginning of its story — Énergie opens
+  on a dark Europe and France switches on, rather than wherever the film had
+  stopped; otherwise the views advance on their own, each for a whole
+  recording — 29 s for Roissy, 14.7 s for the power grid, 12 s (two passes)
+  for the others — and the active tab's underline fills in that time. The
+  clock waits until the scene is on screen, holds while the pointer rests on
+  it, and stops with « Mettre en pause » or « Image fixe »; reduced motion
+  starts paused. On a phone the scene has no button of its own — the docked
+  « Ouvrir le globe » is already there — only an arrow on the picture, which
+  is the link. Only the view on stage and the next one are downloaded until the
+  reader reaches for the tabs, and a phone takes the 960 px files instead of
+  the 1440 (5.2 MB for Roissy). The films' enlargement under the pointer,
+  listed below, goes with the tiles: the scene is already full width.
 - **The energy ratings read like the label on a listing, and a click on one
   opens its card in the map key.** Each address carries a filled plate in its
   class colour with the letter in dark ink, and plates that would stand on one

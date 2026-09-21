@@ -4,17 +4,19 @@
  *
  * Loaded by `src/boot.js` only when `html[data-vitrine]` is set, and free of
  * Cesium by construction (its imports are `gate.js`, `rotation.js`,
- * `counters.js`, the loop modules beside it and `../geolocate.js`, whose own
- * graph is two small modules). Everything here works on top of a page that is
- * already readable without it: the form is a native GET to `/?q=`, the
- * examples are links, the list is a list, and the live figures stay hidden
- * until an answer backs them.
+ * `stage.js`, `counters.js`, the loop modules beside it and `../geolocate.js`,
+ * whose own graph is two small modules). Everything here works on top of a
+ * page that is already readable without it: the form is a native GET to
+ * `/?q=`, the examples are links, the list is a list, the six views stand one
+ * under the other, and the live figures stay hidden until an answer backs
+ * them.
  *
  * @module vitrine/vitrine
  */
 
 import { APP_PATH, isWideVitrine, VITRINE_ATTRIBUTE } from './gate.js';
 import { createRotation } from './rotation.js';
+import { createStage } from './stage.js';
 import { HERO_LOOP } from './heroLoop.js';
 import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
 import { scheduleCounters } from './counters.js';
@@ -89,6 +91,12 @@ export function initVitrine({
   const rotation = createRotation(root.querySelector('.discover'), { documentRef });
   cleanups.push(() => rotation?.dispose());
 
+  // ── The scene of views ─────────────────────────────────────────────────
+  // The tabs and the clock work with or without the loops: a reader with
+  // reduced motion or on data saver still switches views, on stills.
+  const stage = createStage(root.querySelector('.gallery'), { documentRef });
+  cleanups.push(() => stage?.dispose());
+
   // ── The recorded loop ──────────────────────────────────────────────────
   const video = root.querySelector('.world-video');
   const loop = { state: 'poster', reason: null, startedAt: null, source: null, rendition: null, still: false, sync: null };
@@ -129,9 +137,12 @@ export function initVitrine({
   // ── The gallery's loops ────────────────────────────────────────────────
   // Same policy as the hero. Nothing of them is on the first screen, not even
   // their code: the module and its list of files (src/vitrine/gallery.js) are
-  // fetched when the first box is a screen away, which is also before any box
-  // asks for its loop (`LOAD_AHEAD`, half a screen). The phone's first screen
-  // is budgeted at 400 kB (criterion 9).
+  // fetched when the first box is three quarters of a screen away, which is
+  // still before any box asks for its loop (`LOAD_AHEAD`, half a screen). A
+  // whole screen was too far once the scene lost its heading band: with the
+  // live figures still hidden, its top sat 1 726 px down a 900 px screen, and
+  // the code came with the first screen. The phone's first screen is budgeted
+  // at 400 kB (criterion 9).
   let gallery = null;
   let opening = false;
   const boxes = root.querySelectorAll('[data-media]');
@@ -142,10 +153,12 @@ export function initVitrine({
         approach.disconnect();
         import('./gallery.js').then(({ initGalleryLoops }) => {
           if (opening || !root.isConnected) return;
-          gallery = initGalleryLoops({ root, win, isStill: () => loop.still });
+          gallery = initGalleryLoops({ root, win, isStill: () => loop.still, stage });
+          // The scene times each view by its recording (src/vitrine/stage.js).
+          stage?.setDurationSource((view) => gallery?.durationOf(view));
           cleanups.push(() => gallery?.dispose());
         }).catch((error) => console.warn('[vitrine] the gallery loops could not start:', error));
-      }, { rootMargin: '100% 0px 100% 0px' });
+      }, { rootMargin: '75% 0px 75% 0px' });
       for (const box of boxes) approach.observe(box);
       cleanups.push(() => approach.disconnect());
     };
@@ -154,7 +167,8 @@ export function initVitrine({
   }
 
   // « Image fixe » (maquette 2 bis): the reader stops the city moving — the
-  // hero AND the gallery. Each loop is PAUSED on the frame being shown rather
+  // hero, the gallery AND the scene's clock, whose pause shows it. Each loop
+  // is PAUSED on the frame being shown rather
   // than hidden: hiding it would uncover the poster, which is frame 0, and the
   // picture would jump. A gallery loop not fetched yet is not fetched while
   // the box is ticked. The box is only on screen while the hero plays
@@ -164,6 +178,7 @@ export function initVitrine({
     listen(stillBox, 'change', () => {
       loop.still = stillBox.checked;
       loop.sync?.();
+      stage?.setPaused(stillBox.checked);
       gallery?.sync();
     });
   }
@@ -325,12 +340,14 @@ export function initVitrine({
   const api = {
     open,
     rotation,
+    stage,
     getDiagnostics: () => ({
       state: root.dataset.state,
       loop: { ...loop, sync: undefined, currentTime: video?.currentTime ?? null, paused: video?.paused ?? null },
       policy,
       opening,
       rotation: rotation?.getDiagnostics() ?? null,
+      stage: stage?.getDiagnostics() ?? null,
       counters: counters.getState(),
       gallery: gallery?.getDiagnostics() ?? { available: 0, items: {}, off: policy.play ? 'not-started' : policy.reason },
     }),

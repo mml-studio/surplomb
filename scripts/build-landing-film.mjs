@@ -34,10 +34,10 @@
  *     16:9. It is cropped to the box here, centred, rather than by
  *     `object-fit: cover` in the page: the files are 7 % lighter, and the
  *     still and the film crop the same way by construction.
- *   - THE KEYFRAMES. The loops have one; a film seeks. The page swaps the 960
- *     for the 1440 at the SAME instant when the reader enlarges the box
- *     (src/vitrine/gallery.js), and a seek costs the decode from the previous
- *     keyframe: {@link GOP} keeps that under 4 s of film.
+ *   - THE KEYFRAMES. The loops have one; a film seeks. The page starts a
+ *     view at its story's opening ({@link openingTime}) each time it comes on
+ *     stage (src/vitrine/gallery.js), and a seek costs the decode from the
+ *     previous keyframe: {@link GOP} keeps that under 4 s of film.
  *   - HEVC, AND H.264 AT 480 ONLY. A Mac or an iPhone without AV1 (Safari
  *     before M3 / A17 Pro) decodes HEVC in hardware. H.264 at the film's
  *     weights lost: measured on this film (2026-09-21), the 960 H.264 read
@@ -132,6 +132,19 @@ const PREFERENCE = ['av1', 'hevc', 'h264'];
 
 const log = (...args) => console.log(...args);
 const round2 = (v) => Number(v.toFixed(2));
+
+/**
+ * Where the film's own story begins in a file turned round by `--start`: the
+ * source's frame 0 now sits `startFrame` frames before the end. The page
+ * starts a view there whenever it comes on stage (src/vitrine/gallery.js) —
+ * Europe dark, then France lighting up — while the still stays frame 0. Pure.
+ * @param {{durationS: number, fps: number, startFrame: number}} film
+ * @returns {number} seconds into the file; 0 for a file that was not turned.
+ */
+export function openingTime({ durationS, fps, startFrame }) {
+  if (!(startFrame > 0) || !(fps > 0)) return 0;
+  return round2((Math.round(durationS * fps) - startFrame) / fps);
+}
 const even = (v) => 2 * Math.round(v / 2);
 
 /**
@@ -284,6 +297,7 @@ async function main() {
         stem: film.stem,
         view: film.view,
         durationS: round2(durationS),
+        openingS: openingTime({ durationS, fps: info.fps, startFrame }),
         fps: info.fps,
         aspect: round2(sources[0].width / sources[0].height),
         camera: 'film',

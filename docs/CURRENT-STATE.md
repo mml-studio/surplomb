@@ -260,40 +260,74 @@ Updated: September 19, 2026
 >   box in DEVICE pixels, then smooth, then hardware (`mediaCapabilities`),
 >   then AV1 > HEVC > H.264. `src/vitrine/heroLoop.js` (generated) lists them
 >   with their `codecs=` strings and the camera law each loop was filmed with.
-> - **The gallery moves** (PR 3, 2026-09-19): the six views and the voice
->   answer are recorded loops too (`npm run landing:gallery:capture` then
+> - **The gallery is one scene** (2026-09-21, from Memel's mock). « Choisissez
+>   une vue. » is no longer six tiles in an ivory panel but one picture at the
+>   full width of the page, straight on the city, with the interface on its
+>   edges: the heading top left, « Mettre en pause » top right, the view's
+>   title and place bottom left, « Ouvrir dans le globe » bottom right (the
+>   picture is the same link), and a bar of six tabs under it — Avions,
+>   Immobilier, Trafic, Énergie, Bus, Vélos, Lucide icons
+>   (`licenses/lucide/`). Markup `.stage` in `index.html`, the bar and the
+>   clock in `src/vitrine/stage.js`. On a desktop the scene is sized to fit
+>   the screen under the header band (1 143 × 761 px on 1440 × 900); on a
+>   phone the picture is cropped to 4:3, the bar folds to 3 × 2, and the door
+>   is only an arrow on the picture — the phone's docked « Ouvrir le globe »
+>   already says the rest, and a second apricot button said it twice. The views share one grid cell; the incoming one fades in
+>   over the outgoing one in 700 ms, and the outgoing one's words go in 200 ms
+>   so the two titles never show through each other. Without JavaScript they
+>   stand one under the other, each with its door (`@media (scripting: none)`).
+> - **The views advance on their own**, a whole recording at a time: as many
+>   passes of the view's loop as reach 10 s (`stageDwellMs`) — 12 s for the
+>   six-second loops, 14.7 s for the power grid, 29 s for Roissy — and 8 s for
+>   a view on its still. The active tab's underline fills in exactly that time.
+>   The clock runs only while half the scene is on screen, so the first view a
+>   reader meets is the first one, from its start; it holds while the pointer
+>   rests on the scene, while the keyboard is inside it, and in a hidden tab.
+>   A pointer resting 120 ms on a tab shows its view (a click or a tap does
+>   too); the arrows, Home and End move along the bar (ARIA tabs, automatic
+>   activation). A view picked any way starts from the beginning of its
+>   STORY, never where it was left, and holds that first frame for 400 ms
+>   while it fades in (`STAGE_ENTRY_HOLD_MS`): the power-grid file begins on
+>   the lit columns (its still), its story — Europe dark, France switching on
+>   — 11.67 s in (`openingS`, written by `build-landing-film.mjs` from
+>   `--start`, carried by the publisher into `galleryLoops.js`). Such a film
+>   is shown on its decoded opening frame before it plays (`data-cued`) and
+>   cuts in rather than fading over a still that is not its opening
+>   (`data-cut`). The first time the reader reaches for the bar, every view's
+>   loop is fetched and cued, so the one they point at is ready. « Mettre en pause » stops the clock and the picture; reduced
+>   motion starts paused; « Image fixe » pauses the scene as well.
+> - **The loops follow the scene**: the six views and the voice answer are
+>   recorded loops (`npm run landing:gallery:capture` then
 >   `landing:gallery:build`: 6 s, cockpit interface kept, fixed camera where
 >   the data move, a 2–3° orbit where they do not, the Bordeaux buses ×5;
 >   the sale card of view 02 and a bus card on 05 are opened through the
 >   layers' `selectCard`). 480/960/1440 (600/1200 for the voice band) in AV1
 >   + H.264 (1440 AV1 only), the stills are frame 0 of each loop.
->   `src/vitrine/gallery.js` — itself fetched only as the gallery nears the
->   screen — fetches a box's loop half a screen ahead, plays it on screen,
->   pauses it off screen, and obeys the hero's policy and *Image fixe* (Still image).
+>   `src/vitrine/gallery.js` — itself fetched when the scene is three quarters
+>   of a screen away — fetches ONLY the view on stage and the next one in line
+>   (`stageGate`), plays only the view on stage while the scene is on screen,
+>   restarts a view from 0 when it comes up, and obeys the hero's policy and
+>   *Image fixe* (Still image). Loops are chosen for a device pixel ratio of at
+>   most 2 (`LOOP_MAX_DPR`): the phone's 4:3 crop asked for the 1440 at its
+>   native 3 (5.2 MB for Roissy); it takes the 960, like its stills. A scene
+>   reached before the loops' list arrives starts on a still's 8 s, and the
+>   view gets the rest of its recording when the length is learned.
 >   Views 01 and 04 play films in place of their recorded loops (below).
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
-> - **View 01 is a film, and it enlarges** (2026-09-21). Its loop is replaced
->   by the Roissy scene cut from the app (29 s, `surplomb-roissy-v9b.mp4`),
->   encoded by `scripts/build-landing-film.mjs --src <film>` into
+> - **View 01 is a film** (2026-09-21). Its loop is replaced by the Roissy
+>   scene cut from the app (29 s, `surplomb-roissy-v9b.mp4`), encoded by
+>   `scripts/build-landing-film.mjs --src <film>` into
 >   `.context/landing-assets/film/out` under the loop's own names — cropped to
 >   the box's 1.65 (centred), a keyframe every 4 s, 480/960/1440 in AV1 + HEVC
 >   (+ H.264 at 480), each at VMAF ≈ 90 or its cap: AV1 1.2 / 2.8 / 5.2 MB,
 >   HEVC 1.2 / 3.8 / 7.6 MB — which `publish-landing-assets.mjs` reads FIRST,
->   so a republished gallery keeps the film. A Retina laptop pays the 960
->   (2.8 MB) as the gallery nears, and the 1440 (5.2 MB) on the first
->   enlargement only. `data-expand` on the view makes
->   `src/vitrine/gallery.js` scale the box (`--expand-scale`, at most 2× and
->   1 040 CSS px, `expandGeometry` keeps it on screen and over its own tile)
->   after the pointer rests 280 ms or on keyboard focus, never on touch, and
->   only once the film plays; the neighbours dim to 0.3 (`:has()`). If the
->   enlarged box needs more pixels than the tile's file, the wider rendition
->   is parked 0.8 s ahead, started when the film reaches it, and the old file
->   dropped on its first frame (`swapForWider`; kept for the visit).
->   `qa:landing` case `gallery` asserts grow, dim, swap and shrink, for every
->   `data-expand` view.
-> - **View 04 is the power-grid film** (2026-09-21), enlarged the same way. The
+>   so a republished gallery keeps the film. The enlargement under the pointer
+>   that #317 and #318 gave the two films (`data-expand`, `expandGeometry`,
+>   `swapForWider`) is gone with the tiles: the scene is already the full
+>   width, and a Retina laptop plays the 1440 from the start.
+> - **View 04 is the power-grid film** (2026-09-21). The
 >   14.7 s `surplomb-grid-v4.mp4` (Europe dark, France lit alone, the nuclear
 >   columns filling, the dive onto Cruas and its card, the switch-off) is
 >   encoded by `build-landing-film.mjs --view 04 --start 3` into
@@ -339,6 +373,9 @@ Updated: September 19, 2026
 >
 > Acceptance: `npm run qa:landing -- --url <server>` (105 checks against a
 > build, 2026-09-19; the byte budget case only asserts against one). Case
+> `gallery` (26 checks, 2026-09-21) covers the scene: fit, what is fetched and
+> played, hover, the clock by whole passes, pause, *Image fixe*, off screen,
+> reduced motion, data saver, a failed download, and the phone. Case
 > `adresses` covers the second URL, `handoff` the in-place swap, and `retour`
 > the way back — open the globe for real, return to `/`, read the home page.
 
