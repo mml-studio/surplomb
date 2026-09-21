@@ -322,6 +322,19 @@ export default defineMessages({
     },
   },
 
+  /** The selected sale, printed in the map key under the classes. */
+  panel: {
+    source: {
+      fr: 'Source : DVF géolocalisées, data.gouv.fr',
+      en: 'Source: geolocated property sales (DVF), data.gouv.fr',
+    },
+    parcel: {
+      fr: (identifier) => `Parcelle cadastrale ${identifier}`,
+      en: (identifier) => `Cadastral parcel ${identifier}`,
+      sample: ['69382000AB0123'],
+    },
+  },
+
   /** What the theme says on the Bâti 3D row when it paints the volumes. */
   theme: {
     label: { fr: 'Ventes DVF (€/m²)', en: 'Property sales, DVF (€/m²)' },

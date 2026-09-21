@@ -137,6 +137,29 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   focus re-count the bubbles without a request, and pressing a bubble zooms in
   until it splits — into smaller bubbles, then into dots and pins. A city with
   fewer vehicles keeps its dots, and so does the landing page's Paris view.
+- **A clicked property sale opens its card in the key, not over the map, and
+  its plot lights up.** The DVF card used to open nine lines tall on the
+  sale's marker — over the block the reader was looking at. On a desktop with
+  the key open, the card now sits under the price key: the address, the kind
+  of sale and its date spelled out (« Vente · 31 mai 2024 »), the price large,
+  what was bought, and the €/m² beside a swatch in the marker's colour, with
+  its class and its ratio to the commune median, the cadastral parcel and a
+  link to the register. The globe keeps a one-line tag with the address. The
+  plot the sale bought is painted again in its class colour, strongly enough
+  to light the building standing on it on the photoreal mesh, walls included;
+  above 600 m the clicked plot or section lights the same way. A click on a
+  washed plot's edge now opens the sale the wash is painted from. The × in the
+  key, Escape or a click elsewhere closes it. With the key folded away, in the
+  clean view, or on a phone (where the selection has its own tab), the card on
+  the globe stays whole.
+- **The two cheapest price classes are green.** The bottom class of the DVF
+  ramp was a turquoise nobody read as « cheap »; it is now a deep green
+  (`#0f8f55`) under the existing light green (`#7ed957`), kept apart by
+  lightness (ΔE76 42 between the two).
+- **« Une parcelle vendue à Lyon, et son prix » opens with the sales alone.**
+  The landing-page link (and the example that shares its view) also switched
+  the cadastral parcels on, which redrew the boundaries the sales layer
+  already washes. The gallery image is unchanged until the next capture.
 - **Shared vehicles are dots, and a few of them wear a pin.** Over the landing
   page's Paris view the globe drew 2,175 parked vehicles as 20 px plates, a
   carpet that covered the street it stood on. Every vehicle is now a dot of

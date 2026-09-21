@@ -106,8 +106,10 @@ export const GALLERY_VIEWS = Object.freeze([
     // Under 600 m, where the sales layer draws each sale on its parcel (above,
     // one disc per block: src/data/dvfSales.js) — Lyon 2e, place des Jacobins.
     pose: { lat: 45.758, lon: 4.834, alt: 550, heading: 0, pitch: -45 },
-    hash: 'v=2&lat=45.7580&lon=4.8340&alt=550&heading=0&pitch=-45&l=dv.cd',
-    layers: ['cadastre-fr', 'dvf-sales'],
+    // Sales alone: the layer already washes each sold parcel, so the cadastre
+    // layer on top only drew the same boundaries twice (dropped 2026-09-21).
+    hash: 'v=2&lat=45.7580&lon=4.8340&alt=550&heading=0&pitch=-45&l=dv',
+    layers: ['dvf-sales'],
     // Sales and parcels do not move: the camera does, a little. « et son prix »:
     // the card of a sale near the middle is open, as a reader's click opens it.
     camera: { amplitudeDeg: 2 },

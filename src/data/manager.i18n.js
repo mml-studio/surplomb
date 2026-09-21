@@ -118,4 +118,9 @@ export default defineMessages({
     },
     elsewhere: { fr: ' · hors de cette vue', en: ' · outside this view' },
   },
+
+  /** The card a layer prints in its key block for the object the reader selected. */
+  legendSelection: {
+    close: { fr: 'Fermer la fiche', en: 'Close the card' },
+  },
 });

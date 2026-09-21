@@ -12,7 +12,9 @@ import { drawScanBoundary } from './scanBoundary.js';
 import { SCAN_BANDS, SCAN_CELL_MIN_ALTITUDE_M, scanCellParams } from './scanRegime.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
 import { governorRequestRender } from '../renderGovernor.js';
-import { formatDecimal, formatEuros, formatEurosPerM2, formatNumber } from '../i18n/format.js';
+import {
+  formatDate, formatDecimal, formatEuros, formatEurosPerM2, formatNumber,
+} from '../i18n/format.js';
 import { labelFor } from '../i18n/messages.js';
 import messages, { NATURE, TYPE_LOCAL } from './dvfSales.i18n.js';
 
@@ -290,12 +292,21 @@ export const COLOR_NO_BASIS = '#c46be0';
  * ±5 % is the band inside which two flats in the same street are the same
  * price; ±25 % is where a buyer stops calling it a variation and starts asking
  * what is wrong with it. Five classes, not seven: B3 caps what a reader can
- * separate, and these five measure ΔE76 26.0 (amber/yellow) to 57.4
- * (green/teal) apart, all above the ~10 at which two colours stop sharing a
- * name.
+ * separate, and neighbouring classes measure ΔE76 26.0 (amber/yellow) to 48.9
+ * (yellow/light green) apart, all above the ~10 at which two colours stop
+ * sharing a name.
+ *
+ * GREEN BELOW, NOT TEAL, since 2026-09-21. The bottom class was `#3dd6c4`, a
+ * turquoise nobody reads as "cheap": green for below and red for above is the
+ * pair a reader decodes without the key. The two greens are kept apart by
+ * LIGHTNESS rather than by hue — `#7ed957` light, `#0f8f55` deep, ΔE76 42.1 —
+ * because two greens of one lightness become one class at 19 px. The price is
+ * a protanope, who sees the deep green and the red at nearly the same grey
+ * (ΔE76 ≈ 8 simulated): the two ends of the scale, never neighbours, and the
+ * card always prints the €/m².
  *
  * Diverging on purpose, and centred on the reference rather than on a range:
- * teal below, yellow at the median, red above. The lightness peak sits at the
+ * green below, yellow at the median, red above. The lightness peak sits at the
  * centre class, which is what a diverging ramp is supposed to do — the ORDER a
  * reader has to recover here is "away from the reference, in which direction",
  * not "more of something".
@@ -335,7 +346,7 @@ export const DVF_RATIO_CLASSES = Object.freeze([
   Object.freeze({
     id: 'very-low',
     min: -Infinity,
-    color: '#3dd6c4',
+    color: '#0f8f55',
     get label() { return messages().classes.veryLow.label; },
     get blurb() { return messages().classes.veryLow.blurb; },
   }),
@@ -813,9 +824,13 @@ function ringPositions(ring) {
  * @param {Array<object>} sales The sales that were actually DRAWN.
  * @param {object} reference From {@link dvfReference}.
  * @param {number} classificationType Cesium surface to clamp onto.
+ * @param {?Map<string, object>} [saleByParcel] Filled with the sale each drawn
+ *   plot is painted from, so a click on its edge can open that sale.
  * @returns {number} Plots drawn.
  */
-export function drawDvfParcels(dataSource, parcels, sales, reference, classificationType) {
+export function drawDvfParcels(
+  dataSource, parcels, sales, reference, classificationType, saleByParcel = null,
+) {
   const list = Array.isArray(parcels) ? parcels : [];
   if (!list.length) return 0;
   const byParcel = new Map();
@@ -834,6 +849,7 @@ export function drawDvfParcels(dataSource, parcels, sales, reference, classifica
     // dossier left in the served cut.
     const sale = dvfMostRecentSale(byParcel.get(parcel.id) || []);
     if (!sale) continue;
+    saleByParcel?.set(parcel.id, sale);
     const price = saleRatioPrice(sale);
     const css = saleColorCss(price, reference.medianPrixM2);
     const fill = Cesium.Color.fromCssColorString(css).withAlpha(PARCEL_FILL_ALPHA);
@@ -1621,6 +1637,324 @@ function drawDvfArea(payload, viewer, classificationType) {
   return shapes.length;
 }
 
+/* ── the selected sale: a lit plot, and its card beside the map ─────────── */
+
+/**
+ * Where the register itself can be read, from the card of any sale. The page
+ * `dataCredits.js` already credits, so the key and the credits point at one
+ * place.
+ */
+export const DVF_SOURCE_URL = 'https://www.data.gouv.fr/datasets/demandes-de-valeurs-foncieres-geolocalisees/';
+
+/**
+ * THE SELECTED PLOT, LIFTED OUT OF THE WASH (2026-09-21).
+ *
+ * A click used to change one thing on the globe: the marker turned cyan and
+ * grew six pixels, while a card nine lines tall opened over the middle of the
+ * map — over the very block the reader was looking at. The card now goes to
+ * the map key, and the ground says which sale it is: the plot the sale bought
+ * is painted again in its own class colour, strongly enough to read as a lit
+ * building on the photoreal mesh (a ground classification paints every
+ * surface of the tileset inside the plot, walls and roof alike), and ringed in
+ * the same colour, thicker.
+ *
+ * THE RING IS NOT THE SELECTION CYAN, and the first version was. On the
+ * photoreal mesh a ground polyline drapes down every wall standing on the
+ * boundary, and a plot's boundary is where its façades are: the ring painted
+ * the whole street front of 27 rue Port du Temple cyan, a building the colour
+ * of no class, beside a key that says cyan means nothing. In the class colour
+ * the façade reads as the price it is; the marker keeps the cyan.
+ *
+ * NOT the wash made thicker for everybody. The 0.2 wash under every marker is
+ * a locator; this one is an answer to one question, and it goes when the card
+ * does.
+ *
+ * Primitives rather than entities, and unpickable: an entity in the shell's
+ * data source would be indexed as a card of its own (a polyline has a
+ * position), and a click on the lit plot has to reach whatever is under it
+ * exactly as it did before.
+ */
+const HIGHLIGHT_FILL_ALPHA = 0.6;
+const HIGHLIGHT_OUTLINE_ALPHA = 0.95;
+const HIGHLIGHT_OUTLINE_WIDTH_PX = 3;
+
+/** @type {?{viewer: object, fill: ?object, outline: ?object, stop: ?Function}} */
+let _highlight = null;
+
+/** The viewer the last draw went to — the highlight is drawn on the same one. */
+let _drawViewer = null;
+
+/**
+ * The answer on screen, in either regime. `_themePayload` cannot stand in: it
+ * is withdrawn above 600 m, where a plot's card is still a sale.
+ */
+let _drawnPayload = null;
+
+/**
+ * The open card, resolved to what it is about: a sale (and the plot it
+ * bought), or an area shape. Null while nothing is selected. The panel is
+ * built from this on each repaint rather than stored, so a language switch
+ * re-words it.
+ * @type {?{card: object, sale: ?object, parcelId: ?string, shape: ?object}}
+ */
+let _selection = null;
+
+/** Most recent sale of every washed plot, filled by {@link drawDvfParcels}. */
+const _saleByParcel = new Map();
+
+/** Take the lit plot off the globe. Idempotent. */
+function clearSaleHighlight() {
+  if (!_highlight) return;
+  _highlight.stop?.();
+  const primitives = _highlight.viewer?.scene?.primitives;
+  if (primitives && !primitives.isDestroyed?.()) {
+    if (_highlight.fill) primitives.remove(_highlight.fill);
+    if (_highlight.outline) primitives.remove(_highlight.outline);
+  }
+  _highlight = null;
+  governorRequestRender('dvf-highlight-clear');
+}
+
+/**
+ * Light one plot, fill and rings in `css`.
+ * @param {object} viewer
+ * @param {Array<Array<Array<number[]>>>} parts `[[outer, ...holes], ...]`, in degrees.
+ * @param {string} css The class colour of the sale.
+ * @returns {boolean} True when something was drawn.
+ */
+function drawSaleHighlight(viewer, parts, css) {
+  clearSaleHighlight();
+  const scene = viewer?.scene;
+  if (!scene?.primitives || !Array.isArray(parts) || !parts.length) return false;
+  const classificationType = gpuClassificationTypeForScene(scene);
+  const fill = Cesium.Color.fromCssColorString(css).withAlpha(HIGHLIGHT_FILL_ALPHA);
+  const stroke = Cesium.Color.fromCssColorString(css).withAlpha(HIGHLIGHT_OUTLINE_ALPHA);
+  const fills = [];
+  const outlines = [];
+  for (const rings of parts) {
+    const outer = areaRingPositions(rings?.[0] || []);
+    if (!outer) continue;
+    const holes = [];
+    for (let h = 1; h < rings.length; h += 1) {
+      const hole = areaRingPositions(rings[h] || []);
+      if (hole) holes.push(new Cesium.PolygonHierarchy(hole));
+    }
+    fills.push(new Cesium.GeometryInstance({
+      geometry: new Cesium.PolygonGeometry({
+        polygonHierarchy: new Cesium.PolygonHierarchy(outer, holes),
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+      }),
+      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(fill) },
+    }));
+    for (const ring of rings) {
+      const positions = areaRingPositions(ring || []);
+      if (!positions) continue;
+      outlines.push(new Cesium.GeometryInstance({
+        geometry: new Cesium.GroundPolylineGeometry({
+          positions: [...positions, positions[0]],
+          width: HIGHLIGHT_OUTLINE_WIDTH_PX,
+        }),
+        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(stroke) },
+      }));
+    }
+  }
+  if (!fills.length) return false;
+  const primitives = scene.primitives;
+  const highlight = { viewer, fill: null, outline: null, stop: null };
+  highlight.fill = primitives.add(new Cesium.GroundPrimitive({
+    geometryInstances: fills,
+    appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
+    classificationType,
+    allowPicking: false,
+    asynchronous: true,
+  }));
+  if (outlines.length) {
+    highlight.outline = primitives.add(new Cesium.GroundPolylinePrimitive({
+      geometryInstances: outlines,
+      appearance: new Cesium.PolylineColorAppearance({ translucent: true }),
+      classificationType,
+      allowPicking: false,
+      asynchronous: true,
+    }));
+  }
+  // Same reason as `pumpAreaUntilReady`: the globe renders on demand, and the
+  // frame in which an asynchronous ground primitive becomes ready is one
+  // nobody else asks for.
+  if (scene.postRender) {
+    let framesLeft = AREA_BUILD_FRAME_CAP;
+    const stop = scene.postRender.addEventListener(() => {
+      const pending = (highlight.fill && !highlight.fill.ready)
+        || (highlight.outline && !highlight.outline.ready);
+      framesLeft -= 1;
+      if (!pending || framesLeft <= 0) {
+        stop();
+        highlight.stop = null;
+        return;
+      }
+      governorRequestRender('dvf-highlight-build');
+    });
+    highlight.stop = stop;
+  }
+  _highlight = highlight;
+  governorRequestRender('dvf-highlight');
+  return true;
+}
+
+/**
+ * What an open card is about.
+ *
+ * A marker's card is a sale (`dvf:<id>`). A plot edge's card is the plot's
+ * most recent sale — the same one its wash is painted from — when that sale
+ * has no marker to redirect to (see `selectionFor`). A card opened on bare
+ * ground, above 600 m, is the plot or section under that point.
+ * @param {object} card
+ * @param {?object} payload The answer on screen.
+ * @returns {?{card: object, sale: ?object, parcelId: ?string, shape: ?object}}
+ */
+export function dvfResolveSelection(card, payload, {
+  saleByParcel = _saleByParcel, shapeAt = dvfAreaShapeAt,
+} = {}) {
+  if (!card?.id || !payload) return null;
+  const id = String(card.id);
+  if (id.startsWith('dvf-parcel:')) {
+    const parcelId = id.split(':')[1] || null;
+    return { card, sale: saleByParcel.get(parcelId) || null, parcelId, shape: null };
+  }
+  if (id.startsWith('dvf:')) {
+    const sale = (payload.sales || []).find((entry) => `dvf:${entry.id}` === id) || null;
+    return { card, sale, parcelId: sale?.parcelle ? String(sale.parcelle).trim() : null, shape: null };
+  }
+  if (Number.isFinite(card.lon) && Number.isFinite(card.lat) && dvfAreaUnit(payload)) {
+    const shape = shapeAt(card.lon, card.lat);
+    return shape ? { card, sale: shape.record?.sale || null, parcelId: null, shape } : null;
+  }
+  return null;
+}
+
+/**
+ * The day a sale was signed, spelled out: `29 décembre 2025`. The register
+ * publishes a bare `YYYY-MM-DD`, read as UTC midnight and printed in UTC, so no
+ * reader's time zone can move it a day.
+ * @param {?string} iso
+ * @returns {?string}
+ */
+export function dvfSaleDateLong(iso) {
+  const text = String(iso || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text || null;
+  return formatDate(`${text}T00:00:00Z`, { dateStyle: 'long', timeZone: 'UTC' });
+}
+
+/**
+ * The selected sale as the map key prints it: address, the kind of sale and
+ * its date, the price large, what was bought, and the €/m² beside the swatch
+ * the marker wears — with its ratio to the named commune median, because a
+ * colour whose denominator is not written down is a decoration.
+ *
+ * @param {object} sale One served mutation.
+ * @param {{medianPrixM2: ?number, territory: ?string}} reference
+ * @param {{parcelId?: ?string, footnote?: ?string}} [extra]
+ * @returns {object} The `legendSelection` slot of the key.
+ */
+export function dvfSalePanel(sale, reference, { parcelId = null, footnote = null } = {}) {
+  const m = messages();
+  const price = saleRatioPrice(sale);
+  const median = reference?.medianPrixM2 ?? null;
+  const klass = saleRatioClass(price, median);
+  const ratio = price !== null && median ? price / median : null;
+  const value = price !== null ? eurosPerM2(price)
+    : sale.dwellingCount > 1 ? m.card.dwellings(sale.dwellingCount)
+      : m.card.noComparable;
+  return {
+    key: `sale:${sale.id ?? sale.parcelle ?? ''}`,
+    title: sale.address || sale.commune || m.card.fallbackName,
+    meta: [labelFor(NATURE, sale.nature), dvfSaleDateLong(sale.date)].filter(Boolean).join(' · '),
+    headline: Number.isFinite(sale.valeur) ? euros(sale.valeur) : null,
+    lines: [dvfSaleKindLine(sale)].filter(Boolean),
+    metric: {
+      color: saleColorCss(price, median),
+      value,
+      caption: [
+        klass ? klass.label : null,
+        ratio !== null
+          ? m.card.ratio(ratioText(ratio), reference.territory || m.reference.theCommune,
+            eurosPerM2(median))
+          : null,
+      ].filter(Boolean),
+    },
+    footnote: [parcelId ? m.panel.parcel(parcelId) : null, footnote].filter(Boolean).join(' · ') || null,
+    link: { href: DVF_SOURCE_URL, label: m.panel.source },
+  };
+}
+
+/**
+ * The key's selection slot for whatever is open, or null.
+ * @param {?object} selection From {@link dvfResolveSelection}.
+ * @param {?object} payload The answer on screen.
+ * @returns {?object}
+ */
+export function dvfSelectionPanel(selection, payload) {
+  if (!selection || !payload) return null;
+  const { card, sale, shape, parcelId } = selection;
+  if (shape?.kind === 'plot' && sale) {
+    const commune = areaCommune(payload, shape.record?.communeCode);
+    return dvfSalePanel(sale, {
+      medianPrixM2: commune?.medianPrixM2 ?? null,
+      territory: commune?.name || commune?.code || null,
+    }, {
+      parcelId: shape.record?.id || null,
+      footnote: messages().area.plots.which(Number(shape.record?.count || 1), dvfYearsLabel(payload.years)),
+    });
+  }
+  if (sale && !shape) return dvfSalePanel(sale, dvfReference(payload), { parcelId });
+  // A section, or a card this layer cannot resolve: its own lines, as the
+  // card on the globe would have printed them.
+  return {
+    key: `card:${card.id}:${card.title}`,
+    title: card.title,
+    lines: Array.isArray(card.details) ? card.details.filter(Boolean) : [],
+    link: { href: DVF_SOURCE_URL, label: messages().panel.source },
+  };
+}
+
+/**
+ * Whether the map key is on screen to carry the card, so the globe can keep
+ * only the card's title. Not on a phone — the key lives in a sheet tab there,
+ * and the selection has a tab of its own — and not while the key is folded
+ * away or hidden by the clean view: a reader must never click a sale and get
+ * its address alone.
+ * @returns {boolean}
+ */
+export function dvfKeyCarriesSelection() {
+  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
+  if (document.documentElement?.dataset?.shell === 'phone') return false;
+  const key = document.getElementById('map-legend');
+  if (!key || key.hidden || key.classList?.contains('collapsed')) return false;
+  return typeof key.getClientRects !== 'function' || key.getClientRects().length > 0;
+}
+
+/**
+ * The shell's selection hook: resolve the card, light its ground.
+ * @param {?object} card
+ */
+function onDvfSelectionChange(card) {
+  _selection = card ? dvfResolveSelection(card, _drawnPayload) : null;
+  clearSaleHighlight();
+  if (!_selection || !_drawViewer) return;
+  if (_selection.shape) {
+    drawSaleHighlight(_drawViewer, _selection.shape.parts,
+      dvfAreaColorCss(_areaUnit, _selection.shape.record));
+    return;
+  }
+  const parcel = _selection.parcelId
+    ? (_themePayload?.parcels || []).find((entry) => entry.id === _selection.parcelId)
+    : null;
+  if (!parcel || !_selection.sale) return;
+  const reference = dvfReference(_themePayload);
+  drawSaleHighlight(_drawViewer, parcel.parts,
+    saleColorCss(saleRatioPrice(_selection.sale), reference.medianPrixM2));
+}
+
+
 const baseLayer = createAddressScanLayer({
   id: DVF_LAYER_ID,
   // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
@@ -1671,15 +2005,36 @@ const baseLayer = createAddressScanLayer({
   // has to take them too. See `drawDvfArea`.
   onClear: () => {
     clearAreaDraw();
+    clearSaleHighlight();
+    _selection = null;
+    _drawnPayload = null;
     _areaUnit = null;
   },
   // A plot or a section is a geometry instance, not an entity: this is how a
   // click on one reaches `groundCard` instead of being ignored as nobody's.
   ownsPick: isDvfAreaPickId,
   groundCard: dvfAreaGroundCard,
+  // ONE PLOT, ONE CARD. A click on a washed plot's edge opens the sale the
+  // wash is painted from — its marker lit, its plot lit, one card — rather
+  // than a second, thinner card about the same sale. A plot whose sale has no
+  // marker (no published coordinate) keeps its own card: the shell falls back
+  // to the entity clicked when the redirect names no card.
+  selectionFor: (entityId) => {
+    const id = String(entityId || '');
+    if (!id.startsWith('dvf-parcel:')) return null;
+    const sale = _saleByParcel.get(id.split(':')[1]);
+    return sale ? `dvf:${sale.id}` : null;
+  },
+  // The card goes beside the map and the globe keeps its title, as a tag over
+  // the sale — see the section above `baseLayer`.
+  onSelectionChange: onDvfSelectionChange,
+  compactCard: () => dvfKeyCarriesSelection(),
 
   render({ payload, dataSource, viewer, runtime, point }) {
     _typeFilter = String(runtime?.type ?? 'tous'); // i18n-ignore-line — share-link token
+    _drawViewer = viewer || _drawViewer;
+    _drawnPayload = payload;
+    _saleByParcel.clear();
     // THE PAYLOAD DECIDES, NOT THE CAMERA. An answer in flight while the reader
     // crossed 600 m lands after the altitude already says the other thing, and
     // drawing a box payload as points — or the reverse — is one frame of
@@ -1708,7 +2063,7 @@ const baseLayer = createAddressScanLayer({
     // the row's number has always been "how many mutations are on screen".
     drawDvfParcels(
       dataSource, payload.parcels, sales, reference,
-      gpuClassificationTypeForScene(viewer?.scene),
+      gpuClassificationTypeForScene(viewer?.scene), _saleByParcel,
     );
     let drawn = 0;
     for (const sale of sales) {
@@ -1818,6 +2173,7 @@ const baseLayer = createAddressScanLayer({
         legendBar: true,
         legendNote: dvfAreaLegendNote(payload),
         note: dvfAreaDisclosure(payload),
+        legendSelection: dvfSelectionPanel(_selection, payload),
       };
     }
     const reference = dvfReference(payload);
@@ -1836,6 +2192,9 @@ const baseLayer = createAddressScanLayer({
         hidden: (payload.sales || []).length - sales.length,
         parcels: payload.parcels,
       }),
+      // The open card, printed under the key it is read against — see the
+      // section above `baseLayer`.
+      legendSelection: dvfSelectionPanel(_selection, payload),
     };
   },
 
@@ -1974,6 +2333,8 @@ const dvfSalesLayer = {
     // on `enable` — so the shapes go now rather than sitting on a hidden
     // layer's ground.
     clearAreaDraw();
+    clearSaleHighlight();
+    _selection = null;
     _areaUnit = null;
     unregisterPickOwner(DVF_LAYER_ID);
   },
@@ -1984,6 +2345,11 @@ const dvfSalesLayer = {
     publishTheme();
     baseLayer.destroy(viewer);
     clearAreaDraw();
+    clearSaleHighlight();
+    _selection = null;
+    _drawnPayload = null;
+    _drawViewer = null;
+    _saleByParcel.clear();
     _areaUnit = null;
     _areaViewer = null;
     unregisterPickOwner(DVF_LAYER_ID);

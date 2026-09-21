@@ -109,6 +109,46 @@ function refreshFailureFromStats(stats, label) {
 const GUIDANCE_STATUSES = Object.freeze(new Set(['zoom-in', 'empty', 'idle', 'out-of-gate']));
 
 /**
+ * A layer's `legendSelection`, checked and normalised, or null.
+ *
+ * The slot is the card of the object the reader selected, printed in the key
+ * block. Only `title` is required; everything else is dropped when it is not
+ * the shape the key knows how to print, and a link that is not `https:` is
+ * dropped whole — its URL may come from a register.
+ * @param {*} selection
+ * @returns {?{key: string, title: string, meta: ?string, headline: ?string,
+ *   lines: string[], metric: ?{color: ?string, value: string, caption: string[]},
+ *   footnote: ?string, link: ?{href: string, label: string}}}
+ */
+export function legendSelectionOf(selection) {
+  const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+  const title = text(selection?.title);
+  if (!title) return null;
+  const metricValue = text(selection.metric?.value);
+  const captions = Array.isArray(selection.metric?.caption)
+    ? selection.metric.caption
+    : [selection.metric?.caption];
+  const href = text(selection.link?.href);
+  const linkLabel = text(selection.link?.label);
+  return {
+    key: text(selection.key) || title,
+    title,
+    meta: text(selection.meta),
+    headline: text(selection.headline),
+    lines: (Array.isArray(selection.lines) ? selection.lines : []).map(text).filter(Boolean),
+    metric: metricValue
+      ? {
+        color: text(selection.metric.color),
+        value: metricValue,
+        caption: captions.map(text).filter(Boolean),
+      }
+      : null,
+    footnote: text(selection.footnote),
+    link: href && linkLabel && /^https:\/\//.test(href) ? { href, label: linkLabel } : null,
+  };
+}
+
+/**
  * Normalize a layer's declared legend SCOPE — where its classes are, and how
  * many of them are on screen right now.
  *
@@ -3602,6 +3642,9 @@ export class DataLayerManager {
           // A layer whose whole dataset sits 800 km away was still printing a
           // six-class key above the layer the reader was actually looking at.
           scope: legendScopeOf(controls.legendScope),
+          // The object the reader selected, printed under the key it is read
+          // against instead of in a card over the map — see `_legendSelection`.
+          selection: legendSelectionOf(controls.legendSelection),
         });
       }
 
@@ -3917,6 +3960,7 @@ export class DataLayerManager {
         segments: group.segments || [],
         segmentsLabel: group.segmentsLabel || '',
         scope: group.scope || null,
+        selection: group.selection || null,
         subtitle: fusionMemberChipFor(rowId, group.layer.id) || this._displayName(group.layer),
       });
       row.split = row.members.length > 1;
@@ -3949,6 +3993,13 @@ export class DataLayerManager {
     if (list.dataset.toggleListener === '1') return;
     list.dataset.toggleListener = '1';
     list.addEventListener('click', (event) => {
+      // The selection card's close: the layer dismisses its own selection, as
+      // Escape does, and the key repaints without it.
+      const close = event.target?.closest?.('.map-legend-selection-close[data-selection-layer]');
+      if (close) {
+        this.layers.get(close.dataset.selectionLayer)?.module?.clearSelectedCard?.();
+        return;
+      }
       const button = event.target?.closest?.('.is-toggle[data-toggle-layer]');
       if (!button) return;
       const { toggleLayer, toggleParam, toggleValue, toggleFanOut } = button.dataset;
@@ -4027,10 +4078,12 @@ export class DataLayerManager {
     if (!groups.length) {
       host.hidden = true;
       list.replaceChildren();
+      this._legendSelectionKey = null;
       return;
     }
     host.hidden = false;
 
+    let selectionKey = null;
     const fragment = document.createDocumentFragment();
     // One shared note, not one per layer: the drape is a property of the MAP
     // STACK, and repeating it under every zonal layer would bury the key it is
@@ -4053,7 +4106,9 @@ export class DataLayerManager {
         rowTitle.textContent = row.title;
         rowNode.appendChild(rowTitle);
       }
-      for (const { layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel } of row.members) {
+      for (const {
+        layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel, selection,
+      } of row.members) {
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
 
@@ -4278,11 +4333,92 @@ export class DataLayerManager {
           line.textContent = note;
           group.appendChild(line);
         }
+        if (selection) {
+          group.appendChild(this._legendSelection(layer, selection));
+          selectionKey = `${layer.id}|${selection.key}`;
+        }
         rowNode.appendChild(group);
       }
       fragment.appendChild(rowNode);
     }
     list.replaceChildren(fragment);
+    // A NEW selection is brought into view once; a repaint of the same one
+    // leaves the reader's scroll where they put it. The key repaints about
+    // once a second, and scrolling on every pass would pin the list.
+    if (selectionKey && selectionKey !== this._legendSelectionKey) {
+      list.querySelector('.map-legend-selection')?.scrollIntoView?.({ block: 'nearest' });
+    }
+    this._legendSelectionKey = selectionKey;
+  }
+
+  /**
+   * The card of the selected object, as a section of its layer's key block.
+   *
+   * WHY HERE AND NOT OVER THE MAP. A card anchored on a marker covers the
+   * block around it, which is the block the reader is reading; the key sits in
+   * the rail beside the map and already carries the classes the card's colour
+   * is read against. The layer keeps a tag over the object on the globe — its
+   * title alone — so map and card still point at each other.
+   *
+   * Everything is `textContent`, and the link is an `https:` URL or nothing:
+   * the strings come from registers, not from us.
+   *
+   * @param {{id: string}} layer
+   * @param {object} selection From {@link legendSelectionOf}.
+   * @returns {HTMLElement}
+   */
+  _legendSelection(layer, selection) {
+    const section = document.createElement('section');
+    section.className = 'map-legend-selection';
+    section.setAttribute('aria-label', selection.title);
+    const add = (className, text, tag = 'div') => {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      section.appendChild(node);
+      return node;
+    };
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'map-legend-selection-close';
+    close.dataset.selectionLayer = String(layer.id);
+    close.setAttribute('aria-label', messages().legendSelection.close);
+    close.title = messages().legendSelection.close;
+    close.textContent = '×';
+    section.appendChild(close);
+    add('map-legend-selection-title', selection.title);
+    if (selection.meta) add('map-legend-selection-meta', selection.meta);
+    if (selection.headline) add('map-legend-selection-headline', selection.headline);
+    for (const line of selection.lines) add('map-legend-selection-line', line);
+    if (selection.metric) {
+      const metric = document.createElement('div');
+      metric.className = 'map-legend-selection-metric';
+      const swatch = document.createElement('span');
+      swatch.className = 'map-legend-selection-swatch';
+      if (selection.metric.color) swatch.style.background = selection.metric.color;
+      const text = document.createElement('div');
+      text.className = 'map-legend-selection-metric-text';
+      const value = document.createElement('div');
+      value.className = 'map-legend-selection-value';
+      value.textContent = selection.metric.value;
+      text.appendChild(value);
+      for (const caption of selection.metric.caption) {
+        const node = document.createElement('div');
+        node.className = 'map-legend-selection-caption';
+        node.textContent = caption;
+        text.appendChild(node);
+      }
+      metric.append(swatch, text);
+      section.appendChild(metric);
+    }
+    if (selection.footnote) add('map-legend-selection-footnote', selection.footnote);
+    if (selection.link) {
+      const link = add('map-legend-selection-link', selection.link.label, 'a');
+      link.href = selection.link.href;
+      link.target = '_blank';
+      link.rel = 'noopener';
+    }
+    return section;
   }
 
   /**

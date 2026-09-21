@@ -45,6 +45,7 @@ import dvfSalesLayer, {
   COLOR_NO_BASIS,
   COLOR_NO_RATIO,
   DVF_LAYER_ID,
+  DVF_SOURCE_URL,
   DVF_RATIO_BREAKS,
   DVF_RATIO_CLASSES,
   DVF_THEME_PRECEDENCE,
@@ -64,7 +65,11 @@ import dvfSalesLayer, {
   dvfPlotCard,
   dvfPlotClass,
   dvfReference,
+  dvfResolveSelection,
   dvfSaleCard,
+  dvfSaleDateLong,
+  dvfSalePanel,
+  dvfSelectionPanel,
   dvfSectionCard,
   dvfSectionClass,
   dvfSaleRecord,
@@ -139,7 +144,7 @@ test('C1 — widening the framing does not repaint a sale', () => {
   const oldWide = saleColorCss(4600, wide.summary.medianPrixM2);
   assert.notEqual(oldTight, oldWide);
   assert.equal(oldTight, '#ffb03d', '4 600 €/m² was "+5 to +25 %" against a 4 200 local median');
-  assert.equal(oldWide, '#3dd6c4', 'and "more than 25 % below" once the dear block entered the view');
+  assert.equal(oldWide, '#0f8f55', 'and "more than 25 % below" once the dear block entered the view');
 
   // THE NEW RULE. Same sale, same colour, whatever the framing.
   const tightRef = dvfReference({ summary: tight.summary, commune: null, years: [2024] });
@@ -900,4 +905,97 @@ test('the disc regime still answers with its radius', () => {
   const disc = dvfVoiceSummary({ dormant: false, salesFound: 102, count: 102 });
   assert.equal(disc.radiusM, 300);
   assert.equal(disc.basis, undefined);
+});
+
+// ── the selected sale, printed in the key ──────────────────────────────────
+
+const PORT_DU_TEMPLE = Object.freeze({
+  id: '2024-816565', date: '2024-05-31', nature: 'Vente', valeur: 340_750,
+  types: ['Appartement'], prixM2: 9_465, dwellingSurface: 36, dwellingCount: 1,
+  address: '27 RUE PORT DU TEMPLE', parcelle: '69382000AI0008',
+});
+const LYON_2E = Object.freeze({ medianPrixM2: 5_317, territory: 'Lyon 2e Arrondissement' });
+
+test('a register date is spelled out and never moves a day', () => {
+  assert.equal(dvfSaleDateLong('2024-05-31'), '31 mai 2024');
+  // UTC midnight read and printed in UTC: a reader west of Greenwich would
+  // otherwise see the 30th. CI runs in UTC, so this runs both ways there.
+  assert.equal(dvfSaleDateLong('2025-01-01'), '1 janvier 2025');
+  assert.equal(dvfSaleDateLong(''), null);
+  assert.equal(dvfSaleDateLong('mai 2024'), 'mai 2024', 'an odd value is shown as it came');
+});
+
+test('the key card leads with the price and states the ratio behind its colour', () => {
+  const panel = dvfSalePanel(PORT_DU_TEMPLE, LYON_2E, { parcelId: '69382000AI0008' });
+  assert.equal(panel.title, '27 RUE PORT DU TEMPLE');
+  assert.equal(panel.meta, 'Vente · 31 mai 2024');
+  assert.match(panel.headline, /^340\s750\s€$/u);
+  assert.deepEqual(panel.lines, ['Appartement — 36 m²']);
+  // The swatch IS the marker's colour: the same function paints both.
+  assert.equal(panel.metric.color, saleColorCss(9_465, 5_317));
+  assert.match(panel.metric.value, /^9\s465\s€\/m²$/u);
+  assert.equal(panel.metric.caption[0], '+25 % et plus');
+  assert.match(panel.metric.caption[1], /^1,78 × le médian de Lyon 2e Arrondissement \(5\s317\s€\/m²\)$/u);
+  assert.equal(panel.footnote, 'Parcelle cadastrale 69382000AI0008');
+  assert.equal(panel.link.href, DVF_SOURCE_URL);
+});
+
+test('a sale with no €/m² says why, in the neutral colour', () => {
+  const panel = dvfSalePanel({ ...PORT_DU_TEMPLE, prixM2: null, dwellingCount: 3 }, LYON_2E);
+  assert.equal(panel.metric.color, COLOR_NO_RATIO);
+  assert.equal(panel.metric.value, '3 logements — pas de €/m² comparable');
+  assert.deepEqual(panel.metric.caption, [], 'no class and no ratio to state');
+  assert.equal(panel.footnote, null);
+});
+
+test('a selection resolves to its sale, whether the marker or the plot edge was clicked', () => {
+  const payload = { sales: [PORT_DU_TEMPLE], parcels: [] };
+  const byMarker = dvfResolveSelection({ id: 'dvf:2024-816565' }, payload);
+  assert.equal(byMarker.sale, PORT_DU_TEMPLE);
+  assert.equal(byMarker.parcelId, '69382000AI0008');
+  const saleByParcel = new Map([['69382000AI0008', PORT_DU_TEMPLE]]);
+  const byEdge = dvfResolveSelection({ id: 'dvf-parcel:69382000AI0008:0:1' }, payload, { saleByParcel });
+  assert.equal(byEdge.sale, PORT_DU_TEMPLE, 'the plot is painted from this sale, so it opens this sale');
+  assert.equal(byEdge.parcelId, '69382000AI0008');
+  assert.equal(dvfResolveSelection({ id: 'dvf:nobody' }, payload).sale, null);
+  assert.equal(dvfResolveSelection(null, payload), null);
+});
+
+test('drawing the plots records which sale each one is painted from', () => {
+  const dataSource = new Cesium.CustomDataSource('test');
+  const older = { ...PORT_DU_TEMPLE, id: 'old', date: '2023-02-01' };
+  const saleByParcel = new Map();
+  drawDvfParcels(dataSource, [{ id: '69382000AI0008', parts: square(4.83, 45.75) }],
+    [older, PORT_DU_TEMPLE], { medianPrixM2: 5_317 }, Cesium.ClassificationType.TERRAIN, saleByParcel);
+  assert.equal(saleByParcel.get('69382000AI0008'), PORT_DU_TEMPLE, 'the most recent, as the wash');
+});
+
+test('a plot clicked from altitude prints its latest sale against its own commune', () => {
+  const plot = {
+    id: '69386000AB0001', communeCode: '69386', count: 5, ratio: 1.2,
+    sale: { ...PORT_DU_TEMPLE, prixM2: 6_600, address: '12 RUE GARIBALDI' },
+  };
+  const payload = { years: [2025, 2024, 2023], plots: [plot], summary: { references: LYON_REFERENCES } };
+  const shape = { kind: 'plot', record: plot, parts: square(4.85, 45.77) };
+  const selection = dvfResolveSelection({ id: 'dvf-sales:ground', lon: 4.85, lat: 45.77 }, payload, {
+    shapeAt: () => shape,
+  });
+  assert.equal(selection.shape, shape);
+  const panel = dvfSelectionPanel(selection, payload);
+  assert.equal(panel.title, '12 RUE GARIBALDI');
+  assert.match(panel.metric.caption[1], /^1,20 × le médian de Lyon 6e/u);
+  assert.match(panel.footnote, /^Parcelle cadastrale 69386000AB0001 · la dernière des 5 ventes/u);
+});
+
+test('a section card keeps its own lines in the key', () => {
+  const section = {
+    id: '69386000AH', communeCode: '69386', count: 27, pricedCount: 15,
+    medianPrixM2: 7_000, medianRatio: 1.27, years: [2023, 2024],
+  };
+  const payload = { years: [2024], sections: [section], summary: { references: LYON_REFERENCES } };
+  const card = { id: 'dvf-sales:ground', ...dvfSectionCard(section, payload) };
+  const panel = dvfSelectionPanel({ card, sale: null, parcelId: null, shape: { kind: 'section', record: section } },
+    payload);
+  assert.equal(panel.title, 'Section AH · Lyon 6e');
+  assert.deepEqual(panel.lines, card.details);
 });
