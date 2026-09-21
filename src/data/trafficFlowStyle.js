@@ -35,7 +35,7 @@ export const FLOW_THRESHOLDS = Object.freeze({
 const FREE_THRESHOLD = FLOW_THRESHOLDS.free;
 const SLOW_THRESHOLD = FLOW_THRESHOLDS.slow;
 
-/** `#2ecc71` → `[46, 204, 113]`. Keeps the ladder as the single source. */
+/** `#8fd4ab` → `[143, 212, 171]`. Keeps the ladder as the single source. */
 function rgb(hex) {
   return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }

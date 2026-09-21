@@ -6,6 +6,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Click a slowed or jammed stretch of road to read it.** The coloured
+  TomTom ribbon now opens a card on the stretch under the pointer: its kind of
+  road, its state, the share of its free-flow speed it is moving at (« roule à
+  35 % de sa vitesse sans trafic » — TomTom sends a ratio, so no km/h is
+  invented), when TomTom sent it, and that the cars on it are simulated. The
+  stretch is redrawn wider in its own colour; Escape or a click elsewhere
+  closes it. Free-flowing roads do not open a card, so clicking the map to
+  close something else still does just that.
+- **A still camera keeps getting fresh traffic.** The flow used to be fetched
+  only when the camera moved; a parked view now re-asks every 125 s (just
+  after the caches behind it expire), recolours the cars in place and keeps
+  the old ribbon on screen until the new one is built, with no loading flash.
+  It stops after about ten minutes without a camera move, or while the tab is
+  hidden, so a forgotten tab cannot spend the shared TomTom budget.
 - **Road events now cover the conceded motorways on the hosted globe.** The
   Événements routiers layer drew the State-run network only: ASF, APRR,
   Cofiroute, Sanef, Escota and Aréa publish their accidents, closures and
@@ -148,6 +162,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The button, the ACTIVE STYLE corner, the HUD and the cockpit's vision control
   now say *Nuit* or *Night*; share links write `style=night`, and links that
   say `style=noir` — the landing page's among them — still open at night.
+- **Road traffic keeps its colour for trouble, and says its cars are
+  simulated.** Free-flowing roads are now a pale mint instead of a
+  traffic-light green, on this layer and on the Bison Futé network status that
+  shares its row; amber and coral are what stands out. Dots on streets TomTom
+  does not measure are light grey instead of pure white, which made the one
+  mark carrying no information the brightest on the map. The key reads
+  best-first (Fluide, Ralenti, Bloqué, Non mesuré, Route fermée), drops the dot
+  counts, says each cut in plain words (« de 55 à 85 % de sa vitesse sans
+  trafic »), and opens on « Véhicules simulés, animés d'après les vitesses
+  reçues de TomTom à 12:53 » — a time read off the tiles, with the day added
+  when it is not today, where it used to promise a 60-second refresh that
+  never happened.
+- **The green frames and `VEH-…` numbers over the traffic cars are off by
+  default.** They sat on every simulated car and claimed a tracked identity
+  none of them has. The new « CADRES » chip on the Trafic routier row brings
+  them back for whoever wants to watch the simulation work, and still switches
+  detection on if it was off.
 - **Airport noise zones read as contours, and each is named on its own
   line.** The four nested zones of a noise exposure plan used to be washed
   at 22 to 42 % opacity, which tinted the whole airport — Roissy's zone D alone

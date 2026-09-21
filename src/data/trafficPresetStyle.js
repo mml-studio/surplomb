@@ -25,9 +25,13 @@
  *    desaturated the whole frame; since it became the night atlas it darkens
  *    the basemap only (`styles/nightAtlas.js`) and the dots keep their hue.
  *
- * Sim/uncovered dots (bucket null/'sim') are NEVER restyled under any
- * style: the keyless simulation path stays byte-identical (qa-traffic
- * gate v), and white is already luminance-legible everywhere.
+ * Sim/uncovered dots (bucket null/'sim') are never given a bucket colour.
+ * Under a styled profile they stay the bright white 0.85 they always were,
+ * because white is luminance-legible through every shader and a dim dot
+ * reads as a dark hole on an NVG-bright road (the round-2 finding above);
+ * under `normal` they have been a light grey since 2026-09-21, so the dot that
+ * carries no measurement stops being the brightest mark on the layer
+ * (`presetUnmeasuredRgba`).
  *
  * Cesium-free so the tables are unit-testable; traffic.js maps tuples to
  * Cesium colors at spawn/restyle time (see `trafficFlowStyle.js` pattern).
@@ -91,6 +95,16 @@ export function presetDotRgba(styleName, bucket) {
 export function presetSizeDelta(styleName, bucket) {
   const entry = DOT_STYLE[trafficStyleProfile(styleName)]?.[bucket];
   return entry ? entry.sizeDelta : 0;
+}
+
+/**
+ * Colour of a dot on a road nothing measures, under a styled profile — or
+ * null under `normal`, where the layer's own grey applies.
+ * @param {string|null|undefined} styleName - Active style name.
+ * @returns {?number[]} [r, g, b, a] (0–255, alpha 0–1).
+ */
+export function presetUnmeasuredRgba(styleName) {
+  return trafficStyleProfile(styleName) === 'normal' ? null : [255, 255, 255, 0.85];
 }
 
 /**

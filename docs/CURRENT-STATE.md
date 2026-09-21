@@ -2285,7 +2285,7 @@ its criteria cannot be silently ignored.
 | Marine Buoys ⬡ | NOAA NDBC — one ~106 KB text report carrying the latest observation from every reporting station worldwide. **NOAA is the operator, not the extent**: only about a fifth of reporting stations carry a wave sensor, and one without renders neutral rather than calm. Sea state coloured on the WMO ladder, AND carried a second time by a vertical stem in WORLD METRES: significant wave height at a ×10 000 reading scale published in the legend (1 m of swell = 10 km of stem), linear, floor 2 km, frozen domain 14 m — the top of the last NAMED band of the WMO ladder, so hue and height clip at the same place for the same published reason. The dot's pixel size no longer encodes anything (it was 9 px / 6 px for “has a sensor”); the SHAPE carries that now — filled disc = sensor, hollow grey ring = none — because a vertical stem has zero projected length at nadir and absence cannot rest on the stem alone. Stations are FIXED, so a poll replaces values in place and nothing interpolates | `src/data/marineBuoys.js`, `src/data/ndbcObservations.js` | `/api/ndbc` (keyless, disk cache, serve-stale) | 5 min |
 | Aéroports ✈ | OurAirports (public domain, bundled) — **7,466 fields**, from Roissy's 4,215 m to an 82 m strip at La Tour-du-Pin. Worldwide: every large and medium airport plus everything selling a scheduled seat; in France the whole long tail — 1,337 fields across métropole and outre-mer, altiports, hydrobases and one balloon field included. **Second publisher, second licence:** 418 French fields also carry the aerodrome boundary the IGN surveys in **BD TOPO® (Licence Ouverte 2.0, the Etalab Open License, attribution required)**, downloaded by the same build from `data.geopf.fr/wfs/ows` and joined on the ICAO code (377) or on the field's point falling inside an unkeyed outline (41) — 0 shared, 0 refused on the 5 km anchor guard, worst kept offset 1,382 m. **213 fields gain a shape they did not have**, 207 of them aéroclubs, which is the tier upstream georeferenced at 8 %. Drawn as one terrain-clamped wash for all 418 (a batched ground primitive colours by bounding rectangle) with its own 8 px screen floor, so the outline goes away between 24 km and 1,208 km depending on its size while the pastille keeps the tier's longer range; the anchor stays on the published reference point. Refused: héliports (704 of the IGN layer's 1,370 objects), anything under 1 ha (219, of which 205 are BD TOPO's 5.2 m placeholder square), and 30 outlines — 1,457 ha, mostly military, largest Lann Bihoué at 767 ha — that match no packed field | `src/data/localLayers.js`, `src/data/airportsPack.js` | — | static |
 | Ports ⚓ | NGA *World Port Index* (US public domain, bundled) — 2,951 ports | `src/data/localLayers.js` | — | static |
-| Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js` | `/api/overpass` + `/api/tomtom` | viewport-driven |
+| Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js`, `src/data/trafficFlowCard.js` | `/api/overpass` + `/api/tomtom` | viewport-driven; live flow also re-fetched every 125 s on a parked view (5 per camera load) |
 | CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback | `src/data/cctv.js` | `/api/cctv` + `/api/osm-cameras` | 10s (active) |
 | Radio | Radio Browser (public-domain station directory) | `src/data/radio.js` | `/api/radio/stations`, `/api/radio/click/:uuid` | 45 min directory refresh |
 | Bikeshare 🚲 | GBFS (Lyft + BCycle, plus Vélib', Vélo'v, vélÔToulouse, Le Vélo TBM). Its block in the « Mobilités partagées » key names each network in view in its ring colour and explains the dock fill; it takes the row's fanned-out `operator` and `kinds` filters and hides docks by `point.show`, no rebuild | `src/data/bikeshare.js` | `/api/gbfs` | 60s |
@@ -4729,23 +4729,67 @@ easier to meet (detection is now on more often), but does not create it.
   healthy while the junction someone is watching still has both flows moving.
   What it deliberately does not model: junction geometry, turning movements,
   and local phase offsets.
-- **Enabling Traffic enables the detection overlay.** `DETECTION_DEMANDING_LAYERS`
-  (`ui.js`) is ORed into the Contacts detection claim rather than given its own
-  snapshot: two owners each holding their own pre-state would restore each
-  other's. Enabling takes a snapshot and applies the tactical preset (Dense @
-  75 %); disabling replays the snapshot, so a viewer who had detection OFF gets
-  OFF back. Driven from the layer-visibility stream and read through
-  `isEffectivelyEnabled`, so a layer switched on as another mode's dependency
-  gets the same brackets.
-- Traffic runs in `sim` mode (white dots, class-table speeds capped by OSM
+- **Traffic hands its dots to the detection overlay only through the `CADRES`
+  row chip** (2026-09-21, param `vehicleFrames`, OFF by default, session-only
+  like the other two chips). The dots are simulated cars, so a bracket and a
+  `VEH-0412` id over one claimed a tracked object that does not exist; with the
+  chip off `getDetectableObjects()` returns nothing, which is what removes the
+  frames for a first-run visitor (detection itself is on at Balanced there).
+  The chip keeps the old claim: `DETECTION_DEMANDING_LAYERS` (`ui.js`) is ORed
+  into the Contacts detection claim, gated on the module's
+  `demandsDetection()`, and a `params` event re-runs the sync — so turning the
+  frames on switches detection on (tactical Dense @ 75 %) if it was off, and
+  turning them (or the layer) off replays the snapshot.
+- Traffic runs in `sim` mode (light-grey dots, class-table speeds capped by OSM
   `maxspeed`) unless `TOMTOM_API_KEY`
   is configured (env or Keychain `tomtom-api`/`api-key`), which enables `live` mode:
   TomTom flow vector tiles via the budget-governed `/api/tomtom` proxy
   (`.gev-cache/tomtom/`, 120 s TTL, `TOMTOM_DAILY_TILE_BUDGET` default 40k/day),
   decoded client-side (`flowTiles.js`), matched onto Overpass roads
-  (`flowMatch.js`), and rendered as green/amber/red dot color + speed/density
+  (`flowMatch.js`), and rendered as mint/amber/coral dot color + speed/density
   scaling (`trafficFlowStyle.js`); closures spawn no dots; unmatched roads stay
-  white. Road fetch bounds center on the camera look-at point (`trafficBounds.js`).
+  light grey (`#d0d6d9` @ 0.7, white under NVG/FLIR/CRT where a dim dot reads as
+  a hole). Road fetch bounds center on the camera look-at point (`trafficBounds.js`).
+- **Colour is for trouble** (2026-09-21). The shared ladder's free rung is a
+  pale mint `#8fd4ab` instead of `#2ecc71` — for `traffic` AND `road-status-fr`,
+  which draw the same rungs on the same row — and free dots sit at 0.8 alpha
+  against 0.9 for amber and coral. The key lists the rungs best-first like
+  `road-status-fr` (Fluide, Ralenti, Bloqué, then Non mesuré, Route fermée),
+  with no counts and one plain sentence each ("de 55 à 85 % de sa vitesse sans
+  trafic"). Its source line opens on « Véhicules simulés » and prints when the
+  OLDEST TomTom tile on screen left TomTom: the proxy stamps
+  `x-tomtom-fetched-at` (epoch ms — absolute, because the browser cache replays
+  a tile for up to 120 s with frozen headers), `flowTiles.js` copies it onto
+  each segment as `fetchedAt`, and a day is added when it is not today. The
+  old line said "rafraîchi toutes les 60 s", which was never true.
+- **A parked view refreshes its flow quietly** every `FLOW_REFRESH_MS` = 125 s
+  (just past the proxy's and the decode cache's 120 s TTL): same box,
+  ribbon repainted, dots recoloured in place with EVERY style field rewritten
+  (a jam that clears loses its size and city-scale punch; a closure that
+  reopens shows its dots again). Quiet means no `_flowPending`, so no loading
+  chip, and a failure keeps the last colours without raising an error — the
+  key's time is what ages. Live sessions only, never in a hidden tab, and at
+  most `FLOW_REFRESH_MAX_PER_VIEW` = 5 per camera load (~10 minutes) so a
+  forgotten tab cannot spend the shared TomTom budget. The previous ribbon
+  batch stays on screen until the new one has built (`getStats().ribbonReady`),
+  so the refresh never blinks. Measured 2026-09-21 over Paris at 3.5 km with the
+  camera still: tiles 4 → 8 in 140 s, `loading` never true, no bare frame, key
+  12:58 → 13:00.
+- **A click on a coloured stretch of the ribbon opens its card**
+  (`trafficFlowCard.js`): road class in French, the rung, "roule à 35 % de sa
+  vitesse sans trafic" (TomTom's relative tiles carry no km/h, so none is
+  printed), "reçu de TomTom à 12:53", and that the vehicles on it are
+  simulated; the stretch is redrawn 4 px wider in its rung's colour. Free-flow
+  stretches do not answer — they lie under most streets, and every "click the
+  map to close this" would open one. The ribbon carries NO pick id on purpose:
+  an id is a claim of ownership to every other layer's click handler (flights
+  would stop releasing tracking on a street click; on a phone nearly every tap
+  would open a traffic card). The layer only looks when the pick is the world
+  (`isWorldPick`), reads the ground with `pickPosition`, and searches its own
+  records (`nearestFlowStretch`, reach = half the drawn width + 6 px, 12 on
+  touch). A repaint re-finds the open stretch by geometry key or closes the
+  card; Escape closes it. QA seams: `qaFlowStretches()`,
+  `qaSelectStretchAt(lon, lat, metresPerPixel)`, `qaSelectedStretch()`.
 - In live mode the layer has TWO halves that degrade separately. The DOTS need
   Overpass. The RIBBON (`flowRibbons.js`) does not: it draws TomTom's own
   polylines as one batched `GroundPolylinePrimitive`, so live congestion reaches

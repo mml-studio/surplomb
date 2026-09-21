@@ -19,7 +19,7 @@
  *         so this asserts on whichever view has sim dots, else records
  *         INCONCLUSIVE rather than a false failure).
  *   (v)   KEYLESS fallback — with /api/tomtom/status intercepted to
- *         {hasKey:false}: mode 'sim', every dot white (buckets.sim ===
+ *         {hasKey:false}: mode 'sim', every dot unmeasured (buckets.sim ===
  *         count), and ZERO /api/tomtom/flow requests issued.
  *
  * Visual proof saved to qa-shots/ (gitignored).
@@ -228,13 +228,13 @@ async function main() {
         mod.setParams({ uncoveredRoads: 'sim' });
         return s;
       });
-      record('PARAM: hide mode renders zero sim (white) dots',
+      record('PARAM: hide mode renders zero sim (unmeasured) dots',
         (hid.flowBuckets?.sim || 0) === 0 && hid.count > 0,
         `count=${hid.count} sim=${hid.flowBuckets?.sim}`);
       if ((hid.flowBuckets?.sim || 0) !== 0) exitCode = 1;
       await shoot(page, 'traffic-live-hide-mode.png');
     } else {
-      record('PARAM: hide mode renders zero sim (white) dots', null,
+      record('PARAM: hide mode renders zero sim (unmeasured) dots', null,
         'view had 100% coverage (no sim dots to hide) — inconclusive here, covered by unit tests');
     }
 
@@ -303,7 +303,7 @@ async function main() {
       const b = simStats.flowBuckets || {};
       const allWhite = simStats.count > 0 && b.sim === simStats.count && !b.free && !b.slow && !b.jam;
       record('KEYLESS: stats.mode === "sim"', simStats.mode === 'sim', `mode=${simStats.mode}`);
-      record('KEYLESS: every dot is white simulation', allWhite,
+      record('KEYLESS: every dot is unmeasured simulation', allWhite,
         `count=${simStats.count} sim=${b.sim} free=${b.free} slow=${b.slow} jam=${b.jam}`);
       record('KEYLESS: zero flow-tile requests issued', keylessFlowReqs.length === 0,
         `flowRequests=${keylessFlowReqs.length}`);

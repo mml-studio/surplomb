@@ -337,7 +337,7 @@ const PROBE_CACHE = 200;
  * A desaturated cold → warm LIGHTNESS ladder, six steps. Not a hue wheel and
  * not a traffic light: more service is better, so a green-to-red reading would
  * be exactly backwards, and `traffic.js` and `roadStatusFrance.js` already own
- * `#2ecc71`/`#f0b23e`/`#e05252` for a congestion ratio on these same streets.
+ * `#8fd4ab`/`#f0b23e`/`#e05252` for a congestion ratio on these same streets.
  * Not `comptagesParis.js`'s indigo → magenta → rose either, which is the other
  * magnitude ramp painted over central Paris. And deliberately far from the five
  * saturated MODE hues above, because those two marks land on the same point.

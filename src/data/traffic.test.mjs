@@ -8,11 +8,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import trafficLayer, {
+  FLOW_REFRESH_MAX_PER_VIEW,
+  FLOW_REFRESH_MS,
   deriveRoadGraphError,
   deriveTrafficFlowError,
   dutyCycleDelay,
+  flowRefreshDecision,
+  oldestFetchedAt,
   trafficFeedPresentation,
+  trafficLegendNote,
 } from './traffic.js';
+import { withLocale } from '../i18n/testing.js';
 import { DataLayerManager, layerFeedState } from './manager.js';
 
 /**
@@ -291,4 +297,88 @@ test('the quiet is capped, so one pathological probe cannot park the loop', () =
   assert.equal(dutyCycleDelay(Number.POSITIVE_INFINITY), 250);
   assert.equal(dutyCycleDelay(Number.NaN), 250);
   assert.equal(dutyCycleDelay(-10), 250);
+});
+
+
+// ─── What the key says about the vehicles, and when ──────────────────────
+// The key used to say "rafraîchi toutes les 60 s" while nothing re-fetched the
+// flow on a still camera. It now says the vehicles are simulated and prints
+// when the oldest tile on screen left TomTom.
+
+test('the key opens on simulated vehicles and prints when the speeds left TomTom', () => {
+  const noon = Date.UTC(2026, 8, 21, 10, 16, 0);
+  const line = withLocale('fr', () => trafficLegendNote({
+    liveMode: true, fetchedAt: noon - 60_000, now: noon, timeZone: 'UTC',
+  }));
+  assert.equal(line, 'Véhicules simulés, animés d’après les vitesses reçues de TomTom à 10:15');
+  const stale = withLocale('fr', () => trafficLegendNote({
+    liveMode: true, fetchedAt: noon - 20 * 3_600_000, now: noon, timeZone: 'UTC',
+  }));
+  assert.match(stale, /reçues de TomTom le 20 sept\.? à 14:16$/, 'yesterday says so');
+  assert.equal(
+    withLocale('fr', () => trafficLegendNote({ liveMode: true, fetchedAt: null })),
+    'Véhicules simulés, animés d’après les vitesses reçues de TomTom',
+  );
+});
+
+test('a keyless key never implies a feed', () => {
+  const line = withLocale('fr', () => trafficLegendNote({ liveMode: false, fetchedAt: Date.now() }));
+  assert.equal(line, 'Véhicules simulés : aucune vitesse n’est mesurée ici');
+  assert.ok(!LIVE_CLAIM.test(line));
+});
+
+test('the time printed is the OLDEST tile on screen, not the newest', () => {
+  assert.equal(oldestFetchedAt([{ fetchedAt: 300 }, { fetchedAt: 100 }, {}, { fetchedAt: 200 }]), 100);
+  assert.equal(oldestFetchedAt([]), null);
+  assert.equal(oldestFetchedAt([{ fetchedAt: Number.NaN }]), null);
+});
+
+// ─── The quiet refresh of a parked view ──────────────────────────────────
+
+test('a parked view refreshes only once the caches behind it have expired', () => {
+  // Proxy TTL and client decode TTL are both 120 s: any sooner and the answer
+  // is the tiles already on screen.
+  assert.ok(FLOW_REFRESH_MS > 120_000);
+  assert.ok(FLOW_REFRESH_MS < 180_000);
+});
+
+test('the refresh waits behind a camera load and a hidden tab, and stops keyless', () => {
+  const base = {
+    enabled: true, liveMode: true, hasBox: true, fetching: false, flowPending: 0, hidden: false, spent: 0,
+  };
+  assert.equal(flowRefreshDecision(base), 'refresh');
+  assert.equal(flowRefreshDecision({ ...base, fetching: true }), 'wait');
+  assert.equal(flowRefreshDecision({ ...base, flowPending: 1 }), 'wait');
+  assert.equal(flowRefreshDecision({ ...base, hidden: true }), 'wait');
+  assert.equal(flowRefreshDecision({ ...base, liveMode: false }), 'stop');
+  assert.equal(flowRefreshDecision({ ...base, enabled: false }), 'stop');
+  assert.equal(flowRefreshDecision({ ...base, hasBox: false }), 'stop');
+});
+
+test('one parked view spends a bounded number of refreshes on the shared budget', () => {
+  const base = {
+    enabled: true, liveMode: true, hasBox: true, fetching: false, flowPending: 0, hidden: false,
+  };
+  assert.equal(flowRefreshDecision({ ...base, spent: FLOW_REFRESH_MAX_PER_VIEW - 1 }), 'refresh');
+  assert.equal(flowRefreshDecision({ ...base, spent: FLOW_REFRESH_MAX_PER_VIEW }), 'stop');
+  // About ten minutes of watching, not a day.
+  assert.ok(FLOW_REFRESH_MAX_PER_VIEW * FLOW_REFRESH_MS <= 15 * 60_000);
+});
+
+// ─── The diagnostic frames ────────────────────────────────────────────────
+
+test('the VEH frames are off by default and are the only claim on detection', () => {
+  assert.equal(trafficLayer.getParams().vehicleFrames, 'off');
+  assert.deepEqual(trafficLayer.getDetectableObjects({ maxCount: 10 }), []);
+  assert.equal(trafficLayer.demandsDetection(), false);
+  trafficLayer.setParams({ vehicleFrames: 'on' });
+  try {
+    assert.equal(trafficLayer.getParams().vehicleFrames, 'on');
+    // A disabled layer claims nothing, chip or not.
+    assert.equal(trafficLayer.demandsDetection(), false);
+  } finally {
+    trafficLayer.setParams({ vehicleFrames: 'off' });
+  }
+  trafficLayer.setParams({ vehicleFrames: 'sideways' });
+  assert.equal(trafficLayer.getParams().vehicleFrames, 'off', 'an unknown value is ignored');
 });

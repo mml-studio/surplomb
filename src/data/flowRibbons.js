@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { flowBucket } from './trafficFlowStyle.js';
+import { CONGESTION_RUNGS } from './congestionLadder.js';
 import { powerClassificationTypeForScene } from './powerGrid.js';
 
 /**
@@ -50,9 +51,9 @@ export const RIBBON_SEGMENT_CAP = 6000;
  */
 export const RIBBON_BUCKETS = Object.freeze({
   closure: Object.freeze({ color: '#ff3b30', alpha: 0.95, width: 6, rank: 4 }),
-  jam: Object.freeze({ color: '#e05252', alpha: 0.85, width: 5, rank: 3 }),
-  slow: Object.freeze({ color: '#f0b23e', alpha: 0.70, width: 4, rank: 2 }),
-  free: Object.freeze({ color: '#2ecc71', alpha: 0.32, width: 2, rank: 1 }),
+  jam: Object.freeze({ color: CONGESTION_RUNGS.jam.color, alpha: 0.85, width: 5, rank: 3 }),
+  slow: Object.freeze({ color: CONGESTION_RUNGS.slow.color, alpha: 0.70, width: 4, rank: 2 }),
+  free: Object.freeze({ color: CONGESTION_RUNGS.free.color, alpha: 0.32, width: 2, rank: 1 }),
 });
 
 /**
@@ -171,14 +172,24 @@ export function flattenRibbonCoords(coords) {
  *   NVG/FLIR the way the dots do). Returning null keeps the shipped colour.
  * @param {number} [opts.cap=RIBBON_SEGMENT_CAP]
  * @param {number} [opts.minClassRank=0] - Road-class floor; see `rankRibbonSegments`.
- * @returns {{instances:Array, counts:Object<string,number>, dropped:number, filtered:number}}
+ * @param {boolean} [opts.withRecords=false] - Also return, per drawn instance,
+ *   the segment and style it was drawn from — what the layer searches when a
+ *   click lands near the ribbon. The instances themselves stay WITHOUT a pick
+ *   id on purpose: an id is a claim of ownership to every other layer's click
+ *   handler (see `nearestFlowStretch` in `trafficFlowCard.js`).
+ * @returns {{instances:Array, counts:Object<string,number>, dropped:number, filtered:number,
+ *   records:Array<{segment:object, style:object, flat:number[]}>}}
+ *   `records` is empty without `withRecords`.
  */
 export function buildRibbonInstances(
   segments,
-  { colorFor = null, cap = RIBBON_SEGMENT_CAP, minClassRank = 0 } = {},
+  {
+    colorFor = null, cap = RIBBON_SEGMENT_CAP, minClassRank = 0, withRecords = false,
+  } = {},
 ) {
   const { kept, dropped, filtered } = rankRibbonSegments(segments, cap, minClassRank);
   const instances = [];
+  const records = [];
   const counts = { closure: 0, jam: 0, slow: 0, free: 0 };
   for (const { segment, style } of kept) {
     const flat = flattenRibbonCoords(segment.coords);
@@ -196,9 +207,12 @@ export function buildRibbonInstances(
         ),
       },
     }));
+    if (withRecords) records.push({ segment, style, flat });
     counts[style.bucket] += 1;
   }
-  return { instances, counts, dropped, filtered };
+  return {
+    instances, counts, dropped, filtered, records,
+  };
 }
 
 /** @type {?boolean} `GroundPolylinePrimitive.isSupported`, checked once per page. */
@@ -215,11 +229,12 @@ let _supported = null;
  * @param {?Cesium.GroundPolylinePrimitive} previous - Primitive to remove first.
  * @param {Array<object>} segments - Decoded flow segments ([] clears).
  * @param {Object} [opts] - Forwarded to `buildRibbonInstances`, plus `show`.
- * @returns {{primitive:?object, counts:Object<string,number>, dropped:number}}
+ * @returns {{primitive:?object, counts:Object<string,number>, dropped:number,
+ *   records:Array<{segment:object, style:object, flat:number[]}>}}
  */
 export function renderFlowRibbons(viewer, previous, segments, opts = {}) {
   const empty = {
-    primitive: null, counts: { closure: 0, jam: 0, slow: 0, free: 0 }, dropped: 0, filtered: 0,
+    primitive: null, counts: { closure: 0, jam: 0, slow: 0, free: 0 }, dropped: 0, filtered: 0, records: [],
   };
   if (previous) viewer?.scene?.groundPrimitives?.remove?.(previous);
   if (!viewer || !Array.isArray(segments) || segments.length === 0) return empty;
@@ -232,7 +247,9 @@ export function renderFlowRibbons(viewer, previous, segments, opts = {}) {
   }
   if (!_supported) return empty;
 
-  const { instances, counts, dropped, filtered } = buildRibbonInstances(segments, opts);
+  const {
+    instances, counts, dropped, filtered, records,
+  } = buildRibbonInstances(segments, opts);
   if (instances.length === 0) return empty;
 
   const primitive = viewer.scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
@@ -244,7 +261,9 @@ export function renderFlowRibbons(viewer, previous, segments, opts = {}) {
   if (dropped) {
     console.log(`[Data:Traffic] Flow ribbon capped at ${instances.length} (${dropped} segments dropped)`);
   }
-  return { primitive, counts, dropped, filtered };
+  return {
+    primitive, counts, dropped, filtered, records,
+  };
 }
 
 /**
