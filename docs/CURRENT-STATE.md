@@ -270,9 +270,7 @@ Updated: September 19, 2026
 >   `src/vitrine/gallery.js` — itself fetched only as the gallery nears the
 >   screen — fetches a box's loop half a screen ahead, plays it on screen,
 >   pauses it off screen, and obeys the hero's policy and *Image fixe* (Still image).
->   View 04's loop predates the 2026-09-21 scene (night atlas, stations in
->   relief, oblique camera): it still shows the daytime straight-down take
->   until `landing:gallery:capture --only 04` and the build are run again.
+>   Views 01 and 04 play films in place of their recorded loops (below).
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
@@ -293,7 +291,21 @@ Updated: September 19, 2026
 >   enlarged box needs more pixels than the tile's file, the wider rendition
 >   is parked 0.8 s ahead, started when the film reaches it, and the old file
 >   dropped on its first frame (`swapForWider`; kept for the visit).
->   `qa:landing` case `gallery` asserts grow, dim, swap and shrink.
+>   `qa:landing` case `gallery` asserts grow, dim, swap and shrink, for every
+>   `data-expand` view.
+> - **View 04 is the power-grid film** (2026-09-21), enlarged the same way. The
+>   14.7 s `surplomb-grid-v4.mp4` (Europe dark, France lit alone, the nuclear
+>   columns filling, the dive onto Cruas and its card, the switch-off) is
+>   encoded by `build-landing-film.mjs --view 04 --start 3` into
+>   `.context/landing-assets/film/view-04`. `--start` turns the file round: it
+>   begins on the filled columns (source 3.0 s), runs to the black end, wraps
+>   to the dark opening and stops one frame before 3.0 s, so the loop point is
+>   continuous and the still — all a reader with reduced motion, data saver or
+>   Low Power Mode sees — shows the grid lit, not an unlit Europe. A night
+>   scene weighs far less than Roissy at the same VMAF ≈ 90: AV1 345 kB /
+>   773 kB / 1.8 MB, HEVC 474 kB / 1.4 MB / 2.7 MB, H.264 480 545 kB. The
+>   publish step reads every `film/*` directory holding a manifest before the
+>   gallery's, and writes `galleryLoops.js` in key order.
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the
