@@ -2998,6 +2998,69 @@ recomputed on each theme's row, which would give two numbers for one fact.
 | `idfm-network` | `if` | `/api/idfm/stops`, `/api/idfm/lines` | Île-de-France Mobilités Opendatasoft |
 | `ads-fr` | `au` | `/api/ads-fr` | Sitadel (SDES DiDo, 4 datafiles) + Paris / Bordeaux / Nantes ADS portals + Etalab cadastre (current and dated editions) + BAL + BAN bulk geocoder |
 
+### `dvf-sales` above 600 m — the cadastre, not discs
+
+Below 600 m the layer is unchanged: a 300 m disc of sales, one € marker each,
+the parcel each sale bought washed under it. Above 600 m (`scanRegime.js`,
+`SCAN_BANDS[].dvfUnit`) it asks `/api/dvf` about a grid-snapped BOX and paints
+the cadastre's own shapes, **not** the 150 m / 850 m discs it drew until
+2026-09-21 — a disc fell across two blocks and a boulevard and named no ground
+a reader could see:
+
+- **600 m to 1 800 m — plots.** Every parcel a sale in the box names
+  (`dvfFeed.aggregateSalesIntoPlots`), painted by its MOST RECENT sale divided
+  by its own commune's median: the same sale, picked by the same function
+  (`dvfFeed.mostRecentMutation`, shared with the client since this change), and
+  therefore the same colour the plot wears under its markers below 600 m. A
+  plot whose latest sale has no €/m² is neutral. Geometry is the Etalab commune
+  parcel file, cut server-side to the parcels the commune's editions name
+  (3 267 of 6 887 in Paris 16e), kept for eight communes and on disk
+  (`.gev-cache/address/dvf-parcels-<insee>-<years>.json`), and served as flat
+  integer offsets at 1e-5 degree (`dvfFeed.encodeRing`): as `[[lon, lat], …]`
+  pairs the Paris 16e answer held 2.05 MB of server heap and 660 KB of JSON,
+  encoded 0.97 MB and 416 KB (70 KB gzipped) — and the address cache keeps 300
+  answers whole.
+- **Above 1 800 m — cadastral sections.** Every section a sale in the box
+  falls in (`sectionIdOf`: the parcel id's first ten characters, 0 misses over
+  12 039 parcels), drawn WHOLE and painted by the median of the ratios of ALL
+  its sales in the editions, from `DVF_SECTION_MIN_PRICED` = 3 priced sales up;
+  a thinner section is neutral and its key row says *fewer than 3 priced
+  sales*. Geometry is Etalab's `cadastre-<insee>-sections.json.gz`
+  (`.gev-cache/address/dvf-sections-e5-<insee>.json`).
+
+Measured before it was built, editions 2023–2025, geometry as nested pairs:
+the densest fine box (Paris 17e) is 1 698 plots / 23 692 vertices / 149 KB
+gzipped; Paris 16e 1 207 plots, 97 KB (70 KB once encoded); the coarse box west
+of Paris would have been 11 547 plots and 875 KB, which is why the band above
+1 800 m draws its 413–566 sections instead.
+Warm, both answers come back in about 2.5 s; cold, the section box over eleven
+communes took 14 s, nearly all of it DVF editions.
+
+**Drawn as primitives, not entities**, the way `cadastreParcels.js` draws its
+parcels: one classification `GroundPrimitive` per colour (six at most — a
+batch mixing colours repaints its neighbours along their bounding rectangles)
+and one `GroundPolylinePrimitive` for every edge. On a Mac, Paris 16e: 3.9 ms of
+main thread for 1 207 plots, ready 0.27 s later. The shell tears them down
+through `addressScanLayer`'s new `onClear` hook (redraw, dormancy, destroy), and
+a click reaches them through `ownsPick` + `groundCard`: the plot or section
+under the click is found by geometry (`ringGeometry.pointInPolygons`), not by
+the pick. A plot's card is its latest sale's, in the six lines the card shell
+paints, ending with *the latest of this parcel's N sales*; a section's says what
+its colour is the median of. The key restates the classes in €/m² when the box
+lies in one commune and in ratios when it straddles several; the building theme
+is withdrawn above 600 m, as it was for the discs. `getAreaDraw()` reports the
+draw to harnesses. `/api/dvf` keys the area answer `dvf-area|…`, so no cached
+disc answer is served to the new client.
+
+**The surface is on every sale card.** `dvfSaleKindLine` puts it on the type
+line — *Appartement + Dépendance — 78 m²*, *… m² au total* for a sale of
+several dwellings — because the card shell paints six detail lines and the
+surface used to be the seventh.
+
+**The row's toggle no longer switches the estimate on.** `avis-valeur` is an
+`optIn` companion of `dvf-sales` since 2026-09-21, like `comparables-fr`: the
+*Estimer un bien* (“Value a property”) chip turns it on.
+
 ### `avis-valeur` — the estimate, and the two uncertainties it never merges
 
 `avis-valeur` (`vv`, `/api/avis-valeur`, `src/data/avisValeurFeed.js` +

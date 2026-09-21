@@ -95,6 +95,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | code postal | postal code | |
 | adresse, Base adresse nationale | address, national address database (BAN) | |
 | cadastre, parcelle cadastrale | cadastre, cadastral parcel | *Parcelles cadastrales* → *Cadastral parcels*. |
+| section cadastrale | cadastral section | The cadastre's subdivision of a commune (`AB`, `0C`); the unit the property-prices layer paints above 1,800 m. |
 | revenu médian | median income | |
 | niveau de vie | standard of living (per consumption unit) | |
 | taux de pauvreté | poverty rate | |

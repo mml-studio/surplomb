@@ -61,10 +61,13 @@ test('a fused row never hides a world layer behind a French scope chip', () => {
 
 test('the row toggle carries its followers and leaves the opt-in companions alone', () => {
   // `comparables-fr` is the reader's own dossier: switching it on from a row
-  // toggle would spend a lifecycle drawing an empty selection.
+  // toggle would spend a lifecycle drawing an empty selection. `avis-valeur`
+  // values a door the reader has in mind, so it waits for its chip too.
   const dvf = fusionToggleGroupFor('dvf-sales');
-  assert.deepEqual(dvf, ['dvf-sales', 'avis-valeur']);
-  assert.ok(fusionCompanionsFor('dvf-sales').some((entry) => entry.id === 'comparables-fr'));
+  assert.deepEqual(dvf, ['dvf-sales']);
+  for (const id of ['avis-valeur', 'comparables-fr']) {
+    assert.ok(fusionCompanionsFor('dvf-sales').some((entry) => entry.id === id && entry.optIn), id);
+  }
 
   // A layer with no fusion is its own group of one — that is the contract that
   // lets a caller use this unconditionally.

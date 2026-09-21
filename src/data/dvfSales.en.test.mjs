@@ -1,6 +1,6 @@
 // The property sales (DVF) layer in both languages, through the real module
 // and the real captured register: the key, the note above it, the A5 line
-// under it, one sale's card, and the cell regime two kilometres up.
+// under it, one sale's card, and the area regimes two kilometres up.
 //
 // Everything a reader sees is read at CALL time, so the same loaded layer
 // answers in whichever language the page is in — the property the catalog
@@ -14,15 +14,17 @@ import { clearAllBuildingThemes, getActiveBuildingTheme } from './buildingTheme.
 import {
   DVF_TYPE_FILTERS,
   _dvfSetThemePayloadForTest,
-  dvfCellCard,
-  dvfCellDisclosure,
-  dvfCellLegendNote,
-  dvfCellReference,
+  dvfAreaDisclosure,
+  dvfAreaLegendNote,
+  dvfAreaReference,
   dvfLegendDisclosure,
   dvfLegendEntries,
   dvfLegendNote,
+  dvfPlotCard,
   dvfReference,
   dvfSaleCard,
+  dvfSaleKindLine,
+  dvfSectionCard,
   dvfVoiceSummary,
   dvfYearsLabel,
 } from './dvfSales.js';
@@ -148,11 +150,33 @@ test('a sale card names its type from the register, and its ratio from the commu
   };
   const en = withLocale('en', () => dvfSaleCard(sale, REFERENCE));
   assertNoFrench(en, { allow: PLACES });
-  assert.equal(en, '2024-03-12 · Sale · €245,000 · Apartment + Outbuilding · €9,054/m² · '
-    + '1.01 × the median of Paris 13e Arrondissement (€8,956/m²) · 27 m² · 64 m');
+  assert.equal(en, '2024-03-12 · Sale · €245,000 · Apartment + Outbuilding — 27 m² · €9,054/m² · '
+    + '1.01 × the median of Paris 13e Arrondissement (€8,956/m²) · 64 m');
   assert.equal(withLocale('fr', () => dvfSaleCard(sale, REFERENCE)),
-    '2024-03-12 · Vente · 245 000 € · Appartement + Dépendance · 9 054 €/m² · '
-    + '1,01 × le médian de Paris 13e Arrondissement (8 956 €/m²) · 27 m² · 64 m');
+    '2024-03-12 · Vente · 245 000 € · Appartement + Dépendance — 27 m² · 9 054 €/m² · '
+    + '1,01 × le médian de Paris 13e Arrondissement (8 956 €/m²) · 64 m');
+});
+
+test('the surface survives the six lines the card shell paints', () => {
+  // Reported from Biarritz on 2026-09-21: the surface was the SEVENTH line of
+  // a comparable sale's card and the shell paints six, so the one sale a
+  // reader clicks for its price never said how big it was.
+  const sale = {
+    date: '2024-04-25', nature: 'Vente', valeur: 1_250_000,
+    types: ['Appartement', 'Dépendance'], prixM2: 16_026, dwellingSurface: 78,
+    dwellingCount: 1, distanceM: 140,
+  };
+  const lines = withLocale('en', () => dvfSaleCard(sale, REFERENCE)).split(' · ');
+  assert.ok(lines.slice(0, 6).includes('Apartment + Outbuilding — 78 m²'), lines.join(' | '));
+  // Several dwellings: the figure is their total, and the line says so.
+  const block = { ...sale, prixM2: null, dwellingSurface: 212.4, dwellingCount: 3 };
+  assert.equal(withLocale('en', () => dvfSaleKindLine(block)),
+    'Apartment + Outbuilding — 212 m² in total');
+  assert.equal(withLocale('fr', () => dvfSaleKindLine(block)),
+    'Appartement + Dépendance — 212 m² au total');
+  // No published surface: the type alone, never « 0 m² ».
+  assert.equal(withLocale('en', () => dvfSaleKindLine({ types: ['Maison'], dwellingSurface: 0 })),
+    'House');
 });
 
 test('a sale the register cannot price says WHY, in English', () => {
@@ -199,66 +223,94 @@ test('the theme that paints the volumes carries its ramp and its reach in Englis
   clearAllBuildingThemes();
 });
 
-/* ── the cell regime, two kilometres up ─────────────────────────────────── */
+/* ── the area regimes, two kilometres up ───────────────────────────────── */
 
-const CELLS = {
+const REFERENCES = [
+  { code: '69386', name: 'Lyon 6e', medianPrixM2: 5_500, count: 2_661, comparableCount: 1_808 },
+  { code: '69383', name: 'Lyon 3e', medianPrixM2: 4_660, count: 5_417, comparableCount: 3_500 },
+];
+const PLOTS = {
   years: [2024, 2025],
   box: { south: 45.77, west: 4.84, north: 45.79, east: 4.86 },
   communes: [{ code: '69386', name: 'Lyon 6e' }, { code: '69383', name: 'Lyon 3e' }],
   communesProbed: 9,
   unavailableYears: [2025],
-  cells: [],
-  summary: {
-    cellM: 150,
-    count: 1_324,
-    pricedCount: 901,
-    references: [
-      { code: '69386', name: 'Lyon 6e', medianPrixM2: 5_500, count: 2_661, comparableCount: 1_808 },
-      { code: '69383', name: 'Lyon 3e', medianPrixM2: 4_660, count: 5_417, comparableCount: 3_500 },
-    ],
-  },
+  plots: [],
+  summary: { count: 1_324, pricedCount: 901, plots: 412, references: REFERENCES },
+};
+const SECTIONS = {
+  years: [2024, 2025],
+  box: { south: 45.74, west: 4.82, north: 45.82, east: 4.90 },
+  communes: PLOTS.communes,
+  communesProbed: 25,
+  sections: [],
+  summary: { count: 9_880, pricedCount: 6_100, sections: 131, references: REFERENCES },
 };
 
-test('the cell key names every denominator, and what the disc size means', () => {
-  const en = withLocale('en', () => dvfCellLegendNote(CELLS));
+test('the area key names every denominator, and what one painted shape is', () => {
+  const en = withLocale('en', () => dvfAreaLegendNote(PLOTS));
   assertNoFrench(en, { allow: PLACES });
   assert.equal(en, 'Compared with each municipality’s median: Lyon 6e €5,500/m² · '
     + 'Lyon 3e €4,660/m² · editions 2024 to 2025 · classes frozen at ±5% and ±25% of this '
-    + 'median · disc size = number of sales');
-  assert.match(withLocale('fr', () => dvfCellLegendNote(CELLS)),
-    /^Rapporté au médian de chaque commune : Lyon 6e 5 500 €\/m²/);
-  assert.equal(withLocale('en', () => dvfCellReference({ summary: {} }).label),
+    + 'median · tinted ground = the parcel, painted by its latest sale');
+  assert.match(withLocale('en', () => dvfAreaLegendNote(SECTIONS)),
+    / · cadastral section painted by the median of its sales$/);
+  assert.match(withLocale('fr', () => dvfAreaLegendNote(PLOTS)),
+    /^Rapporté au médian de chaque commune\s: Lyon 6e 5\s500\s€\/m²/u);
+  assert.equal(withLocale('en', () => dvfAreaReference({ summary: {} }).label),
     'No municipal median: nothing to compare against');
 });
 
-test('the cell A5 line names the box, the grid and what the probe can miss', () => {
-  const en = withLocale('en', () => dvfCellDisclosure(CELLS));
+test('the area A5 line names the box, what was drawn, and what the probe can miss', () => {
+  const en = withLocale('en', () => dvfAreaDisclosure(PLOTS));
   assertNoFrench(en, { allow: PLACES });
-  assert.equal(en, 'View aggregated over 2.2 km a side, cells of 150 m · 1,324 sales in the box, '
-    + '901 with a €/m² · 2 municipalities identified by 9 probes: a municipality no probe '
-    + 'landed in does not contribute · vintage not downloaded: 2025 · drop below 600 m to '
-    + 'get each sale back, and its parcel.');
-  const fr = withLocale('fr', () => dvfCellDisclosure(CELLS));
-  assert.match(fr, /^Vue agrégée sur 2,2 km de côté, cellules de 150 m · 1 324 ventes/);
-  assert.match(fr, /descendre sous 600 m pour retrouver chaque vente et sa parcelle\.$/);
+  assert.equal(en, 'View over 2.2 km a side: 1,324 sales, 412 parcels drawn · 2 municipalities '
+    + 'identified by 9 probes: a municipality no probe landed in does not contribute · '
+    + 'vintage not downloaded: 2025 · drop below 600 m to get each sale back.');
+  const sections = withLocale('en', () => dvfAreaDisclosure(SECTIONS));
+  assertNoFrench(sections, { allow: PLACES });
+  assert.match(sections, /^View over 8\.8 km a side: 131 cadastral sections, 9,880 sales · /);
+  assert.match(sections, /drop below 1,800 m to see each parcel sold\.$/);
+  const fr = withLocale('fr', () => dvfAreaDisclosure(PLOTS));
+  assert.match(fr, /^Vue sur 2,2 km de côté\s: 1\s324 ventes, 412 parcelles dessinées/u);
 });
 
-test('a cell card says what the disc is a median OF', () => {
-  const cell = {
-    key: '69386:1', count: 14, pricedCount: 9, medianPrixM2: 5_458, medianRatio: 0.99,
-    communeCode: '69386', years: [2023, 2024],
-  };
-  const en = withLocale('en', () => dvfCellCard(cell, CELLS));
-  assertNoFrench(en, { allow: PLACES });
-  assert.equal(en, '14 sales in this cell · 9 with a usable €/m² · median €5,458/m² · '
-    + 'against €5,500/m² for Lyon 6e · −5% to +5% — at the median · vintages 2023, 2024 · '
-    + 'drop below 600 m to see the sales one by one');
-  assert.match(withLocale('fr', () => dvfCellCard(cell, CELLS)),
-    /^14 ventes dans cette cellule · 9 avec un €\/m² exploitable · médian 5 458 €\/m²/);
-  const unpriced = { ...cell, count: 1, pricedCount: 0, medianPrixM2: null, medianRatio: null };
-  assert.match(withLocale('en', () => dvfCellCard(unpriced, CELLS)),
-    /^1 sale in this cell · 0 with a usable €\/m² · against/);
-  assert.match(withLocale('en', () => dvfCellCard(unpriced, CELLS)), /no median: nothing is painted/);
+test('a plot card and a section card read in English', () => {
+  const plot = withLocale('en', () => dvfPlotCard({
+    id: '69386000AB0001', communeCode: '69386', count: 1, ratio: 0.99,
+    sale: {
+      date: '2024-06-02', nature: 'Vente', valeur: 272_000, types: ['Appartement'],
+      prixM2: 5_440, dwellingSurface: 50, dwellingCount: 1, address: '12 RUE GARIBALDI',
+    },
+  }, PLOTS));
+  assertNoFrench(plot, { allow: [...PLACES, 'RUE GARIBALDI'] });
+  assert.deepEqual(plot.details, [
+    '2024-06-02 · Sale', '€272,000', 'Apartment — 50 m²', '€5,440/m²',
+    '0.99 × the median of Lyon 6e (€5,500/m²)', 'this parcel’s only sale (editions 2024 to 2025)',
+  ]);
+  const section = withLocale('en', () => dvfSectionCard({
+    id: '69386000AH', communeCode: '69386', count: 14, pricedCount: 9,
+    medianPrixM2: 5_458, medianRatio: 0.99, years: [2023, 2024],
+  }, SECTIONS));
+  assertNoFrench(section, { allow: PLACES });
+  assert.equal(section.title, 'Section AH · Lyon 6e');
+  assert.deepEqual(section.details, [
+    '14 sales, 9 with a usable €/m²', 'median €5,458/m²', 'against €5,500/m² for Lyon 6e',
+    '−5% to +5% — at the median', 'vintages 2023, 2024', 'drop below 1,800 m to see each parcel sold',
+  ]);
+  const thin = withLocale('en', () => dvfSectionCard({
+    id: '69386000AJ', communeCode: '69386', count: 2, pricedCount: 1,
+    medianPrixM2: 9_000, medianRatio: 1.6, years: [2024],
+  }, SECTIONS));
+  assert.ok(thin.details.includes('fewer than 3 priced sales'), thin.details.join(' | '));
+});
+
+test('the section key calls its neutral what it is', () => {
+  const entries = withLocale('en', () => dvfLegendEntries(dvfAreaReference(SECTIONS), new Map(),
+    { neutral: { label: 'fewer than 3 priced sales', blurb: 'x' } }));
+  assert.equal(entries.at(-1).label, 'fewer than 3 priced sales');
+  assert.equal(withLocale('en', () => dvfLegendEntries(dvfAreaReference(PLOTS))).at(-1).label,
+    'no price per m²');
 });
 
 test('what the voice is handed is named in the reader’s language', () => {

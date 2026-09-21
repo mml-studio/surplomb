@@ -66,19 +66,20 @@ export const SCAN_CELL_MIN_ALTITUDE_M = 600;
  * eight requests (two per tile for the DPE — see `dpeFeed.js`) instead of
  * letting it grow with altitude.
  *
- * `cellM` is the grid the DVF proxy buckets its own rows onto. It is not
- * arbitrary: it matches what the ADEME's `geo_agg` returns for a tile of this
- * span, MEASURED on 2026-09-14 at Lyon — a 0.01° bbox is answered in geohash
- * precision 7 (107 × 152 m cells) and a 0.04° bbox in precision 6 (853 × 607 m).
- * data-fair picks the precision from the box, so the two layers land on
- * comparable cells without either of them asking for a resolution.
+ * `dvfUnit` is the shape the DVF proxy draws a box's sales on, and since
+ * 2026-09-21 it is the cadastre's own, not a grid: the PLOTS the sales name on
+ * the fine band, their cadastral SECTIONS on the coarse one — see
+ * `dvfFeed.aggregateSalesIntoPlots` for the measurement that put the switch
+ * here. The DPE keeps its cells, whose size the ADEME's `geo_agg` picks from
+ * the span of the box (geohash precision 7, ~107 × 152 m, for a 0.01° tile;
+ * precision 6, ~853 × 607 m, for a 0.04° one — measured 2026-09-14 at Lyon).
  *
  * `maxAltitudeM` is the top of the band, not of the layer: the layer's own
  * ceiling (12 km for both) still applies above the last band.
  */
 export const SCAN_BANDS = Object.freeze([
-  Object.freeze({ id: 'fine', maxAltitudeM: 1_800, tileDeg: 0.01, cellM: 150 }),
-  Object.freeze({ id: 'coarse', maxAltitudeM: Infinity, tileDeg: 0.04, cellM: 850 }),
+  Object.freeze({ id: 'fine', maxAltitudeM: 1_800, tileDeg: 0.01, dvfUnit: 'plots' }),
+  Object.freeze({ id: 'coarse', maxAltitudeM: Infinity, tileDeg: 0.04, dvfUnit: 'sections' }),
 ]);
 
 /** Every tile span a box may legitimately be built from. */
@@ -93,7 +94,7 @@ const TILE_DEGS = Object.freeze(SCAN_BANDS.map((band) => band.tileDeg));
  * would discard the only thing they said.
  *
  * @param {?{altitudeM: number, pinned?: boolean}} point
- * @returns {?{id: string, tileDeg: number, cellM: number}}
+ * @returns {?{id: string, tileDeg: number, dvfUnit: string}}
  */
 export function scanBandFor(point) {
   if (point?.pinned) return null;

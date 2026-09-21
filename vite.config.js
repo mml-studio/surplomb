@@ -171,8 +171,10 @@ import {
 } from './src/data/communeContours.js';
 import {
   DVF_FIRST_YEAR,
-  aggregateSalesIntoCells,
+  aggregateSalesIntoPlots,
+  aggregateSalesIntoSections,
   buildDvfUrl,
+  encodeParts,
   clampDvfRadius,
   dvfCoverage,
   groupMutations,
@@ -518,6 +520,7 @@ import {
   SITADEL_MILLESIME_FLOOR,
   SITADEL_SOURCE,
   cadastreCommuneUrl,
+  cadastreSectionsUrl,
   communeCadastreCodes,
   discoverSitadelRid,
   geoCommuneUrl,
@@ -9052,6 +9055,27 @@ async function fetchSitadelParcels(insee) {
   if (Number.isFinite(declared) && declared > SITADEL_CADASTRE_MAX_BYTES) {
     throw new Error(`Parcel file for ${insee} too large`);
   }
+  const gz = Buffer.from(await response.arrayBuffer());
+  const raw = zlib.gunzipSync(gz, { maxOutputLength: SITADEL_CADASTRE_MAX_BYTES });
+  return JSON.parse(raw.toString('utf8'));
+}
+
+/**
+ * One Etalab SECTION file, decompressed — the sibling of
+ * {@link fetchSitadelParcels}, for the DVF layer's coarse band.
+ *
+ * Same body (raw gzip, no `content-encoding`), same 404 contract: a commune
+ * Etalab publishes nothing for answers null, and its sales are counted as
+ * drawn on no shape rather than failing the box.
+ * @param {string} insee
+ * @returns {Promise<?object>}
+ */
+async function fetchCadastreSections(insee) {
+  const response = await fetch(cadastreSectionsUrl(insee), {
+    signal: AbortSignal.timeout(SITADEL_TIMEOUT_MS),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`HTTP ${response.status} from cadastre.data.gouv.fr for ${insee} sections`);
   const gz = Buffer.from(await response.arrayBuffer());
   const raw = zlib.gunzipSync(gz, { maxOutputLength: SITADEL_CADASTRE_MAX_BYTES });
   return JSON.parse(raw.toString('utf8'));
@@ -23798,7 +23822,8 @@ function dvfProxy() {
   }
 
   /**
-   * The commune's parcels, indexed by the 14-character reference DVF publishes.
+   * The geometry of the plots a commune's editions name, keyed by the
+   * 14-character reference DVF publishes.
    *
    * WHY THE GROUND, AND NOT JUST THE DOT. A euro sign floating over an oblique
    * photoreal city names no building: the operator's own reading of the
@@ -23812,35 +23837,62 @@ function dvfProxy() {
    * vertices in total.
    *
    * ETALAB'S COMMUNE FILE, NOT API CARTO. The sibling Sitadel proxy already
-   * takes this exact file for this exact purpose, so the download is shared
-   * and cached rather than doubled; and a per-box Api Carto call would spend a
-   * rate-limit slot on a free public service for every pan, to answer about
-   * plots this route has already named.
+   * takes this exact file for this exact purpose; and a per-box Api Carto call
+   * would spend a rate-limit slot on a free public service for every pan, to
+   * answer about plots this route has already named.
    *
    * NON-FATAL, ALWAYS. A commune Etalab publishes no parcels for (Saint-
-   * Barthélemy) or a download that fails leaves `parcels: []` and the layer
-   * draws its markers exactly as it did before. A price map that refuses to
-   * open because the ground under it is unavailable would be a worse answer
-   * than one without the ground.
+   * Barthélemy) or a download that fails leaves the plots without a shape and
+   * the layer draws what it can, saying so. A price map that refuses to open
+   * because the ground under it is unavailable would be a worse answer than
+   * one without the ground.
    *
-   * BOUNDED TO THREE COMMUNES. Nantes' single file holds 58 099 parcels; the
-   * index is the one structure here a reader can grow by panning, and the
-   * downloads underneath are disk-cached by the Sitadel fetcher, so eviction
-   * costs a parse and not a request.
+   * ONLY THE PLOTS THAT SOLD, and that is what lets it hold eight communes
+   * instead of three. Since 2026-09-21 the fine box regime (600 m to 1 800 m)
+   * paints every plot a box's sales name, and a 0.02° box touches three to
+   * five communes — at three the second half of a box evicted the first. A
+   * full parsed commune costs ~1.4 KB a parcel (9.5 MB for Paris 16e's 6 887,
+   * and Nantes holds 58 099); cut to the plots the editions actually name it
+   * is half to a third of that — 3 267 of 6 887 in Paris 16e, 1 633 of 5 152
+   * in Boulogne-Billancourt over 2023–2025. Keyed by the editions it was cut
+   * for, and written to disk when every one of them arrived, so a box panned
+   * back into is a file read instead of a download.
    */
   const parcelIndexes = new Map();
-  const PARCEL_INDEX_MAX = 3;
+  const PARCEL_INDEX_MAX = 8;
 
-  function loadCommuneParcels(insee) {
-    if (parcelIndexes.has(insee)) return parcelIndexes.get(insee);
+  /**
+   * @param {string} insee
+   * @param {Array<number>} years
+   * @param {Array<object>} mutations The commune's editions, whole.
+   * @param {boolean} complete Every edition arrived — the only case in which
+   *   the cut is worth keeping on disk, since a missing edition names fewer
+   *   plots and would leave its sales shapeless for a week.
+   * @returns {Promise<Map<string, Array>>}
+   */
+  function loadCommuneParcels(insee, years, mutations, complete) {
+    const key = `${insee}-${years.join('-')}`;
+    if (parcelIndexes.has(key)) return parcelIndexes.get(key);
     const pending = (async () => {
+      const diskPath = path.join(ADDRESS_CACHE_DIR, `dvf-parcels-${key}.json`);
+      try {
+        const stat = await fsp.stat(diskPath);
+        if (Date.now() - stat.mtimeMs < DVF_DISK_TTL_MS) {
+          return new Map(JSON.parse(await fsp.readFile(diskPath, 'utf8')));
+        }
+      } catch { /* no disk copy yet */ }
+      const wanted = new Set();
+      for (const mutation of mutations) {
+        const id = String(mutation?.parcelle || '').trim();
+        if (id) wanted.add(id);
+      }
       const index = new Map();
       for (const code of communeCadastreCodes(insee)) {
         const collection = await fetchSitadelParcels(code);
         for (const feature of collection?.features || []) {
           const id = feature?.properties?.id;
           const geometry = feature?.geometry;
-          if (!id || !geometry) continue;
+          if (!id || !geometry || !wanted.has(id)) continue;
           // Polygon → one part; MultiPolygon → several. Rings kept as
           // published: the client closes them, and a plot with a courtyard
           // needs its interior rings to cut a hole rather than be filled in.
@@ -23850,15 +23902,21 @@ function dvfProxy() {
           if (parts) index.set(id, parts);
         }
       }
+      if (complete) {
+        try {
+          await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });
+          await fsp.writeFile(diskPath, JSON.stringify([...index]));
+        } catch { /* cache is an optimisation, never a requirement */ }
+      }
       return index;
     })().catch((error) => {
       // Evicted, so a transient failure does not cost the ground for the life
       // of the process. Reported once rather than per scan.
-      parcelIndexes.delete(insee);
+      parcelIndexes.delete(key);
       console.warn(`[DVF Proxy] cadastre for ${insee} unavailable:`, error?.message || error);
       return new Map();
     });
-    parcelIndexes.set(insee, pending);
+    parcelIndexes.set(key, pending);
     while (parcelIndexes.size > PARCEL_INDEX_MAX) {
       parcelIndexes.delete(parcelIndexes.keys().next().value);
     }
@@ -23869,22 +23927,78 @@ function dvfProxy() {
    * The plots the served sales actually name, once each.
    * @param {Array<object>} sales
    * @param {string} insee
+   * @param {Array<number>} years
+   * @param {Array<object>} mutations
+   * @param {boolean} complete
    * @returns {Promise<Array<{id: string, parts: Array}>>}
    */
-  async function parcelsFor(sales, insee) {
+  async function parcelsFor(sales, insee, years, mutations, complete) {
     const wanted = new Set();
     for (const sale of sales) {
       const id = String(sale?.parcelle || '').trim();
       if (id) wanted.add(id);
     }
     if (!wanted.size) return [];
-    const index = await loadCommuneParcels(insee);
+    const index = await loadCommuneParcels(insee, years, mutations, complete);
     const out = [];
     for (const id of wanted) {
       const parts = index.get(id);
       if (parts) out.push({ id, parts });
     }
     return out;
+  }
+
+  /**
+   * The commune's cadastral SECTIONS, by their ten-character id — the shapes
+   * the coarse band paints. A whole commune is a few dozen to a few hundred
+   * sections and a few kilobytes, so the whole file is kept, encoded, in
+   * memory and on disk.
+   */
+  const sectionIndexes = new Map();
+  const SECTION_INDEX_MAX = 40;
+
+  function loadCommuneSections(insee) {
+    if (sectionIndexes.has(insee)) return sectionIndexes.get(insee);
+    const pending = (async () => {
+      // `e5`: rings encoded at 1e-5 degree (`dvfFeed.encodeRing`). A file in
+      // any other form is a different name, never a misread one.
+      const diskPath = path.join(ADDRESS_CACHE_DIR, `dvf-sections-e5-${insee}.json`);
+      try {
+        const stat = await fsp.stat(diskPath);
+        if (Date.now() - stat.mtimeMs < DVF_DISK_TTL_MS) {
+          return new Map(JSON.parse(await fsp.readFile(diskPath, 'utf8')));
+        }
+      } catch { /* no disk copy yet */ }
+      const index = new Map();
+      for (const code of communeCadastreCodes(insee)) {
+        const collection = await fetchCadastreSections(code);
+        for (const feature of collection?.features || []) {
+          const id = feature?.properties?.id;
+          const geometry = feature?.geometry;
+          if (!id || !geometry) continue;
+          const parts = geometry.type === 'Polygon'
+            ? [geometry.coordinates]
+            : (geometry.type === 'MultiPolygon' ? geometry.coordinates : null);
+          // Encoded once, here: the whole file is kept, and flat integers are
+          // the compact form of it (`dvfFeed.encodeRing`).
+          if (parts) index.set(id, encodeParts(parts));
+        }
+      }
+      try {
+        await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });
+        await fsp.writeFile(diskPath, JSON.stringify([...index]));
+      } catch { /* cache is an optimisation, never a requirement */ }
+      return index;
+    })().catch((error) => {
+      sectionIndexes.delete(insee);
+      console.warn(`[DVF Proxy] cadastral sections for ${insee} unavailable:`, error?.message || error);
+      return new Map();
+    });
+    sectionIndexes.set(insee, pending);
+    while (sectionIndexes.size > SECTION_INDEX_MAX) {
+      sectionIndexes.delete(sectionIndexes.keys().next().value);
+    }
+    return pending;
   }
 
   /**
@@ -23927,19 +24041,25 @@ function dvfProxy() {
   }
 
   /**
-   * The cell answer for a box — the high-altitude regime.
+   * The area answer for a box — the regimes above 600 m.
    *
-   * THE ROWS NEVER LEAVE THE SERVER. That is the whole economy of this branch:
-   * the editions are already parsed here, so aggregating them costs no request
-   * and no parse, and what crosses the wire is a few hundred cells instead of
-   * the ~3 000 mutations a Lyon viewport holds. The disc regime's own payload
-   * is 192 KB for 400 sales; this one is a fifth of that for eight times the
-   * ground.
+   * THE ROWS NEVER LEAVE THE SERVER. The editions are already parsed here, so
+   * reducing them costs no request and no parse, and what crosses the wire is
+   * one record per SHAPE — a plot and the sale it is painted from, or a
+   * section and its median — instead of the ~3 000 mutations a Lyon viewport
+   * holds.
+   *
+   * WHICH SHAPE is the band's (`SCAN_BANDS[].dvfUnit`): the PLOTS the sales
+   * name from 600 m to 1 800 m, their cadastral SECTIONS above. Until
+   * 2026-09-21 both bands were grids of discs — 150 m and 850 m — and the
+   * reader's verdict was that a disc named no ground they could see.
+   * `dvfFeed.aggregateSalesIntoPlots` holds the measurements that placed the
+   * switch between plots and sections where it is.
    *
    * @param {object} box @param {object} band @param {Array<number>} years
    * @returns {Promise<?object>}
    */
-  async function loadCells(box, band, years) {
+  async function loadArea(box, band, years) {
     const { communes, probes } = await communesInBox(box);
     if (!communes.length) return null;
     const loaded = [];
@@ -23947,10 +24067,9 @@ function dvfProxy() {
     for (const commune of communes) {
       const { mutations, unavailable: missing } = await loadEditions(years, commune.code);
       for (const year of missing) unavailable.add(year);
-      if (mutations.length) loaded.push({ commune, mutations });
+      if (mutations.length) loaded.push({ commune, mutations, complete: missing.length === 0 });
     }
-    const { cells, summary } = aggregateSalesIntoCells(loaded, box, band.cellM);
-    return {
+    const answer = {
       box,
       band: band.id,
       years,
@@ -23961,9 +24080,53 @@ function dvfProxy() {
       coverage: dvfCoverage(communes[0].code),
       communes,
       communesProbed: probes,
-      cells,
-      summary,
     };
+    if (band.dvfUnit === 'sections') {
+      const { sections, summary } = aggregateSalesIntoSections(loaded, box);
+      const shaped = [];
+      for (const [code, list] of groupByCommune(sections)) {
+        const index = await loadCommuneSections(code);
+        for (const section of list) {
+          const parts = index.get(section.id);
+          if (parts) shaped.push({ ...section, parts });
+        }
+      }
+      // A4: a section the register names and Etalab does not draw is counted,
+      // so a hole in the painting has a stated cause.
+      return {
+        ...answer,
+        sections: shaped,
+        summary: { ...summary, unshaped: sections.length - shaped.length },
+      };
+    }
+    const { plots, summary } = aggregateSalesIntoPlots(loaded, box);
+    const shaped = [];
+    for (const [code, list] of groupByCommune(plots)) {
+      const edition = loaded.find((entry) => entry.commune.code === code);
+      if (!edition) continue;
+      const index = await loadCommuneParcels(code, years, edition.mutations, edition.complete);
+      for (const plot of list) {
+        const parts = index.get(plot.id);
+        if (parts) shaped.push({ ...plot, parts: encodeParts(parts) });
+      }
+    }
+    return {
+      ...answer,
+      plots: shaped,
+      summary: { ...summary, unshaped: plots.length - shaped.length },
+    };
+  }
+
+  /** Shapes grouped by the commune whose files draw them, in first-seen order. */
+  function groupByCommune(shapes) {
+    const groups = new Map();
+    for (const shape of shapes) {
+      const code = shape.communeCode;
+      if (!code) continue;
+      const held = groups.get(code);
+      if (held) held.push(shape); else groups.set(code, [shape]);
+    }
+    return groups;
   }
 
   function install(middlewares) {
@@ -23980,8 +24143,11 @@ function dvfProxy() {
       if (cellScan) {
         const { box, band } = cellScan;
         return {
-          key: `dvf-cells|${scanBoxKey(box)}|${band.id}|${years.join('-')}`,
-          load: () => loadCells(box, band, years),
+          // `dvf-area`, not `dvf-cells`: the answer changed shape on
+          // 2026-09-21, and a key that outlived it would serve discs to a
+          // client that no longer draws them.
+          key: `dvf-area|${scanBoxKey(box)}|${band.id}|${years.join('-')}`,
+          load: () => loadArea(box, band, years),
         };
       }
       const radiusM = clampDvfRadius(url.searchParams.get('radius'));
@@ -23992,7 +24158,9 @@ function dvfProxy() {
           if (!commune) return null;
           const { mutations, unavailable } = await loadEditions(years, commune.code);
           const { sales, summary } = selectNearbySales(mutations, point, radiusM);
-          const parcels = await parcelsFor(sales, commune.code);
+          const parcels = await parcelsFor(
+            sales, commune.code, years, mutations, unavailable.length === 0,
+          );
           // The register's own hole, carried on the answer rather than left to
           // be inferred from an empty list: a commune in the Bas-Rhin, the
           // Haut-Rhin, the Moselle or Mayotte returns nothing because the file

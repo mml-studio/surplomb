@@ -35,7 +35,7 @@ test('the bands are ordered and cover every altitude above the switch', () => {
   assert.equal(scanBandFor({ altitudeM: 1_800 }).id, 'coarse');
   assert.equal(scanBandFor({ altitudeM: 11_000 }).id, 'coarse');
   for (const band of SCAN_BANDS) {
-    assert.ok(band.tileDeg > 0 && band.cellM > 0);
+    assert.ok(band.tileDeg > 0 && ['plots', 'sections'].includes(band.dvfUnit));
   }
 });
 

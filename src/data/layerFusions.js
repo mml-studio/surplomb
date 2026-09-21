@@ -233,10 +233,17 @@ export const LAYER_FUSIONS = Object.freeze([
   // row called « Prix de l'immobilier » a reader had no way to tell that one
   // of them was about a specific door. The row answers "what does it cost
   // around here"; the chips say what else you can ask.
+  //
+  // THE ESTIMATE IS OPT-IN since 2026-09-21. It followed the row, so every
+  // reader who asked what the street sold for also got a valuation of a 60 m²
+  // flat nobody had described — a second block in the key and a second scan
+  // of the same editions — and the operator asked for the chip to start
+  // unticked. What a property is worth is a question about a door the reader
+  // has in mind, so the chip is where it is asked.
   fusionRow({
     primary: 'dvf-sales',
     companions: [
-      { id: 'avis-valeur' },
+      { id: 'avis-valeur', optIn: true },
       {
         id: 'comparables-fr',
         // Opt-in: the dossier is the reader's OWN selection, and an empty

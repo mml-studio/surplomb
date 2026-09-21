@@ -680,6 +680,41 @@ test('a ceiling given as a function is consulted per scan, not captured once', a
   layer.disable();
 });
 
+/**
+ * A layer that draws PRIMITIVES beside the shell's entities — the DVF's plots
+ * and sections above 600 m — only learns the shell took its draw down through
+ * `onClear`. Missed on dormancy, its washes would stand over the country at
+ * 12 km with no answer behind them.
+ */
+test('onClear runs whenever the shell takes its own draw down', async (t) => {
+  withDocument(t);
+  let clears = 0;
+  let ceilingM = 45_000;
+  const events = stackEventTarget();
+  const { layer } = await scannedLayer({
+    onClear: () => { clears += 1; },
+    maxAltitudeM: () => ceilingM,
+    redrawOnMapStack: true,
+    mapStackEventTarget: events,
+  }, { altitudeM: 5_000 });
+  assert.equal(clears, 1, 'before the first draw');
+  events.fire();
+  assert.equal(clears, 2, 'before a redraw from the answer in hand');
+  ceilingM = 1_000;
+  await layer.update();
+  assert.equal(layer.getStats().dormant, true);
+  assert.equal(clears, 3, 'on going dormant above the ceiling');
+  layer.disable();
+});
+
+test('a pick a layer claims through ownsPick reaches its ground card', () => {
+  // The intent rule itself is unchanged: an own pick on a layer that answers
+  // ground opens the ground card. `ownsPick` is only how a primitive's id
+  // becomes "own" — see `installClickHandler`.
+  assert.equal(addressScanClickIntent({ isOwn: true, answersGround: true }), 'ground');
+  assert.equal(addressScanClickIntent({ isOwn: false, answersGround: true }), 'ignore');
+});
+
 test('a movement threshold given as a function is consulted per scan too', async (t) => {
   withDocument(t);
   let thresholdKm = 50;
