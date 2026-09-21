@@ -184,52 +184,70 @@ export const GALLERY_LOOPS = Object.freeze({
     "view:04": {
       "aspect": 1.66,
       "fps": 30,
-      "durationS": 6,
+      "durationS": 14.67,
       "renditions": [
         {
-          "src": "/landing/view-04-480-av1.6e79d5ce.mp4",
+          "src": "/landing/view-04-480-av1.079ac161.mp4",
           "mime": "video/mp4; codecs=\"av01.0.00M.08\"",
           "codec": "av1",
           "width": 480,
           "height": 290,
-          "bytes": 69610,
-          "bitrateKbps": 93
+          "bytes": 344611,
+          "bitrateKbps": 188
         },
         {
-          "src": "/landing/view-04-480-h264.46252b9d.mp4",
+          "src": "/landing/view-04-480-hevc.a01e06ac.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L63.90\"",
+          "codec": "hevc",
+          "width": 480,
+          "height": 290,
+          "bytes": 474003,
+          "bitrateKbps": 259
+        },
+        {
+          "src": "/landing/view-04-480-h264.38a7357d.mp4",
           "mime": "video/mp4; codecs=\"avc1.640015\"",
           "codec": "h264",
           "width": 480,
           "height": 290,
-          "bytes": 273904,
-          "bitrateKbps": 365
+          "bytes": 545299,
+          "bitrateKbps": 297
         },
         {
-          "src": "/landing/view-04-960-av1.9ec9d3bb.mp4",
+          "src": "/landing/view-04-960-av1.fc174c4d.mp4",
           "mime": "video/mp4; codecs=\"av01.0.04M.08\"",
           "codec": "av1",
           "width": 960,
           "height": 582,
-          "bytes": 195929,
-          "bitrateKbps": 261
+          "bytes": 773017,
+          "bitrateKbps": 422
         },
         {
-          "src": "/landing/view-04-960-h264.06e5c35a.mp4",
-          "mime": "video/mp4; codecs=\"avc1.64001F\"",
-          "codec": "h264",
+          "src": "/landing/view-04-960-hevc.c5513ffd.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L93.90\"",
+          "codec": "hevc",
           "width": 960,
           "height": 582,
-          "bytes": 459398,
-          "bitrateKbps": 613
+          "bytes": 1371153,
+          "bitrateKbps": 748
         },
         {
-          "src": "/landing/view-04-1440-av1.26f0d31b.mp4",
+          "src": "/landing/view-04-1440-av1.518d6bbc.mp4",
           "mime": "video/mp4; codecs=\"av01.0.08M.08\"",
           "codec": "av1",
           "width": 1440,
           "height": 872,
-          "bytes": 498484,
-          "bitrateKbps": 665
+          "bytes": 1776432,
+          "bitrateKbps": 969
+        },
+        {
+          "src": "/landing/view-04-1440-hevc.4cce6f4f.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L120.90\"",
+          "codec": "hevc",
+          "width": 1440,
+          "height": 872,
+          "bytes": 2745049,
+          "bitrateKbps": 1497
         }
       ]
     },
