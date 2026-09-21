@@ -5040,6 +5040,50 @@ test('a legend selection needs a title, and a link must be https', () => {
   );
 });
 
+test('a new selection card is revealed again while the rail settles, until the reader scrolls', () => {
+  // Measured 2026-09-21 at 1440 × 900: the DVF card was scrolled into view in
+  // a key the rail's layout pass then shrank to 403 px, which cut it under the
+  // price. The list's box changing is the signal to reveal it again.
+  const originalObserver = globalThis.ResizeObserver;
+  const observers = [];
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; this.disconnected = false; observers.push(this); }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  };
+  let scrolls = 0;
+  const listeners = new Map();
+  const card = { scrollIntoView: (options) => { assert.deepEqual(options, { block: 'nearest' }); scrolls += 1; } };
+  const list = {
+    querySelector: (selector) => (selector === '.map-legend-selection' ? card : null),
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    removeEventListener: (type, listener) => { if (listeners.get(type) === listener) listeners.delete(type); },
+  };
+  const mgr = {};
+  const reveal = () => DataLayerManager.prototype._revealLegendSelection.call(mgr, list);
+  try {
+    reveal();
+    assert.equal(scrolls, 1, 'revealed when it lands');
+    observers[0].callback();
+    assert.equal(scrolls, 2, 'and again when the rail hands the key its height');
+    listeners.get('wheel')();
+    assert.equal(observers[0].disconnected, true, 'the reader scrolling ends the watch');
+    assert.equal(listeners.size, 0);
+    assert.equal(mgr._stopLegendReveal, null);
+
+    // A second selection replaces the first watch rather than stacking on it.
+    reveal();
+    reveal();
+    assert.equal(observers[1].disconnected, true);
+    assert.equal(observers[2].disconnected, false);
+    mgr._stopLegendReveal();
+    assert.equal(observers[2].disconnected, true);
+  } finally {
+    if (originalObserver === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = originalObserver;
+  }
+});
+
 test('the selected object prints under its own key block, with a close that reaches the layer', async () => {
   // The card used to open over the middle of the map, on the block the reader
   // was reading. It now sits under the classes its colour belongs to.

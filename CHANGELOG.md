@@ -126,6 +126,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The map key is printed large enough to read.** A clicked sale's card in
+  the key set its notes at 9 px and the class rows at 10.5 px, small enough
+  that the operator squinted at the figures. Every line of the key grows: a
+  class row is now 13 px, the smallest sentence 11.5 px, and the sale's card
+  reads 16 px for the address, 32 px for the price and 18 px for the €/m².
+  The price classes now stack one per line. A key that no longer fits its
+  share of the right rail scrolls, and a newly clicked card is kept in view
+  while the rail settles: at 1440 × 900 it used to be cut off under the price.
+- **The flights key says what an aircraft is in plain words.** Two rows read
+  as aviation jargon, each under a two-line explanation: « Plage OACI
+  militaire » is now « Avion militaire » (*Military aircraft*), and « À
+  l'estime (sondages manqués) » is now « Signal perdu, position estimée »
+  (*Signal lost, estimated position*), on the civil and the military flights
+  layers alike. Neither row carries an explanation any more.
 - **The Vélib' bikes are in the bubbles too.** From the city-wide view the
   docks stayed dots under the fleet bubbles — 1,344 violet rings over Paris
   from 18 km, the densest mark on the map — and a bubble's number left out

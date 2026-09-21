@@ -24,12 +24,6 @@ export default defineMessages({
     },
   },
   coasting: {
-    label: { fr: 'À l’estime (sondages manqués)', en: 'Dead reckoning (missed polls)' },
-    blurb: {
-      fr: 'Délavé, et non estompé : la position est tenue à l’estime depuis '
-        + 'le dernier point, elle n’est pas rapportée. Ici la transparence dit l’ancienneté.',
-      en: 'Washed out, not faded: the position is being carried by dead reckoning from '
-        + 'the last fix, it is not being reported. Here transparency means age.',
-    },
+    label: { fr: 'Signal perdu, position estimée', en: 'Signal lost, estimated position' },
   },
 });

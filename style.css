@@ -6751,7 +6751,13 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    viewport with the pass still unfired. `--right-stack-max-height` is the
    corridor the pass last measured and inherits from the rail; the 70vh
    fallback is what holds before it has ever run. Either way the key stays on
-   screen and `#map-legend-items` gives instead. */
+   screen and `#map-legend-items` gives instead.
+
+   THE TYPE IS SIZED TO BE READ, NOT TO FIT. Notes at 9 px and classes at
+   10.5 px made the operator squint at a sale's card (2026-09-21): the
+   smallest sentence is now 11.5 px, a class 13 px, and a key that no longer
+   fits its allocation scrolls — a new selection card is scrolled into view
+   by `_revealLegendSelection` in src/data/manager.js. */
 .map-legend {
   position: relative;
   width: 100%;
@@ -6761,8 +6767,8 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 9px 12px 10px;
+  gap: 8px;
+  padding: 11px 14px 12px;
   border: 1px solid rgba(247, 171, 124, 0.22);
   border-radius: 4px;
   background: rgba(6, 11, 9, 0.62);
@@ -6786,7 +6792,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-title {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 2.4px;
   color: rgba(247, 171, 124, 0.72);
   flex: none;
@@ -6809,7 +6815,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-items {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -6821,7 +6827,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    colours below no longer match the map, and the swatches recede so nobody
    matches them by eye. */
 .map-legend-key-note {
-  font-size: 9px;
+  font-size: 11.5px;
   line-height: 1.45;
   letter-spacing: 0.6px;
   color: rgba(255, 196, 120, 0.92);
@@ -6843,10 +6849,10 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    the tileset's shading darkens it. Cesium cannot split that drape, so the
    legend says it once. */
 .map-legend-surface-note {
-  font-size: 9px;
+  font-size: 11.5px;
   line-height: 1.45;
   letter-spacing: 0.2px;
-  color: rgba(247, 244, 234, 0.6);
+  color: rgba(247, 244, 234, 0.7);
   border-left: 2px solid rgba(247, 171, 124, 0.28);
   padding-left: 7px;
 }
@@ -6855,10 +6861,10 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    its marks came from. Sits under the classes it qualifies, and reads as an
    aside rather than as another class. */
 .map-legend-note {
-  font-size: 9px;
+  font-size: 11.5px;
   line-height: 1.45;
   letter-spacing: 0.2px;
-  color: rgba(247, 244, 234, 0.6);
+  color: rgba(247, 244, 234, 0.7);
   border-left: 2px solid rgba(247, 171, 124, 0.28);
   padding-left: 7px;
   margin-top: 6px;
@@ -6871,7 +6877,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* Tier 1 — the row. Brighter and wider-tracked than the sub-titles below it,
@@ -6879,7 +6885,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    repair: three sub-blocks used to be titled identically, at the same weight,
    and nothing said which was the subject and which were its parts. */
 .map-legend-row-title {
-  font-size: 9.5px;
+  font-size: 12px;
   letter-spacing: 1.8px;
   text-transform: uppercase;
   color: rgba(247, 244, 234, 0.86);
@@ -6888,7 +6894,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
 }
 
 /* Tier 2 — a sub-layer of a split row. The rule is what carries the grouping:
@@ -6903,10 +6909,10 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    is a colour chart. On a split row this is the CHIP label — the word the
    reader pressed — so the key and the control agree. */
 .map-legend-layer {
-  font-size: 9.5px;
+  font-size: 12px;
   letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: rgba(247, 244, 234, 0.62);
+  color: rgba(247, 244, 234, 0.72);
   /* The extent clause pushes this line past one row on a narrow rail, and the
      default break left "vue" alone under "Semaine type · Lyon et Paris, hors
      de cette". Balanced, the two lines carry roughly the same words. */
@@ -6919,11 +6925,11 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    published what IS in them and how often, and frames them from above. Italic,
    so the two asides a block can carry never read as the same kind of statement. */
 .map-legend-source {
-  font-size: 9px;
+  font-size: 11.5px;
   line-height: 1.4;
   letter-spacing: 0.2px;
   font-style: italic;
-  color: rgba(247, 244, 234, 0.5);
+  color: rgba(247, 244, 234, 0.64);
   margin-bottom: 1px;
 }
 
@@ -6934,7 +6940,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-scope {
   letter-spacing: 0.6px;
   text-transform: none;
-  color: rgba(247, 244, 234, 0.42);
+  color: rgba(247, 244, 234, 0.52);
 }
 
 /* ORDERED CLASSES, ONE TRACK. Six stacked rows spent six lines saying what
@@ -6950,7 +6956,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-bar {
   display: flex;
   gap: 2px;
-  height: 9px;
+  height: 11px;
   margin: 1px 0 3px;
   border-radius: 2px;
   overflow: hidden;
@@ -6967,7 +6973,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    Two channels over one population were printing two lists of the same total,
    and a reader with no word for either added 84 and 84 and read 168. */
 .map-legend-channel {
-  font-size: 8.5px;
+  font-size: 10.5px;
   letter-spacing: 0.9px;
   text-transform: uppercase;
   color: rgba(251, 214, 190, 0.55);
@@ -6979,14 +6985,14 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-inline {
   display: flex;
   flex-wrap: wrap;
-  column-gap: 12px;
-  row-gap: 3px;
+  column-gap: 14px;
+  row-gap: 5px;
 }
 
 .map-legend-entry {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
+  gap: 9px;
 }
 
 /* A key line that is also its own switch. It keeps the geometry of a plain
@@ -7050,12 +7056,12 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   -webkit-appearance: none;
   margin: 0;
   padding: 3px 9px;
-  min-height: 22px;
+  min-height: 26px;
   border: 1px solid rgba(251, 214, 190, 0.26);
   border-radius: 999px;
   background: rgba(6, 11, 9, 0.35);
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.4px;
   color: rgba(247, 244, 234, 0.82);
   text-shadow: none;
@@ -7101,9 +7107,9 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-swatch {
-  width: 8px;
-  height: 8px;
-  margin-top: 3px;
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
   border-radius: 50%;
   /* The swatch IS the datum — exactly the drawn colour, with only a hairline
      ring so a near-black class still reads against the glass. */
@@ -7122,8 +7128,8 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
    its own glyph; the swatch keeps its declared colour and the mask decides
    which of its pixels survive. */
 .map-legend-swatch.has-glyph {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   margin-top: 0;
   border-radius: 0;
   box-shadow: none;
@@ -7147,7 +7153,7 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-label {
-  font-size: 10.5px;
+  font-size: 13px;
   letter-spacing: 0.4px;
   line-height: 1.35;
 }
@@ -7155,10 +7161,10 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 /* Rendered as TEXT, not as a `title` tooltip: these strings carry statements
    the map has to make, and a tooltip puts them out of reach without a mouse. */
 .map-legend-blurb {
-  font-size: 9px;
+  font-size: 11.5px;
   line-height: 1.4;
   letter-spacing: 0.2px;
-  color: rgba(247, 244, 234, 0.55);
+  color: rgba(247, 244, 234, 0.66);
 }
 
 /* THE SELECTED OBJECT'S CARD, under the key it is read against. It used to
@@ -7170,15 +7176,15 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 8px;
-  padding-top: 9px;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid rgba(247, 171, 124, 0.22);
 }
 
 .map-legend-selection-title {
-  padding-right: 24px;
-  font-size: 13px;
+  padding-right: 34px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: 0.2px;
@@ -7186,14 +7192,14 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-selection-meta {
-  font-size: 10px;
+  font-size: 12.5px;
   letter-spacing: 0.3px;
-  color: rgba(247, 244, 234, 0.62);
+  color: rgba(247, 244, 234, 0.72);
 }
 
 .map-legend-selection-headline {
-  margin-top: 5px;
-  font-size: 24px;
+  margin-top: 6px;
+  font-size: 32px;
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: 0.2px;
@@ -7202,25 +7208,25 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-selection-line {
-  font-size: 10.5px;
+  font-size: 14px;
   line-height: 1.4;
-  color: rgba(247, 244, 234, 0.82);
+  color: rgba(247, 244, 234, 0.88);
 }
 
 .map-legend-selection-metric {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  margin-top: 7px;
+  gap: 11px;
+  margin-top: 9px;
 }
 
 /* The marker's own colour, at a size the eye can match against the rows
    above: the dark ring is the marker's rim, the light one keeps a dark class
    off the glass. */
 .map-legend-selection-swatch {
-  width: 14px;
-  height: 14px;
-  margin-top: 1px;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.55), 0 0 0 2.5px rgba(255, 255, 255, 0.22);
   flex: none;
@@ -7229,12 +7235,12 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-selection-metric-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .map-legend-selection-value {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
@@ -7242,24 +7248,24 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 .map-legend-selection-caption {
-  font-size: 9.5px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  color: rgba(247, 244, 234, 0.74);
+}
+
+.map-legend-selection-footnote {
+  margin-top: 6px;
+  font-size: 12px;
   line-height: 1.4;
   letter-spacing: 0.2px;
   color: rgba(247, 244, 234, 0.64);
 }
 
-.map-legend-selection-footnote {
-  margin-top: 5px;
-  font-size: 9px;
-  line-height: 1.4;
-  letter-spacing: 0.2px;
-  color: rgba(247, 244, 234, 0.5);
-}
-
 .map-legend-selection-link {
   align-self: flex-start;
-  margin-top: 5px;
-  font-size: 10px;
+  margin-top: 6px;
+  font-size: 12.5px;
   letter-spacing: 0.3px;
   color: rgba(247, 171, 124, 0.9);
   text-decoration: underline;
@@ -7273,16 +7279,16 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 
 .map-legend-selection-close {
   position: absolute;
-  top: 6px;
+  top: 10px;
   right: 0;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid rgba(247, 171, 124, 0.28);
   border-radius: 6px;
   background: rgba(6, 11, 9, 0.5);
   color: rgba(247, 244, 234, 0.8);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
