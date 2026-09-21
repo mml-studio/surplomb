@@ -55,8 +55,10 @@ import {
 import { horizonOccluder } from './iconOrientation.js';
 import {
   clearOverlaySource,
+  overlayRectIntersectsAny,
   setOverlayEntries,
   setOverlaySourceVisible,
+  worldOverlayUiOcclusionRects,
 } from '../overlays/worldOverlay.js';
 import {
   GBFS_MAX_BOX_DEG,
@@ -70,15 +72,16 @@ import {
 import { formatDecimal, formatList, formatNumber } from '../i18n/format.js';
 import messages from './sharedMobilityFrance.i18n.js';
 import {
-  MOBILITY_DOCK_FILL,
   dockFillLegend,
+  mobilityDockFill,
   isMobilityOperatorId,
   curatedMobilityOperators,
   mobilityOperatorShortLabel,
   resolveMobilityOperator,
 } from './mobilityOperators.js';
 import operatorMessages from './mobilityOperators.i18n.js';
-import { sharedMobilityGlyph } from './sharedMobilityIcons.js';
+import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
+import { selectSharedMobilityPins, sharedMobilityPinRank } from './sharedMobilityPins.js';
 import { pickAt } from './pickAt.js';
 import { profileCountBudget } from '../perfProfile.js';
 
@@ -137,63 +140,62 @@ const FLOOR_FILL_KM = 10;
 
 // --- Presentation -----------------------------------------------------------
 //
-// TWO CHANNELS, TWO QUESTIONS. A viewport over Paris holds Lime, Dott and Voi
+// THREE MARKS, THREE QUESTIONS. A viewport over Paris holds Lime, Dott and Voi
 // in the same streets, publishing bikes, e-bikes, scooters and mopeds side by
-// side. Those are independent facts, so they get independent channels:
+// side — 2,175 vehicles on the landing's view alone. Since 2026-09-21 (the
+// « Repères discrets » mock) they are drawn in two tiers:
 //
-//   SHAPE  — WHAT it is.  A vehicle wears its own silhouette
-//            (`sharedMobilityIcons.js`); a station is a dot, because a place
-//            is not a vehicle and should not be drawn as one.
-//   COLOUR — WHO runs it. The operator's hue (`mobilityOperators.js`) is the
-//            body of a vehicle and the RING of a station.
+//   DOT  — WHO, and HOW MANY. Every vehicle is a small dot in its operator's
+//          hue (`mobilityOperators.js`), so the density of a street reads at
+//          a glance and costs one point each.
+//   PIN  — WHAT it is. A few vehicles, never two within 200 px of each other
+//          on screen, wear a pin over their dot with their silhouette
+//          (`sharedMobilityPins.js`, `sharedMobilityIcons.js`). Pins only come
+//          in close to the street; from higher up the dots say it all.
+//   RING — A STATION is a dot RINGED in its operator's hue and filled with
+//          the same hue as far as it is full (`mobilityDockFill`): solid,
+//          tinted, or an empty ring — the one number a rider acts on, and one
+//          no vehicle has.
 //
-// A station keeps its FILL for availability, which is the reading someone acts
-// on and which no vehicle has: how full it is. So the ring, not the fill,
-// carries the operator there — the alternative was to spend the fill on the
-// operator and lose the only actionable number the layer publishes.
+// The 20 px plate every vehicle wore until then — silhouette, operator hue
+// and, up close, a monogram — was the right mark for ONE vehicle and a carpet
+// for two thousand: over the landing's view it covered the street it stood on.
+/** Vehicle dot, in CSS px before the distance ramp: 6 of colour inside a 1 px rim. */
+const VEHICLE_DOT_PX = 6;
+/** The dot's rim: dark, so a pale hue keeps its edge on a pale map. */
+const VEHICLE_DOT_RIM_PX = 1;
+const VEHICLE_DOT_RIM_COLOR = 'rgba(0,0,0,0.6)';
 /**
- * Vehicle plate footprint, in CSS px before the distance ramp.
+ * Dot scale ramp: 8 px total up close, about 4.5 px at the gate altitude.
  *
- * 17 until 2026-09-14, raised with the move to a plate: the mark now has to
- * carry a punched silhouette AND, up close, an operator monogram, and a capital
- * inside a badge inside a disc needs the room. The far end of the ramp is
- * unchanged in absolute terms — see {@link VEHICLE_GLYPH_SCALE}.
+ * Cesium does NOT interpolate this linearly: `czm_nearFarScalar` works on
+ * SQUARED distance and then takes `pow(t, 0.2)`, so most of the fall happens
+ * just past `near`. That is the shape wanted here — the dot is at full size
+ * only where a pin can stand beside it.
  */
-const VEHICLE_GLYPH_PX = 20;
+const VEHICLE_DOT_SCALE = Object.freeze({ near: 1_500, nearValue: 1, far: 45_000, farValue: 0.55 });
+/** A selected vehicle's dot, under its cyan pin. */
+const SELECTED_VEHICLE_DOT_PX = 9;
 /**
- * Glyph scale ramp: recognisable up close, a coloured speck at gate altitude.
+ * Camera altitude (m) at or below which pins are drawn.
  *
- * Retuned with the plate, and `near` moved from 500 m to 1,200 m — which is
- * what actually gives the monogram somewhere to live.
- *
- * Cesium does NOT interpolate this linearly. `czm_nearFarScalar` works on
- * SQUARED distance and then takes `pow(t, 0.2)`, so the falloff is violently
- * front-loaded: on the old ramp a mark was already down to 15.9 px at 2 km and
- * to 19.5 px — its own maximum — only below ~600 m. Holding the plate at full
- * size across the whole street-level band costs nothing legible (it was already
- * at its maximum down there) and is what makes a badge band exist at all.
- *
- * The WIDE end is deliberately unchanged: 20 × 0.34 = 6.8 px is exactly what
- * 17 × 0.4 drew before. The layer renders up to 6,000 objects and the far end
- * is a budget, not a taste.
+ * The landing's Paris view sits at 1,300 m. At 3,500 m a pin already stands
+ * for a whole neighbourhood of dots, and above it a silhouette names one
+ * vehicle among hundreds — so the dots alone carry the view, which is what
+ * the mock asks of a wide shot. Clustering, for the city-wide view, is a
+ * later step.
  */
-const VEHICLE_GLYPH_SCALE = Object.freeze({ near: 1_200, nearValue: 1.2, far: 45_000, farValue: 0.34 });
-/**
- * Drawn size (CSS px) below which the operator monogram is NOT asked for.
- *
- * Measured on the contact sheets rather than picked: a capital inside the badge
- * resolves from about 22 px of plate and is pure noise under it, where it eats
- * the silhouette without replacing it. Below this the layer draws the plain
- * plate and the operator is carried by colour alone — which is exactly what the
- * mark degrades to anyway as the ramp closes.
- */
-const MONOGRAM_MIN_DRAWN_PX = 22;
+const PIN_CEILING_M = 3_500;
+/** Pin footprint, CSS px: the 96 × 124 artwork drawn 32 wide. */
+const PIN_WIDTH_PX = 32;
+const PIN_HEIGHT_PX = Math.round((32 * 124) / 96);
+/** The pin's tip stops this far above the dot's centre: the dot stays visible. */
+const PIN_TIP_GAP_PX = VEHICLE_DOT_PX / 2 + VEHICLE_DOT_RIM_PX + 1;
 const STATION_POINT_MIN_PX = 7;
 const STATION_POINT_MAX_PX = 15;
 /** Operator ring on a station dot. Two pixels is the thinnest that reads. */
 const STATION_RING_PX = 2;
 const SELECTED_POINT_PX = 18;
-const SELECTED_GLYPH_PX = 28;
 /** Operators listed by name in the key before the tail is summarised. */
 const MAX_OPERATOR_LEGEND_ROWS = 6;
 /** Swatch of the tail line that stands for several operators at once. */
@@ -201,12 +203,6 @@ const TAIL_LEGEND_TINT = '#cbd5e1';
 
 const SELECTED_COLOR = '#00ffff';
 
-/** Station fill-rate palette — the one `bikeshare.js` reads too. */
-const STATION_FULL = MOBILITY_DOCK_FILL.full;
-const STATION_MID = MOBILITY_DOCK_FILL.half;
-const STATION_LOW = MOBILITY_DOCK_FILL.low;
-const STATION_UNKNOWN = MOBILITY_DOCK_FILL.unknown;
-const STATION_CLOSED = MOBILITY_DOCK_FILL.closed;
 
 // --- Filtering --------------------------------------------------------------
 /**
@@ -353,12 +349,14 @@ let _overlayHost = DEFAULT_OVERLAY_HOST;
 
 // --- Runtime state ----------------------------------------------------------
 let _viewer = null;
-/** Station dots: fill = availability, ring = operator. */
+/** Every dot: stations (fill = availability, ring = operator), then vehicles
+ *  (operator hue) — added in that order so a vehicle paints over the dock it
+ *  is parked next to. */
 let _points = null;
-/** Vehicle glyphs: silhouette = kind, tint = operator. */
-let _billboards = null;
-/** True while the camera is close enough for a monogram to resolve. */
-let _monogramOn = false;
+/** The few vehicle pins: silhouette = kind, ring and tail = operator. */
+let _pins = null;
+/** Ids pinned by the last pin pass, offered first to the next one. */
+let _pinnedIds = new Set();
 let _records = new Map();
 let _enabled = false;
 let _clickHandler = null;
@@ -411,9 +409,9 @@ export function sharedMobilityOperator(record) {
   return record?.operator || resolveMobilityOperator(record?.system?.name);
 }
 
-/** The single primitive a record draws — a glyph for a vehicle, a dot for a station. */
+/** The dot a record draws — every station and every vehicle has one. */
 function recordPrimitive(record) {
-  return record?.billboard || record?.point || null;
+  return record?.point || null;
 }
 
 /** Display label for a vehicle kind. */
@@ -503,33 +501,45 @@ export function stationTitle(record) {
 }
 
 /**
- * Colour for a station, by how full it is.
+ * How full a station is: `full`, `half`, `low` — or `unknown` and `closed`,
+ * which are not levels.
  *
- * A station with no availability data is NOT drawn as empty — it takes the
- * neutral tint, because "we do not know" and "there are no bikes" are
- * different facts and the second one is actionable.
+ * A station with no availability data is NOT read as empty — it is `unknown`,
+ * because "we do not know" and "there are no bikes" are different facts and
+ * the second one is actionable.
  *
  * @param {{available:?number, capacity:?number, docks:?number, renting:?boolean}} station
- * @returns {string}
+ * @returns {'full'|'half'|'low'|'unknown'|'closed'}
  */
-export function stationColor(station) {
-  if (station?.renting === false) return STATION_CLOSED;
+export function stationFillLevel(station) {
+  if (station?.renting === false) return 'closed';
   // `Number(null)` is 0, not NaN — so a plain Number() coercion here would
   // paint every station whose feed omits availability as EMPTY, which is the
   // one reading a person acts on. The absence has to be checked first.
   const raw = station?.available;
-  if (raw === null || raw === undefined || raw === '') return STATION_UNKNOWN;
+  if (raw === null || raw === undefined || raw === '') return 'unknown';
   const available = Number(raw);
-  if (!Number.isFinite(available)) return STATION_UNKNOWN;
+  if (!Number.isFinite(available)) return 'unknown';
   const capacity = Number(station?.capacity)
     || (Number.isFinite(Number(station?.docks)) ? available + Number(station.docks) : NaN);
   if (!Number.isFinite(capacity) || capacity <= 0) {
-    return available > 0 ? STATION_FULL : STATION_LOW;
+    return available > 0 ? 'full' : 'low';
   }
   const ratio = available / capacity;
-  if (ratio > 0.6) return STATION_FULL;
-  if (ratio >= 0.3) return STATION_MID;
-  return STATION_LOW;
+  if (ratio > 0.6) return 'full';
+  if (ratio >= 0.3) return 'half';
+  return 'low';
+}
+
+/**
+ * A station's fill, as CSS: its operator's hue poured in as far as it is full
+ * (`mobilityDockFill`), so the level never borrows another operator's hue.
+ * @param {Object} station Wire station.
+ * @param {string} [operatorColor] The ring's hue.
+ * @returns {string} `rgba(…)`.
+ */
+export function stationColor(station, operatorColor) {
+  return mobilityDockFill(stationFillLevel(station), operatorColor);
 }
 
 /** Rendered size for a station, scaled by capacity. */
@@ -565,108 +575,6 @@ export function cameraSharedMobilityBox(viewer) {
 function cameraAltitudeM(viewer) {
   const carto = viewer?.camera?.positionCartographic;
   return Number.isFinite(carto?.height) ? carto.height : Infinity;
-}
-
-/**
- * The scale Cesium will actually apply to a billboard at `distance`.
- *
- * NOT a linear interpolation, which is the trap this started out in. Cesium's
- * `czm_nearFarScalar` (built into the vertex shader, see
- * `Build/Cesium/Cesium.js`) interpolates on SQUARED distance and then raises
- * the parameter to the 0.2 power:
- *
- *     t = ((d² − near²) / (far² − near²))^0.2   clamped to [0, 1]
- *     scale = mix(nearValue, farValue, t)
- *
- * Assuming a straight line between the two ends puts the switch altitude out by
- * an order of magnitude — it read 5,800 m where the mark is really 22 px only
- * below ~550 m. Reimplemented here rather than guessed, so the layer and the
- * GPU agree about how big anything is.
- *
- * @param {number} distance Metres from the camera.
- * @returns {number} Multiplier applied to {@link VEHICLE_GLYPH_PX}.
- */
-function rampScaleAt(distance) {
-  const { near, nearValue, far, farValue } = VEHICLE_GLYPH_SCALE;
-  const span = far * far - near * near;
-  const raw = span <= 0 ? 0 : (distance * distance - near * near) / span;
-  const t = Math.min(1, Math.max(0, raw)) ** 0.2;
-  return nearValue + t * (farValue - nearValue);
-}
-
-/**
- * Camera altitude (m) at or below which a plate is drawn at least
- * {@link MONOGRAM_MIN_DRAWN_PX} wide, and so may carry its monogram.
- *
- * DERIVED from the ramp rather than written down beside it: the size the layer
- * draws and the altitude it switches at are the same equation, and a second
- * hard-coded number would drift the moment the ramp is retuned.
- * {@link rampScaleAt} inverted.
- *
- * Distance is read as altitude, which holds for the near-nadir views this layer
- * is gated to and errs on the safe side otherwise — an oblique camera is
- * FURTHER from the object than its altitude, so the badge comes on slightly
- * late rather than on a mark too small to carry it.
- *
- * It lands just past `near` (1,218 m against 1,200 m) and that is not a
- * coincidence to tidy away: `pow(t, 0.2)` is near-vertical the moment it leaves
- * the clamp, so "at least 22 px" and "still at full size" are the same band on
- * this ramp. The rule the reader gets is therefore the simple one — the plate
- * carries its letter exactly while it is drawn at full size.
- *
- * @returns {number} Metres.
- */
-function monogramAltitudeCeilingM() {
-  const { near, nearValue, far, farValue } = VEHICLE_GLYPH_SCALE;
-  const wanted = MONOGRAM_MIN_DRAWN_PX / VEHICLE_GLYPH_PX;
-  if (wanted >= nearValue) return near;
-  if (wanted <= farValue) return far;
-  const t = (wanted - nearValue) / (farValue - nearValue);
-  return Math.sqrt(near * near + (t ** 5) * (far * far - near * near));
-}
-
-/**
- * Whether the plates currently on screen should carry their monogram, and
- * whether that answer just changed.
- *
- * @param {Object} viewer
- * @returns {boolean} True when the answer flipped and the set needs rewriting.
- */
-function updateMonogramGate(viewer) {
-  const next = cameraAltitudeM(viewer) <= monogramAltitudeCeilingM();
-  if (next === _monogramOn) return false;
-  _monogramOn = next;
-  return true;
-}
-
-/** The image one vehicle record should be drawing right now. */
-function vehicleGlyphFor(record) {
-  return sharedMobilityGlyph(record.object?.kind, {
-    initial: _monogramOn ? (record.operator?.initial || null) : null,
-  });
-}
-
-/**
- * Re-point every vehicle plate at the image the current zoom calls for.
- *
- * Cheap by construction: the whole layer draws at most seven distinct kinds
- * times the handful of operators in view, so every assignment here resolves to
- * an atlas entry Cesium already holds. It walks the set only when
- * {@link updateMonogramGate} says the answer changed.
- *
- * @returns {number} How many plates were rewritten.
- */
-function syncMonograms() {
-  let changed = 0;
-  for (const record of _records.values()) {
-    if (!record.billboard) continue;
-    const image = vehicleGlyphFor(record);
-    if (record.billboard.image === image) continue;
-    record.billboard.image = image;
-    changed += 1;
-  }
-  if (changed) governorRequestRender('shared-mobility-fr-monogram');
-  return changed;
 }
 
 function updateAltitudeGate(viewer) {
@@ -891,42 +799,36 @@ export function createSharedMobilitySelectedOverlayEntry(record, nowMs = Date.no
 }
 
 function restoreRecordStyle(record) {
-  const color = Cesium.Color.fromCssColorString(record?.baseColor || SELECTED_COLOR);
-  if (record?.billboard) {
-    record.billboard.color = color;
-    record.billboard.width = record.baseSize;
-    record.billboard.height = record.baseSize;
-    return;
-  }
   if (!record?.point) return;
-  record.point.color = color;
+  record.point.color = Cesium.Color.fromCssColorString(record.baseColor || SELECTED_COLOR);
   record.point.pixelSize = record.baseSize;
 }
 
-function clearSelection() {
-  if (_selectedId) {
-    restoreRecordStyle(_records.get(_selectedId));
+function clearSelection({ repin = true } = {}) {
+  const had = _selectedId;
+  if (had) {
+    restoreRecordStyle(_records.get(had));
   }
   _selectedId = null;
   _overlayHost.clearSource(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID);
+  // The cyan pin goes back to being an ordinary one — or makes room again.
+  if (had && repin) refreshPins();
 }
 
 function selectObject(id) {
-  clearSelection();
+  clearSelection({ repin: false });
   const record = _records.get(id);
-  if (!record || !_viewer) return;
-  _selectedId = id;
-  const selected = Cesium.Color.fromCssColorString(SELECTED_COLOR);
-  if (record.billboard) {
-    record.billboard.color = selected;
-    record.billboard.width = SELECTED_GLYPH_PX;
-    record.billboard.height = SELECTED_GLYPH_PX;
-  } else if (record.point) {
-    // The ring is left alone: losing the operator colour at the moment someone
-    // asks "whose is this?" would be exactly backwards.
-    record.point.color = selected;
-    record.point.pixelSize = SELECTED_POINT_PX;
+  if (!record || !_viewer) {
+    refreshPins();
+    return;
   }
+  _selectedId = id;
+  // The ring is left alone on a station: losing the operator colour at the
+  // moment someone asks "whose is this?" would be exactly backwards. A vehicle
+  // says it with its pin, which the pass below forces and draws in cyan.
+  record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
+  record.point.pixelSize = record.type === 'vehicle' ? SELECTED_VEHICLE_DOT_PX : SELECTED_POINT_PX;
+  refreshPins();
   const entry = createSharedMobilitySelectedOverlayEntry(record);
   if (entry) {
     _overlayHost.setEntries(
@@ -979,8 +881,147 @@ function onPreRender() {
   for (const record of _records.values()) {
     const primitive = recordPrimitive(record);
     if (!primitive) continue;
-    primitive.show = occluder.isPointVisible(record.position);
+    const visible = occluder.isPointVisible(record.position);
+    primitive.show = visible;
+    if (record.pin) record.pin.show = visible;
   }
+}
+
+// --- Pins -------------------------------------------------------------------
+
+const _scratchWindow = new Cesium.Cartesian2();
+/** World → CSS px. A seam for the unit tests, which have no WebGL scene. */
+const projectToWindow = (scene, position, result) => (
+  Cesium.SceneTransforms.worldToWindowCoordinates(scene, position, result)
+);
+let _projectToWindow = projectToWindow;
+/** The chrome the pins keep clear of — the overlay host's own inventory. */
+let _readChrome = worldOverlayUiOcclusionRects;
+
+const _scratchPinRect = { x: 0, y: 0, w: PIN_WIDTH_PX, h: PIN_HEIGHT_PX };
+
+/**
+ * The vehicles whose pin would be SEEN, in CSS px, ready for
+ * `selectSharedMobilityPins`.
+ *
+ * Runs once per arrival, never per frame. The view box is tested first — a
+ * latitude and longitude compare — so the proxy's prefetch margin, a third of
+ * a Paris answer, is never projected at all. A pin that would stand off the
+ * edge, or under the chrome the overlay host measures (the phone's search bar,
+ * its chips, its bottom sheet, the side rails), is not offered: on the phone
+ * that was five of the eight pins the rule placed.
+ * @returns {Array<{id: string, x: number, y: number, rank: number}>}
+ */
+function pinCandidates() {
+  const scene = _viewer?.scene;
+  const canvas = scene?.canvas;
+  const width = canvas?.clientWidth || 0;
+  const height = canvas?.clientHeight || 0;
+  if (!scene || !width || !height) return [];
+  const box = cameraSharedMobilityBox(_viewer);
+  const occluder = horizonOccluder(_viewer.camera);
+  const chrome = _readChrome();
+  const half = PIN_WIDTH_PX / 2;
+  const rise = PIN_TIP_GAP_PX + PIN_HEIGHT_PX;
+  const out = [];
+  for (const record of _records.values()) {
+    if (record.type !== 'vehicle') continue;
+    const selected = record.id === _selectedId;
+    const { lat, lon } = record.object;
+    if (box && !gbfsBoxContains(box, lat, lon) && !selected) continue;
+    if (!occluder.isPointVisible(record.position)) continue;
+    const screen = _projectToWindow(scene, record.position, _scratchWindow);
+    if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) continue;
+    // The selected vehicle is pinned wherever it is: its card points at it.
+    if (!selected) {
+      if (screen.x < half || screen.x > width - half || screen.y < rise || screen.y > height) continue;
+      _scratchPinRect.x = screen.x - half;
+      _scratchPinRect.y = screen.y - rise;
+      if (chrome.length && overlayRectIntersectsAny(_scratchPinRect, chrome)) continue;
+    }
+    out.push({ id: record.id, x: screen.x, y: screen.y, rank: record.pinRank });
+  }
+  return out;
+}
+
+/** The image a pinned record wears: its kind, its operator, and whether it is selected. */
+function pinImageFor(record) {
+  return sharedMobilityPinGlyph(record.object?.kind, {
+    color: record.operator?.color,
+    selected: record.id === _selectedId,
+  });
+}
+
+/**
+ * Re-choose the pinned vehicles for the view the camera is showing.
+ *
+ * A DIFF, not a rebuild: a pin that survives keeps its billboard, so a pan
+ * redraws only the pins that changed, and a surviving pin never blinks while
+ * the atlas resolves an image it already holds. Above {@link PIN_CEILING_M}
+ * every pin comes off except the selected one, which is the mark its card
+ * points at.
+ * @returns {number} How many pins are drawn after the pass.
+ */
+function refreshPins() {
+  if (!_pins) return 0;
+  const close = cameraAltitudeM(_viewer) <= PIN_CEILING_M;
+  let wanted;
+  if (close) {
+    wanted = selectSharedMobilityPins(pinCandidates(), {
+      incumbents: _pinnedIds,
+      forced: _selectedId,
+    });
+  } else {
+    wanted = _selectedId && _records.get(_selectedId)?.type === 'vehicle' ? [_selectedId] : [];
+  }
+  const next = new Set(wanted);
+  let changed = false;
+  for (const id of _pinnedIds) {
+    if (next.has(id)) continue;
+    const record = _records.get(id);
+    if (record?.pin) {
+      _pins.remove(record.pin);
+      record.pin = null;
+    }
+    changed = true;
+  }
+  for (const id of next) {
+    const record = _records.get(id);
+    if (!record) continue;
+    const image = pinImageFor(record);
+    if (record.pin) {
+      if (record.pin.image !== image) {
+        record.pin.image = image;
+        changed = true;
+      }
+      continue;
+    }
+    record.pin = _pins.add({
+      id,
+      position: record.position,
+      image,
+      width: PIN_WIDTH_PX,
+      height: PIN_HEIGHT_PX,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -PIN_TIP_GAP_PX),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      show: record.point?.show !== false,
+    });
+    changed = true;
+  }
+  _pinnedIds = next;
+  if (changed) governorRequestRender('shared-mobility-fr-pins');
+  return next.size;
+}
+
+/** Take every pin off, without choosing new ones. */
+function clearPins() {
+  if (_pins) _pins.removeAll();
+  for (const id of _pinnedIds) {
+    const record = _records.get(id);
+    if (record) record.pin = null;
+  }
+  _pinnedIds = new Set();
 }
 
 /**
@@ -1023,9 +1064,9 @@ function reconcile(payload) {
   const vehicles = Array.isArray(payload.vehicles) ? payload.vehicles : [];
   const systemsById = new Map((payload.systems || []).map((system) => [system.id, system]));
 
-  clearSelection();
+  clearSelection({ repin: false });
   _points.removeAll();
-  _billboards.removeAll();
+  if (_pins) _pins.removeAll();
   _records.clear();
   // A new set is a new situation: the deferred floor pass gets its budget back.
   resetFloorRetries();
@@ -1053,10 +1094,6 @@ function reconcile(payload) {
     drawn.push({ type: 'vehicle', id, object: vehicle });
   }
 
-  // Answered BEFORE the plates are built, so a reconcile that follows a zoom
-  // writes the right image once instead of writing it and then rewriting it.
-  updateMonogramGate(_viewer);
-
   const objects = drawn.map((entry) => entry.object);
   // Ground the cold cells against the surface actually being DRAWN before the
   // positions below are taken. Synchronous, no network of ours, ≤40 probes and
@@ -1070,7 +1107,7 @@ function reconcile(payload) {
     const position = objectPosition(object);
     const operator = operatorFor(object.system);
     if (entry.type === 'station') {
-      const color = stationColor(object);
+      const color = stationColor(object, operator.color);
       const size = stationPointSize(object);
       const point = _points.add({
         id,
@@ -1089,28 +1126,25 @@ function reconcile(payload) {
       });
       continue;
     }
-    const billboard = _billboards.add({
+    // Stations are all added above, so every vehicle dot paints over them.
+    const point = _points.add({
       id,
       position,
-      image: sharedMobilityGlyph(object.kind, {
-        initial: _monogramOn ? (operator.initial || null) : null,
-      }),
-      width: VEHICLE_GLYPH_PX,
-      height: VEHICLE_GLYPH_PX,
       color: Cesium.Color.fromCssColorString(operator.color),
-      // A glyph big enough to read at street level is a blanket over a whole
-      // city, so it rides a distance ramp down to roughly the speck the layer
-      // drew before it had shapes.
+      pixelSize: VEHICLE_DOT_PX,
+      outlineColor: Cesium.Color.fromCssColorString(VEHICLE_DOT_RIM_COLOR),
+      outlineWidth: VEHICLE_DOT_RIM_PX,
       scaleByDistance: new Cesium.NearFarScalar(
-        VEHICLE_GLYPH_SCALE.near, VEHICLE_GLYPH_SCALE.nearValue,
-        VEHICLE_GLYPH_SCALE.far, VEHICLE_GLYPH_SCALE.farValue,
+        VEHICLE_DOT_SCALE.near, VEHICLE_DOT_SCALE.nearValue,
+        VEHICLE_DOT_SCALE.far, VEHICLE_DOT_SCALE.farValue,
       ),
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
       translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 90_000, 0.3),
     });
     _records.set(id, {
       id, type: 'vehicle', object, system: systemsById.get(object.system) || {},
-      operator, billboard, position, baseColor: operator.color, baseSize: VEHICLE_GLYPH_PX,
+      operator, point, pin: null, pinRank: sharedMobilityPinRank(id),
+      position, baseColor: operator.color, baseSize: VEHICLE_DOT_PX,
     });
   }
 
@@ -1120,6 +1154,9 @@ function reconcile(payload) {
   // the tiles under a cell may not have streamed yet, and the DEM warm above
   // is fire-and-forget — nothing repositions what it resolves.
   if (pending || hasColdFloor(objects)) scheduleFloorRetry();
+  // `_pinnedIds` still names the last pass's pins, and they are offered
+  // first: a poll that brought the same fleet back keeps the same landmarks.
+  refreshPins();
   governorRequestRender('shared-mobility-fr-reconcile');
 }
 
@@ -1150,6 +1187,8 @@ function reanchor() {
     record.position = next;
     const primitive = recordPrimitive(record);
     if (primitive) primitive.position = next;
+    // A pin stands on its dot; one left behind would point at the ellipsoid.
+    if (record.pin) record.pin.position = next;
     moved += 1;
   }
   // The selected card is anchored on the record's position, so it has to be
@@ -1209,10 +1248,10 @@ function resetFloorRetries() {
 }
 
 function clearFleet() {
-  clearSelection();
+  clearSelection({ repin: false });
   resetFloorRetries();
+  clearPins();
   if (_points) _points.removeAll();
-  if (_billboards) _billboards.removeAll();
   _records.clear();
   _count = 0;
 }
@@ -1332,16 +1371,16 @@ function onCameraSettled() {
   _cameraDebounceTimer = null;
   resetFloorRetries();
   scheduleFloorRetry();
-  // A zoom that stays inside the view already read reloads nothing — and a zoom
-  // is exactly what decides whether a monogram can be resolved. So the gate is
-  // answered here, on arrival, and not only on the load path.
-  if (updateMonogramGate(_viewer)) syncMonograms();
+  // A zoom or a pan that stays inside the view already read reloads nothing —
+  // and it is exactly what moves the vehicles across the screen. So the pins
+  // are chosen again here, on arrival, and not only on the load path.
+  refreshPins();
   void loadViewport();
 }
 
 /** Deterministic subsample of rendered objects for the detection overlay. */
 function collectDetectableObjects(options = {}) {
-  if (!_enabled || !(_points?.show || _billboards?.show) || !_records.size) return [];
+  if (!_enabled || !_points?.show || !_records.size) return [];
   const records = [];
   for (const record of _records.values()) {
     if (!recordPrimitive(record)?.show && record.id !== _selectedId) continue;
@@ -1490,13 +1529,14 @@ const sharedMobilityFranceLayer = {
     _points = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
     _points.show = false;
     viewer.scene.primitives.add(_points);
-    _billboards = new Cesium.BillboardCollection({ scene: viewer.scene });
-    _billboards.show = false;
-    viewer.scene.primitives.add(_billboards);
-    // Registered in this order so a vehicle glyph paints OVER the dock dot it
-    // is parked next to, and both stay inside this layer's sprite slot.
+    _pins = new Cesium.BillboardCollection({ scene: viewer.scene });
+    _pins.show = false;
+    viewer.scene.primitives.add(_pins);
+    // Registered in this order so a pin paints OVER the dots it stands among,
+    // and both stay inside this layer's sprite slot.
     registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _points);
-    registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _billboards);
+    registerSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _pins);
+    _pinnedIds = new Set();
 
     _enabled = false;
     _records = new Map();
@@ -1522,7 +1562,7 @@ const sharedMobilityFranceLayer = {
     _enabled = true;
     _error = null;
     _points.show = true;
-    _billboards.show = true;
+    _pins.show = true;
     _overlayHost.setVisible(SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID, true);
     installClickHandler(viewer);
     registerPickOwner(SHARED_MOBILITY_FR_LAYER_ID, (pickedId) => _records.has(pickedId));
@@ -1572,7 +1612,7 @@ const sharedMobilityFranceLayer = {
     }
 
     _points.show = false;
-    _billboards.show = false;
+    _pins.show = false;
     _loading = false;
     _status = 'idle';
     _systems = [];
@@ -1836,11 +1876,12 @@ const sharedMobilityFranceLayer = {
       viewer.scene.primitives.remove(_points);
       _points = null;
     }
-    if (_billboards) {
-      unregisterSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _billboards);
-      viewer.scene.primitives.remove(_billboards);
-      _billboards = null;
+    if (_pins) {
+      unregisterSpriteCollection(SHARED_MOBILITY_FR_LAYER_ID, _pins);
+      viewer.scene.primitives.remove(_pins);
+      _pins = null;
     }
+    _pinnedIds = new Set();
     resetFloorRetries();
     _records.clear();
     _lastPayload = null;
@@ -1849,35 +1890,30 @@ const sharedMobilityFranceLayer = {
   },
 };
 
-/** Seed rendered records so selection/card/legend paths run without WebGL. */
-export function _setSharedMobilityStateForTest({ viewer, records, overlayHost }) {
+/**
+ * Seed rendered records so selection/card/legend/pin paths run without WebGL.
+ * `pins` stands in for the billboard collection, `project` for Cesium's
+ * world-to-window transform and `chrome` for the overlay host's UI rectangles.
+ */
+export function _setSharedMobilityStateForTest({ viewer, records, overlayHost, pins, project, chrome }) {
   _viewer = viewer || null;
   _records = new Map((records || []).map((record) => [record.id, record]));
   _selectedId = null;
-  _monogramOn = false;
+  _pinnedIds = new Set();
+  _pins = pins || null;
+  _projectToWindow = project || projectToWindow;
+  _readChrome = chrome ? () => chrome : worldOverlayUiOcclusionRects;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
 }
 
-/**
- * Drive the production zoom gate at a given camera altitude.
- * @param {number} altitudeM
- * @returns {{on: boolean, flipped: boolean, rewritten: number}}
- */
-export function _setSharedMobilityAltitudeForTest(altitudeM) {
-  const viewer = { camera: { positionCartographic: { height: altitudeM } } };
-  const flipped = updateMonogramGate(viewer);
-  return { on: _monogramOn, flipped, rewritten: flipped ? syncMonograms() : 0 };
+/** Drive the production pin pass over the seeded records. */
+export function _refreshSharedMobilityPinsForTest() {
+  return { drawn: refreshPins(), pinned: [..._pinnedIds] };
 }
 
-/** The altitude the monogram switches at, derived from the ramp. */
-export function _sharedMobilityMonogramCeilingForTest() {
-  return {
-    ceilingM: monogramAltitudeCeilingM(),
-    glyphPx: VEHICLE_GLYPH_PX,
-    scale: VEHICLE_GLYPH_SCALE,
-    minDrawnPx: MONOGRAM_MIN_DRAWN_PX,
-    drawnPxAt: (distance) => VEHICLE_GLYPH_PX * rampScaleAt(distance),
-  };
+/** The pin gate and footprint, for tests that pin the mock's rules. */
+export function _sharedMobilityPinGeometryForTest() {
+  return { ceilingM: PIN_CEILING_M, widthPx: PIN_WIDTH_PX, heightPx: PIN_HEIGHT_PX, tipGapPx: PIN_TIP_GAP_PX };
 }
 
 /** Exercise the production selection path in focused runtime tests. */

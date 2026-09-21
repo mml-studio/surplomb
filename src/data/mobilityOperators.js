@@ -85,31 +85,71 @@ export const MOBILITY_OPERATOR_UNKNOWN_COLOR = '#6b7a8a';
  *
  * The ring carries the operator (above); the fill carries the one number a
  * rider acts on. `bikeshare.js` and `sharedMobilityFrance.js` both paint it,
- * and over Paris both are on screen at once, so the thresholds and the hues
+ * and over Paris both are on screen at once, so the thresholds and the tones
  * live here once. `full` is above 60 %, `half` from 30 %, `low` under it.
+ *
+ * THE OPERATOR'S OWN HUE, POURED IN — SINCE 2026-09-21. The fill was a
+ * traffic light, green, orange, red, on a map where every hue already names an
+ * operator: over the landing's Paris view that put three greens side by side
+ * (Lime's vehicles, Vélib's ring and a « bien remplie » dock), Voi's red
+ * beside « presque vide » and YEGO's yellow beside « à moitié ». A dock is
+ * now filled with its OWN ring's hue, as far as it is full: a solid disc when
+ * it is well stocked, a tint at half, and an empty ring when there is nearly
+ * nothing to rent. No level borrows a hue, and an emptied dock spends the
+ * least ink of all — a lightness ramp measured first gave the dark « empty »
+ * core the most weight on the map, and a white « full » core that read as
+ * hollow on the light basemap.
+ */
+export const MOBILITY_DOCK_LEVEL_ALPHA = Object.freeze({
+  full: 1,
+  half: 0.42,
+  // Not zero: a fragment that transparent is discarded, pick pass included,
+  // and the middle of an empty ring would stop answering a click.
+  low: 0.1,
+});
+
+/**
+ * The two states that are NOT a level — no data, and closed. Greys, faded, so
+ * « we do not know » never reads as « empty ».
  */
 export const MOBILITY_DOCK_FILL = Object.freeze({
-  full: '#00ff88',
-  half: '#ffaa00',
-  low: '#ff4444',
   unknown: '#91a4b4',
   closed: '#687581',
 });
+const DOCK_STATE_ALPHA = Object.freeze({ unknown: 0.6, closed: 0.45 });
+
+/**
+ * The CSS fill of one dock.
+ * @param {'full'|'half'|'low'|'unknown'|'closed'} level
+ * @param {string} operatorColor The ring's hue, `#rrggbb`.
+ * @returns {string} `rgba(…)`.
+ */
+export function mobilityDockFill(level, operatorColor) {
+  const state = MOBILITY_DOCK_FILL[level];
+  const alpha = state ? DOCK_STATE_ALPHA[level] : (MOBILITY_DOCK_LEVEL_ALPHA[level] ?? DOCK_STATE_ALPHA.unknown);
+  const hex = state || (/^#[0-9a-f]{6}$/i.test(operatorColor || '') ? operatorColor : MOBILITY_DOCK_FILL.unknown);
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Swatch tone of the fill key: the levels are a property of every ring, not of one operator. */
+const DOCK_LEGEND_TONE = '#eef3f8';
 
 /**
  * The three dock-fill lines of the key, in the page's language.
  *
  * Only the three a rider acts on: « unknown » and « closed » are greys that
  * read as absence without a key, and every line spent on them pushes the
- * operators down the card.
+ * operators down the card. Drawn in a neutral tone at each level's opacity —
+ * solid, tinted, all but empty — because the map pours each operator's own hue.
  * @returns {Array<{label:string, color:string, channel:string}>}
  */
 export function dockFillLegend() {
   const m = messages().legend;
   return [
-    { label: m.full, color: MOBILITY_DOCK_FILL.full, channel: m.docks },
-    { label: m.half, color: MOBILITY_DOCK_FILL.half, channel: m.docks },
-    { label: m.low, color: MOBILITY_DOCK_FILL.low, channel: m.docks },
+    { label: m.full, color: mobilityDockFill('full', DOCK_LEGEND_TONE), channel: m.docks },
+    { label: m.half, color: mobilityDockFill('half', DOCK_LEGEND_TONE), channel: m.docks },
+    { label: m.low, color: mobilityDockFill('low', DOCK_LEGEND_TONE), channel: m.docks },
   ];
 }
 
@@ -151,7 +191,9 @@ const CURATED_OPERATORS = Object.freeze([
   { id: 'bird', label: 'Bird', slot: 16, match: ['bird'] },
   { id: 'pony', label: 'Pony', slot: 11, match: ['pony'] },
   { id: 'yego', label: 'YEGO', slot: 3, match: ['yego'] },
-  { id: 'cityscoot', label: 'Cityscoot', slot: 10, match: ['cityscoot'] },
+  // Green, where Vélib' stood until 2026-09-21: Cityscoot went bankrupt in
+  // 2024 and none of the 165 catalogued systems is still its own.
+  { id: 'cityscoot', label: 'Cityscoot', slot: 5, match: ['cityscoot'] },
 
   // ── Carsharing ──────────────────────────────────────────────────────────
   { id: 'citiz', label: 'Citiz', slot: 1, match: ['citiz'] },
@@ -159,7 +201,10 @@ const CURATED_OPERATORS = Object.freeze([
   { id: 'leo-and-go', label: 'Leo&Go', slot: 14, match: ['leo go', 'leoandgo', 'leogo'] },
 
   // ── The four docked networks the Bikeshare layer draws ──────────────────
-  { id: 'velib', label: "Vélib'", slot: 5, match: ['velib', 'velib metropole'] },
+  // Violet, not the green of its bikes: Vélib' shares every Paris street with
+  // Lime's lime and Clem's emerald, and three greens in one key is two
+  // operators too many. Separability wins, as the header says.
+  { id: 'velib', label: "Vélib'", slot: 10, match: ['velib', 'velib metropole'] },
   { id: 'velov', label: "Vélo'v", slot: 12, match: ['velov'] },
   { id: 'velotoulouse', label: 'VélÔToulouse', slot: 2, match: ['velotoulouse'] },
   { id: 'levelo-tbm', label: 'Le Vélo (TBM)', slot: 9, match: ['tbm', 'le velo tbm'] },

@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  sharedMobilityPinGlyph,
   sharedMobilityGlyph,
   sharedMobilityGlyphKind,
   sharedMobilityMonogramGlyph,
@@ -263,4 +264,25 @@ test('nothing runs off the 96 box — plate, ring or badge', () => {
       assert.ok(Number(ty) + side <= VIEW + 0.5, `${kind}: punch runs off the bottom`);
     }
   }
+});
+
+test('the pin bakes its operator\'s hue, draws the kind in white, and has a selected twin', () => {
+  // Three colours share a pin — dark disc, white silhouette, operator ring —
+  // which a multiply cannot make from one white sprite, so the hue is baked.
+  const decode = (uri) => Buffer.from(uri.split(',')[1], 'base64').toString('utf8');
+  const lime = sharedMobilityPinGlyph('ebike', { color: '#b6f03c' });
+  const svg = decode(lime);
+  assert.match(svg, /fill="#b6f03c"/);
+  assert.match(svg, /<g fill="#ffffff"/);
+  assert.match(svg, /viewBox="0 0 96 124"/);
+  // Same kind, another operator: another image. Same pair: the cached one.
+  assert.notEqual(sharedMobilityPinGlyph('ebike', { color: '#ff4d4d' }), lime);
+  assert.equal(sharedMobilityPinGlyph('ebike', { color: '#b6f03c' }), lime);
+  // Every kind its own pin, so the shape channel survives the move off the plate.
+  const kinds = ['bike', 'ebike', 'scooter', 'moped', 'car', 'other'];
+  assert.equal(new Set(kinds.map((kind) => sharedMobilityPinGlyph(kind, { color: '#b6f03c' }))).size, kinds.length);
+  // Selected: the cyan ring every layer selects with, whatever the operator.
+  const selected = decode(sharedMobilityPinGlyph('ebike', { color: '#b6f03c', selected: true }));
+  assert.match(selected, /fill="#00ffff"/);
+  assert.doesNotMatch(selected, /#b6f03c/);
 });

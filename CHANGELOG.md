@@ -126,6 +126,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Shared vehicles are dots, and a few of them wear a pin.** Over the landing
+  page's Paris view the globe drew 2,175 parked vehicles as 20 px plates, a
+  carpet that covered the street it stood on. Every vehicle is now a dot of
+  8 px in its operator's colour, and close to the street (below 3.5 km) a
+  handful of them — never two within 200 px on screen — carry a pin that
+  shows what the vehicle is: 24 pins on a desktop, 5 on a phone, none from
+  higher up, where the dots say it all. Pins keep clear of the phone's search
+  bar, its chips, its bottom sheet and the side panels, stay on the same
+  vehicles from one poll or short pan to the next, and a selected vehicle
+  always gets one, in cyan. Docks are now filled with their own operator's
+  colour as far as they are full: a solid disc when well stocked, a tint at
+  half, an empty ring when nearly empty — the green-orange-red fill put three
+  greens side by side over Paris (Lime's vehicles, the Vélib' ring, a « bien
+  remplie » dock). Vélib' moves from green to violet for the same reason.
+  The operator's initial no longer appears on the map.
 - **The shared-bike key became « Mobilités partagées »: a family control,
   operators by name, and one press that focuses the whole row.** The key over
   Paris used to print the same population twice (`VAE 5.2K · Scooter 797`,

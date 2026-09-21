@@ -91,9 +91,12 @@ export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   // rectangles and re-reads them on layout, which a height transition is.
   '#phone-sheet',
   // The phone's search bar and its row of layer chips, and the basemap panel
-  // that opens over the sheet. The bar's box is the whole top band; a card
-  // parked under it would be read through a search field.
-  '#phone-topbar',
+  // that opens over the sheet. A card parked under them would be read through
+  // a search field. Named ONE BY ONE: their parent `#phone-topbar` is
+  // `display: contents` (`phone.css`), so its own box is 0 × 0 and, listed
+  // alone until 2026-09-21, excluded nothing at all.
+  '#phone-search',
+  '#phone-layer-chips',
   '#phone-basemap-sheet',
   '#style-indicator',
   '#top-center-actions',
@@ -1222,6 +1225,20 @@ export function overlayRectIntersectsAny(rect, exclusions, count = exclusions.le
       && rect.y < other.y + other.h && rect.y + rect.h > other.y) return true;
   }
   return false;
+}
+
+/**
+ * The UI chrome rectangles the host last measured — canvas-relative CSS px,
+ * padded, one per element of {@link WORLD_OVERLAY_OCCLUDER_SELECTORS}.
+ *
+ * READ-ONLY and live: the array and its objects are pooled and rewritten on
+ * the next layout. It is here for a layer that places its own screen marks —
+ * the shared-mobility pins — and wants the rule the cards already follow: a
+ * mark parked under the search bar or the bottom sheet is simply lost.
+ * @returns {ReadonlyArray<{x:number, y:number, w:number, h:number, hard:boolean}>}
+ */
+export function worldOverlayUiOcclusionRects() {
+  return _uiOcclusionRects;
 }
 
 /**

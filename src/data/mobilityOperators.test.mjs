@@ -8,6 +8,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   curatedMobilityOperators,
+  dockFillLegend,
+  mobilityDockFill,
   mobilityOperatorColor,
   mobilityOperatorShortLabel,
   normalizeOperatorText,
@@ -163,4 +165,36 @@ test('resolution is stable and cached — the same title never changes colour mi
   const second = resolveMobilityOperator('Vélam Amiens');
   assert.equal(first, second, 'same frozen descriptor, so nothing downstream can mutate it');
   assert.throws(() => { first.color = '#000000'; }, TypeError);
+});
+
+test('a dock is filled with its own hue, and an emptied dock spends the least ink', () => {
+  // The traffic light this replaced put a « bien remplie » green beside Lime's
+  // lime and Vélib's ring, and a « presque vide » red beside Voi. A level made
+  // of the ring's own hue cannot collide with another operator.
+  const vélib = resolveMobilityOperator("Vélib' Métropole").color;
+  const alpha = (css) => Number(css.match(/,([\d.]+)\)$/)[1]);
+  const full = mobilityDockFill('full', vélib);
+  const half = mobilityDockFill('half', vélib);
+  const low = mobilityDockFill('low', vélib);
+  for (const css of [full, half, low]) {
+    assert.ok(css.startsWith(`rgba(${[1, 3, 5].map((i) => parseInt(vélib.slice(i, i + 2), 16)).join(',')},`), css);
+  }
+  assert.ok(alpha(full) > alpha(half) && alpha(half) > alpha(low));
+  // Never zero: a fully transparent fragment is discarded, and the middle of an
+  // empty ring would stop answering a click.
+  assert.ok(alpha(low) > 0);
+  // « We do not know » is a grey, not a level, whatever the ring.
+  assert.equal(mobilityDockFill('unknown', vélib), mobilityDockFill('unknown', '#ff4d4d'));
+  // The key says it in the same three steps.
+  const legend = dockFillLegend();
+  assert.deepEqual(legend.map((row) => row.label), ['bien remplie', 'à moitié', 'presque vide']);
+  assert.ok(alpha(legend[0].color) > alpha(legend[1].color) && alpha(legend[1].color) > alpha(legend[2].color));
+});
+
+test("Vélib' is no longer a third green beside Lime and Clem'", () => {
+  const colorOf = (name) => resolveMobilityOperator(name).color;
+  const vélib = colorOf("Vélib' Métropole");
+  for (const other of ['Lime Paris', 'Clem', 'Voi Paris', 'Dott Paris', 'YEGO Paris', 'Citiz Développement']) {
+    assert.ok(colorDistance(vélib, colorOf(other)) >= 150, `Vélib' vs ${other}`);
+  }
 });

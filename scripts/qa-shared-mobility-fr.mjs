@@ -13,10 +13,11 @@
  *   iii. the row legend counts what is on screen, by kind, omitting zeroes
  *   iv.  the layer reports the shared municipal bays it merged out, instead of
  *        silently drawing three dots on every bay in the city
- *   v.   SHAPE says what an object is — each vehicle kind reaches the scene as
- *        its own glyph, and no two kinds share one
+ *   v.   SHAPE rides the pin — every vehicle is a dot, and close to the street
+ *        a few of them, never two within 200 px, wear a pin with their kind's
+ *        silhouette; no two kinds share one
  *   vi.  COLOUR says who runs it — a vehicle is drawn in its operator's hue and
- *        a station is RINGED in it while its fill stays spent on availability,
+ *        a station is RINGED in it and filled with it as far as it is full,
  *        so two operators in one street are tellable apart
  *
  * Run: node scripts/qa-shared-mobility-fr.mjs --url http://localhost:4173
@@ -207,31 +208,38 @@ function probe(page) {
     // The collections are found by the id of the objects inside them, so this
     // cannot accidentally sample another layer's sprites.
     const ellipsoid = gev.viewer.scene.globe?.ellipsoid || gev.viewer.scene.ellipsoid;
+    // Stations and vehicle dots share one point collection since 2026-09-21,
+    // and the pins have their own; every collection is read, and an item is
+    // told apart by what it is — a pin carries an image, a dot does not.
     const scan = (prefix) => {
       const primitives = gev.viewer.scene.primitives;
+      const drawn = [];
       for (let i = 0; i < primitives.length; i++) {
         const collection = primitives.get(i);
         if (typeof collection?.get !== 'function' || !collection.length) continue;
         const first = collection.get(0);
-        if (typeof first?.id !== 'string' || !first.id.startsWith(prefix)) continue;
-        const drawn = [];
+        if (typeof first?.id !== 'string' || !first.id.startsWith('gbfs-')) continue;
         for (let n = 0; n < collection.length; n++) {
           const item = collection.get(n);
+          if (typeof item.id !== 'string' || !item.id.startsWith(prefix)) continue;
           // The ANCHOR, read off the primitive rather than off the layer's
           // own record: a record that agrees with the ground while the sprite
           // does not is the bug with a passing test.
           const carto = item.position ? ellipsoid.cartesianToCartographic(item.position) : null;
+          const screen = item.image && item.position
+            ? gev.viewer.scene.cartesianToCanvasCoordinates(item.position)
+            : null;
           drawn.push({
             id: item.id,
             image: item.image || null,
             color: item.color?.toCssHexString?.() || null,
             outline: item.outlineColor?.toCssHexString?.() || null,
             height: carto ? carto.height : null,
+            screen: screen ? { x: screen.x, y: screen.y } : null,
           });
         }
-        return drawn;
       }
-      return [];
+      return drawn;
     };
 
     return {
@@ -245,7 +253,9 @@ function probe(page) {
       segments: (module.getRowControls().legendSegments || []).map((segment) => segment.label),
       detections: module.getDetectableObjects({ maxCount: 100000 }).map((entry) => entry.id),
       rendered: module.getDetectableObjects({ maxCount: 100000 }).length,
-      glyphs: scan('gbfs-float'),
+      glyphs: scan('gbfs-float').filter((item) => !item.image && !item.id.includes('bay')),
+      pins: scan('gbfs-float').filter((item) => item.image),
+      bays: scan('gbfs-float').filter((item) => !item.image && item.id.includes('bay')),
       dots: scan('gbfs-dock'),
     };
   });
@@ -335,13 +345,13 @@ async function main() {
     console.log('[qa] ii-bis. the fleet stands on the ground');
     let anchored = loaded;
     for (let attempt = 0; attempt < 25; attempt++) {
-      const heights = [...anchored.dots, ...anchored.glyphs].map((item) => item.height);
+      const heights = [...anchored.dots, ...anchored.bays, ...anchored.glyphs].map((item) => item.height);
       if (heights.length && heights.every((h) => Number.isFinite(h) && h > GROUND_FLOOR_MIN_M)) break;
       await pump(page, 3, 60);
       await sleep(400);
       anchored = await probe(page);
     }
-    const anchorHeights = [...anchored.dots, ...anchored.glyphs].map((item) => item.height);
+    const anchorHeights = [...anchored.dots, ...anchored.bays, ...anchored.glyphs].map((item) => item.height);
     const buried = anchorHeights.filter((h) => !Number.isFinite(h) || h <= GROUND_FLOOR_MIN_M).length;
     const lowest = anchorHeights.length ? Math.min(...anchorHeights) : null;
     const highest = anchorHeights.length ? Math.max(...anchorHeights) : null;
@@ -401,27 +411,75 @@ async function main() {
       !loaded.detections.some((id) => /_ZID[A-Z0-9]{6,}|_PARKING_/.test(id)),
       loaded.detections.filter((id) => /_ZID|_PARKING_/.test(id)).join(' | '));
 
-    // ── v. SHAPE says what an object is ────────────────────────────────────
+    // ── v. SHAPE rides the pin ─────────────────────────────────────────────
     console.log('[qa] v. shape channel');
-    const byKind = new Map();
-    for (const glyph of loaded.glyphs) byKind.set(glyph.image, (byKind.get(glyph.image) || 0) + 1);
-    check('every vehicle reaches the scene as a glyph, not a dot',
-      loaded.glyphs.length === 20 && loaded.glyphs.every((glyph) => typeof glyph.image === 'string'
-        && glyph.image.startsWith('data:image/svg+xml')),
-      `${loaded.glyphs.length} glyph(s)`);
-    check('the four kinds in view draw four DIFFERENT silhouettes',
-      byKind.size === 4, `${byKind.size} distinct image(s)`);
-    check('and five of each, so no kind borrowed another\'s shape',
-      [...byKind.values()].every((count) => count === 5), JSON.stringify([...byKind.values()]));
+    check('every vehicle reaches the scene as a dot',
+      loaded.glyphs.length === 20 && loaded.glyphs.every((dot) => dot.image === null),
+      `${loaded.glyphs.length} dot(s)`);
+    check('and from the city view no vehicle is pinned — the dots carry it',
+      loaded.pins.length === 0, `${loaded.pins.length} pin(s) at 6 km`);
     // Since 2026-09-21 the key names FAMILIES as a segmented control rather
     // than reprinting the silhouettes: e-bike and bike are one « Vélos ».
     check('the key offers one segment per family on screen, after « Tous »',
       JSON.stringify(loaded.segments) === JSON.stringify(['Tous', 'Vélos', 'Trottinettes', 'Scooters']),
       JSON.stringify(loaded.segments));
 
+    // Down to 2.4 km over the middle of the fleet — under the pins' ceiling,
+    // with the fixture's vehicles ~260 px apart, so each one clear of the side
+    // panels has room for its own pin.
+    await setView(page, CITY.lon + 0.016, CITY.lat + 0.0115, 2_400);
+    // The pins are chosen on arrival and again when the answer for the new
+    // view lands, so this waits for a set that two reads agree on.
+    let street = await probe(page);
+    let previous = '';
+    for (let attempt = 0; attempt < 25; attempt++) {
+      await pump(page, 3, 60);
+      await sleep(400);
+      street = await probe(page);
+      const signature = street.pins.map((pin) => pin.id).sort().join(',');
+      if (signature && signature === previous && !street.stats.loading) break;
+      previous = signature;
+    }
+    const kindById = new Map(payload.vehicles.map((vehicle) => [vehicle.id, vehicle.kind]));
+    const systemById = new Map(payload.vehicles.map((vehicle) => [vehicle.id, vehicle.system]));
+    check('close to the street, vehicles wear pins',
+      street.pins.length >= 4, `${street.pins.length} pin(s) at 2.4 km`);
+    check('every pin stands on a vehicle of the answer',
+      street.pins.every((pin) => kindById.has(pin.id)), street.pins.map((pin) => pin.id).join(', '));
+    const imageByKey = new Map();
+    let shared = 0;
+    for (const pin of street.pins) {
+      const key = `${systemById.get(pin.id)}|${kindById.get(pin.id)}`;
+      if (imageByKey.has(key) && imageByKey.get(key) !== pin.image) shared = -1;
+      imageByKey.set(key, pin.image);
+    }
+    const imagesByOperator = new Map();
+    for (const [key, image] of imageByKey) {
+      const [system] = key.split('|');
+      if (!imagesByOperator.has(system)) imagesByOperator.set(system, []);
+      imagesByOperator.get(system).push(image);
+    }
+    for (const images of imagesByOperator.values()) {
+      if (new Set(images).size !== images.length) shared += 1;
+    }
+    check('a pin wears its vehicle\'s kind: one image per kind and operator, no two kinds alike',
+      shared === 0 && imageByKey.size >= 3, `${imageByKey.size} kind×operator image(s), clash=${shared}`);
+    const onScreen = street.pins.filter((pin) => pin.screen);
+    let closest = Infinity;
+    for (let i = 0; i < onScreen.length; i++) {
+      for (let j = i + 1; j < onScreen.length; j++) {
+        closest = Math.min(closest, Math.hypot(onScreen[i].screen.x - onScreen[j].screen.x,
+          onScreen[i].screen.y - onScreen[j].screen.y));
+      }
+    }
+    check('and no two pins stand within 200 px of each other',
+      onScreen.length < 2 || closest >= 200, `closest pair ${Math.round(closest)} px`);
+    await shoot(page, '03-pins.png');
+    await setView(page, CITY.lon, CITY.lat, 6_000);
+
     // ── vi. COLOUR says who runs it ────────────────────────────────────────
     console.log('[qa] vi. operator channel');
-    const hueById = new Map(loaded.glyphs.map((glyph) => [glyph.id, glyph.color]));
+    const hueById = new Map(loaded.glyphs.map((dot) => [dot.id, dot.color]));
     const pony = [...hueById].filter(([id]) => id.startsWith('gbfs-float:')).map(([, hue]) => hue);
     const lime = [...hueById].filter(([id]) => id.startsWith('gbfs-float-b:')).map(([, hue]) => hue);
     check('every vehicle of one operator is drawn in one hue',
@@ -429,11 +487,13 @@ async function main() {
       `${new Set(pony).size} / ${new Set(lime).size}`);
     check('and the two operators in the same street are NOT the same hue',
       pony[0] !== lime[0], `${pony[0]} vs ${lime[0]}`);
-    const ponyShapes = new Set(loaded.glyphs.filter((glyph) => glyph.id.startsWith('gbfs-float:'))
-      .map((glyph) => glyph.image));
-    check('the two channels are independent — one operator, four silhouettes, one hue',
-      ponyShapes.size === 4 && new Set(pony).size === 1,
-      `${ponyShapes.size} shape(s), ${new Set(pony).size} hue(s)`);
+    const ponyShapes = new Set(street.pins.filter((pin) => pin.id.startsWith('gbfs-float:'))
+      .map((pin) => pin.image));
+    const ponyKinds = new Set(street.pins.filter((pin) => pin.id.startsWith('gbfs-float:'))
+      .map((pin) => kindById.get(pin.id)));
+    check('the two channels are independent — one operator, a silhouette per kind, one hue',
+      ponyShapes.size === ponyKinds.size && ponyKinds.size >= 2 && new Set(pony).size === 1,
+      `${ponyShapes.size} shape(s) for ${ponyKinds.size} kind(s), ${new Set(pony).size} hue(s)`);
     // The Naolib docks only — the Pony bay is ringed in ITS operator's hue,
     // which is the whole point of the channel and would break a "one hue" read.
     const dockDots = loaded.dots.filter((dot) => dot.id.startsWith('gbfs-dock:'));
@@ -441,8 +501,9 @@ async function main() {
     check('a station is RINGED in its operator hue',
       dockDots.length === 12 && stationHues.size === 1 && stationHues.has([...stationHues][0]),
       JSON.stringify([...stationHues]));
-    check('while its FILL still answers availability, not ownership',
-      new Set(dockDots.map((dot) => dot.color)).size >= 3,
+    check('while its FILL still answers availability, in its own hue',
+      new Set(dockDots.map((dot) => dot.color)).size >= 3
+        && dockDots.some((dot) => dot.color?.slice(0, 7) === dot.outline?.slice(0, 7)),
       JSON.stringify([...new Set(dockDots.map((dot) => dot.color))]));
     const operatorRows = loaded.legendRows.filter((row) => row.channel === 'Fournisseurs');
     check('every named operator line is a switch offered to the whole row',
@@ -454,7 +515,7 @@ async function main() {
     check('and the detection readout says whose vehicle it is',
       loaded.detections.some((id) => id.startsWith('LIME ')) && loaded.detections.some((id) => id.startsWith('PONY ')),
       loaded.detections.slice(0, 4).join(' | '));
-    await shoot(page, '03-channels.png');
+    await shoot(page, '04-channels.png');
 
     const relevant = consoleErrors.filter((entry) => !/favicon|Failed to load resource/i.test(entry));
     check('no console errors from the layer',
