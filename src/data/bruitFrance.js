@@ -16,7 +16,9 @@ import {
 import { formatDate, formatDecimal, formatNumber } from '../i18n/format.js';
 import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
 import messages from './bruitFrance.i18n.js';
-import { pointInPolygons } from './ringGeometry.js';
+import { INTER_CAPITALS, interOutlineMarkup } from './interCapitals.js';
+import { INTER_DIGITS } from './interDigits.js';
+import { pointInPolygons, ringLabelAnchor } from './ringGeometry.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 
 /**
@@ -292,14 +294,26 @@ export const BRUIT_UNKNOWN_ZONE_COLOR = '#c9d4e0';
  * say so. {@link ZONE_FILL_MAX_ALPHA} is imported from that module rather than
  * copied, so its ceiling and this layer's cannot drift apart.
  *
- *   winner  0.42  the band the rule chose — the answer
- *   inside  0.30  another band that also contains the point
- *   nearby  0.22  a band the buffer returned beside the point, dashed as well
+ * THE STROKE CARRIES THE BAND; THE WASH ONLY MARKS THE ANSWER. The first
+ * ladder washed every band between 0.22 and 0.42, and four nested plans at
+ * that weight laid a tinted sheet over the whole airport — at Roissy zone D
+ * alone is a 65.8 km ring — so the photograph a reader came to look at was the
+ * thing the layer hid. A PEB is nested contours, and contours read from their
+ * lines, so only the band the rule chose keeps a readable wash. Every other
+ * band sits UNDER the measured 0.22 floor on purpose: its outline and its
+ * badge name it, and what is left of the wash is a tint that says which side
+ * of a line the band lies on — which a bare contour does not say, and a
+ * hole-cut ring is exactly where it matters. Clicks do not depend on it: a
+ * pick on bare ground reaches `bruitGroundCard` as well as a pick on a wash.
+ *
+ *   winner  0.28  the band the rule chose — the answer ("readable")
+ *   inside  0.14  another band that also contains the point
+ *   nearby  0.10  a band the buffer returned beside the point, dashed as well
  */
 export const BRUIT_FILL_ALPHA = Object.freeze({
-  winner: 0.42,
-  inside: 0.30,
-  nearby: 0.22,
+  winner: 0.28,
+  inside: 0.14,
+  nearby: 0.10,
 });
 
 /** The stroke on the boundary itself, over its own wash. */
@@ -329,6 +343,272 @@ const BRUIT_DASH_LENGTH_PX = 18;
  * metres wide, and 0.0004° is about 30 m of longitude at 45°N.
  */
 export const BRUIT_LABEL_MIN_WIDTH_DEG = 0.0004;
+
+/**
+ * The badge a zone's code is written on, in CSS pixels.
+ *
+ * ON THE LINE, NOT IN THE BAND. Once the wash is only a tint (see
+ * {@link BRUIT_FILL_ALPHA}) a letter floating between two contours names
+ * neither of them: the reader cannot tell whether the `B` belongs to the line
+ * above it or the one below. So the code sits ON its band's outer ring and
+ * interrupts it, the way a contour label does on a topographic map. Holes are
+ * not labelled: a hole's edge is the next zone's outer ring, which carries
+ * that zone's own badge.
+ */
+export const BRUIT_BADGE_PX = 22;
+
+/**
+ * How far apart two badges must sit on the ground, in metres.
+ *
+ * Badges are pinned to the ground and the camera is not, so no single distance
+ * keeps them apart at every altitude. Each number is chosen for the altitude
+ * where its mode is READ: 30 px (the badge plus 8 px of air) at the top of the
+ * mode, on a 1,440-px-wide window looking straight down, where the ground
+ * spans 2·tan 30° ≈ 1.155 × the altitude.
+ *
+ *   point  300 m   30 px at 12 km, the ceiling of the point scan
+ *   area   750 m   30 px at 30 km, the altitude below which the overview waits
+ *                  for fine outlines — where a reader dezooms to see one plan
+ *
+ * Below those altitudes badges only draw further apart. Above them they can
+ * touch, and the overview shrinks them with distance
+ * ({@link BRUIT_AREA_LABEL_SCALE}) before fading them out.
+ */
+export const BRUIT_BADGE_SEPARATION_M = Object.freeze({ point: 300, area: 750 });
+
+/**
+ * A second piece of the same band gets its own badge only if it is at least
+ * this share of the widest piece. Measured on the 2026-09-21 overview around
+ * Roissy (18 aerodromes, 72 bands): Roissy's two zone-A lobes are 8.05 and
+ * 8.00 km wide and both deserve a badge, while Orly's PGS zone 2 arrives as 27
+ * pieces of which 25 are under 20 m — fragments, not lobes.
+ */
+const BRUIT_BADGE_SECONDARY_SHARE = 0.5;
+
+/** `--glass-bg` from `style.css`, a little more opaque over a photograph. */
+const BRUIT_BADGE_FILL = 'rgba(26,40,35,0.9)';
+/** `--brand-ivory`. */
+const BRUIT_BADGE_INK = '#f7f4ea';
+
+const _badgeCache = new Map();
+
+/**
+ * The badge for one zone: the app's glass panel as a rounded square, framed in
+ * the zone's colour, with the code in ivory Inter.
+ *
+ * FILL AND INK ARE BAKED IN and the billboard is drawn untinted. A tint cannot
+ * do this job: `billboard.color` multiplies, so it could colour the frame only
+ * by also colouring the ivory code and darkening the glass. The cost is one
+ * atlas entry per zone colour — seven at most, PEB and PGS together.
+ *
+ * Returned as a data-URI STRING because Cesium shares an atlas entry between
+ * billboards only when their image is a string; a canvas gets a fresh entry
+ * per billboard.
+ *
+ * @param {'peb'|'pgs'} kind
+ * @param {?string} zone
+ * @param {number} [px] Raster size: three times the drawn size, because the
+ *   billboard atlas has no mipmaps and a 22 px mark must survive a 2× screen.
+ * @returns {?string} `data:image/svg+xml;base64,…`, or null for a code with no
+ *   vendored outline — the caller then writes it as text.
+ */
+export function bruitZoneBadge(kind, zone, px = 72) {
+  const code = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
+  const glyph = code.length === 1 ? (INTER_CAPITALS[code] ?? INTER_DIGITS[code]) : null;
+  if (!glyph) return null;
+  const frame = bruitZoneColorCss(kind, zone);
+  const key = `${code}|${frame}|${px}`;
+  const cached = _badgeCache.get(key);
+  if (cached) return cached;
+  // A 28-unit box: the frame's stroke centred 1.5 units in, and an 11-unit cap
+  // height centred on the box (baseline = (28 + 11) / 2).
+  const letter = interOutlineMarkup(glyph, { capPx: 11, cx: 14, baseline: 19.5 });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 28 28">`
+    + `<rect x="1.5" y="1.5" width="25" height="25" rx="5" fill="${BRUIT_BADGE_FILL}"`
+    + ` stroke="${frame}" stroke-width="2"/>`
+    + `<g fill="${BRUIT_BADGE_INK}">${letter}</g>`
+    + '</svg>';
+  const uri = `data:image/svg+xml;base64,${_b64(svg)}`;
+  _badgeCache.set(key, uri);
+  return uri;
+}
+
+/** Ground distance in metres, flat-earth — exact enough at badge spacing. */
+function groundDistanceM(a, b) {
+  const kx = 111_320 * Math.cos(Cesium.Math.toRadians((a.lat + b.lat) / 2));
+  return Math.hypot((b.lon - a.lon) * kx, (b.lat - a.lat) * 110_574);
+}
+
+/** Points along a ring, at least one every `stepM` metres, vertices included. */
+function ringStations(ring, stepM) {
+  const stations = [];
+  for (let i = 0; i < ring.length; i += 1) {
+    const [lon, lat] = ring[i];
+    const [nextLon, nextLat] = ring[(i + 1) % ring.length];
+    const here = { lon, lat };
+    stations.push(here);
+    const steps = Math.floor(groundDistanceM(here, { lon: nextLon, lat: nextLat }) / stepM);
+    for (let s = 1; s <= steps; s += 1) {
+      const t = s / (steps + 1);
+      stations.push({ lon: lon + (nextLon - lon) * t, lat: lat + (nextLat - lat) * t });
+    }
+  }
+  return stations;
+}
+
+/** True when no mark in `placed` is closer than `separationM`. */
+function isClearOf(station, placed, separationM) {
+  for (const other of placed) {
+    // A latitude gap alone already clears it — no cosine needed.
+    if (Math.abs(other.lat - station.lat) * 110_574 >= separationM) continue;
+    if (groundDistanceM(station, other) < separationM) return false;
+  }
+  return true;
+}
+
+function ringBoundsCentre(ring) {
+  let west = Infinity; let east = -Infinity; let south = Infinity; let north = -Infinity;
+  for (const [lon, lat] of ring) {
+    west = Math.min(west, lon); east = Math.max(east, lon);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  }
+  return { lon: (west + east) / 2, lat: (south + north) / 2 };
+}
+
+/**
+ * Where each band's badges go: ON its outer ring, as near as possible to the
+ * point the reader is looking at, and clear of every badge placed before.
+ *
+ * NEAREST THE REFERENCE, because that is the part of a ring most likely to be
+ * on screen: the aerodrome's own point in an overview — the camera is centred
+ * on it when a reader looks at its plan — and the scan point under a point
+ * scan, where the nearest stretch of each outline is the boundary the reader
+ * is asking about. Measured at Roissy, the old in-band anchor put zone D's
+ * letter 24 km from the aerodrome, off every frame that shows the airport.
+ *
+ * MOST EXPOSED FIRST, and the rest slide. Nested rings are nearest the
+ * reference on the same flank, so a ladder of badges would stack there: zone A
+ * takes the nearest spot, and each later badge walks along its own ring until
+ * it is {@link BRUIT_BADGE_SEPARATION_M} clear of every badge already down.
+ * That is what staggers them.
+ *
+ * A band's widest piece always gets a badge — pushed as far from the others as
+ * its ring allows when nothing is clear — because a band with no name on
+ * screen is worse than two badges touching. Further pieces get one only when
+ * they are lobes rather than fragments ({@link BRUIT_BADGE_SECONDARY_SHARE}),
+ * are not a duplicate of a piece already seen (the register publishes some
+ * pieces twice), and find a clear spot.
+ *
+ * @param {Array<{id: string, parts: Array, reference: ?{lon: number, lat: number}}>} bands
+ *   In the order badges claim their spot: most exposed first.
+ * @param {number} separationM
+ * @param {Array<{lon: number, lat: number}>} [obstacles] Marks already on the
+ *   ground that a badge must keep clear of too — the aerodrome markers, or the
+ *   scan marker. They sit at the reference, which is where every badge would
+ *   otherwise head first.
+ * @returns {Map<string, Array<{lon: number, lat: number}>>} Spots per band id.
+ */
+export function bruitBadgeSpots(bands, separationM, obstacles = []) {
+  const placed = [...obstacles];
+  const spots = new Map();
+  const stepM = separationM / 4;
+  for (const band of bands || []) {
+    const pieces = (band?.parts || [])
+      .filter((rings) => Array.isArray(rings?.[0]) && rings[0].length >= 3)
+      .map((rings) => ({ ring: rings[0], width: ringLabelAnchor(rings)?.widthDeg ?? 0 }))
+      .filter((piece) => piece.width >= BRUIT_LABEL_MIN_WIDTH_DEG)
+      .sort((a, b) => b.width - a.width);
+    const seen = new Set();
+    const own = [];
+    for (const [index, piece] of pieces.entries()) {
+      if (index > 0 && piece.width < pieces[0].width * BRUIT_BADGE_SECONDARY_SHARE) break;
+      const { ring } = piece;
+      const signature = `${ring.length}:${ring[0]}:${ring[Math.floor(ring.length / 2)]}`;
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      const reference = band.reference ?? ringBoundsCentre(ring);
+      // Nearest first, and the first clear station wins: sorting once and
+      // stopping early is what keeps this under the frame budget — scanning
+      // every station against every badge cost 17–25 ms per redraw on the
+      // real overview around Paris.
+      const stations = ringStations(ring, stepM)
+        .map((station) => ({ station, distance: groundDistanceM(station, reference) }))
+        .sort((a, b) => a.distance - b.distance)
+        .map(({ station }) => station);
+      let spot = stations.find((station) => isClearOf(station, placed, separationM)) ?? null;
+      if (!spot && index === 0) {
+        let roomiest = -1;
+        for (const station of stations) {
+          let clearance = Infinity;
+          for (const other of placed) clearance = Math.min(clearance, groundDistanceM(station, other));
+          if (clearance > roomiest) { spot = station; roomiest = clearance; }
+        }
+      }
+      if (!spot) continue;
+      placed.push(spot);
+      own.push(spot);
+    }
+    if (own.length) spots.set(band.id, own);
+  }
+  return spots;
+}
+
+/**
+ * The badges' claim order for one plan: answers before context, most exposed
+ * first — {@link bruitDrawOrder} read backwards, since paint goes quietest
+ * first for the opposite reason.
+ */
+function bruitBadgeOrder(bands, kind, referenceFor) {
+  return bruitDrawOrder(bands, kind).reverse()
+    .filter((band) => band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG)
+    .map((band) => ({ id: band.id, parts: band.parts, reference: referenceFor(band) }));
+}
+
+/**
+ * Put one band's badges on the ground. Each opens the band's own card, exactly
+ * as its outline does.
+ *
+ * A code with no vendored outline — a zone the grammar does not know — is
+ * written as text at the same spot instead of being dropped.
+ */
+function addBruitBadges(dataSource, band, kind, spots, style) {
+  const image = bruitZoneBadge(kind, band.zone);
+  for (const [index, spot] of (spots || []).entries()) {
+    const mark = image
+      ? {
+        billboard: {
+          image,
+          width: BRUIT_BADGE_PX,
+          height: BRUIT_BADGE_PX,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: style.scaleByDistance,
+          translucencyByDistance: style.translucencyByDistance,
+        },
+      }
+      : {
+        label: {
+          text: String(band.zone ?? '?'),
+          font: 'bold 15px "Roboto Mono", monospace',
+          fillColor: Cesium.Color.fromCssColorString(bruitZoneColorCss(kind, band.zone)),
+          outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: style.scaleByDistance,
+          translucencyByDistance: style.translucencyByDistance,
+        },
+      };
+    dataSource.entities.add({
+      // i18n-ignore-next-line — an entity id, not a word.
+      id: `bruit:${band.id}:badge:${index}`,
+      position: Cesium.Cartesian3.fromDegrees(spot.lon, spot.lat),
+      name: style.name,
+      description: style.description,
+      properties: style.properties,
+      ...mark,
+    });
+  }
+}
 
 /**
  * Which clause of {@link chooseBruitAnswer} actually separated the winner from
@@ -1168,12 +1448,52 @@ export function bruitDrawOrder(bands, kind = 'peb') {
 }
 
 /**
- * The colour legend for the toggle row: one entry per zone actually on screen.
+ * The legend swatch for one zone: the zone's code cut out of a rounded tile.
  *
- * Counted from what was DRAWN, not from the vocabulary, so a row never claims a
- * band the reader cannot see. The blurbs carry the facts that would otherwise
- * need a chip — and a chip in this manager is a BUTTON, so an informational one
- * would look clickable and do nothing.
+ * The same letter the map writes on its badges, so the key and the map are
+ * matched by eye. A MASK, because that is the legend's `glyph` contract: the
+ * manager tints the opaque pixels with the entry's colour, so the tile takes
+ * the zone's colour and the code shows the glass of the panel through it.
+ *
+ * @param {?string} zone
+ * @returns {?string} `data:image/svg+xml;base64,…`, or null for a code with no
+ *   vendored outline — that entry keeps the plain colour dot.
+ */
+export function bruitZoneLegendGlyph(zone) {
+  const code = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
+  const glyph = code.length === 1 ? (INTER_CAPITALS[code] ?? INTER_DIGITS[code]) : null;
+  if (!glyph) return null;
+  const key = `legend|${code}`;
+  const cached = _badgeCache.get(key);
+  if (cached) return cached;
+  // A 28-unit box drawn at 14 CSS px: a 15-unit cap height keeps the code at
+  // the size of the legend's own text.
+  const letter = interOutlineMarkup(glyph, { capPx: 15, cx: 14, baseline: 21.5 });
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">'
+    + '<mask id="m"><rect x="1" y="1" width="26" height="26" rx="6" fill="#fff"/>'
+    + `<g fill="#000">${letter}</g></mask>`
+    + '<rect x="1" y="1" width="26" height="26" rx="6" fill="#000" mask="url(#m)"/>'
+    + '</svg>';
+  const uri = `data:image/svg+xml;base64,${_b64(svg)}`;
+  _badgeCache.set(key, uri);
+  return uri;
+}
+
+/**
+ * The map key: one entry per zone actually on screen, under a heading that
+ * says what each plan is FOR.
+ *
+ * WRITTEN FOR A READER WHO KNOWS NO ACRONYM. The first key led every line with
+ * « PEB zone A 14 » — two acronyms and a count of drawn bands nobody could
+ * place. Each plan is now named by its use (« Ce qu’on peut construire »,
+ * « Aide pour isoler son logement »), with its official name one hover away on
+ * the heading; each zone by how loud it is, its swatch carrying the same code
+ * the map writes on its badges; and a PEB zone by what it means for a new
+ * home. The PGS zones need no second line: every one of them means the same
+ * thing, said once by the heading.
+ *
+ * Built from what was DRAWN, not from the vocabulary, so a line never claims a
+ * band the reader cannot see, and a heading never stands over nothing.
  */
 export function bruitLegend(payload) {
   if (!payload) return [];
@@ -1181,33 +1501,38 @@ export function bruitLegend(payload) {
   const legend = [];
   for (const [kind, order] of [['peb', PEB_ZONE_ORDER], ['pgs', PGS_ZONE_ORDER]]) {
     const bands = payload[kind] || [];
+    const entries = [];
     for (const zone of order) {
       const rows = bands.filter((band) => String(band?.zone ?? '').trim().toUpperCase() === zone);
       if (!rows.length) continue;
       const here = rows.filter((band) => band.atPoint === true).length;
       // `atPoint` is false on every overview band by construction, so the
-      // point-mode blurb would report all of them as "returned beside the
-      // marker" — an explanation of dashes that are not on screen.
+      // point-mode line would report all of them as "beside the marker" — an
+      // explanation of dashes that are not on screen.
       const aside = payload.area === true ? 0 : rows.length - here;
-      legend.push({
-        label: kind === 'pgs' ? m.pgsZone(zone) : m.pebZone(zone),
+      const blurb = [
+        kind === 'peb' ? m.pebRule[zone] : null,
+        aside === 0 ? null : m.aside(aside),
+      ].filter(Boolean).join(' — ');
+      entries.push({
+        label: m.loudness[zone],
         color: bruitZoneColorCss(kind, zone),
-        count: rows.length,
-        blurb: [
-          bruitZoneSentence(kind, zone),
-          aside === 0 ? null : m.aside(aside),
-        ].filter(Boolean).join(' — '),
+        glyph: bruitZoneLegendGlyph(zone),
+        ...(blurb ? { blurb } : {}),
       });
     }
-    const unknown = bands.filter((band) => bruitZoneRank(kind, band?.zone) === order.length);
-    if (unknown.length) {
-      legend.push({
-        label: kind === 'pgs' ? m.pgsUnknown : m.pebUnknown,
-        color: BRUIT_UNKNOWN_ZONE_COLOR,
-        count: unknown.length,
-        blurb: m.unknownBlurb,
-      });
+    if (bands.some((band) => bruitZoneRank(kind, band?.zone) === order.length)) {
+      entries.push({ label: m.unknown, color: BRUIT_UNKNOWN_ZONE_COLOR, blurb: m.unknownBlurb });
     }
+    if (!entries.length) continue;
+    legend.push({
+      label: kind === 'pgs' ? m.pgsHeading : m.pebHeading,
+      color: null,
+      // A caption, not a class — the manager draws it without a swatch, and
+      // its official name travels as the hover title.
+      heading: true,
+      blurb: kind === 'pgs' ? m.pgsHeadingTitle : m.pebHeadingTitle,
+    }, ...entries);
   }
   return legend;
 }
@@ -1503,6 +1828,12 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
   _peb = peb;
   _pgs = pgs;
   let drawn = 0;
+  const reference = point && Number.isFinite(point.lon) && Number.isFinite(point.lat)
+    ? { lon: point.lon, lat: point.lat } : null;
+  const spots = bruitBadgeSpots([
+    ...bruitBadgeOrder(payload?.peb, 'peb', () => reference),
+    ...bruitBadgeOrder(payload?.pgs, 'pgs', () => reference),
+  ], BRUIT_BADGE_SEPARATION_M.point, reference ? [reference] : []);
 
   for (const [kind, answer] of [['peb', peb], ['pgs', pgs]]) {
     for (const band of bruitDrawOrder(payload?.[kind], kind)) {
@@ -1510,30 +1841,13 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
       const css = bruitZoneColorCss(kind, band.zone);
       const description = bruitBandDescription(band, answer);
       const name = bruitBandLabel(band);
-      if (band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG) {
-        dataSource.entities.add({
-          // i18n-ignore-next-line — an entity id, not a word.
-          id: `bruit:${band.id}:label`,
-          position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
-          name,
-          description,
-          properties: { kind: `${kind}-zone-label`, zone: band.zone, atPoint: band.atPoint },
-          label: {
-            // The letter, and the letter only. The thresholds are on the card:
-            // writing "de 62 à 70 dB(A)" across a 500 m band would be five
-            // words of ink over the thing they describe.
-            text: String(band.zone ?? '?'),
-            font: 'bold 15px "Roboto Mono", monospace',
-            fillColor: Cesium.Color.fromCssColorString(css),
-            outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
-            outlineWidth: 3,
-            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            scaleByDistance: new Cesium.NearFarScalar(800, 1.0, 14_000, 0.6),
-            translucencyByDistance: new Cesium.NearFarScalar(9000, 1.0, 20_000, 0.0),
-          },
-        });
-      }
+      addBruitBadges(dataSource, band, kind, spots.get(band.id), {
+        name,
+        description,
+        properties: { kind: `${kind}-zone-badge`, zone: band.zone, atPoint: band.atPoint },
+        scaleByDistance: new Cesium.NearFarScalar(800, 1.0, 14_000, 0.6),
+        translucencyByDistance: new Cesium.NearFarScalar(9000, 1.0, 20_000, 0.0),
+      });
       // i18n-ignore-next-line — an entity id prefix, not a word.
       drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
         css,
@@ -1614,6 +1928,17 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
       for (const band of aerodrome.bands || []) byBand.set(band.id, aerodrome);
     }
   }
+  const aerodromePoint = (band) => {
+    const aerodrome = byBand.get(band.id);
+    return aerodrome && Number.isFinite(aerodrome.lon) && Number.isFinite(aerodrome.lat)
+      ? { lon: aerodrome.lon, lat: aerodrome.lat } : null;
+  };
+  const spots = bruitBadgeSpots([
+    ...bruitBadgeOrder(payload?.peb, 'peb', aerodromePoint),
+    ...bruitBadgeOrder(payload?.pgs, 'pgs', aerodromePoint),
+  ], BRUIT_BADGE_SEPARATION_M.area, (payload?.aerodromes || [])
+    .filter((entry) => Number.isFinite(entry.lon) && Number.isFinite(entry.lat))
+    .map((entry) => ({ lon: entry.lon, lat: entry.lat })));
   for (const kind of ['peb', 'pgs']) {
     for (const band of bruitDrawOrder(payload?.[kind], kind)) {
       const aerodrome = byBand.get(band.id) || null;
@@ -1621,31 +1946,17 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
       const css = bruitZoneColorCss(kind, band.zone);
       const description = bruitBandDescription(band, null, { area: true });
       const name = bruitBandLabel(band);
-      if (band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG) {
-        dataSource.entities.add({
-          // i18n-ignore-next-line — an entity id, not a word.
-          id: `bruit:${band.id}:label`,
-          position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
-          name,
-          description,
-          properties: { kind: `${kind}-zone-label`, zone: band.zone, area: true },
-          label: {
-            text: String(band.zone ?? '?'),
-            font: 'bold 15px "Roboto Mono", monospace',
-            fillColor: Cesium.Color.fromCssColorString(css),
-            outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
-            outlineWidth: 3,
-            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            scaleByDistance: new Cesium.NearFarScalar(
-              BRUIT_AREA_LABEL_SCALE.near, 1.0, BRUIT_AREA_LABEL_SCALE.far, 0.65,
-            ),
-            translucencyByDistance: new Cesium.NearFarScalar(
-              BRUIT_AREA_LABEL_FADE.near, 1.0, BRUIT_AREA_LABEL_FADE.far, 0.0,
-            ),
-          },
-        });
-      }
+      addBruitBadges(dataSource, band, kind, spots.get(band.id), {
+        name,
+        description,
+        properties: { kind: `${kind}-zone-badge`, zone: band.zone, area: true },
+        scaleByDistance: new Cesium.NearFarScalar(
+          BRUIT_AREA_LABEL_SCALE.near, 1.0, BRUIT_AREA_LABEL_SCALE.far, 0.65,
+        ),
+        translucencyByDistance: new Cesium.NearFarScalar(
+          BRUIT_AREA_LABEL_FADE.near, 1.0, BRUIT_AREA_LABEL_FADE.far, 0.0,
+        ),
+      });
       // i18n-ignore-next-line — an entity id prefix, not a word.
       drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
         css,

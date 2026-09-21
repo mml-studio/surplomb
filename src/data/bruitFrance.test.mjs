@@ -28,6 +28,8 @@ import {
   BRUIT_AREA_SCALE_DENOMINATOR, BRUIT_PROBE_SCALE_DENOMINATOR, bruitGroundResolutionText,
   projectBruit, projectBruitArea,
 } from './bruitFeed.js';
+import { INTER_CAPITALS } from './interCapitals.js';
+import { INTER_DIGITS } from './interDigits.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 import bruitFranceLayer, {
   ADDRESS_SCAN_CEILING_M,
@@ -35,6 +37,7 @@ import bruitFranceLayer, {
   BRUIT_OVERVIEW_CEILING_M,
   BRUIT_FILL_ALPHA,
   BRUIT_ARRETE_UNDER_MARKER_KM,
+  BRUIT_BADGE_SEPARATION_M,
   BRUIT_FR_ENDPOINT,
   BRUIT_FR_LAYER_ID,
   BRUIT_LABEL_MIN_WIDTH_DEG,
@@ -48,6 +51,7 @@ import bruitFranceLayer, {
   bruitAreaEmphasis,
   bruitAreaRadiusKm,
   bruitAreaSummary,
+  bruitBadgeSpots,
   BRUIT_CARD_MAX_LINES,
   bruitBandDescription,
   bruitBandLabel,
@@ -69,6 +73,8 @@ import bruitFranceLayer, {
   bruitScanParams,
   bruitStatus,
   bruitZoneColorCss,
+  bruitZoneBadge,
+  bruitZoneLegendGlyph,
   bruitZoneRank,
   chooseBruitAnswer,
   drawBruitParts,
@@ -89,6 +95,8 @@ ContextLimits._maximumAliasedLineWidth = 16;
 const read = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 const norm = (value) => String(value).replace(/[\s ]+/g, ' ');
 const now = () => Cesium.JulianDate.now();
+const badgesOf = (dataSource) => dataSource.entities.values
+  .filter((entity) => /-zone-badge$/.test(entity.properties?.getValue(now())?.kind ?? ''));
 
 const EMPTY_PGS = read('bruit-peb-empty-sample.json');
 
@@ -437,6 +445,11 @@ test('a wash never exceeds the ceiling the neighbouring layer measured', () => {
   }
   assert.ok(BRUIT_FILL_ALPHA.winner > BRUIT_FILL_ALPHA.inside);
   assert.ok(BRUIT_FILL_ALPHA.inside > BRUIT_FILL_ALPHA.nearby);
+  // The stroke carries the band and the wash only marks the answer: nothing
+  // but the winner reaches the neighbour's measured 0.22 floor, so four nested
+  // plans no longer lay a tinted sheet over the airport.
+  assert.ok(BRUIT_FILL_ALPHA.winner >= 0.22);
+  assert.ok(BRUIT_FILL_ALPHA.inside < 0.22);
   const source = new Cesium.CustomDataSource('bruit-test');
   drawBruitParts(source, 'x', [[[[2, 48], [2.01, 48], [2.01, 48.01]]]], {
     css: '#ff2d55',
@@ -507,15 +520,16 @@ test('the marker takes the WINNER\'s colour, and its card is the winner\'s card'
   assert.ok(Cesium.Color.fromCssColorString(PEB_ZONE_COLORS.A)
     .equals(marker.billboard.color.getValue(now())));
   assert.equal(norm(marker.name), 'Bruit des avions · zone A — SAINT CYR L\'ECOLE');
-  // Every band drew a fill, a stroke per ring and a label, and each label
+  // Every band drew a fill, a stroke per ring and a badge, and each badge
   // opens the SAME card as its own outline.
-  const labels = dataSource.entities.values.filter((entity) => entity.label);
-  assert.deepEqual(labels.map((entity) => entity.label.text.getValue(now())).sort(), ['A', 'B']);
-  for (const label of labels) {
+  const badges = badgesOf(dataSource);
+  assert.deepEqual([...new Set(badges.map((entity) => entity.properties.getValue(now()).zone))].sort(),
+    ['A', 'B']);
+  for (const badge of badges) {
     const ring = dataSource.entities.values.find((entity) => entity.polyline
-      && entity.name === label.name);
-    assert.ok(ring, 'the label and the outline are the same band');
-    assert.equal(norm(ring.description.getValue(now())), norm(label.description.getValue(now())));
+      && entity.name === badge.name);
+    assert.ok(ring, 'the badge and the outline are the same band');
+    assert.equal(norm(ring.description.getValue(now())), norm(badge.description.getValue(now())));
   }
 });
 
@@ -530,13 +544,130 @@ test('a band too narrow to hold four characters is drawn and left unlabelled', (
     })),
   };
   const { dataSource } = _drawBruitForTest(narrow, LFPZ_POINT);
-  assert.equal(dataSource.entities.values.filter((entity) => entity.label).length, 0);
+  assert.equal(badgesOf(dataSource).length, 0);
   assert.ok(dataSource.entities.values.filter((entity) => entity.polygon).length > 0,
     'the wash is still drawn');
   // A band with no anchor at all is not a crash.
   const anchorless = { ...LFPZ, peb: LFPZ.peb.map((band) => ({ ...band, anchor: null })) };
-  assert.equal(_drawBruitForTest(anchorless, LFPZ_POINT).dataSource.entities.values
-    .filter((entity) => entity.label).length, 0);
+  assert.equal(badgesOf(_drawBruitForTest(anchorless, LFPZ_POINT).dataSource).length, 0);
+});
+
+test('a zone badge is the app\'s glass panel framed in the zone\'s colour, one atlas entry per zone', () => {
+  const svgOf = (uri) => Buffer.from(uri.split(',')[1], 'base64').toString('utf8');
+  const a = bruitZoneBadge('peb', 'A');
+  assert.ok(a.startsWith('data:image/svg+xml;base64,'));
+  // A STRING, and the same string for the same zone: Cesium shares an atlas
+  // entry only between billboards whose image is an identical string.
+  assert.equal(bruitZoneBadge('peb', ' a '), a);
+  assert.notEqual(bruitZoneBadge('peb', 'B'), a);
+  assert.ok(svgOf(a).includes(`stroke="${PEB_ZONE_COLORS.A}"`));
+  assert.ok(svgOf(a).includes(INTER_CAPITALS.A.d), 'the letter is Inter\'s own outline, untouched');
+  // The PGS writes figures, from the same instance of the same typeface.
+  const pgs = svgOf(bruitZoneBadge('pgs', '1'));
+  assert.ok(pgs.includes(INTER_DIGITS[1].d));
+  assert.ok(pgs.includes(`stroke="${PGS_ZONE_COLORS[1]}"`));
+  // No outline, no badge — the caller writes the code as text instead.
+  for (const zone of ['?', 'AB', '', null]) assert.equal(bruitZoneBadge('peb', zone), null, String(zone));
+});
+
+test('a zone code with no outline is still written, as text, where its badge would go', () => {
+  const odd = { ...LFPZ, peb: LFPZ.peb.map((band, index) => (index ? band : { ...band, zone: '?' })) };
+  const badges = badgesOf(_drawBruitForTest(odd, LFPZ_POINT).dataSource);
+  const text = badges.filter((entity) => entity.label);
+  assert.ok(text.length >= 1);
+  assert.deepEqual([...new Set(text.map((entity) => entity.label.text.getValue(now())))], ['?']);
+  assert.ok(badges.filter((entity) => entity.billboard).length >= 1, 'the known zone keeps its badge');
+});
+
+// Axis-aligned rectangles around one reference point: on their north and
+// south flanks the rings are ~110 m apart, along the axis kilometres apart —
+// the shape of a PEB, whose bands are narrow beside a runway and long off its
+// ends.
+const REF = { lon: 2.5, lat: 49 };
+const box = (halfLon, halfLat, lon = REF.lon, lat = REF.lat) => [[
+  [lon - halfLon, lat - halfLat], [lon + halfLon, lat - halfLat],
+  [lon + halfLon, lat + halfLat], [lon - halfLon, lat + halfLat],
+]];
+const metres = (a, b) => Math.hypot(
+  (b.lon - a.lon) * 111_320 * Math.cos((a.lat + b.lat) / 2 * Math.PI / 180),
+  (b.lat - a.lat) * 110_574,
+);
+const onBox = (spot, halfLon, halfLat, lon = REF.lon, lat = REF.lat) => {
+  const dx = Math.abs(spot.lon - lon);
+  const dy = Math.abs(spot.lat - lat);
+  const eps = 1e-9;
+  return (Math.abs(dy - halfLat) < eps && dx <= halfLon + eps)
+    || (Math.abs(dx - halfLon) < eps && dy <= halfLat + eps);
+};
+
+test('badges sit ON their outline, the most exposed nearest the reader, the rest staggered clear of it', () => {
+  const separation = BRUIT_BADGE_SEPARATION_M.area;
+  const bands = [
+    { id: 'A', parts: [box(0.02, 0.004)], reference: REF },
+    { id: 'B', parts: [box(0.04, 0.005)], reference: REF },
+    { id: 'C', parts: [box(0.08, 0.02)], reference: REF },
+  ];
+  const spots = bruitBadgeSpots(bands, separation);
+  const [a] = spots.get('A');
+  const [b] = spots.get('B');
+  const [c] = spots.get('C');
+  assert.ok(onBox(a, 0.02, 0.004) && onBox(b, 0.04, 0.005) && onBox(c, 0.08, 0.02), 'on the ring, never inside the band');
+  // Zone A takes the nearest point of its ring: the middle of a long flank.
+  assert.ok(Math.abs(metres(a, REF) - 0.004 * 110_574) < 1, `${metres(a, REF)} m`);
+  // Zone B's nearest point is 110 m from A's badge, so it walks along its ring.
+  assert.ok(metres(b, a) >= separation, `${metres(b, a)} m`);
+  assert.ok(metres(c, a) >= separation && metres(c, b) >= separation);
+  // An obstacle at the reference — the aerodrome's own marker — pushes even
+  // zone A along its ring.
+  const clear = bruitBadgeSpots(bands, separation, [REF]);
+  assert.ok(metres(clear.get('A')[0], REF) >= separation);
+});
+
+test('a second lobe gets its own badge; a fragment and a duplicate piece do not', () => {
+  const east = box(0.02, 0.004, 2.6);
+  const west = box(0.02, 0.004, 2.4);
+  const fragment = box(0.0005, 0.0005, 2.5, 49.01);
+  const spots = bruitBadgeSpots([{ id: 'A', parts: [east, east, west, fragment], reference: REF }], 750);
+  assert.equal(spots.get('A').length, 2);
+  assert.ok(spots.get('A').some((spot) => onBox(spot, 0.02, 0.004, 2.6)));
+  assert.ok(spots.get('A').some((spot) => onBox(spot, 0.02, 0.004, 2.4)));
+});
+
+test('a band always keeps one badge, even with no clear spot left on its ring', () => {
+  // A 220 m square around the marker: every point of it is inside the 750 m
+  // clearance, and a band with no name on screen is worse than a crowded one.
+  const spots = bruitBadgeSpots([{ id: 'A', parts: [box(0.0015, 0.001)], reference: REF }], 750, [REF]);
+  assert.equal(spots.get('A').length, 1);
+  assert.ok(onBox(spots.get('A')[0], 0.0015, 0.001));
+});
+
+test('every overview band is named by a badge on its own outer ring', () => {
+  const { dataSource } = _drawBruitForTest(AREA, null);
+  const badges = badgesOf(dataSource);
+  const bands = [...AREA.peb, ...AREA.pgs].filter((band) => band.anchor);
+  for (const band of bands) {
+    const own = badges.filter((entity) => entity.id.startsWith(`bruit:${band.id}:badge:`));
+    assert.ok(own.length >= 1, `${band.id} has a badge`);
+    for (const entity of own) {
+      const carto = Cesium.Cartographic.fromCartesian(entity.position.getValue(now()));
+      const spot = { lon: Cesium.Math.toDegrees(carto.longitude), lat: Cesium.Math.toDegrees(carto.latitude) };
+      // Within a metre of a segment of one of the band's outer rings.
+      const gap = Math.min(...band.parts.flatMap((rings) => rings[0].map((vertex, i) => {
+        const next = rings[0][(i + 1) % rings[0].length];
+        const p = { lon: vertex[0], lat: vertex[1] };
+        const q = { lon: next[0], lat: next[1] };
+        const length = metres(p, q);
+        if (length === 0) return metres(p, spot);
+        let best = Infinity;
+        for (let t = 0; t <= 1; t += 1 / Math.ceil(length)) {
+          best = Math.min(best, metres({ lon: p.lon + (q.lon - p.lon) * t, lat: p.lat + (q.lat - p.lat) * t }, spot));
+        }
+        return best;
+      })));
+      assert.ok(gap < 1.5, `${entity.id} sits ${gap.toFixed(1)} m off its ring`);
+      assert.ok(entity.billboard.image.getValue(now()).startsWith('data:image/svg+xml;base64,'));
+    }
+  }
 });
 
 test('the PGS is drawn in its own colours and named as its own document', () => {
@@ -585,23 +716,48 @@ test('an incomplete arrêté register is reported, because "the nearest" would b
   assert.ok(!healthy.includes('registre des arrêtés incomplet'), healthy);
 });
 
-test('the row legend counts what is on screen, and separates under from beside', () => {
+test('the row legend lists what is on screen, and separates under from beside', () => {
   const legend = bruitLegend(LFMD);
-  assert.equal(legend.length, 2);
-  assert.deepEqual(legend.map((row) => row.label), ['PEB zone B', 'PEB zone C']);
-  assert.deepEqual(legend.map((row) => row.count), [1, 1]);
-  assert.equal(legend[0].color, PEB_ZONE_COLORS.B);
-  assert.ok(legend[0].blurb.includes('gêne forte'));
-  assert.ok(norm(legend[1].blurb).includes('renvoyée par le service à côté du repère'), legend[1].blurb);
+  assert.deepEqual(legend.map((row) => row.label), ['Ce qu’on peut construire', 'Bruit fort', 'Bruit modéré']);
+  assert.equal(legend[0].heading, true);
+  assert.equal(legend[1].color, PEB_ZONE_COLORS.B);
+  assert.equal(legend[1].blurb, 'presque pas de nouveaux logements');
+  assert.ok(norm(legend[2].blurb).includes('à côté du repère, pas dessous'), legend[2].blurb);
   // A zone the register did not publish at this point is not in the legend.
-  assert.equal(legend.some((row) => row.label === 'PEB zone A'), false);
-  // A zone letter the grammar does not know still gets a row rather than
-  // vanishing from a count the reader is comparing against the map.
+  assert.equal(legend.some((row) => row.label === 'Bruit très fort'), false);
+  // A zone letter the grammar does not know still gets a line rather than
+  // vanishing from a key the reader is comparing against the map.
   const odd = bruitLegend({ peb: [{ zone: 'Z', atPoint: true }], pgs: [] });
-  assert.equal(odd.length, 1);
-  assert.equal(odd[0].color, BRUIT_UNKNOWN_ZONE_COLOR);
-  assert.ok(odd[0].blurb.includes('jamais retenue'));
+  assert.deepEqual(odd.map((row) => row.label), ['Ce qu’on peut construire', 'Zone non précisée']);
+  assert.equal(odd[1].color, BRUIT_UNKNOWN_ZONE_COLOR);
+  assert.equal(odd[1].blurb, 'le plan officiel ne dit pas laquelle');
   assert.deepEqual(bruitLegend(null), []);
+});
+
+test('the key speaks to anyone: no acronym, no unit, no bare count on a line a reader sees', () => {
+  const legend = [...bruitLegend(AREA), ...bruitLegend(LFMD), ...bruitLegend(PGS)];
+  for (const row of legend) {
+    const seen = row.heading ? row.label : `${row.label} ${row.blurb ?? ''}`;
+    assert.equal(/\b(PEB|PGS|dB|Lden|OACI)\b/.test(seen), false, seen);
+    assert.equal(row.count, undefined, `${row.label}: a count of drawn bands means nothing to a reader`);
+  }
+  // The official names are not lost: they are the headings' hover titles.
+  const headings = bruitLegend(AREA).filter((row) => row.heading);
+  assert.deepEqual(headings.map((row) => row.label), ['Ce qu’on peut construire', 'Aide pour isoler son logement']);
+  assert.ok(headings[0].blurb.includes('Plan d’exposition au bruit (PEB)'));
+  assert.ok(headings[1].blurb.includes('Plan de gêne sonore (PGS)'));
+  assert.ok(headings.every((row) => row.color === null), 'a caption takes no swatch');
+});
+
+test('each zone\'s swatch is the code the map writes on its badges, cut out of a tile', () => {
+  const svgOf = (uri) => Buffer.from(uri.split(',')[1], 'base64').toString('utf8');
+  const [, zoneA] = bruitLegend(AREA);
+  assert.ok(svgOf(zoneA.glyph).includes(INTER_CAPITALS.A.d));
+  assert.ok(svgOf(zoneA.glyph).includes('<mask'), 'a mask: the manager tints it with the zone colour');
+  assert.equal(zoneA.color, PEB_ZONE_COLORS.A);
+  const pgsOne = bruitLegend(AREA).find((row) => row.color === PGS_ZONE_COLORS[1]);
+  assert.ok(svgOf(pgsOne.glyph).includes(INTER_DIGITS[1].d));
+  assert.equal(bruitZoneLegendGlyph('?'), null);
 });
 
 test('the row controls are empty while the layer is dormant, and full once it has scanned', () => {
@@ -610,7 +766,7 @@ test('the row controls are empty while the layer is dormant, and full once it ha
   // drawn payload is what the row describes.
   const controls = _bruitRowControlsForTest();
   assert.deepEqual(controls.chips, [], 'a chip in this manager is a BUTTON');
-  assert.deepEqual(controls.legend.map((row) => row.label), ['PEB zone A', 'PEB zone B']);
+  assert.deepEqual(controls.legend.map((row) => row.label), ['Ce qu’on peut construire', 'Bruit très fort', 'Bruit fort']);
   _setBruitStateForTest(null);
   assert.deepEqual(_bruitRowControlsForTest().legend, []);
 });
@@ -760,7 +916,7 @@ test('an overview draws every band of every aerodrome, and not one of them dashe
   assert.ok(fills.length >= 11, `${fills.length} washes drawn`);
   // One marker per aerodrome, named by the register and carrying the whole
   // plan on its card — the overview's equivalent of the scan point.
-  const markers = values.filter((entity) => entity.billboard);
+  const markers = values.filter((entity) => entity.properties?.getValue(now())?.kind === 'bruit-aerodrome');
   assert.deepEqual(markers.map((entity) => entity.name).sort(), [
     'LFPB — PARIS LE BOURGET', 'LFPG — PARIS CHARLES DE GAULLE',
   ]);
@@ -836,20 +992,21 @@ test('an overview that is capped, silent or empty says which, on the row and on 
 
 test('the overview legend explains colours, and never dashes that are not drawn', () => {
   const legend = bruitLegend(AREA);
-  const labels = legend.map((row) => row.label);
-  assert.deepEqual(labels, [
-    'PEB zone A', 'PEB zone B', 'PEB zone C', 'PEB zone D',
-    'PGS zone 1', 'PGS zone 2', 'PGS zone 3',
+  assert.deepEqual(legend.map((row) => row.label), [
+    'Ce qu’on peut construire', 'Bruit très fort', 'Bruit fort', 'Bruit modéré', 'Bruit plus faible',
+    'Aide pour isoler son logement', 'Bruit très fort', 'Bruit fort', 'Bruit modéré',
   ]);
-  // `atPoint` is false on every overview band. The point-mode blurb would read
-  // that as "returned beside the marker" and explain dashes nobody can see.
+  // `atPoint` is false on every overview band. The point-mode line would read
+  // that as "beside the marker" and explain dashes nobody can see.
   for (const row of legend) {
-    assert.equal(/en tirets/.test(row.blurb), false, row.blurb);
-    assert.ok(row.blurb.length > 0);
+    assert.equal(/pointillés/.test(row.blurb ?? ''), false, row.blurb);
   }
-  assert.equal(legend[0].count, 2, 'two aerodromes publish a zone A here');
+  // Every PEB zone says what it means for a home; the PGS heading says it once
+  // for all three of its zones.
+  assert.ok(legend.slice(1, 5).every((row) => row.blurb.length > 0));
+  assert.ok(legend.slice(6).every((row) => row.blurb === undefined));
   // The point-mode legend still explains its dashes, on the same function.
-  assert.ok(bruitLegend(LFMD).some((row) => /en tirets/.test(row.blurb)));
+  assert.ok(bruitLegend(LFMD).some((row) => /pointillés/.test(row.blurb ?? '')));
 });
 
 test('getStats in an overview counts aerodromes, not bands under a marker', () => {

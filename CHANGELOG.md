@@ -70,6 +70,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Airport noise zones read as contours, and each is named on its own
+  line.** The four nested zones of a noise exposure plan used to be washed
+  at 22 to 42 % opacity, which tinted the whole airport — Roissy's zone D alone
+  is a 65.8 km ring — and hid the photograph. Only the zone the layer retains
+  now keeps a visible wash; the others are a faint tint, and their outline does
+  the work. Each zone's letter (or PGS figure) sits in a small framed badge ON
+  its outline, as near the airport as the other badges allow: Roissy's zone D
+  letter used to land 24 km away, off any frame that shows the airport. A badge
+  opens the same card as its zone.
+- **The airport-noise key speaks to anyone.** « PEB zone A 14 » and « PGS
+  zone 1 3 » became two plain headings — *What can be built* and *Help to
+  soundproof a home* — with each zone named by how loud it is (*Very loud* to
+  *Quieter*) and, for building, what that means for a new home. Each swatch
+  is the zone's letter or figure, as on the map's badges; the official plan
+  names are one hover away on the headings, and the unexplained counts are
+  gone.
 - **Property prices paint the parcels from altitude, not discs.** Between
   600 m and 1,800 m the layer now draws every parcel sold in the view,
   coloured by its latest sale against its own municipality's median — the same
