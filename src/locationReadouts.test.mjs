@@ -24,7 +24,7 @@ test('the ACTIVE STYLE indicator is written from the style name and nothing else
   assert.equal(writes.length, 1, 'the style indicator must have exactly one writer');
   assert.match(
     ui.slice(writes[0].index, writes[0].index + 160),
-    /this\._styleIndicator\.textContent = displayNames\[styleName\] \|\| styleName\.toUpperCase\(\);/,
+    /this\._styleIndicator\.textContent = styleDisplayName\(styleName\);/,
   );
 
   const handler = locationSearchHandler();

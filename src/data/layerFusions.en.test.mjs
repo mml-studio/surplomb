@@ -50,7 +50,7 @@ test('a tooltip keeps its claim, its number and its hedge', () => {
     'Paris traffic counts — a COUNT of vehicles, not congestion');
   assert.equal(title('transit-fr', 'idfm-network'),
     'Stops, lines and hourly frequency across Île-de-France — 37,956 stops');
-  assert.equal(title('edf-power-plants', 'fr-hydro-plants'),
+  assert.equal(title('power-grid', 'fr-hydro-plants'),
     'The ODRÉ register — the whole French hydro fleet, plus 592 plants mapped outside France');
   assert.equal(title('local-firms', 'gironde-megafire-2026'),
     'The July 2026 megafire — reconstructed day by day, with no FIRMS key');

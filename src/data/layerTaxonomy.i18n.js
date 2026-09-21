@@ -108,9 +108,12 @@ export default defineMessages({
     // Plain words since 2026-09-21: « groupes de production » is RTE's term,
     // and the key titles its block with this name.
     'rte-generation': { fr: 'Production des centrales', en: 'Power station output' },
-    'edf-power-plants': { fr: 'Centrales électriques', en: 'Power plants' },
+    // The register's own name again since 2026-09-21: it stopped being the
+    // plants row's primary when the grid and the plants became one row.
+    'edf-power-plants': { fr: 'Centrales EDF', en: 'EDF power plants' },
     'fr-hydro-plants': { fr: 'Centrales hydro', en: 'Hydro plants' },
-    'power-grid': { fr: 'Réseau électrique', en: 'Power grid' },
+    // The row's name: the grid is its primary (`layerFusions.js`, entry 9).
+    'power-grid': { fr: 'Réseau électrique et centrales', en: 'Power grid and plants' },
     'gas-fr': { fr: 'Réseau gaz', en: 'Gas network' },
     'irve-fr': { fr: 'Bornes de recharge', en: 'EV charging stations' },
     'local-dams': { fr: 'Barrages & digues', en: 'Dams & levees' },

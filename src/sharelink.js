@@ -93,9 +93,20 @@ const STYLE_TO_URL = {
   surveillance: 'nvg',
   thermal: 'flir',
   anime: 'anime',
-  noir: 'noir',
+  // The night atlas writes the word its button shows an English reader. Until
+  // 2026-09-21 it wrote its id, `noir` — see LEGACY_URL_STYLES.
+  noir: 'night',
   snow: 'snow',
 };
+
+/**
+ * Words a link may still carry for a preset that has since changed its word.
+ * Read, never written: a link sent with `style=noir` — the landing page's own
+ * link among them, until 2026-09-21 — still opens at night.
+ */
+const LEGACY_URL_STYLES = Object.freeze({
+  noir: 'noir',
+});
 
 const SHARE_UI_STATE_PARAM = 'ui';
 const SHARE_STYLE_PARAMS_PARAM = 'sp';
@@ -122,9 +133,10 @@ const SHARE_PANEL_STATE_BY_TOKEN = Object.freeze(new Map(
   SHARE_PANEL_STATE_REGISTRY.map((entry) => [entry.token, entry]),
 ));
 
-const URL_TO_STYLE = Object.fromEntries(
-  Object.entries(STYLE_TO_URL).map(([k, v]) => [v, k])
-);
+const URL_TO_STYLE = Object.freeze({
+  ...LEGACY_URL_STYLES,
+  ...Object.fromEntries(Object.entries(STYLE_TO_URL).map(([k, v]) => [v, k])),
+});
 
 const SHARE_STYLE_PARAM_REGISTRY = Object.freeze({
   retro: Object.freeze([

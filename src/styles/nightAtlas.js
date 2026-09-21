@@ -21,14 +21,21 @@
  * daylight palette (red, orange, yellow, green, chosen to survive an
  * orthophoto) for one chosen to glow on black. That is a PRESET decision, not
  * a scene decision, so it lives here: the scene link of « Le réseau électrique
- * et ce qu'il produit » asks for `style=noir`, and a reader who picks Noir by
+ * et ce qu'il produit » asks for `style=night`, and a reader who picks Night by
  * hand over the grid gets the same dress.
+ *
+ * The reader sees this preset named « Nuit » / "Night" (`styleNames.js`); its
+ * id stays `noir`, which is what every table below and beside this file keys
+ * on. Switching the power-grid row on puts it on too — see `nightAtlasRow.js`.
  *
  * Cesium-free and DOM-guarded so the layers that import it stay testable
  * under `node --test`.
  */
 
-/** The preset id — the name the style buttons, the share link and `ui.js` use. */
+/**
+ * The preset id — what the style buttons, the stages and `ui.js` key on. Not a
+ * name: the reader is shown « Nuit » / "Night", and the link writes `night`.
+ */
 export const NIGHT_ATLAS_STYLE = 'noir';
 
 /** Window event `ui.js` dispatches after every preset change. */

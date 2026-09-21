@@ -328,17 +328,39 @@ export const LAYER_FUSIONS = Object.freeze([
     ],
   }),
 
-  // ── 9. Power plants ──────────────────────────────────────────────────────
-  // Three registers, 56 plants held by more than one of them, five gas sites
-  // drawn twice with different megawatts. The row merge is the FIRST half of
-  // this fix; the deduplication by EIC and by ODRÉ id is the second, and it is
-  // not done here. Until it is, the chips at least let a reader see the same
-  // plant twice on purpose rather than by accident.
+  // ── 9. Electricity: the grid and the plants that feed it ────────────────
+  // ONE row since 2026-09-21, asked for by name: « Réseau électrique » and
+  // « Centrales électriques » were two rows for the question the landing
+  // page's scene already asks as one — « Le réseau électrique et ce qu'il
+  // produit ». The scene lit the grid and the RTE output; the row now lights
+  // the same pair, so pressing it by hand opens what the link opens.
+  //
+  // `power-grid` is primary by the rule stated above: it is the WORLD layer
+  // (OSM lines everywhere), and a row chipped `FR` would tell a reader in
+  // Madrid the grid under them is not for them. The three registers are FR.
+  //
+  // PEERS, SO THE GRID GETS A CHIP (`primaryToggle`), like « Infrastructure
+  // numérique »: a line and a power station are two different objects, and a
+  // reader who came for the stations must be able to take the lines away.
+  //
+  // THE EDF REGISTER AND THE HYDRO REGISTER ARE `optIn`. They followed the old
+  // plants row, and on this one they would draw the same stations again: 56
+  // plants are held by more than one register, and under the relief columns
+  // (`rteGeneration.js`) the EDF register puts a second icon on every nuclear
+  // site the column already names. The hydro register adds the whole French
+  // fleet — 2 742 plants, down to a 40 kW mill. Both are one chip away, and
+  // both stay what they were.
+  //
+  // What is still owed, as before: the deduplication by EIC and by ODRÉ id.
+  // Until it lands, the chips let a reader see the same plant twice on purpose
+  // rather than by accident.
   fusionRow({
-    primary: 'edf-power-plants',
+    primary: 'power-grid',
+    primaryToggle: true,
     companions: [
       { id: 'rte-generation' },
-      { id: 'fr-hydro-plants' },
+      { id: 'edf-power-plants', optIn: true },
+      { id: 'fr-hydro-plants', optIn: true },
     ],
   }),
 

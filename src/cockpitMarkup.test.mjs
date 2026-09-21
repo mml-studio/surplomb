@@ -69,9 +69,11 @@ test('Cockpit heading tape leaves the bottom exit row unobstructed', () => {
 
 test('Cockpit vision cycle exposes exactly five real visual styles without NONE', () => {
   assert.match(ui, /const modes = COCKPIT_VISION_MODES;/);
-  assert.match(ui, /const labels = \{ optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: 'NOIR' \};/);
+  // The night atlas is named by `styles/styleNames.js` — NUIT or NIGHT, never
+  // its id — and so is whatever preset the inherited entry repeats.
+  assert.match(ui, /const labels = \{ optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: styleDisplayName\('noir'\) \};/);
   assert.doesNotMatch(ui, /none: 'NONE'/);
-  assert.match(ui, /getInheritedVisionLabel: \(\) => \([\s\S]*?STYLE_STATUS_LABELS\[this\.activeStyle\]/);
+  assert.match(ui, /getInheritedVisionLabel: \(\) => styleDisplayName\(this\.activeStyle\)/);
   assert.match(html, /id="cockpit-vision-current-label"[^>]*>NORMAL<\/strong>/);
   assert.match(ui, /const target = applyCockpitVisionStageIntensities\(this\.stages, next, this\._cockpitVisionRestore\);/);
   assert.match(ui, /this\._cockpitVisionRestore = captureCockpitVisionBaseline\(this\.stages, this\.transitions\);/);

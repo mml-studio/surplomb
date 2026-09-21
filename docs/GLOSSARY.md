@@ -187,6 +187,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 |---|---|---|
 | ÉNERGIE | ENERGY | Layer group. |
 | Réseau électrique | Power grid | |
+| Réseau électrique et centrales | Power grid and plants | The fused row (grid + power stations), since 2026-09-21. |
 | ligne haute tension (HTB), moyenne tension (HTA) | high-voltage line, medium-voltage line | |
 | poste électrique, poste source | substation, primary substation | |
 | capacité d’accueil | hosting capacity | |
@@ -455,6 +456,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Zone non publiée | Unpublished area | |
 | DÉGRADÉ, PÉRIMÉ, REPLI, INDISPONIBLE, INCERTAIN | DEGRADED, STALE, FALLBACK, UNAVAILABLE, UNCERTAIN | Fault states. Identical in both languages today; the French is the decision recorded here. |
 | Plan Google, Plan IGN | Google map, IGN map | Basemap chips; brand names are not translated. |
+| Nuit, NUIT | Night, NIGHT | The night-atlas visual preset (id `noir`). The other presets — NORMAL, CRT, NVG, FLIR, ANIME, SNOW — are the same word in both languages. |
 
 ## Panel chips and fused rows
 
@@ -468,7 +470,8 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 | Écoles et lycées | Schools and high schools | |
 | Anneau, Fiche | Ring, Report | |
 | Vigilance | Warnings | Météo-France. |
-| Registre EDF, Groupes RTE | EDF register, RTE units | |
+| Registre EDF, Groupes RTE | EDF register, RTE units | « Groupes RTE » retired as a chip on 2026-09-21. |
+| Réseau, Production | Grid, Output | Chips of *Réseau électrique et centrales*. |
 | Véhicules en direct, Vélos en station | Live vehicles, Docked bikes | |
 | Flottes partagées | Shared fleets | |
 | Semaine type, Débit mesuré | Typical week, Measured flow | |

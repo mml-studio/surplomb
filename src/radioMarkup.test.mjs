@@ -211,7 +211,12 @@ test('no unchanged Realtime tool definition drifts silently', () => {
   // from "God's Eye View" to "Surplomb" (the fork's name since 2026-09-15). A
   // one-word description edit; the tool itself did not move, so it stays under
   // this digest rather than joining TOUCHED.
-  assert.equal(digest, '9f4a8bb223988cff', 'an unchanged Realtime tool definition drifted');
+  //
+  // Re-derived again on 2026-09-21, when the same tool's `style` property
+  // gained a six-word description: the night atlas's button reads "Night"
+  // while its id stays `noir`, and a model asked for "mode nuit" had only the
+  // id to go on. The enum did not move.
+  assert.equal(digest, 'd4426c2bb3000a23', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {

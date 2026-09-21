@@ -39,9 +39,12 @@ export default defineMessages({
     'hubeau-hydro': { fr: 'Stations', en: 'Stations' },
     'meteofrance-vigilance': { fr: 'Vigilance', en: 'Warnings' },
     'meteo-stations-fr': { fr: 'Stations', en: 'Stations' },
-    // Energy
+    // Energy — one row since 2026-09-21: the grid is its primary AND a chip
+    // (`primaryToggle`), and the output chip says what the column measures
+    // rather than who publishes it (« Groupes RTE » was the operator's term).
+    'power-grid': { fr: 'Réseau', en: 'Grid', note: 'The lines and substations, beside the power stations on the same row.' },
+    'rte-generation': { fr: 'Production', en: 'Output', note: 'What each power station produces right now.' },
     'edf-power-plants': { fr: 'Registre EDF', en: 'EDF register' },
-    'rte-generation': { fr: 'Groupes RTE', en: 'RTE units' },
     'fr-hydro-plants': { fr: 'Centrales hydro', en: 'Hydro plants' },
     // Transit and shared vehicles
     'transit-fr': { fr: 'Véhicules en direct', en: 'Live vehicles' },
@@ -127,6 +130,10 @@ export default defineMessages({
     'rte-generation': {
       fr: 'Production des centrales (RTE) — en temps réel, avec une clé',
       en: 'Power station output (RTE) — real time, with a key',
+    },
+    'edf-power-plants': {
+      fr: 'Registre EDF — les 79 sites d’EDF et leur puissance installée, sans la production du moment',
+      en: 'EDF register — EDF’s 79 sites and their installed capacity, without what they produce now',
     },
     'fr-hydro-plants': {
       fr: 'Registre ODRÉ — toute la filière hydraulique française, '

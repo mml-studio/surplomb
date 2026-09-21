@@ -19461,6 +19461,7 @@ const GEV_REALTIME_TOOLS = [
         style: {
           type: 'string',
           enum: ['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow'],
+          description: '`noir` is shown as Night (Nuit).',
         },
       },
       required: ['style'],

@@ -1185,8 +1185,11 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   failed searches leave the current camera owner untouched, and Context Focus
 >   can return to the preserved Contact. Focus also restores the selected
 >   aircraft's canonical follow frame after a manual zoom-away.
->   Visual presets retain the order Normal, CRT, NVG, FLIR, Anime, Noir, Snow.
->   Noir is the NIGHT ATLAS since 2026-09-21 (`src/styles/nightAtlas.js`): the
+>   Visual presets retain the order Normal, CRT, NVG, FLIR, Anime, Night, Snow.
+>   Night — « Nuit » on the French page, `noir` in code and in the stage names,
+>   `style=night` in a share link (`style=noir` is still read) — is the NIGHT
+>   ATLAS since 2026-09-21 (`src/styles/nightAtlas.js`; the one name that
+>   changes with the language comes from `src/styles/styleNames.js`): the
 >   basemap is dimmed and desaturated inside the scene (`nightBasemap.js` —
 >   `ImageryLayer.brightness/saturation` on the active stack's own layers, a
 >   `CustomShader` on the photorealistic tileset while it is the ground) and
@@ -2791,8 +2794,8 @@ SUBJECT. `layerTaxonomy.js` answers "what is this dataset and which group does
 it belong to", which is a per-layer question; "are these two rows one subject?"
 is a statement about a PAIR, and a per-layer field can only hold half of it.
 
-Fifteen entries fold **23 layers** into the row of the subject they belong to.
-The panel goes from **61 rows to 38** (36 core layers plus the two plugged
+Sixteen entries fold **26 layers** into the row of the subject they belong to.
+The panel goes from **61 rows to 35** (33 core layers plus the two plugged
 datasets). What a fusion changes is presentation and nothing else:
 
 - the companion keeps its **id, module, lifecycle, cache and share token**, so a
@@ -2804,7 +2807,7 @@ datasets). What a fusion changes is presentation and nothing else:
 On the row, each companion becomes a **fusion chip**: round, dotted (`○` off,
 `●` on), against the square option chips the panel already had. The row toggle
 enables the primary and the companions that FOLLOW it; a companion marked
-`optIn` (only `comparables-fr` today, the reader's own dossier) waits for its
+`optIn` (the reader's own dossier `comparables-fr`, among others) waits for its
 chip. Switching a row OFF takes the whole group down, `optIn` included — a lit
 chip under a dark row would be a layer drawing with no visible control.
 
@@ -2836,6 +2839,21 @@ border, the WORLD layer is primary (`bikeshare` over `shared-mobility-fr`,
 `local-datacenters` over `anfr-fr`). A row chipped `FR` over a world subject
 tells a reader outside France that a layer serving them is not for them.
 `layerFusions.test.mjs` asserts it.
+
+**The electricity row brings the night.** Since 2026-09-21 the grid and the
+power stations are one row, *Réseau électrique et centrales* (*Power grid and
+plants*): `power-grid` is primary (the world layer) with a chip of its own
+(`primaryToggle`), `rte-generation` follows the row, and `edf-power-plants` and
+`fr-hydro-plants` are `optIn` — on this row they drew the same stations a second
+time. The row's switch therefore lights what the landing page's scene lights.
+It also moves the visual preset (`src/styles/nightAtlasRow.js`, fed from the
+manager's settled `visibility` events in `ui.js`): when the row goes from dark to
+lit by a reader — origin `user` or `voice` — the preset becomes Night, and when
+it goes dark again by a reader the preset it replaced comes back, unless the
+reader picked another one meanwhile or was already under Night. A share link, a
+restored session, a scene or a context mode moves layers without moving the
+preset. The switch lands when the first of the row's layers settles: 1.8 to
+2.8 s after the click in headless SwiftShader runs against the dev server.
 
 **What the fusion does NOT do**, and is owed separately: deduplicate the 56
 plants three registers share (`edf-power-plants`, `rte-generation`,

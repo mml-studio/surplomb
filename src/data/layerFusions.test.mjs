@@ -69,6 +69,14 @@ test('the row toggle carries its followers and leaves the opt-in companions alon
     assert.ok(fusionCompanionsFor('dvf-sales').some((entry) => entry.id === id && entry.optIn), id);
   }
 
+  // The electricity row lights what the landing page's scene lights — the
+  // grid and the output of the power stations — and leaves the two registers
+  // that would draw the same stations a second time to their chips.
+  assert.deepEqual(fusionToggleGroupFor('power-grid'), ['power-grid', 'rte-generation']);
+  for (const id of ['edf-power-plants', 'fr-hydro-plants']) {
+    assert.ok(fusionCompanionsFor('power-grid').some((entry) => entry.id === id && entry.optIn), id);
+  }
+
   // A layer with no fusion is its own group of one — that is the contract that
   // lets a caller use this unconditionally.
   assert.deepEqual(fusionToggleGroupFor('cctv'), ['cctv']);
@@ -82,6 +90,8 @@ test('a companion resolves back to the row it disappeared into', () => {
   assert.equal(fusedIntoFor('gironde-megafire-2026'), 'local-firms');
   assert.equal(fusedIntoFor('bruit-fr'), 'local-airports');
   assert.equal(fusedIntoFor('military'), 'flights');
+  assert.equal(fusedIntoFor('edf-power-plants'), 'power-grid');
+  assert.equal(fusedIntoFor('rte-generation'), 'power-grid');
   assert.equal(fusedIntoFor('cctv'), null);
   assert.equal(fusedIntoFor('urbanisme-gpu'), null);
 });
@@ -102,7 +112,7 @@ test('the taxonomy carries the fusion facets, and the panel projection drops the
   }
 });
 
-test('the merge is measured, not asserted: the panel loses 25 rows and keeps every layer', () => {
+test('the merge is measured, not asserted: the panel loses 26 rows and keeps every layer', () => {
   // The number is the point of the whole exercise, so it is pinned. If a new
   // layer lands, the row count moves and this assertion moves with it — what
   // must not move silently is the DIFFERENCE between what is registered and
@@ -118,8 +128,12 @@ test('the merge is measured, not asserted: the panel loses 25 rows and keeps eve
   // the permits under it (« Urbanisme »), the moorings joined the vessels whose
   // cards already read them, and the Gironde archive became the past tense of
   // « Feux actifs ».
+  //
+  // 25 until 2026-09-21, when the grid and the power stations became one row:
+  // `power-grid` took the plants row over, and `edf-power-plants`, its primary
+  // until then, became the fourth member of it.
   const folded = LAYER_FUSIONS.reduce((total, fusion) => total + fusion.companions.length, 0);
-  assert.equal(folded, 25);
+  assert.equal(folded, 26);
 
   const rows = groupLayerIdsByCategory().flatMap((group) => group.layerIds);
   const datasets = LAYER_TAXONOMY.filter((entry) => entry.kind === 'dataset');

@@ -109,6 +109,7 @@ test('the French a person actually says resolves — accents optional', () => {
     tram: 'transit-fr',
     trottinettes: 'shared-mobility-fr',
     'réseau électrique': 'power-grid',
+    'centrales électriques': 'power-grid',
     'centrales EDF': 'edf-power-plants',
     gaz: 'gas-fr',
     'stations météo': 'meteo-stations-fr',
@@ -140,12 +141,12 @@ test('normalization folds accents, case and punctuation to one key', () => {
 });
 
 test('a near miss gets suggestions and nonsense gets none', () => {
-  // `edf-power-plants` joined this list when the fusion relabelled it
-  // « Centrales électriques » — it really does share a word with what was
-  // asked, and it is ranked below the two that share more.
+  // `edf-power-plants` sat between these two while the fusion labelled it
+  // « Centrales électriques ». It left on 2026-09-21 with that label, which
+  // now names the grid-and-plants row the grid keeps.
   assert.deepEqual(
     suggestVoiceLayers('bornes electriques').map((entry) => entry.id),
-    ['irve-fr', 'edf-power-plants', 'power-grid'],
+    ['irve-fr', 'power-grid'],
   );
   assert.equal(suggestVoiceLayers('la couche medecin')[0].id, 'medecins-fr');
   // French grammar words must not manufacture a match: "des" appears in half
