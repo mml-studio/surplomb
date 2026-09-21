@@ -109,6 +109,13 @@ function refreshFailureFromStats(stats, label) {
 const GUIDANCE_STATUSES = Object.freeze(new Set(['zoom-in', 'empty', 'idle', 'out-of-gate']));
 
 /**
+ * How long a new selection card is kept in view while the rail settles. The
+ * rail's layout pass runs on a frame and on the 500 ms stats cadence; the key
+ * was measured taking its final height within 2.5 s of a click.
+ */
+export const LEGEND_SELECTION_REVEAL_MS = 3000;
+
+/**
  * A layer's `legendSelection`, checked and normalised, or null.
  *
  * The slot is the card of the object the reader selected, printed in the key
@@ -4346,9 +4353,45 @@ export class DataLayerManager {
     // leaves the reader's scroll where they put it. The key repaints about
     // once a second, and scrolling on every pass would pin the list.
     if (selectionKey && selectionKey !== this._legendSelectionKey) {
-      list.querySelector('.map-legend-selection')?.scrollIntoView?.({ block: 'nearest' });
+      this._revealLegendSelection(list);
     }
     this._legendSelectionKey = selectionKey;
+  }
+
+  /**
+   * Scroll a new selection card into view, and keep it there while the rail
+   * settles.
+   *
+   * The card lands in the key BEFORE the rail's layout pass hands the key its
+   * height: scrolled at insertion, it was whole in a key about to shrink, and
+   * the pass then cut it under the price — measured at 1440 × 900 with the
+   * DVF key, 568 px of content in 403 px of list and the list still at its
+   * top. So the list's box is watched for a short window and the card is
+   * revealed again each time that box changes, until the reader scrolls,
+   * clicks or touches the list themselves.
+   *
+   * @param {HTMLElement} list `#map-legend-items`.
+   */
+  _revealLegendSelection(list) {
+    const reveal = () => {
+      list.querySelector('.map-legend-selection')?.scrollIntoView?.({ block: 'nearest' });
+    };
+    reveal();
+    this._stopLegendReveal?.();
+    if (typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(reveal);
+    const events = ['wheel', 'pointerdown', 'touchstart', 'keydown'];
+    let timer = null;
+    const stop = () => {
+      observer.disconnect();
+      clearTimeout(timer);
+      for (const type of events) list.removeEventListener(type, stop);
+      if (this._stopLegendReveal === stop) this._stopLegendReveal = null;
+    };
+    observer.observe(list);
+    for (const type of events) list.addEventListener(type, stop, { passive: true });
+    timer = setTimeout(stop, LEGEND_SELECTION_REVEAL_MS);
+    this._stopLegendReveal = stop;
   }
 
   /**

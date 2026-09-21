@@ -101,22 +101,24 @@ test('one silhouette, one caption — and the air and sea layers agree on the un
   assert.equal(withLocale('fr', () => CLASS_LEGEND_LABELS.airliner), 'Jet monocouloir');
 });
 
-test('the flight key refuses to read a mission into an allocation block', () => {
+test('the flight key speaks plain words and still reads no mission into a block', () => {
   const m = withLocale('en', () => flightMessages());
   assertNoFrench(m, { allow: DATA });
-  assert.equal(m.militaryBlock.label, 'Military ICAO block');
-  assert.equal(m.militaryBlock.blurb,
-    'Amber marks the transponder’s registered allocation block, not the mission.');
+  // Plain words, one line each: the ICAO block and the dead reckoning read as
+  // jargon, and their two-line blurbs went with them (2026-09-21).
+  assert.equal(m.militaryBlock.label, 'Military aircraft');
+  assert.equal(m.militaryBlock.blurb, undefined);
   assert.equal(m.tracked.label, 'Tracked contact');
-  assert.match(m.coasting.label, /^Dead reckoning \(missed polls\)$/);
-  assert.match(m.coasting.blurb, /^Washed out, not faded: the position is being carried by dead reckoning/);
-  assert.match(m.coasting.blurb, /Here transparency means age\.$/);
+  assert.equal(m.coasting.label, 'Signal lost, estimated position');
+  assert.equal(m.coasting.blurb, undefined);
+  assert.equal(withLocale('fr', () => flightMessages().militaryBlock.label), 'Avion militaire');
+  assert.equal(withLocale('fr', () => flightMessages().coasting.label), 'Signal perdu, position estimée');
   assert.equal(m.coverage.regional(250), '250 NM regional circle');
   assert.equal(m.coverage.worldwide, 'worldwide coverage');
   // The military layer says the same two things, word for word.
   const military = withLocale('en', () => militaryMessages());
   assert.equal(military.tracked.blurb, m.tracked.blurb);
-  assert.equal(military.coasting.blurb, m.coasting.blurb);
+  assert.equal(military.coasting.label, m.coasting.label);
   assert.equal(military.unknownBlurb, 'Type not declared by adsb.lol — the silhouette is a stand-in.');
 });
 

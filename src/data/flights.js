@@ -6018,7 +6018,6 @@ const flightsLayer = {
         label: messages().militaryBlock.label,
         color: '#ffb800',
         count: military,
-        blurb: messages().militaryBlock.blurb,
       });
     }
     if (_trackedIcao) {
@@ -6036,7 +6035,6 @@ const flightsLayer = {
         // not an alpha, so the swatch can be the datum.
         color: coastingSwatchCss('#ffffff'),
         count: coasting,
-        blurb: messages().coasting.blurb,
       });
     }
     if (unclassified > 0 && !byClass.has('unknown')) {

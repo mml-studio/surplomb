@@ -3101,7 +3101,14 @@ a one-line address tag and the whole card goes to the key through the new
 lines, a metric with swatch and captions, a footnote and an `https:` link,
 normalised by `manager.legendSelectionOf` and rendered under the block's
 classes, with a × that calls the layer's new `clearSelectedCard()`. A new
-selection is scrolled into view once. With the key folded, hidden by the
+selection is scrolled into view once, and again each time the list's box
+changes size for up to 3 s (`_revealLegendSelection`, a `ResizeObserver`
+that a wheel, pointer, touch or key on the list ends): the card lands before
+the rail's layout pass shrinks the key, which cut it under the price at
+1440 × 900. Since the same day the whole key is set larger — class rows
+13 px, notes, sources and blurbs 11.5 px, the card's address 16 px, price
+32 px, €/m² 18 px — so the DVF classes stack one per line and the key
+scrolls sooner. With the key folded, hidden by the
 clean view, or on a phone (`html[data-shell="phone"]` hides the section;
 `phoneSelection.js` keeps its tab), the globe card stays whole. The plot the
 sale bought — or, above 600 m, the plot or section under the click — is

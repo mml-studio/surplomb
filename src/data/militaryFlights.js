@@ -3855,7 +3855,6 @@ const militaryFlightsLayer = {
         label: messages().coasting.label,
         color: coastingSwatchCss('#ffb800'),
         count: coasting,
-        blurb: messages().coasting.blurb,
       });
     }
     return { legend };

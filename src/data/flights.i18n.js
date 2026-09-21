@@ -2,16 +2,15 @@
  * Legend strings of `src/data/flights.js` — see docs/i18n/CONVENTIONS.md.
  *
  * The aircraft classes themselves are captioned once, for both air layers, in
- * `aircraftClass.i18n.js`. What is here is the rest of the key, and two of
- * its rows are deliberate refusals to over-claim:
+ * `aircraftClass.i18n.js`. What is here is the rest of the key, written for a
+ * reader who knows no aviation word (2026-09-21: « Plage OACI militaire » and
+ * « À l'estime (sondages manqués) », each with a two-line blurb, read as
+ * jargon). The two rows still claim no more than the layer sees:
  *
- *   · the amber row marks the transponder's REGISTERED ALLOCATION BLOCK, not
- *     a mission — an airliner on a military block is still an airliner;
- *   · the washed-out row says the position is being held by dead reckoning
- *     and is not being reported, so the transparency is age, not opacity.
- *
- * Both survive in English word for word, because a key that softened either
- * would make the layer claim things it cannot see.
+ *   · the amber row is an aircraft whose transponder sits in a military
+ *     allocation block — who owns it, never what it is doing;
+ *   · the washed-out row is an aircraft the feed has stopped reporting, drawn
+ *     where it would be on its last heading, so the pale tint is age.
  */
 import { defineMessages } from '../i18n/messages.js';
 
@@ -23,11 +22,7 @@ export default defineMessages({
       + 'place as soon as the type answer arrives.',
   },
   militaryBlock: {
-    label: { fr: 'Plage OACI militaire', en: 'Military ICAO block' },
-    blurb: {
-      fr: 'L’ambre marque le bloc d’allocation enregistré du transpondeur, pas la mission.',
-      en: 'Amber marks the transponder’s registered allocation block, not the mission.',
-    },
+    label: { fr: 'Avion militaire', en: 'Military aircraft' },
   },
   tracked: {
     label: { fr: 'Contact suivi', en: 'Tracked contact' },
@@ -37,13 +32,7 @@ export default defineMessages({
     },
   },
   coasting: {
-    label: { fr: 'À l’estime (sondages manqués)', en: 'Dead reckoning (missed polls)' },
-    blurb: {
-      fr: 'Délavé, et non estompé : la position est tenue à l’estime depuis '
-        + 'le dernier point, elle n’est pas rapportée. Ici la transparence dit l’ancienneté.',
-      en: 'Washed out, not faded: the position is being carried by dead reckoning from '
-        + 'the last fix, it is not being reported. Here transparency means age.',
-    },
+    label: { fr: 'Signal perdu, position estimée', en: 'Signal lost, estimated position' },
   },
   unclassified: { fr: 'Non classé', en: 'Unclassified' },
 
