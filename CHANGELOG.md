@@ -6,6 +6,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The landing page's Roissy view is the Roissy film, and it grows under the
+  pointer.** The « Roissy et les avions en approche » thumbnail played six
+  seconds of a nearly still camera; it now plays the 29-second scene cut from
+  the app — the terminals, the take-off down 09R, a departure followed into
+  its Cockpit, the climb to the noise plan — at the thumbnail's own
+  definition. Resting the pointer on it (or reaching it with the keyboard)
+  enlarges it to about twice its size, kept on screen, over dimmed
+  neighbours; the film does not stop, and swaps to a sharper file at the same
+  instant when the thumbnail's one would be blown up. A phone never enlarges
+  it: a tap is still the link to the globe.
 - **Click a slowed or jammed stretch of road to read it.** The coloured
   TomTom ribbon now opens a card on the stretch under the pointer: its kind of
   road, its state, the share of its free-flow speed it is moving at (« roule à

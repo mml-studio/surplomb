@@ -276,6 +276,24 @@ Updated: September 19, 2026
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
+> - **View 01 is a film, and it enlarges** (2026-09-21). Its loop is replaced
+>   by the Roissy scene cut from the app (29 s, `surplomb-roissy-v9b.mp4`),
+>   encoded by `scripts/build-landing-film.mjs --src <film>` into
+>   `.context/landing-assets/film/out` under the loop's own names — cropped to
+>   the box's 1.65 (centred), a keyframe every 4 s, 480/960/1440 in AV1 + HEVC
+>   (+ H.264 at 480), each at VMAF ≈ 90 or its cap: AV1 1.2 / 2.8 / 5.2 MB,
+>   HEVC 1.2 / 3.8 / 7.6 MB — which `publish-landing-assets.mjs` reads FIRST,
+>   so a republished gallery keeps the film. A Retina laptop pays the 960
+>   (2.8 MB) as the gallery nears, and the 1440 (5.2 MB) on the first
+>   enlargement only. `data-expand` on the view makes
+>   `src/vitrine/gallery.js` scale the box (`--expand-scale`, at most 2× and
+>   1 040 CSS px, `expandGeometry` keeps it on screen and over its own tile)
+>   after the pointer rests 280 ms or on keyboard focus, never on touch, and
+>   only once the film plays; the neighbours dim to 0.3 (`:has()`). If the
+>   enlarged box needs more pixels than the tile's file, the wider rendition
+>   is parked 0.8 s ahead, started when the film reaches it, and the old file
+>   dropped on its first frame (`swapForWider`; kept for the visit).
+>   `qa:landing` case `gallery` asserts grow, dim, swap and shrink.
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the

@@ -543,6 +543,32 @@ html[data-input="coarse"] #vitrine .field input { font-size: 16px; }
 }
 #vitrine [data-loop="live"] > .loop-video { opacity: 1; }
 #vitrine .view:hover .view-image .loop-video { transform: scale(1.025); }
+
+/* The enlarged film (src/vitrine/gallery.js, `data-expand`): the box grows
+   about the origin the script picked to keep it on screen, above its
+   neighbours, which dim. The raised z-index outlives the shrink by its
+   duration, or the next boxes would cut across it on the way back. The
+   credit keeps its size. */
+#vitrine .gallery-grid > .view { transition: opacity 300ms var(--ease-out); }
+#vitrine .gallery-grid:has(> .view[data-expanded]) > .view:not([data-expanded]) { opacity: .3; }
+#vitrine .gallery-grid > .view[data-expand] {
+  position: relative;
+  transition: opacity 300ms var(--ease-out), z-index 0s 450ms;
+}
+#vitrine .gallery-grid > .view[data-expanded] { z-index: 3; transition-delay: 0s; }
+#vitrine .view[data-expand] .view-image {
+  transform-origin: var(--expand-origin, 50% 50%);
+  transition: transform 450ms var(--ease-out), box-shadow 450ms var(--ease-out);
+}
+#vitrine .view[data-expanded] .view-image {
+  transform: scale(var(--expand-scale, 1));
+  box-shadow: 0 6px 18px #24473C38;
+}
+#vitrine .view[data-expand] .image-credit {
+  transform-origin: 100% 100%;
+  transition: transform 450ms var(--ease-out);
+}
+#vitrine .view[data-expanded] .image-credit { transform: scale(calc(1 / var(--expand-scale, 1))); }
 #vitrine .view figcaption {
   display: flex;
   justify-content: space-between;
