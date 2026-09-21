@@ -307,7 +307,8 @@ export const LAYER_MANIFEST = Object.freeze([
     name: 'Bikeshare',
     icon: '🚲',
     source: 'GBFS',
-    capabilities: Object.freeze(['destroy', 'getStats']),
+    capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
+    defaultParams: Object.freeze({ operator: null, kinds: null }),
     load: () => import('./bikeshare.js').then((module) => module.default),
   }),
   Object.freeze({
@@ -332,7 +333,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '🛴',
     source: 'transport.data.gouv.fr',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ kinds: null }),
+    defaultParams: Object.freeze({ kinds: null, operator: null }),
     load: () => import('./sharedMobilityFrance.js').then((module) => module.default),
   }),
   Object.freeze({

@@ -5089,3 +5089,90 @@ test('a layer whose chunk never arrives settles OFF, not stuck UNCERTAIN', async
   assert.equal(events.find((event) => event.type === 'visibility-failed').enabled, true);
   assert.equal(manager.getLayerLifecycleState('cctv').uncertain, false);
 });
+
+test('the shared-mobility key: a segmented control, an action line, and a press offered to the row', async () => {
+  // Adopted 2026-09-21. Over Paris the Vélib' docks (`bikeshare`) and the
+  // free-floating fleets (`shared-mobility-fr`) are one row; an operator
+  // pressed in either block must reach both, or « Lime » leaves the docks up.
+  const originalDocument = globalThis.document;
+  const element = () => {
+    const node = makeControlElement();
+    node.classList = { add(name) { node.className = `${node.className} ${name}`.trim(); }, toggle() {} };
+    return node;
+  };
+  const host = element();
+  const items = element();
+  globalThis.document = {
+    createElement: element,
+    createDocumentFragment: () => {
+      const fragment = element();
+      fragment.isFragment = true;
+      return fragment;
+    },
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const received = [];
+  const fleet = makeRowControlLayer().module;
+  fleet.id = 'shared-mobility-fr';
+  fleet.getRowControls = () => ({
+    chips: [],
+    legendSegments: [
+      { id: 'all', label: 'Tous', active: true, toggle: null },
+      { id: 'velo', label: 'Vélos', active: false, title: '3 à l’écran', toggle: { param: 'kinds', value: 'velo', fanOut: true } },
+    ],
+    legendSegmentsLabel: 'Type de véhicule',
+    legend: [
+      { label: 'Lime', color: '#b6f03c', count: 2, channel: 'Fournisseurs', toggle: { param: 'operator', value: 'lime', fanOut: true } },
+      { label: 'Tout afficher', action: true, channel: 'Fournisseurs', toggle: { param: 'operator', value: 'all', fanOut: true } },
+    ],
+  });
+  const docks = makeRowControlLayer().module;
+  docks.id = 'bikeshare';
+  docks.acceptsParams = (params) => 'operator' in params;
+  docks.setParams = (params) => { received.push(params); return true; };
+  docks.getRowControls = () => ({ chips: [], legend: [] });
+  mgr.register(fleet);
+  mgr.register(docks);
+  mgr._registrationTaxonomy = new Map([
+    ['bikeshare', { label: 'Vélos et véhicules partagés', companions: [{ id: 'shared-mobility-fr' }] }],
+    ['shared-mobility-fr', { label: 'Véhicules partagés', fusedInto: 'bikeshare' }],
+  ]);
+  const container = element();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('shared-mobility-fr', true), true);
+    assert.equal(await mgr.setEnabled('bikeshare', true), true);
+    mgr._refreshTogglePanel();
+
+    const strips = collectByClass(items, 'map-legend-segments');
+    assert.equal(strips.length, 1);
+    assert.equal(strips[0].attributes['aria-label'], 'Type de véhicule');
+    const [all, velo] = collectByClass(items, 'map-legend-segment');
+    assert.equal(all.attributes['aria-pressed'], 'true');
+    assert.equal(all.disabled, true, 'the lit « Tous » is not a control');
+    assert.equal(velo.attributes['aria-pressed'], 'false');
+    assert.deepEqual({ ...velo.dataset }, {
+      toggleParam: 'kinds', toggleValue: 'velo', toggleLayer: 'shared-mobility-fr', toggleFanOut: '1',
+    });
+    assert.equal(velo.title, '3 à l’écran');
+
+    // An action line takes no swatch: a dot beside it would read as a class.
+    const [action] = collectByClass(items, 'is-action');
+    assert.equal(action.children.length, 1);
+    assert.equal(action.children[0].textContent, 'Tout afficher');
+    assert.equal(collectByClass(items, 'map-legend-swatch').length, 1, 'Lime only');
+
+    // A press from the companion's block reaches the row's primary.
+    mgr._offerParamsToRow('shared-mobility-fr', { operator: 'lime' });
+    assert.deepEqual(received, [{ operator: 'lime' }]);
+    // A neighbour that does not take the key is not asked to.
+    mgr._offerParamsToRow('shared-mobility-fr', { kinds: 'velo' });
+    assert.deepEqual(received, [{ operator: 'lime' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});

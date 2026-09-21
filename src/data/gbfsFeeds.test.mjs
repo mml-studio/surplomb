@@ -27,6 +27,7 @@ import {
   parseGbfsVehicles,
   registrableDomain,
   resolveGbfsDiscovery,
+  resolveStationKinds,
   selectSystemsForBox,
   setsEqual,
   snapGbfsBox,
@@ -472,4 +473,16 @@ test('docks go before vehicles when a system has to be cut', () => {
   ], CAP_BOX, 2);
   assert.deepEqual(kept.get('v').stations, [dock]);
   assert.equal(kept.get('v').vehicles.length, 1);
+});
+
+test('a dock\'s own vehicle type ids are read through its vehicle_types', () => {
+  // Clem' Paris, 2026-09-21: `renault-zoe: 1` on a car-share station, which
+  // the key filed under « Vélos » by the GBFS default.
+  const kinds = { 'renault-zoe': 'car', 'vt-velo': 'ebike' };
+  assert.deepEqual(resolveStationKinds({ 'renault-zoe': 1 }, kinds), { car: 1 });
+  assert.deepEqual(resolveStationKinds({ bike: 3, 'vt-velo': 2, ebike: 1 }, kinds), { bike: 3, ebike: 3 });
+  // An id the system does not describe stays as it came; the layer applies
+  // the default itself.
+  assert.deepEqual(resolveStationKinds({ 'vt-9f3a': 4 }, kinds), { 'vt-9f3a': 4 });
+  assert.equal(resolveStationKinds(null, kinds), null);
 });

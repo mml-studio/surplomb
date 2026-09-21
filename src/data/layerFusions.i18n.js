@@ -46,8 +46,11 @@ export default defineMessages({
     // Transit and shared vehicles
     'transit-fr': { fr: 'Véhicules en direct', en: 'Live vehicles' },
     'idfm-network': { fr: 'Réseau IDFM', en: 'IDFM network' },
-    bikeshare: { fr: 'Stations GBFS', en: 'GBFS stations' },
-    'shared-mobility-fr': { fr: 'Longue traîne FR', en: 'FR long tail' },
+    // Read back as the two sub-titles of the « Mobilités partagées » key, so
+    // they are words a rider uses: « Stations GBFS » and « Longue traîne FR »
+    // named the pipeline, not the bikes (renamed 2026-09-21).
+    bikeshare: { fr: 'Vélos en station', en: 'Docked bikes' },
+    'shared-mobility-fr': { fr: 'Flottes partagées', en: 'Shared fleets' },
     'velo-pulse-fr': { fr: 'Semaine type', en: 'Typical week' },
     // Road
     traffic: { fr: 'Débit mesuré', en: 'Measured flow' },

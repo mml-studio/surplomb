@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
-import {
+import bikeshareLayer, {
   bikeshareCoveredSystems,
   BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS,
   _clearBikeshareSelectionForTest,
@@ -10,6 +10,7 @@ import {
   _parseStationStatusForTest,
   _selectBikeshareStationForTest,
   _setBikeshareSelectionStateForTest,
+  _setBikeshareStationsForTest,
   createBikeshareSelectedOverlayEntry,
 } from './bikeshare.js';
 import { mobilityOperatorColor } from './mobilityOperators.js';
@@ -163,4 +164,82 @@ test('every covered system resolves to an operator colour, and the four French o
   for (const color of french.map(mobilityOperatorColor)) {
     assert.ok(!floating.includes(color), `${color} collides with a free-floating operator`);
   }
+});
+
+// --- The Vélib' block of the « Mobilités partagées » key ----------------------
+//
+// Over Paris the docks and the free-floating fleets are one subject on one row.
+// A focus pressed in either block is fanned out to the other, so « Lime » takes
+// the Vélib' docks off the map and « Vélib' » keeps only them.
+
+function velibDock(id, lat = 48.86, lon = 2.35) {
+  return {
+    key: `paris-velib:${id}`,
+    cityId: 'paris-velib',
+    stationId: id,
+    stationName: `Station ${id}`,
+    lat,
+    lon,
+    point: { position: Cesium.Cartesian3.fromDegrees(lon, lat, 2), show: true },
+  };
+}
+
+test('the Vélib\' block names the network in its ring colour, as a switch for the whole row', () => {
+  _setBikeshareStationsForTest({ records: [velibDock('1'), velibDock('2')] });
+  const { chips, legend, legendScope } = bikeshareLayer.getRowControls();
+  assert.deepEqual(chips, []);
+  const [velib, ...fill] = legend;
+  assert.equal(velib.label, 'Vélib\'');
+  assert.equal(velib.color, mobilityOperatorColor('Vélib\' Métropole'));
+  assert.equal(velib.channel, 'Fournisseurs');
+  assert.deepEqual(velib.toggle, { param: 'operator', value: 'velib', fanOut: true });
+  assert.equal(velib.count, 2);
+  assert.deepEqual(fill.map((item) => item.label), ['bien remplie', 'à moitié', 'presque vide']);
+  assert.equal(legendScope.inView, 2);
+  _setBikeshareStationsForTest();
+});
+
+test('a focus on another operator hides the docks by flag, and the block offers the way back', () => {
+  const docks = [velibDock('1'), velibDock('2')];
+  _setBikeshareStationsForTest({ records: docks });
+  assert.equal(bikeshareLayer.acceptsParams({ operator: 'lime' }), true);
+  assert.equal(bikeshareLayer.acceptsParams({ kinds: 'scooter' }), true);
+  assert.equal(bikeshareLayer.acceptsParams({ year: 2024 }), false);
+  assert.equal(bikeshareLayer.setParams({ operator: 'lime' }), true);
+  assert.ok(docks.every((dock) => dock.point.show === false), 'hidden in place, not rebuilt');
+
+  const { legend, legendScope } = bikeshareLayer.getRowControls();
+  assert.equal(legend[0].off, true, 'Vélib\' is dimmed, not dropped: it is still there to press');
+  assert.deepEqual(legend.find((item) => item.action)?.toggle, { param: 'operator', value: 'all', fanOut: true });
+  assert.equal(legendScope, null, 'hidden by a filter is not « hors de cette vue »');
+  assert.equal(legend.some((item) => item.channel === 'Stations'), false, 'no dock drawn, no fill key');
+
+  assert.equal(bikeshareLayer.setParams({ operator: 'velib' }), true);
+  assert.ok(docks.every((dock) => dock.point.show === true));
+  const lit = bikeshareLayer.getRowControls().legend;
+  assert.deepEqual(lit[0].toggle, { param: 'operator', value: 'all', fanOut: true });
+  assert.equal(lit.some((item) => item.action), false, 'its own lit line is the way back');
+
+  // A dock holds bikes: any other family hides it.
+  assert.equal(bikeshareLayer.setParams({ operator: 'all', kinds: 'scooter' }), true);
+  assert.ok(docks.every((dock) => dock.point.show === false));
+  assert.equal(bikeshareLayer.setParams({ kinds: 'velo' }), true);
+  assert.ok(docks.every((dock) => dock.point.show === true));
+  assert.equal(bikeshareLayer.setParams({ kinds: 'velo' }), false, 'a replayed value changes nothing');
+  _setBikeshareStationsForTest();
+});
+
+test('clearing a selection gives the dock back to the filters, not to "shown"', () => {
+  const dock = velibDock('1');
+  const viewer = { entities: new Cesium.EntityCollection() };
+  _setBikeshareStationsForTest({ viewer, records: [dock] });
+  _selectBikeshareStationForTest(dock.key);
+  assert.equal(dock.point.show, false, 'hidden under its highlight');
+  // A focus that excludes the selected dock clears the selection with it.
+  bikeshareLayer.setParams({ operator: 'lime' });
+  assert.equal(dock.point.show, false);
+  assert.equal(viewer.entities.values.length, 0);
+  _clearBikeshareSelectionForTest();
+  assert.equal(dock.point.show, false, 'released selection, still filtered out');
+  _setBikeshareStationsForTest();
 });

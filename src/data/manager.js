@@ -1,7 +1,7 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
-import { fusionMemberChipFor, fusionPrimaryChipFor } from './layerFusions.js';
+import { fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor } from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
 import { getSelectedEntityContext } from './contextStore.js';
 import { renderZoomPrompt, zoomPromptModel, zoomPromptVisible } from '../zoomPrompt.js';
@@ -3185,36 +3185,8 @@ export class DataLayerManager {
         if (chip.params) {
           const owner = chip.targetLayerId || layer.id;
           this.setLayerParams(owner, chip.params, { origin: 'user' });
-          // ONE CONTROL FOR ONE READER INTENTION, ACROSS A FUSED ROW.
-          //
-          // A fusion says these layers are one subject. When two of them take
-          // the SAME parameter about it — DVF filters the mutations by
-          // dwelling type, the estimate chooses the type it is valuing — two
-          // chip strips on one row is not redundancy, it is a trap: the reader
-          // presses one `Maison`, the other stays on `Appartement`, and the
-          // map and the headline above it describe different populations.
-          // Measured on exactly that row in Bayonne, 2026-09-14.
-          //
-          // So a chip may declare `fanOut` and the params are OFFERED to every
-          // other enabled member of the row. Offered, not imposed: `setParams`
-          // is a closed enum per layer and returns false on anything outside
-          // it, so a member that does not take the key — or does not take that
-          // value, which is how `tous` stays a map-only instruction — keeps
-          // the question it was already asking. That refusal is the mechanism,
-          // not a failure, so it is not logged as one.
-          if (chip.fanOut) {
-            for (const member of this._fusionGroupIds(layer.id)) {
-              if (member === owner || !this.isEnabled(member)) continue;
-              const module = this.layers.get(member)?.module;
-              // ASKED, NOT ATTEMPTED. `setParams` returning false is a
-              // refusal the manager logs and notifies as `params-failed`,
-              // which is right for a caller that meant it — and wrong here,
-              // where declining is the normal outcome and the mechanism.
-              if (typeof module?.acceptsParams !== 'function') continue;
-              if (!module.acceptsParams(chip.params)) continue;
-              this.setLayerParams(member, chip.params, { origin: 'user' });
-            }
-          }
+          // A chip may declare `fanOut`: see `_offerParamsToRow`.
+          if (chip.fanOut) this._offerParamsToRow(owner, chip.params, layer.id);
         }
       });
       row.appendChild(controls);
@@ -3623,6 +3595,9 @@ export class DataLayerManager {
           // Ordered classes get ONE segmented bar above them instead of six
           // stacked rows — see `_legendBar`.
           bar: controls.legendBar === true,
+          // A segmented control over the key, when the layer has one.
+          segments: Array.isArray(controls.legendSegments) ? controls.legendSegments : [],
+          segmentsLabel: typeof controls.legendSegmentsLabel === 'string' ? controls.legendSegmentsLabel : '',
           // WHERE these classes are, and whether any of them is on screen.
           // A layer whose whole dataset sits 800 km away was still printing a
           // six-class key above the layer the reader was actually looking at.
@@ -3939,6 +3914,8 @@ export class DataLayerManager {
         note: group.note || null,
         source: group.source || null,
         bar: group.bar === true,
+        segments: group.segments || [],
+        segmentsLabel: group.segmentsLabel || '',
         scope: group.scope || null,
         subtitle: fusionMemberChipFor(rowId, group.layer.id) || this._displayName(group.layer),
       });
@@ -3972,12 +3949,69 @@ export class DataLayerManager {
     if (list.dataset.toggleListener === '1') return;
     list.dataset.toggleListener = '1';
     list.addEventListener('click', (event) => {
-      const button = event.target?.closest?.('.map-legend-entry.is-toggle');
+      const button = event.target?.closest?.('.is-toggle[data-toggle-layer]');
       if (!button) return;
-      const { toggleLayer, toggleParam, toggleValue } = button.dataset;
+      const { toggleLayer, toggleParam, toggleValue, toggleFanOut } = button.dataset;
       if (!toggleLayer || !toggleParam) return;
-      this.setLayerParams(toggleLayer, { [toggleParam]: toggleValue }, { origin: 'user' });
+      const params = { [toggleParam]: toggleValue };
+      this.setLayerParams(toggleLayer, params, { origin: 'user' });
+      if (toggleFanOut === '1') this._offerParamsToRow(toggleLayer, params);
     });
+  }
+
+  /**
+   * Make a key line or a segment its own switch: the layer, the one param it
+   * sends, and whether the rest of the row is offered it too.
+   * @param {HTMLElement} node
+   * @param {{id: string}} layer
+   * @param {{param: string, value: *, fanOut?: boolean}} toggle
+   */
+  _bindLegendToggle(node, layer, toggle) {
+    node.dataset.toggleParam = toggle.param;
+    node.dataset.toggleValue = String(toggle.value ?? '');
+    node.dataset.toggleLayer = String(layer.id);
+    if (toggle.fanOut === true) node.dataset.toggleFanOut = '1';
+  }
+
+  /**
+   * ONE CONTROL FOR ONE READER INTENTION, ACROSS A FUSED ROW.
+   *
+   * A fusion says these layers are one subject. When two of them take the
+   * SAME parameter about it — DVF filters the mutations by dwelling type, the
+   * estimate chooses the type it is valuing; the shared fleets and the Vélib'
+   * docks both take an operator focus — two controls on one row is not
+   * redundancy, it is a trap: the reader presses one `Maison`, the other stays
+   * on `Appartement`, and the map and the headline above it describe
+   * different populations. Measured on exactly that row in Bayonne,
+   * 2026-09-14.
+   *
+   * So the params are OFFERED to every other enabled member of the row.
+   * Offered, not imposed: `setParams` is a closed enum per layer and returns
+   * false on anything outside it, so a member that does not take the key — or
+   * does not take that value, which is how `tous` stays a map-only
+   * instruction — keeps the question it was already asking.
+   * @param {string} ownerId The layer the control belongs to.
+   * @param {object} params
+   * @param {string} [rowId] The row's primary, when the caller already knows it.
+   */
+  _offerParamsToRow(
+    ownerId,
+    params,
+    rowId = this._registrationTaxonomy?.get(ownerId)?.fusedInto || fusedIntoFor(ownerId) || ownerId,
+  ) {
+    // The ROW, not the owner's own companions: a control on a companion's
+    // block (the shared fleets, under the Vélib' row) must reach the primary.
+    for (const member of this._fusionGroupIds(rowId)) {
+      if (member === ownerId || !this.isEnabled(member)) continue;
+      const module = this.layers.get(member)?.module;
+      // ASKED, NOT ATTEMPTED. `setParams` returning false is a refusal the
+      // manager logs and notifies as `params-failed`, which is right for a
+      // caller that meant it — and wrong here, where declining is the normal
+      // outcome and the mechanism.
+      if (typeof module?.acceptsParams !== 'function') continue;
+      if (!module.acceptsParams(params)) continue;
+      this.setLayerParams(member, params, { origin: 'user' });
+    }
   }
 
   _refreshMapLegend(groups) {
@@ -4019,7 +4053,7 @@ export class DataLayerManager {
         rowTitle.textContent = row.title;
         rowNode.appendChild(rowTitle);
       }
-      for (const { layer, entries, note, source, subtitle, bar, scope } of row.members) {
+      for (const { layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel } of row.members) {
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
 
@@ -4049,6 +4083,40 @@ export class DataLayerManager {
           sourceNode.className = 'map-legend-source';
           sourceNode.textContent = source;
           group.appendChild(sourceNode);
+        }
+
+        // A SEGMENTED CONTROL, WHEN THE LAYER PUBLISHES ONE. « Tous · Vélos ·
+        // Scooters » is a filter over the classes below, so it sits between
+        // the block's name and its key, where the reader looks before reading
+        // the dots. Same click path as a toggling key line: one delegated
+        // listener, one param per press, and `fanOut` offers it to the row.
+        if (segments.length) {
+          const strip = document.createElement('div');
+          strip.className = 'map-legend-segments';
+          strip.setAttribute('role', 'group');
+          if (segmentsLabel) strip.setAttribute('aria-label', segmentsLabel);
+          for (const segment of segments) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'map-legend-segment';
+            button.textContent = segment.label;
+            button.setAttribute('aria-pressed', segment.active ? 'true' : 'false');
+            if (segment.title) button.title = segment.title;
+            const toggle = segment.toggle && typeof segment.toggle.param === 'string' ? segment.toggle : null;
+            if (toggle) {
+              button.classList.add('is-toggle');
+              this._bindLegendToggle(button, layer, toggle);
+              // A segment that would blank the map is refused, not hidden:
+              // the control keeps its shape under the reader's hand.
+              if (segment.disabled === true) button.disabled = true;
+            } else {
+              // The lit « Tous »: pressing where one already is does nothing,
+              // and says so rather than looking pressable.
+              button.disabled = true;
+            }
+            strip.appendChild(button);
+          }
+          group.appendChild(strip);
         }
 
         // ORDERED CLASSES GET ONE BAR. Six stacked rows spend six lines saying
@@ -4143,11 +4211,21 @@ export class DataLayerManager {
         if (toggle) {
           entry.type = 'button';
           entry.classList.add('is-toggle');
-          entry.dataset.toggleParam = toggle.param;
-          entry.dataset.toggleValue = String(toggle.value ?? '');
-          entry.dataset.toggleLayer = String(layer.id);
+          this._bindLegendToggle(entry, layer, toggle);
           entry.setAttribute('aria-pressed', item.off ? 'false' : 'true');
           if (item.off) entry.classList.add('is-off');
+        }
+        // AN ACTION IS NOT A CLASS. « Tout afficher » releases a focus; it
+        // gets no swatch, because a dot beside it would read as one more
+        // operator drawn in some colour.
+        if (item.action === true) {
+          entry.classList.add('is-action');
+          const text = document.createElement('span');
+          text.className = 'map-legend-label';
+          text.textContent = item.label;
+          entry.appendChild(text);
+          entryHost().appendChild(entry);
+          continue;
         }
 
         const swatch = document.createElement('span');

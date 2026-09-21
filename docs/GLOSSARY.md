@@ -257,6 +257,8 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Identité pas encore reçue | Identity not received yet | |
 | borne / place (libre-service) | dock / space | |
 | VAE, Trottinette, Scooter | E-bike, E-scooter, Moped | |
+| Fournisseurs (mobilité partagée), Tout afficher | Operators, Show all | The shared-mobility key. |
+| bien remplie, à moitié, presque vide (station) | well stocked, half full, nearly empty | A dock's fill. |
 | point de repère (PR) | kilometer post (PR) | |
 | tige (bouée) | stem | |
 | mer forte / grosse | Rough / High | WMO's own English. |
@@ -467,8 +469,8 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 | Anneau, Fiche | Ring, Report | |
 | Vigilance | Warnings | Météo-France. |
 | Registre EDF, Groupes RTE | EDF register, RTE units | |
-| Véhicules en direct, Stations GBFS | Live vehicles, GBFS stations | |
-| Longue traîne FR | FR long tail | |
+| Véhicules en direct, Vélos en station | Live vehicles, Docked bikes | |
+| Flottes partagées | Shared fleets | |
 | Semaine type, Débit mesuré | Typical week, Measured flow | |
 | État du réseau, Comptages · Paris | Network status, Counts · Paris | |
 | Revenus, Délinquance | Income, Crime | |

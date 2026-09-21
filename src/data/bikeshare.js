@@ -16,7 +16,15 @@ import { markViewportRead, releaseCameraSettle, watchCameraSettle } from './came
 import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
-import { mobilityOperatorColor } from './mobilityOperators.js';
+import {
+  MOBILITY_DOCK_FILL,
+  dockFillLegend,
+  isMobilityOperatorId,
+  mobilityOperatorColor,
+  resolveMobilityOperator,
+} from './mobilityOperators.js';
+import operatorMessages from './mobilityOperators.i18n.js';
+import { formatNumber } from '../i18n/format.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -70,15 +78,15 @@ const MAX_TOTAL_POINTS = 8000;
 
 // --- Availability color palette ---
 /** Station has >60% bikes available. */
-const COLOR_GREEN = Cesium.Color.fromCssColorString('#00ff88').withAlpha(0.95);
+const COLOR_GREEN = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.full).withAlpha(0.95);
 /** Station has 30-60% bikes available. */
-const COLOR_YELLOW = Cesium.Color.fromCssColorString('#ffaa00').withAlpha(0.94);
+const COLOR_YELLOW = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.half).withAlpha(0.94);
 /** Station has <30% bikes available. */
-const COLOR_RED = Cesium.Color.fromCssColorString('#ff4444').withAlpha(0.94);
+const COLOR_RED = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.low).withAlpha(0.94);
 /** No status data available for station. */
-const COLOR_NEUTRAL = Cesium.Color.fromCssColorString('#91a4b4').withAlpha(0.62);
+const COLOR_NEUTRAL = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.unknown).withAlpha(0.62);
 /** Station is offline (not installed, not renting, or not returning). */
-const COLOR_MUTED = Cesium.Color.fromCssColorString('#687581').withAlpha(0.48);
+const COLOR_MUTED = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.closed).withAlpha(0.48);
 /** Outline color for all station points. */
 const COLOR_OUTLINE = Cesium.Color.BLACK.withAlpha(0.25);
 
@@ -566,6 +574,60 @@ function cityRingColor(cityId) {
   return CITY_RING_COLOR.get(cityId) || COLOR_OUTLINE;
 }
 
+/**
+ * Operator per city, resolved once at module load: the name the key prints
+ * and the id an operator focus compares against.
+ * @type {Map<string, {id: string, label: string, color: string}>}
+ */
+const CITY_OPERATOR = new Map(GBFS_CITY_REGISTRY.map((entry) => [
+  entry.id,
+  resolveMobilityOperator(entry.provider),
+]));
+
+/**
+ * Whether a station is drawn under the filters the key fanned out.
+ *
+ * Both arrive from the shared-fleet block of the same row
+ * (`sharedMobilityFrance.js`), where the reader pressed them: an operator
+ * focus — « Lime » takes the Vélib' docks off the map, « Vélib' » keeps only
+ * them — and a vehicle family. A dock here holds bikes, so any family but
+ * `velo` hides it.
+ * @param {{cityId?: string}} record
+ * @returns {boolean}
+ */
+function stationVisible(record) {
+  if (_kindFilter && _kindFilter !== 'velo') return false;
+  return !_operatorFilter || CITY_OPERATOR.get(record?.cityId)?.id === _operatorFilter;
+}
+
+/**
+ * Show or hide every loaded dock under the current filters — `show`, not a
+ * rebuild: the 1,518 Vélib' points stay in their collection and a filter costs
+ * a flag per point, which is what a phone can afford on every press.
+ */
+function applyStationFilters() {
+  if (_selectedKey && !stationVisible(_stationRenderMap.get(_selectedKey))) _clearSelection();
+  for (const record of _stationRenderMap.values()) {
+    // The selected dock stays hidden under its highlight entity.
+    if (record.key === _selectedKey) continue;
+    if (record.point) record.point.show = stationVisible(record);
+  }
+  governorRequestRender('bikeshare-filter');
+}
+
+/** The camera's view box in degrees, or null when it has none. */
+function viewBoxDegrees(viewer) {
+  const rectangle = viewer?.camera?.computeViewRectangle?.();
+  if (!rectangle) return null;
+  const box = {
+    south: Cesium.Math.toDegrees(rectangle.south),
+    west: Cesium.Math.toDegrees(rectangle.west),
+    north: Cesium.Math.toDegrees(rectangle.north),
+    east: Cesium.Math.toDegrees(rectangle.east),
+  };
+  return Object.values(box).every(Number.isFinite) && box.west < box.east ? box : null;
+}
+
 // ---------------------------------------------------------------------------
 // Module-level mutable state
 // ---------------------------------------------------------------------------
@@ -617,6 +679,12 @@ let _loading = false;
 /** Reference count of concurrent loading operations. */
 let _loadingOps = 0;
 /** Most recent error message string, or null. */
+/** Operator focus fanned out from the key, or null for every network. */
+let _operatorFilter = null;
+/** Vehicle family fanned out from the key, or null — see `stationVisible`. */
+let _kindFilter = null;
+/** The manager's "repaint my key" callback. */
+let _rowControlsListener = null;
 let _error = null;
 /** Whether the MAX_TOTAL_POINTS cap warning has already been logged. */
 let _limitWarned = false;
@@ -1147,7 +1215,9 @@ function _clearSelection() {
   if (_selectedKey) {
     const record = _stationRenderMap.get(_selectedKey);
     if (record?.point) {
-      record.point.show = true;
+      // Back to what the filters say, not to "shown": a dock selected before
+      // a focus that excludes it must not reappear when it is released.
+      record.point.show = stationVisible(record);
     }
   }
 
@@ -1319,6 +1389,7 @@ function ensureCityPoints(cityId, stationMap) {
       translucencyByDistance: new Cesium.NearFarScalar(200, 1.0, 180000, 0.15),
       disableDepthTestDistance: 2500,
       id: key,
+      show: stationVisible({ cityId }),
     });
 
     _stationRenderMap.set(key, {
@@ -1810,6 +1881,113 @@ const bikeshareLayer = {
   },
 
   /**
+   * Filters fanned out from the key (see {@link stationVisible}). Both are
+   * DRAW-ONLY: nothing is refetched, a press flips `show` on loaded points.
+   * @param {{operator?: ?string, kinds?: ?string}} [params]
+   * @returns {boolean} Whether anything changed.
+   */
+  setParams(params = {}) {
+    if (!this.acceptsParams(params)) return false;
+    const operator = params.operator === undefined
+      ? _operatorFilter
+      : (params.operator === null || params.operator === 'all' ? null : params.operator);
+    const kinds = params.kinds === undefined
+      ? _kindFilter
+      : (params.kinds === null || params.kinds === 'all' ? null : params.kinds);
+    if (operator === _operatorFilter && kinds === _kindFilter) return false;
+    _operatorFilter = operator;
+    _kindFilter = kinds;
+    applyStationFilters();
+    _rowControlsListener?.();
+    return true;
+  },
+
+  /**
+   * Whether a fanned-out param is one this layer takes: an operator id, or a
+   * family word — `velo` keeps the docks and any other family hides them, so
+   * the family list itself stays the shared-fleet layer's business.
+   * @param {object} params
+   * @returns {boolean}
+   */
+  acceptsParams(params = {}) {
+    const keys = Object.keys(params || {});
+    if (!keys.length || keys.some((key) => key !== 'operator' && key !== 'kinds')) return false;
+    const { operator, kinds } = params;
+    if (operator !== undefined && operator !== null && operator !== 'all' && !isMobilityOperatorId(operator)) return false;
+    if (kinds !== undefined && kinds !== null && !/^[a-z]{1,20}$/.test(String(kinds))) return false;
+    return true;
+  },
+
+  /** @returns {{operator: ?string, kinds: ?string}} */
+  getParams() {
+    return { operator: _operatorFilter, kinds: _kindFilter };
+  },
+
+  setRowControlsListener(listener) {
+    _rowControlsListener = typeof listener === 'function' ? listener : null;
+  },
+
+  /**
+   * The Vélib' block of the « Mobilités partagées » key: the networks on
+   * screen by name, in the hue of their ring, each a switch that focuses the
+   * whole row on it; then what a dock's fill means.
+   *
+   * « Tout afficher » only when the focused operator has no line here to
+   * press again — a focus on Lime, set from the block below — so the card
+   * never prints two ways back.
+   * @returns {{chips: Array, legend: Array<object>, legendScope: object}}
+   */
+  getRowControls() {
+    const om = operatorMessages().legend;
+    const box = viewBoxDegrees(_viewer);
+    const operators = new Map();
+    let shown = 0;
+    for (const record of _stationRenderMap.values()) {
+      if (box && !(record.lat >= box.south && record.lat <= box.north
+        && record.lon >= box.west && record.lon <= box.east)) continue;
+      const operator = CITY_OPERATOR.get(record.cityId);
+      if (!operator) continue;
+      const seen = operators.get(operator.id);
+      if (seen) seen.count += 1;
+      else operators.set(operator.id, { operator, count: 1 });
+      if (stationVisible(record)) shown += 1;
+    }
+    const legend = [];
+    const docksHidden = Boolean(_kindFilter && _kindFilter !== 'velo');
+    const ranked = [...operators.values()]
+      .sort((a, b) => b.count - a.count || a.operator.label.localeCompare(b.operator.label));
+    for (const { operator, count } of ranked) {
+      const active = operator.id === _operatorFilter;
+      legend.push({
+        label: operator.label,
+        color: operator.color,
+        count,
+        channel: om.operators,
+        toggle: { param: 'operator', value: active ? 'all' : operator.id, fanOut: true },
+        off: docksHidden || (Boolean(_operatorFilter) && !active),
+        blurb: active ? om.focused(operator.label) : om.focus(operator.label, formatNumber(count)),
+      });
+    }
+    if (_operatorFilter && !operators.has(_operatorFilter) && ranked.length) {
+      legend.push({
+        label: om.showAll,
+        action: true,
+        channel: om.operators,
+        toggle: { param: 'operator', value: 'all', fanOut: true },
+      });
+    }
+    if (shown > 0) legend.push(...dockFillLegend());
+    // Emptied by a filter is not « hors de cette vue » — see the same line in
+    // `sharedMobilityFrance.js`.
+    const filtered = Boolean(_operatorFilter || _kindFilter);
+    return {
+      chips: [],
+      legend,
+      legendScope: shown > 0 || !filtered ? { inView: shown, where: null } : null,
+    };
+  },
+
+  /**
    * Return a sampled array of detectable station objects for HUD overlay rendering.
    * @param {Object} [options] - Sampling options (maxCount, seed).
    * @returns {Array<{ position: Cesium.Cartesian3, id: string, type: string, skipLabel: boolean }>}
@@ -1916,6 +2094,19 @@ export function _setBikeshareSelectionStateForTest({ viewer, key, record, overla
   _selectedKey = null;
   _selectedEntity = null;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
+}
+
+/**
+ * Seed loaded docks (and, optionally, a camera) for the key and filter tests,
+ * and put both filters back to none.
+ */
+export function _setBikeshareStationsForTest({ viewer = null, records = [] } = {}) {
+  _viewer = viewer;
+  _stationRenderMap = new Map(records.map((record) => [record.key, record]));
+  _selectedKey = null;
+  _selectedEntity = null;
+  _operatorFilter = null;
+  _kindFilter = null;
 }
 
 /** Exercise the production selection path in focused runtime tests. */
