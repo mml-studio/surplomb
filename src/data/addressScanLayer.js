@@ -577,6 +577,20 @@ export function scanShiftNeeded(last, next, minShiftKm = ADDRESS_SCAN_MIN_SHIFT_
  *   Returning true consumes the click. Called even while the layer is DORMANT,
  *   which is the whole point for a layer whose click PINS the scan centre: the
  *   reader is up too high to scan and is asking to scan here anyway.
+ * @param {() => void} [config.onClear]
+ *   Called every time the shell takes its own draw down — before a redraw,
+ *   when the layer goes dormant above its ceiling, and on destroy. For a layer
+ *   that draws PRIMITIVES as well as entities: the shell empties the data
+ *   source it owns, and only the layer knows what else it put on the globe.
+ *   Without it, a layer gone dormant at 12 km would leave its ground washes
+ *   standing over the country with no answer behind them.
+ * @param {(pickedId: string) => boolean} [config.ownsPick]
+ *   Whether a pick id that is NOT an entity of this layer's data source is
+ *   still this layer's — the ids a layer gives the geometry instances of its
+ *   own primitives. Such a pick then reads as a click on the layer's own
+ *   ground, exactly like a click on one of its washes, and reaches
+ *   `groundCard`; without it the click met an id nobody claimed and was
+ *   ignored.
  * @param {typeof fetch} [config.fetchImpl] Injection seam for tests.
  * @returns {object} A layer module.
  */
@@ -597,6 +611,8 @@ export function createAddressScanLayer(config) {
     // several marks for one subject — see `selectEntity`. Null for the four
     // layers where one mark is one subject.
     selectionFor = null,
+    onClear = null,
+    ownsPick = null,
     maxAltitudeM = ADDRESS_SCAN_MAX_ALTITUDE_M,
     // How far the answer actually reaches, in metres. Declared rather than
     // inferred, because only the layer knows: the ceiling says when a scan
@@ -697,6 +713,21 @@ export function createAddressScanLayer(config) {
    * that vanishes a quarter of a second after it opens.
    */
   let _groundCard = null;
+
+  /**
+   * Take the whole draw down: the entities this shell owns, and whatever the
+   * layer drew beside them (`config.onClear`). A layer's hook must never be
+   * able to stop the shell from clearing its own half.
+   */
+  function clearDraw() {
+    _dataSource?.entities?.removeAll();
+    if (typeof onClear !== 'function') return;
+    try {
+      onClear();
+    } catch (error) {
+      console.warn(`[Data:${id}] onClear`, error?.message || error);
+    }
+  }
 
   /** The open card, whether it belongs to a marker or to a bare point. */
   function cardById(cardId) {
@@ -871,7 +902,8 @@ export function createAddressScanLayer(config) {
         world: isWorldPick(picked),
         isCard: typeof pickedId === 'string' && _cards.has(pickedId),
         isOwn: typeof pickedId === 'string'
-          && Boolean(_dataSource?.entities?.getById?.(pickedId)),
+          && (Boolean(_dataSource?.entities?.getById?.(pickedId))
+            || (typeof ownsPick === 'function' && ownsPick(pickedId) === true)),
         answersGround: Boolean(groundCard || groundClick),
         selected: Boolean(_selectedId),
       });
@@ -1025,7 +1057,7 @@ export function createAddressScanLayer(config) {
   function redrawFromPayload(reason) {
     if (!_dataSource || !_payload || !_lastPoint || _dormant) return false;
     clearSelection();
-    _dataSource.entities.removeAll();
+    clearDraw();
     _count = render({
       payload: _payload, dataSource: _dataSource, point: _lastPoint, viewer: _viewer,
       runtime: { ..._runtime },
@@ -1098,7 +1130,7 @@ export function createAddressScanLayer(config) {
         // the region.
         if (!_dormant) {
           clearSelection();
-          _dataSource.entities.removeAll();
+          clearDraw();
           _cards.clear();
           _count = 0;
           _payload = null;
@@ -1161,7 +1193,7 @@ export function createAddressScanLayer(config) {
           return false;
         }
         clearSelection();
-        _dataSource.entities.removeAll();
+        clearDraw();
         _count = render({
           payload, dataSource: _dataSource, point, viewer: _viewer, runtime: { ..._runtime },
         }) || 0;
@@ -1303,7 +1335,7 @@ export function createAddressScanLayer(config) {
       removeClickHandler();
       clearOverlaySource(id);
       if (_dataSource) {
-        _dataSource.entities.removeAll();
+        clearDraw();
         viewer?.dataSources?.remove(_dataSource, true);
       }
       _cards.clear();

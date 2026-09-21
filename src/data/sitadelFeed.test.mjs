@@ -38,6 +38,7 @@ import {
   SITADEL_SIZE_CEILING_LGT,
   buildSitadelPermitCard,
   cadastreCommuneUrl,
+  cadastreSectionsUrl,
   communeCadastreCodes,
   discoverSitadelRid,
   finiteOrNull,
@@ -346,6 +347,7 @@ test('the request URLs carry the filter and the projection, and only the columns
   assert.ok(!SITADEL_DEMOLITION_COLUMNS.includes('DATE_REELLE_DOC'));
   assert.ok(!SITADEL_DEMOLITION_COLUMNS.includes('DATE_REELLE_DAACT'));
   assert.ok(cadastreCommuneUrl('44109').endsWith('/communes/44/44109/cadastre-44109-parcelles.json.gz'));
+  assert.ok(cadastreSectionsUrl('75116').endsWith('/communes/75/75116/cadastre-75116-sections.json.gz'));
   assert.ok(cadastreCommuneUrl('75105').includes('/communes/75/75105/'));
 });
 

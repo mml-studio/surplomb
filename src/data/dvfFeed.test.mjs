@@ -7,20 +7,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  DVF_CELL_BREAKS,
   DVF_DEFAULT_RADIUS_M,
   DVF_MAX_RADIUS_M,
+  DVF_SECTION_MIN_PRICED,
   DVF_UNCOVERED_DEPARTEMENTS,
-  aggregateSalesIntoCells,
+  aggregateSalesIntoPlots,
+  aggregateSalesIntoSections,
   buildDvfUrl,
   clampDvfRadius,
+  compareMutationRecency,
+  decodeParts,
+  decodeRing,
   departementOf,
-  dvfCellBreaks,
   dvfCoverage,
+  encodeParts,
+  encodeRing,
   groupMutations,
   haversineM,
+  mostRecentMutation,
   parseDvfCsv,
   percentile,
+  sectionIdOf,
   selectNearbySales,
 } from './dvfFeed.js';
 
@@ -194,99 +201,213 @@ test('the distance the estimate measures is the distance the map drew', () => {
   assert.equal(Math.round(haversineM(48.0, 2.0, 48.0 + 1 / 60, 2.0)), 1853);
 });
 
-// ── the cell regime ────────────────────────────────────────────────────────
+// ── the area regimes ───────────────────────────────────────────────────────
 // The one rule that cannot bend: a box straddles communes, and a sale is
 // divided by the median of ITS OWN commune. Everything else here follows.
+const LYON_BOX = { south: 45.76, west: 4.84, north: 45.78, east: 4.86 };
+const sale = (fields) => ({ types: ['Appartement'], dwellingSurface: 50, dwellingCount: 1, ...fields });
+
 test('each commune keeps its own denominator across a box', () => {
-  const box = { south: 45.76, west: 4.84, north: 45.78, east: 4.86 };
   const cheap = {
     commune: { code: '69383', name: 'Lyon 3e' },
     mutations: [
-      { lon: 4.8450, lat: 45.7700, prixM2: 4_000, communeCode: '69383', date: '2024-01-02' },
-      { lon: 4.8452, lat: 45.7701, prixM2: 4_000, communeCode: '69383', date: '2024-02-02' },
-      { lon: 4.8454, lat: 45.7702, prixM2: 4_000, communeCode: '69383', date: '2024-03-02' },
+      sale({ lon: 4.8450, lat: 45.7700, prixM2: 4_000, parcelle: '69383000AB0001', date: '2024-01-02' }),
+      sale({ lon: 4.8452, lat: 45.7701, prixM2: 4_000, parcelle: '69383000AB0002', date: '2024-02-02' }),
+      sale({ lon: 4.8454, lat: 45.7702, prixM2: 4_000, parcelle: '69383000AB0003', date: '2024-03-02' }),
     ],
   };
   const dear = {
     commune: { code: '69386', name: 'Lyon 6e' },
     mutations: [
-      { lon: 4.8550, lat: 45.7760, prixM2: 8_000, communeCode: '69386', date: '2024-01-02' },
-      { lon: 4.8552, lat: 45.7761, prixM2: 8_000, communeCode: '69386', date: '2024-02-02' },
-      { lon: 4.8554, lat: 45.7762, prixM2: 8_000, communeCode: '69386', date: '2024-03-02' },
+      sale({ lon: 4.8550, lat: 45.7760, prixM2: 8_000, parcelle: '69386000CD0001', date: '2024-01-02' }),
+      sale({ lon: 4.8552, lat: 45.7761, prixM2: 8_000, parcelle: '69386000CD0002', date: '2024-02-02' }),
+      sale({ lon: 4.8554, lat: 45.7762, prixM2: 8_000, parcelle: '69386000CD0003', date: '2024-03-02' }),
     ],
   };
-  const { cells, summary } = aggregateSalesIntoCells([cheap, dear], box, 150);
+  const { plots, summary } = aggregateSalesIntoPlots([cheap, dear], LYON_BOX);
   assert.equal(summary.references.length, 2);
   // 4 000 in a commune whose median is 4 000 and 8 000 in one whose median is
   // 8 000 are the SAME reading: both at their own market. A single blended
   // denominator of 6 000 would have painted one 0.67 and the other 1.33.
-  for (const cell of cells) assert.equal(cell.medianRatio, 1);
+  assert.equal(plots.length, 6);
+  for (const plot of plots) assert.equal(plot.ratio, 1);
+  const { sections } = aggregateSalesIntoSections([cheap, dear], LYON_BOX);
+  assert.deepEqual(sections.map((section) => section.id), ['69383000AB', '69386000CD']);
+  for (const section of sections) assert.equal(section.medianRatio, 1);
 });
 
-test('the summary counts the box, never the communes behind it', () => {
+test('a plot is painted from its LATEST sale, with the whole plot counted', () => {
+  const edition = {
+    commune: { code: '75116', name: 'Paris 16e Arrondissement' },
+    mutations: [
+      // The commune median is 10 000 over these three.
+      sale({ id: 'old', lon: 2.2700, lat: 48.8600, prixM2: 12_000, parcelle: '75116000BM0001', date: '2023-03-01' }),
+      sale({ id: 'new', lon: 2.2700, lat: 48.8600, prixM2: 8_000, parcelle: '75116000BM0001', date: '2025-10-13', address: '62 BD SUCHET', dwellingSurface: 89 }),
+      sale({ id: 'else', lon: 2.2750, lat: 48.8620, prixM2: 10_000, parcelle: '75116000BM0002', date: '2024-05-05' }),
+    ],
+  };
+  const { plots, summary } = aggregateSalesIntoPlots([edition], { south: 48.85, west: 2.26, north: 48.87, east: 2.28 });
+  const plot = plots.find((entry) => entry.id === '75116000BM0001');
+  assert.equal(plot.count, 2);
+  assert.equal(plot.ratio, 0.8, 'the 2025 sale at 8 000 against a median of 10 000');
+  // What the card prints, and nothing it does not: the surface travels.
+  assert.deepEqual(plot.sale, {
+    date: '2025-10-13', nature: null, valeur: null, types: ['Appartement'], prixM2: 8_000,
+    dwellingSurface: 89, dwellingCount: 1, address: '62 BD SUCHET',
+  });
+  assert.equal(summary.basis, 'plots');
+  assert.equal(summary.count, 3);
+  assert.equal(summary.plots, 2);
+});
+
+test('the latest sale wins even when it cannot be priced — the rule below 600 m', () => {
+  const edition = {
+    commune: { code: '75116', name: 'Paris 16e' },
+    mutations: [
+      sale({ lon: 2.27, lat: 48.86, prixM2: 9_000, parcelle: '75116000BM0001', date: '2023-01-01' }),
+      sale({ lon: 2.27, lat: 48.86, prixM2: null, types: ['Dépendance'], dwellingCount: 0, parcelle: '75116000BM0001', date: '2025-01-01' }),
+    ],
+  };
+  const { plots, summary } = aggregateSalesIntoPlots([edition], { south: 48.85, west: 2.26, north: 48.87, east: 2.28 });
+  assert.equal(plots[0].ratio, null);
+  assert.equal(summary.pricedPlots, 0);
+});
+
+test('the recency order is the one the markers use, and it never depends on input order', () => {
+  const small = { id: 'z', date: '2024-05-05', dwellingSurface: 30 };
+  const large = { id: 'a', date: '2024-05-05', dwellingSurface: 90 };
+  assert.equal(mostRecentMutation([small, large]), large);
+  assert.equal(mostRecentMutation([large, small]), large);
+  assert.ok(compareMutationRecency({ date: '2025-01-01' }, { date: '2024-12-31' }) > 0);
+  assert.equal(mostRecentMutation([]), null);
+});
+
+test('a sale outside the box is in the denominator and nowhere else', () => {
   const box = { south: 45.77, west: 4.84, north: 45.78, east: 4.86 };
   const edition = {
     commune: { code: '69386', name: 'Lyon 6e' },
     mutations: [
-      { lon: 4.8500, lat: 45.7750, prixM2: 5_000, communeCode: '69386', date: '2024-01-02' },
+      sale({ lon: 4.8500, lat: 45.7750, prixM2: 5_000, parcelle: '69386000AB0001', date: '2024-01-02' }),
       // Same commune, outside the box: it belongs in the DENOMINATOR and must
       // not be counted as something the reader can see.
-      { lon: 4.9500, lat: 45.9000, prixM2: 9_000, communeCode: '69386', date: '2024-01-03' },
+      sale({ lon: 4.9500, lat: 45.9000, prixM2: 9_000, parcelle: '69386000ZZ0001', date: '2024-01-03' }),
     ],
   };
-  const { cells, summary } = aggregateSalesIntoCells([edition], box, 150);
+  const { plots, summary } = aggregateSalesIntoPlots([edition], box);
   assert.equal(summary.count, 1);
-  assert.equal(cells.reduce((sum, cell) => sum + cell.count, 0), 1);
+  assert.deepEqual(plots.map((plot) => plot.id), ['69386000AB0001']);
   // The denominator still saw both — that is the whole point of keeping the
   // reference's own sample size separate from the box's.
   assert.equal(summary.references[0].count, 2);
+  // A section is selected by a sale in the box, and the other one's section
+  // was never touched.
+  const { sections } = aggregateSalesIntoSections([edition], box);
+  assert.deepEqual(sections.map((section) => section.id), ['69386000AB']);
 });
 
-test('a sale the register cannot price is counted but never coloured', () => {
+test('a section is drawn whole, so every one of its sales counts, in the box or not', () => {
   const box = { south: 45.77, west: 4.84, north: 45.78, east: 4.86 };
-  const { cells } = aggregateSalesIntoCells([{
+  const edition = {
     commune: { code: '69386', name: 'Lyon 6e' },
     mutations: [
-      { lon: 4.8500, lat: 45.7750, prixM2: null, communeCode: '69386', date: '2024-01-02' },
-      { lon: 4.8501, lat: 45.7751, prixM2: null, communeCode: '69386', date: '2024-01-03' },
+      sale({ lon: 4.8500, lat: 45.7750, prixM2: 5_000, parcelle: '69386000AB0001', date: '2024-01-02' }),
+      // Same section, just across the box's northern edge.
+      sale({ lon: 4.8500, lat: 45.7810, prixM2: 6_000, parcelle: '69386000AB0002', date: '2023-01-02' }),
+      sale({ lon: 4.8500, lat: 45.7812, prixM2: 7_000, parcelle: '69386000AB0003', date: '2025-01-02' }),
     ],
-  }], box, 150);
-  assert.equal(cells.length, 1);
-  assert.equal(cells[0].count, 2);
-  assert.equal(cells[0].pricedCount, 0);
-  assert.equal(cells[0].medianPrixM2, null);
-  assert.equal(cells[0].medianRatio, null);
+  };
+  const { sections, summary } = aggregateSalesIntoSections([edition], box);
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].count, 3);
+  assert.equal(sections[0].pricedCount, 3);
+  assert.equal(sections[0].medianPrixM2, 6_000);
+  assert.deepEqual(sections[0].years, [2023, 2024, 2025]);
+  assert.equal(summary.inBox, 1);
+  assert.equal(summary.count, 3);
+  assert.equal(summary.paintedSections, 1);
+  assert.equal(summary.minPriced, DVF_SECTION_MIN_PRICED);
+});
+
+test('a section under the floor still reports its median, and is not counted as painted', () => {
+  const box = { south: 45.77, west: 4.84, north: 45.78, east: 4.86 };
+  const { sections, summary } = aggregateSalesIntoSections([{
+    commune: { code: '69386', name: 'Lyon 6e' },
+    mutations: [
+      sale({ lon: 4.8500, lat: 45.7750, prixM2: 5_000, parcelle: '69386000AB0001', date: '2024-01-02' }),
+      sale({ lon: 4.8501, lat: 45.7751, prixM2: null, parcelle: '69386000AB0002', date: '2024-01-03' }),
+    ],
+  }], box);
+  assert.equal(sections[0].pricedCount, 1);
+  assert.equal(sections[0].medianRatio, 1);
+  assert.equal(summary.paintedSections, 0);
 });
 
 test('a commune whose edition prices nothing yields no ratio, not a ratio of one', () => {
   const box = { south: 45.77, west: 4.84, north: 45.78, east: 4.86 };
-  const { cells } = aggregateSalesIntoCells([{
+  const editions = [{
     commune: { code: '68066', name: 'Colmar' },
-    mutations: [{ lon: 4.8500, lat: 45.7750, prixM2: null, communeCode: '68066', date: '2024-01-02' }],
-  }], box, 150);
-  assert.equal(cells[0].medianRatio, null);
+    mutations: [sale({ lon: 4.8500, lat: 45.7750, prixM2: null, parcelle: '68066000AB0001', date: '2024-01-02' })],
+  }];
+  assert.equal(aggregateSalesIntoPlots(editions, box).plots[0].ratio, null);
+  assert.equal(aggregateSalesIntoSections(editions, box).sections[0].medianRatio, null);
 });
 
-test('a mutation with no coordinate never reaches a cell', () => {
+test('a mutation with no coordinate or no parcel is counted, never moved', () => {
   const box = { south: 45.77, west: 4.84, north: 45.78, east: 4.86 };
-  const { cells, summary } = aggregateSalesIntoCells([{
+  const editions = [{
     commune: { code: '69386', name: 'Lyon 6e' },
     mutations: [
-      { lon: null, lat: null, prixM2: 5_000, communeCode: '69386', date: '2024-01-02' },
-      { lon: 4.8500, lat: 45.7750, prixM2: 5_000, communeCode: '69386', date: '2024-01-03' },
+      sale({ lon: null, lat: null, prixM2: 5_000, parcelle: '69386000AB0009', date: '2024-01-02' }),
+      sale({ lon: 4.8500, lat: 45.7750, prixM2: 5_000, parcelle: null, date: '2024-01-03' }),
+      sale({ lon: 4.8501, lat: 45.7751, prixM2: 5_000, parcelle: '69386000AB0001', date: '2024-01-04' }),
     ],
-  }], box, 150);
-  assert.equal(summary.count, 1);
-  assert.equal(cells.length, 1);
+  }];
+  const { plots, summary } = aggregateSalesIntoPlots(editions, box);
+  assert.equal(summary.count, 2, 'the sale with no coordinate never reaches the box');
+  assert.equal(summary.unplotted, 1);
+  assert.equal(plots.length, 1);
+  assert.equal(aggregateSalesIntoSections(editions, box).summary.unplotted, 1);
 });
 
-test('the size breaks are published per grid step and fall back rather than throw', () => {
-  assert.deepEqual([...dvfCellBreaks(150)], [2, 5, 10, 25, 60]);
-  assert.deepEqual([...dvfCellBreaks(850)], [5, 20, 50, 130, 350]);
-  assert.deepEqual([...dvfCellBreaks(undefined)], [2, 5, 10, 25, 60]);
-  assert.deepEqual([...dvfCellBreaks(900)], [5, 20, 50, 130, 350]);
-  for (const breaks of Object.values(DVF_CELL_BREAKS)) {
-    const ascending = [...breaks].every((edge, index) => index === 0 || edge > breaks[index - 1]);
-    assert.ok(ascending, 'size breaks must ascend or a bigger count draws a smaller disc');
+test('a section is its parcels’ ten-character prefix, and nothing shorter is guessed', () => {
+  assert.equal(sectionIdOf('75116000AA0004'), '75116000AA');
+  assert.equal(sectionIdOf('920120000A0023'), '920120000A');
+  assert.equal(sectionIdOf('75116000AA'), null);
+  assert.equal(sectionIdOf(null), null);
+});
+
+test('the key names the register’s commune, not the geocoder’s', () => {
+  // The BAN answers « Paris » for every arrondissement; the register's own
+  // `nom_commune` is what tells two Paris medians apart in a key.
+  const { summary } = aggregateSalesIntoPlots([{
+    commune: { code: '75116', name: 'Paris' },
+    mutations: [sale({ lon: 2.27, lat: 48.86, prixM2: 9_000, commune: 'Paris 16e Arrondissement', parcelle: '75116000AA0001', date: '2024-01-01' })],
+  }], { south: 48.85, west: 2.26, north: 48.87, east: 2.28 });
+  assert.equal(summary.references[0].name, 'Paris 16e Arrondissement');
+  assert.equal(summary.references[0].code, '75116');
+});
+
+test('a ring travels as integer offsets and comes back within half a unit', () => {
+  const ring = [[2.278123, 48.859127], [2.278456, 48.859127], [2.278456, 48.858901], [2.278123, 48.859127]];
+  const flat = encodeRing(ring);
+  assert.deepEqual(flat.slice(0, 2), [227812, 4885913]);
+  assert.ok(flat.slice(2).every((value) => Number.isInteger(value) && Math.abs(value) < 100));
+  const back = decodeRing(flat);
+  assert.equal(back.length, ring.length);
+  for (const [index, [lon, lat]] of back.entries()) {
+    assert.ok(Math.abs(lon - ring[index][0]) <= 0.000005 + 1e-12);
+    assert.ok(Math.abs(lat - ring[index][1]) <= 0.000005 + 1e-12);
   }
+});
+
+test('a vertex that rounds onto the previous one is dropped, and so is a part that collapses', () => {
+  assert.equal(encodeRing([[2.5, 48.5], [2.500001, 48.500001], [2.6, 48.5], [2.6, 48.6]]).length, 6);
+  const parts = encodeParts([
+    // A sliver thinner than the unit: its outer ring collapses, and its hole
+    // must not be promoted to an outline.
+    [[[2.5, 48.5], [2.500001, 48.5], [2.500001, 48.500001]], [[2.4, 48.4], [2.41, 48.4], [2.41, 48.41]]],
+    [[[2.5, 48.5], [2.6, 48.5], [2.6, 48.6], [2.5, 48.5]]],
+  ]);
+  assert.equal(parts.length, 1);
+  assert.equal(decodeParts(parts)[0][0].length, 4);
 });

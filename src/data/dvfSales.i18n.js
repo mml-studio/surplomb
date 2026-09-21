@@ -13,7 +13,7 @@
  * code, in caches and in share links; {@link TYPE_LOCAL} and {@link NATURE}
  * are what a card displays instead, through `labelFor()`.
  */
-import { countNoun } from '../i18n/format.js';
+import { countNoun, formatInteger } from '../i18n/format.js';
 import { plural } from '../i18n/format.js';
 import { defineMessages } from '../i18n/messages.js';
 
@@ -300,6 +300,13 @@ export default defineMessages({
   card: {
     fallbackName: { fr: 'Mutation', en: 'Sale' },
     typeUnpublished: { fr: 'type non publié', en: 'type not published' },
+    typeWithSurface: {
+      fr: (types, surface, total) => `${types} — ${surface} m²${total ? ' au total' : ''}`,
+      en: (types, surface, total) => `${types} — ${surface} m²${total ? ' in total' : ''}`,
+      note: 'The built floor area DVF publishes (`surface_reelle_bati`), summed over the '
+        + 'dwellings of the sale; `total` is true when there were several.',
+      sample: ['Apartment + Outbuilding', '78', false],
+    },
     noComparable: { fr: 'pas de €/m² comparable', en: 'no comparable €/m²' },
     dwellings: {
       fr: (count) => `${count} logements — pas de €/m² comparable`,
@@ -334,11 +341,14 @@ export default defineMessages({
     },
   },
 
-  /** Above 600 m the layer answers by cell, and says so in its own words. */
-  cells: {
+  /**
+   * Above 600 m the layer paints the cadastre — plots, then sections — and
+   * says so in its own words.
+   */
+  area: {
     reference: {
-      fr: (communes) => `Chaque cellule est rapportée au médian de SA commune (${communes})`,
-      en: (communes) => `Every cell is compared with ITS OWN municipality’s median (${communes})`,
+      fr: (communes) => `Chaque vente est rapportée au médian de SA commune (${communes})`,
+      en: (communes) => `Every sale is compared with ITS OWN municipality’s median (${communes})`,
       sample: [2],
     },
     noReference: {
@@ -350,24 +360,9 @@ export default defineMessages({
       en: (list) => `Compared with each municipality’s median: ${list}`,
       note: '`list` is already joined, busiest commune first, capped at four.',
       sample: ['Lyon 6e €5,500/m² · Lyon 3e €4,660/m²'],
-    },
-    discSize: {
-      fr: 'taille du disque = nombre de ventes',
-      en: 'disc size = number of sales',
+      keep: ['Lyon 6e', 'Lyon 3e'],
     },
     box: { fr: 'la boîte', en: 'the box' },
-    aggregated: {
-      fr: (span, cellM) => `vue agrégée sur ${span} de côté, cellules de ${cellM} m`,
-      en: (span, cellM) => `view aggregated over ${span} a side, cells of ${cellM} m`,
-      sample: ['2.2 km', 150],
-    },
-    inBox: {
-      fr: (sales, priced) => `${countNoun(sales, 'vente', 'ventes', FR)} dans la boîte, `
-        + `${priced} avec un €/m²`,
-      en: (sales, priced) => `${countNoun(sales, 'sale', 'sales', EN)} in the box, `
-        + `${priced} with a €/m²`,
-      sample: [1324, 901],
-    },
     communes: {
       fr: (communes, probes) => `${countNoun(communes, 'commune', 'communes', FR)} `
         + `identifiée${communes > 1 ? 's' : ''} par ${probes} sondages : une commune `
@@ -378,63 +373,120 @@ export default defineMessages({
       note: 'A4 — the commune list comes from probing the box, not from intersecting it.',
       sample: [2, 9],
     },
+    unplotted: {
+      fr: (count) => `${countNoun(count, 'vente', 'ventes', FR)} sans parcelle publiée, `
+        + 'impossible à dessiner',
+      en: (count) => `${countNoun(count, 'sale', 'sales', EN)} with no published parcel, `
+        + 'impossible to draw',
+      sample: [4],
+    },
+    unshaped: {
+      fr: (count) => `${count} forme(s) nommée(s) par le registre et absente(s) du cadastre `
+        + 'Etalab, non dessinée(s)',
+      en: (count) => `${count} ${plural(count, 'shape', 'shapes', { locale: 'en' })} the register `
+        + 'names and the Etalab cadastre does not draw',
+      sample: [3],
+    },
     missingYears: {
       fr: (years) => `millésime(s) non téléchargé(s) : ${years}`,
       en: (years) => `${plural(countItems(years), 'vintage', 'vintages', { locale: 'en' })} not downloaded: ${years}`,
       sample: ['2025'],
-    },
-    descendForSales: {
-      fr: (metres) => `descendre sous ${metres} m pour retrouver chaque vente et sa parcelle`,
-      en: (metres) => `drop below ${metres} m to get each sale back, and its parcel`,
-      sample: [600],
-    },
-    inCell: {
-      fr: (sales) => `${countNoun(sales, 'vente', 'ventes', FR)} dans cette cellule`,
-      en: (sales) => `${countNoun(sales, 'sale', 'sales', EN)} in this cell`,
-      sample: [14],
-    },
-    priced: {
-      fr: (priced) => `${priced} avec un €/m² exploitable`,
-      en: (priced) => `${priced} with a usable €/m²`,
-      sample: [9],
-    },
-    allPriced: {
-      fr: 'toutes avec un €/m² exploitable',
-      en: 'all of them with a usable €/m²',
-    },
-    median: {
-      fr: (price) => `médian ${price}`,
-      en: (price) => `median ${price}`,
-      sample: ['€5,458/m²'],
-    },
-    against: {
-      fr: (price, commune) => `contre ${price} pour ${commune}`,
-      en: (price, commune) => `against ${price} for ${commune}`,
-      sample: ['€5,500/m²', 'Lyon 6e'],
-    },
-    noMedian: {
-      fr: 'pas de médian : rien n’est peint',
-      en: 'no median: nothing is painted',
     },
     vintages: {
       fr: (years) => `millésimes ${years}`,
       en: (years) => `vintages ${years}`,
       sample: ['2023, 2024'],
     },
-    descendForEach: {
-      fr: (metres) => `descendre sous ${metres} m pour voir les ventes une par une`,
-      en: (metres) => `drop below ${metres} m to see the sales one by one`,
-      sample: [600],
+    /** 600 m to 1 800 m: every plot a sale in the box names. */
+    plots: {
+      unit: {
+        fr: 'sol teinté = la parcelle, peinte par sa dernière vente',
+        en: 'tinted ground = the parcel, painted by its latest sale',
+      },
+      drawn: {
+        fr: (span, sales, plots) => `vue sur ${span} de côté : `
+          + `${countNoun(sales, 'vente', 'ventes', FR)}, `
+          + `${countNoun(plots, 'parcelle dessinée', 'parcelles dessinées', FR)}`,
+        en: (span, sales, plots) => `view over ${span} a side: `
+          + `${countNoun(sales, 'sale', 'sales', EN)}, `
+          + `${countNoun(plots, 'parcel drawn', 'parcels drawn', EN)}`,
+        sample: ['2.2 km', 3964, 1207],
+      },
+      descend: {
+        fr: (metres) => `descendre sous ${metres} m pour retrouver chaque vente`,
+        en: (metres) => `drop below ${metres} m to get each sale back`,
+        sample: [600],
+      },
+      which: {
+        fr: (count, years) => (count > 1
+          ? `la dernière des ${count} ventes de cette parcelle${years ? ` (${years})` : ''}`
+          : `la seule vente de cette parcelle${years ? ` (${years})` : ''}`),
+        en: (count, years) => (count > 1
+          ? `the latest of this parcel’s ${count} sales${years ? ` (${years})` : ''}`
+          : `this parcel’s only sale${years ? ` (${years})` : ''}`),
+        note: '`years` is the editions label, e.g. "editions 2023 to 2025", or null.',
+        sample: [5, 'editions 2023 to 2025'],
+      },
     },
-    discName: {
-      fr: (price, sales) => `${price} · ${countNoun(sales, 'vente', 'ventes', FR)}`,
-      en: (price, sales) => `${price} · ${countNoun(sales, 'sale', 'sales', EN)}`,
-      sample: ['€5,458/m²', 14],
-    },
-    discNameNoPrice: {
-      fr: (sales) => countNoun(sales, 'vente', 'ventes', FR),
-      en: (sales) => countNoun(sales, 'sale', 'sales', EN),
-      sample: [14],
+    /** Above 1 800 m: every cadastral section a sale in the box falls in. */
+    sections: {
+      unit: {
+        fr: 'section cadastrale peinte par le médian de ses ventes',
+        en: 'cadastral section painted by the median of its sales',
+      },
+      drawn: {
+        fr: (span, sections, sales) => `vue sur ${span} de côté : `
+          + `${countNoun(sections, 'section cadastrale', 'sections cadastrales', FR)}, `
+          + `${countNoun(sales, 'vente', 'ventes', FR)}`,
+        en: (span, sections, sales) => `view over ${span} a side: `
+          + `${countNoun(sections, 'cadastral section', 'cadastral sections', EN)}, `
+          + `${countNoun(sales, 'sale', 'sales', EN)}`,
+        sample: ['8.8 km', 566, 54108],
+      },
+      descend: {
+        fr: (metres) => `descendre sous ${formatInteger(metres, FR)} m pour voir chaque parcelle vendue`,
+        en: (metres) => `drop below ${formatInteger(metres, EN)} m to see each parcel sold`,
+        sample: [1800],
+      },
+      title: {
+        fr: (code, commune) => `Section ${code} · ${commune}`,
+        en: (code, commune) => `Section ${code} · ${commune}`,
+        note: '`code` is the cadastre\'s own section code (AB, 0C…).',
+        sample: ['AH', 'Paris 7e Arrondissement'],
+        keep: ['Paris 7e Arrondissement'],
+      },
+      sales: {
+        fr: (count, priced) => `${countNoun(count, 'vente', 'ventes', FR)}, `
+          + `dont ${priced} avec un €/m² exploitable`,
+        en: (count, priced) => `${countNoun(count, 'sale', 'sales', EN)}, `
+          + `${priced} with a usable €/m²`,
+        sample: [27, 15],
+      },
+      median: {
+        fr: (price) => `médian ${price}`,
+        en: (price) => `median ${price}`,
+        sample: ['€20,898/m²'],
+      },
+      against: {
+        fr: (price, commune) => `contre ${price} pour ${commune}`,
+        en: (price, commune) => `against ${price} for ${commune}`,
+        sample: ['€13,958/m²', 'Paris 7e Arrondissement'],
+        keep: ['Paris 7e Arrondissement'],
+      },
+      neutral: {
+        fr: (min) => `moins de ${min} ventes chiffrées`,
+        en: (min) => `fewer than ${min} priced sales`,
+        sample: [3],
+      },
+      neutralBlurb: {
+        fr: (min) => `Section dont moins de ${min} ventes portent un €/m² comparable : son médian `
+          + 'serait le prix d’une ou deux ventes étendu à tout un quartier, donc rien n’est '
+          + 'peint. Les ventes existent, leur nombre est sur la fiche de la section.',
+        en: (min) => `A section where fewer than ${min} sales carry a comparable €/m²: its median `
+          + 'would be the price of one or two sales stretched over a whole neighbourhood, so '
+          + 'nothing is painted. The sales exist, and the section’s card counts them.',
+        sample: [3],
+      },
     },
   },
 });

@@ -51,6 +51,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **A sale's card now says how big the property is.** The surface was the
+  seventh line of the card and the card shows six, so every sale that could be
+  compared with its municipality — the ones a reader clicks for their price —
+  lost it: a Biarritz flat read €1,250,000 and €16,026/m² with no way to see it
+  was 78 m². It now rides on the type line, *Apartment + Outbuilding — 78 m²*,
+  on the sale markers, on the parcels under them and on the parcels painted
+  from altitude; a sale of several dwellings says the figure is their total.
 - **Un lien vers Lyon ouvrait les ventes sur une carte vide.** Dans certaines
   orientations de la caméra, Cesium voyait bouger une caméra immobile : la
   lecture du cap déplace le vecteur « haut » d’un arrondi de l’ordre de
@@ -63,6 +70,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Property prices paint the parcels from altitude, not discs.** Between
+  600 m and 1,800 m the layer now draws every parcel sold in the view,
+  coloured by its latest sale against its own municipality's median — the same
+  colour that parcel wears under its markers closer in. Above 1,800 m it paints
+  the cadastral sections instead, each by the median of its sales, and leaves a
+  section with fewer than three priced sales uncoloured. The 150 m and 850 m
+  discs are gone: they fell across blocks and boulevards and named no ground a
+  reader could see. Measured over Paris 16e: 1,207 parcels for 3,964 sales,
+  70 kB gzipped, built in 4 ms on the main thread and on screen within 0.3 s;
+  491 sections for the view from 5 km. A click on a parcel or a section opens
+  its card.
+- **“Value a property” starts unticked.** Switching on property prices no
+  longer switches on the valuation of a 60 m² flat nobody described; its chip
+  on the row turns it on.
 - **L’écran de chargement s’anime aux couleurs de Surplomb.** Sur le vert de
   la marque, le soleil du logo quitte sa place et fait sa course au-dessus de
   la terrasse ; la terrasse jette son ombre sur le sol, plus longue quand le

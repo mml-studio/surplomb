@@ -634,6 +634,20 @@ export function cadastreCommuneUrl(insee) {
     + `/cadastre-${code}-parcelles.json.gz`;
 }
 
+/**
+ * Etalab's SECTION file for one commune, at the same `latest` alias.
+ *
+ * The DVF layer paints a box seen from above 1 800 m section by section, and
+ * this file is what those shapes are: 130 sections for Paris 16e in 33 KB
+ * gzipped, against 632 KB for its 6 887 parcels.
+ */
+export function cadastreSectionsUrl(insee) {
+  const code = String(insee).trim();
+  // i18n-ignore-next-line — a URL path, not prose
+  return `${CADASTRE_ETALAB_BASE}/latest/geojson/communes/${code.slice(0, 2)}/${code}`
+    + `/cadastre-${code}-sections.json.gz`;
+}
+
 /** The reverse commune lookup the proxy resolves a camera focus with. */
 export function geoCommuneUrl(lat, lon) {
   const params = new URLSearchParams({

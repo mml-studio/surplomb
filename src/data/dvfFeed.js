@@ -66,12 +66,13 @@
  * rather than trusting it.
  *
  * Side-effect-free: URL construction, CSV parsing and projection only, over
- * one equally side-effect-free import (`scanCells.js`, the grid arithmetic it
- * shares with the DPE). The `/api/dvf` proxy imports this; nothing in the
- * browser bundle does.
+ * one equally side-effect-free import (`scanCells.js`, for its median). The
+ * `/api/dvf` proxy runs the projections; the browser imports the few shared
+ * rules (`saleKind`, the recency order, the section floor) so both sides of
+ * the wire apply the same ones.
  */
 
-import { bucketCells, medianOf } from './scanCells.js';
+import { medianOf } from './scanCells.js';
 
 const FILES_ROOT = 'https://files.data.gouv.fr/geo-dvf/latest/csv';
 
@@ -574,59 +575,105 @@ export function selectNearbySales(mutations, origin, radiusM) {
   };
 }
 
-/**
- * Size classes for a DVF cell, per grid step, as counts of mutations.
- *
- * MEASURED, not chosen: over the 877 communes of cached editions this repo has
- * on disk — 183 603 occupied cells on the 150 m grid, 25 388 on the 850 m one,
- * three editions each — the counts are very skewed. On the fine grid the median
- * cell holds 2 mutations, the ninth decile 17, the ninety-ninth centile 60 and
- * the densest 385. So the breaks are spread across the UPPER range, where the
- * eye can actually separate two discs, and the bottom two classes deliberately
- * carry most of the country.
- *
- * The consequence is the honest one, and it is `filosofiCarreaux.js`'s: a
- * brilliantly coloured speck is two sales, and it must not be read as a
- * neighbourhood.
- */
-export const DVF_CELL_BREAKS = Object.freeze({
-  150: Object.freeze([2, 5, 10, 25, 60]),
-  850: Object.freeze([5, 20, 50, 130, 350]),
-});
+/* ── the area regimes ───────────────────────────────────────────────────── */
 
 /**
- * The breaks for a grid step, falling back to the nearest published one.
- * @param {number} cellM @returns {ReadonlyArray<number>}
+ * Compare two mutations by how recent they are: date first, then the larger
+ * dwelling surface, then the id, so the answer never depends on the order the
+ * editions were concatenated in.
+ *
+ * It lives HERE, beside the register, because two callers on either side of
+ * the wire must agree on it. `dvfSales.js` reduces the sales of one plot to
+ * the one its wash is painted from; the `/api/dvf` proxy does the same
+ * reduction for a whole box of plots before any of them reaches the browser.
+ * Two copies that agree today are two copies that can disagree tomorrow, and
+ * a plot would then change colour on the way through 600 m with no row of
+ * data changed.
+ *
+ * @returns {number} > 0 when `a` is the more recent.
  */
-export function dvfCellBreaks(cellM) {
-  return DVF_CELL_BREAKS[cellM]
-    || DVF_CELL_BREAKS[Number(cellM) > 400 ? 850 : 150];
+export function compareMutationRecency(a, b) {
+  const dateA = String(a?.date || '');
+  const dateB = String(b?.date || '');
+  // ISO `YYYY-MM-DD`, so a string compare IS a date compare. An empty date
+  // sorts below every real one rather than throwing the sale away.
+  if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+  const surfaceA = Number.isFinite(a?.dwellingSurface) ? a.dwellingSurface : 0;
+  const surfaceB = Number.isFinite(b?.dwellingSurface) ? b.dwellingSurface : 0;
+  if (surfaceA !== surfaceB) return surfaceA - surfaceB;
+  const idA = String(a?.id || '');
+  const idB = String(b?.id || '');
+  return idA === idB ? 0 : (idA < idB ? -1 : 1);
 }
 
 /**
- * Aggregate whole editions into cells over a box — the high-altitude regime.
+ * N mutations on one plot → the one it speaks for. See
+ * {@link compareMutationRecency}, and `dvfSales.js` for why recency and not a
+ * median.
+ * @param {Array<object>} mutations
+ * @returns {?object}
+ */
+export function mostRecentMutation(mutations) {
+  let best = null;
+  for (const mutation of Array.isArray(mutations) ? mutations : []) {
+    if (!mutation) continue;
+    if (!best || compareMutationRecency(mutation, best) > 0) best = mutation;
+  }
+  return best;
+}
+
+/**
+ * The cadastral section a parcel belongs to: the first ten characters of its
+ * identifier — commune (5), prefix (3), section (2).
+ *
+ * MEASURED, not assumed: over the 12 039 parcels Etalab publishes for Paris 16e
+ * and Boulogne-Billancourt, every one of them carries the id of a section of
+ * the same edition's section file as its prefix — zero misses. `id_parcelle`
+ * in DVF is the same 14-character key (see `vite.config.js`, 400 of 400
+ * joined), so a sale reaches its section with no lookup at all.
+ *
+ * @param {?string} parcelId
+ * @returns {?string}
+ */
+export function sectionIdOf(parcelId) {
+  const id = String(parcelId || '').trim();
+  return id.length === 14 ? id.slice(0, 10) : null;
+}
+
+/**
+ * Fewest priced sales a SECTION needs before it is painted in a price class.
+ *
+ * The discs this regime replaced needed no floor: their AREA was the count,
+ * so a one-sale disc was a speck. A section's area is the cadastre's, and a
+ * rural section can be two square kilometres — painted from one sale it would
+ * be a statement about a whole hillside made by one house. Three is the
+ * smallest sample whose median is not simply one of its members' prices
+ * standing alone. A section under it is still drawn, in the neutral, and its
+ * card gives the count: the sales happened, the median would be a guess.
+ */
+export const DVF_SECTION_MIN_PRICED = 3;
+
+/** A point inside the box, west and south inclusive, east and north not. */
+function insideBox(mutation, box) {
+  return mutation.lon >= box.west && mutation.lon < box.east
+    && mutation.lat >= box.south && mutation.lat < box.north;
+}
+
+/**
+ * What both area regimes start from: one reference per commune, and every
+ * geocoded mutation divided by the median of ITS OWN commune.
  *
  * ONE REFERENCE PER COMMUNE, NEVER ONE FOR THE BOX. This is the rule
- * {@link communeReference} already enforces by REPORTING `codeCount` instead of
- * averaging across codes, and a box scan is the first caller that can actually
+ * {@link communeReference} already enforces by REPORTING `codeCount` instead
+ * of averaging across codes, and a box is the caller that can actually
  * straddle two: 0.02° at Lyon spans four arrondissements and a slice of
- * Villeurbanne. So each edition set keeps its own median, every mutation is
- * divided by the median of ITS OWN commune, and what a cell carries is the
- * median of those RATIOS. A single blended denominator would paint Villeurbanne
- * against Lyon 6e's prices and call the difference a market.
- *
- * NO MINIMUM COUNT FOR A COLOUR, and that is deliberate. A cell holding one
- * priced sale is coloured by that sale's ratio, exactly as the point regime
- * colours the sale itself — the claim is identical, and the disc's AREA is what
- * says how many sales stand behind it. Adding a floor would state the count
- * twice, once in a channel that already carries it.
+ * Villeurbanne. A single blended denominator would paint Villeurbanne against
+ * Lyon 6e's prices and call the difference a market.
  *
  * @param {Array<{commune: ?object, mutations: Array<object>}>} editions
- * @param {{south: number, west: number, north: number, east: number}} box
- * @param {number} cellM Grid step in metres.
- * @returns {{cells: Array<object>, summary: object}}
+ * @returns {{references: Array<object>, rows: Array<object>}}
  */
-export function aggregateSalesIntoCells(editions, box, cellM) {
+function areaInputs(editions) {
   const rows = [];
   const references = [];
   for (const edition of Array.isArray(editions) ? editions : []) {
@@ -635,7 +682,10 @@ export function aggregateSalesIntoCells(editions, box, cellM) {
     const reference = communeReference(mutations);
     references.push({
       code: edition?.commune?.code ?? reference.code,
-      name: edition?.commune?.name ?? reference.name,
+      // The REGISTER's name first, as the disc regime does (`dvfReference`):
+      // the BAN answers « Paris » for every arrondissement, and a key listing
+      // « Paris 9 615 €/m² · Paris 10 972 €/m² » names neither.
+      name: reference.name ?? edition?.commune?.name ?? null,
       medianPrixM2: reference.medianPrixM2,
       // The denominator's OWN sample size — the whole commune over the whole
       // window — because that is what the median was computed on. It is not the
@@ -646,64 +696,299 @@ export function aggregateSalesIntoCells(editions, box, cellM) {
     });
     const median = reference.medianPrixM2;
     for (const mutation of mutations) {
-      if (mutation.lon === null || mutation.lat === null) continue;
-      if (mutation.lon === undefined || mutation.lat === undefined) continue;
+      if (!Number.isFinite(mutation?.lon) || !Number.isFinite(mutation?.lat)) continue;
       const priced = typeof mutation.prixM2 === 'number' && Number.isFinite(mutation.prixM2)
         && mutation.prixM2 > 0;
       rows.push({
-        lon: mutation.lon,
-        lat: mutation.lat,
+        mutation,
         prixM2: priced ? mutation.prixM2 : null,
         // Null rather than 1 when there is no denominator: a sale in a commune
         // whose edition prices nothing is not a sale at the median.
         ratio: priced && median ? mutation.prixM2 / median : null,
-        communeCode: mutation.communeCode ?? edition?.commune?.code ?? null,
-        year: Number(String(mutation.date || '').slice(0, 4)) || null,
+        // The EDITION's code first: it is the one the references are keyed by
+        // and the one the proxy fetches the commune's cadastre under.
+        communeCode: edition?.commune?.code ?? mutation.communeCode ?? null,
       });
     }
   }
-  const buckets = bucketCells(rows, box, cellM);
-  const cells = buckets.map((cell) => {
-    const prices = cell.rows.map((row) => row.prixM2).filter((value) => value !== null);
-    const ratios = cell.rows.map((row) => row.ratio).filter((value) => value !== null);
-    return {
-      key: cell.key,
-      lon: Number(cell.lon.toFixed(6)),
-      lat: Number(cell.lat.toFixed(6)),
-      west: cell.west,
-      south: cell.south,
-      east: cell.east,
-      north: cell.north,
-      count: cell.rows.length,
-      pricedCount: prices.length,
-      medianPrixM2: medianOf(prices) === null ? null : Math.round(medianOf(prices)),
-      medianRatio: medianOf(ratios),
-      communeCode: dominant(cell.rows.map((row) => row.communeCode)),
-      years: [...new Set(cell.rows.map((row) => row.year).filter(Boolean))].sort(),
-    };
-  }).sort((a, b) => b.count - a.count);
-  // COUNTED OFF THE CELLS, NOT OFF `rows`. `rows` holds every geocoded mutation
-  // of every commune the box touched — both whole arrondissements, 8 069 of
-  // them at Lyon — while the box itself held a fraction of that. Summarising
-  // the wider set would print a coverage line describing ground the reader
-  // cannot see, under a map drawn from the narrower one.
-  const inBox = buckets.flatMap((cell) => cell.rows);
-  const allPrices = inBox.map((row) => row.prixM2).filter((value) => value !== null);
+  references.sort((a, b) => (b.count || 0) - (a.count || 0));
+  return { references, rows };
+}
+
+/** A ratio rounded for the wire: four decimals is 0.01 % of a class width. */
+function wireRatio(ratio) {
+  return typeof ratio === 'number' && Number.isFinite(ratio) ? Number(ratio.toFixed(4)) : null;
+}
+
+/** The median of a list of numbers, rounded to the euro, or null. */
+function roundedMedian(values) {
+  const median = medianOf(values);
+  return median === null ? null : Math.round(median);
+}
+
+/**
+ * The one mutation a plot is painted from, cut down to what its card prints.
+ *
+ * Not the whole mutation: a dense box holds 1 700 plots, and the fields the
+ * card never reads — the commune name the reference already carries, the row
+ * count, the ancillary tallies — would be a third of the payload.
+ * @param {object} mutation
+ * @returns {object}
+ */
+function plotSale(mutation) {
   return {
-    cells,
+    date: mutation.date ?? null,
+    nature: mutation.nature ?? null,
+    valeur: mutation.valeur ?? null,
+    types: Array.isArray(mutation.types) ? mutation.types : [],
+    prixM2: Number.isFinite(mutation.prixM2) ? mutation.prixM2 : null,
+    dwellingSurface: Number.isFinite(mutation.dwellingSurface) ? mutation.dwellingSurface : 0,
+    dwellingCount: Number.isFinite(mutation.dwellingCount) ? mutation.dwellingCount : 0,
+    address: mutation.address ?? null,
+  };
+}
+
+/**
+ * The unit a ring is sent in: 1e-5 degree — 1.1 m of latitude, 0.7 m of
+ * longitude in France, under two pixels from 600 m, where the area regimes
+ * start.
+ */
+export const DVF_RING_SCALE = 1e5;
+
+/**
+ * One ring as a flat list of integers: the first vertex in 1e-5 degree, then
+ * each vertex as its offset from the previous one.
+ *
+ * WHY NOT `[[lon, lat], …]` LIKE THE DISC REGIME. The area answers are the
+ * biggest this route serves and the address cache keeps 300 answers whole in
+ * the server's memory. Measured on the densest Paris 16e box (1 207 plots,
+ * 18 984 vertices): 660 KB of JSON and **2.05 MB of heap** as nested pairs —
+ * every vertex its own array of two boxed doubles. Flat small integers are
+ * what V8 packs tightest, and the offsets are two- and three-digit numbers
+ * on the wire. A vertex that rounds onto the one before it is dropped: at
+ * this unit it adds nothing but bytes.
+ *
+ * @param {Array<number[]>} ring `[[lon, lat], …]`, open or closed.
+ * @returns {number[]}
+ */
+export function encodeRing(ring) {
+  const out = [];
+  let lastX = null;
+  let lastY = null;
+  for (const point of Array.isArray(ring) ? ring : []) {
+    const x = Math.round(Number(point?.[0]) * DVF_RING_SCALE);
+    const y = Math.round(Number(point?.[1]) * DVF_RING_SCALE);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (lastX === null) out.push(x, y);
+    else if (x !== lastX || y !== lastY) out.push(x - lastX, y - lastY);
+    else continue;
+    lastX = x;
+    lastY = y;
+  }
+  return out;
+}
+
+/**
+ * The inverse of {@link encodeRing}: `[[lon, lat], …]` in degrees.
+ * @param {number[]} flat
+ * @returns {Array<number[]>}
+ */
+export function decodeRing(flat) {
+  const ring = [];
+  if (!Array.isArray(flat) || flat.length < 2) return ring;
+  let x = 0;
+  let y = 0;
+  for (let i = 0; i + 1 < flat.length; i += 2) {
+    x += flat[i];
+    y += flat[i + 1];
+    ring.push([x / DVF_RING_SCALE, y / DVF_RING_SCALE]);
+  }
+  return ring;
+}
+
+/**
+ * Every ring of a shape's parts through {@link encodeRing}. A part whose outer
+ * ring collapses under three vertices is dropped whole — its holes would
+ * otherwise be promoted to an outline — and a collapsed hole just goes.
+ */
+export function encodeParts(parts) {
+  const out = [];
+  for (const rings of Array.isArray(parts) ? parts : []) {
+    const encoded = (Array.isArray(rings) ? rings : []).map(encodeRing);
+    if (!encoded.length || encoded[0].length < 6) continue;
+    out.push([encoded[0], ...encoded.slice(1).filter((ring) => ring.length >= 6)]);
+  }
+  return out;
+}
+
+/** Every ring of a shape's parts through {@link decodeRing}. */
+export function decodeParts(parts) {
+  return (Array.isArray(parts) ? parts : []).map((rings) => (Array.isArray(rings) ? rings : [])
+    .map(decodeRing));
+}
+
+/**
+ * The fine area regime: every PLOT a sale in the box names, painted from its
+ * most recent mutation — the same reduction, and the same colour, the plot
+ * already takes below 600 m under its markers.
+ *
+ * WHY PLOTS AND NOT CELLS. The 150 m discs this replaced were a median over a
+ * patch of ground that matched nothing on it: a disc straddled two blocks and a
+ * boulevard, and the reader asked for « les parcelles en question » instead of
+ * « ces cercles d'affichage par zone » (2026-09-21). The register names the
+ * plot of every sale, so the plot is the honest unit — and at the altitudes of
+ * this band (600 m to 1 800 m) a Paris plot of 20 to 50 m is 20 to 60 pixels.
+ *
+ * MEASURED BEFORE IT WAS BUILT, over 0.02° boxes and editions 2023–2025:
+ * Paris 16e La Muette 3 964 mutations → 1 207 plots, 18 984 vertices, 94 KB
+ * gzipped as five-decimal pairs (70 KB served, see {@link encodeRing});
+ * Paris 15e Beaugrenelle 5 516 → 1 493 plots;
+ * Paris 17e Ternes 5 213 → 1 698 plots, 149 KB; Issy-les-Moulineaux 1 758 →
+ * 509 plots, 50 KB. The cadastre layer already draws up to 5 000 parcels in
+ * one view, so the densest box is a third of a load the globe carries.
+ *
+ * A PLOT IS SELECTED BY ITS SALE'S POSITION, and every sale of it counts.
+ * DVF geolocates a mutation at its plot, so "a sale in the box" and "a plot in
+ * the box" are the same test; a plot straddling the box edge is drawn whole.
+ * `count` is how many mutations the plot holds over the editions in hand — the
+ * card says it, so « le dernier de 7 » is readable next to the price.
+ *
+ * @param {Array<{commune: ?object, mutations: Array<object>}>} editions
+ * @param {{south: number, west: number, north: number, east: number}} box
+ * @returns {{plots: Array<object>, summary: object}}
+ */
+export function aggregateSalesIntoPlots(editions, box) {
+  const { references, rows } = areaInputs(editions);
+  const inBox = rows.filter((row) => insideBox(row.mutation, box));
+  const byPlot = new Map();
+  let unplotted = 0;
+  for (const row of inBox) {
+    const id = String(row.mutation.parcelle || '').trim();
+    // A mutation the register files under no plot is a sale nobody can draw
+    // on the ground. Counted, never moved to a neighbour's plot.
+    if (!id) { unplotted += 1; continue; }
+    const held = byPlot.get(id);
+    if (held) held.push(row); else byPlot.set(id, [row]);
+  }
+  const plots = [];
+  for (const [id, list] of byPlot) {
+    const latest = mostRecentMutation(list.map((row) => row.mutation));
+    const row = list.find((entry) => entry.mutation === latest);
+    plots.push({
+      id,
+      communeCode: row.communeCode,
+      count: list.length,
+      // The latest sale's own ratio, NOT a median of the plot's: see
+      // `dvfSales.js` — a median of five years publishes a price nobody paid.
+      ratio: wireRatio(row.ratio),
+      sale: plotSale(latest),
+    });
+  }
+  // Stable order, so two identical answers serialise identically.
+  plots.sort((a, b) => (a.id < b.id ? -1 : (a.id > b.id ? 1 : 0)));
+  const prices = inBox.map((row) => row.prixM2).filter((value) => value !== null);
+  return {
+    plots,
     summary: {
-      basis: 'cells',
-      cellM,
-      cells: cells.length,
+      basis: 'plots',
       count: inBox.length,
-      pricedCount: allPrices.length,
+      pricedCount: prices.length,
+      plots: plots.length,
+      pricedPlots: plots.filter((plot) => plot.ratio !== null).length,
+      unplotted,
       // The box statistic: printed, never divided by. Same rule as
       // `selectNearbySales`'s `medianPrixM2`, for the same reason.
-      medianPrixM2: medianOf(allPrices) === null ? null : Math.round(medianOf(allPrices)),
-      // Every commune the box touched, each with its own denominator. A reader
-      // must be able to see that the colours were read against four references
-      // and which ones.
-      references: references.sort((a, b) => (b.count || 0) - (a.count || 0)),
+      medianPrixM2: roundedMedian(prices),
+      references,
+    },
+  };
+}
+
+/**
+ * The coarse area regime: every cadastral SECTION a sale in the box falls in,
+ * painted by the median of its sales' ratios.
+ *
+ * WHY SECTIONS AND NOT PLOTS UP HERE. Measured over the 0.08° box west of
+ * Paris (1 800 m to 12 km of altitude): 38 087 mutations name 11 547 plots,
+ * 170 297 vertices, 875 KB gzipped — and at five kilometres a Paris plot is
+ * five pixels. The same box holds 413 sections and 11 063 vertices. A section
+ * is the cadastre's own subdivision of a commune, a few blocks in a city and a
+ * hamlet's fields in the country, so the shapes still follow the streets where
+ * the 850 m discs this replaced fell across them.
+ *
+ * THE WHOLE SECTION, NOT ITS SLICE OF THE BOX. A section is selected when any
+ * of its sales lands in the box, and then EVERY sale of it in the editions is
+ * counted: the shape is drawn whole, so its colour has to describe the whole
+ * shape. The commune's editions are already in memory — this costs no request.
+ *
+ * A MEDIAN OF RATIOS, NOT A RATIO OF MEDIANS — although a section, unlike the
+ * cells before it, never straddles a commune, so the two agree here up to
+ * rounding. It is kept for the reason it was chosen: the colour language is
+ * the one the sales speak below 600 m, one frozen ramp around one named
+ * reference, and only the unit moves.
+ *
+ * `medianRatio` is published even under {@link DVF_SECTION_MIN_PRICED}; the
+ * floor is applied where the colour is chosen, so the card can still print a
+ * median it is refusing to paint.
+ *
+ * @param {Array<{commune: ?object, mutations: Array<object>}>} editions
+ * @param {{south: number, west: number, north: number, east: number}} box
+ * @returns {{sections: Array<object>, summary: object}}
+ */
+export function aggregateSalesIntoSections(editions, box) {
+  const { references, rows } = areaInputs(editions);
+  const touched = new Set();
+  let inBox = 0;
+  let unplotted = 0;
+  for (const row of rows) {
+    if (!insideBox(row.mutation, box)) continue;
+    inBox += 1;
+    const section = sectionIdOf(row.mutation.parcelle);
+    if (section) touched.add(section); else unplotted += 1;
+  }
+  const bySection = new Map();
+  for (const row of rows) {
+    const section = sectionIdOf(row.mutation.parcelle);
+    if (!section || !touched.has(section)) continue;
+    const held = bySection.get(section);
+    if (held) held.push(row); else bySection.set(section, [row]);
+  }
+  const sections = [];
+  for (const [id, list] of bySection) {
+    const prices = list.map((row) => row.prixM2).filter((value) => value !== null);
+    const ratios = list.map((row) => row.ratio).filter((value) => value !== null);
+    sections.push({
+      id,
+      communeCode: list[0].communeCode,
+      count: list.length,
+      pricedCount: prices.length,
+      medianPrixM2: roundedMedian(prices),
+      medianRatio: wireRatio(medianOf(ratios)),
+      years: [...new Set(list.map((row) => Number(String(row.mutation.date || '').slice(0, 4)))
+        .filter(Boolean))].sort(),
+    });
+  }
+  sections.sort((a, b) => (a.id < b.id ? -1 : (a.id > b.id ? 1 : 0)));
+  // COUNTED OFF THE SECTIONS DRAWN, NOT OFF `rows`, which holds every
+  // geocoded mutation of every commune the box touched — whole
+  // arrondissements — while the drawing covers a fraction of them.
+  const drawnRows = sections.length ? [...bySection.values()].flat() : [];
+  const prices = drawnRows.map((row) => row.prixM2).filter((value) => value !== null);
+  return {
+    sections,
+    summary: {
+      basis: 'sections',
+      count: drawnRows.length,
+      pricedCount: prices.length,
+      inBox,
+      sections: sections.length,
+      paintedSections: sections
+        .filter((section) => section.pricedCount >= DVF_SECTION_MIN_PRICED
+          && section.medianRatio !== null).length,
+      minPriced: DVF_SECTION_MIN_PRICED,
+      unplotted,
+      medianPrixM2: roundedMedian(prices),
+      references,
     },
   };
 }

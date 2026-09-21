@@ -19,6 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  DVF_SECTION_MIN_PRICED,
   communeReference,
   groupMutations,
   parseDvfCsv,
@@ -36,6 +37,7 @@ import {
   unknownBuildingCss,
 } from './buildingTheme.js';
 import { BDTOPO_USAGE_TIERS } from './bdtopoBuildingsFeed.js';
+import { polygonsBounds } from './ringGeometry.js';
 import * as Cesium from 'cesium';
 import dvfSalesLayer, {
   _dvfSetThemePayloadForTest,
@@ -47,23 +49,29 @@ import dvfSalesLayer, {
   DVF_RATIO_CLASSES,
   DVF_THEME_PRECEDENCE,
   DVF_TYPE_FILTERS,
-  countCellsByClass,
+  countAreaByClass,
   drawDvfParcels,
-  dvfCellClass,
-  dvfCellColorCss,
-  dvfCellDisclosure,
-  dvfCellLegendNote,
-  dvfCellReference,
+  dvfAreaColorCss,
+  dvfAreaDisclosure,
+  dvfAreaLegendNote,
+  dvfAreaReference,
+  dvfAreaShapeAt,
+  dvfAreaUnit,
   dvfLegendDisclosure,
   dvfLegendEntries,
   dvfLegendNote,
   dvfMostRecentSale,
+  dvfPlotCard,
+  dvfPlotClass,
   dvfReference,
   dvfSaleCard,
+  dvfSectionCard,
+  dvfSectionClass,
   dvfSaleRecord,
   dvfVoiceSummary,
   dvfYearsLabel,
   filterSalesByType,
+  isDvfAreaPickId,
   saleColorCss,
   saleRatioClass,
   saleRatioPrice,
@@ -696,100 +704,196 @@ test('the drawn payload is what answers, capped like every other layer', () => {
   clearAllBuildingThemes();
 });
 
-// ── the cell regime ────────────────────────────────────────────────────────
-test('a cell is coloured by the same frozen ramp as a sale', () => {
+// ── the area regimes ───────────────────────────────────────────────────────
+const LYON_REFERENCES = [
+  { code: '69386', name: 'Lyon 6e', medianPrixM2: 5_500, count: 2_661, comparableCount: 1_808 },
+  { code: '69383', name: 'Lyon 3e', medianPrixM2: 4_660, count: 5_417, comparableCount: 3_500 },
+];
+
+/** A square plot or section around a point, as the proxy serves `parts`. */
+function square(lon, lat, halfDeg = 0.0002) {
+  return [[[
+    [lon - halfDeg, lat - halfDeg], [lon + halfDeg, lat - halfDeg],
+    [lon + halfDeg, lat + halfDeg], [lon - halfDeg, lat + halfDeg], [lon - halfDeg, lat - halfDeg],
+  ]]];
+}
+
+test('a plot and a section are coloured by the same frozen ramp as a sale', () => {
   // The whole argument for changing the UNIT and not the language: a reader
   // who learned the ramp at street level reads the same ramp from altitude.
-  assert.equal(dvfCellClass(1.4).id, 'very-high');
-  assert.equal(dvfCellClass(1.1).id, 'high');
-  assert.equal(dvfCellClass(1).id, 'at-median');
-  assert.equal(dvfCellClass(0.8).id, 'low');
-  assert.equal(dvfCellClass(0.4).id, 'very-low');
+  assert.equal(dvfPlotClass({ ratio: 1.4 }).id, 'very-high');
+  assert.equal(dvfPlotClass({ ratio: 1.1 }).id, 'high');
+  assert.equal(dvfPlotClass({ ratio: 1 }).id, 'at-median');
+  assert.equal(dvfPlotClass({ ratio: 0.8 }).id, 'low');
+  assert.equal(dvfPlotClass({ ratio: 0.4 }).id, 'very-low');
   for (const klass of DVF_RATIO_CLASSES) {
-    assert.equal(dvfCellClass(klass.min === -Infinity ? 0.01 : klass.min).id, klass.id);
+    const ratio = klass.min === -Infinity ? 0.01 : klass.min;
+    assert.equal(dvfPlotClass({ ratio }).id, klass.id);
+    assert.equal(dvfSectionClass({ medianRatio: ratio, pricedCount: 3 }).id, klass.id);
   }
 });
 
-test('a cell the register could not price takes the neutral, never a band', () => {
-  assert.equal(dvfCellClass(null), null);
-  assert.equal(dvfCellClass(0), null);
-  assert.equal(dvfCellColorCss({ medianRatio: null }), COLOR_NO_RATIO);
-  assert.equal(dvfCellColorCss({ medianRatio: 1 }), DVF_RATIO_CLASSES[2].color);
+test('a plot whose latest sale has no €/m² takes the neutral, never a band', () => {
+  assert.equal(dvfPlotClass({ ratio: null }), null);
+  assert.equal(dvfPlotClass({ ratio: 0 }), null);
+  assert.equal(dvfAreaColorCss('plots', { ratio: null }), COLOR_NO_RATIO);
+  assert.equal(dvfAreaColorCss('plots', { ratio: 1 }), DVF_RATIO_CLASSES[2].color);
 });
 
-test('the key in cell mode labels the RATIOS, because there is no single median', () => {
+test('a section under the floor is neutral whatever its median says', () => {
+  // One house painting a hillside is the failure the floor exists for.
+  const thin = { medianRatio: 1.6, pricedCount: DVF_SECTION_MIN_PRICED - 1 };
+  assert.equal(dvfSectionClass(thin), null);
+  assert.equal(dvfAreaColorCss('sections', thin), COLOR_NO_RATIO);
+  assert.equal(dvfSectionClass({ ...thin, pricedCount: DVF_SECTION_MIN_PRICED }).id, 'very-high');
+});
+
+test('the area key labels the RATIOS, because there is no single median', () => {
   // Two communes, two denominators — so restating the breaks in €/m² would
   // have to pick one of them and would be false for the other.
-  const payload = {
-    years: [2025, 2024, 2023],
-    cells: [],
-    summary: {
-      references: [
-        { code: '69386', name: 'Lyon 6e', medianPrixM2: 5_500, count: 2_661, comparableCount: 1_808 },
-        { code: '69383', name: 'Lyon 3e', medianPrixM2: 4_660, count: 5_417, comparableCount: 3_500 },
-      ],
-    },
-  };
-  const reference = dvfCellReference(payload);
+  const payload = { years: [2025, 2024, 2023], plots: [], summary: { references: LYON_REFERENCES } };
+  const reference = dvfAreaReference(payload);
   assert.equal(reference.medianPrixM2, null);
   assert.equal(reference.basis, 'communes');
   const entries = dvfLegendEntries(reference, new Map());
   assert.equal(entries[0].label, '+25 % et plus');
   // And every denominator is named rather than counted.
-  const note = dvfCellLegendNote(payload);
+  const note = dvfAreaLegendNote(payload);
   assert.match(note, /Lyon 6e/);
   assert.match(note, /Lyon 3e/);
   assert.match(note, /5\s500/u);
   assert.match(note, /4\s660/u);
-  assert.match(note, /taille du disque/);
+  assert.match(note, /parcelle, peinte par sa dernière vente/);
+  assert.match(dvfAreaLegendNote({ ...payload, plots: undefined, sections: [] }),
+    /section cadastrale peinte par le médian/);
 });
 
-test('the cell key counts CELLS, and the neutral has its own bucket', () => {
-  const counts = countCellsByClass([
-    { medianRatio: 1.4 }, { medianRatio: 1.4 }, { medianRatio: 1 }, { medianRatio: null },
+test('a box inside one commune restates the classes in €/m², like the key below 600 m', () => {
+  const one = dvfAreaReference({ plots: [], summary: { references: [LYON_REFERENCES[0]] } });
+  assert.equal(one.medianPrixM2, 5_500);
+  const entries = dvfLegendEntries(one, new Map());
+  assert.match(entries[0].label, /^6\s875\s€\/m² et plus$/u);
+});
+
+test('the area key counts SHAPES, and the section neutral says what it is', () => {
+  const counts = countAreaByClass('sections', [
+    { medianRatio: 1.4, pricedCount: 9 }, { medianRatio: 1.4, pricedCount: 9 },
+    { medianRatio: 1, pricedCount: 3 }, { medianRatio: 1, pricedCount: 1 },
   ]);
   assert.equal(counts.get('very-high'), 2);
   assert.equal(counts.get('at-median'), 1);
   assert.equal(counts.get('no-ratio'), 1);
 });
 
-test('the A5 line names the box, the grid and what the probe can miss', () => {
-  const note = dvfCellDisclosure({
+test('the A5 line names the box, what was drawn and what the probe can miss', () => {
+  const plots = dvfAreaDisclosure({
     box: { south: 45.77, west: 4.84, north: 45.79, east: 4.86 },
     communes: [{ code: '69386', name: 'Lyon 6e' }, { code: '69383', name: 'Lyon 3e' }],
     communesProbed: 9,
     unavailableYears: [2025],
-    summary: { cellM: 150, count: 1_324, pricedCount: 901 },
+    plots: [],
+    summary: { count: 1_324, pricedCount: 901, plots: 412, unshaped: 2 },
   });
-  assert.match(note, /2,2 km/);
-  assert.match(note, /cellules de 150 m/);
+  assert.match(plots, /^Vue sur 2,2 km de côté/);
   // `toLocaleString('fr-FR')` groups with a NARROW NO-BREAK SPACE, not a space.
-  assert.match(note, /1\s324\sventes/u);
-  assert.match(note, /sondage/);
-  assert.match(note, /2025/);
-  assert.match(note, /descendre sous 600 m/);
+  assert.match(plots, /1\s324\sventes, 412 parcelles dessinées/u);
+  assert.match(plots, /sondage/);
+  assert.match(plots, /2 forme\(s\)/);
+  assert.match(plots, /2025/);
+  assert.match(plots, /descendre sous 600 m/);
+  const sections = dvfAreaDisclosure({
+    box: { south: 48.82, west: 2.24, north: 48.9, east: 2.32 },
+    sections: [],
+    summary: { count: 54_108, sections: 566 },
+  });
+  assert.match(sections, /8,8 km/);
+  assert.match(sections, /566 sections cadastrales/);
+  assert.match(sections, /descendre sous 1\s800 m pour voir chaque parcelle vendue\.$/u);
+});
+
+test('a plot card is the sale card of its latest sale, surface included, in six lines', () => {
+  const payload = { years: [2025, 2024, 2023], plots: [], summary: { references: LYON_REFERENCES } };
+  const card = dvfPlotCard({
+    id: '69386000AB0001', communeCode: '69386', count: 5, ratio: 1.2,
+    sale: {
+      date: '2025-03-01', nature: 'Vente', valeur: 330_000, types: ['Appartement', 'Dépendance'],
+      prixM2: 6_600, dwellingSurface: 50, dwellingCount: 1, address: '12 RUE GARIBALDI',
+    },
+  }, payload);
+  assert.equal(card.title, '12 RUE GARIBALDI');
+  assert.equal(card.details.length, 6);
+  assert.equal(card.details[0], '2025-03-01 · Vente');
+  assert.equal(card.details[2], 'Appartement + Dépendance — 50 m²');
+  assert.match(card.details[4], /^1,20 × le médian de Lyon 6e \(5\s500\s€\/m²\)$/u);
+  assert.match(card.details[5], /^la dernière des 5 ventes de cette parcelle \(éditions 2023 à 2025\)$/);
+});
+
+test('a section card says what its colour is the median OF, and when it refuses one', () => {
+  const payload = { years: [2024], sections: [], summary: { references: LYON_REFERENCES } };
+  const painted = dvfSectionCard({
+    id: '69386000AH', communeCode: '69386', count: 27, pricedCount: 15,
+    medianPrixM2: 7_000, medianRatio: 1.27, years: [2023, 2024],
+  }, payload);
+  assert.equal(painted.title, 'Section AH · Lyon 6e');
+  assert.match(painted.details[0], /^27 ventes, dont 15 avec un €\/m² exploitable$/);
+  assert.match(painted.details[2], /^contre 5\s500\s€\/m² pour Lyon 6e$/u);
+  assert.equal(painted.details[3], '+25 % et plus');
+  const thin = dvfSectionCard({
+    id: '693860000B', communeCode: '69386', count: 2, pricedCount: 1,
+    medianPrixM2: 9_000, medianRatio: 1.6, years: [2024],
+  }, payload);
+  // The cadastre prints section `B`, not the file's zero-padded `0B`.
+  assert.equal(thin.title, 'Section B · Lyon 6e');
+  assert.ok(thin.details.includes('moins de 3 ventes chiffrées'), thin.details.join(' | '));
+});
+
+test('a click finds the shape under it by geometry, the smallest winning', () => {
+  const big = { kind: 'section', record: { id: 'S' }, parts: square(4.85, 45.77, 0.01) };
+  const small = { kind: 'plot', record: { id: 'P' }, parts: square(4.85, 45.77, 0.0002) };
+  const shapes = [big, small].map((shape) => ({ ...shape, bounds: polygonsBounds(shape.parts) }));
+  assert.equal(dvfAreaShapeAt(4.85, 45.77, shapes).record.id, 'P');
+  assert.equal(dvfAreaShapeAt(4.855, 45.775, shapes).record.id, 'S');
+  assert.equal(dvfAreaShapeAt(4.9, 45.9, shapes), null);
+});
+
+test('an area pick id is claimed, and nothing else is', () => {
+  assert.equal(isDvfAreaPickId('dvf-plot:75116000AA0001'), true);
+  assert.equal(isDvfAreaPickId('dvf-section:75116000AA'), true);
+  assert.equal(isDvfAreaPickId('dvf:2024-1234'), false);
+  assert.equal(isDvfAreaPickId('dvf-parcel:75116000AA0001:0'), false);
+  assert.equal(isDvfAreaPickId(undefined), false);
+});
+
+test('the payload names its regime, and a disc answer has none', () => {
+  assert.equal(dvfAreaUnit({ plots: [] }), 'plots');
+  assert.equal(dvfAreaUnit({ sections: [] }), 'sections');
+  assert.equal(dvfAreaUnit({ sales: [] }), null);
+  assert.equal(dvfAreaUnit({ cells: [] }), null);
 });
 
 test('the voice surface never claims a radius it did not use', () => {
   // The failure this guards: a box answer published with `radiusM: 300` beside
   // it, and a caller saying "sur les 300 m autour de vous" about two kilometres.
-  const cells = dvfVoiceSummary({
-    dormant: false,
-    scanBasis: 'cells',
-    salesFound: 1_324,
-    comparableCount: 901,
-    cellSizeM: 150,
-    localMedianPrixM2: 5_458,
-    scanCentre: { lat: 45.777, lon: 4.8498 },
-    communes: ['Lyon 6e', 'Lyon 3e'],
-  });
-  assert.equal(cells.basis, 'cells');
-  assert.equal(cells.radiusM, undefined);
-  assert.equal(cells.salesInView, 1_324);
-  // And it says out loud that there is no per-sale list up here, because
-  // `getAnalystRecords` returns none and an empty list reads as "no sales".
-  assert.match(cells.note, /not by\s+sale|by AREA/);
-  assert.match(cells.note, /600 m/);
+  for (const basis of ['plots', 'sections']) {
+    const area = dvfVoiceSummary({
+      dormant: false,
+      scanBasis: basis,
+      salesFound: 1_324,
+      comparableCount: 901,
+      shapeCount: 412,
+      localMedianPrixM2: 5_458,
+      scanCentre: { lat: 45.777, lon: 4.8498 },
+      communes: ['Lyon 6e', 'Lyon 3e'],
+    });
+    assert.equal(area.basis, basis);
+    assert.equal(area.radiusM, undefined);
+    assert.equal(area.salesInView, 1_324);
+    assert.equal(area.shapesDrawn, 412);
+    // And it says out loud that there is no per-sale list up here, because
+    // `getAnalystRecords` returns none and an empty list reads as "no sales".
+    assert.match(area.note, /no list of sales to rank/);
+    assert.match(area.note, /600 m/);
+  }
 });
 
 test('the disc regime still answers with its radius', () => {

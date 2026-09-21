@@ -5,9 +5,10 @@
  * The complaint this answers, in the reader's words: « y a qu'un pan de la vue
  * qui est dessiné ». Below 600 m that pan is the right answer and this harness
  * asserts it is still drawn as before; above 600 m the layers must change UNIT
- * — one disc per patch of ground, over the whole box — and that is the part no
- * unit test can see, because it depends on the camera, the shell's scan guard
- * and the proxy all agreeing.
+ * over the whole box — one disc per patch of ground for the DPE, and since
+ * 2026-09-21 the cadastre's own PLOTS for the DVF (its sections above 1 800 m)
+ * — and that is the part no unit test can see, because it depends on the
+ * camera, the shell's scan guard and the proxy all agreeing.
  *
  * What is checked, in order:
  *   1. LOW: both layers draw their points and their scanned edge.
@@ -32,6 +33,8 @@ const url = argv.includes('--url') ? argv[argv.indexOf('--url') + 1] : 'http://l
 const LON = 4.84979;
 const LAT = 45.77535;
 const LAYERS = ['dvf-sales', 'dpe-fr'];
+/** The `scanBasis` each layer publishes above 600 m, at the altitude parked below. */
+const HIGH_BASIS = { 'dvf-sales': 'plots', 'dpe-fr': 'cells' };
 
 let failures = 0;
 const check = (ok, label, detail = '') => {
@@ -95,7 +98,12 @@ try {
         }
       }
       const values = source ? [...source.entities.values] : [];
-      const cells = values.filter((e) => String(e.id).includes('-cell:') && e.polygon);
+      // The DVF paints its area answer as PRIMITIVES, which live outside the
+      // data source; the layer reports what it drew.
+      const area = module?.getAreaDraw?.() ?? null;
+      const cells = area
+        ? area.shapes
+        : values.filter((e) => String(e.id).includes('-cell:') && e.polygon).length;
       const edge = values.find((e) => String(e.id).endsWith(':scan-edge'));
       const edgePositions = edge?.polyline?.positions?.getValue?.(gev.viewer.clock.currentTime);
       out[id] = {
@@ -103,7 +111,7 @@ try {
         controls: module?.getRowControls?.() ?? null,
         entities: values.length,
         billboards: values.filter((e) => e.billboard).length,
-        cells: cells.length,
+        cells,
         hasEdge: Boolean(edge),
         // A box outline is densified to 96 points, a circle to 96 too — so the
         // two are told apart by SHAPE, not by count: a box's corners are right
@@ -135,12 +143,12 @@ try {
    * twelve-second settle reported "the cell regime never engaged" for a regime
    * that engaged at second fourteen.
    */
-  const awaitRegime = (basis) => page.waitForFunction((ids, want) => ids.every((id) => {
+  const awaitRegime = (basis) => page.waitForFunction((ids, want, high) => ids.every((id) => {
     const stats = window.__godsEyeView.dataManager.layers.get(id)?.module?.getStats?.() || {};
-    return want === 'cells'
-      ? stats.scanBasis === 'cells'
-      : (stats.scanBasis !== 'cells' && (stats.count || 0) > 0);
-  }), { timeout: 240_000 }, LAYERS, basis);
+    return want === 'high'
+      ? stats.scanBasis === high[id]
+      : (!stats.scanBasis && (stats.count || 0) > 0);
+  }), { timeout: 240_000 }, LAYERS, basis, HIGH_BASIS);
 
   // ── 1. LOW: the disc regime, unchanged ──────────────────────────────────
   await park(420);
@@ -160,21 +168,21 @@ try {
     check(low[id].hasEdge, `${id} · low · the scanned edge is drawn`);
     check(low[id].edgeRoundness !== null && low[id].edgeRoundness > 0.97,
       `${id} · low · and the edge is a circle`, `roundness ${low[id].edgeRoundness?.toFixed(3)}`);
-    check(low[id].stats?.scanBasis !== 'cells', `${id} · low · stats say the disc regime`);
+    check(!low[id].stats?.scanBasis, `${id} · low · stats say the disc regime`);
   }
 
   // ── 2. HIGH: the cell regime ────────────────────────────────────────────
   await park(1_322);
-  await awaitRegime('cells');
+  await awaitRegime('high');
   await settle(2_000);
   const high = await read();
   for (const id of LAYERS) {
-    check(high[id].cells > 0, `${id} · high · draws cells over the box`,
-      `${high[id].cells} cellules`);
+    check(high[id].cells > 0, `${id} · high · draws ${HIGH_BASIS[id]} over the box`,
+      `${high[id].cells} ${HIGH_BASIS[id]}`);
     check(high[id].billboards === 0, `${id} · high · and no per-subject marks`,
       `${high[id].billboards}`);
-    check(high[id].stats?.scanBasis === 'cells', `${id} · high · stats say the cell regime`,
-      String(high[id].stats?.scanBasis));
+    check(high[id].stats?.scanBasis === HIGH_BASIS[id],
+      `${id} · high · stats say the ${HIGH_BASIS[id]} regime`, String(high[id].stats?.scanBasis));
     check(high[id].hasEdge, `${id} · high · the aggregated box is outlined`);
     check(high[id].edgeRoundness !== null && high[id].edgeRoundness < 0.95,
       `${id} · high · and the edge is a box, not a circle`,
@@ -182,7 +190,7 @@ try {
     const legend = high[id].controls?.legend || [];
     check(legend.length > 0, `${id} · high · the key describes the cells`,
       `${legend.length} entrées`);
-    check(/agrégée/.test(high[id].controls?.note || ''),
+    check(/agrégée|^Vue sur/.test(high[id].controls?.note || ''),
       `${id} · high · the A5 line says what was aggregated`,
       (high[id].controls?.note || '').slice(0, 120));
   }
@@ -224,7 +232,7 @@ try {
   for (const id of LAYERS) {
     check(back[id].billboards > 0, `${id} · back down · the per-subject marks return`,
       `${back[id].billboards}`);
-    check(back[id].cells === 0, `${id} · back down · and the cells are gone`);
+    check(back[id].cells === 0, `${id} · back down · and the area draw is gone`);
   }
 
   const fatal = errors.filter((message) => !/ResizeObserver|Failed to load resource/.test(message));
