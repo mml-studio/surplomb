@@ -19,6 +19,7 @@ import sharedMobilityFranceLayer, {
   createSharedMobilitySelectedOverlayEntry,
   sharedMobilityOperator,
   stationColor,
+  stationFillLevel,
   stationPointSize,
   vehicleKindLabel,
   vehicleKindPlural,
@@ -31,8 +32,8 @@ import sharedMobilityFranceLayer, {
   _selectSharedMobilityObjectForTest,
   _setSharedMobilityPayloadForTest,
   _setSharedMobilityStateForTest,
-  _setSharedMobilityAltitudeForTest,
-  _sharedMobilityMonogramCeilingForTest,
+  _refreshSharedMobilityPinsForTest,
+  _sharedMobilityPinGeometryForTest,
   SHARED_MOBILITY_KIND_FILTERS,
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID,
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_OPTIONS,
@@ -40,7 +41,8 @@ import sharedMobilityFranceLayer, {
 import { reportMeshFloorCell, setMeshFloorPreferred } from './groundFloor.js';
 import { GBFS_MAX_BOX_DEG } from './gbfsFeeds.js';
 import { resolveMobilityOperator } from './mobilityOperators.js';
-import { sharedMobilityGlyph } from './sharedMobilityIcons.js';
+import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
+import { SHARED_MOBILITY_PIN_SPACING_PX } from './sharedMobilityPins.js';
 
 function viewerWithView(degrees) {
   return {
@@ -73,10 +75,13 @@ function vehicleRecord(overrides = {}) {
     system,
     operator,
     position: Cesium.Cartesian3.fromDegrees(object.lon, object.lat, 12),
-    // A vehicle is a glyph, not a dot: the silhouette is what says "scooter".
-    billboard: { color: null, width: 0, height: 0, show: true },
+    // A vehicle is a dot in its operator's hue; its silhouette rides a pin,
+    // and only a few of them get one.
+    point: { color: null, pixelSize: 0, show: true },
+    pin: null,
+    pinRank: 0,
     baseColor: operator.color,
-    baseSize: 17,
+    baseSize: 6,
   };
 }
 
@@ -120,11 +125,11 @@ test('the camera gate answers a city view and refuses a regional one', () => {
   })));
 });
 
-test('every vehicle kind draws a distinct silhouette and keeps a readable label', () => {
-  // Colour is spent on the OPERATOR, so the kind has to survive on shape
-  // alone. A shared glyph between two kinds would silently merge them.
+test('every vehicle kind pins a distinct silhouette and keeps a readable label', () => {
+  // The dot is spent on the OPERATOR, so the kind has to survive on the pin's
+  // shape alone. A shared glyph between two kinds would silently merge them.
   const kinds = ['bike', 'ebike', 'scooter', 'moped', 'car', 'other'];
-  const glyphs = kinds.map((kind) => sharedMobilityGlyph(kind));
+  const glyphs = kinds.map((kind) => sharedMobilityPinGlyph(kind, { color: '#b6f03c' }));
   assert.equal(new Set(glyphs).size, kinds.length);
   assert.ok(glyphs.every((glyph) => glyph.startsWith('data:image/svg+xml;base64,')));
   assert.equal(vehicleKindLabel('ebike'), 'VAE');
@@ -157,9 +162,15 @@ test('the operator is read from the system title, and shared with the bikeshare 
 test('a station with no availability data is neutral, not empty', () => {
   // "We do not know" and "there are no bikes" are different facts, and only
   // the second one is actionable for someone deciding where to walk.
-  const unknown = stationColor({ available: null, capacity: 20 });
-  const empty = stationColor({ available: 0, capacity: 20 });
+  assert.equal(stationFillLevel({ available: null, capacity: 20 }), 'unknown');
+  assert.equal(stationFillLevel({ available: 0, capacity: 20 }), 'low');
+  const unknown = stationColor({ available: null, capacity: 20 }, '#4fd94f');
+  const empty = stationColor({ available: 0, capacity: 20 }, '#4fd94f');
   assert.notEqual(unknown, empty);
+  // The level is the ring's own hue poured in: a full Clem' dock is Clem'
+  // emerald, never the green of another operator.
+  assert.equal(stationColor({ available: 20, capacity: 20 }, '#1fcf94'), 'rgba(31,207,148,1)');
+  assert.match(empty, /^rgba\(79,217,79,0\.1\)$/);
   assert.equal(stationColor({ available: 18, capacity: 20 }), stationColor({ available: 20, capacity: 20 }));
   assert.notEqual(stationColor({ available: 1, capacity: 20 }), stationColor({ available: 18, capacity: 20 }));
   // A closed station reads closed whatever it holds.
@@ -302,14 +313,14 @@ test('selecting and clearing drives the real host seam and restores the point', 
   const set = calls.find((call) => call[0] === 'set');
   assert.equal(set[1], SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID);
   assert.equal(set[2][0].id, record.id);
-  assert.equal(record.billboard.color.toCssHexString(), '#00ffff');
-  assert.ok(record.billboard.width > record.baseSize);
+  assert.equal(record.point.color.toCssHexString(), '#00ffff');
+  assert.ok(record.point.pixelSize > record.baseSize);
 
   _clearSharedMobilitySelectionForTest();
   assert.ok(calls.some((call) => call[0] === 'clear' && call[1] === SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID));
   // Restored to the OPERATOR's colour — the channel survives a selection.
-  assert.equal(record.billboard.color.toCssHexString(), resolveMobilityOperator('Lime Paris').color);
-  assert.equal(record.billboard.width, record.baseSize);
+  assert.equal(record.point.color.toCssHexString(), resolveMobilityOperator('Lime Paris').color);
+  assert.equal(record.point.pixelSize, record.baseSize);
 });
 
 // --- The key: « Mobilités partagées » ----------------------------------------
@@ -553,8 +564,8 @@ test('a point placed before its floor landed is re-placed, not left on the ellip
   assert.ok(Math.abs(placed.height - (213.4 + 2.5)) < 0.05,
     `expected the Grenoble floor plus the lift, got ${placed.height}`);
   // The primitive is what is actually drawn — a record that agrees with the
-  // floor while its billboard does not is the same bug with a passing test.
-  assert.ok(Cesium.Cartesian3.equals(record.billboard.position, record.position));
+  // floor while its dot does not is the same bug with a passing test.
+  assert.ok(Cesium.Cartesian3.equals(record.point.position, record.position));
 
   // Idempotent: a pass with nothing new to say must not dirty the collection.
   assert.equal(_reanchorSharedMobilityForTest(), 0);
@@ -564,78 +575,149 @@ test('a point placed before its floor landed is re-placed, not left on the ellip
 });
 
 
-// --- The monogram, and the zoom that decides it ------------------------------
+// --- Pins: the few vehicles that say what they are ---------------------------
+//
+// The « Repères discrets » mock: every vehicle a dot, a few of them pinned.
+// These drive the production pass over a fake scene — a flat projection and a
+// collection that records what it was asked to draw.
 
-test('the monogram switch is computed the way Cesium actually scales, not linearly', () => {
-  // `czm_nearFarScalar` interpolates on SQUARED distance and then takes
-  // `pow(t, 0.2)`. Assuming a straight line between the two ends puts the
-  // switch altitude out by a factor of five, which is exactly the bug this
-  // pins: the layer would badge a letter onto a 16 px plate and call it 22.
-  const { ceilingM, glyphPx, scale, minDrawnPx, drawnPxAt } = _sharedMobilityMonogramCeilingForTest();
-
-  // Reimplemented here from the shader source, independently of the module.
-  const cesium = (distance) => {
-    const span = scale.far ** 2 - scale.near ** 2;
-    const t = Math.min(1, Math.max(0, (distance ** 2 - scale.near ** 2) / span)) ** 0.2;
-    return glyphPx * (scale.nearValue + t * (scale.farValue - scale.nearValue));
+/** A billboard collection that only remembers. */
+function fakePins() {
+  const drawn = new Set();
+  return {
+    drawn,
+    add(options) { const pin = { ...options }; drawn.add(pin); return pin; },
+    remove(pin) { drawn.delete(pin); return true; },
+    removeAll() { drawn.clear(); },
   };
-  for (const distance of [0, 500, 1200, 2000, 5000, 20_000, 45_000, 90_000]) {
-    assert.ok(Math.abs(drawnPxAt(distance) - cesium(distance)) < 1e-9, `${distance} m`);
-  }
+}
 
-  // The switch is where the plate stops being big enough to carry a letter.
-  assert.ok(drawnPxAt(ceilingM) >= minDrawnPx - 1e-6, 'a badged plate is never under the threshold');
-  assert.ok(drawnPxAt(ceilingM * 1.05) < minDrawnPx, 'and just above it, the letter is refused');
-  // A LINEAR reading of the same ramp would have answered ~5.8 km. Pinned so
-  // the mistake cannot come back as a "simplification".
-  assert.ok(ceilingM < 2_000, `the switch must be street-level, got ${Math.round(ceilingM)} m`);
+/** A camera `altitudeM` above central Paris, looking at a 1,000 × 800 screen. */
+function pinViewer(altitudeM) {
+  return {
+    camera: {
+      positionCartographic: { height: altitudeM },
+      positionWC: Cesium.Cartesian3.fromDegrees(2.35, 48.86, altitudeM),
+      computeViewRectangle: () => Cesium.Rectangle.fromDegrees(2.30, 48.84, 2.40, 48.88),
+    },
+    scene: { canvas: { clientWidth: 1_000, clientHeight: 800 } },
+  };
+}
 
-  // The far end is a rendering budget: up to 6,000 objects share the screen.
-  assert.ok(drawnPxAt(scale.far) <= 7, 'the wide view stays a speck');
-});
+/** Flat projection of the view box onto the screen: 0.1° of longitude is 1,000 px. */
+function flatProject(scene, position, result) {
+  const carto = Cesium.Cartographic.fromCartesian(position);
+  result.x = (Cesium.Math.toDegrees(carto.longitude) - 2.30) * 10_000;
+  result.y = (48.88 - Cesium.Math.toDegrees(carto.latitude)) * 20_000;
+  return result;
+}
 
-test('a zoom rewrites every plate exactly once, and only when the answer changed', () => {
-  const records = [
-    vehicleRecord({ object: { id: 'a', kind: 'ebike' }, system: { name: 'Lime Paris' } }),
-    vehicleRecord({ object: { id: 'b', kind: 'scooter' }, system: { name: 'Dott Paris' } }),
-  ].map((record) => ({ ...record, billboard: { image: null } }));
-  _setSharedMobilityStateForTest({ viewer: viewerWithView(null), records });
-  const { ceilingM } = _sharedMobilityMonogramCeilingForTest();
+/** A row of Lime e-bikes `stepDeg` apart along one street. */
+function street(count, stepDeg, prefix = 'lime') {
+  return Array.from({ length: count }, (_, i) => vehicleRecord({
+    object: { id: `${prefix}:${i}`, lat: 48.86, lon: 2.31 + i * stepDeg },
+  })).map((record, i) => ({ ...record, pinRank: i }));
+}
 
-  // Wide: colour alone. A letter here would be noise on a 12 px disc.
-  const wide = _setSharedMobilityAltitudeForTest(ceilingM * 4);
-  assert.equal(wide.on, false);
-  assert.equal(wide.flipped, false, 'the layer starts wide, so nothing flipped');
+test('pins come in close to the street, and stay off from higher up', () => {
+  const { ceilingM } = _sharedMobilityPinGeometryForTest();
+  // 0.001° = 10 px apart: a crowded kerb, which must not become a crowd of pins.
+  const records = street(60, 0.001);
+  const pins = fakePins();
+  _setSharedMobilityStateForTest({ viewer: pinViewer(ceilingM * 2), records, pins, project: flatProject });
+  assert.equal(_refreshSharedMobilityPinsForTest().drawn, 0, 'a wide view is dots only');
 
-  // Down to the street: both plates take their operator's letter.
-  const close = _setSharedMobilityAltitudeForTest(ceilingM / 2);
-  assert.equal(close.on, true);
-  assert.equal(close.flipped, true);
-  assert.equal(close.rewritten, 2);
-  assert.equal(records[0].billboard.image, sharedMobilityGlyph('ebike', { initial: 'L' }));
-  assert.equal(records[1].billboard.image, sharedMobilityGlyph('scooter', { initial: 'D' }));
-
-  // Panning at the same zoom must not walk 6,000 billboards for nothing.
-  const again = _setSharedMobilityAltitudeForTest(ceilingM / 3);
-  assert.equal(again.flipped, false);
-  assert.equal(again.rewritten, 0);
-
-  // Back out: the letters come off rather than lingering as unreadable grit.
-  const out = _setSharedMobilityAltitudeForTest(ceilingM * 4);
-  assert.equal(out.rewritten, 2);
-  assert.equal(records[0].billboard.image, sharedMobilityGlyph('ebike'));
-
+  _setSharedMobilityStateForTest({ viewer: pinViewer(ceilingM / 3), records, pins, project: flatProject });
+  const { drawn, pinned } = _refreshSharedMobilityPinsForTest();
+  // 60 dots over 590 px of street: one pin per 200 px, never two touching.
+  assert.equal(drawn, Math.floor(590 / SHARED_MOBILITY_PIN_SPACING_PX) + 1);
+  assert.equal(pins.drawn.size, drawn);
+  const xs = pinned.map((id) => records.find((record) => record.id === id)).map((record) => flatProject(null, record.position, {}).x)
+    .sort((a, b) => a - b);
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= SHARED_MOBILITY_PIN_SPACING_PX);
+  // The pin wears the vehicle's kind and its operator's hue, and stands on its dot.
+  const pin = [...pins.drawn][0];
+  assert.equal(pin.image, sharedMobilityPinGlyph('ebike', { color: resolveMobilityOperator('Lime Paris').color }));
+  assert.equal(pin.verticalOrigin, Cesium.VerticalOrigin.BOTTOM);
   _setSharedMobilityStateForTest({ viewer: null, records: [] });
 });
 
-test('an operator with no letter is badged with nothing at all', () => {
-  // A GBFS title that carries no Latin letter must not be given a capital its
-  // name does not contain — the same rule the hue follows when it refuses to
-  // claim a livery no feed publishes.
-  const record = { ...vehicleRecord({ object: { id: 'z' }, system: { name: '' } }), billboard: { image: null } };
-  _setSharedMobilityStateForTest({ viewer: viewerWithView(null), records: [record] });
-  const { ceilingM } = _sharedMobilityMonogramCeilingForTest();
-  _setSharedMobilityAltitudeForTest(ceilingM / 2);
-  assert.equal(record.billboard.image, sharedMobilityGlyph(record.object.kind));
+test('a pin that would stand under the UI or off the edge is not offered', () => {
+  const { ceilingM } = _sharedMobilityPinGeometryForTest();
+  // Three vehicles 300 px apart at y = 400: one under a side rail, one at the
+  // left edge, one in the clear.
+  const records = [
+    vehicleRecord({ object: { id: 'rail', lat: 48.86, lon: 2.395 } }),
+    vehicleRecord({ object: { id: 'edge', lat: 48.86, lon: 2.3001 } }),
+    vehicleRecord({ object: { id: 'clear', lat: 48.86, lon: 2.35 } }),
+  ];
+  const pins = fakePins();
+  const rail = { x: 900, y: 0, w: 100, h: 800, hard: false };
+  _setSharedMobilityStateForTest({
+    viewer: pinViewer(ceilingM / 3), records, pins, project: flatProject, chrome: [rail],
+  });
+  assert.deepEqual(_refreshSharedMobilityPinsForTest().pinned, ['clear']);
+  _setSharedMobilityStateForTest({ viewer: null, records: [] });
+});
+
+test('a pass keeps the pins that survive, so a pan does not blink them', () => {
+  const { ceilingM } = _sharedMobilityPinGeometryForTest();
+  const records = street(8, 0.003);
+  const pins = fakePins();
+  _setSharedMobilityStateForTest({ viewer: pinViewer(ceilingM / 3), records, pins, project: flatProject });
+  _refreshSharedMobilityPinsForTest();
+  const before = new Map(records.filter((record) => record.pin).map((record) => [record.id, record.pin]));
+  assert.ok(before.size >= 2);
+  _refreshSharedMobilityPinsForTest();
+  for (const [id, pin] of before) {
+    assert.equal(records.find((record) => record.id === id).pin, pin, `${id} kept its billboard`);
+  }
+  _setSharedMobilityStateForTest({ viewer: null, records: [] });
+});
+
+test('the selected vehicle wears the cyan pin, even from higher up, and gives it back', () => {
+  const { ceilingM } = _sharedMobilityPinGeometryForTest();
+  const records = street(20, 0.001);
+  const pins = fakePins();
+  const host = { setEntries() {}, setVisible() {}, clearSource() {} };
+  _setSharedMobilityStateForTest({
+    viewer: pinViewer(ceilingM / 3), records, pins, project: flatProject, overlayHost: host,
+  });
+  _refreshSharedMobilityPinsForTest();
+  // An unpinned vehicle, crowded by a pin 10 px away: pressing it pins IT.
+  const chosen = records.find((record) => !record.pin);
+  _selectSharedMobilityObjectForTest(chosen.id);
+  assert.ok(chosen.pin, 'the selected vehicle is pinned whatever its neighbours');
+  assert.equal(chosen.pin.image, sharedMobilityPinGlyph('ebike', { selected: true }));
+
+  // From higher up the other pins come off; the selected one is what the card points at.
+  _setSharedMobilityStateForTest({
+    viewer: pinViewer(ceilingM * 2), records, pins, project: flatProject, overlayHost: host,
+  });
+  for (const record of records) record.pin = null;
+  pins.removeAll();
+  _selectSharedMobilityObjectForTest(chosen.id);
+  assert.deepEqual([...pins.drawn].map((pin) => pin.id), [chosen.id]);
+  _clearSharedMobilitySelectionForTest();
+  assert.equal(pins.drawn.size, 0, 'released, it goes back to being a dot');
+  _setSharedMobilityStateForTest({ viewer: null, records: [] });
+});
+
+test('a pin stands on its dot when the floor lands under both', () => {
+  setMeshFloorPreferred(true);
+  const { ceilingM } = _sharedMobilityPinGeometryForTest();
+  const [record] = street(1, 0, 'floor');
+  record.object.lat = 48.8612;
+  record.object.lon = 2.3301;
+  record.position = Cesium.Cartesian3.fromDegrees(2.3301, 48.8612, 12);
+  record.point.position = record.position;
+  const pins = fakePins();
+  _setSharedMobilityStateForTest({ viewer: pinViewer(ceilingM / 3), records: [record], pins, project: flatProject });
+  _refreshSharedMobilityPinsForTest();
+  assert.ok(record.pin);
+  reportMeshFloorCell(48.8612, 2.3301, 41.2);
+  assert.equal(_reanchorSharedMobilityForTest(), 1);
+  assert.ok(Cesium.Cartesian3.equals(record.pin.position, record.position), 'the pin moved with its dot');
+  setMeshFloorPreferred(false);
   _setSharedMobilityStateForTest({ viewer: null, records: [] });
 });

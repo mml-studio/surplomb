@@ -17,7 +17,7 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import {
-  MOBILITY_DOCK_FILL,
+  mobilityDockFill,
   dockFillLegend,
   isMobilityOperatorId,
   mobilityOperatorColor,
@@ -76,17 +76,20 @@ const POINT_HEIGHT_OFFSET_M = 2.0;
 /** Hard cap on total rendered station points across all cities. */
 const MAX_TOTAL_POINTS = 8000;
 
-// --- Availability color palette ---
-/** Station has >60% bikes available. */
-const COLOR_GREEN = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.full).withAlpha(0.95);
-/** Station has 30-60% bikes available. */
-const COLOR_YELLOW = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.half).withAlpha(0.94);
-/** Station has <30% bikes available. */
-const COLOR_RED = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.low).withAlpha(0.94);
-/** No status data available for station. */
-const COLOR_NEUTRAL = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.unknown).withAlpha(0.62);
-/** Station is offline (not installed, not renting, or not returning). */
-const COLOR_MUTED = Cesium.Color.fromCssColorString(MOBILITY_DOCK_FILL.closed).withAlpha(0.48);
+// --- Availability fill ---
+// A dock is filled with its own ring's hue as far as it is full — see
+// `MOBILITY_DOCK_LEVEL_ALPHA`. Memoised per hue and level: a city holds one
+// operator, so this is a handful of colours for 1,500 docks.
+const _dockFillCache = new Map();
+function dockFill(level, operatorColor) {
+  const key = `${level}|${operatorColor || ''}`;
+  let color = _dockFillCache.get(key);
+  if (!color) {
+    color = Cesium.Color.fromCssColorString(mobilityDockFill(level, operatorColor));
+    _dockFillCache.set(key, color);
+  }
+  return color;
+}
 /** Outline color for all station points. */
 const COLOR_OUTLINE = Cesium.Color.BLACK.withAlpha(0.25);
 
@@ -1120,28 +1123,30 @@ function capacityToPixelSize(capacity) {
 }
 
 /**
- * Determine the display color for a station based on its availability ratio.
- * - No status data: neutral gray.
- * - Offline (not installed/renting/returning): muted gray.
- * - >60% bikes available: green.
- * - 30-60% bikes available: yellow.
- * - <30% bikes available: red.
+ * Determine the display color for a station based on its availability ratio,
+ * poured in the hue of the ring it sits in (`mobilityDockFill`).
+ * - No status data: faded grey.
+ * - Offline (not installed/renting/returning): fainter grey.
+ * - >60% bikes available: solid.
+ * - 30-60% bikes available: tinted.
+ * - <30% bikes available: an empty ring.
  * @param {Object|null} status - Station status object.
  * @param {number} capacity - Resolved station capacity.
+ * @param {string} [operatorColor] - The ring's hue, `#rrggbb`.
  * @returns {Cesium.Color} Color to apply to the station point.
  */
-function statusToColor(status, capacity) {
-  if (!status) return COLOR_NEUTRAL;
-  if (!status.isInstalled || !status.isRenting || !status.isReturning) return COLOR_MUTED;
+function statusToColor(status, capacity, operatorColor) {
+  if (!status) return dockFill('unknown');
+  if (!status.isInstalled || !status.isRenting || !status.isReturning) return dockFill('closed');
 
   const bikes = toNonNegativeInteger(status.bikesAvailable);
-  if (!Number.isFinite(bikes)) return COLOR_NEUTRAL;
+  if (!Number.isFinite(bikes)) return dockFill('unknown');
 
   const cap = Math.max(1, Number(capacity) || DEFAULT_CAPACITY);
   const ratio = bikes / cap;
-  if (ratio > 0.6) return COLOR_GREEN;
-  if (ratio >= 0.3) return COLOR_YELLOW;
-  return COLOR_RED;
+  if (ratio > 0.6) return dockFill('full', operatorColor);
+  if (ratio >= 0.3) return dockFill('half', operatorColor);
+  return dockFill('low', operatorColor);
 }
 
 /**
@@ -1383,7 +1388,7 @@ function ensureCityPoints(cityId, stationMap) {
     const point = _pointCollection.add({
       position,
       pixelSize: capacityToPixelSize(station.capacity),
-      color: COLOR_NEUTRAL,
+      color: dockFill('unknown'),
       outlineColor: cityRingColor(cityId),
       outlineWidth: POINT_RING_PX,
       translucencyByDistance: new Cesium.NearFarScalar(200, 1.0, 180000, 0.15),
@@ -1476,7 +1481,7 @@ function applyStatusToPoints(cityId, statusMap) {
 
     // Update visual properties based on current status
     record.point.pixelSize = capacityToPixelSize(capacity);
-    record.point.color = statusToColor(status, capacity);
+    record.point.color = statusToColor(status, capacity, CITY_OPERATOR.get(record.cityId)?.color);
   }
 }
 

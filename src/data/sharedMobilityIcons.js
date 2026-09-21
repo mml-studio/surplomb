@@ -4,6 +4,12 @@
  * The mark a shared vehicle wears on the globe: a PLATE that carries its
  * operator, with its form factor punched through.
  *
+ * SINCE 2026-09-21 THE MAP DRAWS A PIN, NOT THE PLATE. Every vehicle is a dot
+ * in its operator's hue and a few of them wear {@link sharedMobilityPinGlyph}
+ * (`sharedMobilityPins.js` chooses which). The pin punches the same artwork
+ * as the plate, so everything below about the silhouettes still holds; the
+ * plate and its monogram badge are no longer on the map.
+ *
  * A GBFS feed states the physical object in `vehicle_types.json` (`form_factor`
  * + `propulsion_type`), and `gbfsFeeds.vehicleKindFromType()` folds that pair
  * to one of six kinds. Separately, the PAN catalog says who publishes it. Those
@@ -144,6 +150,30 @@ const LEGEND_MONOGRAM_CAP = 52;
  * record.
  */
 const GLYPH_RASTER_PX = 88;
+
+/**
+ * The pin, in the same 96-unit width as the plate so the punches fit
+ * unchanged: a ring of 42 around a dark disc of 34, centred 46 units down, and
+ * a tail whose tip touches the bottom edge — the layer anchors the image
+ * there, just above the dot.
+ */
+const PIN_HEIGHT = 124;
+const PIN_CY = 46;
+const PIN_RING_R = 42;
+const PIN_DISC_R = 34;
+const PIN_TAIL_HALF = 16;
+/** Share of the plate's punch the pin's smaller disc takes. */
+const PIN_GLYPH_FRACTION = 0.7;
+/** The pin's disc: the cockpit's glass, dark enough for a white silhouette. */
+const PIN_DISC_COLOR = '#16201d';
+/** Selection ring — the cyan every layer of the globe selects with. */
+const PIN_SELECTED_RING = '#00ffff';
+/**
+ * Pin raster width. The layer draws it 30 CSS px wide, so 64 is one texel per
+ * device pixel on a 2× phone and a gentle 2:1 minification on a 1× desktop —
+ * well inside what an atlas without mipmaps keeps sharp.
+ */
+const PIN_RASTER_PX = 64;
 
 /**
  * Material Symbols artwork, verbatim — now ONE glyph, not five.
@@ -409,6 +439,63 @@ export function sharedMobilityMonogramGlyph(initial, { px = GLYPH_RASTER_PX } = 
     + `<g fill="#000000">${outline}</g></mask>`
     + `<circle cx="${CENTRE}" cy="${CENTRE}" r="${DISC_R + RING_W / 2}" fill="${RING_COLOR}"/>`
     + `<circle cx="${CENTRE}" cy="${CENTRE}" r="${DISC_R}" fill="#ffffff" mask="url(#m)"/>`
+    + '</svg>';
+
+  const uri = `data:image/svg+xml;base64,${_b64(svg)}`;
+  _cache.set(cacheKey, uri);
+  return uri;
+}
+
+/**
+ * The PIN a landmark vehicle wears above its dot.
+ *
+ * Since 2026-09-21 the map draws every vehicle as a dot in its operator's hue
+ * and pins a few of them (`sharedMobilityPins.js`) — the « Repères discrets »
+ * mock. The pin is that mock's: a dark disc, the silhouette in white, a ring
+ * and a tail in the operator's hue pointing down at the dot it stands for.
+ *
+ * NOT TINT-SAFE, AND ON PURPOSE. Three colours share the pin — the dark disc
+ * the silhouette needs to read over a pale roof, the white silhouette, and the
+ * operator ring — and a multiply can make only one of them from a white
+ * sprite. So the hue is baked in and the billboard stays white. The cost is
+ * one image per kind and operator IN VIEW: Paris draws four fleet operators and
+ * three kinds, twelve atlas entries at most, where the plate needed seven.
+ *
+ * The silhouette is the plate's own punch (`punchFor`), shrunk into the disc,
+ * so the pin and every earlier contact sheet draw the same bicycle.
+ *
+ * @param {string} kind Vehicle kind.
+ * @param {Object} [options]
+ * @param {string} [options.color='#9fb0c4'] Operator hue, as CSS.
+ * @param {boolean} [options.selected=false] Draw the selection ring instead.
+ * @param {number} [options.px=PIN_RASTER_PX] Raster width.
+ * @returns {string} `data:image/svg+xml;base64,…`
+ */
+export function sharedMobilityPinGlyph(kind, options = {}) {
+  const { color = '#9fb0c4', selected = false, px = PIN_RASTER_PX } = options;
+  const key = sharedMobilityGlyphKind(kind);
+  const ring = selected ? PIN_SELECTED_RING : String(color);
+  const cacheKey = `pin:${key}@${px}:${ring}`;
+  const cached = _cache.get(cacheKey);
+  if (cached) return cached;
+
+  const scale = PIN_GLYPH_FRACTION;
+  const offset = (1 - scale) * CENTRE;
+  const glyph = `<g fill="#ffffff" transform="translate(${offset.toFixed(3)} `
+    + `${(offset + PIN_CY - CENTRE).toFixed(3)}) scale(${scale})">${punchFor(key)}</g>`;
+  const tail = `M${CENTRE - PIN_TAIL_HALF} ${PIN_CY + PIN_RING_R - 8}`
+    + `L${CENTRE + PIN_TAIL_HALF} ${PIN_CY + PIN_RING_R - 8}`
+    + `L${CENTRE} ${PIN_HEIGHT - 2}Z`;
+  const height = Math.round(px * PIN_HEIGHT / VIEW);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${height}"`
+    + ` viewBox="0 0 ${VIEW} ${PIN_HEIGHT}">`
+    // A hairline under everything, so a pale hue keeps an edge on a pale map.
+    + `<path d="${tail}" fill="${RING_COLOR}" stroke="${RING_COLOR}" stroke-width="5" stroke-linejoin="round"/>`
+    + `<circle cx="${CENTRE}" cy="${PIN_CY}" r="${PIN_RING_R + 2.5}" fill="${RING_COLOR}"/>`
+    + `<path d="${tail}" fill="${ring}"/>`
+    + `<circle cx="${CENTRE}" cy="${PIN_CY}" r="${PIN_RING_R}" fill="${ring}"/>`
+    + `<circle cx="${CENTRE}" cy="${PIN_CY}" r="${PIN_DISC_R}" fill="${PIN_DISC_COLOR}"/>`
+    + glyph
     + '</svg>';
 
   const uri = `data:image/svg+xml;base64,${_b64(svg)}`;
