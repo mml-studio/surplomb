@@ -1060,3 +1060,133 @@ export function capGbfsObjects(systems, box, budget = GBFS_MAX_OBJECTS, { margin
   }
   return { kept, boxTruncated, marginTruncated };
 }
+
+// --- Groups, for the city-wide view -------------------------------------------
+
+/**
+ * The grid the city-wide groups are counted on, in degrees of latitude, finest
+ * first. Each step doubles the last, so a zoom that stays inside one step keeps
+ * every group, and a zoom across it splits each group into four.
+ *
+ * The finest step, 0.001° (~110 m), is under what a group is drawn at from the
+ * lowest altitude groups are shown at; the coarsest, 0.064° (~7 km), still
+ * leaves a few groups on the widest view the proxy answers.
+ */
+export const GBFS_CLUSTER_CELLS_DEG = Object.freeze([0.001, 0.002, 0.004, 0.008, 0.016, 0.032, 0.064]);
+
+/**
+ * A cell is a graticule rectangle this many times wider in longitude than in
+ * latitude: square on the ground at 48° N (1 / cos 48° = 1.49), and within
+ * 10 % of square from Marseille to Lille. Fixed rather than computed from the
+ * view, so the same vehicle falls in the same cell whatever the camera does.
+ */
+export const GBFS_CLUSTER_LON_FACTOR = 1.5;
+
+/**
+ * A cell with fewer vehicles than this sends them one by one: a group of one
+ * is a vehicle, and drawing it as a « 1 » would hide where it is parked.
+ */
+export const GBFS_CLUSTER_MIN = 3;
+
+/**
+ * Fewest vehicles inside the requested box for the answer to be groups.
+ *
+ * Under it the dots are drawn instead: nothing needs thinning, every dot is a
+ * vehicle, and a city with a few hundred of them reads better as its streets
+ * than as a handful of bubbles. Over Paris every view above the pins' ceiling
+ * holds several thousand, so the groups are what the landing's city-wide
+ * zoom-out meets.
+ */
+export const GBFS_CLUSTER_ABOVE = 1500;
+
+/**
+ * Whether a viewport is dense enough to be answered in groups.
+ * @param {Array<{vehicles:Array<Object>}>} systems The cached clip.
+ * @param {{south:number, west:number, north:number, east:number}} box
+ * @param {number} [above]
+ * @returns {boolean}
+ */
+export function gbfsBoxWantsClusters(systems, box, above = GBFS_CLUSTER_ABOVE) {
+  let inside = 0;
+  for (const system of systems) {
+    for (const vehicle of system.vehicles || []) {
+      if (boxContainsPoint(box, vehicle.lat, vehicle.lon) && ++inside >= above) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Count the vehicles of a viewport on a fixed grid, for the city-wide view.
+ *
+ * THE COUNT HAS TO BE THE SERVER'S. Past a few kilometres of altitude the
+ * screen holds more vehicles than the 6,000-object cap: measured 2026-09-21
+ * from 7 km over Paris, the answer carried Lime 987 · Dott 986 · Voi 986 —
+ * the cap's fair shares, not the fleet. A group drawn from that answer would
+ * print a number the thinning made up. So the groups are counted here, over
+ * the whole cached clip, and the client receives numbers instead of objects —
+ * about twenty times fewer bytes over Paris.
+ *
+ * A cell's count is complete: it is taken over every vehicle of the clip, and
+ * the clip reaches past the requested box by more than the coarsest cell. A
+ * cell is returned when its CENTROID lies in the requested box grown by one
+ * cell, so a group straddling the screen edge is still drawn, whole.
+ *
+ * Each group says who and what it holds, as `system|kind` → count, so the
+ * client can filter by family and focus an operator without asking again.
+ *
+ * @param {Array<{id:string, vehicles:Array<Object>}>} systems The cached clip.
+ * @param {{south:number, west:number, north:number, east:number}} box The box
+ *   the request asked for.
+ * @param {number} cellDeg One of {@link GBFS_CLUSTER_CELLS_DEG}.
+ * @param {{min?: number}} [options]
+ * @returns {{clusters: Array<{id:string, lat:number, lon:number, n:number,
+ *   by:Object<string, number>}>, vehicles: Array<Object>, counted: number}}
+ *   `vehicles` are the members of cells under `min`, whole.
+ */
+export function clusterGbfsVehicles(systems, box, cellDeg, { min = GBFS_CLUSTER_MIN } = {}) {
+  const latStep = cellDeg;
+  const lonStep = cellDeg * GBFS_CLUSTER_LON_FACTOR;
+  const cells = new Map();
+  for (const system of systems) {
+    for (const vehicle of system.vehicles || []) {
+      if (!Number.isFinite(vehicle?.lat) || !Number.isFinite(vehicle?.lon)) continue;
+      const key = `${Math.floor(vehicle.lat / latStep)}:${Math.floor(vehicle.lon / lonStep)}`;
+      let cell = cells.get(key);
+      if (!cell) {
+        cell = { n: 0, lat: 0, lon: 0, by: {}, members: [] };
+        cells.set(key, cell);
+      }
+      cell.n += 1;
+      cell.lat += vehicle.lat;
+      cell.lon += vehicle.lon;
+      const tag = `${vehicle.system ?? system.id}|${vehicle.kind || 'other'}`;
+      cell.by[tag] = (cell.by[tag] || 0) + 1;
+      // Only a cell that may stay under `min` needs its members.
+      if (cell.n < min) cell.members.push(vehicle);
+      else cell.members = null;
+    }
+  }
+  const grown = {
+    south: box.south - latStep,
+    north: box.north + latStep,
+    west: box.west - lonStep,
+    east: box.east + lonStep,
+  };
+  const clusters = [];
+  const vehicles = [];
+  let counted = 0;
+  for (const [key, cell] of cells) {
+    const lat = cell.lat / cell.n;
+    const lon = cell.lon / cell.n;
+    if (!boxContainsPoint(grown, lat, lon)) continue;
+    counted += cell.n;
+    if (cell.n < min) {
+      vehicles.push(...cell.members);
+      continue;
+    }
+    clusters.push({ id: key, lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)), n: cell.n, by: cell.by });
+  }
+  clusters.sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1));
+  return { clusters, vehicles, counted };
+}

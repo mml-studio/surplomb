@@ -623,6 +623,9 @@ import {
 import { projectPeDepartements } from './src/data/petiteEnfanceDepartements.js';
 import {
   capGbfsObjects,
+  clusterGbfsVehicles,
+  gbfsBoxWantsClusters,
+  GBFS_CLUSTER_CELLS_DEG,
   gbfsBoxKey,
   gbfsBoxContains,
   isEmptyVirtualBay,
@@ -15629,7 +15632,11 @@ async function refreshGbfsFrViewport(box, key) {
  * for fewer objects (`profileCountBudget` in `sharedMobilityFrance.js`) and
  * the smaller answer is what it draws.
  */
-function cappedGbfsFrPayload(view, requested, limit = GBFS_MAX_OBJECTS) {
+function cappedGbfsFrPayload(view, requested, limit = GBFS_MAX_OBJECTS, clusterDeg = null) {
+  // Groups only where the dots would crowd: a sparse view keeps its vehicles.
+  if (clusterDeg && gbfsBoxWantsClusters(view.parts, requested)) {
+    return clusteredGbfsFrPayload(view, requested, limit, clusterDeg);
+  }
   const { kept, boxTruncated, marginTruncated } = capGbfsObjects(view.parts, requested, limit);
   const stations = [];
   const vehicles = [];
@@ -15650,10 +15657,38 @@ function cappedGbfsFrPayload(view, requested, limit = GBFS_MAX_OBJECTS) {
 }
 
 /**
+ * The city-wide answer, for a box holding at least `GBFS_CLUSTER_ABOVE`
+ * vehicles: the vehicles as GROUPS counted over the whole cached clip
+ * (`clusterGbfsVehicles`), and the stations capped as before.
+ *
+ * Over Paris from 7 km this is the difference between a group that prints the
+ * fleet and one that prints the cap's fair share: every vehicle is counted,
+ * none is sent, and only a cell of one or two sends its vehicles whole.
+ */
+function clusteredGbfsFrPayload(view, requested, limit, clusterDeg) {
+  const docks = view.parts.map((part) => ({ id: part.id, stations: part.stations, vehicles: [] }));
+  const { kept, boxTruncated, marginTruncated } = capGbfsObjects(docks, requested, limit);
+  const stations = [];
+  for (const part of docks) stations.push(...kept.get(part.id).stations);
+  const { clusters, vehicles, counted } = clusterGbfsVehicles(view.parts, requested, clusterDeg);
+  return {
+    ...view.payload,
+    stations,
+    vehicles,
+    clusters,
+    clusterDeg,
+    vehiclesCounted: counted,
+    objectsTruncated: boxTruncated,
+    marginTruncated,
+  };
+}
+
+/**
  * Vite plugin: viewport-bounded French shared-mobility proxy.
  *
  *   GET /api/shared-mobility-fr/systems             — index summary
  *   GET /api/shared-mobility-fr/objects?south&…     — stations + vehicles in box
+ *       …&cluster=<deg>                             — the vehicles as groups
  *
  * Separate from the older `/api/gbfs` proxy on purpose. That one answers a
  * fixed registry of `station_*.json` URLs on an allow-list of eight hosts,
@@ -15745,21 +15780,25 @@ function gbfsFranceProxy() {
       // Only ever LOWER than the ceiling: a missing or odd value is the ceiling.
       const asked = Math.floor(Number(url.searchParams.get('limit')));
       const limit = asked > 0 ? Math.min(asked, GBFS_MAX_OBJECTS) : GBFS_MAX_OBJECTS;
+      // `cluster` is a step of the shared grid or nothing: an arbitrary cell
+      // size would let a client ask for a grid nobody else shares.
+      const clusterAsked = Number(url.searchParams.get('cluster'));
+      const clusterDeg = GBFS_CLUSTER_CELLS_DEG.includes(clusterAsked) ? clusterAsked : null;
       const now = Date.now();
       const cached = _gbfsFrViewportCache.get(key);
       if (cached && now - cached.at <= GBFS_FR_VIEWPORT_CACHE_MS) {
-        json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit), status: 'cached' }, { 'X-Shared-Mobility-FR': 'HIT' });
+        json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit, clusterDeg), status: 'cached' }, { 'X-Shared-Mobility-FR': 'HIT' });
         return;
       }
 
       const request = coalesceProxyRequest(_gbfsFrViewportInFlight, key, () => refreshGbfsFrViewport(box, key));
       try {
         const view = await request.promise;
-        json(200, cappedGbfsFrPayload(view, requested, limit), { 'X-Shared-Mobility-FR': request.shared ? 'INFLIGHT' : 'MISS' });
+        json(200, cappedGbfsFrPayload(view, requested, limit, clusterDeg), { 'X-Shared-Mobility-FR': request.shared ? 'INFLIGHT' : 'MISS' });
       } catch (error) {
         console.warn('[GBFS FR] viewport unavailable:', error?.message || error);
         if (cached) {
-          json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit), status: 'stale' }, { 'X-Shared-Mobility-FR': 'STALE' });
+          json(200, { ...cappedGbfsFrPayload(cached.view, requested, limit, clusterDeg), status: 'stale' }, { 'X-Shared-Mobility-FR': 'STALE' });
           return;
         }
         json(503, { error: 'French shared-mobility data is temporarily unavailable' });

@@ -19,6 +19,8 @@
  *   vi.  COLOUR says who runs it — a vehicle is drawn in its operator's hue and
  *        a station is RINGED in it and filled with it as far as it is full,
  *        so two operators in one street are tellable apart
+ *   vii. from the city-wide view the layer asks for GROUPS, and draws the
+ *        proxy's counts — every vehicle in exactly one bubble or one dot
  *
  * Run: node scripts/qa-shared-mobility-fr.mjs --url http://localhost:4173
  */
@@ -27,6 +29,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
+import { GBFS_CLUSTER_CELLS_DEG, clusterGbfsVehicles, gbfsBoxWantsClusters } from '../src/data/gbfsFeeds.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -280,12 +283,31 @@ async function main() {
 
     const payload = objectsPayload();
     let objectRequests = 0;
+    let clusterRequests = 0;
+    // The fixture's 20 vehicles are far under the proxy's density rule, which
+    // is the point of sections i–vi: a sparse city keeps its dots. Section vii
+    // lowers the rule to what the fixture holds, to see the groups drawn.
+    let clusterAbove;
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const url = new URL(request.url());
       if (url.origin === APP_ORIGIN && url.pathname === '/api/shared-mobility-fr/objects') {
         objectRequests += 1;
-        void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+        // Asked for groups, the fixture answers the way the proxy does — with
+        // the proxy's own function, over the same vehicles.
+        const cell = Number(url.searchParams.get('cluster'));
+        let body = payload;
+        const box = ['south', 'west', 'north', 'east'].reduce((out, edge) => ({ ...out, [edge]: Number(url.searchParams.get(edge)) }), {});
+        const parts = payload.systems.map((system) => ({
+          id: system.id,
+          vehicles: payload.vehicles.filter((vehicle) => vehicle.system === system.id),
+        }));
+        if (GBFS_CLUSTER_CELLS_DEG.includes(cell) && gbfsBoxWantsClusters(parts, box, clusterAbove)) {
+          clusterRequests += 1;
+          const { clusters, vehicles, counted } = clusterGbfsVehicles(parts, box, cell);
+          body = { ...payload, vehicles, clusters, clusterDeg: cell, vehiclesCounted: counted };
+        }
+        void request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
         return;
       }
       if (url.origin === APP_ORIGIN && url.pathname === '/api/shared-mobility-fr/systems') {
@@ -516,6 +538,42 @@ async function main() {
       loaded.detections.some((id) => id.startsWith('LIME ')) && loaded.detections.some((id) => id.startsWith('PONY ')),
       loaded.detections.slice(0, 4).join(' | '));
     await shoot(page, '04-channels.png');
+
+    // ── vii. the city-wide groups ──────────────────────────────────────────
+    console.log('[qa] vii. city-wide groups');
+    check('a sparse city is not grouped, even from above the pins\' ceiling',
+      clusterRequests === 0, `${clusterRequests} grouped answer(s) for 20 vehicles`);
+    clusterAbove = 1;
+    await setView(page, CITY.lon + 0.016, CITY.lat + 0.0115, 9_000);
+    const readGroups = () => page.evaluate(() => {
+      const scene = window.__godsEyeView.viewer.scene;
+      const labels = [];
+      let vehicleDots = 0;
+      for (let i = 0; i < scene.primitives.length; i++) {
+        const collection = scene.primitives.get(i);
+        if (typeof collection?.get !== 'function' || !collection.length) continue;
+        for (let n = 0; n < collection.length; n++) {
+          const item = collection.get(n);
+          if (typeof item.id !== 'string') continue;
+          if (typeof item.text === 'string' && item.id.startsWith('shared-mobility-fr-group:')) labels.push(item.text);
+          if (!item.image && typeof item.text !== 'string' && /^gbfs-float(-b)?:\d+$/.test(item.id)) vehicleDots += 1;
+        }
+      }
+      return { labels, vehicleDots };
+    });
+    let groups = await readGroups();
+    for (let attempt = 0; attempt < 25 && !groups.labels.length; attempt++) {
+      await pump(page, 3, 60);
+      await sleep(400);
+      groups = await readGroups();
+    }
+    const grouped = groups.labels.reduce((sum, text) => sum + Number(text.replace(/\D/g, '')), 0);
+    check('a dense city-wide view is answered in groups', clusterRequests >= 1, `${clusterRequests} grouped answer(s)`);
+    check('and draws them as bubbles', groups.labels.length >= 1, `${groups.labels.length} bubble(s)`);
+    check('every vehicle is in exactly one bubble or one dot',
+      grouped + groups.vehicleDots === payload.vehicles.length,
+      `${grouped} grouped + ${groups.vehicleDots} alone for ${payload.vehicles.length}`);
+    await shoot(page, '05-groups.png');
 
     const relevant = consoleErrors.filter((entry) => !/favicon|Failed to load resource/i.test(entry));
     check('no console errors from the layer',

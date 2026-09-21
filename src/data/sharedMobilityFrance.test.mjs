@@ -33,6 +33,7 @@ import sharedMobilityFranceLayer, {
   _setSharedMobilityPayloadForTest,
   _setSharedMobilityStateForTest,
   _refreshSharedMobilityPinsForTest,
+  _refreshSharedMobilityBubblesForTest,
   _sharedMobilityPinGeometryForTest,
   SHARED_MOBILITY_KIND_FILTERS,
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_ID,
@@ -720,4 +721,90 @@ test('a pin stands on its dot when the floor lands under both', () => {
   assert.ok(Cesium.Cartesian3.equals(record.pin.position, record.position), 'the pin moved with its dot');
   setMeshFloorPreferred(false);
   _setSharedMobilityStateForTest({ viewer: null, records: [] });
+});
+
+// --- Groups: the city-wide view ----------------------------------------------
+//
+// The « Regroupements lisibles » mock: above the pins' ceiling the proxy counts
+// the vehicles on its grid, and the layer draws one bubble per group.
+
+/** A collection that only remembers, for billboards and labels alike. */
+function fakeCollection() {
+  const drawn = new Set();
+  return {
+    drawn,
+    add(options) { const item = { ...options }; drawn.add(item); return item; },
+    remove(item) { drawn.delete(item); return true; },
+    removeAll() { drawn.clear(); },
+  };
+}
+
+function groupsPayload() {
+  return {
+    systems: PARIS_SYSTEMS,
+    stations: [],
+    vehicles: [],
+    clusterDeg: 0.008,
+    clusters: [
+      { id: '1:1', lat: 48.86, lon: 2.34, n: 1_234, by: { 'lime|ebike': 700, 'dott|ebike': 500, 'yego|moped': 34 } },
+      { id: '1:2', lat: 48.87, lon: 2.36, n: 40, by: { 'yego|moped': 40 } },
+    ],
+  };
+}
+
+test('above the ceiling each group prints the proxy\'s count and its operators\' bar', () => {
+  const sprites = fakeCollection();
+  const labels = fakeCollection();
+  _setSharedMobilityStateForTest({ viewer: null, records: [], groups: { sprites, labels } });
+  _setSharedMobilityPayloadForTest(groupsPayload());
+  const drawn = _refreshSharedMobilityBubblesForTest();
+  assert.deepEqual(drawn.map((bubble) => [bubble.id, bubble.n]), [['1:1', 1_234], ['1:2', 40]]);
+  // « 1,2 k »: formatted in the page's language, with a narrow space or not.
+  assert.match(drawn[0].text, /^1,2\s?k$/);
+  assert.equal(drawn[0].bars, 3, 'Lime, Dott and YEGO each get their segment');
+  assert.equal(drawn[1].text, '40');
+  // One bubble image for all of them, and one bar image: no atlas entry per number.
+  const images = new Set([...sprites.drawn].map((item) => item.image));
+  assert.equal(images.size, 2);
+  // The key counts the groups, not the few objects the answer carried.
+  const rows = Object.fromEntries(sharedMobilityFranceLayer.getRowControls().legend
+    .filter((row) => row.channel === 'Fournisseurs').map((row) => [row.label, row.count]));
+  assert.deepEqual(rows, { Lime: 700, Dott: 500, YEGO: 74 });
+  assert.match(sharedMobilityFranceLayer.getRowControls().note, /bulle/);
+  clearKindFilter();
+});
+
+test('a filter re-counts the groups, and a group it empties comes off', () => {
+  const sprites = fakeCollection();
+  const labels = fakeCollection();
+  _setSharedMobilityStateForTest({ viewer: null, records: [], groups: { sprites, labels } });
+  _setSharedMobilityPayloadForTest(groupsPayload());
+  _refreshSharedMobilityBubblesForTest();
+  // The filter is set with no answer in hand (no WebGL to reconcile into),
+  // then the same answer is folded through it.
+  const refold = (params) => {
+    _setSharedMobilityPayloadForTest(null);
+    sharedMobilityFranceLayer.setParams(params);
+    _setSharedMobilityPayloadForTest(groupsPayload());
+    return _refreshSharedMobilityBubblesForTest();
+  };
+  const bikes = refold({ kinds: 'velo' });
+  assert.deepEqual(bikes.map((bubble) => [bubble.id, bubble.n]), [['1:1', 1_200]]);
+  assert.equal(labels.drawn.size, 1, 'the scooter-only group left the map');
+  const yego = refold({ kinds: 'all', operator: 'yego' });
+  assert.deepEqual(yego.map((bubble) => [bubble.id, bubble.n]), [['1:2', 40], ['1:1', 34]]);
+  clearKindFilter();
+});
+
+test('the analyst counts the grouped vehicles, one row each, and says they are grouped', () => {
+  _setSharedMobilityStateForTest({
+    viewer: null, records: [], groups: { sprites: fakeCollection(), labels: fakeCollection() }, enabled: true,
+  });
+  _setSharedMobilityPayloadForTest(groupsPayload());
+  const rows = sharedMobilityFranceLayer.getAnalystRecords(5_000);
+  assert.equal(rows.length, 1_274, 'every vehicle the groups count');
+  assert.ok(rows.every((row) => row.grouped === true && row.kind === 'shared-mobility-vehicle'));
+  assert.equal(rows.filter((row) => row.operator === 'YEGO').length, 74);
+  assert.equal(sharedMobilityFranceLayer.getAnalystRecords(100).length, 100, 'the ceiling still holds');
+  clearKindFilter();
 });

@@ -401,6 +401,8 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | discrétisation | classification | Class breaks of a choropleth. |
 | aplat | fill | |
 | pastille | dot | |
+| épingle (repère) | pin | The few vehicles of the shared fleets that wear their silhouette. |
+| bulle, groupe (regroupement) | bubble, group | A count drawn for a cell of the proxy's grid, from the city-wide view. |
 | tige de rappel | leader stem | The line from a raised label to its ground point. |
 | faisceau | beam | |
 | écrêtage | cap | |

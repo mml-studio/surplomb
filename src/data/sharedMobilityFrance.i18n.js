@@ -89,8 +89,22 @@ export default defineMessages({
     },
   },
 
+  bubble: {
+    thousands: {
+      fr: (value) => `${value} k`,
+      en: (value) => `${value}k`,
+      note: 'A group of a thousand vehicles or more, on a 46 px bubble. `value` is already formatted in the page\'s language (1,2 / 1.2).',
+      sample: ['12'],
+    },
+  },
+
   legend: {
     segmentsLabel: { fr: 'Type de véhicule', en: 'Vehicle type', note: 'Accessible name of the segmented control.' },
+    groupsNote: {
+      fr: 'Chaque bulle compte les véhicules garés autour ; la toucher zoome dessus.',
+      en: 'Each bubble counts the vehicles parked around it; tap it to zoom in.',
+      note: 'Shown only while the city-wide groups are drawn. The count is the server\'s, over every vehicle.',
+    },
     familyTitle: {
       fr: (count) => `${count} à l’écran`,
       en: (count) => `${count} on screen`,
