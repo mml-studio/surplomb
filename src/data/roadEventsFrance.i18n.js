@@ -147,6 +147,12 @@ export default defineMessages({
     note: 'The aggregate upstream is republished hourly; the number is the poll.',
     sample: [10],
   },
+  legendNoteConceded: {
+    fr: (minutes) => `publié par Bison Futé, les DIR et les sociétés d’autoroute, relu toutes les ${minutes} min`,
+    en: (minutes) => `published by Bison Futé, the DIRs and the motorway companies, re-read every ${minutes} min`,
+    note: 'Hosted build only: the Action b licence adds the conceded motorways (ASF, APRR, Sanef…).',
+    sample: [5],
+  },
 
   /** The three scopes: what the visitor is looking at. */
   scopes: {
@@ -239,6 +245,18 @@ export default defineMessages({
       keep: ['Méditerranée'],
       sample: ['DIR Méditerranée'],
     },
+    suppliedBy: {
+      fr: (operator) => `Information fournie par ${operator}`,
+      en: (operator) => `Information supplied by ${operator}`,
+      note: 'Wording required by the Action b reuse licence (art. 5): the producer is named after it. Keep the French formula exactly.',
+      sample: ['ASF'],
+    },
+    updatedAt: {
+      fr: (stamp) => `mise à jour ${stamp}`,
+      en: (stamp) => `updated ${stamp}`,
+      note: 'Follows the producer credit on one line; the licence asks for the time of the last update.',
+      sample: ['10:45'],
+    },
     safety: { fr: 'Message lié à la sécurité', en: 'Safety-related message' },
   },
 
@@ -281,5 +299,10 @@ export default defineMessages({
     fr: 'RRN non concédé',
     en: 'State-run national road network',
     note: 'The edge of the data: the non-conceded national road network, what the State operates directly.',
+  },
+  coverageConceded: {
+    fr: 'RRN, autoroutes concédées comprises',
+    en: 'National road network, conceded motorways included',
+    note: 'Hosted build with the Action b licence: the State-run network plus the motorways run by concession companies.',
   },
 });

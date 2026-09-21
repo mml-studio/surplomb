@@ -67,10 +67,13 @@ import messages, {
  *   while its validity window stays open — a rockfall opened on 31 January and
  *   cleared in March would otherwise sit on the N20 forever. The flag wins.
  *
- * • **The RRN non concédé only.** The conceded motorways — the whole
- *   ASF/APRR/Sanef network — are NOT in this feed. Their absence is a property
- *   of the source (Bison Futé serves them under the credentialed *Action b*
- *   licence), not a gap this layer can fill, and the row says so.
+ * • **The conceded motorways only where the licence is held.** The open feed
+ *   covers the RRN non concédé; the ASF/APRR/Sanef network is served under
+ *   the credentialed *Action b* licence. The hosted build holds it, and its
+ *   proxy merges that stream in (`bisonFuteActionB.js`); an open-source
+ *   install without the login draws the State-run network alone. The row says
+ *   which of the two it is showing, and every Action b card credits its
+ *   producer and its last update the way that licence asks.
  */
 
 const EVENTS_URL = '/api/bison-fute/events';
@@ -175,8 +178,9 @@ export const ROAD_EVENT_UNKNOWN_CATEGORY = category('inconnu', 0);
  *
  * @returns {string}
  */
-export function roadEventLegendNote() {
-  return messages().legendNote(Math.round(UPDATE_INTERVAL_MS / 60_000));
+export function roadEventLegendNote(conceded = false) {
+  const minutes = Math.round(UPDATE_INTERVAL_MS / 60_000);
+  return conceded ? messages().legendNoteConceded(minutes) : messages().legendNote(minutes);
 }
 
 /**
@@ -425,10 +429,7 @@ function parisDayKey(ms) {
  */
 export function formatRoadEventWindow(event, nowMs = Date.now()) {
   const m = messages().window;
-  const sameDay = (ms) => parisDayKey(ms) === parisDayKey(nowMs);
-  const stamp = (ms) => (sameDay(ms)
-    ? formatParis(ms, { hour: '2-digit', minute: '2-digit' }, formatTime)
-    : formatParis(ms, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+  const stamp = (ms) => formatRoadEventStamp(ms, nowMs);
   const start = Number.isFinite(event?.start) ? stamp(event.start) : null;
   const end = Number.isFinite(event?.end) ? stamp(event.end) : null;
   if (event?.state === 'planned') return start ? m.plannedFrom(start) : m.planned;
@@ -436,6 +437,19 @@ export function formatRoadEventWindow(event, nowMs = Date.now()) {
   if (start && end) return m.between(start, end);
   if (start) return m.since(start);
   return null;
+}
+
+/**
+ * One instant, phrased for a card: the time alone today, the date as well
+ * otherwise. Paris time, whatever the reader's clock says.
+ * @param {number} ms
+ * @param {number} nowMs
+ * @returns {string}
+ */
+function formatRoadEventStamp(ms, nowMs) {
+  return parisDayKey(ms) === parisDayKey(nowMs)
+    ? formatParis(ms, { hour: '2-digit', minute: '2-digit' }, formatTime)
+    : formatParis(ms, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /** Human title for one event: what happened, and on which road. */
@@ -515,7 +529,17 @@ export function roadEventDetails(event, nowMs = Date.now()) {
         : m.section(distance));
     }
   }
-  if (event?.operator) lines.push(m.source(event.operator));
+  if (event?.licence === 'action-b') {
+    // The Action b licence, art. 5: "Information fournie par" + the producer,
+    // and the time of the last update, both in front of the reader.
+    const credit = [
+      event.operator ? m.suppliedBy(event.operator) : null,
+      Number.isFinite(event.updated) ? m.updatedAt(formatRoadEventStamp(event.updated, nowMs)) : null,
+    ].filter(Boolean).join(' · ');
+    if (credit) lines.push(credit);
+  } else if (event?.operator) {
+    lines.push(m.source(event.operator));
+  }
   if (event?.safety) lines.push(m.safety);
   return lines;
 }
@@ -736,6 +760,9 @@ export function createRoadEventsFranceLayer({
   let _lastUpdate = null;
   let _lastError = null;
   let _stale = false;
+  // True when the proxy merged the Action b stream: the conceded motorways are
+  // on the map, and the row must not say they are missing.
+  let _conceded = false;
   let _loading = false;
   let _enabled = false;
   let _selectedId = null;
@@ -921,6 +948,7 @@ export function createRoadEventsFranceLayer({
       _publishedAtMs = Number.isFinite(payload.publishedAtMs) ? payload.publishedAtMs : null;
       _counts = payload.counts || null;
       _stale = payload.stale === true;
+      _conceded = payload.actionB?.synced === true;
       _lastUpdate = Date.now();
       _lastError = null;
       applyScope();
@@ -965,6 +993,7 @@ export function createRoadEventsFranceLayer({
       _lastUpdate = null;
       _lastError = null;
       _stale = false;
+      _conceded = false;
       _enabled = false;
       _classificationType = roadEventClassificationForScene(viewer?.scene);
       if (mapStackEventTarget && !_mapStackListener) {
@@ -1033,6 +1062,7 @@ export function createRoadEventsFranceLayer({
       _lastUpdate = null;
       _lastError = null;
       _stale = false;
+      _conceded = false;
     },
 
     setParams(params = {}) {
@@ -1064,7 +1094,7 @@ export function createRoadEventsFranceLayer({
       return {
         chips,
         legend: roadEventLegend(_summary.byCategory),
-        legendNote: roadEventLegendNote(),
+        legendNote: roadEventLegendNote(_conceded),
       };
     },
 
@@ -1098,7 +1128,7 @@ export function createRoadEventsFranceLayer({
         // difference is the answer to "why is the map emptier than the count".
         published: _events.length,
         upstream: _counts,
-        coverage: messages().coverage,
+        coverage: _conceded ? messages().coverageConceded : messages().coverage,
       };
     },
   };
