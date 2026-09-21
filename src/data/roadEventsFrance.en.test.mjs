@@ -72,6 +72,23 @@ test('the key: eight categories, what each covers, and who publishes them', () =
     'publié par Bison Futé et les DIR, relu toutes les 5 min');
 });
 
+test('the Action b credit and the conceded-motorway legend read in both languages', () => {
+  const event = {
+    ...EVENTS[0],
+    operator: 'APRR',
+    licence: 'action-b',
+    updated: Date.parse('2026-08-31T20:45:00+02:00'),
+  };
+  const en = withLocale('en', () => roadEventDetails(event, CAPTURE_MS));
+  assert.ok(en.includes('Information supplied by APRR · updated 20:45'), en.join(' | '));
+  const fr = withLocale('fr', () => roadEventDetails(event, CAPTURE_MS));
+  assert.ok(fr.includes('Information fournie par APRR · mise à jour 20:45'), fr.join(' | '));
+  assert.equal(withLocale('en', () => roadEventLegendNote(true)),
+    'published by Bison Futé, the DIRs and the motorway companies, re-read every 5 min');
+  assert.equal(withLocale('fr', () => roadEventLegendNote(true)),
+    'publié par Bison Futé, les DIR et les sociétés d’autoroute, relu toutes les 5 min');
+});
+
 test('the three scopes name what they add', () => {
   const chips = withLocale('en', () => ROAD_EVENT_SCOPES.map(({ id, label, title }) => ({ id, label, title })));
   assertNoFrench(chips);

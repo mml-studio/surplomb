@@ -156,6 +156,21 @@ test('the title says what happened and where, without repeating itself', () => {
   assert.equal(roadEventTitle({ category: 'travaux', subtype: 'bridgeJacking' }), 'Travaux · bridgeJacking');
 });
 
+test('an Action b card credits its producer and its last update, as that licence asks', () => {
+  const event = {
+    ...byId('260830-002035'),
+    operator: 'ASF',
+    licence: 'action-b',
+    updated: Date.parse('2026-08-31T20:45:00+02:00'),
+  };
+  const lines = roadEventDetails(event, CAPTURE_MS);
+  assert.ok(lines.includes('Information fournie par ASF · mise à jour 20:45'), lines.join(' | '));
+  assert.ok(!lines.some((line) => line.startsWith('Source :')), 'one credit, not two');
+  // Another day: the date is part of the stamp.
+  const older = roadEventDetails({ ...event, updated: Date.parse('2026-08-29T08:05:00+02:00') }, CAPTURE_MS);
+  assert.ok(older.some((line) => /^Information fournie par ASF · mise à jour 29 août/.test(line)), older.join(' | '));
+});
+
 test('a card states the operator, the place, the PR and the window', () => {
   const lines = roadEventDetails(byId('260830-002035'), CAPTURE_MS);
   assert.ok(lines.some((line) => line.includes("situé 6920 m à l'ouest de Le Sauze")));

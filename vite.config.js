@@ -138,6 +138,12 @@ import { projectGasNetwork, projectGasSites } from './src/data/gasFranceFeed.js'
 import { EDF_DATASETS, projectEdfPlants } from './src/data/edfPlantsFeed.js';
 import { projectRoadEvents } from './src/data/bisonFuteFeed.js';
 import {
+  countRoadEvents,
+  createActionBPoller,
+  createActionBStore,
+  mergeRoadEventFeeds,
+} from './src/data/bisonFuteActionB.js';
+import {
   indexCarriagewayPack,
   traceBetweenPr,
 } from './scripts/lib/rrnCarriageway.mjs';
@@ -11513,8 +11519,18 @@ function gasFranceProxy() {
  * genuinely moved — which is what makes the layer affordable at a cadence worth
  * having.
  *
+ * THE CONCEDED MOTORWAYS, where a login is configured. With
+ * `BISON_FUTE_RESTRICTED_USER` and `BISON_FUTE_RESTRICTED_PASSWORD` set, the
+ * first request for events also starts a background poller on the credentialed
+ * *Action b* stream (`bisonFuteActionB.js`) and every response merges it in:
+ * ASF, APRR, Cofiroute, Sanef, Escota and Aréa, tagged `licence: 'action-b'` so
+ * the card can credit them as that licence requires. The poller keeps running
+ * once started, because the stream is a ~24 h window of messages and a gap in
+ * the reading is a missed END. Without the two variables none of it exists —
+ * the hosted build holds the licence, the open-source build does not.
+ *
  * Routes:
- *   GET /api/bison-fute/events → {fetchedAt, stale, publishedAt, events, counts}
+ *   GET /api/bison-fute/events → {fetchedAt, stale, publishedAt, events, counts, actionB}
  *   GET /api/bison-fute/status → the cache state
  *
  * @returns {import('vite').Plugin}
@@ -11592,6 +11608,9 @@ function bisonFuteProxy() {
   const UPSTREAM_TIMEOUT_MS = 45_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache', 'bison-fute');
   const SOURCE = 'Bison Futé / Tipi (tipi.bison-fute.gouv.fr)';
+  // HTTPS, although the access email gave an http:// link: the host serves
+  // both, and Basic credentials should not cross the network in clear.
+  const ACTION_B_URL = 'https://tipi.bison-fute.gouv.fr/bison-fute-restreint/publications-restreintes/grt/ACTION-B/';
 
   /**
    * One conditionally-refreshed upstream document.
@@ -11666,6 +11685,60 @@ function bisonFuteProxy() {
 
   const cachePath = (key) => path.join(CACHE_DIR, `${key}.json`);
 
+  /** Read lazily: Vite's loadEnv fills process.env after this module loads. */
+  const actionBCredentials = () => {
+    const user = String(process.env.BISON_FUTE_RESTRICTED_USER || '').trim();
+    const password = String(process.env.BISON_FUTE_RESTRICTED_PASSWORD || '').trim();
+    return user && password ? { user, password } : null;
+  };
+  const actionBStore = createActionBStore();
+  let actionBPoller = null;
+  let actionBStarting = null;
+
+  /**
+   * Start the Action b poller once, from the store the last process left on
+   * disk. The store holds live situations only — ended ones are deleted, as
+   * the licence's duration clause requires — so persisting it keeps nothing
+   * the licence has stopped covering, and spares the origin a 2 200-file
+   * replay at every deploy.
+   */
+  function ensureActionB() {
+    if (actionBPoller || !actionBCredentials()) return Promise.resolve();
+    if (!actionBStarting) {
+      actionBStarting = (async () => {
+        try {
+          actionBStore.load(JSON.parse(await fsp.readFile(cachePath('action-b'), 'utf8')));
+        } catch { /* first run: replay the window */ }
+        await loadRrnCarriageway();
+        actionBPoller = createActionBPoller({
+          store: actionBStore,
+          baseUrl: ACTION_B_URL,
+          credentials: actionBCredentials,
+          tracer: () => carriagewayTracer(_rrnCarriageway),
+          persist: (store) => writeDisk('action-b', store.toJSON()),
+        });
+        actionBPoller.start();
+        console.log(
+          `[bison-fute-proxy] Action b stream on (${actionBStore.size} live situations from disk,`
+          + ` last file ${actionBStore.state.lastSeq || 'none'})`,
+        );
+      })();
+    }
+    return actionBStarting;
+  }
+
+  /** What the row and /status say about the stream. Never the credentials. */
+  function actionBStatus(streamEvents) {
+    if (!actionBCredentials()) return null;
+    return {
+      synced: actionBStore.state.synced,
+      events: streamEvents.length,
+      lastPollAt: actionBStore.state.lastPollAt || null,
+      pending: actionBPoller?.status.pending ?? null,
+      error: actionBPoller?.status.lastError ?? null,
+    };
+  }
+
   async function readDiskOnce(key, valid) {
     if (diskChecked[key]) return;
     diskChecked[key] = true;
@@ -11732,13 +11805,23 @@ function bisonFuteProxy() {
               ? { lastFetch: mem.events.at, publishedAt: mem.events.publishedAt, count: mem.events.events.length }
               : null,
             ttlMs: EVENTS_TTL_MS,
+            actionB: actionBStatus(actionBStore.state.synced ? actionBStore.snapshot() : []),
           });
           return;
         }
 
         if (subPath === '/events' || subPath === '/events/') {
+          await ensureActionB();
           const { served, stale } = await serve('events', EVENTS_TTL_MS, refreshEvents);
           if (!served) { sendJson(502, { error: 'Bison Futé events fetch failed and no cache available' }); return; }
+          // Merged per request, not per refresh: the stream moves every minute
+          // and the open aggregate hourly. Until a first replay has read the
+          // whole window nothing from the stream is served — a half-read window
+          // holds situations whose END has not been read yet.
+          const stream = actionBCredentials() && actionBStore.state.synced ? actionBStore.snapshot() : null;
+          const events = stream
+            ? mergeRoadEventFeeds(served.events, stream, actionBStore.tombstone)
+            : served.events;
           sendJson(200, {
             fetchedAt: served.at,
             stale,
@@ -11747,8 +11830,9 @@ function bisonFuteProxy() {
             publishedAt: served.publishedAt,
             publishedAtMs: served.publishedAtMs,
             supplier: served.supplier,
-            counts: served.counts,
-            events: served.events,
+            counts: stream ? { ...served.counts, ...countRoadEvents(events) } : served.counts,
+            actionB: actionBStatus(stream || []),
+            events,
           });
           return;
         }

@@ -6,6 +6,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Road events now cover the conceded motorways on the hosted globe.** The
+  Événements routiers layer drew the State-run network only: ASF, APRR,
+  Cofiroute, Sanef, Escota and Aréa publish their accidents, closures and
+  roadworks behind Bison Futé's *Action b* reuse licence, which Surplomb now
+  holds. Where the login is configured (`BISON_FUTE_RESTRICTED_USER` /
+  `BISON_FUTE_RESTRICTED_PASSWORD`), the server replays that real-time stream —
+  a rolling directory of ~2 200 one-situation messages — into the current
+  state, merges it with the open DIR feed on Tipi's situation ids, and serves
+  both from the same route. Each motorway card reads « Information fournie par
+  ASF · mise à jour 10:45 », as the licence requires; an ended situation is
+  deleted rather than kept, since the licence covers an event only until it
+  ends, and the row says *RRN, autoroutes concédées comprises*. The origin is
+  read at most once a second, under a User-Agent that names the project, and
+  its index every five minutes (22 KB gzipped). Without the login nothing changes: the open-source build draws the
+  State-run network, as before.
 - **The globe is bilingual, layer by layer, and the voice with it.** Every
   panel, card, legend, status and refusal now exists in French and in English:
   the shell, the 60-layer registry, the Address X-ray, real estate, transport,
