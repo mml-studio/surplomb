@@ -20,7 +20,8 @@
  *   4. does the same for the gallery's loops (six views and the voice answer,
  *      `scripts/build-landing-gallery.mjs`) into `src/vitrine/galleryLoops.js`,
  *      which src/vitrine/gallery.js reads — with a film in place of a loop
- *      where one was cut (`scripts/build-landing-film.mjs`: Roissy, view 01).
+ *      where one was cut (`scripts/build-landing-film.mjs`: Roissy, view 01;
+ *      the power grid, view 04).
  *
  * `--from` takes several directories, comma-separated, earliest first: the
  * films, which win their box over its recorded loop under the same file
@@ -44,7 +45,18 @@ const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
-const DEFAULT_FROM = '.context/landing-assets/film/out,.context/landing-assets/galerie/out,.context/landing-assets/hq,.context/landing-assets/out';
+/**
+ * The films' staging, one directory per view (`film/view-04`), then the
+ * gallery's, the hero's and the design pack's. Each film is found by its
+ * manifest, so the directory Roissy was first encoded to (`film/out`) counts.
+ */
+const FILMS_DIR = path.join(REPO_ROOT, '.context', 'landing-assets', 'film');
+const stagedFilms = () => (existsSync(FILMS_DIR) ? readdirSync(FILMS_DIR, { withFileTypes: true }) : [])
+  .filter((entry) => entry.isDirectory() && existsSync(path.join(FILMS_DIR, entry.name, 'manifest.json')))
+  .map((entry) => path.join(FILMS_DIR, entry.name))
+  .sort();
+const DEFAULT_FROM = [...stagedFilms(), '.context/landing-assets/galerie/out', '.context/landing-assets/hq',
+  '.context/landing-assets/out'].join(',');
 const FROM_GIVEN = args.includes('--from');
 const FROM = option('--from', DEFAULT_FROM)
   .split(',').filter(Boolean).map((dir) => path.resolve(REPO_ROOT, dir));
@@ -134,7 +146,10 @@ export function mergeManifests(manifests) {
  */
 export function galleryModuleData(gallery, published) {
   const loops = {};
-  for (const [key, loop] of Object.entries(gallery || {})) {
+  // By key, not by the directory each came from: a film staged first must not
+  // reorder the generated module.
+  const entries = Object.entries(gallery || {}).sort(([a], [b]) => a.localeCompare(b));
+  for (const [key, loop] of entries) {
     const sources = (loop.sources || []).filter((source) => published.has(source.file));
     if (!sources.length) continue;
     loops[key] = {

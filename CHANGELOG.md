@@ -6,6 +6,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The landing page's power-grid view is the power-grid film, and it grows
+  under the pointer.** « Le réseau électrique et ce qu'il produit » showed a
+  daytime take from before the view's night rework; it now plays the
+  14.7-second film: France lighting up inside a dark Europe, the nuclear
+  plants' columns filling to their live output, the dive onto Cruas and its
+  card, and the country switching off. The thumbnail opens on the filled
+  columns, so a reader who keeps still images sees the grid lit, not an
+  unlit Europe. It enlarges like the Roissy film.
 - **The landing page's Roissy view is the Roissy film, and it grows under the
   pointer.** The « Roissy et les avions en approche » thumbnail played six
   seconds of a nearly still camera; it now plays the 29-second scene cut from
