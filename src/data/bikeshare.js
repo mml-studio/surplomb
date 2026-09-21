@@ -31,6 +31,12 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickAt } from './pickAt.js';
+import {
+  mobilityDocksGrouped,
+  notifyMobilityDocksChanged,
+  onMobilityDocksGrouped,
+  publishMobilityDocks,
+} from './mobilityDockBridge.js';
 
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_ID = 'bikeshare-selected';
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
@@ -604,16 +610,45 @@ function stationVisible(record) {
 }
 
 /**
+ * Whether a dock's own point is DRAWN: the filters keep it, and no group is
+ * counting it. From the city-wide view the shared fleets' bubbles count the
+ * docks' available bikes (`mobilityDockBridge.js`), and a dock drawn under the
+ * bubble that already counts it would say the same bikes twice.
+ * @param {{cityId?: string}} record
+ * @returns {boolean}
+ */
+function stationDrawn(record) {
+  return !mobilityDocksGrouped() && stationVisible(record);
+}
+
+/**
+ * The docks the groups count: the ones the filters keep, with what they hold
+ * now. A dock whose status has not landed yet holds nothing to count.
+ * @returns {Array<{lat:number, lon:number, bikes:number, operator:{id:string, color:string}}>}
+ */
+function docksForGroups() {
+  const out = [];
+  for (const record of _stationRenderMap.values()) {
+    if (!stationVisible(record) || !(record.bikesAvailable > 0)) continue;
+    if (record.isRenting === false) continue;
+    const operator = CITY_OPERATOR.get(record.cityId);
+    if (!operator) continue;
+    out.push({ lat: record.lat, lon: record.lon, bikes: record.bikesAvailable, operator });
+  }
+  return out;
+}
+
+/**
  * Show or hide every loaded dock under the current filters — `show`, not a
  * rebuild: the 1,518 Vélib' points stay in their collection and a filter costs
  * a flag per point, which is what a phone can afford on every press.
  */
 function applyStationFilters() {
-  if (_selectedKey && !stationVisible(_stationRenderMap.get(_selectedKey))) _clearSelection();
+  if (_selectedKey && !stationDrawn(_stationRenderMap.get(_selectedKey))) _clearSelection();
   for (const record of _stationRenderMap.values()) {
     // The selected dock stays hidden under its highlight entity.
     if (record.key === _selectedKey) continue;
-    if (record.point) record.point.show = stationVisible(record);
+    if (record.point) record.point.show = stationDrawn(record);
   }
   governorRequestRender('bikeshare-filter');
 }
@@ -637,6 +672,9 @@ function viewBoxDegrees(viewer) {
 
 /** @type {Cesium.Viewer|null} Active Cesium viewer instance. */
 let _viewer = null;
+/** Unsubscribe from the groups' « docks counted » signal. */
+let _unsubscribeGrouped = null;
+
 /** @type {Cesium.PointPrimitiveCollection|null} Primitive collection for station dots. */
 let _pointCollection = null;
 /** Whether the bikeshare layer is currently enabled. */
@@ -1222,7 +1260,7 @@ function _clearSelection() {
     if (record?.point) {
       // Back to what the filters say, not to "shown": a dock selected before
       // a focus that excludes it must not reappear when it is released.
-      record.point.show = stationVisible(record);
+      record.point.show = stationDrawn(record);
     }
   }
 
@@ -1394,7 +1432,7 @@ function ensureCityPoints(cityId, stationMap) {
       translucencyByDistance: new Cesium.NearFarScalar(200, 1.0, 180000, 0.15),
       disableDepthTestDistance: 2500,
       id: key,
-      show: stationVisible({ cityId }),
+      show: stationDrawn({ cityId }),
     });
 
     _stationRenderMap.set(key, {
@@ -1483,6 +1521,8 @@ function applyStatusToPoints(cityId, statusMap) {
     record.point.pixelSize = capacityToPixelSize(capacity);
     record.point.color = statusToColor(status, capacity, CITY_OPERATOR.get(record.cityId)?.color);
   }
+  // The groups count these bikes; they have changed.
+  notifyMobilityDocksChanged();
 }
 
 /**
@@ -1808,6 +1848,13 @@ const bikeshareLayer = {
     _installClickHandler(viewer);
     // Pick-ownership (H2): station point ids are string render-map keys.
     registerPickOwner('bikeshare', (pickedId) => _stationRenderMap.has(pickedId));
+    publishMobilityDocks(docksForGroups);
+    _unsubscribeGrouped?.();
+    _unsubscribeGrouped = onMobilityDocksGrouped(() => {
+      applyStationFilters();
+      _rowControlsListener?.();
+    });
+    applyStationFilters();
 
     if (!_cameraChangedAttached) {
       viewer.camera.changed.addEventListener(onCameraChanged);
@@ -1853,6 +1900,11 @@ const bikeshareLayer = {
     deactivateAllCities();
     _cityRuntime.clear();
     _pointCollection.show = false;
+    // No docks left to count: the groups count the fleets alone.
+    publishMobilityDocks(null);
+    _unsubscribeGrouped?.();
+    _unsubscribeGrouped = null;
+    notifyMobilityDocksChanged();
     _count = 0;
     _loading = false;
     _loadingOps = 0;
@@ -1903,6 +1955,9 @@ const bikeshareLayer = {
     _operatorFilter = operator;
     _kindFilter = kinds;
     applyStationFilters();
+    // A filter changes which docks a group counts, whichever layer of the row
+    // heard the press first.
+    notifyMobilityDocksChanged();
     _rowControlsListener?.();
     return true;
   },
@@ -1981,7 +2036,8 @@ const bikeshareLayer = {
         toggle: { param: 'operator', value: 'all', fanOut: true },
       });
     }
-    if (shown > 0) legend.push(...dockFillLegend());
+    // While a group counts the docks, none is drawn: no fill to explain.
+    if (shown > 0 && !mobilityDocksGrouped()) legend.push(...dockFillLegend());
     // Emptied by a filter is not « hors de cette vue » — see the same line in
     // `sharedMobilityFrance.js`.
     const filtered = Boolean(_operatorFilter || _kindFilter);
@@ -2112,6 +2168,11 @@ export function _setBikeshareStationsForTest({ viewer = null, records = [] } = {
   _selectedEntity = null;
   _operatorFilter = null;
   _kindFilter = null;
+}
+
+/** The docks this layer hands the groups, under the current filters. */
+export function _bikeshareDocksForGroupsForTest() {
+  return docksForGroups();
 }
 
 /** Exercise the production selection path in focused runtime tests. */

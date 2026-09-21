@@ -16,7 +16,7 @@
  * Pure on purpose: the Cesium side lives in `sharedMobilityFrance.js`, and this
  * turns the proxy's groups into the bubbles to draw.
  */
-import { GBFS_CLUSTER_CELLS_DEG } from './gbfsFeeds.js';
+import { GBFS_CLUSTER_CELLS_DEG, GBFS_CLUSTER_LON_FACTOR, gbfsClusterCellKey } from './gbfsFeeds.js';
 
 /**
  * Screen size a grid cell aims at, in CSS px. The grid only doubles, so a cell
@@ -93,6 +93,59 @@ export function foldSharedMobilityClusters(clusters, { keep, operatorOf }) {
     });
   }
   return out;
+}
+
+/**
+ * Count the docks' available bikes into the groups of the same grid cells.
+ *
+ * A dock joins the group of its cell — the proxy's own key, so a Vélib' dock
+ * and the Lime bikes parked beside it land in one bubble — or opens a group of
+ * its own where no fleet vehicle is. It adds its bikes to the count, its
+ * network to the bar, and pulls the centroid by its weight. An empty dock adds
+ * nothing: a bubble counts what can be ridden away.
+ *
+ * Only docks inside `box` grown by one cell are counted, the rule the proxy
+ * applies to its own cells.
+ *
+ * @param {Array<Object>} bubbles {@link foldSharedMobilityClusters}' answer.
+ * @param {Array<{lat:number, lon:number, bikes:number, operator:{id:string, color:string}}>} docks
+ * @param {number} cellDeg The answer's grid step.
+ * @param {?{south:number, west:number, north:number, east:number}} box
+ * @returns {Array<Object>} The same shape, with the docks in.
+ */
+export function addDocksToSharedMobilityBubbles(bubbles, docks, cellDeg, box = null) {
+  if (!(cellDeg > 0) || !Array.isArray(docks) || !docks.length) return bubbles;
+  const byId = new Map(bubbles.map((bubble) => [bubble.id, {
+    ...bubble,
+    operators: bubble.operators.map((operator) => ({ ...operator })),
+    latSum: bubble.lat * bubble.n,
+    lonSum: bubble.lon * bubble.n,
+  }]));
+  const lonStep = cellDeg * GBFS_CLUSTER_LON_FACTOR;
+  for (const dock of docks) {
+    const bikes = Number(dock?.bikes);
+    if (!(bikes > 0) || !Number.isFinite(dock.lat) || !Number.isFinite(dock.lon)) continue;
+    if (box && (dock.lat < box.south - cellDeg || dock.lat > box.north + cellDeg
+      || dock.lon < box.west - lonStep || dock.lon > box.east + lonStep)) continue;
+    const id = gbfsClusterCellKey(dock.lat, dock.lon, cellDeg);
+    let bubble = byId.get(id);
+    if (!bubble) {
+      bubble = { id, lat: dock.lat, lon: dock.lon, n: 0, operators: [], latSum: 0, lonSum: 0 };
+      byId.set(id, bubble);
+    }
+    bubble.n += bikes;
+    bubble.latSum += dock.lat * bikes;
+    bubble.lonSum += dock.lon * bikes;
+    const seen = bubble.operators.find((operator) => operator.id === dock.operator.id);
+    if (seen) seen.n += bikes;
+    else bubble.operators.push({ id: dock.operator.id, color: dock.operator.color, n: bikes });
+  }
+  return [...byId.values()].map(({ latSum, lonSum, ...bubble }) => ({
+    ...bubble,
+    lat: latSum / bubble.n,
+    lon: lonSum / bubble.n,
+    operators: bubble.operators.sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1)),
+  }));
 }
 
 /**

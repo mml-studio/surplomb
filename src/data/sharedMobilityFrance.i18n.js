@@ -101,8 +101,8 @@ export default defineMessages({
   legend: {
     segmentsLabel: { fr: 'Type de véhicule', en: 'Vehicle type', note: 'Accessible name of the segmented control.' },
     groupsNote: {
-      fr: 'Chaque bulle compte les véhicules garés autour ; la toucher zoome dessus.',
-      en: 'Each bubble counts the vehicles parked around it; tap it to zoom in.',
+      fr: 'Chaque bulle compte les véhicules disponibles autour, vélos en station compris ; la toucher zoome dessus.',
+      en: 'Each bubble counts the vehicles available around it, docked bikes included; tap it to zoom in.',
       note: 'Shown only while the city-wide groups are drawn. The count is the server\'s, over every vehicle.',
     },
     familyTitle: {

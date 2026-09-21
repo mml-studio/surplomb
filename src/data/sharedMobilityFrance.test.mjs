@@ -40,9 +40,14 @@ import sharedMobilityFranceLayer, {
   SHARED_MOBILITY_FR_OVERLAY_SOURCE_OPTIONS,
 } from './sharedMobilityFrance.js';
 import { reportMeshFloorCell, setMeshFloorPreferred } from './groundFloor.js';
-import { GBFS_MAX_BOX_DEG } from './gbfsFeeds.js';
+import { GBFS_MAX_BOX_DEG, gbfsClusterCellKey } from './gbfsFeeds.js';
 import { resolveMobilityOperator } from './mobilityOperators.js';
 import { sharedMobilityPinGlyph } from './sharedMobilityIcons.js';
+import {
+  _resetMobilityDockBridgeForTest,
+  mobilityDocksGrouped,
+  publishMobilityDocks,
+} from './mobilityDockBridge.js';
 import { SHARED_MOBILITY_PIN_SPACING_PX } from './sharedMobilityPins.js';
 
 function viewerWithView(degrees) {
@@ -806,5 +811,35 @@ test('the analyst counts the grouped vehicles, one row each, and says they are g
   assert.ok(rows.every((row) => row.grouped === true && row.kind === 'shared-mobility-vehicle'));
   assert.equal(rows.filter((row) => row.operator === 'YEGO').length, 74);
   assert.equal(sharedMobilityFranceLayer.getAnalystRecords(100).length, 100, 'the ceiling still holds');
+  clearKindFilter();
+});
+
+test('the Vélib\' bikes join the group of their cell, and the docks are told they are counted', () => {
+  const velib = resolveMobilityOperator("Vélib' Métropole");
+  publishMobilityDocks(() => [
+    // Same cell as group « 1:1 » at 0.008° — its bikes are added to it.
+    { lat: 48.86, lon: 2.34, bikes: 20, operator: velib },
+    // A cell no fleet vehicle is in: a group of its own.
+    { lat: 48.9101, lon: 2.4501, bikes: 7, operator: velib },
+  ]);
+  const sprites = fakeCollection();
+  const labels = fakeCollection();
+  _setSharedMobilityStateForTest({ viewer: null, records: [], groups: { sprites, labels } });
+  // The proxy keys its cells the way the docks are keyed.
+  const payload = groupsPayload();
+  payload.clusters[0].id = gbfsClusterCellKey(48.86, 2.34, 0.008);
+  _setSharedMobilityPayloadForTest(payload);
+  assert.equal(mobilityDocksGrouped(), false);
+  const drawn = _refreshSharedMobilityBubblesForTest();
+  const counts = Object.fromEntries(drawn.map((bubble) => [bubble.n, bubble.bars]));
+  assert.ok(1_254 in counts, 'the 1,234 fleet vehicles and the 20 docked bikes of the same cell');
+  assert.equal(counts[1_254], 4, 'Lime, Dott, Vélib\' and YEGO each have their segment');
+  assert.ok(7 in counts, 'a group of docked bikes alone');
+  assert.equal(mobilityDocksGrouped(), true, 'the docks are counted, so they must not draw themselves');
+  // Groups gone — a zoom back to the street — and the docks draw again.
+  _setSharedMobilityPayloadForTest({ ...groupsPayload(), clusters: undefined });
+  _refreshSharedMobilityBubblesForTest();
+  assert.equal(mobilityDocksGrouped(), false);
+  _resetMobilityDockBridgeForTest();
   clearKindFilter();
 });

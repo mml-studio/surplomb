@@ -126,6 +126,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The Vélib' bikes are in the bubbles too.** From the city-wide view the
+  docks stayed dots under the fleet bubbles — 1,344 violet rings over Paris
+  from 18 km, the densest mark on the map — and a bubble's number left out
+  the bikes waiting in the docks around it. While the bubbles are drawn, each
+  dock's available bikes now join the bubble of its grid cell, with a violet
+  segment in its bar, and the dock itself is not drawn: over central Paris
+  from 7 km, 114 bubbles count 24,417 vehicles, 10,255 of them in docks.
+  Pressing « Vélib' » in the key keeps only the docked bikes, « Lime » only
+  Lime's. Zoomed back in, the docks are dots again.
 - **From the city-wide view the shared fleets are bubbles that count.** Above
   3.5 km over a view holding at least 1,500 vehicles, the globe no longer
   draws thousands of dots — or rather the 6,000 the server could send, which
