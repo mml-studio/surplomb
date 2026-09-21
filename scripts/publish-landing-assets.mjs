@@ -19,10 +19,12 @@
  *      (src/vitrine/handoff.js);
  *   4. does the same for the gallery's loops (six views and the voice answer,
  *      `scripts/build-landing-gallery.mjs`) into `src/vitrine/galleryLoops.js`,
- *      which src/vitrine/gallery.js reads.
+ *      which src/vitrine/gallery.js reads — with a film in place of a loop
+ *      where one was cut (`scripts/build-landing-film.mjs`: Roissy, view 01).
  *
  * `--from` takes several directories, comma-separated, earliest first: the
- * gallery's loops and the stills cut from them, the high-definition hero
+ * films, which win their box over its recorded loop under the same file
+ * names; the gallery's loops and the stills cut from them, the high-definition hero
  * loops (`--quality hq`, 2026-09-17), then the stills of the design pack. A
  * name found in an earlier directory wins, and each directory's
  * `manifest.json` contributes what it describes. A default directory that
@@ -42,7 +44,7 @@ const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
-const DEFAULT_FROM = '.context/landing-assets/galerie/out,.context/landing-assets/hq,.context/landing-assets/out';
+const DEFAULT_FROM = '.context/landing-assets/film/out,.context/landing-assets/galerie/out,.context/landing-assets/hq,.context/landing-assets/out';
 const FROM_GIVEN = args.includes('--from');
 const FROM = option('--from', DEFAULT_FROM)
   .split(',').filter(Boolean).map((dir) => path.resolve(REPO_ROOT, dir));
