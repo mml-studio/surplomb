@@ -2,6 +2,34 @@
 
 Updated: September 22, 2026
 
+> **2026-09-22 — `GEV_NONCOMMERCIAL_SOURCES=off`: a commercial deployment
+> drops the sources licensed for non-commercial use only. Open-Meteo is the
+> first and, for now, the only one.**
+>
+> - **Why.** Open-Meteo's free API terms (<https://open-meteo.com/en/terms>)
+>   say “You may only use the free API services for non-commercial purposes”.
+>   surplomb.app is run by a company; a clone is its owner's own use.
+> - **The list.** `src/nonCommercialSources.js` holds one line per source (id,
+>   name, the terms that bind it, its credit keys). Unset or `on` keeps them;
+>   any other value turns every listed source off, so a typo errs on the
+>   licence's side. Read per request, like every `GEV_*` runtime switch.
+> - **Server.** `/api/regional-brief` skips Open-Meteo and answers
+>   `weatherStatus: "off"`, `weather: null`; with a place and news it is
+>   `ready`, not `partial`. The switch is in its cache key, so a brief cached
+>   with weather never answers once it is off. `/api/weather-effects` answers
+>   `200 {status: "off", weather: null}` before its rate limiter and without a
+>   fetch (`X-Weather-Effects: OFF`). `/api/trial` and `/healthz` carry
+>   `sourcesOff` (`[]` on a clone, `["open-meteo"]` where it is off).
+> - **Page.** `src/main.js` reads `sourcesOff` from the boot's one
+>   `/api/trial` answer (no new request). Without Open-Meteo: the WX toggle is
+>   hidden; the cloud pass stops and never asks (the reader's saved WX
+>   preference is kept); Local Info shows the place and the position under
+>   « LIEU / POSITION » / “PLACE / POSITION” and « OPENSTREETMAP · UTC », with
+>   neither the four weather boxes nor the Open-Meteo link; and
+>   `withdrawDataCredits` takes the Open-Meteo line out of the “Data
+>   attribution” popover. If the probe fails, a route's `off` answer flips the
+>   same one-way switch.
+
 > **2026-09-22 — the landing page speaks English too, and the globe's mark
 > leads back to it.**
 >
@@ -4836,7 +4864,7 @@ inert again.
 - **Cockpit Context scope:** the 250 km radius applies to the air/sea proximity cohorts. Installation counts come only from the currently loaded viewport and are labeled `CURRENT VIEWPORT ONLY` in the cockpit as well as the normal Context panel; neither surface presents them as a complete 250 km installation survey.
 - **Cockpit camera anchor:** first-person mode does not write feed-boundary corrections directly into the camera. A cockpit-only inertial anchor advances from the selected aircraft's displayed course and speed, then converges toward the authoritative delayed track with correction capped below forward motion. The displayed kinematics are derived from the same consecutive fix segment as the rendered position, with raw feed speed/course used only as fallback; a transient zero/missing feed speed therefore cannot freeze a visibly moving aircraft after layer enable or a map/cockpit handoff. Rendered altitude continues to come from that interpolated track position. Late ADS-B fixes and short render stalls can remove drift without accelerating or reversing the view. Camera placement runs before scene update/culling at a bounded 20 Hz so a moving cockpit does not force Photoreal 3D Tiles to retraverse on every display frame; textual instruments update at 10 Hz and context/layout work at 4 Hz. Every far Cockpit contact pip shares one stable Cesium texture-atlas entry and skips unused screen-projected course calculations, while only in-range 2D aircraft silhouettes pay the screen-projected rotation cost; ambient glTF collections are hidden/retained rather than synchronously destroyed at cockpit entry, and context rails lay out only on explicit content/state changes and viewport resize. The deliberate 15/30-second layer interpolation delays and per-Cesium-frame position caches remain unchanged.
 - **Cockpit route, vision, and view controls:** visible on-screen `COCKPIT`, `RESET`, and `EXIT COCKPIT` controls replace reliance on the `C` shortcut. RESET uses the same canonical globe route as the map and voice actions, exits Cockpit, and releases its camera ownership rather than exposing the hidden map-style top action. When the tracked commercial flight has a plausible ADSBDB route, the top of the right briefing rail shows a compact `FROM → TO` airport strip and the visor shows a centered estimated-destination chevron with its relative bearing; absent or implausible route data hides the strip and cue rather than guessing. The cockpit-local vision control is an interactive `PREV / CURRENT / NEXT` carousel over the inherited map preset, `CRT`, `NVG`, `FLIR`, and `NOIR`; its previous/next actions wrap, and activating the current value advances to the next style. The inherited entry is named directly, such as `NOIR`, and retains that map shader. There is no empty `NONE` entry. CRT, NVG, FLIR, and NOIR temporarily activate the existing Cesium post-process stages, while returning to the inherited entry or exiting Cockpit restores the pre-entry visual style. The regional-news page uses a free Google News RSS locality query first, with the existing GDELT query retained only as a fail-soft fallback; linked headlines remain reporting, not verified incidents or risk intelligence.
-- **Cockpit weather status:** the earlier multi-canvas atmospheric compositor remains fail-closed and is not attached to the live viewer. Cockpit clouds are a separate transparent WebGL pass with a capped 520×320 framebuffer, 24 ray steps, three FBM octaves, and a 12 FPS ceiling. It defaults off and starts only when local storage explicitly contains the persisted `WX ON` opt-in (`'1'`). When opted in, observations refresh after five minutes or 25 km of aircraft movement, fail transparent when unavailable or clear, and stop on exit or disable. `WX OFF` governs atmospheric rendering only: the briefing still fetches source-backed Nominatim, headline, and Open-Meteo local-information data, aborting and replacing any in-flight request when the selected aircraft changes. No weather effect runs in map mode and no synthetic fallback is shown.
+- **Cockpit weather status:** the earlier multi-canvas atmospheric compositor remains fail-closed and is not attached to the live viewer. Cockpit clouds are a separate transparent WebGL pass with a capped 520×320 framebuffer, 24 ray steps, three FBM octaves, and a 12 FPS ceiling. It defaults off and starts only when local storage explicitly contains the persisted `WX ON` opt-in (`'1'`). When opted in, observations refresh after five minutes or 25 km of aircraft movement, fail transparent when unavailable or clear, and stop on exit or disable. `WX OFF` governs atmospheric rendering only: the briefing still fetches source-backed Nominatim, headline, and Open-Meteo local-information data, aborting and replacing any in-flight request when the selected aircraft changes. No weather effect runs in map mode and no synthetic fallback is shown. Under `GEV_NONCOMMERCIAL_SOURCES=off` (the hosted deployment) there is no Open-Meteo at all: no `WX` toggle, no cloud pass, and a Local Info page with the place and position only (2026-09-22 note at the top).
 - **Cockpit trail visibility:** entering cockpit hides the selected aircraft's trail body and head so they cannot cross the first-person view; exit restores them. This cockpit-only presentation change does not alter the normal map-mode invariant that aircraft trails render through terrain using their depth-fail material.
 - **Aircraft course slew:** civilian and military 3D models retain the 60°/s course limiter, but each rendered frame can consume at most 250 ms of accumulated slew time. A long tile/render stall therefore catches up over multiple visible frames instead of turning one delayed frame into a heading snap.
 - **Manual-first cockpit briefing:** the right-side Live Signals / Regional News / Local Info carousel does not advance automatically on page load. Previous, Next, and direct page controls remain available; the visible `CYCLE OFF` / `CYCLE ON` toggle explicitly starts or stops the nine-second page cycle, which still pauses on hover/focus and while collapsed, hidden, or outside cockpit mode. Live signal data continues refreshing in either state.

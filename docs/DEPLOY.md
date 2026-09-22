@@ -829,6 +829,48 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
   rest without waiting:
   `ssh box 'docker exec gev rm -rf /app/.gev-cache/first-run-ab'`.
 
+## Sources a commercial deployment may not use
+
+Some free sources are free for non-commercial use only. A clone run for
+yourself is that use; a hosted site run by a company is not. One variable turns
+all of them off at once:
+
+```sh
+# in /opt/gev/.env
+GEV_NONCOMMERCIAL_SOURCES=off
+```
+
+Unset (or `on`) keeps them, which is the open-source default; any other value
+turns them off, so a typo errs on the licence's side. The list lives in
+`src/nonCommercialSources.js`, one line per source. Today it holds one:
+
+| Source | Why | What the switch removes |
+| --- | --- | --- |
+| Open-Meteo (free API) | [Terms](https://open-meteo.com/en/terms): “You may only use the free API services for non-commercial purposes.” | The weather of the cockpit's Local Info page, the `WX` toggle and its cloud pass, and the Open-Meteo line of the Data attribution popover. `/api/regional-brief` answers `weatherStatus: "off"` and never calls Open-Meteo; `/api/weather-effects` answers `{"status":"off"}` without a fetch. |
+
+Google News RSS, whose terms also say personal, non-commercial use
+([`DATA_SOURCES.md`](../DATA_SOURCES.md)), is **not** on the list yet: adding
+it is one line in that file plus the check in the news fetch.
+
+- **Switching it on** (no rebuild — the variable is read per request; `up -d`
+  recreates the container so it reads the edited `.env`):
+
+  ```sh
+  ssh -t box 'cd /opt/gev && cp .env .env.bak-$(date +%F)-noncommercial && $EDITOR .env && docker compose up -d'
+  ```
+
+- **Checking it:**
+
+  ```sh
+  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo"]
+  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo"]
+  curl -s 'https://<your-host>/api/weather-effects?latitude=48.86&longitude=2.35' | jq .status   # "off"
+  ```
+
+  `[]` means the variable did not reach the container, or the live deploy
+  predates the switch; `null` means the deploy predates it.
+- **Rolling back:** remove the line and `docker compose up -d`.
+
 ## Opening the origin to the public
 
 `GEV_ACCESS_PASSWORD` is the only thing between the open internet and a set of
