@@ -17,7 +17,8 @@
  *  11b. OSM mapped cameras — viewport-bounded, cached camera positions (opt-in)
  *  12. Regional briefing — cached place, weather, and recent location-matched news
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
- *      (12 and 13 drop Open-Meteo under GEV_NONCOMMERCIAL_SOURCES=off — src/nonCommercialSources.js)
+ *      (12 and 13 drop Open-Meteo, and 12 Google News, under GEV_NONCOMMERCIAL_SOURCES=off
+ *      — src/nonCommercialSources.js)
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
  *  16. transport.data.gouv.fr — French GTFS-RT live vehicle positions (PAN)
@@ -21850,23 +21851,32 @@ async function fetchRegionalPlace(point) {
   return normalizeRegionalPlace(payload);
 }
 
-async function fetchRegionalNews(place) {
+/**
+ * The cockpit's regional headlines: Google News RSS first, GDELT when it fails
+ * or is empty. `googleNewsOn: false` is a deployment that may not use Google
+ * News (GEV_NONCOMMERCIAL_SOURCES=off, src/nonCommercialSources.js — its terms
+ * allow personal, non-commercial use only): no RSS request at all, and GDELT,
+ * whose terms allow commercial use with a citation, is the only source.
+ */
+async function fetchRegionalNews(place, { googleNewsOn = true } = {}) {
   const query = place?.locality || place?.region || place?.country;
   if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
-  const rssParams = new URLSearchParams({
-    q: String(query).replace(/["\\]/g, ' ').trim(),
-    hl: 'en-US',
-    gl: 'US',
-    ceid: 'US:en',
-  });
-  try {
-    const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
-      headers: { 'User-Agent': 'Surplomb/0.1' },
-      timeoutMs: 12_000,
+  if (googleNewsOn) {
+    const rssParams = new URLSearchParams({
+      q: String(query).replace(/["\\]/g, ' ').trim(),
+      hl: 'en-US',
+      gl: 'US',
+      ceid: 'US:en',
     });
-    const articles = normalizeRssArticles(xml, 5);
-    if (articles.length) return { status: 'ready', query, articles, source: 'Google News RSS' };
-  } catch { /* fall through to the existing free index */ }
+    try {
+      const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
+        headers: { 'User-Agent': 'Surplomb/0.1' },
+        timeoutMs: 12_000,
+      });
+      const articles = normalizeRssArticles(xml, 5);
+      if (articles.length) return { status: 'ready', query, articles, source: 'Google News RSS' };
+    } catch { /* fall through to the existing free index */ }
+  }
   const params = new URLSearchParams({
     query: `"${String(query).replace(/["\\]/g, ' ').trim()}"`,
     mode: 'artlist',
@@ -21881,7 +21891,9 @@ async function fetchRegionalNews(place) {
       timeoutMs: 12_000,
     });
     const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT fallback' };
+    // Named for what it is on this deployment: a fallback beside Google News,
+    // the one source where Google News is off.
+    return { status: articles.length ? 'ready' : 'empty', query, articles, source: googleNewsOn ? 'GDELT fallback' : 'GDELT' };
   } catch {
     return { status: 'unavailable', query, articles: [], source: null };
   }
@@ -21921,6 +21933,7 @@ export function regionalBriefPayload({
   place = null,
   weather = null,
   weatherOn = true,
+  googleNewsOn = true,
   news,
   retrievedAt = new Date().toISOString(),
 }) {
@@ -21936,23 +21949,26 @@ export function regionalBriefPayload({
     newsStatus: news.status,
     newsQuery: news.query,
     newsSource: news.source,
+    // `off` where this deployment may not use Google News: the page then names
+    // GDELT alone as the headline source, even if its `/api/trial` read failed.
+    googleNewsStatus: googleNewsOn ? 'on' : 'off',
     articles: news.articles,
   };
 }
 
 function regionalBriefProxy() {
-  async function refresh(point, key, weatherOn) {
+  async function refresh(point, key, { weatherOn, googleNewsOn }) {
     const [placeResult, weatherResult] = await Promise.allSettled([
       fetchRegionalPlace(point),
       weatherOn ? fetchRegionalWeather(point) : null,
     ]);
     const place = placeResult.status === 'fulfilled' ? placeResult.value : null;
     const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
-    const news = await fetchRegionalNews(place);
+    const news = await fetchRegionalNews(place, { googleNewsOn });
     if (!regionalBriefHasAnySource({ place, weather, news })) {
       throw new Error('All regional briefing sources unavailable');
     }
-    const payload = regionalBriefPayload({ point, place, weather, weatherOn, news });
+    const payload = regionalBriefPayload({ point, place, weather, weatherOn, googleNewsOn, news });
     // A place missing only because Nominatim's pacer was full is not kept:
     // the next look at this cell asks again rather than reading "unavailable"
     // for five minutes.
@@ -21983,10 +21999,12 @@ function regionalBriefProxy() {
         return;
       }
       // Read per request, and part of the cache key: a brief cached with the
-      // weather in it must never answer a deployment that has switched it off.
+      // weather or Google News headlines in it must never answer a deployment
+      // that has switched them off.
       const weatherOn = isSourceOn('open-meteo', process.env);
+      const googleNewsOn = isSourceOn('google-news', process.env);
       const cell = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
-      const key = weatherOn ? cell : `${cell}:no-weather`;
+      const key = `${cell}${weatherOn ? '' : ':no-weather'}${googleNewsOn ? '' : ':no-google-news'}`;
       const now = Date.now();
       const cached = _regionalBriefCache.get(key);
       if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_CACHE_MS) {
@@ -21997,7 +22015,7 @@ function regionalBriefProxy() {
       const request = coalesceProxyRequest(
         _regionalBriefInFlight,
         key,
-        () => runForVisitor(req, () => refresh(point, key, weatherOn)),
+        () => runForVisitor(req, () => refresh(point, key, { weatherOn, googleNewsOn })),
       );
       try {
         const { value: payload, refusal } = await request.promise;

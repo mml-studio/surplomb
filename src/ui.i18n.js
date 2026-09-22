@@ -32,6 +32,11 @@ export default defineMessages({
       newsKicker: { fr: 'ACTUALITÉS RÉGIONALES', en: 'REGIONAL NEWS' },
       newsSubtitle: { fr: 'DERNIERS ARTICLES SITUÉS ICI', en: 'LATEST LOCATION-MATCHED REPORTING' },
       newsSource: { fr: 'GOOGLE NEWS RSS · REQUÊTE PAR LIEU · RÉCENT', en: 'GOOGLE NEWS RSS · LOCATION QUERY · RECENT' },
+      newsSourceGdeltOnly: {
+        fr: 'GDELT · REQUÊTE PAR LIEU · RÉCENT',
+        en: 'GDELT · LOCATION QUERY · RECENT',
+        note: 'Regional News source line on a deployment that does not use Google News (GEV_NONCOMMERCIAL_SOURCES=off).',
+      },
       localKicker: { fr: 'INFOS LOCALES', en: 'LOCAL INFO' },
       localSubtitle: { fr: 'LIEU / CONDITIONS / POSITION', en: 'PLACE / CONDITIONS / POSITION' },
       localSource: { fr: 'OPENSTREETMAP · OPEN-METEO · UTC', en: 'OPENSTREETMAP · OPEN-METEO · UTC' },

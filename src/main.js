@@ -568,8 +568,10 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // The sources this deployment does not use (GEV_NONCOMMERCIAL_SOURCES —
     // src/nonCommercialSources.js), read from the boot's one `/api/trial`
     // answer. A clone, or a failed read, changes nothing. Without Open-Meteo
-    // the cockpit loses its WX toggle and weather readings, and the popover
-    // the attribution for data it can no longer show.
+    // the cockpit loses its WX toggle and weather readings; without Google
+    // News its headlines name GDELT alone; and the popover drops the
+    // attribution for data it can no longer show. The layers a switched-off
+    // source feeds are withheld further down, once the panel exists.
     void trialProbe.read().then((probe) => {
       // Before the early return: on a clone this is what opens the anonymous
       // Esri endpoint, and it waits for this answer like everything else.
@@ -581,6 +583,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
         cockpitCloudEffects.setSourceAvailable(false);
         styleManager.cockpitView?.setWeatherAvailable(false);
       }
+      if (off.has('google-news')) styleManager.cockpitView?.setGoogleNewsAvailable(false);
     });
 
     // The 3D globe, bought on the reader's first close rest rather than on

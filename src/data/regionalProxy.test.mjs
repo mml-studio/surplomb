@@ -123,6 +123,22 @@ test('a brief without weather is partial where weather was due, and complete whe
   assert.equal(full.weatherStatus, 'ready');
   assert.deepEqual(Object.keys(full), [
     'status', 'retrievedAt', 'coordinates', 'place', 'placeStatus', 'weather',
-    'weatherStatus', 'newsStatus', 'newsQuery', 'newsSource', 'articles',
+    'weatherStatus', 'newsStatus', 'newsQuery', 'newsSource', 'googleNewsStatus', 'articles',
   ]);
+  assert.equal(full.googleNewsStatus, 'on');
+});
+
+test('a brief says when this deployment may not use Google News', () => {
+  const news = { status: 'ready', query: 'Bordeaux', articles: [], source: 'GDELT' };
+  const payload = regionalBriefPayload({
+    point: { latitude: 44.84, longitude: -0.58 },
+    place: { label: 'Bordeaux' },
+    weather: { temperatureC: 18 },
+    googleNewsOn: false,
+    news,
+    retrievedAt: '2026-09-22T08:00:00.000Z',
+  });
+  assert.equal(payload.googleNewsStatus, 'off');
+  assert.equal(payload.newsSource, 'GDELT');
+  assert.equal(payload.status, 'ready', 'GDELT alone is a complete news source');
 });
