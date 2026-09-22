@@ -19,7 +19,13 @@ import {
   encodeCoverage,
   normalizeCoverageMode,
 } from './mobileCoverage.js';
-import { paintCoverageRgba, coverageCodeAt, coverageOverzoomSource } from './mobileCoverageImagery.js';
+import { coverageOverzoomSource } from './mobileCoverageImagery.js';
+import {
+  COVERAGE_TILE_EDGE,
+  coverageTileCode,
+  decodeCoverageRgba,
+  paintCoverageTile,
+} from './mobileCoverageTile.js';
 import {
   LAYER_STATE_VERSION,
   createDefaultLayerState,
@@ -87,15 +93,19 @@ test('the draped table is the same ramp at the drape’s one alpha, lighter than
 
 test('painting decoded pixels uses the code in R and leaves sea transparent whatever its code', () => {
   const lut = coverageLut('orange');
-  const pixels = new Uint8ClampedArray([
+  const rgba = new Uint8ClampedArray(COVERAGE_TILE_EDGE * COVERAGE_TILE_EDGE * 4);
+  rgba.set([
     encodeCoverage([0, 3, 3, 3]), 0, 0, 255, // Orange absent → rung 0
     encodeCoverage([3, 0, 0, 0]), 0, 0, 255, // Orange very good → bare
     encodeCoverage([0, 0, 0, 0]), 0, 0, 0, //   sea → bare
   ]);
-  assert.equal(coverageCodeAt(pixels, 0, 0), encodeCoverage([0, 3, 3, 3]));
-  paintCoverageRgba(pixels, lut);
-  assert.deepEqual([...pixels.slice(0, 4)], [0xf0, 0x28, 0x7a, Math.round(COVERAGE_ALPHA * 255)]);
-  assert.deepEqual([...pixels.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
+  const tile = decodeCoverageRgba(rgba);
+  assert.equal(coverageTileCode(tile, 0, 0), encodeCoverage([0, 3, 3, 3]));
+  assert.equal(coverageTileCode(tile, 2, 0), null);
+  const out = paintCoverageTile(tile, lut, new Uint32Array(COVERAGE_TILE_EDGE * COVERAGE_TILE_EDGE));
+  const bytes = new Uint8Array(out.buffer);
+  assert.deepEqual([...bytes.slice(0, 4)], [0xf0, 0x28, 0x7a, Math.round(COVERAGE_ALPHA * 255)]);
+  assert.deepEqual([...bytes.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
 });
 
 test('a tile past the finest zoom magnifies the quarter of its zoom-12 ancestor that it covers', () => {
