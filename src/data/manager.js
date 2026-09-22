@@ -3406,26 +3406,28 @@ export class DataLayerManager {
   /**
    * Switch ONE member of a fused row, as its chip or its tile in the key asks.
    *
-   * Fire-and-forget on purpose: the caller is a click handler, and the panel
-   * repaints from the lifecycle events either way.
+   * Fire-and-forget for a click handler, which the panel repaints after from
+   * the lifecycle events either way; the promise it returns settles once the
+   * press is done with — briefing answered, layer switched — for a caller that
+   * has to know what came of it.
    * @param {string} layerId The member layer.
+   * @returns {Promise<void>|undefined}
    */
   _toggleFusionMember(layerId) {
-    if (!layerId || !this.layers.has(layerId)) return;
+    if (!layerId || !this.layers.has(layerId)) return undefined;
     const turningOn = !this.isEnabled(layerId);
     // Only ON is briefed. Interrupting somebody who is switching a layer
     // OFF to explain what it was would be the most annoying card in the
     // app, and they have already seen whatever it had to say.
     if (turningOn && this._shouldBriefCoverage(layerId)) {
-      void this._runCoverageBriefing(layerId);
-      return;
+      return this._runCoverageBriefing(layerId);
     }
     // The dimmed chip's tooltip ends "cliquer pour y aller", and a
     // promise made in a tooltip is still a promise. A territorial layer
     // with no briefing copy keeps it by flying — switched on first, so
     // its data is in hand as the camera lands.
     const destination = turningOn ? this._coverageFlightFor(layerId) : null;
-    this.setEnabled(layerId, turningOn, { origin: 'user' })
+    return this.setEnabled(layerId, turningOn, { origin: 'user' })
       .then(() => {
         if (!destination) return;
         return this._coverageBriefingHandler?.flyTo?.(destination);
@@ -3483,10 +3485,16 @@ export class DataLayerManager {
       this.setLayerParams(layerId, tile.on, { origin: 'user' });
       return;
     }
-    // Off: the layer comes on showing the pressed part alone.
+    // Off: the layer comes on showing the pressed part alone — unless the
+    // reader turns down the briefing a layer off its territory opens with, in
+    // which case it stays off with the params the row lights it with.
     const alone = Object.assign({}, ...parts.filter((entry) => entry !== tile).map((entry) => entry.off), tile.on);
     this.setLayerParams(layerId, alone, { origin: 'user' });
-    this._toggleFusionMember(layerId);
+    Promise.resolve(this._toggleFusionMember(layerId))
+      .then(() => {
+        if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
+      })
+      .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
   }
 
   /**
@@ -4660,6 +4668,10 @@ export class DataLayerManager {
         // one. `pattern: 'hatch'` draws the patch the way the map draws that
         // class — stripes of the full colour over its translucent fill.
         if (item.swatch === 'area' && !item.glyph) swatch.className += ' is-area';
+        // A LINE IS KEYED BY A STROKE: a route drawn as a hairline over the sea
+        // reads as that route only if its swatch is one, not a dot — which is
+        // what the landing points beside it are.
+        else if (item.swatch === 'line' && !item.glyph) swatch.className += ' is-line';
         const hatched = item.pattern === 'hatch' && Boolean(item.color) && !item.glyph;
         if (hatched) {
           swatch.className += ' is-hatched';

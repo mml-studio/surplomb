@@ -6,7 +6,8 @@
  * dead-zone mode restored FROM THE SHARE LINK (`lo=an.c.z`), then checks what
  * a reader would see:
  *
- *   1. the coverage block of the key, « Sans 4G » lit, and the row's own tile;
+ *   1. the coverage block of the key, « Sans 4G » lit, and both tiles of the
+ *      antennas' layer — « Antennes » and « Couverture 4G » — lit;
  *   2. an imagery layer on the globe (`getStats().coverage.drawn`);
  *   3. tiles fetched from `/tiles/mobile-coverage/…`, never from `/api`, and
  *      none of them a 404 (the client reads the meta's index before asking);
@@ -15,7 +16,9 @@
  *      decoded and recoloured.
  *
  * Then switches to Orange through `setParams`, as the chip does, and checks the
- * layer swapped. Screenshots go to `qa-shots/mobile-coverage/`.
+ * layer swapped; reads a ground card and a mast card; and last, presses the
+ * « Antennes » tile off and checks the coverage is drawn alone, with no mast.
+ * Screenshots go to `qa-shots/mobile-coverage/`.
  *
  * `--photoreal` runs the same checks on Google's mesh instead of the globe:
  * the coverage draped on the tileset (`coverage.draped`), the magenta on the
@@ -122,7 +125,10 @@ async function coverageState(page) {
       // segments instead of the five chips it had on the row.
       segments: (block?.legendSegments || []).map((segment) => ({ label: segment.label, active: segment.active })),
       subSegments: (block?.legendSubSegments || []).map((segment) => segment.label),
-      tile: document.querySelector('.map-legend-tile[data-tile-layer="anfr-fr"]')?.getAttribute('aria-pressed') ?? null,
+      tile: document.querySelector('.map-legend-tile[data-tile-part="masts"]')?.getAttribute('aria-pressed') ?? null,
+      coverageTile: document.querySelector('.map-legend-tile[data-tile-part="coverage"]')?.getAttribute('aria-pressed') ?? null,
+      enabled: window.__godsEyeView.dataManager.isEnabled('anfr-fr'),
+      masts: module.getStats?.().count ?? null,
       // The masts' classes and the coverage's, in the order the key prints them.
       legend: [...controls.legend, ...(block?.legend || [])].map((entry) => entry.label),
       note: block?.note ?? null,
@@ -178,6 +184,7 @@ async function main() {
       state.segments.length === 2 && state.segments[0].active === true,
       state.segments.map((segment) => `${segment.label}:${segment.active}`).join(' '));
     check('the Antennes tile in the key is lit', state.tile === 'true', String(state.tile));
+    check('and so is the Couverture 4G tile', state.coverageTile === 'true', String(state.coverageTile));
     check('an imagery layer is on the globe', state.stats.drawn === true);
     if (PHOTOREAL) {
       const stack = await page.evaluate(() => window.__godsEyeView.mapStackController.getActiveId());
@@ -404,6 +411,29 @@ async function main() {
     await render(page, 10);
     await page.screenshot({ path: path.join(SHOTS_DIR, 'line-of-sight.png') });
     await railShot(page, path.join(SHOTS_DIR, 'rail-mast.png'));
+
+    // Lot 3 of the mock: the coverage is a tile of its own, and the dead zones
+    // read with no mast over them.
+    console.log('\nThe coverage alone');
+    await page.keyboard.press('Escape');
+    const pressTile = (part) => page.evaluate((which) => {
+      document.querySelector(`.map-legend-tile[data-tile-part="${which}"]`)?.click();
+    }, part);
+    await pressTile('masts');
+    await sleep(1_500);
+    await render(page, 20);
+    state = await coverageState(page);
+    check('with the Antennes tile out, the coverage is still drawn', state.enabled && state.stats.drawn === true,
+      JSON.stringify(state.stats));
+    check('and no mast is', state.masts === 0 && state.params.masts === false, `${state.masts} masts, ${JSON.stringify(state.params)}`);
+    check('the tiles say so', state.tile === 'false' && state.coverageTile === 'true', `${state.tile} ${state.coverageTile}`);
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'coverage-alone.png') });
+    await railShot(page, path.join(SHOTS_DIR, 'rail-coverage-alone.png'));
+    await pressTile('coverage');
+    await sleep(1_500);
+    state = await coverageState(page);
+    check('putting the last lit tile out switches the layer off, back to its masts',
+      !state.enabled && state.params.masts === true && state.params.coverage === 'off', JSON.stringify(state.params));
   } finally {
     await browser.close();
     console.log(`\n${failures ? `${failures} check(s) failed` : 'All checks passed'}`);

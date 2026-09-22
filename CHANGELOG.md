@@ -319,10 +319,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   draws on the map; the row in the Layers panel keeps its own toggle and no
   longer carries eight chips. The 4G coverage has its own block under the
   antennas, « Couverture 4G », with two choices, « Sans 4G » and « Par
-  opérateur » (then Orange, SFR, Bouygues or Free); pressing the lit choice
-  again removes the coverage. Where no operator has 4G — or, per operator,
+  opérateur » (then Orange, SFR, Bouygues or Free). Where no operator has 4G — or, per operator,
   where it has none — the ground is now hatched, on the map and in the key,
   so the dead zones no longer depend on telling two shades of pink apart.
+- **The 4G coverage has its own switch, and the dead zones can be read with no
+  antenna on them.** « Infrastructure numérique » now shows four tiles in the
+  key: Câbles, Data centers, Antennes and Couverture 4G. The coverage is lit
+  and put out on its own; with Antennes off, the map shows the dead zones
+  alone. « Sans 4G » and « Par opérateur » now only choose what it paints.
+  Shared links keep the choice, and links sent before keep their antennas.
+- **The submarine cables have a key and a card for each landing point.** The
+  key names the published route and the landing point in the colours the map
+  draws them, and says the routes are TeleGeography's schematic lines, not a
+  survey. Clicking a landing point — Lannion, Marseille — opens its card in the
+  key: the place, its country, and « Voir les N câbles associés » listing the
+  cables whose route reaches it. Every route is drawn in one cyan, and each
+  line of a cable now answers a click as that cable (two thirds of them did
+  not answer at all).
 - **A clicked antenna or dead-zone spot opens its card in the map key.** The
   globe keeps a small tag over the object — the town, or « Point sélectionné »
   — and the full card sits beside the key it is read against. An antenna

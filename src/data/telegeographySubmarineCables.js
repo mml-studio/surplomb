@@ -8,6 +8,15 @@ import {
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { pickAt } from './pickAt.js';
 import { SUBMARINE_CABLE_FILES, submarineCableUrl } from './submarineCableFiles.js';
+import { mapKeyCarriesSelection, watchMapKeyCarriesSelection } from './mapKeySelection.js';
+import {
+  cableKeyEntries,
+  cableKeyNote,
+  cablesAtLanding,
+  createCableRouteIndex,
+  landingCardLines,
+  landingSelectionPanel,
+} from './submarineCableKey.js';
 
 // TeleGeography submarine-cable data ships in the checkout for an out-of-the-
 // box experience. IMPORTANT: it is CC BY-NC-SA 3.0 (NonCommercial +
@@ -20,9 +29,29 @@ import { SUBMARINE_CABLE_FILES, submarineCableUrl } from './submarineCableFiles.
 const cableUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.cables);
 const landingPointUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.landingPoints);
 
-/** The cables' colour — also the lit colour of their tile in the key (layerFusions.js). */
+/**
+ * The cables' colour — every route, since the key names ONE colour for them —
+ * and the lit colour of their tile in the key (layerFusions.js).
+ */
 export const BASE_CABLE_COLOR = '#39d5ff';
-const BASE_LANDING_COLOR = '#8fffd2';
+/** The landing points' colour, keyed as « Point d'atterrissement ». */
+export const BASE_LANDING_COLOR = '#8fffd2';
+/** The clicked landing's tag or card, on its own protected overlay source. */
+export const CABLE_SELECTED_OVERLAY_SOURCE_ID = 'telegeography-submarine-cables-selected';
+/**
+ * How close, in CSS px, a click on a cable must land to a landing point to be
+ * read as a click on the landing. Every route ends ON a landing, so at a hub
+ * the lines cover the point: clicking Marseille's dot picked one of its 16
+ * cables and flew the camera to the middle of that cable's route.
+ */
+export const LANDING_CLICK_SLOP_PX = 14;
+const CABLE_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
+  cohortLimit: 1,
+  collisionCapacity: 1,
+  moving: false,
+});
+/** The layer id, as the key's close and the shell's repaint event name it. */
+const CABLE_LAYER_ID = 'telegeography-submarine-cables';
 const STEM_TARGET_PX = 66;
 const CABLE_REFERENCE_LABEL_MAX_DISTANCE_M = 9000000;
 /** Bounded nearest-visible cohort the layer offers the shared host. */
@@ -81,11 +110,14 @@ export default createTeleGeographySubmarineCableLayer();
  * cohort cap the shared host is offered.
  * @param {object[]} records Records annotated with `visible` and `distanceM`.
  * @param {number} [limit]
+ * @param {?object} [exclude] A record whose label is not offered — the clicked
+ *   landing, whose tag stands where its label would.
  * @returns {object[]}
  */
 export function selectCableReferenceLabelWinners(
   records,
   limit = CABLE_REFERENCE_LABEL_WINNER_CAP,
+  exclude = null,
 ) {
   const cap = Math.max(0, Math.min(
     CABLE_REFERENCE_LABEL_WINNER_CAP,
@@ -94,6 +126,7 @@ export function selectCableReferenceLabelWinners(
   if (!Array.isArray(records) || cap === 0) return [];
   return records
     .filter((record) => record?.visible === true
+      && record !== exclude
       && record.label
       && Number.isFinite(record.distanceM)
       && record.distanceM <= CABLE_REFERENCE_LABEL_MAX_DISTANCE_M)
@@ -157,6 +190,41 @@ export function createCableOverlayEntry(record) {
     gapPx: 14,
     verticalOnly: true,
     placement: 'above',
+  };
+}
+
+/**
+ * The clicked landing on the globe, on its own protected source: its place
+ * alone as a tag while the map key carries its card, the whole card where the
+ * key cannot — on a phone, or with the key folded or hidden. Anchored on the
+ * landing's stem tip, where its ambient label stood (that label is withheld
+ * while it is selected).
+ * @param {{id: string}} landing
+ * @param {Cesium.Cartesian3} position
+ * @param {{title: string, details?: string[]}} copy
+ * @returns {object}
+ */
+export function createLandingSelectedOverlayEntry(landing, position, { title, details = [] }) {
+  return {
+    id: `landing-selected:${landing?.id || ''}`,
+    position,
+    variant: 'selected',
+    selected: true,
+    protected: true,
+    paintLane: 'selected',
+    collisionGroup: 'ambient-card',
+    priority: Number.MAX_SAFE_INTEGER,
+    title: String(title || ''),
+    details: Array.isArray(details) ? details : [],
+    accent: BASE_LANDING_COLOR,
+    interactive: false,
+    anchorRadiusPx: 9,
+    minAnchorGapPx: 11,
+    verticalOnly: true,
+    placement: 'above',
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
   };
 }
 
@@ -524,10 +592,18 @@ export function createTeleGeographySubmarineCableLayer({
   let _markerBlendInvariantWarned = false;
   let _pickByEntity = new WeakMap();
   let _referenceLabelCount = 0;
+  /** Every route, flattened for the landing join (`submarineCableKey.js`). */
+  let _cableIndex = [];
+  /** Landing feature id → its reference record, for the tip a tag stands on. */
+  let _landingRefById = new Map();
+  /** `{ id, name, tbd, lon, lat, cables, ref }` for the clicked landing, or null. */
+  let _selectedLanding = null;
+  let _unwatchKey = null;
   const _referenceSweepGate = createCableReferenceSweepGate({ now: sweepClock });
   const _overlayPublisher = createCableOverlayPublisher({ host: overlayHost });
   /** Reused winner→entry scratch so a 2 Hz sweep allocates no arrays. */
   const _publishScratch = [];
+  const _screenScratch = new Cesium.Cartesian2();
   /**
    * Last published cohort signature (ids + quantized priorities). A parked
    * camera reproduces the same winners every sweep; skipping the identical
@@ -648,22 +724,35 @@ export function createTeleGeographySubmarineCableLayer({
       _referenceRecords = [];
       _referenceById = new Map();
       _surfaceRecords = [];
+      _landingRefById = new Map();
+      _cableIndex = createCableRouteIndex(cableFeatures);
 
-      cableEntities.forEach((entity, index) => {
-        const feature = cableFeatures[index];
+      // ONE ENTITY PER LINE, NOT PER FEATURE. Every cable is a MultiLineString,
+      // and the GeoJSON loader makes an entity of each line (`id`, `id_2`, …):
+      // 1 913 entities for 712 features. Joined by position, the first 712 wore
+      // other cables' colours and names and the other 1 201 were unclickable.
+      // Joined by id, every line is its own cable's — and one reference stem is
+      // added per cable, at its first line.
+      const cableById = featuresById(cableFeatures);
+      const stemmed = new Set();
+      cableEntities.forEach((entity) => {
+        const feature = featureOfEntity(entity, cableById);
         const reference = featureReference(feature);
         if (!reference) return;
 
-        styleCableEntity(entity, feature);
+        styleCableEntity(entity);
         registerPickEntity(entity, {
           kind: 'cable',
           reference,
           label: featureLabel(feature),
         });
-        _surfaceRecords.push({
-          entity,
-          base: Cesium.Cartesian3.fromDegrees(reference.lon, reference.lat, 0),
-        });
+        // NOT a surface record: those are hidden when their reference point
+        // is past the horizon, and a cable's reference is the middle of its
+        // whole route — 2Africa's lies in the Arabian Sea, and hiding by it would take
+        // the line landing at Marseille off a view of France. The batched
+        // ground line is culled as a whole anyway.
+        if (stemmed.has(feature)) return;
+        stemmed.add(feature);
         addReferenceStem({
           reference,
           label: featureLabel(feature),
@@ -673,8 +762,9 @@ export function createTeleGeographySubmarineCableLayer({
         });
       });
 
-      landingEntities.forEach((entity, index) => {
-        const feature = landingFeatures[index];
+      const landingById = featuresById(landingFeatures);
+      landingEntities.forEach((entity) => {
+        const feature = featureOfEntity(entity, landingById);
         const reference = featureReference(feature);
         if (!reference) return;
 
@@ -683,6 +773,8 @@ export function createTeleGeographySubmarineCableLayer({
           kind: 'landing-point',
           reference,
           label: featureLabel(feature),
+          featureId: feature.id,
+          tbd: feature.properties?.is_tbd === true,
         });
         _surfaceRecords.push({
           entity,
@@ -733,12 +825,11 @@ export function createTeleGeographySubmarineCableLayer({
     _pickByEntity.set(entity, info);
   }
 
-  function styleCableEntity(entity, feature) {
+  function styleCableEntity(entity) {
     if (!entity?.polyline) return;
-    const color = feature?.properties?.color
-      ? Cesium.Color.fromCssColorString(String(feature.properties.color))
-      : cableColor;
-    entity.polyline.material = color.withAlpha(0.92);
+    // One colour for every route: the key names one. TeleGeography's own
+    // per-system colours (534 of them in the file) could not be keyed.
+    entity.polyline.material = cableColor.withAlpha(0.92);
     entity.polyline.width = 2.5;
     entity.polyline.clampToGround = true;
     entity.polyline.classificationType = _classificationType;
@@ -813,6 +904,7 @@ export function createTeleGeographySubmarineCableLayer({
       reference,
       label,
       featureId: feature?.id || feature?.properties?.id || null,
+      tbd: feature?.properties?.is_tbd === true,
     };
     const pointColor = color.withAlpha(kind === 'cable' ? 0.84 : 0.94);
     const stemColor = color.withAlpha(kind === 'cable' ? 0.58 : 0.68);
@@ -850,6 +942,7 @@ export function createTeleGeographySubmarineCableLayer({
       reference,
       kind,
       label: clampLabel(label),
+      info,
       visible: false,
       distanceM: Infinity,
       entry: null,
@@ -857,6 +950,7 @@ export function createTeleGeographySubmarineCableLayer({
     record.entry = createCableOverlayEntry(record);
     _referenceRecords.push(record);
     _referenceById.set(record.id, record);
+    if (kind === 'landing-point' && info.featureId) _landingRefById.set(info.featureId, record);
   }
 
   function updateReferenceVisibility() {
@@ -884,7 +978,11 @@ export function createTeleGeographySubmarineCableLayer({
         record.entity.show = visible;
       }
     }
-    const winners = selectCableReferenceLabelWinners(_referenceRecords);
+    const winners = selectCableReferenceLabelWinners(
+      _referenceRecords,
+      CABLE_REFERENCE_LABEL_WINNER_CAP,
+      _selectedLanding?.ref || null,
+    );
     let changed = winners.length !== _lastPublishedCount;
     for (let i = 0; i < winners.length; i++) {
       const record = winners[i];
@@ -921,7 +1019,8 @@ export function createTeleGeographySubmarineCableLayer({
       const picked = pickAt(viewer.scene, click.position);
       const record = resolvePickRecord(picked);
       if (record?.reference) {
-        flyToReference(viewer, record.reference);
+        const landing = record.kind === 'cable' ? landingNear(viewer, click.position) : null;
+        openReference(viewer, landing?.info || record);
         return;
       }
       // The label plane, which the depth buffer knows nothing about, resolved
@@ -932,8 +1031,125 @@ export function createTeleGeographySubmarineCableLayer({
         hitTest: overlayHost.hitTest,
       });
       const labelled = labelledId ? _referenceById.get(labelledId) : null;
-      if (labelled?.reference) flyToReference(viewer, labelled.reference);
+      if (labelled?.info?.reference) {
+        openReference(viewer, labelled.info);
+        return;
+      }
+      // Anywhere else — the sea, the ground, another layer's object — the
+      // landing card closes, as a click away closes every card in the key.
+      clearLandingSelection();
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  }
+
+  /**
+   * A landing opens its card; a cable still takes the camera to it, as it
+   * always has. The camera stays put for a landing: its card lists the cables
+   * that leave from it, and they are read from the view the reader clicked in.
+   */
+  function openReference(viewer, info) {
+    if (info.kind === 'landing-point') {
+      selectLanding(info);
+      return;
+    }
+    clearLandingSelection();
+    flyToReference(viewer, info.reference);
+  }
+
+  /**
+   * The drawn landing whose dot or stem tip is nearest a click, within
+   * {@link LANDING_CLICK_SLOP_PX}, or null. Only the landings the last sweep
+   * found this side of the horizon are measured.
+   */
+  function landingNear(viewer, windowPosition) {
+    const scene = viewer?.scene;
+    if (!scene?.cartesianToCanvasCoordinates || !windowPosition) return null;
+    let best = null;
+    let bestSq = LANDING_CLICK_SLOP_PX ** 2;
+    for (const record of _referenceRecords) {
+      if (record.kind !== 'landing-point' || !record.visible) continue;
+      for (const point of [record.base, record.tip]) {
+        const screen = scene.cartesianToCanvasCoordinates(point, _screenScratch);
+        if (!screen) continue;
+        const distanceSq = (screen.x - windowPosition.x) ** 2 + (screen.y - windowPosition.y) ** 2;
+        if (distanceSq <= bestSq) {
+          bestSq = distanceSq;
+          best = record;
+        }
+      }
+    }
+    return best;
+  }
+
+  function selectLanding(info) {
+    const id = String(info.featureId || info.label || '');
+    if (!id || !info.label) return;
+    const { lon, lat } = info.reference;
+    _selectedLanding = {
+      id,
+      name: info.label,
+      tbd: info.tbd === true,
+      lon,
+      lat,
+      cables: cablesAtLanding(_cableIndex, lon, lat),
+      ref: _landingRefById.get(id) || null,
+    };
+    // Its ambient label is withheld at the next sweep: the tag stands there.
+    resetPublishSignature();
+    _referenceSweepGate.markDirty();
+    publishSelectedLanding();
+    _unwatchKey?.();
+    _unwatchKey = watchMapKeyCarriesSelection(() => publishSelectedLanding(), mapKeyCarriesSelection());
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
+    announceSelectionChanged();
+    _viewer?.scene?.requestRender?.();
+  }
+
+  function publishSelectedLanding() {
+    const selected = _selectedLanding;
+    if (!selected) return;
+    const position = selected.ref?.tip || Cesium.Cartesian3.fromDegrees(selected.lon, selected.lat, 2500);
+    const copy = mapKeyCarriesSelection()
+      ? { title: landingSelectionPanel(selected, selected.cables)?.title || selected.name }
+      : landingCardLines(selected, selected.cables);
+    overlayHost.setVisible(CABLE_SELECTED_OVERLAY_SOURCE_ID, true);
+    overlayHost.setEntries(
+      CABLE_SELECTED_OVERLAY_SOURCE_ID,
+      [createLandingSelectedOverlayEntry(selected, position, copy)],
+      CABLE_SELECTED_OVERLAY_SOURCE_OPTIONS,
+    );
+    _viewer?.scene?.requestRender?.();
+  }
+
+  /** Close the landing card, wherever it is shown. @returns {boolean} Whether one was open. */
+  function clearLandingSelection() {
+    if (!_selectedLanding) return false;
+    _selectedLanding = null;
+    _unwatchKey?.();
+    _unwatchKey = null;
+    if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeyDown);
+    overlayHost.clearSource(CABLE_SELECTED_OVERLAY_SOURCE_ID);
+    overlayHost.setVisible(CABLE_SELECTED_OVERLAY_SOURCE_ID, false);
+    resetPublishSignature();
+    _referenceSweepGate.markDirty();
+    announceSelectionChanged();
+    _viewer?.scene?.requestRender?.();
+    return true;
+  }
+
+  function onKeyDown(event) {
+    if (event?.key === 'Escape') clearLandingSelection();
+  }
+
+  /**
+   * Ask the shell to repaint the key now rather than on its next pass. The
+   * literal is `LAYER_DRAW_CHANGED_EVENT` of `addressScanLayer.js`, as in
+   * `anfrFrance.js`.
+   */
+  function announceSelectionChanged() {
+    if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+    window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+      detail: { layerId: CABLE_LAYER_ID, selection: true },
+    }));
   }
 
   function resolvePickRecord(picked) {
@@ -1041,6 +1257,22 @@ export function createTeleGeographySubmarineCableLayer({
     for (const child of value) collectLonLat(child, out);
   }
 
+  function featuresById(features) {
+    const byId = new Map();
+    for (const feature of features) if (!byId.has(feature.id)) byId.set(feature.id, feature);
+    return byId;
+  }
+
+  /**
+   * The feature an entity was made from. The loader names an entity after its
+   * feature's `id`, and the second, third… line of a MultiLineString — or of
+   * a later feature with the same id — `id_2`, `id_3`.
+   */
+  function featureOfEntity(entity, byId) {
+    const id = String(entity?.id ?? '');
+    return byId.get(id) || byId.get(id.replace(/_\d+$/, '')) || null;
+  }
+
   function featureLabel(feature) {
     const props = feature?.properties || {};
     return String(props.name || props.id || feature?.id || '').trim();
@@ -1127,6 +1359,7 @@ export function createTeleGeographySubmarineCableLayer({
     },
 
     disable() {
+      clearLandingSelection();
       _enabled = false;
       updateVisibility();
       _overlayPublisher.hide();
@@ -1143,6 +1376,7 @@ export function createTeleGeographySubmarineCableLayer({
     },
 
     destroy(viewer) {
+      clearLandingSelection();
       if (_abort) _abort.abort();
       if (_cableDataSource && viewer) viewer.dataSources.remove(_cableDataSource, true);
       if (_landingDataSource && viewer) viewer.dataSources.remove(_landingDataSource, true);
@@ -1184,6 +1418,8 @@ export function createTeleGeographySubmarineCableLayer({
       _surfaceRecords = [];
       _pickByEntity = new WeakMap();
       _referenceLabelCount = 0;
+      _cableIndex = [];
+      _landingRefById = new Map();
       _publishScratch.length = 0;
       _markerBlendDone = false;
       _markerBlendInvariantWarned = false;
@@ -1199,7 +1435,37 @@ export function createTeleGeographySubmarineCableLayer({
         loadingLabel: _loadingLabel,
         error: _error,
         referenceLabelCount: _referenceLabelCount,
+        // The clicked landing, for the QA harness: which, and how many cables.
+        selectedLanding: _selectedLanding
+          ? { id: _selectedLanding.id, cables: _selectedLanding.cables.map((cable) => cable.name) }
+          : null,
       };
+    },
+
+    /**
+     * The cables' block of the map key: the route and the landing in the
+     * colours the map draws them, what the routes are, and the clicked
+     * landing's card (lot 3 of the approved mock, 2026-09-22). Nothing until
+     * the files are in: a key for lines not yet drawn would describe nothing.
+     */
+    getRowControls() {
+      if (!_loaded) return { chips: [], legend: [] };
+      const controls = {
+        chips: [],
+        legend: cableKeyEntries({ route: BASE_CABLE_COLOR, landing: BASE_LANDING_COLOR }),
+        note: cableKeyNote(),
+      };
+      if (_selectedLanding) controls.legendSelection = landingSelectionPanel(_selectedLanding, _selectedLanding.cables);
+      return controls;
+    },
+
+    /**
+     * The key's close on the landing card: the same dismissal as Escape, or as
+     * a click away.
+     * @returns {boolean} Whether there was a card to close.
+     */
+    clearSelectedCard() {
+      return clearLandingSelection();
     },
   };
 }

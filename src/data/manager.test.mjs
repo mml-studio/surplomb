@@ -4403,6 +4403,16 @@ test('the 4G coverage is a tile of its own: the antennas follow their two parts,
     coverage.focus();
     panel.mgr._refreshTogglePanel();
     assert.equal(globalThis.document.activeElement?.dataset.tilePart, 'coverage');
+
+    // Off its territory the layer opens with a briefing; turned down, it
+    // leaves the layer off with the params the row lights it with.
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    panel.mgr._shouldBriefCoverage = () => true;
+    panel.mgr._coverageBriefingHandler = { ask: async () => 'dismiss' };
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    assert.deepEqual(panel.antennaParams, { coverage: 'off', masts: true });
   } finally {
     await panel.restore();
   }
@@ -5735,6 +5745,40 @@ test('the shared-mobility key: a segmented control, an action line, and a press 
     // A neighbour that does not take the key is not asked to.
     mgr._offerParamsToRow('shared-mobility-fr', { kinds: 'velo' });
     assert.deepEqual(received, [{ operator: 'lime' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a route is keyed by a stroke, a point beside it by a dot', async () => {
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => Object.assign(makeControlElement(), { isFragment: true }),
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [
+      { label: 'Tracé publié', color: '#39d5ff', swatch: 'line' },
+      { label: 'Point d’atterrissement', color: '#8fffd2' },
+    ],
+  });
+  mgr.register(layer.module);
+  try {
+    mgr.buildTogglePanel(makeControlElement());
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+    const [route, landing] = collectByClass(items, 'map-legend-swatch');
+    assert.ok(route.className.includes('is-line'));
+    assert.equal(route.style.background, '#39d5ff');
+    assert.equal(landing.className, 'map-legend-swatch');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

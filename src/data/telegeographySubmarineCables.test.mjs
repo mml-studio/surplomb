@@ -8,6 +8,7 @@ import {
   CABLE_OVERLAY_COLLISION_CAPACITY,
   CABLE_OVERLAY_SOURCE_ID,
   CABLE_REFERENCE_LABEL_WINNER_CAP,
+  CABLE_SELECTED_OVERLAY_SOURCE_ID,
   CABLE_STEM_TIP_EPSILON_M,
   CABLE_SWEEP_MOTION_EPSILON_M,
   CABLE_SWEEP_MOTION_PROBE_INTERVAL_MS,
@@ -973,8 +974,9 @@ test('destroy mid-load stays clean and a re-enabled layer reloads exactly once',
   }
 });
 
-async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) {
+async function createRealCableLayerHarness({ mapStackEventTarget = null, cables = null, landings = null } = {}) {
   const hostCalls = [];
+  const clicks = [];
   // The sweep gate's motion-fallback clock is FROZEN here and advanced only by
   // the tests that exercise it, so every other harness test observes the pure
   // event-dirty behavior with no wall-clock coupling.
@@ -985,13 +987,14 @@ async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) 
       setEntries: (...args) => hostCalls.push(['entries', ...args]),
       clearSource: (...args) => hostCalls.push(['clear', ...args]),
     },
-    screenSpaceEventHandlerFactory: () => ({ setInputAction() {}, destroy() {} }),
+    screenSpaceEventHandlerFactory: () => ({ setInputAction(action) { clicks.push(action); }, destroy() {} }),
     mapStackEventTarget,
     sweepClock: () => clockMs,
   });
 
   const listeners = { preRender: new Set(), moveEnd: new Set() };
   const dataSources = [];
+  let picked = null;
   const viewer = {
     dataSources: {
       add: (source) => { dataSources.push(source); return Promise.resolve(source); },
@@ -1017,7 +1020,8 @@ async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) 
     scene: {
       canvas: { clientHeight: 900 },
       requestRender() {},
-      pick() { return null; },
+      pick() { return picked; },
+      cartesianToCanvasCoordinates: () => undefined,
       preRender: {
         addEventListener: (fn) => {
           listeners.preRender.add(fn);
@@ -1034,7 +1038,7 @@ async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) 
   globalThis.fetch = async (url) => ({
     ok: true,
     json: async () => (String(url).includes('landing-point')
-      ? {
+      ? landings || {
         type: 'FeatureCollection',
         features: [
           {
@@ -1045,7 +1049,7 @@ async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) 
           },
         ],
       }
-      : {
+      : cables || {
         type: 'FeatureCollection',
         features: [
           {
@@ -1076,7 +1080,13 @@ async function createRealCableLayerHarness({ mapStackEventTarget = null } = {}) 
     for (const fn of listeners.preRender) fn();
   };
   const advanceClock = (ms) => { clockMs += ms; };
-  return { layer, viewer, hostCalls, dataSources, raiseSweep, listeners, advanceClock };
+  /** Click with the scene answering `pick` as given; returns once handled. */
+  const click = (pick) => {
+    picked = pick;
+    for (const action of clicks) action({ position: { x: 10, y: 10 } });
+    picked = null;
+  };
+  return { layer, viewer, hostCalls, dataSources, raiseSweep, listeners, advanceClock, click };
 }
 
 test('a real enabled cable layer publishes host entries and has zero native labels', async () => {
@@ -1261,4 +1271,118 @@ test('an unchanged cohort never republishes, so a parked camera stays governor-i
   assert.equal(publishCount(), 3, 're-enable republishes after the hide cleared the source');
 
   env.layer.destroy(env.viewer);
+});
+
+test('every line of a multi-line cable is its own cable’s: one colour, pickable, one stem per cable', async () => {
+  const env = await createRealCableLayerHarness({
+    cables: {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 'two-lines', name: 'Two Lines', color: '#ff0000' },
+          geometry: { type: 'MultiLineString', coordinates: [[[-40, 35], [-30, 40]], [[-30, 40], [-20, 45]]] },
+        },
+        {
+          type: 'Feature',
+          properties: { id: 'one-line', name: 'One Line', color: '#00ff00' },
+          geometry: { type: 'MultiLineString', coordinates: [[[-10, 40], [-5, 42]]] },
+        },
+      ],
+    },
+  });
+  try {
+    const cables = env.dataSources.find((ds) => ds.name === 'TeleGeography Submarine Cables');
+    const lines = cables.entities.values;
+    assert.equal(lines.length, 3, 'the loader makes an entity of each line');
+    // Joined by position, the third line had no feature at all, and the
+    // second wore the other cable's name.
+    assert.deepEqual(lines.map((entity) => entity.__gevTeleGeography?.label), ['Two Lines', 'Two Lines', 'One Line']);
+    for (const entity of lines) {
+      assert.equal(entity.polyline.material.color.getValue().toCssHexString().slice(0, 7), '#39d5ff', 'one colour, the key’s');
+    }
+    const references = env.dataSources.find((ds) => /References/.test(ds.name || '')).entities.values;
+    assert.equal(references.filter((entity) => entity.__gevTeleGeography.kind === 'cable').length, 2);
+  } finally {
+    env.layer.destroy(env.viewer);
+  }
+});
+
+test('the cables key their route and their landing, and nothing before the files are in', async () => {
+  const layer = createTeleGeographySubmarineCableLayer({
+    screenSpaceEventHandlerFactory: () => ({ setInputAction() {}, destroy() {} }),
+  });
+  assert.deepEqual(layer.getRowControls(), { chips: [], legend: [] });
+  const env = await createRealCableLayerHarness();
+  try {
+    const controls = env.layer.getRowControls();
+    assert.deepEqual(controls.legend, [
+      { label: 'Tracé publié', color: '#39d5ff', swatch: 'line' },
+      { label: 'Point d’atterrissement', color: '#8fffd2' },
+    ]);
+    assert.match(controls.note, /^Tracés schématiques de TeleGeography/);
+    assert.equal(controls.legendSelection, undefined);
+  } finally {
+    env.layer.destroy(env.viewer);
+  }
+});
+
+test('a clicked landing prints its card in the key and keeps a tag on the globe; the close clears both', async () => {
+  const env = await createRealCableLayerHarness({
+    cables: {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: { id: 'lisbon-madeira', name: 'Lisbon–Madeira' },
+        geometry: { type: 'MultiLineString', coordinates: [[[-9.1, 38.7], [-16.9, 32.6]]] },
+      }],
+    },
+  });
+  try {
+    env.raiseSweep();
+    const references = env.dataSources.find((ds) => /References/.test(ds.name || '')).entities.values;
+    const landing = references.find((entity) => entity.__gevTeleGeography.kind === 'landing-point');
+    const cable = references.find((entity) => entity.__gevTeleGeography.kind === 'cable');
+    env.hostCalls.length = 0;
+    const flights = [];
+    env.viewer.camera.flyTo = (options) => flights.push(options);
+
+    env.click({ id: landing });
+    assert.deepEqual(flights, [], 'a landing opens its card and leaves the camera where it is');
+    assert.deepEqual(env.layer.getStats().selectedLanding, { id: 'lisbon', cables: ['Lisbon–Madeira'] });
+    const card = env.layer.getRowControls().legendSelection;
+    assert.equal(card.title, 'Lisbon');
+    assert.deepEqual(card.meta, ['Point d’atterrissement · Portugal']);
+    assert.equal(card.list.summary, 'Voir le câble associé');
+    // No `document` here, so the key is not on screen: the globe gets the
+    // whole card, on its own protected source.
+    const [, sourceId, entries] = env.hostCalls.filter(([type]) => type === 'entries').at(-1);
+    assert.equal(sourceId, CABLE_SELECTED_OVERLAY_SOURCE_ID);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].title, 'Lisbon');
+    assert.deepEqual(entries[0].details, ['Point d’atterrissement · Portugal', '1 câble arrive ici', 'Lisbon–Madeira']);
+    assert.equal(entries[0].protected, true);
+
+    // Its ambient label is withheld while its tag stands there.
+    env.raiseSweep();
+    const ambient = env.hostCalls.filter(([type, id]) => type === 'entries' && id === CABLE_OVERLAY_SOURCE_ID).at(-1);
+    assert.deepEqual(ambient[2].map((entry) => entry.title), ['Lisbon–Madeira']);
+
+    assert.equal(env.layer.clearSelectedCard(), true);
+    assert.equal(env.layer.getStats().selectedLanding, null);
+    assert.equal(env.layer.getRowControls().legendSelection, undefined);
+    assert.ok(env.hostCalls.some(([type, id]) => type === 'clear' && id === CABLE_SELECTED_OVERLAY_SOURCE_ID));
+    assert.equal(env.layer.clearSelectedCard(), false, 'nothing left to close');
+
+    // A cable still takes the camera to it, and a click on nothing closes the card.
+    env.click({ id: landing });
+    env.click({ id: cable });
+    assert.equal(flights.length, 1);
+    assert.equal(env.layer.getStats().selectedLanding, null);
+    env.click({ id: landing });
+    env.click(null);
+    assert.equal(env.layer.getStats().selectedLanding, null);
+  } finally {
+    env.layer.destroy(env.viewer);
+  }
 });
