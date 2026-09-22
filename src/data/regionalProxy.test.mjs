@@ -7,6 +7,7 @@ import createViteConfig, {
   LL2_CACHE_TTL_MS,
   readResponseJsonCapped,
   regionalBriefHasAnySource,
+  regionalBriefPayload,
   validMilitaryInstallationBox,
   validRegionalPoint,
 } from '../../vite.config.js';
@@ -96,4 +97,32 @@ test('regional brief treats an all-source outage as total failure', () => {
     weather: null,
     news: { status: 'unavailable' },
   }), true);
+});
+
+test('a brief without weather is partial where weather was due, and complete where it is switched off', () => {
+  const point = { latitude: 44.84, longitude: -0.58 };
+  const place = { label: 'Bordeaux' };
+  const news = { status: 'ready', query: 'Bordeaux', articles: [], source: 'Google News RSS' };
+  const retrievedAt = '2026-09-22T08:00:00.000Z';
+
+  const missing = regionalBriefPayload({ point, place, weather: null, news, retrievedAt });
+  assert.equal(missing.status, 'partial');
+  assert.equal(missing.weatherStatus, 'unavailable');
+
+  const off = regionalBriefPayload({ point, place, weather: null, weatherOn: false, news, retrievedAt });
+  assert.equal(off.status, 'ready');
+  assert.equal(off.weatherStatus, 'off');
+  assert.equal(off.weather, null);
+
+  // Even handed a reading, a switched-off deployment does not pass it on.
+  const leaked = regionalBriefPayload({ point, place, weather: { temperatureC: 18 }, weatherOn: false, news, retrievedAt });
+  assert.equal(leaked.weather, null);
+
+  const full = regionalBriefPayload({ point, place, weather: { temperatureC: 18 }, news, retrievedAt });
+  assert.equal(full.status, 'ready');
+  assert.equal(full.weatherStatus, 'ready');
+  assert.deepEqual(Object.keys(full), [
+    'status', 'retrievedAt', 'coordinates', 'place', 'placeStatus', 'weather',
+    'weatherStatus', 'newsStatus', 'newsQuery', 'newsSource', 'articles',
+  ]);
 });
