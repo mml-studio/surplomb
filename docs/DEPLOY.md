@@ -11,9 +11,9 @@ Two consequences shape everything below:
 1. **A reachable origin is a spendable wallet.** `/api/realtime/token` and
    `/api/google/nearby-places` cost real money per call. Set
    `GEV_ACCESS_PASSWORD` before the URL exists, not after.
-2. **`GOOGLE_MAPS_API_KEY` and `CESIUM_ION_TOKEN` are inlined at build time**
-   (the `define` block in `vite.config.js`), so they must be present when the
-   image is built, not only when it runs.
+2. **`GOOGLE_MAPS_API_KEY`, `CESIUM_ION_TOKEN` and `ARCGIS_API_KEY` are
+   inlined at build time** (the `define` block in `vite.config.js`), so they
+   must be present when the image is built, not only when it runs.
 
 ## Deploy your own
 
@@ -929,11 +929,12 @@ GEV_NONCOMMERCIAL_SOURCES=off
 
 Unset (or `on`) keeps them, which is the open-source default; any other value
 turns them off, so a typo errs on the licence's side. The list lives in
-`src/nonCommercialSources.js`, one line per source. Today it holds one:
+`src/nonCommercialSources.js`, one line per source. Today it holds two:
 
 | Source | Why | What the switch removes |
 | --- | --- | --- |
 | Open-Meteo (free API) | [Terms](https://open-meteo.com/en/terms): “You may only use the free API services for non-commercial purposes.” | The weather of the cockpit's Local Info page, the `WX` toggle and its cloud pass, and the Open-Meteo line of the Data attribution popover. `/api/regional-brief` answers `weatherStatus: "off"` and never calls Open-Meteo; `/api/weather-effects` answers `{"status":"off"}` without a fetch. |
+| Esri World Imagery, anonymous endpoint (`services.arcgisonline.com`) | Esri staff, for this URL: “as is stated in the terms of use, this service is not available for commercial use” ([Esri Community](https://community.esri.com/t5/arcgis-location-platform-developers-ques/inquiry-about-world-imagery/td-p/1569266)). | The satellite beyond France under the Satellite stack becomes Sentinel-2 cloudless 2016 (10 m), unless the build has an ArcGIS key — [below](#the-satellite-beyond-france-an-arcgis-location-platform-key). The browser fetches these tiles itself, so the page is the check: it never asks the endpoint unless `/api/trial` positively allows it, even before that answer has arrived. |
 
 Google News RSS, whose terms also say personal, non-commercial use
 ([`DATA_SOURCES.md`](../DATA_SOURCES.md)), is **not** on the list yet: adding
@@ -949,14 +950,75 @@ it is one line in that file plus the check in the news fetch.
 - **Checking it:**
 
   ```sh
-  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo"]
-  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo"]
+  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo","esri-world-imagery"]
+  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo","esri-world-imagery"]
   curl -s 'https://<your-host>/api/weather-effects?latitude=48.86&longitude=2.35' | jq .status   # "off"
   ```
 
   `[]` means the variable did not reach the container, or the live deploy
   predates the switch; `null` means the deploy predates it.
 - **Rolling back:** remove the line and `docker compose up -d`.
+
+### The satellite beyond France: an ArcGIS Location Platform key
+
+Without a key, a deployment with `GEV_NONCOMMERCIAL_SOURCES=off` draws
+Sentinel-2 cloudless beyond France: 10 m, cities and coastlines but no
+buildings. `ARCGIS_API_KEY` puts back the same Esri World Imagery a clone
+shows, through ArcGIS Location Platform, which licenses it for commercial use
+and bills it per tile: **2 million basemap tiles free a month, then $0.15 per
+1,000, no subscription** ([pricing](https://location.arcgis.com/pricing/)).
+The page sends the key with each tile, from the visitor's browser, so it is
+public like the Google browser key: what protects it is the referrer list and
+the one privilege it carries. A visit costs roughly 100-800 tiles (measured
+2026-09-22; the base sleeps wherever IGN covers the view), so 1,000 visits a
+month stay inside the free tier.
+
+1. **Account.** Sign up at <https://location.arcgis.com> (free). Leave
+   **pay-as-you-go off**, which is the default: “when you disable
+   pay-as-you-go, your account will no longer have privileges to […] services
+   in which you have exceeded the free tier” ([billing
+   help](https://location.arcgis.com/help/billing/)). That makes the free tier
+   a hard ceiling; past it the tiles stop and the globe falls back to
+   Sentinel-2 on its own. Esri documents no budget alert, so this switch is
+   the spending limit.
+2. **New key.** Dashboard → **My portal** → **Content** → **My content** →
+   **New item** → **Developer credentials** → **API key credentials** →
+   **Next**.
+3. **Public application**, then **No item access**.
+4. **Privileges: Location services → Basemaps** (`premium:user:basemaps`)
+   and nothing else.
+5. **Expiration** up to one year from today — write the date down, the globe
+   loses the layer the day it passes. **Referrers:** one line per public
+   hostname, each with its scheme — `https://surplomb.app` and every other
+   name in `GEV_PUBLIC_HOST`. Esri: “The expiration date and referrers of an
+   access token cannot be changed without invalidating the token.”
+6. **Save**, choose **Generate the API key**, and copy it: Esri shows it once.
+7. **Build it in.** It is a build argument, and the box's compose file does
+   not update itself ([above](#the-compose-file-does-not-update-itself)):
+
+   ```sh
+   scp deploy/vps/docker-compose.yml box:/opt/gev/
+   ssh -t box 'cd /opt/gev && cp .env .env.bak-$(date +%F)-arcgis && $EDITOR .env'   # add ARCGIS_API_KEY=<key>
+   ssh box 'cd /opt/gev && docker compose up -d --build --force-recreate'
+   ```
+
+8. **Check.** The bundle carries the key (one file name back; nothing means
+   the build did not see it), and the globe says so:
+
+   ```sh
+   ssh box 'docker exec gev sh -c "grep -rl \"\$ARCGIS_API_KEY\" /app/dist/assets | head -1"'
+   ```
+
+   Open the globe on the Satellite map over the Atlantic: the bottom-left
+   credit reads “Powered by Esri · Source: Esri, Vantor, Earthstar
+   Geographics, and the GIS User Community”, and the Data attribution popover
+   names ArcGIS Location Platform. A wrong key does **not** show on the globe
+   — on 2026-09-22 Esri's CDN answered tiles to a made-up token — so the proof
+   is the Location Platform dashboard, which counts basemap tiles the next day.
+
+Rotating the key is steps 2 to 8 again; removing it is removing the line and
+the same rebuild. `npm run qa:world-imagery-licence -- --url <host> --expect
+licensed` checks a build in a browser.
 
 ## Opening the origin to the public
 

@@ -230,6 +230,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **The Sentinel-2 satellite base painted the Americas, Asia, southern Africa
+  and Australia as white land.** It used EOX's 2017 release, which covers
+  Europe, North Africa and the Middle East only; it went unseen while it only
+  stood in for a failed Esri. It is now the 2016 release — also CC BY 4.0, and
+  the one that covers the whole world, at the same 10 m detail.
 - **Under a tilted camera the energy ratings, sales and other address layers
   answered for the blocks at the top of the screen, not the one in the
   middle.** They scanned around the point where the centre of the screen meets
@@ -287,6 +292,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The satellite beyond France no longer comes from Esri's anonymous
+  endpoint on a commercial deployment.** Esri says of
+  `services.arcgisonline.com` that “this service is not available for
+  commercial use”. It is now the second source `GEV_NONCOMMERCIAL_SOURCES=off`
+  turns off: the page never asks it there, not even before `/api/trial` has
+  answered, and the world under the Satellite stack becomes Sentinel-2
+  cloudless (10 m: cities and coastlines, not buildings). A build with
+  `ARCGIS_API_KEY` draws the same Esri World Imagery through ArcGIS Location
+  Platform instead, licensed and billed per tile (2 million free a month, then
+  $0.15 per 1,000; no subscription), with “Powered by Esri” on screen while it
+  is drawn. The key is inlined at build time like the Google browser key;
+  `docs/DEPLOY.md` says how to create and restrict it. A clone without a key
+  and without the switch is unchanged. The “Data attribution” popover now
+  names only the world bases this page can draw, and
+  `npm run qa:world-imagery-licence` checks the network log in a browser.
 - **A commercial deployment can switch off the sources licensed for
   non-commercial use only, and Open-Meteo is the first.** Open-Meteo's free
   API terms say “You may only use the free API services for non-commercial
