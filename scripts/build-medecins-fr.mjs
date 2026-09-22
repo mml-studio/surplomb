@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Build `src/data/local_data/medecins_fr/medecins.json` — every place in France
- * where a doctor holds a conventioned practice, and the best coordinate anyone
- * can derive for it.
+ * Build the doctors pack — every place in France where a doctor holds a
+ * conventioned practice, the best coordinate anyone can derive for it, and the
+ * named practitioners at each.
  *
  * WHY THIS SCRIPT EXISTS: **the national register of doctors has no
  * coordinates, and the geocoded copies in circulation are a decade old.**
@@ -117,8 +117,23 @@
  * dots that never show a name. Line N ↔ `sites[N]` means a byte-offset index
  * stays trivial the day the card is served by a proxy.
  *
+ * ── Where they go, and why the names never go into the repository ──────────
+ *
+ * By default both land in `.gev-cache/medecins-fr/pack/` (`GEV_MEDECINS_PACK_DIR`),
+ * the deployment's own cache volume, where the proxy prefers them to the
+ * repository's copy. The hosted box rebuilds them weekly (docs/DEPLOY.md), so
+ * a correction made at Ameli reaches the map within a week, and the names
+ * are filtered through the same suppression list the proxy applies
+ * (`GEV_MEDECINS_SUPPRESS`) — a list that exists and cannot be read stops
+ * the build. See `src/data/medecinsNames.js` for why.
+ *
+ * `--repo` refreshes the repository's name-free `medecins.json.gz` instead,
+ * and writes no names file at all: the pack it writes declares
+ * `praticiens: null`, so nothing lying beside it is ever paired with it.
+ *
  * Usage:
- *   npm run medecins:registry
+ *   npm run medecins:registry                    # the pair, into the cache volume
+ *   npm run medecins:registry -- --repo          # the name-free pack, into src/
  *   npm run medecins:registry -- --report        # full precision + coverage audit
  *   npm run medecins:registry -- --refresh       # re-download, ignore the cache
  *   npm run medecins:registry -- --no-cds        # PS file only, skip centres de santé
@@ -128,6 +143,7 @@
  *   npm run medecins:registry -- --plain         # write the two outputs uncompressed
  */
 
+import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -144,9 +160,20 @@ import {
   readFinessRow,
   splitSemicolonRow,
 } from '../src/data/amenitiesFeed.js';
+import {
+  addressNamesPractitioner,
+  buildSuppressionIndex,
+  medecinsRuntimePaths,
+  parseSuppressionList,
+  withoutSuppressed,
+} from '../src/data/medecinsNames.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_OUT = path.join(ROOT, 'src', 'data', 'local_data', 'medecins_fr', 'medecins.json');
+const RUNTIME = medecinsRuntimePaths(ROOT, process.env, path);
+/** The deployment's pair. Never inside `src/`: see the header. */
+const DEFAULT_OUT = path.join(RUNTIME.packDir, 'medecins.json');
+/** The repository's name-free pack, written by `--repo`. */
+const REPO_OUT = path.join(ROOT, 'src', 'data', 'local_data', 'medecins_fr', 'medecins.json');
 const CACHE_DIR = path.join(ROOT, '.gev-cache', 'medecins-fr');
 const USER_AGENT = 'surplomb/0.1 (+https://github.com/mml-studio/surplomb)';
 
@@ -304,7 +331,12 @@ async function fetchApl(args) {
   const resource = candidates[0];
   const stamp = String(resource.last_modified).slice(0, 10);
 
-  const file = await cachedDownload(resource.url, `apl-medecins-generalistes-${stamp}.xlsx`, args);
+  const file = await cachedDownload(
+    resource.url,
+    `apl-medecins-generalistes-${stamp}.xlsx`,
+    args,
+    /^apl-medecins-generalistes-.+\.xlsx$/,
+  );
   const buffer = await fsp.readFile(file);
 
   const years = listXlsxSheets(buffer)
@@ -661,7 +693,10 @@ async function verifyAgainstCnam(rollup, namesBySpecialty, specialtyLabels) {
 }
 
 function parseArgs(argv) {
-  const args = { out: DEFAULT_OUT, report: false, refresh: false, cds: true, apl: true, praticiens: false, verifier: false, plain: false };
+  const args = {
+    out: DEFAULT_OUT, names: true, report: false, refresh: false, cds: true, apl: true,
+    praticiens: false, verifier: false, plain: false,
+  };
   for (const arg of argv.slice(2)) {
     if (arg === '--report') args.report = true;
     else if (arg === '--refresh') args.refresh = true;
@@ -670,6 +705,7 @@ function parseArgs(argv) {
     else if (arg === '--verifier') args.verifier = true;
     else if (arg === '--plain') args.plain = true;
     else if (arg === '--praticiens') args.praticiens = true;
+    else if (arg === '--repo') { args.out = REPO_OUT; args.names = false; }
     else if (arg.startsWith('--out=')) args.out = path.resolve(arg.slice('--out='.length));
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -710,7 +746,16 @@ async function resolveAmeliResources() {
   };
 }
 
-async function cachedDownload(url, name, { refresh }) {
+/**
+ * Download once, keep in `.gev-cache/medecins-fr/`.
+ *
+ * `family` matches the OTHER editions of a dated file, which go once the new
+ * one has landed. A weekly rebuild names each register file by its date, and
+ * without this the volume would keep a copy of every edition — about 52 a
+ * year, each with every doctor's name in it, which is precisely the kind of
+ * stale copy the weekly rebuild exists to stop keeping.
+ */
+async function cachedDownload(url, name, { refresh }, family = null) {
   await fsp.mkdir(CACHE_DIR, { recursive: true });
   const file = path.join(CACHE_DIR, name);
   if (!refresh) {
@@ -726,6 +771,11 @@ async function cachedDownload(url, name, { refresh }) {
   const body = Buffer.from(await response.arrayBuffer());
   await fsp.writeFile(file, body);
   process.stderr.write(` ${(body.length / 1e6).toFixed(1)} MB\n`);
+  if (family) {
+    for (const other of await fsp.readdir(CACHE_DIR)) {
+      if (other !== name && family.test(other)) await fsp.rm(path.join(CACHE_DIR, other), { force: true });
+    }
+  }
   return file;
 }
 
@@ -735,27 +785,44 @@ async function cachedDownload(url, name, { refresh }) {
  * appear around whole fields in both, but `""` escapes are handled because a
  * practice named `SELARL "LES TILLEULS"` would otherwise shift every column
  * after it silently.
+ *
+ * Each row is handed to `onRow` as it ends, and a field is copied out of the
+ * text in RUNS (`slice`) rather than one character at a time. Both are about
+ * memory, and the hosted box is why: appending character by character builds
+ * each field as a rope of one-character strings, and holding every row as an
+ * array before turning it into an object kept the whole register twice. On
+ * the 156 MB file of 2026-09-21 the build died of heap exhaustion at 2 GB
+ * that way; see the README for what it needs now.
  */
-function parseCsv(text, delimiter) {
-  const rows = [];
-  let field = '';
+function forEachCsvRow(text, delimiter, onRow) {
   let row = [];
+  let field = '';
   let quoted = false;
+  // Start of the run of ordinary characters not yet copied into `field`.
+  let run = 0;
+  const flush = (end) => { if (end > run) field += text.slice(run, end); };
   for (let i = 0; i < text.length; i += 1) {
     const char = text[i];
     if (quoted) {
-      if (char !== '"') { field += char; continue; }
-      if (text[i + 1] === '"') { field += '"'; i += 1; continue; }
+      if (char !== '"') continue;
+      flush(i);
+      if (text[i + 1] === '"') { field += '"'; i += 1; run = i + 1; continue; }
       quoted = false;
+      run = i + 1;
       continue;
     }
-    if (char === '"') { quoted = true; continue; }
-    if (char === delimiter) { row.push(field); field = ''; continue; }
-    if (char === '\n') { row.push(field); rows.push(row); row = []; field = ''; continue; }
-    if (char === '\r') continue;
-    field += char;
+    if (char === '"') { flush(i); quoted = true; run = i + 1; continue; }
+    if (char === delimiter) { flush(i); row.push(field); field = ''; run = i + 1; continue; }
+    if (char === '\n') { flush(i); row.push(field); onRow(row); row = []; field = ''; run = i + 1; continue; }
+    if (char === '\r') { flush(i); run = i + 1; }
   }
-  if (field.length || row.length) { row.push(field); rows.push(row); }
+  flush(text.length);
+  if (field.length || row.length) { row.push(field); onRow(row); }
+}
+
+function parseCsv(text, delimiter) {
+  const rows = [];
+  forEachCsvRow(text, delimiter, (row) => { rows.push(row); });
   return rows;
 }
 
@@ -919,11 +986,16 @@ async function readRegister(file, delimiter = ';') {
   // The register ships a UTF-8 BOM; left in place it becomes part of the first
   // header name and `ps_activite_nom` is never found again.
   const text = (await fsp.readFile(file, 'utf8')).replace(/^﻿/, '');
-  const rows = parseCsv(text, delimiter);
-  const header = rows.shift();
-  return rows
-    .filter((cells) => cells.length === header.length)
-    .map((cells) => Object.fromEntries(header.map((key, index) => [key, cells[index]])));
+  const rows = [];
+  let header = null;
+  forEachCsvRow(text, delimiter, (cells) => {
+    if (!header) { header = cells; return; }
+    if (cells.length !== header.length) return;
+    const row = {};
+    for (let index = 0; index < header.length; index += 1) row[header[index]] = cells[index];
+    rows.push(row);
+  });
+  return rows;
 }
 
 /** `01000` → `01`, `97400` → `974`, `98000` → `980`. */
@@ -1034,6 +1106,31 @@ async function banGeocode(rows, { columns, postcode = null, label }) {
   throw new Error(`BAN ${label}: ${lastError?.message ?? 'échec'}`);
 }
 
+/**
+ * One BAN batch, cached against the exact request it answers.
+ *
+ * The file name says WHICH batch (pass and position); the key says WHAT was
+ * asked. Sites are numbered in the register's own order, so batch 3 of next
+ * week's edition holds other addresses under the same ids, and a cache keyed on
+ * the name alone hands last week's coordinates to this week's ids — every
+ * practice silently moved, and nothing on the map to say so. A key that does
+ * not match is a miss.
+ */
+async function cachedBanGeocode(name, rows, options, { refresh }) {
+  await fsp.mkdir(path.join(CACHE_DIR, 'ban'), { recursive: true });
+  const cacheFile = path.join(CACHE_DIR, 'ban', `${name}.json`);
+  const key = createHash('sha256')
+    .update(JSON.stringify([rows, options.columns, options.postcode ?? null]))
+    .digest('hex');
+  if (!refresh) {
+    const cached = await fsp.readFile(cacheFile, 'utf8').then(JSON.parse).catch(() => null);
+    if (cached?.key === key && Array.isArray(cached.results)) return cached.results;
+  }
+  const results = await banGeocode(rows, options);
+  await fsp.writeFile(cacheFile, JSON.stringify({ key, results }), 'utf8');
+  return results;
+}
+
 function chunk(items, size) {
   const out = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -1079,14 +1176,12 @@ async function geocodeSites(sites, { refresh }) {
     const placed = [];
     const batches = chunk(pending, BAN_CHUNK_ROWS);
     for (const [index, batch] of batches.entries()) {
-      const cacheFile = path.join(CACHE_DIR, 'ban', `${name}-${String(index).padStart(2, '0')}.json`);
-      let results = null;
-      if (!refresh) results = await fsp.readFile(cacheFile, 'utf8').then(JSON.parse).catch(() => null);
-      if (!results) {
-        const rows = [header, ...batch.map((site) => build(site))];
-        results = await banGeocode(rows, { columns, postcode, label: `${name}#${index}` });
-        await fsp.writeFile(cacheFile, JSON.stringify(results), 'utf8');
-      }
+      const results = await cachedBanGeocode(
+        `${name}-${String(index).padStart(2, '0')}`,
+        [header, ...batch.map((site) => build(site))],
+        { columns, postcode, label: `${name}#${index}` },
+        { refresh },
+      );
       for (const result of results) {
         const site = byId.get(result.id);
         if (!site || site.position) continue;
@@ -1227,18 +1322,15 @@ async function repairMisplaced(placed, communeIndex, { refresh }) {
   }
   if (!suspects.length) return { suspects: 0, regeocoded: 0, demoted: 0 };
 
-  await fsp.mkdir(path.join(CACHE_DIR, 'ban'), { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, 'ban', 'repair-00.json');
-  let results = null;
-  if (!refresh) results = await fsp.readFile(cacheFile, 'utf8').then(JSON.parse).catch(() => null);
-  if (!results) {
-    const rows = [
+  const results = await cachedBanGeocode(
+    'repair-00',
+    [
       ['id', 'voie', 'ville', 'dep'],
       ...suspects.map(({ site }) => [site.id, site.voie, site.ville, site.departement]),
-    ];
-    results = await banGeocode(rows, { columns: ['voie', 'ville'], postcode: null, label: 'repair' });
-    await fsp.writeFile(cacheFile, JSON.stringify(results), 'utf8');
-  }
+    ],
+    { columns: ['voie', 'ville'], postcode: null, label: 'repair' },
+    { refresh },
+  );
 
   const byId = new Map(suspects.map((entry) => [entry.site.id, entry]));
   let regeocoded = 0;
@@ -1310,7 +1402,12 @@ async function main() {
   process.stderr.write(`  PS  ${resources.ps.modified?.slice(0, 10)} (${(resources.ps.bytes / 1e6).toFixed(0)} MB)\n`);
   process.stderr.write(`  CDS ${resources.cds.modified?.slice(0, 10)} (${(resources.cds.bytes / 1e6).toFixed(1)} MB)\n`);
 
-  const psFile = await cachedDownload(resources.ps.url, `liste-ps-${resources.ps.modified?.slice(0, 10)}.csv`, args);
+  const psFile = await cachedDownload(
+    resources.ps.url,
+    `liste-ps-${resources.ps.modified?.slice(0, 10)}.csv`,
+    args,
+    /^liste-ps-.+\.csv$/,
+  );
   const psRows = await readRegister(psFile);
   const medecinCodes = medecinSpecialtyCodes(psRows);
 
@@ -1385,7 +1482,12 @@ async function main() {
 
   let cdsRows = 0;
   if (args.cds) {
-    const cdsFile = await cachedDownload(resources.cds.url, `liste-cds-${resources.cds.modified?.slice(0, 10)}.csv`, args);
+    const cdsFile = await cachedDownload(
+      resources.cds.url,
+      `liste-cds-${resources.cds.modified?.slice(0, 10)}.csv`,
+      args,
+      /^liste-cds-.+\.csv$/,
+    );
     for (const row of await readRegister(cdsFile)) {
       if (!medecinCodes.has(row.specialite_code)) continue;
       const cp = row.coordonnees_code_postal.trim();
@@ -1486,6 +1588,19 @@ async function main() {
 
   if (args.report) printReport(sites, specialtyLabels);
 
+  // A name travels in the names file and nowhere else — see
+  // `addressNamesPractitioner` for the one address line that broke that rule.
+  // Masked AFTER geocoding, which needed the line as the register wrote it.
+  let maskedAddressLines = 0;
+  for (const site of sites) {
+    if (!addressNamesPractitioner(site.voie, site.praticiens.map(([name]) => name))) continue;
+    site.voie = '';
+    maskedAddressLines += 1;
+  }
+  if (maskedAddressLines) {
+    process.stderr.write(`\n${maskedAddressLines} address line(s) naming a doctor of that site, masked\n`);
+  }
+
   const document = {
     generated: new Date().toISOString().slice(0, 10),
     source: {
@@ -1528,6 +1643,9 @@ async function main() {
       precision: Object.fromEntries(
         PRECISION.map((key) => [key, placed.filter((site) => site.position.precision === key).length]),
       ),
+      // Address lines emptied because they carried the name of a doctor of
+      // that site — 1 on the 2026-08-17 edition.
+      voiesMasquees: maskedAddressLines,
     },
     precision: PRECISION,
     specialites: specialtyLabels,
@@ -1624,31 +1742,6 @@ async function main() {
       .map((site) => [site.cp, site.ville, site.voie, [...site.specialites].reduce((n, [, c]) => n + c, 0)]),
   };
 
-  await fsp.mkdir(path.dirname(args.out), { recursive: true });
-  /**
-   * Both outputs ship GZIPPED, and that is a size decision with a measured
-   * price. Plain they are 8.93 MB + 7.25 MB = **16.18 MB in the repository**,
-   * larger than every other file in it put together; gzipped they are 3.67 MB,
-   * **4.4× less**. What that costs at runtime is **15 ms of `gunzipSync` at
-   * the proxy's first request**, once per process — against 12.5 MB on every
-   * clone, every CI checkout and every container image.
-   *
-   * `--plain` writes them uncompressed for anyone who wants to grep the
-   * dataset; the proxy reads whichever of the two it finds.
-   */
-  const write = async (file, text) => {
-    if (args.plain) {
-      await fsp.rm(`${file}.gz`, { force: true });
-      await fsp.writeFile(file, text, 'utf8');
-      return (await fsp.stat(file)).size;
-    }
-    await fsp.rm(file, { force: true });
-    await fsp.writeFile(`${file}.gz`, zlib.gzipSync(Buffer.from(text, 'utf8'), { level: 9 }));
-    return (await fsp.stat(`${file}.gz`)).size;
-  };
-
-  const bytes = await write(args.out, `${JSON.stringify(document)}\n`);
-
   /**
    * The named practitioners, in a SECOND file, one line per site.
    *
@@ -1663,17 +1756,78 @@ async function main() {
    * and that is not the same statement as "no doctors here", which is why the
    * site's own `[[specialite, n]]` tally counts those rows and this file does
    * not.
+   *
+   * The suppression list is applied HERE too, not only by the proxy, so the
+   * file on the volume does not hold the names of people who objected. The
+   * site counts keep them: they are the register's arithmetic and name nobody.
+   * The pack then declares the file's sha256, which is what lets the proxy
+   * refuse a names file that belongs to another build.
    */
-  const praticiensPath = path.join(path.dirname(args.out), 'praticiens.jsonl');
-  const praticiensBytes = await write(
-    praticiensPath,
-    `${placed.map((site) => JSON.stringify(site.praticiens)).join('\n')}\n`,
-  );
-  process.stderr.write(
-    `${path.relative(ROOT, praticiensPath)}${args.plain ? '' : '.gz'} — `
-    + `${placed.reduce((n, site) => n + site.praticiens.length, 0)} praticiens nommés sur ${placed.length} lignes, `
-    + `${(praticiensBytes / 1024 / 1024).toFixed(1)} MB\n`,
-  );
+  let namesText = null;
+  let suppressed = 0;
+  if (args.names) {
+    const listText = await fsp.readFile(RUNTIME.suppressPath, 'utf8').catch((error) => {
+      if (error?.code === 'ENOENT') return '';
+      // Fail closed, like the proxy: a build that cannot read the list must
+      // not write the names of the people on it. The previous pair stays.
+      throw new Error(`suppression list ${RUNTIME.suppressPath} unreadable: ${error?.message || error}`);
+    });
+    const suppression = buildSuppressionIndex(parseSuppressionList(listText));
+    const lines = placed.map((site, index) => {
+      const kept = withoutSuppressed(site.praticiens, document.sites[index], suppression);
+      suppressed += site.praticiens.length - kept.length;
+      return JSON.stringify(kept);
+    });
+    namesText = `${lines.join('\n')}\n`;
+    document.praticiens = {
+      lignes: lines.length,
+      sha256: createHash('sha256').update(namesText, 'utf8').digest('hex'),
+    };
+    if (suppression.size) {
+      process.stderr.write(`\nsuppression list: ${suppression.size} entry(ies), ${suppressed} practitioner entry(ies) left out\n`);
+    }
+  } else {
+    // Built without names: nothing lying beside this pack belongs to it.
+    document.praticiens = null;
+  }
+
+  await fsp.mkdir(path.dirname(args.out), { recursive: true });
+  /**
+   * Both outputs ship GZIPPED, and that is a size decision with a measured
+   * price. Plain they are 8.93 MB + 7.25 MB = **16.18 MB**; gzipped they are
+   * 3.67 MB, **4.4× less**. What that costs at runtime is **15 ms of
+   * `gunzipSync` at the proxy's first request**, once per process.
+   *
+   * `--plain` writes them uncompressed for anyone who wants to grep the
+   * dataset; the proxy reads whichever of the two it finds.
+   *
+   * Each file is written beside its target and RENAMED into place, the pack
+   * first. The proxy re-reads the pair while it serves, so it must never see a
+   * half-written file; and between the two renames it sees a new pack whose
+   * declared digest does not match the old names file, which it recognises
+   * and sits out on the pair it already has.
+   */
+  const write = async (file, text) => {
+    const target = args.plain ? file : `${file}.gz`;
+    const body = args.plain ? Buffer.from(text, 'utf8') : zlib.gzipSync(Buffer.from(text, 'utf8'), { level: 9 });
+    const partial = `${target}.partial-${process.pid}`;
+    await fsp.writeFile(partial, body);
+    await fsp.rename(partial, target);
+    await fsp.rm(args.plain ? `${file}.gz` : file, { force: true });
+    return body.length;
+  };
+
+  const bytes = await write(args.out, `${JSON.stringify(document)}\n`);
+
+  if (namesText !== null) {
+    const praticiensPath = path.join(path.dirname(args.out), 'praticiens.jsonl');
+    const praticiensBytes = await write(praticiensPath, namesText);
+    process.stderr.write(
+      `${path.relative(ROOT, praticiensPath)}${args.plain ? '' : '.gz'} — `
+      + `${placed.reduce((n, site) => n + site.praticiens.length, 0) - suppressed} praticiens nommés sur ${placed.length} lignes, `
+      + `${(praticiensBytes / 1024 / 1024).toFixed(1)} MB\n`,
+    );
+  }
 
   if (args.praticiens) {
     const file = path.join(CACHE_DIR, 'praticiens.csv');

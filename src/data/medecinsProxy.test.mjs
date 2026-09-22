@@ -228,6 +228,21 @@ test('a weekly rebuild is picked up, and the moment between its two renames keep
   assert.deepEqual(card.body.praticiens.map((entry) => entry[0]), ['ROUSSELIN ANNE NEW']);
 });
 
+test('a names file lying beside a pack built without names is never paired with it', async (t) => {
+  const dirs = await fixture(t);
+  // What a clone that still had the old untracked file would look like: the
+  // repository's pack declares `praticiens: null`, the file sits beside it.
+  await fsp.mkdir(dirs.repoDir, { recursive: true });
+  await fsp.writeFile(
+    path.join(dirs.repoDir, 'medecins.json.gz'),
+    zlib.gzipSync(`${JSON.stringify({ ...packDocument(SITES), praticiens: null })}\n`),
+  );
+  await fsp.writeFile(path.join(dirs.repoDir, 'praticiens.jsonl.gz'), zlib.gzipSync(namesText()));
+  const handler = handlerFor(dirs);
+  const { body: status } = await get(handler, '/status');
+  assert.deepEqual(status.names, { available: false, reason: 'undeclared' });
+});
+
 test('no pack anywhere is a 503, not a crash', async (t) => {
   const dirs = await fixture(t);
   const handler = handlerFor(dirs);

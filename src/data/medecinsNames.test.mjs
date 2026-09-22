@@ -82,8 +82,11 @@ test('a names file pairs with its pack by digest, or by line count for the 2026-
   assert.deepEqual(pairPractitioners({ declared, lines: 3, siteCount: 3, digest: 'abc' }), { ok: true, reason: null });
   assert.deepEqual(pairPractitioners({ declared, lines: 3, siteCount: 3, digest: 'def' }), { ok: false, reason: 'digest' });
   assert.deepEqual(pairPractitioners({ declared, lines: 4, siteCount: 4, digest: 'abc' }), { ok: false, reason: 'line-count' });
-  assert.deepEqual(pairPractitioners({ declared: null, lines: 3, siteCount: 3 }), { ok: true, reason: null });
-  assert.deepEqual(pairPractitioners({ declared: null, lines: 2, siteCount: 3 }), { ok: false, reason: 'line-count' });
+  // The 2026-09-01 pack declares nothing: the line count is all it has.
+  assert.deepEqual(pairPractitioners({ lines: 3, siteCount: 3 }), { ok: true, reason: null });
+  assert.deepEqual(pairPractitioners({ lines: 2, siteCount: 3 }), { ok: false, reason: 'line-count' });
+  // A pack built without names says so, and nothing lying beside it is its.
+  assert.deepEqual(pairPractitioners({ declared: null, lines: 3, siteCount: 3 }), { ok: false, reason: 'undeclared' });
   assert.deepEqual(pairPractitioners({ declared, lines: 0, siteCount: 3 }), { ok: false, reason: 'absent' });
 });
 

@@ -7145,7 +7145,7 @@ async function readMedecinsPair(source) {
   if (source.practitioners) {
     buffer = await readMedecinsArtifact(source.practitioners.file);
     spans = medecinsLineSpans(buffer);
-    const declared = pack.praticiens ?? null;
+    const declared = pack.praticiens;
     const verdict = pairPractitioners({
       declared,
       lines: spans.length,

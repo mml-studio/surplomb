@@ -63,7 +63,7 @@ export function medecinsRuntimePaths(root, env, pathApi) {
 
 /**
  * Fold a name to what two spellings of the same person share: no accents, no
- * case, no punctuation. `Dupont-Lefèvre Hélène` and `DUPONT LEFEVRE HELENE`
+ * case, no punctuation. `Surname-Lefèvre Hélène` and `SURNAME LEFEVRE HELENE`
  * are the same entry; the register writes the second.
  */
 export function foldPractitionerName(value) {
@@ -78,9 +78,9 @@ export function foldPractitionerName(value) {
 /**
  * The comparison key of a name: its folded words, in alphabetical order.
  *
- * ORDER-BLIND, because an objection arrives as "Dr Jean Dupont" and the
- * register writes `DUPONT JEAN`. WORD-EXACT, because `DUPONT JEAN PIERRE` is
- * somebody else: a list that swept every name containing `DUPONT JEAN` would
+ * ORDER-BLIND, because an objection arrives as "Dr Jean Surname" and the
+ * register writes `SURNAME JEAN`. WORD-EXACT, because `SURNAME JEAN PIERRE` is
+ * somebody else: a list that swept every name containing `SURNAME JEAN` would
  * hide namesakes who asked for nothing.
  */
 export function practitionerNameKey(value) {
@@ -94,9 +94,9 @@ export function practitionerNameKey(value) {
  * narrowed to the postal codes that start with a prefix:
  *
  *     # 2026-09-22, objection received by email
- *     DUPONT JEAN
- *     MARTIN CLAIRE ; 75011
- *     DURAND PAUL ; 63
+ *     SURNAME FIRSTNAME
+ *     OTHERSURNAME FIRSTNAME ; 75011
+ *     THIRDSURNAME FIRSTNAME ; 63
  *
  * A malformed prefix does not narrow anything: the entry then applies
  * everywhere. Hiding a namesake too is the safe failure; showing the person
@@ -173,15 +173,18 @@ export function withoutSuppressed(practitioners, site, index) {
  *
  * Line N of `praticiens.jsonl` describes `sites[N]`, with no key to join on,
  * so a names file from another build attaches every name to the wrong address.
- * A pack written by the current build declares `praticiens: {lignes, sha256}`;
- * the one committed on 2026-09-01 declares nothing, and falls back to the line
+ * A pack written by the current build declares `praticiens: {lignes, sha256}`,
+ * or `praticiens: null` when it was built WITHOUT names (the repository's
+ * copy) — then no names file belongs to it, whatever lies next to it. The pack
+ * committed on 2026-09-01 declares nothing at all, and falls back to the line
  * count, which is all it ever had.
  *
  * @param {{declared?:?{lignes?:number, sha256?:string}, lines:number, siteCount:number, digest?:?string}} input
- * @returns {{ok:boolean, reason:?string}} reason is `absent`, `line-count` or `digest`
+ * @returns {{ok:boolean, reason:?string}} reason is `absent`, `undeclared`, `line-count` or `digest`
  */
-export function pairPractitioners({ declared = null, lines, siteCount, digest = null }) {
+export function pairPractitioners({ declared, lines, siteCount, digest = null }) {
   if (!lines) return { ok: false, reason: 'absent' };
+  if (declared === null) return { ok: false, reason: 'undeclared' };
   if (lines !== siteCount) return { ok: false, reason: 'line-count' };
   if (declared?.sha256) {
     if (Number.isFinite(declared.lignes) && declared.lignes !== lines) return { ok: false, reason: 'line-count' };
