@@ -12195,9 +12195,13 @@ function edfPlantsProxy() {
  * @returns {import('vite').Plugin}
  */
 function rteGenerationProxy() {
-  // The resource publishes hourly. Five minutes bounds staleness to a twelfth
-  // of a step while costing 288 upstream calls a day against a free account.
-  const TTL_MS = 5 * 60_000;
+  // The resource publishes hourly, and RTE's user guide for Actual Generation
+  // v1.1 asks callers to match it: for `actual_generations_per_unit`, "It is
+  // advisable to make one call to this service per hour". Sixty minutes, then —
+  // 24 upstream calls a day instead of the 288 a five-minute cache cost, for an
+  // answer that cannot change more than once an hour anyway.
+  // https://data.rte-france.com/catalog/-/api/doc/user-guide/Actual+Generation/1.1
+  const TTL_MS = 60 * 60_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
   const CACHE_PATH = path.join(CACHE_DIR, 'rte-generation.json');
   const SOURCE = 'RTE (digital.iservices.rte-france.com)';
