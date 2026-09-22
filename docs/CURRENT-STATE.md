@@ -2,6 +2,54 @@
 
 Updated: September 22, 2026
 
+> **2026-09-22 — the hosted switch covers Google News RSS, the Street View
+> CCTV fallback and the TeleGeography cable map too; the CCTV route no longer
+> takes coordinates from the request.**
+>
+> - **Why.** Google News' terms allow personal, non-commercial use only; the
+>   TeleGeography map is CC BY-NC-SA 3.0; Google's EEA Street View Static terms
+>   forbid its imagery "With any Map", and the CCTV panel sits beside the globe.
+>   The owner decided the hosted site drops all three; a clone keeps them.
+> - **The list.** `src/nonCommercialSources.js` gains `google-news`,
+>   `google-street-view` and `telegeography`. Each entry now carries a
+>   `reason` (`non-commercial` by default; `display-terms` for Street View) and
+>   the `layers` it alone feeds (the cable row). The variable keeps its name.
+>   `/api/trial` and `/healthz` report
+>   `["open-meteo","esri-world-imagery","opensky","google-news","google-street-view","telegeography"]`
+>   where it is off.
+> - **Headlines.** Where Google News is off, `/api/regional-brief` sends no RSS
+>   request, asks GDELT first, names the source `GDELT` and adds
+>   `googleNewsStatus: "off"` (in the cache key). The Regional News source line
+>   reads « GDELT · REQUÊTE PAR LIEU · RÉCENT » / "GDELT · LOCATION QUERY ·
+>   RECENT". GDELT answers 429 to a second request inside 5 s, so it is paced
+>   in `src/upstreamPacing.js` (one every 6.25 s; a call that would wait more
+>   than 5 s is refused, and the brief is then not cached).
+> - **CCTV frames, both builds.** `/api/cctv/frame/<id>` takes the Street View
+>   position from the server's own record of the camera — a catalog row, or
+>   an OSM mapped camera it served from a box still in memory — and never from
+>   `lat`/`lon` in the query; an unknown id gets the synthetic placeholder. The
+>   aim (heading, FOV, pitch) may still come from the query. **Where the switch
+>   is off** there is no Street View call at all: a camera whose frame fails
+>   answers `404` with `X-CCTV-Source: unavailable`, and the panel prints its
+>   « IMAGE · INDISPONIBLE » / "FRAME · UNAVAILABLE" badge.
+> - **Cable map.** The two GeoJSON files are no longer a Vite asset: nothing
+>   is emitted into `dist/assets/`. The server reads them from the checkout at
+>   `/api/submarine-cables/cable-geo.json` and `/landing-point-geo.json`
+>   (gzip at once, brotli-11 once warmed, `private, max-age=86400`, ETag); where
+>   the switch is off it answers `404` with `X-Source-Off: telegeography`
+>   without reading them. The page withholds the layer (`withholdLayers` in
+>   `src/data/manager.js`): no Câbles chip on « Infrastructure numérique », not
+>   among the row's followers, `showInTogglePanel: false`, and any request to
+>   switch it on is refused with « « Câbles sous-marins » n’est pas disponible
+>   sur ce site : la licence de ses données exclut l’usage commercial. » A
+>   request made before the probe answered waits for it (5 s at most). Voice:
+>   the "infrastructure mode" instruction names two layers where the cables are
+>   off, and `set_layer_visibility` answers a withheld layer with
+>   `withheld: true`.
+> - **Credits.** The Google News RSS, Google Street View (new line) and
+>   TeleGeography entries leave the Data attribution popover where the switch
+>   is off; GDELT stays.
+
 > **2026-09-22 — flights on the commercial build: OpenSky off, adsb.lol
 > primary over four French circles, and adsbdb replaced by the VRS standing
 > data in both builds.**
@@ -12,7 +60,7 @@ Updated: September 22, 2026
 >   serves adsb.lol only and never fetches OpenSky or its OAuth token;
 >   `/api/opensky-track` answers 404 `{status: "off"}`; `/api/pulse` counts
 >   « avions » from the four French circles (all four required);
->   `sourcesOff` ends in `"opensky"` (after `"open-meteo", "esri-world-imagery"`); the OpenSky credit is
+>   `sourcesOff` lists `"opensky"` after `"open-meteo", "esri-world-imagery"`; the OpenSky credit is
 >   withdrawn, and the Flights row names adsb.lol (the dormant stub via
 >   `src/main.js`, the loaded module via `flights.js` `init`). A clone keeps
 >   OpenSky primary, with the adsb.lol circle when its snapshot is stale.
@@ -94,8 +142,8 @@ Updated: September 22, 2026
 > - **Check.** `npm run qa:world-imagery-licence -- --url <preview> --expect off|on|licensed`.
 
 > **2026-09-22 — `GEV_NONCOMMERCIAL_SOURCES=off`: a commercial deployment
-> drops the sources licensed for non-commercial use only. Open-Meteo is the
-> first and, for now, the only one.**
+> drops the sources licensed for non-commercial use only. Open-Meteo was the
+> first (the blocks above add the others).**
 >
 > - **Why.** Open-Meteo's free API terms (<https://open-meteo.com/en/terms>)
 >   say “You may only use the free API services for non-commercial purposes”.
@@ -2620,7 +2668,7 @@ its criteria cannot be silently ignored.
 | Aéroports ✈ | OurAirports (public domain, bundled) — **7,466 fields**, from Roissy's 4,215 m to an 82 m strip at La Tour-du-Pin. Worldwide: every large and medium airport plus everything selling a scheduled seat; in France the whole long tail — 1,337 fields across métropole and outre-mer, altiports, hydrobases and one balloon field included. **Second publisher, second licence:** 418 French fields also carry the aerodrome boundary the IGN surveys in **BD TOPO® (Licence Ouverte 2.0, the Etalab Open License, attribution required)**, downloaded by the same build from `data.geopf.fr/wfs/ows` and joined on the ICAO code (377) or on the field's point falling inside an unkeyed outline (41) — 0 shared, 0 refused on the 5 km anchor guard, worst kept offset 1,382 m. **213 fields gain a shape they did not have**, 207 of them aéroclubs, which is the tier upstream georeferenced at 8 %. Drawn as one terrain-clamped wash for all 418 (a batched ground primitive colours by bounding rectangle) with its own 8 px screen floor, so the outline goes away between 24 km and 1,208 km depending on its size while the pastille keeps the tier's longer range; the anchor stays on the published reference point. Refused: héliports (704 of the IGN layer's 1,370 objects), anything under 1 ha (219, of which 205 are BD TOPO's 5.2 m placeholder square), and 30 outlines — 1,457 ha, mostly military, largest Lann Bihoué at 767 ha — that match no packed field | `src/data/localLayers.js`, `src/data/airportsPack.js` | — | static |
 | Ports ⚓ | NGA *World Port Index* (US public domain, bundled) — 2,951 ports | `src/data/localLayers.js` | — | static |
 | Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js`, `src/data/trafficFlowCard.js` | `/api/overpass` + `/api/tomtom` | viewport-driven; live flow also re-fetched every 125 s on a parked view (5 per camera load) |
-| CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback | `src/data/cctv.js` | `/api/cctv` + `/api/osm-cameras` | 10s (active) |
+| CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback at the server's own camera position (none where `GEV_NONCOMMERCIAL_SOURCES=off`) | `src/data/cctv.js` | `/api/cctv` + `/api/osm-cameras` | 10s (active) |
 | Radio | Radio Browser (public-domain station directory) | `src/data/radio.js` | `/api/radio/stations`, `/api/radio/click/:uuid` | 45 min directory refresh |
 | Bikeshare 🚲 | GBFS (Lyft + BCycle, plus Vélib', Vélo'v, vélÔToulouse, Le Vélo TBM). A dock is a dark disc ringed in its network's hue holding a core of that hue as large as it is full (`mobilityDockMark`: core 0.62 / 0.36 of the disc, none when nearly empty, grey disc for no data or closed — two `PointPrimitive`s under one id, the core added after the disc); it stands on the shared floor (`cachedGroundFloor`, else `provisionalFloor`, re-placed by bounded retries as floors land) — until 2026-09-21 a raw `scene.sampleHeight` put all 1,518 Paris docks 46-48 km underground whenever the fleets' layer was on. While the shared fleets draw their groups, its available bikes are counted into them and the dot is not drawn (`mobilityDockBridge.js`), and the layer then stays loaded up to 250 km instead of 50 km. Its block in the « Mobilités partagées » key names each network in view in its ring colour and explains the dock levels — the only block of the row that does (`publishMobilityDockKey`) — and it repaints the key when a proximity pass settles; it takes the row's fanned-out `operator` and `kinds` filters and hides docks by `point.show`, no rebuild | `src/data/bikeshare.js` | `/api/gbfs` | 60s |
 | Transit FR 🚌 | transport.data.gouv.fr GTFS-Realtime vehicle positions (~150 French networks; observed footprints in `config/pan_gtfs_rt_feeds.json`), enriched per vehicle with the same networks' `TripUpdate` deviations (150 feeds, 63 in the same body) and `Alert` disruptions (63 feeds) — join rules in `src/data/transitSchedule.js`, companion resources measured into the index — plus, for the SELECTED vehicle, that network's static GTFS GeoJSON conversion for the line's trace and the ordered stops of the run (`config/pan_gtfs_static.json`) | `src/data/transitFrance.js`, `src/data/transitRouteView.js` | `/api/transit-fr/vehicles`, `/api/transit-fr/feeds`, `/api/transit-fr/trip` | 15s fleet, viewport-driven below ~300 km; 25s for the selected run; trip-update bodies cached 45 s and shared by both, alerts 5 min |
@@ -2656,7 +2704,7 @@ its criteria cannot be silently ignored.
 | Centrales hydro 🇫🇷 ≈ | ODRÉ *Registre national des installations de production et de stockage d'électricité*, hydraulic filière entire — **2,742 installations for 26.02 GW**, shipped as a file because the register publishes NO coordinate, only an INSEE code. 998 placed where they physically are (589 on an IGN BD TOPO® building footprint), the other 1,744 rolled into 1,147 commune rings that claim a count and never a position. Renamed from *Petite hydro (FR)* on 2026-09-14: it holds Grand-Maison (1 690 MW), so nothing about it was small. It also draws **592 stations outside France** that used to ship inside the dams pack as barrages — a SAMPLE, with its own colour, its own legend row and its own four-line card all saying so | `src/data/frHydroPlants.js`, `src/data/frHydroFeed.js`, `local_data/world_hydro/` | — (bundled; `npm run hydro:registry` + `npm run hydro:world` rebuild) | 30 min |
 | Datacenters ▣ | OSM extract (bundled, 4 351 objects) — the footprint is drawn where it is, in WORLD METRES, and the anchor dot drops from 10 px to 6 px so size stops being the channel. Four marks, measured on the pack: extruded volume 461 (10.6 %), flat slab 2 739 (63.0 % — the A1 sign for “footprint known, height unknown”), site outline 317 (7.3 %), hollow ring with no footprint 834 (19.2 %). Height is read from `height` first (154 objects) then converted from `building:levels` (374) by a MEASURED factor: the 59 objects carrying both give a median 5.0 m per level (p25 4.0, p75 6.7) — a data hall, not an office floor. A site outline is NEVER extruded, even where a mapper put a height on it (5 cases) | `src/data/localLayers.js`, `src/data/datacentersPack.js`, `src/data/localGeojson.js` | — | static |
 | Barrages & digues ▰ | OSM via Overpass for France + a 69-feature OpenInfraMap tail elsewhere (bundled, **6 840 features**) — `height` is MEASURED at 143 of 6 840 (2.09 %) and therefore REFUSED, with the refusal locked by an assertion. The size channel carries `spanM` instead, the longest dimension measured on the geometry at build time, present on 5 328 (77.89 %), 25 m → 6 399 m (median 100, p95 539), in CONSTANT SCREEN PIXELS — four frozen span classes (100/300/1 000 m) at 18/13/9/6 px plus a hollow 8 px ring for the 1 512 unmeasured (22.1 %). **The row was renamed and simplified on 2026-09-14**: 1 267 of its French features are digues, so the name says so; the 592 hydroelectric stations its world half held moved to `world_hydro/` and the *Centrales hydro* layer; and the second chip row (TOUS/NOMMÉS/GRANDS) was deleted, because GRANDS kept 494 features of which only 65 carry a height — it was a hydro filter wearing a size label. Thinning is the zoom's job now, via a per-tier `markerMaxDistance` (900 km / 3 000 km / orbit). One chip row left: TOUS / BARRAGES / DIGUES | `src/data/localLayers.js`, `src/data/damsPack.js`, `src/data/localGeojson.js` | — | static |
-| Submarine Cables ◠ | TeleGeography public map (bundled) | `src/data/telegeographySubmarineCables.js` | — | static |
+| Submarine Cables ◠ | TeleGeography public map (in the checkout, served by the server; withheld where `GEV_NONCOMMERCIAL_SOURCES=off`) | `src/data/telegeographySubmarineCables.js` | `/api/submarine-cables` | static |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
 
 `src/data/militaryAwareness.js` remains registered internally as the Contacts
@@ -4518,6 +4566,9 @@ inert again.
   row is registered with NO upstream URL and resolves through the existing frame chain — Street
   View still (`SRC STREETVIEW`, health `degraded`) or the synthetic `NO UPSTREAM CONFIGURED`
   placeholder. That billable fallback is why it is opt-in rather than a fourth default pack.
+  Since 2026-09-22 the Street View still is taken at the position the server served for that
+  camera (`osmMappedCameraById`), never at coordinates the request carries, and not at all where
+  `GEV_NONCOMMERCIAL_SOURCES=off`.
   Pose uses mapped values where OSM has them and priors where it does not: bearing from
   `camera:direction` (high confidence; `direction` or a multi-value `camera:direction` → medium,
   otherwise an id-hash fallback at low), tilt from `camera:angle` (the wiki's tilt-from-horizon,

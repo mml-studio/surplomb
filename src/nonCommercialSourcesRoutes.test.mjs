@@ -1,8 +1,11 @@
 // GEV_NONCOMMERCIAL_SOURCES wired into the real middlewares of vite.config.js:
-// the two routes that call Open-Meteo, and the two answers that report the
-// switch (`/api/trial`, which the page reads, and `/healthz`, which a deploy
-// check reads). Upstream fetches are stubbed and logged, so "no request to
-// Open-Meteo" is asserted on the wire, not inferred from a payload.
+// the two routes that call Open-Meteo (one of which also calls Google News),
+// and the two answers that report the switch (`/api/trial`, which the page
+// reads, and `/healthz`, which a deploy check reads). Upstream fetches are
+// stubbed and logged, so "no request to Open-Meteo" or to Google News is
+// asserted on the wire, not inferred from a payload. The CCTV frame route and
+// the cable map have their own files (src/data/cctvStreetView.test.mjs,
+// src/data/submarineCableRoute.test.mjs).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -10,6 +13,8 @@ Object.assign(process.env, { GEV_TRIAL_LIMIT: '', GEV_FIRST_RUN_AB: '' });
 delete process.env.GEV_NONCOMMERCIAL_SOURCES;
 
 const { default: createViteConfig } = await import('../vite.config.js');
+const { NONCOMMERCIAL_SOURCES } = await import('./nonCommercialSources.js');
+const ALL_OFF = NONCOMMERCIAL_SOURCES.map((source) => source.id);
 
 const routes = new Map();
 for (const plugin of createViteConfig({ mode: 'test' }).plugins.flat()) {
@@ -42,6 +47,12 @@ before(() => {
       return new Response('<rss><channel><item><title>Tram works on the quays</title>'
         + '<link>https://example.org/tram</link><source>Example</source>'
         + '<pubDate>Tue, 22 Sep 2026 08:00:00 GMT</pubDate></item></channel></rss>');
+    }
+    if (url.startsWith('https://api.gdeltproject.org/')) {
+      return json({ articles: [{
+        url: 'https://example.org/quays', title: 'Quays reopen after the works', domain: 'example.org',
+        seendate: '20260922T080000Z', sourcecountry: 'France',
+      }] });
     }
     if (url.startsWith('https://api.open-meteo.com/')) {
       return json({ current: { time: '2026-09-22T08:00', temperature_2m: 18.4, weather_code: 3, cloud_cover: 90 } });
@@ -84,6 +95,7 @@ async function call(url) {
 }
 
 const openMeteoCalls = () => upstream.filter((url) => url.startsWith('https://api.open-meteo.com/')).length;
+const googleNewsCalls = () => upstream.filter((url) => url.startsWith('https://news.google.com/')).length;
 
 test('off: the cockpit clouds route answers `off` at once, with no upstream call', async () => {
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
@@ -96,23 +108,28 @@ test('off: the cockpit clouds route answers `off` at once, with no upstream call
   assert.equal(upstream.length, before, 'nothing left the server');
 });
 
-test('off: the regional brief keeps its place and news, and never asks Open-Meteo', async () => {
+test('off: the regional brief keeps its place and news, and never asks Open-Meteo or Google News', async () => {
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
   const meteoBefore = openMeteoCalls();
+  const newsBefore = googleNewsCalls();
   const answer = await call('/api/regional-brief?latitude=44.84&longitude=-0.58');
   assert.equal(answer.status, 200);
   assert.equal(answer.body.weatherStatus, 'off');
   assert.equal(answer.body.weather, null);
   assert.equal(answer.body.place.label, 'Bordeaux, Nouvelle-Aquitaine');
   assert.equal(answer.body.articles.length, 1);
+  assert.equal(answer.body.articles[0].title, 'Quays reopen after the works', 'the headline is GDELT\'s');
+  assert.equal(answer.body.newsSource, 'GDELT');
+  assert.equal(answer.body.googleNewsStatus, 'off');
   assert.equal(answer.body.status, 'ready', 'no weather is not a partial brief where there is none to have');
   assert.equal(openMeteoCalls(), meteoBefore);
+  assert.equal(googleNewsCalls(), newsBefore, 'no RSS request at all');
 });
 
 test('off: /api/trial and /healthz both say which sources are off', async () => {
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
-  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ['open-meteo', 'esri-world-imagery', 'opensky']);
-  assert.deepEqual((await call('/healthz')).body.sourcesOff, ['open-meteo', 'esri-world-imagery', 'opensky']);
+  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ALL_OFF);
+  assert.deepEqual((await call('/healthz')).body.sourcesOff, ALL_OFF);
 });
 
 test('unset: a clone is unchanged — both routes use Open-Meteo, and nothing is reported off', async () => {
@@ -126,17 +143,35 @@ test('unset: a clone is unchanged — both routes use Open-Meteo, and nothing is
   assert.equal(effects.body.status, 'ready');
   assert.equal(effects.body.weather.temperatureC, 18.4);
 
+  const newsBefore = googleNewsCalls();
   const brief = await call('/api/regional-brief?latitude=48.86&longitude=2.35');
   assert.equal(brief.body.weatherStatus, 'ready');
   assert.equal(brief.body.weather.temperatureC, 18.4);
   assert.equal(openMeteoCalls(), meteoBefore + 2);
+  assert.equal(googleNewsCalls(), newsBefore + 1, 'a clone still asks Google News first');
+  assert.equal(brief.body.newsSource, 'Google News RSS');
+  assert.equal(brief.body.googleNewsStatus, 'on');
 });
 
-test('a brief cached with its weather never answers once the switch is off', async () => {
-  // The cell of the previous test, cached with Open-Meteo in it.
+test('"infrastructure mode" names the two layers the site still offers where the cables are off', async () => {
+  const { voiceInstructionText, VOICE_INFRASTRUCTURE_VIEW } = await import('../vite.config.js');
+  const clone = voiceInstructionText({});
+  assert.ok(clone.includes(`means ${VOICE_INFRASTRUCTURE_VIEW.withCables} plus zoom_to_globe`),
+    'the phrase this replaces is still the one written in the instructions');
+  const hosted = voiceInstructionText({ GEV_NONCOMMERCIAL_SOURCES: 'off' });
+  assert.ok(!hosted.includes(VOICE_INFRASTRUCTURE_VIEW.withCables));
+  assert.ok(hosted.includes(`means ${VOICE_INFRASTRUCTURE_VIEW.withoutCables} plus zoom_to_globe`));
+  assert.equal(hosted.length - clone.length,
+    VOICE_INFRASTRUCTURE_VIEW.withoutCables.length - VOICE_INFRASTRUCTURE_VIEW.withCables.length,
+    'nothing else changes');
+});
+
+test('a brief cached with its weather and Google News headlines never answers once the switch is off', async () => {
+  // The cell of the previous test, cached with Open-Meteo and Google News in it.
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
   const answer = await call('/api/regional-brief?latitude=48.86&longitude=2.35');
   assert.equal(answer.body.weatherStatus, 'off');
   assert.equal(answer.body.weather, null);
+  assert.equal(answer.body.newsSource, 'GDELT');
   assert.equal(answer.headers.get('x-regional-brief'), 'MISS');
 });

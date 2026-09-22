@@ -900,3 +900,17 @@ test('a deployment without a weather source can hide every weather surface of th
   assert.match(ui, /if \(payload\?\.weatherStatus === 'off'\) this\.setWeatherAvailable\(false\);/);
   assert.match(ui, /if \(event\?\.detail\?\.available === false\) this\.setWeatherAvailable\(false\);/);
 });
+
+test('a deployment without Google News names GDELT as the only headline source', () => {
+  // GEV_NONCOMMERCIAL_SOURCES=off (src/nonCommercialSources.js). The static
+  // source line of the Regional News page promised Google News RSS on every
+  // deployment; where the server never asks it, the line must say GDELT.
+  const setter = ui.slice(ui.indexOf('  setGoogleNewsAvailable(available) {'), ui.indexOf('  syncWeatherToggle(enabled) {'));
+  assert.match(setter, /this\.googleNewsAvailable = false/);
+  assert.match(ui, /get sourceWithoutGoogleNews\(\) \{ return messages\(\)\.cockpit\.brief\.newsSourceGdeltOnly; \}/);
+  assert.match(ui, /withoutGoogleNews \? page\.sourceWithoutGoogleNews : page\.source/);
+  // Both ways the page can learn it: the boot probe, and the brief's own `off`.
+  assert.match(ui, /if \(payload\?\.googleNewsStatus === 'off'\) this\.setGoogleNewsAvailable\(false\);/);
+  const main = fs.readFileSync(path.join(ROOT, 'src', 'main.js'), 'utf8');
+  assert.match(main, /if \(off\.has\('google-news'\)\) styleManager\.cockpitView\?\.setGoogleNewsAvailable\(false\);/);
+});

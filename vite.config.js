@@ -17,7 +17,9 @@
  *  11b. OSM mapped cameras — viewport-bounded, cached camera positions (opt-in)
  *  12. Regional briefing — cached place, weather, and recent location-matched news
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
- *      (12 and 13 drop Open-Meteo under GEV_NONCOMMERCIAL_SOURCES=off — src/nonCommercialSources.js)
+ *      (12 and 13 drop Open-Meteo, and 12 Google News, under GEV_NONCOMMERCIAL_SOURCES=off
+ *      — src/nonCommercialSources.js)
+ *  13b. Submarine cables — the TeleGeography map from the checkout, refused under the same switch
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
  *  16. transport.data.gouv.fr — French GTFS-RT live vehicle positions (PAN)
@@ -78,6 +80,7 @@ import {
   osmCameraFromElement,
   snapOsmCameraBox,
   validOsmCameraBox,
+  OSM_CAMERA_ID_PREFIX,
   OSM_CAMERA_MAX_BOX_DEG,
   OSM_CAMERA_QUERY_CAP,
 } from './src/data/osmCameras.js';
@@ -109,6 +112,11 @@ import {
   mergeCellSnapshots,
   regionalSnapshot,
 } from './src/adsbLolFeed.js';
+import {
+  SUBMARINE_CABLE_DATA_DIR,
+  SUBMARINE_CABLE_FILES,
+  SUBMARINE_CABLE_ROUTE,
+} from './src/data/submarineCableFiles.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import { UpstreamBusyError, createUpstreamPacing } from './src/upstreamPacing.js';
 import {
@@ -17265,6 +17273,38 @@ function trimOsmCameraCache() {
   }
 }
 
+/** Per cached box, its cameras by id — built on the first lookup that needs it. */
+const _osmCameraIndexByPayload = new WeakMap();
+
+/**
+ * An OSM mapped camera this server has itself served, by id, or null.
+ *
+ * The CCTV frame route's Street View fallback reads a camera's position from
+ * here rather than from the request: OSM cameras are not in the frame-bearing
+ * catalog, and trusting the `lat`/`lon` the browser sends made that route a
+ * Street View proxy for any point on Earth, billed to the server key. Only
+ * boxes still held in memory answer (at most OSM_CAMERA_MAX_CACHE), so a
+ * camera the server has never published has no position here.
+ *
+ * @param {string} cameraId
+ * @returns {object|null}
+ */
+function osmMappedCameraById(cameraId) {
+  if (typeof cameraId !== 'string' || !cameraId.startsWith(OSM_CAMERA_ID_PREFIX)) return null;
+  for (const entry of _osmCameraCache.values()) {
+    const payload = entry?.payload;
+    if (!payload || !Array.isArray(payload.cameras)) continue;
+    let index = _osmCameraIndexByPayload.get(payload);
+    if (!index) {
+      index = new Map(payload.cameras.map((camera) => [camera?.id, camera]));
+      _osmCameraIndexByPayload.set(payload, index);
+    }
+    const camera = index.get(cameraId);
+    if (camera) return camera;
+  }
+  return null;
+}
+
 /**
  * Vite plugin: viewport-bounded OpenStreetMap mapped-camera proxy.
  *
@@ -18047,8 +18087,54 @@ export async function fetchCctvImageFromUpstream(url, {
 }
 
 /**
+ * Where a CCTV frame's Street View fallback may look, or null for nowhere.
+ *
+ * THE POSITION IS THE SERVER'S, NEVER THE REQUEST'S. The route used to take
+ * `lat`/`lon` from the query first, and an id it did not know went straight to
+ * the fallback — so `/api/cctv/frame/anything?lat=…&lon=…` was a Street View
+ * Static proxy for any point on Earth, unauthenticated and billed to the
+ * server's key. Now only a camera the server itself holds has a position: a
+ * row of the frame-bearing catalog, or an OSM mapped camera it served
+ * (`osmMappedCameraById`). Anything else gets the synthetic placeholder.
+ *
+ * The DIRECTION may still come from the request, because the panel's CAL
+ * controls let a reader re-aim a camera and the frame should follow; it is
+ * clamped again in `streetViewFallback` and moves nothing on the map.
+ *
+ * @param {object} options
+ * @param {object|null} [options.source] The camera's catalog row.
+ * @param {object|null} [options.mapped] The OSM mapped camera, when not in the catalog.
+ * @param {URLSearchParams} [options.params] The request's query.
+ * @returns {{lat: number, lon: number, heading: number, fov: number, pitch: number}|null}
+ */
+export function cctvStreetViewTarget({ source = null, mapped = null, params = new URLSearchParams() } = {}) {
+  const camera = source || mapped;
+  if (!camera) return null;
+  const lat = Number(camera.lat);
+  const lon = Number(camera.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const direction = (name, stored) => {
+    const raw = params.get(name);
+    const requested = raw === null || raw.trim() === '' ? NaN : Number(raw);
+    return Number.isFinite(requested) ? requested : Number(stored);
+  };
+  return {
+    lat,
+    lon,
+    heading: direction('heading', camera.headingDeg),
+    fov: direction('fov', camera.fovDeg),
+    pitch: direction('pitch', camera.pitchDeg),
+  };
+}
+
+/**
  * Vite plugin: CCTV camera proxy with source registry, frame/media serving,
  * fallback chain (upstream -> Street View -> synthetic SVG), and health tracking.
+ *
+ * Where the deployment has Street View switched off (GEV_NONCOMMERCIAL_SOURCES
+ * =off — src/nonCommercialSources.js) the chain is upstream only: a camera
+ * whose frame fails answers 404 `unavailable`, and the panel says « IMAGE ·
+ * INDISPONIBLE » rather than showing a Google still beside a non-Google map.
  *
  * Endpoints:
  *   GET /api/cctv/sources        — list all registered camera sources
@@ -18269,11 +18355,9 @@ function cctvProxy() {
           const source = sourceById.get(cameraId);
           const label = url.searchParams.get('label') || source?.name || cameraId;
           const city = url.searchParams.get('city') || source?.city || '';
-          const lat = Number(url.searchParams.get('lat') || source?.lat);
-          const lon = Number(url.searchParams.get('lon') || source?.lon);
-          const heading = Number(url.searchParams.get('heading') || source?.headingDeg);
-          const fov = Number(url.searchParams.get('fov') || source?.fovDeg);
-          const pitch = Number(url.searchParams.get('pitch') || source?.pitchDeg);
+          // Read per request, like every GEV_* switch: where it is off, no
+          // Street View call leaves this server (see the plugin comment).
+          const streetViewOn = isSourceOn('google-street-view', process.env);
 
           // Only use server-registered upstream URLs — never accept client-supplied URLs
           // (prevents SSRF via ?upstream= query parameter)
@@ -18315,7 +18399,33 @@ function cctvProxy() {
             return;
           }
 
-          const sv = await streetViewFallback({ lat, lon, heading, fov, pitch });
+          if (!streetViewOn) {
+            // No Google still, and no synthetic placeholder either: the SVG
+            // is English-only and says "CCTV FEED PLACEHOLDER" in the frame.
+            // A 404 makes the panel print its own bilingual « IMAGE ·
+            // INDISPONIBLE » / "FRAME · UNAVAILABLE", and the ambient cards
+            // draw nothing, which is what they do for any failed frame.
+            setHealth(cameraId, {
+              status: 'degraded',
+              sourceKind: 'unavailable',
+              label: source?.provider || 'No frame',
+              message: (source?.url ? 'Upstream unavailable' : 'No source configured') + placeholderNote,
+            });
+            res.writeHead(404, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+              'X-CCTV-Source': 'unavailable',
+            });
+            res.end(JSON.stringify({ error: 'Camera image unavailable', sourceKind: 'unavailable' }));
+            return;
+          }
+
+          const streetViewTarget = cctvStreetViewTarget({
+            source,
+            mapped: source ? null : osmMappedCameraById(cameraId),
+            params: url.searchParams,
+          });
+          const sv = streetViewTarget ? await streetViewFallback(streetViewTarget) : null;
           if (sv?.ok) {
             setHealth(cameraId, {
               status: 'degraded',
@@ -18815,7 +18925,7 @@ function openAiRealtimeProxy() {
             },
             output: { voice },
           },
-          instructions: [GEV_VOICE_INSTRUCTION_LINES.join('\n'), sessionLanguageLines]
+          instructions: [voiceInstructionText(process.env), sessionLanguageLines]
             .filter(Boolean).join('\n'),
           tools: GEV_REALTIME_TOOLS,
           tool_choice: 'auto',
@@ -19030,7 +19140,7 @@ function voiceBrainProxy() {
       const languageLines = voiceSessionInstruction(language);
       const model = process.env.OPENROUTER_VOICE_MODEL || OPENROUTER_VOICE_MODEL_DEFAULT;
       const system = [
-        GEV_VOICE_INSTRUCTION_LINES.join('\n'),
+        voiceInstructionText(process.env),
         // The realtime model hears silence and knows the turn ended. A text
         // brain does not, so it needs the one rule the audio session gets for
         // free: finish the work in this turn, then say one short thing.
@@ -19640,6 +19750,30 @@ const GEV_VOICE_INSTRUCTION_LINES = [
   'WHAT CAN I SAY? Answer "que puis-je dire ?" / "what can you do?" from this list, three or four of them, in the operator\'s language — never invent a capability: "Emmène-moi à Bordeaux", "Montre les médecins", "Quelles couches as-tu ?", "Combien de bornes de recharge dans la vue ?", "Combien de vélos à cette station ?", "Où suis-je ?", "Passe en vision nocturne", "Affiche les avions et suis le plus proche", "La station de vélos la plus proche avec des vélos", "Recule, vue du globe entier".',
   'SCOPE HONESTLY. The French point layers load by viewport or camera proximity, so a count over them is a count of what is loaded around the current view — say "in view" or "around here", never a national or world total. When a result carries a coverage note or a warmup note, it is telling you the count is still rising; say so instead of stating it as settled fact.',
 ];
+
+/** The "infrastructure mode" shorthand as written above, and as it reads without the cables. */
+export const VOICE_INFRASTRUCTURE_VIEW = Object.freeze({
+  withCables: 'three set_layer_visibility calls (local-datacenters, local-dams, telegeography-submarine-cables)',
+  withoutCables: 'two set_layer_visibility calls (local-datacenters, local-dams; this site does not offer the submarine cables, so say so if asked for them)',
+});
+
+/**
+ * The spoken contract for THIS deployment, read per request.
+ *
+ * Where GEV_NONCOMMERCIAL_SOURCES=off withholds the TeleGeography cables
+ * (src/nonCommercialSources.js), "infrastructure mode" names the two layers the
+ * site still offers, so the model does not plan a call the page will refuse.
+ * The page refuses it anyway (`isLayerWithheld` in src/voice/gevActions.js);
+ * this only spares the operator a failed step in the confirmation.
+ *
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {string}
+ */
+export function voiceInstructionText(env = process.env) {
+  const text = GEV_VOICE_INSTRUCTION_LINES.join('\n');
+  if (isSourceOn('telegeography', env)) return text;
+  return text.replace(VOICE_INFRASTRUCTURE_VIEW.withCables, VOICE_INFRASTRUCTURE_VIEW.withoutCables);
+}
 
 const GEV_REALTIME_TOOLS = [
   {
@@ -21850,23 +21984,32 @@ async function fetchRegionalPlace(point) {
   return normalizeRegionalPlace(payload);
 }
 
-async function fetchRegionalNews(place) {
+/**
+ * The cockpit's regional headlines: Google News RSS first, GDELT when it fails
+ * or is empty. `googleNewsOn: false` is a deployment that may not use Google
+ * News (GEV_NONCOMMERCIAL_SOURCES=off, src/nonCommercialSources.js — its terms
+ * allow personal, non-commercial use only): no RSS request at all, and GDELT,
+ * whose terms allow commercial use with a citation, is the only source.
+ */
+async function fetchRegionalNews(place, { googleNewsOn = true } = {}) {
   const query = place?.locality || place?.region || place?.country;
   if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
-  const rssParams = new URLSearchParams({
-    q: String(query).replace(/["\\]/g, ' ').trim(),
-    hl: 'en-US',
-    gl: 'US',
-    ceid: 'US:en',
-  });
-  try {
-    const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
-      headers: { 'User-Agent': 'Surplomb/0.1' },
-      timeoutMs: 12_000,
+  if (googleNewsOn) {
+    const rssParams = new URLSearchParams({
+      q: String(query).replace(/["\\]/g, ' ').trim(),
+      hl: 'en-US',
+      gl: 'US',
+      ceid: 'US:en',
     });
-    const articles = normalizeRssArticles(xml, 5);
-    if (articles.length) return { status: 'ready', query, articles, source: 'Google News RSS' };
-  } catch { /* fall through to the existing free index */ }
+    try {
+      const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
+        headers: { 'User-Agent': 'Surplomb/0.1' },
+        timeoutMs: 12_000,
+      });
+      const articles = normalizeRssArticles(xml, 5);
+      if (articles.length) return { status: 'ready', query, articles, source: 'Google News RSS' };
+    } catch { /* fall through to the existing free index */ }
+  }
   const params = new URLSearchParams({
     query: `"${String(query).replace(/["\\]/g, ' ').trim()}"`,
     mode: 'artlist',
@@ -21881,7 +22024,9 @@ async function fetchRegionalNews(place) {
       timeoutMs: 12_000,
     });
     const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT fallback' };
+    // Named for what it is on this deployment: a fallback beside Google News,
+    // the one source where Google News is off.
+    return { status: articles.length ? 'ready' : 'empty', query, articles, source: googleNewsOn ? 'GDELT fallback' : 'GDELT' };
   } catch {
     return { status: 'unavailable', query, articles: [], source: null };
   }
@@ -21921,6 +22066,7 @@ export function regionalBriefPayload({
   place = null,
   weather = null,
   weatherOn = true,
+  googleNewsOn = true,
   news,
   retrievedAt = new Date().toISOString(),
 }) {
@@ -21936,23 +22082,26 @@ export function regionalBriefPayload({
     newsStatus: news.status,
     newsQuery: news.query,
     newsSource: news.source,
+    // `off` where this deployment may not use Google News: the page then names
+    // GDELT alone as the headline source, even if its `/api/trial` read failed.
+    googleNewsStatus: googleNewsOn ? 'on' : 'off',
     articles: news.articles,
   };
 }
 
 function regionalBriefProxy() {
-  async function refresh(point, key, weatherOn) {
+  async function refresh(point, key, { weatherOn, googleNewsOn }) {
     const [placeResult, weatherResult] = await Promise.allSettled([
       fetchRegionalPlace(point),
       weatherOn ? fetchRegionalWeather(point) : null,
     ]);
     const place = placeResult.status === 'fulfilled' ? placeResult.value : null;
     const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
-    const news = await fetchRegionalNews(place);
+    const news = await fetchRegionalNews(place, { googleNewsOn });
     if (!regionalBriefHasAnySource({ place, weather, news })) {
       throw new Error('All regional briefing sources unavailable');
     }
-    const payload = regionalBriefPayload({ point, place, weather, weatherOn, news });
+    const payload = regionalBriefPayload({ point, place, weather, weatherOn, googleNewsOn, news });
     // A place missing only because Nominatim's pacer was full is not kept:
     // the next look at this cell asks again rather than reading "unavailable"
     // for five minutes.
@@ -21983,10 +22132,12 @@ function regionalBriefProxy() {
         return;
       }
       // Read per request, and part of the cache key: a brief cached with the
-      // weather in it must never answer a deployment that has switched it off.
+      // weather or Google News headlines in it must never answer a deployment
+      // that has switched them off.
       const weatherOn = isSourceOn('open-meteo', process.env);
+      const googleNewsOn = isSourceOn('google-news', process.env);
       const cell = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
-      const key = weatherOn ? cell : `${cell}:no-weather`;
+      const key = `${cell}${weatherOn ? '' : ':no-weather'}${googleNewsOn ? '' : ':no-google-news'}`;
       const now = Date.now();
       const cached = _regionalBriefCache.get(key);
       if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_CACHE_MS) {
@@ -21997,7 +22148,7 @@ function regionalBriefProxy() {
       const request = coalesceProxyRequest(
         _regionalBriefInFlight,
         key,
-        () => runForVisitor(req, () => refresh(point, key, weatherOn)),
+        () => runForVisitor(req, () => refresh(point, key, { weatherOn, googleNewsOn })),
       );
       try {
         const { value: payload, refusal } = await request.promise;
@@ -22511,6 +22662,139 @@ function keylessGeocodeProxy() {
 
   return {
     name: 'keyless-geocode-proxy',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
+}
+
+/** What `/api/submarine-cables/*` answers where the TeleGeography map is switched off. */
+export const SUBMARINE_CABLES_OFF_PAYLOAD = Object.freeze({
+  status: 'off',
+  error: 'This deployment does not serve the TeleGeography cable map, which is licensed for non-commercial use only (CC BY-NC-SA 3.0).',
+});
+
+/**
+ * Vite plugin: the TeleGeography cable map, served from the checkout.
+ *
+ *   GET /api/submarine-cables/cable-geo.json          — 712 cable routes
+ *   GET /api/submarine-cables/landing-point-geo.json  — 1,917 landing points
+ *
+ * WHY THIS EXISTS. The files were a bundled asset, so every build copied them
+ * into `dist/assets/` and the static server gave them to anyone — including
+ * surplomb.app, a commercial deployment serving CC BY-NC-SA data. Here the
+ * server decides per request: where GEV_NONCOMMERCIAL_SOURCES=off
+ * (src/nonCommercialSources.js) it answers 404 with `X-Source-Off:
+ * telegeography` and never reads the file; elsewhere it serves the checkout's
+ * copy, which needs no network and no key, exactly as the bundle did.
+ *
+ * WHAT IT COSTS. The bundle went out pre-compressed with the rest of `dist/`
+ * (brotli, 168 kB for the 728 kB cable file). The route keeps that: each file
+ * is read and compressed once per process, on the first request — gzip at
+ * once, brotli (quality 11, ~3 s on the threadpool for the cable file) in the
+ * background, served from the next request on. `private` keeps shared caches
+ * out, so turning the switch off is not undone by an edge still holding a copy;
+ * the ETag lets a browser revalidate for nothing.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function submarineCablesProxy() {
+  const dir = path.join(__dirname, ...SUBMARINE_CABLE_DATA_DIR);
+  const files = new Set(Object.values(SUBMARINE_CABLE_FILES));
+  /** @type {Map<string, Promise<{raw: Buffer, gzip: Buffer, br: ?Buffer, etag: string}>>} */
+  const prepared = new Map();
+
+  function prepare(file) {
+    let pending = prepared.get(file);
+    if (!pending) {
+      pending = fsp.readFile(path.join(dir, file)).then(async (raw) => {
+        const item = {
+          raw,
+          gzip: await new Promise((resolve, reject) => {
+            zlib.gzip(raw, { level: 9 }, (error, out) => (error ? reject(error) : resolve(out)));
+          }),
+          br: null,
+          etag: `"${createHash('sha1').update(raw).digest('base64url').slice(0, 20)}"`,
+        };
+        zlib.brotliCompress(raw, {
+          params: {
+            [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+          },
+        }, (error, out) => { if (!error) item.br = out; });
+        return item;
+      });
+      // A missing file (a checkout that deleted the folder, as its README
+      // allows) is asked again next time rather than cached as a failure.
+      pending.catch(() => prepared.delete(file));
+      prepared.set(file, pending);
+    }
+    return pending;
+  }
+
+  function install(middlewares) {
+    middlewares.use(SUBMARINE_CABLE_ROUTE, async (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'GET, HEAD' });
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return;
+      }
+      const file = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/+/, '');
+      if (!files.has(file)) {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+        return;
+      }
+      // Read per request, before the file is touched: where it is off, the
+      // bytes never leave the disk.
+      if (!isSourceOn('telegeography', process.env)) {
+        res.writeHead(404, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'X-Source-Off': 'telegeography',
+        });
+        res.end(JSON.stringify(SUBMARINE_CABLES_OFF_PAYLOAD));
+        return;
+      }
+      let item;
+      try {
+        item = await prepare(file);
+      } catch {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'The TeleGeography files are not in this checkout' }));
+        return;
+      }
+      const headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, max-age=86400',
+        ETag: item.etag,
+        Vary: 'Accept-Encoding',
+      };
+      if (req.headers?.['if-none-match'] === item.etag) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+      const accept = String(req.headers?.['accept-encoding'] || '');
+      let body = item.raw;
+      if (item.br && acceptsBrotli(accept)) {
+        body = item.br;
+        headers['Content-Encoding'] = 'br';
+      } else if (/\bgzip\b/.test(accept)) {
+        body = item.gzip;
+        headers['Content-Encoding'] = 'gzip';
+      }
+      headers['Content-Length'] = String(body.length);
+      res.writeHead(200, headers);
+      res.end(req.method === 'HEAD' ? undefined : body);
+    });
+  }
+
+  return {
+    name: 'submarine-cables',
     configureServer(server) {
       install(server.middlewares);
     },
@@ -29979,6 +30263,7 @@ export default defineConfig(({ mode, command }) => {
       osmCamerasProxy(),
       regionalBriefProxy(),
       weatherEffectsProxy(),
+      submarineCablesProxy(),
       cctvProxy(),
       radioBrowserProxy(),
       gbfsProxy(),

@@ -363,6 +363,10 @@ export class DataLayerManager {
     // Plugged datasets: registered AFTER the seal, by the dataset box, and
     // tracked apart so they can be unplugged without touching the sealed set.
     this._datasetLayerIds = new Set();
+    // Layers this deployment may not show (`withholdLayers`): registered like
+    // every other, so share tokens and the taxonomy still resolve, but with no
+    // row or chip, and refused if anything asks to switch them on.
+    this._withheldLayerIds = new Set();
     // WHERE THE CAMERA IS, for the controls that have a territory.
     //
     // Pushed in by the shell (`setCoverageView`) rather than read off a viewer
@@ -557,6 +561,64 @@ export class DataLayerManager {
   /** Whether a layer id was registered through `registerDataset()`. */
   isDatasetLayer(layerId) {
     return this._datasetLayerIds.has(layerId);
+  }
+
+  /**
+   * Take layers this deployment may not show off the panel, for the session.
+   *
+   * THE CASE. A commercial host (GEV_NONCOMMERCIAL_SOURCES=off —
+   * src/nonCommercialSources.js) does not serve the TeleGeography cable map,
+   * which is licensed for non-commercial use only; its server refuses the
+   * files. A row or chip for it would be a control that can only fail, so the
+   * layer is treated the way the panel already treats a key-gated layer that
+   * never registered: not offered. The chip leaves its fused row, a
+   * standalone row would leave its group, and `getAll()` reports it with
+   * `showInTogglePanel: false`, which is also what the voice layer list reads.
+   *
+   * It stays REGISTERED, so a share link that names it still parses and the
+   * taxonomy still validates; any request to switch it on — a share link,
+   * a scene, the voice agent, a fused row's followers — is refused by
+   * `_visibilityBlockReason` with `withheldLayerReason`. One already on (a
+   * share link restored before the deployment said anything) is switched off.
+   *
+   * @param {Iterable<string>} layerIds
+   * @returns {string[]} The ids newly withheld.
+   */
+  withholdLayers(layerIds) {
+    const added = [];
+    for (const id of layerIds || []) {
+      if (typeof id !== 'string' || !this.layers.has(id) || this._withheldLayerIds.has(id)) continue;
+      this._withheldLayerIds.add(id);
+      added.push(id);
+    }
+    if (!added.length) return added;
+    for (const id of added) {
+      if (this.isEffectivelyEnabled(id)) {
+        this.setEnabled(id, false, { origin: 'programmatic' }).catch((error) => {
+          console.warn(`[Data] ${id} could not be switched off when withheld:`, error);
+        });
+      }
+    }
+    this._renderToggles();
+    return added;
+  }
+
+  /** Whether `withholdLayers` took this layer off the panel. */
+  isLayerWithheld(layerId) {
+    return this._withheldLayerIds.has(layerId);
+  }
+
+  /**
+   * The one line a reader sees when something asks for a withheld layer, in
+   * the page's language; null for a layer that is not withheld.
+   * @param {string} layerId
+   * @returns {?string}
+   */
+  withheldLayerReason(layerId) {
+    if (!this._withheldLayerIds.has(layerId)) return null;
+    const entry = this.layers.get(layerId);
+    const name = this._registrationTaxonomy?.get(layerId)?.label || entry?.module?.name || layerId;
+    return messages().withheld(name);
   }
 
   _registerLayer(layerModule) {
@@ -2409,7 +2471,10 @@ export class DataLayerManager {
         // beside `name`: `source` is the string the module calls its feed, and
         // `_buildMetaText` is the only place that prefers the registry's.
         sourceLabel: taxonomy?.sourceLabel || null,
-        showInTogglePanel: entry.module.showInTogglePanel !== false,
+        // A withheld layer (`withholdLayers`) has no control anywhere: its
+        // row, its chip, and its line in the voice agent's layer list all
+        // read this.
+        showInTogglePanel: entry.module.showInTogglePanel !== false && !this._withheldLayerIds.has(id),
         category: taxonomy?.category || null,
         kind: taxonomy?.kind || null,
         // The fusion facets, passed through exactly as the taxonomy stated
@@ -2515,6 +2580,12 @@ export class DataLayerManager {
       } catch (error) {
         console.warn('[Data] visibility guard error:', error);
       }
+    }
+    // After the guards, not before: the shell's guard may WAIT for the
+    // deployment to say what it withholds (src/main.js), and this is the read
+    // that has to see the answer. Switching a withheld layer OFF is never refused.
+    if (change?.enabled && this._withheldLayerIds.has(change.layerId)) {
+      return this.withheldLayerReason(change.layerId);
     }
     return null;
   }
@@ -3326,7 +3397,10 @@ export class DataLayerManager {
   _fusionCompanions(layerId) {
     const companions = this._registrationTaxonomy?.get(layerId)?.companions;
     if (!Array.isArray(companions)) return [];
-    return companions.filter((entry) => entry?.id && this.layers.has(entry.id));
+    // A withheld layer is off the row like one that never registered: no chip,
+    // and not among the followers a row's toggle switches on.
+    return companions.filter((entry) => entry?.id && this.layers.has(entry.id)
+      && !this._withheldLayerIds.has(entry.id));
   }
 
   /**

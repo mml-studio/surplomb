@@ -203,6 +203,16 @@ export const DATA_CREDITS = [
       '(location-matched article links; publisher terms apply)',
   },
   {
+    // Only ever drawn in the CCTV panel, in place of a camera frame that did
+    // not arrive, and only on a build with a server-side Google key. Withdrawn
+    // where GEV_NONCOMMERCIAL_SOURCES=off: the hosted site never calls it.
+    key: 'google-street-view',
+    html:
+      'CCTV fallback frames: ' +
+      '<a href="https://www.google.com/streetview/" target="_blank" rel="noopener">Google Street View</a> ' +
+      '(imagery &copy; Google, shown when a camera frame is unavailable)',
+  },
+  {
     key: 'austin-cctv',
     html:
       'CCTV cameras &amp; frames: City of Austin, TX — ' +

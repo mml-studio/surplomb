@@ -365,6 +365,9 @@ const COCKPIT_BRIEF_PAGES = [
     get kicker() { return messages().cockpit.brief.newsKicker; },
     get subtitle() { return messages().cockpit.brief.newsSubtitle; },
     get source() { return messages().cockpit.brief.newsSource; },
+    // On a deployment that may not use Google News (GEV_NONCOMMERCIAL_SOURCES
+    // =off) the headlines are GDELT's alone, and the source line says so.
+    get sourceWithoutGoogleNews() { return messages().cockpit.brief.newsSourceGdeltOnly; },
   },
   {
     id: 'local',
@@ -924,6 +927,8 @@ class CockpitViewController {
     this.localWeatherCredit = document.getElementById('cockpit-local-credit');
     // False on a deployment that does not use Open-Meteo; see setWeatherAvailable.
     this.weatherAvailable = true;
+    // False on a deployment that does not use Google News; see setGoogleNewsAvailable.
+    this.googleNewsAvailable = true;
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
     this.signalItems = [];
@@ -1040,6 +1045,20 @@ class CockpitViewController {
     if (this.localWeatherCredit) this.localWeatherCredit.hidden = true;
     if (COCKPIT_BRIEF_PAGES[this.briefPageIndex]?.id === 'local') this.showBriefPage(this.briefPageIndex);
     this.scheduleContextLayout();
+  }
+
+  /**
+   * Whether this deployment asks Google News for headlines. Unavailable
+   * (GEV_NONCOMMERCIAL_SOURCES=off) makes the Regional News page name GDELT
+   * as its only source instead of promising Google News RSS. Learned from
+   * `/api/trial` at boot (src/main.js), or from a brief whose
+   * `googleNewsStatus` is `off`. One-way for the session.
+   * @param {boolean} available
+   */
+  setGoogleNewsAvailable(available) {
+    if (available !== false || !this.googleNewsAvailable) return;
+    this.googleNewsAvailable = false;
+    if (COCKPIT_BRIEF_PAGES[this.briefPageIndex]?.id === 'news') this.showBriefPage(this.briefPageIndex);
   }
 
   syncWeatherToggle(enabled) {
@@ -1934,9 +1953,14 @@ class CockpitViewController {
       this.briefKicker.replaceChildren(...[indicator, document.createTextNode(` ${page.kicker}`)].filter(Boolean));
     }
     const withoutWeather = !this.weatherAvailable && page.subtitleWithoutWeather;
+    const withoutGoogleNews = !this.googleNewsAvailable && page.sourceWithoutGoogleNews;
     if (this.briefSubtitle) this.briefSubtitle.textContent = withoutWeather ? page.subtitleWithoutWeather : page.subtitle;
     if (this.briefPosition) this.briefPosition.textContent = `${this.briefPageIndex + 1} / ${count}`;
-    if (this.briefSource) this.briefSource.textContent = withoutWeather ? page.sourceWithoutWeather : page.source;
+    if (this.briefSource) {
+      this.briefSource.textContent = withoutWeather
+        ? page.sourceWithoutWeather
+        : (withoutGoogleNews ? page.sourceWithoutGoogleNews : page.source);
+    }
     if (this.signalStream) this.signalStream.dataset.briefPage = page.id;
     if (manual && this.briefAutoRotateEnabled) this.startBriefRotation({ reset: true });
     this.scheduleContextLayout();
@@ -2081,6 +2105,7 @@ class CockpitViewController {
     if (this.localPlace) this.localPlace.textContent = placeLabel.toUpperCase();
     this.updateLocalPosition(info);
     if (payload?.weatherStatus === 'off') this.setWeatherAvailable(false);
+    if (payload?.googleNewsStatus === 'off') this.setGoogleNewsAvailable(false);
     const weather = payload?.weather;
     if (this.localTemperature) {
       this.localTemperature.textContent = Number.isFinite(weather?.temperatureC)

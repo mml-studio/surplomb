@@ -292,6 +292,26 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The hosted site no longer uses Google News RSS, Google Street View or the
+  TeleGeography cable map; a clone keeps all three.** Google News allows
+  personal, non-commercial use only, the cable map is CC BY-NC-SA, and
+  Google's EEA terms forbid Street View imagery beside a non-Google map. With
+  `GEV_NONCOMMERCIAL_SOURCES=off`: the cockpit's Regional News comes from
+  GDELT alone and says so (« GDELT · REQUÊTE PAR LIEU · RÉCENT »); a CCTV
+  camera whose frame fails shows « IMAGE · INDISPONIBLE » instead of a Street
+  View still; the Câbles chip leaves « Infrastructure numérique », voice's
+  "infrastructure mode" no longer asks for it, and a share link naming it
+  explains that the site does not offer it. The server no longer hands out the
+  cable files: they left the build's `assets/` and come through
+  `/api/submarine-cables/`, which refuses them there. The three credits leave
+  the Data attribution popover.
+- **The CCTV frame route no longer fetches Street View at coordinates the
+  request supplies.** Any `?lat=&lon=` used to buy a Google still of that
+  point on the server's key; the fallback now looks only where the server
+  holds the camera (its catalog, or an OSM camera it served), everywhere.
+- **GDELT headlines are paced at one request every 6.25 s**, under the one
+  every 5 s it enforces with a 429, now that it is the hosted site's only
+  headline source.
 - **The satellite beyond France no longer comes from Esri's anonymous
   endpoint on a commercial deployment.** Esri says of
   `services.arcgisonline.com` that “this service is not available for

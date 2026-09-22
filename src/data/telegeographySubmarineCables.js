@@ -7,19 +7,18 @@ import {
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { pickAt } from './pickAt.js';
+import { SUBMARINE_CABLE_FILES, submarineCableUrl } from './submarineCableFiles.js';
 
-// TeleGeography submarine-cable data is bundled for an out-of-the-box
-// experience. IMPORTANT: it is CC BY-NC-SA 3.0 (NonCommercial + ShareAlike),
-// NOT covered by this project's MIT license — see DATA_SOURCES.md. Commercial
-// users must remove this dataset or obtain a license from TeleGeography.
-const cableUrl = new URL(
-  './local_data/telegeography_submarine_cables/cable-geo.json',
-  import.meta.url,
-).href;
-const landingPointUrl = new URL(
-  './local_data/telegeography_submarine_cables/landing-point-geo.json',
-  import.meta.url,
-).href;
+// TeleGeography submarine-cable data ships in the checkout for an out-of-the-
+// box experience. IMPORTANT: it is CC BY-NC-SA 3.0 (NonCommercial +
+// ShareAlike), NOT covered by this project's MIT license — see DATA_SOURCES.md.
+// It is NOT a bundled asset: the server reads it from the checkout and serves
+// it through `/api/submarine-cables/`, which refuses it where
+// GEV_NONCOMMERCIAL_SOURCES=off (a commercial host) — src/data/submarineCableFiles.js
+// says why. Commercial users must switch it off, remove the dataset, or obtain
+// a license from TeleGeography.
+const cableUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.cables);
+const landingPointUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.landingPoints);
 
 const BASE_CABLE_COLOR = '#39d5ff';
 const BASE_LANDING_COLOR = '#8fffd2';
@@ -1060,6 +1059,13 @@ export function createTeleGeographySubmarineCableLayer({
   async function fetchJson(url, signal) {
     const response = await fetch(url, { signal, cache: 'force-cache' });
     if (!response.ok) {
+      // The route's refusal on a deployment that does not serve this
+      // non-commercial dataset (GEV_NONCOMMERCIAL_SOURCES=off). The page
+      // normally withholds the layer before it asks; this is the case where
+      // its `/api/trial` read failed.
+      if (response.headers?.get?.('X-Source-Off') === 'telegeography') {
+        throw new Error('TeleGeography data is not served by this deployment');
+      }
       throw new Error(`HTTP ${response.status} for ${url}`);
     }
     return response.json();

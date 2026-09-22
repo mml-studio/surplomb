@@ -1,11 +1,17 @@
-// Sources whose terms allow non-commercial use only, and the one switch that
-// turns them all off.
+// Sources a commercial deployment may not use, and the one switch that turns
+// them all off.
 //
 // A clone is its owner's own non-commercial use, and keeps every source below.
 // surplomb.app is run by a company, so it is a commercial deployment: it sets
 // `GEV_NONCOMMERCIAL_SOURCES=off`, and each source listed here goes dark there.
-// The server stops asking it; the page stops drawing the control, the readings
-// and the attribution that belonged to it.
+// The server stops asking it (or serving it); the page stops drawing the
+// control, the readings and the attribution that belonged to it.
+//
+// Most members are here because their licence or terms allow non-commercial
+// use only. One is here for a different clause — Google's Street View terms
+// forbid its imagery beside a non-Google map — and says so in its `reason`.
+// The variable keeps its name: it is set on the hosted box, and what it means
+// there has not changed (a commercial host turns these off).
 //
 // The switch is read per request, like every GEV_* runtime switch; the page
 // learns it from the `/api/trial` read it already makes at boot
@@ -14,7 +20,8 @@
 // Adding a source is one line in NONCOMMERCIAL_SOURCES, then honouring it
 // where the source is fetched (`isSourceOn(id)` in the proxy) and where it is
 // drawn (`offSourcesFromProbe` in the page). Its credits are withdrawn from
-// the "Data attribution" popover by the entry itself.
+// the "Data attribution" popover, and its layers from the Data Layers panel,
+// by the entry itself.
 
 /** The environment variable. Unset, or `on`, keeps the sources. */
 export const NONCOMMERCIAL_SOURCES_VAR = 'GEV_NONCOMMERCIAL_SOURCES';
@@ -23,10 +30,15 @@ export const NONCOMMERCIAL_SOURCES_VAR = 'GEV_NONCOMMERCIAL_SOURCES';
  * Every source the switch turns off.
  *
  * - `id` is what the server reports in `sourcesOff` (`/api/trial`, `/healthz`).
- * - `terms` is the clause that makes it non-commercial.
+ * - `terms` is the clause that keeps it off a commercial deployment.
+ * - `reason` is which kind of clause that is: `non-commercial` (the default —
+ *   the licence or terms allow non-commercial use only) or `display-terms`
+ *   (the provider forbids the way this app would show it).
  * - `credits` are the keys of its entries in src/data/dataCredits.js.
+ * - `layers` are the Data Layers rows it alone feeds, withheld from the panel
+ *   where it is off (none by default).
  *
- * @type {ReadonlyArray<Readonly<{id: string, name: string, terms: string, credits: readonly string[]}>>}
+ * @type {ReadonlyArray<Readonly<{id: string, name: string, terms: string, reason: string, credits: readonly string[], layers: readonly string[]}>>}
  */
 export const NONCOMMERCIAL_SOURCES = Object.freeze([
   // "You may only use the free API services for non-commercial purposes."
@@ -38,7 +50,18 @@ export const NONCOMMERCIAL_SOURCES = Object.freeze([
   // regardless of purpose." Off, the flights proxy makes adsb.lol its primary
   // source and never asks OpenSky for a snapshot, a track or a token.
   { id: 'opensky', name: 'OpenSky Network', terms: 'https://opensky-network.org/about/terms-of-use', credits: ['opensky'] },
-].map((source) => Object.freeze({ ...source, credits: Object.freeze([...source.credits]) })));
+  // "You may only display the content of the Service for your own personal use (i.e., non-commercial use)." The cockpit headlines fall back on GDELT.
+  { id: 'google-news', name: 'Google News RSS', terms: 'https://www.google.com/intl/en_us/terms_google_news.html', credits: ['google-news-rss'] },
+  // EEA: "Customer may not use any Google Maps Content from the Street View Static API With any Map."
+  { id: 'google-street-view', name: 'Google Street View Static', terms: 'https://developers.google.com/maps/comms/eea/street-view-static', reason: 'display-terms', credits: ['google-street-view'] },
+  // CC BY-NC-SA 3.0: the bundled cable map may not be used commercially.
+  { id: 'telegeography', name: 'TeleGeography Submarine Cable Map', terms: 'https://creativecommons.org/licenses/by-nc-sa/3.0/', credits: ['telegeography'], layers: ['telegeography-submarine-cables'] },
+].map((source) => Object.freeze({
+  reason: 'non-commercial',
+  ...source,
+  credits: Object.freeze([...source.credits]),
+  layers: Object.freeze([...(source.layers || [])]),
+})));
 
 const KNOWN_IDS = new Set(NONCOMMERCIAL_SOURCES.map((source) => source.id));
 
@@ -104,3 +127,17 @@ export function creditKeysOf(ids) {
   const wanted = new Set(ids);
   return NONCOMMERCIAL_SOURCES.filter((source) => wanted.has(source.id)).flatMap((source) => source.credits);
 }
+
+/**
+ * The Data Layers rows of the given sources, for `withholdLayers`.
+ *
+ * @param {Iterable<string>} ids
+ * @returns {string[]}
+ */
+export function layerIdsOf(ids) {
+  const wanted = new Set(ids);
+  return NONCOMMERCIAL_SOURCES.filter((source) => wanted.has(source.id)).flatMap((source) => source.layers);
+}
+
+/** Every layer some source on the list could withhold, whatever this deployment says. */
+export const SWITCHABLE_LAYER_IDS = Object.freeze(NONCOMMERCIAL_SOURCES.flatMap((source) => source.layers));
