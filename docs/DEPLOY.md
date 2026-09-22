@@ -978,9 +978,10 @@ month stay inside the free tier.
    pay-as-you-go, your account will no longer have privileges to […] services
    in which you have exceeded the free tier” ([billing
    help](https://location.arcgis.com/help/billing/)). That makes the free tier
-   a hard ceiling; past it the tiles stop and the globe falls back to
-   Sentinel-2 on its own. Esri documents no budget alert, so this switch is
-   the spending limit.
+   a hard ceiling: past it Esri stops the service instead of billing it, and
+   the globe treats refused tiles like an Esri outage and swaps in Sentinel-2
+   (not yet observed — no account has reached the ceiling). Esri documents no
+   budget alert, so this switch is the spending limit.
 2. **New key.** Dashboard → **My portal** → **Content** → **My content** →
    **New item** → **Developer credentials** → **API key credentials** →
    **Next**.
