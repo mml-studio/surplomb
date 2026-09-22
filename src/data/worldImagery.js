@@ -31,8 +31,14 @@
 //   s2cloudless-2017_3857   (2017)   CC BY 4.0
 //   s2cloudless-2018 … 2025          CC BY-NC-SA 4.0   <- NonCommercial
 //
-// Hence 2017 and not the sharpest year: it is the most recent vintage a MIT
-// fork can hand downstream users without a NonCommercial clause riding along.
+// Hence 2016, and not 2017 as this file first said. Both are CC BY 4.0, but
+// only 2016 covers the world: 2017 is Europe, North Africa and the Middle East,
+// and paints every other continent as flat white land — its four z1 tiles,
+// read 2026-09-22, show the Americas, Asia past the Urals, southern Africa
+// and Australia white. That went unseen while Sentinel-2 only stood in for a
+// dead Esri; it became the whole world base the day a commercial deployment
+// switched the anonymous endpoint off. Same 10 m detail, same z14 profile
+// (Madrid, 2016 vs 2017: 25.3 / 27.7 kB at z13, 13.2 / 14.6 kB at z14).
 //
 // THREE PATHS, AND WHO GETS WHICH (`chooseWorldImagery`):
 //
@@ -47,7 +53,7 @@
 //      (src/nonCommercialSources.js), and a page that has not heard from the
 //      server yet does not guess: the browser fetches these tiles itself, so
 //      one guess would be one request the hosted site may not make.
-//   3. Everything else draws Sentinel-2 cloudless 2017, which is also where
+//   3. Everything else draws Sentinel-2 cloudless 2016, which is also where
 //      either Esri path lands once it has failed its tile budget.
 
 import * as Cesium from 'cesium';
@@ -174,14 +180,14 @@ export function anonymousEsriAllowedByProbe(probe) {
 // `g` matrix set is GoogleMapsCompatible — verified by asking for it directly:
 // level 0 returns one tile, level 1 returns four.
 const S2CLOUDLESS_URL =
-  'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2017_3857/default/g/{z}/{y}/{x}.jpg';
+  'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg';
 
 // Sentinel-2 is 10 m/px. EOX serves 200s up to 16, but the bodies collapse
 // past 14 (13 kB at 14, 6 kB at 16) — that is upsampling, not detail.
 const S2CLOUDLESS_MAX_LEVEL = 14;
 
 const S2CLOUDLESS_CREDIT =
-  'Sentinel-2 cloudless 2017 © EOX — Copernicus, CC BY 4.0';
+  'Sentinel-2 cloudless 2016 © EOX — Copernicus, CC BY 4.0';
 
 /**
  * Distinct failed tiles tolerated before Esri is declared down.
@@ -231,7 +237,8 @@ export function createWorldImageryProvider(kind, { arcgisApiKey = '' } = {}) {
 }
 
 /**
- * Sentinel-2 cloudless 2017 — the CC BY 4.0 fallback.
+ * Sentinel-2 cloudless 2016 — the CC BY 4.0 fallback, and the only CC BY
+ * vintage that covers the whole world.
  * @returns {Cesium.UrlTemplateImageryProvider}
  */
 export function createS2CloudlessProvider() {

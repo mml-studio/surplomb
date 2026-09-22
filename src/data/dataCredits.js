@@ -312,10 +312,11 @@ export const DATA_CREDITS = [
     key: 'world-satellite-s2cloudless',
     html:
       'Worldwide satellite base where Esri is not used, or has failed: ' +
-      '<a href="https://cloudless.eox.at" target="_blank" rel="noopener">Sentinel-2 cloudless 2017 by EOX</a> ' +
-      '(contains modified Copernicus Sentinel data 2017, ' +
+      '<a href="https://cloudless.eox.at" target="_blank" rel="noopener">Sentinel-2 cloudless 2016 by EOX</a> ' +
+      '(contains modified Copernicus Sentinel data 2016, ' +
       '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) &mdash; ' +
-      '10 m resolution, served to z14. The 2017 vintage is deliberate: every EOX vintage from 2018 onward is ' +
+      '10 m resolution, served to z14. The 2016 vintage is deliberate: it is the one CC BY vintage that covers ' +
+      'the whole world (2017 covers Europe only), and every EOX vintage from 2018 onward is ' +
       'CC BY-<strong>NC</strong>-SA, and this repository is MIT. ' +
       'Not shown over metropolitan France, where IGN&rsquo;s 20 cm orthophoto sits above it.',
   },

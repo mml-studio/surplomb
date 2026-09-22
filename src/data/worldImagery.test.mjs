@@ -81,7 +81,7 @@ test('each world base has its own popover line, and a build withdraws the Esri p
   assert.match(html('world-satellite-arcgis'), /Powered by <a[^>]*>Esri<\/a>/);
   assert.match(html('world-satellite-arcgis'), /ArcGIS Location Platform/);
   assert.match(html('world-satellite-keyless'), /not available for commercial use/);
-  assert.match(html('world-satellite-s2cloudless'), /Sentinel-2 cloudless 2017/);
+  assert.match(html('world-satellite-s2cloudless'), /Sentinel-2 cloudless 2016/);
   // The Sentinel-2 line never names Esri, so withdrawing Esri leaves a true popover.
   assert.doesNotMatch(html('world-satellite-s2cloudless'), /arcgis|Esri World Imagery/i);
 
@@ -111,6 +111,9 @@ test('each kind builds the provider it names, and none asks a NonCommercial EOX 
   assert.match(licensed.url, /ibasemaps-api\.arcgis\.com/);
   assert.match(anonymous.url, /^https:\/\/services\.arcgisonline\.com\//);
   assert.doesNotMatch(anonymous.url, /token=/, 'the anonymous endpoint is never handed the key');
-  assert.match(fallback.url, /s2cloudless-2017_3857/);
+  // 2016, not 2017: both are CC BY 4.0, but 2017 paints every continent
+  // outside Europe, North Africa and the Middle East as white land.
+  assert.match(fallback.url, /\/s2cloudless_3857\//);
+  assert.match(fallback.credit.html, /2016/);
   assert.equal(fallback.maximumLevel, 14);
 });

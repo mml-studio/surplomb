@@ -203,7 +203,7 @@ test('the world base falls back to Sentinel-2 once Esri has failed its tile budg
   }
   const fallback = controller._getWorldImageryProvider();
   assert.notEqual(fallback, esri, 'a real outage swaps the base');
-  assert.match(fallback.url, /s2cloudless-2017/, 'the fallback is the CC BY 4.0 vintage, not a NonCommercial one');
+  assert.match(fallback.url, /\/s2cloudless_3857\//, 'the fallback is the worldwide CC BY 4.0 vintage, not a NonCommercial one');
   assert.equal(fallback.maximumLevel, 14, 'Sentinel-2 is 10 m — anything past 14 is upsampling');
 
   // IGN is untouched by the swap: France keeps its 20 cm layer and its cache.
@@ -241,7 +241,7 @@ test('without a key, the world base asks no Esri host until the server has said 
   const viewer = recordingViewer();
   const controller = new MapStackController(viewer, { cesiumToken: '' });
   const [base, ign] = await showOrtho(controller);
-  assert.match(base.imageryProvider.url, /s2cloudless-2017/, 'not told is not allowed');
+  assert.match(base.imageryProvider.url, /s2cloudless_3857/, 'not told is not allowed');
   assert.equal(controller.getWorldImageryKind(), 's2cloudless');
 
   // A clone's answer: the anonymous endpoint opens, swapped in place.
@@ -258,7 +258,7 @@ test('without a key, the world base asks no Esri host until the server has said 
 
   // GEV_NONCOMMERCIAL_SOURCES=off (or a probe that failed): back to Sentinel-2.
   controller.setAnonymousEsriAllowed(false);
-  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless-2017/);
+  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless_3857/);
 });
 
 test('a swap keeps the base asleep over France, and never touches a layer that is not the world base', async () => {
@@ -296,7 +296,7 @@ test('a key draws the licensed layer whatever the switch says, and a dead key fa
   for (let tile = 0; tile < WORLD_IMAGERY_FAILURE_BUDGET; tile += 1) {
     base.imageryProvider.errorEvent.raiseEvent({ level: 7, x: tile, y: 3 });
   }
-  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless-2017/);
+  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless_3857/);
   assert.doesNotMatch(viewer.layers[0].imageryProvider.url, /arcgisonline/);
 });
 
