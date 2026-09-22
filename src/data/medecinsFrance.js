@@ -405,6 +405,11 @@ export function buildSiteCard(site, practitioners, context = {}) {
   if ((practitioners?.length ?? 0) > 8) {
     details.push(m.morePractitioners(practitioners.length - 8));
   }
+  // Where the names would be, when the server has none to give. Only where
+  // the register names somebody: a health centre never publishes names, and
+  // its card already says so.
+  if (doctors > 0 && context.names === 'unavailable') details.push(m.namesUnavailable);
+  else if (doctors > 0 && context.names === 'stale') details.push(m.namesStale);
 
   const commune = apl?.communes?.[site[SITE_INSEE]];
   if (commune) {
@@ -605,8 +610,14 @@ export function createMedecinsLayer({
   let _lastServedKey = null;
   let _floorRetryTimer = null;
   let _floorRetries = 0;
-  /** siteIndex → practitioner rows, fetched on the click that needs them. */
+  /**
+   * `packId:siteIndex` → {praticiens, names}, fetched on the click that needs
+   * them. Keyed by pack too: an index is a line number of ONE server pack.
+   */
   const _practitionerCache = new Map();
+  /** The server pack the last `/sites` answer came from. */
+  let _packId = null;
+  const practitionerKey = (record) => `${record.packId ?? ''}:${record.index}`;
 
   const renderId = (key) => `${RENDER_PREFIX}${key}`;
 
@@ -730,7 +741,10 @@ export function createMedecinsLayer({
     // follow the mark up rather than stay where the buried one used to be.
     if (moved && _selectedId && !_selectedId.startsWith('dep:')) {
       const record = _records.get(_selectedId);
-      if (record) paintSiteCard(_selectedId, record, _practitionerCache.get(record.index) ?? null);
+      if (record) {
+        const cached = _practitionerCache.get(practitionerKey(record));
+        paintSiteCard(_selectedId, record, cached?.praticiens ?? null, cached?.names ?? null);
+      }
     }
     return moved;
   }
@@ -950,11 +964,12 @@ export function createMedecinsLayer({
     governorRequestRender('medecins-fr-clear');
   }
 
-  function paintSiteCard(id, record, praticiens) {
+  function paintSiteCard(id, record, praticiens, names = null) {
     const copy = buildSiteCard(record.site, praticiens, {
       specialites: _national?.specialites,
       precision: _national?.precision,
       apl: _national?.apl,
+      names,
     });
     overlayHost.setEntries(
       OVERLAY_SOURCE_ID,
@@ -965,6 +980,24 @@ export function createMedecinsLayer({
   }
 
   /**
+   * The names at one address, or why there are none.
+   *
+   * 409 is the server saying its pack was rebuilt since these dots were drawn:
+   * their indices are line numbers of the OLD pack, and asking again with them
+   * would put this week's names on last week's addresses.
+   */
+  async function fetchPractitioners(record) {
+    const params = new URLSearchParams({ index: String(record.index), pack: record.packId ?? '' });
+    const response = await fetchImpl(`/api/medecins-fr/praticiens?${params}`);
+    if (response.status === 409) {
+      const body = await response.json().catch(() => ({}));
+      return { stale: true, packId: body?.packId ?? null };
+    }
+    if (!response.ok) throw new Error(`/api/medecins-fr/praticiens → HTTP ${response.status}`);
+    return response.json();
+  }
+
+  /**
    * Open a card, and fetch the doctors' names for it.
    *
    * The names are NOT in the `/sites` payload on purpose — over central Paris
@@ -972,6 +1005,9 @@ export function createMedecinsLayer({
    * opens one. So the card paints immediately from what the dot already knows,
    * and fills in the names when they land. Cached per address, because a
    * reader who closes a card and reopens it should not pay twice.
+   *
+   * A server without names (a clone that never ran the build) answers
+   * `names: false`, and the card says so instead of listing nobody.
    */
   function selectSite(id) {
     const record = _records.get(id);
@@ -994,14 +1030,27 @@ export function createMedecinsLayer({
       governorRequestRender('medecins-fr-select');
       return;
     }
-    const cached = _practitionerCache.get(record.index);
-    paintSiteCard(id, record, cached ?? null);
+    const key = practitionerKey(record);
+    const cached = _practitionerCache.get(key);
+    paintSiteCard(id, record, cached?.praticiens ?? null, cached?.names ?? null);
     if (cached || record.index === undefined) return;
-    fetchJson(`/api/medecins-fr/praticiens?index=${record.index}`)
+    fetchPractitioners(record)
       .then((payload) => {
-        _practitionerCache.set(record.index, payload.praticiens ?? []);
+        if (payload.stale) {
+          // Re-read the sites under the new pack, and say why this card has
+          // no names rather than leave it looking complete.
+          _packId = payload.packId ?? _packId;
+          if (_selectedId === id) paintSiteCard(id, record, null, 'stale');
+          refresh({ force: true });
+          return;
+        }
+        const entry = {
+          praticiens: payload.praticiens ?? [],
+          names: payload.names === false ? 'unavailable' : null,
+        };
+        _practitionerCache.set(key, entry);
         // Only if the reader is still looking at this card.
-        if (_selectedId === id) paintSiteCard(id, record, payload.praticiens ?? []);
+        if (_selectedId === id) paintSiteCard(id, record, entry.praticiens, entry.names);
       })
       .catch(() => { /* the card is already useful without the names */ });
   }
@@ -1196,6 +1245,10 @@ export function createMedecinsLayer({
     const params = new URLSearchParams({
       south: String(box.south), west: String(box.west), north: String(box.north), east: String(box.east),
     });
+    // Ignored by the server, and there for the browser's cache: `/sites` is
+    // cached for ten minutes, and after a rebuild the same box must not come
+    // back with the old pack's indices.
+    if (_packId) params.set('pack', _packId);
     let payload;
     try {
       payload = await fetchJson(`/api/medecins-fr/sites?${params}`, controller?.signal);
@@ -1204,6 +1257,7 @@ export function createMedecinsLayer({
       throw error;
     }
     if (token !== _sitesToken) return;
+    _packId = payload.packId ?? _packId;
     _sites = payload.sites;
     _sitesTruncated = Boolean(payload.truncated);
     _sitesBox = box;
@@ -1211,6 +1265,7 @@ export function createMedecinsLayer({
     const practices = absorbedByHospital(payload.sites.map((entry) => ({
       key: `site:${entry.index}`,
       index: entry.index,
+      packId: payload.packId ?? null,
       lat: entry.site[SITE_LAT],
       lon: entry.site[SITE_LON],
       practitioners: entry.site[SITE_PRACTITIONERS],

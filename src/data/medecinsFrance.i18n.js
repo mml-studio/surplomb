@@ -163,6 +163,17 @@ export default defineMessages({
       en: (count) => `and ${count} more practitioners`,
       sample: [7],
     },
+    namesUnavailable: {
+      fr: 'Noms des praticiens indisponibles sur ce serveur',
+      en: 'Practitioners’ names are not available on this server',
+      note: 'The names are built by each deployment, not shipped in the repository; a '
+        + 'server that never built them draws the layer without them.',
+    },
+    namesStale: {
+      fr: 'Annuaire mis à jour à l’instant : rouvrez la fiche pour voir les noms',
+      en: 'The directory was just updated: reopen the card to see the names',
+      note: 'The server rebuilt its copy since the map was drawn; the map redraws on its own.',
+    },
     decile: {
       fr: (n) => `${n}ᵉ dixième de France`,
       en: (n) => `${ordinal(n, { locale: 'en' })} tenth of France`,

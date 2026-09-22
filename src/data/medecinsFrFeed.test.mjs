@@ -79,6 +79,16 @@ test('every specialty the shipped pack publishes has an explicit family', () => 
   assert.deepEqual(stale, [], `family table names codes the pack does not: ${stale.join(', ')}`);
 });
 
+test('the shipped pack is the name-free one, and says no names file belongs to it', () => {
+  // The names are built by each deployment and never committed. `null` is the
+  // pack declaring that it was built without them, which is what stops the
+  // proxy from pairing it with a names file left lying beside it.
+  assert.equal(PACK.praticiens, null);
+  // The one address line of the 2026-08-17 edition that was a doctor's
+  // nameplate stays masked.
+  assert.equal(PACK.stats.voiesMasquees, 1);
+});
+
 test('every family has a label, and the index covers the list', () => {
   for (const family of MEDECIN_FAMILIES) {
     assert.ok(medecinFamilyLabel(family) !== family, `no label for ${family}`);

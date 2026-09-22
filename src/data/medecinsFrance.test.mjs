@@ -229,3 +229,30 @@ test('crossing a regime boundary always re-asks', () => {
   assert.notEqual(boxKey(box, 'mesh'), boxKey(box, 'sites'));
   assert.notEqual(boxKey(box, 'national'), boxKey(box, 'mesh'));
 });
+
+test('a server without names says so where the names would be, and only where there are some', () => {
+  // The names are built by each deployment, not shipped in the repository: a
+  // clone that never built them must not show an address that looks as
+  // though nobody practises there.
+  const card = buildSiteCard(site(), [], { specialites: SPECIALITES, precision: PRECISION, names: 'unavailable' });
+  assert.match(card, /Noms des praticiens indisponibles sur ce serveur/);
+  assert.match(card, /2 médecins/, 'the count is the register’s arithmetic and stays');
+
+  // A health centre publishes no names anywhere; its card already says so.
+  const centre = buildSiteCard(
+    site({ kind: 'centre-de-sante', practitioners: 0, specialties: [['01', 3]] }),
+    [],
+    { specialites: SPECIALITES, precision: PRECISION, names: 'unavailable' },
+  );
+  assert.ok(!centre.includes('indisponibles'));
+
+  // Names that arrived are never followed by a line saying they did not.
+  const named = buildSiteCard(site(), [['MARTIN CLAIRE', 'F', '01', '1', '']], { precision: PRECISION });
+  assert.ok(!named.includes('indisponibles'));
+});
+
+test('a card opened across a server rebuild asks to be reopened instead of guessing', () => {
+  const card = buildSiteCard(site(), null, { specialites: SPECIALITES, precision: PRECISION, names: 'stale' });
+  assert.match(card, /Annuaire mis à jour/);
+  assert.ok(!card.includes('Dr '), 'no name from another pack may reach the card');
+});

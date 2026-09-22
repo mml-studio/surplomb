@@ -13,3 +13,7 @@ qa-shots
 output
 3d-models
 docs/media
+# Doctors' names live in the cache volume, rebuilt weekly; an image must not
+# carry a frozen copy of them.
+src/data/local_data/medecins_fr/praticiens.jsonl
+src/data/local_data/medecins_fr/praticiens.jsonl.gz

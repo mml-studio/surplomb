@@ -5,9 +5,13 @@ planned as *Médecins (FR)* when this pack was first built):
 
 - `medecins.json` — every address in France where a doctor practices under the
   national health-insurance agreement (*conventionné*), its coordinate, what is
-  practiced there, and the DREES's **APL** (local GP accessibility);
+  practiced there, and the DREES's **APL** (local GP accessibility). **No
+  names.** A copy lives in this directory, in git;
 - `praticiens.jsonl` — the named practitioners, one line per address, in the
-  same order as `sites[]`.
+  same order as `sites[]`. **Never in git**: each deployment builds it, with a
+  fresh `medecins.json` beside it, into its own cache volume
+  (`.gev-cache/medecins-fr/pack/`), and the hosted site rebuilds it every week.
+  See [the names](#the-names-built-by-each-deployment-never-committed).
 
 They exist for one simple and awkward reason: **the national register of
 doctors has no coordinates, and every geocoded copy in circulation is a decade
@@ -16,7 +20,8 @@ old.**
 Rebuild:
 
 ```
-npm run medecins:registry                   # writes both files
+npm run medecins:registry                   # both files, into .gev-cache/medecins-fr/pack/
+npm run medecins:registry -- --repo         # the name-free medecins.json.gz, into this directory
 npm run medecins:registry -- --report       # + the precision / coverage audit
 npm run medecins:registry -- --verifier     # + the check against the CNAM headcount
 npm run medecins:registry -- --refresh      # re-downloads, ignores the cache
@@ -25,6 +30,77 @@ npm run medecins:registry -- --no-apl       # without the accessibility indicato
 npm run medecins:registry -- --praticiens   # + the per-practitioner CSV in .gev-cache/
 npm run medecins:registry -- --plain        # writes both outputs uncompressed
 ```
+
+Measured on 2026-09-22 against the 2026-09-21 edition: a full `--refresh`
+build takes **6 min 21 s**, nearly all of it waiting on the BAN (24 s of CPU),
+downloads 214 MB (the register 159 MB, FINESS 44 MB, the APL workbook and the
+commune list) and needs a **heap between 1.25 and 1.5 GB** — it dies at
+`--max-old-space-size=1280` and finishes at 1536, 1.76 GB peak footprint; under
+the hosted unit's 2048 it took 6 min 11 s and 1.95 GB. It needed more than
+2 GB of heap before the CSV reader stopped building each field one character
+at a time and holding every row twice. That edition gives 64,297 addresses
+located out of 64,691 (99.4%; 64,295 on a second run the same day — the BAN
+is not strictly repeatable) and 193,955 named practitioner entries.
+
+## The names: built by each deployment, never committed
+
+Until 2026-09-22 `praticiens.jsonl.gz` was committed here, from the 2026-08-17
+edition, and served unchanged. Displaying the names is lawful — the CNAM
+publishes them as open data under article L. 1461-2 of the Public Health Code —
+but a reuser of published personal data becomes a controller of its own (CNIL
+guidance on reuse), owes their accuracy (GDPR art. 5(1)(d)) and must honour an
+objection (art. 21). A copy frozen in a public repository can do neither: a
+correction made at Ameli never reaches it, and a name cannot be withdrawn from
+it. So:
+
+- **The names are built, not shipped.** `npm run medecins:registry` writes the
+  pair into `.gev-cache/medecins-fr/pack/` (`GEV_MEDECINS_PACK_DIR`), which the
+  hosted stack mounts as a volume. The hosted box rebuilds it **every Monday**
+  (`gev-medecins-refresh.timer`, [docs/DEPLOY.md](../../../../docs/DEPLOY.md)),
+  so a correction made at Ameli reaches the map within a week. The proxy
+  re-checks the pair once a minute; no restart.
+- **The pair wins over this directory.** When it exists the proxy serves it;
+  when it does not, the layer draws from the `medecins.json.gz` here — every
+  address, count, specialty and APL value — and a practice card says the
+  names are not available on this server. A fresh clone therefore works with
+  no build at all, minus the names.
+- **An objection is a line in a file.** `GEV_MEDECINS_SUPPRESS` (default
+  `.gev-cache/medecins-fr/suppress.txt`, never in git: it names exactly the
+  people who asked not to be named) lists one practitioner per line, as the
+  directory spells the name, optionally narrowed to a postal-code prefix:
+
+  ```
+  # 2026-09-22, objection received by email
+  SURNAME FIRSTNAME
+  OTHERSURNAME FIRSTNAME ; 75011
+  ```
+
+  Matching ignores accents, case, punctuation and word order, and is exact on
+  the words: `SURNAME JEAN` does not hide `SURNAME JEAN PIERRE`. The proxy reads
+  the file again whenever it changes and applies it to **every** card, with
+  `Cache-Control: no-store`, so the next card anyone opens honours it; the
+  weekly build applies it too, so the names file itself no longer holds the
+  entry. The whole entry goes (name, title, specialty, sector); the address
+  counts stay, because they name nobody. A list that exists but cannot be read
+  fails closed: no names at all.
+- **A names file only ever joins its own pack.** Line N is `sites[N]`, with no
+  key, so a names file from another build would put every name on the wrong
+  address. The build declares the file's sha256 in the pack
+  (`praticiens: {lignes, sha256}`), the copy here declares `praticiens: null`,
+  and the proxy refuses any pair that does not match. Every answer carries a
+  `packId`, and `/praticiens` refuses an index from another pack with 409, so a
+  tab left open across a weekly rebuild re-reads its sites instead of showing
+  this week's names at last week's addresses.
+- **One address line was a nameplate.** The register's address block is free
+  text, and one practice of 64,232 wrote `CABINET DU DR` followed by its
+  doctor's initial and surname. The build now empties an address line that
+  carries a title word and the surname of a doctor of that same site, unless
+  it starts like a street (three do: streets named after a doctor, with a
+  namesake practising there). `stats.voiesMasquees` counts them: 1.
+
+Removing the file from git does not remove it from git's **history**, nor from
+forks made before 2026-09-22; rewriting published history was left out on
+purpose.
 
 ## The state of play, checked 2026-09-01
 
@@ -141,10 +217,10 @@ Measured on the 2026-08-17 edition:
   matched (99.7%)**.
 - **393 addresses not located, 0.6%** — `nonLocalisees[]`, named and not
   erased.
-- **Both files ship gzipped**: `medecins.json.gz` 2.0 MB and
+- **Both files are written gzipped**: `medecins.json.gz` 2.0 MB and
   `praticiens.jsonl.gz` 1.5 MB, against 8.9 + 7.3 = **16.2 MB uncompressed**.
   `npm run medecins:registry -- --plain` writes the readable version; the proxy
-  and the tests read whichever of the two is present.
+  and the tests read whichever of the two is present. Only the first is in git.
 
 ### Why the names are in a second file
 
@@ -401,7 +477,7 @@ thirty small camera moves — read through the browser's *Resource Timing* API.
 | `/mesh` | 1,445 KiB | **361 KiB** | 4.0× |
 | `/sites`, dense box over Paris | 1,451 KiB | **163 KiB** | 8.9× |
 | `/national` | 9 KiB | **4 KiB** | 2.1× |
-| The two artifacts in the repository | 16.18 MB | **3.67 MB** | 4.4× |
+| The two artifacts (only `medecins.json.gz` in git since 2026-09-22) | 16.18 MB | **3.67 MB** | 4.4× |
 
 Four decisions, each with its price:
 
@@ -413,8 +489,8 @@ Four decisions, each with its price:
    original.
 2. **The names left `/sites`.** On a dense Paris box they weighed **40% of
    1,451 KiB**: 16,069 names sent to draw 5,907 points, of which a reader opens
-   one. They are now requested through `/praticiens?index=N` on click, and
-   cached per address.
+   one. They are now requested through `/praticiens?index=N&pack=…` on click,
+   and cached per address.
 3. **A view already served costs nothing.** `moveEnd` and `changed` both fire on
    the same gesture, and Cesium's rectangle differs between the two at the
    twelfth decimal — enough to request the same 800 KiB box twice. The view key
@@ -444,6 +520,13 @@ required, including the date of last update:
 > Geocoding: Base Adresse Nationale (api-adresse.data.gouv.fr), Licence
 > Ouverte 2.0.
 
-The files contain personal data about health professionals — name, title,
-specialty, practice address, fee sector — published as open data under article
-L. 1461-2 of the Public Health Code.
+A deployment's own build carries its own edition date in `source.ps.modified`,
+which `/api/medecins-fr/status` reports as `edition`.
+
+The names file holds personal data about health professionals — name, title,
+specialty, fee sector — published as open data under article L. 1461-2 of the
+Public Health Code; the practice address and phone number in `medecins.json`
+are the ones the CNAM publishes for the practice. Which is why the first is
+built by each deployment, refreshed weekly and filtered through a suppression
+list, and never committed: see
+[the names](#the-names-built-by-each-deployment-never-committed).

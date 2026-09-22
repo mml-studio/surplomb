@@ -125,3 +125,13 @@ test('the tariff line, the APL ramp and the seven families all speak English', (
     'Medical specialty', 'Surgery', 'Imaging and laboratory', 'Hospital']);
   assertNoFrench([line, rungs, families]);
 });
+
+test('a server without names, or mid-rebuild, says so in English', () => {
+  const unavailable = en(() => buildSiteCard(site(), [], { precision: PRECISION, names: 'unavailable' }));
+  const unavailableLine = unavailable.split('\n').find((text) => text.includes('names'));
+  assert.equal(unavailableLine, 'Practitioners’ names are not available on this server');
+  const stale = en(() => buildSiteCard(site(), null, { precision: PRECISION, names: 'stale' }));
+  const staleLine = stale.split('\n').find((text) => text.includes('directory'));
+  assert.equal(staleLine, 'The directory was just updated: reopen the card to see the names');
+  assertNoFrench([unavailableLine, staleLine]);
+});

@@ -1,0 +1,15 @@
+[Unit]
+Description=Rebuild the doctors pack once a week, after the CNAM republishes it
+
+[Timer]
+# The CNAM republishes the Annuaire santé Ameli every Monday: the 2026-08-17
+# and 2026-09-21 editions both landed between 00:42 and 02:31 UTC. 07:23 leaves
+# room for a late upload, and stays clear of gev-warm-view (Mon 04:17).
+OnCalendar=Mon *-*-* 07:23:00
+# Missed while the box was off is caught up at boot, not skipped for a week.
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

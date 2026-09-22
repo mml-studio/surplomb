@@ -56,6 +56,14 @@ import { Readable } from 'node:stream';
 import readline from 'node:readline';
 import zlib from 'node:zlib';
 import { MEDECIN_FAMILY_INDEX, sitePrimaryFamily } from './src/data/medecinsFrFeed.js';
+import {
+  EMPTY_SUPPRESSION,
+  buildSuppressionIndex,
+  medecinsRuntimePaths,
+  pairPractitioners,
+  parseSuppressionList,
+  withoutSuppressed,
+} from './src/data/medecinsNames.js';
 import https from 'node:https';
 import { lookup as lookupDns } from 'node:dns/promises';
 import { directionToHeading } from './src/data/directionText.js';
@@ -6931,11 +6939,12 @@ function petiteEnfanceFranceProxy() {
 
 
 /**
- * French doctor register — served from the shipped pack, not from a network.
+ * French doctor register — served from a built pack, not from a network.
  *
  *   GET /api/medecins-fr/national                     — départements + APL, once
  *   GET /api/medecins-fr/mesh                         — the national point set, once
- *   GET /api/medecins-fr/sites?south&west&north&east  — sites in one box, with names
+ *   GET /api/medecins-fr/sites?south&west&north&east  — sites in one box, no names
+ *   GET /api/medecins-fr/praticiens?index&pack        — the names at ONE address
  *   GET /api/medecins-fr/status                       — provenance + what is loaded
  *
  * WHY A PROXY FOR A LOCAL FILE, when `plants.json` is simply fetched by its
@@ -6946,13 +6955,43 @@ function petiteEnfanceFranceProxy() {
  * their doctors' names — only once someone looks. Slicing here costs one
  * `readFile` at boot and keeps every one of those three answers small.
  *
- * There is no TTL and no stale window on purpose. The upstream is a file in
- * this repository, rebuilt by `npm run medecins:registry`; it cannot go stale
- * between two requests, and pretending otherwise would be theatre.
+ * ── TWO PLACES, AND THE NAMES ARE ONLY IN ONE OF THEM ──────────────────────
+ *
+ * The repository ships `medecins.json.gz` — addresses, specialties, counts,
+ * the APL — and NO names. The names file is built by each deployment into its
+ * cache volume (`npm run medecins:registry`, weekly on the hosted box; see
+ * docs/DEPLOY.md) together with a fresh `medecins.json`, and the pair there
+ * wins whenever it exists. A clone that never ran the build draws the whole
+ * layer from the repository's pack, and its cards say the names are not
+ * available: the aggregate is everything but the names.
+ *
+ * The pair is re-checked once a minute, so the weekly rebuild lands without a
+ * restart. Every answer carries a `packId`, and `/praticiens`
+ * refuses an index from another pack with 409: line N of the names file is
+ * site N of ITS pack only, and a tab opened before the rebuild would otherwise
+ * attach every name to the wrong address.
+ *
+ * ── THE SUPPRESSION LIST ────────────────────────────────────────────────────
+ *
+ * `GEV_MEDECINS_SUPPRESS` (default `.gev-cache/medecins-fr/suppress.txt`)
+ * lists the practitioners who objected; format in `src/data/medecinsNames.js`.
+ * It is stat-ed on EVERY `/praticiens` request, so a line appended by hand is
+ * honoured by the next card anyone opens, and the answer is `no-store` so no
+ * cache keeps an older one. A list that exists and cannot be read fails
+ * CLOSED: no names at all, rather than the names of people who objected.
  */
 const MEDECINS_DIR = path.join(process.cwd(), 'src', 'data', 'local_data', 'medecins_fr');
-const MEDECINS_PACK_PATH = path.join(MEDECINS_DIR, 'medecins.json');
-const MEDECINS_PRACTITIONERS_PATH = path.join(MEDECINS_DIR, 'praticiens.jsonl');
+const { packDir: MEDECINS_RUNTIME_DIR, suppressPath: MEDECINS_SUPPRESS_PATH } = medecinsRuntimePaths(
+  process.cwd(),
+  process.env,
+  path,
+);
+/**
+ * How long a loaded pair is trusted before the disk is asked again. One
+ * minute, like the carroyage pack: a rebuild is weekly, and a `stat` of two
+ * files per minute is nothing.
+ */
+const MEDECINS_RECHECK_MS = 60_000;
 /** Paris at 0.6° holds ~4 500 sites; wider than that is a smear, not a map. */
 const MEDECINS_MAX_BOX_DEG = 0.6;
 const MEDECINS_SITES_CAP = 6000;
@@ -6969,12 +7008,17 @@ const _medecinsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 120, globa
  */
 const MEDECINS_GRID_DEG = 0.25;
 
-/** @type {?{pack:object, practitioners:{length:number, line:(i:number)=>string}, grid:Map<string, number[]>, loadedAt:number}} */
-let _medecinsPack = null;
-/** @type {?Promise<object>} */
-let _medecinsPackInFlight = null;
-/** route → {raw:Buffer, gzip:Buffer} for the two payloads that never vary. */
-const _medecinsStatic = new Map();
+/**
+ * @typedef {object} MedecinsLoaded
+ * @property {object} pack
+ * @property {{length:number, line:(i:number)=>string}} practitioners
+ * @property {Map<string, number[]>} grid
+ * @property {number} loadedAt
+ * @property {string} packId      first 12 hex of the pack's sha256
+ * @property {'runtime'|'repository'} origin
+ * @property {{available:boolean, reason:?string}} names
+ * @property {string} signature   paths, sizes and mtimes the pair was read from
+ */
 
 function medecinsGridKey(lat, lon) {
   return `${Math.floor(lat / MEDECINS_GRID_DEG)}:${Math.floor(lon / MEDECINS_GRID_DEG)}`;
@@ -6988,8 +7032,13 @@ function medecinsGridKey(lat, lon) {
  * Measured on one session over central Paris — national + mesh + two site
  * boxes — **3 360 kio uncompressed against 900 kio gzipped**. The mesh alone
  * is 1 445 kio and compresses to 430.
+ *
+ * `staticCache` holds the two payloads that never vary within one pack,
+ * serialized and compressed once: `route:packId` → {raw, gzip}.
  */
-function medecinsSend(req, res, status, body, { cacheSeconds = 3600, cacheKey = null } = {}) {
+function medecinsSend(req, res, status, body, {
+  cacheSeconds = 3600, cacheKey = null, cacheControl = null, staticCache = null,
+} = {}) {
   const accepts = /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''));
   let raw = null;
   let gzipped = null;
@@ -6997,21 +7046,21 @@ function medecinsSend(req, res, status, body, { cacheSeconds = 3600, cacheKey = 
   // BIGGER — measured: a 68-byte `/praticiens` body came back as 82. The
   // per-card route is the one that hits this.
   const GZIP_FLOOR_BYTES = 1024;
-  if (cacheKey && _medecinsStatic.has(cacheKey)) {
-    ({ raw, gzip: gzipped } = _medecinsStatic.get(cacheKey));
+  if (cacheKey && staticCache?.has(cacheKey)) {
+    ({ raw, gzip: gzipped } = staticCache.get(cacheKey));
   } else {
     raw = Buffer.from(JSON.stringify(body));
     // Level 6, not 9: on the 1.4 MB mesh, 9 costs ~3× the CPU for under 2 %
     // more compression, and this buffer is built once and served forever.
     gzipped = raw.length >= GZIP_FLOOR_BYTES ? zlib.gzipSync(raw, { level: 6 }) : raw;
-    if (cacheKey) _medecinsStatic.set(cacheKey, { raw, gzip: gzipped });
+    if (cacheKey && staticCache) staticCache.set(cacheKey, { raw, gzip: gzipped });
   }
   const useGzip = accepts && raw.length >= GZIP_FLOOR_BYTES && gzipped.length < raw.length;
   const payload = useGzip ? gzipped : raw;
   const headers = {
     'Content-Type': 'application/json',
     'Content-Length': String(payload.length),
-    'Cache-Control': `public, max-age=${cacheSeconds}`,
+    'Cache-Control': cacheControl ?? `public, max-age=${cacheSeconds}`,
   };
   if (useGzip) headers['Content-Encoding'] = 'gzip';
   res.writeHead(status, headers);
@@ -7019,254 +7068,464 @@ function medecinsSend(req, res, status, body, { cacheSeconds = 3600, cacheKey = 
 }
 
 /**
- * Read one shipped artifact, gzipped or plain, whichever the build wrote.
+ * Where one artifact is, gzipped or plain, whichever the build wrote — and a
+ * signature that changes when a rebuild replaces it.
  *
- * The `.gz` is the default — 3.67 MB in the repository against 16.18 MB — and
+ * The `.gz` is the default — 3.67 MB against 16.18 MB — and
  * `npm run medecins:registry -- --plain` writes the other for anyone who wants
- * to grep the dataset. Measured cost of the compressed path: **15 ms of
- * `gunzipSync` for both files, once per process.**
+ * to grep the dataset.
  */
-async function readMedecinsArtifact(file, { optional = false } = {}) {
-  const gz = await fsp.readFile(`${file}.gz`).catch(() => null);
-  if (gz) return zlib.gunzipSync(gz).toString('utf8');
-  const plain = await fsp.readFile(file, 'utf8').catch(() => null);
-  if (plain !== null) return plain;
-  if (optional) return '';
-  throw new Error(`neither ${path.basename(file)}.gz nor ${path.basename(file)} is present`);
+async function statMedecinsArtifact(file) {
+  for (const candidate of [`${file}.gz`, file]) {
+    const stat = await fsp.stat(candidate).catch(() => null);
+    if (stat?.isFile()) return { file: candidate, signature: `${candidate}:${stat.size}:${stat.mtimeMs}` };
+  }
+  return null;
 }
 
-async function loadMedecinsPack() {
-  if (_medecinsPack) return _medecinsPack;
-  if (_medecinsPackInFlight) return _medecinsPackInFlight;
-  _medecinsPackInFlight = (async () => {
-    const [packText, practitionersText] = await Promise.all([
-      readMedecinsArtifact(MEDECINS_PACK_PATH),
-      readMedecinsArtifact(MEDECINS_PRACTITIONERS_PATH, { optional: true }),
-    ]);
-    const pack = JSON.parse(packText);
-    // Line N of the practitioner file describes site N. If the two files ever
-    // disagree the join is meaningless, so refuse it rather than serve names
-    // attached to the wrong address.
-    //
-    // Kept as ONE buffer plus an offset index rather than 64 232 JavaScript
-    // strings: the array of strings retains roughly twice the bytes for a file
-    // whose lines are read one at a time, on a click, and never all together.
-    const practitionerBuffer = Buffer.from(practitionersText, 'utf8');
-    const practitionerOffsets = [];
-    if (practitionerBuffer.length) {
-      let start = 0;
-      for (let i = 0; i < practitionerBuffer.length; i += 1) {
-        if (practitionerBuffer[i] !== 0x0a) continue;
-        if (i > start) practitionerOffsets.push([start, i]);
-        start = i + 1;
-      }
-      if (start < practitionerBuffer.length) practitionerOffsets.push([start, practitionerBuffer.length]);
-    }
-    const practitioners = {
-      length: practitionerOffsets.length,
-      line(index) {
-        const span = practitionerOffsets[index];
-        return span ? practitionerBuffer.toString('utf8', span[0], span[1]) : '';
-      },
-    };
-    if (practitioners.length && practitioners.length !== pack.sites.length) {
-      throw new Error(
-        `praticiens.jsonl has ${practitioners.length} lines for ${pack.sites.length} sites — `
-        + 'rebuild with `npm run medecins:registry`',
-      );
-    }
-    const grid = new Map();
-    for (let index = 0; index < pack.sites.length; index += 1) {
-      const site = pack.sites[index];
-      const key = medecinsGridKey(site[0], site[1]);
-      const bucket = grid.get(key);
-      if (bucket) bucket.push(index);
-      else grid.set(key, [index]);
-    }
-    _medecinsPack = { pack, practitioners, grid, loadedAt: Date.now() };
-    return _medecinsPack;
-  })().finally(() => { _medecinsPackInFlight = null; });
-  return _medecinsPackInFlight;
+/**
+ * The pair to serve: the deployment's own build when there is one, the
+ * repository's pack otherwise. A names file is only ever read from the
+ * directory its pack came from — pairing the repository's pack with a names
+ * file built from another edition is exactly the join this code refuses.
+ */
+async function resolveMedecinsSource({ runtimeDir, repoDir }) {
+  for (const [dir, origin] of [[runtimeDir, 'runtime'], [repoDir, 'repository']]) {
+    const pack = await statMedecinsArtifact(path.join(dir, 'medecins.json'));
+    if (!pack) continue;
+    const practitioners = await statMedecinsArtifact(path.join(dir, 'praticiens.jsonl'));
+    return { origin, pack, practitioners, signature: `${pack.signature}|${practitioners?.signature ?? ''}` };
+  }
+  return null;
 }
 
-/** Vite plugin: the shipped French doctor register, sliced. */
-function medecinsFranceProxy() {
-  function install(middlewares) {
-    middlewares.use('/api/medecins-fr', async (req, res) => {
-      const json = (status, body, headers = {}) => {
-        if (res.headersSent) return;
-        res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
-        res.end(JSON.stringify(body));
-      };
-      if (req.method !== 'GET') { json(405, { error: 'Method Not Allowed' }); return; }
-      if (!_medecinsRateLimiter(clientKey(req))) {
-        json(429, { error: 'Rate limit exceeded' }, { 'Retry-After': '5' });
-        return;
-      }
+/** Measured cost of the compressed path: 15 ms of `gunzipSync` for both files. */
+async function readMedecinsArtifact(file) {
+  const bytes = await fsp.readFile(file);
+  return file.endsWith('.gz') ? zlib.gunzipSync(bytes) : bytes;
+}
 
-      const url = new URL(req.url || '/', 'http://localhost');
-      const route = url.pathname.replace(/\/+$/, '') || '/';
+/**
+ * Line spans of the names file.
+ *
+ * Kept as ONE buffer plus an offset index rather than 64 232 JavaScript
+ * strings: the array of strings retains roughly twice the bytes for a file
+ * whose lines are read one at a time, on a click, and never all together.
+ */
+function medecinsLineSpans(buffer) {
+  const spans = [];
+  let start = 0;
+  while (start < buffer.length) {
+    let end = buffer.indexOf(0x0a, start);
+    if (end < 0) end = buffer.length;
+    if (end > start) spans.push([start, end]);
+    start = end + 1;
+  }
+  return spans;
+}
 
-      let loaded;
-      try {
-        loaded = await loadMedecinsPack();
-      } catch (error) {
-        json(503, { error: `medecins-fr pack unavailable: ${error.message}` });
-        return;
-      }
-      const { pack } = loaded;
+/**
+ * Read one pair from disk. Throws only when the PACK is unusable.
+ *
+ * @returns {Promise<MedecinsLoaded>}
+ */
+async function readMedecinsPair(source) {
+  const packBytes = await readMedecinsArtifact(source.pack.file);
+  const pack = JSON.parse(packBytes.toString('utf8'));
+  if (!Array.isArray(pack?.sites)) throw new Error(`${source.pack.file} has no sites[]`);
+  const packId = createHash('sha256').update(packBytes).digest('hex').slice(0, 12);
 
-      if (route === '/status') {
-        json(200, {
-          source: pack.sources,
-          generated: pack.generated,
-          edition: pack.source?.ps?.modified ?? null,
-          stats: pack.stats,
-          apl: pack.apl ? { millesime: pack.apl.millesime, national: pack.apl.national, champ: pack.apl.champ } : null,
-          loadedAt: loaded.loadedAt,
-          practitionerLines: loaded.practitioners.length,
-          maxBoxDeg: MEDECINS_MAX_BOX_DEG,
-        }, { 'Cache-Control': 'public, max-age=60' });
-        return;
-      }
-
-      if (route === '/national') {
-        medecinsSend(req, res, 200, {
-          generated: pack.generated,
-          sources: pack.sources,
-          source: pack.source,
-          stats: pack.stats,
-          precision: pack.precision,
-          specialites: pack.specialites,
-          secteurs: pack.secteurs,
-          optionsTarifaires: pack.optionsTarifaires,
-          departements: pack.departements,
-          apl: pack.apl
-            ? {
-              millesime: pack.apl.millesime,
-              indicateur: pack.apl.indicateur,
-              unite: pack.apl.unite,
-              champ: pack.apl.champ,
-              seuils: pack.apl.seuils,
-              national: pack.apl.national,
-              dixiemes: pack.apl.dixiemes,
-              bornes: pack.apl.bornes,
-              population: pack.apl.population,
-              departements: pack.apl.departements,
-              jointure: pack.apl.jointure,
-            }
-            : null,
-          nonLocalisees: pack.nonLocalisees.length,
-          // THE WHOLE HOSPITAL TABLE, ON THE NATIONAL ROUTE, AND NOT ON A BOX.
-          //
-          // 2 211 tuples — 210 kB raw, 46 kB gzipped — against 64 232 practice
-          // addresses that had to be boxed. At that size a bbox route would
-          // cost a round trip to save nothing, and it would cost something
-          // real: the mesh regime thins practices to a budget, and a hospital
-          // is exactly the mark a reader wants left standing when the camera
-          // pulls back. Shipping the table once means the browser can draw
-          // every hospital in view in BOTH close regimes without asking again.
-          etablissements: pack.etablissements || [],
-        }, { cacheKey: 'national' });
-        return;
-      }
-
-      if (route === '/mesh') {
-        // `[lat, lon, praticiens, familleIndex]` — the thinner's tuple, and the
-        // family resolved HERE rather than shipped as a specialty list. Sending
-        // each site's `[[code, n], …]` instead measured 2.35 MB against 1.5 MB
-        // for the index, for a number the browser would derive from the same
-        // table anyway — which is why that table is imported rather than
-        // copied.
-        medecinsSend(req, res, 200, {
-          generated: pack.generated,
-          sites: pack.sites.map((site) => [
-            // FOUR decimals, not five. The mesh is only ever drawn at spans
-            // wider than 0.6°, where 11 m and 1 m are the same pixel — and the
-            // shorter numbers compress better: 1 445 kio → 1 268, and 430 kio
-            // → 384 once gzipped.
-            Math.round(site[0] * 1e4) / 1e4,
-            Math.round(site[1] * 1e4) / 1e4,
-            site[10] || 1,
-            MEDECIN_FAMILY_INDEX[sitePrimaryFamily(site)] ?? MEDECIN_FAMILY_INDEX.specialiste,
-          ]),
-          siteCount: pack.sites.length,
-        }, { cacheKey: 'mesh' });
-        return;
-      }
-
-      /**
-       * The names for ONE address, fetched when a card opens.
-       *
-       * They used to ride along with `/sites`, and over central Paris that was
-       * **40 % of a 1 451 kio response** — 16 069 practitioner names shipped to
-       * draw 5 907 dots, of which a reader opens one. Splitting them out takes
-       * the same box to 789 kio raw and 162 gzipped, and moves the names to the
-       * click that actually wants them.
-       */
-      if (route === '/praticiens') {
-        const index = Number.parseInt(url.searchParams.get('index') ?? '', 10);
-        if (!Number.isInteger(index) || index < 0 || index >= pack.sites.length) {
-          json(400, { error: 'index required, within the site range' });
-          return;
-        }
-        let praticiens = [];
-        const line = loaded.practitioners.line(index);
-        if (line) { try { praticiens = JSON.parse(line); } catch { praticiens = []; } }
-        medecinsSend(req, res, 200, { index, praticiens });
-        return;
-      }
-
-      if (route === '/sites') {
-        const num = (key) => Number.parseFloat(url.searchParams.get(key) ?? '');
-        const box = { south: num('south'), west: num('west'), north: num('north'), east: num('east') };
-        if (!Object.values(box).every(Number.isFinite) || box.north <= box.south || box.east <= box.west) {
-          json(400, { error: 'south/west/north/east required, and north>south, east>west' });
-          return;
-        }
-        if (box.north - box.south > MEDECINS_MAX_BOX_DEG || box.east - box.west > MEDECINS_MAX_BOX_DEG) {
-          json(413, { error: `box wider than ${MEDECINS_MAX_BOX_DEG}°`, maxBoxDeg: MEDECINS_MAX_BOX_DEG });
-          return;
-        }
-        // Only the grid cells the box touches, never the whole register.
-        const sites = [];
-        let truncated = false;
-        const minRow = Math.floor(box.south / MEDECINS_GRID_DEG);
-        const maxRow = Math.floor(box.north / MEDECINS_GRID_DEG);
-        const minCol = Math.floor(box.west / MEDECINS_GRID_DEG);
-        const maxCol = Math.floor(box.east / MEDECINS_GRID_DEG);
-        outer:
-        for (let row = minRow; row <= maxRow; row += 1) {
-          for (let col = minCol; col <= maxCol; col += 1) {
-            for (const index of loaded.grid.get(`${row}:${col}`) ?? []) {
-              const site = pack.sites[index];
-              if (site[0] < box.south || site[0] > box.north || site[1] < box.west || site[1] > box.east) continue;
-              if (sites.length >= MEDECINS_SITES_CAP) { truncated = true; break outer; }
-              sites.push({ index, site });
-            }
-          }
-        }
-        medecinsSend(req, res, 200, {
-          generated: pack.generated,
-          box,
-          sites,
-          count: sites.length,
-          // Said, never silent: a capped box is a partial answer and the layer
-          // has to be able to say so on the card.
-          truncated,
-          cap: MEDECINS_SITES_CAP,
-        }, { cacheSeconds: 600 });
-        return;
-      }
-
-      json(404, { error: 'Not Found' });
+  // Line N of the names file describes site N. If the two files disagree the
+  // join is meaningless, so the names are dropped rather than attached to the
+  // wrong address — and the layer still draws, because nothing else in it
+  // depends on them.
+  let buffer = Buffer.alloc(0);
+  let spans = [];
+  let names = { available: false, reason: 'absent' };
+  if (source.practitioners) {
+    buffer = await readMedecinsArtifact(source.practitioners.file);
+    spans = medecinsLineSpans(buffer);
+    const declared = pack.praticiens;
+    const verdict = pairPractitioners({
+      declared,
+      lines: spans.length,
+      siteCount: pack.sites.length,
+      digest: declared?.sha256 ? createHash('sha256').update(buffer).digest('hex') : null,
     });
+    names = { available: verdict.ok, reason: verdict.reason };
+    if (!verdict.ok) {
+      buffer = Buffer.alloc(0);
+      spans = [];
+    }
+  }
+  const practitioners = {
+    length: spans.length,
+    line(index) {
+      const span = spans[index];
+      return span ? buffer.toString('utf8', span[0], span[1]) : '';
+    },
+  };
+
+  const grid = new Map();
+  for (let index = 0; index < pack.sites.length; index += 1) {
+    const site = pack.sites[index];
+    const key = medecinsGridKey(site[0], site[1]);
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(index);
+    else grid.set(key, [index]);
+  }
+  return {
+    pack, practitioners, grid, loadedAt: Date.now(), packId, origin: source.origin, names, signature: source.signature,
+  };
+}
+
+/**
+ * The `/api/medecins-fr` handler, with its state: the loaded pair, the
+ * suppression list, and the two payloads cached per pack.
+ *
+ * A factory rather than module state so the tests can point it at a
+ * temporary directory and drive the routes the hosted box serves.
+ */
+export function createMedecinsMiddleware({
+  runtimeDir = MEDECINS_RUNTIME_DIR,
+  repoDir = MEDECINS_DIR,
+  suppressPath = MEDECINS_SUPPRESS_PATH,
+  recheckMs = MEDECINS_RECHECK_MS,
+  rateLimiter = _medecinsRateLimiter,
+  log = console,
+} = {}) {
+  /** @type {?MedecinsLoaded} */
+  let current = null;
+  /** @type {?Promise<MedecinsLoaded>} */
+  let inFlight = null;
+  let checkedAt = 0;
+  /** The last warning logged, so a pair that stays mismatched says so once. */
+  let lastWarning = '';
+  const staticCache = new Map();
+  /** @type {{signature:?string, index:{size:number, byKey:Map<string, string[]>}}} */
+  let suppression = { signature: null, index: EMPTY_SUPPRESSION };
+
+  function warnOnce(message) {
+    if (message === lastWarning) return;
+    lastWarning = message;
+    log.warn(`[Medecins FR Proxy] ${message}`);
   }
 
+  /**
+   * Look at the disk, and swap in a new pair if one is there and usable.
+   *
+   * Whatever goes wrong while a pair is already loaded, that pair keeps
+   * answering: a reload is an improvement or nothing.
+   */
+  async function refreshPack() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let source;
+      let next;
+      try {
+        source = await resolveMedecinsSource({ runtimeDir, repoDir });
+        if (!source) throw new Error('neither medecins.json.gz nor medecins.json is present');
+        if (current?.signature === source.signature) return current;
+        next = await readMedecinsPair(source);
+      } catch (error) {
+        if (!current) throw error;
+        warnOnce(`reload failed, still serving pack ${current.packId}: ${error?.message || error}`);
+        return current;
+      }
+      // Renamed into place while it was being read: a rebuild in progress.
+      // Read again rather than keep a pair assembled from two builds.
+      if ((await resolveMedecinsSource({ runtimeDir, repoDir }))?.signature !== source.signature) continue;
+
+      // A names file that does not match its pack YET, beside a pair that has
+      // names: the moment between a rebuild's two renames. The build renames
+      // the pack first, and the digest it declares is what makes this
+      // detectable.
+      if (current?.names.available && !next.names.available && next.names.reason !== 'absent') {
+        warnOnce(`names file does not match the new pack (${next.names.reason}), still serving pack ${current.packId}`);
+        return current;
+      }
+      current = next;
+      staticCache.clear();
+      lastWarning = '';
+      log.log(
+        `[Medecins FR Proxy] ${next.origin} pack ${next.packId}, ${next.pack.sites.length} sites, `
+        + `names ${next.names.available ? `on ${next.practitioners.length} lines` : `unavailable (${next.names.reason})`}`,
+      );
+      return next;
+    }
+    if (current) return current;
+    throw new Error('the medecins-fr pack kept changing while it was read');
+  }
+
+  async function loadPack() {
+    if (current && Date.now() - checkedAt < recheckMs) return current;
+    if (!inFlight) {
+      checkedAt = Date.now();
+      inFlight = refreshPack().finally(() => { inFlight = null; });
+    }
+    // Nobody waits for a reload: the pair already in memory answers while the
+    // next one is read. Only the very first request waits.
+    return current ?? inFlight;
+  }
+
+  /**
+   * The suppression index, re-read whenever the file changes.
+   *
+   * `null` means "serve no names": the list exists and could not be read, and
+   * an unreadable list must not quietly un-suppress the people on it.
+   */
+  async function loadSuppression() {
+    let stat = null;
+    try {
+      stat = await fsp.stat(suppressPath);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        warnOnce(`suppression list unreadable (${error?.code || error}), serving no names`);
+        return null;
+      }
+    }
+    const signature = stat ? `${stat.size}:${stat.mtimeMs}` : 'absent';
+    if (suppression.signature === signature) return suppression.index;
+    if (!stat) {
+      suppression = { signature, index: EMPTY_SUPPRESSION };
+      return EMPTY_SUPPRESSION;
+    }
+    try {
+      const index = buildSuppressionIndex(parseSuppressionList(await fsp.readFile(suppressPath, 'utf8')));
+      suppression = { signature, index };
+      log.log(`[Medecins FR Proxy] suppression list: ${index.size} ${index.size === 1 ? 'entry' : 'entries'}`);
+      return index;
+    } catch (error) {
+      warnOnce(`suppression list unreadable (${error?.code || error?.message || error}), serving no names`);
+      return null;
+    }
+  }
+
+  async function medecinsMiddleware(req, res) {
+    const json = (status, body, headers = {}) => {
+      if (res.headersSent) return;
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method !== 'GET') { json(405, { error: 'Method Not Allowed' }); return; }
+    if (!rateLimiter(clientKey(req))) {
+      json(429, { error: 'Rate limit exceeded' }, { 'Retry-After': '5' });
+      return;
+    }
+
+    const url = new URL(req.url || '/', 'http://localhost');
+    const route = url.pathname.replace(/\/+$/, '') || '/';
+
+    let loaded;
+    try {
+      loaded = await loadPack();
+    } catch (error) {
+      json(503, { error: `medecins-fr pack unavailable: ${error.message}` });
+      return;
+    }
+    const { pack } = loaded;
+
+    if (route === '/status') {
+      json(200, {
+        source: pack.sources,
+        generated: pack.generated,
+        edition: pack.source?.ps?.modified ?? null,
+        stats: pack.stats,
+        apl: pack.apl ? { millesime: pack.apl.millesime, national: pack.apl.national, champ: pack.apl.champ } : null,
+        loadedAt: loaded.loadedAt,
+        packId: loaded.packId,
+        // `runtime` is the deployment's own build; `repository` is the
+        // name-free pack in git. The hosted box never reads names from the
+        // repository: the tarball it deploys does not have them.
+        origin: loaded.origin,
+        names: loaded.names,
+        practitionerLines: loaded.practitioners.length,
+        // How many objections are on file, never who: the list itself names
+        // exactly the people who asked not to be named.
+        suppressionEntries: (await loadSuppression())?.size ?? null,
+        maxBoxDeg: MEDECINS_MAX_BOX_DEG,
+      }, { 'Cache-Control': 'public, max-age=60' });
+      return;
+    }
+
+    if (route === '/national') {
+      medecinsSend(req, res, 200, {
+        generated: pack.generated,
+        packId: loaded.packId,
+        sources: pack.sources,
+        source: pack.source,
+        stats: pack.stats,
+        precision: pack.precision,
+        specialites: pack.specialites,
+        secteurs: pack.secteurs,
+        optionsTarifaires: pack.optionsTarifaires,
+        departements: pack.departements,
+        apl: pack.apl
+          ? {
+            millesime: pack.apl.millesime,
+            indicateur: pack.apl.indicateur,
+            unite: pack.apl.unite,
+            champ: pack.apl.champ,
+            seuils: pack.apl.seuils,
+            national: pack.apl.national,
+            dixiemes: pack.apl.dixiemes,
+            bornes: pack.apl.bornes,
+            population: pack.apl.population,
+            departements: pack.apl.departements,
+            jointure: pack.apl.jointure,
+          }
+          : null,
+        nonLocalisees: pack.nonLocalisees.length,
+        // THE WHOLE HOSPITAL TABLE, ON THE NATIONAL ROUTE, AND NOT ON A BOX.
+        //
+        // 2 211 tuples — 210 kB raw, 46 kB gzipped — against 64 232 practice
+        // addresses that had to be boxed. At that size a bbox route would
+        // cost a round trip to save nothing, and it would cost something
+        // real: the mesh regime thins practices to a budget, and a hospital
+        // is exactly the mark a reader wants left standing when the camera
+        // pulls back. Shipping the table once means the browser can draw
+        // every hospital in view in BOTH close regimes without asking again.
+        etablissements: pack.etablissements || [],
+      }, { cacheKey: `national:${loaded.packId}`, staticCache });
+      return;
+    }
+
+    if (route === '/mesh') {
+      // `[lat, lon, praticiens, familleIndex]` — the thinner's tuple, and the
+      // family resolved HERE rather than shipped as a specialty list. Sending
+      // each site's `[[code, n], …]` instead measured 2.35 MB against 1.5 MB
+      // for the index, for a number the browser would derive from the same
+      // table anyway — which is why that table is imported rather than
+      // copied.
+      medecinsSend(req, res, 200, {
+        generated: pack.generated,
+        packId: loaded.packId,
+        sites: pack.sites.map((site) => [
+          // FOUR decimals, not five. The mesh is only ever drawn at spans
+          // wider than 0.6°, where 11 m and 1 m are the same pixel — and the
+          // shorter numbers compress better: 1 445 kio → 1 268, and 430 kio
+          // → 384 once gzipped.
+          Math.round(site[0] * 1e4) / 1e4,
+          Math.round(site[1] * 1e4) / 1e4,
+          site[10] || 1,
+          MEDECIN_FAMILY_INDEX[sitePrimaryFamily(site)] ?? MEDECIN_FAMILY_INDEX.specialiste,
+        ]),
+        siteCount: pack.sites.length,
+      }, { cacheKey: `mesh:${loaded.packId}`, staticCache });
+      return;
+    }
+
+    /**
+     * The names for ONE address, fetched when a card opens.
+     *
+     * They used to ride along with `/sites`, and over central Paris that was
+     * **40 % of a 1 451 kio response** — 16 069 practitioner names shipped to
+     * draw 5 907 dots, of which a reader opens one. Splitting them out takes
+     * the same box to 789 kio raw and 162 gzipped, and moves the names to the
+     * click that actually wants them.
+     *
+     * `pack` is REQUIRED and must be the pack the index came from. An index
+     * is a line number, and a line number from last week's pack names
+     * somebody else this week; 409 hands back the current `packId` so the
+     * layer can re-read its sites instead.
+     *
+     * `no-store`, because the suppression list is consulted HERE and an
+     * objection must not be outlived by a cached answer.
+     */
+    if (route === '/praticiens') {
+      const index = Number.parseInt(url.searchParams.get('index') ?? '', 10);
+      if (!Number.isInteger(index) || index < 0 || index >= pack.sites.length) {
+        json(400, { error: 'index required, within the site range' });
+        return;
+      }
+      if (url.searchParams.get('pack') !== loaded.packId) {
+        json(409, { error: 'pack changed, re-read the sites', packId: loaded.packId });
+        return;
+      }
+      const list = loaded.names.available ? await loadSuppression() : null;
+      if (!list) {
+        // The card says the names are unavailable, rather than showing an
+        // address that looks as though nobody practises there.
+        medecinsSend(req, res, 200, {
+          index, packId: loaded.packId, names: false, praticiens: [],
+        }, { cacheControl: 'no-store' });
+        return;
+      }
+      let praticiens = [];
+      const line = loaded.practitioners.line(index);
+      if (line) { try { praticiens = JSON.parse(line); } catch { praticiens = []; } }
+      medecinsSend(req, res, 200, {
+        index,
+        packId: loaded.packId,
+        names: true,
+        praticiens: withoutSuppressed(praticiens, pack.sites[index], list),
+      }, { cacheControl: 'no-store' });
+      return;
+    }
+
+    if (route === '/sites') {
+      const num = (key) => Number.parseFloat(url.searchParams.get(key) ?? '');
+      const box = { south: num('south'), west: num('west'), north: num('north'), east: num('east') };
+      if (!Object.values(box).every(Number.isFinite) || box.north <= box.south || box.east <= box.west) {
+        json(400, { error: 'south/west/north/east required, and north>south, east>west' });
+        return;
+      }
+      if (box.north - box.south > MEDECINS_MAX_BOX_DEG || box.east - box.west > MEDECINS_MAX_BOX_DEG) {
+        json(413, { error: `box wider than ${MEDECINS_MAX_BOX_DEG}°`, maxBoxDeg: MEDECINS_MAX_BOX_DEG });
+        return;
+      }
+      // Only the grid cells the box touches, never the whole register.
+      const sites = [];
+      let truncated = false;
+      const minRow = Math.floor(box.south / MEDECINS_GRID_DEG);
+      const maxRow = Math.floor(box.north / MEDECINS_GRID_DEG);
+      const minCol = Math.floor(box.west / MEDECINS_GRID_DEG);
+      const maxCol = Math.floor(box.east / MEDECINS_GRID_DEG);
+      outer:
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let col = minCol; col <= maxCol; col += 1) {
+          for (const index of loaded.grid.get(`${row}:${col}`) ?? []) {
+            const site = pack.sites[index];
+            if (site[0] < box.south || site[0] > box.north || site[1] < box.west || site[1] > box.east) continue;
+            if (sites.length >= MEDECINS_SITES_CAP) { truncated = true; break outer; }
+            sites.push({ index, site });
+          }
+        }
+      }
+      medecinsSend(req, res, 200, {
+        generated: pack.generated,
+        // The indices below are line numbers of THIS pack; the layer sends
+        // the id back with every `/praticiens` request.
+        packId: loaded.packId,
+        box,
+        sites,
+        count: sites.length,
+        // Said, never silent: a capped box is a partial answer and the layer
+        // has to be able to say so on the card.
+        truncated,
+        cap: MEDECINS_SITES_CAP,
+      }, { cacheSeconds: 600 });
+      return;
+    }
+
+    json(404, { error: 'Not Found' });
+  }
+
+  /** Resolves once any reload in flight has finished — for tests. */
+  medecinsMiddleware.settled = async () => {
+    await (inFlight ?? loadPack().catch(() => null));
+    return current;
+  };
+  return medecinsMiddleware;
+}
+
+/** Vite plugin: the French doctor register, sliced, with names only where they may be shown. */
+function medecinsFranceProxy() {
+  // ONE handler for both hooks, so dev and preview share one loaded pair.
+  const handler = createMedecinsMiddleware();
   return {
     name: 'medecins-france-proxy',
-    configureServer(server) { install(server.middlewares); },
-    configurePreviewServer(server) { install(server.middlewares); },
+    configureServer(server) { server.middlewares.use('/api/medecins-fr', handler); },
+    configurePreviewServer(server) { server.middlewares.use('/api/medecins-fr', handler); },
   };
 }
 
