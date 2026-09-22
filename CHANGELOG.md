@@ -210,6 +210,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The landing page names the project it is built on.** Its ivory footer
+  panel now says that the globe, the cockpit and the voice agent come from
+  God's Eye View, created and open-sourced by Bilawal Sidhu, with both names
+  linked; until now only the legal notice named him.
+- **In English, the voice trial no longer calls itself premium.** The mic's
+  help line reads “Hosted demo · 3 free spoken requests”, and the card that
+  closes the trial says “Voice is capped on this hosted demo” under a
+  “SURPLOMB · HOSTED” kicker: the voice agent is upstream's, and the limit is
+  this server's, not a tier for sale. The French is unchanged.
 - **Shared vehicles answer at every scale.** Above 250 km the layer shows one
   label per city with a network — its name over a bar of its operators'
   colours, 81 cities over France — and pressing one flies there; between the

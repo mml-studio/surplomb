@@ -12,6 +12,11 @@
  *   - THE GLOBE STAYS FREE, and the card repeats it every time, because the
  *     visitor is reading it at the moment something was refused.
  *
+ * The English never says “premium”; it says “hosted demo” and “hosted
+ * version”. The voice agent the card gates is upstream's (God's Eye View,
+ * Bilawal Sidhu), and in English “premium” on it reads as selling his work
+ * (see src/voicePremium.i18n.js). The French keeps its words.
+ *
  * The usage choices' VALUES (`logement`, `immobilier`…) are data: they are
  * posted to Buttondown as `metadata__usage` and land on the subscriber's
  * record, so they stay as they are in both languages and only their label is
@@ -56,12 +61,12 @@ export default defineMessages({
     tries: { fr: 'Vos essais', en: 'Your tries', note: 'Same subject, when the server named no number.' },
     lede: {
       fr: (subject, stillFree) => `${subject} premium sont utilisés. ${stillFree}`,
-      en: (subject, stillFree) => `${subject} at the premium features are used up. ${stillFree}`,
+      en: (subject, stillFree) => `${subject} on this hosted demo are used up. ${stillFree}`,
       sample: ['Your 5 tries', 'The globe and its layers stay free.'],
     },
   },
   voice: {
-    title: { fr: 'La voix est une fonction premium', en: 'Voice is a premium feature' },
+    title: { fr: 'La voix est une fonction premium', en: 'Voice is capped on this hosted demo' },
     // Counted in COMMANDS, the word the mic uses (src/voicePremium.js).
     spent: {
       fr: (turns) => (turns > 1
@@ -93,9 +98,9 @@ export default defineMessages({
       note: 'The visitor asked for the card (?waitlist=1 or a button), so nothing was refused.',
     },
   },
-  kicker: { fr: 'SURPLOMB · PREMIUM', en: 'SURPLOMB · PREMIUM' },
+  kicker: { fr: 'SURPLOMB · PREMIUM', en: 'SURPLOMB · HOSTED' },
   close: { fr: 'Fermer', en: 'Close' },
-  includesTitle: { fr: 'Premium, à l’ouverture', en: 'Premium, at launch' },
+  includesTitle: { fr: 'Premium, à l’ouverture', en: 'On the hosted version, at launch' },
   email: { fr: 'Votre email', en: 'Your email' },
   emailPlaceholder: { fr: 'vous@exemple.fr', en: 'you@example.com' },
   usageLegend: { fr: 'Ce qui vous amène', en: 'What brings you here' },

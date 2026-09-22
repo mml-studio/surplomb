@@ -249,8 +249,11 @@ Updated: September 19, 2026
 >   loop is `position: fixed` behind the whole page on EVERY width; *Image
 >   fixe* (Still image; `#vitrine-still`, shown only in `data-state="live"`) pauses it on
 >   the current frame. The page ends on `.footer-ending`: the city with two
->   opaque blocks. The cockpit carries the same mark since 2026-09-19 (see
->   “Cockpit identity” below).
+>   opaque blocks. The ivory `.footer-info` panel above it credits upstream
+>   (`.footer-credit`, README.fr.md's sentence: the globe, the cockpit and the
+>   voice agent come from God's Eye View, by Bilawal Sidhu, both linked). The
+>   cockpit carries the same mark since 2026-09-19 (see “Cockpit identity”
+>   below).
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
 >   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop
@@ -621,6 +624,12 @@ Updated: September 19, 2026
 > deletes a draw. The waitlist card keeps its own fresh read: it opens after the
 > trial has moved. `describeTrial(req, config, experiments)` adds
 > `experiments: { firstRun: { variants } } | null` to the response.
+>
+> **English says “hosted demo”, never “premium”.** The mic's help line
+> (`src/voicePremium.i18n.js`) and the waitlist card (`src/waitlistCard.i18n.js`)
+> gate upstream's voice agent, so their English names the limit of this
+> server (“Hosted demo · 3 free spoken requests”, kicker “SURPLOMB · HOSTED”)
+> rather than a paid tier; the French keeps « premium ». The crown stays.
 >
 > **The wiring.** `src/main.js` no longer passes `variant: 'A'`; the reveal is
 > `whenBootFlightEnds(() => { void startFirstRunExperience({ styleManager,

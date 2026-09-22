@@ -5,6 +5,11 @@
  * holds and never more: there is no paid tier to buy yet, only a waitlist
  * (src/waitlistCard.js), so “premium” names a feature and promises a date,
  * not a price.
+ *
+ * The English says “hosted demo”, not “premium”. The voice agent is upstream's
+ * (God's Eye View, Bilawal Sidhu), and an English reader is the one most likely
+ * to know it: on his agent, “premium” reads as selling his work, where the
+ * limit is only this server's key paying for the requests.
  */
 import { defineMessages } from './i18n/messages.js';
 import { countNoun } from './i18n/format.js';
@@ -14,17 +19,17 @@ export default defineMessages({
     // French keeps its own condition: the module printed `commande` at 1 and
     // `commandes` above, which is also what French CLDR says.
     fr: (turns) => `Fonction premium · ${countNoun(turns, 'commande vocale offerte', 'commandes vocales offertes')}`,
-    en: (turns) => `Premium feature · ${countNoun(turns, 'free spoken request', 'free spoken requests')}`,
+    en: (turns) => `Hosted demo · ${countNoun(turns, 'free spoken request', 'free spoken requests')}`,
     note: 'The voice trial can still open. `turns` is a count of spoken requests (3 by default).',
     sample: [3],
   },
   spent: {
     fr: 'Fonction premium · commandes offertes utilisées',
-    en: 'Premium feature · free requests used up',
+    en: 'Hosted demo · free requests used up',
   },
   closed: {
     fr: 'Fonction premium · disponible à l’ouverture',
-    en: 'Premium feature · available at launch',
+    en: 'Hosted demo · voice available at launch',
     note: 'This instance keeps voice out of the trial (GEV_TRIAL_VOICE=0).',
   },
 });
