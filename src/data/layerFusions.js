@@ -98,7 +98,13 @@ function fusionRow(fusion) {
     [FROM_CATALOG]: true,
     get primaryChip() { return messages().chips[fusion.primary]; },
     companions: Object.freeze(fusion.companions.map(fusionCompanion)),
-    ...(fusion.tiles ? { tiles: Object.freeze(fusion.tiles.map((tile) => Object.freeze({ ...tile }))) } : {}),
+    ...(fusion.tiles ? {
+      tiles: Object.freeze(fusion.tiles.map((tile) => Object.freeze({
+        ...tile,
+        ...(tile.on ? { on: Object.freeze({ ...tile.on }) } : {}),
+        ...(tile.off ? { off: Object.freeze({ ...tile.off }) } : {}),
+      }))),
+    } : {}),
   });
 }
 
@@ -186,6 +192,19 @@ function declaredChip(entry, layerId, own) {
  * the layer modules that own those colours are not; `layerFusions.test.mjs`
  * pins each one to its module's constant. Requires `primaryToggle`, since the
  * primary's tile needs the primary's chip as its name.
+ *
+ * A TILE CAN SWITCH PART OF A LAYER (`part`). One layer module can draw two
+ * things a reader asks for separately: `anfr-fr` draws the masts AND the ARCEP
+ * coverage under them, and the mock gives the coverage a tile of its own —
+ * « Couverture 4G » lit with the masts dark is the dead-zone map alone. A
+ * member split this way lists one tile per part, never a whole-layer tile
+ * beside them. Each part names the layer params that light it (`on`) and put
+ * it out (`off`), which must be options the share link already carries, so a
+ * link keeps what the tiles say. `lit` says whether the ROW's toggle lights
+ * that part — the state the layer comes back in when its last lit part is put
+ * out — so at least one part per layer has it, or the row toggle would switch
+ * on a layer that draws nothing. The label and tooltip of a part come from the
+ * catalog's `tiles` entry (`<id>:<part>`), and fall back to the member's chip.
  *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It
  * is for a companion whose cost is real and whose value is conditional — the
@@ -488,13 +507,37 @@ export const LAYER_FUSIONS = Object.freeze([
   // approved mock of this row: the strip held three member chips and five
   // coverage chips, and the key that says what each of them draws sat on the
   // other side of the screen.
+  //
+  // THE 4G COVERAGE IS A FOURTH TILE (lot 3 of that mock), although it is
+  // drawn by the antennas' module: the dead zones are read with no mast on
+  // them as often as with, and before this the coverage could only be had with
+  // 60 000 dots over it. The row's toggle lights the masts and not the
+  // coverage, as it always did.
   fusionRow({
     primary: 'local-datacenters',
     primaryToggle: true,
     tiles: [
       { id: 'telegeography-submarine-cables', icon: 'cable', color: '#39d5ff' },
       { id: 'local-datacenters', icon: 'database', color: '#00ffff' },
-      { id: 'anfr-fr', icon: 'radio-tower', color: '#ffcb2b' },
+      {
+        id: 'anfr-fr',
+        part: 'masts',
+        icon: 'radio-tower',
+        color: '#ffcb2b',
+        on: { masts: true },
+        off: { masts: false },
+        lit: true,
+      },
+      {
+        id: 'anfr-fr',
+        part: 'coverage',
+        icon: 'signal-high',
+        // The dead-zone rung, which is what the tile opens on.
+        color: '#f0287a',
+        on: { coverage: 'gaps' },
+        off: { coverage: 'off' },
+        lit: false,
+      },
     ],
     companions: [
       { id: 'telegeography-submarine-cables' },
@@ -546,13 +589,46 @@ export const LAYER_FUSIONS = Object.freeze([
 /** A tile's colour is the map's, written the way the layer modules write it. */
 const TILE_COLOR = /^#[0-9a-f]{6}$/i;
 
+/** A part's `on` or `off`: a plain object of params, at least one. */
+function isParamSet(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
+/**
+ * Check the parts of ONE member split across several tiles.
+ * @param {string} id The member.
+ * @param {object[]} tiles Its tiles, every one carrying a `part`.
+ * @throws {Error} On a malformed part set.
+ */
+function validateTileParts(id, tiles) {
+  if (tiles.length < 2) throw new Error(`Fusion tile part needs a sibling: ${id}`);
+  const parts = new Set();
+  for (const tile of tiles) {
+    if (typeof tile.part !== 'string' || !tile.part) throw new Error(`Fusion tile part must be a name: ${id}`);
+    if (parts.has(tile.part)) throw new Error(`Fusion tile listed twice: ${id}:${tile.part}`);
+    parts.add(tile.part);
+    if (!isParamSet(tile.on) || !isParamSet(tile.off)) {
+      throw new Error(`Fusion tile part needs on and off params: ${id}:${tile.part}`);
+    }
+    // The same params, two values: a part that is lit by one key and put out
+    // by another could be both at once.
+    const onKeys = Object.keys(tile.on).sort().join();
+    if (onKeys !== Object.keys(tile.off).sort().join()) {
+      throw new Error(`Fusion tile part must switch the same params on and off: ${id}:${tile.part}`);
+    }
+    if (typeof tile.lit !== 'boolean') throw new Error(`Fusion tile part lit flag must be a boolean: ${id}:${tile.part}`);
+  }
+  if (!tiles.some((tile) => tile.lit)) throw new Error(`Fusion tile parts leave the row toggle nothing to light: ${id}`);
+}
+
 /**
  * Check a fusion's `tiles`, when it declares any.
  *
- * Every member the row OFFERS gets exactly one tile: a member with no tile
- * would have no switch anywhere, since the strip no longer carries one, and a
- * tile for a withdrawn (`disabled`) companion would switch on a layer the
- * table took out of the interface.
+ * Every member the row OFFERS gets its tile: a member with no tile would have
+ * no switch anywhere, since the strip no longer carries one, and a tile for a
+ * withdrawn (`disabled`) companion would switch on a layer the table took out
+ * of the interface. A member split into PARTS gets one tile per part and none
+ * for the whole.
  * @param {object} fusion
  * @param {string} primary
  * @throws {Error} On any malformed or incomplete tile set.
@@ -568,19 +644,28 @@ function validateFusionTiles(fusion, primary) {
   const offered = [primary, ...fusion.companions
     .filter((companion) => companion.disabled !== true)
     .map((companion) => companion.id)];
-  const seen = new Set();
+  const byMember = new Map();
   for (const tile of fusion.tiles) {
     const id = tile?.id;
     if (!offered.includes(id)) throw new Error(`Fusion tile is not an offered member: ${primary} → ${id}`);
-    if (seen.has(id)) throw new Error(`Fusion tile listed twice: ${id}`);
-    seen.add(id);
     if (!Object.hasOwn(LUCIDE_ICONS, String(tile.icon))) throw new Error(`Fusion tile has an unknown icon: ${id} → ${tile.icon}`);
     if (typeof tile.color !== 'string' || !TILE_COLOR.test(tile.color)) {
       throw new Error(`Fusion tile colour must be #rrggbb: ${id}`);
     }
+    if (!byMember.has(id)) byMember.set(id, []);
+    byMember.get(id).push(tile);
+  }
+  for (const [id, tiles] of byMember) {
+    const split = tiles.filter((tile) => tile.part !== undefined);
+    if (!split.length) {
+      if (tiles.length > 1) throw new Error(`Fusion tile listed twice: ${id}`);
+      continue;
+    }
+    if (split.length !== tiles.length) throw new Error(`Fusion member has a whole tile beside its parts: ${id}`);
+    validateTileParts(id, tiles);
   }
   for (const id of offered) {
-    if (!seen.has(id)) throw new Error(`Fusion member has no tile: ${primary} → ${id}`);
+    if (!byMember.has(id)) throw new Error(`Fusion member has no tile: ${primary} → ${id}`);
   }
 }
 
@@ -788,21 +873,49 @@ const TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
   .filter((fusion) => Array.isArray(fusion.tiles))
   .map((fusion) => [fusion.primary, Object.freeze(fusion.tiles.map((tile) => {
     const companion = fusion.companions.find((entry) => entry.id === tile.id) || null;
+    const part = typeof tile.part === 'string' ? tile.part : null;
+    const own = () => (part ? messages().tiles[`${tile.id}:${part}`] : null);
     return Object.freeze({
       id: tile.id,
+      part,
       color: tile.color,
       icon: lucideIconMask(tile.icon),
-      get label() { return companion ? companion.chip : fusion.primaryChip; },
-      get title() { return companion ? companion.title : ''; },
+      ...(part ? { on: tile.on, off: tile.off, lit: tile.lit } : {}),
+      get label() { return own()?.label || (companion ? companion.chip : fusion.primaryChip); },
+      get title() { return own()?.title || (companion ? companion.title : ''); },
     });
   }))]));
 
 /**
  * The member tiles a row shows in the map key, or null when its members are
- * chips on the strip — see `tiles` in the table's header.
+ * chips on the strip — see `tiles` in the table's header. A tile that switches
+ * part of its layer carries `part`, its `on` and `off` params and `lit`; every
+ * other tile has `part: null` and switches its whole layer.
  * @param {string} layerId The row's primary.
- * @returns {?ReadonlyArray<{id: string, color: string, icon: string, label: string, title: string}>}
+ * @returns {?ReadonlyArray<{id: string, part: ?string, color: string, icon: string,
+ *   label: string, title: string, on?: object, off?: object, lit?: boolean}>}
  */
 export function fusionTilesFor(layerId) {
   return TILES_BY_PRIMARY.get(layerId) || null;
+}
+
+/**
+ * Whether a layer's params put one of its tile parts out — every `off` param
+ * holds its value.
+ * @param {?object} params `getParams()` of the layer.
+ * @param {{off: object}} tile A part tile.
+ * @returns {boolean}
+ */
+export function tilePartIsOff(params, tile) {
+  return Object.entries(tile.off).every(([key, value]) => Object.is(params?.[key], value));
+}
+
+/**
+ * The params a split layer returns to when its last lit part is put out: each
+ * part as the row's toggle lights it. See `lit` in the table's header.
+ * @param {ReadonlyArray<object>} parts Every part tile of ONE layer.
+ * @returns {object}
+ */
+export function tilePartDefaults(parts) {
+  return Object.assign({}, ...parts.map((tile) => (tile.lit ? tile.on : tile.off)));
 }

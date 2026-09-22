@@ -13,6 +13,7 @@ import anfrFranceLayer, {
   _anfrMapStackChangedForTest,
   _openAnfrCoverageCardForTest,
   _setAnfrCoverageForTest,
+  anfrMastsShownOnEnable,
 } from './anfrFrance.js';
 import { COVERAGE_FORMAT, encodeCoverage } from './mobileCoverage.js';
 
@@ -100,13 +101,29 @@ function hostDouble() {
 
 test('the mode is a share-linked param, accepted before the layer is on and normalized', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), enabled: false });
-  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'off' });
+  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'off', masts: true });
   assert.equal(anfrFranceLayer.setParams({ coverage: 'free' }), true);
-  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'free' });
+  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'free', masts: true });
   assert.equal(anfrFranceLayer.setParams({ coverage: '5g' }), true);
-  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'off' });
+  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'off', masts: true });
   // Params without a coverage key are not a rejection.
   assert.equal(anfrFranceLayer.setParams({}), true);
+});
+
+test('the masts are a share-linked param too, and a layer switched on to draw nothing shows them', () => {
+  _setAnfrCoverageForTest({ viewer: viewerDouble(), enabled: false });
+  assert.equal(anfrFranceLayer.setParams({ masts: false, coverage: 'gaps' }), true);
+  assert.deepEqual(anfrFranceLayer.getParams(), { coverage: 'gaps', masts: false });
+  // The link's own spelling is accepted; anything else is refused, not guessed.
+  assert.equal(anfrFranceLayer.setParams({ masts: '1' }), true);
+  assert.equal(anfrFranceLayer.getParams().masts, true);
+  assert.equal(anfrFranceLayer.setParams({ masts: 'maybe' }), false);
+  assert.equal(anfrFranceLayer.getParams().masts, true);
+  anfrFranceLayer.setParams({ masts: true, coverage: 'off' });
+  // Switched on, the layer draws its masts unless the coverage is drawn instead.
+  assert.equal(anfrMastsShownOnEnable(false, 'gaps'), false);
+  assert.equal(anfrMastsShownOnEnable(false, 'off'), true, 'no masts and no coverage would be an empty layer');
+  assert.equal(anfrMastsShownOnEnable(true, 'sfr'), true);
 });
 
 /** The coverage block the key prints, or undefined. */
@@ -114,38 +131,35 @@ function coverageBlock() {
   return anfrFranceLayer.getRowControls().legendBlocks?.find((block) => block.key === 'coverage');
 }
 
-test('no chip on the row, and no coverage block until the server is known to have a map', () => {
+test('no chip on the row, and no coverage block while the coverage is off — its tile switches it on', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'off', meta: null, status: 'missing', enabled: true });
   assert.deepEqual(anfrFranceLayer.getRowControls().chips, [], 'the row is a tile in the key now');
   assert.equal(coverageBlock(), undefined);
 
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'off', meta: META, enabled: true });
-  const block = coverageBlock();
-  assert.equal(block.title, 'Couverture 4G');
-  assert.deepEqual(block.legendSegments.map((segment) => segment.label), ['Sans 4G', 'Par opérateur']);
-  assert.ok(block.legendSegments.every((segment) => segment.active === false));
-  assert.deepEqual(block.legendSegments.map((segment) => segment.toggle), [
-    { param: 'coverage', value: 'gaps' },
-    { param: 'coverage', value: 'orange' },
-  ], '« Par opérateur » opens on Orange before any operator was shown');
-  assert.deepEqual(block.legendSubSegments, [], 'no operator strip until « Par opérateur » is lit');
-  assert.deepEqual(block.legend, [], 'nothing painted, no class');
-  assert.equal(block.note, undefined);
+  assert.equal(coverageBlock(), undefined, '« Couverture 4G » is a tile, not a block waiting to be pressed');
 });
 
-test('a lit mode is pressed again to take the coverage away; the operators follow « Par opérateur »', () => {
+test('the segments choose what the coverage paints; a lit one is not a control, and the operators follow « Par opérateur »', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: META, enabled: true });
-  let [gaps, byOperator] = coverageBlock().legendSegments;
+  let block = coverageBlock();
+  assert.equal(block.title, 'Couverture 4G');
+  assert.deepEqual(block.legendSegments.map((segment) => segment.label), ['Sans 4G', 'Par opérateur']);
+  let [gaps, byOperator] = block.legendSegments;
   assert.equal(gaps.active, true);
-  assert.deepEqual(gaps.toggle, { param: 'coverage', value: 'off' });
-  assert.match(gaps.title, /Appuyez de nouveau pour retirer la couverture\.$/);
+  // Pressing it would change nothing: the tile is what takes the coverage away.
+  assert.equal(gaps.toggle, null);
   assert.equal(byOperator.active, false);
+  assert.deepEqual(byOperator.toggle, { param: 'coverage', value: 'orange' },
+    '« Par opérateur » opens on Orange before any operator was shown');
+  assert.deepEqual(block.legendSubSegments, [], 'no operator strip until « Par opérateur » is lit');
 
   anfrFranceLayer.setParams({ coverage: 'sfr' });
-  const block = coverageBlock();
+  block = coverageBlock();
   [gaps, byOperator] = block.legendSegments;
   assert.equal(byOperator.active, true);
-  assert.deepEqual(byOperator.toggle, { param: 'coverage', value: 'off' });
+  assert.equal(byOperator.toggle, null);
+  assert.deepEqual(gaps.toggle, { param: 'coverage', value: 'gaps' });
   assert.deepEqual(block.legendSubSegments.map((segment) => [segment.label, segment.active]), [
     ['Orange', false], ['SFR', true], ['Bouygues', false], ['Free', false],
   ]);

@@ -10,7 +10,7 @@ Source: https://github.com/lucide-icons/lucide
         icons/<name>.svg
         Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
 
-WHAT WAS TAKEN. Twelve icons, in two files.
+WHAT WAS TAKEN. Thirteen icons, in two files.
 
 `index.html`, the landing page's scene « Choisissez une vue. »
 (src/vitrine/stage.js), draws them in its tab bar, its pause control and its
@@ -28,16 +28,18 @@ door to the globe:
 `arrow-up-right` is one of the icons Lucide derived from Feather, so the MIT
 notice covers it; the eight others are Lucide's own, under ISC.
 
-`src/data/lucideIcons.js` draws three more (retrieved 2026-09-22 at the same
+`src/data/lucideIcons.js` draws four more (retrieved 2026-09-22 at the same
 commit) as the member tiles of the « Infrastructure numérique » row in the map
 key:
 
     cable        — the « Câbles » tile (submarine cables),
     database     — the « Data centers » tile,
-    radio-tower  — the « Antennes » tile.
+    radio-tower  — the « Antennes » tile,
+    signal-high  — the « Couverture 4G » tile.
 
 `database` is one of the icons Lucide derived from Feather, so the MIT notice
-covers it; `cable` and `radio-tower` are Lucide's own, under ISC. There the
+covers it; `cable`, `radio-tower` and `signal-high` are Lucide's own, under
+ISC. There the
 child elements are copied verbatim into an `<svg viewBox="0 0 24 24">` that
 carries Lucide's own stroke attributes (width 2), and the result is used as a
 CSS mask, so the tile's colour paints through the strokes.

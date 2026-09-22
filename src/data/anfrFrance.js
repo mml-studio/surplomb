@@ -491,6 +491,13 @@ let _mastsUnpublished = 0;
 let _mastsClipped = 0;
 let _sectorsDrawn = 0;
 let _requestGeneration = 0;
+/**
+ * Whether the masts are drawn at all — the « Antennes » tile of the key, the
+ * coverage being the « Couverture 4G » one (`part` in layerFusions.js).
+ * Share-linked as `m`. With the masts out and the coverage on, the layer asks
+ * the register nothing: no maillage, no supports, no dot over the dead zones.
+ */
+let _mastsShown = true;
 
 let _mesh = null;
 let _meshPromise = null;
@@ -2156,6 +2163,7 @@ async function loadViewport({ force = false } = {}) {
   // it concludes it about the view the camera is showing right now. See
   // `cameraSettle.js`: an arrival on any other view has to be read afresh.
   markViewportRead(_viewer, ANFR_FR_LAYER_ID);
+  if (!_mastsShown) return;
   const regime = updateRegime(_viewer);
   if (regime === 'supports') {
     const box = cameraAnfrBox(_viewer);
@@ -2182,6 +2190,56 @@ async function loadViewport({ force = false } = {}) {
     return;
   }
   await loadMesh(meshBox);
+}
+
+/**
+ * Put the masts away and keep the coverage: every dot, shaft and ray goes, the
+ * selected mast's card with them, and whatever the register was about to
+ * answer is dropped when it lands. A read coverage spot stays open — it is
+ * about the ground, which is still painted.
+ */
+function dropMasts() {
+  _requestGeneration += 1;
+  if (_selectedId) clearSelection();
+  _points?.removeAll();
+  _masts?.removeAll();
+  _sectors?.removeAll();
+  _records = new Map();
+  _meshBoxKey = null;
+  _packBoxKey = null;
+  _count = 0;
+  _inView = 0;
+  _mastsDrawn = 0;
+  _mastsUnpublished = 0;
+  _mastsClipped = 0;
+  _sectorsDrawn = 0;
+  _regime = 'maillage';
+  _mastRegime = false;
+  _loading = false;
+  _error = null;
+  // Nothing to wait for and nothing that failed: the layer draws what it was
+  // asked to draw.
+  _status = 'ready';
+  governorRequestRender('anfr-fr-masts');
+}
+
+/**
+ * Whether the masts are drawn once the layer comes on. A layer switched on to
+ * draw nothing — a hand-written link, a session stored mid-way — shows its
+ * masts, as the row's own toggle does.
+ * @param {boolean} mastsShown The `masts` param.
+ * @param {string} coverageMode The `coverage` param.
+ * @returns {boolean}
+ */
+export function anfrMastsShownOnEnable(mastsShown, coverageMode) {
+  return mastsShown || coverageMode === 'off';
+}
+
+/** Normalise a `masts` param: a boolean, or the share link's `'1'`/`'0'`. */
+function normalizeMastsParam(value) {
+  if (value === true || value === 'true' || value === '1' || value === 1) return true;
+  if (value === false || value === 'false' || value === '0' || value === 0) return false;
+  return null;
 }
 
 function onCameraChanged() {
@@ -2748,16 +2806,18 @@ function openCoverageCard(viewer, windowPosition) {
  * operator — and five more lines at the foot of the antenna colours. The
  * approved mock of 2026-09-22 keys it apart: two segments, « Sans 4G » and
  * « Par opérateur », and the four operators on a second strip once the second
- * is lit. A lit mode segment is pressed again to take the coverage away; the
- * lit operator is not pressable, since pressing it would change nothing.
+ * is lit.
  *
- * No block until the server is known to have the map, as the chips did — but a
- * mode a share link asked for keeps its block on a server without one, unlit,
- * with the reason on it, rather than vanishing with no word.
+ * Since lot 3 of that mock the coverage is switched by its own tile, « Couverture
+ * 4G », so the block is there while the coverage is and the segments only
+ * choose what it paints: neither a lit mode nor the lit operator is pressable,
+ * since pressing it would change nothing. A mode a share link asked for keeps
+ * its block on a server without the map, unlit, with the reason on it, rather
+ * than vanishing with no word.
  * @returns {?object} A `legendBlocks` entry, or null.
  */
 function coverageKeyBlock() {
-  if (_coverageStatus !== 'ready' && _coverageMode === 'off') return null;
+  if (_coverageMode === 'off') return null;
   const m = coverageMessages().block;
   const on = _coverageMode !== 'off';
   const loading = on && _coverageStatus === 'loading';
@@ -2765,7 +2825,7 @@ function coverageKeyBlock() {
   const failure = _coverageStatus === 'missing' ? m.missing : m.failed;
   const operatorMode = COVERAGE_OPERATORS.some((op) => op.id === _coverageMode);
   const modeSegment = (key, label, active, title, value) => {
-    let segmentTitle = active ? m.pressAgain(title) : title;
+    let segmentTitle = title;
     if (active && loading) segmentTitle = m.loading;
     else if (active && failed) segmentTitle = failure;
     return {
@@ -2774,7 +2834,7 @@ function coverageKeyBlock() {
       active: active && !failed,
       busy: active && loading,
       title: segmentTitle,
-      toggle: { param: 'coverage', value: active ? 'off' : value },
+      toggle: active ? null : { param: 'coverage', value },
     };
   };
   const block = {
@@ -2872,6 +2932,7 @@ const anfrFranceLayer = {
   enable(viewer) {
     _enabled = true;
     _error = null;
+    _mastsShown = anfrMastsShownOnEnable(_mastsShown, _coverageMode);
     if (_points) _points.show = true;
     // The shafts and rays stay hidden until a reconcile decides they belong on
     // screen — the camera may well be over the Atlantic when the row is ticked.
@@ -2972,6 +3033,8 @@ const anfrFranceLayer = {
       mastsUnpublished: _mastsUnpublished,
       mastsClipped: _mastsClipped,
       sectors: _sectorsDrawn,
+      // Whether the masts are drawn at all (the « Antennes » tile).
+      mastsShown: _mastsShown,
       // The layer's own honesty numbers, surfaced rather than buried.
       supportsNational: national?.count ?? null,
       projectOnly: national?.projectOnly ?? null,
@@ -3087,15 +3150,31 @@ const anfrFranceLayer = {
   },
 
   /**
-   * `{ coverage }` — which coverage the ground is painted with.
+   * `{ coverage, masts }` — which coverage the ground is painted with, and
+   * whether the masts are drawn over it.
    *
    * Serialized in the share link, because it is not a preference but what the
    * map says: the same masts over a painted Orange gap and over the dead zones
-   * are two different arguments. Accepted before the module is enabled (a
-   * link restores params first) and applied on `enable`.
+   * are two different arguments, and the dead zones with no mast on them are a
+   * third. Accepted before the module is enabled (a link restores params
+   * first) and applied on `enable`. A `masts` that is not a boolean is refused.
    * @returns {boolean}
    */
   setParams(params = {}) {
+    if (params.masts !== undefined) {
+      const masts = normalizeMastsParam(params.masts);
+      if (masts === null) return false;
+      if (masts !== _mastsShown) {
+        _mastsShown = masts;
+        if (!_enabled) {
+          // Applied on `enable`.
+        } else if (masts) {
+          void loadViewport({ force: true });
+        } else {
+          dropMasts();
+        }
+      }
+    }
     if (params.coverage === undefined) return true;
     const next = normalizeCoverageMode(params.coverage);
     if (next === _coverageMode) return true;
@@ -3107,7 +3186,7 @@ const anfrFranceLayer = {
   },
 
   getParams() {
-    return { coverage: _coverageMode };
+    return { coverage: _coverageMode, masts: _mastsShown };
   },
 
   destroy(viewer) {
@@ -3165,9 +3244,10 @@ const anfrFranceLayer = {
 export function _setAnfrStateForTest({
   viewer, overlayHost, http, mesh = null, pack = null, meshPick = null,
   regime = pack ? 'supports' : 'maillage', enabled = true, details = null, lookups = null,
-  mastRegime = false,
+  mastRegime = false, mastsShown = true,
 } = {}) {
   _viewer = viewer || null;
+  _mastsShown = mastsShown;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
   _http = http || DEFAULT_HTTP;
   _mesh = mesh;

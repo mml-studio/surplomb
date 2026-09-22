@@ -2,7 +2,7 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
 import {
-  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor,
+  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor, tilePartDefaults, tilePartIsOff,
 } from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
 import { getSelectedEntityContext } from './contextStore.js';
@@ -3434,6 +3434,62 @@ export class DataLayerManager {
   }
 
   /**
+   * Whether a tile that switches PART of a layer is lit: the layer is on and
+   * its params do not put that part out. See `part` in layerFusions.js.
+   * @param {{id: string, off: object}} tile
+   * @returns {boolean}
+   */
+  _tilePartLit(tile) {
+    return this.isEnabled(tile.id) && !tilePartIsOff(this.getLayerParams(tile.id), tile);
+  }
+
+  /**
+   * Press a member tile in the key.
+   *
+   * A whole-layer tile is the chip it replaced ({@link _toggleFusionMember}).
+   * A PART tile — the 4G coverage of the antennas' layer — switches that part
+   * alone, and the layer follows its parts: it comes on with the pressed part
+   * and no other, and goes off when its last lit part is put out, back to the
+   * params the row's toggle lights it with. Otherwise the masts would come
+   * back with the coverage the next time the row was switched on, although the
+   * reader had put both out.
+   * @param {string} layerId The member layer.
+   * @param {?string} part The part the tile switches, or null for the layer.
+   */
+  _toggleFusionTile(layerId, part = null) {
+    if (!part) {
+      this._toggleFusionMember(layerId);
+      return;
+    }
+    const rowId = fusedIntoFor(layerId) || layerId;
+    const parts = (fusionTilesFor(rowId) || []).filter((tile) => tile.id === layerId && tile.part);
+    const tile = parts.find((entry) => entry.part === part);
+    if (!tile || !this.layers.has(layerId)) return;
+    if (this._tilePartLit(tile)) {
+      if (parts.some((entry) => entry !== tile && this._tilePartLit(entry))) {
+        this.setLayerParams(layerId, tile.off, { origin: 'user' });
+        return;
+      }
+      // Off FIRST, then back to the row's own params: set on a layer still
+      // drawing, they would light its other part for a frame.
+      this.setEnabled(layerId, false, { origin: 'user' })
+        .then(() => {
+          if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
+        })
+        .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
+      return;
+    }
+    if (this.isEnabled(layerId)) {
+      this.setLayerParams(layerId, tile.on, { origin: 'user' });
+      return;
+    }
+    // Off: the layer comes on showing the pressed part alone.
+    const alone = Object.assign({}, ...parts.filter((entry) => entry !== tile).map((entry) => entry.off), tile.on);
+    this.setLayerParams(layerId, alone, { origin: 'user' });
+    this._toggleFusionMember(layerId);
+  }
+
+  /**
    * Hand a row's layer — and every companion painted on that row — the
    * "your controls changed, repaint me" callback.
    *
@@ -4184,10 +4240,11 @@ export class DataLayerManager {
         const title = tile.title || '';
         return {
           id: tile.id,
+          part: tile.part || null,
           label: tile.label,
           color: tile.color,
           icon: tile.icon,
-          active: this.isEnabled(tile.id),
+          active: tile.part ? this._tilePartLit(tile) : this.isEnabled(tile.id),
           offCoverage,
           title: notice ? `${title || tile.label} — ${notice}` : title,
         };
@@ -4292,10 +4349,10 @@ export class DataLayerManager {
         return;
       }
       // A member tile switches its whole layer, exactly as the chip it
-      // replaces did on the row.
+      // replaces did on the row — or the part of it the tile names.
       const tile = event.target?.closest?.('.map-legend-tile[data-tile-layer]');
       if (tile) {
-        this._toggleFusionMember(tile.dataset.tileLayer);
+        this._toggleFusionTile(tile.dataset.tileLayer, tile.dataset.tilePart || null);
         return;
       }
       const button = event.target?.closest?.('.is-toggle[data-toggle-layer]');
@@ -4769,7 +4826,8 @@ export class DataLayerManager {
         + (tile.active ? ' is-on' : '')
         + (tile.offCoverage ? ' is-offcoverage' : '');
       button.dataset.tileLayer = tile.id;
-      button.dataset.focusKey = `tile:${tile.id}`;
+      if (tile.part) button.dataset.tilePart = tile.part;
+      button.dataset.focusKey = tile.part ? `tile:${tile.id}:${tile.part}` : `tile:${tile.id}`;
       button.setAttribute('aria-pressed', tile.active ? 'true' : 'false');
       if (tile.title) button.title = tile.title;
       setCssVar(button, '--tile-color', tile.color);

@@ -59,6 +59,14 @@ export const LUCIDE_ICONS = Object.freeze({
     '<path d="M9.5 18h5"/>',
     '<path d="m8 22 4-11 4 11"/>',
   ]),
+  // Three rising bars after a dot — the 4G coverage, a part of the antennas'
+  // layer with a tile of its own.
+  'signal-high': Object.freeze([
+    '<path d="M2 20h.01"/>',
+    '<path d="M7 20v-4"/>',
+    '<path d="M12 20v-8"/>',
+    '<path d="M17 20V8"/>',
+  ]),
 });
 
 const _cache = new Map();

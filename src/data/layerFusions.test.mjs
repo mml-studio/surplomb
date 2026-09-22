@@ -7,12 +7,21 @@ import {
   fusionCompanionsFor,
   fusionTilesFor,
   fusionToggleGroupFor,
+  tilePartDefaults,
+  tilePartIsOff,
   validateLayerFusions,
 } from './layerFusions.js';
 import { ANFR_BAND_COLORS } from './anfrFrance.js';
 import { DATACENTER_HALL_COLOR } from './datacentersPack.js';
+import { COVERAGE_RAMP } from './mobileCoverage.js';
 import { BASE_CABLE_COLOR } from './telegeographySubmarineCables.js';
-import { DISABLED_LAYER_IDS, REGISTERED_LAYER_IDS } from './layerState.js';
+import {
+  DISABLED_LAYER_IDS,
+  REGISTERED_LAYER_IDS,
+  decodeLayerStateParams,
+  encodeLayerStateParams,
+  normalizeLayerState,
+} from './layerState.js';
 import { LAYER_TAXONOMY, groupLayerIdsByCategory, layerTaxonomyFor } from './layerTaxonomy.js';
 
 test('the shipped table validates against the registered layer set', () => {
@@ -234,13 +243,21 @@ test('validation refuses the four ways a fusion table goes wrong', () => {
 
 test('the digital-infrastructure row is laid out as tiles, each lit in the colour its layer draws', () => {
   const tiles = fusionTilesFor('local-datacenters');
-  assert.deepEqual(tiles.map((tile) => tile.id), ['telegeography-submarine-cables', 'local-datacenters', 'anfr-fr']);
-  assert.deepEqual(tiles.map((tile) => tile.label), ['Câbles', 'Data centers', 'Antennes']);
+  assert.deepEqual(tiles.map((tile) => [tile.id, tile.part]), [
+    ['telegeography-submarine-cables', null],
+    ['local-datacenters', null],
+    ['anfr-fr', 'masts'],
+    ['anfr-fr', 'coverage'],
+  ]);
+  assert.deepEqual(tiles.map((tile) => tile.label), ['Câbles', 'Data centers', 'Antennes', 'Couverture 4G']);
   // The colour of a lit tile is the map's, so the tile is also a swatch. The
   // table writes literals (it is imported at boot, the modules are not); this
-  // is what keeps them from drifting.
-  assert.deepEqual(tiles.map((tile) => tile.color), [BASE_CABLE_COLOR, DATACENTER_HALL_COLOR, ANFR_BAND_COLORS['5g']]);
-  for (const tile of tiles) assert.ok(tile.icon.startsWith('data:image/svg+xml;base64,'), tile.id);
+  // is what keeps them from drifting. The coverage opens on the dead zones.
+  assert.deepEqual(tiles.map((tile) => tile.color), [
+    BASE_CABLE_COLOR, DATACENTER_HALL_COLOR, ANFR_BAND_COLORS['5g'], COVERAGE_RAMP[0],
+  ]);
+  for (const tile of tiles) assert.ok(tile.icon.startsWith('data:image/svg+xml;base64,'), `${tile.id}:${tile.part}`);
+  assert.match(tiles[3].title, /ARCEP/);
   // Every other row keeps its chips.
   const tiled = LAYER_FUSIONS.filter((fusion) => fusionTilesFor(fusion.primary));
   assert.deepEqual(tiled.map((fusion) => fusion.primary), ['local-datacenters']);
@@ -266,4 +283,47 @@ test('validation refuses a tile set that leaves a member without a switch', () =
   assert.throws(() => validateLayerFusions(row([]), ids), /non-empty array/);
   assert.throws(() => validateLayerFusions(row([tile('a'), tile('b')], { primaryToggle: false }), ids),
     /tiles need primaryToggle/);
+});
+
+test('a member split into parts gets one tile per part, each switching the same params, one lit by the row', () => {
+  const ids = ['a', 'b'];
+  const row = (tiles) => [{
+    primary: 'a', primaryChip: 'A', primaryToggle: true, companions: [{ id: 'b', chip: 'B' }], tiles,
+  }];
+  const tile = (id, extra = {}) => ({ id, icon: 'database', color: '#00ffff', ...extra });
+  const part = (name, extra = {}) => tile('b', {
+    part: name, on: { [name]: true }, off: { [name]: false }, lit: name === 'x', ...extra,
+  });
+  assert.equal(validateLayerFusions(row([tile('a'), part('x'), part('y')]), ids), true);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x')]), ids), /needs a sibling/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x'), part('x')]), ids), /listed twice: b:x/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x'), tile('b')]), ids), /whole tile beside its parts/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x'), part('y', { on: {} })]), ids), /on and off/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x'), part('y', { off: { z: false } })]), ids),
+    /same params on and off/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x'), part('y', { lit: 'no' })]), ids), /lit flag/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), part('x', { lit: false }), part('y')]), ids),
+    /nothing to light/);
+});
+
+test('the antennas split into masts and coverage: the row lights the masts, and a link keeps what the tiles say', () => {
+  const parts = fusionTilesFor('local-datacenters').filter((tile) => tile.id === 'anfr-fr');
+  assert.deepEqual(tilePartDefaults(parts), { masts: true, coverage: 'off' },
+    'the state the row toggle has always switched the antennas on in');
+  const [masts, coverage] = parts;
+  assert.equal(tilePartIsOff({ masts: true, coverage: 'sfr' }, masts), false);
+  assert.equal(tilePartIsOff({ masts: true, coverage: 'sfr' }, coverage), false);
+  assert.equal(tilePartIsOff({ masts: false, coverage: 'off' }, masts), true);
+  assert.equal(tilePartIsOff({ masts: false, coverage: 'off' }, coverage), true);
+  // Every param a part switches is one the share link carries, both ways.
+  const state = normalizeLayerState({
+    enabledLayerIds: ['anfr-fr'],
+    options: { 'anfr-fr': { ...masts.off, ...coverage.on } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  const antennas = params.get('lo').split('_').filter((assignment) => assignment.startsWith('an.'));
+  assert.deepEqual(antennas, ['an.c.z', 'an.m.0']);
+  assert.deepEqual(decodeLayerStateParams(params).options['anfr-fr'], { coverage: 'gaps', masts: false });
+  // A link written before the tile says nothing of the masts, and keeps them.
+  assert.equal(decodeLayerStateParams(new URLSearchParams('v=2&l=an&lo=an.c.z')).options['anfr-fr'].masts, true);
 });
