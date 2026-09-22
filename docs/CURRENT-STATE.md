@@ -30,6 +30,32 @@ Updated: September 22, 2026
 >   attribution” popover. If the probe fails, a route's `off` answer flips the
 >   same one-way switch.
 
+> **2026-09-22 — the globe says when a model is talking (EU AI Act art. 50).**
+>
+> - **The mark.** `src/aiDisclosure.js` builds a 17×13 px cream pill reading
+>   « IA » (« AI » in English, `src/aiDisclosure.i18n.js`), `role="img"`, with
+>   the sentence it stands for as its `aria-label` and `title`. The disclosure
+>   before it was the voice dock's `AI AGENT` kicker: English on both globes,
+>   0 px wide at 1440×900, `display: none` on phones and hidden whenever a
+>   dock panel opens. The kicker is unchanged (instrument lettering).
+> - **On the mic, always.** `createVoiceControl()` puts the mark inside
+>   `.gev-mic-orbit`, upper left (`top/left: -3px`), mirroring the premium
+>   crown on the upper right; the button's `aria-describedby` is
+>   `gev-voice-ai-badge gev-voice-help`. Sentence: « Assistant d’intelligence
+>   artificielle — voix de synthèse ». It names no vendor, since the voice
+>   provider is OpenAI or OpenRouter per instance.
+> - **On the HUD summary, only while a model wrote it.**
+>   `IntelHUD._setSummaryText(text, animate, aiGenerated)` sets
+>   `data-ai-generated="true"` on `#hud-summary` when `aiGenerated` (only the
+>   `/api/openai/hud-summary` answer passes it) and removes it otherwise; the
+>   badge beside `SUMMARY` shows through
+>   `.hud-summary-wrap:has(#hud-summary[data-ai-generated='true'])`. Setting a
+>   line outright now also stops a typewriter still typing an older one.
+> - **Machine-readable.** `[data-role="said"] .gev-voice-transcript-text` (the
+>   assistant's words) carries `data-ai-generated="true"` in the markup.
+> - Checked by `npm run qa:ai-badge` (1440×900, panel open, 820 px, phone,
+>   English; it sets `data-voice-premium` itself so the crown is drawn).
+
 > **2026-09-22 — the landing page speaks English too, and the globe's mark
 > leads back to it.**
 >
@@ -4615,6 +4641,8 @@ inert again.
 
 `GEV MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC:
 
+- **AI disclosure** (2026-09-22): the mic's ring always wears an « IA » / « AI » badge, upper left, on every layout; its `title` and the button's first `aria-describedby` say « Assistant d’intelligence artificielle — voix de synthèse ». The SAID transcript text is marked `data-ai-generated="true"`. See `src/aiDisclosure.js`.
+
 - **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`; the Vite middleware holds `OPENAI_API_KEY` and posts the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
 - **Session defaults** (env-tunable): model `gpt-realtime-2` (or `gpt-realtime-2.1-mini` when the MINI tier is selected — see the model-tier entry below), voice `marin`, reasoning effort `low`, semantic VAD with low eagerness, no response interruption, context window truncated to ~3,000 post-instruction tokens with 0.5 retention ratio — the conversational window stays short because map state is fetched live per turn.
 - **Twenty-eight tools** (schemas defined server-side in `vite.config.js`, executed client-side in `src/voice/gevActions.js`): `fly_to_location`, `select_nearest_aircraft`, `adjust_camera_zoom`, `zoom_to_globe`, `set_layer_visibility`, `show_data_layers_menu`, `set_panel_open`, `set_visual_style`, `get_entity_context`, `get_current_view_state`, `set_hud`, `set_detection`, `set_map_stack`, `set_post_processing`, `control_scene`, `control_cctv`, `set_context_mode`, `control_cockpit`, `control_radio`, `track_entity`, `stop_tracking`, `frame_overhead`, `annotate_map`, `clear_annotations`, `move_camera`, `fly_route`, `analyst_query`, and `next_iss_pass`.
@@ -4668,6 +4696,7 @@ inert again.
 - HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning).
 - Input is the live basemap label context (place/street/nearby-place labels + enabled layers) — the model is instructed not to infer from coordinates.
 - Output is sanitized to exactly five words; falls back to the deterministic telemetry summary on error/timeout (5s abort); typewriter animation on update.
+- **Disclosure** (2026-09-22): while the line on screen is the model's, `#hud-summary` carries `data-ai-generated="true"` and an « IA » / « AI » badge sits beside the `SUMMARY` label (tooltip « Résumé rédigé par une intelligence artificielle (OpenAI) »); the deterministic line carries neither. See `src/aiDisclosure.js`.
 
 ### Map Stack Switcher (June 2026)
 
