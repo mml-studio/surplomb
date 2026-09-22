@@ -5,9 +5,13 @@ import {
   LAYER_FUSIONS,
   fusedIntoFor,
   fusionCompanionsFor,
+  fusionTilesFor,
   fusionToggleGroupFor,
   validateLayerFusions,
 } from './layerFusions.js';
+import { ANFR_BAND_COLORS } from './anfrFrance.js';
+import { DATACENTER_HALL_COLOR } from './datacentersPack.js';
+import { BASE_CABLE_COLOR } from './telegeographySubmarineCables.js';
 import { DISABLED_LAYER_IDS, REGISTERED_LAYER_IDS } from './layerState.js';
 import { LAYER_TAXONOMY, groupLayerIdsByCategory, layerTaxonomyFor } from './layerTaxonomy.js';
 
@@ -226,4 +230,40 @@ test('validation refuses the four ways a fusion table goes wrong', () => {
     () => validateLayerFusions([{ primary: 'a', companions: [{ id: 'b', chip: 'B', disabled: 'yes' }] }], ids),
     /disabled flag must be a boolean/,
   );
+});
+
+test('the digital-infrastructure row is laid out as tiles, each lit in the colour its layer draws', () => {
+  const tiles = fusionTilesFor('local-datacenters');
+  assert.deepEqual(tiles.map((tile) => tile.id), ['telegeography-submarine-cables', 'local-datacenters', 'anfr-fr']);
+  assert.deepEqual(tiles.map((tile) => tile.label), ['Câbles', 'Data centers', 'Antennes']);
+  // The colour of a lit tile is the map's, so the tile is also a swatch. The
+  // table writes literals (it is imported at boot, the modules are not); this
+  // is what keeps them from drifting.
+  assert.deepEqual(tiles.map((tile) => tile.color), [BASE_CABLE_COLOR, DATACENTER_HALL_COLOR, ANFR_BAND_COLORS['5g']]);
+  for (const tile of tiles) assert.ok(tile.icon.startsWith('data:image/svg+xml;base64,'), tile.id);
+  // Every other row keeps its chips.
+  const tiled = LAYER_FUSIONS.filter((fusion) => fusionTilesFor(fusion.primary));
+  assert.deepEqual(tiled.map((fusion) => fusion.primary), ['local-datacenters']);
+});
+
+test('validation refuses a tile set that leaves a member without a switch', () => {
+  const ids = ['a', 'b', 'c'];
+  const row = (tiles, extra = {}) => [{
+    primary: 'a',
+    primaryChip: 'A',
+    primaryToggle: true,
+    companions: [{ id: 'b', chip: 'B' }, { id: 'c', chip: 'C', disabled: true }],
+    tiles,
+    ...extra,
+  }];
+  const tile = (id, extra = {}) => ({ id, icon: 'database', color: '#00ffff', ...extra });
+  assert.equal(validateLayerFusions(row([tile('b'), tile('a')]), ids), true, 'any order, withdrawn member left out');
+  assert.throws(() => validateLayerFusions(row([tile('a')]), ids), /Fusion member has no tile: a → b/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), tile('b'), tile('c')]), ids), /not an offered member/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), tile('b'), tile('b')]), ids), /listed twice/);
+  assert.throws(() => validateLayerFusions(row([tile('a', { icon: 'plane' }), tile('b')]), ids), /unknown icon/);
+  assert.throws(() => validateLayerFusions(row([tile('a', { color: 'cyan' }), tile('b')]), ids), /#rrggbb/);
+  assert.throws(() => validateLayerFusions(row([]), ids), /non-empty array/);
+  assert.throws(() => validateLayerFusions(row([tile('a'), tile('b')], { primaryToggle: false }), ids),
+    /tiles need primaryToggle/);
 });

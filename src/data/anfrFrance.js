@@ -239,9 +239,9 @@ import { sceneGroundPoint } from './groundPick.js';
 import {
   COVERAGE_DRAPE_ALPHA,
   COVERAGE_FORMAT,
-  COVERAGE_MODES,
   COVERAGE_OPERATORS,
   coverageCardText,
+  coverageHatchLut,
   coverageLegend,
   coverageLut,
   coverageMonthLabel,
@@ -498,6 +498,11 @@ const _meshLookups = new Map();
 // --- The ARCEP coverage under the masts -------------------------------------
 /** `off`, `gaps` or an operator id — see `mobileCoverage.js`. Share-linked. */
 let _coverageMode = 'off';
+/**
+ * The operator « Par opérateur » opens on: the last one shown this session,
+ * Orange before any. Not share-linked — the mode is, and it names the operator.
+ */
+let _coverageLastOperator = 'orange';
 /** idle → loading → ready | missing | failed. `missing`: no pyramid on this server. */
 let _coverageStatus = 'idle';
 let _coverageError = null;
@@ -2244,7 +2249,10 @@ function syncCoverageDrape() {
   removeCoverageDrape();
   if (!tileset?.imageryLayers?.add) return;
   const layer = new Cesium.ImageryLayer(
-    createCoverageImageryProvider(_coverageMeta, coverageLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA), { drape: true }),
+    createCoverageImageryProvider(_coverageMeta, coverageLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA), {
+      drape: true,
+      hatchLut: coverageHatchLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA),
+    }),
   );
   tileset.imageryLayers.add(layer);
   _coverageDrape = { tileset, layer };
@@ -2256,7 +2264,9 @@ function syncCoverageImagery() {
   if (_coverageImageryMode !== wanted) {
     removeCoverageImagery();
     if (wanted && _viewer?.imageryLayers) {
-      _coverageImagery = new Cesium.ImageryLayer(createCoverageImageryProvider(_coverageMeta, coverageLut(wanted)));
+      _coverageImagery = new Cesium.ImageryLayer(
+        createCoverageImageryProvider(_coverageMeta, coverageLut(wanted), { hatchLut: coverageHatchLut(wanted) }),
+      );
       _viewer.imageryLayers.add(_coverageImagery);
       _coverageImageryMode = wanted;
       // The selected mast's line of sight stays ABOVE the coverage: it is the
@@ -2341,34 +2351,72 @@ function openCoverageCard(viewer, windowPosition) {
 }
 
 /**
- * The five coverage chips — or none, until the server is known to have a map.
+ * The coverage as its OWN block of the map key: « Couverture 4G », its mode
+ * control, its classes and whose estimate they are.
  *
- * A chip is a real control: it sends `{ coverage }` to `setParams`, and the
- * active one sends `off`. A restored share link that asked for coverage on a
- * server without a pyramid keeps its chip, in the error state, so the reader
- * is told why nothing is painted rather than shown an empty map (A4).
+ * It used to be five chips on the row — « Zones blanches » and one per
+ * operator — and five more lines at the foot of the antenna colours. The
+ * approved mock of 2026-09-22 keys it apart: two segments, « Sans 4G » and
+ * « Par opérateur », and the four operators on a second strip once the second
+ * is lit. A lit mode segment is pressed again to take the coverage away; the
+ * lit operator is not pressable, since pressing it would change nothing.
+ *
+ * No block until the server is known to have the map, as the chips did — but a
+ * mode a share link asked for keeps its block on a server without one, unlit,
+ * with the reason on it, rather than vanishing with no word.
+ * @returns {?object} A `legendBlocks` entry, or null.
  */
-function coverageChips() {
-  if (_coverageStatus !== 'ready' && _coverageMode === 'off') return [];
-  const m = coverageMessages();
-  return COVERAGE_MODES.filter((mode) => mode !== 'off').map((mode) => {
-    const op = COVERAGE_OPERATORS.find((candidate) => candidate.id === mode);
-    const active = _coverageMode === mode;
-    const loading = active && _coverageStatus === 'loading';
-    const failed = active && (_coverageStatus === 'failed' || _coverageStatus === 'missing');
-    let title = op ? m.chip.operatorTitle(op.name) : m.chip.gapsTitle;
-    if (loading) title = m.chip.loading;
-    else if (failed) title = _coverageStatus === 'missing' ? m.chip.missing : m.chip.failed;
+function coverageKeyBlock() {
+  if (_coverageStatus !== 'ready' && _coverageMode === 'off') return null;
+  const m = coverageMessages().block;
+  const on = _coverageMode !== 'off';
+  const loading = on && _coverageStatus === 'loading';
+  const failed = on && (_coverageStatus === 'failed' || _coverageStatus === 'missing');
+  const failure = _coverageStatus === 'missing' ? m.missing : m.failed;
+  const operatorMode = COVERAGE_OPERATORS.some((op) => op.id === _coverageMode);
+  const modeSegment = (key, label, active, title, value) => {
+    let segmentTitle = active ? m.pressAgain(title) : title;
+    if (active && loading) segmentTitle = m.loading;
+    else if (active && failed) segmentTitle = failure;
     return {
-      id: `coverage-${mode}`,
-      label: op ? op.short : m.chip.gaps,
+      key,
+      label,
       active: active && !failed,
-      busy: loading,
-      state: loading ? 'loading' : (failed ? 'error' : (active ? 'active' : 'idle')),
-      title,
-      params: { coverage: active ? 'off' : mode },
+      busy: active && loading,
+      title: segmentTitle,
+      toggle: { param: 'coverage', value: active ? 'off' : value },
     };
-  });
+  };
+  const block = {
+    key: 'coverage',
+    title: m.title,
+    legend: coverageLegendEntries(),
+    legendSegmentsLabel: m.segmentsLabel,
+    legendSegments: [
+      modeSegment('gaps', m.gaps, _coverageMode === 'gaps', m.gapsTitle, 'gaps'),
+      modeSegment('operator', m.byOperator, operatorMode, m.byOperatorTitle, _coverageLastOperator),
+    ],
+    legendSubSegments: operatorMode
+      ? COVERAGE_OPERATORS.map((op) => {
+        const active = op.id === _coverageMode;
+        return {
+          key: op.id,
+          label: op.short,
+          active: active && !failed,
+          title: m.operatorTitle(op.name),
+          toggle: active ? null : { param: 'coverage', value: op.id },
+        };
+      })
+      : [],
+  };
+  // E1: the coverage runs on the ARCEP's quarterly clock, not on the
+  // observatoire's weekly one, and says so under its own classes.
+  if (failed) block.note = failure;
+  else if (block.legend.length) {
+    const legend = coverageMessages().legend;
+    block.note = `${legend.source(coverageMonthLabel(_coverageMeta?.quarterEnd))} ${legend.note}`;
+  }
+  return block;
 }
 
 /** The coverage block of the key, or nothing while the coverage is off. */
@@ -2602,12 +2650,8 @@ const anfrFranceLayer = {
    * when there is one — four lines where this used to print nine.
    */
   getRowControls() {
-    // The only chips are the coverage switches: the manager renders a chip as
-    // a BUTTON keyed by `chip.id` and dispatches `chip.params` on click, so an
-    // informational one would be a control that looks clickable and does
-    // nothing.
-    const chips = coverageChips();
-    const coverage = coverageLegendEntries();
+    // No chip: the row is a tile in the key (`tiles` in layerFusions.js), and
+    // the coverage switches are segments of its own block there.
     const legend = [];
     if (_records.size) {
       const tally = new Map();
@@ -2628,15 +2672,9 @@ const anfrFranceLayer = {
       const m = messages().viewshed.legend;
       legend.push({ label: m.label, color: VIEWSHED_COLOR, blurb: m.blurb });
     }
-    legend.push(...coverage);
-    const controls = { chips, legend };
-    if (coverage.length) {
-      // E1: the coverage runs on the ARCEP's quarterly clock, not on the
-      // observatoire's weekly one. Said UNDER the coverage classes, which it
-      // is about, rather than above the antenna colours, which it is not.
-      const m = coverageMessages();
-      controls.note = `${m.legend.source(coverageMonthLabel(_coverageMeta?.quarterEnd))} ${m.legend.note}`;
-    }
+    const controls = { chips: [], legend };
+    const coverage = coverageKeyBlock();
+    if (coverage) controls.legendBlocks = [coverage];
     return controls;
   },
 
@@ -2654,6 +2692,7 @@ const anfrFranceLayer = {
     const next = normalizeCoverageMode(params.coverage);
     if (next === _coverageMode) return true;
     _coverageMode = next;
+    if (COVERAGE_OPERATORS.some((op) => op.id === next)) _coverageLastOperator = next;
     void applyCoverage();
     governorRequestRender('anfr-fr-coverage-mode');
     return true;
@@ -2893,6 +2932,7 @@ export function _setAnfrCoverageForTest({
   _overlayHost = overlayHost;
   _enabled = enabled;
   _coverageMode = normalizeCoverageMode(mode);
+  _coverageLastOperator = COVERAGE_OPERATORS.some((op) => op.id === _coverageMode) ? _coverageMode : 'orange';
   _coverageMeta = meta;
   _coverageStatus = status;
   _coverageError = null;

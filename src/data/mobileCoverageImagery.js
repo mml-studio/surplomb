@@ -42,6 +42,7 @@
 import * as Cesium from 'cesium';
 
 import {
+  COVERAGE_HATCH,
   COVERAGE_TILE_PX,
   coverageTileAt,
   coverageTileExists,
@@ -66,13 +67,26 @@ function emptyCanvas() {
  * `rgba` is the canvas's own bytes: the code is in R (G and B repeat it) and
  * the land mask in A. Pure, so the one piece of arithmetic that decides every
  * colour on screen is tested without a canvas.
+ *
+ * With `hatchLut`, the pixels on a stripe of `COVERAGE_HATCH` are painted
+ * through it instead — that table differs from `lut` on rung 0 only, which is
+ * how the hatching lands on that rung and nowhere else.
  * @param {Uint8ClampedArray|Uint8Array} rgba
  * @param {Uint32Array} lut 256 packed RGBA values, little-endian (`ImageData` order)
+ * @param {?Uint32Array} [hatchLut] Same shape, for the stripe pixels.
  */
-export function paintCoverageRgba(rgba, lut) {
+export function paintCoverageRgba(rgba, lut, hatchLut = null) {
   const out = new Uint32Array(rgba.buffer, rgba.byteOffset, rgba.byteLength >> 2);
+  const { period, width } = COVERAGE_HATCH;
   for (let i = 0, p = 0; i < out.length; i++, p += 4) {
-    out[i] = rgba[p + 3] ? lut[rgba[p]] : 0;
+    if (!rgba[p + 3]) {
+      out[i] = 0;
+      continue;
+    }
+    const code = rgba[p];
+    const x = i % COVERAGE_TILE_PX;
+    const y = (i - x) / COVERAGE_TILE_PX;
+    out[i] = hatchLut && (x + y) % period < width ? hatchLut[code] : lut[code];
   }
 }
 
@@ -96,23 +110,27 @@ export function coverageOverzoomSource(level, x, y, maxZoom) {
   return { z: level - over, x: ax, y: ay, sx: (x - (ax << over)) * size, sy: (y - (ay << over)) * size, size };
 }
 
-function magnify(canvas, { sx, sy, size }) {
-  const out = document.createElement('canvas');
-  out.width = COVERAGE_TILE_PX;
-  out.height = COVERAGE_TILE_PX;
-  const context = out.getContext('2d');
-  // Nearest neighbour: a smoothed edge would invent colours between two rungs.
-  context.imageSmoothingEnabled = false;
-  context.drawImage(canvas, sx, sy, size, size, 0, 0, COVERAGE_TILE_PX, COVERAGE_TILE_PX);
-  return out;
-}
-
-function decodeToCanvas(image) {
+/**
+ * Draw a decoded tile — or, past the pyramid, the square of its ancestor that
+ * a tile magnifies — onto a fresh canvas, and read its codes back.
+ *
+ * The CODES are magnified, before any colour exists, so the painting that
+ * follows runs at the output's own pixel size: the hatching keeps one stripe
+ * width at every level instead of doubling with each level of magnification.
+ * Nearest neighbour, because a smoothed edge would invent codes between two
+ * pixels — and with them operators and levels nobody published.
+ */
+function decodeToCanvas(image, crop = null) {
   const canvas = document.createElement('canvas');
   canvas.width = COVERAGE_TILE_PX;
   canvas.height = COVERAGE_TILE_PX;
   const context = canvas.getContext('2d', { willReadFrequently: true });
-  context.drawImage(image, 0, 0);
+  if (crop) {
+    context.imageSmoothingEnabled = false;
+    context.drawImage(image, crop.sx, crop.sy, crop.size, crop.size, 0, 0, COVERAGE_TILE_PX, COVERAGE_TILE_PX);
+  } else {
+    context.drawImage(image, 0, 0);
+  }
   image.close?.();
   return { canvas, context, image: context.getImageData(0, 0, COVERAGE_TILE_PX, COVERAGE_TILE_PX) };
 }
@@ -128,10 +146,11 @@ function decodeToCanvas(image) {
  *
  * @param {object} meta The pyramid's meta.json
  * @param {Uint32Array} lut
- * @param {{credit?: string, drape?: boolean}} [options] `drape`: for a
- *   tileset's `imageryLayers`, one level past the pyramid — see the header.
+ * @param {{credit?: string, drape?: boolean, hatchLut?: Uint32Array}} [options]
+ *   `drape`: for a tileset's `imageryLayers`, one level past the pyramid — see
+ *   the header. `hatchLut`: the stripe colours, see `paintCoverageRgba`.
  */
-export function createCoverageImageryProvider(meta, lut, { credit, drape = false } = {}) {
+export function createCoverageImageryProvider(meta, lut, { credit, drape = false, hatchLut = null } = {}) {
   const [west, south, east, north] = meta.bounds || [-5.5, 41.2, 9.8, 51.2];
   const provider = new Cesium.UrlTemplateImageryProvider({
     url: coverageTileUrl(meta.edition, '{z}', '{x}', '{y}').replace(/%7B/g, '{').replace(/%7D/g, '}'),
@@ -153,10 +172,10 @@ export function createCoverageImageryProvider(meta, lut, { credit, drape = false
     // `undefined` is Cesium's "throttled, ask again next frame".
     if (!pending) return undefined;
     return pending.then((bitmap) => {
-      const { canvas, context, image } = decodeToCanvas(bitmap);
-      paintCoverageRgba(image.data, lut);
+      const { canvas, context, image } = decodeToCanvas(bitmap, source.z === level ? null : source);
+      paintCoverageRgba(image.data, lut, hatchLut);
       context.putImageData(image, 0, 0);
-      return source.z === level ? canvas : magnify(canvas, source);
+      return canvas;
     });
   };
   return provider;

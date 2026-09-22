@@ -52,6 +52,7 @@
  */
 
 import { REGISTERED_LAYER_IDS } from './layerState.js';
+import { LUCIDE_ICONS, lucideIconMask } from './lucideIcons.js';
 import messages from './layerFusions.i18n.js';
 
 /**
@@ -97,6 +98,7 @@ function fusionRow(fusion) {
     [FROM_CATALOG]: true,
     get primaryChip() { return messages().chips[fusion.primary]; },
     companions: Object.freeze(fusion.companions.map(fusionCompanion)),
+    ...(fusion.tiles ? { tiles: Object.freeze(fusion.tiles.map((tile) => Object.freeze({ ...tile }))) } : {}),
   });
 }
 
@@ -160,6 +162,30 @@ function declaredChip(entry, layerId, own) {
  * the flag the reader could add the other two and never subtract the first —
  * measured on that row, where the 4 351 data centres were unswitchable for as
  * long as the reader wanted to look at antennas.
+ *
+ * `tiles` MOVES A PEER ROW'S CONTROLS INTO THE MAP KEY. Each member becomes a
+ * tile in the row's block of the key — its icon, its name and a switch — and
+ * the row in the panel keeps its own toggle and nothing else: the fusion chips
+ * leave the strip, and so do the members' option chips, which the key prints
+ * as segments over the classes they steer. Moved, never copied: two sets of
+ * switches for one row is the duplication the key already refused for
+ * swatches (see `_syncRowControls` in manager.js).
+ *
+ * The key is where the reader is already looking while the row is on — it
+ * names what each member draws, and since the mock of 2026-09-22 it is where
+ * the approved design puts the switches. A reader who came for the antennas
+ * sees three tiles and the classes of the one that is lit, instead of eight
+ * chips on a 300 px row whose key sits on the other side of the screen.
+ *
+ * The array lists EVERY member the row offers, primary included, each once,
+ * in the order the tiles are laid out — which is a design order and not the
+ * strip's: the mock pairs the wired backbone (cables, halls) on one line and
+ * the radio network on the next. `icon` names a glyph of `lucideIcons.js`;
+ * `color` is the colour that layer draws on the map, so a lit tile's icon is
+ * also a swatch. Both are literals because this table is imported at boot and
+ * the layer modules that own those colours are not; `layerFusions.test.mjs`
+ * pins each one to its module's constant. Requires `primaryToggle`, since the
+ * primary's tile needs the primary's chip as its name.
  *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It
  * is for a companion whose cost is real and whose value is conditional — the
@@ -457,9 +483,19 @@ export const LAYER_FUSIONS = Object.freeze([
   // the other two qualify", which is the shape every other fusion here has. The
   // row's toggle alone therefore left the data centres forced on under any
   // reader who came for the antennas.
+  //
+  // THE MEMBERS ARE TILES IN THE KEY since 2026-09-22 (`tiles`), after the
+  // approved mock of this row: the strip held three member chips and five
+  // coverage chips, and the key that says what each of them draws sat on the
+  // other side of the screen.
   fusionRow({
     primary: 'local-datacenters',
     primaryToggle: true,
+    tiles: [
+      { id: 'telegeography-submarine-cables', icon: 'cable', color: '#39d5ff' },
+      { id: 'local-datacenters', icon: 'database', color: '#00ffff' },
+      { id: 'anfr-fr', icon: 'radio-tower', color: '#ffcb2b' },
+    ],
     companions: [
       { id: 'telegeography-submarine-cables' },
       { id: 'anfr-fr' },
@@ -506,6 +542,47 @@ export const LAYER_FUSIONS = Object.freeze([
     ],
   }),
 ]);
+
+/** A tile's colour is the map's, written the way the layer modules write it. */
+const TILE_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Check a fusion's `tiles`, when it declares any.
+ *
+ * Every member the row OFFERS gets exactly one tile: a member with no tile
+ * would have no switch anywhere, since the strip no longer carries one, and a
+ * tile for a withdrawn (`disabled`) companion would switch on a layer the
+ * table took out of the interface.
+ * @param {object} fusion
+ * @param {string} primary
+ * @throws {Error} On any malformed or incomplete tile set.
+ */
+function validateFusionTiles(fusion, primary) {
+  if (fusion.tiles === undefined) return;
+  if (!Array.isArray(fusion.tiles) || fusion.tiles.length === 0) {
+    throw new Error(`Fusion tiles must be a non-empty array: ${primary}`);
+  }
+  if (fusion.primaryToggle !== true) {
+    throw new Error(`Fusion tiles need primaryToggle: ${primary}`);
+  }
+  const offered = [primary, ...fusion.companions
+    .filter((companion) => companion.disabled !== true)
+    .map((companion) => companion.id)];
+  const seen = new Set();
+  for (const tile of fusion.tiles) {
+    const id = tile?.id;
+    if (!offered.includes(id)) throw new Error(`Fusion tile is not an offered member: ${primary} → ${id}`);
+    if (seen.has(id)) throw new Error(`Fusion tile listed twice: ${id}`);
+    seen.add(id);
+    if (!Object.hasOwn(LUCIDE_ICONS, String(tile.icon))) throw new Error(`Fusion tile has an unknown icon: ${id} → ${tile.icon}`);
+    if (typeof tile.color !== 'string' || !TILE_COLOR.test(tile.color)) {
+      throw new Error(`Fusion tile colour must be #rrggbb: ${id}`);
+    }
+  }
+  for (const id of offered) {
+    if (!seen.has(id)) throw new Error(`Fusion member has no tile: ${primary} → ${id}`);
+  }
+}
 
 /**
  * Validate the fusion table against the registered layer set.
@@ -580,6 +657,7 @@ export function validateLayerFusions(
       }
       claimed.set(id, primary);
     }
+    validateFusionTiles(fusion, primary);
   }
   // A companion that is itself a primary would render a row AND a chip for the
   // same layer, which is the exact duplication this table exists to remove.
@@ -701,4 +779,30 @@ export function fusionToggleGroupFor(layerId) {
   const companions = fusionCompanionsFor(layerId);
   if (!companions) return [layerId];
   return [layerId, ...companions.filter((entry) => entry.optIn !== true).map((entry) => entry.id)];
+}
+
+// Resolved once at import, like the maps above: the table is frozen, and the
+// key asks for its tiles on every repaint. The words stay getters, because
+// this runs before the page's language is readable.
+const TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
+  .filter((fusion) => Array.isArray(fusion.tiles))
+  .map((fusion) => [fusion.primary, Object.freeze(fusion.tiles.map((tile) => {
+    const companion = fusion.companions.find((entry) => entry.id === tile.id) || null;
+    return Object.freeze({
+      id: tile.id,
+      color: tile.color,
+      icon: lucideIconMask(tile.icon),
+      get label() { return companion ? companion.chip : fusion.primaryChip; },
+      get title() { return companion ? companion.title : ''; },
+    });
+  }))]));
+
+/**
+ * The member tiles a row shows in the map key, or null when its members are
+ * chips on the strip — see `tiles` in the table's header.
+ * @param {string} layerId The row's primary.
+ * @returns {?ReadonlyArray<{id: string, color: string, icon: string, label: string, title: string}>}
+ */
+export function fusionTilesFor(layerId) {
+  return TILES_BY_PRIMARY.get(layerId) || null;
 }

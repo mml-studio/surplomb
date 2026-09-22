@@ -278,6 +278,38 @@ export function coverageLut(mode, alpha = COVERAGE_ALPHA) {
   return lut;
 }
 
+/**
+ * RUNG 0 IS HATCHED: diagonal stripes of its own colour, near-opaque, over its
+ * usual translucent fill.
+ *
+ * Rung 0 is the answer the layer exists for — nobody has 4G here, or not this
+ * operator — and in the ramp it sits one lightness step from rung 1 (L* 53.4
+ * against 65.2), which over a busy orthophoto is a step a reader has to hunt
+ * for. Texture separates it from every other rung by a second channel that
+ * survives colour-vision deficiencies and the sensor styles, and the key draws
+ * the same stripes (`pattern: 'hatch'` in `coverageLegend`), as the approved
+ * mock of 2026-09-22 did.
+ *
+ * The stripes ADD ink and never take any away, so the order the ramp is built
+ * on still holds (CARTOGRAPHY B3): the hatched class is darker than its plain
+ * fill, never lighter than rung 1.
+ *
+ * Counted in the tile's own pixels, along `x + y`, so the stripes run from
+ * lower left to upper right on a north-up map. `period` divides the tile edge,
+ * so a stripe leaving one tile enters the next exactly where it should.
+ */
+export const COVERAGE_HATCH = Object.freeze({ period: 8, width: 3, alpha: 0.95 });
+
+/** The colours of the stripe pixels: rung 0 at the hatch alpha, every other code as `lut` paints it. */
+export function coverageHatchLut(mode, alpha = COVERAGE_ALPHA) {
+  const lut = coverageLut(mode, alpha);
+  const ink = packRgba(COVERAGE_RAMP[0], Math.max(alpha, COVERAGE_HATCH.alpha));
+  for (let code = 0; code < 256; code++) {
+    if (coverageRung(code, mode) === 0) lut[code] = ink;
+  }
+  return lut;
+}
+
 // --- What the reader is told --------------------------------------------------
 
 /** `2026-03-31` → `mars 2026` / `March 2026`: the month the map describes. */
@@ -288,25 +320,35 @@ export function coverageMonthLabel(iso) {
 
 /**
  * Legend entries for a mode: a caption, one plain name per painted colour,
- * and the unpainted class as a colourless line — "pas de couleur" is a class
+ * and the unpainted class as a colourless line — "sans teinte" is a class
  * too, and the reader has to be told which one.
+ *
+ * Every class is keyed by a PATCH (`swatch: 'area'`), because it paints the
+ * ground rather than a mark on it, and rung 0 is keyed HATCHED because the map
+ * hatches it — see `COVERAGE_HATCH`.
  */
 export function coverageLegend(meta, mode) {
   if (!meta || mode === 'off') return [];
   const m = messages().legend;
+  const rungEntry = (label, rung) => ({
+    label,
+    color: COVERAGE_RAMP[rung],
+    swatch: 'area',
+    ...(rung === 0 ? { pattern: 'hatch' } : {}),
+  });
   if (mode === 'gaps') {
     return [
       { heading: true, label: m.headingGaps },
-      ...COVERAGE_RAMP.map((color, rung) => ({ label: m.gaps[rung], color })),
-      { label: m.gaps[4], color: null },
+      ...COVERAGE_RAMP.map((_, rung) => rungEntry(m.gaps[rung], rung)),
+      { label: m.gaps[4], color: null, swatch: 'area' },
     ];
   }
   const op = COVERAGE_OPERATORS[coverageOperatorIndex(mode)];
   if (!op) return [];
   return [
     { heading: true, label: m.headingOperator(op.short) },
-    ...COVERAGE_LEVELS.slice(0, 3).map((level, rung) => ({ label: m.operator[level], color: COVERAGE_RAMP[rung] })),
-    { label: m.operator.tbc, color: null },
+    ...COVERAGE_LEVELS.slice(0, 3).map((level, rung) => rungEntry(m.operator[level], rung)),
+    { label: m.operator.tbc, color: null, swatch: 'area' },
   ];
 }
 

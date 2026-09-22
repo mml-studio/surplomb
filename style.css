@@ -7273,6 +7273,178 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   box-shadow: 0 0 0 2px rgba(247, 244, 234, 0.92);
 }
 
+/* THE FOLLOW-UP CHOICE — « Orange · SFR · Bouygues · Free » once « Par
+   opérateur » is lit. Smaller and indented under the strip that opened it, so
+   it reads as a detail of that choice rather than as a second filter. */
+.map-legend-segments.is-sub {
+  margin: -1px 0 4px 10px;
+  padding-left: 9px;
+  border-left: 1px solid rgba(251, 214, 190, 0.22);
+}
+
+.map-legend-segments.is-sub .map-legend-segment {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+}
+
+/* Asked for and still arriving: lit, and visibly waiting. */
+.map-legend-segment[aria-busy="true"] {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* A FUSED ROW'S MEMBERS AS TILES — the approved mock of « Infrastructure
+   numérique » (2026-09-22). Two to a line, each an icon, a name and a switch.
+   A lit tile wears its layer's MAP colour (`--tile-color`) on the icon, the
+   switch and a ring, so it is also that member's swatch; an unlit one is the
+   panel's own cream at low contrast, still legible enough to find and press.
+   A member off its territory is dimmed, never disabled — pressing it is how
+   the reader asks to be taken there. */
+.map-legend-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+
+.map-legend-tile {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  row-gap: 9px;
+  min-width: 0;
+  min-height: 60px;
+  margin: 0;
+  padding: 10px 10px 9px 11px;
+  border: 1px solid rgba(251, 214, 190, 0.2);
+  border-radius: 8px;
+  background: rgba(247, 244, 234, 0.04);
+  font: inherit;
+  color: rgba(247, 244, 234, 0.74);
+  text-align: left;
+  text-shadow: none;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.map-legend-tile:hover,
+.map-legend-tile:focus-visible {
+  background: rgba(251, 214, 190, 0.1);
+}
+
+.map-legend-tile:focus-visible {
+  outline: 1px solid rgba(251, 214, 190, 0.7);
+  outline-offset: 2px;
+}
+
+.map-legend-tile-icon {
+  grid-column: 1;
+  grid-row: 1;
+  width: 20px;
+  height: 20px;
+  background: rgba(247, 244, 234, 0.52);
+  -webkit-mask-image: var(--tile-icon);
+  mask-image: var(--tile-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: background-color 140ms ease;
+}
+
+/* The switch is drawn, not a form control: the tile is the button, and
+   `aria-pressed` on it is what a screen reader hears. */
+.map-legend-tile-switch {
+  grid-column: 3;
+  grid-row: 1;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(247, 244, 234, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(247, 244, 234, 0.24);
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.map-legend-tile-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(247, 244, 234, 0.55);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.map-legend-tile-label {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-legend-tile.is-on {
+  border-color: color-mix(in srgb, var(--tile-color) 72%, transparent);
+  background: color-mix(in srgb, var(--tile-color) 8%, rgba(6, 11, 9, 0.4));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tile-color) 16%, transparent);
+  color: rgba(247, 244, 234, 0.96);
+}
+
+.map-legend-tile.is-on:hover,
+.map-legend-tile.is-on:focus-visible {
+  background: color-mix(in srgb, var(--tile-color) 14%, rgba(6, 11, 9, 0.4));
+}
+
+.map-legend-tile.is-on .map-legend-tile-icon {
+  background: var(--tile-color);
+}
+
+.map-legend-tile.is-on .map-legend-tile-switch {
+  background: color-mix(in srgb, var(--tile-color) 58%, transparent);
+  box-shadow: inset 0 0 0 1px var(--tile-color);
+}
+
+.map-legend-tile.is-on .map-legend-tile-switch::after {
+  transform: translateX(12px);
+  background: #f7f4ea;
+}
+
+.map-legend-tile.is-offcoverage {
+  opacity: 0.5;
+}
+
+.map-legend-tile.is-offcoverage:hover,
+.map-legend-tile.is-offcoverage:focus-visible {
+  opacity: 0.85;
+}
+
+@media (pointer: coarse) {
+  .map-legend-tile {
+    min-height: 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-legend-tile,
+  .map-legend-tile-icon,
+  .map-legend-tile-switch,
+  .map-legend-tile-switch::after {
+    transition: none;
+  }
+}
+
 /* Entries laid out in columns, filled DOWN first (`grid-auto-flow: column`),
    so a ladder still reads in its own order: A to D, then E to G. The row
    count is set inline from the number of entries. */
@@ -7309,6 +7481,26 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 .map-legend-swatch.is-unmapped {
   background: transparent;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+/* AN AREA IS KEYED BY A PATCH. A class painted over the ground — a coverage
+   rung — reads as a surface only when its swatch is one, not a dot. */
+.map-legend-swatch.is-area {
+  width: 18px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 2px;
+}
+
+/* The patch drawn the way the map draws that class: stripes of the full
+   colour over its translucent fill (`COVERAGE_HATCH` in mobileCoverage.js —
+   one stripe in eight texels, three wide, lower left to upper right). */
+.map-legend-swatch.is-hatched {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--swatch-ink) 0 2px,
+    color-mix(in srgb, var(--swatch-ink) 60%, transparent) 2px 5px
+  );
 }
 
 /* Same contract as the panel legend: a layer whose channel is SHAPE hands over

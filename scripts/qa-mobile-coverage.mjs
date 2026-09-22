@@ -6,7 +6,7 @@
  * dead-zone mode restored FROM THE SHARE LINK (`lo=an.c.z`), then checks what
  * a reader would see:
  *
- *   1. the five coverage chips, the dead-zone one active;
+ *   1. the coverage block of the key, « Sans 4G » lit, and the row's own tile;
  *   2. an imagery layer on the globe (`getStats().coverage.drawn`);
  *   3. tiles fetched from `/tiles/mobile-coverage/…`, never from `/api`, and
  *      none of them a 404 (the client reads the meta's index before asking);
@@ -114,12 +114,18 @@ async function coverageState(page) {
     const module = window.__godsEyeView?.dataManager?.layers?.get('anfr-fr')?.module;
     if (!module?.getRowControls) return null;
     const controls = module.getRowControls();
+    const block = (controls.legendBlocks || []).find((entry) => entry.key === 'coverage') || null;
     return {
       stats: module.getStats?.().coverage ?? null,
       params: module.getParams?.() ?? null,
-      chips: controls.chips.map((chip) => ({ label: chip.label, state: chip.state })),
-      legend: controls.legend.map((entry) => entry.label),
-      note: controls.note ?? null,
+      // The coverage is its own block of the key since 2026-09-22, with
+      // segments instead of the five chips it had on the row.
+      segments: (block?.legendSegments || []).map((segment) => ({ label: segment.label, active: segment.active })),
+      subSegments: (block?.legendSubSegments || []).map((segment) => segment.label),
+      tile: document.querySelector('.map-legend-tile[data-tile-layer="anfr-fr"]')?.getAttribute('aria-pressed') ?? null,
+      // The masts' classes and the coverage's, in the order the key prints them.
+      legend: [...controls.legend, ...(block?.legend || [])].map((entry) => entry.label),
+      note: block?.note ?? null,
     };
   });
 }
@@ -168,16 +174,17 @@ async function main() {
       console.log('  Build it first: node scripts/build-mobile-coverage.mjs');
       return;
     }
-    check('five coverage chips, the dead-zone one active',
-      state.chips.length === 5 && state.chips[0].state === 'active',
-      state.chips.map((chip) => `${chip.label}:${chip.state}`).join(' '));
+    check('the coverage block has its two modes, « Sans 4G » lit',
+      state.segments.length === 2 && state.segments[0].active === true,
+      state.segments.map((segment) => `${segment.label}:${segment.active}`).join(' '));
+    check('the Antennes tile in the key is lit', state.tile === 'true', String(state.tile));
     check('an imagery layer is on the globe', state.stats.drawn === true);
     if (PHOTOREAL) {
       const stack = await page.evaluate(() => window.__godsEyeView.mapStackController.getActiveId());
       check('the surface is Google’s mesh', stack === 'photoreal', stack);
       check('the coverage is draped on the mesh', state.stats.draped === true, JSON.stringify(state.stats));
     }
-    check('the key carries the coverage block', state.legend.some((label) => label === 'Réseau 4G : opérateurs qui captent'),
+    check('the key carries the coverage block', state.legend.some((label) => label === 'Opérateurs qui captent'),
       state.legend.join(' | '));
     check('the key says whose estimate it is, and the month', /^Estimation des opérateurs, publiée par l’ARCEP \(\p{L}+ \d{4}\)\./u.test(state.note || ''), state.note);
 
@@ -237,7 +244,7 @@ async function main() {
       await render(page, 10);
     }
 
-    console.log('\nThe Orange chip');
+    console.log('\nBy operator: Orange');
     await page.evaluate(() => {
       window.__godsEyeView.dataManager.setLayerParams('anfr-fr', { coverage: 'orange' }, { origin: 'user' });
     });
@@ -248,7 +255,9 @@ async function main() {
     check('the mode is Orange and one layer is drawn', state.params.coverage === 'orange' && state.stats.drawn === true,
       JSON.stringify(state.stats));
     if (PHOTOREAL) check('and draped on the mesh', state.stats.draped === true);
-    check('the key is Orange’s', state.legend.some((label) => label === 'Réseau 4G Orange'), state.legend.join(' | '));
+    check('the key is Orange’s', state.legend.some((label) => label === 'Réseau Orange'), state.legend.join(' | '));
+    check('the operator strip follows « Par opérateur »', state.subSegments.join(' ') === 'Orange SFR Bouygues Free',
+      state.subSegments.join(' '));
     await meshSettled(page, 20_000);
     await render(page, 10);
     await page.screenshot({ path: path.join(SHOTS_DIR, `${SHOT_PREFIX}orange-mont-blanc.png`) });
