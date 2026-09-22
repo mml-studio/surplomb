@@ -159,7 +159,8 @@ test('the WMTS provider carries every parameter the Géoplateforme requires', ()
 });
 
 test('an IGN stack composites over a world base, bottom-first; every other stack is one layer', async () => {
-  const controller = new MapStackController(stubViewer(), { cesiumToken: '' });
+  // A clone, once the server has said the anonymous Esri endpoint is allowed.
+  const controller = new MapStackController(stubViewer(), { cesiumToken: '', anonymousEsriAllowed: true });
 
   const ign = await controller._getStackProviders(stackById('ign-ortho'));
   assert.equal(ign.length, 2, 'IGN needs a world base under it');
@@ -185,7 +186,7 @@ test('an IGN stack composites over a world base, bottom-first; every other stack
 });
 
 test('the world base falls back to Sentinel-2 once Esri has failed its tile budget', async () => {
-  const controller = new MapStackController(stubViewer(), { cesiumToken: '' });
+  const controller = new MapStackController(stubViewer(), { cesiumToken: '', anonymousEsriAllowed: true });
   const [esri] = await controller._getStackProviders(stackById('ign-ortho'));
   assert.equal(controller._getWorldImageryProvider(), esri, 'the base is cached, not rebuilt');
 
@@ -209,6 +210,94 @@ test('the world base falls back to Sentinel-2 once Esri has failed its tile budg
   const after = await controller._getStackProviders(stackById('ign-ortho'));
   assert.equal(after[0], fallback);
   assert.equal(after[1], (await controller._getStackProviders(stackById('ign-ortho')))[1]);
+});
+
+/** A viewer whose imagery collection records what the controller does to it. */
+const recordingViewer = () => {
+  const layers = [];
+  return {
+    layers,
+    scene: { globe: { show: true } },
+    imageryLayers: {
+      add(layer, index = layers.length) { layers.splice(index, 0, layer); },
+      remove(layer) { layers.splice(layers.indexOf(layer), 1); },
+    },
+  };
+};
+
+/** Puts the ortho's two layers on the viewer the way `_activateGlobeStack` does. */
+async function showOrtho(controller) {
+  const providers = await controller._getStackProviders(stackById('ign-ortho'));
+  controller._imageryLayers = providers.map((provider, index) => {
+    const layer = new Cesium.ImageryLayer(provider);
+    controller.viewer.imageryLayers.add(layer, index);
+    return layer;
+  });
+  return controller._imageryLayers;
+}
+
+test('without a key, the world base asks no Esri host until the server has said the deployment may', async () => {
+  // What main.js builds on a build with no ArcGIS key, before `/api/trial` answers.
+  const viewer = recordingViewer();
+  const controller = new MapStackController(viewer, { cesiumToken: '' });
+  const [base, ign] = await showOrtho(controller);
+  assert.match(base.imageryProvider.url, /s2cloudless-2017/, 'not told is not allowed');
+  assert.equal(controller.getWorldImageryKind(), 's2cloudless');
+
+  // A clone's answer: the anonymous endpoint opens, swapped in place.
+  controller.setAnonymousEsriAllowed(true);
+  assert.equal(controller.getWorldImageryKind(), 'esri-anonymous');
+  assert.match(viewer.layers[0].imageryProvider.url, /services\.arcgisonline\.com/);
+  assert.equal(viewer.layers[1], ign, 'IGN keeps its layer and its cache');
+  assert.equal(viewer.layers.length, 2);
+
+  // The same answer twice rebuilds nothing.
+  const builds = controller.getImageryBuildCount();
+  controller.setAnonymousEsriAllowed(true);
+  assert.equal(controller.getImageryBuildCount(), builds);
+
+  // GEV_NONCOMMERCIAL_SOURCES=off (or a probe that failed): back to Sentinel-2.
+  controller.setAnonymousEsriAllowed(false);
+  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless-2017/);
+});
+
+test('a swap keeps the base asleep over France, and never touches a layer that is not the world base', async () => {
+  const viewer = recordingViewer();
+  const controller = new MapStackController(viewer, { cesiumToken: '' });
+  const [base] = await showOrtho(controller);
+  base.show = false; // IGN covers the view.
+  controller.setAnonymousEsriAllowed(true);
+  assert.equal(viewer.layers[0].show, false, 'a fresh layer would fetch a base nobody can see');
+
+  // Mid-switch to OSM, `_activeId` still reads `ign-ortho` over OSM's layer.
+  const other = recordingViewer();
+  const switching = new MapStackController(other, { cesiumToken: '' });
+  const [osm] = await switching._getStackProviders(stackById('osm'));
+  switching._imageryLayers = [new Cesium.ImageryLayer(osm)];
+  other.imageryLayers.add(switching._imageryLayers[0]);
+  switching._activeId = 'ign-ortho';
+  switching._getWorldImageryProvider();
+  switching.setAnonymousEsriAllowed(true);
+  assert.equal(other.layers[0].imageryProvider, osm, 'index 0 was not ours to replace');
+});
+
+test('a key draws the licensed layer whatever the switch says, and a dead key falls to Sentinel-2, never to the anonymous endpoint', async () => {
+  const viewer = recordingViewer();
+  const controller = new MapStackController(viewer, { cesiumToken: '', arcgisApiKey: ' AAPTkey ' });
+  const [base] = await showOrtho(controller);
+  assert.match(base.imageryProvider.url, /^https:\/\/ibasemaps-api\.arcgis\.com\/.*\?token=AAPTkey$/);
+  assert.equal(controller.getWorldImageryKind(), 'esri-licensed');
+
+  // The server's switch concerns the anonymous endpoint only.
+  controller.setAnonymousEsriAllowed(false);
+  controller.setAnonymousEsriAllowed(true);
+  assert.equal(viewer.layers[0], base, 'nothing to swap: the key decides');
+
+  for (let tile = 0; tile < WORLD_IMAGERY_FAILURE_BUDGET; tile += 1) {
+    base.imageryProvider.errorEvent.raiseEvent({ level: 7, x: tile, y: 3 });
+  }
+  assert.match(viewer.layers[0].imageryProvider.url, /s2cloudless-2017/);
+  assert.doesNotMatch(viewer.layers[0].imageryProvider.url, /arcgisonline/);
 });
 
 test('an unavailable stack says which credential it is missing, not a generic one', () => {

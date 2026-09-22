@@ -41,8 +41,8 @@
  *      from the OpenSky, AISStream, GTFS-RT and SYNOP caches above. It fetches
  *      nothing: a figure whose cache is cold is null, and the page hides it.
  *
- * Also exposes Cesium and Google 3D Tiles API keys to the
- * client via `import.meta.env.*` defines.
+ * Also exposes the Cesium, Google 3D Tiles and ArcGIS Location Platform API
+ * keys to the client via `import.meta.env.*` defines.
  *
  * @module vite.config
  */
@@ -30065,6 +30065,10 @@ export default defineConfig(({ mode, command }) => {
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(env.GOOGLE_MAPS_API_KEY),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(env.CESIUM_ION_TOKEN),
+      // ArcGIS Location Platform key for the world satellite base
+      // (src/data/worldImagery.js). Public by design: restrict it by referrer
+      // and to the basemap privilege, see docs/DEPLOY.md.
+      'import.meta.env.ARCGIS_API_KEY': JSON.stringify(env.ARCGIS_API_KEY),
       // Where the aircraft GLBs actually live. Keyed on `command`, the same
       // signal `hashedModelsDirPlugin` applies on, so the directory and the
       // path that names it can never disagree; `vite dev` serves `public/`

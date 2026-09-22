@@ -26,8 +26,9 @@ test('a clone keeps the sources: unset, empty and `on` all allow them', () => {
 test('`off` turns every listed source off, and a typo errs on the licence side', () => {
   for (const value of ['off', 'OFF', ' off ', 'of', 'false', '0']) {
     assert.equal(nonCommercialSourcesAllowed(env(value)), false, JSON.stringify(value));
-    assert.deepEqual(sourcesOff(env(value)), ['open-meteo']);
+    assert.deepEqual(sourcesOff(env(value)), ['open-meteo', 'esri-world-imagery']);
     assert.equal(isSourceOn('open-meteo', env(value)), false);
+    assert.equal(isSourceOn('esri-world-imagery', env(value)), false);
   }
 });
 
@@ -36,8 +37,8 @@ test('a source that is not on the list is never this switch\'s business', () => 
   assert.equal(isSourceOn('nominatim', env('off')), true);
 });
 
-test('Open-Meteo is the only member for now, and each member is one well-formed line', () => {
-  assert.deepEqual(NONCOMMERCIAL_SOURCES.map((source) => source.id), ['open-meteo']);
+test('Open-Meteo and the anonymous Esri endpoint are the members, and each is one well-formed line', () => {
+  assert.deepEqual(NONCOMMERCIAL_SOURCES.map((source) => source.id), ['open-meteo', 'esri-world-imagery']);
   const ids = new Set();
   for (const source of NONCOMMERCIAL_SOURCES) {
     assert.match(source.id, /^[a-z0-9-]+$/);

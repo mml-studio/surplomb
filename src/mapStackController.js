@@ -3,9 +3,10 @@ import { governorRequestRender } from './renderGovernor.js';
 import { IgnBilTerrainProvider } from './data/ignBilTerrain.js';
 import { createGoogleMapTilesProvider } from './data/googleMapTiles.js';
 import {
+  WORLD_IMAGERY,
   WORLD_IMAGERY_FAILURE_BUDGET,
-  createEsriWorldImageryProvider,
-  createS2CloudlessProvider,
+  chooseWorldImagery,
+  createWorldImageryProvider,
   watchTileFailures,
 } from './data/worldImagery.js';
 import { isPhoneShell } from './inputMode.js';
@@ -426,12 +427,22 @@ export class MapStackController {
     loadPhotoreal = null,
     ignTerrainSpike = false,
     initialStack = 'photoreal',
+    arcgisApiKey = '',
+    anonymousEsriAllowed = false,
     onChange = null,
     onError = null,
   } = {}) {
     this.viewer = viewer;
     this.googleTileset = googleTileset;
     this.cesiumToken = String(cesiumToken || '').trim();
+    // The world base under `ign-ortho` (src/data/worldImagery.js). With a key,
+    // Esri through ArcGIS Location Platform. Without one, the anonymous Esri
+    // endpoint only once the page has been TOLD this deployment may use it
+    // (`setAnonymousEsriAllowed`); until then, and on a deployment that
+    // switched it off, Sentinel-2. Defaulting to `false` means a controller
+    // built by a test or a tool never asks Esri on a guess.
+    this.arcgisApiKey = String(arcgisApiKey || '').trim();
+    this._anonymousEsriAllowed = anonymousEsriAllowed === true;
     // Why `photoreal` is unavailable, when it is: a build with NO Google key
     // (the keyless build) and a keyed build whose tileset failed to load are
     // the same `googleTileset === null` here but need opposite advice. Default
@@ -500,8 +511,8 @@ export class MapStackController {
     // stacks are a world base (index 0) + IGN France (index 1). Bottom-first.
     this._imageryLayers = [];
     this._imageryProviders = new Map();
-    // The world satellite base under `ign-ortho`, cached by provider name so a
-    // degraded session doesn't rebuild Esri behind its own fallback. Keyed
+    // The world satellite base under `ign-ortho`, cached by `WORLD_IMAGERY`
+    // kind so a degraded session doesn't rebuild Esri behind its own fallback. Keyed
     // separately from `_imageryProviders` because these are not stacks: they
     // have no chip, no id and no share token, and are never selectable alone.
     this._worldImageryProviders = new Map();
@@ -981,6 +992,11 @@ export class MapStackController {
     // A newer switch started while the provider was resolving — don't touch the
     // scene's imagery layers, the winning switch already owns them (M7).
     if (gen != null && gen !== this._switchGen) return;
+    // The world base is read again in the same synchronous block that adds it:
+    // the page may have learned during the await above whether it may use the
+    // anonymous Esri endpoint, and a base picked before that answer would stay
+    // on screen after it.
+    if (stack.id === 'ign-ortho') providers[0] = this._getWorldImageryProvider();
     this._removeImageryLayers();
 
     // Added bottom-first at ascending indices, so `providers[0]` is Cesium's
@@ -1045,25 +1061,24 @@ export class MapStackController {
   }
 
   /**
-   * The worldwide satellite base: Esri, or Sentinel-2 cloudless once Esri has
-   * proved it cannot serve this session.
+   * The worldwide satellite base: Esri (licensed with a key, anonymous where
+   * the deployment allows it), or Sentinel-2 cloudless — where neither Esri
+   * path is open, or once Esri has proved it cannot serve this session.
    *
-   * Synchronous on purpose. Both providers are plain URL templates with nothing
-   * to fetch at construction, so this never joins the awaited path that
-   * `_switchGen` guards — there is no window in which a newer switch could be
-   * clobbered by an older one resolving late.
+   * Synchronous on purpose. Every provider is a plain URL template with
+   * nothing to fetch at construction, so this never joins the awaited path
+   * that `_switchGen` guards — there is no window in which a newer switch
+   * could be clobbered by an older one resolving late.
    * @returns {Cesium.ImageryProvider}
    */
   _getWorldImageryProvider() {
-    const key = this._worldImageryDegraded ? 's2cloudless' : 'esri';
-    const cached = this._worldImageryProviders.get(key);
+    const kind = this.getWorldImageryKind();
+    const cached = this._worldImageryProviders.get(kind);
     if (cached) return cached;
 
-    const provider = this._worldImageryDegraded
-      ? createS2CloudlessProvider()
-      : createEsriWorldImageryProvider();
-    this._worldImageryProviders.set(key, provider);
-    if (!this._worldImageryDegraded) {
+    const provider = createWorldImageryProvider(kind, { arcgisApiKey: this.arcgisApiKey });
+    this._worldImageryProviders.set(kind, provider);
+    if (kind !== WORLD_IMAGERY.S2CLOUDLESS) {
       watchTileFailures(
         provider,
         WORLD_IMAGERY_FAILURE_BUDGET,
@@ -1071,6 +1086,33 @@ export class MapStackController {
       );
     }
     return provider;
+  }
+
+  /**
+   * Which world base this session draws now: one of `WORLD_IMAGERY`.
+   * Diagnostics — the QA harness reads it next to the tile hosts it saw.
+   * @returns {string}
+   */
+  getWorldImageryKind() {
+    return chooseWorldImagery({
+      arcgisApiKey: this.arcgisApiKey,
+      anonymousEsriAllowed: this._anonymousEsriAllowed,
+      degraded: this._worldImageryDegraded,
+    });
+  }
+
+  /**
+   * What the server said about the anonymous Esri endpoint
+   * (`anonymousEsriAllowedByProbe`). A build with an ArcGIS key never asks
+   * that endpoint, so there this changes nothing. Idempotent; a change swaps
+   * the base in place when it is on screen.
+   * @param {boolean} allowed
+   */
+  setAnonymousEsriAllowed(allowed) {
+    const next = allowed === true;
+    if (this._anonymousEsriAllowed === next) return;
+    this._anonymousEsriAllowed = next;
+    this._replaceWorldBase('world-imagery-licence');
   }
 
   /**
@@ -1111,24 +1153,45 @@ export class MapStackController {
 
   /**
    * Swaps the dead Esri base for Sentinel-2 cloudless, in place.
-   *
-   * Only the base layer is rebuilt, and only when it is actually on screen: the
-   * IGN layer above it is untouched, so France keeps its 20 cm orthophoto and
-   * its tile cache across the swap. A stack that is not currently showing the
-   * world base just picks the fallback up the next time it is built.
    */
   _degradeWorldImagery() {
     if (this._worldImageryDegraded) return;
     this._worldImageryDegraded = true;
-    if (this.getActiveId() !== 'ign-ortho' || this._imageryLayers.length === 0) return;
+    this._replaceWorldBase('world-imagery-fallback');
+  }
 
+  /**
+   * Puts the world base `_getWorldImageryProvider()` now names on screen, in
+   * place of the one there.
+   *
+   * Only the base layer is rebuilt, and only when it is actually on screen: the
+   * IGN layer above it is untouched, so France keeps its 20 cm orthophoto and
+   * its tile cache across the swap. A stack that is not currently showing the
+   * world base just picks the new one up the next time it is built.
+   *
+   * "On screen" is asked of the bottom layer itself rather than of the active
+   * id: `_activeId` is committed only once a switch has finished, so during a
+   * switch away from the ortho it still reads `ign-ortho` over another stack's
+   * layers — and index 0 there is not ours to replace.
+   * @param {string} reason For the render governor.
+   * @returns {boolean} Whether a layer was swapped.
+   */
+  _replaceWorldBase(reason) {
     const stale = this._imageryLayers[0];
-    const layer = new Cesium.ImageryLayer(this._getWorldImageryProvider());
+    if (!stale || ![...this._worldImageryProviders.values()].includes(stale.imageryProvider)) return false;
+    const provider = this._getWorldImageryProvider();
+    if (stale.imageryProvider === provider) return false;
+
+    const layer = new Cesium.ImageryLayer(provider);
+    // A fresh layer is shown by default, and the next camera rest would come
+    // too late to stop it fetching a base IGN is covering.
+    layer.show = stale.show;
     this.viewer.imageryLayers.add(layer, 0);
     this.viewer.imageryLayers.remove(stale, false);
     this._imageryLayers[0] = layer;
     this._imageryBuilds += 1;
-    governorRequestRender('world-imagery-fallback');
+    governorRequestRender(reason);
+    return true;
   }
 
   async _getImageryProvider(stack) {

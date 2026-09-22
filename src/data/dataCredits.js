@@ -281,20 +281,43 @@ export const DATA_CREDITS = [
       'Plan IGN v2 is regenerated continuously from IGN&rsquo;s vector databases. ' +
       'Coverage is clipped to metropolitan France and Corsica; DOM-TOM are not shown.',
   },
+  // The world satellite base under the Satellite stack is one of THREE layers,
+  // and each has its own line so the popover can drop the ones this page does
+  // not draw: a build withdraws the Esri path it does not have (main.js), and
+  // GEV_NONCOMMERCIAL_SOURCES=off withdraws the anonymous one
+  // (src/nonCommercialSources.js). Sentinel-2 stays: every page can fall back
+  // to it.
   {
     key: 'world-satellite-keyless',
     html:
       'Worldwide satellite base under the Satellite stack (keyless): ' +
       '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noopener">Esri World Imagery</a> ' +
-      '&mdash; imagery &copy; Esri, Maxar, Earthstar Geographics and the GIS User Community, served to z19 under the ' +
+      '&mdash; imagery &copy; Esri, Vantor, Earthstar Geographics and the GIS User Community, served to z19 from the anonymous endpoint under the ' +
       '<a href="https://www.esri.com/en-us/legal/terms/full-master-agreement" target="_blank" rel="noopener">Esri Terms of Use</a>. ' +
-      'If that service fails, the base degrades to ' +
+      'Esri states that this endpoint is not available for commercial use, so only a non-commercial deployment draws it. ' +
+      'Not shown over metropolitan France, where IGN&rsquo;s 20 cm orthophoto sits above it.',
+  },
+  {
+    key: 'world-satellite-arcgis',
+    html:
+      'Worldwide satellite base under the Satellite stack: ' +
+      '<a href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noopener">Esri World Imagery</a> ' +
+      'through <a href="https://location.arcgis.com" target="_blank" rel="noopener">ArcGIS Location Platform</a>, ' +
+      'licensed per tile &mdash; Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>. ' +
+      'Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community. Served to z19 under the ' +
+      '<a href="https://www.esri.com/en-us/legal/terms/full-master-agreement" target="_blank" rel="noopener">Esri Terms of Use</a>. ' +
+      'Not shown over metropolitan France, where IGN&rsquo;s 20 cm orthophoto sits above it.',
+  },
+  {
+    key: 'world-satellite-s2cloudless',
+    html:
+      'Worldwide satellite base where Esri is not used, or has failed: ' +
       '<a href="https://cloudless.eox.at" target="_blank" rel="noopener">Sentinel-2 cloudless 2017 by EOX</a> ' +
       '(contains modified Copernicus Sentinel data 2017, ' +
       '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) &mdash; ' +
       '10 m resolution, served to z14. The 2017 vintage is deliberate: every EOX vintage from 2018 onward is ' +
       'CC BY-<strong>NC</strong>-SA, and this repository is MIT. ' +
-      'Neither layer is shown over metropolitan France, where IGN&rsquo;s 20 cm orthophoto sits above them.',
+      'Not shown over metropolitan France, where IGN&rsquo;s 20 cm orthophoto sits above it.',
   },
   {
     key: 'odre-eco2mix',
