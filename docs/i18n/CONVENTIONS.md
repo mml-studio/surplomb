@@ -287,7 +287,9 @@ panel: {
 - `<template>` contents are translated too (the first-run card).
 - `translate="no"` exempts an element (a brand name, a code).
 - The showcase (`#vitrine`) and `<head>` are out of scope: the landing page
-  gets its own English document later.
+  gets its own English document later. That English page credits upstream
+  (God's Eye View, by Bilawal Sidhu, both linked — README.md's sentence); the
+  French page does not carry the credit (decision of 2026-09-22).
 - While an English page's markup is being translated, `style.css` hides the
   loading line (`html[lang="en"]:not([data-i18n-ready])`), so its French never
   flashes.

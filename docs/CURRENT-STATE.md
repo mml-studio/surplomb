@@ -249,11 +249,8 @@ Updated: September 19, 2026
 >   loop is `position: fixed` behind the whole page on EVERY width; *Image
 >   fixe* (Still image; `#vitrine-still`, shown only in `data-state="live"`) pauses it on
 >   the current frame. The page ends on `.footer-ending`: the city with two
->   opaque blocks. The ivory `.footer-info` panel above it credits upstream
->   (`.footer-credit`, README.fr.md's sentence: the globe, the cockpit and the
->   voice agent come from God's Eye View, by Bilawal Sidhu, both linked). The
->   cockpit carries the same mark since 2026-09-19 (see “Cockpit identity”
->   below).
+>   opaque blocks. The cockpit carries the same mark since 2026-09-19 (see
+>   “Cockpit identity” below).
 > - **The background** is a recorded loop (`public/landing/hero-*.mp4`,
 >   hashed by `scripts/publish-landing-assets.mjs`), `data-state` poster → live
 >   → fallback (reduced motion, Save-Data, 2G, error, 8 s). Renditions: desktop

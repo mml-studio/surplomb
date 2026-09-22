@@ -210,10 +210,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
-- **The landing page names the project it is built on.** Its ivory footer
-  panel now says that the globe, the cockpit and the voice agent come from
-  God's Eye View, created and open-sourced by Bilawal Sidhu, with both names
-  linked; until now only the legal notice named him.
 - **In English, the voice trial no longer calls itself premium.** The mic's
   help line reads “Hosted demo · 3 free spoken requests”, and the card that
   closes the trial says “Voice is capped on this hosted demo” under a
