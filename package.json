@@ -52,6 +52,7 @@
     "qa:mission-reveal": "node scripts/qa-mission-reveal.mjs",
     "qa:world-imagery": "node scripts/qa-world-imagery.mjs",
     "qa:world-imagery-cost": "node scripts/qa-world-imagery-cost.mjs",
+    "qa:world-imagery-licence": "node scripts/qa-world-imagery-licence.mjs",
     "qa:ign-opaque-boxes": "node scripts/qa-ign-opaque-boxes.mjs",
     "qa:ign-opaque-boxes:check": "node scripts/qa-ign-opaque-boxes.mjs --check",
     "qa:transit-fr": "node scripts/qa-transit-fr.mjs",
