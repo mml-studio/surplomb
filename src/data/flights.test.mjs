@@ -16,6 +16,7 @@ import flightsLayer, {
   _clearDisplayFloorStateForTest,
   ambientRouteCallsign,
   chooseFlightFeedAnchor,
+  describeFlightCoverage,
   flightRouteInfoUrl,
   flightTypeInfoUrl,
   mapAnalystRecord,
@@ -1693,4 +1694,11 @@ test('route lookups carry the fix, rounded, and nothing when the fix is unknown'
   assert.equal(flightRouteInfoUrl('AFR1234', { lat: 46.5, lon: 4.6 }), '/api/flight-info/route/AFR1234?lat=46.500&lon=4.600');
   assert.equal(flightRouteInfoUrl('AFR1234', { lat: null, lon: 4.6 }), '/api/flight-info/route/AFR1234');
   assert.equal(flightRouteInfoUrl('AFR1234'), '/api/flight-info/route/AFR1234');
+});
+
+test('the chip names the area the proxy covered: France, a circle, or the world', () => {
+  assert.equal(describeFlightCoverage({ area: 'fr-metro', radiusNm: 0 }), 'France métropolitaine et ses abords');
+  assert.equal(describeFlightCoverage({ area: null, radiusNm: 250 }), 'cercle régional de 250 NM');
+  assert.equal(describeFlightCoverage({ area: null, radiusNm: 0 }), 'couverture mondiale');
+  assert.equal(describeFlightCoverage(), 'couverture mondiale');
 });

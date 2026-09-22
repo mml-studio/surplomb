@@ -32,6 +32,7 @@ const SERVER_ONLY = new Map([
   ['data/vigicruesFeed.js', 'node:crypto, for the geometryVersion hash the /api/vigicrues proxy stamps'],
   ['data/amenitiesPack.js', 'node:fs/zlib, for the BPE fold and the sharded pack the /api/amenities-fr proxy reads'],
   ['trialQuota.js', 'node:crypto, for the HMAC that signs the hosted trial cookie'],
+  ['vrsStandingData.js', 'node:fs/zlib, for the daily VRS standing-data tarball the /api/flight-info proxy answers from'],
 ]);
 
 test('no browser-built module imports a Node core module', () => {

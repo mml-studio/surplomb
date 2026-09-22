@@ -67,6 +67,8 @@ import {
 } from './motionModel.js';
 import { greatCircleKm, routePlausible } from './routePlausible.js';
 import { openSkyStaleThresholdMs } from './openSkyFreshness.js';
+import { trialProbe } from '../trialProbe.js';
+import { offSourcesFromProbe } from '../nonCommercialSources.js';
 import { buildFlightRoutePlan, routeFrameOffsetEnu } from './flightRoutePlan.js';
 import { hideFlightRouteArc, showFlightRouteArc } from './flightRouteArc.js';
 import { isMilitaryIcao, isMilitaryLayerActive, refreshMilitaryRegistryIfStale, onMilitaryLayerActiveChange } from './militaryRegistry.js';
@@ -345,6 +347,21 @@ let _lastCoverage = 'couverture mondiale';
 
 /** @type {Cesium.Cartographic} Owned scratch for the poll's feed anchor. */
 const _scratchFeedAnchor = new Cesium.Cartographic();
+
+/**
+ * The chip's coverage line for one answer of the flights proxy.
+ *
+ * `fr-metro` is the hosted build's France snapshot (four adsb.lol circles,
+ * src/adsbLolFeed.js); a radius is one circle around the view; neither is the
+ * worldwide OpenSky snapshot.
+ * @param {{area?: ?string, radiusNm?: ?number}} coverage
+ * @returns {string}
+ */
+export function describeFlightCoverage({ area = null, radiusNm = null } = {}) {
+  if (area === 'fr-metro') return messages().coverage.france;
+  if (Number.isFinite(radiusNm) && radiusNm > 0) return messages().coverage.regional(radiusNm);
+  return messages().coverage.worldwide;
+}
 
 /**
  * Which point the regional feed should be centred on: the FOLLOWED contact
@@ -4578,6 +4595,15 @@ const flightsLayer = {
     _lastStatus = null;
     _lastSource = 'OpenSky Network';
     _lastCoverage = 'couverture mondiale';
+    // A deployment without OpenSky (GEV_NONCOMMERCIAL_SOURCES=off) says so from
+    // the start: the row names adsb.lol before the first poll answers, not a
+    // source this server never calls. The probe is the boot's one read of
+    // /api/trial, long settled by the time a reader switches flights on.
+    void trialProbe.read().then((probe) => {
+      if (!offSourcesFromProbe(probe).has('opensky')) return;
+      flightsLayer.source = 'adsb.lol';
+      if (_lastUpdate === null) _lastSource = 'adsb.lol';
+    });
     _trackedIcao = null;
     _resetTrackedSelectionState();
     _trackedEntity = null;
@@ -4742,6 +4768,7 @@ const flightsLayer = {
       _lastStatus = response.status;
       const responseSource = response.headers.get('x-flight-source');
       const responseCoverageNm = Number(response.headers.get('x-flight-coverage-nm'));
+      const responseCoverageArea = response.headers.get('x-flight-coverage-area');
       const authMode = _toLowerText(
         response.headers.get('x-opensky-auth-mode-used') || response.headers.get('x-opensky-auth')
       );
@@ -4818,7 +4845,12 @@ const flightsLayer = {
       // applying, which it publishes. A fixed 120 s here was not a staleness
       // test once that TTL stretched to 300 s — it was a guarantee of one, and
       // it is why the badge sat orange while nothing was wrong.
-      const proxyTtlSec = Number(response.headers.get('x-opensky-ttl-seconds'));
+      // `x-flight-ttl-seconds` when adsb.lol answered: how often the paced
+      // queue refreshes what was served (one circle per 20 s slot), which is
+      // the age the snapshot is EXPECTED to have.
+      const proxyTtlSec = Number(
+        response.headers.get('x-flight-ttl-seconds') ?? response.headers.get('x-opensky-ttl-seconds'),
+      );
       const staleThresholdMs = openSkyStaleThresholdMs(
         Number.isFinite(proxyTtlSec) ? proxyTtlSec * 1000 : null,
       );
@@ -4829,11 +4861,9 @@ const flightsLayer = {
         ? messages().staleSource(Math.max(2, Math.round(sourceAgeMs / 60_000)))
         : null;
       _lastSource = responseSource || 'OpenSky Network';
-      // The proxy publishes a radius; the sentence is worded here, in the
-      // language the chip is read in. Absent header = the worldwide feed.
-      _lastCoverage = Number.isFinite(responseCoverageNm) && responseCoverageNm > 0
-        ? messages().coverage.regional(responseCoverageNm)
-        : messages().coverage.worldwide;
+      // The proxy publishes an area code or a radius; the sentence is worded
+      // here, in the language the chip is read in.
+      _lastCoverage = describeFlightCoverage({ area: responseCoverageArea, radiusNm: responseCoverageNm });
       const currentIcaos = new Set();
       const acceptedSnapshotIcaos = new Set();
       const now = Cesium.JulianDate.now();

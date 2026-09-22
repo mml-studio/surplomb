@@ -713,6 +713,16 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // longer exists.
     const layers = LAYER_MANIFEST.map((descriptor) => createLazyLayer(descriptor));
     for (const layer of layers) dataManager.register(layer);
+    // Where OpenSky is off (GEV_NONCOMMERCIAL_SOURCES), the Flights row names
+    // the source it will actually draw, adsb.lol, while it is still switched
+    // off. Once loaded, the module says so itself (flights.js, `init`).
+    void trialProbe.read().then((probe) => {
+      if (!offSourcesFromProbe(probe).has('opensky')) return;
+      const flights = layers.find((layer) => layer.id === 'flights');
+      if (!flights || flights.__lazy?.isLoaded()) return;
+      flights.source = 'adsb.lol';
+      dataManager.refreshControls();
+    });
     // `rocket-launches` and `military-awareness` read the manager back (one for
     // the satellites layer's params, the other to drive its own camera
     // hand-offs). The stub takes the reference now and passes it on the moment

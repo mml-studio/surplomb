@@ -19,6 +19,7 @@ test('a clone keeps the sources: unset, empty and `on` all allow them', () => {
     assert.equal(nonCommercialSourcesAllowed(env(value)), true, JSON.stringify(value));
     assert.deepEqual(sourcesOff(env(value)), []);
     assert.equal(isSourceOn('open-meteo', env(value)), true);
+    assert.equal(isSourceOn('opensky', env(value)), true);
   }
   assert.equal(nonCommercialSourcesAllowed({}), true);
 });
@@ -26,9 +27,10 @@ test('a clone keeps the sources: unset, empty and `on` all allow them', () => {
 test('`off` turns every listed source off, and a typo errs on the licence side', () => {
   for (const value of ['off', 'OFF', ' off ', 'of', 'false', '0']) {
     assert.equal(nonCommercialSourcesAllowed(env(value)), false, JSON.stringify(value));
-    assert.deepEqual(sourcesOff(env(value)), ['open-meteo', 'esri-world-imagery']);
+    assert.deepEqual(sourcesOff(env(value)), ['open-meteo', 'esri-world-imagery', 'opensky']);
     assert.equal(isSourceOn('open-meteo', env(value)), false);
     assert.equal(isSourceOn('esri-world-imagery', env(value)), false);
+    assert.equal(isSourceOn('opensky', env(value)), false);
   }
 });
 
@@ -37,8 +39,8 @@ test('a source that is not on the list is never this switch\'s business', () => 
   assert.equal(isSourceOn('nominatim', env('off')), true);
 });
 
-test('Open-Meteo and the anonymous Esri endpoint are the members, and each is one well-formed line', () => {
-  assert.deepEqual(NONCOMMERCIAL_SOURCES.map((source) => source.id), ['open-meteo', 'esri-world-imagery']);
+test('Open-Meteo, the anonymous Esri endpoint and OpenSky are the members, and each is one well-formed line', () => {
+  assert.deepEqual(NONCOMMERCIAL_SOURCES.map((source) => source.id), ['open-meteo', 'esri-world-imagery', 'opensky']);
   const ids = new Set();
   for (const source of NONCOMMERCIAL_SOURCES) {
     assert.match(source.id, /^[a-z0-9-]+$/);
@@ -58,6 +60,7 @@ test('every credit a source names exists in the attribution list, so withdrawing
     for (const key of source.credits) assert.ok(keys.has(key), `${source.id} names unknown credit ${key}`);
   }
   assert.deepEqual(creditKeysOf(['open-meteo']), ['open-meteo']);
+  assert.deepEqual(creditKeysOf(['opensky', 'open-meteo']), ['open-meteo', 'opensky']);
   assert.deepEqual(creditKeysOf([]), []);
   assert.deepEqual(creditKeysOf(['unknown']), []);
 });
