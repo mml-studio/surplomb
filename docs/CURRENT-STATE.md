@@ -3243,6 +3243,38 @@ switches; a dark row keys nothing. The key is rebuilt on every repaint, so a
 focused tile or segment hands its keyboard focus to its successor
 (`data-focus-key`). Every other fusion keeps its chips.
 
+**A selected antenna and a read coverage spot are printed in the key**
+(2026-09-22, lot 2 of the same mock), as the DVF sale and the DPE site already
+were. With the key on screen (`mapKeyCarriesSelection`, now in
+`src/data/mapKeySelection.js` and re-exported by `addressScanLayer.js`), the
+globe keeps a tag — the antenna's title, or « Point sélectionné » over the
+spot — and the card goes to the `legendSelection` slot: under the antenna
+classes for a mast (`anfrSelectionPanel`), under the *Couverture 4G* block for
+a spot (`coverageSelectionPanel`, carried on that block's `legendBlocks`
+entry). On a phone, or with the key folded or hidden, the whole card stays on
+the globe; the key's `class` and `hidden` are watched while something is
+selected, so folding it after a click puts the card back. The antenna card:
+the commune as its name once Cartoradio has answered (« Antenne 5G · 4
+opérateurs » until then, under one key so it is revealed once), what it stands
+on and the brands as two meta lines, one plate per generation on the air
+ringed in its dot colour (`chips.outline`: the 2G slate cannot carry black
+text) with the planned ones beside them, the wave line, the line of sight as a
+figure (« 28 % · rayon 39 km », swatch in the viewshed cyan, « une géométrie,
+pas une couverture radio »), « Source : ANFR, <edition> », and « Voir les
+équipements · N antennes » folding one line per operator (brand, generations,
+antenna count; no frequency). The spot card: « Au point sélectionné », the
+answer (« Seul Orange capte ici »), and a table of the four operators with
+their level in words and as three phone bars (`rows`, a real `<table>`; bars
+rather than a swatch, which would read as one of the key's pinks). Like the
+globe's, it appears only with its answer (or « Chargement… » past 250 ms), and
+the previous one stays until then. The key's card slot gained `meta` as a list,
+`chips.outline`, `metric.heading` and `rows`; a card whose content changes is
+revealed again until the reader scrolls, clicks or types in the list
+(`_legendSelectionTouched`), because the spot card grew its table under the
+fold of a 370 px key at 1280 × 800. Register communes are cased per part of a
+compound name (`Saint-Sever`, `Villeneuve-d’Ascq`, `La Rochelle`), since the
+commune is now a title.
+
 **The electricity row brings the night.** Since 2026-09-21 the grid and the
 power stations are one row, *Réseau électrique et centrales* (*Power grid and
 plants*): `power-grid` is primary (the world layer) with a chip of its own

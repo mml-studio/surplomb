@@ -361,13 +361,49 @@ export function coverageLegend(meta, mode) {
 export function coverageCardText(meta, reading) {
   const m = messages().card;
   if (!reading?.inside) return [m.outsideTitle, m.outside].join('\n');
-  const reached = COVERAGE_OPERATORS.filter((_, i) => coverageLevel(reading.code, i) >= 1);
-  let title;
-  if (!reached.length) title = m.deadZone;
-  else if (reached.length === 1) title = m.one(reached[0].short);
-  else if (reached.length === COVERAGE_OPERATORS.length) title = m.all;
-  else title = m.some(formatInteger(reached.length));
   const levels = messages().level;
   const lines = COVERAGE_OPERATORS.map((op, i) => m.operatorLine(op.short, levels[COVERAGE_LEVELS[coverageLevel(reading.code, i)]]));
-  return [title, ...lines, m.source(coverageMonthLabel(meta?.quarterEnd))].join('\n');
+  return [coverageAnswer(reading), ...lines, m.source(coverageMonthLabel(meta?.quarterEnd))].join('\n');
+}
+
+/** Who has signal at a read spot, in one sentence: the card's title. */
+export function coverageAnswer(reading) {
+  const m = messages().card;
+  const reached = COVERAGE_OPERATORS.filter((_, i) => coverageLevel(reading?.code, i) >= 1);
+  if (!reached.length) return m.deadZone;
+  if (reached.length === 1) return m.one(reached[0].short);
+  if (reached.length === COVERAGE_OPERATORS.length) return m.all;
+  return m.some(formatInteger(reached.length));
+}
+
+/**
+ * The clicked spot as the map key prints it, under the coverage's own block
+ * (`legendSelection`): « Au point sélectionné », who has signal there, then
+ * one row per operator with its level in words and as bars — the table of the
+ * approved mock of 2026-09-22.
+ *
+ * No source line: the block prints whose estimate it is and of which quarter
+ * just above the card.
+ * @param {?{lon: number, lat: number, reading: ?object, failed?: boolean}} card
+ *   The spot, and its reading once the tile under it is decoded.
+ * @returns {?object}
+ */
+export function coverageSelectionPanel(card) {
+  if (!card || !Number.isFinite(card.lon) || !Number.isFinite(card.lat)) return null;
+  const m = messages();
+  const base = { key: `coverage:${card.lon.toFixed(5)},${card.lat.toFixed(5)}`, title: m.panel.title };
+  if (card.failed) return { ...base, lines: [m.card.failed] };
+  if (!card.reading) return { ...base, lines: [m.card.reading] };
+  if (!card.reading.inside) return { ...base, lines: [m.card.outsideTitle, m.card.outside] };
+  const max = COVERAGE_LEVELS.length - 1;
+  return {
+    ...base,
+    lines: [coverageAnswer(card.reading)],
+    rows: {
+      items: COVERAGE_OPERATORS.map((op, i) => {
+        const level = coverageLevel(card.reading.code, i);
+        return { label: op.short, value: m.level[COVERAGE_LEVELS[level]], meter: { value: level, max } };
+      }),
+    },
+  };
 }

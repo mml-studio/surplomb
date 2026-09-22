@@ -61,6 +61,7 @@ import anfrFranceLayer, {
   cameraAnfrBox,
   cameraAnfrMeshBox,
   createAnfrSelectedOverlayEntry,
+  anfrSelectionPanel,
   pickAnfrSupportsAt,
   _anfrDetectablesForTest,
   _anfrMastTallyForTest,
@@ -531,6 +532,111 @@ test('selecting a support runs the production path and publishes one protected c
   _clearAnfrSelectionForTest();
   assert.equal(_anfrSelectedIdForTest(), null);
   assert.equal(host.entries, null);
+});
+
+test('the key card names the place, rings each network in its dot colour, and folds what each operator runs', () => {
+  // Lot 2 of the approved mock (2026-09-22): the card moved from over the
+  // mast to the map key, under the classes it is read against.
+  const record = { id: anfrSupportId(449714), support: support(449714), detail: DETAIL };
+  const panel = anfrSelectionPanel(record, PACK, { recordId: record.id, status: 'ready', share: 0.28, radiusM: 39_000 });
+  assert.equal(panel.key, record.id, 'one key for the life of the selection, so the key reveals it once');
+  assert.equal(panel.title, 'Paris 6e', 'the place is the name once Cartoradio has answered');
+  assert.deepEqual(panel.meta.map(norm), ['Sur un toit, à 65 m de haut', 'Orange · SFR · Bouygues · Free']);
+  assert.equal(panel.chips.outline, true, 'ringed: the 2G slate cannot carry black text');
+  assert.deepEqual(panel.chips.items, ['2G', '3G', '4G', '5G'].map((label) => ({
+    label, color: ANFR_BAND_COLORS[label.toLowerCase()],
+  })));
+  assert.equal(norm(panel.metric.value), '28 % · rayon 39 km');
+  assert.equal(panel.metric.heading, 'Visibilité du terrain');
+  assert.match(panel.metric.caption, /pas une couverture radio/, 'the line of sight is never called coverage');
+  assert.deepEqual(panel.lines.map(norm), [
+    'Ondes mesurées à 40 m en 2009, avant les antennes actuelles : trop faibles pour être mesurées',
+  ]);
+  assert.equal(norm(panel.footnote), 'Source : ANFR, 27 août 2026');
+  assert.equal(norm(panel.list.summary), 'Voir les équipements · 30 antennes');
+  assert.deepEqual(panel.list.items.map((item) => norm(item.text)), [
+    'Orange · 5G, 4G, 3G, 2G · 8 antennes',
+    'SFR · 5G, 4G, 3G, 2G · 6 antennes',
+    'Bouygues · 5G, 4G · 8 antennes',
+    'Free · 5G, 4G · 8 antennes',
+  ]);
+  // The card's refusals hold in the key: no frequency, no corporate name.
+  assert.doesNotMatch(JSON.stringify(panel), /MHz|GHz|FREE MOBILE|BOUYGUES TELECOM/);
+});
+
+test('before Cartoradio answers, the key card is titled like the globe card and says what it waits for', () => {
+  const id = anfrSupportId(449714);
+  const pending = anfrSelectionPanel({ id, support: support(449714), detailPending: true }, PACK,
+    { recordId: id, status: 'loading' });
+  assert.equal(norm(pending.title), 'Antenne 5G · 4 opérateurs');
+  assert.equal(pending.key, id);
+  assert.deepEqual(pending.lines.map(norm), ['Chargement…', 'Calcul de la zone d’où l’on voit l’antenne…']);
+  assert.equal(pending.metric, null);
+  assert.equal(pending.list, null, 'no button that opens onto nothing');
+  // Another mast's line of sight is not this one's.
+  assert.equal(anfrSelectionPanel({ id, support: support(449714) }, PACK,
+    { recordId: 'anfr-fr:1', status: 'ready', share: 0.5, radiusM: 10_000 }).metric, null);
+
+  // A planned antenna has no plate: nothing is on the air.
+  const planned = anfrSelectionPanel({ id: anfrSupportId(278838), support: support(278838) }, PACK);
+  assert.equal(norm(planned.title), 'Antenne en projet · 2 opérateurs');
+  assert.equal(planned.chips, null);
+  assert.deepEqual(planned.lines.map(norm), ['Prévu : 4G, 3G, 2G — pas encore installé']);
+
+  // A maillage dot whose support is not known yet prints the globe card's lines.
+  const tuple = MESH_TUPLES.find((t) => t[3] === 4);
+  const dot = anfrSelectionPanel({ id: 'anfr-fr:mesh:1', mesh: true, tuple, lookupPending: true }, PACK);
+  assert.equal(norm(dot.title), 'Antenne 5G · 2 opérateurs');
+  assert.deepEqual(dot.lines, ['Chargement…']);
+  assert.equal(anfrSelectionPanel(null), null);
+});
+
+test('with the map key on screen the globe keeps a tag, the key gets the card, and its close clears both', async () => {
+  const originalDocument = globalThis.document;
+  const originalWindow = globalThis.window;
+  const events = [];
+  globalThis.window = { dispatchEvent: (event) => events.push(event) };
+  globalThis.document = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => (id === 'map-legend'
+      ? { hidden: false, classList: { contains: () => false }, getClientRects: () => [{}] }
+      : null),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  try {
+    const host = makeHost();
+    _setAnfrStateForTest({
+      viewer: fakeViewer(2.3, 48.8, 2.4, 48.9),
+      overlayHost: host,
+      pack: PACK,
+      http: async () => ({ ok: true, json: async () => DETAIL }),
+    });
+    const id = anfrSupportId(449714);
+    _selectAnfrForTest(id);
+    assert.equal(norm(host.entries[0].title), 'Antenne 5G · 4 opérateurs');
+    assert.deepEqual(host.entries[0].details, [], 'a tag, not a card, over the mast');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(host.entries[0].title, 'Paris 6e', 'the tag takes the place name with the card');
+    assert.ok(events.some((event) => event.type === 'gev:layer-draw-changed'),
+      'the key is asked to repaint at once rather than at the six-hour poll');
+
+    const controls = _anfrRowControlsForTest();
+    assert.equal(controls.legendSelection.title, 'Paris 6e');
+
+    events.length = 0;
+    assert.equal(anfrFranceLayer.clearSelectedCard(), true);
+    assert.equal(_anfrSelectedIdForTest(), null);
+    assert.equal(host.entries, null);
+    assert.equal(events.length, 1);
+    assert.equal(_anfrRowControlsForTest().legendSelection, undefined);
+    assert.equal(anfrFranceLayer.clearSelectedCard(), false, 'nothing left to close');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
 });
 
 test('a maillage click asks the register for the identity, once, and caches a miss', async () => {

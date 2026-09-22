@@ -369,6 +369,66 @@ test('a second click keeps the open card on screen until the new answer replaces
   assert.equal(last.entries[0].title, 'Les 4 opérateurs captent ici');
 });
 
+test('with the map key on screen, the read spot is a card in the coverage block and a tag on the globe', async () => {
+  const originalDocument = globalThis.document;
+  const originalWindow = globalThis.window;
+  const events = [];
+  globalThis.window = { dispatchEvent: (event) => events.push(event) };
+  globalThis.document = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => (id === 'map-legend'
+      ? { hidden: false, classList: { contains: () => false }, getClientRects: () => [{}] }
+      : null),
+  };
+  try {
+    const host = hostDouble();
+    const viewer = viewerDouble();
+    let release = null;
+    const reads = [
+      () => Promise.resolve({ inside: true, code: encodeCoverage([0, 0, 0, 0]) }),
+      () => new Promise((resolve) => { release = resolve; }),
+    ];
+    _setAnfrCoverageForTest({
+      viewer,
+      mode: 'gaps',
+      meta: META,
+      enabled: true,
+      overlayHost: host,
+      read: () => reads.shift()(),
+    });
+    assert.equal(_openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 }), true);
+    // Like the globe's, the key's card waits for its answer (#339): no
+    // « Chargement… » that is rewritten a frame later.
+    assert.equal(coverageBlock().legendSelection, undefined);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const tag = host.calls.filter((call) => call.entries).at(-1).entries[0];
+    assert.equal(tag.title, 'Point sélectionné');
+    assert.deepEqual(tag.details, [], 'a tag, not a card, over the spot');
+    const card = coverageBlock().legendSelection;
+    assert.equal(card.title, 'Au point sélectionné');
+    assert.deepEqual(card.lines, ['Zone blanche : pas de 4G ici']);
+    assert.deepEqual(card.rows.items.map((row) => row.value), Array(4).fill('aucun réseau'));
+    assert.equal(events.length, 1, 'the key repaints once, when the answer is there');
+
+    // A second click keeps the first card, in the key too, until its answer.
+    assert.equal(_openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 }), true);
+    assert.deepEqual(coverageBlock().legendSelection.lines, ['Zone blanche : pas de 4G ici']);
+    release({ inside: true, code: 255 });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(coverageBlock().legendSelection.lines, ['Les 4 opérateurs captent ici']);
+
+    assert.equal(anfrFranceLayer.clearSelectedCard(), true);
+    assert.equal(_anfrCoverageCardForTest(), null);
+    assert.equal(coverageBlock().legendSelection, undefined);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
 test('with the coverage off, a ground click is not taken — it falls through to a dismissal', () => {
   const viewer = viewerDouble();
   _setAnfrCoverageForTest({ viewer, mode: 'off', meta: META, enabled: true, read: async () => ({ inside: false }) });

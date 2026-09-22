@@ -130,4 +130,13 @@ export default defineMessages({
       en: 'The map covers mainland France, not the sea.',
     },
   },
+
+  /**
+   * The same spot as the map key prints it (`coverageSelectionPanel`), with
+   * the tag the globe keeps over it while the key carries the rest.
+   */
+  panel: {
+    title: { fr: 'Au point sélectionné', en: 'At the selected point' },
+    tag: { fr: 'Point sélectionné', en: 'Selected point' },
+  },
 });

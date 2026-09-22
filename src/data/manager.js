@@ -166,10 +166,20 @@ function setCssVar(node, name, value) {
  * block. Only `title` is required; everything else is dropped when it is not
  * the shape the key knows how to print, and a link that is not `https:` is
  * dropped whole — its URL may come from a register.
+ * `meta` takes one line or several: an antenna says what it stands on and whose
+ * it is before its networks, and both are the small print under the name.
+ * `chips.outline` rings each chip in its colour instead of filling it — for a
+ * colour too dark to carry black text (the 2G slate). `rows` is a table of
+ * named values, each with an optional `meter` of `max` steps: the level of
+ * every operator at a clicked point.
  * @param {*} selection
- * @returns {?{key: string, title: string, meta: ?string, headline: ?string,
- *   lines: string[], metric: ?{color: ?string, value: string, caption: string[]},
- *   chips: ?{caption: ?string, items: Array<{label: string, color: ?string}>, text: ?string},
+ * @returns {?{key: string, title: string, meta: string[], headline: ?string,
+ *   lines: string[],
+ *   metric: ?{heading: ?string, color: ?string, value: string, caption: string[]},
+ *   chips: ?{caption: ?string, items: Array<{label: string, color: ?string}>, text: ?string,
+ *     outline: boolean},
+ *   rows: ?{caption: ?string, items: Array<{label: string, value: ?string,
+ *     meter: ?{value: number, max: number}}>},
  *   footnote: ?string,
  *   list: ?{caption: ?string, summary: string, items: Array<{label: ?string,
  *     color: ?string, text: ?string, href: ?string, title: ?string}>},
@@ -193,6 +203,18 @@ export function legendSelectionOf(selection) {
   const chipItems = (Array.isArray(selection.chips?.items) ? selection.chips.items : [])
     .map((item) => ({ label: text(item?.label), color: text(item?.color) }))
     .filter((item) => item.label);
+  // A table of named values. A meter is kept only when it is a whole number
+  // of steps out of a small positive maximum — anything else is not a meter.
+  const rowItems = (Array.isArray(selection.rows?.items) ? selection.rows.items : [])
+    .map((item) => {
+      const max = Number(item?.meter?.max);
+      const value = Number(item?.meter?.value);
+      const meter = Number.isInteger(max) && max > 0 && max <= 5 && Number.isInteger(value)
+        ? { value: Math.min(Math.max(value, 0), max), max }
+        : null;
+      return { label: text(item?.label), value: text(item?.value), meter };
+    })
+    .filter((item) => item.label);
   // A folded list — the records behind the object, one line each.
   const listItems = (Array.isArray(selection.list?.items) ? selection.list.items : [])
     .map((item) => ({
@@ -207,19 +229,26 @@ export function legendSelectionOf(selection) {
   return {
     key: text(selection.key) || title,
     title,
-    meta: text(selection.meta),
+    meta: (Array.isArray(selection.meta) ? selection.meta : [selection.meta]).map(text).filter(Boolean),
     headline: text(selection.headline),
     lines: (Array.isArray(selection.lines) ? selection.lines : []).map(text).filter(Boolean),
     metric: metricValue
       ? {
+        heading: text(selection.metric.heading),
         color: text(selection.metric.color),
         value: metricValue,
         caption: captions.map(text).filter(Boolean),
       }
       : null,
     chips: chipItems.length
-      ? { caption: text(selection.chips.caption), items: chipItems, text: text(selection.chips.text) }
+      ? {
+        caption: text(selection.chips.caption),
+        items: chipItems,
+        text: text(selection.chips.text),
+        outline: selection.chips.outline === true,
+      }
       : null,
+    rows: rowItems.length ? { caption: text(selection.rows.caption), items: rowItems } : null,
     footnote: text(selection.footnote),
     list: listItems.length && listSummary
       ? { caption: text(selection.list.caption), summary: listSummary, items: listItems }
@@ -4343,11 +4372,13 @@ export class DataLayerManager {
       host.hidden = true;
       list.replaceChildren();
       this._legendSelectionKey = null;
+      this._legendSelectionText = null;
       return;
     }
     host.hidden = false;
 
     let selectionKey = null;
+    let selectionText = null;
     const fragment = document.createDocumentFragment();
     // One shared note, not one per layer: the drape is a property of the MAP
     // STACK, and repeating it under every zonal layer would bury the key it is
@@ -4612,6 +4643,7 @@ export class DataLayerManager {
         if (selection) {
           group.appendChild(this._legendSelection(layer, selection));
           selectionKey = `${layer.id}|${selection.key}`;
+          selectionText = JSON.stringify(selection);
         }
         rowNode.appendChild(group);
       }
@@ -4627,10 +4659,21 @@ export class DataLayerManager {
     // A NEW selection is brought into view once; a repaint of the same one
     // leaves the reader's scroll where they put it. The key repaints about
     // once a second, and scrolling on every pass would pin the list.
+    //
+    // A card that LEARNED something is brought back too, until the reader
+    // takes the list over. A card often opens before its answer: the coverage
+    // spot says « Chargement… » for the few hundred milliseconds its tile
+    // takes, the antenna waits for Cartoradio and its line of sight. Revealed
+    // at one line, the card grew its table under the fold of a 370 px key
+    // (measured at 1280 × 800 over the Mont-Blanc, 2026-09-22).
     if (selectionKey && selectionKey !== this._legendSelectionKey) {
+      this._legendSelectionTouched = false;
+      this._revealLegendSelection(list);
+    } else if (selectionKey && selectionText !== this._legendSelectionText && !this._legendSelectionTouched) {
       this._revealLegendSelection(list);
     }
     this._legendSelectionKey = selectionKey;
+    this._legendSelectionText = selectionText;
   }
 
   /**
@@ -4744,7 +4787,8 @@ export class DataLayerManager {
    * DVF key, 568 px of content in 403 px of list and the list still at its
    * top. So the list's box is watched for a short window and the card is
    * revealed again each time that box changes, until the reader scrolls,
-   * clicks or touches the list themselves.
+   * clicks or touches the list themselves — which also hands them the list
+   * for the rest of the selection (`_legendSelectionTouched`).
    *
    * @param {HTMLElement} list `#map-legend-items`.
    */
@@ -4761,11 +4805,15 @@ export class DataLayerManager {
     const stop = () => {
       observer.disconnect();
       clearTimeout(timer);
-      for (const type of events) list.removeEventListener(type, stop);
+      for (const type of events) list.removeEventListener(type, onReader);
       if (this._stopLegendReveal === stop) this._stopLegendReveal = null;
     };
+    const onReader = () => {
+      this._legendSelectionTouched = true;
+      stop();
+    };
     observer.observe(list);
-    for (const type of events) list.addEventListener(type, stop, { passive: true });
+    for (const type of events) list.addEventListener(type, onReader, { passive: true });
     timer = setTimeout(stop, LEGEND_SELECTION_REVEAL_MS);
     this._stopLegendReveal = stop;
   }
@@ -4806,7 +4854,7 @@ export class DataLayerManager {
     close.textContent = '×';
     section.appendChild(close);
     add('map-legend-selection-title', selection.title);
-    if (selection.meta) add('map-legend-selection-meta', selection.meta);
+    for (const meta of selection.meta) add('map-legend-selection-meta', meta);
     if (selection.headline) add('map-legend-selection-headline', selection.headline);
     if (selection.chips) {
       if (selection.chips.caption) add('map-legend-selection-caption is-heading', selection.chips.caption);
@@ -4814,9 +4862,12 @@ export class DataLayerManager {
       strip.className = 'map-legend-selection-chips';
       for (const item of selection.chips.items) {
         const chip = document.createElement('span');
-        chip.className = 'map-legend-selection-chip';
+        chip.className = selection.chips.outline
+          ? 'map-legend-selection-chip is-outline'
+          : 'map-legend-selection-chip';
         chip.textContent = item.label;
-        if (item.color) chip.style.background = item.color;
+        if (item.color && selection.chips.outline) setCssVar(chip, '--chip-ink', item.color);
+        else if (item.color) chip.style.background = item.color;
         strip.appendChild(chip);
       }
       if (selection.chips.text) {
@@ -4828,7 +4879,9 @@ export class DataLayerManager {
       section.appendChild(strip);
     }
     for (const line of selection.lines) add('map-legend-selection-line', line);
+    if (selection.rows) section.appendChild(this._legendSelectionRows(selection.rows));
     if (selection.metric) {
+      if (selection.metric.heading) add('map-legend-selection-caption is-heading', selection.metric.heading);
       const metric = document.createElement('div');
       metric.className = 'map-legend-selection-metric';
       const swatch = document.createElement('span');
@@ -4858,6 +4911,57 @@ export class DataLayerManager {
       link.rel = 'noopener';
     }
     return section;
+  }
+
+  /**
+   * A selection's table of named values — the level of each of the four
+   * operators at a clicked point.
+   *
+   * A real `<table>`, so a screen reader announces the rows as rows. The meter
+   * is bars, not a colour: a swatch in the key's pink would read as one of the
+   * classes above it, and the four levels are an order a phone already taught
+   * everyone to read as bars.
+   *
+   * @param {{caption: ?string, items: Array<object>}} rows From {@link legendSelectionOf}.
+   * @returns {HTMLElement}
+   */
+  _legendSelectionRows(rows) {
+    const block = document.createElement('div');
+    block.className = 'map-legend-selection-rows';
+    if (rows.caption) {
+      const caption = document.createElement('div');
+      caption.className = 'map-legend-selection-caption is-heading';
+      caption.textContent = rows.caption;
+      block.appendChild(caption);
+    }
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    for (const item of rows.items) {
+      const row = document.createElement('tr');
+      const name = document.createElement('th');
+      name.scope = 'row';
+      name.textContent = item.label;
+      const value = document.createElement('td');
+      if (item.meter) {
+        const meter = document.createElement('span');
+        meter.className = 'map-legend-selection-bars';
+        meter.setAttribute('aria-hidden', 'true');
+        for (let step = 1; step <= item.meter.max; step += 1) {
+          const bar = document.createElement('i');
+          if (step <= item.meter.value) bar.className = 'is-on';
+          meter.appendChild(bar);
+        }
+        value.appendChild(meter);
+      }
+      const label = document.createElement('span');
+      label.textContent = item.value || '';
+      value.appendChild(label);
+      row.append(name, value);
+      body.appendChild(row);
+    }
+    table.appendChild(body);
+    block.appendChild(table);
+    return block;
   }
 
   /**

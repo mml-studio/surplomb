@@ -317,6 +317,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   again removes the coverage. Where no operator has 4G — or, per operator,
   where it has none — the ground is now hatched, on the map and in the key,
   so the dead zones no longer depend on telling two shades of pink apart.
+- **A clicked antenna or dead-zone spot opens its card in the map key.** The
+  globe keeps a small tag over the object — the town, or « Point sélectionné »
+  — and the full card sits beside the key it is read against. An antenna
+  shows its town, what it stands on and whose it is, one plate per network on
+  the air (2G to 5G), the wave measurement, how much of the land around can
+  see it (« 28 % · rayon 39 km », never called coverage), the register's date,
+  and a folded list of what each operator runs on it. A spot on the coverage
+  shows who has signal there and a table of the four operators, each with its
+  level in words and as phone bars. On a phone, or with the key folded, the
+  whole card stays on the globe. Compound town names are no longer printed
+  « Saint-sever ».
 - **The hosted site no longer uses Google News RSS, Google Street View or the
   TeleGeography cable map; a clone keeps all three.** Google News allows
   personal, non-commercial use only, the cable map is CC BY-NC-SA, and

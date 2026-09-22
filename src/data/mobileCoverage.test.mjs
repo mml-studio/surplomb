@@ -9,6 +9,7 @@ import {
   COVERAGE_OPERATORS,
   COVERAGE_RAMP,
   coverageCardText,
+  coverageSelectionPanel,
   coverageHatchLut,
   coverageLegend,
   coverageLevel,
@@ -240,6 +241,32 @@ test('the card answers first — who has signal here — then one short line per
   assert.equal(coverageCardText(META, { inside: true, code: 255 }).split('\n')[0], 'Les 4 opérateurs captent ici');
   assert.deepEqual(coverageCardText(META, { inside: false }).split('\n'),
     ['Pas de données ici', 'La carte couvre la France métropolitaine, hors mer.']);
+});
+
+test('the key card: « Au point sélectionné », who has signal, and one row per operator with bars', () => {
+  const at = { lon: 6.8652, lat: 45.8326 };
+  const read = coverageSelectionPanel({ ...at, reading: { inside: true, code: encodeCoverage([3, 2, 1, 0]) } });
+  assert.equal(read.title, 'Au point sélectionné');
+  assert.equal(read.key, 'coverage:6.86520,45.83260', 'the spot keys the card, so a new click is revealed');
+  assert.deepEqual(read.lines, ['3 opérateurs sur 4 captent ici']);
+  assert.deepEqual(read.rows.items, [
+    { label: 'Orange', value: 'très bon', meter: { value: 3, max: 3 } },
+    { label: 'SFR', value: 'bon', meter: { value: 2, max: 3 } },
+    { label: 'Bouygues', value: 'faible (dehors seulement)', meter: { value: 1, max: 3 } },
+    { label: 'Free', value: 'aucun réseau', meter: { value: 0, max: 3 } },
+  ]);
+  // No source line: the block prints it right above the card.
+  assert.equal(read.footnote, undefined);
+
+  // Every other state keeps the same key, and says what it is doing.
+  assert.deepEqual(coverageSelectionPanel({ ...at, reading: null }).lines, ['Chargement…']);
+  assert.deepEqual(coverageSelectionPanel({ ...at, reading: null, failed: true }).lines,
+    ['Lecture impossible pour le moment.']);
+  assert.deepEqual(coverageSelectionPanel({ ...at, reading: { inside: false } }).lines,
+    ['Pas de données ici', 'La carte couvre la France métropolitaine, hors mer.']);
+  assert.equal(coverageSelectionPanel({ ...at, reading: { inside: false } }).rows, undefined);
+  assert.equal(coverageSelectionPanel(null), null);
+  assert.equal(coverageSelectionPanel({ lon: NaN, lat: 45 }), null);
 });
 
 test('an unknown mode is off, and the month the map describes prints in words', () => {
