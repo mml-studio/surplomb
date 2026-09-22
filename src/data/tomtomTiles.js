@@ -115,6 +115,42 @@ export function tilesForBounds(bounds, zoom = 12, { maxTiles = 64 } = {}) {
 // ─── Daily budget accounting ───────────────────────────────
 
 /**
+ * TomTom's free allowance for flow tiles, per MONTH.
+ *
+ * The pricing page lists "Traffic Flow & Incidents API Vector Tiles" (and the
+ * raster ones) at "Free 200K monthly" requests, read 2026-09-22. It used to be
+ * quoted as ~50,000 a day, which is what the old 40,000-a-day default was cut
+ * against — and 40,000 a day is 1.24 million in a 31-day month, six times the
+ * allowance. One upstream tile fetch is one request.
+ * https://docs.tomtom.com/pricing
+ * @const {number}
+ */
+export const TOMTOM_FREE_MONTHLY_TILES = 200_000;
+
+/**
+ * Default daily cap on upstream tile fetches: the monthly allowance spread
+ * over the LONGEST month, so thirty-one full days still end inside it
+ * (6,451 × 31 = 199,981). A day's unspent tiles are not carried over, which
+ * keeps the governor a single counter at the price of never using the whole
+ * allowance.
+ * @const {number}
+ */
+export const DEFAULT_DAILY_TILE_BUDGET = Math.floor(TOMTOM_FREE_MONTHLY_TILES / 31);
+
+/**
+ * The daily cap in force: `TOMTOM_DAILY_TILE_BUDGET` when it is a positive
+ * integer, the default otherwise. An operator on a paid plan raises it; one
+ * sharing the key with other projects lowers it.
+ *
+ * @param {string|undefined|null} envValue - Raw `TOMTOM_DAILY_TILE_BUDGET`.
+ * @returns {number} Tiles per UTC day.
+ */
+export function dailyTileBudget(envValue) {
+  const raw = Number.parseInt(String(envValue ?? ''), 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_DAILY_TILE_BUDGET;
+}
+
+/**
  * UTC calendar-day key for budget bucketing.
  *
  * @param {number} [epochMs=Date.now()] - Timestamp in ms.

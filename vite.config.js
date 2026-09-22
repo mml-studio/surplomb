@@ -96,6 +96,7 @@ import {
   utcDayKey as tomtomUtcDayKey,
   normalizeBudget as normalizeTomTomBudget,
   isOverBudget as isTomTomOverBudget,
+  dailyTileBudget as tomtomDailyTileBudget,
   secondsToUtcMidnight,
 } from './src/data/tomtomTiles.js';
 import {
@@ -3189,9 +3190,12 @@ function rocketLaunchesProxy() {
  * Budget governor (mirrors the OpenSky credit-governor philosophy — last-good
  * data beats a dead layer): a persistent counter (.gev-cache/tomtom/budget.json,
  * keyed by UTC date, reset on day change) counts upstream fetch attempts
- * against a soft cap (TOMTOM_DAILY_TILE_BUDGET, default 40,000 of the free
- * tier's ~50k/day). Over the cap the proxy serves stale tiles when available,
- * else 429 {error:'budget'}.
+ * against a daily cap (TOMTOM_DAILY_TILE_BUDGET, default
+ * `DEFAULT_DAILY_TILE_BUDGET` = 6,451: TomTom's free 200,000 tiles a MONTH
+ * spread over 31 days — see `tomtomTiles.js`). Over the cap the proxy serves
+ * stale tiles when available, else 429 {error:'budget'} with `x-tomtom-limit:
+ * budget` and a Retry-After to the next UTC midnight; the layer reads that as
+ * "TomTom daily budget reached" and its dots go back to simulated speeds.
  *
  * GET /api/tomtom/status → {hasKey, dailyCount, budget, date}. Keyless mode:
  * status reports hasKey:false and the tile endpoint 503s {error:'no_key'}
@@ -3203,7 +3207,6 @@ function tomtomProxy() {
   const TILE_TTL_MS = 120_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache', 'tomtom');
   const BUDGET_PATH = path.join(CACHE_DIR, 'budget.json');
-  const DEFAULT_DAILY_BUDGET = 40000;
   const MEM_MAX_ENTRIES = 256;
   const UPSTREAM_TIMEOUT_MS = 15000;
 
@@ -3217,8 +3220,7 @@ function tomtomProxy() {
   let budgetLoaded = false;
 
   function dailyBudgetLimit() {
-    const raw = Number.parseInt(process.env.TOMTOM_DAILY_TILE_BUDGET || '', 10);
-    return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_DAILY_BUDGET;
+    return tomtomDailyTileBudget(process.env.TOMTOM_DAILY_TILE_BUDGET);
   }
 
   async function loadBudgetOnce() {
