@@ -3271,9 +3271,20 @@ the previous one stays until then. The key's card slot gained `meta` as a list,
 `chips.outline`, `metric.heading` and `rows`; a card whose content changes is
 revealed again until the reader scrolls, clicks or types in the list
 (`_legendSelectionTouched`), because the spot card grew its table under the
-fold of a 370 px key at 1280 × 800. Register communes are cased per part of a
-compound name (`Saint-Sever`, `Villeneuve-d’Ascq`, `La Rochelle`), since the
-commune is now a title.
+fold of a 370 px key at 1280 × 800 — one card at a time, and the one that
+opened or learned something: two layers can hold a card at once
+(`_legendSelections`, keyed by layer and selection). A meter draws three bars,
+the number `style.css` gives it, and `legendSelectionOf` refuses more. Register
+communes are cased per part of a compound name (`Saint-Sever`,
+`Villeneuve-d’Ascq`, `La Rochelle`), since the commune is now a title.
+
+**`mapKeyCarriesSelection` reads the COMPUTED visibility** (2026-09-22), not
+the layout boxes alone: `body.ui-clean-view #map-legend` is `opacity: 0;
+visibility: hidden`, and a node hidden that way keeps its boxes, so the key
+answered "on screen" through the clean view and a clicked object printed its
+title on the globe and its card where nobody could see it — the DVF sale and
+the DPE site had it too. The antennas also watch the BODY's class, not only
+the key's, so pressing `V` with a card open puts it back on the globe.
 
 **The electricity row brings the night.** Since 2026-09-21 the grid and the
 power stations are one row, *Réseau électrique et centrales* (*Power grid and

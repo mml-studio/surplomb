@@ -110,6 +110,9 @@ function refreshFailureFromStats(stats, label) {
  */
 const GUIDANCE_STATUSES = Object.freeze(new Set(['zoom-in', 'empty', 'idle', 'out-of-gate']));
 
+/** Steps a selection row's meter can draw — the bars `style.css` gives it. */
+const METER_STEPS = 3;
+
 /**
  * How long a new selection card is kept in view while the rail settles. The
  * rail's layout pass runs on a frame and on the 500 ms stats cadence; the key
@@ -170,8 +173,8 @@ function setCssVar(node, name, value) {
  * it is before its networks, and both are the small print under the name.
  * `chips.outline` rings each chip in its colour instead of filling it — for a
  * colour too dark to carry black text (the 2G slate). `rows` is a table of
- * named values, each with an optional `meter` of `max` steps: the level of
- * every operator at a clicked point.
+ * named values, each with an optional `meter` of `max` steps (three at most,
+ * {@link METER_STEPS}): the level of every operator at a clicked point.
  * @param {*} selection
  * @returns {?{key: string, title: string, meta: string[], headline: ?string,
  *   lines: string[],
@@ -207,9 +210,11 @@ export function legendSelectionOf(selection) {
   // of steps out of a small positive maximum — anything else is not a meter.
   const rowItems = (Array.isArray(selection.rows?.items) ? selection.rows.items : [])
     .map((item) => {
+      // Three steps at most: that is how many bars the key draws, and a
+      // fourth would be an `<i>` with no height — invisible, and silent.
       const max = Number(item?.meter?.max);
       const value = Number(item?.meter?.value);
-      const meter = Number.isInteger(max) && max > 0 && max <= 5 && Number.isInteger(value)
+      const meter = Number.isInteger(max) && max > 0 && max <= METER_STEPS && Number.isInteger(value)
         ? { value: Math.min(Math.max(value, 0), max), max }
         : null;
       return { label: text(item?.label), value: text(item?.value), meter };
@@ -4371,14 +4376,19 @@ export class DataLayerManager {
     if (!groups.length) {
       host.hidden = true;
       list.replaceChildren();
-      this._legendSelectionKey = null;
-      this._legendSelectionText = null;
+      // The watch would go on scrolling a list that no longer holds a card.
+      this._stopLegendReveal?.();
+      this._legendSelections = new Map();
+      this._legendSelectionTouched = new Set();
       return;
     }
     host.hidden = false;
 
-    let selectionKey = null;
-    let selectionText = null;
+    // Every card on screen, by layer and key: TWO layers can hold a selection
+    // at once (a DVF sale and an antenna do not dismiss each other), and the
+    // one revealed has to be the one that just opened or just learned
+    // something — not whichever block was rendered last.
+    const selections = new Map();
     const fragment = document.createDocumentFragment();
     // One shared note, not one per layer: the drape is a property of the MAP
     // STACK, and repeating it under every zonal layer would bury the key it is
@@ -4641,9 +4651,8 @@ export class DataLayerManager {
           group.appendChild(line);
         }
         if (selection) {
-          group.appendChild(this._legendSelection(layer, selection));
-          selectionKey = `${layer.id}|${selection.key}`;
-          selectionText = JSON.stringify(selection);
+          const card = group.appendChild(this._legendSelection(layer, selection));
+          selections.set(`${layer.id}|${selection.key}`, { node: card, text: JSON.stringify(selection) });
         }
         rowNode.appendChild(group);
       }
@@ -4661,19 +4670,23 @@ export class DataLayerManager {
     // once a second, and scrolling on every pass would pin the list.
     //
     // A card that LEARNED something is brought back too, until the reader
-    // takes the list over. A card often opens before its answer: the coverage
-    // spot says « Chargement… » for the few hundred milliseconds its tile
-    // takes, the antenna waits for Cartoradio and its line of sight. Revealed
-    // at one line, the card grew its table under the fold of a 370 px key
-    // (measured at 1280 × 800 over the Mont-Blanc, 2026-09-22).
-    if (selectionKey && selectionKey !== this._legendSelectionKey) {
-      this._legendSelectionTouched = false;
-      this._revealLegendSelection(list);
-    } else if (selectionKey && selectionText !== this._legendSelectionText && !this._legendSelectionTouched) {
-      this._revealLegendSelection(list);
+    // takes THAT card's list over. A card often opens before its answer: the
+    // coverage spot says « Chargement… » for the few hundred milliseconds its
+    // tile takes, the antenna waits for Cartoradio and its line of sight.
+    // Revealed at one line, the card grew its table under the fold of a
+    // 370 px key (measured at 1280 × 800 over the Mont-Blanc, 2026-09-22).
+    const previous = this._legendSelections || new Map();
+    const touched = this._legendSelectionTouched || new Set();
+    this._legendSelections = selections;
+    for (const key of touched) if (!selections.has(key)) touched.delete(key);
+    this._legendSelectionTouched = touched;
+    for (const [key, card] of selections) {
+      const before = previous.get(key);
+      if (!before) touched.delete(key);
+      else if (before.text === card.text || touched.has(key)) continue;
+      this._revealLegendSelection(list, key);
+      break;
     }
-    this._legendSelectionKey = selectionKey;
-    this._legendSelectionText = selectionText;
   }
 
   /**
@@ -4791,10 +4804,12 @@ export class DataLayerManager {
    * for the rest of the selection (`_legendSelectionTouched`).
    *
    * @param {HTMLElement} list `#map-legend-items`.
+   * @param {string} key Which card, as `<layer id>|<selection key>`: the node
+   *   is looked up again on every pass, since the key is rebuilt around it.
    */
-  _revealLegendSelection(list) {
+  _revealLegendSelection(list, key) {
     const reveal = () => {
-      list.querySelector('.map-legend-selection')?.scrollIntoView?.({ block: 'nearest' });
+      this._legendSelections?.get(key)?.node?.scrollIntoView?.({ block: 'nearest' });
     };
     reveal();
     this._stopLegendReveal?.();
@@ -4809,7 +4824,7 @@ export class DataLayerManager {
       if (this._stopLegendReveal === stop) this._stopLegendReveal = null;
     };
     const onReader = () => {
-      this._legendSelectionTouched = true;
+      this._legendSelectionTouched?.add(key);
       stop();
     };
     observer.observe(list);

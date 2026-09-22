@@ -1620,10 +1620,12 @@ function announceSelectionChanged() {
  * take it off again when the key comes back — while something is selected.
  *
  * Nothing republishes the card per frame (#339), so without this a reader who
- * folds the key after a click keeps a tag and loses the card. Only the key's
- * own `class` and `hidden` are watched, and a change is acted on only when it
- * flips the answer the card was published with, so the key's repaint cannot
- * feed the watch.
+ * folds the key after a click keeps a tag and loses the card. TWO nodes are
+ * watched, because the key is hidden from two places: its own `class` and
+ * `hidden` when it is folded, and the BODY's class when the clean view takes
+ * the whole interface away (`body.ui-clean-view`). A change is acted on only
+ * when it flips the answer the card was published with, so the key's repaint
+ * — which writes neither — cannot feed the watch.
  */
 function watchKeyVisibility() {
   if (_keyObserver || typeof MutationObserver !== 'function' || typeof document === 'undefined') return;
@@ -1641,6 +1643,7 @@ function watchKeyVisibility() {
     governorRequestRender('anfr-fr-card');
   });
   _keyObserver.observe(key, { attributes: true, attributeFilter: ['class', 'hidden'] });
+  if (document.body) _keyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 }
 
 function unwatchKeyVisibility() {

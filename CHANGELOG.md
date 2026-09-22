@@ -230,6 +230,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **In the clean view, clicking a sale, an energy rating or an antenna showed
+  its name and nothing else.** The card went to the map key, which the clean
+  view had just taken off the screen — it is hidden there, but a hidden panel
+  still measures as one, so the globe kept only its tag. Clicked in the clean
+  view, or with the key hidden after the click, an object shows its whole card
+  on the globe again.
 - **The Sentinel-2 satellite base painted the Americas, Asia, southern Africa
   and Australia as white land.** It used EOX's 2017 release, which covers
   Europe, North Africa and the Middle East only; it went unseen while it only

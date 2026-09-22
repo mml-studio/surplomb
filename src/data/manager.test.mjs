@@ -5152,12 +5152,12 @@ test('a new selection card is revealed again while the rail settles, until the r
   const listeners = new Map();
   const card = { scrollIntoView: (options) => { assert.deepEqual(options, { block: 'nearest' }); scrolls += 1; } };
   const list = {
-    querySelector: (selector) => (selector === '.map-legend-selection' ? card : null),
     addEventListener: (type, listener) => listeners.set(type, listener),
     removeEventListener: (type, listener) => { if (listeners.get(type) === listener) listeners.delete(type); },
   };
-  const mgr = {};
-  const reveal = () => DataLayerManager.prototype._revealLegendSelection.call(mgr, list);
+  // The card is looked up by key on every pass: the key is rebuilt around it.
+  const mgr = { _legendSelections: new Map([['dvf-sales|sale:1', { node: card }]]), _legendSelectionTouched: new Set() };
+  const reveal = () => DataLayerManager.prototype._revealLegendSelection.call(mgr, list, 'dvf-sales|sale:1');
   try {
     reveal();
     assert.equal(scrolls, 1, 'revealed when it lands');
@@ -5165,7 +5165,8 @@ test('a new selection card is revealed again while the rail settles, until the r
     assert.equal(scrolls, 2, 'and again when the rail hands the key its height');
     listeners.get('wheel')();
     assert.equal(observers[0].disconnected, true, 'the reader scrolling ends the watch');
-    assert.equal(mgr._legendSelectionTouched, true, 'and hands them the list for this selection');
+    assert.deepEqual([...mgr._legendSelectionTouched], ['dvf-sales|sale:1'],
+      'and hands them the list for THAT selection');
     assert.equal(listeners.size, 0);
     assert.equal(mgr._stopLegendReveal, null);
 
@@ -5214,14 +5215,39 @@ test('a selection card that learns more is revealed again, until the reader take
     selection = { ...selection, lines: ['Seul Orange capte ici'], rows: { items: [{ label: 'Orange', value: 'bon' }] } };
     mgr._refreshTogglePanel();
     assert.equal(reveals, 2, 'the card grew its answer: brought back into view');
-    mgr._legendSelectionTouched = true; // the reader scrolled the list
+    mgr._legendSelectionTouched.add('satellites|coverage:1'); // the reader scrolled the list
     selection = { ...selection, lines: ['Les 4 opérateurs captent ici'] };
     mgr._refreshTogglePanel();
     assert.equal(reveals, 2, 'not under the reader’s hand');
     selection = { key: 'coverage:2', title: 'Au point sélectionné', lines: ['Chargement…'] };
     mgr._refreshTogglePanel();
     assert.equal(reveals, 3, 'a new spot is revealed whatever the reader did with the last one');
-    assert.equal(mgr._legendSelectionTouched, false);
+    assert.deepEqual([...mgr._legendSelectionTouched], [], 'the card that left takes its mark with it');
+
+    // TWO LAYERS CAN HOLD A CARD AT ONCE — a DVF sale and an antenna do not
+    // dismiss each other. The card revealed is the one that opened or learned
+    // something, not whichever block was rendered last.
+    const second = makeRowControlLayer();
+    second.module.id = 'anfr-fr';
+    let other = null;
+    second.module.getRowControls = () => ({
+      chips: [],
+      legend: [{ label: 'NAV', color: '#4fd8ff', count: 2 }],
+      legendSelection: other,
+    });
+    mgr.register(second.module);
+    assert.equal(await mgr.setEnabled('anfr-fr', true), true);
+    reveals = 0;
+    other = { key: 'anfr-fr:1', title: 'Vallorcine', lines: ['Chargement…'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'the antenna card opens: revealed once');
+    assert.deepEqual([...mgr._legendSelections.keys()].sort(),
+      ['anfr-fr|anfr-fr:1', 'satellites|coverage:2'], 'both cards are tracked');
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'neither card moved: no scroll');
+    other = { ...other, lines: ['Pylône de 31 m'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 2, 'the antenna card learned its support, under the other layer’s card');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;
