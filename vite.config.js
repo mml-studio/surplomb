@@ -79,6 +79,7 @@ import {
   osmCameraFromElement,
   snapOsmCameraBox,
   validOsmCameraBox,
+  OSM_CAMERA_ID_PREFIX,
   OSM_CAMERA_MAX_BOX_DEG,
   OSM_CAMERA_QUERY_CAP,
 } from './src/data/osmCameras.js';
@@ -17266,6 +17267,38 @@ function trimOsmCameraCache() {
   }
 }
 
+/** Per cached box, its cameras by id — built on the first lookup that needs it. */
+const _osmCameraIndexByPayload = new WeakMap();
+
+/**
+ * An OSM mapped camera this server has itself served, by id, or null.
+ *
+ * The CCTV frame route's Street View fallback reads a camera's position from
+ * here rather than from the request: OSM cameras are not in the frame-bearing
+ * catalog, and trusting the `lat`/`lon` the browser sends made that route a
+ * Street View proxy for any point on Earth, billed to the server key. Only
+ * boxes still held in memory answer (at most OSM_CAMERA_MAX_CACHE), so a
+ * camera the server has never published has no position here.
+ *
+ * @param {string} cameraId
+ * @returns {object|null}
+ */
+function osmMappedCameraById(cameraId) {
+  if (typeof cameraId !== 'string' || !cameraId.startsWith(OSM_CAMERA_ID_PREFIX)) return null;
+  for (const entry of _osmCameraCache.values()) {
+    const payload = entry?.payload;
+    if (!payload || !Array.isArray(payload.cameras)) continue;
+    let index = _osmCameraIndexByPayload.get(payload);
+    if (!index) {
+      index = new Map(payload.cameras.map((camera) => [camera?.id, camera]));
+      _osmCameraIndexByPayload.set(payload, index);
+    }
+    const camera = index.get(cameraId);
+    if (camera) return camera;
+  }
+  return null;
+}
+
 /**
  * Vite plugin: viewport-bounded OpenStreetMap mapped-camera proxy.
  *
@@ -18048,8 +18081,54 @@ export async function fetchCctvImageFromUpstream(url, {
 }
 
 /**
+ * Where a CCTV frame's Street View fallback may look, or null for nowhere.
+ *
+ * THE POSITION IS THE SERVER'S, NEVER THE REQUEST'S. The route used to take
+ * `lat`/`lon` from the query first, and an id it did not know went straight to
+ * the fallback — so `/api/cctv/frame/anything?lat=…&lon=…` was a Street View
+ * Static proxy for any point on Earth, unauthenticated and billed to the
+ * server's key. Now only a camera the server itself holds has a position: a
+ * row of the frame-bearing catalog, or an OSM mapped camera it served
+ * (`osmMappedCameraById`). Anything else gets the synthetic placeholder.
+ *
+ * The DIRECTION may still come from the request, because the panel's CAL
+ * controls let a reader re-aim a camera and the frame should follow; it is
+ * clamped again in `streetViewFallback` and moves nothing on the map.
+ *
+ * @param {object} options
+ * @param {object|null} [options.source] The camera's catalog row.
+ * @param {object|null} [options.mapped] The OSM mapped camera, when not in the catalog.
+ * @param {URLSearchParams} [options.params] The request's query.
+ * @returns {{lat: number, lon: number, heading: number, fov: number, pitch: number}|null}
+ */
+export function cctvStreetViewTarget({ source = null, mapped = null, params = new URLSearchParams() } = {}) {
+  const camera = source || mapped;
+  if (!camera) return null;
+  const lat = Number(camera.lat);
+  const lon = Number(camera.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const direction = (name, stored) => {
+    const raw = params.get(name);
+    const requested = raw === null || raw.trim() === '' ? NaN : Number(raw);
+    return Number.isFinite(requested) ? requested : Number(stored);
+  };
+  return {
+    lat,
+    lon,
+    heading: direction('heading', camera.headingDeg),
+    fov: direction('fov', camera.fovDeg),
+    pitch: direction('pitch', camera.pitchDeg),
+  };
+}
+
+/**
  * Vite plugin: CCTV camera proxy with source registry, frame/media serving,
  * fallback chain (upstream -> Street View -> synthetic SVG), and health tracking.
+ *
+ * Where the deployment has Street View switched off (GEV_NONCOMMERCIAL_SOURCES
+ * =off — src/nonCommercialSources.js) the chain is upstream only: a camera
+ * whose frame fails answers 404 `unavailable`, and the panel says « IMAGE ·
+ * INDISPONIBLE » rather than showing a Google still beside a non-Google map.
  *
  * Endpoints:
  *   GET /api/cctv/sources        — list all registered camera sources
@@ -18270,11 +18349,9 @@ function cctvProxy() {
           const source = sourceById.get(cameraId);
           const label = url.searchParams.get('label') || source?.name || cameraId;
           const city = url.searchParams.get('city') || source?.city || '';
-          const lat = Number(url.searchParams.get('lat') || source?.lat);
-          const lon = Number(url.searchParams.get('lon') || source?.lon);
-          const heading = Number(url.searchParams.get('heading') || source?.headingDeg);
-          const fov = Number(url.searchParams.get('fov') || source?.fovDeg);
-          const pitch = Number(url.searchParams.get('pitch') || source?.pitchDeg);
+          // Read per request, like every GEV_* switch: where it is off, no
+          // Street View call leaves this server (see the plugin comment).
+          const streetViewOn = isSourceOn('google-street-view', process.env);
 
           // Only use server-registered upstream URLs — never accept client-supplied URLs
           // (prevents SSRF via ?upstream= query parameter)
@@ -18316,7 +18393,33 @@ function cctvProxy() {
             return;
           }
 
-          const sv = await streetViewFallback({ lat, lon, heading, fov, pitch });
+          if (!streetViewOn) {
+            // No Google still, and no synthetic placeholder either: the SVG
+            // is English-only and says "CCTV FEED PLACEHOLDER" in the frame.
+            // A 404 makes the panel print its own bilingual « IMAGE ·
+            // INDISPONIBLE » / "FRAME · UNAVAILABLE", and the ambient cards
+            // draw nothing, which is what they do for any failed frame.
+            setHealth(cameraId, {
+              status: 'degraded',
+              sourceKind: 'unavailable',
+              label: source?.provider || 'No frame',
+              message: (source?.url ? 'Upstream unavailable' : 'No source configured') + placeholderNote,
+            });
+            res.writeHead(404, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+              'X-CCTV-Source': 'unavailable',
+            });
+            res.end(JSON.stringify({ error: 'Camera image unavailable', sourceKind: 'unavailable' }));
+            return;
+          }
+
+          const streetViewTarget = cctvStreetViewTarget({
+            source,
+            mapped: source ? null : osmMappedCameraById(cameraId),
+            params: url.searchParams,
+          });
+          const sv = streetViewTarget ? await streetViewFallback(streetViewTarget) : null;
           if (sv?.ok) {
             setHealth(cameraId, {
               status: 'degraded',
