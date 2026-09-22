@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: September 20, 2026
+Updated: September 22, 2026
 
 This file tracks active runtime issues only.
 
@@ -303,6 +303,54 @@ Consequences in runtime:
   already in place (`src/firstRunOptOut.js`) wired to it. Otherwise, a consent
   banner. `/confidentialite` will have to name PostHog as a processor, in the
   same pull request.
+
+### The world satellite imagery comes from an Esri endpoint closed to commercial use
+Status: Open (backlog), decided 2026-09-22
+
+Context:
+- Outside France, the `Satellite` stack's photography, and the globe seen from
+  space at boot, is Esri World Imagery, fetched without a key from
+  `services.arcgisonline.com` (`src/data/worldImagery.js`). Esri's
+  documentation for these legacy tile services: *"this service is not
+  available for commercial use."* The endpoint still answers everyone; the
+  limit is in the terms, not in the network.
+- Maintainer's decision (2026-09-22): keep the keyless endpoint while the
+  product is free, and switch the day surplomb.app gains traction.
+- Crediting Esri does not license it. The imagery is already credited on
+  screen (`Imagerie © Esri, Maxar, Earthstar Geographics`) and in the
+  attribution popover (`src/data/dataCredits.js`); a credit meets an
+  attribution duty, it does not lift a non-commercial one.
+
+Consequences in runtime:
+- None visible: surplomb.app and every fork show the same imagery. The
+  exposure is contractual, and it grows with the product. Once surplomb.app
+  charges for anything, every world view it draws breaks Esri's terms.
+
+What the switch takes (2 to 3 hours, plus an ArcGIS Location Platform account):
+- The same pixels through the licensed path: an API key with the
+  `premium:user:basemaps` privilege, tiles from `ibasemaps-api.arcgis.com`,
+  which answers `Token Required` without one (probed 2026-09-22). The pinned
+  CesiumJS (1.138) loads it natively:
+  `ArcGisMapServerImageryProvider.fromBasemapType(ArcGisBaseMapType.SATELLITE)`
+  with `ArcGisMapService.defaultAccessToken`. The ceiling stays z19, so the
+  composite under the IGN orthophoto and the base's sleep over France
+  (`_syncWorldBaseVisibility`) do not change.
+- The world base follows a key the way `photoreal` does: a configured build
+  gets the licensed layer, a keyless build (every fork) keeps today's
+  endpoint. `src/mapStackController.test.mjs` asserts the keyless URL and
+  moves with it.
+- Price, checked 2026-09-22: 2 million tiles free a month, then $0.15 per
+  1,000, so $150 per extra million. At about 90 tiles a view the free tier
+  covers some 22,000 views, and a view over France costs about one tile since
+  the base sleeps under the IGN layer. The session model (1,000 free, then $4
+  per 1,000) is documented for the Basemap Styles service only; it has not
+  been verified for raw imagery tiles.
+- The key is readable in the browser: restrict it to the surplomb.app
+  referrer, and read on the account what happens past the free tier (service
+  cut or bill) before switching. Check whether Esri's attribution rules for
+  the licensed path add "Powered by Esri" to the on-screen credit.
+- The other options and their prices are in `DATA_SOURCES.md`, *The imagery
+  replacement, if that day comes*.
 
 ---
 
