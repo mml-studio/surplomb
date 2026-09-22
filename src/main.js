@@ -19,7 +19,8 @@ import { LAYER_STATE_REGISTRY } from './data/layerState.js';
 import { LAYER_CATEGORIES, LAYER_TAXONOMY } from './data/layerTaxonomy.js';
 import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
-import { registerDataCredits } from './data/dataCredits.js';
+import { registerDataCredits, withdrawDataCredits } from './data/dataCredits.js';
+import { creditKeysOf, offSourcesFromProbe } from './nonCommercialSources.js';
 import { installLegalLinks } from './legalLinks.js';
 import { modelAssetUrl } from './data/modelAssets.js';
 import { installLazyVoice } from './voice/lazyVoice.js';
@@ -536,6 +537,21 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // Cesium fog or post-process stages and is fully stopped in map mode.
     const weatherEffects = null;
     const cockpitCloudEffects = initCockpitCloudEffects(viewer);
+
+    // The sources this deployment does not use (GEV_NONCOMMERCIAL_SOURCES —
+    // src/nonCommercialSources.js), read from the boot's one `/api/trial`
+    // answer. A clone, or a failed read, changes nothing. Without Open-Meteo
+    // the cockpit loses its WX toggle and weather readings, and the popover
+    // the attribution for data it can no longer show.
+    void trialProbe.read().then((probe) => {
+      const off = offSourcesFromProbe(probe);
+      if (!off.size) return;
+      withdrawDataCredits(viewer, creditKeysOf(off));
+      if (off.has('open-meteo')) {
+        cockpitCloudEffects.setSourceAvailable(false);
+        styleManager.cockpitView?.setWeatherAvailable(false);
+      }
+    });
 
     // The 3D globe, bought on the reader's first close rest rather than on
     // arrival. Installed here because it needs the boot flight: that flight

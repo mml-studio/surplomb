@@ -161,6 +161,15 @@ export function cockpitWeatherEnabledFromStoredValue(value) {
 }
 
 /**
+ * Whether a `/api/weather-effects` answer says this deployment has no weather
+ * source at all (GEV_NONCOMMERCIAL_SOURCES=off, src/nonCommercialSources.js),
+ * as opposed to an observation that is missing for now.
+ */
+export function weatherSourceSwitchedOff(payload) {
+  return payload?.status === 'off';
+}
+
+/**
  * Weather-backed volumetric cloud pass that exists only while cockpit mode is
  * active. It owns no Cesium fog/post-process stages and cannot affect map mode.
  */
@@ -192,6 +201,8 @@ export class CockpitCloudEffectsController {
     this.destroyed = false;
     this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.enabled = this.readEnabledPreference();
+    // False on a deployment without a weather source; see setSourceAvailable.
+    this.sourceAvailable = true;
 
     this.onResize = () => this.resize();
     this.onCockpitMode = (event) => {
@@ -221,8 +232,27 @@ export class CockpitCloudEffectsController {
 
   emitEnabledState() {
     window.dispatchEvent(new CustomEvent('gev:cockpit-weather-state', {
-      detail: { enabled: this.enabled },
+      detail: { enabled: this.enabled, available: this.sourceAvailable },
     }));
+  }
+
+  /**
+   * Whether this deployment has a weather source at all. The page learns it
+   * from `/api/trial` at boot (src/main.js), or from the route's own `off`
+   * answer if that read failed. Unavailable stops the pass and every request
+   * for the rest of the session, and leaves the reader's saved WX preference
+   * alone: it belongs to them, and holds on a deployment that has the source.
+   * @param {boolean} available
+   */
+  setSourceAvailable(available) {
+    const next = available !== false;
+    if (next === this.sourceAvailable) return;
+    this.sourceAvailable = next;
+    if (!next) {
+      this.canvas.dataset.sourceStatus = 'off';
+      this.stop();
+    } else if (this.enabled && document.body.classList.contains('cockpit-mode')) this.start();
+    this.emitEnabledState();
   }
 
   setEnabled(enabled) {
@@ -311,7 +341,7 @@ export class CockpitCloudEffectsController {
   }
 
   start() {
-    if (this.destroyed || !this.enabled || this.frame !== null || this.suspended) return;
+    if (this.destroyed || !this.enabled || !this.sourceAvailable || this.frame !== null || this.suspended) return;
     if (!this.gl) {
       this.initializeRenderer();
       this.resize();
@@ -351,7 +381,7 @@ export class CockpitCloudEffectsController {
   }
 
   async refresh() {
-    if (this.destroyed || !this.enabled || this.pending || this.suspended
+    if (this.destroyed || !this.enabled || !this.sourceAvailable || this.pending || this.suspended
       || !document.body.classList.contains('cockpit-mode')) {
       return this.pending;
     }
@@ -376,6 +406,11 @@ export class CockpitCloudEffectsController {
       .then(async (response) => {
         if (!response.ok) throw new Error(`Cloud weather unavailable (${response.status})`);
         const payload = await response.json();
+        if (weatherSourceSwitchedOff(payload)) {
+          // Not a miss to retry in a second: there is no source to ask.
+          this.setSourceAvailable(false);
+          return null;
+        }
         if (!payload?.weather) throw new Error('Cloud weather observation unavailable');
         this.weather = payload.weather;
         this.fetchedAt = Date.now();
@@ -416,7 +451,8 @@ export class CockpitCloudEffectsController {
   }
 
   tick(timeMs) {
-    if (this.destroyed || !this.enabled || !document.body.classList.contains('cockpit-mode')) {
+    if (this.destroyed || !this.enabled || !this.sourceAvailable
+      || !document.body.classList.contains('cockpit-mode')) {
       this.stop();
       return;
     }
@@ -484,6 +520,7 @@ export class CockpitCloudEffectsController {
   getSnapshot() {
     return {
       enabled: this.enabled,
+      sourceAvailable: this.sourceAvailable,
       active: this.canvas.classList.contains('active'),
       strength: this.targetStrength,
       weather: this.weather ? { ...this.weather } : null,

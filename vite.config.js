@@ -17,6 +17,7 @@
  *  11b. OSM mapped cameras — viewport-bounded, cached camera positions (opt-in)
  *  12. Regional briefing — cached place, weather, and recent location-matched news
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
+ *      (12 and 13 drop Open-Meteo under GEV_NONCOMMERCIAL_SOURCES=off — src/nonCommercialSources.js)
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
  *  16. transport.data.gouv.fr — French GTFS-RT live vehicle positions (PAN)
@@ -88,6 +89,7 @@ import {
   TRIAL_VOICE_TURNS_HEADER,
   voiceTrialSpend,
 } from './src/trialQuota.js';
+import { isSourceOn, sourcesOff } from './src/nonCommercialSources.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import {
   isValidTileCoord as isValidTomTomTile,
@@ -1664,7 +1666,14 @@ function trialQuotaPlugin() {
       // The A/B switch is read per request, never cached: the variable IS the
       // switch, and removing it must stop the test on the next boot of every
       // browser (src/firstRunAb.js).
-      res.end(JSON.stringify(describeTrial(req, trialConfig(), firstRunExperimentFromEnv(process.env))));
+      res.end(JSON.stringify({
+        ...describeTrial(req, trialConfig(), firstRunExperimentFromEnv(process.env)),
+        // The sources this deployment does not use (GEV_NONCOMMERCIAL_SOURCES,
+        // src/nonCommercialSources.js). Carried here because the page already
+        // reads this answer once at boot: a field costs no request, and the
+        // edge in front of the hosted origin counts every `/api` call.
+        sourcesOff: sourcesOff(process.env),
+      }));
     });
   }
   return {
@@ -21517,11 +21526,42 @@ export function regionalBriefHasAnySource({ place, weather, news } = {}) {
   return Boolean(place || weather || (news && news.status !== 'unavailable'));
 }
 
+/**
+ * The `/api/regional-brief` body. `weatherOn: false` is a deployment that does
+ * not use Open-Meteo at all (GEV_NONCOMMERCIAL_SOURCES=off,
+ * src/nonCommercialSources.js): its weather is `off` rather than
+ * `unavailable`, and a brief with a place and news is then complete, not
+ * partial — nothing it was supposed to carry is missing.
+ */
+export function regionalBriefPayload({
+  point,
+  place = null,
+  weather = null,
+  weatherOn = true,
+  news,
+  retrievedAt = new Date().toISOString(),
+}) {
+  const weatherComplete = !weatherOn || Boolean(weather);
+  return {
+    status: place && weatherComplete && news.status !== 'unavailable' ? 'ready' : 'partial',
+    retrievedAt,
+    coordinates: point,
+    place,
+    placeStatus: place ? 'ready' : 'unavailable',
+    weather: weatherOn ? weather : null,
+    weatherStatus: !weatherOn ? 'off' : (weather ? 'ready' : 'unavailable'),
+    newsStatus: news.status,
+    newsQuery: news.query,
+    newsSource: news.source,
+    articles: news.articles,
+  };
+}
+
 function regionalBriefProxy() {
-  async function refresh(point, key) {
+  async function refresh(point, key, weatherOn) {
     const [placeResult, weatherResult] = await Promise.allSettled([
       fetchRegionalPlace(point),
-      fetchRegionalWeather(point),
+      weatherOn ? fetchRegionalWeather(point) : null,
     ]);
     const place = placeResult.status === 'fulfilled' ? placeResult.value : null;
     const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
@@ -21529,19 +21569,7 @@ function regionalBriefProxy() {
     if (!regionalBriefHasAnySource({ place, weather, news })) {
       throw new Error('All regional briefing sources unavailable');
     }
-    const payload = {
-      status: place && weather && news.status !== 'unavailable' ? 'ready' : 'partial',
-      retrievedAt: new Date().toISOString(),
-      coordinates: point,
-      place,
-      placeStatus: place ? 'ready' : 'unavailable',
-      weather,
-      weatherStatus: weather ? 'ready' : 'unavailable',
-      newsStatus: news.status,
-      newsQuery: news.query,
-      newsSource: news.source,
-      articles: news.articles,
-    };
+    const payload = regionalBriefPayload({ point, place, weather, weatherOn, news });
     _regionalBriefCache.set(key, { payload, cachedAt: Date.now() });
     trimRegionalBriefCache();
     return payload;
@@ -21566,7 +21594,11 @@ function regionalBriefProxy() {
         res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
         return;
       }
-      const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
+      // Read per request, and part of the cache key: a brief cached with the
+      // weather in it must never answer a deployment that has switched it off.
+      const weatherOn = isSourceOn('open-meteo', process.env);
+      const cell = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
+      const key = weatherOn ? cell : `${cell}:no-weather`;
       const now = Date.now();
       const cached = _regionalBriefCache.get(key);
       if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_CACHE_MS) {
@@ -21574,7 +21606,7 @@ function regionalBriefProxy() {
         res.end(JSON.stringify({ ...cached.payload, status: 'cached' }));
         return;
       }
-      const request = coalesceProxyRequest(_regionalBriefInFlight, key, () => refresh(point, key));
+      const request = coalesceProxyRequest(_regionalBriefInFlight, key, () => refresh(point, key, weatherOn));
       try {
         const payload = await request.promise;
         res.writeHead(200, {
@@ -22083,6 +22115,13 @@ function keylessGeocodeProxy() {
   };
 }
 
+/** What `/api/weather-effects` answers where Open-Meteo is switched off. */
+export const WEATHER_EFFECTS_OFF_PAYLOAD = Object.freeze({
+  status: 'off',
+  weather: null,
+  reason: 'This deployment does not use Open-Meteo, whose free API is for non-commercial use only.',
+});
+
 function weatherEffectsProxy() {
   async function refresh(point, key) {
     const weather = await fetchRegionalWeather(point);
@@ -22103,6 +22142,20 @@ function weatherEffectsProxy() {
       if (req.method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return;
+      }
+      // A deployment without Open-Meteo (GEV_NONCOMMERCIAL_SOURCES=off) has no
+      // weather to give. It says so in a 200 the page can read — `off` is a
+      // state, not a failure — before the rate limiter and without a fetch,
+      // so a page that asks anyway stops asking instead of retrying a 503
+      // every second (src/cockpitCloudEffects.js).
+      if (!isSourceOn('open-meteo', process.env)) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=300',
+          'X-Weather-Effects': 'OFF',
+        });
+        res.end(JSON.stringify(WEATHER_EFFECTS_OFF_PAYLOAD));
         return;
       }
       if (!_weatherEffectsRateLimiter(clientKey(req))) {
@@ -28152,6 +28205,9 @@ function accessGatePlugin() {
         legal: legalNoticeFromEnv(process.env).complete,
         // Whether the first-run A/B test is collecting (GEV_FIRST_RUN_AB).
         abtest: Boolean(firstRunExperimentFromEnv(process.env)),
+        // The non-commercial sources this deployment has switched off
+        // (GEV_NONCOMMERCIAL_SOURCES). `["open-meteo"]` on a commercial host.
+        sourcesOff: sourcesOff(process.env),
         client: clientKeyFor(req),
       }));
     });

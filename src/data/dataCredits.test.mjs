@@ -26,6 +26,8 @@ import {
   NATURAL_EARTH_CREDIT,
   OSM_CAMERA_CREDIT,
   TOMTOM_CREDIT,
+  registerDataCredits,
+  withdrawDataCredits,
 } from './dataCredits.js';
 
 const SOURCE = readFileSync(fileURLToPath(new URL('./dataCredits.js', import.meta.url)), 'utf8');
@@ -87,4 +89,37 @@ test('the credits lost to this merge shape are present', () => {
   for (const key of ['power-grid-osm', 'bison-fute-events', 'irve-charge-points', 'cadastre-pci']) {
     assert.ok(keys.has(key), `${key} has no attribution entry`);
   }
+});
+
+/** A credit display that keeps what Cesium would show in the popover. */
+function fakeViewer() {
+  const shown = new Set();
+  return {
+    shown,
+    creditDisplay: {
+      addStaticCredit(credit) { shown.add(credit); },
+      removeStaticCredit(credit) { shown.delete(credit); },
+    },
+  };
+}
+
+test('a source the deployment turns off loses its line in the popover, and nothing else does', () => {
+  const viewer = fakeViewer();
+  registerDataCredits(viewer);
+  const before = viewer.shown.size;
+  assert.ok([...viewer.shown].some((credit) => /Open-Meteo/.test(credit.html)));
+
+  assert.deepEqual(withdrawDataCredits(viewer, ['open-meteo']), ['open-meteo']);
+  assert.equal(viewer.shown.size, before - 1);
+  assert.ok(![...viewer.shown].some((credit) => /Open-Meteo/.test(credit.html)));
+
+  // Twice, or for a key that was never registered, is a no-op.
+  assert.deepEqual(withdrawDataCredits(viewer, ['open-meteo', 'no-such-credit']), []);
+  assert.equal(viewer.shown.size, before - 1);
+});
+
+test('withdrawing from a viewer that registered nothing, or none at all, is harmless', () => {
+  assert.deepEqual(withdrawDataCredits(fakeViewer(), ['open-meteo']), []);
+  assert.deepEqual(withdrawDataCredits(null, ['open-meteo']), []);
+  assert.deepEqual(withdrawDataCredits({ creditDisplay: { addStaticCredit() {} } }, ['open-meteo']), []);
 });

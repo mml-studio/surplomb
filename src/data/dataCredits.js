@@ -954,9 +954,17 @@ export function registerDynamicCredit(viewer, credit) {
 }
 
 /**
+ * The static credits each display holds, by key — what `withdrawDataCredits`
+ * needs to hand Cesium back the very object it was given.
+ * @type {WeakMap<object, Map<string, Cesium.Credit>>}
+ */
+const _staticCreditsByDisplay = new WeakMap();
+
+/**
  * Register every per-layer data credit into the viewer's credit display.
  * Idempotent: safe to call once at init. Credits are static and always
- * present in the "Data attribution" popover.
+ * present in the "Data attribution" popover — unless the deployment turns
+ * their source off, see `withdrawDataCredits`.
  * @param {Cesium.Viewer} viewer — the initialized Cesium viewer
  */
 export function registerDataCredits(viewer) {
@@ -968,12 +976,39 @@ export function registerDataCredits(viewer) {
   // added the same source once left `pan-transit` in this list twice, and the
   // popover showed the same attribution line twice. Registering by key makes
   // that class of merge accident invisible to the reader instead of visible.
-  const seen = new Set();
+  const registered = new Map();
   for (const { key, html } of DATA_CREDITS) {
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (registered.has(key)) continue;
     // showOnScreen=false → lives in the expandable "Data attribution" popover,
     // not the on-globe credit line.
-    creditDisplay.addStaticCredit(new Cesium.Credit(html, false));
+    const credit = new Cesium.Credit(html, false);
+    creditDisplay.addStaticCredit(credit);
+    registered.set(key, credit);
   }
+  _staticCreditsByDisplay.set(creditDisplay, registered);
+}
+
+/**
+ * Take static credits back out of the popover, for sources this deployment
+ * does not use (GEV_NONCOMMERCIAL_SOURCES, src/nonCommercialSources.js): an
+ * attribution for data that can never be on screen is not one. Called once the
+ * page has read `/api/trial`, which is after `registerDataCredits` — the
+ * popover is closed at boot, so no reader sees the line come and go.
+ * @param {Cesium.Viewer} viewer — the viewer `registerDataCredits` was given
+ * @param {Iterable<string>} keys — credit keys, e.g. `['open-meteo']`
+ * @returns {string[]} The keys actually withdrawn.
+ */
+export function withdrawDataCredits(viewer, keys) {
+  const creditDisplay = viewer?.creditDisplay;
+  const registered = creditDisplay && _staticCreditsByDisplay.get(creditDisplay);
+  if (!registered || typeof creditDisplay.removeStaticCredit !== 'function') return [];
+  const withdrawn = [];
+  for (const key of keys) {
+    const credit = registered.get(key);
+    if (!credit) continue;
+    creditDisplay.removeStaticCredit(credit);
+    registered.delete(key);
+    withdrawn.push(key);
+  }
+  return withdrawn;
 }

@@ -265,6 +265,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **A commercial deployment can switch off the sources licensed for
+  non-commercial use only, and Open-Meteo is the first.** Open-Meteo's free
+  API terms say “You may only use the free API services for non-commercial
+  purposes”; the hosted site is run by a company. With
+  `GEV_NONCOMMERCIAL_SOURCES=off` in its environment, the server stops asking
+  Open-Meteo, and the cockpit shows no weather: no WX toggle, no cloud pass,
+  and a Local Info page that holds the place and the position under “PLACE /
+  POSITION” — no empty boxes, no Open-Meteo credit. The “Data attribution”
+  popover drops the Open-Meteo line too. Unset, nothing changes: a clone keeps
+  the weather. `/healthz` and `/api/trial` report the sources that are off in
+  `sourcesOff`.
 - **In English, the voice trial no longer calls itself premium.** The mic's
   help line reads “Hosted demo · 3 free spoken requests”, and the card that
   closes the trial says “Voice is capped on this hosted demo” under a

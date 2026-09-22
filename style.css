@@ -4184,6 +4184,17 @@ body.cockpit-mode #view-switcher button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+/* A deployment without a weather source (GEV_NONCOMMERCIAL_SOURCES=off) hides
+   the WX toggle and the Local Info readings. Each rule above sets a display,
+   which beats the user agent's own [hidden]. */
+.cockpit-context-weather[hidden],
+.cockpit-local-grid[hidden],
+.cockpit-weather-credit[hidden] { display: none; }
+/* Without the toggle the footer has two items; a third, empty column would
+   still hold its gap and push the clock off the right edge. */
+.cockpit-context-footer:has(> .cockpit-context-weather[hidden]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 .cockpit-signal-footer {
   display: flex;
   align-items: center;
