@@ -304,6 +304,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - **Per-unit generation asks RTE once an hour.** RTE publishes the figures
   hourly and asks callers to call once an hour; the proxy held them five
   minutes and could ask 288 times a day. It now keeps them 60 minutes.
+- **Doctors' names come from this week's directory, and a doctor can ask to
+  be left out.** The names on the *Médecins (FR)* cards were a copy of the
+  CNAM's Annuaire santé Ameli frozen in the repository at the 2026-08-17
+  edition; they are no longer in the repository at all. The hosted site
+  rebuilds them from the official source every Monday, so a correction made at
+  Ameli reaches the map within a week, and a name on the site's removal list
+  disappears from the next card anyone opens. A copy of Surplomb that has not
+  built the names still draws every practice, count and accessibility figure;
+  its cards say « Noms des praticiens indisponibles sur ce serveur »
+  (“Practitioners' names are not available on this server”). A card opened
+  just as the weekly rebuild lands asks to be reopened instead of guessing.
+  The one practice whose address line was its doctor's nameplate now shows the
+  town instead.
 - **In English, the voice trial no longer calls itself premium.** The mic's
   help line reads “Hosted demo · 3 free spoken requests”, and the card that
   closes the trial says “Voice is capped on this hosted demo” under a

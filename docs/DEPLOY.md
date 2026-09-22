@@ -18,16 +18,16 @@ Two consequences shape everything below:
 ## Deploy your own
 
 `deploy/vps/` holds everything a single Linux box with Docker needs: the
-compose file, a pull-based deploy agent, a health probe, a road-cell warmer and
-their systemd units. The commands below call that box `box` (an `ssh` alias)
+compose file, a pull-based deploy agent, a health probe, a road-cell warmer, a
+weekly rebuild of the doctors' names and their systemd units. The commands below call that box `box` (an `ssh` alias)
 and install into `/opt/gev`, the default `GEV_ROOT` of the scripts.
 
 ```bash
 ssh box 'mkdir -p /opt/gev'
 scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh box:/opt/gev/
-scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} box:/etc/systemd/system/
+scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} deploy/vps/gev-medecins-refresh.{service,timer} box:/etc/systemd/system/
 ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh && chmod 600 /opt/gev/.env'
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer gev-medecins-refresh.timer'
 ```
 
 `/opt/gev/.env` needs at least:
@@ -109,6 +109,8 @@ that predates the access gate.
 | `/opt/gev/state/freshness` | `<head> <base> <behind_by>`, the cached verdict for one pair of shas |
 | `/opt/gev/gev-health-probe.sh` | availability probe (copy of `deploy/vps/gev-health-probe.sh`) |
 | `/opt/gev/src/scripts/warm-road-cells.mjs` | weekly Overpass pre-warm for the ten cities, run by `gev-warm-view.timer` — ships with the source, nothing to copy |
+| volume `gev_gev-cache`, `medecins-fr/pack/` | the doctors' pack with its names, rebuilt every Monday by `gev-medecins-refresh.timer` |
+| volume `gev_gev-cache`, `medecins-fr/suppress.txt` | the doctors who asked not to appear, one per line; never in git |
 | `/opt/gev/state/health.log` | one line per probe, ~7 days |
 
 ### Day to day
@@ -242,8 +244,8 @@ ssh box 'tail -5 /opt/gev/state/health.log'
 
 ## Data packs
 
-Three layers draw from a pack in the container's cache volume rather than from
-an upstream at request time. Two are built on the box; the mobile-coverage
+Four layers draw from a pack in the container's cache volume rather than from
+an upstream at request time. Three are built on the box; the mobile-coverage
 pyramid is built on a workstation and copied there.
 
 ### The 2021 carroyage pack
@@ -360,6 +362,56 @@ modification time changes. The tiles are served from `/tiles/mobile-coverage/`,
 
 The ARCEP publishes a new edition each quarter; rebuild when it does. The
 work directory (`~/gev-couverture` by default) can be deleted afterwards.
+
+### The doctors' names (weekly)
+
+`medecins-fr` draws every practice address from the name-free
+`medecins.json.gz` in git. The **names** on its cards are not in git: the box
+builds them from the CNAM's *Annuaire santé Ameli* into the cache volume, with a
+fresh `medecins.json.gz` beside them, and rebuilds both every Monday, so a
+correction made at Ameli reaches the map within a week. Why, and the file
+formats: `src/data/local_data/medecins_fr/README.md`.
+
+```bash
+scp deploy/vps/gev-medecins-refresh.{service,timer} box:/etc/systemd/system/
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-medecins-refresh.timer'
+ssh box 'systemctl start --no-block gev-medecins-refresh.service'   # build now
+ssh box 'journalctl -u gev-medecins-refresh -n 30'                   # how it went
+curl -s https://<your-host>/api/medecins-fr/status | jq '{origin, edition, names, suppressionEntries}'
+```
+
+`origin: "runtime"` and `names.available: true` is the healthy answer; `edition`
+is the Ameli publication the names come from. `origin: "repository"` means no
+build has landed yet: the layer draws, and its cards say the names are not
+available on this server. Nothing else to do after a build — the proxy re-checks
+the pair once a minute, and sits a rebuild out on the pair it already has until
+both files are in place.
+
+The build runs like the amenity pack's: a **throwaway container off the running
+image**, with the volume mounted and a memory budget of its own, never
+`docker exec gev`. Measured on 2026-09-22 against the 2026-09-21 edition: a full
+`--refresh` build takes **6 min 21 s**, nearly all of it waiting on the BAN;
+its heap dies at 1280 MB and finishes at 1536 MB (1.76 GB peak footprint), so
+the unit gives it `--max-old-space-size=2048` inside a **2560m** container,
+where a full run peaked at 1.95 GB — check `free -m` if the box is short. It downloads 214 MB (the register alone is
+159 MB) and sends 64,691 addresses to the BAN in 8,000-row batches. A failed
+run writes nothing and the previous pair keeps serving. The build keeps only
+the current edition of each downloaded register file.
+
+**An objection is one line.** When a doctor asks not to appear, append the name
+as the directory spells it (optionally `; <postal-code prefix>`) to the
+suppression list in the volume:
+
+```bash
+ssh box 'docker exec gev sh -c "echo \"SURNAME FIRSTNAME ; 75011\" >> /app/.gev-cache/medecins-fr/suppress.txt"'
+```
+
+The proxy reads the file again on the next card anyone opens, and the next
+weekly build leaves the entry out of the names file too. The list never goes
+into git — it names exactly the people who asked not to be named. A list that
+exists but cannot be read hides every name until it is fixed.
+`GEV_MEDECINS_SUPPRESS` and `GEV_MEDECINS_PACK_DIR` move the list and the pair
+elsewhere, for a self-hosted instance that keeps its data outside the volume.
 
 ## Road data: Overpass
 

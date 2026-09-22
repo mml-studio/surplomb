@@ -1,0 +1,33 @@
+[Unit]
+Description=Surplomb — rebuild the doctors pack from this week's Annuaire santé Ameli
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# A THROWAWAY CONTAINER off the running image, with the cache volume mounted —
+# the same shape as the amenity pack in docs/DEPLOY.md, for the same reason:
+# `docker exec gev` would share the live container's 1 GiB cgroup, and the
+# build holds the whole register in memory. It writes medecins.json.gz and
+# praticiens.jsonl.gz into /app/.gev-cache/medecins-fr/pack/, the pack first,
+# each renamed into place; the live proxy picks the pair up within a minute.
+# A build that fails writes nothing, and the previous pair keeps serving.
+#
+# --refresh, because the weekly edition is the point: without it the FINESS
+# file and the commune list are reused from the first run forever.
+#
+# 2048 is the heap floor with room, not a round number. Measured 2026-09-22 on
+# the 156 MB register of 2026-09-21: 1280 dies of `Ineffective mark-compacts
+# near heap limit` while the register is read, 1536 finishes at 1.76 GB peak
+# footprint, and a full --refresh run at 2048 peaked at 1.95 GB. 2560m around
+# it leaves the runtime and the download buffers their own share. Check
+# `free -m` first on a box shared with a database.
+ExecStart=/usr/bin/docker run --rm --name gev-medecins-refresh \
+  -m 2560m --memory-swap 2560m \
+  -e NODE_OPTIONS=--max-old-space-size=2048 \
+  -v gev_gev-cache:/app/.gev-cache \
+  gev:staging node scripts/build-medecins-fr.mjs --refresh
+# Measured 6 min 21 s for a full run, nearly all of it waiting on the BAN; an
+# hour is the point past which BAN or data.gouv.fr is stuck rather than slow.
+TimeoutStartSec=3600
