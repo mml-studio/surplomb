@@ -1,10 +1,12 @@
 // One read of `/api/trial` per page, shared.
 //
-// Two boot-time readers want the same answer: the voice crown
-// (src/voicePremium.js) and, when the hosted A/B test runs, the first-run card
+// Three boot-time readers want the same answer: the voice crown
+// (src/voicePremium.js); when the hosted A/B test runs, the first-run card
 // (src/firstRunAb.js) — which has to know whether the test is on BEFORE it
-// shows anything. One request serves both: the edge in front of the hosted
-// origin counts `/api` calls per address, and a boot already makes about six.
+// shows anything; and the list of sources the deployment switched off
+// (`sourcesOff`, src/nonCommercialSources.js, read in src/main.js). One request
+// serves all three: the edge in front of the hosted origin counts `/api` calls
+// per address, and a boot already makes about six.
 //
 // The probe starts early (src/main.js) and never rejects: a failed or absent
 // endpoint reads as `null`, which every caller already treats as "no trial, no

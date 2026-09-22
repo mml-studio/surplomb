@@ -35,6 +35,16 @@ export default defineMessages({
       localKicker: { fr: 'INFOS LOCALES', en: 'LOCAL INFO' },
       localSubtitle: { fr: 'LIEU / CONDITIONS / POSITION', en: 'PLACE / CONDITIONS / POSITION' },
       localSource: { fr: 'OPENSTREETMAP · OPEN-METEO · UTC', en: 'OPENSTREETMAP · OPEN-METEO · UTC' },
+      localSubtitlePlaceOnly: {
+        fr: 'LIEU / POSITION',
+        en: 'PLACE / POSITION',
+        note: 'Local Info page on a deployment without a weather source (GEV_NONCOMMERCIAL_SOURCES=off).',
+      },
+      localSourcePlaceOnly: {
+        fr: 'OPENSTREETMAP · UTC',
+        en: 'OPENSTREETMAP · UTC',
+        note: 'Source line of the same page: the place comes from OpenStreetMap, the time is UTC.',
+      },
       newsAcquiring: { fr: 'RÉCUPÉRATION DES ACTUALITÉS RÉGIONALES', en: 'ACQUIRING REGIONAL NEWS' },
       newsUnavailable: { fr: 'ACTUALITÉS RÉGIONALES INDISPONIBLES', en: 'REGIONAL NEWS UNAVAILABLE' },
       newsNoMatch: { fr: 'AUCUN ARTICLE RÉCENT SITUÉ ICI', en: 'NO RECENT LOCATION MATCHES' },

@@ -870,3 +870,33 @@ test('cockpit state cannot report entryAllowed while already active', () => {
   assert.match(state, /'contacts-inactive'/);
   assert.match(state, /'no-tracked-aircraft'/);
 });
+
+test('a deployment without a weather source can hide every weather surface of the cockpit', () => {
+  // GEV_NONCOMMERCIAL_SOURCES=off (src/nonCommercialSources.js). The three
+  // elements setWeatherAvailable(false) hides must exist under the ids it
+  // looks up, or it hides nothing and the reader gets a dead toggle and four
+  // boxes that say "—".
+  for (const id of ['cockpit-weather-toggle', 'cockpit-local-weather', 'cockpit-local-credit']) {
+    assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, `#${id} must have one DOM owner`);
+    assert.match(ui, new RegExp(`getElementById\\('${id}'\\)`), `ui.js must look #${id} up`);
+  }
+  assert.match(html, /id="cockpit-local-weather" class="cockpit-local-grid"/);
+  assert.match(html, /id="cockpit-local-credit" class="cockpit-weather-credit"/);
+  // Each of the three sets a display that beats the user agent's [hidden].
+  for (const selector of ['.cockpit-context-weather', '.cockpit-local-grid', '.cockpit-weather-credit']) {
+    assert.match(css, new RegExp(`\\${selector} \\{[\\s\\S]*?display:`), `${selector} sets a display`);
+    assert.match(
+      css,
+      new RegExp(`\\${selector}\\[hidden\\][^{]*\\{[^}]*display: none;`),
+      `${selector}[hidden] must be restated as display: none`,
+    );
+  }
+
+  const setter = ui.slice(ui.indexOf('  setWeatherAvailable(available) {'), ui.indexOf('  syncWeatherToggle(enabled) {'));
+  assert.match(setter, /this\.weatherToggle\.hidden = true/);
+  assert.match(setter, /this\.localWeather\.hidden = true/);
+  assert.match(setter, /this\.localWeatherCredit\.hidden = true/);
+  // Both ways the page can learn it: the boot probe, and the routes' `off`.
+  assert.match(ui, /if \(payload\?\.weatherStatus === 'off'\) this\.setWeatherAvailable\(false\);/);
+  assert.match(ui, /if \(event\?\.detail\?\.available === false\) this\.setWeatherAvailable\(false\);/);
+});

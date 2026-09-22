@@ -371,6 +371,10 @@ const COCKPIT_BRIEF_PAGES = [
     get kicker() { return messages().cockpit.brief.localKicker; },
     get subtitle() { return messages().cockpit.brief.localSubtitle; },
     get source() { return messages().cockpit.brief.localSource; },
+    // On a deployment without a weather source (GEV_NONCOMMERCIAL_SOURCES=off)
+    // the page is the place and the position, and says so.
+    get subtitleWithoutWeather() { return messages().cockpit.brief.localSubtitlePlaceOnly; },
+    get sourceWithoutWeather() { return messages().cockpit.brief.localSourcePlaceOnly; },
   },
 ];
 /**
@@ -916,6 +920,10 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.localWeather = document.getElementById('cockpit-local-weather');
+    this.localWeatherCredit = document.getElementById('cockpit-local-credit');
+    // False on a deployment that does not use Open-Meteo; see setWeatherAvailable.
+    this.weatherAvailable = true;
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
     this.signalItems = [];
@@ -976,6 +984,7 @@ class CockpitViewController {
       }));
     });
     this._listen(window, 'gev:cockpit-weather-state', (event) => {
+      if (event?.detail?.available === false) this.setWeatherAvailable(false);
       this.syncWeatherToggle(event?.detail?.enabled !== false);
     });
     this._listen(this.signalToggle, 'click', () => this.setSignalCollapsed(
@@ -1012,6 +1021,25 @@ class CockpitViewController {
     if (!target?.addEventListener) return;
     target.addEventListener(type, handler, options);
     this._listenerRemovers.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  /**
+   * Whether this deployment has a weather source. Unavailable
+   * (GEV_NONCOMMERCIAL_SOURCES=off — src/nonCommercialSources.js) hides the WX
+   * toggle, the four weather readings of the Local Info page and their
+   * Open-Meteo credit, rather than leaving a control that does nothing and
+   * boxes that say "—". Learned from `/api/trial` at boot (src/main.js), or
+   * from a route that answers `off`. One-way for the session.
+   * @param {boolean} available
+   */
+  setWeatherAvailable(available) {
+    if (available !== false || !this.weatherAvailable) return;
+    this.weatherAvailable = false;
+    if (this.weatherToggle) this.weatherToggle.hidden = true;
+    if (this.localWeather) this.localWeather.hidden = true;
+    if (this.localWeatherCredit) this.localWeatherCredit.hidden = true;
+    if (COCKPIT_BRIEF_PAGES[this.briefPageIndex]?.id === 'local') this.showBriefPage(this.briefPageIndex);
+    this.scheduleContextLayout();
   }
 
   syncWeatherToggle(enabled) {
@@ -1905,9 +1933,10 @@ class CockpitViewController {
       const indicator = this.briefKicker.querySelector('i');
       this.briefKicker.replaceChildren(...[indicator, document.createTextNode(` ${page.kicker}`)].filter(Boolean));
     }
-    if (this.briefSubtitle) this.briefSubtitle.textContent = page.subtitle;
+    const withoutWeather = !this.weatherAvailable && page.subtitleWithoutWeather;
+    if (this.briefSubtitle) this.briefSubtitle.textContent = withoutWeather ? page.subtitleWithoutWeather : page.subtitle;
     if (this.briefPosition) this.briefPosition.textContent = `${this.briefPageIndex + 1} / ${count}`;
-    if (this.briefSource) this.briefSource.textContent = page.source;
+    if (this.briefSource) this.briefSource.textContent = withoutWeather ? page.sourceWithoutWeather : page.source;
     if (this.signalStream) this.signalStream.dataset.briefPage = page.id;
     if (manual && this.briefAutoRotateEnabled) this.startBriefRotation({ reset: true });
     this.scheduleContextLayout();
@@ -2051,6 +2080,7 @@ class CockpitViewController {
     const placeLabel = payload?.place?.label || payload?.place?.country || m.regionUnavailable;
     if (this.localPlace) this.localPlace.textContent = placeLabel.toUpperCase();
     this.updateLocalPosition(info);
+    if (payload?.weatherStatus === 'off') this.setWeatherAvailable(false);
     const weather = payload?.weather;
     if (this.localTemperature) {
       this.localTemperature.textContent = Number.isFinite(weather?.temperatureC)

@@ -4,6 +4,7 @@ import {
   cockpitCloudRenderSize,
   cockpitWeatherRefreshDue,
   cockpitWeatherEnabledFromStoredValue,
+  weatherSourceSwitchedOff,
 } from './cockpitCloudEffects.js';
 
 test('cockpit cloud framebuffer stays low resolution on large displays', () => {
@@ -53,4 +54,11 @@ test('cockpit weather refreshes after time or meaningful movement', () => {
     point: { latitude: 30.3, longitude: -97 },
     hasWeather: true,
   }), true);
+});
+
+test('only the route\'s explicit `off` stops the cloud pass for good; a miss is retried', () => {
+  assert.equal(weatherSourceSwitchedOff({ status: 'off', weather: null }), true);
+  for (const payload of [null, undefined, {}, { status: 'ready', weather: {} }, { status: 'stale' }, { error: 'x' }]) {
+    assert.equal(weatherSourceSwitchedOff(payload), false, JSON.stringify(payload));
+  }
 });
