@@ -19,6 +19,7 @@
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
  *      (12 and 13 drop Open-Meteo, and 12 Google News, under GEV_NONCOMMERCIAL_SOURCES=off
  *      — src/nonCommercialSources.js)
+ *  13b. Submarine cables — the TeleGeography map from the checkout, refused under the same switch
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
  *  16. transport.data.gouv.fr — French GTFS-RT live vehicle positions (PAN)
@@ -111,6 +112,11 @@ import {
   mergeCellSnapshots,
   regionalSnapshot,
 } from './src/adsbLolFeed.js';
+import {
+  SUBMARINE_CABLE_DATA_DIR,
+  SUBMARINE_CABLE_FILES,
+  SUBMARINE_CABLE_ROUTE,
+} from './src/data/submarineCableFiles.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import { UpstreamBusyError, createUpstreamPacing } from './src/upstreamPacing.js';
 import {
@@ -22641,6 +22647,139 @@ function keylessGeocodeProxy() {
   };
 }
 
+/** What `/api/submarine-cables/*` answers where the TeleGeography map is switched off. */
+export const SUBMARINE_CABLES_OFF_PAYLOAD = Object.freeze({
+  status: 'off',
+  error: 'This deployment does not serve the TeleGeography cable map, which is licensed for non-commercial use only (CC BY-NC-SA 3.0).',
+});
+
+/**
+ * Vite plugin: the TeleGeography cable map, served from the checkout.
+ *
+ *   GET /api/submarine-cables/cable-geo.json          — 712 cable routes
+ *   GET /api/submarine-cables/landing-point-geo.json  — 1,917 landing points
+ *
+ * WHY THIS EXISTS. The files were a bundled asset, so every build copied them
+ * into `dist/assets/` and the static server gave them to anyone — including
+ * surplomb.app, a commercial deployment serving CC BY-NC-SA data. Here the
+ * server decides per request: where GEV_NONCOMMERCIAL_SOURCES=off
+ * (src/nonCommercialSources.js) it answers 404 with `X-Source-Off:
+ * telegeography` and never reads the file; elsewhere it serves the checkout's
+ * copy, which needs no network and no key, exactly as the bundle did.
+ *
+ * WHAT IT COSTS. The bundle went out pre-compressed with the rest of `dist/`
+ * (brotli, 168 kB for the 728 kB cable file). The route keeps that: each file
+ * is read and compressed once per process, on the first request — gzip at
+ * once, brotli (quality 11, ~3 s on the threadpool for the cable file) in the
+ * background, served from the next request on. `private` keeps shared caches
+ * out, so turning the switch off is not undone by an edge still holding a copy;
+ * the ETag lets a browser revalidate for nothing.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function submarineCablesProxy() {
+  const dir = path.join(__dirname, ...SUBMARINE_CABLE_DATA_DIR);
+  const files = new Set(Object.values(SUBMARINE_CABLE_FILES));
+  /** @type {Map<string, Promise<{raw: Buffer, gzip: Buffer, br: ?Buffer, etag: string}>>} */
+  const prepared = new Map();
+
+  function prepare(file) {
+    let pending = prepared.get(file);
+    if (!pending) {
+      pending = fsp.readFile(path.join(dir, file)).then(async (raw) => {
+        const item = {
+          raw,
+          gzip: await new Promise((resolve, reject) => {
+            zlib.gzip(raw, { level: 9 }, (error, out) => (error ? reject(error) : resolve(out)));
+          }),
+          br: null,
+          etag: `"${createHash('sha1').update(raw).digest('base64url').slice(0, 20)}"`,
+        };
+        zlib.brotliCompress(raw, {
+          params: {
+            [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+          },
+        }, (error, out) => { if (!error) item.br = out; });
+        return item;
+      });
+      // A missing file (a checkout that deleted the folder, as its README
+      // allows) is asked again next time rather than cached as a failure.
+      pending.catch(() => prepared.delete(file));
+      prepared.set(file, pending);
+    }
+    return pending;
+  }
+
+  function install(middlewares) {
+    middlewares.use(SUBMARINE_CABLE_ROUTE, async (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'GET, HEAD' });
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return;
+      }
+      const file = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/+/, '');
+      if (!files.has(file)) {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+        return;
+      }
+      // Read per request, before the file is touched: where it is off, the
+      // bytes never leave the disk.
+      if (!isSourceOn('telegeography', process.env)) {
+        res.writeHead(404, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'X-Source-Off': 'telegeography',
+        });
+        res.end(JSON.stringify(SUBMARINE_CABLES_OFF_PAYLOAD));
+        return;
+      }
+      let item;
+      try {
+        item = await prepare(file);
+      } catch {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'The TeleGeography files are not in this checkout' }));
+        return;
+      }
+      const headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, max-age=86400',
+        ETag: item.etag,
+        Vary: 'Accept-Encoding',
+      };
+      if (req.headers?.['if-none-match'] === item.etag) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+      }
+      const accept = String(req.headers?.['accept-encoding'] || '');
+      let body = item.raw;
+      if (item.br && acceptsBrotli(accept)) {
+        body = item.br;
+        headers['Content-Encoding'] = 'br';
+      } else if (/\bgzip\b/.test(accept)) {
+        body = item.gzip;
+        headers['Content-Encoding'] = 'gzip';
+      }
+      headers['Content-Length'] = String(body.length);
+      res.writeHead(200, headers);
+      res.end(req.method === 'HEAD' ? undefined : body);
+    });
+  }
+
+  return {
+    name: 'submarine-cables',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
+}
+
 /** What `/api/weather-effects` answers where Open-Meteo is switched off. */
 export const WEATHER_EFFECTS_OFF_PAYLOAD = Object.freeze({
   status: 'off',
@@ -30100,6 +30239,7 @@ export default defineConfig(({ mode, command }) => {
       osmCamerasProxy(),
       regionalBriefProxy(),
       weatherEffectsProxy(),
+      submarineCablesProxy(),
       cctvProxy(),
       radioBrowserProxy(),
       gbfsProxy(),
