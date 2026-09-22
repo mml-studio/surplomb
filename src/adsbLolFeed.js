@@ -45,8 +45,20 @@ export const ADSBLOL_WANT_TTL_MS = 75_000;
 /** Pause after a 429 in spite of the pacing. */
 export const ADSBLOL_429_PAUSE_MS = 60_000;
 
-/** An answer older than this is dropped rather than drawn. */
+/**
+ * An answer older than this is never drawn: it is what is left when adsb.lol
+ * has been unreachable that long.
+ */
 export const ADSBLOL_RECORD_MAX_AGE_MS = 10 * 60_000;
+
+/**
+ * An answer older than this — or than one and a half rounds of the queue,
+ * whichever is longer — was not being refreshed: the queue went idle because
+ * nobody was looking. The first request after that waits for a fresh answer
+ * (under a second when the queue is idle) rather than open on a map several
+ * minutes old, and falls back to the old one only if the fresh one fails.
+ */
+export const ADSBLOL_SERVE_MIN_AGE_MS = 150_000;
 
 /** Upstream request timeout. */
 export const ADSBLOL_TIMEOUT_MS = 10_000;
@@ -324,6 +336,10 @@ export function createAdsbLolScheduler({
       const job = jobs.get(key);
       if (job) { job.lat = lat; job.lon = lon; }
     },
+    /** The oldest answer still worth serving without first asking for a new one. */
+    maxServeAgeMs() {
+      return Math.max(ADSBLOL_SERVE_MIN_AGE_MS, 1.5 * this.roundSeconds() * 1000);
+    },
     /** How many jobs are being refreshed now: one of each per this many seconds. */
     roundSeconds() {
       const t = now();
@@ -366,19 +382,25 @@ export async function franceSnapshot(scheduler, anchor, { waitMs = 25_000, now =
   for (const cell of FRANCE_CELLS) {
     scheduler.want(cell.key, { url: pointUrl(cell.lat, cell.lon), parse: parsePointAnswer, pinned: true });
   }
-  const fresh = () => FRANCE_CELLS
+  const within = (maxAgeMs) => FRANCE_CELLS
     .map((cell) => scheduler.record(cell.key))
-    .filter((record) => record && now() - record.fetchedAt <= ADSBLOL_RECORD_MAX_AGE_MS);
+    .filter((record) => record && now() - record.fetchedAt <= maxAgeMs);
+  const fresh = () => within(scheduler.maxServeAgeMs());
   let records = fresh();
   if (!records.length) {
-    // Nothing yet: wait for the circle nearest the view, which the queue
-    // serves first because somebody is waiting on it.
+    // Nothing yet, or nothing refreshed since the queue went idle: wait for
+    // the circle nearest the view, which the queue serves first because
+    // somebody is waiting on it. The other three follow one per slot; until
+    // then France fills in, rather than opening on a map minutes old.
     const nearest = [...FRANCE_CELLS].sort((a, b) => (
       distanceKm(anchor?.lat ?? 46.5, anchor?.lon ?? 2.5, a.lat, a.lon)
       - distanceKm(anchor?.lat ?? 46.5, anchor?.lon ?? 2.5, b.lat, b.lon)
     ))[0];
     await scheduler.next(nearest.key, waitMs);
     records = fresh();
+    // adsb.lol not answering: the last circles it gave, up to ten minutes
+    // old, which the page labels by their age.
+    if (!records.length) records = within(ADSBLOL_RECORD_MAX_AGE_MS);
   }
   if (!records.length) return null;
   const merged = mergeCellSnapshots(records);
@@ -415,7 +437,7 @@ export async function regionalSnapshot(scheduler, anchor, { waitMs = 25_000, now
   const url = centre ? pointUrl(centre.lat, centre.lon) : null;
   let record = scheduler.want(key, { url, parse: parsePointAnswer });
   if (centre) scheduler.locate(key, centre.lat, centre.lon);
-  if (!record || now() - record.fetchedAt > ADSBLOL_RECORD_MAX_AGE_MS) {
+  if (!record || now() - record.fetchedAt > scheduler.maxServeAgeMs()) {
     record = await scheduler.next(key, waitMs);
   }
   if (!record || now() - record.fetchedAt > ADSBLOL_RECORD_MAX_AGE_MS) return null;

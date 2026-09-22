@@ -227,6 +227,42 @@ test('France from cold: the circle nearest the view first, then all four merged 
   assert.equal(warm.roundSeconds, 80);
 });
 
+test('after the queue went idle, France reopens on a fresh circle, not on a map minutes old', async () => {
+  const clock = fakeClock();
+  let down = false;
+  const fetchImpl = fakeAdsbLol(clock, { status: () => (down ? 502 : 200) });
+  const feed = scheduler(clock, fetchImpl);
+  const view = { lat: 48.86, lon: 2.35 };
+  const warming = franceSnapshot(feed, view, { now: clock.now });
+  await clock.advance(1);
+  await warming;
+  for (let i = 0; i < 3; i += 1) {
+    await clock.advance(ADSBLOL_MIN_GAP_MS);
+    await franceSnapshot(feed, view, { now: clock.now });
+  }
+  assert.equal((await franceSnapshot(feed, view, { now: clock.now })).cells, 4);
+  // Nobody looks for five minutes: the queue stops, the answers age.
+  await clock.advance(5 * 60_000);
+  const departures = fetchImpl.calls.length;
+  const reopened = franceSnapshot(feed, view, { now: clock.now });
+  await clock.advance(1);
+  const answer = await reopened;
+  assert.equal(fetchImpl.calls.length, departures + 1, 'one fresh circle asked for at once');
+  assert.equal(answer.cells, 1, 'the fresh one only; the three old ones follow one per slot');
+  // And if adsb.lol does not answer then, the old map is better than none: the
+  // four circles the queue refreshed while it was still wanted, 3.5-5 min old.
+  await clock.advance(5 * 60_000);
+  down = true;
+  const fallback = franceSnapshot(feed, view, { now: clock.now, waitMs: 25_000 });
+  await clock.advance(25_001);
+  assert.equal((await fallback)?.cells, 4, 'the last answers under ten minutes old');
+  // Past ten minutes, nothing.
+  await clock.advance(10 * 60_000);
+  const nothing = franceSnapshot(feed, view, { now: clock.now, waitMs: 25_000 });
+  await clock.advance(25_001);
+  assert.equal(await nothing, null);
+});
+
 test('France with adsb.lol down: null after the bounded wait, and nothing drawn from nothing', async () => {
   const clock = fakeClock();
   const feed = scheduler(clock, fakeAdsbLol(clock, { status: () => 502 }));
