@@ -22,6 +22,11 @@ services:
         # what you get, which is correct for a deployment behind a password.
         GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_BROWSER_KEY:-${GOOGLE_MAPS_API_KEY:-}}
         CESIUM_ION_TOKEN: ${CESIUM_ION_TOKEN:-}
+        # The world satellite base through ArcGIS Location Platform. Public by
+        # design, like the Google browser key: restricted to this site's
+        # referrers and to the basemap privilege (docs/DEPLOY.md). Unset, the
+        # base is Sentinel-2 wherever GEV_NONCOMMERCIAL_SOURCES=off.
+        ARCGIS_API_KEY: ${ARCGIS_API_KEY:-}
         # The one absolute URL in the bundle: the social card's image. Unset,
         # the build uses the public hostname (`SOCIAL_ORIGIN_DEFAULT`), which is
         # correct here — this box also answers on the staging name, and a card

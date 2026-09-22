@@ -21,6 +21,11 @@ import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
 import { registerDataCredits, withdrawDataCredits } from './data/dataCredits.js';
 import { creditKeysOf, offSourcesFromProbe } from './nonCommercialSources.js';
+import {
+  WORLD_BASE_PROBE_WAIT_MS,
+  anonymousEsriAllowedByProbe,
+  unusedWorldImageryCreditKeys,
+} from './data/worldImagery.js';
 import { installLegalLinks } from './legalLinks.js';
 import { modelAssetUrl } from './data/modelAssets.js';
 import { installLazyVoice } from './voice/lazyVoice.js';
@@ -148,6 +153,13 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     if (cesiumToken) {
       Cesium.Ion.defaultAccessToken = cesiumToken;
     }
+
+    // ArcGIS Location Platform key for the world satellite base under the
+    // Satellite stack. OPTIONAL: without it the base is the anonymous Esri
+    // endpoint where the deployment allows it, Sentinel-2 elsewhere — see
+    // src/data/worldImagery.js. Public by design, like the Google browser key:
+    // it is restricted by referrer and to the basemap privilege.
+    const arcgisApiKey = String(import.meta.env.ARCGIS_API_KEY || '').trim();
 
     // Google Maps API key for Photorealistic 3D Tiles. OPTIONAL: a missing key
     // is a supported configuration (the keyless build), not a fatal error.
@@ -286,6 +298,9 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // expandable bottom-left credit lightbox (showOnScreen=false), so they never
     // clutter the on-globe attribution line.
     registerDataCredits(viewer);
+    // One of the two Esri paths can never be drawn by this build, so it is not
+    // credited either.
+    withdrawDataCredits(viewer, unusedWorldImageryCreditKeys(arcgisApiKey));
     installLegalLinks(document.getElementById('cesium-credits'));
 
     // Hide Cesium's default globe — Google Photorealistic 3D Tiles provide their own
@@ -480,6 +495,7 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
       googleKeyConfigured: !keylessMode,
       ignTerrainSpike,
       initialStack: startupStack,
+      arcgisApiKey,
       // Task 5 (height-datum fix): rebroadcast stack changes as a window
       // CustomEvent so data layers (CCTV per-regime ground resolution) can
       // react without coupling MapStackController to layer modules. Fires on
@@ -507,6 +523,17 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     const bootStack = requestedStack && mapStackController.isStackAvailable(requestedStack)
       ? requestedStack
       : mapStackController.getActiveId();
+    // The satellite stack's world base must know, before its first tile,
+    // whether this deployment may ask the anonymous Esri endpoint: the browser
+    // fetches those tiles itself, so nothing downstream could take a request
+    // back. The probe started at the top of this function and has usually
+    // answered by now; the wait is bounded, and a late answer is still applied
+    // below, swapping the base in place. A build with an ArcGIS key does not
+    // ask that endpoint at all, and does not wait.
+    if (!arcgisApiKey && bootStack === 'ign-ortho') {
+      const probe = await trialProbe.within(WORLD_BASE_PROBE_WAIT_MS);
+      mapStackController.setAnonymousEsriAllowed(anonymousEsriAllowedByProbe(probe));
+    }
     await mapStackController.setStack(bootStack, { silent: true });
     // Same bookkeeping as an adoption, so the next visit opens on the globe
     // this one ended on.
@@ -544,6 +571,9 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // the cockpit loses its WX toggle and weather readings, and the popover
     // the attribution for data it can no longer show.
     void trialProbe.read().then((probe) => {
+      // Before the early return: on a clone this is what opens the anonymous
+      // Esri endpoint, and it waits for this answer like everything else.
+      mapStackController.setAnonymousEsriAllowed(anonymousEsriAllowedByProbe(probe));
       const off = offSourcesFromProbe(probe);
       if (!off.size) return;
       withdrawDataCredits(viewer, creditKeysOf(off));

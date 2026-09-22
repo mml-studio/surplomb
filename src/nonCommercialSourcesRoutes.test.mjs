@@ -111,8 +111,8 @@ test('off: the regional brief keeps its place and news, and never asks Open-Mete
 
 test('off: /api/trial and /healthz both say which sources are off', async () => {
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
-  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ['open-meteo']);
-  assert.deepEqual((await call('/healthz')).body.sourcesOff, ['open-meteo']);
+  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ['open-meteo', 'esri-world-imagery']);
+  assert.deepEqual((await call('/healthz')).body.sourcesOff, ['open-meteo', 'esri-world-imagery']);
 });
 
 test('unset: a clone is unchanged — both routes use Open-Meteo, and nothing is reported off', async () => {

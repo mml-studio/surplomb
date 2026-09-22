@@ -21,14 +21,15 @@ The golden rule: **secret-bearing API keys stay on the server side.** The dev/pr
 | `AISSTREAM_API_KEY` | Server only | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache |
 | OpenSky OAuth (`OPENSKY_CLIENT_ID/SECRET`) | Server only | Server mints + refreshes the token behind `/api/opensky` |
 
-### Two deliberately client-side keys — restrict them
+### Three deliberately client-side keys — restrict them
 
 These are designed to be used directly in the browser (like a Mapbox public token). They are injected into the client bundle via Vite's `define`, so they **will** be visible in browser devtools. Scope and restrict them rather than trying to hide them:
 
 1. **Google Maps API key** — loads the Photorealistic 3D Tiles in the browser. **Restrict it** (HTTP referrer + API restriction to the Map Tiles API) in the Google Cloud Console. An unrestricted key in a public deployment can be abused and billed to you.
 2. **Cesium ion token** (`CESIUM_ION_TOKEN`, optional — only for the Bing world-imagery map stacks) — used as `Cesium.Ion.defaultAccessToken` client-side. Use a public **`assets:read`** token with **URL restrictions** for any hosted deployment.
+3. **ArcGIS Location Platform API key** (`ARCGIS_API_KEY`, optional — the world satellite base under the Satellite stack) — sent as the `token` of each World Imagery tile. Create it as a **public application** key with the **Basemaps** privilege only and **referrers** set to your hostnames; tiles past the free tier are billed to the account. Steps in [docs/DEPLOY.md](docs/DEPLOY.md).
 
-> The Vite `define` block in `vite.config.js` controls exactly what reaches the client: only these two keys plus two non-secret CCTV feature flags. Everything else stays server-side.
+> The Vite `define` block in `vite.config.js` controls exactly what reaches the client: only these three keys plus two non-secret CCTV feature flags. Everything else stays server-side.
 
 Never commit real keys. `.env` is gitignored; only `.env.example` (placeholder names) is tracked. On macOS the launcher reads keys from the Keychain; on other platforms use env vars or a local `.env`.
 
