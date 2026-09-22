@@ -49,6 +49,7 @@
 
 import fs from 'node:fs';
 import { promises as fsp } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -91,11 +92,13 @@ import {
 } from './src/trialQuota.js';
 import { isSourceOn, sourcesOff } from './src/nonCommercialSources.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
+import { UpstreamBusyError, createUpstreamPacing } from './src/upstreamPacing.js';
 import {
   isValidTileCoord as isValidTomTomTile,
   utcDayKey as tomtomUtcDayKey,
   normalizeBudget as normalizeTomTomBudget,
   isOverBudget as isTomTomOverBudget,
+  dailyTileBudget as tomtomDailyTileBudget,
   secondsToUtcMidnight,
 } from './src/data/tomtomTiles.js';
 import {
@@ -1514,6 +1517,131 @@ function makeRateLimiter({ windowMs, max, globalMax }) {
 const _overpassRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 90, globalMax: 300 });
 const _militaryInstallationsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 90, globalMax: 300 });
 const _routeRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 60, globalMax: 200 });
+
+/**
+ * Pacing for the upstreams that publish a per-IP ceiling: Géorisques, the
+ * Géoplateforme isochrone, WFS and geocoder (API Adresse included), INSEE
+ * Melodi, Nominatim and the FOSSGIS OSRM servers. The table, its sources and
+ * the reasons live in `src/upstreamPacing.js`.
+ *
+ * The limiters just above cannot do this job. They count ONE visitor's
+ * requests over a minute and refuse the excess; the published ceilings count
+ * EVERY visitor's requests over a second, because on the hosted site they all
+ * leave from one address. So there is one pacer per upstream for the whole
+ * process, and every route that reaches the same service queues in the same
+ * line — the Nominatim queue that used to sit next to the regional brief is
+ * now simply this module's `nominatim` pacer, with a bounded wait.
+ */
+let _upstreamPacing = createUpstreamPacing();
+
+/**
+ * Swap the process's pacing for another one; returns the previous.
+ *
+ * Exported for tests, like `resetOverpassMirrorHealth`: the real pacers keep
+ * real time, and a route test that had to fill Géorisques' queue at 1.25 s a
+ * slot would spend its whole run sleeping.
+ * @param {ReturnType<typeof createUpstreamPacing>} pacing
+ */
+export function setUpstreamPacing(pacing) {
+  const previous = _upstreamPacing;
+  _upstreamPacing = pacing;
+  return previous;
+}
+/**
+ * Who a paced call is made for, and the refusal it met if any.
+ *
+ * AsyncLocalStorage rather than a parameter: the calls sit several frames
+ * under their route, inside loaders a dozen address layers share, and the
+ * visitor is only known at the top. A call made outside any visitor's scope
+ * (a background refresh) is paced like the others and simply not capped per
+ * visitor.
+ *
+ * @type {AsyncLocalStorage<{key: ?string, refusal: ?{upstream: string, retryAfterSec: number}}>}
+ */
+const _upstreamCaller = new AsyncLocalStorage();
+/** When each upstream's last refusal was logged: a saturated queue writes one line a minute. */
+const _upstreamRefusalLoggedAt = new Map();
+
+/** Run `task` on behalf of the visitor behind `req`. */
+function asVisitor(req, task) {
+  return _upstreamCaller.run({ key: clientKey(req), refusal: null }, task);
+}
+
+/**
+ * {@link asVisitor}, returning the refusal met along the way next to the value.
+ * An address loader turns a refused call into a null part, like any failed
+ * upstream; this is how its route tells the two apart, so an answer our own
+ * pacing made partial is neither cached nor reported as an outage.
+ * @template T
+ * @param {object} req
+ * @param {() => Promise<T>} task
+ * @returns {Promise<{value: T, refusal: ?{upstream: string, retryAfterSec: number}}>}
+ */
+function runForVisitor(req, task) {
+  return asVisitor(req, async () => {
+    const value = await task();
+    return { value, refusal: pacingRefusal() };
+  });
+}
+
+/** The refusal met so far by the current visitor's calls, or null. */
+function pacingRefusal() {
+  return _upstreamCaller.getStore()?.refusal ?? null;
+}
+
+/**
+ * Wait for `url`'s upstream slot. Unpaced hosts go at once.
+ *
+ * A refusal is recorded on the visitor's scope — the longest Retry-After wins,
+ * since that is when the whole answer could be rebuilt — and logged at most
+ * once a minute per upstream.
+ *
+ * @param {string} url
+ * @returns {Promise<{ok: boolean, upstream: ?string, retryAfterSec?: number}>}
+ */
+async function awaitUpstreamSlot(url) {
+  const scope = _upstreamCaller.getStore();
+  const verdict = await _upstreamPacing.acquire(url, { key: scope?.key ?? null });
+  if (verdict.ok) return verdict;
+  if (scope && (!scope.refusal || verdict.retryAfterSec > scope.refusal.retryAfterSec)) {
+    scope.refusal = { upstream: verdict.upstream, retryAfterSec: verdict.retryAfterSec };
+  }
+  const loggedAt = _upstreamRefusalLoggedAt.get(verdict.upstream) ?? 0;
+  if (Date.now() - loggedAt >= 60_000) {
+    _upstreamRefusalLoggedAt.set(verdict.upstream, Date.now());
+    console.warn(`[upstream-pacing] ${verdict.upstream}: ${verdict.reason === 'visitor'
+      ? 'one visitor holds its share of the queue'
+      : 'queue full'} — refusing for ${verdict.retryAfterSec} s`);
+  }
+  return verdict;
+}
+
+/**
+ * The body of a 503 our own pacing caused. `code` lets the page say it in the
+ * reader's language (`upstream-paced` in `serverMessages.i18n.js`); the route
+ * sets the matching Retry-After header.
+ * @param {{upstream: string, retryAfterSec: number}} refusal
+ */
+export function upstreamBusyPayload(refusal) {
+  return {
+    error: `${refusal.upstream} is busy: try again in ${refusal.retryAfterSec} s`,
+    code: 'upstream-paced',
+    params: { seconds: refusal.retryAfterSec },
+    upstream: refusal.upstream,
+  };
+}
+
+/**
+ * Stop `url`'s pacer for as long as the upstream asked, when it answered 429
+ * in spite of the pacing. Anything else, and any unpaced host, is a no-op.
+ * @param {string} url
+ * @param {{status: number, headers?: {get?: (name: string) => ?string}}} response
+ */
+function noteUpstreamStatus(url, response) {
+  if (response?.status !== 429) return;
+  const seconds = _upstreamPacing.penalize(url, response.headers?.get?.('retry-after') ?? null);
+  if (seconds !== null) console.warn(`[upstream-pacing] 429 from ${new URL(url).host}: pausing ${seconds} s`);
+}
 
 /**
  * Opt-in rate limiter for the cost-bearing API proxies (OpenAI / Google).
@@ -3189,9 +3317,12 @@ function rocketLaunchesProxy() {
  * Budget governor (mirrors the OpenSky credit-governor philosophy — last-good
  * data beats a dead layer): a persistent counter (.gev-cache/tomtom/budget.json,
  * keyed by UTC date, reset on day change) counts upstream fetch attempts
- * against a soft cap (TOMTOM_DAILY_TILE_BUDGET, default 40,000 of the free
- * tier's ~50k/day). Over the cap the proxy serves stale tiles when available,
- * else 429 {error:'budget'}.
+ * against a daily cap (TOMTOM_DAILY_TILE_BUDGET, default
+ * `DEFAULT_DAILY_TILE_BUDGET` = 6,451: TomTom's free 200,000 tiles a MONTH
+ * spread over 31 days — see `tomtomTiles.js`). Over the cap the proxy serves
+ * stale tiles when available, else 429 {error:'budget'} with `x-tomtom-limit:
+ * budget` and a Retry-After to the next UTC midnight; the layer reads that as
+ * "TomTom daily budget reached" and its dots go back to simulated speeds.
  *
  * GET /api/tomtom/status → {hasKey, dailyCount, budget, date}. Keyless mode:
  * status reports hasKey:false and the tile endpoint 503s {error:'no_key'}
@@ -3203,7 +3334,6 @@ function tomtomProxy() {
   const TILE_TTL_MS = 120_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache', 'tomtom');
   const BUDGET_PATH = path.join(CACHE_DIR, 'budget.json');
-  const DEFAULT_DAILY_BUDGET = 40000;
   const MEM_MAX_ENTRIES = 256;
   const UPSTREAM_TIMEOUT_MS = 15000;
 
@@ -3217,8 +3347,7 @@ function tomtomProxy() {
   let budgetLoaded = false;
 
   function dailyBudgetLimit() {
-    const raw = Number.parseInt(process.env.TOMTOM_DAILY_TILE_BUDGET || '', 10);
-    return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_DAILY_BUDGET;
+    return tomtomDailyTileBudget(process.env.TOMTOM_DAILY_TILE_BUDGET);
   }
 
   async function loadBudgetOnce() {
@@ -10146,11 +10275,15 @@ const _bruitRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 40, globalMax
  */
 async function fetchBruitJson(url) {
   for (let attempt = 1; attempt <= BRUIT_RETRY_ATTEMPTS; attempt += 1) {
+    // The arrêté register is a WFS read and takes the Géoplateforme WFS slot;
+    // the WMS-V probes are not paced by this change and go straight through.
+    if (!(await awaitUpstreamSlot(url)).ok) return null;
     try {
       const response = await fetch(url, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(BRUIT_TIMEOUT_MS),
       });
+      noteUpstreamStatus(url, response);
       if (response.status === 429 || response.status >= 500) {
         // "Not now", not "not this". Back off and come back.
         if (attempt < BRUIT_RETRY_ATTEMPTS) {
@@ -12193,9 +12326,13 @@ function edfPlantsProxy() {
  * @returns {import('vite').Plugin}
  */
 function rteGenerationProxy() {
-  // The resource publishes hourly. Five minutes bounds staleness to a twelfth
-  // of a step while costing 288 upstream calls a day against a free account.
-  const TTL_MS = 5 * 60_000;
+  // The resource publishes hourly, and RTE's user guide for Actual Generation
+  // v1.1 asks callers to match it: for `actual_generations_per_unit`, "It is
+  // advisable to make one call to this service per hour". Sixty minutes, then —
+  // 24 upstream calls a day instead of the 288 a five-minute cache cost, for an
+  // answer that cannot change more than once an hour anyway.
+  // https://data.rte-france.com/catalog/-/api/doc/user-guide/Actual+Generation/1.1
+  const TTL_MS = 60 * 60_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
   const CACHE_PATH = path.join(CACHE_DIR, 'rte-generation.json');
   const SOURCE = 'RTE (digital.iservices.rte-france.com)';
@@ -13302,15 +13439,29 @@ function overpassProxy() {
             return;
           }
           const upstream = `https://routing.openstreetmap.de/routed-${profile}/route/v1/${osrmProfile}/${coords}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+          // FOSSGIS allows one request a second for the whole host, shared with
+          // the cycling isochrone's `/table`. A refused slot is a 503 with the
+          // wait; the annotation draws its straight segments meanwhile.
+          const slot = await asVisitor(req, () => awaitUpstreamSlot(upstream));
+          if (!slot.ok) {
+            res.writeHead(503, { 'Content-Type': 'application/json', 'Retry-After': String(slot.retryAfterSec) });
+            res.end(JSON.stringify({ ok: false, ...upstreamBusyPayload(slot) }));
+            return;
+          }
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 12000);
           let osrm;
           try {
             const upstreamRes = await fetch(upstream, {
               signal: controller.signal,
-              headers: { 'User-Agent': 'surplomb/dev (local)' },
+              // The FOSSGIS terms ask for "a valid user agent"; this is the one
+              // every other Surplomb proxy identifies itself with.
+              headers: { 'User-Agent': 'Surplomb/1.0 (+https://github.com/mml-studio/surplomb)' },
             });
-            if (!upstreamRes.ok) return fail('no route found');
+            if (!upstreamRes.ok) {
+              noteUpstreamStatus(upstream, upstreamRes);
+              return fail('no route found');
+            }
             const ctype = upstreamRes.headers.get('content-type') || '';
             if (!ctype.includes('json')) return fail('no route found');
             const text = await readResponseTextCapped(upstreamRes, ROUTE_MAX_RESPONSE_BYTES);
@@ -21319,8 +21470,6 @@ const WEATHER_EFFECTS_MAX_RESPONSE_BYTES = 512 * 1024;
 const _weatherEffectsCache = new Map();
 const _weatherEffectsInFlight = new Map();
 const _weatherEffectsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 45, globalMax: 120 });
-let _nominatimQueue = Promise.resolve();
-let _nominatimLastRequestAt = 0;
 
 export function requiredFiniteQueryNumber(params, key) {
   const value = params.get(key);
@@ -21358,11 +21507,19 @@ async function fetchRegionalJson(url, {
   timeoutMs = 9000,
   maxBytes = REGIONAL_MAX_RESPONSE_BYTES,
 } = {}) {
+  // Nominatim and the Géoplateforme geocoder are paced (`src/upstreamPacing.js`);
+  // Open-Meteo, the other caller, is not and goes at once. A refusal throws
+  // like any failed upstream, so every caller's existing fallback applies.
+  const slot = await awaitUpstreamSlot(url);
+  if (!slot.ok) throw new UpstreamBusyError(slot.upstream, slot.retryAfterSec);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
+    if (!response.ok) {
+      noteUpstreamStatus(url, response);
+      throw new Error(`Upstream returned ${response.status}`);
+    }
     return readResponseJsonCapped(response, maxBytes);
   } finally {
     clearTimeout(timeout);
@@ -21424,9 +21581,6 @@ function normalizeRssArticles(xml, limit = 5) {
   return articles;
 }
 
-/** Nominatim's usage policy is one request per second for the WHOLE application. */
-const NOMINATIM_MIN_INTERVAL_MS = 1100;
-
 /** The identification the policy asks for; a browser cannot set either header itself. */
 const NOMINATIM_HEADERS = Object.freeze({
   'User-Agent': 'Surplomb/0.1 (+https://github.com/mml-studio/surplomb)',
@@ -21434,37 +21588,25 @@ const NOMINATIM_HEADERS = Object.freeze({
 });
 
 /**
- * Run one Nominatim call on the single process-wide queue, at least
- * NOMINATIM_MIN_INTERVAL_MS after the previous one. Both callers share it —
- * the cockpit's reverse geocode and the keyless search box's forward one —
- * because the policy counts the application, not the endpoint.
+ * The cockpit's reverse geocode. Nominatim's policy is one request per second
+ * for the WHOLE application, so this and the search box's forward lookups
+ * share one pacer — `fetchRegionalJson` takes the `nominatim` slot, 1.25 s
+ * apart. That pacer replaced a queue of its own here, which spaced calls
+ * 1.1 s apart but let the line grow without bound.
  */
-function queueNominatimRequest(run) {
-  const task = _nominatimQueue.then(async () => {
-    const waitMs = Math.max(0, NOMINATIM_MIN_INTERVAL_MS - (Date.now() - _nominatimLastRequestAt));
-    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    _nominatimLastRequestAt = Date.now();
-    return run();
+async function fetchRegionalPlace(point) {
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    lat: point.latitude.toFixed(5),
+    lon: point.longitude.toFixed(5),
+    zoom: '10',
+    addressdetails: '1',
+    'accept-language': 'en',
   });
-  _nominatimQueue = task.catch(() => null);
-  return task;
-}
-
-function fetchRegionalPlace(point) {
-  return queueNominatimRequest(async () => {
-    const params = new URLSearchParams({
-      format: 'jsonv2',
-      lat: point.latitude.toFixed(5),
-      lon: point.longitude.toFixed(5),
-      zoom: '10',
-      addressdetails: '1',
-      'accept-language': 'en',
-    });
-    const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-      headers: NOMINATIM_HEADERS,
-    });
-    return normalizeRegionalPlace(payload);
+  const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+    headers: NOMINATIM_HEADERS,
   });
+  return normalizeRegionalPlace(payload);
 }
 
 async function fetchRegionalNews(place) {
@@ -21570,8 +21712,13 @@ function regionalBriefProxy() {
       throw new Error('All regional briefing sources unavailable');
     }
     const payload = regionalBriefPayload({ point, place, weather, weatherOn, news });
-    _regionalBriefCache.set(key, { payload, cachedAt: Date.now() });
-    trimRegionalBriefCache();
+    // A place missing only because Nominatim's pacer was full is not kept:
+    // the next look at this cell asks again rather than reading "unavailable"
+    // for five minutes.
+    if (!pacingRefusal()) {
+      _regionalBriefCache.set(key, { payload, cachedAt: Date.now() });
+      trimRegionalBriefCache();
+    }
     return payload;
   }
 
@@ -21606,12 +21753,16 @@ function regionalBriefProxy() {
         res.end(JSON.stringify({ ...cached.payload, status: 'cached' }));
         return;
       }
-      const request = coalesceProxyRequest(_regionalBriefInFlight, key, () => refresh(point, key, weatherOn));
+      const request = coalesceProxyRequest(
+        _regionalBriefInFlight,
+        key,
+        () => runForVisitor(req, () => refresh(point, key, weatherOn)),
+      );
       try {
-        const payload = await request.promise;
+        const { value: payload, refusal } = await request.promise;
         res.writeHead(200, {
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=60',
+          'Cache-Control': refusal ? 'no-store' : 'public, max-age=60',
           'X-Regional-Brief': request.shared ? 'INFLIGHT' : 'MISS',
         });
         res.end(JSON.stringify(payload));
@@ -21959,15 +22110,16 @@ function firstUsableNominatimRow(rows) {
   return (Array.isArray(rows) ? rows : []).find((row) => normalizeNominatimSearchResult(row)) || null;
 }
 
+/** One Nominatim search, on the shared `nominatim` pacer (see `fetchRegionalPlace`). */
 function searchNominatim(query, viewbox, lang) {
-  return queueNominatimRequest(() => fetchRegionalJson(
+  return fetchRegionalJson(
     nominatimSearchUrl(query, { viewbox, lang }),
     {
       headers: NOMINATIM_HEADERS,
       timeoutMs: GEOCODE_SEARCH_TIMEOUT_MS,
       maxBytes: GEOCODE_SEARCH_MAX_RESPONSE_BYTES,
     },
-  ));
+  );
 }
 
 /**
@@ -22034,11 +22186,11 @@ export function geocodeSearchCacheKey(query, box, lang) {
 function keylessGeocodeProxy() {
   function install(middlewares) {
     middlewares.use('/api/geocode', async (req, res) => {
-      const send = (status, payload, source) => {
+      const send = (status, payload, source, { store = true } = {}) => {
         res.writeHead(status, {
           'Content-Type': 'application/json; charset=utf-8',
           // Only an answer is cacheable; a refusal must not be replayed.
-          'Cache-Control': status === 200 ? 'private, max-age=300' : 'no-store',
+          'Cache-Control': status === 200 && store ? 'private, max-age=300' : 'no-store',
           'X-Geocode-Cache': source,
         });
         res.end(JSON.stringify(payload));
@@ -22080,10 +22232,16 @@ function keylessGeocodeProxy() {
         const { promise } = coalesceProxyRequest(
           _geocodeSearchInFlight,
           cacheKey,
-          () => resolveGeocodeSearch(query, box, lang),
+          () => runForVisitor(req, () => resolveGeocodeSearch(query, box, lang)),
         );
-        const { result, failed } = await promise;
+        const { value: { result, failed }, refusal } = await promise;
         if (!result && failed) {
+          // Our own pacing, not an outage: say when to come back.
+          if (refusal) {
+            res.setHeader('Retry-After', String(refusal.retryAfterSec));
+            send(503, { ...upstreamBusyPayload(refusal), result: null }, 'NONE');
+            return;
+          }
           // Every upstream refused. Serving `result: null` here would report a
           // network outage as "there is no such place".
           send(502, { error: 'Geocoding upstreams are unavailable', result: null }, 'NONE');
@@ -22094,6 +22252,12 @@ function keylessGeocodeProxy() {
           source: result?.source || null,
           attribution: geocodeSourceAttribution(result?.source),
         };
+        // Nominatim skipped for pacing leaves the answer to the French
+        // backstop; right for this search, not worth keeping for five minutes.
+        if (refusal) {
+          send(200, payload, 'MISS', { store: false });
+          return;
+        }
         _geocodeSearchCache.set(cacheKey, { payload, cachedAt: Date.now() });
         trimGeocodeSearchCache();
         send(200, payload, 'MISS');
@@ -23136,12 +23300,21 @@ async function refreshFilosofiTerritories(level) {
   const urls = buildTerritoryUrls(level);
   const partial = [];
   const get = async (name) => {
+    // Outside the try, deliberately: a dataset refused by Melodi's pacer is
+    // not a dataset that failed. Recorded as `partial` it would be cached for
+    // the thirty days of the TTL; thrown, it fails this refresh and the route
+    // serves the stale copy or a 503 with the wait.
+    const slot = await awaitUpstreamSlot(urls[name]);
+    if (!slot.ok) throw new UpstreamBusyError(slot.upstream, slot.retryAfterSec);
     try {
       const response = await fetch(urls[name], {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(FILOSOFI_TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        noteUpstreamStatus(urls[name], response);
+        throw new Error(`HTTP ${response.status}`);
+      }
       return await response.json();
     } catch (error) {
       partial.push(`${MELODI_DATASETS[name]}: ${error?.message || error}`);
@@ -23191,11 +23364,16 @@ async function refreshFilosofiViewport(box, resolution) {
   const packed = await filosofiFromPack(box, resolution);
   if (packed) return packed;
   const url = buildCarreauxUrl({ box, resolution, count: FILOSOFI_MAX_CELLS });
+  const slot = await awaitUpstreamSlot(url);
+  if (!slot.ok) throw new UpstreamBusyError(slot.upstream, slot.retryAfterSec);
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(FILOSOFI_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`upstream carreaux_${resolution} HTTP ${response.status}`);
+  if (!response.ok) {
+    noteUpstreamStatus(url, response);
+    throw new Error(`upstream carreaux_${resolution} HTTP ${response.status}`);
+  }
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > FILOSOFI_MAX_BYTES) {
     throw new Error(`carreaux_${resolution} answer too large (${length} bytes)`);
@@ -23327,13 +23505,13 @@ function filosofiProxy() {
           return;
         }
         try {
-          const { promise } = coalesceProxyRequest(_filosofiTerritoryInFlight, level, async () => {
+          const { promise } = coalesceProxyRequest(_filosofiTerritoryInFlight, level, () => asVisitor(req, async () => {
             const payload = await refreshFilosofiTerritories(requested);
             const fresh = { at: Date.now(), payload };
             _filosofiTerritoryCache.set(level, fresh);
             writeFilosofiTerritoryDisk(level, fresh);
             return fresh;
-          });
+          }));
           const entry = await promise;
           json(200, { ...entry.payload, fetchedAt: entry.at, stale: false }, { 'X-Filosofi': 'MISS' });
         } catch (error) {
@@ -23343,6 +23521,10 @@ function filosofiProxy() {
             || await readFilosofiTerritoryDisk(level, Infinity);
           if (stale) {
             json(200, { ...stale.payload, fetchedAt: stale.at, stale: true }, { 'X-Filosofi': 'STALE' });
+            return;
+          }
+          if (error instanceof UpstreamBusyError) {
+            json(503, upstreamBusyPayload(error), { 'Retry-After': String(error.retryAfterSec) });
             return;
           }
           json(502, { error: String(error?.message || error) });
@@ -23400,7 +23582,7 @@ function filosofiProxy() {
         return;
       }
 
-      const request = coalesceProxyRequest(_filosofiViewportInFlight, key, async () => {
+      const request = coalesceProxyRequest(_filosofiViewportInFlight, key, () => asVisitor(req, async () => {
         const payload = await refreshFilosofiViewport(box, resolution);
         const entry = { at: Date.now(), payload };
         _filosofiViewportCache.set(key, entry);
@@ -23410,7 +23592,7 @@ function filosofiProxy() {
         // that on every pan is the traffic this cache exists to stop.
         writeFilosofiDisk(key, entry);
         return entry;
-      });
+      }));
       try {
         const entry = await request.promise;
         json(200, { ...entry.payload, fetchedAt: entry.at, stale: false }, {
@@ -23421,6 +23603,10 @@ function filosofiProxy() {
         const stale = cached || await readFilosofiDisk(key, FILOSOFI_STALE_MS);
         if (stale) {
           json(200, { ...stale.payload, fetchedAt: stale.at, stale: true }, { 'X-Filosofi': 'STALE' });
+          return;
+        }
+        if (error instanceof UpstreamBusyError) {
+          json(503, upstreamBusyPayload(error), { 'Retry-After': String(error.retryAfterSec) });
           return;
         }
         json(503, { error: 'Le carroyage INSEE est temporairement indisponible', code: 'filosofi-grid-unavailable' });
@@ -23584,6 +23770,12 @@ async function fetchAddressSource(url, options = {}) {
  */
 async function fetchAddressSourceOnce(url, options) {
   const { timeoutMs, maxBytes, text } = options;
+  // The slot comes BEFORE the timeout starts, so a call that queued for its
+  // upstream still gets its whole budget once it leaves. A refused slot is a
+  // null like any other failed source, and not retried: the queue that refused
+  // it will not have drained 400 ms later. The route learns it was pacing, not
+  // an outage, from the visitor's scope (`runForVisitor`).
+  if (!(await awaitUpstreamSlot(url)).ok) return { ok: false, retryable: false, status: null };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -23593,6 +23785,7 @@ async function fetchAddressSourceOnce(url, options) {
     });
     if (!response.ok) {
       console.warn(`[address-proxy] ${response.status} from ${new URL(url).host}`);
+      noteUpstreamStatus(url, response);
       // A 5xx is the server saying "not now"; a 4xx is it saying "not this".
       // The STATUS travels with the verdict because one caller has to tell the
       // two apart: a DVF commune-year that answers 404 has no edition, and one
@@ -23728,7 +23921,7 @@ function installAddressRoute(middlewares, route, plan, options = {}) {
     ? (payload) => options.ttlMs(payload)
     : () => options.ttlMs ?? ADDRESS_MEMORY_TTL_MS;
   middlewares.use(route, async (req, res) => {
-    const send = (status, payload) => {
+    const send = (status, payload, { store = true } = {}) => {
       if (res.headersSent) return;
       res.writeHead(status, {
         'Content-Type': 'application/json; charset=utf-8',
@@ -23741,7 +23934,7 @@ function installAddressRoute(middlewares, route, plan, options = {}) {
         // five minutes without a single request reaching it. Measured — the
         // draw stayed at 72 coarse bands for the whole session while the proxy
         // finished all 18 aerodromes in 20 s.
-        'Cache-Control': status === 200 ? addressCacheControl(ttlFor(payload)) : 'no-store',
+        'Cache-Control': status === 200 && store ? addressCacheControl(ttlFor(payload)) : 'no-store',
       });
       res.end(JSON.stringify(payload));
     };
@@ -23781,8 +23974,12 @@ function installAddressRoute(middlewares, route, plan, options = {}) {
       return;
     }
     try {
-      const { promise } = coalesceProxyRequest(_addressInFlight, planned.key, planned.load);
-      const payload = await promise;
+      const { promise } = coalesceProxyRequest(
+        _addressInFlight,
+        planned.key,
+        () => runForVisitor(req, planned.load),
+      );
+      const { value: payload, refusal } = await promise;
       if (!payload) {
         // Serve a stale answer rather than nothing: an outage must not read as
         // "there is nothing here".
@@ -23790,7 +23987,23 @@ function installAddressRoute(middlewares, route, plan, options = {}) {
           send(200, { ...cached.payload, fetchedAt: cached.cachedAt, stale: true });
           return;
         }
+        // Our own pacing said "not now", which is neither an outage nor an
+        // answer: 503 with the wait, so the layer tries again instead of
+        // reporting a dead register.
+        if (refusal) {
+          res.setHeader('Retry-After', String(refusal.retryAfterSec));
+          send(503, upstreamBusyPayload(refusal));
+          return;
+        }
         send(502, { error: `${route} upstream unavailable` });
+        return;
+      }
+      // An answer missing a part only because a paced call was refused is
+      // served, but kept by nobody — neither here nor in the browser — so the
+      // next scan of this point asks again instead of reading the gap for the
+      // whole shelf life.
+      if (refusal) {
+        send(200, { ...payload, fetchedAt: Date.now(), stale: false }, { store: false });
         return;
       }
       addressCacheSet(planned.key, payload);
@@ -26282,6 +26495,8 @@ function adsFranceProxy() {
     body.append('columns', 'adresse');
     body.append('postcode', 'codepostal');
     body.append('citycode', 'citycode');
+    // One slot of the geocoding bucket, shared with every reverse lookup.
+    if (!(await awaitUpstreamSlot(BAN_CSV_URL)).ok) return null;
     try {
       const response = await fetch(BAN_CSV_URL, {
         method: 'POST',
@@ -26291,6 +26506,7 @@ function adsFranceProxy() {
       });
       if (!response.ok) {
         console.warn(`[ADS Proxy] BAN ${response.status}`);
+        noteUpstreamStatus(BAN_CSV_URL, response);
         return null;
       }
       return await response.text();
@@ -26420,6 +26636,10 @@ function adsFranceProxy() {
       }
     } catch { /* no disk copy yet */ }
     const edition = await buildEdition(communeCode, since);
+    // An edition whose bulk geocode was refused by the geocoding pacer is
+    // served to this scan but not kept: remembered, its unplaced permits would
+    // stay unplaced for the week the disk copy lives.
+    if (pacingRefusal()) return edition;
     rememberEdition(cacheKey, edition);
     try {
       await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });

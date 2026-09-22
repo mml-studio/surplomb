@@ -10,6 +10,9 @@ import {
   normalizeBudget,
   isOverBudget,
   secondsToUtcMidnight,
+  DEFAULT_DAILY_TILE_BUDGET,
+  TOMTOM_FREE_MONTHLY_TILES,
+  dailyTileBudget,
 } from './tomtomTiles.js';
 
 // Downtown Austin — the verified TomTom fixture tile (z12 x935 y1686).
@@ -168,4 +171,22 @@ test('secondsToUtcMidnight: the boundary it counts to is the budget key’s', ()
   const after = now + secondsToUtcMidnight(now) * 1000;
   assert.notEqual(utcDayKey(after), utcDayKey(now));
   assert.equal(utcDayKey(after - 1000), utcDayKey(now));
+});
+
+// ── The default daily cap against the monthly allowance ─────
+
+test('the free allowance is monthly, and the default day fits 31 of them into it', () => {
+  assert.equal(TOMTOM_FREE_MONTHLY_TILES, 200_000);
+  assert.equal(DEFAULT_DAILY_TILE_BUDGET, 6451);
+  assert.ok(DEFAULT_DAILY_TILE_BUDGET * 31 <= TOMTOM_FREE_MONTHLY_TILES);
+  // One more tile a day and a long month would cross it.
+  assert.ok((DEFAULT_DAILY_TILE_BUDGET + 1) * 31 > TOMTOM_FREE_MONTHLY_TILES);
+});
+
+test('dailyTileBudget: a positive integer override wins, anything else is the default', () => {
+  assert.equal(dailyTileBudget('20000'), 20000);
+  assert.equal(dailyTileBudget('1'), 1);
+  for (const value of [undefined, null, '', '0', '-5', 'lots']) {
+    assert.equal(dailyTileBudget(value), DEFAULT_DAILY_TILE_BUDGET, String(value));
+  }
 });

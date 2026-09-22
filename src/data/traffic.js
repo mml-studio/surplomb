@@ -3309,9 +3309,10 @@ export const FLOW_REFRESH_MS = 125_000;
  * minutes of watching.
  *
  * The TomTom budget is ONE daily allowance shared by every reader of the
- * hosted globe (`TOMTOM_DAILY_TILE_BUDGET`, 40 000 tiles). A tab left open on a
- * city costs up to four tiles per refresh, and without a cap a single
- * forgotten tab would spend ~2 800 of them a day. After the cap the colours
+ * hosted globe (`TOMTOM_DAILY_TILE_BUDGET`, 6 451 tiles by default — the free
+ * 200 000 a month over 31 days). A tab left open on a city costs up to four
+ * tiles per refresh, and without a cap a single forgotten tab would spend
+ * ~2 800 of them a day, close to half the day's allowance. After the cap the colours
  * stay as they are and the key's clock time says how old they are; the next
  * camera move re-arms the count.
  */

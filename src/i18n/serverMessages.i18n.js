@@ -101,6 +101,12 @@ export default defineMessages({
     fr: 'Le carroyage INSEE est temporairement indisponible',
     en: 'The INSEE income grid is temporarily unavailable',
   },
+  'upstream-paced': {
+    fr: (params) => `Cette source est très sollicitée en ce moment — réessaie dans ${params.seconds} s`,
+    en: (params) => `This source is in heavy demand right now — try again in ${params.seconds} s`,
+    sample: [{ seconds: 3 }],
+    note: 'Not an outage: the server paces a public API that caps requests per second for the whole site (src/upstreamPacing.js), and this call found the queue full. The answer carries Retry-After.',
+  },
   'poste-id-invalid': {
     fr: 'L’identifiant doit être un numéro de poste à 8 chiffres',
     en: 'The id must be an 8-digit station number',

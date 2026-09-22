@@ -276,6 +276,34 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   popover drops the Open-Meteo line too. Unset, nothing changes: a clone keeps
   the weather. `/healthz` and `/api/trial` report the sources that are off in
   `sourcesOff`.
+- **The hosted server now keeps every visitor, together, under the public
+  APIs' published rate limits.** Every visitor reaches Géorisques, the IGN
+  Géoplateforme (isochrone, WFS, geocoder and API Adresse), INSEE Melodi,
+  Nominatim and the FOSSGIS routing servers from the server's one address, so
+  their "per IP" ceilings apply to the whole audience at once: three people
+  scanning addresses could cross Géorisques' one report a second. Each of
+  these services now has one queue that spaces calls at 80 % of its published
+  ceiling (the risk report one every 1.25 s, the isochrone 4 a second, the
+  WFS 24, the geocoders 40, Melodi 16, Nominatim and the routing servers one
+  every 1.25 s). A call waits at most 5 s and one visitor may hold at most
+  half of a queue. Beyond that the layer is told to come back — « Cette source
+  est très sollicitée en ce moment — réessaie dans 3 s » (“This source is in
+  heavy demand right now — try again in 3 s”) — instead of the server
+  hammering the service; a card missing only its queued part is shown and
+  asked again on the next scan rather than kept, the search box answers from
+  the IGN geocoder when Nominatim's queue is full, and a drawn route keeps its
+  straight lines. If a service still answers “too many requests”, its queue
+  stops for as long as it asks.
+- **Live traffic stays inside TomTom's free allowance.** TomTom's free tier
+  is 200,000 flow tiles a month, not the ~50,000 a day the daily cap was set
+  against; the default cap drops from 40,000 to 6,451 tiles a day, so even a
+  31-day month stays inside it (`TOMTOM_DAILY_TILE_BUDGET` still overrides
+  it). When the day's tiles are spent the layer behaves as before: cached
+  tiles keep their colours with their age, and otherwise the dots go back to
+  simulated speeds with “TomTom daily budget reached” until midnight UTC.
+- **Per-unit generation asks RTE once an hour.** RTE publishes the figures
+  hourly and asks callers to call once an hour; the proxy held them five
+  minutes and could ask 288 times a day. It now keeps them 60 minutes.
 - **In English, the voice trial no longer calls itself premium.** The mic's
   help line reads “Hosted demo · 3 free spoken requests”, and the card that
   closes the trial says “Voice is capped on this hosted demo” under a

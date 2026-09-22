@@ -160,11 +160,12 @@ export function rteRenderId(siteId) {
 /**
  * Idle refresh cadence.
  *
- * The resource publishes hourly and the proxy holds a 5-minute cache in front
- * of it, so three minutes is already faster than anything can change. It is
- * this short because the interesting event on this layer — a reactor coming
- * back or dropping out — is a step change, and a step change is worth seeing
- * within one poll.
+ * The resource publishes hourly and the proxy holds it for an hour — the
+ * cadence RTE's user guide asks callers to keep — so three minutes is far
+ * faster than anything can change. It stays this short because a poll costs
+ * RTE nothing (the proxy answers from its cache), and the first poll after the
+ * proxy refreshes is when a step change — a reactor coming back or dropping
+ * out — reaches the screen.
  */
 const UPDATE_INTERVAL_MS = 180_000;
 

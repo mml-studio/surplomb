@@ -10,8 +10,9 @@
  */
 
 /**
- * Two Nominatim passes serialized at ~1.1 s apart, plus a Géoplateforme
- * backstop, is the worst case behind one search. The ceiling is generous
+ * Two Nominatim passes paced 1.25 s apart, plus a Géoplateforme backstop,
+ * is the worst case behind one search; a Nominatim queue that is already full
+ * skips straight to the backstop (`src/upstreamPacing.js`). The ceiling is generous
  * because giving up early on a slow-but-working lookup reads as "not found".
  */
 const KEYLESS_GEOCODE_TIMEOUT_MS = 15000;
