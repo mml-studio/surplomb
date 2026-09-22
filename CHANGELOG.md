@@ -6,6 +6,34 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The mobile antennas now show where their 4G reaches, and where it does
+  not.** Five chips on the Antennes mobiles row paint the ARCEP's quarterly
+  coverage map under the masts: « Zones blanches » colours the ground by how
+  many of the four operators reach it — darkest where none does, even at
+  limited coverage — and Orange, SFR, Bouygues and Free each show their own
+  gaps and limited areas. Fully served ground stays unpainted, so the dead
+  zones stand out: 1.0 % of mainland France in the 2026 Q1 edition, most of it
+  in the Alps, the Pyrenees and Corsica. Clicking the ground answers in one line —
+  « Zone blanche : pas de 4G ici », « Seul Orange capte ici » — then gives each
+  operator's level in everyday words. The map is the operators' own estimate,
+  published by ARCEP, and every surface says so; it is drawn on
+  Satellite, IGN map and OSM, not on Google 3D, and the key says that too. The
+  chosen view travels in shared links.
+- **A selected mast shows what it can see.** Selecting a mast now lights, in
+  the selection cyan, the ground from which the top of the mast is in view —
+  over the terrain, out to the radio horizon its registered height allows
+  (27.6 km for a typical 30 m mast). The card gives the share of that disc in
+  view (« Visible depuis 2 % du terrain dans un rayon de 28 km »), and the key
+  says it is worked out from the relief alone, without buildings or trees.
+- **The antenna cards and key read at first glance.** A mast's card is now five
+  short lines: what it is and how many operators (« Antenne 5G · 4
+  opérateurs »), their names, the networks on the air, what it stands on and
+  where (« Sur un toit, à 65 m de haut · Paris 6e »), and the nearest wave
+  measurement as a multiple of the legal limit, flagged when it predates the
+  current antennas. Frequencies, antenna counts, the owner, the register
+  number and the licence are gone from it. The key names each colour in two or
+  three words — « Antenne 5G », « En projet, n’émet pas » — without the national
+  statistics that used to follow every swatch.
 - **The landing page speaks English.** A browser in English now opens the
   landing page in English, like the globe, and an EN / FR pill in the header
   switches between the two (it remembers the choice, and the address stays

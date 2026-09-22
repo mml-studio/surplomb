@@ -1,25 +1,20 @@
-// What Mobile antennas (ANFR) claims, in English.
+// What Mobile antennas (ANFR) says, in English — as plainly as the French.
 //
-// The four refusals the French card makes are the layer, and every one is
-// checked here: a ratio is not a health verdict, a CEM report measures a PLACE
-// and not a mast, an absent band is not a band measured at zero, and a ray's
-// length is a drawing convention rather than a range. Nothing anywhere on the
-// English card promises a speed, a coverage or a verdict either.
+// The refusals survive the simplification and are checked here: a multiple of
+// the legal limit is not a health verdict, a measurement taken before the
+// current antennas says so, and a planned antenna is never called a
+// transmitter. Nothing on the English card promises a speed, a coverage or a
+// verdict either.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  anfrAzimuthLines,
-  anfrCardinal,
   anfrEditionLabel,
-  anfrExposureLines,
-  anfrFiveGBandLabel,
+  anfrExposureLine,
   anfrMastLegend,
+  anfrNetworksLine,
   anfrPlacementLine,
-  anfrPlanLine,
-  anfrShortBand,
-  anfrShortMonth,
   buildAnfrLoadingLabel,
   buildAnfrMeshLabel,
   buildAnfrSelectionLabel,
@@ -92,95 +87,58 @@ const DETAIL = {
 const support = (id) => SUPPORTS.find((row) => row.id === id);
 const en = (fn) => withLocale('en', fn);
 
-test('the card leads with what it is and closes with its provenance', () => {
+test('the card is five short lines, in English', () => {
   const raw = en(() => buildAnfrSelectionLabel({ support: support(449714), detail: DETAIL }, PACK));
-  const lines = raw.split('\n').map(norm);
-  assert.equal(lines[0], 'Mobile antenna · 4 operators · 5G');
-  assert.match(lines.at(-1), /^ANFR no\. 449714 · register of August 27, 2026 · Licence Ouverte 2\.0$/);
-  assert.match(norm(raw), /Roof of apartment building, 65 m/);
-  assert.match(norm(raw), /5G 3\.5 GHz and 4G: all 4 operators · 3G and 2G: Orange and SFR/);
+  assert.deepEqual(raw.split('\n').map(norm), [
+    '5G antenna · 4 operators',
+    'Orange, SFR, Bouygues, Free',
+    'Networks: 5G, 4G, 3G, 2G',
+    'On a roof, 65 m up · Paris 6e',
+    'Waves measured 40 m away in 2009, before the current antennas: too weak to measure',
+    'Source: ANFR, August 27, 2026',
+  ]);
   // The three questions this register cannot answer stay unanswered.
   assert.doesNotMatch(norm(raw), /\bspeed\b|Mb\/s|covered|harmless|safe|no risk/i);
+  assertNoFrench(raw.split('\n'), { allow: ['Paris 6e'] });
 });
 
-test('a mast that radiates nothing says so, and never as 5G', () => {
-  const planned = norm(en(() => buildAnfrSelectionLabel({ support: support(278838) }, PACK)));
-  assert.match(planned, /^Mobile antenna · \d+ operators? · nothing transmits/);
-  assert.match(planned, /Nothing transmits at this position/);
-  assert.match(en(() => anfrPlanLine(support(278838))),
-    /^4G · 3G · 2G authorized here — nothing has been installed yet$/);
-  assert.equal(en(() => anfrPlanLine(support(506104))), '5G also authorized — not installed yet');
-  // A re-filing still takes no line.
-  assert.equal(en(() => anfrPlanLine(support(449714))), null);
+test('a planned antenna says so, and never as 5G', () => {
+  const planned = en(() => buildAnfrSelectionLabel({ support: support(278838) }, PACK)).split('\n').map(norm);
+  assert.equal(planned[0], 'Planned antenna · 2 operators');
+  assert.equal(planned[2], 'Planned: 4G, 3G, 2G — not installed yet');
+  assert.equal(en(() => anfrNetworksLine(support(506104))), 'Networks: 4G, 3G, 2G · 5G planned');
+  // A re-filing still takes no word.
+  assert.equal(en(() => anfrNetworksLine(support(449714))), 'Networks: 5G, 4G, 3G, 2G');
 });
 
-test('a heightless support explains the missing shaft instead of leaving a hole', () => {
+test('an underground support says there is no mast, instead of leaving a hole', () => {
   const zero = norm(en(() => buildAnfrSelectionLabel({ support: support(325857) }, PACK)));
-  assert.match(zero, /Underground installation \(indoor gallery\) — no mast/);
-  assert.match(zero, /No shaft drawn: 551 supports in the register publish no height/);
+  assert.match(zero, /Underground, no mast/);
   assert.doesNotMatch(zero, / 0 m/);
 });
 
-test('the placement line keeps the preposition that tells a roof from a tower', () => {
-  // The register's 38 natures are a closed vocabulary, so they are named
-  // rather than quoted: “Roof of immeuble” is not English.
-  assert.equal(en(() => anfrPlacementLine('Immeuble', 35)), 'Roof of apartment building, 35 m');
-  assert.equal(en(() => anfrPlacementLine('Pylône autostable', 42)), 'Free-standing pylon, 42 m');
-  assert.equal(en(() => anfrPlacementLine('Mobilier urbain', 6)), 'On street furniture, 6 m');
-  // One the table has never seen falls through to the register's own French.
-  assert.equal(en(() => anfrPlacementLine('Pylône martien', 12)), 'Pylône martien, 12 m');
-  assert.equal(en(() => anfrPlacementLine(null, null)), 'Type and height not published');
+test('the placement line says what the antenna stands on', () => {
+  assert.equal(en(() => anfrPlacementLine('Immeuble', 35)), 'On a roof, 35 m up');
+  assert.equal(en(() => anfrPlacementLine('Pylône autostable', 42)), 'Pylon, 42 m tall');
+  assert.equal(en(() => anfrPlacementLine('Mobilier urbain', 6)), 'Street furniture, 6 m');
+  assert.equal(en(() => anfrPlacementLine(null, null)), 'Support type not published');
   // French is untouched.
-  assert.equal(anfrPlacementLine('Immeuble', 35), 'Toit d’immeuble, 35 m');
+  assert.equal(anfrPlacementLine('Immeuble', 35), 'Sur un toit, à 35 m de haut');
 });
 
-test('the exposure block keeps every one of its refusals', () => {
-  const lines = en(() => anfrExposureLines(DETAIL));
-  const joined = norm(lines.join('\n'));
-  // The fixture's global reading is at the protocol's floor, so the card
-  // gives the strongest band its real value rather than printing the zero.
-  assert.match(joined, /Total field below the measurable threshold, 40 m away \(2009\)/);
-  assert.match(joined, /peak: 1800 MHz at 0\.15 V\/m/);
-  // The report measured a place, not this mast — and a band it never looked
-  // at is not a band it measured at zero.
-  assert.match(joined, /⚠ Measured at a neighbor’s, 2009 — .* never measured/);
-  assert.doesNotMatch(joined, /safe|harmless|no risk/i);
-  assertNoFrench(lines, { allow: ['Wi-Fi'] });
-
-  // And the ratio, on a report that did publish a global value.
-  const ratio = en(() => anfrExposureLines({
+test('the waves line keeps its refusals in English', () => {
+  const line = en(() => anfrExposureLine(DETAIL));
+  assert.equal(norm(line), 'Waves measured 40 m away in 2009, before the current antennas: too weak to measure');
+  assert.doesNotMatch(line, /safe|harmless|no risk/i);
+  // And the multiple, on a report that did publish a global value.
+  const ratio = en(() => anfrExposureLine({
     exposure: {
       within: 1,
       nearest: { metres: 120 },
-      report: {
-        measuredOn: '2025-04-02',
-        globalVoltsPerM: 0.86,
-        lowestLimitVoltsPerM: 28,
-        strongest: { band: 'TM 700 (Téléphonie Mobile en 700 MHz)', volts: 0.5 },
-        conforming: true,
-      },
+      report: { measuredOn: '2025-04-02', globalVoltsPerM: 0.86, lowestLimitVoltsPerM: 28, conforming: true },
     },
   }));
-  assert.match(ratio[0], /^0\.86 V\/m at 120 m \(2025\) — 33× below the limit \(28 V\/m\), peak: 700 MHz$/);
-});
-
-test('the bearings say what was drawn and what could not be', () => {
-  const lines = en(() => anfrAzimuthLines(DETAIL));
-  const joined = norm(lines.join('\n'));
-  assert.match(joined, /antennas, /);
-  assert.match(joined, /directions?/);
-  assert.match(joined, /m above ground/);
-  assertNoFrench(lines);
-});
-
-test('the compass, the 5G rung and the band names read as English', () => {
-  assert.equal(en(() => anfrCardinal(-90)), 'W');
-  assert.equal(en(() => anfrCardinal(225)), 'SW');
-  assert.equal(anfrCardinal(-90), 'O');
-  assert.equal(en(() => anfrFiveGBandLabel(3500)), 'high-band');
-  assert.equal(en(() => anfrFiveGBandLabel(700)), 'low-band');
-  assert.equal(en(() => anfrShortBand('TM 700 (Téléphonie Mobile en 700 MHz)')), '700 MHz');
-  assert.equal(en(() => anfrShortMonth(null)), 'date unknown');
+  assert.equal(ratio, 'Waves measured 120 m away in 2025: 33 times below the legal limit');
   assert.equal(en(() => anfrEditionLabel('2026-08-27')), 'August 27, 2026');
   assert.equal(anfrEditionLabel('2026-08-27'), '27 août 2026');
 });
@@ -211,13 +169,8 @@ test('the row label and the mesh card say which regime they are in', () => {
     'no ANFR support in this view');
   assert.equal(en(() => buildAnfrLoadingLabel({ loading: true })), 'reading the ANFR register...');
 
-  const card = norm(en(() => buildAnfrMeshLabel(
-    { tuple: [48.8, 2.3, 4, 4], lookupPending: true }, PACK,
-  )));
-  assert.match(card, /^Mobile antenna/);
-  assert.match(card, /Looking the mast up in the register…/);
-  assert.match(card, /Move closer for the mast’s card/);
-  assert.match(card, /Overview — one point per cell · register of August 27, 2026/);
+  const card = en(() => buildAnfrMeshLabel({ tuple: [48.8, 2.3, 4, 4], lookupPending: true }));
+  assert.equal(card, '5G antenna · 4 operators\nLoading…');
 });
 
 test('the mast legend still owes the reader its three absences, in English', () => {
@@ -225,8 +178,7 @@ test('the mast legend still owes the reader its three absences, in English', () 
     mastRegime: true, regime: 'supports', mastsUnpublished: 4, mastsClipped: 9, sectors: 3,
   }));
   assert.deepEqual(rows.map((row) => row.label),
-    ['No mast — height not published', 'Shafts cut off', 'Bearings of the selected support']);
-  assert.match(rows[0].blurb, /551 concerned are underground or in a tunnel/);
-  assert.match(rows[2].blurb, /The length is a drawing convention, not a range/);
-  assertNoFrench(rows.map((row) => [row.label, row.blurb]));
+    ['Underground, no mast', 'Masts not drawn: too many here', 'Direction of the antennas']);
+  assert.equal(rows[2].blurb, 'Line length is indicative only.');
+  assertNoFrench(rows.map((row) => [row.label, row.blurb].filter(Boolean)));
 });
