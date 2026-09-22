@@ -1,7 +1,9 @@
 // The film encode's pure rules (scripts/build-landing-film.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOX_ASPECT, boxCrop, CAP_BYTES, CODECS_BY_WIDTH, filmFor, GOP, openingTime, referenceFilter } from './build-landing-film.mjs';
+import {
+  BOX_ASPECT, boxCrop, CAP_BYTES, CODECS_BY_WIDTH, filmFor, GOP, openingTime, referenceFilter, sourceTag,
+} from './build-landing-film.mjs';
 
 test('a 16:9 film is cropped to the box\'s 1.65, centred, full height, even-sized', () => {
   const crop = boxCrop({ width: 1920, height: 1080 }, BOX_ASPECT);
@@ -47,4 +49,14 @@ test('a film turned round by --start says where its story now begins in the file
   // The power-grid film: 14.67 s at 30 fps, turned to begin at 3.0 s.
   assert.equal(openingTime({ durationS: 14.67, fps: 30, startFrame: 90 }), 11.67);
   assert.equal(openingTime({ durationS: 28.97, fps: 30, startFrame: 0 }), 0, 'Roissy was not turned');
+});
+
+test('a cached encode belongs to one source: a new film of the same length is encoded again', () => {
+  const stat = { size: 71_649_808, mtimeMs: 1_790_000_000_000 };
+  const tag = sourceTag('/tmp/lyon-reveal-landing.mp4', stat);
+  assert.match(tag, /^[0-9a-f]{8}$/);
+  assert.equal(sourceTag('/elsewhere/lyon-reveal-landing.mp4', stat), tag, 'the name, not the directory');
+  assert.notEqual(sourceTag('/tmp/lyon-reveal-landing-clean.mp4', stat), tag);
+  assert.notEqual(sourceTag('/tmp/lyon-reveal-landing.mp4', { ...stat, size: stat.size + 1 }), tag);
+  assert.notEqual(sourceTag('/tmp/lyon-reveal-landing.mp4', { ...stat, mtimeMs: stat.mtimeMs + 1000 }), tag);
 });

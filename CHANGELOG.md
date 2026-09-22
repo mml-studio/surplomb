@@ -50,6 +50,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   key's seven letters are now a filter: one press shows that class alone, the
   next ones add or remove a class, and the counts stay those of everything
   loaded.
+- **The landing page's property view is the Lyon film: the sales, then the
+  energy ratings.** « Immobilier » (“Property”) played six seconds of a sale
+  card over place des Jacobins; it now plays a 10-second film shot on the
+  photorealistic globe: a dive from high over the Presqu'île onto the
+  Hôtel de Ville, the property sales (DVF) around it, one of them pinned —
+  €410,000, a 68 m² flat sold in October 2025 — then a line that sweeps the
+  district, putting the sales out behind it and painting every rated parcel
+  in its energy class (DPE), and a climb over the repainted district, the
+  same building now reading « 14 energy ratings · C to G ». The view is
+  titled « Ventes et DPE » (“Sales and energy ratings”), plays once for its
+  10 seconds, and « Ouvrir dans le globe » opens the film's last frame:
+  the energy ratings over the Terreaux from 693 m. The thumbnail opens mid-
+  sweep, sales on one side and ratings on the other, so a reader who keeps
+  still images sees both.
 - **The landing page's power-grid view is the power-grid film, and it grows
   under the pointer.** « Le réseau électrique et ce qu'il produit » showed a
   daytime take from before the view's night rework; it now plays the

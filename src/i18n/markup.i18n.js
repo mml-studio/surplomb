@@ -662,9 +662,12 @@ export default defineMessages({
         place: { fr: 'Roissy-Charles-de-Gaulle', en: 'Roissy-Charles-de-Gaulle', keep: ['Roissy-Charles-de-Gaulle'] },
       },
       v02: {
-        alt: { fr: 'Une parcelle vendue à Lyon, et son prix', en: 'A parcel sold in Lyon, and its price' },
-        title: { fr: 'Ventes immobilières', en: 'Property sales' },
-        place: { fr: 'Une parcelle vendue à Lyon, et son prix', en: 'A parcel sold in Lyon, and its price' },
+        alt: {
+          fr: 'Les ventes autour de l’Hôtel de Ville de Lyon, puis chaque parcelle peinte selon son DPE',
+          en: 'The sales around Lyon’s city hall, then every parcel painted by its energy rating (DPE)',
+        },
+        title: { fr: 'Ventes et DPE', en: 'Sales and energy ratings' },
+        place: { fr: 'Lyon : chaque vente, puis chaque DPE', en: 'Lyon: every sale, then every energy rating' },
       },
       v03: {
         alt: { fr: 'Les voitures en direct dans les rues, avec les bouchons', en: 'Live cars in the streets, traffic jams included' },
