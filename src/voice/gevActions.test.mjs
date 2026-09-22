@@ -830,6 +830,36 @@ test('barge-in never tears down a data layer load, and radio still stops for it'
   assert.equal(signalsSeen.get('radio'), controller.signal);
 });
 
+test('a layer this deployment withholds is refused in words the model can repeat, and never asked of the manager', async () => {
+  // GEV_NONCOMMERCIAL_SOURCES=off: "infrastructure mode" names the cables, and
+  // the hosted site does not serve them.
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  let asked = 0;
+  const dataManager = {
+    layers: new Map([['telegeography-submarine-cables', { module: {} }]]),
+    getAll: () => [{ id: 'telegeography-submarine-cables', name: 'Submarine Cables' }],
+    getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+    isLayerWithheld: (id) => id === 'telegeography-submarine-cables',
+    _setEnabledWithIntent: () => { asked += 1; return { intentEpoch: 1, promise: Promise.resolve(false) }; },
+    setRowFollowers: async () => [],
+  };
+  const runner = createGevActionRunner({ viewer, styleManager: {}, dataManager });
+  const result = await runner('set_layer_visibility', { layerId: 'telegeography-submarine-cables', enabled: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.withheld, true);
+  assert.match(result.error, /does not offer this layer: its data licence excludes commercial use/);
+  assert.equal(asked, 0);
+
+  // Switching it OFF is never refused.
+  await runner('set_layer_visibility', { layerId: 'telegeography-submarine-cables', enabled: false });
+  assert.equal(asked, 1);
+});
+
 test('generic voice visibility preserves a manager resource-cancellation envelope', async () => {
   globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
   const viewer = {

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   NONCOMMERCIAL_SOURCES,
@@ -87,6 +88,17 @@ test('the layers a source feeds are real rows, and only the cable map withholds 
   assert.deepEqual(layerIdsOf(['open-meteo', 'google-news', 'google-street-view']), []);
   assert.deepEqual(layerIdsOf(ALL_IDS), ['telegeography-submarine-cables']);
   assert.deepEqual(layerIdsOf([]), []);
+});
+
+test('the page withholds the layers of the sources the probe says are off, and holds early requests for the answer', () => {
+  const main = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
+  assert.match(main, /dataManager\.withholdLayers\(layerIdsOf\(offSourcesFromProbe\(probe\)\)\)/);
+  // A share link restored before the probe answers must wait for it, bounded.
+  assert.match(main, /SWITCHABLE_LAYER_IDS\.includes\(change\.layerId\)/);
+  assert.match(main, /await Promise\.race\(\[withholding, new Promise\(\(resolve\) => \{ setTimeout\(resolve, 5_000\); \}\)\]\)/);
+  // Credits for every off source, and the two cockpit surfaces.
+  assert.match(main, /withdrawDataCredits\(viewer, creditKeysOf\(off\)\)/);
+  assert.match(main, /off\.has\('google-news'\)/);
 });
 
 test('the page reads the probe defensively: a failed or foreign answer is a clone', () => {

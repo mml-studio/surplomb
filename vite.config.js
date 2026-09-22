@@ -18925,7 +18925,7 @@ function openAiRealtimeProxy() {
             },
             output: { voice },
           },
-          instructions: [GEV_VOICE_INSTRUCTION_LINES.join('\n'), sessionLanguageLines]
+          instructions: [voiceInstructionText(process.env), sessionLanguageLines]
             .filter(Boolean).join('\n'),
           tools: GEV_REALTIME_TOOLS,
           tool_choice: 'auto',
@@ -19140,7 +19140,7 @@ function voiceBrainProxy() {
       const languageLines = voiceSessionInstruction(language);
       const model = process.env.OPENROUTER_VOICE_MODEL || OPENROUTER_VOICE_MODEL_DEFAULT;
       const system = [
-        GEV_VOICE_INSTRUCTION_LINES.join('\n'),
+        voiceInstructionText(process.env),
         // The realtime model hears silence and knows the turn ended. A text
         // brain does not, so it needs the one rule the audio session gets for
         // free: finish the work in this turn, then say one short thing.
@@ -19750,6 +19750,30 @@ const GEV_VOICE_INSTRUCTION_LINES = [
   'WHAT CAN I SAY? Answer "que puis-je dire ?" / "what can you do?" from this list, three or four of them, in the operator\'s language — never invent a capability: "Emmène-moi à Bordeaux", "Montre les médecins", "Quelles couches as-tu ?", "Combien de bornes de recharge dans la vue ?", "Combien de vélos à cette station ?", "Où suis-je ?", "Passe en vision nocturne", "Affiche les avions et suis le plus proche", "La station de vélos la plus proche avec des vélos", "Recule, vue du globe entier".',
   'SCOPE HONESTLY. The French point layers load by viewport or camera proximity, so a count over them is a count of what is loaded around the current view — say "in view" or "around here", never a national or world total. When a result carries a coverage note or a warmup note, it is telling you the count is still rising; say so instead of stating it as settled fact.',
 ];
+
+/** The "infrastructure mode" shorthand as written above, and as it reads without the cables. */
+export const VOICE_INFRASTRUCTURE_VIEW = Object.freeze({
+  withCables: 'three set_layer_visibility calls (local-datacenters, local-dams, telegeography-submarine-cables)',
+  withoutCables: 'two set_layer_visibility calls (local-datacenters, local-dams; this site does not offer the submarine cables, so say so if asked for them)',
+});
+
+/**
+ * The spoken contract for THIS deployment, read per request.
+ *
+ * Where GEV_NONCOMMERCIAL_SOURCES=off withholds the TeleGeography cables
+ * (src/nonCommercialSources.js), "infrastructure mode" names the two layers the
+ * site still offers, so the model does not plan a call the page will refuse.
+ * The page refuses it anyway (`isLayerWithheld` in src/voice/gevActions.js);
+ * this only spares the operator a failed step in the confirmation.
+ *
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {string}
+ */
+export function voiceInstructionText(env = process.env) {
+  const text = GEV_VOICE_INSTRUCTION_LINES.join('\n');
+  if (isSourceOn('telegeography', env)) return text;
+  return text.replace(VOICE_INFRASTRUCTURE_VIEW.withCables, VOICE_INFRASTRUCTURE_VIEW.withoutCables);
+}
 
 const GEV_REALTIME_TOOLS = [
   {

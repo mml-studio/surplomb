@@ -1211,6 +1211,21 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
         };
       }
       const enabled = Boolean(args.enabled);
+      // A layer this deployment withholds (GEV_NONCOMMERCIAL_SOURCES=off — the
+      // TeleGeography cables on the hosted site) is answered here, in words
+      // the model can repeat, rather than as the manager's bare refusal. The
+      // "infrastructure mode" shorthand names it; on this deployment the
+      // other two layers of that view still come on.
+      if (enabled && dataManager.isLayerWithheld?.(layerId)) {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          withheld: true,
+          error: 'This site does not offer this layer: its data licence excludes commercial use.',
+          hint: 'Say plainly that this site does not offer it. Do not retry it, and do not present another layer as the same data.', // i18n-ignore-line
+        };
+      }
       const changeOptions = { origin: 'voice' };
       // BARGE-IN MAY CANCEL A SOUND. IT MAY NOT TEAR DOWN A DATA LOAD.
       //

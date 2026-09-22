@@ -153,6 +153,19 @@ test('unset: a clone is unchanged — both routes use Open-Meteo, and nothing is
   assert.equal(brief.body.googleNewsStatus, 'on');
 });
 
+test('"infrastructure mode" names the two layers the site still offers where the cables are off', async () => {
+  const { voiceInstructionText, VOICE_INFRASTRUCTURE_VIEW } = await import('../vite.config.js');
+  const clone = voiceInstructionText({});
+  assert.ok(clone.includes(`means ${VOICE_INFRASTRUCTURE_VIEW.withCables} plus zoom_to_globe`),
+    'the phrase this replaces is still the one written in the instructions');
+  const hosted = voiceInstructionText({ GEV_NONCOMMERCIAL_SOURCES: 'off' });
+  assert.ok(!hosted.includes(VOICE_INFRASTRUCTURE_VIEW.withCables));
+  assert.ok(hosted.includes(`means ${VOICE_INFRASTRUCTURE_VIEW.withoutCables} plus zoom_to_globe`));
+  assert.equal(hosted.length - clone.length,
+    VOICE_INFRASTRUCTURE_VIEW.withoutCables.length - VOICE_INFRASTRUCTURE_VIEW.withCables.length,
+    'nothing else changes');
+});
+
 test('a brief cached with its weather and Google News headlines never answers once the switch is off', async () => {
   // The cell of the previous test, cached with Open-Meteo and Google News in it.
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';

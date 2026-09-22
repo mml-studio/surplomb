@@ -4314,6 +4314,49 @@ test('a peer row gives its own primary a chip, so the reader can subtract it', a
   }
 });
 
+test('a withheld layer leaves its row, and nothing can switch it back on', async () => {
+  // GEV_NONCOMMERCIAL_SOURCES=off on the hosted site: the TeleGeography cable
+  // map is licensed for non-commercial use only and its server refuses the
+  // files, so the chip goes the way of a layer that never registered.
+  const panel = makePeerPanel();
+  const changes = [];
+  panel.mgr.subscribe((change) => changes.push(change));
+  try {
+    // A share link restored before the deployment said anything.
+    await panel.mgr.setEnabled('telegeography-submarine-cables', true, { origin: 'programmatic' });
+    assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), true);
+
+    assert.deepEqual(panel.mgr.withholdLayers(['telegeography-submarine-cables', 'not-a-layer']), ['telegeography-submarine-cables']);
+    assert.deepEqual(panel.mgr.withholdLayers(['telegeography-submarine-cables']), [], 'withholding is idempotent');
+    await panel.mgr.waitForLayerSettled('telegeography-submarine-cables');
+    assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), false, 'the one already on goes off');
+    assert.equal(panel.mgr.isLayerWithheld('telegeography-submarine-cables'), true);
+    assert.equal(panel.mgr.isLayerWithheld('anfr-fr'), false);
+
+    // No chip: the row carries the halls and the masts.
+    await panel.mgr._setRowEnabled('local-datacenters', true);
+    panel.mgr._refreshTogglePanel();
+    assert.deepEqual(panel.chips('local-datacenters').map((chip) => chip.textContent), ['Data centers', 'Antennes']);
+    assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), false, 'the row\'s toggle does not bring it along');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
+    const listed = panel.mgr.getAll().find((layer) => layer.id === 'telegeography-submarine-cables');
+    assert.equal(listed.showInTogglePanel, false, 'the voice agent\'s layer list reads this');
+
+    // Asked for anyway — a share link, a scene, a voice turn: refused, with one line.
+    changes.length = 0;
+    assert.equal(await panel.mgr.setEnabled('telegeography-submarine-cables', true, { origin: 'user' }), false);
+    assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), false);
+    const blocked = changes.find((change) => change.type === 'visibility-blocked');
+    assert.equal(
+      blocked?.reason,
+      '« Câbles sous-marins » n’est pas disponible sur ce site : la licence de ses données exclut l’usage commercial.',
+    );
+    assert.equal(panel.mgr.withheldLayerReason('anfr-fr'), null);
+  } finally {
+    await panel.restore();
+  }
+});
+
 test('the peer row draws a vendored map glyph, masked, instead of a character', async () => {
   const panel = makePeerPanel();
   try {

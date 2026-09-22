@@ -20,7 +20,12 @@ import { LAYER_CATEGORIES, LAYER_TAXONOMY } from './data/layerTaxonomy.js';
 import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
 import { registerDataCredits, withdrawDataCredits } from './data/dataCredits.js';
-import { creditKeysOf, offSourcesFromProbe } from './nonCommercialSources.js';
+import {
+  SWITCHABLE_LAYER_IDS,
+  creditKeysOf,
+  layerIdsOf,
+  offSourcesFromProbe,
+} from './nonCommercialSources.js';
 import {
   WORLD_BASE_PROBE_WAIT_MS,
   anonymousEsriAllowedByProbe,
@@ -733,6 +738,21 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     for (const layer of layers) layer.attachDataManager?.(dataManager);
     // Restoration starts only after the complete production registry is sealed.
     dataManager.finalizeRegistrations(LAYER_STATE_REGISTRY, LAYER_TAXONOMY, LAYER_CATEGORIES);
+    // The layers a switched-off source alone feeds (GEV_NONCOMMERCIAL_SOURCES —
+    // src/nonCommercialSources.js; on the hosted site, the TeleGeography cable
+    // map, whose files its server refuses) leave the panel once the boot's
+    // `/api/trial` answer says so. Until it has, a request to switch one ON
+    // waits for that answer — at most 5 s, the probe never rejects — so a share
+    // link restored early does not fetch what the server will refuse. The
+    // manager's own check runs after this guard and reads the answer.
+    const withholding = trialProbe.read().then((probe) => {
+      dataManager.withholdLayers(layerIdsOf(offSourcesFromProbe(probe)));
+    });
+    dataManager.addVisibilityGuard(async (change) => {
+      if (!change?.enabled || !SWITCHABLE_LAYER_IDS.includes(change.layerId)) return null;
+      await Promise.race([withholding, new Promise((resolve) => { setTimeout(resolve, 5_000); })]);
+      return null;
+    });
     if (import.meta.env.DEV) {
       window.__gevQaRegisterLayer = (targetManager, layerModule) => {
         if (targetManager !== dataManager) throw new Error('QA layer manager mismatch');

@@ -123,4 +123,12 @@ export default defineMessages({
   legendSelection: {
     close: { fr: 'Fermer la fiche', en: 'Close the card' },
   },
+
+  withheld: {
+    fr: (name) => `« ${name} » n’est pas disponible sur ce site : la licence de ses données exclut l’usage commercial.`,
+    en: (name) => `“${name}” is not available on this site: its data licence excludes commercial use.`,
+    note: 'Toast when a share link, a scene or the voice agent asks for a layer this deployment withholds '
+      + '(GEV_NONCOMMERCIAL_SOURCES=off — today the TeleGeography submarine cables). The name arrives in the page language.',
+    sample: ['Submarine cables'],
+  },
 });
