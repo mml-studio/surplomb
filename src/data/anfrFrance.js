@@ -154,13 +154,13 @@
  * beamwidth nor a range, so a wedge would have to invent an aperture and a
  * distance. The ray is drawn at a declared **60 m** — twice the national
  * median mast height, chosen so it reads against the shaft it springs from —
- * and the card says in French that this length is a convention and not a
- * coverage claim. `orientation: 0` is drawn as due north, because it was
+ * and the key says this length is indicative, not a range.
+ * `orientation: 0` is drawn as due north, because it was
  * checked and it is one: 26 of 138 measured installations carry a 0, none
  * carries it alone, and 18 of the 26 are the three-sector `0/120/240`.
  *
- * An antenna whose bearing is not filed gets no ray and is counted on the
- * card. That is the same case `cctv.js` meets with an unsurveyed camera
+ * An antenna whose bearing is not filed gets no ray. That is the same case
+ * `cctv.js` meets with an unsurveyed camera
  * heading and answers with a dashed cone — the difference is that `cctv.js`
  * has a placeholder bearing to disown, and this layer has none to draw, so the
  * stricter answer is available and is taken.
@@ -188,14 +188,17 @@
  * Défense et de l'Intérieur."* Blank ground beside a base or an airport is
  * policy, not a gap in the data. And the observatoire is PUBLIC MOBILE only:
  * a support that also carries a microwave link, TNT or PMR is drawn here as a
- * mobile mast and its card names the rest from Cartoradio rather than letting
- * the dot imply the whole installation.
+ * mobile mast, and only its mobile networks are named.
+ *
+ * ── The card and the key are written for a first-time reader ────────────────
+ * Five short lines on the card (what and whose, the networks, where, the
+ * waves, the source) and one plain name per colour in the key, since
+ * 2026-09-22 — see "Card copy" below for what was left off and the three
+ * refusals that were kept.
  */
 
-import { formatDate, formatNumber } from '../i18n/format.js';
-import { getLocale } from '../i18n/locale.js';
+import { formatDate, formatNumber, formatPercent } from '../i18n/format.js';
 import { labelFor } from '../i18n/messages.js';
-import { ANFR_BAND_LABELS } from './anfrFeed.i18n.js';
 import { ANFR_NATURE_LABELS } from './anfrFrance.i18n.js';
 import messages from './anfrFrance.i18n.js';
 import * as Cesium from 'cesium';
@@ -216,8 +219,6 @@ import {
   ANFR_BANDS,
   ANFR_EXPOSURE_RADIUS_M,
   ANFR_GENERATIONS,
-  ANFR_HEIGHTLESS_NATURES,
-  ANFR_HEIGHT_MISSING,
   anfrBand,
   anfrDecodeMask,
   anfrProjectPoint,
@@ -233,6 +234,21 @@ import {
   selectAnfrMesh,
 } from './anfrMesh.js';
 import { pickAt } from './pickAt.js';
+import { isWorldPick } from './pickRegistry.js';
+import { sceneGroundPoint } from './groundPick.js';
+import {
+  COVERAGE_FORMAT,
+  COVERAGE_MODES,
+  COVERAGE_OPERATORS,
+  coverageCardText,
+  coverageLegend,
+  coverageLut,
+  coverageMonthLabel,
+  normalizeCoverageMode,
+} from './mobileCoverage.js';
+import coverageMessages from './mobileCoverage.i18n.js';
+import { createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
+import { VIEWSHED_COLOR, computeMastViewshed, createViewshedImageryLayer } from './mastViewshedImagery.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const ANFR_FR_LAYER_ID = 'anfr-fr';
@@ -249,6 +265,10 @@ export const ANFR_FR_OVERLAY_SOURCE_OPTIONS = Object.freeze({
 const MESH_URL = '/api/anfr-fr/mesh';
 const SUPPORTS_URL = '/api/anfr-fr/supports';
 const DETAIL_URL = '/api/anfr-fr/support';
+/** The ARCEP coverage pyramid's meta; the tiles themselves are outside /api. */
+const COVERAGE_META_URL = '/api/anfr-fr/coverage';
+/** Overlay id of the coverage card, on the same source as the support card. */
+const COVERAGE_CARD_ID = 'anfr-fr:coverage';
 
 // --- Activation / load gating ----------------------------------------------
 /**
@@ -366,26 +386,7 @@ const SECTOR_ALPHA = 0.9;
  * dropped.
  */
 const MAX_RENDERED_SECTORS = 96;
-/**
- * How many distinct bearings the card NAMES before it only counts them.
- *
- * Four, and it is a legibility floor rather than a width one. A three-sector
- * mast is the textbook case and reads as `0° N · 120° SE · 240° O`, which a
- * reader can stand under and check; past four the line becomes a list of
- * numbers with no shape, and the count plus the mounting heights say more
- * than the numbers would.
- */
-const CARD_BEARING_NAME_LIMIT = 4;
 
-/**
- * Where the card wraps, in characters — measured, not chosen.
- *
- * `worldOverlayDraw` wraps a detail line at a pixel width, and at the shipped
- * detail font that lands at about 62 characters. It is used here for ONE
- * decision only: whether two short facts fit on one line or need two. It is
- * not a truncation limit — nothing on this card is ever cut to fit.
- */
-const CARD_WRAP_CHARS = 62;
 
 // --- Presentation -----------------------------------------------------------
 /**
@@ -434,31 +435,7 @@ const POINT_MAX_PX = 11;
  */
 const SIZE_CEILING_OPERATORS = 5;
 
-/**
- * How many operators a card names before summarising.
- *
- * Only reachable on the FALLBACK line — the one the card prints while the
- * detailed fiche has not arrived, from the observatoire's flat operator list.
- * Once it lands there is one line per operator and nothing to truncate: five
- * is the measured maximum on any mast in France.
- */
-const CARD_OPERATOR_LIMIT = 5;
 
-/**
- * ONE SHORT SENTENCE per band swatch, and no more.
- *
- * These used to run to four sentences on `5g` alone, the last three of them
- * about how ANFR files a status — that `Techniquement opérationnel` appears on
- * 5G rows and nothing else, so the field describes the GENERATION and not the
- * mast. That fact is true, it is load-bearing, and it is not a legend's job —
- * nor, it turned out, a card's: it is true of every 5G row in the edition, so
- * it is a note about the register and lives in this module's header, with the
- * cross-tabulation that established it.
- *
- * What is left is the one thing a colour swatch has to answer — WHAT DOES THIS
- * COLOUR MEAN — plus the national count that puts it in proportion.
- */
-const bandBlurb = (band) => messages().bandBlurbs[band] ?? '';
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -516,6 +493,35 @@ let _packBoxKey = null;
 
 /** Coordinate id → the supports the register places there, or null. */
 const _meshLookups = new Map();
+
+// --- The ARCEP coverage under the masts -------------------------------------
+/** `off`, `gaps` or an operator id — see `mobileCoverage.js`. Share-linked. */
+let _coverageMode = 'off';
+/** idle → loading → ready | missing | failed. `missing`: no pyramid on this server. */
+let _coverageStatus = 'idle';
+let _coverageError = null;
+let _coverageMeta = null;
+let _coverageMetaPromise = null;
+/** The Cesium ImageryLayer on `viewer.imageryLayers`, and the mode it paints. */
+let _coverageImagery = null;
+let _coverageImageryMode = null;
+let _coverageRead = null;
+/** The ground card: `{ position, text }`, or null. One card at a time with the support's. */
+let _coverageCard = null;
+let _coverageCardGeneration = 0;
+
+// --- The selected mast's line of sight ---------------------------------------
+/**
+ * `{ recordId, status, radiusM?, horizonM?, capped?, share?, error?, layer? }`
+ * for the selected support, or null. `status`: loading | ready | failed |
+ * photoreal. The heavy grids are dropped once painted; the layer is the only
+ * thing kept.
+ */
+let _viewshed = null;
+let _viewshedGeneration = 0;
+/** Seams: the network-and-canvas half, swapped in tests. */
+let _viewshedCompute = computeMastViewshed;
+let _viewshedLayerFactory = createViewshedImageryLayer;
 /** SUP_ID → the Cartoradio card, or null when Cartoradio refused. */
 const _details = new Map();
 
@@ -528,8 +534,8 @@ export function anfrBandColor(band) {
 
 /** The band's name, in the page's language. */
 export function anfrBandLabelFor(band) {
-  const resolved = ANFR_BAND_LABELS();
-  return resolved[band] || resolved.projet;
+  const labels = messages().legend.bands;
+  return labels[band] || labels.projet;
 }
 
 /**
@@ -1084,21 +1090,21 @@ function drawSectors(record) {
 
 // --- Card copy --------------------------------------------------------------
 
-// ── PLAIN FRENCH, AND WHERE IT STOPS ────────────────────────────────────────
+// ── WRITTEN FOR SOMEONE WHO HAS NEVER HEARD OF THE ANFR ─────────────────────
 //
-// Everything below this line translates the register into the words a reader
-// arrived with. It is a rewrite of vocabulary and of ORDER, not of facts: no
-// sentence here says anything the previous card did not, and three of them say
-// something it held in memory and threw away.
+// The card answers five questions, one short line each, in the order people
+// ask them: what is it and whose, what does it carry, where is it, and what
+// are the waves like around it. Everything else the two registers publish —
+// the frequencies, the antenna count and heights, the owner, the register
+// number — stays in the data and off the card; the bearings are still drawn
+// as rays, and Cartoradio is one search away for anyone who needs 3,5 GHz or
+// a SUP_ID.
 //
-// The rule the translation obeys is that a plainer word may not be a larger
-// claim. A band becomes "rapide" or "basse", which describes the FREQUENCY and
-// not a speed the register never measured; the card never promises a débit,
-// never says a mast covers an address, and never says a level is safe. Those
-// three are the questions people come with and the three the data cannot
-// answer, so the card answers the answerable neighbours instead: who
-// transmits, what the measured level is against its own published ceiling, and
-// what the measurement missed.
+// Three refusals survive the simplification, because they are the difference
+// between plain and wrong: the card never says a level is safe (a multiple of
+// the legal limit is a measurement, "safe" would be a verdict), never says an
+// antenna covers an address (that is the ARCEP map's job), and never lets a
+// measurement taken before the current equipment pass for one of it.
 
 /** `FREE MOBILE` → `Free Mobile`, and `SFR` stays `SFR`. */
 export function anfrOperatorName(name) {
@@ -1175,336 +1181,72 @@ export function anfrPlainText(value) {
     .join(' ');
 }
 
+/** The commune of a Cartoradio site — `Paris 6e`, not `PARIS 6E ARRONDISSEMENT` — or `''`. */
+export function anfrPlainCommune(site) {
+  return anfrPlainText(site?.commune).replace(/\s+Arrondissement$/i, '');
+}
+
+/** The four national brands first, in the order readers know them, then the rest. */
+// i18n-ignore-next-line — brand names, the same in both languages.
+const ANFR_BRAND_ORDER = Object.freeze(['Orange', 'SFR', 'Bouygues', 'Free']);
+
+/** The operators of a support as a reader names them: `Orange, SFR, Bouygues, Free`. */
+export function anfrCardOperators(support) {
+  const names = Array.isArray(support?.operators) ? support.operators : [];
+  const rank = (name) => {
+    const index = ANFR_BRAND_ORDER.indexOf(name);
+    return index < 0 ? ANFR_BRAND_ORDER.length : index;
+  };
+  return [...new Set(names.map(anfrOperatorShort).filter(Boolean))]
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'fr'));
+}
+
+/** The card's title: the newest generation on the air and the operator count. */
+export function anfrCardTitle(top, operators) {
+  const m = messages().card;
+  if (!operators) return m.titleNoOperator;
+  return top ? m.title(top, fr(operators), operators) : m.titleProject(fr(operators), operators);
+}
+
 /**
- * Street and commune on one short line, or `''`.
- *
- * The postcode and the building name are DROPPED, not forgotten: the card
- * wraps at about 62 characters and both are redundant once the commune is
- * named — nobody reading "Paris 6e" needs "75006" to know where they are.
- * `Arrondissement` goes for the same reason; `Paris 6e` is how the place is
- * called.
+ * What the antenna carries, in one line: the generations on the air, and the
+ * ones an approved project would ADD. An operator re-filing for a band already
+ * on the air is paperwork and takes no word — 11 830 of the 15 606 live
+ * supports with a project on file are exactly that.
  */
-export function anfrPlainAddress(site) {
-  const street = anfrPlainText(site?.address);
-  const commune = anfrPlainText(site?.commune).replace(/\s+Arrondissement$/i, '');
-  return [street, commune].filter(Boolean).join(', ');
+export function anfrNetworksLine(support) {
+  const m = messages().networks;
+  const liveMask = Number(support?.live) || 0;
+  const live = anfrDecodeMask(liveMask, ANFR_GENERATIONS).reverse();
+  const planned = anfrDecodeMask((Number(support?.plan) || 0) & ~liveMask, ANFR_GENERATIONS).reverse();
+  if (!live.length) return planned.length ? m.plannedOnly(planned.join(', ')) : m.nothing;
+  return planned.length
+    ? m.liveAndPlanned(live.join(', '), planned.join(', '), planned.length)
+    : m.live(live.join(', '));
 }
 
 /**
- * A band in MHz, spelled the way it is spoken in France.
+ * What the antenna stands on, and how high, in the reader's words.
  *
- * 3500 is the only one said in gigahertz — "la 3,5 GHz" is the phrase the
- * whole public debate about 5G uses — and every other band keeps its megahertz
- * because "la 1,8 GHz" is nobody's name for LTE 1800.
- */
-export function anfrMhzLabel(mhz) {
-  const value = Number(mhz);
-  if (!Number.isFinite(value)) return null;
-  if (value === 3500) return messages().band35;
-  // No thousands separator: the band is a NAME, not a quantity, and nobody in
-  // France has ever called LTE 1800 "la 1 800".
-  return `${value} MHz`;
-}
-
-/**
- * The one distinction a 5G reader actually needs.
- *
- * A phone shows "5G" on 700 MHz and on 3,5 GHz alike, and the two are not the
- * same object: 3,5 GHz is the band allocated to 5G outright, the low bands are
- * shared. Naming the RUNG rather than a speed keeps the card inside what ANFR
- * published — the register has no throughput column and this layer will not
- * invent one.
- */
-export function anfrFiveGBandLabel(mhz) {
-  const value = Number(mhz);
-  const m = messages().fiveG;
-  if (value >= 3000) return m.fast;
-  if (value >= 1500) return m.mid;
-  if (Number.isFinite(value)) return m.low;
-  return null;
-}
-
-/** Eight-point compass, so a bearing is readable without a protractor. */
-export function anfrCardinal(deg) {
-  const value = Number(deg);
-  if (!Number.isFinite(value)) return null;
-  const points = messages().compass;
-  return points[Math.round((((value % 360) + 360) % 360) / 45) % 8];
-}
-
-/**
- * What the mast IS, with the preposition the register omits.
- *
- * `nat_id` resolves to one of 38 nouns, and the difference between "Immeuble"
- * and "Pylône autostable" is the difference between a rooftop installation and
- * a tower in a field — a reader gets that from a preposition and not from a
- * bare noun. The register's own word is always quoted; only the framing is
- * added, so a nature this function has never seen degrades to the noun rather
- * than to a guess.
+ * The register's 38 natures fold into the handful a reader can picture — a
+ * pylon, a mast, a roof — and the rest keep their own name (a lighthouse is a
+ * lighthouse). The height is the one the register publishes, rounded to the
+ * metre; none is printed where none is published.
  */
 export function anfrPlacementLine(nature, heightM) {
   const m = messages().placement;
-  const noun = String(nature || '').trim();
-  const tall = Number.isFinite(heightM) && heightM > 0 ? m.height(fr(heightM)) : '';
-  if (!noun) return tall ? m.unnamedWithHeight(tall) : m.unknown;
-  // The BRANCHES read the register's own French; only what is PRINTED moves.
-  const lower = noun.toLocaleLowerCase('fr-FR');
-  const french = getLocale() === 'fr';
-  const shownLower = french ? lower : labelFor(ANFR_NATURE_LABELS, lower);
-  const shown = french ? noun : shownLower.charAt(0).toUpperCase() + shownLower.slice(1);
-  // The 551 supports with no published height are all of them underground or
-  // indoor — see the feed's Trap 3 — so this branch is the one that explains
-  // the missing shaft rather than leaving it as a silence.
-  if (/tunnel|intérieur|souterrain|sous-terrain|galerie/i.test(lower)) {
-    return m.underground(shownLower);
-  }
-  if (/pylône|pylone|mât|mat |tour|fût|fut |éolienne|eolienne|sémaphore|phare/i.test(lower)) {
-    return tall ? `${shown}${tall}` : m.noHeight(shown);
-  }
-  if (/immeuble|bâtiment|batiment|monument|château|chateau|silo|local technique|dalle/i.test(lower)) {
-    // i18n-ignore-next-line — the French elision, written onto the register's
-    // own noun; the English message adds its own preposition to the named one.
-    const of = french
-      ? (/^[aeiouâàéèêëîïôöûüh]/i.test(lower) ? `d’${lower}` : `de ${lower}`)
-      : shownLower;
-    return tall ? m.roof(of, tall) : m.roofNoHeight(of);
-  }
-  if (/mobilier|signalisation|ouvrage/i.test(lower)) {
-    return tall ? m.on(shownLower, tall) : m.onNoHeight(shownLower);
-  }
-  return tall ? `${shown}${tall}` : m.noHeight(shown);
-}
-
-/** `les 4 opérateurs`, `Orange et SFR`, or a single name. */
-function anfrOperatorSet(names, total) {
-  const m = messages().operators;
-  const list = [...names];
-  if (total > 1 && list.length === total) return m.all(fr(total));
-  const plain = list.sort((a, b) => a.localeCompare(b, 'fr')).map(anfrOperatorShort);
-  if (plain.length === 1) return plain[0];
-  return m.andLast(plain.slice(0, -1).join(', '), plain[plain.length - 1]);
-}
-
-/**
- * WHO TRANSMITS, in ONE line — grouped by what they actually offer.
- *
- * One row per operator was the honest shape and the wrong one: on the great
- * majority of French masts every operator files the same ladder, so four rows
- * were four repetitions of one fact and the reader had to diff them by eye to
- * find the case where they differ. Grouping inverts that — identical offerings
- * collapse to `les 4 opérateurs`, and a mast where somebody is missing the
- * 3,5 GHz band says so in the same breath, at the width where it is visible.
- *
- * 5G is split by band because a phone shows "5G" on 700 MHz and on 3,5 GHz
- * alike and the two are not the same object. Everything else is the
- * generation, because nobody asks which 4G band they are on.
- *
- * @param {?object} detail Cartoradio payload.
- * @returns {?string}
- */
-export function anfrOperatorSummaryLine(detail) {
-  const rows = Array.isArray(detail?.antennas?.byOperator) ? detail.antennas.byOperator : [];
-  if (!rows.length) return null;
-  const total = rows.length;
-  /** Rung label → the operators that radiate it here, in ladder order. */
-  const rungs = new Map();
-  const push = (label, name) => {
-    if (!rungs.has(label)) rungs.set(label, new Set());
-    rungs.get(label).add(name);
-  };
-  // 5G first, by band, strongest band first — the rung being asked about.
-  const tiers = new Map();
-  for (const row of rows) {
-    const five = (row.generations || []).find((entry) => entry.generation === '5G');
-    if (!five) continue;
-    const mhz = (five.mhz || []).length ? five.mhz[five.mhz.length - 1] : null;
-    const key = mhz === null ? 0 : mhz;
-    if (!tiers.has(key)) tiers.set(key, []);
-    tiers.get(key).push(row.name);
-  }
-  // The adjective only where it EARNS its width: on a mast where every
-  // operator files the same 5G band there is nothing to compare, and the
-  // number alone is the name of the band. Where the mast is split, the top
-  // tier is qualified so the comparison is legible without knowing that
-  // 3,5 GHz is the band allocated to 5G outright and 700 MHz is not.
-  const ladder = [...tiers.keys()].sort((a, b) => b - a);
-  for (const key of ladder) {
-    const adjective = ladder.length > 1 && key === ladder[0] ? anfrFiveGBandLabel(key) : null;
-    const label = key === 0 ? '5G'
-      : adjective ? `5G ${adjective} (${anfrMhzLabel(key)})` : `5G ${anfrMhzLabel(key)}`;
-    for (const name of tiers.get(key)) push(label, name);
-  }
-  for (const generation of ['4G', '3G', '2G']) {
-    for (const row of rows) {
-      if ((row.generations || []).some((entry) => entry.generation === generation)) {
-        push(generation, row.name);
-      }
-    }
-  }
-  if (!rungs.size) return null;
-
-  // Rungs carried by exactly the same operators are ONE group: `5G 3,5 GHz et
-  // 4G : les 4 opérateurs` rather than the same four names printed twice.
-  const groups = [];
-  for (const [label, names] of rungs) {
-    const key = [...names].sort().join('|');
-    const found = groups.find((group) => group.key === key);
-    if (found) found.labels.push(label);
-    else groups.push({ key, labels: [label], names });
-  }
-  const m = messages().operators;
-  return groups
-    .map((group) => m.rungs(group.labels.join(m.rungJoin), anfrOperatorSet(group.names, total)))
-    .join(' · ');
-}
-
-/**
- * What radiates here, said once and plainly.
- *
- * The fallback for the seconds before the detailed fiche lands — and the
- * permanent line when it never does. It does NOT repeat the in-service /
- * technically-operational split, because the sentence right under it already
- * says which generations radiate, and a per-mast gloss on a register-wide
- * filing convention is a note about ANFR rather than about this mast.
- */
-export function anfrLivePlainLine(support) {
-  const live = anfrDecodeMask(support?.live, ANFR_GENERATIONS).reverse();
-  const m = messages().live;
-  if (!live.length) return m.nothing;
-  return m.transmits(live.join(' · '));
-}
-
-/** The approved project, named by what it would add, or null. */
-export function anfrPlanLine(support) {
-  const plan = Number(support?.plan) || 0;
-  if (!plan) return null;
-  const live = Number(support?.live) || 0;
-  const adds = anfrDecodeMask(plan & ~live, ANFR_GENERATIONS).reverse();
-  const again = anfrDecodeMask(plan & live, ANFR_GENERATIONS).reverse();
-  if (adds.length) {
-    const m = messages().plan;
-    return live
-      ? m.alsoAuthorized(adds.join(' · '), adds.length)
-      : m.authorizedHere(adds.join(' · '), adds.length);
-  }
-  // A RE-FILING TAKES NO LINE. An operator lodging a fresh dossier for a band
-  // already on the air is paperwork, and the feed counted it: 11 830 of the
-  // 15 606 live supports carrying a project are exactly that. A line on 16 %
-  // of French masts that says nothing changed is the kind of noise a compact
-  // card exists to remove — the `plan` mask still rings the dot, which is
-  // where "somebody filed something" belongs.
-  return null;
-}
-
-/**
- * Card copy for one selected support.
- *
- * Every line is a published value, a count of published values, or a stated
- * absence of one. The Cartoradio half is appended only once it has arrived and
- * says so while it has not, because a card that silently omits the address is
- * indistinguishable from a mast whose address ANFR does not publish.
- *
- * @param {object} record Render record.
- * @param {object} [payload] The document the record came from.
- * @returns {string} Newline-separated card copy.
- */
-export function buildAnfrSelectionLabel(record, payload = null) {
-  const support = record?.support || {};
-  const details = [];
-  const detail = record?.detail || null;
-  const operators = Array.isArray(support.operators) ? support.operators : [];
-  const top = anfrDecodeMask(support.live, ANFR_GENERATIONS).reverse()[0] || null;
-
-  // The title answers "what is it and does it matter", in that order. The
-  // SUP_ID used to lead and now closes the card: it is the one field on here
-  // nobody arrived wanting, and it is still printed because it is the handle
-  // for every other ANFR tool.
-  const m = messages().card;
-  const title = operators.length
-    ? m.title(fr(operators.length), operators.length, top ? m.titleTop(top) : m.titleSilent)
-    : m.titleNoOperator;
-
-  // 551 of the 72 700 supports publish a height of 0, which is the register's
-  // way of saying nobody filled the field in. The feed returns null for those
-  // and the card says so rather than printing "0 m".
-  // WHERE IT IS, in one line: what it is bolted to, how tall, and the street.
-  // Two lines only when the upstream forces it — the `/sites` endpoint files
-  // some addresses as a single 52-character blob with no `voie` to split on,
-  // and merging one of those produces a line that wraps to two anyway.
-  const where = anfrPlainAddress(detail?.site);
-  const placement = anfrPlacementLine(support.nature, support.heightM);
-  const merged = where ? `${placement} — ${where}` : placement;
-  if (merged.length <= CARD_WRAP_CHARS) details.push(merged);
-  else details.push(placement, where);
-  if (!Number.isFinite(support.heightM)) {
-    details.push(m.noShaft(fr(ANFR_HEIGHT_MISSING), ANFR_HEIGHTLESS_NATURES.join(' · ').toLowerCase()));
-  }
-
-  // WHO TRANSMITS, grouped by offering. Cartoradio is the only upstream that
-  // binds an operator to a band, so until it lands the card falls back to the
-  // observatoire's flat list rather than leaving the question unanswered.
-  const summary = anfrOperatorSummaryLine(detail);
-  if (summary) {
-    details.push(summary);
-  } else if (operators.length) {
-    const shown = operators.slice(0, CARD_OPERATOR_LIMIT).map(anfrOperatorName).join(', ');
-    const rest = operators.length - CARD_OPERATOR_LIMIT;
-    details.push(m.operatorsFallback(shown, rest > 0 ? ` +${rest}` : '', anfrLivePlainLine(support)));
-  } else {
-    details.push(anfrLivePlainLine(support));
-  }
-
-  const plan = anfrPlanLine(support);
-  if (plan) details.push(plan);
-
-  // Everything below is Cartoradio's, on demand, and is labelled as such by
-  // being absent until it arrives.
-  if (record?.detailPending) {
-    details.push(m.detailPending);
-  } else if (record?.detailError) {
-    details.push(m.detailUnavailable(record.detailError));
-  } else if (detail) {
-    details.push(...anfrDetailLines(detail));
-  }
-
-  if (record?.coSited > 0) {
-    details.push(m.coSited(fr(record.coSited), record.coSited));
-  }
-
-  const edition = anfrEditionLabel(payload?.edition);
-  // Who owns the ground the mast stands on — the question a copropriété or a
-  // council arrives with, and one line of the register answers it.
-  const owner = anfrPlainText(detail?.site?.owner);
-  if (owner) details.push(m.owner(owner));
-  details.push(m.provenance(support.id, edition || '—'));
-  return [title, ...details].join('\n');
-}
-
-/**
- * The Cartoradio half of the card.
- *
- * Kept apart from `buildAnfrSelectionLabel` so a test can assert on it alone,
- * and because it comes from a DIFFERENT upstream with a different licence
- * footing — the observatoire is published for reuse, the Cartoradio REST API
- * is the private backend of ANFR's own map.
- */
-export function anfrDetailLines(detail) {
-  // ORDER IS THE DESIGN. Who transmits is already above; the level of the
-  // waves comes next because it is the second question people arrive with,
-  // and the physical description of the mast comes last because it is the
-  // only one a reader can answer by looking up.
-  const lines = [];
-  lines.push(...anfrExposureLines(detail));
-  lines.push(...anfrAzimuthLines(detail));
-
-  // A leg of the Cartoradio card that did not answer is NAMED. Measured on a
-  // SUP_ID the register does not hold: `/sites/999999999` returns HTTP 200
-  // with a zero-byte body, so the card would otherwise be indistinguishable
-  // from a mast Cartoradio has nothing to say about.
-  if (Array.isArray(detail?.degraded) && detail.degraded.length) {
-    lines.push(messages().card.degraded(detail.degraded.join(' · ')));
-  }
-  return lines;
+  const lower = String(nature || '').trim().toLocaleLowerCase('fr-FR');
+  const height = Number.isFinite(heightM) && heightM > 0 ? fr(Math.round(heightM)) : '';
+  if (/tunnel|intérieur|souterrain|sous-terrain|galerie/.test(lower)) return m.underground;
+  if (/pylône|pylone/.test(lower)) return m.pylon(height);
+  if (/^mât|^mat\b|^fût|^fut\b/.test(lower)) return m.mast(height);
+  if (/^tour/.test(lower)) return m.tower(height);
+  if (/immeuble|bâtiment|batiment|local technique|dalle|toit/.test(lower)) return m.roof(height);
+  if (/château d'eau|chateau d'eau|réservoir/.test(lower)) return m.waterTower(height);
+  if (/religieux|église|eglise|clocher/.test(lower)) return m.religious(height);
+  if (!lower) return height ? m.other(m.unknown, height) : m.unknown;
+  const named = labelFor(ANFR_NATURE_LABELS, lower);
+  return m.other(named.charAt(0).toUpperCase() + named.slice(1), height);
 }
 
 /** Every distinct band the mast radiates, in MHz — the join key for a report. */
@@ -1520,183 +1262,70 @@ export function anfrMastBandsMhz(detail) {
 }
 
 /**
- * The report's own band name, in the reader's words.
+ * The waves around the antenna, in ONE line, or null.
  *
- * `TM 1800` is ANFR's filing code for the 1800 MHz mobile band and means
- * nothing to anybody else; the rest of the list is already French and is left
- * exactly as published.
- */
-export function anfrServicePlainBand(label) {
-  const text = String(label || '').trim();
-  const m = messages().service;
-  const mobile = /^TM\s*(\d{3,4})/.exec(text);
-  if (mobile) return m.mobile(mobile[1]);
-  if (/wifi|wi-fi/i.test(text)) return 'Wi-Fi';
-  if (/^Radiodiffusion sonore/i.test(text)) return m.radio;
-  if (/^TV$/i.test(text)) return m.tv;
-  // Everything else is already the report's own French wording and is left
-  // exactly as published — a register's value is never rewritten.
-  return text;
-}
-
-/**
- * The same band as a four-character suffix — `700 MHz`, `Wi-Fi`.
- *
- * Written to ride at the end of the headline rather than take a line of its
- * own, and deliberately gender-free (`pic : 700 MHz`, never `pic sur le…`)
- * because the list it draws from holds masculine and feminine nouns alike.
- */
-export function anfrShortBand(label) {
-  const mobile = /^TM\s*(\d{3,4})/.exec(String(label || '').trim());
-  return mobile ? `${mobile[1]} MHz` : anfrServicePlainBand(label);
-}
-
-/** `2025-07-18` → `07/2025`. A month is enough to date an installation. */
-export function anfrShortMonth(iso) {
-  const match = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
-  return match ? `${match[2]}/${match[1]}` : messages().service.unknownDate;
-}
-
-/**
- * THE EXPOSURE BLOCK, and the four things it refuses to say.
- *
- * A number in volts per metre is meaningless to the person who came here
- * worried, and the previous card printed one with no scale at all. The scale
- * was already on the payload and unread: every CEM report publishes a
- * regulatory ceiling PER BAND, 28 to 61 V/m across one report, and the ratio
- * to the strictest of them is the one comparison a reader can act on.
- *
- * What it will not say: that a level is safe (a ratio is not a health
- * verdict), that the mast is the source (a report measures a PLACE, and the
- * bands it names may be anybody's), that the mast covers the reader's address
- * (there is no coverage column anywhere in this upstream), or that an absent
- * band reads as zero — the last is the reason `anfrUnmeasuredBands` exists.
+ * A CEM report measures a PLACE on request and is never attached to a mast, so
+ * the line says how far from the mast it was taken and when. The level is a
+ * multiple of the strictest limit the report publishes — "32 fois sous la
+ * limite légale" is a thing a worried reader can hold, volts per metre are
+ * not — and it is never called safe. A report older than the equipment beside
+ * it, or blind to some of its bands, says so in the same line.
  *
  * @param {?object} detail Cartoradio payload.
- * @returns {Array<string>}
+ * @returns {?string}
  */
-export function anfrExposureLines(detail) {
+export function anfrExposureLine(detail) {
   const exposure = detail?.exposure;
-  const lines = [];
-  if (!exposure) return lines;
+  if (!exposure) return null;
   const m = messages().exposure;
-  if (exposure.within === 0) {
-    lines.push(m.none(fr(exposure.radiusM ?? ANFR_EXPOSURE_RADIUS_M)));
-    return lines;
-  }
+  if (exposure.within === 0) return m.none(fr(exposure.radiusM ?? ANFR_EXPOSURE_RADIUS_M));
   const report = exposure.report;
-  if (!report) {
-    if (exposure.nearest) {
-      lines.push(m.unreadable(fr(exposure.nearest.metres)));
-    }
-    return lines;
-  }
+  if (!report) return exposure.nearest ? m.unreadable(fr(exposure.nearest.metres)) : null;
 
   const metres = fr(exposure.nearest?.metres ?? 0);
   const year = String(report.measuredOn || '').slice(0, 4) || '?';
+  const before = report.predatesEquipment || anfrUnmeasuredBands(report, anfrMastBandsMhz(detail)).length > 0;
+  const measured = before ? m.measuredBefore(metres, year) : m.measured(metres, year);
+  if (report.conforming === false) return m.aboveLimit(measured);
   const limit = Number(report.lowestLimitVoltsPerM);
   const global = Number(report.globalVoltsPerM);
-  const volts = (value) => formatNumber(value, { minimumFractionDigits: 2 });
-
-  // WHICH band was strongest rides the headline as a suffix, because that is
-  // how a reader learns whether the mobile network is even the dominant
-  // source at that address — and it costs four words there instead of a line.
-  const strongest = report.strongest;
-  const peak = strongest && Number.isFinite(strongest.volts)
-    ? m.peak(anfrShortBand(strongest.band)) : '';
   if (Number.isFinite(global) && global > 0) {
-    // "51× sous la limite" rather than "2 % de la limite": the two are the
-    // same fact, and a reader who is frightened reads a multiple faster than
-    // a percentage of something they have never heard of.
-    const ratio = Number.isFinite(limit) && limit > 0
-      ? m.ratio(fr(Math.round(limit / global)), fr(limit))
-      : '';
-    lines.push(m.reading(volts(global), metres, year, ratio, peak));
-  } else if (Number.isFinite(global)) {
-    // A global of zero is the protocol's floor, not a reassuring number, so
-    // the strongest band carries its real reading here rather than the zero.
-    const reading = strongest && Number.isFinite(strongest.volts)
-      ? m.peakWithValue(anfrShortBand(strongest.band), volts(strongest.volts)) : '';
-    lines.push(m.belowFloor(metres, year, reading));
-  } else {
-    lines.push(m.noGlobal(metres, year));
+    return Number.isFinite(limit) && limit > 0
+      ? m.belowLimit(measured, fr(Math.max(1, Math.round(limit / global))))
+      : m.volts(measured, formatNumber(global, { minimumFractionDigits: 2 }));
   }
-
-  // ONE caveat line, and it carries the two things a reader cannot supply
-  // themselves: a CEM report measures an ADDRESS on request and is never
-  // attached to a SUP_ID, and a report older than the equipment beside it is
-  // a true reading of a DIFFERENT installation. The bands it never looked at
-  // are not bands it measured at zero, and that is the sharper of the two.
-  const missing = anfrUnmeasuredBands(report, anfrMastBandsMhz(detail));
-  if (missing.length) {
-    lines.push(m.neighbourUnmeasured(year, missing.map(anfrMhzLabel).join(', ')));
-  } else if (report.predatesEquipment) {
-    lines.push(m.neighbourStale(anfrShortMonth(report.newestService)));
-  } else {
-    lines.push(m.neighbour);
-  }
-  if (report.conforming === false) lines.push(m.nonConforming);
-  return lines;
+  // A global of zero is the protocol's floor: too weak to register, not zero.
+  if (Number.isFinite(global)) return m.tooWeak(measured);
+  return m.noValue(measured);
 }
 
 /**
- * The bearing lines of a card: what is drawn, and what could not be.
+ * Card copy for one selected support.
  *
- * Kept apart so a test can assert on it without the rest of the Cartoradio
- * card, and because it is the one place in this layer where a number is
- * published that the observatoire does not have — the sentence names its
- * source rather than letting it read as part of the register.
- *
- * @param {?object} detail Cartoradio payload.
- * @returns {Array<string>}
+ * @param {object} record Render record.
+ * @param {object} [payload] The document the record came from.
+ * @returns {string} Newline-separated card copy.
  */
-export function anfrAzimuthLines(detail) {
-  const { bearings, rays, unplaced, unaimed } = anfrSectorRays(detail);
+export function buildAnfrSelectionLabel(record, payload = null) {
+  const support = record?.support || {};
+  const detail = record?.detail || null;
+  const m = messages().card;
+  const operators = anfrCardOperators(support);
+  const top = anfrDecodeMask(support.live, ANFR_GENERATIONS).reverse()[0] || null;
   const lines = [];
-  const antennas = Number(detail?.antennas?.antennas) || 0;
-  // The observatoire is public mobile ONLY, and Cartoradio counts the rest.
-  // It rides this line rather than taking its own, because it is a correction
-  // to the antenna count and reads as one only while it is beside it.
-  const other = detail?.antennas?.other;
-  const alsoCount = Number(other?.antennas) || 0;
-  const m = messages().azimuth;
-  const also = alsoCount > 0
-    ? m.alsoOther(fr(alsoCount), other.labels?.length ? other.labels.join('/') : m.otherLabel)
-    : '';
-  if (bearings.length) {
-    // A bare list of twelve bearings is twelve numbers nobody can use. The
-    // count leads, the compass points follow only while there are few enough
-    // to read, and the mounting heights are a RANGE rather than a count: a
-    // busy mast files one height per installation and the fixture returns
-    // sixteen distinct ones across thirty antennas, so "16 hauteurs" is true
-    // and says nothing while "31 à 49 m du sol" is a thing a reader can look
-    // at. The ray length is NOT explained here — `anfrMastLegend` publishes
-    // that convention on the legend row that appears with the rays.
-    const heights = [...new Set(rays.map((ray) => ray.heightM))].sort((a, b) => b - a);
-    const named = bearings.length <= CARD_BEARING_NAME_LIMIT
-      ? m.named(bearings.map((deg) => m.bearing(fr(deg), anfrCardinal(deg))).join(' · '))
-      : '';
-    // Rounded to the metre: the register publishes 30,9 and 48,8 and the
-    // tenths are precision the reader cannot use and the card cannot spare.
-    const round = (value) => fr(Math.round(value));
-    const tier = heights.length === 0 ? ''
-      : heights.length === 1
-        ? m.oneHeight(round(heights[0]))
-        : m.heightRange(round(heights[heights.length - 1]), round(heights[0]));
-    lines.push(m.line(antennas ? m.antennasPrefix(fr(antennas)) : '',
-      fr(bearings.length), bearings.length, named, tier, also));
-  } else if (antennas > 0) {
-    lines.push(m.noDirection(fr(antennas), also));
-  } else if (also) {
-    lines.push(also.replace(/^ · \+/, m.carries));
+  if (operators.length) lines.push(operators.join(', '));
+  lines.push(anfrNetworksLine(support));
+  const placement = anfrPlacementLine(support.nature, support.heightM);
+  const commune = anfrPlainCommune(detail?.site);
+  lines.push(commune ? m.where(placement, commune) : placement);
+  if (record?.detailPending) {
+    lines.push(m.loading);
+  } else {
+    const waves = anfrExposureLine(detail);
+    if (waves) lines.push(waves);
   }
-  if (unplaced > 0) {
-    lines.push(m.unplaced(fr(unplaced), unplaced));
-  }
-  if (unaimed > 0) {
-    lines.push(m.unaimed(fr(unaimed), unaimed));
-  }
-  return lines;
+  lines.push(m.source(anfrEditionLabel(payload?.edition) || '—'));
+  return [anfrCardTitle(top, operators.length), ...lines].join('\n');
 }
 
 /** `2025-07-18` → `18/07/2025`. */
@@ -1706,32 +1335,21 @@ export function anfrFrenchDate(iso) {
 }
 
 /**
- * Card copy for one maillage dot, before and after its lookup.
+ * Card copy for one maillage dot, before its lookup lands.
  *
- * Unlike `schools-fr`'s maillage, both channels the map uses ARE in the tuple,
- * so this card is never a placeholder: it says the band and the operator count
- * truthfully at first paint. What the lookup adds is the identity — the
- * SUP_ID, the operators by name, the systems, the height — and until it lands
- * the card says which of the two it is showing.
+ * The tuple carries the newest generation and the operator count, so the
+ * title is already true; the lookup brings the rest, and turns this card into
+ * the support's own.
  */
-export function buildAnfrMeshLabel(record, payload = null) {
+export function buildAnfrMeshLabel(record) {
   const tuple = record?.tuple || [];
   const band = meshSupportBand(tuple);
   const operators = Number(tuple[MESH_OPERATORS]) || 0;
-  const m = messages().mesh;
-  const details = [anfrBandLabelFor(band)];
-  details.push(m.operators(fr(operators), operators));
-  if (record?.lookupPending) {
-    details.push(m.lookupPending);
-  } else if (record?.lookupError) {
-    details.push(m.lookupError(record.lookupError));
-  } else if (record?.lookupEmpty) {
-    details.push(m.lookupEmpty);
-  }
-  details.push(m.zoomIn);
-  const edition = anfrEditionLabel(payload?.edition);
-  details.push(m.provenance(edition || '—'));
-  return [m.title, ...details].join('\n');
+  const m = messages().card;
+  const lines = [];
+  if (record?.lookupPending) lines.push(m.loading);
+  else if (record?.lookupError || record?.lookupEmpty) lines.push(m.zoomIn);
+  return [anfrCardTitle(band === 'projet' ? null : band.toUpperCase(), operators), ...lines].join('\n');
 }
 
 function selectedOverlayEntry(id, position, copy) {
@@ -1760,13 +1378,38 @@ function selectedOverlayEntry(id, position, copy) {
 }
 
 /** Protected selected-support entry for the shared overlay host. */
-export function createAnfrSelectedOverlayEntry(record, payload = null) {
+export function createAnfrSelectedOverlayEntry(record, payload = null, viewshed = null) {
   const position = record?.position;
   if (!record?.id || !position) return null;
   const copy = record.mesh && !record.support
     ? buildAnfrMeshLabel(record, payload)
     : buildAnfrSelectionLabel(record, payload);
-  return selectedOverlayEntry(record.id, position, copy);
+  const line = viewshed?.recordId === record.id ? anfrViewshedLine(viewshed) : '';
+  if (!line) return selectedOverlayEntry(record.id, position, copy);
+  // Above the source line, which closes a support's card.
+  const lines = copy.split('\n');
+  lines.splice(record.support ? lines.length - 1 : lines.length, 0, line);
+  return selectedOverlayEntry(record.id, position, lines.join('\n'));
+}
+
+/** Whole kilometres, the way the card prints them: `28 km`. */
+function viewshedKm(metres) {
+  return `${formatNumber(Math.round(metres / 1000))} km`;
+}
+
+/**
+ * The card's line-of-sight sentence for one state, or '' when there is none.
+ * Exported for the tests; the state object is the one `ensureViewshed` keeps.
+ */
+export function anfrViewshedLine(viewshed) {
+  const m = messages().viewshed;
+  switch (viewshed?.status) {
+    case 'loading': return m.loading;
+    case 'photoreal': return m.photoreal;
+    case 'failed': return m.failed;
+    case 'ready': return m.ready(formatPercent(Math.round(viewshed.share * 100)), viewshedKm(viewshed.radiusM));
+    default: return '';
+  }
 }
 
 // --- Selection --------------------------------------------------------------
@@ -1779,10 +1422,22 @@ function restoreRecordStyle(record) {
 }
 
 function clearSelection() {
-  if (!_selectedId) return;
+  // The coverage card shares the support card's overlay source, so clearing
+  // either is clearing the one card on screen.
+  const hadCoverageCard = Boolean(_coverageCard);
+  _coverageCard = null;
+  _coverageCardGeneration += 1;
+  if (!_selectedId) {
+    if (hadCoverageCard) {
+      _overlayHost.clearSource(ANFR_FR_OVERLAY_SOURCE_ID);
+      governorRequestRender('anfr-fr-coverage-card');
+    }
+    return;
+  }
   restoreRecordStyle(_records.get(_selectedId));
   _selectedId = null;
   clearSectors();
+  removeViewshed();
   _overlayHost.clearSource(ANFR_FR_OVERLAY_SOURCE_ID);
   governorRequestRender('anfr-fr-deselect');
 }
@@ -1794,7 +1449,10 @@ function repaintSelectedCard(id) {
   // The Cartoradio card is what carries the bearings, so the arrival that
   // repaints the text is also the arrival that can finally draw the rays.
   if (record) drawSectors(record);
-  const entry = createAnfrSelectedOverlayEntry(record, activePayload());
+  // A maillage dot only learns WHICH support it is when its lookup lands —
+  // and with it the height the line of sight starts from.
+  if (record) ensureViewshed(record);
+  const entry = createAnfrSelectedOverlayEntry(record, activePayload(), _viewshed);
   if (entry) {
     _overlayHost.setEntries(ANFR_FR_OVERLAY_SOURCE_ID, [entry], ANFR_FR_OVERLAY_SOURCE_OPTIONS);
   }
@@ -1804,7 +1462,7 @@ function repaintSelectedCard(id) {
 function selectSupport(id) {
   const record = _records.get(id);
   if (!record) return;
-  if (_selectedId && _selectedId !== id) clearSelection();
+  if ((_selectedId && _selectedId !== id) || _coverageCard) clearSelection();
   _selectedId = id;
   if (record.point) {
     record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
@@ -1825,7 +1483,7 @@ function selectSupport(id) {
 }
 
 function onKeyDown(event) {
-  if (event.key === 'Escape' && _selectedId) clearSelection();
+  if (event.key === 'Escape' && (_selectedId || _coverageCard)) clearSelection();
 }
 
 function installClickHandler(viewer) {
@@ -1838,7 +1496,11 @@ function installClickHandler(viewer) {
       selectSupport(id);
       return;
     }
-    if (_selectedId) clearSelection();
+    // With the coverage on, the ground itself answers: "who reaches HERE".
+    // Only a click nobody can select counts — a click on another layer's
+    // object is that layer's (see `pickRegistry.isWorldPick`).
+    if (isWorldPick(picked) && openCoverageCard(viewer, movement.position)) return;
+    if (_selectedId || _coverageCard) clearSelection();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
 }
@@ -1853,8 +1515,12 @@ function installClickHandler(viewer) {
  * is already happening; the overlay host draws in it.
  */
 function onPreRender() {
-  if (!_enabled || !_selectedId) return;
-  const entry = createAnfrSelectedOverlayEntry(_records.get(_selectedId), activePayload());
+  if (!_enabled) return;
+  if (!_selectedId) {
+    if (_coverageCard) publishCoverageCard();
+    return;
+  }
+  const entry = createAnfrSelectedOverlayEntry(_records.get(_selectedId), activePayload(), _viewshed);
   if (entry) {
     _overlayHost.setEntries(ANFR_FR_OVERLAY_SOURCE_ID, [entry], ANFR_FR_OVERLAY_SOURCE_OPTIONS);
   }
@@ -2407,21 +2073,10 @@ export function anfrMastLegend({
   const legendWords = messages().legend;
   const rows = [];
   if (mastsUnpublished > 0) {
-    rows.push({
-      label: legendWords.noMast.label,
-      color: null,
-      count: mastsUnpublished,
-      glyph: prismHatchGlyph(),
-      blurb: legendWords.noMast.blurb(fr(ANFR_HEIGHT_MISSING)),
-    });
+    rows.push({ label: legendWords.noMast, color: null, count: mastsUnpublished, glyph: prismHatchGlyph() });
   }
   if (mastsClipped > 0) {
-    rows.push({
-      label: legendWords.clipped.label,
-      color: null,
-      count: mastsClipped,
-      blurb: legendWords.clipped.blurb(fr(MAX_RENDERED_MASTS)),
-    });
+    rows.push({ label: legendWords.clipped, color: null, count: mastsClipped });
   }
   if (sectors > 0) {
     rows.push({
@@ -2434,6 +2089,241 @@ export function anfrMastLegend({
   return rows;
 }
 
+// --- The selected mast's line of sight ---------------------------------------
+//
+// ANFR publishes neither a power nor a beamwidth, so this layer draws no range
+// of its own — the rays are 60 m and say they are a convention. What it CAN
+// draw honestly is geometry: from the top of the mast, at its registered
+// height, which ground is in view, out to the radio horizon that height
+// implies. `mastViewshed.js` holds the geometry and its caveats.
+
+function removeViewshed() {
+  _viewshedGeneration += 1;
+  if (_viewshed?.layer) _viewer?.imageryLayers?.remove?.(_viewshed.layer, true);
+  _viewshed = null;
+}
+
+/** Start the selected support's line of sight, once, when it can have one. */
+function ensureViewshed(record) {
+  // No imagery collection, nothing to lay the result on: a viewer double in a
+  // test, or a viewer being torn down. Never fetch a DEM for nobody.
+  if (!_enabled || !record || record.id !== _selectedId || !_viewer?.imageryLayers?.add) return;
+  if (_viewshed?.recordId === record.id) return;
+  const support = record.support;
+  const antennaM = support ? anfrMastHeightM(support) : null;
+  // No support yet (a maillage dot still being looked up) or no mast to stand
+  // on (the 551 underground supports): nothing to compute, and nothing said.
+  if (!support || !Number.isFinite(antennaM) || antennaM <= 0) return;
+  removeViewshed();
+  const generation = _viewshedGeneration;
+  if (_viewer?.scene?.globe && _viewer.scene.globe.show === false) {
+    _viewshed = { recordId: record.id, status: 'photoreal' };
+    return;
+  }
+  _viewshed = { recordId: record.id, status: 'loading' };
+  _viewshedCompute({ lon: support.lon, lat: support.lat, antennaM })
+    .then((result) => {
+      if (generation !== _viewshedGeneration || _selectedId !== record.id) return;
+      const layer = _viewshedLayerFactory(result);
+      _viewer?.imageryLayers?.add?.(layer);
+      _viewshed = {
+        recordId: record.id,
+        status: 'ready',
+        radiusM: result.radiusM,
+        horizonM: result.horizonM,
+        capped: result.capped,
+        share: result.area.share,
+        layer,
+      };
+      repaintSelectedCard(record.id);
+    })
+    .catch((error) => {
+      if (generation !== _viewshedGeneration || _selectedId !== record.id) return;
+      _viewshed = { recordId: record.id, status: 'failed', error: error?.message || String(error) };
+      repaintSelectedCard(record.id);
+    });
+}
+
+// --- The ARCEP coverage under the masts -------------------------------------
+//
+// What the masts cannot say — where their signal actually reaches — comes from
+// the operators' own simulations, published by the ARCEP and folded into a
+// tile pyramid by `scripts/build-mobile-coverage.mjs`. See `mobileCoverage.js`
+// for the encoding and the source, `mobileCoverageImagery.js` for the drawing.
+//
+// OFF BY DEFAULT, and one of five chips on the row turns it on: « Zones
+// blanches » counts the operators, the four others show one operator's levels.
+// The meta is asked for once when the layer is switched on — 7 KB — so the
+// chips only appear on a server that actually has the pyramid.
+
+function coverageMetaValid(meta) {
+  return meta?.format === COVERAGE_FORMAT
+    && typeof meta.edition === 'string'
+    && Boolean(meta.tiles) && typeof meta.tiles === 'object'
+    && Number.isInteger(meta.minZoom) && Number.isInteger(meta.maxZoom)
+    && Array.isArray(meta.stats?.histogramKm2);
+}
+
+async function ensureCoverageMeta() {
+  if (_coverageMeta) return _coverageMeta;
+  if (_coverageMetaPromise) return _coverageMetaPromise;
+  _coverageStatus = 'loading';
+  _coverageError = null;
+  _coverageMetaPromise = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await _http(COVERAGE_META_URL, { signal: controller.signal });
+      // A 404 is not a failure: this server was never given a pyramid.
+      if (response.status === 404) {
+        _coverageStatus = 'missing';
+        return null;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const meta = await response.json();
+      if (!coverageMetaValid(meta)) throw new Error('malformed payload');
+      _coverageMeta = meta;
+      _coverageRead = createCoveragePointReader(meta, { fetchImpl: (url) => _http(url) });
+      _coverageStatus = 'ready';
+      return meta;
+    } catch (error) {
+      _coverageStatus = 'failed';
+      _coverageError = error?.message || String(error);
+      return null;
+    } finally {
+      clearTimeout(timer);
+      _coverageMetaPromise = null;
+    }
+  })();
+  return _coverageMetaPromise;
+}
+
+function removeCoverageImagery() {
+  if (_coverageImagery) _viewer?.imageryLayers?.remove?.(_coverageImagery, true);
+  _coverageImagery = null;
+  _coverageImageryMode = null;
+}
+
+/** Put on the globe the imagery the current mode asks for, or none. */
+function syncCoverageImagery() {
+  const wanted = _enabled && _coverageMode !== 'off' && _coverageStatus === 'ready' ? _coverageMode : null;
+  if (_coverageImageryMode === wanted) return;
+  removeCoverageImagery();
+  if (wanted && _viewer?.imageryLayers) {
+    _coverageImagery = new Cesium.ImageryLayer(createCoverageImageryProvider(_coverageMeta, coverageLut(wanted)));
+    _viewer.imageryLayers.add(_coverageImagery);
+    _coverageImageryMode = wanted;
+    // The selected mast's line of sight stays ABOVE the coverage: it is the
+    // one mark on the ground that belongs to the selection.
+    if (_viewshed?.layer) _viewer.imageryLayers.raiseToTop?.(_viewshed.layer);
+  }
+  governorRequestRender('anfr-fr-coverage');
+}
+
+async function applyCoverage() {
+  // With the meta in hand the swap is synchronous: a chip press repaints in
+  // the same frame instead of one microtask later.
+  if (_enabled && _coverageMode !== 'off' && !_coverageMeta) await ensureCoverageMeta();
+  syncCoverageImagery();
+  // A card read in the previous mode is still true — the code under a point
+  // does not depend on the mode — but a card with the coverage OFF is not.
+  if (_coverageMode === 'off' && _coverageCard) clearSelection();
+}
+
+function publishCoverageCard() {
+  if (!_coverageCard) return;
+  _overlayHost.setEntries(
+    ANFR_FR_OVERLAY_SOURCE_ID,
+    [selectedOverlayEntry(COVERAGE_CARD_ID, _coverageCard.position, _coverageCard.text)],
+    ANFR_FR_OVERLAY_SOURCE_OPTIONS,
+  );
+}
+
+/**
+ * Open the "who reaches here" card at a clicked ground point.
+ *
+ * Answers only with the coverage on and its meta in hand; otherwise returns
+ * false and the click falls through to a dismissal, as before. The card
+ * appears at once saying it is reading, and is rewritten when the zoom-12
+ * tile under the point has been decoded.
+ * @returns {boolean} Whether the click was taken.
+ */
+function openCoverageCard(viewer, windowPosition) {
+  if (!_enabled || _coverageMode === 'off' || _coverageStatus !== 'ready' || !_coverageRead) return false;
+  const point = sceneGroundPoint(viewer, windowPosition);
+  if (!point) return false;
+  clearSelection();
+  const generation = _coverageCardGeneration;
+  const m = coverageMessages();
+  let height = 0;
+  try {
+    height = viewer?.scene?.globe?.getHeight?.(Cesium.Cartographic.fromDegrees(point.lon, point.lat)) ?? 0;
+  } catch {
+    height = 0;
+  }
+  _coverageCard = {
+    lon: point.lon,
+    lat: point.lat,
+    position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, (Number.isFinite(height) ? height : 0) + POINT_LIFT_M),
+    text: `${m.card.readingTitle}\n${m.card.reading}`,
+  };
+  publishCoverageCard();
+  governorRequestRender('anfr-fr-coverage-card');
+  const repaint = (text) => {
+    if (generation !== _coverageCardGeneration || !_coverageCard) return;
+    _coverageCard.text = text;
+    publishCoverageCard();
+    governorRequestRender('anfr-fr-coverage-card');
+  };
+  _coverageRead(point.lon, point.lat)
+    .then((reading) => repaint(coverageCardText(_coverageMeta, reading)))
+    .catch(() => repaint(`${m.card.readingTitle}\n${m.card.failed}`));
+  return true;
+}
+
+/**
+ * The five coverage chips — or none, until the server is known to have a map.
+ *
+ * A chip is a real control: it sends `{ coverage }` to `setParams`, and the
+ * active one sends `off`. A restored share link that asked for coverage on a
+ * server without a pyramid keeps its chip, in the error state, so the reader
+ * is told why nothing is painted rather than shown an empty map (A4).
+ */
+function coverageChips() {
+  if (_coverageStatus !== 'ready' && _coverageMode === 'off') return [];
+  const m = coverageMessages();
+  return COVERAGE_MODES.filter((mode) => mode !== 'off').map((mode) => {
+    const op = COVERAGE_OPERATORS.find((candidate) => candidate.id === mode);
+    const active = _coverageMode === mode;
+    const loading = active && _coverageStatus === 'loading';
+    const failed = active && (_coverageStatus === 'failed' || _coverageStatus === 'missing');
+    let title = op ? m.chip.operatorTitle(op.name) : m.chip.gapsTitle;
+    if (loading) title = m.chip.loading;
+    else if (failed) title = _coverageStatus === 'missing' ? m.chip.missing : m.chip.failed;
+    return {
+      id: `coverage-${mode}`,
+      label: op ? op.short : m.chip.gaps,
+      active: active && !failed,
+      busy: loading,
+      state: loading ? 'loading' : (failed ? 'error' : (active ? 'active' : 'idle')),
+      title,
+      params: { coverage: active ? 'off' : mode },
+    };
+  });
+}
+
+/** The coverage block of the key, or nothing while the coverage is off. */
+function coverageLegendEntries() {
+  if (_coverageMode === 'off' || _coverageStatus !== 'ready') return [];
+  const entries = coverageLegend(_coverageMeta, _coverageMode);
+  // The photorealistic stack hides the globe, and with it the imagery. A key
+  // of colours that are nowhere on screen would be a key to nothing.
+  if (entries.length && _viewer?.scene?.globe && _viewer.scene.globe.show === false) {
+    return [entries[0], { label: coverageMessages().legend.photoreal, color: null }];
+  }
+  return entries;
+}
+
 // --- Layer ------------------------------------------------------------------
 
 const anfrFranceLayer = {
@@ -2444,7 +2334,7 @@ const anfrFranceLayer = {
   // `radio` row could be confused with: that layer is audio streams and this
   // one is the masts. 📡 is the transmitting dish, unused elsewhere on the globe.
   icon: '📡',
-  source: 'Observatoire des réseaux mobiles — ANFR',
+  source: 'Observatoire des réseaux mobiles — ANFR · couverture 4G — ARCEP',
   // i18n-ignore-end
   updateInterval: POLL_INTERVAL_MS,
 
@@ -2510,6 +2400,9 @@ const anfrFranceLayer = {
     restoreSpriteOrder(viewer);
     // DataLayerManager calls update() immediately after enable(), which owns
     // the first fetch. Avoid racing it with a second request here.
+    // The coverage meta is a separate, small question — does this server have
+    // the pyramid at all? — and its answer is what makes the chips appear.
+    void ensureCoverageMeta().then(() => applyCoverage());
   },
 
   disable(viewer) {
@@ -2520,6 +2413,9 @@ const anfrFranceLayer = {
     clearTimeout(_cameraDebounceTimer);
     _cameraDebounceTimer = null;
     clearSelection();
+    // The imagery goes; the MODE stays, so switching the row back on paints
+    // the same coverage the reader left.
+    removeCoverageImagery();
     _points?.removeAll();
     _masts?.removeAll();
     _sectors?.removeAll();
@@ -2584,6 +2480,24 @@ const anfrFranceLayer = {
       projectOnly: national?.projectOnly ?? null,
       plannedUpgrades: national?.plannedUpgrades ?? null,
       edition: activePayload()?.edition ?? null,
+      coverage: {
+        mode: _coverageMode,
+        status: _coverageStatus,
+        edition: _coverageMeta?.edition ?? null,
+        drawn: Boolean(_coverageImagery),
+        // The open ground card, for the QA harness and the voice layer: what
+        // the reader is reading, and where.
+        card: _coverageCard ? { lon: _coverageCard.lon, lat: _coverageCard.lat, text: _coverageCard.text } : null,
+      },
+      viewshed: _viewshed
+        ? {
+          id: _viewshed.recordId,
+          status: _viewshed.status,
+          radiusM: _viewshed.radiusM ?? null,
+          share: _viewshed.share ?? null,
+          drawn: Boolean(_viewshed.layer),
+        }
+        : null,
     };
     if (activePayload()?.stale) stats.stale = true;
     const label = buildAnfrLoadingLabel();
@@ -2623,25 +2537,65 @@ const anfrFranceLayer = {
    * when there is one — four lines where this used to print nine.
    */
   getRowControls() {
-    if (!_records.size) return { chips: [], legend: [] };
-    const tally = new Map();
-    for (const record of _records.values()) {
-      const band = record.style?.band;
-      if (band) tally.set(band, (tally.get(band) || 0) + 1);
+    // The only chips are the coverage switches: the manager renders a chip as
+    // a BUTTON keyed by `chip.id` and dispatches `chip.params` on click, so an
+    // informational one would be a control that looks clickable and does
+    // nothing.
+    const chips = coverageChips();
+    const coverage = coverageLegendEntries();
+    const legend = [];
+    if (_records.size) {
+      const tally = new Map();
+      for (const record of _records.values()) {
+        const band = record.style?.band;
+        if (band) tally.set(band, (tally.get(band) || 0) + 1);
+      }
+      legend.push(...[...ANFR_BANDS].reverse()
+        .filter((band) => tally.get(band) > 0 || band === 'projet')
+        .map((band) => ({
+          label: anfrBandLabelFor(band),
+          color: anfrBandColor(band),
+          count: tally.get(band) || 0,
+        })));
+      legend.push(...anfrMastLegend());
     }
-    const legend = [...ANFR_BANDS].reverse()
-      .filter((band) => tally.get(band) > 0 || band === 'projet')
-      .map((band) => ({
-        label: anfrBandLabelFor(band),
-        color: anfrBandColor(band),
-        count: tally.get(band) || 0,
-        blurb: bandBlurb(band),
-      }));
-    legend.push(...anfrMastLegend());
-    // No chips: the manager renders a chip as a BUTTON keyed by `chip.id` and
-    // dispatches `chip.params` on click, so an informational one would be a
-    // control that looks clickable and does nothing.
-    return { chips: [], legend };
+    if (_viewshed?.status === 'ready') {
+      const m = messages().viewshed.legend;
+      legend.push({ label: m.label, color: VIEWSHED_COLOR, blurb: m.blurb });
+    }
+    legend.push(...coverage);
+    const controls = { chips, legend };
+    if (coverage.length) {
+      // E1: the coverage runs on the ARCEP's quarterly clock, not on the
+      // observatoire's weekly one. Said UNDER the coverage classes, which it
+      // is about, rather than above the antenna colours, which it is not.
+      const m = coverageMessages();
+      controls.note = `${m.legend.source(coverageMonthLabel(_coverageMeta?.quarterEnd))} ${m.legend.note}`;
+    }
+    return controls;
+  },
+
+  /**
+   * `{ coverage }` — which coverage the ground is painted with.
+   *
+   * Serialized in the share link, because it is not a preference but what the
+   * map says: the same masts over a painted Orange gap and over the dead zones
+   * are two different arguments. Accepted before the module is enabled (a
+   * link restores params first) and applied on `enable`.
+   * @returns {boolean}
+   */
+  setParams(params = {}) {
+    if (params.coverage === undefined) return true;
+    const next = normalizeCoverageMode(params.coverage);
+    if (next === _coverageMode) return true;
+    _coverageMode = next;
+    void applyCoverage();
+    governorRequestRender('anfr-fr-coverage-mode');
+    return true;
+  },
+
+  getParams() {
+    return { coverage: _coverageMode };
   },
 
   destroy(viewer) {
@@ -2673,6 +2627,8 @@ const anfrFranceLayer = {
       viewer?.scene?.primitives?.remove?.(_sectors);
       _sectors = null;
     }
+    removeCoverageImagery();
+    removeViewshed();
     // Nothing to clear for the materials any more: each one belongs to the
     // polyline that wears it, so `primitives.remove` above destroys them with
     // their collection — exactly once each — and a second `init()` on a new
@@ -2857,3 +2813,51 @@ export function _anfrDetectablesForTest(options = {}) {
 }
 
 export default anfrFranceLayer;
+
+/**
+ * Put the coverage in a known state for a test: a mode, a meta (or none), and
+ * the HTTP seam the point reader will use. Resets the card and the imagery.
+ */
+export function _setAnfrCoverageForTest({
+  viewer = _viewer, mode = 'off', meta = null, status = meta ? 'ready' : 'idle', http = _http, enabled = _enabled,
+  read = null, overlayHost = _overlayHost,
+} = {}) {
+  removeCoverageImagery();
+  _viewer = viewer;
+  _http = http;
+  _overlayHost = overlayHost;
+  _enabled = enabled;
+  _coverageMode = normalizeCoverageMode(mode);
+  _coverageMeta = meta;
+  _coverageStatus = status;
+  _coverageError = null;
+  _coverageMetaPromise = null;
+  _coverageCard = null;
+  _coverageCardGeneration += 1;
+  _coverageRead = read || (meta ? createCoveragePointReader(meta, { fetchImpl: (url) => _http(url) }) : null);
+  syncCoverageImagery();
+}
+
+/** Drive the production ground-click path of the coverage card. */
+export function _openAnfrCoverageCardForTest(viewer, windowPosition) {
+  return openCoverageCard(viewer, windowPosition);
+}
+
+/** The coverage card as published, or null. */
+export function _anfrCoverageCardForTest() {
+  return _coverageCard ? { ..._coverageCard } : null;
+}
+
+/** Swap the network-and-canvas half of the line of sight, for tests. */
+export function _setAnfrViewshedForTest({ compute = computeMastViewshed, layerFactory = createViewshedImageryLayer } = {}) {
+  removeViewshed();
+  _viewshedCompute = compute;
+  _viewshedLayerFactory = layerFactory;
+}
+
+/** The line-of-sight state as kept, without the layer. */
+export function _anfrViewshedForTest() {
+  if (!_viewshed) return null;
+  const { layer, ...rest } = _viewshed;
+  return { ...rest, drawn: Boolean(layer) };
+}

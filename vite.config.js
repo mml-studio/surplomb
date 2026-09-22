@@ -613,6 +613,11 @@ import {
   readAnfrCsvRow,
 } from './src/data/anfrFeed.js';
 import { buildAnfrMesh } from './src/data/anfrMesh.js';
+import {
+  COVERAGE_TILE_ROUTE,
+  coverageMetaResponse,
+  createCoverageTileHandler,
+} from './scripts/lib/mobileCoveragePack.mjs';
 import { readZipMember } from './scripts/lib/remoteZip.mjs';
 import { delinquanceRateBins } from './src/data/delinquanceDepartements.js';
 import { projectSupDepartements } from './src/data/supDepartements.js';
@@ -7836,6 +7841,12 @@ const ANFR_MAX_SUPPORTS = 8000;
 const ANFR_DETAIL_TTL_MS = 24 * 60 * 60_000;
 const ANFR_DETAIL_MAX = 400;
 const ANFR_DISK_DIR = path.join(process.cwd(), '.gev-cache', 'anfr-fr');
+/**
+ * The ARCEP 4G coverage pyramid, built OFF the server by
+ * `node scripts/build-mobile-coverage.mjs` (GDAL, 1.35 GB of input) and only
+ * read here. See `scripts/lib/mobileCoveragePack.mjs` for the layout.
+ */
+const MOBILE_COVERAGE_DIR = path.join(process.cwd(), '.gev-cache', 'mobile-coverage');
 const ANFR_CACHE_PATH = path.join(ANFR_DISK_DIR, 'register.json');
 /** BUMP THIS whenever the projection changes shape — the disk cache outlives the edit. */
 const ANFR_CACHE_VERSION = 1;
@@ -8214,6 +8225,13 @@ function anfrFranceProxy() {
       const url = new URL(req.url || '/', 'http://localhost');
       const route = url.pathname.replace(/\/+$/, '') || '/';
 
+      // ── The ARCEP coverage pyramid's meta (the tiles are outside /api) ───────
+      if (route === '/coverage') {
+        const answer = await coverageMetaResponse(MOBILE_COVERAGE_DIR);
+        json(answer.status, answer.body, answer.headers);
+        return;
+      }
+
       if (route === '/status') {
         await readAnfrDisk();
         json(200, {
@@ -8321,10 +8339,23 @@ function anfrFranceProxy() {
     });
   }
 
+  function installCoverageTiles(middlewares) {
+    // Static tiles, OUTSIDE /api and outside the limiter above: one pan across
+    // the Alps asks for more tiles than that limiter allows in a minute, and
+    // the edge's /api rule would lock the reader out of every other proxy.
+    middlewares.use(COVERAGE_TILE_ROUTE, createCoverageTileHandler(MOBILE_COVERAGE_DIR));
+  }
+
   return {
     name: 'anfr-france-proxy',
-    configureServer(server) { install(server.middlewares); },
-    configurePreviewServer(server) { install(server.middlewares); },
+    configureServer(server) {
+      installCoverageTiles(server.middlewares);
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      installCoverageTiles(server.middlewares);
+      install(server.middlewares);
+    },
   };
 }
 

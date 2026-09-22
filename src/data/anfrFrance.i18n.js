@@ -1,23 +1,15 @@
 /**
  * Strings of src/data/anfrFrance.js — Mobile antennas (ANFR).
  *
- * THE CARD IS A LIST OF PUBLISHED VALUES AND STATED ABSENCES, and the English
- * keeps every one of the refusals, because they are the layer. A ratio is not
- * a health verdict; a CEM report measures a PLACE and not a mast; an absent
- * band is not a band measured at zero; a ray's length is a drawing convention
- * and not a range. None of those four may soften.
+ * WRITTEN FOR A FIRST-TIME READER. The card is five short lines — what and
+ * whose, the networks, where, the waves, the source — and the key names each
+ * colour in two or three words. No frequency, no register number, no licence
+ * on the card; the English is as short as the French.
  *
- * TWO REGISTERS, TWO LICENCES. The observatoire is published for reuse and
- * gives the dots; Cartoradio is the private backend of ANFR's own map and
- * gives the detailed card. The wording keeps them apart — the Cartoradio half
- * is absent until it lands and says so while it has not, because a card that
- * silently omits the address cannot be told from a mast with no published
- * address.
- *
- * NUMBERS THAT ARE NAMES. `700 MHz` and `3,5 GHz` are band names, not
- * quantities, so they take no thousands separator in either language — nobody
- * in France has ever called LTE 1800 “la 1 800”, and nobody in English calls
- * it “1,800”.
+ * THREE REFUSALS SURVIVE THE SIMPLIFICATION, in both languages: a multiple of
+ * the legal limit is a measurement and never "safe"; a measurement older than
+ * the antennas beside it says so; a planned antenna is never called a
+ * transmitter.
  *
  * The statuses and the five colour rungs are shared with the feed and live in
  * `anfrFeed.i18n.js`.
@@ -86,385 +78,164 @@ export const ANFR_NATURE_LABELS = defineMessages({
 });
 
 export default defineMessages({
-  /** One short sentence per band swatch, with the national count. */
-  bandBlurbs: {
-    '5g': {
-      fr: 'La 5G émet depuis ce mât. 50 148 supports : un sur deux en France.',
-      en: '5G transmits from this mast. 50,148 supports: one in two in France.',
-    },
-    '4g': {
-      fr: 'La 4G est la plus récente qui émet ici : pas de 5G sur ce mât. 18 698 supports.',
-      en: '4G is the newest thing transmitting here: no 5G on this mast. 18,698 supports.',
-    },
-    '3g': {
-      fr: 'La 3G est la plus récente qui émet ici. 127 supports dans toute la France.',
-      en: '3G is the newest thing transmitting here. 127 supports in the whole of France.',
-    },
-    '2g': {
-      fr: '2G seule. 89 supports dans toute la France.',
-      en: '2G only. 89 supports in the whole of France.',
-    },
-    projet: {
-      fr: 'Rien n’émet : une autorisation déposée à l’ANFR, aucune installation. 3 638 supports.',
-      en: 'Nothing transmits: an authorization filed with ANFR, nothing installed. 3,638 supports.',
-    },
-  },
-
-  /** The eight compass points a bearing is read as. */
-  compass: {
-    fr: ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'],
-    en: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'],
-    note: 'French writes Sud-Ouest, Ouest, Nord-Ouest; English SW, W, NW.',
-  },
-
-  /** `3,5 GHz` / `3.5 GHz` — the one band written in gigahertz. */
-  band35: { fr: '3,5 GHz', en: '3.5 GHz' },
-
-  /** The 5G rung, as an adjective inside `5G … (700 MHz)`. */
-  fiveG: {
-    fast: {
-      fr: 'rapide',
-      en: 'high-band',
-      note: 'The rung, never a speed: the register has no throughput column and this '
-        + 'layer will not invent one.',
-    },
-    mid: { fr: 'moyenne', en: 'mid-band' },
-    low: { fr: 'basse', en: 'low-band' },
-  },
-
-  /** The report's own band name, in the reader's words. */
-  service: {
-    mobile: {
-      fr: (mhz) => `téléphonie mobile ${mhz} MHz`,
-      en: (mhz) => `mobile telephony ${mhz} MHz`,
-      sample: ['1800'],
-    },
-    radio: { fr: 'radio FM', en: 'FM radio' },
-    tv: { fr: 'télévision', en: 'television' },
-    unknownDate: { fr: 'date inconnue', en: 'date unknown' },
-  },
-
-  /** What the mast IS, with the preposition the register omits. */
-  placement: {
-    unnamedWithHeight: {
-      fr: (height) => `Support${height} — nature non publiée`,
-      en: (height) => `Support${height} — type not published`,
-      note: '`height` is `, 32 m` or empty; it leads with its own comma.',
-      sample: [', 32 m'],
-    },
-    unknown: {
-      fr: 'Nature et hauteur non publiées',
-      en: 'Type and height not published',
-    },
-    underground: {
-      fr: (noun) => `Installation souterraine (${noun}) — aucun mât`,
-      en: (noun) => `Underground installation (${noun}) — no mast`,
-      note: '`noun` is the register’s own word, lower-cased and named by ANFR_NATURE_LABELS.',
-      sample: ['tunnel'],
-    },
-    noHeight: {
-      fr: (noun) => `${noun} — hauteur non publiée`,
-      en: (noun) => `${noun} — height not published`,
-      sample: ['Free-standing pylon'],
-    },
-    roof: {
-      fr: (of, height) => `Toit ${of}${height}`,
-      en: (of, height) => `Roof of ${of}${height}`,
-      note: '`of` already carries the French elision (`d’immeuble`, `de bâtiment`); the '
-        + 'English adds its own preposition and gets the named noun.',
-      sample: ['apartment building', ', 32 m'],
-    },
-    roofNoHeight: {
-      fr: (of) => `Toit ${of} — hauteur non publiée`,
-      en: (of) => `Roof of ${of} — height not published`,
-      sample: ['apartment building'],
-    },
-    on: {
-      fr: (noun, height) => `Sur ${noun}${height}`,
-      en: (noun, height) => `On ${noun}${height}`,
-      sample: ['street furniture', ', 8 m'],
-    },
-    onNoHeight: {
-      fr: (noun) => `Sur ${noun} — hauteur non publiée`,
-      en: (noun) => `On ${noun} — height not published`,
-      sample: ['street furniture'],
-    },
-    height: {
-      fr: (height) => `, ${height} m`,
-      en: (height) => `, ${height} m`,
-      sample: ['32'],
-    },
-  },
-
-  /** Who transmits, in one line. */
-  operators: {
-    all: {
-      fr: (total) => `les ${total} opérateurs`,
-      en: (total) => `all ${total} operators`,
-      sample: ['4'],
-    },
-    andLast: {
-      fr: (first, last) => `${first} et ${last}`,
-      en: (first, last) => `${first} and ${last}`,
-      note: 'The list is already joined with commas; this adds the last conjunction.',
-      sample: ['Orange, Bouygues', 'SFR'],
-    },
-    rungs: {
-      fr: (rungs, who) => `${rungs} : ${who}`,
-      en: (rungs, who) => `${rungs}: ${who}`,
-      sample: ['5G 3.5 GHz and 4G', 'all 4 operators'],
-    },
-    rungJoin: { fr: ' et ', en: ' and ' },
-  },
-
-  /** What radiates here, said once and plainly. */
-  live: {
-    nothing: { fr: 'Rien n’émet à cette position', en: 'Nothing transmits at this position' },
-    transmits: {
-      fr: (generations) => `Émet en ${generations}`,
-      en: (generations) => `Transmits on ${generations}`,
-      sample: ['5G · 4G'],
-    },
-  },
-
-  /** The approved project, named by what it would add. */
-  plan: {
-    alsoAuthorized: {
-      fr: (bands, n) => `${bands} ${plural(n, 'autorisée', 'autorisées')} en plus — pas encore ${plural(n, 'installée', 'installées')}`,
-      en: (bands, n) => `${bands} also authorized — not installed yet`,
-      note: '`n` is how many bands, for the French agreement.',
-      sample: ['5G', 1],
-    },
-    authorizedHere: {
-      fr: (bands, n) => `${bands} ${plural(n, 'autorisée', 'autorisées')} ici — rien n’a encore été installé`,
-      en: (bands, n) => `${bands} authorized here — nothing has been installed yet`,
-      sample: ['4G · 5G', 2],
-    },
-  },
-
-  /** The card of one selected support. */
+  /**
+   * The card of one antenna — written for someone who has never heard of the
+   * ANFR. One short line per question, in the order people ask them: what is
+   * it, whose is it, what does it carry, where is it, what are the waves like
+   * around it.
+   */
   card: {
     title: {
-      fr: (count, n, top) => `Antenne-relais · ${count} ${plural(n, 'opérateur', 'opérateurs')}${top}`,
-      en: (count, n, top) => `Mobile antenna · ${count} ${plural(n, 'operator', 'operators')}${top}`,
-      note: '`top` is ` · 5G`, or the “nothing transmits” tail.',
-      sample: ['4', 4, ' · 5G'],
+      fr: (generation, count, n) => `Antenne ${generation} · ${count} ${plural(n, 'opérateur', 'opérateurs')}`,
+      en: (generation, count, n) => `${generation} antenna · ${count} ${plural(n, 'operator', 'operators')}`,
+      note: '`generation` is the newest one on the air: 5G, 4G, 3G or 2G.',
+      sample: ['5G', '4', 4],
     },
-    titleTop: {
-      fr: (generation) => ` · ${generation}`,
-      en: (generation) => ` · ${generation}`,
-      sample: ['5G'],
-    },
-    titleSilent: { fr: ' · rien n’émet', en: ' · nothing transmits' },
-    titleNoOperator: {
-      fr: 'Antenne-relais · aucun opérateur déclaré',
-      en: 'Mobile antenna · no operator declared',
-    },
-    noShaft: {
-      fr: (count, natures) => `Aucun fût dessiné : ${count} supports du registre ne publient pas `
-        + `de hauteur, tous ${natures}`,
-      en: (count, natures) => `No shaft drawn: ${count} supports in the register publish no `
-        + `height, all of them ${natures}`,
-      note: '`natures` is the register’s own list of `nat_id` values, lower-cased.',
-      sample: ['551', 'underground · tunnel · indoor gallery'],
-    },
-    operatorsFallback: {
-      fr: (names, rest, live) => `${names}${rest} · ${live}`,
-      en: (names, rest, live) => `${names}${rest} · ${live}`,
-      sample: ['Orange, SFR', ' +2', 'Transmits on 5G · 4G'],
-    },
-    detailPending: {
-      fr: 'Lecture de la fiche détaillée du mât…',
-      en: 'Reading the mast’s detailed record…',
-    },
-    detailUnavailable: {
-      fr: (detail) => `⚠ Fiche détaillée indisponible — ${detail}`,
-      en: (detail) => `⚠ Detailed record unavailable — ${detail}`,
-      sample: ['HTTP 503'],
-    },
-    coSited: {
-      fr: (count, n) => `⚠ ${count} ${plural(n, 'autre', 'autres')} ${plural(n, 'support', 'supports')} à cette position exacte`,
-      en: (count, n) => `⚠ ${count} other ${plural(n, 'support', 'supports')} at this exact position`,
+    titleProject: {
+      fr: (count, n) => `Antenne en projet · ${count} ${plural(n, 'opérateur', 'opérateurs')}`,
+      en: (count, n) => `Planned antenna · ${count} ${plural(n, 'operator', 'operators')}`,
+      note: 'Authorized by the ANFR, nothing on the air yet.',
       sample: ['2', 2],
     },
-    owner: {
-      fr: (owner) => `Propriétaire : ${owner}`,
-      en: (owner) => `Owner: ${owner}`,
-      sample: ['SCI Horizon'],
+    titleNoOperator: {
+      fr: 'Antenne sans opérateur déclaré',
+      en: 'Antenna with no operator declared',
     },
-    provenance: {
-      fr: (id, edition) => `ANFR n° ${id} · registre du ${edition} · Licence Ouverte 2.0`,
-      en: (id, edition) => `ANFR no. ${id} · register of ${edition} · Licence Ouverte 2.0`,
-      keep: ['Licence Ouverte'],
-      sample: ['123456', 'Aug 27, 2026'],
+    where: {
+      fr: (placement, commune) => `${placement} · ${commune}`,
+      en: (placement, commune) => `${placement} · ${commune}`,
+      sample: ['Pylon, 30 m tall', 'Vallorcine'],
     },
-    degraded: {
-      fr: (legs) => `⚠ Fiche détaillée muette sur : ${legs}`,
-      en: (legs) => `⚠ Detailed record silent on: ${legs}`,
-      note: 'A leg of the Cartoradio card that answered with nothing is NAMED, so the '
-        + 'card cannot be told from a mast Cartoradio has nothing to say about.',
-      sample: ['exposure'],
+    loading: { fr: 'Chargement…', en: 'Loading…' },
+    zoomIn: {
+      fr: 'Rapprochez-vous pour voir cette antenne en détail.',
+      en: 'Zoom in to see this antenna in detail.',
+    },
+    source: {
+      fr: (edition) => `Source : ANFR, ${edition}`,
+      en: (edition) => `Source: ANFR, ${edition}`,
+      sample: ['Aug 27, 2026'],
     },
   },
 
-  /** The exposure block, and the four things it refuses to say. */
+  /** What the antenna carries: the networks on the air, and the planned ones. */
+  networks: {
+    live: {
+      fr: (generations) => `Réseaux : ${generations}`,
+      en: (generations) => `Networks: ${generations}`,
+      sample: ['5G, 4G, 3G, 2G'],
+    },
+    liveAndPlanned: {
+      fr: (generations, planned, n) => `Réseaux : ${generations} · ${planned} ${plural(n, 'prévue', 'prévues')}`,
+      en: (generations, planned, n) => `Networks: ${generations} · ${planned} planned`,
+      note: '`n` is how many planned generations, for the French agreement.',
+      sample: ['4G', '5G', 1],
+    },
+    plannedOnly: {
+      fr: (planned) => `Prévu : ${planned} — pas encore installé`,
+      en: (planned) => `Planned: ${planned} — not installed yet`,
+      sample: ['4G, 3G, 2G'],
+    },
+    nothing: { fr: 'N’émet pas', en: 'Not transmitting' },
+  },
+
+  /** What the antenna stands on, and how high. `height` is empty when not published. */
+  placement: {
+    pylon: {
+      fr: (height) => (height ? `Pylône de ${height} m` : 'Pylône'),
+      en: (height) => (height ? `Pylon, ${height} m tall` : 'Pylon'),
+      sample: ['30'],
+    },
+    mast: {
+      fr: (height) => (height ? `Mât de ${height} m` : 'Mât'),
+      en: (height) => (height ? `Mast, ${height} m tall` : 'Mast'),
+      sample: ['12'],
+    },
+    tower: {
+      fr: (height) => (height ? `Tour de ${height} m` : 'Tour'),
+      en: (height) => (height ? `Tower, ${height} m tall` : 'Tower'),
+      sample: ['48'],
+    },
+    roof: {
+      fr: (height) => (height ? `Sur un toit, à ${height} m de haut` : 'Sur un toit'),
+      en: (height) => (height ? `On a roof, ${height} m up` : 'On a roof'),
+      sample: ['65'],
+    },
+    waterTower: {
+      fr: (height) => (height ? `Sur un château d’eau, à ${height} m de haut` : 'Sur un château d’eau'),
+      en: (height) => (height ? `On a water tower, ${height} m up` : 'On a water tower'),
+      sample: ['25'],
+    },
+    religious: {
+      fr: (height) => (height ? `Sur un édifice religieux, à ${height} m de haut` : 'Sur un édifice religieux'),
+      en: (height) => (height ? `On a religious building, ${height} m up` : 'On a religious building'),
+      sample: ['40'],
+    },
+    other: {
+      fr: (noun, height) => (height ? `${noun}, ${height} m` : noun),
+      en: (noun, height) => (height ? `${noun}, ${height} m` : noun),
+      note: '`noun` is the register’s own word, named by ANFR_NATURE_LABELS.',
+      sample: ['Lighthouse', '30'],
+    },
+    underground: { fr: 'Sous terre, sans mât', en: 'Underground, no mast' },
+    unknown: { fr: 'Type de support non publié', en: 'Support type not published' },
+  },
+
+  /**
+   * The waves around the antenna, in ONE line. A multiple of the legal limit
+   * rather than volts per metre, which mean nothing to the person who came
+   * here worried — and never a verdict: "32 times below the limit" is a
+   * measurement, "safe" would be a claim.
+   */
   exposure: {
     none: {
-      fr: (radius) => `Aucun relevé d’ondes publié dans ${radius} m autour de ce mât`,
-      en: (radius) => `No field measurement published within ${radius} m of this mast`,
+      fr: (radius) => `Aucune mesure d’ondes publiée à moins de ${radius} m`,
+      en: (radius) => `No wave measurement published within ${radius} m`,
       sample: ['300'],
     },
     unreadable: {
-      fr: (metres) => `Un relevé d’ondes à ${metres} m — rapport illisible`,
-      en: (metres) => `One field measurement ${metres} m away — unreadable report`,
+      fr: (metres) => `Mesure d’ondes à ${metres} m : rapport illisible`,
+      en: (metres) => `Wave measurement ${metres} m away: unreadable report`,
       sample: ['120'],
     },
-    reading: {
-      fr: (volts, metres, year, ratio, peak) => `${volts} V/m à ${metres} m (${year})${ratio}${peak}`,
-      en: (volts, metres, year, ratio, peak) => `${volts} V/m at ${metres} m (${year})${ratio}${peak}`,
-      sample: ['0.86', '120', '2025', ' — 32× below the limit (28 V/m)', ', peak: 700 MHz'],
-    },
-    ratio: {
-      fr: (times, limit) => ` — ${times}× sous la limite (${limit} V/m)`,
-      en: (times, limit) => ` — ${times}× below the limit (${limit} V/m)`,
-      note: 'A multiple, not a percentage: a reader who is frightened reads “32× below” '
-        + 'faster than “3% of” something they have never heard of. And a ratio is not a '
-        + 'health verdict, which is why the sentence says nothing else.',
-      sample: ['32', '28'],
-    },
-    peak: {
-      fr: (band) => `, pic : ${band}`,
-      en: (band) => `, peak: ${band}`,
-      sample: ['700 MHz'],
-    },
-    peakWithValue: {
-      fr: (band, volts) => `, pic : ${band} à ${volts} V/m`,
-      en: (band, volts) => `, peak: ${band} at ${volts} V/m`,
-      sample: ['700 MHz', '0.31'],
-    },
-    belowFloor: {
-      fr: (metres, year, reading) => `Champ global sous le seuil mesurable, à ${metres} m (${year})${reading}`,
-      en: (metres, year, reading) => `Total field below the measurable threshold, ${metres} m away (${year})${reading}`,
-      note: 'A global of zero is the protocol’s floor, not a reassuring number.',
-      sample: ['120', '2025', ', peak: 700 MHz at 0.31 V/m'],
-    },
-    noGlobal: {
-      fr: (metres, year) => `Relevé à ${metres} m (${year}) — valeur globale non publiée`,
-      en: (metres, year) => `Measured ${metres} m away (${year}) — total value not published`,
+    measured: {
+      fr: (metres, year) => `Ondes mesurées à ${metres} m en ${year}`,
+      en: (metres, year) => `Waves measured ${metres} m away in ${year}`,
       sample: ['120', '2025'],
     },
-    neighbourUnmeasured: {
-      fr: (year, bands) => `⚠ Relevé chez un voisin, ${year} — ${bands} jamais mesurés`,
-      en: (year, bands) => `⚠ Measured at a neighbor’s, ${year} — ${bands} never measured`,
-      note: 'The sharper of the two caveats: a band the report never looked at is not a '
-        + 'band it measured at zero.',
-      sample: ['2025', '3.5 GHz, 700 MHz'],
+    measuredBefore: {
+      fr: (metres, year) => `Ondes mesurées à ${metres} m en ${year}, avant les antennes actuelles`,
+      en: (metres, year) => `Waves measured ${metres} m away in ${year}, before the current antennas`,
+      note: 'A measurement older than the antennas beside it, or blind to some of their '
+        + 'bands, is a true reading of a DIFFERENT installation.',
+      sample: ['40', '2009'],
     },
-    neighbourStale: {
-      fr: (month) => `⚠ Relevé chez un voisin, antérieur à l’équipement de ${month}`,
-      en: (month) => `⚠ Measured at a neighbor’s, before the equipment of ${month}`,
-      note: 'A report older than the equipment beside it is a true reading of a '
-        + 'DIFFERENT installation.',
-      sample: ['07/2025'],
+    belowLimit: {
+      fr: (measured, times) => `${measured} : ${times} fois sous la limite légale`,
+      en: (measured, times) => `${measured}: ${times} times below the legal limit`,
+      sample: ['Waves measured 120 m away in 2025', '32'],
     },
-    neighbour: {
-      fr: 'Relevé chez un voisin, pas sur le mât',
-      en: 'Measured at a neighbor’s, not on the mast',
+    volts: {
+      fr: (measured, volts) => `${measured} : ${volts} V/m`,
+      en: (measured, volts) => `${measured}: ${volts} V/m`,
+      note: 'Only when the report publishes no legal limit to compare with.',
+      sample: ['Waves measured 120 m away in 2025', '0.86'],
     },
-    nonConforming: {
-      fr: '⚠ Non conforme selon le rapport ANFR',
-      en: '⚠ Non-compliant according to the ANFR report',
+    tooWeak: {
+      fr: (measured) => `${measured} : trop faibles pour être mesurées`,
+      en: (measured) => `${measured}: too weak to measure`,
+      note: 'The protocol’s floor, not a zero.',
+      sample: ['Waves measured 40 m away in 2009'],
     },
-  },
-
-  /** What the bearings draw, and what they could not. */
-  azimuth: {
-    alsoOther: {
-      fr: (count, labels) => ` · +${count} ${labels} hors téléphonie`,
-      en: (count, labels) => ` · +${count} ${labels} outside mobile telephony`,
-      note: 'The observatoire is public mobile ONLY; Cartoradio counts the rest.',
-      sample: ['6', 'faisceaux'],
+    noValue: {
+      fr: (measured) => `${measured} : valeur non publiée`,
+      en: (measured) => `${measured}: value not published`,
+      sample: ['Waves measured 120 m away in 2025'],
     },
-    otherLabel: { fr: 'autres', en: 'others' },
-    carries: { fr: 'Porte ', en: 'Carries ' },
-    line: {
-      fr: (antennas, directions, n, named, tier, also) => `${antennas}${directions} ${plural(n, 'direction', 'directions')}${named}${tier}${also}`,
-      en: (antennas, directions, n, named, tier, also) => `${antennas}${directions} ${plural(n, 'direction', 'directions')}${named}${tier}${also}`,
-      note: '`antennas` already ends with its own comma and space when present.',
-      sample: ['30 antennas, ', '12', 12, ' (0° N · 120° SE)', ', 31 to 49 m above ground', ''],
-    },
-    antennasPrefix: {
-      fr: (count) => `${count} antennes, `,
-      en: (count) => `${count} antennas, `,
-      sample: ['30'],
-    },
-    bearing: {
-      fr: (deg, point) => `${deg}° ${point}`,
-      en: (deg, point) => `${deg}° ${point}`,
-      sample: ['120', 'SE'],
-    },
-    named: {
-      fr: (list) => ` (${list})`,
-      en: (list) => ` (${list})`,
-      sample: ['0° N · 120° SE'],
-    },
-    oneHeight: {
-      fr: (height) => `, ${height} m du sol`,
-      en: (height) => `, ${height} m above ground`,
-      sample: ['31'],
-    },
-    heightRange: {
-      fr: (low, high) => `, ${low} à ${high} m du sol`,
-      en: (low, high) => `, ${low} to ${high} m above ground`,
-      note: 'A range, not a count: “16 heights” is true and says nothing.',
-      sample: ['31', '49'],
-    },
-    noDirection: {
-      fr: (count, also) => `${count} antennes — aucune direction publiée${also}`,
-      en: (count, also) => `${count} antennas — no direction published${also}`,
-      sample: ['12', ''],
-    },
-    unplaced: {
-      fr: (count, n) => `⚠ ${count} ${plural(n, 'direction', 'directions')} sans hauteur de fixation publiée — non ${plural(n, 'dessinée', 'dessinées')}`,
-      en: (count, n) => `⚠ ${count} ${plural(n, 'direction', 'directions')} with no published mounting height — not drawn`,
-      sample: ['3', 3],
-    },
-    unaimed: {
-      fr: (count, n) => `⚠ ${count} ${plural(n, 'antenne', 'antennes')} sans direction publiée`,
-      en: (count, n) => `⚠ ${count} ${plural(n, 'antenna', 'antennas')} with no published direction`,
-      sample: ['2', 2],
-    },
-  },
-
-  /** The card of one mesh dot, before and after its lookup. */
-  mesh: {
-    title: { fr: 'Antenne-relais', en: 'Mobile antenna' },
-    operators: {
-      fr: (count, n) => `${count} ${plural(n, 'opérateur', 'opérateurs')} ${plural(n, 'déclaré', 'déclarés')}`,
-      en: (count, n) => `${count} ${plural(n, 'operator', 'operators')} declared`,
-      sample: ['4', 4],
-    },
-    lookupPending: {
-      fr: 'Lecture du mât dans le registre…',
-      en: 'Looking the mast up in the register…',
-    },
-    lookupError: {
-      fr: (detail) => `⚠ Registre injoignable pour ce point — ${detail}`,
-      en: (detail) => `⚠ Register unreachable for this point — ${detail}`,
-      sample: ['timed out'],
-    },
-    lookupEmpty: {
-      fr: '⚠ Aucun mât du registre à cette position exacte',
-      en: '⚠ No register mast at this exact position',
-    },
-    zoomIn: {
-      fr: 'Approchez pour la fiche du mât : opérateurs, bandes et relevé d’ondes',
-      en: 'Move closer for the mast’s card: operators, bands and field measurement',
-    },
-    provenance: {
-      fr: (edition) => `Vue d’ensemble — un point par cellule · registre du ${edition}`,
-      en: (edition) => `Overview — one point per cell · register of ${edition}`,
-      sample: ['Aug 27, 2026'],
+    aboveLimit: {
+      fr: (measured) => `⚠ ${measured} : au-dessus de la limite légale`,
+      en: (measured) => `⚠ ${measured}: above the legal limit`,
+      sample: ['Waves measured 120 m away in 2025'],
     },
   },
 
@@ -559,37 +330,51 @@ export default defineMessages({
   },
 
   /** What the mast channel still owes the reader: the absences. */
+  /** The key: one plain name per colour, and the few absences worth a line. */
   legend: {
-    noMast: {
-      label: { fr: 'Sans mât — hauteur non publiée', en: 'No mast — height not published' },
-      blurb: {
-        fr: (count) => 'Le point reste au sol et aucun fût n’est dessiné. Les '
-          + `${count} concernés sont souterrains ou en tunnel : il n’y a pas de mât `
-          + 'à mesurer.',
-        en: (count) => 'The point stays on the ground and no shaft is drawn. The '
-          + `${count} concerned are underground or in a tunnel: there is no mast `
-          + 'to measure.',
-        sample: ['551'],
+    bands: {
+      '5g': { fr: 'Antenne 5G', en: '5G antenna' },
+      '4g': { fr: 'Antenne 4G', en: '4G antenna' },
+      '3g': { fr: 'Antenne 3G', en: '3G antenna' },
+      '2g': { fr: 'Antenne 2G', en: '2G antenna' },
+      projet: {
+        fr: 'En projet, n’émet pas',
+        en: 'Planned, not transmitting',
+        note: 'A hollow ring: authorized by the ANFR, nothing installed.',
       },
     },
-    clipped: {
-      label: { fr: 'Fûts écrêtés', en: 'Shafts cut off' },
-      blurb: {
-        fr: (cap) => `Plafond de ${cap} fûts par vue : le point est dessiné, le fût non.`,
-        en: (cap) => `Cap of ${cap} shafts per view: the point is drawn, the shaft is not.`,
-        sample: ['600'],
-      },
-    },
+    noMast: { fr: 'Sous terre, sans mât', en: 'Underground, no mast' },
+    clipped: { fr: 'Mâts non dessinés : trop nombreux ici', en: 'Masts not drawn: too many here' },
     azimuths: {
-      label: {
-        fr: 'Azimuts du support sélectionné',
-        en: 'Bearings of the selected support',
-      },
+      label: { fr: 'Direction des antennes', en: 'Direction of the antennas' },
+      blurb: { fr: 'Longueur des traits indicative.', en: 'Line length is indicative only.' },
+    },
+  },
+
+  /**
+   * The selected antenna's line of sight (mastViewshed.js): the ground it can
+   * be SEEN from, over the relief alone. Never called coverage.
+   */
+  viewshed: {
+    loading: {
+      fr: 'Calcul de la zone d’où l’on voit l’antenne…',
+      en: 'Working out where the antenna can be seen from…',
+    },
+    ready: {
+      fr: (share, radius) => `Visible depuis ${share} du terrain dans un rayon de ${radius}`,
+      en: (share, radius) => `Visible from ${share} of the land within ${radius}`,
+      sample: ['41%', '27.6 km'],
+    },
+    photoreal: {
+      fr: 'Zone de visibilité : passez en vue Satellite, Plan IGN ou OSM',
+      en: 'Visibility area: switch to Satellite, IGN map or OSM',
+    },
+    failed: { fr: 'Zone de visibilité indisponible', en: 'Visibility area unavailable' },
+    legend: {
+      label: { fr: 'Terrain d’où l’on voit l’antenne', en: 'Ground the antenna can be seen from' },
       blurb: {
-        fr: 'Une direction publiée par rayon. La longueur est une convention de dessin, pas une '
-          + 'portée : ni l’ouverture du faisceau ni la distance couverte ne sont publiées.',
-        en: 'One published direction per ray. The length is a drawing convention, not a '
-          + 'range: neither the beam width nor the distance covered is published.',
+        fr: 'D’après le relief, sans bâtiments ni arbres.',
+        en: 'From the relief alone, without buildings or trees.',
       },
     },
   },

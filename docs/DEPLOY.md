@@ -242,8 +242,9 @@ ssh box 'tail -5 /opt/gev/state/health.log'
 
 ## Data packs
 
-Two layers draw from a pack built on the box, into the container's cache
-volume, rather than from an upstream at request time.
+Three layers draw from a pack in the container's cache volume rather than from
+an upstream at request time. Two are built on the box; the mobile-coverage
+pyramid is built on a workstation and copied there.
 
 ### The 2021 carroyage pack
 
@@ -325,6 +326,40 @@ there is nothing usable, and the proxy now logs *why* it refused a file.
 
 BPE is published once a year and FINESS once a month, so a pack is fresh for 30
 days and served stale for 120.
+
+### The mobile-coverage pyramid
+
+The coverage chips on the Antennes mobiles row (dead zones, and each
+operator's 4G) draw from a tile pyramid of the ARCEP's quarterly coverage maps.
+It needs **GDAL and 7-Zip**, which the image does not have, 1.35 GB of
+download and about 20 GB of scratch disk, so it is built on a workstation and
+copied to the box:
+
+```bash
+brew install gdal sevenzip                      # once
+node scripts/build-mobile-coverage.mjs          # last edition; --edition 2026_T1 to pin one
+node scripts/build-mobile-coverage.mjs --check  # edition, tile count, size, land area
+tar -C .gev-cache -czf /tmp/mobile-coverage.tgz mobile-coverage
+scp /tmp/mobile-coverage.tgz box:/tmp/
+ssh box 'docker cp /tmp/mobile-coverage.tgz gev:/tmp/ &&
+  docker exec gev tar -C /app/.gev-cache -xzf /tmp/mobile-coverage.tgz'
+```
+
+Measured on the 2026 T1 edition (2026-09-22, a 16 GB Mac): rasterising took
+505, 207, 294 and 279 s for the four operators, tiling 81 s, and the result is
+17 316 PNG tiles, **196 MB**. `gdal_rasterize` must be given a cache that holds
+the whole 1.86 GB grid — the script sets `GDAL_CACHEMAX=2200` — or it thrashes
+the disk: four in parallel on the default cache ran at 4–8 % CPU each.
+
+No restart is needed: the proxy re-reads `current` and the meta when their
+modification time changes. The tiles are served from `/tiles/mobile-coverage/`,
+**outside `/api`**, with an immutable cache header — a coverage view asks for
+30 to 90 tiles at once, which neither the proxy's limiter nor an edge rule on
+`/api` would let through. A box without the pyramid answers 404 on
+`/api/anfr-fr/coverage` and the chips simply do not appear.
+
+The ARCEP publishes a new edition each quarter; rebuild when it does. The
+work directory (`~/gev-couverture` by default) can be deleted afterwards.
 
 ## Road data: Overpass
 

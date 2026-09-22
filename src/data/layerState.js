@@ -318,6 +318,21 @@ const OPTION_GROUPS = Object.freeze({
   'ads-fr': Object.freeze([
     enumOption('months', 'w', '36', ['36', '72', '156'], { 36: '3', 72: '6', 156: 'd' }),
   ]),
+  // WHICH COVERAGE THE GROUND UNDER THE MASTS IS PAINTED WITH — the ARCEP's
+  // 4G map, counted (`z`, the dead zones) or one operator's own levels. It is
+  // what the map says, not a preference: the same masts over Orange's gaps and
+  // over the dead zones are two different arguments. One letter each, frozen
+  // from the first link copied; the values are `mobileCoverage.js`'s modes.
+  'anfr-fr': Object.freeze([
+    enumOption('coverage', 'c', 'off', ['off', 'gaps', 'orange', 'sfr', 'bouygues', 'free'], {
+      off: '0',
+      gaps: 'z',
+      orange: 'o',
+      sfr: 's',
+      bouygues: 'b',
+      free: 'f',
+    }),
+  ]),
   // THE SUBJECT OF THE ESTIMATE, and it has to travel. `a 60 m² flat here` and
   // `a 150 m² house here` are two different numbers over one doorway, and a
   // link that dropped either token would reopen the right address under the
@@ -530,7 +545,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   // `an` for ANFR. The agency's own initials; `a` is airports. The `radio`
   // layer next door is radio-browser.info AUDIO streams and shares nothing with
   // this but a word, which is exactly why the token had to be unmistakable.
-  Object.freeze({ id: 'anfr-fr', token: 'an', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'anfr-fr', token: 'an', disposition: 'enabled+options', optionOwner: 'anfr-fr' }),
   // `vv` for valeur vénale, and NOT the `av` this layer was first written
   // against. `av` is one character from `au` (ads-fr), the other layer about a
   // property dossier at the same doorway, and this file already records what a

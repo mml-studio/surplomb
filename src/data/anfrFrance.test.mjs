@@ -32,32 +32,25 @@ import anfrFranceLayer, {
   ANFR_MAST_EXIT_SPAN_DEG,
   ANFR_MAX_BOX_DEG,
   ANFR_SECTOR_RAY_M,
-  anfrAzimuthLines,
   anfrBandColor,
-  anfrCardinal,
-  anfrExposureLines,
-  anfrFiveGBandLabel,
+  anfrCardOperators,
+  anfrExposureLine,
+  anfrNetworksLine,
+  anfrPlainCommune,
   anfrMastBandsMhz,
-  anfrMhzLabel,
   anfrOperatorName,
   anfrOperatorShort,
-  anfrOperatorSummaryLine,
   anfrPlacementLine,
-  anfrPlainAddress,
   anfrPlainText,
-  anfrShortBand,
-  anfrShortMonth,
   anfrMastHeightM,
   anfrMastLegend,
   anfrMastRegime,
   anfrSectorRays,
-  anfrDetailLines,
   anfrEditionLabel,
   anfrFrenchDate,
   anfrHasPlannedUpgrade,
   anfrMeshStyle,
   anfrMeshRecordId,
-  anfrPlanLine,
   anfrPointSize,
   anfrSupportId,
   anfrSupportStyle,
@@ -361,63 +354,49 @@ test('a register-wide filing convention is not news about one mast', () => {
   }
 });
 
-test('the plan line distinguishes an upgrade from a re-filing', () => {
-  // `Projet approuvé` is the register's phrase and it is the single most
-  // misread field in this dataset — 8.05 % of the file, and a reader who takes
-  // it for a transmitter has been misled. The card says what it IS.
-  assert.match(anfrPlanLine(support(506104)), /^5G autorisée en plus — pas encore installée$/);
-  assert.match(anfrPlanLine(support(278838)), /^4G · 3G · 2G autorisées ici — rien n’a encore été installé$/);
-  // A RE-FILING TAKES NO LINE: an operator lodging a dossier for a band
+test('the networks line says what is on the air, and what a project would ADD — never a re-filing', () => {
+  // `Projet approuvé` is the register's phrase and the most misread field in
+  // this dataset — 8.05 % of the file, and a reader who takes it for a
+  // transmitter has been misled. The card says what it IS: planned.
+  assert.equal(anfrNetworksLine(support(506104)), 'Réseaux : 4G, 3G, 2G · 5G prévue');
+  assert.equal(anfrNetworksLine(support(278838)), 'Prévu : 4G, 3G, 2G — pas encore installé');
+  // A RE-FILING TAKES NO WORD: an operator lodging a dossier for a band
   // already on the air is paperwork, true of 11 830 of the 15 606 live
-  // supports that carry a project. The ring on the dot already says somebody
-  // filed something; a line saying nothing changed is what a compact card
-  // exists to remove.
-  assert.equal(anfrPlanLine(support(449714)), null);
-  assert.equal(anfrPlanLine(support(22132)), null);
-  assert.equal(anfrPlanLine({}), null);
+  // supports that carry a project.
+  assert.equal(anfrNetworksLine(support(449714)), 'Réseaux : 5G, 4G, 3G, 2G');
+  assert.equal(anfrNetworksLine(support(22132)), 'Réseaux : 4G, 3G, 2G');
+  assert.equal(anfrNetworksLine({}), 'N’émet pas');
 });
 
-test('the selection card leads with the question people arrive with', () => {
+test('the selection card is five short lines a first-time reader can follow', () => {
   const raw = buildAnfrSelectionLabel({ support: support(449714), detail: DETAIL }, PACK);
-  const copy = norm(raw);
-  const lines = raw.split('\n').map(norm);
-  // The title is what it is and whether it matters. The SUP_ID used to lead
-  // and now closes: it is the one field nobody arrived wanting, and it is
-  // still printed because it is the handle for every other ANFR tool.
-  assert.equal(lines[0], 'Antenne-relais · 4 opérateurs · 5G');
-  assert.match(lines.at(-1), /^ANFR n° 449714 · registre du 27 août 2026 · Licence Ouverte 2\.0$/);
-  assert.match(copy, /Toit d’immeuble, 65 m/);
+  // What it is and whose, what it carries, where, the waves, the source — one
+  // line each, and nothing a reader would have to look up: no frequency, no
+  // register number, no licence, no antenna count.
+  assert.deepEqual(raw.split('\n').map(norm), [
+    'Antenne 5G · 4 opérateurs',
+    'Orange, SFR, Bouygues, Free',
+    'Réseaux : 5G, 4G, 3G, 2G',
+    'Sur un toit, à 65 m de haut · Paris 6e',
+    'Ondes mesurées à 40 m en 2009, avant les antennes actuelles : trop faibles pour être mesurées',
+    'Source : ANFR, 27 août 2026',
+  ]);
+  assert.doesNotMatch(raw, /MHz|GHz|ANFR n°|Licence|FH|Propriétaire|FREE MOBILE|BOUYGUES TELECOM/);
 
-  // NINE LINES, and the four operators share ONE of them. Every French mast
-  // where the operators file the same ladder — the great majority — used to
-  // spend four lines repeating one fact.
-  assert.equal(lines.length, 9);
-  assert.match(copy, /5G 3,5 GHz et 4G : les 4 opérateurs · 3G et 2G : Orange et SFR/);
-  // Names are not shouted, and the whole register is on the card: nothing is
-  // hidden behind a `+n`.
-  assert.doesNotMatch(copy, /FREE MOBILE|BOUYGUES TELECOM/);
-  assert.doesNotMatch(copy, /\+\d+ systèmes/);
-  // The owner of the ground, expanded out of the register's paper-form codes.
-  assert.match(copy, /Propriétaire : Établissement public, Ministère, Syndicat mixte/);
-
-  // 325857 publishes a height of 0, which is not a height.
-  // 325857 publishes a height of 0 and is an `Intérieur galerie` — and those
-  // two facts are the SAME fact: all 551 heightless supports in the register
-  // are underground or indoor, so the card explains the missing shaft rather
-  // than printing a hole where a number should be.
+  // 325857 publishes a height of 0 and is an `Intérieur galerie` — the SAME
+  // fact: all 551 heightless supports are underground or indoor, so the card
+  // says so rather than printing a hole where a number should be.
   const zeroHeight = norm(buildAnfrSelectionLabel({ support: support(325857) }, PACK));
-  assert.match(zeroHeight, /Installation souterraine \(intérieur galerie\) — aucun mât/);
-  assert.match(zeroHeight, /Aucun fût dessiné : 551 supports du registre ne publient pas de hauteur/);
+  assert.match(zeroHeight, /Sous terre, sans mât/);
   assert.doesNotMatch(zeroHeight, /de 0 m/);
 
-  // A support that radiates nothing says so, and never as "5G".
-  const planned = norm(buildAnfrSelectionLabel({ support: support(278838) }, PACK));
-  assert.match(planned, /^Antenne-relais · \d+ opérateurs? · rien n’émet/);
-  assert.match(planned, /Rien n’émet à cette position/);
-  assert.doesNotMatch(planned, /en service/);
+  // A support that radiates nothing says so in its title, and never as "5G".
+  const planned = buildAnfrSelectionLabel({ support: support(278838) }, PACK).split('\n').map(norm);
+  assert.equal(planned[0], 'Antenne en projet · 2 opérateurs');
+  assert.equal(planned[2], 'Prévu : 4G, 3G, 2G — pas encore installé');
 });
 
-test('the plain-French pass expands the register without re-casing a real name', () => {
+test('the plain-French pass expands the register and names what a mast stands on', () => {
   assert.equal(anfrOperatorName('FREE MOBILE'), 'Free Mobile');
   assert.equal(anfrOperatorName('SFR'), 'SFR');
   assert.equal(anfrOperatorName(''), '');
@@ -428,95 +407,57 @@ test('the plain-French pass expands the register without re-casing a real name',
   assert.equal(anfrPlainText('Ets public , Minist, Synd mixt'), 'Établissement public, Ministère, Syndicat mixte');
   assert.equal(anfrPlainText("Lieu d'habitation"), 'Lieu d’habitation');
   assert.equal(anfrPlainText(null), '');
+  // The commune alone: `Arrondissement` is dropped, the street is not printed.
+  assert.equal(anfrPlainCommune({ address: '9 R DE GRENELLE', commune: 'PARIS 7E ARRONDISSEMENT' }), 'Paris 7e');
+  assert.equal(anfrPlainCommune(null), '');
 
-  // A band is a NAME, not a quantity: no thousands separator, and 3500 is the
-  // only one France says in gigahertz.
-  assert.equal(anfrMhzLabel(1800), '1800 MHz');
-  assert.equal(anfrMhzLabel(3500), '3,5 GHz');
-  assert.equal(anfrMhzLabel('nope'), null);
-  // The rung, never a speed — the register has no throughput column.
-  assert.equal(anfrFiveGBandLabel(3500), 'rapide');
-  assert.equal(anfrFiveGBandLabel(2100), 'moyenne');
-  assert.equal(anfrFiveGBandLabel(700), 'basse');
-  assert.equal(anfrCardinal(0), 'N');
-  assert.equal(anfrCardinal(140), 'SE');
-  assert.equal(anfrCardinal(-90), 'O');
-  assert.equal(anfrCardinal(NaN), null);
+  // The 38 natures fold into what a reader can picture; the rest keep their name.
+  assert.equal(anfrPlacementLine('Immeuble', 35), 'Sur un toit, à 35 m de haut');
+  assert.equal(anfrPlacementLine('Bâtiment', 12), 'Sur un toit, à 12 m de haut');
+  assert.equal(anfrPlacementLine('Pylône autostable', 42), 'Pylône de 42 m');
+  assert.equal(anfrPlacementLine('Mât béton', 12.4), 'Mât de 12 m');
+  assert.equal(anfrPlacementLine('Intérieur sous-terrain', null), 'Sous terre, sans mât');
+  assert.equal(anfrPlacementLine('Phare', 30), 'Phare, 30 m');
+  assert.equal(anfrPlacementLine('Pylône haubané', null), 'Pylône');
+  assert.equal(anfrPlacementLine(null, null), 'Type de support non publié');
 
-  // The preposition is the whole point: a rooftop and a tower in a field are
-  // different objects and a bare noun does not say which.
-  assert.equal(anfrPlacementLine('Immeuble', 35), 'Toit d’immeuble, 35 m');
-  assert.equal(anfrPlacementLine('Bâtiment', 12), 'Toit de bâtiment, 12 m');
-  assert.equal(anfrPlacementLine('Pylône autostable', 42), 'Pylône autostable, 42 m');
-  assert.match(anfrPlacementLine('Intérieur sous-terrain', null), /^Installation souterraine/);
-  assert.equal(anfrPlacementLine('Mobilier urbain', 6), 'Sur mobilier urbain, 6 m');
-  assert.equal(anfrPlacementLine(null, null), 'Nature et hauteur non publiées');
-
-  // The brand, not the corporate name — only where four names share a line.
+  // The brand, not the corporate name, in the order readers know them.
   assert.equal(anfrOperatorShort('FREE MOBILE'), 'Free');
   assert.equal(anfrOperatorShort('BOUYGUES TELECOM'), 'Bouygues');
   assert.equal(anfrOperatorShort('SFR'), 'SFR');
-  assert.equal(anfrShortBand('TM 700 (Téléphonie Mobile en 700 MHz)'), '700 MHz');
-  assert.equal(anfrShortBand('Réseaux locaux radioélectriques ou Wifi'), 'Wi-Fi');
-  assert.equal(anfrShortMonth('2025-07-18'), '07/2025');
-  assert.equal(anfrShortMonth(null), 'date inconnue');
-  // The postcode and `Arrondissement` are dropped: both are redundant once
-  // the commune is named, and the card wraps at about 62 characters.
-  assert.equal(
-    anfrPlainAddress({ address: '30 R PETRICOT', postcode: '64200', commune: 'BIARRITZ' }),
-    '30 rue Petricot, Biarritz',
-  );
-  assert.equal(
-    anfrPlainAddress({ address: '9 R DE GRENELLE', postcode: '75007', commune: 'PARIS 7E ARRONDISSEMENT' }),
-    '9 rue de Grenelle, Paris 7e',
-  );
+  assert.deepEqual(anfrCardOperators({ operators: ['FREE MOBILE', 'SFR', 'ORANGE', 'BOUYGUES TELECOM'] }),
+    ['Orange', 'SFR', 'Bouygues', 'Free']);
+  assert.deepEqual(anfrCardOperators({}), []);
 });
 
-test('the Cartoradio half is labelled while it is missing, not silently omitted', () => {
+test('the card says it is loading, and answers who is on the mast before the detail lands', () => {
   const pending = buildAnfrSelectionLabel({ support: support(449714), detailPending: true }, PACK);
-  assert.match(norm(pending), /Lecture de la fiche détaillée du mât…/);
-  const failed = buildAnfrSelectionLabel(
-    { support: support(449714), detailError: 'HTTP 503' }, PACK,
-  );
-  assert.match(norm(failed), /⚠ Fiche détaillée indisponible — HTTP 503/);
-  // A card with neither says nothing about an address it does not have — and
-  // still answers the operator question from the observatoire's own list,
-  // because "who is on this mast" is the reason the reader clicked and a
-  // pending fiche is not a reason to leave it blank.
+  assert.match(norm(pending), /Chargement…/);
+  // A failed detail costs its two lines — the commune and the waves — and no
+  // error message a reader cannot act on.
+  const failed = norm(buildAnfrSelectionLabel({ support: support(449714), detailError: 'HTTP 503' }, PACK));
+  assert.doesNotMatch(failed, /HTTP 503|⚠/);
+  // "Who is on this mast" is the reason the reader clicked, and the
+  // observatoire answers it without waiting for Cartoradio.
   const bare = norm(buildAnfrSelectionLabel({ support: support(449714) }, PACK));
-  assert.match(bare, /Bouygues Telecom, Free Mobile, Orange, SFR/);
-  assert.match(bare, /Émet en 5G · 4G · 3G · 2G/);
-  assert.doesNotMatch(bare, /appartenant à/);
-  assert.doesNotMatch(bare, /V\/m/);
-  assert.doesNotMatch(bare, /· modifié /);
+  assert.match(bare, /Orange, SFR, Bouygues, Free/);
+  assert.match(bare, /Réseaux : 5G, 4G, 3G, 2G/);
+  assert.doesNotMatch(bare, /V\/m|Ondes/);
 });
 
-test('the exposure block is two lines, a scale and one caveat', () => {
-  const lines = anfrDetailLines(DETAIL).map(norm);
-  const joined = lines.join('\n');
-  // The mobile antenna count and the three microwave dishes share ONE line,
-  // because the second is a correction to the first and reads as one only
-  // while it is beside it.
-  assert.match(joined, /^30 antennes, 12 directions, 31 à 49 m du sol · \+3 FH hors téléphonie$/m);
-  // Heights are rounded to the metre: the register publishes 30,9 and 48,8
-  // and the tenths are precision the reader cannot use.
-  assert.doesNotMatch(joined, /30,9|48,8/);
-  // The ray-length convention is NOT repeated here — `anfrMastLegend` carries
-  // it on the legend row that appears with the rays.
-  assert.doesNotMatch(joined, /ni la largeur du faisceau/);
-
-  // 0,0 V/m measured in 2009, forty metres away, beside equipment from 2025.
-  // A global of zero is the protocol's floor and is never headlined as a
-  // reassuring number: the strongest band carries the real reading.
-  assert.match(joined, /^Champ global sous le seuil mesurable, à 40 m \(2009\), pic : 1800 MHz à 0,15 V\/m$/m);
-  // THE SHARP LINE. A 2009 protocol has no row at all for 700, 800, 2600 or
-  // 3600 — three of those four bands were not yet mobile in France — so the
-  // 5G and the low-band 4G on this mast are UNMEASURED, not measured at zero.
-  assert.match(joined, /^⚠ Relevé chez un voisin, 2009 — 700 MHz, 800 MHz, 2600 MHz, 3,5 GHz jamais mesurés$/m);
+test('the waves are ONE line: how far, when, and a multiple of the legal limit — never a verdict', () => {
+  // 0,0 V/m measured in 2009, forty metres away, beside equipment from 2025,
+  // and blind to 700, 800, 2600 and 3500 MHz: a global of zero is the
+  // protocol's floor, not a reassuring number, and a report older than the
+  // antennas beside it measured a DIFFERENT installation.
+  assert.equal(norm(anfrExposureLine(DETAIL)),
+    'Ondes mesurées à 40 m en 2009, avant les antennes actuelles : trop faibles pour être mesurées');
   assert.deepEqual(anfrMastBandsMhz(DETAIL), [700, 800, 900, 1800, 2100, 2600, 3500]);
   assert.deepEqual(anfrMastBandsMhz(null), []);
 
-  // A RECENT report: TWO lines, a number with a scale and one caveat.
+  // A RECENT report: 0,55 V/m against the strictest ceiling in its own report,
+  // 28 V/m — "51 fois sous la limite légale", a multiple a worried reader can
+  // hold. Still older than the 2025 equipment, and still said.
   const recent = {
     ...DETAIL,
     exposure: projectCartoradioExposure({
@@ -527,51 +468,31 @@ test('the exposure block is two lines, a scale and one caveat', () => {
       newestService: ANTENNAS.newestService,
     }),
   };
-  const fresh = anfrExposureLines(recent).map(norm);
-  assert.equal(fresh.length, 2);
-  // 0,55 V/m against the strictest ceiling in its own report, 28 V/m. "51×
-  // sous la limite" rather than "2 % de la limite": the same fact, and a
-  // frightened reader reads a multiple faster than a percentage.
-  assert.equal(fresh[0], '0,55 V/m à 40 m (2024) — 51× sous la limite (28 V/m), pic : 700 MHz');
-  assert.equal(fresh[1], '⚠ Relevé chez un voisin, antérieur à l’équipement de 07/2025');
-  // A ratio is not a verdict: the block never says a level is safe, and never
-  // says the mast is the source of what was measured.
-  assert.doesNotMatch(fresh.join('\n'), /sans danger|conforme aux normes|aucun risque/i);
+  const fresh = norm(anfrExposureLine(recent));
+  assert.equal(fresh, 'Ondes mesurées à 40 m en 2024, avant les antennes actuelles : 51 fois sous la limite légale');
+  assert.doesNotMatch(fresh, /sans danger|conforme aux normes|aucun risque/i);
 
   // No measurement in the radius is stated, not left blank.
-  const empty = anfrDetailLines({ ...DETAIL, exposure: { within: 0, radiusM: 300, nearest: null, report: null } });
-  assert.match(norm(empty.join('\n')), /Aucun relevé d’ondes publié dans 300 m autour de ce mât/);
-  assert.deepEqual(anfrDetailLines(null), []);
-  assert.deepEqual(anfrExposureLines(null), []);
-
-  // A SUP_ID Cartoradio does not hold answers HTTP 200 with a ZERO-byte body
-  // (measured against /sites/999999999), so the proxy hands back a card with
-  // nothing in it. That is named rather than left as an empty half.
-  const mute = anfrDetailLines({
-    supId: 999999999, site: null, antennas: null, exposure: null,
-    degraded: ['fiche support (empty upstream body)'],
-  });
-  assert.deepEqual(mute.map(norm), ['⚠ Fiche détaillée muette sur : fiche support (empty upstream body)']);
+  assert.equal(norm(anfrExposureLine({ exposure: { within: 0, radiusM: 300, nearest: null, report: null } })),
+    'Aucune mesure d’ondes publiée à moins de 300 m');
+  assert.equal(anfrExposureLine(null), null);
   assert.equal(anfrFrenchDate('2025-07-18'), '18/07/2025');
   assert.equal(anfrFrenchDate('18/07/2025'), null);
   assert.equal(anfrEditionLabel('2026-08-27'), '27 août 2026');
   assert.equal(anfrEditionLabel('nope'), null);
 });
 
-test('the maillage card is never a placeholder, and names which half it is showing', () => {
+test('the maillage card is true at first paint, and short', () => {
   const tuple = MESH_TUPLES.find((t) => t[3] === 4);
-  const first = norm(buildAnfrMeshLabel({ tuple }, { edition: '2026-08-27' }));
-  assert.match(first, /^Antenne-relais/);
-  assert.match(first, /5G en service/);
-  assert.match(first, /opérateurs? déclarés?/);
-  // The far zoom cannot reach the per-mast fiche, so it says what the reader
-  // gets by coming closer instead of leaving the card looking complete.
-  assert.match(first, /Approchez pour la fiche du mât : opérateurs, bandes et relevé d’ondes/);
-  assert.match(first, /Vue d’ensemble — un point par cellule · registre du 27 août 2026/);
-
-  assert.match(norm(buildAnfrMeshLabel({ tuple, lookupPending: true })), /Lecture du mât dans le registre…/);
-  assert.match(norm(buildAnfrMeshLabel({ tuple, lookupError: 'HTTP 500' })), /⚠ Registre injoignable pour ce point — HTTP 500/);
-  assert.match(norm(buildAnfrMeshLabel({ tuple, lookupEmpty: true })), /⚠ Aucun mât du registre à cette position exacte/);
+  // The tuple carries the newest generation and the operator count, so the
+  // title is already the support's own.
+  assert.equal(norm(buildAnfrMeshLabel({ tuple })), 'Antenne 5G · 2 opérateurs');
+  assert.equal(buildAnfrMeshLabel({ tuple, lookupPending: true }), 'Antenne 5G · 2 opérateurs\nChargement…');
+  for (const record of [{ tuple, lookupError: 'HTTP 500' }, { tuple, lookupEmpty: true }]) {
+    assert.match(norm(buildAnfrMeshLabel(record)), /Rapprochez-vous pour voir cette antenne en détail\./);
+  }
+  const planned = MESH_TUPLES.find((t) => t[3] === 0);
+  if (planned) assert.match(norm(buildAnfrMeshLabel({ tuple: planned })), /^Antenne en projet/);
 });
 
 test('selecting a support runs the production path and publishes one protected card', async () => {
@@ -593,13 +514,14 @@ test('selecting a support runs the production path and publishes one protected c
   assert.equal(entry.protected, true);
   assert.equal(entry.selected, true);
   assert.equal(entry.priority, Number.MAX_SAFE_INTEGER);
-  assert.match(norm(entry.title), /^Antenne-relais · 4 opérateurs · 5G$/);
+  assert.equal(norm(entry.title), 'Antenne 5G · 4 opérateurs');
 
   // The Cartoradio fetch is one call for the clicked mast, and the card is
   // repainted with it when it lands.
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, ['/api/anfr-fr/support/449714']);
-  assert.match(norm(host.entries[0].details.join('\n')), /Propriétaire : Établissement public/);
+  assert.match(norm(host.entries[0].details.join('\n')), /Paris 6e/);
+  assert.ok(host.entries[0].details.some((line) => line.startsWith('Ondes mesurées à 40 m')));
 
   // Selecting the same mast again does not re-ask.
   _selectAnfrForTest(id);
@@ -634,7 +556,8 @@ test('a maillage click asks the register for the identity, once, and caches a mi
   assert.ok(_anfrRecordForTest(id), 'the Paris dot is in the pick');
   _selectAnfrForTest(id);
   // First paint: the band and the operator count, truthfully, with no identity.
-  assert.match(norm(host.entries[0].title), /^Antenne-relais$/);
+  assert.match(norm(host.entries[0].title), /^Antenne 5G · \d+ opérateurs?$/);
+  assert.deepEqual(host.entries[0].details, ['Chargement…']);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls[0].startsWith('/api/anfr-fr/supports?'), true);
@@ -642,7 +565,8 @@ test('a maillage click asks the register for the identity, once, and caches a mi
   // arc-second lattice and a wider box would sweep in the neighbour.
   const params = new URLSearchParams(calls[0].split('?')[1]);
   assert.ok(Number(params.get('north')) - Number(params.get('south')) < 0.002);
-  assert.match(norm(host.entries[0].title), /^Antenne-relais · \d+ opérateurs? · 5G$/);
+  assert.equal(norm(host.entries[0].title), 'Antenne 5G · 4 opérateurs');
+  assert.equal(host.entries[0].details[0], 'Orange, SFR, Bouygues, Free');
 
   // A dot the register cannot name is cached as unnameable, not re-asked.
   const missHost = makeHost();
@@ -661,7 +585,7 @@ test('a maillage click asks the register for the identity, once, and caches a mi
   });
   _selectAnfrForTest(id);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.match(norm(missHost.entries[0].details.join('\n')), /Aucun mât du registre à cette position exacte/);
+  assert.deepEqual(missHost.entries[0].details, ['Rapprochez-vous pour voir cette antenne en détail.']);
   _selectAnfrForTest(id);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(missCalls.length, 1);
@@ -688,32 +612,22 @@ test('DETECT is never offered a mast that has never transmitted', () => {
   assert.deepEqual(_anfrDetectablesForTest(), [], 'a disabled layer offers nothing');
 });
 
-test('the legend keeps the project row at zero, because the ring has to be explained', () => {
+test('the legend is one plain name per colour, and keeps the project row at zero', () => {
   const host = makeHost();
   _setAnfrStateForTest({ viewer: fakeViewer(2.3, 48.8, 2.4, 48.9), overlayHost: host, pack: PACK });
   const { legend, chips } = _anfrRowControlsForTest();
-  // No chips: the manager renders a chip as a clickable button that dispatches
-  // `chip.params`, so an informational one would be a control that does
-  // nothing. `anfr-fr` is `enabled-only` and owns no option group.
+  // No chips while the server has no coverage map: a chip is a clickable
+  // button that dispatches `chip.params`, and one that does nothing is a lie.
   assert.deepEqual(chips, []);
   // Newest generation first, which is the order the map is read in.
   assert.deepEqual(legend.map((row) => row.color).slice(0, 2), [
     ANFR_BAND_COLORS['5g'], ANFR_BAND_COLORS['4g'],
   ]);
-  assert.equal(legend[legend.length - 1].color, ANFR_BAND_COLORS.projet);
+  assert.deepEqual(legend.map((row) => row.label), ['Antenne 5G', 'Antenne 4G', 'En projet, n’émet pas']);
   assert.equal(legend.find((row) => row.color === ANFR_BAND_COLORS['5g']).count, FOLD.bands['5g']);
-  for (const row of legend) assert.ok(row.blurb && row.blurb.length > 20, row.label);
-
-  // ONE SENTENCE PER SWATCH. A colour key answers "what does this colour mean"
-  // and a national count puts it in proportion; it does not run to four
-  // sentences about how ANFR files a status. That fact qualifies one clicked
-  // mast and the CARD prints ANFR's own gloss for it.
-  const fiveG = legend.find((row) => row.color === ANFR_BAND_COLORS['5g']);
-  assert.match(norm(fiveG.blurb), /La 5G émet depuis ce mât/);
-  assert.match(norm(fiveG.blurb), /50 148 supports/);
-  for (const row of legend) {
-    assert.ok(row.blurb.length <= 140, `${row.label} is a paragraph again: ${row.blurb.length}`);
-  }
+  // A colour key names the colour. The national statistics it used to carry
+  // were true and were a paragraph under every swatch.
+  for (const row of legend) assert.equal(row.blurb, undefined, row.label);
 
   // With nothing drawn there is no legend to draw either.
   _clearAnfrSelectionForTest();
@@ -918,12 +832,11 @@ test('the overlay entry is anchored, protected and single', () => {
   assert.equal(entry.paintLane, 'selected');
   assert.equal(entry.interactive, false);
   assert.equal(entry.horizonCull, true);
-  // The compact card is three lines before the detailed fiche lands — where
-  // it is, who transmits, and where it comes from — and never a stub.
-  assert.equal(entry.details.length, 3, entry.details.join(' | '));
-  assert.match(entry.details[0], /^Toit d’immeuble/);
-  assert.match(entry.details[1], /Orange/);
-  assert.match(entry.details[2], /^ANFR n° /);
+  // Before the detail lands: who, what, where, and the source.
+  assert.equal(entry.title, 'Antenne 5G · 4 opérateurs');
+  assert.deepEqual(entry.details, [
+    'Orange, SFR, Bouygues, Free', 'Réseaux : 5G, 4G, 3G, 2G', 'Sur un toit, à 65 m de haut', 'Source : ANFR, 27 août 2026',
+  ]);
   assert.equal(createAnfrSelectedOverlayEntry({ id: 'x' }), null);
   assert.equal(createAnfrSelectedOverlayEntry(null), null);
   assert.equal(ANFR_FR_OVERLAY_SOURCE_ID, 'anfr-fr-selected');
@@ -1012,25 +925,20 @@ test('the shaft sub-regime has hysteresis and is nested inside the exact one', (
 
 test('the mast key states the ABSENCES and publishes no size ladder', () => {
   // The house rule (PR #138): `#map-legend` carries the COLOUR channel, not the
-  // FORM channel. A shaft under a dot is decoded right without a key, and the
-  // three numbered height marks were a size ladder in one flat graphite — a
-  // second list re-printing the same masts by their extent. Both are gone.
+  // FORM channel. A shaft under a dot is decoded right without a key.
   _setAnfrStateForTest({ overlayHost: makeHost(), pack: PACK, regime: 'supports', mastRegime: true });
   const { legend } = _anfrRowControlsForTest();
   const labels = legend.map((row) => row.label);
   assert.equal(labels.filter((label) => /^\d+ m$/.test(label)).length, 0, 'the size ladder is gone');
-  assert.ok(!labels.some((label) => label.startsWith('Fût —')), 'a shaft needs no key');
 
   // A1 — what survives is the mark that is NOT THERE. A dot with no shaft reads
   // as a short mast, which is the one way a form is decoded WRONG unaided, so
   // it keeps its row, its count and a hatch rather than a tint (D3).
-  const blank = legend.find((row) => row.label.startsWith('Sans mât'));
+  const blank = legend.find((row) => row.label === 'Sous terre, sans mât');
   assert.equal(blank.count, 1);
   assert.ok(blank.glyph?.startsWith('data:image/svg+xml'));
-  assert.ok(blank.blurb.includes(String(ANFR_HEIGHT_MISSING)));
-  assert.ok(blank.blurb.length <= 180, blank.blurb);
   // The band ramp is untouched: the absence rows are appended, never mixed in.
-  assert.equal(labels.indexOf('5G en service'), 0);
+  assert.equal(labels.indexOf('Antenne 5G'), 0);
   _clearAnfrSelectionForTest();
 });
 
@@ -1046,9 +954,12 @@ test('the ceiling and the azimuths only take a row when they have something to s
     regime: 'supports', mastRegime: true, mastsUnpublished: 2, mastsClipped: 7, sectors: 3,
   });
   assert.deepEqual(full.map((row) => row.label), [
-    'Sans mât — hauteur non publiée', 'Fûts écrêtés', 'Azimuts du support sélectionné',
+    'Sous terre, sans mât', 'Mâts non dessinés : trop nombreux ici', 'Direction des antennes',
   ]);
   assert.deepEqual(full.map((row) => row.count), [2, 7, 3]);
+  // The rays are bearings; their length is a drawing convention, and the one
+  // row that shows them says so.
+  assert.equal(full[2].blurb, 'Longueur des traits indicative.');
 });
 
 test('the row label tells the three empties apart', () => {
@@ -1112,41 +1023,7 @@ test('the rays are the published bearings, and refuse to imply a range', () => {
   assert.equal(partial.unaimed, 2);
   assert.deepEqual(anfrSectorRays(null).rays, []);
 
-  // The card COUNTS the directions rather than listing them. Twelve bearings
-  // printed as twelve numbers is twelve numbers nobody can use; the count and
-  // the height range are the same fact in a form a reader can check by
-  // standing under the mast and looking up.
-  const lines = anfrAzimuthLines(DETAIL);
-  assert.equal(lines[0], '30 antennes, 12 directions, 31 à 49 m du sol · +3 FH hors téléphonie');
-  assert.ok(!lines.some((line) => line.includes('Azimuts publiés')));
-  // The ray-length convention is the LEGEND's job — it appears on the row
-  // that appears with the rays, and printing it per mast repeated on every
-  // card a fact about how this layer draws.
-  assert.ok(!lines.some((line) => line.includes(`${ANFR_SECTOR_RAY_M} m`)));
-  assert.ok(anfrMastLegend({ mastRegime: true, regime: 'supports', sectors: 12 })
-    .some((row) => /convention de dessin, pas une portée/.test(row.blurb)));
-
-  // Four or fewer, and they are NAMED with their compass point — the
-  // three-sector mast is the textbook case and reads without a protractor.
-  const threeSector = anfrAzimuthLines({
-    antennas: {
-      antennas: 9,
-      withoutAzimuth: 0,
-      azimuths: [
-        { deg: 0, heightM: 30, antennas: 3 },
-        { deg: 120, heightM: 30, antennas: 3 },
-        { deg: 240, heightM: 30, antennas: 3 },
-      ],
-    },
-  });
-  assert.equal(threeSector[0], '9 antennes, 3 directions (0° N · 120° SE · 240° SO), 30 m du sol');
-
-  const refusals = anfrAzimuthLines({
-    antennas: { antennas: 1, withoutAzimuth: 1, azimuths: [{ deg: 90, heightM: null, antennas: 1 }] },
-  });
-  assert.ok(refusals.some((line) => line.includes('sans hauteur de fixation publiée')));
-  assert.ok(refusals.some((line) => line.includes('sans direction publiée')));
-  assert.deepEqual(anfrAzimuthLines({ antennas: { azimuths: [], withoutAzimuth: 0 } }), []);
+  // The card no longer lists them: the rays ARE the bearings, drawn.
 });
 
 test('the drawn shafts and rays are world geometry, and go away with the selection', async () => {

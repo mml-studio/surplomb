@@ -394,6 +394,10 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | azimut, faisceau | bearing, beam | |
 | Techniquement opérationnel, Projet approuvé | Technically operational, Approved project | ANFR status. |
 | 5G rapide / moyenne / basse | 5G high-band / mid-band / low-band | The rung, never a speed. |
+| zone blanche (mobile) | dead zone | No operator reaches it, not even at limited coverage. One operator only is not a dead zone. |
+| très bonne / bonne couverture, couverture limitée | very good / good / limited coverage | ARCEP's three levels. |
+| couverture théorique (ARCEP) | simulated coverage (ARCEP) | The operators' own model, checked by ARCEP — never "measured". |
+| Mon réseau mobile | Mon réseau mobile | ARCEP dataset title, kept in French. |
 | Direction relevée / non relevée | Direction mapped / not mapped | Public cameras. |
 
 ## Cartography and data
