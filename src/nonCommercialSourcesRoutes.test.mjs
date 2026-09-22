@@ -10,6 +10,8 @@ Object.assign(process.env, { GEV_TRIAL_LIMIT: '', GEV_FIRST_RUN_AB: '' });
 delete process.env.GEV_NONCOMMERCIAL_SOURCES;
 
 const { default: createViteConfig } = await import('../vite.config.js');
+const { NONCOMMERCIAL_SOURCES } = await import('./nonCommercialSources.js');
+const ALL_OFF = NONCOMMERCIAL_SOURCES.map((source) => source.id);
 
 const routes = new Map();
 for (const plugin of createViteConfig({ mode: 'test' }).plugins.flat()) {
@@ -111,8 +113,8 @@ test('off: the regional brief keeps its place and news, and never asks Open-Mete
 
 test('off: /api/trial and /healthz both say which sources are off', async () => {
   process.env.GEV_NONCOMMERCIAL_SOURCES = 'off';
-  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ['open-meteo', 'esri-world-imagery', 'opensky']);
-  assert.deepEqual((await call('/healthz')).body.sourcesOff, ['open-meteo', 'esri-world-imagery', 'opensky']);
+  assert.deepEqual((await call('/api/trial')).body.sourcesOff, ALL_OFF);
+  assert.deepEqual((await call('/healthz')).body.sourcesOff, ALL_OFF);
 });
 
 test('unset: a clone is unchanged — both routes use Open-Meteo, and nothing is reported off', async () => {
