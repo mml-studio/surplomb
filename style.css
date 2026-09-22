@@ -13362,6 +13362,16 @@ html[data-voice-premium] #gev-voice-control .gev-premium-badge .premium-crown {
   display: none;
 }
 
+/* `#intel-hud *` paints every node in the HUD colour with a glow — cream
+   letters on the cream pill — and the HUD takes no pointer, so the tooltip
+   would never open. The mark opts out of both. */
+#intel-hud .hud-summary-label .gev-ai-badge {
+  color: #0e1b16;
+  text-shadow: none;
+  line-height: 1;
+  pointer-events: auto;
+}
+
 .hud-summary-wrap:has(#hud-summary[data-ai-generated='true']) .hud-summary-label .gev-ai-badge {
   display: inline-grid;
 }

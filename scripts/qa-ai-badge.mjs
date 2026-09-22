@@ -47,6 +47,9 @@ const SHOT_DIR = getOpt('--shots', null);
 const LABEL = getOpt('--label', 'after');
 const GLOBE = `${APP_URL}/globe?welcome=0&photoreal=0`;
 
+/** The mark's letters: the crown's keyline colour, #0e1b16. */
+const DARK_INK = 'rgb(14, 27, 22)';
+
 /** A model's five words, as `/api/openai/hud-summary` returns them. */
 const MODEL_SUMMARY = 'EIFFEL TOWER SEINE RIVERBANK PARIS';
 
@@ -133,6 +136,7 @@ const readVoiceMark = () => {
   return {
     text: badge?.textContent?.trim() ?? null,
     title: badge?.getAttribute('title') ?? null,
+    ink: badge ? getComputedStyle(badge).color : null,
     badge: boxOf(badge),
     crown: boxOf(crown),
     // On a phone the ? button floats just above the mic.
@@ -143,6 +147,20 @@ const readVoiceMark = () => {
     heard: document.querySelector('[data-role="heard"] .gev-voice-transcript-text')?.dataset.aiGenerated ?? null,
     viewport: { width: innerWidth, height: innerHeight },
   };
+};
+
+/**
+ * Put a model's words on the HUD and keep them there (runs in the page).
+ * Without a key the HUD would soon put its local line back, which is right
+ * for the product and useless for a picture of the mark.
+ */
+const stillModelSummary = (summary) => {
+  const view = window.__godsEyeView.styleManager.hud;
+  const set = view._setSummaryText.bind(view);
+  view._setSummaryText = (text, animate, aiGenerated) => {
+    if (aiGenerated) set(text, animate, aiGenerated);
+  };
+  set(summary, false, true);
 };
 
 const overlap = (a, b) => Boolean(a && b)
@@ -157,6 +175,7 @@ function checkVoiceMark(tag, mark, { text, descriptionRe }) {
     Boolean(mark.badge) && mark.badge.height <= 16 && mark.badge.width <= 24 && inside(mark.badge, mark.viewport),
     mark.badge && { w: Math.round(mark.badge.width), h: Math.round(mark.badge.height) });
   record(`[${tag}] nothing is drawn over it`, mark.onTop);
+  record(`[${tag}] its letters are dark on the cream pill`, mark.ink === DARK_INK, mark.ink);
   record(`[${tag}] the crown is drawn too, and the two do not touch`,
     Boolean(mark.badge?.painted && mark.crown?.painted) && !overlap(mark.badge, mark.crown),
     { badge: mark.badge, crown: mark.crown });
@@ -189,6 +208,8 @@ async function desktop(browser) {
       return {
         generated: text?.dataset.aiGenerated ?? null,
         text: badge?.textContent?.trim() ?? null,
+        ink: style?.color ?? null,
+        pointer: style?.pointerEvents ?? null,
         title: badge?.getAttribute('title') ?? null,
         painted: Boolean(style && style.display !== 'none' && style.visibility === 'visible' && r.width > 0),
         box: r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null,
@@ -203,16 +224,17 @@ async function desktop(browser) {
   record('[desktop] the local telemetry line is not marked', hud.local.generated === null && !hud.local.painted, hud.local);
   record('[desktop] the model’s summary is marked data-ai-generated', hud.model.generated === 'true', hud.model.generated);
   record('[desktop] … and wears « IA » beside its label', hud.model.text === 'IA' && hud.model.painted, hud.model);
+  // `#intel-hud *` paints every node cream and the HUD takes no pointer: the
+  // mark must opt out of both, or it is a blank pill with a tooltip nobody
+  // can open.
+  record('[desktop] … in dark letters, and its tooltip reachable',
+    hud.model.ink === DARK_INK && hud.model.pointer === 'auto', { ink: hud.model.ink, pointer: hud.model.pointer });
   record('[desktop] … whose tooltip names the model’s maker', /intelligence artificielle.*OpenAI/i.test(hud.model.title || ''), hud.model.title);
 
-  // For the shots only: the HUD's own 15 s tick puts the local line back on a
-  // server without an OpenAI key, so it is stilled before the model's words
-  // go up again.
-  await page.evaluate((summary) => {
-    const view = window.__godsEyeView.styleManager.hud;
-    view._updateSummary = async () => {};
-    view._setSummaryText(summary, false, true);
-  }, MODEL_SUMMARY);
+  // For the shots only: on a server without an OpenAI key the HUD puts its
+  // local line back (its 15 s tick, a camera settle, the geoid landing), so
+  // every line but a model's is refused before the model's words go up again.
+  await page.evaluate(stillModelSummary, MODEL_SUMMARY);
   await shoot(page, 'desktop-1440x900');
   await shoot(page, 'desktop-mic-x3', await cropAround(page, '#gev-voice-control', 16));
   await shoot(page, 'desktop-hud-summary-x3', await cropAround(page, '.hud-summary-wrap', 12));
@@ -259,13 +281,11 @@ async function english(browser) {
   record('[english] the globe booted', await boot(page, GLOBE));
   const mark = await page.evaluate(readVoiceMark);
   checkVoiceMark('english', mark, { text: 'AI', descriptionRe: /artificial intelligence.*synthetic voice/i });
-  const hudTitle = await page.evaluate((summary) => {
-    const view = window.__godsEyeView.styleManager.hud;
-    view._updateSummary = async () => {};
-    view._setSummaryText(summary, false, true);
+  await page.evaluate(stillModelSummary, MODEL_SUMMARY);
+  const hudTitle = await page.evaluate(() => {
     const badge = document.querySelector('.hud-summary-wrap .gev-ai-badge');
     return { text: badge?.textContent?.trim() ?? null, title: badge?.getAttribute('title') ?? null };
-  }, MODEL_SUMMARY);
+  });
   record('[english] the summary wears « AI », with an English tooltip',
     hudTitle.text === 'AI' && /artificial intelligence/i.test(hudTitle.title || ''), hudTitle);
   await shoot(page, 'english-mic-x3', await cropAround(page, '#gev-voice-control', 16));
