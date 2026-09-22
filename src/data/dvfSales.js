@@ -4,17 +4,14 @@ import {
   ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer, mapKeyCarriesSelection,
 } from './addressScanLayer.js';
 import { clearBuildingTheme, registerBuildingTheme } from './buildingTheme.js';
-import {
-  DVF_SECTION_MIN_PRICED, decodeParts, mostRecentMutation, saleKind,
-} from './dvfFeed.js';
+import { DVF_SECTION_MIN_PRICED, mostRecentMutation, saleKind } from './dvfFeed.js';
+import { createGroundAreaPaint, groundShapeAt } from './groundAreaPaint.js';
 import { drawGroundHighlight } from './groundHighlight.js';
 import { publishJoin } from './layerJoins.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
-import { pointInPolygons, polygonsBounds } from './ringGeometry.js';
 import { drawScanBoundary } from './scanBoundary.js';
 import { SCAN_BANDS, SCAN_CELL_MIN_ALTITUDE_M, scanCellParams } from './scanRegime.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
-import { governorRequestRender } from '../renderGovernor.js';
 import {
   formatDate, formatDecimal, formatEuros, formatEurosPerM2, formatNumber,
 } from '../i18n/format.js';
@@ -1155,21 +1152,9 @@ export function dvfVoiceSummary(stats) {
  * it wears under its markers below 600 m: it is painted from the same sale,
  * picked by the same function (`dvfFeed.mostRecentMutation`).
  *
- * PRIMITIVES, NOT ENTITIES, and that is the performance half of the decision.
- * The densest box measured holds 1 698 plots; as entities that is ~3 500
- * objects — a fill and an outline each — at the ~30 KiB of `Entity` machinery
- * `localGeojson.js` measured per feature. Drawn the way `cadastreParcels.js`
- * draws its 5 000 parcels instead, it is ONE classification `GroundPrimitive`
- * per colour (six at most) and one `GroundPolylinePrimitive` for every edge.
- * One colour per batch is not a style choice: a batch mixing colours repaints
- * its neighbours along their bounding rectangles (`cadastreParcels.js`,
- * `drawRecords`).
- *
- * A CLICK IS ANSWERED BY GEOMETRY, not by the pick. Ground classification
- * answers `scene.pick` with whichever shadow volume the ray enters first,
- * which at this globe's oblique angles is often not the shape under the
- * pointer; the shapes are in memory, so the shell's `groundCard` finds the
- * one under the ground point directly (`ringGeometry.pointInPolygons`).
+ * DRAWN BY `groundAreaPaint.js` — primitives, one classification batch per
+ * colour, a click answered by geometry — which the energy-rating layer shares
+ * since 2026-09-22; the reasons for each of those three are written there.
  */
 
 /**
@@ -1184,9 +1169,6 @@ const AREA_STYLE = Object.freeze({
   sections: Object.freeze({ fill: 0.24, outline: 0.85, widthPx: 1.4 }),
 });
 
-/** Frames a freshly built area draw is re-rendered for, at most, while it tessellates. */
-const AREA_BUILD_FRAME_CAP = 240;
-
 /** Top of the plot band — the altitude the section cards send a reader under. */
 const PLOT_BAND_MAX_ALTITUDE_M = SCAN_BANDS.find((band) => band.dvfUnit === 'plots')?.maxAltitudeM;
 
@@ -1198,13 +1180,8 @@ const PLOT_BAND_MAX_ALTITUDE_M = SCAN_BANDS.find((band) => band.dvfUnit === 'plo
  * is drawn.
  */
 let _areaUnit = null;
-let _areaViewer = null;
-/** @type {Array<object>} One classification primitive per colour. */
-let _areaFills = [];
-let _areaOutline = null;
-let _areaPumpStop = null;
-/** @type {Array<{kind: string, record: object, parts: Array, bounds: ?object}>} */
-let _areaShapes = [];
+/** The plots or sections on the globe — see `groundAreaPaint.js`. */
+const _areaPaint = createGroundAreaPaint({ renderReason: 'dvf-area-build' });
 
 /**
  * The regime a payload answers in.
@@ -1464,27 +1441,13 @@ export function dvfSectionCard(section, payload) {
 }
 
 /**
- * The area shape under a ground point, or null. The smallest wins where two
- * overlap — a multipart plot's neighbour, a section drawn over a sliver of
- * another — because the smaller shape is the more specific claim.
+ * The area shape under a ground point, or null — see `groundShapeAt`.
  * @param {number} lon @param {number} lat
  * @param {Array<object>} [shapes]
  * @returns {?object}
  */
-export function dvfAreaShapeAt(lon, lat, shapes = _areaShapes) {
-  let best = null;
-  let bestSpan = Infinity;
-  for (const shape of shapes) {
-    const bounds = shape.bounds;
-    // The bbox rejects almost everything for almost nothing — at 1 700 plots
-    // it is the difference between a hit test and a stutter.
-    if (!bounds || lat < bounds.south || lat > bounds.north
-      || lon < bounds.west || lon > bounds.east) continue;
-    if (!pointInPolygons(shape.parts, lon, lat)) continue;
-    const span = (bounds.north - bounds.south) * (bounds.east - bounds.west);
-    if (span < bestSpan) { best = shape; bestSpan = span; }
-  }
-  return best;
+export function dvfAreaShapeAt(lon, lat, shapes = _areaPaint.shapes()) {
+  return groundShapeAt(lon, lat, shapes);
 }
 
 /**
@@ -1493,7 +1456,7 @@ export function dvfAreaShapeAt(lon, lat, shapes = _areaShapes) {
  * null off every shape, so the click falls through to a dismissal.
  */
 function dvfAreaGroundCard({ lon, lat, payload }) {
-  if (!dvfAreaUnit(payload) || !_areaShapes.length) return null;
+  if (!dvfAreaUnit(payload) || !_areaPaint.shapes().length) return null;
   const shape = dvfAreaShapeAt(lon, lat);
   if (!shape) return null;
   return shape.kind === 'plot'
@@ -1501,56 +1464,9 @@ function dvfAreaGroundCard({ lon, lat, payload }) {
     : dvfSectionCard(shape.record, payload);
 }
 
-/** Positions for one ring, without its repeated closing vertex. */
-function areaRingPositions(ring) {
-  const degrees = [];
-  const last = ring.length - 1;
-  const closed = last > 0 && ring[0][0] === ring[last][0] && ring[0][1] === ring[last][1];
-  for (let i = 0; i < (closed ? last : ring.length); i += 1) {
-    const point = ring[i];
-    if (Array.isArray(point)) degrees.push(point[0], point[1]);
-  }
-  return degrees.length >= 6 ? Cesium.Cartesian3.fromDegreesArray(degrees) : null;
-}
-
 /** Take the area draw off the globe. Idempotent. */
 function clearAreaDraw() {
-  _areaPumpStop?.();
-  _areaPumpStop = null;
-  const primitives = _areaViewer?.scene?.primitives;
-  if (primitives) {
-    for (const fill of _areaFills) primitives.remove(fill);
-    if (_areaOutline) primitives.remove(_areaOutline);
-  }
-  _areaFills = [];
-  _areaOutline = null;
-  _areaShapes = [];
-}
-
-/**
- * Keep rendering while the batches tessellate on the worker pool, then stop.
- *
- * The globe renders on demand, and nothing else asks for the frames in which
- * an asynchronous `GroundPrimitive` becomes ready — without this a box of
- * plots can land and stay invisible until the reader next moves. Bounded, so a
- * primitive that never readies cannot hold the render loop open.
- */
-function pumpAreaUntilReady(scene) {
-  if (!scene?.postRender) return;
-  let framesLeft = AREA_BUILD_FRAME_CAP;
-  const stop = scene.postRender.addEventListener(() => {
-    const pending = _areaFills.some((fill) => !fill.ready)
-      || (_areaOutline && !_areaOutline.ready);
-    framesLeft -= 1;
-    if (!pending || framesLeft <= 0) {
-      stop();
-      if (_areaPumpStop === stop) _areaPumpStop = null;
-      return;
-    }
-    governorRequestRender('dvf-area-build');
-  });
-  _areaPumpStop = stop;
-  governorRequestRender('dvf-area-build');
+  _areaPaint.clear();
 }
 
 /**
@@ -1561,83 +1477,15 @@ function drawDvfArea(payload, viewer, classificationType) {
   clearAreaDraw();
   const unit = dvfAreaUnit(payload);
   if (!unit || !viewer?.scene?.primitives) return 0;
-  _areaViewer = viewer;
-  const style = AREA_STYLE[unit];
   const kind = unit === 'plots' ? 'plot' : 'section';
-  const fillsByColor = new Map();
-  const outlines = [];
-  const shapes = [];
-  for (const record of (unit === 'plots' ? payload.plots : payload.sections)) {
-    // Rings travel as flat integer offsets (`dvfFeed.encodeRing`) — decoded
-    // once here, for the draw and for the click test both.
-    const parts = decodeParts(record?.parts);
-    if (!parts.length) continue;
-    const css = dvfAreaColorCss(unit, record);
-    const fill = Cesium.Color.fromCssColorString(css).withAlpha(style.fill);
-    const stroke = Cesium.Color.fromCssColorString(css).withAlpha(style.outline);
-    const instanceId = `dvf-${kind}:${record.id}`;
-    let batch = fillsByColor.get(css);
-    if (!batch) { batch = []; fillsByColor.set(css, batch); }
-    for (const rings of parts) {
-      const outer = areaRingPositions(rings[0] || []);
-      if (!outer) continue;
-      const holes = [];
-      for (let h = 1; h < rings.length; h += 1) {
-        const hole = areaRingPositions(rings[h]);
-        // A courtyard is not part of the plot, and a hole in a section is
-        // another commune's enclave: filled in, the wash claims ground the
-        // numbers are not about.
-        if (hole) holes.push(new Cesium.PolygonHierarchy(hole));
-      }
-      batch.push(new Cesium.GeometryInstance({
-        id: instanceId,
-        geometry: new Cesium.PolygonGeometry({
-          polygonHierarchy: new Cesium.PolygonHierarchy(outer, holes),
-          vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-        }),
-        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(fill) },
-      }));
-      for (const ring of rings) {
-        const positions = areaRingPositions(ring || []);
-        if (!positions) continue;
-        outlines.push(new Cesium.GeometryInstance({
-          id: instanceId,
-          geometry: new Cesium.GroundPolylineGeometry({
-            positions: [...positions, positions[0]],
-            width: style.widthPx,
-          }),
-          attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(stroke) },
-        }));
-      }
-    }
-    shapes.push({ kind, record, parts, bounds: polygonsBounds(parts) });
-  }
-  const primitives = viewer.scene.primitives;
-  for (const instances of fillsByColor.values()) {
-    if (!instances.length) continue;
-    const primitive = new Cesium.GroundPrimitive({
-      geometryInstances: instances,
-      appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
-      classificationType,
-      asynchronous: true,
-    });
-    _areaFills.push(primitive);
-    primitives.add(primitive);
-  }
-  if (outlines.length) {
-    // One batch, colours per instance: safe for polylines, which cull by
-    // distance to the line and not by bounding rectangle.
-    _areaOutline = new Cesium.GroundPolylinePrimitive({
-      geometryInstances: outlines,
-      appearance: new Cesium.PolylineColorAppearance({ translucent: true }),
-      classificationType,
-      asynchronous: true,
-    });
-    primitives.add(_areaOutline);
-  }
-  _areaShapes = shapes;
-  pumpAreaUntilReady(viewer.scene);
-  return shapes.length;
+  const items = (unit === 'plots' ? payload.plots : payload.sections).map((record) => ({
+    id: `dvf-${kind}:${record.id}`,
+    kind,
+    record,
+    parts: record?.parts,
+    css: dvfAreaColorCss(unit, record),
+  }));
+  return _areaPaint.draw(viewer, items, { style: AREA_STYLE[unit], classificationType });
 }
 
 /* ── the selected sale: a lit plot, and its card beside the map ─────────── */
@@ -2275,7 +2123,6 @@ const dvfSalesLayer = {
     _drawViewer = null;
     _saleByParcel.clear();
     _areaUnit = null;
-    _areaViewer = null;
     unregisterPickOwner(DVF_LAYER_ID);
   },
 
@@ -2317,12 +2164,7 @@ const dvfSalesLayer = {
    * @returns {{unit: ?string, shapes: number, fills: number, ready: boolean}}
    */
   getAreaDraw() {
-    return {
-      unit: _areaUnit,
-      shapes: _areaShapes.length,
-      fills: _areaFills.length,
-      ready: _areaFills.every((fill) => fill.ready) && (!_areaOutline || _areaOutline.ready),
-    };
+    return { unit: _areaUnit, ..._areaPaint.stats() };
   },
 
   /** The mutation the operator clicked, ready to be spoken. */

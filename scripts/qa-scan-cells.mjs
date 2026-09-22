@@ -5,18 +5,19 @@
  * The complaint this answers, in the reader's words: « y a qu'un pan de la vue
  * qui est dessiné ». Below 600 m that pan is the right answer and this harness
  * asserts it is still drawn as before; above 600 m the layers must change UNIT
- * over the whole box — one disc per patch of ground for the DPE, and since
- * 2026-09-21 the cadastre's own PLOTS for the DVF (its sections above 1 800 m)
- * — and that is the part no unit test can see, because it depends on the
- * camera, the shell's scan guard and the proxy all agreeing.
+ * over the whole box — the cadastre's own PARCELS from 600 m (DVF since
+ * 2026-09-21, DPE since 2026-09-22) and its SECTIONS above 1 800 m — and that
+ * is the part no unit test can see, because it depends on the camera, the
+ * shell's scan guard and the proxy all agreeing.
  *
  * What is checked, in order:
  *   1. LOW: both layers draw their points and their scanned edge.
- *   2. HIGH: both switch to cells, the key changes with them, and the ground
+ *   2. HIGH: both switch to parcels, the key changes with them, and the ground
  *      covered goes up by more than an order of magnitude.
  *   3. The boundary is a BOX up high and a CIRCLE down low.
  *   4. Panning inside one tile does not re-ask the question.
- *   5. Nothing throws on the way.
+ *   5. HIGHER: both switch to cadastral sections.
+ *   6. Nothing throws on the way.
  *
  * Reads the MODEL, never the pixels: no Cesium entity ever paints in headless
  * Chrome here (see `docs/` and the other qa-* harnesses), so entity counts and
@@ -34,7 +35,9 @@ const LON = 4.84979;
 const LAT = 45.77535;
 const LAYERS = ['dvf-sales', 'dpe-fr'];
 /** The `scanBasis` each layer publishes above 600 m, at the altitude parked below. */
-const HIGH_BASIS = { 'dvf-sales': 'plots', 'dpe-fr': 'cells' };
+const HIGH_BASIS = { 'dvf-sales': 'plots', 'dpe-fr': 'parcels' };
+/** …and above 1 800 m. */
+const HIGHER_BASIS = { 'dvf-sales': 'sections', 'dpe-fr': 'sections' };
 
 let failures = 0;
 const check = (ok, label, detail = '') => {
@@ -98,8 +101,8 @@ try {
         }
       }
       const values = source ? [...source.entities.values] : [];
-      // The DVF paints its area answer as PRIMITIVES, which live outside the
-      // data source; the layer reports what it drew.
+      // Both layers paint their area answer as PRIMITIVES, which live outside
+      // the data source; each reports what it drew.
       const area = module?.getAreaDraw?.() ?? null;
       const cells = area
         ? area.shapes
@@ -143,12 +146,12 @@ try {
    * twelve-second settle reported "the cell regime never engaged" for a regime
    * that engaged at second fourteen.
    */
-  const awaitRegime = (basis) => page.waitForFunction((ids, want, high) => ids.every((id) => {
+  const awaitRegime = (basis) => page.waitForFunction((ids, want, high, higher) => ids.every((id) => {
     const stats = window.__godsEyeView.dataManager.layers.get(id)?.module?.getStats?.() || {};
-    return want === 'high'
-      ? stats.scanBasis === high[id]
-      : (!stats.scanBasis && (stats.count || 0) > 0);
-  }), { timeout: 240_000 }, LAYERS, basis, HIGH_BASIS);
+    if (want === 'high') return stats.scanBasis === high[id];
+    if (want === 'higher') return stats.scanBasis === higher[id];
+    return !stats.scanBasis && (stats.count || 0) > 0;
+  }), { timeout: 240_000 }, LAYERS, basis, HIGH_BASIS, HIGHER_BASIS);
 
   // ── 1. LOW: the disc regime, unchanged ──────────────────────────────────
   await park(420);
@@ -188,9 +191,9 @@ try {
       `${id} · high · and the edge is a box, not a circle`,
       `roundness ${high[id].edgeRoundness?.toFixed(3)}`);
     const legend = high[id].controls?.legend || [];
-    check(legend.length > 0, `${id} · high · the key describes the cells`,
+    check(legend.length > 0, `${id} · high · the key describes the shapes`,
       `${legend.length} entrées`);
-    check(/agrégée|^Vue sur/.test(high[id].controls?.note || ''),
+    check(/^Vue sur/.test(high[id].controls?.note || ''),
       `${id} · high · the A5 line says what was aggregated`,
       (high[id].controls?.note || '').slice(0, 120));
   }
@@ -224,7 +227,22 @@ try {
       `lastUpdate ${before[id]} → ${after[id]}`);
   }
 
-  // ── 4. Back down: the points come back ──────────────────────────────────
+  // ── 4. Higher: the cadastral sections ───────────────────────────────────
+  await park(2_600);
+  await awaitRegime('higher');
+  await settle(2_000);
+  const higher = await read();
+  for (const id of LAYERS) {
+    check(higher[id].cells > 0, `${id} · higher · draws sections over the box`,
+      `${higher[id].cells} sections`);
+    check(higher[id].stats?.scanBasis === 'sections', `${id} · higher · stats say the section regime`,
+      String(higher[id].stats?.scanBasis));
+  }
+  const dpeLegend = higher['dpe-fr'].controls?.legend || [];
+  check(dpeLegend.slice(0, 7).map((entry) => entry.label).join('') === 'ABCDEFG',
+    'dpe-fr · higher · the key is still the A–G scale', dpeLegend.map((entry) => entry.label).join(','));
+
+  // ── 5. Back down: the points come back ──────────────────────────────────
   await park(420);
   await awaitRegime('points');
   await settle(2_000);

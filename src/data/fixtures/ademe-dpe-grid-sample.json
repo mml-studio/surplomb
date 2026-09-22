@@ -1,0 +1,273 @@
+{
+ "total": 1503,
+ "aggs": [
+  {
+   "total": 1086,
+   "value": "75105",
+   "total_values": null,
+   "total_other": 0,
+   "aggs": [
+    {
+     "total": 417,
+     "value": 652150,
+     "total_other": 0,
+     "aggs": [
+      {
+       "total": 234,
+       "value": 6861050,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 113,
+         "value": "C"
+        },
+        {
+         "total": 50,
+         "value": "D"
+        },
+        {
+         "total": 39,
+         "value": "E"
+        },
+        {
+         "total": 18,
+         "value": "F"
+        },
+        {
+         "total": 14,
+         "value": "G"
+        }
+       ]
+      },
+      {
+       "total": 183,
+       "value": 6861400,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 76,
+         "value": "E"
+        },
+        {
+         "total": 55,
+         "value": "D"
+        },
+        {
+         "total": 33,
+         "value": "C"
+        },
+        {
+         "total": 15,
+         "value": "F"
+        },
+        {
+         "total": 4,
+         "value": "G"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "total": 669,
+     "value": 652550,
+     "total_other": 0,
+     "aggs": [
+      {
+       "total": 462,
+       "value": 6860350,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 288,
+         "value": "E"
+        },
+        {
+         "total": 112,
+         "value": "D"
+        },
+        {
+         "total": 55,
+         "value": "F"
+        },
+        {
+         "total": 5,
+         "value": "C"
+        },
+        {
+         "total": 2,
+         "value": "G"
+        }
+       ]
+      },
+      {
+       "total": 207,
+       "value": 6860250,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 120,
+         "value": "G"
+        },
+        {
+         "total": 70,
+         "value": "E"
+        },
+        {
+         "total": 15,
+         "value": "F"
+        },
+        {
+         "total": 2,
+         "value": "D"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "total": 417,
+   "value": "75106",
+   "total_values": null,
+   "total_other": 0,
+   "aggs": [
+    {
+     "total": 174,
+     "value": 650900,
+     "total_other": 0,
+     "aggs": [
+      {
+       "total": 96,
+       "value": 6860650,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 40,
+         "value": "E"
+        },
+        {
+         "total": 23,
+         "value": "F"
+        },
+        {
+         "total": 19,
+         "value": "G"
+        },
+        {
+         "total": 11,
+         "value": "D"
+        },
+        {
+         "total": 2,
+         "value": "C"
+        },
+        {
+         "total": 1,
+         "value": "B"
+        }
+       ]
+      },
+      {
+       "total": 78,
+       "value": 6861700,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 27,
+         "value": "E"
+        },
+        {
+         "total": 17,
+         "value": "D"
+        },
+        {
+         "total": 14,
+         "value": "C"
+        },
+        {
+         "total": 10,
+         "value": "F"
+        },
+        {
+         "total": 10,
+         "value": "G"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "total": 243,
+     "value": 650850,
+     "total_other": 0,
+     "aggs": [
+      {
+       "total": 143,
+       "value": 6861350,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 49,
+         "value": "C"
+        },
+        {
+         "total": 31,
+         "value": "E"
+        },
+        {
+         "total": 25,
+         "value": "D"
+        },
+        {
+         "total": 16,
+         "value": "F"
+        },
+        {
+         "total": 12,
+         "value": "G"
+        },
+        {
+         "total": 10,
+         "value": "B"
+        }
+       ]
+      },
+      {
+       "total": 100,
+       "value": 6861650,
+       "total_other": 0,
+       "aggs": [
+        {
+         "total": 29,
+         "value": "E"
+        },
+        {
+         "total": 28,
+         "value": "D"
+        },
+        {
+         "total": 17,
+         "value": "F"
+        },
+        {
+         "total": 15,
+         "value": "G"
+        },
+        {
+         "total": 10,
+         "value": "C"
+        },
+        {
+         "total": 1,
+         "value": "B"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

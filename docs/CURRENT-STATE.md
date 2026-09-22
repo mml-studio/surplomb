@@ -3181,7 +3181,7 @@ recomputed on each theme's row, which would give two numbers for one fact.
 | `georisques` | `gr` | `/api/georisques` | Géorisques (BRGM) — 3 endpoints fanned out per scan |
 | `dvf-sales` | `dv` | `/api/dvf` | geo-DVF CSV per commune-year, parsed and cached server-side |
 | `avis-valeur` | `vv` | `/api/avis-valeur` | the SAME geo-DVF editions, read as comparables — the estimate, not a source |
-| `dpe-fr` | `dp` | `/api/dpe` | ADEME `dpe03existant`, `geo_distance` query |
+| `dpe-fr` | `dp` | `/api/dpe` | ADEME `dpe03existant` — a `geo_distance` query below 600 m; above it the rows of a box (parcels) or a 50 m `values_agg` grid (sections), placed on the Etalab cadastre |
 | `urbanisme-gpu` | `ur` | `/api/gpu` | APIcarto `zone-urba` + `assiette-sup-s` |
 | `idfm-network` | `if` | `/api/idfm/stops`, `/api/idfm/lines` | Île-de-France Mobilités Opendatasoft |
 | `ads-fr` | `au` | `/api/ads-fr` | Sitadel (SDES DiDo, 4 datafiles) + Paris / Bordeaux / Nantes ADS portals + Etalab cadastre (current and dated editions) + BAL + BAN bulk geocoder |
@@ -3278,6 +3278,105 @@ because a ground polyline drapes down every façade on the boundary.
 `selectionFor` redirects a washed plot's edge to the marker of the sale the
 wash is painted from. The bottom class of the ramp is `#0f8f55` (was the
 turquoise `#3dd6c4`): two greens apart by lightness, ΔE76 42.1.
+
+### `dpe-fr` above 600 m — the cadastre, on the A–G scale
+
+Below 600 m the layer is unchanged: a 200 m disc of ratings grouped into sites,
+each on its building's footprint. Above 600 m it asks `/api/dpe` about the same
+grid-snapped BOX as the price layer and paints the cadastre's own shapes on the
+official A–G scale, **not** the geohash discs it drew until 2026-09-22 — discs
+sized by their count and coloured by their share of F and G on a ramp of their
+own. The operator's request, over Lyon's Presqu'île: the parcels of the
+buildings concerned, and the DPE scale « même sur la vue dézoomée ».
+
+Every shape is painted by the MOST FREQUENT class of its own ratings, ties to
+the worse (`dpeSites.dpeSummaryFromCounts`, the rule `dpeBuildingSummary` now
+calls), so a parcel wears the colour its building wore close up. No mean of
+letters is computed; the card names the mode as « la classe la plus fréquente »
+and prints every class present, and the share of F and G the discs carried
+stays in the key's note beside the national register's 9.75 %.
+
+- **600 m to 1 800 m — parcels.** The proxy reads the box's ROWS, four fields
+  only (`dpeFeed.DPE_AREA_FIELDS`), tile by 0.01° tile (one or two 10 000-row
+  pages each; Paris 11e is 12 231 rows), folds them into one point per BAN
+  geocode, and places each point on the Etalab parcel it stands on
+  (`shapeLocator.js`) — or, within 3 m, on the one whose frontage it touches:
+  a BAN point stands on the front door, and over Lyon 1er–2e 534 of 1 107
+  points were within 2 m of a parcel and outside it (Paris 11e: 1 177 of 1 185
+  inside). Measured over Lyon's Presqu'île, 0.02° box: 22 567 ratings, 11 206
+  placed inside, 11 204 from the frontage, 157 on no parcel; 2 469 parcels,
+  607 KB of JSON, 99 KB gzipped, 9 ms warm. Tiles are cached a week in memory
+  and on disk (`.gev-cache/address/dpe-points-*.json`); a commune's whole
+  parcel file is indexed for eight communes at a time, as ONE float32 array of
+  offsets per commune (`shapeLocator.js`): Toulouse's 91 938 parcels hold
+  46 MB, where GeoJSON's nested pairs held 181 MB.
+- **Above 1 800 m — cadastral sections.** A 0.08° box holds 227 114 ratings
+  over Lyon and 513 554 over central Paris, 14 to 52 pages of rows per camera
+  settle, so the ADEME aggregates them instead: `values_agg` nests a histogram
+  on the register's own Lambert-93 coordinates under the commune and over the
+  letters (`dpeFeed.buildDpeGridUrl`), one request per 0.04° tile, and every
+  50 m square holding a rating comes back with its seven counts (central Paris:
+  102 104 ratings, 5 230 squares, 92 KB, 3.2 s, exact sum). 25 m trips the
+  ADEME's Elasticsearch circuit breaker over Paris (HTTP 429 « Data too
+  large »); the proxy retries a 429 once after 1.5 s. Each square goes to the
+  section under its centre, and a section is COLOURED only when at least three
+  ratings fall in squares wholly inside it (`DPE_SECTION_MIN_GRADED`): measured
+  against point-by-point placement over one Lyon tile, 5.6 % of ratings land in
+  a neighbouring section and two sections holding none received 3 and 89; the
+  whole-square floor turns both neutral and every coloured section keeps its
+  exact letter (14 of 14). Over central Lyon: 402 sections, 345 coloured
+  (179 C, 149 D, 13 E, 4 B), 54 KB gzipped, 6 s cold. The section files are
+  the price layer's (`loadCommuneSections`, now shared), and each commune is
+  named once through the BAN — « Lyon 7e Arrondissement », where the BAN says
+  « Lyon ».
+
+**Only the tiles on screen are asked for, and the wait is the ADEME's.** The
+client narrows the box to the tiles `viewGate.cameraViewBox` touches, with a
+~100 m margin (`scanRegime.scanTileMask`, sent as `tiles=0110`; a bad mask
+reads as the whole box, never a wider one), so a low, straight-down view asks
+for one or two tiles instead of four; nothing is fetched ahead of the reader.
+Measured cold on 2026-09-22, the rows are the whole wait: over Bordeaux
+centre, 4.7 s of ADEME pages, 0.9 s of cadastre, 37 ms of placement. A
+10 000-row page took 0.2 s to 11 s for the same size of answer. The time is a
+matter of ROWS: over untouched tiles, 1 row answers in 0.10–0.17 s, 500 in
+0.15–0.25 s, ~5 000 in 0.65–1.0 s, and the register gets through 0.14–0.31 ms
+per row whether it is asked one, two or four tiles at a time — so more in
+flight wins nothing and the tiles go two at a time. Its own aggregation of the
+same tile into points (`values_agg` on the Lambert coordinates) was slower,
+1.4 to 2.3 s against 0.75 to 1.6 s for the rows, so the rows stay. Each tile's
+parcel files are requested as soon as its rows name them, under the wait.
+Cold over the whole box: Lille 1.5 s of rows, Grenoble 4.2 s, Nantes 3.8 s,
+Strasbourg 5.0 s, Toulouse 7.4 s; warm 8 to 13 ms.
+
+**The next kilometre is loaded while the reader looks at this one.** Once a
+view's answer is built, the proxy queues the ring of tiles around it
+(`scanRegime.scanTileRing`, up to twelve, nearest the reader first) and loads
+them one at a time, server-side only — the browser still receives only its
+screen. The queue pauses whenever a reader's own request is waiting on the
+ADEME, the latest view's ring replaces an older one, and a refusal stops it
+for a minute. The operator chose this among three measured options (the
+ring, the rest of the box, nothing). Measured over Grenoble: the view cold in
+4.2 s, its ring of 12 tiles in 7.7 s behind it, then moves of a kilometre east,
+north and south-west answered in 64, 12 and 30 ms instead of one to two
+seconds; Brest asked cold one second into Dijon's ring answered in 3.1 s, its
+normal time.
+
+Drawn through `groundAreaPaint.js`, extracted from the price layer for both:
+one classification `GroundPrimitive` per colour (eight at most), one
+`GroundPolylinePrimitive` for the edges, a click answered by geometry through
+`ownsPick` + `groundCard`. The layer is now `redrawOnMapStack: true`. A click
+opens the shape's card in the key — for a parcel its busiest address and up to
+two more, the count, the classes present and their range, the mode with a tie
+named, the *passoires*, how many ratings were placed from the frontage; for a
+section its code and commune, and how many ratings lie in whole squares — and
+lights the shape in its class colour ringed in white. The key's seven plates
+still filter (`classes`, draw-only): a shape stays if it holds a shown letter
+and is repainted from those letters, while the counts stay the whole answer.
+The building theme is withdrawn above 600 m, as it was for the discs.
+`getAreaDraw()` reports the draw; `npm run qa:dpe-area` checks both bands on
+the reader's view, and `qa:scan-cells` checks the switch with the price layer.
+The route keys the box answer `dpe-area|…`, so no cached disc answer is served
+to the new client.
 
 ### `avis-valeur` — the estimate, and the two uncertainties it never merges
 

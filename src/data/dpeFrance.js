@@ -1,19 +1,24 @@
 import * as Cesium from 'cesium';
 import {
-  DPE_CELL_BREAKS,
-  DPE_CELL_MIN_TOTAL,
+  DPE_GRID_M,
   DPE_LABELS,
+  DPE_PARCEL_SNAP_M,
   DPE_POOR_SHARE_NATIONAL,
+  DPE_SECTION_MIN_GRADED,
 } from './dpeFeed.js';
 import { addressMarkerGlyph, dpeLetterKind } from './addressMarkerIcons.js';
 import {
   ADDRESS_SCAN_MIN_SHIFT_KM, createAddressScanLayer, mapKeyCarriesSelection,
 } from './addressScanLayer.js';
 import { drawScanBoundary } from './scanBoundary.js';
-import { cellDiscRadiusM, discRing } from './scanCells.js';
-import { SCAN_CELL_MIN_ALTITUDE_M, scanCellParams } from './scanRegime.js';
+import {
+  SCAN_BANDS, SCAN_CELL_MIN_ALTITUDE_M, scanBandFor, scanCellParams, scanTileMask, scanTileMaskParam,
+} from './scanRegime.js';
+import { cameraViewBox } from './viewGate.js';
 import { bdtopoLoadedFootprints } from './bdtopoBuildings.js';
+import { createGroundAreaPaint } from './groundAreaPaint.js';
 import { drawGroundHighlight } from './groundHighlight.js';
+import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import {
   clearBuildingTheme,
   joinPointsToBuildings,
@@ -23,6 +28,7 @@ import {
   dpeBuildingSummary,
   dpeGradeOf,
   dpeSitePlacementLine,
+  dpeSummaryFromCounts,
   groupDpeSites,
 } from './dpeSites.js';
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
@@ -829,27 +835,7 @@ export function dpeKeyNote(payload, filter = DPE_CLASS_FILTER_ALL) {
  * @returns {object}
  */
 export function dpeSummarize(payload) {
-  if (Array.isArray(payload?.cells)) {
-    const summary = payload.summary || {};
-    return {
-      // `scanBasis` is what tells a caller which question was answered, and the
-      // voice surface reads it before quoting anything: "9,1 % de passoires sur
-      // la vue" and "9,1 % dans les 200 m" are different sentences.
-      scanBasis: 'cells',
-      cellCount: summary.cells ?? 0,
-      diagnosticsTotal: summary.total ?? 0,
-      // NAMED THE SAME AS THE DISC REGIME'S, because it is the same quantity
-      // measured over different ground — a share of F and G over the labelled
-      // diagnostics the scan reached.
-      poorCount: summary.poor ?? 0,
-      poorShare: summary.poorShare ?? null,
-      poorShareNational: DPE_POOR_SHARE_NATIONAL,
-      truncated: summary.truncated === true,
-      tilesMissing: summary.tilesMissing ?? 0,
-      coverage: dpeCellDisclosure(payload),
-      legend: dpeCellRowControls(payload).legend,
-    };
-  }
+  if (dpeAreaUnit(payload)) return dpeAreaSummarize(payload);
   const distribution = payload?.distribution || {};
   const labelled = DPE_LABELS.reduce((sum, letter) => sum + (distribution[letter] || 0), 0);
   const poor = (distribution.F || 0) + (distribution.G || 0);
@@ -1391,6 +1377,24 @@ function drawSiteHighlight(viewer, site) {
   return _highlight !== null;
 }
 
+/**
+ * Light one area shape: refilled in its class colour, ringed in white — the
+ * site highlight's grammar, one scale up.
+ * @param {object} viewer @param {{parts: Array, css: string}} shape
+ * @returns {boolean}
+ */
+function drawShapeHighlight(viewer, shape) {
+  clearSiteHighlight();
+  if (!shape?.parts?.length) return false;
+  _highlight = drawGroundHighlight(viewer, [{
+    parts: shape.parts,
+    fill: Cesium.Color.fromCssColorString(shape.css || COLOR_UNLABELLED_CSS).withAlpha(SELECTED_FILL_ALPHA),
+    stroke: Cesium.Color.WHITE.withAlpha(SELECTED_OUTLINE.alpha),
+    widthPx: SELECTED_OUTLINE.widthPx,
+  }], 'dpe-highlight');
+  return _highlight !== null;
+}
+
 /** The drawn site a card id names, or null. */
 function siteForCard(card) {
   const id = String(card?.id ?? '');
@@ -1413,7 +1417,16 @@ function onDpeSelectionChange(card) {
   const wasPinned = _selectedSiteKey !== null;
   const site = card ? siteForCard(card) : null;
   _selectedSiteKey = site ? site.key : null;
-  _selectedCard = card && !site ? card : null;
+  // Above 600 m a card is opened on bare ground, and it is about the parcel
+  // or section under that point — found by geometry, as the card was.
+  _selectedShape = !site && _areaUnit && Number.isFinite(card?.lon) && Number.isFinite(card?.lat)
+    ? _areaPaint.shapeAt(card.lon, card.lat)
+    : null;
+  _selectedCard = card && !site && !_selectedShape ? card : null;
+  if (_selectedShape) {
+    if (_drawViewer) drawShapeHighlight(_drawViewer, _selectedShape);
+    return;
+  }
   if (!site) {
     // The plate it pinned may fold back into its neighbours' pill.
     if (wasPinned) declutter();
@@ -1435,9 +1448,14 @@ export function dpeSelectionPanel() {
     const site = _sites.find((entry) => entry.key === _selectedSiteKey);
     if (site) return dpeSitePanel(site);
   }
+  if (_selectedShape) {
+    return _selectedShape.kind === 'section'
+      ? dpeSectionPanel(_selectedShape.record, _areaPayload)
+      : dpeParcelPanel(_selectedShape.record);
+  }
   if (_selectedCard?.title) {
-    // A cell, or a card this layer cannot resolve: its own lines, as the card
-    // on the globe would have printed them.
+    // A card this layer cannot resolve: its own lines, as the card on the
+    // globe would have printed them.
     return {
       key: `card:${_selectedCard.id}:${_selectedCard.title}`,
       title: _selectedCard.title,
@@ -1457,7 +1475,13 @@ export function dpeSelectionPanel() {
 function dpeCompactCard(card) {
   if (!mapKeyCarriesSelection()) return false;
   const site = siteForCard(card);
-  return site ? dpeSiteTag(site) : true;
+  if (site) return dpeSiteTag(site);
+  // Resolved from the card itself: the shell asks for the compact form BEFORE
+  // it tells `onSelectionChange`, so `_selectedShape` may still be the last one.
+  const shape = _areaUnit && Number.isFinite(card?.lon) && Number.isFinite(card?.lat)
+    ? _areaPaint.shapeAt(card.lon, card.lat)
+    : null;
+  return shape ? dpeAreaTag(shape) : true;
 }
 
 /* ── plates that overlap, grouped ──────────────────────────────────────── */
@@ -1673,7 +1697,7 @@ function clearPills() {
  */
 function declutter() {
   const scene = _drawViewer?.scene;
-  if (!scene || !_dataSource || _cellMode || !_enabled) {
+  if (!scene || !_dataSource || _areaUnit || !_enabled) {
     clearPills();
     return 0;
   }
@@ -1755,237 +1779,514 @@ function zoomIntoCluster(entities, { viewer }) {
 
 /* ── the layer ─────────────────────────────────────────────────────────── */
 
-/* ── the cell regime ───────────────────────────────────────────────────── */
+/* ── the area regimes ──────────────────────────────────────────────────── */
 /**
- * Above 600 m this layer stops drawing one badge per building and draws one
- * disc per patch of ground. See `scanRegime.js` for the switch; what follows is
- * what the mark claims and — just as importantly — what it refuses to claim.
+ * Above 600 m this layer stops drawing one badge per building and paints the
+ * CADASTRE, the way the price layer does: from 600 m to 1 800 m every parcel a
+ * rating in the box stands on, above that every cadastral section. Each shape
+ * is painted on the official A–G scale by the MOST FREQUENT class of its own
+ * ratings, ties to the worse — the rule a building's footprint follows below
+ * 600 m (`dpeSummaryFromCounts`), so a parcel keeps the colour its building
+ * wore close up.
  *
- * IT IS NOT A NEIGHBOURHOOD GRADE. This module has refused to average letters
- * into one since it was written, and aggregating over a cell is exactly the
- * place that refusal would quietly break: the mean of a block's A to G is not a
- * property of the block, and a single letter over forty dwellings is a claim
- * about none of them. So the cell carries a COUNT, not a letter — the share of
- * F and G, the *passoires thermiques*, which is the one cut of this register
- * with a legal consequence attached to it and the one the building card already
- * makes.
+ * WHY NOT DISCS ANY MORE. Until 2026-09-22 both bands drew geohash cells as
+ * discs sized by their count and coloured by their share of F and G, on a
+ * blue-to-magenta ramp of their own. The operator's request, on screen over
+ * Lyon's Presqu'île: « qu'on ne vienne pas afficher ces espèces de cercles
+ * mais bien directement les parcelles des bâtiments concernés par une donnée
+ * DPE », on the DPE scale « même sur la vue dézoomée ». A disc fell across two
+ * blocks and a river quay and named no ground a reader could point at.
  *
- * THE RAMP IS ITS OWN, and it has to be. The seven official DPE colours run
- * green to red and are spent on the letters; a share is a different quantity
- * with a different order — "more of something", not "which rung" — so it gets a
- * sequential blue-to-magenta ramp measured clear of both the letters and the
- * DVF price ramp (nearest neighbour ΔE76 17.4, adjacent steps 25 to 47).
+ * THE LETTER OF A SHAPE IS NOT A NEIGHBOURHOOD GRADE, and the refusal this
+ * module has always made still holds: no mean of letters is ever computed.
+ * The mode is an observed class, the card names it as « la classe la plus
+ * fréquente » and prints every class present beside it, and the share of F
+ * and G the discs carried stays in the key.
+ *
+ * HOW A RATING REACHES A SHAPE, and what each band admits, is the proxy's
+ * business (`dpeFeed.js`, `shapeLocator.js`): a BAN point placed on the parcel
+ * it stands on, or 3 m off its frontage; a 50 m square of the register given
+ * to the section under its centre, a section painted only when three ratings
+ * fall in squares wholly inside it. The key prints both admissions.
+ *
+ * DRAWN BY `groundAreaPaint.js`, shared with the price layer: primitives, one
+ * classification batch per colour, a click answered by geometry.
  */
-export const DPE_POOR_BREAKS = Object.freeze([25, 15, 5, 0]);
 
-/** @type {ReadonlyArray<{id: string, min: number, color: string, label: string, blurb: string}>} */
-export const DPE_POOR_CLASSES = Object.freeze([
-  Object.freeze({
-    id: 'very-high',
-    min: 25,
-    color: '#e02f8c',
-    get label() { return messages().cells.classes.veryHigh.label; },
-    get blurb() { return messages().cells.classes.veryHigh.blurb; },
-  }),
-  Object.freeze({
-    id: 'high',
-    min: 15,
-    color: '#9a3fc4',
-    get label() { return messages().cells.classes.high.label; },
-    get blurb() { return messages().cells.classes.high.blurb; },
-  }),
-  Object.freeze({
-    id: 'near',
-    min: 5,
-    color: '#7b6fe0',
-    get label() { return messages().cells.classes.near.label; },
-    get blurb() { return messages().cells.classes.near.blurb; },
-  }),
-  Object.freeze({
-    id: 'low',
-    min: 0,
-    color: '#6fa3ee',
-    get label() { return messages().cells.classes.low.label; },
-    get blurb() { return messages().cells.classes.low.blurb; },
-  }),
-  Object.freeze({
-    id: 'none',
-    min: -Infinity,
-    color: '#9adcf5',
-    get label() { return messages().cells.classes.none.label; },
-    get blurb() { return messages().cells.classes.none.blurb; },
-  }),
-]);
+/** Ink — the price layer's, for the same reasons (see `dvfSales.js`, `AREA_STYLE`). */
+const DPE_AREA_STYLE = Object.freeze({
+  parcels: Object.freeze({ fill: 0.34, outline: 0.9, widthPx: 1.2 }),
+  sections: Object.freeze({ fill: 0.24, outline: 0.85, widthPx: 1.4 }),
+});
 
-/** The colour of a cell's share, or the unlabelled grey when it has none. */
-export function dpePoorClass(share) {
-  if (!(typeof share === 'number' && Number.isFinite(share))) return null;
-  if (share <= 0) return DPE_POOR_CLASSES[DPE_POOR_CLASSES.length - 1];
-  return DPE_POOR_CLASSES.find((entry) => share >= entry.min) || null;
+/** Top of the parcel band — the altitude a section card sends a reader under. */
+const PARCEL_BAND_MAX_ALTITUDE_M = SCAN_BANDS.find((band) => band.dvfUnit === 'plots')?.maxAltitudeM;
+
+/** The parcels or sections on the globe. */
+const _areaPaint = createGroundAreaPaint({ renderReason: 'dpe-area-build' });
+
+/**
+ * Which area answer is on screen: `'parcels'`, `'sections'`, or null for the
+ * disc regime. Set by `render` from the payload, never from the camera — see
+ * `dvfSales.js` for the window in which the two disagree.
+ */
+let _areaUnit = null;
+/** The answer on screen, so a selection can be resolved against it. */
+let _areaPayload = null;
+/** The area shape whose card is open, or null. */
+let _selectedShape = null;
+
+/**
+ * The regime a payload answers in.
+ * @param {?object} payload
+ * @returns {?string} `'parcels'`, `'sections'`, or null for the disc.
+ */
+export function dpeAreaUnit(payload) {
+  if (Array.isArray(payload?.parcels)) return 'parcels';
+  if (Array.isArray(payload?.sections)) return 'sections';
+  return null;
 }
 
-/** class id → number of CELLS. */
-export function countPoorCells(cells) {
+/**
+ * Whether a pick id is one of this layer's area shapes.
+ * @param {?string} pickedId @returns {boolean}
+ */
+export function isDpeAreaPickId(pickedId) {
+  const id = String(pickedId ?? '');
+  return id.startsWith('dpe-parcel:') || id.startsWith('dpe-section:');
+}
+
+/**
+ * A shape's counts with the key's filter applied: the letters it hides are
+ * zeroed, exactly as a site below 600 m keeps only its shown diagnostics.
+ * @param {object} record @param {Set<string>} shown
+ * @returns {number[]}
+ */
+function shownCounts(record, shown) {
+  return DPE_LABELS.map((letter, i) => (shown.has(letter) ? Number(record?.counts?.[i]) || 0 : 0));
+}
+
+/**
+ * The summary a shape is painted from — `dpeSummaryFromCounts` over its
+ * shown letters. The ungraded ratings only count while nothing is filtered:
+ * the filter hides unlabelled ratings below 600 m too.
+ * @param {object} record
+ * @param {Set<string>} [shown]
+ * @returns {ReturnType<typeof dpeSummaryFromCounts>}
+ */
+export function dpeAreaSummary(record, shown = new Set(DPE_LABELS)) {
+  const everything = shown.size === DPE_LABELS.length;
+  return dpeSummaryFromCounts(shownCounts(record, shown), everything ? record?.ungraded : 0);
+}
+
+/**
+ * Whether a section holds enough certain ratings to be painted — see
+ * `DPE_SECTION_MIN_GRADED`. Read on the WHOLE answer, never the filtered one:
+ * the filter chooses which letters show, not which ground is known.
+ * @param {object} record @returns {boolean}
+ */
+export function dpeSectionIsPainted(record) {
+  return (Number(record?.whole) || 0) >= DPE_SECTION_MIN_GRADED;
+}
+
+/**
+ * The letter a shape is painted in, or null for neutral.
+ * @param {string} unit @param {object} record @param {Set<string>} [shown]
+ * @returns {?string}
+ */
+export function dpeAreaGrade(unit, record, shown) {
+  if (unit === 'sections' && !dpeSectionIsPainted(record)) return null;
+  return dpeAreaSummary(record, shown).grade;
+}
+
+/** The CSS colour a shape is painted in. */
+export function dpeAreaColorCss(unit, record, shown) {
+  const letter = dpeAreaGrade(unit, record, shown);
+  return letter ? DPE_COLORS[letter] : COLOR_UNLABELLED_CSS;
+}
+
+/**
+ * The shapes the key's filter leaves on the map: those holding at least one
+ * rating of a shown letter. With every letter shown, all of them — the ones
+ * with no published letter included, since they are ground the register did
+ * rate.
+ * @param {Array<object>} records @param {Set<string>} shown
+ * @returns {Array<object>}
+ */
+export function dpeFilterAreaRecords(records, shown) {
+  if (shown.size === DPE_LABELS.length) return records || [];
+  return (records || []).filter((record) => shownCounts(record, shown).some((n) => n > 0));
+}
+
+/** The records of an area answer, by unit. */
+function areaRecords(payload) {
+  const unit = dpeAreaUnit(payload);
+  if (unit === 'parcels') return payload.parcels;
+  if (unit === 'sections') return payload.sections;
+  return [];
+}
+
+/**
+ * The key in an area regime: the seven classes counted in SHAPES — how many
+ * parcels, or sections, each letter paints — and the neutral row the unit
+ * needs, then the same filter plates as close up.
+ * @param {object} payload
+ * @param {Record<string, string>} [runtime]
+ * @returns {object}
+ */
+export function dpeAreaRowControls(payload, runtime = {}) {
+  const m = messages();
+  const k = m.key;
+  const unit = dpeAreaUnit(payload);
+  const filter = runtime?.classes ?? DPE_CLASS_FILTER_ALL;
+  const shown = new Set(dpeClassFilterLetters(filter));
+  const filtering = shown.size < DPE_LABELS.length;
+  // The WHOLE answer, as close up: the plates the filter dims say what is
+  // hidden, and how much.
   const counts = new Map();
-  for (const cell of cells || []) {
-    const klass = dpePoorClass(cell?.poorShare);
-    counts.set(klass ? klass.id : 'unknown', (counts.get(klass ? klass.id : 'unknown') || 0) + 1);
+  for (const record of areaRecords(payload)) {
+    const letter = dpeAreaGrade(unit, record) || 'neutral';
+    counts.set(letter, (counts.get(letter) || 0) + 1);
   }
-  return counts;
-}
-
-/**
- * The key in cell mode: the five share classes, plus the cells that have too
- * few diagnostics to carry a share at all.
- * @param {object} payload @returns {object}
- */
-export function dpeCellRowControls(payload) {
-  const counts = countPoorCells(payload?.cells);
-  const legend = DPE_POOR_CLASSES.map((klass) => ({
-    label: klass.label,
-    color: klass.color,
-    count: counts.get(klass.id) || 0,
-    blurb: klass.blurb,
+  const channel = m.area.painted(unit);
+  const legend = DPE_LABELS.map((letter) => ({
+    label: letter,
+    color: DPE_COLORS[letter],
+    count: counts.get(letter) || 0,
+    blurb: m.legend.letterBlurbShort(gradeEnergy(letter)),
+    channel,
   }));
-  legend.push({
-    label: messages().cells.tooFew.label(DPE_CELL_MIN_TOTAL),
-    color: COLOR_UNLABELLED_CSS,
-    count: counts.get('unknown') || 0,
-    blurb: messages().cells.tooFew.blurb(DPE_CELL_MIN_TOTAL),
-  });
+  legend.push(unit === 'sections'
+    ? {
+      label: m.area.sections.neutral.label(DPE_SECTION_MIN_GRADED),
+      color: COLOR_UNLABELLED_CSS,
+      count: counts.get('neutral') || 0,
+      blurb: m.area.sections.neutral.blurb(DPE_SECTION_MIN_GRADED, payload?.summary?.gridM ?? DPE_GRID_M),
+      channel,
+    }
+    : {
+      label: m.legend.ungraded.label,
+      color: COLOR_UNLABELLED_CSS,
+      count: counts.get('neutral') || 0,
+      blurb: m.legend.ungraded.blurb,
+      channel,
+    });
+  let title = (letter) => k.showOnly(letter, gradeEnergy(letter));
+  if (filtering) title = (letter) => (shown.has(letter) ? k.hide(letter) : k.showToo(letter));
   return {
     legend,
-    // ORDERED CLASSES, SO ONE BAR — the same argument the price ramp makes next
-    // door: how an area's blocks fall around the national share is one
-    // distribution of one population.
-    legendBar: true,
-    legendNote: dpeCellLegendNote(payload),
-    note: dpeCellDisclosure(payload),
+    legendNote: dpeAreaLegendNote(payload),
+    legendColumns: 2,
+    legendSegmentsLabel: k.filterLabel,
+    legendSegments: DPE_LABELS.map((letter) => ({
+      label: letter,
+      color: DPE_COLORS[letter],
+      active: shown.has(letter),
+      title: title(letter),
+      toggle: { param: 'classes', value: dpeClassFilterToggle(filter, letter) },
+    })),
+    note: dpeAreaDisclosure(payload),
+    legendSelection: dpeSelectionPanel(),
   };
 }
 
-/** What the colours are read against, named — the anchor, and what it is not. */
-export function dpeCellLegendNote(payload) {
-  const m = messages().cells;
-  const summary = payload?.summary || {};
-  const here = Number.isFinite(summary.poorShare)
-    ? m.here(formatNumber(summary.poorShare))
-    : null;
+/** The share of F and G over the box's labelled ratings, one decimal, or null. */
+function areaPoorShare(summary) {
+  const graded = Number(summary?.graded) || 0;
+  if (!graded) return null;
+  const distribution = summary.distribution || {};
+  return Math.round((((distribution.F || 0) + (distribution.G || 0)) / graded) * 1000) / 10;
+}
+
+/**
+ * The note above the key in an area regime: what a letter is (the worse of
+ * two grades), what one painted shape is, and the share of F and G the discs
+ * used to carry — here, and in the whole register (A2).
+ * @param {object} payload @returns {string}
+ */
+export function dpeAreaLegendNote(payload) {
+  const m = messages();
+  const unit = dpeAreaUnit(payload);
+  const share = areaPoorShare(payload?.summary);
   return [
-    m.anchor(formatNumber(DPE_POOR_SHARE_NATIONAL)),
-    here,
-    // A2: the denominator is the REGISTER, not the housing stock. A DPE is
-    // compulsory on a sale or a new let, so the register over-represents what
-    // has changed hands recently — calling this a share of French housing
-    // would be a different and unsupported claim.
-    m.registerNotStock,
-    m.discSize,
+    m.key.source,
+    unit === 'sections' ? m.area.sections.unit : m.area.parcels.unit,
+    share !== null ? m.area.poorHere(formatNumber(share), formatNumber(DPE_POOR_SHARE_NATIONAL)) : null,
+    m.area.registerNotStock,
   ].filter(Boolean).join(' · ');
 }
 
-/** The A5 line in cell mode. */
-export function dpeCellDisclosure(payload) {
-  const m = messages().cells;
+/**
+ * The A5 line in an area regime: the box, what was drawn from it, and every
+ * way a rating can be on the ground without being on a shape.
+ * @param {object} payload @returns {string}
+ */
+export function dpeAreaDisclosure(payload) {
+  const m = messages().area;
+  const unit = dpeAreaUnit(payload);
   const summary = payload?.summary || {};
-  const parts = [];
   const spanKm = payload?.box
     ? formatDecimal((payload.box.north - payload.box.south) * 110.54, 1,
       { minimumFractionDigits: 1 })
     : null;
-  parts.push(m.aggregated(spanKm ? `${spanKm} km` : m.box));
-  parts.push(m.inCells(ratings(summary.total || 0), Number(summary.cells || 0)));
-  if (summary.tilesMissing > 0) {
-    parts.push(m.tilesMissing(summary.tilesMissing, summary.tiles));
+  const span = spanKm ? `${spanKm} km` : m.box;
+  const parts = [];
+  if (unit === 'sections') {
+    parts.push(m.sections.drawn(span, Number(summary.sections || 0), ratings(summary.total || 0)));
+    parts.push(m.sections.grid(summary.gridM ?? DPE_GRID_M));
+  } else {
+    parts.push(m.parcels.drawn(span, ratings(summary.total || 0), Number(summary.parcels || 0)));
+    if (summary.snapped > 0) parts.push(m.parcels.snapped(ratings(summary.snapped), DPE_PARCEL_SNAP_M));
   }
-  if (summary.truncated) {
-    parts.push(m.truncated);
-  }
-  parts.push(m.descendForBuildings(SCAN_CELL_MIN_ALTITUDE_M));
+  if (summary.tilesInBox > summary.tiles) parts.push(m.visibleOnly(summary.tiles, summary.tilesInBox));
+  if (summary.unplaced > 0) parts.push(m.unplaced(ratings(summary.unplaced)));
+  if ((summary.communesMissing || []).length) parts.push(m.communesMissing(summary.communesMissing.length));
+  if (summary.tilesMissing > 0) parts.push(m.tilesMissing(summary.tilesMissing, summary.tiles));
+  if (summary.tilesPartial > 0 || summary.truncated) parts.push(m.partial);
+  parts.push(unit === 'sections'
+    ? m.sections.descend(PARCEL_BAND_MAX_ALTITUDE_M)
+    : m.parcels.descend(SCAN_CELL_MIN_ALTITUDE_M));
   const line = parts.join(' · ');
   return `${line.charAt(0).toUpperCase()}${line.slice(1)}.`;
 }
 
-/** The card a cell opens. */
-export function dpeCellCard(cell) {
-  const m = messages().cells;
-  const klass = dpePoorClass(cell?.poorShare);
-  return [
-    m.inCell(ratings(cell.total)),
-    cell.poorShare === null
-      ? m.noShare(DPE_CELL_MIN_TOTAL)
-      : m.poorShare(messages().site.poor(cell.poor), formatNumber(cell.poorShare)),
-    klass && cell.poorShare !== null ? klass.label : null,
-    cell.poorShare !== null ? m.national(formatNumber(DPE_POOR_SHARE_NATIONAL)) : null,
-    // The layer's own refusal, restated where a reader could most easily read
-    // past it: this disc is a count of F and G, never a grade for the block.
-    m.notAGrade,
-    m.descendForLabels(SCAN_CELL_MIN_ALTITUDE_M),
-  ].filter(Boolean).join(' · ');
+/**
+ * The section's own code as the cadastre prints it: `AH`, and `A` rather
+ * than the file's zero-padded `0A`.
+ */
+function sectionCode(id) {
+  const code = String(id || '').slice(8);
+  return code.startsWith('0') ? code.slice(1) : code;
+}
+
+/** The commune a section is in, named when the proxy could name it. */
+function sectionCommune(record, payload) {
+  return payload?.communeNames?.[record?.communeCode] || record?.communeCode || '';
 }
 
 /**
- * Draw the cells. Clamped to whatever surface the globe is drawing, exactly as
- * the site footprints next door are.
- * @returns {number} Discs drawn.
+ * The lines both area cards share: the classes present and their range, the
+ * mode named as what it is, the unlabelled and the *passoires*.
  */
-function drawDpeCells(payload, dataSource, classificationType) {
-  const cells = payload?.cells || [];
-  const breaks = DPE_CELL_BREAKS[payload?.band] || DPE_CELL_BREAKS.fine;
-  let drawn = 0;
-  for (const cell of cells) {
-    const radiusM = cellDiscRadiusM(cell, cell.total, breaks);
-    if (!(radiusM > 0)) continue;
-    const klass = dpePoorClass(cell.poorShare);
-    const css = klass ? klass.color : COLOR_UNLABELLED_CSS;
-    const ring = discRing(cell.lon, cell.lat, radiusM);
-    const positions = Cesium.Cartesian3.fromDegreesArray(ring.flat());
-    const name = cell.poorShare === null
-      ? ratings(cell.total)
-      : messages().cells.discName(formatNumber(cell.poorShare));
-    const description = dpeCellCard(cell);
-    dataSource.entities.add({
-      id: `dpe-cell:${cell.key}`,
-      name,
-      description,
-      properties: {
-        kind: 'dpe-cell',
-        diagnostics: cell.total,
-        poor: cell.poor,
-        poorShare: cell.poorShare,
-        poorClass: klass ? klass.id : null,
-      },
-      polygon: {
-        hierarchy: new Cesium.PolygonHierarchy(positions),
-        material: Cesium.Color.fromCssColorString(css).withAlpha(DPE_CELL_FILL_ALPHA),
-        classificationType,
-        outline: false,
-      },
-    });
-    dataSource.entities.add({
-      id: `dpe-cell:${cell.key}:edge`,
-      name,
-      description,
-      polyline: {
-        positions: [...positions, positions[0]],
-        width: DPE_CELL_OUTLINE_WIDTH_PX,
-        material: new Cesium.ColorMaterialProperty(
-          Cesium.Color.fromCssColorString(css).withAlpha(DPE_CELL_OUTLINE_ALPHA),
-        ),
-        clampToGround: true,
-        classificationType,
-      },
-    });
-    drawn += 1;
+function areaLines(summary, record) {
+  const m = messages();
+  const p = m.panel;
+  let range = null;
+  if (summary.graded) {
+    if (summary.mixed) range = p.range(summary.best, summary.worst);
+    else range = summary.graded > 1 ? p.all(summary.grade) : p.one(summary.grade);
   }
-  return drawn;
+  const counts = record?.counts || [];
+  const tied = summary.grade
+    ? summary.letters.filter((letter) => letter !== summary.grade
+      && (Number(counts[DPE_LABELS.indexOf(letter)]) || 0) === summary.votes)
+    : [];
+  let mode = null;
+  if (summary.mixed) mode = tied.length ? p.modeTie(summary.grade, tied.join(', ')) : p.mode(summary.grade);
+  const poor = (Number(counts[5]) || 0) + (Number(counts[6]) || 0);
+  return {
+    range,
+    lines: [
+      mode,
+      summary.ungraded ? m.site.ungraded(summary.ungraded) : null,
+      poor ? m.site.poor(poor) : null,
+    ].filter(Boolean),
+  };
 }
 
-/** Same ink as the price cells next door, for the same reason. */
-const DPE_CELL_FILL_ALPHA = 0.15;
-/** Whether the answer ON SCREEN is a field of cells — see `dvfSales.js`. */
-let _cellMode = false;
-const DPE_CELL_OUTLINE_ALPHA = 0.8;
-const DPE_CELL_OUTLINE_WIDTH_PX = 1.4;
+/**
+ * The key's card for a PARCEL: its busiest address, the ratings filed on it,
+ * the classes present and the one it is painted in, and how the ratings got
+ * there.
+ * @param {object} record @param {object} payload
+ * @returns {object} The key's `legendSelection` slot.
+ */
+export function dpeParcelPanel(record) {
+  const m = messages();
+  const summary = dpeAreaSummary(record);
+  const { street, locality } = dpeSplitAddress(record?.addresses?.[0]);
+  const { range, lines } = areaLines(summary, record);
+  const more = Number(record?.moreAddresses) || 0;
+  const others = (record?.addresses || []).slice(1).map((address) => dpeSplitAddress(address).street);
+  if (others.length || more) {
+    lines.unshift([...others, more ? m.area.parcels.moreAddresses(more) : null].filter(Boolean).join(' · '));
+  }
+  if (record?.snapped > 0) lines.push(m.area.parcels.snappedCard(record.snapped));
+  return {
+    key: `dpe-parcel:${record?.id}`,
+    title: street || m.area.parcels.fallbackTitle(record?.id ?? ''),
+    meta: locality,
+    headline: m.panel.count(summary.total),
+    chips: summary.letters.length
+      ? {
+        caption: m.panel.present,
+        items: summary.letters.map((letter) => ({ label: letter, color: DPE_COLORS[letter] })),
+        text: range,
+      }
+      : null,
+    lines,
+    footnote: [
+      summary.total > 1 ? m.panel.perDwelling : null,
+      record?.id ? m.site.parcel(record.id) : null,
+      m.area.parcels.descend(SCAN_CELL_MIN_ALTITUDE_M),
+    ].filter(Boolean).join(' · '),
+    link: { href: DPE_SOURCE_URL, label: m.panel.source },
+  };
+}
+
+/**
+ * The key's card for a SECTION: which section of which commune, the ratings
+ * counted in it, and — when it is neutral — why.
+ * @param {object} record @param {object} payload
+ * @returns {object}
+ */
+export function dpeSectionPanel(record, payload) {
+  const m = messages();
+  const summary = dpeAreaSummary(record);
+  const { range, lines } = areaLines(summary, record);
+  const painted = dpeSectionIsPainted(record);
+  lines.push(painted
+    ? m.area.sections.whole(Number(record?.whole) || 0)
+    : m.area.sections.neutralCard(DPE_SECTION_MIN_GRADED));
+  return {
+    key: `dpe-section:${record?.id}`,
+    title: m.area.sections.title(sectionCode(record?.id), sectionCommune(record, payload)),
+    meta: null,
+    headline: m.panel.count(summary.total),
+    chips: summary.letters.length
+      ? {
+        caption: m.panel.present,
+        items: summary.letters.map((letter) => ({ label: letter, color: DPE_COLORS[letter] })),
+        text: range,
+      }
+      : null,
+    lines,
+    footnote: [
+      m.area.sections.grid(payload?.summary?.gridM ?? DPE_GRID_M),
+      m.area.sections.descend(PARCEL_BAND_MAX_ALTITUDE_M),
+    ].join(' · '),
+    link: { href: DPE_SOURCE_URL, label: m.panel.source },
+  };
+}
+
+/**
+ * The card on the globe for a shape — its title and the lines the key would
+ * print, flattened, for when the key is folded or on a phone.
+ * @param {{kind: string, record: object}} shape @param {object} payload
+ * @returns {{title: string, details: string[]}}
+ */
+export function dpeAreaCard(shape, payload) {
+  const panel = shape?.kind === 'section'
+    ? dpeSectionPanel(shape.record, payload)
+    : dpeParcelPanel(shape?.record);
+  return {
+    title: panel.title,
+    details: [
+      panel.meta,
+      [panel.headline, panel.chips?.text].filter(Boolean).join(' · '),
+      ...panel.lines,
+      panel.footnote,
+    ].filter(Boolean),
+  };
+}
+
+/** The tag a selected shape keeps on the globe: `C–E · 16`. */
+export function dpeAreaTag(shape) {
+  const summary = dpeAreaSummary(shape?.record);
+  let letters = '?';
+  if (summary.graded) letters = summary.mixed ? `${summary.best}–${summary.worst}` : summary.grade;
+  return summary.total > 1 ? `${letters} · ${formatNumber(summary.total)}` : letters;
+}
+
+/**
+ * The card for a click on the ground, in an area regime. Null in the disc
+ * regime — its marks are entities with cards of their own — and off every
+ * shape, so the click falls through to a dismissal.
+ */
+function dpeAreaGroundCard({ lon, lat, payload }) {
+  if (!dpeAreaUnit(payload)) return null;
+  const shape = _areaPaint.shapeAt(lon, lat);
+  return shape ? dpeAreaCard(shape, payload) : null;
+}
+
+/**
+ * Paint an area answer, through the class filter.
+ * @returns {number} Shapes drawn.
+ */
+function drawDpeArea(payload, viewer, classificationType, shown) {
+  _areaPaint.clear();
+  const unit = dpeAreaUnit(payload);
+  if (!unit || !viewer?.scene?.primitives) return 0;
+  const kind = unit === 'parcels' ? 'parcel' : 'section';
+  const items = dpeFilterAreaRecords(areaRecords(payload), shown).map((record) => ({
+    id: `dpe-${kind}:${record.id}`,
+    kind,
+    record,
+    parts: record?.parts,
+    css: dpeAreaColorCss(unit, record, shown),
+  }));
+  return _areaPaint.draw(viewer, items, { style: DPE_AREA_STYLE[unit], classificationType });
+}
+
+/** Take the area draw and its selection off the globe. */
+function clearAreaDraw() {
+  _areaPaint.clear();
+  _areaUnit = null;
+  _areaPayload = null;
+  _selectedShape = null;
+}
+
+/**
+ * The query for one scan: the disc close up; above 600 m the box, narrowed to
+ * the tiles the screen shows (`scanRegime.scanTileMask`) — the reader's
+ * « ne charge que ce qui est dans la vue ».
+ * @param {?object} point The scan point.
+ * @param {?{south: number, west: number, north: number, east: number}} view
+ * @returns {Record<string, string>}
+ */
+export function dpeScanParams(point, view) {
+  const cells = scanCellParams(point);
+  if (!Object.keys(cells).length) return { radius: String(SCAN_RADIUS_M), limit: String(SCAN_LIMIT) };
+  const band = scanBandFor(point);
+  const box = {
+    south: Number(cells.south), west: Number(cells.west), north: Number(cells.north), east: Number(cells.east),
+  };
+  const tiles = scanTileMaskParam(scanTileMask(box, band.tileDeg, view));
+  return tiles ? { ...cells, tiles } : cells;
+}
+
+/**
+ * What the area regime puts in `getStats()`.
+ * @param {object} payload @returns {object}
+ */
+function dpeAreaSummarize(payload) {
+  const unit = dpeAreaUnit(payload);
+  const summary = payload?.summary || {};
+  const distribution = summary.distribution || {};
+  const share = areaPoorShare(summary);
+  const controls = dpeAreaRowControls(payload);
+  return {
+    // `scanBasis` is what tells a caller which question was answered — the
+    // voice surface reads it before quoting a number.
+    scanBasis: unit,
+    shapeCount: unit === 'sections' ? (summary.sections ?? 0) : (summary.parcels ?? 0),
+    diagnosticsTotal: summary.total ?? 0,
+    distribution,
+    poorCount: (distribution.F || 0) + (distribution.G || 0),
+    poorShare: share,
+    poorShareNational: DPE_POOR_SHARE_NATIONAL,
+    // The four ways a rating lands, published rather than only printed.
+    placedInside: summary.inside ?? 0,
+    placedSnapped: summary.snapped ?? 0,
+    unplaced: summary.unplaced ?? 0,
+    // How much of the box was asked for: the tiles on screen, of its four.
+    tilesLoaded: summary.tiles ?? null,
+    tilesInBox: summary.tilesInBox ?? summary.tiles ?? null,
+    tilesMissing: summary.tilesMissing ?? 0,
+    coverage: controls.note,
+    legend: controls.legend,
+  };
+}
 
 const dpeScanLayer = createAddressScanLayer({
   id: 'dpe-fr',
@@ -1997,13 +2298,14 @@ const dpeScanLayer = createAddressScanLayer({
   endpoint: '/api/dpe',
   updateInterval: UPDATE_INTERVAL_MS,
   // Two questions, one route — see `dvfSales.js` for the contract.
-  params: (point) => {
-    const cells = scanCellParams(point);
-    return Object.keys(cells).length
-      ? cells
-      : { radius: String(SCAN_RADIUS_M), limit: String(SCAN_LIMIT) };
-  },
-  minShiftKm: () => (_cellMode ? 0.6 : ADDRESS_SCAN_MIN_SHIFT_KM),
+  params: (point, viewer) => dpeScanParams(point, cameraViewBox(viewer)),
+  // Half a tile in an area regime — the box is snapped, so a smaller move asks
+  // the identical question. See `dvfSales.js`.
+  minShiftKm: () => (_areaUnit ? 0.6 : ADDRESS_SCAN_MIN_SHIFT_KM),
+  // ON, since the layer paints the cadastre from altitude: a classification
+  // primitive reads its surface once, when it is built, so a draw addressed to
+  // terrain survives a switch to the photoreal stack by showing nothing.
+  redrawOnMapStack: true,
   // The classes the key shows. A filter over diagnostics already served, so it
   // redraws from the answer in hand and never reaches `params` — see
   // `dpeClassFilterToggle` and `DPE_CLASS_FILTER_VALUES`.
@@ -2018,9 +2320,14 @@ const dpeScanLayer = createAddressScanLayer({
   onClear: () => {
     clearSiteHighlight();
     clearPills();
+    clearAreaDraw();
     _selectedSiteKey = null;
     _selectedCard = null;
   },
+  // A parcel or a section is a geometry instance, not an entity: this is how a
+  // click on one reaches `groundCard` instead of being ignored as nobody's.
+  ownsPick: isDpeAreaPickId,
+  groundCard: dpeAreaGroundCard,
   // Plates that touch are grouped into one pill — see the section above.
   clusterClick: zoomIntoCluster,
   onSeat: () => { declutter(); },
@@ -2029,28 +2336,35 @@ const dpeScanLayer = createAddressScanLayer({
   render({ payload, dataSource, viewer, point, runtime }) {
     _dataSource = dataSource;
     _drawViewer = viewer || _drawViewer;
-    // The payload decides, not the camera — see `dvfSales.js`.
-    _cellMode = Array.isArray(payload?.cells);
-    if (_cellMode) {
-      // The volumes are painted from a building's own diagnostics and a cell
-      // has none. Withdrawn rather than left standing: a city tinted from the
-      // block the reader flew away from is the failure `withdrawTheme` exists
-      // for, reached by a different road.
+    // The class filter from the key, applied to what is DRAWN and PAINTED and
+    // never to what is counted: the key's counts and the row's coverage stay
+    // the whole answer, so a reader can see what the filter is hiding.
+    const filter = runtime?.classes ?? DPE_CLASS_FILTER_ALL;
+    const shown = new Set(dpeClassFilterLetters(filter));
+    // The payload decides, not the camera — see `dvfSales.js`. `cells` is the
+    // shape a box answer had until 2026-09-22; a browser may hold one for the
+    // five minutes its HTTP cache allows, and nothing of it is drawn.
+    const unit = dpeAreaUnit(payload);
+    if (unit || Array.isArray(payload?.cells)) {
+      // The volumes are painted from a building's own diagnostics and a shape
+      // seen from altitude holds counts, not rows. Withdrawn rather than left
+      // standing: a city tinted from the block the reader flew away from is
+      // the failure `withdrawTheme` exists for, reached by a different road.
       _entries = [];
       _sites = [];
       _allSites = [];
       _join = null;
       _themeDirty = false;
       withdrawTheme();
-      const drawn = drawDpeCells(payload, dataSource, gpuClassificationTypeForScene(viewer?.scene));
+      const drawn = drawDpeArea(payload, viewer, gpuClassificationTypeForScene(viewer?.scene), shown);
+      _areaUnit = unit;
+      _areaPayload = payload;
       drawScanBoundary(dataSource, { id: 'dpe:scan-edge', box: payload.box });
       return drawn;
     }
-    // The class filter from the key, applied to what is DRAWN and PAINTED and
-    // never to what is counted: the key's counts and the row's coverage stay
-    // the whole answer, so a reader can see what the filter is hiding.
-    const filter = runtime?.classes ?? DPE_CLASS_FILTER_ALL;
-    const shown = new Set(dpeClassFilterLetters(filter));
+    // Back under 600 m: whatever the box drew goes, even if the shell's own
+    // teardown did not run first.
+    clearAreaDraw();
     const everything = shown.size === DPE_LABELS.length;
     _entries = everything
       ? (payload.entries || [])
@@ -2136,10 +2450,6 @@ const dpeScanLayer = createAddressScanLayer({
    */
   selectionFor(entityId) {
     const id = String(entityId ?? '');
-    // A cell's disc and its edge are one subject too.
-    if (id.startsWith('dpe-cell:') && id.endsWith(':edge')) {
-      return id.slice(0, -':edge'.length);
-    }
     for (const prefix of ['dpe:bati:', 'dpe:parcelle:']) {
       if (!id.startsWith(prefix)) continue;
       // `dpe:bati:<key>:<part>` and `dpe:bati:<key>:<part>:<ring>` both name
@@ -2150,8 +2460,8 @@ const dpeScanLayer = createAddressScanLayer({
     return null;
   },
 
-  rowControls: (runtime, _summary, payload) => (Array.isArray(payload?.cells)
-    ? { ...dpeCellRowControls(payload), legendSelection: dpeSelectionPanel() }
+  rowControls: (runtime, _summary, payload) => (dpeAreaUnit(payload)
+    ? dpeAreaRowControls(payload, runtime)
     : dpeRowControls(payload, runtime)),
 
   summarize: dpeSummarize,
@@ -2182,8 +2492,11 @@ const dpeFranceLayer = {
     _allSites = [];
     _join = null;
     _themeDirty = false;
-    _cellMode = false;
+    clearAreaDraw();
     withdrawTheme();
+    // Claimed so the sibling handlers that track or select read a click on a
+    // parcel as somebody's and leave it alone — see `pickRegistry.js`.
+    registerPickOwner('dpe-fr', isDpeAreaPickId);
     // A settle is finer than the half-view change Cesium re-clusters on.
     _removeMoveEnd?.();
     _removeMoveEnd = args[0]?.camera?.moveEnd?.addEventListener?.(() => { declutter(); }) || null;
@@ -2200,14 +2513,19 @@ const dpeFranceLayer = {
     _selectedCard = null;
     _join = null;
     _themeDirty = false;
-    _cellMode = false;
     // Before the shell hides the markers, so the volumes and the badges leave
     // together rather than the city staying painted by a layer that is off.
     withdrawTheme();
     _removeMoveEnd?.();
     _removeMoveEnd = null;
     clearPills();
-    return dpeScanLayer.disable(...args);
+    const result = dpeScanLayer.disable(...args);
+    // After the shell, which keeps its payload and redraws from a fresh scan
+    // on `enable` — so the shapes go now rather than sitting on a hidden
+    // layer's ground.
+    clearAreaDraw();
+    unregisterPickOwner('dpe-fr');
+    return result;
   },
 
   destroy(...args) {
@@ -2221,14 +2539,16 @@ const dpeFranceLayer = {
     _drawViewer = null;
     _join = null;
     _themeDirty = false;
-    _cellMode = false;
     _removeMoveEnd?.();
     _removeMoveEnd = null;
     clearPills();
     _dataSource = null;
     _rowControlsListener = null;
     withdrawTheme();
-    return dpeScanLayer.destroy(...args);
+    const result = dpeScanLayer.destroy(...args);
+    clearAreaDraw();
+    unregisterPickOwner('dpe-fr');
+    return result;
   },
 
   async update(...args) {
@@ -2258,6 +2578,15 @@ const dpeFranceLayer = {
   setRowControlsListener(listener) {
     _rowControlsListener = typeof listener === 'function' ? listener : null;
     dpeScanLayer.setRowControlsListener?.(listener);
+  },
+
+  /**
+   * What the area regime has on the globe, for the harnesses: a Cesium
+   * primitive does not live in the data source the shell counts.
+   * @returns {{unit: ?string, shapes: number, fills: number, ready: boolean}}
+   */
+  getAreaDraw() {
+    return { unit: _areaUnit, ..._areaPaint.stats() };
   },
 };
 

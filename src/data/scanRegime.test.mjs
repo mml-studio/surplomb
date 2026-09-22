@@ -11,11 +11,16 @@ import {
   SCAN_CELL_MIN_ALTITUDE_M,
   boxSamplePoints,
   readScanCellBox,
+  readScanTileMask,
   scanBandFor,
   scanBoxKey,
   scanCellBox,
   scanCellParams,
+  scanTileMask,
+  scanTileMaskParam,
+  scanTileRing,
   scanTiles,
+  scanTilesBox,
 } from './scanRegime.js';
 
 test('below the switch the scan stays a disc', () => {
@@ -134,4 +139,59 @@ test('a bigger box is probed more densely, up to the cap', () => {
   assert.equal(fine.length, 9);
   assert.ok(coarse.length > fine.length);
   assert.ok(coarse.length <= 25, 'the cap bounds what one box spends on the BAN');
+});
+
+// ── only the tiles on screen (2026-09-22) ──────────────────────────────────
+test('a box keeps only the tiles the view touches, in scanTiles order', () => {
+  const box = { south: 45.75, west: 4.82, north: 45.77, east: 4.84 };
+  // A view over the north-east quarter only, well clear of the margin.
+  const view = { south: 45.763, west: 4.833, north: 45.769, east: 4.839 };
+  assert.deepEqual(scanTileMask(box, 0.01, view), [false, false, false, true]);
+  assert.equal(scanTileMaskParam(scanTileMask(box, 0.01, view)), '0001');
+  // Within ~100 m of the line, the neighbour comes too — and no further.
+  const nearLine = { ...view, west: 4.8305 };
+  assert.deepEqual(scanTileMask(box, 0.01, nearLine), [false, false, true, true]);
+});
+
+test('a view that covers the box, or is unknown, asks for the whole box', () => {
+  const box = { south: 45.75, west: 4.82, north: 45.77, east: 4.84 };
+  const wide = { south: 45.7, west: 4.7, north: 45.9, east: 4.9 };
+  assert.equal(scanTileMaskParam(scanTileMask(box, 0.01, wide)), null);
+  assert.equal(scanTileMask(box, 0.01, null), null);
+  // A camera looking elsewhere mid-flight: nothing to narrow to, whole box.
+  assert.equal(scanTileMask(box, 0.01, { south: 10, west: 10, north: 11, east: 11 }), null);
+});
+
+test('a mask read off a request can only narrow the box, never widen it', () => {
+  const box = { south: 45.75, west: 4.82, north: 45.77, east: 4.84 };
+  const band = { tileDeg: 0.01 };
+  const read = (tiles) => readScanTileMask(new URLSearchParams(tiles === null ? {} : { tiles }), box, band);
+  assert.deepEqual(read('1010'), [true, false, true, false]);
+  for (const bad of [null, '', '0000', '10', '10101', '1x10']) {
+    assert.deepEqual(read(bad), [true, true, true, true], String(bad));
+  }
+});
+
+test('the box of the tiles loaded is what the answer describes', () => {
+  const box = { south: 45.75, west: 4.82, north: 45.77, east: 4.84 };
+  const tiles = scanTiles(box, 0.01).filter((tile, index) => [false, true, false, true][index]);
+  assert.deepEqual(scanTilesBox(tiles), { south: 45.75, west: 4.83, north: 45.77, east: 4.84 });
+  assert.equal(scanTilesBox([]), null);
+});
+
+test('the ring around a 2 × 2 view is its twelve neighbours, nearest first', () => {
+  const box = { south: 45.75, west: 4.82, north: 45.77, east: 4.84 };
+  const tiles = scanTiles(box, 0.01);
+  const ring = scanTileRing(tiles, 0.01, { lat: 45.7605, lon: 4.8395 });
+  assert.equal(ring.length, 12);
+  // None of the view's own tiles, and every one on the same grid.
+  for (const tile of ring) {
+    assert.ok(!tiles.some((own) => own.south === tile.south && own.west === tile.west));
+    assert.equal(Number((tile.north - tile.south).toFixed(6)), 0.01);
+  }
+  // The reader stands near the east edge: the first tile is east of the box.
+  assert.equal(ring[0].west, 4.84);
+  // A single tile has eight neighbours; nothing, nothing.
+  assert.equal(scanTileRing(tiles.slice(0, 1), 0.01).length, 8);
+  assert.deepEqual(scanTileRing([], 0.01), []);
 });

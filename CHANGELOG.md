@@ -228,6 +228,26 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   closes the trial says “Voice is capped on this hosted demo” under a
   “SURPLOMB · HOSTED” kicker: the limit is this server's, and no tier is for
   sale yet. The French is unchanged.
+- **Energy ratings paint the parcels from altitude, on the A–G scale, not
+  discs.** Between 600 m and 1,800 m the layer now draws every parcel that
+  holds a rating, coloured by the most frequent class of its ratings (a tie
+  goes to the worse) — the rule its building follows closer in. Above 1,800 m
+  it paints the cadastral sections the same way. The discs coloured by their
+  share of F and G are gone; that share stays in the key, beside the
+  national register's 9.75 %. The register names no parcel, so each rating is
+  placed on the parcel its address point stands on, or on the one whose
+  frontage it touches within 3 m: over Lyon's Presqu'île, 22,567 ratings land
+  on 2,469 parcels and 157 on none, 99 kB gzipped. Only the part of the view on
+  screen is sent to the browser — one or two squares of about a kilometre from
+  low down, four at most — while the server loads the squares around it in the
+  background, so moving a kilometre answers in tens of milliseconds instead of
+  one to two seconds; each square is kept a week. From higher up the ADEME
+  counts the ratings itself in 50 m squares (227,114 over central
+  Lyon in four requests, 402 sections); a section is coloured only when three
+  ratings fall in squares wholly inside it, which keeps a square or a quay with
+  no dwelling uncoloured. A click on a parcel or a section opens its card in
+  the key — its address, its ratings, the classes present — and the key's
+  seven letters filter the map at every altitude.
 - **Shared vehicles answer at every scale.** Above 250 km the layer shows one
   label per city with a network — its name over a bar of its operators'
   colours, 81 cities over France — and pressing one flies there; between the
