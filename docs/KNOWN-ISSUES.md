@@ -304,53 +304,36 @@ Consequences in runtime:
   banner. `/confidentialite` will have to name PostHog as a processor, in the
   same pull request.
 
-### The world satellite imagery comes from an Esri endpoint closed to commercial use
-Status: Open (backlog), decided 2026-09-22
+### Outside France, the hosted Satellite map is 10 m Sentinel-2 until the ArcGIS key exists
+Status: Open (waiting on the owner's key), 2026-09-22 — the licence half is fixed
 
 Context:
 - Outside France, the `Satellite` stack's photography, and the globe seen from
-  space at boot, is Esri World Imagery, fetched without a key from
-  `services.arcgisonline.com` (`src/data/worldImagery.js`). Esri's
-  documentation for these legacy tile services: *"this service is not
-  available for commercial use."* The endpoint still answers everyone; the
-  limit is in the terms, not in the network.
-- Maintainer's decision (2026-09-22): keep the keyless endpoint while the
-  product is free, and switch the day surplomb.app gains traction.
-- Crediting Esri does not license it. The imagery is already credited on
-  screen (`Imagerie © Esri, Maxar, Earthstar Geographics`) and in the
-  attribution popover (`src/data/dataCredits.js`); a credit meets an
-  attribution duty, it does not lift a non-commercial one.
+  space at boot, was Esri World Imagery from `services.arcgisonline.com`,
+  without a key. Esri staff, for that URL: *"as is stated in the terms of use,
+  this service is not available for commercial use"*. The backlog entry opened
+  earlier on 2026-09-22 (#333) planned to keep it until surplomb.app gained
+  traction; the owner decided the same day to stop at once and pay per use.
+- Since then (`src/data/worldImagery.js`, `chooseWorldImagery`): a build with
+  `ARCGIS_API_KEY` draws the same imagery through ArcGIS Location Platform
+  (`ibasemaps-api.arcgis.com`, billed per tile, 2 M free a month then $0.15
+  per 1,000); a deployment with `GEV_NONCOMMERCIAL_SOURCES=off` and no key
+  never asks the anonymous endpoint and draws Sentinel-2 cloudless 2016; a
+  clone keeps the anonymous endpoint. The two questions the backlog entry left
+  open are answered: past the free tier, an account with pay-as-you-go off
+  (the default) loses the service rather than being billed, and the licensed
+  path adds "Powered by Esri" to the on-screen credit, which the build does.
 
 Consequences in runtime:
-- None visible: surplomb.app and every fork show the same imagery. The
-  exposure is contractual, and it grows with the product. Once surplomb.app
-  charges for anything, every world view it draws breaks Esri's terms.
+- With the switch set and no key, surplomb.app shows 10 m Sentinel-2 beyond
+  France (cities and coastlines, no buildings) where it showed Esri's
+  sub-metre imagery, on the boot globe as on the Satellite map. France itself
+  is unchanged: IGN's 20 cm orthophoto sits above the base.
 
-What the switch takes (2 to 3 hours, plus an ArcGIS Location Platform account):
-- The same pixels through the licensed path: an API key with the
-  `premium:user:basemaps` privilege, tiles from `ibasemaps-api.arcgis.com`,
-  which answers `Token Required` without one (probed 2026-09-22). The pinned
-  CesiumJS (1.138) loads it natively:
-  `ArcGisMapServerImageryProvider.fromBasemapType(ArcGisBaseMapType.SATELLITE)`
-  with `ArcGisMapService.defaultAccessToken`. The ceiling stays z19, so the
-  composite under the IGN orthophoto and the base's sleep over France
-  (`_syncWorldBaseVisibility`) do not change.
-- The world base follows a key the way `photoreal` does: a configured build
-  gets the licensed layer, a keyless build (every fork) keeps today's
-  endpoint. `src/mapStackController.test.mjs` asserts the keyless URL and
-  moves with it.
-- Price, checked 2026-09-22: 2 million tiles free a month, then $0.15 per
-  1,000, so $150 per extra million. At about 90 tiles a view the free tier
-  covers some 22,000 views, and a view over France costs about one tile since
-  the base sleeps under the IGN layer. The session model (1,000 free, then $4
-  per 1,000) is documented for the Basemap Styles service only; it has not
-  been verified for raw imagery tiles.
-- The key is readable in the browser: restrict it to the surplomb.app
-  referrer, and read on the account what happens past the free tier (service
-  cut or bill) before switching. Check whether Esri's attribution rules for
-  the licensed path add "Powered by Esri" to the on-screen credit.
-- The other options and their prices are in `DATA_SOURCES.md`, *The imagery
-  replacement, if that day comes*.
+What closes it:
+- The eight steps in `docs/DEPLOY.md`, *The satellite beyond France: an ArcGIS
+  Location Platform key*, then a rebuild. `npm run qa:world-imagery-licence --
+  --url <host> --expect licensed` checks the result in a browser.
 
 ---
 
