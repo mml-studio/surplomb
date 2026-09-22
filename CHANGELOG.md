@@ -16,9 +16,8 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   in the Alps, the Pyrenees and Corsica. Clicking the ground answers in one line —
   « Zone blanche : pas de 4G ici », « Seul Orange capte ici » — then gives each
   operator's level in everyday words. The map is the operators' own estimate,
-  published by ARCEP, and every surface says so; it is drawn on
-  Satellite, IGN map and OSM, not on Google 3D, and the key says that too. The
-  chosen view travels in shared links.
+  published by ARCEP, and every surface says so; it is drawn on every
+  basemap, Google 3D included. The chosen view travels in shared links.
 - **A selected mast shows what it can see.** Selecting a mast now lights, in
   the selection cyan, the ground from which the top of the mast is in view —
   over the terrain, out to the radio horizon its registered height allows
@@ -330,6 +329,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   just as the weekly rebuild lands asks to be reopened instead of guessing.
   The one practice whose address line was its doctor's nameplate now shows the
   town instead.
+- **The 4G coverage and dead zones show on Google 3D too.** They were drawn on
+  Satellite, IGN map and OSM only, and the key told a Google 3D reader to
+  switch basemap. The same colours are now laid over Google's 3D mesh, at the
+  same strength as on the flat maps, and a click on the mesh opens the « who
+  has signal here » card standing on the ground rather than at sea level. On
+  buildings inside a painted area the colour runs up the walls; the painted
+  areas are almost never built up. The mast's line of sight is still drawn on
+  the flat maps only.
 - **In English, the voice trial no longer calls itself premium.** The mic's
   help line reads “Hosted demo · 3 free spoken requests”, and the card that
   closes the trial says “Voice is capped on this hosted demo” under a

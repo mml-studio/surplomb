@@ -32,7 +32,9 @@ import { isPickedWorldPosition } from './scenePick.js';
  *
  * @param {?object} viewer Cesium viewer.
  * @param {{x:number, y:number}} windowPosition Canvas coordinates.
- * @returns {?{lon:number, lat:number}} Null when the ray met nothing real.
+ * @returns {?{lon:number, lat:number, height:number}} Null when the ray met
+ *   nothing real. `height` is the surface's, in metres above the ellipsoid —
+ *   the mesh's own on Google 3D, where `globe.getHeight` answers nothing.
  */
 export function sceneGroundPoint(viewer, windowPosition) {
   const scene = viewer?.scene;
@@ -44,7 +46,7 @@ export function sceneGroundPoint(viewer, windowPosition) {
     if (!carto) return null;
     const lon = Cesium.Math.toDegrees(carto.longitude);
     const lat = Cesium.Math.toDegrees(carto.latitude);
-    return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat } : null;
+    return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat, height: carto.height } : null;
   };
 
   if (scene.globe?.show !== false) {

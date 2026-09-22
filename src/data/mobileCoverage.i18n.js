@@ -79,12 +79,6 @@ export default defineMessages({
       fr: 'Cliquez sur la carte pour voir le réseau à un endroit. Métropole seulement.',
       en: 'Click the map to see the signal at a spot. Mainland France only.',
     },
-    photoreal: {
-      fr: 'Pas visible en vue Google 3D : choisissez Satellite, Plan IGN ou OSM.',
-      en: 'Not shown in Google 3D: pick Satellite, IGN map or OSM.',
-      note: 'Shown instead of the classes while the photorealistic stack hides the globe. Stack names '
-        + 'as the basemap chips print them (mapStackController.i18n.js).',
-    },
   },
 
   /** The card of one clicked spot: the verdict as the title, then each operator. */

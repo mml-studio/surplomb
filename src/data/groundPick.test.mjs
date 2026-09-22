@@ -59,8 +59,11 @@ test('the rendered terrain answers first, because it is the surface shapes are d
 
 test('a hidden globe leaves the depth buffer, which is the photoreal stack', () => {
   const target = viewer({ globeShow: false });
-  near(sceneGroundPoint(target, { x: 10, y: 10 }), { lon: ADDRESS.lon + 0.004, lat: ADDRESS.lat });
+  const point = sceneGroundPoint(target, { x: 10, y: 10 });
+  near(point, { lon: ADDRESS.lon + 0.004, lat: ADDRESS.lat });
   assert.deepEqual(target.asked, ['depth']);
+  // The mesh's own height: the only one there is while the globe is hidden.
+  assert.ok(Math.abs(point.height - 30) < 0.01, `height ${point.height}`);
 });
 
 test('no terrain resident under the pixel falls through, it does not fail', () => {

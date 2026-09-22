@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   COVERAGE_ALPHA,
+  COVERAGE_DRAPE_ALPHA,
   COVERAGE_MODES,
   COVERAGE_OPERATORS,
   COVERAGE_RAMP,
@@ -18,7 +19,7 @@ import {
   encodeCoverage,
   normalizeCoverageMode,
 } from './mobileCoverage.js';
-import { paintCoverageRgba, coverageCodeAt } from './mobileCoverageImagery.js';
+import { paintCoverageRgba, coverageCodeAt, coverageOverzoomSource } from './mobileCoverageImagery.js';
 import {
   LAYER_STATE_VERSION,
   createDefaultLayerState,
@@ -72,6 +73,18 @@ test('the lookup table paints each rung with one alpha, and leaves the unpainted
   }
 });
 
+test('the draped table is the same ramp at the drape’s one alpha, lighter than the globe’s', () => {
+  const globe = coverageLut('gaps');
+  const drape = coverageLut('gaps', COVERAGE_DRAPE_ALPHA);
+  const drapeAlpha = Math.round(COVERAGE_DRAPE_ALPHA * 255);
+  assert.ok(COVERAGE_DRAPE_ALPHA < COVERAGE_ALPHA, 'a linear-light blend weighs the same alpha more');
+  for (let code = 0; code < 256; code++) {
+    assert.equal(drape[code] & 0xffffff, globe[code] & 0xffffff, `code ${code} keeps its colour`);
+    const a = drape[code] >>> 24;
+    assert.ok(a === 0 || a === drapeAlpha, `code ${code} has alpha ${a}`);
+  }
+});
+
 test('painting decoded pixels uses the code in R and leaves sea transparent whatever its code', () => {
   const lut = coverageLut('orange');
   const pixels = new Uint8ClampedArray([
@@ -83,6 +96,16 @@ test('painting decoded pixels uses the code in R and leaves sea transparent what
   paintCoverageRgba(pixels, lut);
   assert.deepEqual([...pixels.slice(0, 4)], [0xf0, 0x28, 0x7a, Math.round(COVERAGE_ALPHA * 255)]);
   assert.deepEqual([...pixels.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
+test('a tile past the finest zoom magnifies the quarter of its zoom-12 ancestor that it covers', () => {
+  // Within the pyramid: the tile itself, whole.
+  assert.deepEqual(coverageOverzoomSource(12, 2074, 1409, 12), { z: 12, x: 2074, y: 1409, sx: 0, sy: 0, size: 256 });
+  // Zoom 13, the drape's finest: the south-east child reads the south-east quarter.
+  assert.deepEqual(coverageOverzoomSource(13, 4149, 2819, 12), { z: 12, x: 2074, y: 1409, sx: 128, sy: 128, size: 128 });
+  assert.deepEqual(coverageOverzoomSource(13, 4148, 2819, 12), { z: 12, x: 2074, y: 1409, sx: 0, sy: 128, size: 128 });
+  // Two levels past: a sixteenth, 64 pixels a side.
+  assert.deepEqual(coverageOverzoomSource(14, 8299, 5636, 12), { z: 12, x: 2074, y: 1409, sx: 192, sy: 0, size: 64 });
 });
 
 test('Paris lands on the zoom-12 tile Web Mercator puts it on', () => {

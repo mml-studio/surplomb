@@ -237,6 +237,7 @@ import { pickAt } from './pickAt.js';
 import { isWorldPick } from './pickRegistry.js';
 import { sceneGroundPoint } from './groundPick.js';
 import {
+  COVERAGE_DRAPE_ALPHA,
   COVERAGE_FORMAT,
   COVERAGE_MODES,
   COVERAGE_OPERATORS,
@@ -505,6 +506,14 @@ let _coverageMetaPromise = null;
 /** The Cesium ImageryLayer on `viewer.imageryLayers`, and the mode it paints. */
 let _coverageImagery = null;
 let _coverageImageryMode = null;
+/**
+ * The same mode draped on Google's mesh: `{ tileset, layer }`, or null while
+ * this session has no mesh. Kept apart from `_coverageImagery` because the mesh
+ * is bought late — often after the coverage was switched on.
+ */
+let _coverageDrape = null;
+/** `gev:map-stack-changed` listener, attached while the row is on. */
+let _mapStackListener = null;
 let _coverageRead = null;
 /** The ground card: `{ position, text }`, or null. One card at a time with the support's. */
 let _coverageCard = null;
@@ -2198,26 +2207,71 @@ async function ensureCoverageMeta() {
   return _coverageMetaPromise;
 }
 
+/** Google's mesh, if this session has bought it — shown or not. */
+function photorealTileset() {
+  const primitives = _viewer?.scene?.primitives;
+  if (!primitives || typeof primitives.get !== 'function') return null;
+  for (let i = 0; i < primitives.length; i++) {
+    const primitive = primitives.get(i);
+    if (primitive instanceof Cesium.Cesium3DTileset && !primitive.isDestroyed?.()) return primitive;
+  }
+  return null;
+}
+
+function removeCoverageDrape() {
+  const drape = _coverageDrape;
+  _coverageDrape = null;
+  if (drape && !drape.tileset.isDestroyed?.()) drape.tileset.imageryLayers?.remove?.(drape.layer, true);
+}
+
 function removeCoverageImagery() {
   if (_coverageImagery) _viewer?.imageryLayers?.remove?.(_coverageImagery, true);
   _coverageImagery = null;
   _coverageImageryMode = null;
+  removeCoverageDrape();
 }
 
-/** Put on the globe the imagery the current mode asks for, or none. */
+/**
+ * Drape the painted mode on the mesh too, once there is a mesh.
+ *
+ * Both layers stay in place whichever stack is shown: a surface that is not on
+ * screen is not traversed and asks for no tile, so switching between Satellite
+ * and Google 3D repaints from the browser's cache instead of rebuilding.
+ */
+function syncCoverageDrape() {
+  const tileset = _coverageImageryMode ? photorealTileset() : null;
+  if (_coverageDrape?.tileset === tileset) return;
+  removeCoverageDrape();
+  if (!tileset?.imageryLayers?.add) return;
+  const layer = new Cesium.ImageryLayer(
+    createCoverageImageryProvider(_coverageMeta, coverageLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA), { drape: true }),
+  );
+  tileset.imageryLayers.add(layer);
+  _coverageDrape = { tileset, layer };
+}
+
+/** Put on the globe and on the mesh the imagery the current mode asks for, or none. */
 function syncCoverageImagery() {
   const wanted = _enabled && _coverageMode !== 'off' && _coverageStatus === 'ready' ? _coverageMode : null;
-  if (_coverageImageryMode === wanted) return;
-  removeCoverageImagery();
-  if (wanted && _viewer?.imageryLayers) {
-    _coverageImagery = new Cesium.ImageryLayer(createCoverageImageryProvider(_coverageMeta, coverageLut(wanted)));
-    _viewer.imageryLayers.add(_coverageImagery);
-    _coverageImageryMode = wanted;
-    // The selected mast's line of sight stays ABOVE the coverage: it is the
-    // one mark on the ground that belongs to the selection.
-    if (_viewshed?.layer) _viewer.imageryLayers.raiseToTop?.(_viewshed.layer);
+  if (_coverageImageryMode !== wanted) {
+    removeCoverageImagery();
+    if (wanted && _viewer?.imageryLayers) {
+      _coverageImagery = new Cesium.ImageryLayer(createCoverageImageryProvider(_coverageMeta, coverageLut(wanted)));
+      _viewer.imageryLayers.add(_coverageImagery);
+      _coverageImageryMode = wanted;
+      // The selected mast's line of sight stays ABOVE the coverage: it is the
+      // one mark on the ground that belongs to the selection.
+      if (_viewshed?.layer) _viewer.imageryLayers.raiseToTop?.(_viewshed.layer);
+    }
   }
+  syncCoverageDrape();
   governorRequestRender('anfr-fr-coverage');
+}
+
+/** The mesh is bought on the first switch to Google 3D, long after `enable`. */
+function onMapStackChanged(event) {
+  if (event?.detail?.status === 'switching') return;
+  syncCoverageImagery();
 }
 
 async function applyCoverage() {
@@ -2255,16 +2309,21 @@ function openCoverageCard(viewer, windowPosition) {
   clearSelection();
   const generation = _coverageCardGeneration;
   const m = coverageMessages();
-  let height = 0;
-  try {
-    height = viewer?.scene?.globe?.getHeight?.(Cesium.Cartographic.fromDegrees(point.lon, point.lat)) ?? 0;
-  } catch {
-    height = 0;
+  // The picked surface's own height: on Google 3D the globe is hidden and
+  // `getHeight` answers nothing, which would sink the card to sea level —
+  // 2 km under the Mont-Blanc dead zones it is opened on.
+  let height = point.height;
+  if (!Number.isFinite(height)) {
+    try {
+      height = viewer?.scene?.globe?.getHeight?.(Cesium.Cartographic.fromDegrees(point.lon, point.lat));
+    } catch { /* no terrain resident here */ }
   }
+  if (!Number.isFinite(height)) height = 0;
   _coverageCard = {
     lon: point.lon,
     lat: point.lat,
-    position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, (Number.isFinite(height) ? height : 0) + POINT_LIFT_M),
+    height,
+    position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + POINT_LIFT_M),
     text: `${m.card.readingTitle}\n${m.card.reading}`,
   };
   publishCoverageCard();
@@ -2315,13 +2374,7 @@ function coverageChips() {
 /** The coverage block of the key, or nothing while the coverage is off. */
 function coverageLegendEntries() {
   if (_coverageMode === 'off' || _coverageStatus !== 'ready') return [];
-  const entries = coverageLegend(_coverageMeta, _coverageMode);
-  // The photorealistic stack hides the globe, and with it the imagery. A key
-  // of colours that are nowhere on screen would be a key to nothing.
-  if (entries.length && _viewer?.scene?.globe && _viewer.scene.globe.show === false) {
-    return [entries[0], { label: coverageMessages().legend.photoreal, color: null }];
-  }
-  return entries;
+  return coverageLegend(_coverageMeta, _coverageMode);
 }
 
 // --- Layer ------------------------------------------------------------------
@@ -2403,6 +2456,10 @@ const anfrFranceLayer = {
     // The coverage meta is a separate, small question — does this server have
     // the pyramid at all? — and its answer is what makes the chips appear.
     void ensureCoverageMeta().then(() => applyCoverage());
+    if (!_mapStackListener && typeof window !== 'undefined') {
+      _mapStackListener = onMapStackChanged;
+      window.addEventListener('gev:map-stack-changed', _mapStackListener);
+    }
   },
 
   disable(viewer) {
@@ -2416,6 +2473,10 @@ const anfrFranceLayer = {
     // The imagery goes; the MODE stays, so switching the row back on paints
     // the same coverage the reader left.
     removeCoverageImagery();
+    if (_mapStackListener && typeof window !== 'undefined') {
+      window.removeEventListener('gev:map-stack-changed', _mapStackListener);
+      _mapStackListener = null;
+    }
     _points?.removeAll();
     _masts?.removeAll();
     _sectors?.removeAll();
@@ -2485,9 +2546,13 @@ const anfrFranceLayer = {
         status: _coverageStatus,
         edition: _coverageMeta?.edition ?? null,
         drawn: Boolean(_coverageImagery),
+        // On Google's mesh as well — see `syncCoverageDrape`.
+        draped: Boolean(_coverageDrape),
         // The open ground card, for the QA harness and the voice layer: what
         // the reader is reading, and where.
-        card: _coverageCard ? { lon: _coverageCard.lon, lat: _coverageCard.lat, text: _coverageCard.text } : null,
+        card: _coverageCard
+          ? { lon: _coverageCard.lon, lat: _coverageCard.lat, height: _coverageCard.height, text: _coverageCard.text }
+          : null,
       },
       viewshed: _viewshed
         ? {
@@ -2836,6 +2901,11 @@ export function _setAnfrCoverageForTest({
   _coverageCardGeneration += 1;
   _coverageRead = read || (meta ? createCoveragePointReader(meta, { fetchImpl: (url) => _http(url) }) : null);
   syncCoverageImagery();
+}
+
+/** Drive the `gev:map-stack-changed` listener the row attaches in `enable`. */
+export function _anfrMapStackChangedForTest(detail) {
+  onMapStackChanged({ detail });
 }
 
 /** Drive the production ground-click path of the coverage card. */

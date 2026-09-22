@@ -17,11 +17,17 @@
  * Then switches to Orange through `setParams`, as the chip does, and checks the
  * layer swapped. Screenshots go to `qa-shots/mobile-coverage/`.
  *
+ * `--photoreal` runs the same checks on Google's mesh instead of the globe:
+ * the coverage draped on the tileset (`coverage.draped`), the magenta on the
+ * mesh, a click on the mesh that stands the card on it, and the frame cost of
+ * the drape. It spends ONE Cesium ion session (the root tile), so it is opt-in;
+ * the line of sight is skipped there, it is still drawn on the globe only.
+ *
  * Needs a server that HAS the pyramid (`node scripts/build-mobile-coverage.mjs`):
  * without one the harness stops at step 1 and says so.
  *
  * Usage:
- *   node scripts/qa-mobile-coverage.mjs --url http://127.0.0.1:4417
+ *   node scripts/qa-mobile-coverage.mjs --url http://127.0.0.1:4417 [--photoreal]
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,6 +46,8 @@ const option = (name, fallback) => {
 };
 const APP_URL = option('--url', process.env.QA_BASE_URL || 'http://localhost:4173');
 const HEADFUL = args.includes('--headful');
+const PHOTOREAL = args.includes('--photoreal');
+const SHOT_PREFIX = PHOTOREAL ? 'photoreal-' : '';
 
 /** Chamonix and the Mont-Blanc massif from 22 km: valleys served, summits not. */
 const VIEW = { lat: 45.86, lon: 6.88, alt: 22_000, heading: 0, pitch: -50 };
@@ -74,6 +82,33 @@ async function magentaPixels(file) {
   return count / (info.width * info.height);
 }
 
+/** Wait for Google's mesh to finish streaming the view, when it is the surface. */
+async function meshSettled(page, timeoutMs = 60_000) {
+  if (!PHOTOREAL) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const loaded = await page.evaluate(() => {
+      const tileset = window.__godsEyeView?.tileset;
+      try { window.__godsEyeView?.viewer?.scene?.render(); } catch { /* stalled */ }
+      return Boolean(tileset?.show && tileset.tilesLoaded);
+    });
+    if (loaded) return true;
+    await sleep(1_000);
+  }
+  return false;
+}
+
+/** Mean `scene.render()` time, in ms, over `frames` forced frames. */
+async function frameMs(page, frames = 30) {
+  return page.evaluate((count) => {
+    const scene = window.__godsEyeView.viewer.scene;
+    scene.render();
+    const start = performance.now();
+    for (let i = 0; i < count; i += 1) scene.render();
+    return (performance.now() - start) / count;
+  }, frames);
+}
+
 async function coverageState(page) {
   return page.evaluate(() => {
     const module = window.__godsEyeView?.dataManager?.layers?.get('anfr-fr')?.module;
@@ -106,14 +141,15 @@ async function main() {
   });
   const tiles = [];
   try {
-    const page = await newQaPage(browser);
+    // The photoreal door is closed by default: it bills a root tile per boot.
+    const page = await newQaPage(browser, PHOTOREAL ? { photoreal: true } : {});
     page.on('response', (response) => {
       const url = response.url();
       if (url.includes('mobile-coverage')) tiles.push({ url, status: response.status() });
     });
     const hash = `lat=${VIEW.lat}&lon=${VIEW.lon}&alt=${VIEW.alt}&heading=${VIEW.heading}&pitch=${VIEW.pitch}`
-      + '&v=2&l=an&lo=an.c.z';
-    const url = `${APP_URL}/globe?welcome=0&photoreal=0#${hash}`;
+      + '&v=2&l=an&lo=an.c.z' + (PHOTOREAL ? '&map=photoreal' : '');
+    const url = `${APP_URL}/globe?welcome=0${PHOTOREAL ? '' : '&photoreal=0'}#${hash}`;
     console.log(`→ ${url}`);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 });
 
@@ -121,7 +157,7 @@ async function main() {
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
       state = await coverageState(page).catch(() => null);
-      if (state?.stats?.drawn) break;
+      if (state?.stats?.drawn && (!PHOTOREAL || state.stats.draped)) break;
       if (state?.stats?.status === 'missing' || state?.stats?.status === 'failed') break;
       await sleep(2_000);
     }
@@ -136,6 +172,11 @@ async function main() {
       state.chips.length === 5 && state.chips[0].state === 'active',
       state.chips.map((chip) => `${chip.label}:${chip.state}`).join(' '));
     check('an imagery layer is on the globe', state.stats.drawn === true);
+    if (PHOTOREAL) {
+      const stack = await page.evaluate(() => window.__godsEyeView.mapStackController.getActiveId());
+      check('the surface is Google’s mesh', stack === 'photoreal', stack);
+      check('the coverage is draped on the mesh', state.stats.draped === true, JSON.stringify(state.stats));
+    }
     check('the key carries the coverage block', state.legend.some((label) => label === 'Réseau 4G : opérateurs qui captent'),
       state.legend.join(' | '));
     check('the key says whose estimate it is, and the month', /^Estimation des opérateurs, publiée par l’ARCEP \(\p{L}+ \d{4}\)\./u.test(state.note || ''), state.note);
@@ -154,6 +195,7 @@ async function main() {
     await render(page, 30);
     await sleep(6_000);
     await render(page, 20);
+    if (PHOTOREAL) check('the mesh finished streaming the view', await meshSettled(page));
     const tileHits = tiles.filter((entry) => /\/tiles\/mobile-coverage\/.+\.png(\?|$)/.test(entry.url));
     console.log('\nTiles');
     check('tiles were fetched', tileHits.length > 0, `${tileHits.length} tiles`);
@@ -161,7 +203,7 @@ async function main() {
     check('no tile request was a 404 (the index is read first)', !tileHits.some((entry) => entry.status === 404),
       tileHits.filter((entry) => entry.status === 404).map((entry) => entry.url).slice(0, 3).join(', '));
 
-    const shot = path.join(SHOTS_DIR, 'gaps-mont-blanc.png');
+    const shot = path.join(SHOTS_DIR, `${SHOT_PREFIX}gaps-mont-blanc.png`);
     await page.screenshot({ path: shot });
     console.log(`  · screenshot ${shot}`);
 
@@ -170,12 +212,30 @@ async function main() {
       window.__godsEyeView.dataManager.setLayerParams('anfr-fr', { coverage: 'off' }, { origin: 'user' });
     });
     await render(page, 20);
-    const offShot = path.join(SHOTS_DIR, 'off-mont-blanc.png');
+    const offShot = path.join(SHOTS_DIR, `${SHOT_PREFIX}off-mont-blanc.png`);
     await page.screenshot({ path: offShot });
     const on = await magentaPixels(shot);
     const off = await magentaPixels(offShot);
     check('the dead-zone view paints magenta the bare view does not have', on - off > 0.005,
       `${(on * 100).toFixed(2)} % on, ${(off * 100).toFixed(2)} % off`);
+    if (PHOTOREAL) {
+      // What the drape costs a frame, the mesh settled both times. Reported,
+      // not judged: SwiftShader or Metal, the absolute figure is the machine's.
+      const offMs = await frameMs(page);
+      await page.evaluate(() => {
+        window.__godsEyeView.dataManager.setLayerParams('anfr-fr', { coverage: 'gaps' }, { origin: 'user' });
+      });
+      await render(page, 20);
+      await meshSettled(page);
+      await sleep(3_000);
+      await render(page, 10);
+      const onMs = await frameMs(page);
+      console.log(`  · frame ${offMs.toFixed(1)} ms bare, ${onMs.toFixed(1)} ms draped`);
+      await page.evaluate(() => {
+        window.__godsEyeView.dataManager.setLayerParams('anfr-fr', { coverage: 'off' }, { origin: 'user' });
+      });
+      await render(page, 10);
+    }
 
     console.log('\nThe Orange chip');
     await page.evaluate(() => {
@@ -187,8 +247,11 @@ async function main() {
     state = await coverageState(page);
     check('the mode is Orange and one layer is drawn', state.params.coverage === 'orange' && state.stats.drawn === true,
       JSON.stringify(state.stats));
+    if (PHOTOREAL) check('and draped on the mesh', state.stats.draped === true);
     check('the key is Orange’s', state.legend.some((label) => label === 'Réseau 4G Orange'), state.legend.join(' | '));
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'orange-mont-blanc.png') });
+    await meshSettled(page, 20_000);
+    await render(page, 10);
+    await page.screenshot({ path: path.join(SHOTS_DIR, `${SHOT_PREFIX}orange-mont-blanc.png`) });
 
     console.log('\nA click on the ground');
     await page.evaluate(() => {
@@ -209,14 +272,21 @@ async function main() {
         const clientY = rect.top + rect.height / 2 + dy;
         const top = document.elementFromPoint(clientX, clientY);
         if (top !== canvas && !canvas.contains(top)) continue;
-        const ray = scene.camera.getPickRay({ x: clientX - rect.left, y: clientY - rect.top });
-        const hit = ray && scene.globe.pick(ray, scene);
+        const position = { x: clientX - rect.left, y: clientY - rect.top };
+        // On Google 3D the globe is hidden and the depth buffer is the ground.
+        let hit = null;
+        if (scene.globe.show) {
+          const ray = scene.camera.getPickRay(position);
+          hit = ray && scene.globe.pick(ray, scene);
+        } else {
+          hit = scene.pickPosition(position);
+        }
         if (!hit) continue;
         const carto = scene.globe.ellipsoid.cartesianToCartographic(hit);
         const base = { bubbles: true, cancelable: true, clientX, clientY, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true };
         canvas.dispatchEvent(new PointerEvent('pointerdown', { ...base, buttons: 1 }));
         canvas.dispatchEvent(new PointerEvent('pointerup', { ...base, buttons: 0 }));
-        return { lon: (carto.longitude * 180) / Math.PI, lat: (carto.latitude * 180) / Math.PI, dx, dy };
+        return { lon: (carto.longitude * 180) / Math.PI, lat: (carto.latitude * 180) / Math.PI, height: carto.height, dx, dy };
       }
       return { blocked: true };
     });
@@ -235,8 +305,20 @@ async function main() {
     check('it names the four operators and a verdict',
       /capte(nt)? ici|pas de 4G ici/.test(lines[0] || '') && lines.filter((line) => /^(Orange|SFR|Bouygues|Free) : /.test(line)).length === 4,
       lines.join(' / '));
+    if (PHOTOREAL) {
+      // Chamonix's valley floor is at 1,000 m: a card at sea level would sit
+      // under the mesh, and be hidden by it.
+      check('the card stands on the mesh, not at sea level',
+        Number.isFinite(card?.height) && Math.abs(card.height - clicked.height) < 50 && card.height > 500,
+        `card ${card?.height?.toFixed?.(0)} m, clicked ${clicked?.height?.toFixed?.(0)} m`);
+    }
     await render(page, 10);
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'card-ground.png') });
+    await page.screenshot({ path: path.join(SHOTS_DIR, `${SHOT_PREFIX}card-ground.png`) });
+
+    if (PHOTOREAL) {
+      console.log('\nThe line of sight of a mast: globe only, skipped on Google 3D');
+      return;
+    }
 
     console.log('\nThe line of sight of a mast');
     await page.keyboard.press('Escape');
