@@ -20,7 +20,9 @@ import {
   meshBudgetForSpan,
   meshRowId,
   meshRowInBox,
+  meshRowPriority,
   selectGeoMesh,
+  selectGeoMeshWorld,
 } from './geoMeshThinning.js';
 import { irveMeshBudget, selectIrveMesh, IRVE_MESH_BUDGETS } from './irveMesh.js';
 import { schoolsMeshBudget, selectSchoolsMesh, SCHOOLS_MESH_BUDGETS } from './schoolsMesh.js';
@@ -241,4 +243,71 @@ test('box membership counts the edges and survives junk', () => {
   assert.equal(meshRowInBox(row(50.001, 10), BOX), false);
   assert.equal(meshRowInBox('nope', BOX), false);
   assert.equal(meshRowInBox(row(45, 5), undefined), false);
+});
+
+// --- World-locked, budget-spending selection ------------------------------------
+
+test('a world pick keeps every mark in view when the view pans over the same rows', () => {
+  const rows = lumpy().sort(byPosition);
+  const before = selectGeoMeshWorld(rows, { box: BOX, budget: 300 });
+  // West, into empty sea: the view holds the same rows.
+  const panned = { ...BOX, west: BOX.west - 0.37, east: BOX.east - 0.37 };
+  const after = selectGeoMeshWorld(rows, { box: panned, budget: 300 });
+  assert.equal(before.stepDeg, after.stepDeg);
+  assert.equal(before.fillLevel, after.fillLevel);
+  assert.deepEqual(after.picked.map(meshRowId), before.picked.map(meshRowId));
+});
+
+test('a world pick nests: a bigger budget adds marks and never swaps them', () => {
+  const rows = lumpy().sort(byPosition);
+  const small = selectGeoMeshWorld(rows, { box: BOX, budget: 300 });
+  const big = selectGeoMeshWorld(rows, { box: BOX, budget: 1200 });
+  // Same cells (both fit their half), so the representatives match and the
+  // fill of the smaller budget is a subset of the larger one's.
+  if (small.stepDeg === big.stepDeg) {
+    const bigIds = new Set(big.picked.map(meshRowId));
+    for (const r of small.picked) assert.ok(bigIds.has(meshRowId(r)), `${meshRowId(r)} was swapped out`);
+  }
+  assert.ok(big.picked.length > small.picked.length);
+});
+
+test('a world pick spends its budget, keeps the density, and draws a small view whole', () => {
+  const rows = lumpy().sort(byPosition);
+  const pick = selectGeoMeshWorld(rows, { box: BOX, budget: 300 });
+  assert.ok(pick.picked.length <= 300 && pick.picked.length > 150, `${pick.picked.length} picked`);
+  assert.ok(pick.cells <= 150, 'the representatives take at most half the budget');
+  assert.equal(new Set(pick.picked.map(meshRowId)).size, pick.picked.length, 'no row twice');
+  // The dense corner holds 2 000 of the 2 150 rows: it must draw most marks.
+  const dense = pick.picked.filter((r) => r[MESH_LAT] < 40.3 && r[MESH_LON] < 0.35).length;
+  assert.ok(dense > pick.picked.length / 2, `${dense} of ${pick.picked.length} in the dense corner`);
+  // Everything fits under a generous budget: nothing is thinned.
+  const all = selectGeoMeshWorld(rows, { box: BOX, budget: 100_000 });
+  assert.equal(all.picked.length, rows.length);
+  assert.equal(all.thinned, false);
+});
+
+test('a world pick keeps the category rule: a tied cell is drawn as its lower category', () => {
+  // Two rows in one ~110 m cell, one of each category, and a budget of one.
+  const rows = [row(45.0001, 5.0001, 4, 2), row(45.0002, 5.0002, 1, 0)];
+  const pick = selectGeoMeshWorld(rows, { box: BOX, budget: 1 });
+  assert.equal(pick.picked.length, 1);
+  assert.equal(pick.picked[0][MESH_CATEGORY], 0);
+});
+
+test('a row’s priority is its own: fixed, in [0, 1), and indifferent to its neighbours', () => {
+  const a = row(48.85528, 2.33167);
+  assert.equal(meshRowPriority(a), meshRowPriority([...a]));
+  const values = lumpy().map(meshRowPriority);
+  assert.ok(values.every((v) => v >= 0 && v < 1));
+  // Spread, not clumped: the lower half holds about half of the rows.
+  const low = values.filter((v) => v < 0.5).length / values.length;
+  assert.ok(low > 0.4 && low < 0.6, `${low}`);
+});
+
+test('a world pick with no box, no budget or nothing inside says so', () => {
+  assert.deepEqual(selectGeoMeshWorld(lumpy(), {}), { picked: [], inBox: 0, budget: 0, thinned: false, cells: 0 });
+  const none = selectGeoMeshWorld(lumpy(), { box: BOX, budget: 0 });
+  assert.equal(none.picked.length, 0);
+  assert.equal(none.thinned, true);
+  assert.equal(selectGeoMeshWorld(lumpy(), { box: { south: -10, west: -10, north: -5, east: -5 }, budget: 50 }).inBox, 0);
 });

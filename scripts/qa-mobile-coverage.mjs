@@ -295,7 +295,8 @@ async function main() {
     const cardDeadline = Date.now() + 15_000;
     while (Date.now() < cardDeadline) {
       card = (await coverageState(page))?.stats?.card;
-      if (card && !/Chargement…/.test(card.text)) break;
+      // The card is published with its answer; `text` stays null until then.
+      if (card?.text && !/Chargement…/.test(card.text)) break;
       await sleep(500);
     }
     const lines = card?.text?.split('\n') || [];

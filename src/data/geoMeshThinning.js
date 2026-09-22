@@ -363,3 +363,218 @@ export function selectGeoMesh(rows, { box, budget, cols, rows: rowCount, lattice
     aggregates: null,
   };
 }
+
+// --- World-locked, budget-spending selection -----------------------------------
+
+/**
+ * The representative of a cell, in one pass over rows in position order:
+ * the heaviest row of the cell's most common category, ties to the lower
+ * category and then to the first row — exactly `cellRepresentative` over the
+ * cell sorted by `byWeight`, without the sort.
+ */
+function representativeOf(rows, indices) {
+  const counts = [];
+  for (const index of indices) {
+    const category = rows[index][MESH_CATEGORY];
+    counts[category] = (counts[category] || 0) + 1;
+  }
+  let modal = -1;
+  let most = 0;
+  for (let category = 0; category < counts.length; category += 1) {
+    if ((counts[category] || 0) > most) {
+      most = counts[category];
+      modal = category;
+    }
+  }
+  let best = -1;
+  for (const index of indices) {
+    const row = rows[index];
+    if (row[MESH_CATEGORY] !== modal) continue;
+    if (best < 0 || (row[MESH_WEIGHT] || 0) > (rows[best][MESH_WEIGHT] || 0)) best = index;
+  }
+  return best < 0 ? indices[0] : best;
+}
+
+/** The finest step a world pick starts from: ~110 m of latitude. */
+export const MESH_WORLD_MIN_STEP_DEG = 1 / 1024;
+/** Share of a world pick's budget spent on one representative per cell. */
+export const MESH_WORLD_REP_SHARE = 0.5;
+/** Fill thresholds are 2^(-level / 4): a quarter power of two per level. */
+const FILL_LEVELS_PER_OCTAVE = 4;
+const FILL_MAX_LEVEL = 255;
+
+/**
+ * A row's fixed priority in [0, 1), from its own coordinates.
+ *
+ * A 32-bit integer mix of the 1e-5° grid indices (the precision the national
+ * meshes are published at): the same row gets the same number on every call,
+ * in every browser, whatever else is in view. That is the whole property the
+ * density fill below rests on.
+ */
+export function meshRowPriority(row) {
+  let h = Math.imul(Math.round(row[MESH_LAT] * 1e5), 0x9e3779b1) ^ Math.round(row[MESH_LON] * 1e5);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * Pick a bounded subset of the rows inside a box that a PAN DOES NOT RESHUFFLE.
+ *
+ * WHY. The view-relative grid of {@link selectGeoMesh} is recomputed from the
+ * box, so every pan moves every cell boundary and re-elects most of its
+ * winners: measured in the browser on the 72 746 ANFR supports, a France view
+ * panned by 3 % of its altitude kept 5 to 36 % of its dots from one step to
+ * the next — the map rained dots, which the reader took for a reload.
+ *
+ * HOW, in two halves, neither of which looks at the box beyond "is this row
+ * inside it":
+ *
+ *   1. COVERAGE. Cells locked to the graticule, at the finest power-of-two
+ *      step from {@link MESH_WORLD_MIN_STEP_DEG} whose occupied cells fit
+ *      {@link MESH_WORLD_REP_SHARE} of the budget — a quadtree, so a coarser
+ *      step merges four cells rather than reshuffling them. Each cell draws
+ *      its representative ({@link cellRepresentative}'s rule: the heaviest
+ *      row of its most common category), so empty country keeps its marks.
+ *   2. DENSITY. The rest of the budget goes to every other row whose fixed
+ *      {@link meshRowPriority} is under 2^(-level/4), at the lowest level that
+ *      fits. A uniform sample of the rows, so a city draws more marks than a
+ *      plateau, as the view-relative stride did — and a nested one: a zoom
+ *      that moves the threshold adds or removes marks, never swaps them.
+ *
+ * A view that holds no more rows than the budget draws them all.
+ *
+ * NO AGGREGATES, on purpose: these are individual rows, several to a cell, and
+ * must never be read as one mark standing for its cell. Callers that print
+ * per-cell totals use the `lattice` option of {@link selectGeoMesh}.
+ *
+ * @param {Array<Array<number>>} rows In position order ({@link byPosition}),
+ *   as every national mesh this module serves already is.
+ * @param {object} options
+ * @param {{south:number, west:number, north:number, east:number}} options.box
+ * @param {number} options.budget Row cap.
+ * @param {number} [options.minStepDeg]
+ * @returns {{picked:Array<Array<number>>, inBox:number, budget:number,
+ *   thinned:boolean, cells:number, stepDeg?:?number, fillLevel?:?number}}
+ */
+export function selectGeoMeshWorld(rows, { box, budget, minStepDeg = MESH_WORLD_MIN_STEP_DEG } = {}) {
+  if (!box) return { picked: [], inBox: 0, budget: 0, thinned: false, cells: 0 };
+  const cap = Math.max(0, Math.floor(Number.isFinite(budget) ? budget : 0));
+  const inside = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (meshRowInBox(row, box)) inside.push(row);
+  }
+  const n = inside.length;
+  if (!cap || !n) {
+    return { picked: [], inBox: n, budget: cap, thinned: n > 0, cells: 0 };
+  }
+  if (n <= cap) {
+    return { picked: inside, inBox: n, budget: cap, thinned: false, cells: 0, stepDeg: null, fillLevel: null };
+  }
+
+  // 1. Coverage — cell indices at the finest step, once; a coarser step is a
+  // right shift of the same integers, so every level stays graticule-locked.
+  const repCap = Math.max(1, Math.floor(cap * MESH_WORLD_REP_SHARE));
+  const finest = Math.min(MESH_LATTICE_MAX_STEP_DEG, Math.max(MESH_LATTICE_MIN_STEP_DEG, minStepDeg));
+  const ci = new Int32Array(n);
+  const cj = new Int32Array(n);
+  let minI = Infinity;
+  let maxI = -Infinity;
+  let minJ = Infinity;
+  let maxJ = -Infinity;
+  for (let x = 0; x < n; x += 1) {
+    const i = Math.floor(inside[x][MESH_LAT] / finest);
+    const j = Math.floor(inside[x][MESH_LON] / finest);
+    ci[x] = i;
+    cj[x] = j;
+    if (i < minI) minI = i;
+    if (i > maxI) maxI = i;
+    if (j < minJ) minJ = j;
+    if (j > maxJ) maxJ = j;
+  }
+  // Small integer keys — offsets from the view's first cell at that level —
+  // because a Set of doubles past 2^31 made the France-wide pick 20 ms.
+  const keysAt = (level) => {
+    const i0 = minI >> level;
+    const j0 = minJ >> level;
+    const width = (maxJ >> level) - j0 + 1;
+    const keys = new Int32Array(n);
+    for (let x = 0; x < n; x += 1) keys[x] = ((ci[x] >> level) - i0) * width + ((cj[x] >> level) - j0);
+    return keys;
+  };
+  const countDistinct = (keys) => {
+    const seen = new Set();
+    for (let x = 0; x < n; x += 1) seen.add(keys[x]);
+    return seen.size;
+  };
+  // A level merges at most four cells into one, so a count `c` over the cap
+  // rules out the next ceil(log4(c / cap)) - 1 levels: skip them, then step
+  // back while the finer level still fits.
+  const maxLevel = Math.max(0, Math.floor(Math.log2(MESH_LATTICE_MAX_STEP_DEG / finest)));
+  let level = 0;
+  while (((maxJ - minJ + 1) * (maxI - minI + 1)) / 4 ** level > 2 ** 30 && level < maxLevel) level += 1;
+  let keys = keysAt(level);
+  let occupied = countDistinct(keys);
+  while (occupied > repCap && level < maxLevel) {
+    level = Math.min(maxLevel, level + Math.max(1, Math.ceil(Math.log(occupied / repCap) / Math.log(4))));
+    keys = keysAt(level);
+    occupied = countDistinct(keys);
+  }
+  while (level > 0) {
+    const finer = keysAt(level - 1);
+    if (countDistinct(finer) > repCap) break;
+    level -= 1;
+    keys = finer;
+  }
+  const stepDeg = finest * 2 ** level;
+  const cells = new Map();
+  for (let x = 0; x < n; x += 1) {
+    const members = cells.get(keys[x]);
+    if (members) members.push(x);
+    else cells.set(keys[x], [x]);
+  }
+  const reps = [];
+  for (const members of cells.values()) reps.push(representativeOf(inside, members));
+  if (reps.length >= cap) {
+    // Even the coarsest step holds more cells than budget (a world view over
+    // scattered territories): the heaviest representatives, as `selectGeoMesh`
+    // does, so the budget stays a ceiling.
+    const best = reps.map((x) => inside[x]).sort(byWeight).slice(0, cap);
+    return { picked: best, inBox: n, budget: cap, thinned: true, cells: cells.size, stepDeg, fillLevel: null };
+  }
+
+  // 2. Density — the other rows under a fixed-priority threshold.
+  const isRep = new Uint8Array(n);
+  for (const x of reps) isRep[x] = 1;
+  const rowLevel = new Uint8Array(n);
+  const histogram = new Uint32Array(FILL_MAX_LEVEL + 1);
+  for (let x = 0; x < n; x += 1) {
+    if (isRep[x]) continue;
+    const p = meshRowPriority(inside[x]);
+    const at = p > 0 ? Math.min(FILL_MAX_LEVEL, Math.floor(-FILL_LEVELS_PER_OCTAVE * Math.log2(p))) : FILL_MAX_LEVEL;
+    rowLevel[x] = at;
+    histogram[at] += 1;
+  }
+  // A row is drawn at threshold level `m` when its own level is `m` or more.
+  const room = cap - reps.length;
+  let fillLevel = FILL_MAX_LEVEL + 1;
+  let drawn = 0;
+  while (fillLevel > 0 && drawn + histogram[fillLevel - 1] <= room) {
+    fillLevel -= 1;
+    drawn += histogram[fillLevel];
+  }
+  const picked = [];
+  for (let x = 0; x < n; x += 1) {
+    if (isRep[x] || rowLevel[x] >= fillLevel) picked.push(inside[x]);
+  }
+  return {
+    picked,
+    inBox: n,
+    budget: cap,
+    thinned: picked.length < n,
+    cells: cells.size,
+    stepDeg,
+    fillLevel,
+  };
+}

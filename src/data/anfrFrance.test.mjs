@@ -821,6 +821,48 @@ test('init builds the three real collections, and the draw path fills them', asy
   assert.equal(added.length, 0, 'destroy removes every collection it added');
 });
 
+test('a reload of the view keeps the selected mast and its card, and lets go once it leaves', async () => {
+  // Every camera settle rebuilds the dots. It used to clear the selection with
+  // them, so the card the reader had just opened closed on the next pan.
+  const added = [];
+  const viewer = {
+    ...fakeViewer(2.30, 48.84, 2.36, 48.88),
+    scene: {
+      requestRender() {},
+      primitives: {
+        add(primitive) { added.push(primitive); return primitive; },
+        remove(primitive) { return added.splice(added.indexOf(primitive), 1).length > 0; },
+        contains() { return true; },
+        raiseToTop() {},
+      },
+    },
+  };
+  anfrFranceLayer.init(viewer);
+  let pack = PACK;
+  const http = async (url) => ({
+    ok: true,
+    json: async () => (url.startsWith('/api/anfr-fr/supports') ? pack : MESH_PAYLOAD),
+  });
+  const host = makeHost();
+  _setAnfrStateForTest({ viewer, overlayHost: host, http, regime: 'maillage' });
+  await _loadAnfrViewportForTest(viewer);
+  const id = anfrSupportId(449714);
+  _selectAnfrForTest(id);
+  const selectedSize = _anfrRecordForTest(id).point.pixelSize;
+
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(_anfrSelectedIdForTest(), id, 'still selected after the rebuild');
+  assert.equal(_anfrRecordForTest(id).point.pixelSize, selectedSize, 'and still lit, on its new dot');
+  assert.equal(host.entries?.[0]?.id, id, 'its card is still published');
+
+  pack = { ...PACK, supports: PACK.supports.filter((row) => row.id !== 449714) };
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(_anfrSelectedIdForTest(), null, 'gone from the view, gone from the selection');
+  assert.equal(host.entries, null);
+
+  anfrFranceLayer.destroy(viewer);
+});
+
 test('the overlay entry is anchored, protected and single', () => {
   const record = {
     id: anfrSupportId(449714),

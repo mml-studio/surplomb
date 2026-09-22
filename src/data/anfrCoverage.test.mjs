@@ -51,16 +51,26 @@ function tilesetDouble() {
   const imageryLayers = imageryDouble();
   Object.defineProperty(tileset, 'imageryLayers', { value: imageryLayers });
   Object.defineProperty(tileset, 'isDestroyed', { value: () => false });
+  Object.defineProperty(tileset, 'tilesLoaded', { value: true });
   return tileset;
 }
 
 function viewerDouble({ globeShow = true, ground = { lon: 2.35, lat: 48.85 }, groundHeight = 35, tileset = null } = {}) {
   const hit = Cesium.Cartesian3.fromDegrees(ground.lon, ground.lat, groundHeight);
   const primitives = tileset ? [tileset] : [];
+  const frames = [];
   return {
     imageryLayers: imageryDouble(),
+    /** Render one frame, as far as the layer's postRender listeners can tell. */
+    renderFrame() { for (const listener of [...frames]) listener(); },
     scene: {
       requestRender() {},
+      postRender: {
+        addEventListener(listener) {
+          frames.push(listener);
+          return () => frames.splice(frames.indexOf(listener), 1);
+        },
+      },
       primitives: { get length() { return primitives.length; }, get: (i) => primitives[i], add: (p) => primitives.push(p) },
       // A hidden globe answers no height, as the real one does on Google 3D.
       globe: {
@@ -68,6 +78,7 @@ function viewerDouble({ globeShow = true, ground = { lon: 2.35, lat: 48.85 }, gr
         ellipsoid: Cesium.Ellipsoid.WGS84,
         pick: () => hit,
         getHeight: () => (globeShow ? groundHeight : undefined),
+        tilesLoaded: true,
       },
       camera: { getPickRay: () => ({}) },
       pickPositionSupported: !globeShow,
@@ -129,8 +140,17 @@ test('one imagery layer on the globe for the mode, swapped on a mode change, gon
   const first = viewer.imageryLayers.layers[0];
   assert.ok(first instanceof Cesium.ImageryLayer);
   anfrFranceLayer.setParams({ coverage: 'sfr' });
+  // The next mode loads out of sight while the current one stays on screen:
+  // removing first left the map bare for the frames the new tiles took.
+  assert.equal(viewer.imageryLayers.layers.length, 2);
+  assert.equal(viewer.imageryLayers.layers[0], first);
+  assert.equal(viewer.imageryLayers.layers[1].alpha, 0);
+  viewer.renderFrame();
+  assert.equal(viewer.imageryLayers.layers.length, 2, 'one settled frame is not yet enough');
+  viewer.renderFrame();
   assert.equal(viewer.imageryLayers.layers.length, 1);
   assert.notEqual(viewer.imageryLayers.layers[0], first);
+  assert.equal(viewer.imageryLayers.layers[0].alpha, 1);
   assert.equal(anfrFranceLayer.getStats().coverage.mode, 'sfr');
   assert.equal(anfrFranceLayer.getStats().coverage.drawn, true);
   anfrFranceLayer.setParams({ coverage: 'off' });
@@ -175,13 +195,53 @@ test('the mode is draped on Google’s mesh too, bought late or early, swapped a
   _anfrMapStackChangedForTest({ status: 'ready', activeId: 'ign-ortho' });
   assert.equal(tileset.imageryLayers.layers.length, 1);
 
+  // The mesh is replaced at once: a second draped layer, even at alpha 0,
+  // rebuilds every loaded tile's draw commands and froze Google 3D 528 ms.
   anfrFranceLayer.setParams({ coverage: 'free' });
   assert.equal(tileset.imageryLayers.layers.length, 1);
   assert.notEqual(tileset.imageryLayers.layers[0], draped);
+  assert.equal(tileset.imageryLayers.layers[0].alpha, 1);
 
   anfrFranceLayer.setParams({ coverage: 'off' });
   assert.equal(tileset.imageryLayers.layers.length, 0);
   assert.equal(anfrFranceLayer.getStats().coverage.draped, false);
+});
+
+test('a swap waits for its tiles, gives up waiting after a second and a half, and follows a second press', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const viewer = viewerDouble();
+  _setAnfrCoverageForTest({ viewer, mode: 'gaps', meta: META, enabled: true });
+  anfrFranceLayer.setParams({ coverage: 'orange' });
+  const incoming = viewer.imageryLayers.layers[1];
+  // Tiles still owed: the swap holds.
+  incoming.imageryProvider.coveragePending = () => 3;
+  viewer.renderFrame();
+  viewer.renderFrame();
+  assert.equal(viewer.imageryLayers.layers.length, 2);
+  // A second press before it lands re-aims the swap rather than stacking one.
+  anfrFranceLayer.setParams({ coverage: 'sfr' });
+  assert.equal(viewer.imageryLayers.layers.length, 2);
+  assert.notEqual(viewer.imageryLayers.layers[1], incoming);
+  viewer.imageryLayers.layers[1].imageryProvider.coveragePending = () => 1;
+  t.mock.timers.tick(1_501);
+  viewer.renderFrame();
+  assert.equal(viewer.imageryLayers.layers.length, 1);
+  assert.equal(anfrFranceLayer.getStats().coverage.mode, 'sfr');
+  // Back to the mode on screen during a swap: the swap is simply dropped.
+  anfrFranceLayer.setParams({ coverage: 'free' });
+  anfrFranceLayer.setParams({ coverage: 'sfr' });
+  assert.equal(viewer.imageryLayers.layers.length, 1);
+  assert.equal(viewer.imageryLayers.layers[0].alpha, 1);
+});
+
+test('switching the row off mid-swap removes both layers', () => {
+  const viewer = viewerDouble();
+  _setAnfrCoverageForTest({ viewer, mode: 'gaps', meta: META, enabled: true });
+  anfrFranceLayer.setParams({ coverage: 'bouygues' });
+  anfrFranceLayer.setParams({ coverage: 'off' });
+  assert.equal(viewer.imageryLayers.layers.length, 0);
+  viewer.renderFrame();
+  assert.equal(viewer.imageryLayers.layers.length, 0);
 });
 
 test('a mesh already bought gets the drape the moment the coverage is switched on', () => {
@@ -198,7 +258,7 @@ test('on Google 3D the ground card stands on the mesh, not at sea level', () => 
   assert.ok(height > 2400, `card at ${height} m`);
 });
 
-test('a click on bare ground opens the card, reads the point, and rewrites the card with the four operators', async () => {
+test('a click on bare ground reads the point and shows the card once, with its answer', async () => {
   const host = hostDouble();
   const viewer = viewerDouble();
   let asked = null;
@@ -214,16 +274,60 @@ test('a click on bare ground opens the card, reads the point, and rewrites the c
     },
   });
   assert.equal(_openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 }), true);
-  assert.equal(_anfrCoverageCardForTest().text, 'Réseau 4G ici\nChargement…');
+  // Nothing on screen yet: a « Chargement… » card rewritten 20 ms later into a
+  // taller one standing elsewhere is what the reader saw as a flicker.
+  assert.equal(_anfrCoverageCardForTest().text, null);
+  assert.equal(host.calls.filter((call) => call.entries).length, 0);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(Math.abs(asked.lon - 2.35) < 1e-6 && Math.abs(asked.lat - 48.85) < 1e-6);
   const lines = _anfrCoverageCardForTest().text.split('\n');
   assert.equal(lines[0], '2 opérateurs sur 4 captent ici');
   assert.equal(lines[1], 'Orange : très bon');
   assert.equal(lines[3], 'Bouygues : faible (dehors seulement)');
-  const published = host.calls.filter((call) => call.entries).at(-1);
-  assert.equal(published.source, ANFR_FR_OVERLAY_SOURCE_ID);
-  assert.equal(published.entries[0].id, 'anfr-fr:coverage');
+  const published = host.calls.filter((call) => call.entries);
+  assert.equal(published.length, 1, 'published once, with the answer');
+  assert.equal(published[0].source, ANFR_FR_OVERLAY_SOURCE_ID);
+  assert.equal(published[0].entries[0].id, 'anfr-fr:coverage');
+  assert.equal(published[0].entries[0].title, '2 opérateurs sur 4 captent ici');
+});
+
+test('a read slower than a quarter of a second says it is reading, then answers', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const host = hostDouble();
+  const viewer = viewerDouble();
+  let release;
+  _setAnfrCoverageForTest({
+    viewer, mode: 'gaps', meta: META, enabled: true, overlayHost: host,
+    read: () => new Promise((resolve) => { release = resolve; }),
+  });
+  assert.equal(_openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 }), true);
+  t.mock.timers.tick(249);
+  assert.equal(host.calls.filter((call) => call.entries).length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(_anfrCoverageCardForTest().text, 'Réseau 4G ici\nChargement…');
+  release({ inside: true, code: 0 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(_anfrCoverageCardForTest().text.split('\n')[0], 'Zone blanche : pas de 4G ici');
+  assert.equal(host.calls.filter((call) => call.entries).length, 2);
+});
+
+test('a second click keeps the open card on screen until the new answer replaces it', async () => {
+  const host = hostDouble();
+  const viewer = viewerDouble();
+  let release = null;
+  _setAnfrCoverageForTest({
+    viewer, mode: 'gaps', meta: META, enabled: true, overlayHost: host,
+    read: () => new Promise((resolve) => { release = resolve; }),
+  });
+  _openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 });
+  release({ inside: true, code: 0 });
+  await new Promise((resolve) => setImmediate(resolve));
+  _openAnfrCoverageCardForTest(viewer, { x: 20, y: 20 });
+  assert.equal(host.calls.filter((call) => call.cleared).length, 0, 'the first card is never cleared in between');
+  release({ inside: true, code: encodeCoverage([3, 3, 3, 3]) });
+  await new Promise((resolve) => setImmediate(resolve));
+  const last = host.calls.filter((call) => call.entries).at(-1);
+  assert.equal(last.entries[0].title, 'Les 4 opérateurs captent ici');
 });
 
 test('with the coverage off, a ground click is not taken — it falls through to a dismissal', () => {
