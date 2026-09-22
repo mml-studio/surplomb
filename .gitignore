@@ -17,3 +17,8 @@ output/
 # Pinokio keeps its app-scoped credential store and install marker here.
 pinokio/ENVIRONMENT
 pinokio/.installed
+
+# Doctors' names: each deployment builds them into .gev-cache/, and they are
+# never committed (src/data/local_data/medecins_fr/README.md says why).
+src/data/local_data/medecins_fr/praticiens.jsonl
+src/data/local_data/medecins_fr/praticiens.jsonl.gz
