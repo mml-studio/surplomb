@@ -20,13 +20,23 @@
  * 'none' })`. Alpha is 0 or 255 and nothing else, so the canvas's internal
  * premultiplication cannot round a code either.
  *
- * ── ON THE GLOBE ONLY ───────────────────────────────────────────────────────
- * The layer is added to `viewer.imageryLayers`, which the photorealistic stack
- * hides with the globe. That is deliberate for now: draping imagery on the
- * Google mesh is an experimental Cesium path this repository has never run,
- * it would climb façades (CARTOGRAPHY F4), and it cannot be exercised by the
- * headless QA fleet, which stays off the metered tiles. The row says so rather
- * than drawing nothing silently (A4).
+ * ── ON THE GLOBE AND ON GOOGLE'S MESH ───────────────────────────────────────
+ * The photorealistic stack hides the globe, and `viewer.imageryLayers` with
+ * it, so the layer owner adds a SECOND layer over the same pyramid to the
+ * tileset's own `imageryLayers` (Cesium ≥ 1.131, marked experimental). Only
+ * the surface on screen is traversed, so the hidden one requests nothing.
+ *
+ * Two things differ on the mesh. Cesium clamps a draped layer's level to
+ * `[minimumLevel, maximumLevel)` — the globe's range is inclusive — so the
+ * draped provider declares one level more than the pyramid holds, and
+ * `requestImage` answers any level past the finest by magnifying a quarter of
+ * its ancestor. Without it the mesh would show zoom 11, whose pixels are the
+ * MODE of four, and could contradict the card, which reads zoom 12.
+ *
+ * And the colour climbs façades (CARTOGRAPHY F4): the drape is vertical, so a
+ * wall wears the pixel at its foot. Accepted here because the ink is where the
+ * network is missing, and that is almost never where the buildings are: in
+ * `gaps` mode a town with the four operators is not painted at all.
  */
 
 import * as Cesium from 'cesium';
@@ -73,6 +83,30 @@ export function coverageCodeAt(rgba, px, py) {
   return rgba[p];
 }
 
+/**
+ * Where a tile past the pyramid's finest zoom is read from: the ancestor at
+ * `maxZoom`, and the square of it, in pixels, that the tile magnifies.
+ * @returns {{z:number, x:number, y:number, sx:number, sy:number, size:number}}
+ */
+export function coverageOverzoomSource(level, x, y, maxZoom) {
+  const over = Math.max(0, level - maxZoom);
+  const ax = x >> over;
+  const ay = y >> over;
+  const size = COVERAGE_TILE_PX >> over;
+  return { z: level - over, x: ax, y: ay, sx: (x - (ax << over)) * size, sy: (y - (ay << over)) * size, size };
+}
+
+function magnify(canvas, { sx, sy, size }) {
+  const out = document.createElement('canvas');
+  out.width = COVERAGE_TILE_PX;
+  out.height = COVERAGE_TILE_PX;
+  const context = out.getContext('2d');
+  // Nearest neighbour: a smoothed edge would invent colours between two rungs.
+  context.imageSmoothingEnabled = false;
+  context.drawImage(canvas, sx, sy, size, size, 0, 0, COVERAGE_TILE_PX, COVERAGE_TILE_PX);
+  return out;
+}
+
 function decodeToCanvas(image) {
   const canvas = document.createElement('canvas');
   canvas.width = COVERAGE_TILE_PX;
@@ -94,9 +128,10 @@ function decodeToCanvas(image) {
  *
  * @param {object} meta The pyramid's meta.json
  * @param {Uint32Array} lut
- * @param {{credit?: string}} [options]
+ * @param {{credit?: string, drape?: boolean}} [options] `drape`: for a
+ *   tileset's `imageryLayers`, one level past the pyramid — see the header.
  */
-export function createCoverageImageryProvider(meta, lut, { credit } = {}) {
+export function createCoverageImageryProvider(meta, lut, { credit, drape = false } = {}) {
   const [west, south, east, north] = meta.bounds || [-5.5, 41.2, 9.8, 51.2];
   const provider = new Cesium.UrlTemplateImageryProvider({
     url: coverageTileUrl(meta.edition, '{z}', '{x}', '{y}').replace(/%7B/g, '{').replace(/%7D/g, '}'),
@@ -104,15 +139,16 @@ export function createCoverageImageryProvider(meta, lut, { credit } = {}) {
     tilingScheme: new Cesium.WebMercatorTilingScheme(),
     rectangle: Cesium.Rectangle.fromDegrees(west, south, east, north),
     minimumLevel: meta.minZoom,
-    maximumLevel: meta.maxZoom,
+    maximumLevel: meta.maxZoom + (drape ? 1 : 0),
     tileWidth: COVERAGE_TILE_PX,
     tileHeight: COVERAGE_TILE_PX,
     hasAlphaChannel: true,
     credit,
   });
   provider.requestImage = (x, y, level, request) => {
-    if (!coverageTileExists(meta, level, x, y)) return Promise.resolve(emptyCanvas());
-    const resource = new Cesium.Resource({ url: coverageTileUrl(meta.edition, level, x, y, meta.builtAt), request });
+    const source = coverageOverzoomSource(level, x, y, meta.maxZoom);
+    if (!coverageTileExists(meta, source.z, source.x, source.y)) return Promise.resolve(emptyCanvas());
+    const resource = new Cesium.Resource({ url: coverageTileUrl(meta.edition, source.z, source.x, source.y, meta.builtAt), request });
     const pending = resource.fetchImage({ preferImageBitmap: true, skipColorSpaceConversion: true, flipY: false });
     // `undefined` is Cesium's "throttled, ask again next frame".
     if (!pending) return undefined;
@@ -120,7 +156,7 @@ export function createCoverageImageryProvider(meta, lut, { credit } = {}) {
       const { canvas, context, image } = decodeToCanvas(bitmap);
       paintCoverageRgba(image.data, lut);
       context.putImageData(image, 0, 0);
-      return canvas;
+      return source.z === level ? canvas : magnify(canvas, source);
     });
   };
   return provider;

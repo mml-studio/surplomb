@@ -169,7 +169,7 @@ test('a scope with no location does not throw', () => {
   assert.equal(photorealDisabled(null), false);
 });
 
-test('the desktop options are byte-for-byte what they have always been', () => {
+test('the desktop options are pinned whole, and no phone lever leaks into them', () => {
   // The phone ceilings are a NEW branch, not a rewrite of the old one. A
   // desktop that started degrading its mesh because a phone needed less memory
   // would be a regression nobody looked for, so the old object is pinned whole
@@ -178,6 +178,9 @@ test('the desktop options are byte-for-byte what they have always been', () => {
     cacheBytes: 1536 * 1024 * 1024,
     maximumCacheOverflowBytes: 1024 * 1024 * 1024,
     enableCollision: true,
+    // Inert until a layer drapes imagery on the mesh; then the difference
+    // between a mesh that waits for the drape and one that shows meanwhile.
+    asynchronouslyLoadImagery: true,
   });
   assert.equal(DESKTOP_CACHE_BYTES, 1536 * 1024 * 1024);
   assert.equal(DESKTOP_CACHE_OVERFLOW_BYTES, 1024 * 1024 * 1024);
@@ -194,6 +197,7 @@ test('a phone declares a sixth of the cache, and keeps its collisions', () => {
   // NOT a memory lever, and switching it off would break `Scene.getHeight` —
   // the camera's floor under a pinch — plus every CLAMP_TO_GROUND placement.
   assert.equal(options.enableCollision, true);
+  assert.equal(options.asynchronouslyLoadImagery, true);
   // The declared ceiling plus its overflow has to leave room for the heap, the
   // imagery under the mesh and the terrain inside a ~1.2 GB process budget.
   assert.ok(

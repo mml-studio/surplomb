@@ -9,6 +9,7 @@ import * as Cesium from 'cesium';
 import anfrFranceLayer, {
   ANFR_FR_OVERLAY_SOURCE_ID,
   _anfrCoverageCardForTest,
+  _anfrMapStackChangedForTest,
   _openAnfrCoverageCardForTest,
   _setAnfrCoverageForTest,
 } from './anfrFrance.js';
@@ -41,15 +42,36 @@ function imageryDouble() {
   };
 }
 
-function viewerDouble({ globeShow = true, ground = { lon: 2.35, lat: 48.85 } } = {}) {
-  const hit = Cesium.Cartesian3.fromDegrees(ground.lon, ground.lat, 35);
+/**
+ * A `Cesium3DTileset` as far as the layer can tell — the prototype is what
+ * `instanceof` reads — without a network or a WebGL context behind it.
+ */
+function tilesetDouble() {
+  const tileset = Object.create(Cesium.Cesium3DTileset.prototype);
+  const imageryLayers = imageryDouble();
+  Object.defineProperty(tileset, 'imageryLayers', { value: imageryLayers });
+  Object.defineProperty(tileset, 'isDestroyed', { value: () => false });
+  return tileset;
+}
+
+function viewerDouble({ globeShow = true, ground = { lon: 2.35, lat: 48.85 }, groundHeight = 35, tileset = null } = {}) {
+  const hit = Cesium.Cartesian3.fromDegrees(ground.lon, ground.lat, groundHeight);
+  const primitives = tileset ? [tileset] : [];
   return {
     imageryLayers: imageryDouble(),
     scene: {
       requestRender() {},
-      globe: { show: globeShow, ellipsoid: Cesium.Ellipsoid.WGS84, pick: () => hit, getHeight: () => 35 },
+      primitives: { get length() { return primitives.length; }, get: (i) => primitives[i], add: (p) => primitives.push(p) },
+      // A hidden globe answers no height, as the real one does on Google 3D.
+      globe: {
+        show: globeShow,
+        ellipsoid: Cesium.Ellipsoid.WGS84,
+        pick: () => hit,
+        getHeight: () => (globeShow ? groundHeight : undefined),
+      },
       camera: { getPickRay: () => ({}) },
-      pickPositionSupported: false,
+      pickPositionSupported: !globeShow,
+      pickPosition: () => hit,
     },
   };
 }
@@ -116,7 +138,7 @@ test('one imagery layer on the globe for the mode, swapped on a mode change, gon
   assert.equal(anfrFranceLayer.getStats().coverage.drawn, false);
 });
 
-test('the key carries the coverage block, whose estimate it is, and how to use it — and on Google 3D, only why nothing shows', () => {
+test('the key carries the coverage block, whose estimate it is, and how to use it — on Google 3D too', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: META, enabled: true });
   const controls = anfrFranceLayer.getRowControls();
   const labels = controls.legend.map((entry) => entry.label);
@@ -126,10 +148,54 @@ test('the key carries the coverage block, whose estimate it is, and how to use i
   assert.equal(controls.note,
     'Estimation des opérateurs, publiée par l’ARCEP (mars 2026). Cliquez sur la carte pour voir le réseau à un endroit. Métropole seulement.');
 
-  _setAnfrCoverageForTest({ viewer: viewerDouble({ globeShow: false }), mode: 'gaps', meta: META, enabled: true });
-  const photoreal = anfrFranceLayer.getRowControls().legend;
-  assert.deepEqual(photoreal.map((entry) => entry.color ?? null).filter(Boolean), []);
-  assert.match(photoreal.at(-1).label, /^Pas visible en vue Google 3D/);
+  // The colours are draped on the mesh now, so the key is the same key.
+  _setAnfrCoverageForTest({ viewer: viewerDouble({ globeShow: false, tileset: tilesetDouble() }), mode: 'gaps', meta: META, enabled: true });
+  assert.deepEqual(anfrFranceLayer.getRowControls().legend, controls.legend);
+});
+
+test('the mode is draped on Google’s mesh too, bought late or early, swapped and removed with the globe’s', () => {
+  const tileset = tilesetDouble();
+  const viewer = viewerDouble();
+  _setAnfrCoverageForTest({ viewer, mode: 'gaps', meta: META, enabled: true });
+  // No mesh in this session yet: the globe alone.
+  assert.equal(anfrFranceLayer.getStats().coverage.draped, false);
+
+  // The reader switches to Google 3D: the mesh is bought, the stack announces it.
+  viewer.scene.primitives.add(tileset);
+  _anfrMapStackChangedForTest({ status: 'ready', activeId: 'photoreal' });
+  assert.equal(tileset.imageryLayers.layers.length, 1);
+  const draped = tileset.imageryLayers.layers[0];
+  assert.ok(draped instanceof Cesium.ImageryLayer);
+  assert.notEqual(draped, viewer.imageryLayers.layers[0], 'one layer per collection, never shared');
+  // One level past the pyramid: Cesium drapes in [minimumLevel, maximumLevel).
+  assert.equal(draped.imageryProvider.maximumLevel, META.maxZoom + 1);
+  assert.equal(anfrFranceLayer.getStats().coverage.draped, true);
+
+  // A second announcement does not stack a second drape.
+  _anfrMapStackChangedForTest({ status: 'ready', activeId: 'ign-ortho' });
+  assert.equal(tileset.imageryLayers.layers.length, 1);
+
+  anfrFranceLayer.setParams({ coverage: 'free' });
+  assert.equal(tileset.imageryLayers.layers.length, 1);
+  assert.notEqual(tileset.imageryLayers.layers[0], draped);
+
+  anfrFranceLayer.setParams({ coverage: 'off' });
+  assert.equal(tileset.imageryLayers.layers.length, 0);
+  assert.equal(anfrFranceLayer.getStats().coverage.draped, false);
+});
+
+test('a mesh already bought gets the drape the moment the coverage is switched on', () => {
+  const tileset = tilesetDouble();
+  _setAnfrCoverageForTest({ viewer: viewerDouble({ globeShow: false, tileset }), mode: 'sfr', meta: META, enabled: true });
+  assert.equal(tileset.imageryLayers.layers.length, 1);
+});
+
+test('on Google 3D the ground card stands on the mesh, not at sea level', () => {
+  const viewer = viewerDouble({ globeShow: false, tileset: tilesetDouble(), ground: { lon: 6.93, lat: 45.9 }, groundHeight: 2400 });
+  _setAnfrCoverageForTest({ viewer, mode: 'gaps', meta: META, enabled: true, read: async () => ({ inside: true, code: 0 }) });
+  assert.equal(_openAnfrCoverageCardForTest(viewer, { x: 10, y: 10 }), true);
+  const height = Cesium.Cartographic.fromCartesian(_anfrCoverageCardForTest().position).height;
+  assert.ok(height > 2400, `card at ${height} m`);
 });
 
 test('a click on bare ground opens the card, reads the point, and rewrites the card with the four operators', async () => {

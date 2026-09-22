@@ -149,6 +149,13 @@ export const PHONE_MAX_SCREEN_SPACE_ERROR = 24;
  * otherwise loads the destination AND the current view at once, which is two
  * peaks of tile memory stacked on the one device that cannot hold one.
  *
+ * `asynchronouslyLoadImagery` is ON for both. It only matters once a data
+ * layer drapes imagery on the mesh (`anfr-fr`'s 4G coverage does), and its
+ * default holds every tile of Google's mesh off screen until the draped
+ * imagery over it has arrived: adding one layer would blank the whole view
+ * for as long as its tiles take. On, the mesh keeps its own photograph and the
+ * colour appears over it tile by tile.
+ *
  * @param {{phone?: boolean}} [options] - `phone` is injected for tests; the
  *   default is the session's own answer.
  * @returns {object}
@@ -159,12 +166,14 @@ export function photorealTilesetOptions({ phone = isPhoneShell() } = {}) {
       cacheBytes: DESKTOP_CACHE_BYTES,
       maximumCacheOverflowBytes: DESKTOP_CACHE_OVERFLOW_BYTES,
       enableCollision: true,
+      asynchronouslyLoadImagery: true,
     };
   }
   return {
     cacheBytes: PHONE_CACHE_BYTES,
     maximumCacheOverflowBytes: PHONE_CACHE_OVERFLOW_BYTES,
     enableCollision: true,
+    asynchronouslyLoadImagery: true,
     maximumScreenSpaceError: PHONE_MAX_SCREEN_SPACE_ERROR,
     preloadFlightDestinations: false,
   };

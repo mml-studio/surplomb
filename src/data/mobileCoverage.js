@@ -229,6 +229,14 @@ export function coverageTileUrl(edition, z, x, y, stamp = '') {
  */
 export const COVERAGE_RAMP = Object.freeze(['#f0287a', '#ff6aa5', '#ffa3c8', '#ffd6e7']);
 export const COVERAGE_ALPHA = 0.6;
+/**
+ * The same ramp draped on Google's mesh, where Cesium blends imagery in LINEAR
+ * light rather than in sRGB as the globe does — which weighs a light colour
+ * over a dark surface more. At 0.6 the rungs read at 0.64–0.68 on the Mont-
+ * Blanc mesh against 0.60 on the globe (fitted from on/off screenshots of the
+ * same view); 0.52 brings them back. Still one alpha for every rung (B3).
+ */
+export const COVERAGE_DRAPE_ALPHA = 0.52;
 
 /**
  * The rung a code is painted in, or -1 for "not painted".
@@ -260,9 +268,9 @@ function packRgba(hex, alpha) {
 }
 
 /** 256 packed colours, one per code, for `paintCoverageRgba`. */
-export function coverageLut(mode) {
+export function coverageLut(mode, alpha = COVERAGE_ALPHA) {
   const lut = new Uint32Array(256);
-  const rungs = COVERAGE_RAMP.map((hex) => packRgba(hex, COVERAGE_ALPHA));
+  const rungs = COVERAGE_RAMP.map((hex) => packRgba(hex, alpha));
   for (let code = 0; code < 256; code++) {
     const rung = coverageRung(code, mode);
     lut[code] = rung < 0 ? 0 : rungs[rung];
