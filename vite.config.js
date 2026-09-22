@@ -28679,8 +28679,9 @@ function accessGatePlugin() {
       res.end(JSON.stringify({
         ok: true,
         gated: Boolean(process.env.GEV_ACCESS_PASSWORD),
-        // Whether /mentions-legales names a publisher. A public origin that
-        // answers `false` here is serving a page the law requires, empty.
+        // Whether /mentions-legales names a publisher — and so /cgv a seller,
+        // from the same variables. A public origin that answers `false` here
+        // is serving a page the law requires, empty.
         legal: legalNoticeFromEnv(process.env).complete,
         // Whether the first-run A/B test is collecting (GEV_FIRST_RUN_AB).
         abtest: Boolean(firstRunExperimentFromEnv(process.env)),
@@ -29122,7 +29123,7 @@ function precompressedAssetsPlugin() {
  * point in the build. Left alone, a printable sheet would download Cesium
  * before its first line of type.
  *
- * The two legal pages (`LEGAL_PAGES`) are documents in the same sense.
+ * The legal pages (`LEGAL_PAGES`) are documents in the same sense.
  */
 const CESIUM_FREE_PAGES = Object.freeze(['fiche.html', ...Object.values(LEGAL_PAGES)]);
 
@@ -29548,10 +29549,11 @@ function frameGuardPlugin() {
 }
 
 /**
- * The two legal pages, filled with the deployment's identity per request.
+ * The legal pages, filled with the deployment's identity per request.
  *
- * `mentions-legales.html` and `confidentialite.html` are built like any other
- * entry, with a visible « non renseigné » where the publisher goes; this
+ * `mentions-legales.html`, `confidentialite.html` and `cgv.html` are built
+ * like any other entry, with a visible « non renseigné » where the publisher
+ * (or the seller) goes; this
  * middleware swaps it for `GEV_LEGAL_*` from the environment
  * (`src/legalNotice.js` says why none of it is committed). It answers the
  * clean path too, so `/mentions-legales` is the link everywhere.
