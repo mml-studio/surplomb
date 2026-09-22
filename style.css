@@ -4675,9 +4675,18 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   max-width: 420px;
 }
 
+/* A row: the dim lettering, then the « IA » mark while a model wrote the
+   line (see "AI mark" below). The dimming sits on the text alone — on the
+   row, it would fade the mark with it. */
 .hud-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 9px;
   letter-spacing: 1.8px;
+}
+
+.hud-summary-label-text {
   opacity: 0.55;
 }
 
@@ -13309,6 +13318,52 @@ html[data-voice-premium] #gev-voice-control .gev-premium-badge .premium-crown {
 
 #gev-voice-control .gev-voice-help-premium:empty {
   display: none;
+}
+
+/* ── AI mark: « IA » on the mic and on the HUD summary ────────────
+   EU AI Act art. 50(1): the reader is told a model is on the other end,
+   before the first request (src/aiDisclosure.js). The crown's sibling: the
+   same 1.5 px dark keyline, on the ring's OTHER upper corner, so the two can
+   both be drawn without touching. Cream, not gold — the crown means "sold",
+   this means "a model", and the colour keeps them two signs. Unlike the
+   crown it takes the pointer: its `title` is the sentence it stands for. */
+.gev-ai-badge {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  height: 13px;
+  min-width: 17px;
+  padding: 0 3px;
+  background: #f4efe1;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1.5px #0e1b16;
+  color: #0e1b16;
+  font-family: var(--font-ui);
+  font-size: 8px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+#gev-voice-control .gev-mic-orbit .gev-ai-badge {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  z-index: 1;
+}
+
+/* On the HUD, only while the line on screen is a model's: `hud.js` marks
+   `#hud-summary` `data-ai-generated` then, and clears it for the local
+   telemetry line. */
+.hud-summary-label .gev-ai-badge {
+  display: none;
+}
+
+.hud-summary-wrap:has(#hud-summary[data-ai-generated='true']) .hud-summary-label .gev-ai-badge {
+  display: inline-grid;
 }
 
 /* The card that the crown leads to wears it in its heading. */

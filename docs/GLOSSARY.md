@@ -511,6 +511,9 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 | Reconnaissance vocale | Speech recognition | The Web Speech API's ears. |
 | Voix sans clé | Keyless voice | The browser-ears path, as opposed to Realtime. |
 | Pas le micro : … | Not the microphone: … | Opens every unreachable-server line. |
+| IA | AI | The mark on the mic and on the HUD summary (EU AI Act art. 50). Translated, unlike the instrument lettering: a disclosure is read in the reader's language. |
+| Assistant d’intelligence artificielle — voix de synthèse | Artificial intelligence assistant — synthetic voice | The mic mark's tooltip. Names no vendor: the voice runs on OpenAI or OpenRouter. |
+| Résumé rédigé par une intelligence artificielle | Summary written by artificial intelligence | The HUD summary mark's tooltip. |
 
 Instrument lettering on the voice dock (`MIC`, `HEARD`, `STD`, `TOKEN LIMIT`)
 and everything the model reads stay English in both languages, as the HUD does.

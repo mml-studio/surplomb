@@ -33,6 +33,7 @@ import * as mgrsModule from 'mgrs';
 const mgrs = mgrsModule.default ?? mgrsModule;
 import { CITY_POIS } from './locations.js';
 import messages from './hud.i18n.js';
+import { aiBadgeHtml, markAiGenerated } from './aiDisclosure.js';
 import { composeLocalityTag } from './hudLocality.js';
 import { styleDisplayName } from './styles/styleNames.js';
 import {
@@ -229,7 +230,7 @@ export class IntelHUD {
         <div class="hud-content">
           <div class="hud-mode" id="hud-mode">${m.mode}</div>
           <div class="hud-summary-wrap">
-            <div class="hud-summary-label">${m.summaryLabel}</div>
+            <div class="hud-summary-label"><span class="hud-summary-label-text">${m.summaryLabel}</span>${aiBadgeHtml('summary')}</div>
             <div class="hud-summary" id="hud-summary">${m.awaitingTelemetry}</div>
           </div>
         </div>
@@ -756,7 +757,8 @@ export class IntelHUD {
         throw new Error(data?.error || `HTTP ${response.status}`);
       }
       if (revision !== this._summaryRevision) return;
-      this._setSummaryText(data.summary, animate);
+      // The one line on this path a model wrote: it wears the « IA » mark.
+      this._setSummaryText(data.summary, animate, true);
     } catch (error) {
       if (SUMMARY_UNCONFIGURED_RE.test(error?.message || '')) {
         // Distinguished from a transient failure on purpose. Retrying a
@@ -779,7 +781,21 @@ export class IntelHUD {
     }
   }
 
-  _setSummaryText(text, animate) {
+  /**
+   * Put a summary on the HUD.
+   *
+   * @param {string} text
+   * @param {boolean} animate - Type it in rather than set it.
+   * @param {boolean} [aiGenerated] - A model wrote it (`/api/openai/hud-summary`),
+   *   not the local telemetry composer: the line is marked `data-ai-generated`
+   *   and its label shows the « IA » badge (src/aiDisclosure.js). Every other
+   *   caller hands the local line, and clears the mark.
+   */
+  _setSummaryText(text, animate, aiGenerated = false) {
+    // Before the retype guard below: the same words can change author (a
+    // model's five words, then the local line that happens to match), and
+    // the mark must follow the author, not the bytes.
+    markAiGenerated(document.getElementById('hud-summary'), aiGenerated);
     // Retyping a line that is already on screen is churn, not animation, and
     // it is not free: the growing text reflows `.hud-corner.hud-top-left`, the
     // world-overlay honours that reflow as paint work, and a parked scene
@@ -793,6 +809,11 @@ export class IntelHUD {
       this._typeSummary(text);
       return;
     }
+    // A line set outright supersedes one still being typed: left running, the
+    // typewriter would finish the model's words over the local line, under a
+    // mark that has just said the line is not a model's.
+    clearInterval(this._summaryTypingInterval);
+    this._summaryTypingInterval = null;
     const el = document.getElementById('hud-summary');
     if (el) el.textContent = text;
   }

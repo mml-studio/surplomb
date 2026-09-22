@@ -18,6 +18,7 @@
  */
 
 import { isCoarseInput } from '../inputMode.js';
+import { aiBadgeHtml } from '../aiDisclosure.js';
 import { PREMIUM_CROWN_SVG, currentVoicePremium, voicePremiumText } from '../voicePremium.js';
 import messages from './voiceControlDom.i18n.js';
 
@@ -79,6 +80,9 @@ export function resolveVoiceReadyPrompt(coarse = isCoarseInput()) {
   return coarse ? m.coarse : m.fine;
 }
 
+/** The mic's « IA » mark, named by the button's `aria-describedby`. */
+export const VOICE_AI_BADGE_ID = 'gev-voice-ai-badge';
+
 /**
  * The markup below is a template literal, so anything interpolated into an
  * attribute has to survive being read as HTML.
@@ -133,10 +137,13 @@ export function createVoiceControl({ reset = false } = {}) {
           <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="${escapeAttribute(m.cost)}">~$0.00</span>
         </div>
       </div>
-      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(voiceControlAriaLabel(resolveVoiceControlHint(false, false)))}" aria-describedby="gev-voice-help">
-        <!-- The crown sits on the ring, which is the one shape every layout
-             keeps; shown only where voice is sold (src/voicePremium.js). -->
-        <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /><span class="gev-premium-badge">${PREMIUM_CROWN_SVG}</span></span>
+      <button id="gev-voice-button" type="button" aria-label="${escapeAttribute(voiceControlAriaLabel(resolveVoiceControlHint(false, false)))}" aria-describedby="${VOICE_AI_BADGE_ID} gev-voice-help">
+        <!-- Two marks sit on the ring, which is the one shape every layout
+             keeps: « IA » on its upper left, always (src/aiDisclosure.js —
+             the AI Act's disclosure, and the button's first description), and
+             the crown on its upper right, only where voice is sold
+             (src/voicePremium.js). -->
+        <span class="gev-mic-orbit"><img src="/mic.svg" alt="" />${aiBadgeHtml('voice', { id: VOICE_AI_BADGE_ID })}<span class="gev-premium-badge">${PREMIUM_CROWN_SVG}</span></span>
         <span class="gev-mic-label">ON/OFF</span>
       </button>
       <div class="gev-voice-visualizer" aria-hidden="true">
@@ -156,9 +163,11 @@ export function createVoiceControl({ reset = false } = {}) {
           <span class="gev-voice-transcript-kicker">HEARD</span>
           <span class="gev-voice-transcript-text"></span>
         </div>
+        <!-- Whatever lands here is the model's own words: marked as such for
+             machines (src/aiDisclosure.js). HEARD is the visitor's. -->
         <div class="gev-voice-transcript-row" data-role="said">
           <span class="gev-voice-transcript-kicker">SAID</span>
-          <span class="gev-voice-transcript-text"></span>
+          <span class="gev-voice-transcript-text" data-ai-generated="true"></span>
         </div>
         <div class="gev-voice-transcript-hint" hidden></div>
         <label class="gev-voice-transcript-voice" hidden>
