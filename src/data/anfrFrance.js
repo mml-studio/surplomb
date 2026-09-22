@@ -248,7 +248,7 @@ import {
   normalizeCoverageMode,
 } from './mobileCoverage.js';
 import coverageMessages from './mobileCoverage.i18n.js';
-import { createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
+import { coverageTileSource, createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
 import { VIEWSHED_COLOR, computeMastViewshed, createViewshedImageryLayer } from './mastViewshedImagery.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
@@ -270,6 +270,12 @@ const DETAIL_URL = '/api/anfr-fr/support';
 const COVERAGE_META_URL = '/api/anfr-fr/coverage';
 /** Overlay id of the coverage card, on the same source as the support card. */
 const COVERAGE_CARD_ID = 'anfr-fr:coverage';
+/**
+ * How long a ground card waits for its answer before saying it is reading.
+ * The answer is a decoded tile already in memory or one small PNG from the
+ * HTTP cache, so it nearly always lands first and no loading card is shown.
+ */
+const LOADING_CARD_DELAY_MS = 250;
 
 // --- Activation / load gating ----------------------------------------------
 /**
@@ -468,7 +474,6 @@ let _enabled = false;
 let _clickHandler = null;
 let _cameraChangedAttached = false;
 let _cameraDebounceTimer = null;
-let _preRenderRemover = null;
 let _selectedId = null;
 let _count = 0;
 let _inView = 0;
@@ -488,6 +493,8 @@ let _requestGeneration = 0;
 let _mesh = null;
 let _meshPromise = null;
 let _meshPick = null;
+/** The box the maillage dots were last picked for; a settle on the same box redraws nothing. */
+let _meshBoxKey = null;
 
 let _pack = null;
 let _packBoxKey = null;
@@ -1473,6 +1480,34 @@ function repaintSelectedCard(id) {
   governorRequestRender('anfr-fr-card');
 }
 
+/**
+ * The selected record, taken out of a collection about to be rebuilt.
+ *
+ * A rebuild on camera settle used to clear the selection outright: every pan,
+ * even a few pixels, closed the card the reader had just opened — the ground
+ * card included, which is anchored to the ground and owes nothing to the
+ * dots. The ground card is now left alone, and the selected support is
+ * carried over when the new view still draws it ({@link restoreSelectionAfterRebuild}).
+ */
+function takeSelectionForRebuild() {
+  return _selectedId ? _records.get(_selectedId) || null : null;
+}
+
+/** Re-light the carried support on its new dot, or let it go if it left the view. */
+function restoreSelectionAfterRebuild(previous) {
+  if (!previous) return;
+  const record = _records.get(previous.id);
+  if (!record) {
+    clearSelection();
+    return;
+  }
+  if (record.point) {
+    record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
+    record.point.pixelSize = SELECTED_POINT_PX;
+  }
+  repaintSelectedCard(record.id);
+}
+
 function selectSupport(id) {
   const record = _records.get(id);
   if (!record) return;
@@ -1517,27 +1552,6 @@ function installClickHandler(viewer) {
     if (_selectedId || _coverageCard) clearSelection();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
-}
-
-/**
- * Keep the selected card pinned to its dot as the camera moves.
- *
- * Republishes the entry and deliberately does NOT call
- * `governorRequestRender`: this runs inside `scene.preRender`, so asking for a
- * render here would ask for the next frame on every frame and pin the whole
- * app at full rate for as long as anything is selected. The frame this runs in
- * is already happening; the overlay host draws in it.
- */
-function onPreRender() {
-  if (!_enabled) return;
-  if (!_selectedId) {
-    if (_coverageCard) publishCoverageCard();
-    return;
-  }
-  const entry = createAnfrSelectedOverlayEntry(_records.get(_selectedId), activePayload(), _viewshed);
-  if (entry) {
-    _overlayHost.setEntries(ANFR_FR_OVERLAY_SOURCE_ID, [entry], ANFR_FR_OVERLAY_SOURCE_OPTIONS);
-  }
 }
 
 // --- HTTP -------------------------------------------------------------------
@@ -1587,6 +1601,10 @@ async function ensureMesh() {
  * Paris, against a round trip that would cost a few hundred.
  */
 function reconcileMesh(box) {
+  // A settle on the view already drawn — a click, a nudge under the rounding —
+  // redraws nothing.
+  const boxKey = boxKeyOf(box);
+  if (boxKey === _meshBoxKey && _records.size) return;
   const pick = selectAnfrMesh(_mesh?.mesh, {
     box,
     // § 3.5: the profile decides how DENSE the mesh is, never what it covers.
@@ -1595,7 +1613,8 @@ function reconcileMesh(box) {
     budget: profileCountBudget(anfrMeshBudget(box.north - box.south)),
   });
   _meshPick = pick;
-  clearSelection();
+  _meshBoxKey = boxKey;
+  const selected = takeSelectionForRebuild();
   _points?.removeAll();
   _records = new Map();
 
@@ -1620,6 +1639,13 @@ function reconcileMesh(box) {
       outlineWidth: style.outlineWidth,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     }) || null;
+    // The selected dot keeps its record — and with it any lookup still in
+    // flight, which writes into this object when it lands.
+    if (selected?.id === id) {
+      Object.assign(selected, { tuple, point, position, style });
+      _records.set(id, selected);
+      continue;
+    }
     // A dot this session has already identified keeps its identity across pans
     // and zooms — the lookup is memoized, so re-entering a city redraws the
     // cards it earned rather than re-asking for them.
@@ -1647,6 +1673,7 @@ function reconcileMesh(box) {
   // The maillage tuple carries no height, so there is nothing to extrude and
   // the shaft field is put away rather than left over from the last close-up.
   reconcileMasts();
+  restoreSelectionAfterRebuild(selected);
   governorRequestRender('anfr-fr-mesh');
 }
 
@@ -1738,7 +1765,8 @@ function boxKeyOf(box) {
 }
 
 function reconcileSupports(payload) {
-  clearSelection();
+  _meshBoxKey = null;
+  const selected = takeSelectionForRebuild();
   _points?.removeAll();
   _records = new Map();
   const warm = [];
@@ -1762,6 +1790,12 @@ function reconcileSupports(payload) {
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
       translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 400_000, 0.45),
     }) || null;
+    if (selected?.id === id) {
+      Object.assign(selected, { support, point, position, groundPosition: ground, mastHeightM: heightM, style });
+      _records.set(id, selected);
+      warm.push({ lat: support.lat, lon: support.lon });
+      continue;
+    }
     _records.set(id, {
       id,
       mesh: false,
@@ -1782,6 +1816,7 @@ function reconcileSupports(payload) {
   _inView = Number(payload?.inBox) || _count;
   warmGroundFloor(warm.slice(0, GROUND_WARM_LIMIT));
   reconcileMasts();
+  restoreSelectionAfterRebuild(selected);
   governorRequestRender('anfr-fr-supports');
 }
 
@@ -2197,7 +2232,7 @@ async function ensureCoverageMeta() {
       const meta = await response.json();
       if (!coverageMetaValid(meta)) throw new Error('malformed payload');
       _coverageMeta = meta;
-      _coverageRead = createCoveragePointReader(meta, { fetchImpl: (url) => _http(url) });
+      _coverageRead = createCoveragePointReader(meta);
       _coverageStatus = 'ready';
       return meta;
     } catch (error) {
@@ -2230,43 +2265,132 @@ function removeCoverageDrape() {
 }
 
 function removeCoverageImagery() {
+  cancelCoverageSwap();
   if (_coverageImagery) _viewer?.imageryLayers?.remove?.(_coverageImagery, true);
   _coverageImagery = null;
   _coverageImageryMode = null;
   removeCoverageDrape();
 }
 
+function coverageLayer(mode, { drape = false, alpha = 1 } = {}) {
+  const lut = drape ? coverageLut(mode, COVERAGE_DRAPE_ALPHA) : coverageLut(mode);
+  // The no-coverage rung is hatched on both surfaces — see `COVERAGE_HATCH`.
+  const hatchLut = drape ? coverageHatchLut(mode, COVERAGE_DRAPE_ALPHA) : coverageHatchLut(mode);
+  const layer = new Cesium.ImageryLayer(createCoverageImageryProvider(_coverageMeta, lut, { drape, hatchLut }));
+  layer.alpha = alpha;
+  return layer;
+}
+
 /**
- * Drape the painted mode on the mesh too, once there is a mesh.
+ * Drape `mode` on the mesh too, once there is a mesh.
  *
  * Both layers stay in place whichever stack is shown: a surface that is not on
  * screen is not traversed and asks for no tile, so switching between Satellite
- * and Google 3D repaints from the browser's cache instead of rebuilding.
+ * and Google 3D repaints from memory instead of rebuilding.
+ *
+ * A mode change on the mesh is a plain replacement, NOT the globe's swap
+ * below. Every change to a tileset's imagery layers rebuilds the draw commands
+ * of every loaded tile, and a second layer at alpha 0 is a shader variant of
+ * its own: measured on the Mont-Blanc, the swap froze the first chip press on
+ * Google 3D for 528 ms, where the replacement costs no long task at all.
  */
-function syncCoverageDrape() {
-  const tileset = _coverageImageryMode ? photorealTileset() : null;
-  if (_coverageDrape?.tileset === tileset) return;
+function syncCoverageDrape(mode = _coverageImageryMode) {
+  const tileset = mode ? photorealTileset() : null;
+  if (_coverageDrape?.tileset === tileset && _coverageDrape?.mode === mode) return;
   removeCoverageDrape();
   if (!tileset?.imageryLayers?.add) return;
-  const layer = new Cesium.ImageryLayer(
-    createCoverageImageryProvider(_coverageMeta, coverageLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA), {
-      drape: true,
-      hatchLut: coverageHatchLut(_coverageImageryMode, COVERAGE_DRAPE_ALPHA),
-    }),
-  );
+  const layer = coverageLayer(mode, { drape: true });
   tileset.imageryLayers.add(layer);
-  _coverageDrape = { tileset, layer };
+  _coverageDrape = { tileset, layer, mode };
+}
+
+// --- The mode swap, on the globe ---------------------------------------------
+//
+// A chip press used to remove the painted layer and add the next one: for the
+// two or three frames the new tiles took, the map had no colour at all —
+// measured at ~36 ms of bare ground on every press, a flash the reader took
+// for a reload. The next mode now loads UNDER the current one at alpha 0 —
+// the globe loads a layer it does not draw, and skips it in its shaders — and
+// the two trade places in one frame once the new one has caught up, or after
+// {@link COVERAGE_SWAP_MAX_MS} whatever happens. The mesh does not swap: see
+// `syncCoverageDrape`.
+
+const COVERAGE_SWAP_MAX_MS = 1500;
+/** Consecutive rendered frames the incoming layer must be settled for. */
+const COVERAGE_SWAP_CALM_FRAMES = 2;
+/** `{ mode, globe, since, calm, remover }` while a swap is running. */
+let _coverageSwap = null;
+
+function cancelCoverageSwap() {
+  const swap = _coverageSwap;
+  _coverageSwap = null;
+  if (!swap) return;
+  swap.remover?.();
+  _viewer?.imageryLayers?.remove?.(swap.globe, true);
+}
+
+/** Whether the incoming layer has everything the view asked of it. */
+function coverageSwapSettled(swap) {
+  const globe = _viewer?.scene?.globe;
+  // A hidden globe (Google 3D) shows nothing to keep up: trade at once.
+  if (globe?.show === false) return true;
+  if (swap.globe.imageryProvider?.coveragePending?.() > 0) return false;
+  return globe?.tilesLoaded !== false;
+}
+
+function completeCoverageSwap() {
+  const swap = _coverageSwap;
+  if (!swap) return;
+  _coverageSwap = null;
+  swap.remover?.();
+  if (_coverageImagery) _viewer?.imageryLayers?.remove?.(_coverageImagery, true);
+  swap.globe.alpha = 1;
+  _coverageImagery = swap.globe;
+  _coverageImageryMode = swap.mode;
+  if (_viewshed?.layer) _viewer?.imageryLayers?.raiseToTop?.(_viewshed.layer);
+  governorRequestRender('anfr-fr-coverage');
+}
+
+function onCoverageSwapFrame() {
+  const swap = _coverageSwap;
+  if (!swap) return;
+  swap.calm = coverageSwapSettled(swap) ? swap.calm + 1 : 0;
+  if (swap.calm >= COVERAGE_SWAP_CALM_FRAMES || Date.now() - swap.since > COVERAGE_SWAP_MAX_MS) {
+    completeCoverageSwap();
+    return;
+  }
+  // The incoming tiles need frames to be requested and uploaded, and the
+  // globe renders on demand: keep asking until the swap is done.
+  governorRequestRender('anfr-fr-coverage-swap');
+}
+
+function startCoverageSwap(mode) {
+  cancelCoverageSwap();
+  const globe = coverageLayer(mode, { alpha: 0 });
+  _viewer.imageryLayers.add(globe);
+  const remover = _viewer.scene?.postRender?.addEventListener?.(onCoverageSwapFrame) || null;
+  _coverageSwap = { mode, globe, since: Date.now(), calm: 0, remover };
+  governorRequestRender('anfr-fr-coverage-swap');
 }
 
 /** Put on the globe and on the mesh the imagery the current mode asks for, or none. */
 function syncCoverageImagery() {
   const wanted = _enabled && _coverageMode !== 'off' && _coverageStatus === 'ready' ? _coverageMode : null;
-  if (_coverageImageryMode !== wanted) {
-    removeCoverageImagery();
-    if (wanted && _viewer?.imageryLayers) {
-      _coverageImagery = new Cesium.ImageryLayer(
-        createCoverageImageryProvider(_coverageMeta, coverageLut(wanted), { hatchLut: coverageHatchLut(wanted) }),
-      );
+  if (!wanted || !_viewer?.imageryLayers) {
+    if (_coverageImagery || _coverageSwap) removeCoverageImagery();
+  } else if (_coverageSwap) {
+    // A press during a swap: aim the swap at the latest mode, or drop it if
+    // the reader came back to the mode on screen.
+    if (_coverageSwap.mode !== wanted) {
+      if (wanted === _coverageImageryMode) cancelCoverageSwap();
+      else startCoverageSwap(wanted);
+    }
+  } else if (_coverageImageryMode !== wanted) {
+    if (_coverageImagery) {
+      startCoverageSwap(wanted);
+    } else {
+      // Nothing on screen yet: nothing to keep up while the tiles arrive.
+      _coverageImagery = coverageLayer(wanted);
       _viewer.imageryLayers.add(_coverageImagery);
       _coverageImageryMode = wanted;
       // The selected mast's line of sight stays ABOVE the coverage: it is the
@@ -2274,7 +2398,7 @@ function syncCoverageImagery() {
       if (_viewshed?.layer) _viewer.imageryLayers.raiseToTop?.(_viewshed.layer);
     }
   }
-  syncCoverageDrape();
+  syncCoverageDrape(wanted && _viewer?.imageryLayers ? wanted : null);
   governorRequestRender('anfr-fr-coverage');
 }
 
@@ -2295,7 +2419,9 @@ async function applyCoverage() {
 }
 
 function publishCoverageCard() {
-  if (!_coverageCard) return;
+  // No text yet: the answer is still being read, and a card is only shown
+  // once there is something to say (see `openCoverageCard`).
+  if (!_coverageCard?.text) return;
   _overlayHost.setEntries(
     ANFR_FR_OVERLAY_SOURCE_ID,
     [selectedOverlayEntry(COVERAGE_CARD_ID, _coverageCard.position, _coverageCard.text)],
@@ -2307,16 +2433,23 @@ function publishCoverageCard() {
  * Open the "who reaches here" card at a clicked ground point.
  *
  * Answers only with the coverage on and its meta in hand; otherwise returns
- * false and the click falls through to a dismissal, as before. The card
- * appears at once saying it is reading, and is rewritten when the zoom-12
- * tile under the point has been decoded.
+ * false and the click falls through to a dismissal, as before.
+ *
+ * THE CARD APPEARS WITH ITS ANSWER. It used to appear at once as « Réseau 4G
+ * ici / Chargement… » and be rewritten 20–200 ms later: a two-line card, then
+ * a six-line one standing somewhere else, which the reader saw as the card
+ * vanishing and coming back. The answer is usually there well inside
+ * {@link LOADING_CARD_DELAY_MS}, so the loading card is kept for the slow
+ * read only. For the same reason a card already open stays on screen until
+ * the next one's answer replaces it, instead of being cleared first.
  * @returns {boolean} Whether the click was taken.
  */
 function openCoverageCard(viewer, windowPosition) {
   if (!_enabled || _coverageMode === 'off' || _coverageStatus !== 'ready' || !_coverageRead) return false;
   const point = sceneGroundPoint(viewer, windowPosition);
   if (!point) return false;
-  clearSelection();
+  if (_selectedId) clearSelection();
+  _coverageCardGeneration += 1;
   const generation = _coverageCardGeneration;
   const m = coverageMessages();
   // The picked surface's own height: on Google 3D the globe is hidden and
@@ -2329,24 +2462,32 @@ function openCoverageCard(viewer, windowPosition) {
     } catch { /* no terrain resident here */ }
   }
   if (!Number.isFinite(height)) height = 0;
-  _coverageCard = {
+  const card = {
     lon: point.lon,
     lat: point.lat,
     height,
     position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + POINT_LIFT_M),
-    text: `${m.card.readingTitle}\n${m.card.reading}`,
+    text: null,
   };
-  publishCoverageCard();
-  governorRequestRender('anfr-fr-coverage-card');
-  const repaint = (text) => {
-    if (generation !== _coverageCardGeneration || !_coverageCard) return;
-    _coverageCard.text = text;
+  _coverageCard = card;
+  const show = (text) => {
+    if (generation !== _coverageCardGeneration || _coverageCard !== card) return;
+    card.text = text;
     publishCoverageCard();
     governorRequestRender('anfr-fr-coverage-card');
   };
+  let answered = false;
+  const slow = setTimeout(() => {
+    if (!answered) show(`${m.card.readingTitle}\n${m.card.reading}`);
+  }, LOADING_CARD_DELAY_MS);
   _coverageRead(point.lon, point.lat)
-    .then((reading) => repaint(coverageCardText(_coverageMeta, reading)))
-    .catch(() => repaint(`${m.card.readingTitle}\n${m.card.failed}`));
+    .then((reading) => coverageCardText(_coverageMeta, reading))
+    .catch(() => `${m.card.readingTitle}\n${m.card.failed}`)
+    .then((text) => {
+      answered = true;
+      clearTimeout(slow);
+      show(text);
+    });
   return true;
 }
 
@@ -2495,9 +2636,10 @@ const anfrFranceLayer = {
       watchCameraSettle(viewer, ANFR_FR_LAYER_ID, onCameraSettled);
       _cameraChangedAttached = true;
     }
-    if (!_preRenderRemover) {
-      _preRenderRemover = viewer.scene.preRender.addEventListener(onPreRender);
-    }
+    // No per-frame hook for the selected card: the overlay host projects every
+    // entry's world position itself on each frame. Republishing it from
+    // `preRender` asked the host for another frame each time, which kept the
+    // globe rendering at ~50 frames a second for as long as a card was open.
     restoreSpriteOrder(viewer);
     // DataLayerManager calls update() immediately after enable(), which owns
     // the first fetch. Avoid racing it with a second request here.
@@ -2529,6 +2671,7 @@ const anfrFranceLayer = {
     _masts?.removeAll();
     _sectors?.removeAll();
     _records = new Map();
+    _meshBoxKey = null;
     _count = 0;
     _inView = 0;
     _mastsDrawn = 0;
@@ -2547,10 +2690,6 @@ const anfrFranceLayer = {
       releaseCameraSensitivity(viewer, ANFR_FR_LAYER_ID);
       releaseCameraSettle(viewer, ANFR_FR_LAYER_ID);
       _cameraChangedAttached = false;
-    }
-    if (_preRenderRemover) {
-      _preRenderRemover();
-      _preRenderRemover = null;
     }
     if (_points) _points.show = false;
     if (_masts) _masts.show = false;
@@ -2596,6 +2735,8 @@ const anfrFranceLayer = {
         drawn: Boolean(_coverageImagery),
         // On Google's mesh as well — see `syncCoverageDrape`.
         draped: Boolean(_coverageDrape),
+        // 'worker' or 'inline': where the tiles are decoded (mobileCoverageTiles.js).
+        decoder: _coverageImagery ? coverageTileSource().backend : null,
         // The open ground card, for the QA harness and the voice layer: what
         // the reader is reading, and where.
         card: _coverageCard
@@ -2714,10 +2855,6 @@ const anfrFranceLayer = {
       if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeyDown);
       unregisterPickOwner(ANFR_FR_LAYER_ID);
     }
-    if (_preRenderRemover) {
-      _preRenderRemover();
-      _preRenderRemover = null;
-    }
     if (_points) {
       unregisterSpriteCollection(ANFR_FR_LAYER_ID, _points);
       viewer?.scene?.primitives?.remove?.(_points);
@@ -2782,6 +2919,7 @@ export function _setAnfrStateForTest({
   _error = null;
   _status = 'ready';
   _records = new Map();
+  _meshBoxKey = null;
   _meshLookups.clear();
   _details.clear();
   for (const [key, value] of details || []) _details.set(key, value);
@@ -2867,6 +3005,7 @@ export function _clearAnfrSelectionForTest() {
   _pack = null;
   _packBoxKey = null;
   _meshPick = null;
+  _meshBoxKey = null;
   _records = new Map();
   _meshLookups.clear();
   _details.clear();
@@ -2939,7 +3078,7 @@ export function _setAnfrCoverageForTest({
   _coverageMetaPromise = null;
   _coverageCard = null;
   _coverageCardGeneration += 1;
-  _coverageRead = read || (meta ? createCoveragePointReader(meta, { fetchImpl: (url) => _http(url) }) : null);
+  _coverageRead = read || (meta ? createCoveragePointReader(meta) : null);
   syncCoverageImagery();
 }
 

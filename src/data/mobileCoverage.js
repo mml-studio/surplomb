@@ -267,7 +267,7 @@ function packRgba(hex, alpha) {
   return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
 }
 
-/** 256 packed colours, one per code, for `paintCoverageRgba`. */
+/** 256 packed colours, one per code, for `paintCoverageTile` (mobileCoverageTile.js). */
 export function coverageLut(mode, alpha = COVERAGE_ALPHA) {
   const lut = new Uint32Array(256);
   const rungs = COVERAGE_RAMP.map((hex) => packRgba(hex, alpha));

@@ -235,6 +235,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   Europe, North Africa and the Middle East only; it went unseen while it only
   stood in for a failed Esri. It is now the 2016 release — also CC BY 4.0, and
   the one that covers the whole world, at the same 10 m detail.
+- **The dead-zone card no longer flickers, and the antennas layer stops
+  working at rest.** A click on the ground showed a small « Chargement… » card
+  and, a moment later, a taller one somewhere else, which read as the card
+  vanishing and coming back; it now appears once, with its answer. An open
+  card — on the ground or on a mast — no longer keeps the globe redrawing
+  sixty times a second, and a pan no longer closes it. Panning no longer
+  reshuffles the antenna dots either: from national to city scale, 99 to
+  100 % of them stay put from one step of a pan to the next, against 18 to
+  44 % before, and they still crowd where the masts crowd. A chip press no longer
+  leaves the map without colour for a couple of frames: the next view appears
+  in one go. The coverage tiles are now decoded off the main thread and kept
+  in memory, so switching between the chips and Google 3D repaints without
+  downloading again. Measured on a phone-class CPU, a chip press no longer
+  stutters (48 → 58 frames a second); on Google 3D a flight over the Alps runs
+  at 60 frames a second instead of 51.
 - **Under a tilted camera the energy ratings, sales and other address layers
   answered for the blocks at the top of the screen, not the one in the
   middle.** They scanned around the point where the centre of the screen meets

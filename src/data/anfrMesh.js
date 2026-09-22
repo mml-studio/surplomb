@@ -9,7 +9,8 @@
  * charge-point layer worked out first (`irveMesh.js` carries the measurements
  * that argue for it) and the schools layer adopted second. This file is the
  * ANTENNA adapter: it names the tuple in this domain, sets the budgets, and
- * nothing else.
+ * picks the world-locked variant of the policy (`selectGeoMeshWorld`, see
+ * {@link selectAnfrMesh}) so that a pan does not re-elect the dots.
  *
  * ── Why this layer needs the middle regime at all ───────────────────────────
  * `sup-fr` deliberately has no maillage, and its argument is a byte count: its
@@ -89,15 +90,13 @@
 
 import {
   MESH_CATEGORY,
-  MESH_COLS,
   MESH_LAT,
   MESH_LON,
-  MESH_ROWS,
   MESH_WEIGHT,
   meshBudgetForSpan,
   meshRowId,
   meshRowInBox,
-  selectGeoMesh,
+  selectGeoMeshWorld,
 } from './geoMeshThinning.js';
 import {
   ANFR_BANDS,
@@ -114,9 +113,6 @@ export { MESH_LAT, MESH_LON };
 /** The ANFR names for the generic weight and category slots. */
 export const MESH_OPERATORS = MESH_WEIGHT;
 export const MESH_BAND = MESH_CATEGORY;
-
-export const ANFR_MESH_COLS = MESH_COLS;
-export const ANFR_MESH_ROWS = MESH_ROWS;
 
 /**
  * Budget by latitude span.
@@ -202,21 +198,30 @@ export function meshSupportBand(site) {
 /**
  * Pick a bounded, spatially-spread subset of the supports inside a box.
  *
- * @param {Array<Array<number>>} sites National mesh tuples.
+ * WITH {@link selectGeoMeshWorld}, not the view-relative grid the charge
+ * points and schools started from. That grid re-elects most of its dots on
+ * every pan: over the real 72 746 supports, a 25-step pan by 2 % of the view
+ * kept 18 % of the dots from one step to the next over France, 43 % over Paris
+ * and 44 % over Brittany (5–36 % measured in the browser at 1 400 km). The
+ * world pick keeps 100 %, 100 % and 99 %, and spends nearly the same budget —
+ * 1 060 dots over France (1 100 before), 2 142 over Paris (2 200), 1 545 over
+ * Brittany (1 600) — with the density still following the network: one mark
+ * per graticule cell for coverage, then a fixed-priority sample of the rest,
+ * so Paris draws a cluster and the Causses a scatter. A view that holds fewer
+ * supports than the budget draws every one, as before.
+ *
+ * @param {Array<Array<number>>} sites National mesh tuples, in position order
+ *   (as {@link buildAnfrMesh} writes them).
  * @param {object} options
  * @param {{south:number, west:number, north:number, east:number}} options.box
  * @param {number} [options.budget] Defaults to the tier for the box's span.
- * @param {number} [options.cols]
- * @param {number} [options.rows]
  * @returns {{picked:Array<Array<number>>, inBox:number, budget:number,
- *   thinned:boolean, cells:number}}
+ *   thinned:boolean, cells:number, stepDeg?:?number, fillLevel?:?number}}
  */
-export function selectAnfrMesh(sites, { box, budget, cols, rows } = {}) {
+export function selectAnfrMesh(sites, { box, budget } = {}) {
   if (!box) return { picked: [], inBox: 0, budget: 0, thinned: false, cells: 0 };
-  return selectGeoMesh(sites, {
+  return selectGeoMeshWorld(sites, {
     box,
     budget: Number.isFinite(budget) ? budget : anfrMeshBudget(box.north - box.south),
-    cols,
-    rows,
   });
 }

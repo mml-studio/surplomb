@@ -21,7 +21,13 @@ import {
   encodeCoverage,
   normalizeCoverageMode,
 } from './mobileCoverage.js';
-import { paintCoverageRgba, coverageCodeAt, coverageOverzoomSource } from './mobileCoverageImagery.js';
+import { coverageOverzoomSource } from './mobileCoverageImagery.js';
+import {
+  COVERAGE_TILE_EDGE,
+  coverageTileCode,
+  decodeCoverageRgba,
+  paintCoverageTile,
+} from './mobileCoverageTile.js';
 import {
   LAYER_STATE_VERSION,
   createDefaultLayerState,
@@ -89,15 +95,19 @@ test('the draped table is the same ramp at the drape’s one alpha, lighter than
 
 test('painting decoded pixels uses the code in R and leaves sea transparent whatever its code', () => {
   const lut = coverageLut('orange');
-  const pixels = new Uint8ClampedArray([
+  const rgba = new Uint8ClampedArray(COVERAGE_TILE_EDGE * COVERAGE_TILE_EDGE * 4);
+  rgba.set([
     encodeCoverage([0, 3, 3, 3]), 0, 0, 255, // Orange absent → rung 0
     encodeCoverage([3, 0, 0, 0]), 0, 0, 255, // Orange very good → bare
     encodeCoverage([0, 0, 0, 0]), 0, 0, 0, //   sea → bare
   ]);
-  assert.equal(coverageCodeAt(pixels, 0, 0), encodeCoverage([0, 3, 3, 3]));
-  paintCoverageRgba(pixels, lut);
-  assert.deepEqual([...pixels.slice(0, 4)], [0xf0, 0x28, 0x7a, Math.round(COVERAGE_ALPHA * 255)]);
-  assert.deepEqual([...pixels.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
+  const tile = decodeCoverageRgba(rgba);
+  assert.equal(coverageTileCode(tile, 0, 0), encodeCoverage([0, 3, 3, 3]));
+  assert.equal(coverageTileCode(tile, 2, 0), null);
+  const out = paintCoverageTile(tile, lut, new Uint32Array(COVERAGE_TILE_EDGE * COVERAGE_TILE_EDGE));
+  const bytes = new Uint8Array(out.buffer);
+  assert.deepEqual([...bytes.slice(0, 4)], [0xf0, 0x28, 0x7a, Math.round(COVERAGE_ALPHA * 255)]);
+  assert.deepEqual([...bytes.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
 });
 
 test('rung 0 is hatched: its stripes add ink of its own colour, every other code paints as the plain table', () => {
@@ -122,35 +132,32 @@ test('rung 0 is hatched: its stripes add ink of its own colour, every other code
 
 test('painting with the hatch table stripes rung 0 along x + y and leaves every other code alone', () => {
   const lut = coverageLut('gaps');
-  const hatch = coverageHatchLut('gaps');
+  const hatch = { lut: coverageHatchLut('gaps'), period: COVERAGE_HATCH.period, width: COVERAGE_HATCH.width };
   const { period, width } = COVERAGE_HATCH;
-  const dead = encodeCoverage([0, 0, 0, 0]);
-  const one = encodeCoverage([3, 0, 0, 0]);
-  const tile = (code) => {
-    const pixels = new Uint8ClampedArray(256 * 256 * 4);
-    for (let p = 0; p < pixels.length; p += 4) {
-      pixels[p] = code;
-      pixels[p + 3] = 255;
-    }
-    return pixels;
-  };
-  const deadTile = tile(dead);
-  paintCoverageRgba(deadTile, lut, hatch);
-  const alphaAt = (pixels, x, y) => pixels[(y * 256 + x) * 4 + 3];
+  const tile = (code) => ({ codes: new Uint8Array(256 * 256).fill(code), land: null });
+  const paint = (code, stripes, crop = null) => paintCoverageTile(tile(code), lut, new Uint32Array(256 * 256), crop, stripes);
+  const alphaAt = (out, x, y) => out[y * 256 + x] >>> 24;
   const stripe = Math.round(COVERAGE_HATCH.alpha * 255);
   const fill = Math.round(COVERAGE_ALPHA * 255);
+  const dead = paint(encodeCoverage([0, 0, 0, 0]), hatch);
   for (const [x, y] of [[0, 0], [1, 1], [5, 250], [255, 255]]) {
-    assert.equal(alphaAt(deadTile, x, y), (x + y) % period < width ? stripe : fill, `(${x}, ${y})`);
+    assert.equal(alphaAt(dead, x, y), (x + y) % period < width ? stripe : fill, `(${x}, ${y})`);
   }
   // Without a hatch table the painter is exactly what it was.
-  const plainTile = tile(dead);
-  paintCoverageRgba(plainTile, lut);
-  assert.equal(alphaAt(plainTile, 0, 0), fill);
+  assert.equal(alphaAt(paint(encodeCoverage([0, 0, 0, 0]), null), 0, 0), fill);
   // A rung that is not 0 carries no stripe at all.
-  const oneTile = tile(one);
-  paintCoverageRgba(oneTile, lut, hatch);
-  assert.equal(alphaAt(oneTile, 0, 0), fill);
-  assert.equal(alphaAt(oneTile, 4, 4), fill);
+  const one = paint(encodeCoverage([3, 0, 0, 0]), hatch);
+  assert.equal(alphaAt(one, 0, 0), fill);
+  assert.equal(alphaAt(one, 4, 4), fill);
+  // Past the pyramid the stripes are laid on the OUTPUT: a quarter magnified
+  // twice keeps three pixels in eight, not six in sixteen.
+  const magnified = paint(encodeCoverage([0, 0, 0, 0]), hatch, { sx: 128, sy: 128, size: 128 });
+  for (const [x, y] of [[0, 0], [3, 0], [7, 0], [8, 0]]) {
+    assert.equal(alphaAt(magnified, x, y), (x + y) % period < width ? stripe : fill, `magnified (${x}, ${y})`);
+  }
+  // Off land stays transparent, stripe or not.
+  const coast = { codes: new Uint8Array(256 * 256), land: new Uint8Array(256 * 256 / 8) };
+  assert.equal(paintCoverageTile(coast, lut, new Uint32Array(256 * 256), null, hatch)[0], 0);
 });
 
 test('a tile past the finest zoom magnifies the quarter of its zoom-12 ancestor that it covers', () => {
