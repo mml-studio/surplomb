@@ -1294,7 +1294,7 @@ function collectionSubjectPosition(subject, rows, layer) {
  * Re-resolve a live subject's DISPLAY label from the layer that owns it.
  *
  * The subject snapshot is captured once at selection time, but a contact's
- * label INPUTS can arrive later: adsbdb enrichment supplies a registration
+ * label INPUTS can arrive later: enrichment supplies a registration
  * seconds after a callsign-less aircraft is selected, so every other surface
  * swapped `ae1fa4` → `N123AB` while the cached Context subject kept the hex.
  * The owning layer's tracked-subject accessor already applies the layer's

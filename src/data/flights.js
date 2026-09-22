@@ -464,7 +464,7 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
     id: icao24,
     // Canonical display chain (callsign → registration → hex). Publishing a
     // bare `callsign || icao24` here resurrected the pre-enrichment behavior:
-    // a callsign-less contact reached Context as its raw hex even once adsbdb
+    // a callsign-less contact reached Context as its raw hex even once enrichment
     // had supplied a registration. Identity below stays `icao24`.
     label: _contactLabel(icao24, info),
     position: Cesium.Cartesian3.clone(bb.position),
@@ -859,21 +859,22 @@ const COURSE_MAX_DPS = 60;
 const COURSE_SLEW_DT_MAX_SEC = 0.25;
 
 // ---------------------------------------------------------------------------
-// adsbdb enrichment (best-effort, fail-silent). Bounded fan-out: max 4
-// concurrent requests, dispatches dripped ≥ENRICH_DISPATCH_GAP_MS apart
-// (≤5/s), and the server proxy caches every key on disk for 24 h, negative
-// results included, so a repeat session mostly answers from disk.
+// Route and type enrichment (best-effort, fail-silent), answered by the
+// server's own copy of VRS standing data (`/api/flight-info`,
+// src/vrsStandingData.js). Bounded fan-out: max 4 concurrent requests,
+// dispatches dripped ≥ENRICH_DISPATCH_GAP_MS apart (≤5/s).
 //
-// The number that actually bounds us upstream: adsbdb allows 512 requests per
-// rolling 60 s per IP, answers the 512th with 429 "rate limited for 60
-// seconds", and extends the lockout to 300 s past 1024
-// (`mrjackwills/adsbdb`, `src/db_redis/ratelimit.rs` — LOWER_LIMIT /
-// UPPER_LIMIT). The drip's ≤5/s is ≤300/min, i.e. 59 % of that ceiling, and
-// it is the drip — not the token bucket below — that decides the rate.
+// Until 2026-09-22 these went through a proxy to api.adsbdb.com, whose route
+// data may not be copied into another database, and the drip and the buckets
+// below were sized against ITS limiter (512 requests per 60 s per IP). Nothing
+// per flight leaves the server now; the same bounds are kept because they are
+// also what one tab asks of our own server, and they were measured against
+// what a reader sees (qa-enrich-budget), not only against that limiter.
 //
-// Each key is requested at most once per session. Priority jobs (tracked
-// plane, model-eligible planes) jump the queue; the ambient fleet sweep
-// (below) fills the back at poll cadence.
+// Each key is requested at most once per session — except after a 503, which
+// means the server holds no copy yet: that key is forgotten and asked again by
+// a later sweep. Priority jobs (tracked plane, model-eligible planes) jump the
+// queue; the ambient fleet sweep (below) fills the back at poll cadence.
 // ---------------------------------------------------------------------------
 const ENRICH_MAX_INFLIGHT = 4;
 /** Min ms between request dispatches — the drip that bounds the fan-out to ≤5/s. */
@@ -888,7 +889,7 @@ const _enrichSeen = new Set();
 function _enqueueEnrich(key, url, onData, priority = false) {
   if (_enrichSeen.has(key)) return;
   _enrichSeen.add(key);
-  const job = { url, onData };
+  const job = { key, url, onData };
   // Priority (tracked / model-eligible) goes to the FRONT so a deep ambient
   // backlog can never delay the plane the user just clicked or zoomed into.
   if (priority) _enrichQueue.unshift(job); else _enrichQueue.push(job);
@@ -911,16 +912,54 @@ function _drainEnrich() {
     const job = _enrichQueue.shift();
     _enrichActive += 1;
     fetch(job.url)
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        // No copy on the server yet (its first download is still failing):
+        // not an answer about this aircraft, so it must not stand as one for
+        // the rest of the session.
+        if (r.status === 503) _enrichSeen.delete(job.key);
+        return r.ok ? r.json() : null;
+      })
       .then((data) => { if (data && data.found) job.onData(data); })
       .catch(() => { /* enrichment never surfaces errors */ })
       .finally(() => { _enrichActive -= 1; _drainEnrich(); });
   }
 }
 
+/**
+ * The type lookup URL for one contact. The designator the feed already carries
+ * travels with it: the server's airframe table is small (16 873 airframes), so
+ * for most aircraft it is that designator which names the type ("A20N" →
+ * "Airbus A320neo").
+ * @param {string} icao24
+ * @param {?string} [typeCode]
+ * @returns {string}
+ */
+export function flightTypeInfoUrl(icao24, typeCode = null) {
+  const base = `/api/flight-info/type/${String(icao24).toLowerCase()}`;
+  const code = String(typeCode || '').trim().toUpperCase();
+  return /^[A-Z0-9]{2,4}$/.test(code) ? `${base}?t=${code}` : base;
+}
+
+/**
+ * The route lookup URL for one callsign. Where the aircraft is rides along, so
+ * a number flown over several legs answers the leg it is on.
+ * @param {string} callsign
+ * @param {?{lat?: number, lon?: number, altitudeM?: ?number, verticalRateMps?: ?number}} [position]
+ * @returns {string}
+ */
+export function flightRouteInfoUrl(callsign, position = null) {
+  const base = `/api/flight-info/route/${encodeURIComponent(callsign)}`;
+  if (!Number.isFinite(position?.lat) || !Number.isFinite(position?.lon)) return base;
+  const params = new URLSearchParams({ lat: position.lat.toFixed(3), lon: position.lon.toFixed(3) });
+  if (Number.isFinite(position.altitudeM)) params.set('alt', String(Math.round(position.altitudeM)));
+  if (Number.isFinite(position.verticalRateMps)) params.set('vr', position.verticalRateMps.toFixed(1));
+  return `${base}?${params}`;
+}
+
 function _requestTypeEnrichment(icao24, priority = false) {
   if (!/^[0-9a-f]{6}$/i.test(icao24)) return;
-  _enqueueEnrich(`t:${icao24}`, `/api/adsbdb/type/${icao24.toLowerCase()}`, (data) => {
+  const url = flightTypeInfoUrl(icao24, _flightData.get(icao24)?.typeCode);
+  _enqueueEnrich(`t:${icao24}`, url, (data) => {
     const meta = _flightData.get(icao24);
     if (!meta) return; // evicted while the lookup was in flight
     meta.typeCode = data.typeCode || meta.typeCode;
@@ -953,7 +992,14 @@ function _requestTypeEnrichment(icao24, priority = false) {
 function _requestRouteEnrichment(icao24, { priority = true } = {}) {
   const cs = String(_flightData.get(icao24)?.callsign || '').trim().toUpperCase();
   if (!/^[A-Z]{3}\d/.test(cs)) return; // airline-style callsigns only (LLL + digit); GA tails won't resolve
-  _enqueueEnrich(`r:${cs}`, `/api/adsbdb/route/${encodeURIComponent(cs)}`, (data) => {
+  const fix = _flightData.get(icao24);
+  const url = flightRouteInfoUrl(cs, {
+    lat: fix?.rawLat,
+    lon: fix?.rawLon,
+    altitudeM: fix?.altitude ?? null,
+    verticalRateMps: fix?.verticalRate ?? null,
+  });
+  _enqueueEnrich(`r:${cs}`, url, (data) => {
     const meta = _flightData.get(icao24);
     if (!meta) return; // evicted while the lookup was in flight
     meta.airline = data.airline || meta.airline;
@@ -1017,11 +1063,11 @@ function _requestRouteEnrichment(icao24, { priority = true } = {}) {
 // sustained 0.5 req/s; doubling it on no evidence would have bought nothing a
 // visitor can perceive and spent someone else's free API to do it.
 //
-// AND NEITHER KNOB IS WHAT ADSBDB SEES. Raising the ceiling does not raise the
-// request RATE: the ≤5/s drip and ENRICH_AMBIENT_PER_SWEEP (150 per 30 s poll)
-// bound that at ≤300/min, against adsbdb's 512-per-60 s limiter — unchanged by
-// this resize. What the bucket bounds is the session TOTAL, which is a
-// courtesy we extend, not the limit we are held to.
+// AND NEITHER KNOB IS THE REQUEST RATE. Raising the ceiling does not raise it:
+// the ≤5/s drip and ENRICH_AMBIENT_PER_SWEEP (150 per 30 s poll) bound that at
+// ≤300/min. What the bucket bounds is the session TOTAL. Since 2026-09-22 both
+// land on the server's own standing-data copy (src/vrsStandingData.js) rather
+// than on adsbdb's 512-per-60 s limiter they were first held against.
 /** Bucket ceiling: max ambient tokens held at once (= the initial burst). */
 const ENRICH_AMBIENT_BUDGET_CEIL = 1000;
 /** Tokens added back per refill window. Deliberately unchanged — measured. */
@@ -1070,14 +1116,17 @@ let _enrichAmbientRefillAnchorMs = 0;
 // reaches Frankfurt may find a bigger first look, and the harness will say so.
 //
 // AND THE YIELD IS PART OF THE SIZING. 30 of 40 sampled callsigns (75.0 %)
-// resolve to a leg at adsbdb, and all 30 of those carry destination
-// coordinates — so three requests in four buy a card line and a distance, and
-// the fourth is negative-cached by the proxy for 24 h and never asked again.
+// resolved to a leg at adsbdb, the source of the day, and all 30 carried
+// destination coordinates. The VRS standing data that replaced it on
+// 2026-09-22 answers about the same share over France (82–83 % found, 76–77 %
+// plausible on 763–782 live airline callsigns), always with coordinates — so
+// three requests in four still buy a card line and a distance, and the fourth
+// is never asked again this session.
 //
 // WHAT THIS DOES NOT CHANGE IS THE RATE. The two buckets bound session TOTALS;
-// what adsbdb sees is bounded by the SHARED drip (4 concurrent,
-// ENRICH_DISPATCH_GAP_MS apart, ≤5/s = ≤300/min) against its 512-per-60 s
-// limiter. Adding a second demand lengthens the queue, not the request rate.
+// the request rate is bounded by the SHARED drip (4 concurrent,
+// ENRICH_DISPATCH_GAP_MS apart, ≤5/s = ≤300/min). Adding a second demand
+// lengthens the queue, not the request rate.
 // A fresh European view on the OpenSky path now has 726 + 573 = 1 299 lookups
 // to drain at that drip, which is 4.3 minutes of back-of-queue work, nearest
 // to the camera first, while every priority path (tracked, model-eligible)
@@ -1177,8 +1226,9 @@ function _refillRouteBudget(nowMs) {
 export function ambientRouteCallsign(meta, seen = (key) => _enrichSeen.has(key)) {
   if (meta?.route) return null; // already answered — the card has its leg
   const cs = String(meta?.callsign || '').trim().toUpperCase();
-  // GA tails (`F-GABC`, `N172SP`) never resolve at adsbdb: the register is
-  // scheduled airline legs. Asking would spend a token on a certain miss.
+  // GA tails (`F-GABC`, `N172SP`) never resolve: the standing data holds
+  // scheduled airline legs and refuses routes for registration callsigns.
+  // Asking would spend a token on a certain miss.
   if (!/^[A-Z]{3}\d/.test(cs)) return null;
   return seen(`r:${cs}`) ? null : cs;
 }
@@ -1207,7 +1257,7 @@ function _sweepAmbientEnrichment() {
       if (meta?.onGround) continue; // ground traffic never spends ambient budget (click-to-enrich still works)
       // THE FEED ALREADY ANSWERED FOR THIS ONE. Since phase 3a the adsb.lol
       // vector carries the ICAO designator at [18] and the tail at [19], which
-      // is the whole of what a SILHOUETTE needs; an adsbdb lookup on top would
+      // is the whole of what a SILHOUETTE needs; a type lookup on top would
       // buy the long model name on a card nobody has opened. That is the
       // cheapest possible thing to spend a rationed token on, and it was where
       // most of the bucket went: measured 2026-09-07, TYPE_SHARE of airborne
@@ -1217,7 +1267,7 @@ function _sweepAmbientEnrichment() {
       // still enriches it — at priority, and off this budget.
       const wantsType = _enrichAmbientBudget > 0
         && !_enrichSeen.has(`t:${icao24}`) // answered / queued / negative this session
-        && /^[0-9a-f]{6}$/i.test(icao24) // adsbdb type keys are 6-char hex only
+        && /^[0-9a-f]{6}$/i.test(icao24) // type keys are 6-char hex only
         && !meta?.typeCode;
       // Deduplicated on the CALLSIGN within the sweep as well as against the
       // queue: two contacts carrying one callsign in the same frame would
@@ -1338,7 +1388,7 @@ function _toCleanText(value) {
  * in both layers.
  *
  * Registration is aircraft IDENTITY, not route, so unlike the origin/destination
- * line it is NOT plausibility-gated — an adsbdb tail number describes the
+ * line it is NOT plausibility-gated — an enriched tail number describes the
  * airframe itself and cannot go stale the way a leg can.
  *
  * This is a DISPLAY string only. Identity everywhere in this layer is `icao24`
@@ -3593,7 +3643,7 @@ function _cancelPendingTrackingRestore() {
 
 /** Multi-line tracked presentation text: "CS · FL · kts" + "Airline · Type" +
  *  "ORIG → DEST". The route line is gated by
- *  routePlausible so a wrong-leg adsbdb route is hidden, not displayed.
+ *  routePlausible so a wrong-leg scheduled route is hidden, not displayed.
  *  While the plane is in its missed-poll grace (coasting on dead reckoning
  *  with sticky metadata), the first line carries a "· STALE" cue — the fleet's
  *  45%-alpha billboard fade doesn't apply to the tracked plane (its entity
@@ -3619,7 +3669,7 @@ function _trackedLabelText(icao24) {
     : [info.airline, info.typeName || info.typeCode].filter(Boolean).join(' · ');
   if (ident) lines.push(ident);
   if (info.route && _routeIsPlausible(icao24, info.route)) {
-    // HOW MUCH IS LEFT. adsbdb has published the destination's coordinates
+    // HOW MUCH IS LEFT. The route source has published the destination's coordinates
     // since this proxy was written and nothing has ever read them — the arc
     // uses them, the readout did not. It is the one number a viewer watching a
     // tracked contact actually wants, and it costs a great-circle.
@@ -3876,7 +3926,7 @@ function _routeIsPlausible(icao24, route) {
  * and for the same reason: it is the position the operator is looking at, and
  * the two halves of one line must not be computed from two different fixes.
  *
- * `null` whenever adsbdb published no coordinate for the destination: a
+ * `null` whenever the route source published no coordinate for the destination: a
  * distance is not a field to fill with a guess, and a leg without one keeps
  * the line it always had.
  *
@@ -3909,10 +3959,11 @@ function _remainingLegKm(icao24, route) {
  * scheduled legs name those very fields. Neither could reach the other without
  * an import edge, which is what `layerJoins.js` exists to remove.
  *
- * TWO CODES, because adsbdb publishes ONE and it is not always the same one:
- * `parseRoute` writes `iata_code || icao_code`, so `LFPG` and `CDG` are both
- * live in the field depending on what the upstream row carried. The pack has
- * both columns, so the caller passes both and either may match.
+ * TWO CODES, because the route's `code` is ONE and it is not always the same
+ * one: the server writes the IATA code when the airport has one and the ICAO
+ * code otherwise (src/vrsStandingData.js), so `LFPG` and `CDG` are both live in
+ * the field. The pack has both columns, so the caller passes both and either
+ * may match.
  *
  * ONLY A PLAUSIBLE ROUTE COUNTS. `routePlausible.js` already gates the route
  * LINE on the aircraft's own position — a wrong-leg answer is hidden rather
@@ -3932,8 +3983,9 @@ function _remainingLegKm(icao24, route) {
  * can stand behind. Three things bound it, and all three are measured:
  *   · only an AIRLINE-STYLE callsign can resolve at all — 573 of the 726
  *     airborne contacts in the Paris circle (79 %), the rest being general
- *     aviation whose tails adsbdb does not carry;
- *   · of those, 30 of 40 sampled (75.0 %) resolve to a leg;
+ *     aviation whose tails the route source does not carry;
+ *   · of those, 76–77 % resolve to a plausible leg in the VRS standing data
+ *     (763–782 live callsigns over France, 2026-09-22);
  *   · and the sweep only sees what is ON SCREEN, so an airport framed from
  *     orbit counts a different sky than the same airport framed from 20 km.
  * A count is therefore what THIS SESSION HAS RESOLVED, still — it is just no
@@ -4301,7 +4353,7 @@ function _onMilitaryActiveChange(active) {
 /**
  * Map one aircraft's internal poll record to a plain JSON-safe analyst
  * record (analyst query engine seam). Pure — no Cesium types, no fetches;
- * enrichment fields read the CACHED adsbdb values only. Missing/unknown
+ * enrichment fields read the CACHED enrichment values only. Missing/unknown
  * fields are null, never NaN/undefined. The route-plausibility verdict is
  * computed by the CALLER (it needs the billboard position) and passed in,
  * so an implausible cached route is never surfaced as fact.
@@ -4984,7 +5036,7 @@ const flightsLayer = {
 
         // Store flight metadata for click-to-track labels
         const cat = stickyNumber(category, prevMeta?.category, null);
-        // Type/tail resolution, in precedence order: an adsbdb answer wins,
+        // Type/tail resolution, in precedence order: an enrichment answer wins,
         // because it is the only source that also carries the human-readable
         // typeName the cards print. The feed's own value fills the gap that
         // answer leaves — the ambient enrichment is rationed (4 in flight, a
@@ -5036,7 +5088,7 @@ const flightsLayer = {
             prevMeta?.lastContactEpochMs,
             null,
           ),
-          // Type and tail: adsb.lol carries them in the vector, adsbdb writes
+          // Type and tail: adsb.lol carries them in the vector, the standing-data lookup writes
           // them from its enrichment callbacks. Either way, carried across polls.
           typeCode,
           typeName: prevMeta?.typeName ?? null,
@@ -5689,7 +5741,7 @@ const flightsLayer = {
    * Snapshot the layer's in-memory records as plain JSON-safe objects for
    * the analyst query engine. On-demand only (called at most once per
    * spoken query) — zero per-frame cost, no listeners, no caching, no
-   * enrichment fetches (cached adsbdb values only). Returns [] while the
+   * enrichment fetches (cached enrichment values only). Returns [] while the
    * layer is disabled or empty.
    * @param {number} [maxCount=2000] - Maximum records to return (truncation).
    * @returns {Array<Object>} See mapAnalystRecord for the record shape.
@@ -5784,7 +5836,7 @@ const flightsLayer = {
    * Describe what the route view can do for the current selection.
    *
    * The UI reads this to decide whether to offer the control at all: an
-   * aircraft whose callsign adsbdb does not know, or whose scheduled leg
+   * aircraft whose callsign the standing data does not know, or whose scheduled leg
    * `routePlausible` rejects, has no route to show and must not be given a
    * button that would do nothing.
    * @returns {{available: boolean, active: boolean, fitsOneView: boolean,

@@ -16,6 +16,8 @@ import flightsLayer, {
   _clearDisplayFloorStateForTest,
   ambientRouteCallsign,
   chooseFlightFeedAnchor,
+  flightRouteInfoUrl,
+  flightTypeInfoUrl,
   mapAnalystRecord,
   formatContactAltitude,
 } from './flights.js';
@@ -295,7 +297,7 @@ const UNTYPED_META = {
 test('phase 3a: a fallback type designator classifies the contact on the poll itself', async () => {
   // The point of the whole phase. OpenSky sends no type code and an empty
   // emitter category for ~94 % of contacts, so this aircraft would sit on the
-  // placeholder silhouette until a rationed adsbdb lookup answered — which,
+  // placeholder silhouette until a rationed type lookup answered — which,
   // against thousands of contacts, mostly never happens. adsb.lol had 'EC35'
   // in the payload all along.
   const { record } = await pollWithVector('a1b2c3', (nowSec) => [
@@ -349,8 +351,8 @@ test('phase 3a: a class learned during a fallback window survives the swing back
   assert.equal(record.aircraftClass, 'helicopter', 'the OpenSky poll did not blank the learned type');
 });
 
-test('phase 3a: an adsbdb answer already in hand outranks the feed type code', async () => {
-  // Precedence, not stickiness-in-general: adsbdb is the only source that also
+test('phase 3a: an enrichment answer already in hand outranks the feed type code', async () => {
+  // Precedence, not stickiness-in-general: enrichment is the only source that also
   // carries the human-readable typeName the cards print, so a resolved value
   // must not be rewritten every poll by a feed that disagrees with it.
   const { record } = await pollWithVector('a1b2c3', (nowSec) => [
@@ -469,7 +471,7 @@ test('real civil track path creates no native label and publishes every cached h
     assert.ok(entity instanceof Cesium.Entity, 'trackById must create the real Cesium entity');
     assert.equal(entity.label, undefined);
     assert.ok(entities.values.every((candidate) => candidate.label === undefined));
-    // The route line carries HOW MUCH IS LEFT. adsbdb has published the
+    // The route line carries HOW MUCH IS LEFT. The route source has published the
     // destination's coordinates since this proxy was written and only the arc
     // ever read them; 1 994 km is the great circle from the billboard's own
     // position over Austin to LAX, measured from the same fix the
@@ -605,7 +607,7 @@ test('real civil track path creates no native label and publishes every cached h
 // Label convention: callsign → registration → icao24
 //
 // A callsign-less civil contact used to read as its raw ICAO hex ("ae1fa4")
-// even once adsbdb enrichment had supplied a registration ("N123AB"). The
+// even once enrichment had supplied a registration ("N123AB"). The
 // military layer already resolved callsign → registration → hex; these lock
 // the civil layer to the same chain across EVERY public label surface, and
 // pin the invariant that identity stays icao24 (the `id`/`icao24`/`sourceId`
@@ -1648,7 +1650,7 @@ test('only an airline-style callsign is worth a route token', () => {
   assert.equal(ambientRouteCallsign({ callsign: 'AFR447' }, seen), 'AFR447');
   assert.equal(ambientRouteCallsign({ callsign: 'ezy62xq' }, seen), 'EZY62XQ');
   assert.equal(ambientRouteCallsign({ callsign: ' BAW11  ' }, seen), 'BAW11');
-  // General aviation: adsbdb is a register of scheduled airline legs, so a
+  // General aviation: the standing data is a register of scheduled airline legs, so a
   // tail number is a request that is certain to come back empty.
   assert.equal(ambientRouteCallsign({ callsign: 'F-GABC' }, seen), null);
   assert.equal(ambientRouteCallsign({ callsign: 'N172SP' }, seen), null);
@@ -1669,4 +1671,26 @@ test('a callsign already in the queue is not asked for twice', () => {
   const queued = new Set(['r:AFR447']);
   assert.equal(ambientRouteCallsign({ callsign: 'AFR447' }, (key) => queued.has(key)), null);
   assert.equal(ambientRouteCallsign({ callsign: 'AFR448' }, (key) => queued.has(key)), 'AFR448');
+});
+
+// ── The standing-data lookups (src/vrsStandingData.js) ─────────────────────
+// adsbdb was asked `/api/adsbdb/type/:hex` and `/api/adsbdb/route/:cs`; the
+// server's own copy of the VRS standing data answers the same shapes under
+// `/api/flight-info`, and wants two things adsbdb never did: the designator
+// the feed already carries (its airframe table is small), and where the
+// aircraft is (a number flown over several legs answers the leg it is on).
+test('type lookups carry the feed designator when there is one', () => {
+  assert.equal(flightTypeInfoUrl('3C6444', 'a20n'), '/api/flight-info/type/3c6444?t=A20N');
+  assert.equal(flightTypeInfoUrl('3c6444'), '/api/flight-info/type/3c6444');
+  assert.equal(flightTypeInfoUrl('3c6444', 'not a code'), '/api/flight-info/type/3c6444');
+});
+
+test('route lookups carry the fix, rounded, and nothing when the fix is unknown', () => {
+  assert.equal(
+    flightRouteInfoUrl('AFR1234', { lat: 46.51234, lon: 4.60001, altitudeM: 10363.4, verticalRateMps: -5.24 }),
+    '/api/flight-info/route/AFR1234?lat=46.512&lon=4.600&alt=10363&vr=-5.2',
+  );
+  assert.equal(flightRouteInfoUrl('AFR1234', { lat: 46.5, lon: 4.6 }), '/api/flight-info/route/AFR1234?lat=46.500&lon=4.600');
+  assert.equal(flightRouteInfoUrl('AFR1234', { lat: null, lon: 4.6 }), '/api/flight-info/route/AFR1234');
+  assert.equal(flightRouteInfoUrl('AFR1234'), '/api/flight-info/route/AFR1234');
 });

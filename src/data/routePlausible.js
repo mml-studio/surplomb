@@ -1,7 +1,7 @@
 // src/data/routePlausible.js
 /**
- * Is an adsbdb scheduled route consistent with where the plane actually is and
- * what it is doing? adsbdb returns the scheduled route for a callsign, which
+ * Is a scheduled route consistent with where the plane actually is and
+ * what it is doing? The route source returns the scheduled route for a callsign, which
  * is sometimes the wrong leg — reject a route rather than display a wrong one.
  * Adapted from skylight (MIT) web/src/display/renderer.ts routePlausible(),
  * with the vertical-trend check made observer-free (skylight anchors it to a

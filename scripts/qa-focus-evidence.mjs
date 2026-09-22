@@ -282,7 +282,7 @@ async function installSyntheticFetches(page) {
       if (url.includes('/api/opensky-track')) return json({ path: [] });
       if (url.includes('/api/adsblol/trace')) return json({ timestamp: Date.now() / 1000, trace: [] });
       if (url.includes('/api/opensky')) return json({ time: Math.floor(Date.now() / 1000), states: [] });
-      if (url.includes('/api/adsbdb/')) return json({ found: false });
+      if (url.includes('/api/flight-info/')) return json({ found: false });
       if (url.includes('/api/ais-live')) return json({ status: 'open', rows: [] });
       return realFetch(input, init);
     };

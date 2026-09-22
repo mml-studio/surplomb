@@ -268,7 +268,7 @@ async function main() {
         // branch. ADSBDB enrichment is incidental to this visual-scale check,
         // so keep an unavailable public enrichment provider from generating an
         // unrelated console error.
-        if (url.includes('/api/adsbdb/')) return Promise.resolve(jsonResponse({ found: false }));
+        if (url.includes('/api/flight-info/')) return Promise.resolve(jsonResponse({ found: false }));
         return realFetch(input, init);
       };
     }, SPRITES);

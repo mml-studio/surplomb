@@ -1114,7 +1114,7 @@ class CockpitViewController {
   /**
    * Offer the route control only when there is a route to show.
    *
-   * adsbdb answers a callsign, not every aircraft, and `routePlausible`
+   * The route source answers a callsign, not every aircraft, and `routePlausible`
    * rejects a wrong-leg answer outright — so most contacts have no scheduled
    * leg at any given moment, and a permanently visible button would mostly be
    * a button that does nothing. The military layer carries no route

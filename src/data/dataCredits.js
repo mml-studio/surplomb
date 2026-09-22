@@ -71,11 +71,22 @@ export const DATA_CREDITS = [
       '(non-commercial)',
   },
   {
+    // Worded for both builds: a clone draws adsb.lol's regional circles
+    // whenever OpenSky's snapshot is stale, and the hosted build (OpenSky off,
+    // src/nonCommercialSources.js) draws nothing else. Neither is a fallback
+    // a reader needs to be told about; the source is.
     key: 'adsblol',
     html:
-      'Military flights, aircraft traces &amp; bounded regional flight fallback: ' +
+      'Live flights (positions, type and tail), military flights &amp; aircraft traces: ' +
       '<a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a> ' +
       '(ODbL 1.0)',
+  },
+  {
+    key: 'vrs-standing-data',
+    html:
+      'Flight routes, airline and aircraft type names: ' +
+      '<a href="https://github.com/vradarserver/standing-data" target="_blank" rel="noopener">Virtual Radar Server standing data</a> ' +
+      '(CC0 1.0) — scheduled legs by callsign, shown only when consistent with the aircraft’s position',
   },
   {
     key: 'aisstream',

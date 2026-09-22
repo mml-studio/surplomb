@@ -13,7 +13,7 @@
  *
  * Fetch shim (installed before app code, same pattern as qa-sprites-b5.mjs):
  *   - /api/opensky           → 12 straight-flying planes, category 0
- *   - /api/adsbdb/type/:hex  → varied REAL type codes (C172, B744, DH8D, H60,
+ *   - /api/flight-info/type/:hex  → varied REAL type codes (C172, B744, DH8D, H60,
  *                              F16, GLID, B77W, A320, B738, PC12, R44) + one
  *                              found:false miss; responses are HELD until the
  *                              harness releases them (deterministic baseline),
@@ -35,7 +35,7 @@
  *   E3b feed-typed: a 13th plane whose type designator the FEED already
  *                  carries at state[18] (what adsb.lol publishes since phase
  *                  3a) is drawn with the right silhouette from the first
- *                  frame and is NEVER requested from adsbdb — the ambient
+ *                  frame and is NEVER requested from flight-info — the ambient
  *                  budget only pays for contacts nothing has classified yet
  *   E4 diversity : ≥5 distinct glyph data-URIs displayed ambiently after
  *                  enrichment (expected: 8)
@@ -128,14 +128,14 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 // ---------------------------------------------------------------------------
 // Synthetic fleet: one east-west row near Austin, ALL category 0 ("no info" —
-// the 94% real-world case). adsbdb type answers cover 8 distinct classes;
+// the 94% real-world case). flight-info type answers cover 8 distinct classes;
 // aa000c answers found:false (negative-cache case → stays airliner).
 // ---------------------------------------------------------------------------
 const ROW_LAT = 30.30;
 const ROW_LON0 = -97.82;
 const ROW_STEP_DEG = 0.012; // ~1.15 km — 12 planes span ~12.7 km, fits a 20 km-up frame
 
-/** hex → adsbdb icao_type (null = adsbdb miss / negative cache). */
+/** hex → flight-info icao_type (null = flight-info miss / negative cache). */
 const TYPES = {
   aa0001: 'C172', // light
   aa0002: 'B744', // quadjet
@@ -148,18 +148,18 @@ const TYPES = {
   aa0009: 'B738', // airliner (known code outside the special sets)
   aa000a: 'PC12', // turboprop
   aa000b: 'R44',  // helicopter
-  aa000c: null,   // adsbdb 404 → found:false → stays airliner, never re-asked
+  aa000c: null,   // flight-info 404 → found:false → stays airliner, never re-asked
 };
 
 /** The 13th plane, and the point of E3b: its designator rides in the FEED at
  *  state[18] — where adsb.lol has published it since phase 3a — so nothing
- *  needs to ask adsbdb about it. It sits just north of the row rather than at
+ *  needs to ask flight-info about it. It sits just north of the row rather than at
  *  the end of it, to keep the 12-plane row inside the top-down frame. */
 const FEED_TYPED = { hex: 'aa000d', typeCode: 'A359' }; // widebody
 
 const SPEC = {
   timeOffsetSec: 0,
-  responseDelayMs: 400, // adsbdb latency so concurrency is actually observable
+  responseDelayMs: 400, // flight-info latency so concurrency is actually observable
   budgetQa: BUDGET_QA,
   types: TYPES,
   planes: [
@@ -242,7 +242,7 @@ async function main() {
     });
     page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-    // ---- Fetch shim: synthetic fleet + instrumented, holdable adsbdb -------
+    // ---- Fetch shim: synthetic fleet + instrumented, holdable flight-info -------
     await page.evaluateOnNewDocument((spec) => {
       window.__ENR = spec;
       window.__ENR.epochMs = Date.now();
@@ -280,7 +280,7 @@ async function main() {
         const nowSec = Date.now() / 1000 + (S.timeOffsetSec || 0);
         const tRel = nowSec - S.epochMs / 1000;
 
-        if (url.includes('/api/adsbdb/type/')) {
+        if (url.includes('/api/flight-info/type/')) {
           const hex = url.split('/').pop().split('?')[0].toLowerCase();
           const L = window.__ENRICH_LOG;
           L.starts.push({ hex, t: performance.now() });
@@ -299,12 +299,12 @@ async function main() {
         // ambient sweep asks for these too, off their OWN token bucket, which
         // is the whole of what E13 checks — that they fire without anything
         // being tracked, and that a callsign is asked about once.
-        if (url.includes('/api/adsbdb/route/')) {
+        if (url.includes('/api/flight-info/route/')) {
           const cs = decodeURIComponent(url.split('/').pop().split('?')[0]).toUpperCase();
           window.__ENRICH_LOG.routes.push({ cs, t: performance.now() });
           return Promise.resolve(jsonResponse({ found: false }));
         }
-        if (url.includes('/api/adsbdb/')) return Promise.resolve(jsonResponse({ found: false }));
+        if (url.includes('/api/flight-info/')) return Promise.resolve(jsonResponse({ found: false }));
         if (url.includes('/api/opensky-track')) return Promise.resolve(jsonResponse({ path: [] }));
         if (url.includes('/api/adsblol/trace')) {
           return Promise.resolve(jsonResponse({ timestamp: Math.floor(nowSec), trace: [] }));
@@ -401,7 +401,7 @@ async function main() {
       window.__ENR_DRIVER = setInterval(() => { fl.update(v); }, 15000);
       return { count: fl.getStats().count, starts: window.__ENRICH_LOG.starts.length };
     });
-    console.log(`  flights count=${primed.count} | adsbdb requests started (held): ${primed.starts}`);
+    console.log(`  flights count=${primed.count} | flight-info requests started (held): ${primed.starts}`);
     record('E1 ingest: all synthetic category-0 planes in the flights layer',
       primed.count === SPEC.planes.length, `count=${primed.count}/${SPEC.planes.length}`);
     if (primed.count === 0) { finish(); return; }
@@ -409,7 +409,7 @@ async function main() {
     // ========================================================================
     // E2 — deterministic pre-enrichment baseline (responses still held)
     // ========================================================================
-    console.log('\nE2 — pre-enrichment baseline (adsbdb responses held)');
+    console.log('\nE2 — pre-enrichment baseline (flight-info responses held)');
     const before = await page.evaluate(() => window.__collectBillboards());
     const beforeById = new Map(before.map((b) => [b.id, b]));
     const baselineBad = [];
@@ -427,9 +427,9 @@ async function main() {
     console.log('  saved enrich-before-monoculture.png (12 identical airliner glyphs)');
 
     // ========================================================================
-    // Release adsbdb + wait for the drip to finish, then for glyph swaps
+    // Release flight-info + wait for the drip to finish, then for glyph swaps
     // ========================================================================
-    console.log('\nReleasing adsbdb responses; waiting for the bounded drip to drain...');
+    console.log('\nReleasing flight-info responses; waiting for the bounded drip to drain...');
     await page.evaluate(() => window.__ENRICH_RELEASE());
     // Only the 12 unclassified planes are ever requested — the 13th carries its
     // designator in the feed, so waiting on SPEC.planes.length would hang here.
@@ -464,7 +464,7 @@ async function main() {
 
     // E3b — the contact the feed already answered for costs nothing. Before
     // phase 3a the adapter dropped `t`, so every contact reached the classifier
-    // with nothing to classify on and the whole fleet queued for adsbdb. Now
+    // with nothing to classify on and the whole fleet queued for flight-info. Now
     // ~97 % of an adsb.lol fleet arrives typed; spending a rationed token to
     // re-ask about them was where most of the bucket went.
     const feedTypedBb = afterById.get(FEED_TYPED.hex);

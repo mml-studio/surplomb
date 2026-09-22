@@ -4,7 +4,7 @@
  * drawable and something framable — and nothing else.
  *
  * ── What this is, and what it is not ────────────────────────────────────────
- * adsbdb answers a CALLSIGN with the leg that callsign is scheduled to fly
+ * The route source (VRS standing data, src/vrsStandingData.js) answers a CALLSIGN with the leg that callsign is scheduled to fly
  * today. It is a timetable entry, not a measurement: no part of it comes from
  * the transponder. The trail behind the aircraft is the flown track; this arc
  * is the plan. Everything here is named `plan` for that reason, and the caller
@@ -106,7 +106,7 @@ export function routeFitsOneView(farthestKm) {
  *
  * @param {object} input
  * @param {string} input.icao24 Contact identity, for the entity/entry ids.
- * @param {{origin?:object, destination?:object}|null} input.route Plausibility-gated adsbdb route.
+ * @param {{origin?:object, destination?:object}|null} input.route Plausibility-gated scheduled route.
  * @param {number} input.latitude Aircraft latitude, degrees.
  * @param {number} input.longitude Aircraft longitude, degrees.
  * @returns {{
