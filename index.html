@@ -283,12 +283,15 @@
     `npm run landing:assets` réécrit les chemins `/landing/…` avec l'empreinte
     de leur contenu (`scripts/build-landing-assets.mjs`).
   -->
-  <!-- The showcase stays French for now: it gets its own English document
-       later (plan decision D2), so its root says so. Without `lang="fr"` an
-       English `<html lang>` would mislabel every French word below it for a
-       screen reader and for a translation tool. -->
-  <div id="vitrine" class="landing" data-state="poster" lang="fr">
-    <a class="skip" href="#contenu">Aller au contenu</a>
+  <!-- The showcase speaks the page's language, like the globe: the French is
+       here, the English is `vitrine.*` in src/i18n/markup.i18n.js, applied by
+       src/boot.js before the page is shown (landing.css keeps an English page
+       hidden until then). Two things exist in ONE language only and carry
+       `data-locale-only`: the waitlist, which is a French offer, and the
+       credit to the project the globe is built on, which the English page
+       carries. -->
+  <div id="vitrine" class="landing" data-state="poster">
+    <a class="skip" href="#contenu" data-i18n="vitrine.skip">Aller au contenu</a>
     <div class="world" aria-hidden="true">
       <!--
         The poster is frame 0 of the loop. AVIF first: at 2880 px it is a third
@@ -320,7 +323,7 @@
       <!-- The file is chosen in src/vitrine/vitrine.js (definition × codec, src/vitrine/renditions.js). -->
       <video class="world-video" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1"></video>
     </div>
-    <span class="world-credit">Cesium ion · Google Maps</span>
+    <span class="world-credit" translate="no">Cesium ion · Google Maps</span>
 
     <!--
       L'identité « Belvédère » (validée le 2026-09-18) : le symbole à deux plans
@@ -328,54 +331,62 @@
       octets, aucune requête, et les deux plans prennent la couleur du texte.
     -->
     <header class="top" id="haut">
-      <a class="brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word" translate="no">surplomb</span></a>
-      <div class="top-right"><p class="slogan">Aucun <br />angle mort.</p></div>
+      <a class="brand" href="#haut" data-i18n-aria-label="vitrine.backToTop" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word" translate="no">surplomb</span></a>
+      <!-- The language switch: a plain link to `/?lang=…` (the locale gate
+           stores the choice), which src/vitrine/vitrine.js turns into
+           `switchLocale()` so the address comes back clean. It names the
+           language it goes TO, in that language, like the globe's button. -->
+      <div class="top-right">
+        <p class="slogan" data-i18n="vitrine.slogan">Aucun <br />angle mort.</p>
+        <a class="locale-link" href="/?lang=en" hreflang="en" lang="en" data-locale-link data-locale-only="fr" aria-label="English — passer en anglais">EN</a>
+        <a class="locale-link" href="/?lang=fr" hreflang="fr" lang="fr" data-locale-link data-locale-only="en" aria-label="Français — switch to French">FR</a>
+      </div>
     </header>
 
     <section class="hero" aria-labelledby="vitrine-title">
       <div class="hero-copy">
-        <h1 id="vitrine-title">La France <br />au rayon X.</h1>
-        <p class="intro">Tout ce que vous n’auriez jamais pensé à chercher.</p>
+        <h1 id="vitrine-title" data-i18n="vitrine.hero.title">La France <br />au rayon X.</h1>
+        <p class="intro" data-i18n="vitrine.hero.intro">Tout ce que vous n’auriez jamais pensé à chercher.</p>
       </div>
       <div class="hero-location">
-        <p class="hero-place"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>Paris · le trafic, rue par rue</p>
+        <p class="hero-place" data-i18n="vitrine.hero.place"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>Paris · le trafic, rue par rue</p>
         <!-- Arrête la boucle sur l'image en cours (src/vitrine/vitrine.js). Absente tant que rien ne joue. -->
-        <label class="motion-control"><input id="vitrine-still" type="checkbox" />Image fixe</label>
+        <label class="motion-control" data-i18n="vitrine.hero.still"><input id="vitrine-still" type="checkbox" />Image fixe</label>
       </div>
-      <span class="image-credit">Cesium ion · Google Maps</span>
+      <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
     </section>
 
     <main class="content" id="contenu">
       <section class="panel discover" aria-labelledby="discover-title">
-        <h2 class="section-title" id="discover-title">Tout commence <br />par un lieu.</h2>
-        <p class="public-copy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
-        <ul class="examples" data-live="examples" aria-label="Des vues à explorer">
-          <li><a href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv" data-example="0">Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night" data-example="1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" data-example="2">Le bus qui arrive, en direct.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8" data-example="3">Les voitures qui roulent en ce moment, rue par rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k" data-example="4">Le vélo libre le plus proche.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+        <h2 class="section-title" id="discover-title" data-i18n="vitrine.discover.title">Tout commence <br />par un lieu.</h2>
+        <p class="public-copy" data-i18n="vitrine.publicCopy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+        <ul class="examples" data-live="examples" data-i18n-aria-label="vitrine.discover.examples" aria-label="Des vues à explorer">
+          <li><a href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv" data-example="0" data-i18n="vitrine.discover.example0">Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night" data-example="1" data-i18n="vitrine.discover.example1">Ce que produit chaque centrale à cette minute.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" data-example="2" data-i18n="vitrine.discover.example2">Le bus qui arrive, en direct.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8" data-example="3" data-i18n="vitrine.discover.example3">Les voitures qui roulent en ce moment, rue par rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k" data-example="4" data-i18n="vitrine.discover.example4">Le vélo libre le plus proche.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
           <!-- En réserve : le rendu des permis est en correction. Hors du HTML visible, JavaScript ou non. -->
-          <li hidden data-pending="permis"><a href="/#v=2&amp;lat=43.6047&amp;lon=1.4442&amp;alt=2500&amp;heading=30&amp;pitch=-50&amp;l=sd.5" data-example="5">Les permis de construire accordés dans la rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t" data-example="6">L’avion qui passe au-dessus, et d’où il vient.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
-          <li><a href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd.gr" data-example="7">Le risque d’inondation sous le trottoir.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li hidden data-pending="permis"><a href="/#v=2&amp;lat=43.6047&amp;lon=1.4442&amp;alt=2500&amp;heading=30&amp;pitch=-50&amp;l=sd.5" data-example="5" data-i18n="vitrine.discover.example5">Les permis de construire accordés dans la rue.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t" data-example="6" data-i18n="vitrine.discover.example6">L’avion qui passe au-dessus, et d’où il vient.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
+          <li><a href="/#v=2&amp;lat=45.7640&amp;lon=4.8357&amp;alt=1200&amp;heading=0&amp;pitch=-55&amp;l=dv.cd.gr" data-example="7" data-i18n="vitrine.discover.example7">Le risque d’inondation sous le trottoir.<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a></li>
         </ul>
         <div class="examples-progress" hidden aria-hidden="true"><span></span></div>
         <div class="example-controls" hidden>
-          <button class="text-button" type="button" data-examples-pause aria-pressed="false">Mettre en pause</button>
-          <button class="text-button" type="button" data-examples-next>Autre exemple <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="text-button" type="button" data-examples-pause aria-pressed="false" data-i18n="vitrine.pause">Mettre en pause</button>
+          <button class="text-button" type="button" data-examples-next data-i18n="vitrine.discover.next">Autre exemple <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <span class="example-index" data-examples-index></span>
         </div>
       </section>
 
       <!-- Aucun chiffre de démonstration : le groupe et ses entrées restent masqués tant qu'aucune valeur positive n'est reçue de /api/pulse (src/vitrine/counters.js). -->
       <section class="panel counter-panel" data-live="counters" hidden aria-labelledby="counter-title">
-        <h2 class="section-title" id="counter-title">En ce moment <br />au-dessus de la France</h2>
+        <h2 class="section-title" id="counter-title" data-i18n="vitrine.counters.title">En ce moment <br />au-dessus de la France</h2>
         <dl>
-          <div class="counter" data-value="" hidden><dt>Avions</dt><dd data-live="counter:avions"></dd></div>
-          <div class="counter" data-value="" hidden><dt>Navires</dt><dd data-live="counter:navires"></dd></div>
-          <div class="counter" data-value="" hidden><dt>Bus et trams</dt><dd data-live="counter:bus"></dd></div>
-          <div class="counter" data-value="" hidden><dt>Stations météo qui émettent</dt><dd data-live="counter:meteo"></dd></div>
+          <div class="counter" data-value="" hidden><dt data-i18n="vitrine.counters.avions">Avions</dt><dd data-live="counter:avions"></dd></div>
+          <div class="counter" data-value="" hidden><dt data-i18n="vitrine.counters.navires">Navires</dt><dd data-live="counter:navires"></dd></div>
+          <div class="counter" data-value="" hidden><dt data-i18n="vitrine.counters.bus">Bus et trams</dt><dd data-live="counter:bus"></dd></div>
+          <div class="counter" data-value="" hidden><dt data-i18n="vitrine.counters.meteo">Stations météo qui émettent</dt><dd data-live="counter:meteo"></dd></div>
         </dl>
       </section>
 
@@ -391,86 +402,86 @@
       -->
       <section class="panel gallery" aria-labelledby="gallery-title">
         <div class="stage">
-          <h2 class="section-title stage-title" id="gallery-title">Choisissez une vue.</h2>
-          <button class="stage-pause" type="button" data-stage-pause aria-pressed="false" hidden><svg class="icon-pause" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></g></svg><svg class="icon-play" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></g></svg><span data-stage-pause-label>Mettre en pause</span></button>
+          <h2 class="section-title stage-title" id="gallery-title" data-i18n="vitrine.gallery.title">Choisissez une vue.</h2>
+          <button class="stage-pause" type="button" data-stage-pause aria-pressed="false" hidden><svg class="icon-pause" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></g></svg><svg class="icon-play" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></g></svg><span data-stage-pause-label data-i18n="vitrine.pause">Mettre en pause</span></button>
           <div class="stage-views">
             <article class="view" data-view="01" data-active>
               <div class="view-image" data-media="view:01">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w, /landing/view-01-1440.dda02268.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-01-480.4cdfdd33.jpg" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w" sizes="100vw" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w, /landing/view-01-1440.dda02268.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-01-480.4cdfdd33.jpg" srcset="/landing/view-01-480.4cdfdd33.jpg 480w, /landing/view-01-960.4229e895.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v01.alt" alt="Roissy et les avions en approche" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-01-titre">Avions en approche</h3><p class="view-place">Roissy-Charles-de-Gaulle</p></div>
-              <a class="view-open" aria-describedby="vue-01-titre" href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-01-titre" data-i18n="vitrine.gallery.v01.title">Avions en approche</h3><p class="view-place" data-i18n="vitrine.gallery.v01.place">Roissy-Charles-de-Gaulle</p></div>
+              <a class="view-open" aria-describedby="vue-01-titre" href="/#v=2&amp;lat=48.9764&amp;lon=2.6095&amp;alt=4000&amp;heading=0&amp;pitch=-45&amp;l=f.t"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
             <article class="view" data-view="02">
               <div class="view-image" data-media="view:02">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w, /landing/view-02-1440.c15ac1b1.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-02-480.5e04590d.jpg" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w" sizes="100vw" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w, /landing/view-02-1440.c15ac1b1.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-02-480.5e04590d.jpg" srcset="/landing/view-02-480.5e04590d.jpg 480w, /landing/view-02-960.dde8e952.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v02.alt" alt="Une parcelle vendue à Lyon, et son prix" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-02-titre">Ventes immobilières</h3><p class="view-place">Une parcelle vendue à Lyon, et son prix</p></div>
-              <a class="view-open" aria-describedby="vue-02-titre" href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-02-titre" data-i18n="vitrine.gallery.v02.title">Ventes immobilières</h3><p class="view-place" data-i18n="vitrine.gallery.v02.place">Une parcelle vendue à Lyon, et son prix</p></div>
+              <a class="view-open" aria-describedby="vue-02-titre" href="/#v=2&amp;lat=45.7580&amp;lon=4.8340&amp;alt=550&amp;heading=0&amp;pitch=-45&amp;l=dv"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
             <article class="view" data-view="03">
               <div class="view-image" data-media="view:03">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w, /landing/view-03-1440.ab55a76b.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-03-480.e0f39b6c.jpg" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w" sizes="100vw" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w, /landing/view-03-1440.ab55a76b.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-03-480.e0f39b6c.jpg" srcset="/landing/view-03-480.e0f39b6c.jpg 480w, /landing/view-03-960.c7aa0f6b.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v03.alt" alt="Les voitures en direct dans les rues, avec les bouchons" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-03-titre">Trafic routier</h3><p class="view-place">Les bouchons en direct, rue par rue</p></div>
-              <a class="view-open" aria-describedby="vue-03-titre" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-03-titre" data-i18n="vitrine.gallery.v03.title">Trafic routier</h3><p class="view-place" data-i18n="vitrine.gallery.v03.place">Les bouchons en direct, rue par rue</p></div>
+              <a class="view-open" aria-describedby="vue-03-titre" href="/#v=2&amp;lat=48.8300&amp;lon=2.2650&amp;alt=600&amp;heading=350&amp;pitch=-60&amp;dm=DENSE&amp;dd=75&amp;l=t.8"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
             <article class="view" data-view="04">
               <div class="view-image" data-media="view:04">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w, /landing/view-04-1440.b66a9bee.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-04-480.517e183e.jpg" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w" sizes="100vw" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w, /landing/view-04-1440.b66a9bee.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-04-480.517e183e.jpg" srcset="/landing/view-04-480.517e183e.jpg 480w, /landing/view-04-960.fd17eb1a.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v04.alt" alt="Le réseau électrique et ce qu’il produit" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-04-titre">Réseau électrique</h3><p class="view-place">La production en France</p></div>
-              <a class="view-open" aria-describedby="vue-04-titre" href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-04-titre" data-i18n="vitrine.gallery.v04.title">Réseau électrique</h3><p class="view-place" data-i18n="vitrine.gallery.v04.place">La production en France</p></div>
+              <a class="view-open" aria-describedby="vue-04-titre" href="/#v=2&amp;lat=44.15&amp;lon=4.95&amp;alt=180000&amp;heading=0&amp;pitch=-58&amp;l=2.3&amp;style=night"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
             <article class="view" data-view="05">
               <div class="view-image" data-media="view:05">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w, /landing/view-05-1440.77bc4297.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-05-480.51fa5b6d.jpg" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w" sizes="100vw" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w, /landing/view-05-1440.77bc4297.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-05-480.51fa5b6d.jpg" srcset="/landing/view-05-480.51fa5b6d.jpg 480w, /landing/view-05-960.4a83b75a.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v05.alt" alt="Les bus de Bordeaux, en direct" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-05-titre">Bus en direct</h3><p class="view-place">Le réseau de Bordeaux</p></div>
-              <a class="view-open" aria-describedby="vue-05-titre" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-05-titre" data-i18n="vitrine.gallery.v05.title">Bus en direct</h3><p class="view-place" data-i18n="vitrine.gallery.v05.place">Le réseau de Bordeaux</p></div>
+              <a class="view-open" aria-describedby="vue-05-titre" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
             <article class="view" data-view="06">
               <div class="view-image" data-media="view:06">
-                <picture><source media="(min-width: 700px)" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w, /landing/view-06-1440.6bc7c61f.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-06-480.6e149147.jpg" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w" sizes="100vw" alt="Les vélos et scooters partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
-                <span class="image-credit">Cesium ion · Google Maps</span>
+                <picture><source media="(min-width: 700px)" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w, /landing/view-06-1440.6bc7c61f.jpg 1440w" sizes="(min-width: 1001px) min(calc(100vw - 80px), 1280px), calc(100vw - 80px)" /><img src="/landing/view-06-480.6e149147.jpg" srcset="/landing/view-06-480.6e149147.jpg 480w, /landing/view-06-960.2b69ac32.jpg 960w" sizes="100vw" data-i18n-alt="vitrine.gallery.v06.alt" alt="Les vélos et scooters partagés de Paris" width="1650" height="1000" loading="lazy" decoding="async" /></picture>
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </div>
-              <div class="view-text"><h3 class="view-title" id="vue-06-titre">Vélos et scooters</h3><p class="view-place">Les flottes partagées de Paris</p></div>
-              <a class="view-open" aria-describedby="vue-06-titre" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k"><span class="view-open-label">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
+              <div class="view-text"><h3 class="view-title" id="vue-06-titre" data-i18n="vitrine.gallery.v06.title">Vélos et scooters</h3><p class="view-place" data-i18n="vitrine.gallery.v06.place">Les flottes partagées de Paris</p></div>
+              <a class="view-open" aria-describedby="vue-06-titre" href="/#v=2&amp;lat=48.8575&amp;lon=2.3510&amp;alt=1300&amp;heading=0&amp;pitch=-55&amp;l=b.k"><span class="view-open-label" data-i18n="vitrine.gallery.open">Ouvrir dans le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></g></svg></a>
             </article>
           </div>
-          <div class="stage-tabs" aria-label="Vues">
-            <button class="stage-tab" type="button" data-tab="01" data-active><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></g></svg><span>Avions</span></button>
-            <button class="stage-tab" type="button" data-tab="02"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g></svg><span>Immobilier</span></button>
-            <button class="stage-tab" type="button" data-tab="03"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></g></svg><span>Trafic</span></button>
-            <button class="stage-tab" type="button" data-tab="04"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></g></svg><span>Énergie</span></button>
-            <button class="stage-tab" type="button" data-tab="05"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 2 7"/><path d="M10 6h4"/><path d="m22 7-2-1"/><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 21v-2"/></g></svg><span>Bus</span></button>
-            <button class="stage-tab" type="button" data-tab="06"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></g></svg><span>Vélos</span></button>
+          <div class="stage-tabs" data-i18n-aria-label="vitrine.gallery.tabs" aria-label="Vues">
+            <button class="stage-tab" type="button" data-tab="01" data-active><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></g></svg><span data-i18n="vitrine.gallery.tab01">Avions</span></button>
+            <button class="stage-tab" type="button" data-tab="02"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g></svg><span data-i18n="vitrine.gallery.tab02">Immobilier</span></button>
+            <button class="stage-tab" type="button" data-tab="03"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></g></svg><span data-i18n="vitrine.gallery.tab03">Trafic</span></button>
+            <button class="stage-tab" type="button" data-tab="04"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></g></svg><span data-i18n="vitrine.gallery.tab04">Énergie</span></button>
+            <button class="stage-tab" type="button" data-tab="05"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 2 7"/><path d="M10 6h4"/><path d="m22 7-2-1"/><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 21v-2"/></g></svg><span data-i18n="vitrine.gallery.tab05">Bus</span></button>
+            <button class="stage-tab" type="button" data-tab="06"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></g></svg><span data-i18n="vitrine.gallery.tab06">Vélos</span></button>
           </div>
         </div>
       </section>
 
       <section class="panel voice" data-live="voice" aria-labelledby="voice-title">
-        <div class="voice-heading"><h2 id="voice-title">Parlez au <br />globe.</h2><span class="premium">premium</span></div>
+        <div class="voice-heading"><h2 id="voice-title" data-i18n="vitrine.voice.title">Parlez au <br />globe.</h2><span class="premium" data-locale-only="fr">premium</span></div>
         <div class="voice-layout">
           <picture>
             <source type="image/webp" srcset="/landing/micro-768.a739f771.webp 768w, /landing/micro-1448.fa608558.webp 1448w" sizes="(min-width: 1001px) 580px, (min-width: 700px) 620px, 100vw" />
-            <img class="microphone" src="/landing/micro-768.a739f771.webp" alt="Microphone en verre traversé par un ruban corail" width="1448" height="1086" loading="lazy" decoding="async" />
+            <img class="microphone" src="/landing/micro-768.a739f771.webp" data-i18n-alt="vitrine.voice.microphoneAlt" alt="Microphone en verre traversé par un ruban corail" width="1448" height="1086" loading="lazy" decoding="async" />
           </picture>
           <div class="voice-body">
-            <blockquote>« Montre-moi les bus autour de la gare Saint-Jean. »</blockquote>
+            <blockquote data-i18n="vitrine.voice.quote">« Montre-moi les bus autour de la gare Saint-Jean. »</blockquote>
             <figure class="voice-answer">
-              <a class="bus" data-media="voice-response" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" aria-label="Voir les bus de Bordeaux dans le globe">
-                <img src="/landing/voice-bus-600.dc1ac719.jpg" srcset="/landing/voice-bus-600.dc1ac719.jpg 600w, /landing/voice-bus-1200.aba962eb.jpg 1200w" sizes="(min-width: 1001px) 520px, 100vw" alt="Les bus autour de la gare Saint-Jean à Bordeaux" loading="lazy" decoding="async" />
-                <span class="image-credit">Cesium ion · Google Maps</span>
+              <a class="bus" data-media="voice-response" data-view="05" href="/#v=2&amp;lat=44.8378&amp;lon=-0.5792&amp;alt=5000&amp;heading=0&amp;pitch=-50&amp;l=p.t" data-i18n-aria-label="vitrine.voice.answerLink" aria-label="Voir les bus de Bordeaux dans le globe">
+                <img src="/landing/voice-bus-600.dc1ac719.jpg" srcset="/landing/voice-bus-600.dc1ac719.jpg 600w, /landing/voice-bus-1200.aba962eb.jpg 1200w" sizes="(min-width: 1001px) 520px, 100vw" data-i18n-alt="vitrine.voice.answerAlt" alt="Les bus autour de la gare Saint-Jean à Bordeaux" loading="lazy" decoding="async" />
+                <span class="image-credit" translate="no">Cesium ion · Google Maps</span>
               </a>
-              <figcaption>Les bus de Bordeaux, en direct.</figcaption>
+              <figcaption data-i18n="vitrine.voice.caption">Les bus de Bordeaux, en direct.</figcaption>
             </figure>
-            <a class="waiting" href="/globe?waitlist=1" data-link="waitlist">Rejoindre la liste d’attente</a>
+            <a class="waiting" href="/globe?waitlist=1" data-link="waitlist" data-locale-only="fr">Rejoindre la liste d’attente</a>
           </div>
         </div>
       </section>
@@ -478,32 +489,38 @@
       <!-- La fin de la page : la vue réelle, et la marque en deux blocs opaques par-dessus. -->
       <footer class="panel footer">
         <div class="footer-info">
-          <p class="footer-copy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
-          <nav class="footer-links" aria-label="Liens de pied de page">
-            <a href="https://github.com/mml-studio/surplomb" data-link="repository" aria-label="Voir le code open source">Voir le code</a>
-            <a href="/globe?waitlist=1" data-link="waitlist">Liste d’attente premium</a>
-            <a href="/mentions-legales" data-link="legal">Mentions légales</a>
-            <a href="/confidentialite" data-link="privacy">Confidentialité</a>
+          <div class="footer-text">
+            <p class="footer-copy" data-i18n="vitrine.publicCopy">Les administrations publient. <br />Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.</p>
+            <!-- The English page names the project the globe is built on, with
+                 the README's wording; the French page does not carry it
+                 (docs/i18n/CONVENTIONS.md § 6). -->
+            <p class="footer-credit" data-locale-only="en" lang="en" data-link="upstream">Surplomb is built on <a href="https://github.com/bilawalsidhu/gods-eye-view">God’s Eye View</a>, the open-source globe created by <a href="https://github.com/bilawalsidhu">Bilawal Sidhu</a>.</p>
+          </div>
+          <nav class="footer-links" data-i18n-aria-label="vitrine.footer.nav" aria-label="Liens de pied de page">
+            <a href="https://github.com/mml-studio/surplomb" data-link="repository" data-i18n="vitrine.footer.code" data-i18n-aria-label="vitrine.footer.codeAria" aria-label="Voir le code open source">Voir le code</a>
+            <a href="/globe?waitlist=1" data-link="waitlist" data-locale-only="fr">Liste d’attente premium</a>
+            <a href="/mentions-legales" hreflang="fr" data-link="legal" data-i18n="vitrine.footer.legal">Mentions légales</a>
+            <a href="/confidentialite" hreflang="fr" data-link="privacy" data-i18n="vitrine.footer.privacy">Confidentialité</a>
           </nav>
         </div>
         <div class="footer-ending">
-          <a class="closing-brand" href="#haut" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word">surplomb</span></a>
-          <p class="closing-slogan">Aucun <br />angle mort.</p>
+          <a class="closing-brand" href="#haut" data-i18n-aria-label="vitrine.backToTop" aria-label="Surplomb, retour en haut"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg><span class="brand-word" translate="no">surplomb</span></a>
+          <p class="closing-slogan" data-i18n="vitrine.slogan">Aucun <br />angle mort.</p>
         </div>
       </footer>
     </main>
 
     <!-- Formulaire natif : sans JavaScript, il ouvre `/globe?q=…` et le cockpit résout le lieu (src/vitrine/query.js). -->
-    <form class="dock" action="/globe" method="get" data-action="open-globe" aria-label="Ouvrir le globe sur un lieu">
+    <form class="dock" action="/globe" method="get" data-action="open-globe" data-i18n-aria-label="vitrine.dock.form" aria-label="Ouvrir le globe sur un lieu">
       <div class="entry">
         <div class="field">
-          <button class="locate" type="button" data-action="geolocate" disabled aria-label="Utiliser ma position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg></button>
-          <label for="vitrine-place" class="sr-only">une adresse, une ville, ou ma position</label>
-          <input id="vitrine-place" name="q" type="search" placeholder="une adresse, une ville, ou ma position" autocomplete="off" enterkeyhint="go" />
+          <button class="locate" type="button" data-action="geolocate" disabled data-i18n-aria-label="vitrine.dock.locate" aria-label="Utiliser ma position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.5 10c0 5-6.5 10-6.5 10S5.5 15 5.5 10a6.5 6.5 0 1 1 13 0Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg></button>
+          <label for="vitrine-place" class="sr-only" data-i18n="vitrine.dock.place">une adresse, une ville, ou ma position</label>
+          <input id="vitrine-place" name="q" type="search" data-i18n-placeholder="vitrine.dock.place" placeholder="une adresse, une ville, ou ma position" autocomplete="off" enterkeyhint="go" />
         </div>
-        <button class="primary" type="submit"><span data-primary-label>Ouvrir le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="primary" type="submit"><span data-primary-label data-i18n="vitrine.dock.open">Ouvrir le globe</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
-      <p class="note" data-dock-note role="status" aria-live="polite">Sans compte. Sans installation.</p>
+      <p class="note" data-dock-note role="status" aria-live="polite" data-i18n="vitrine.dock.note">Sans compte. Sans installation.</p>
     </form>
   </div>
   <div id="world-overlay-root" aria-hidden="true">
@@ -515,12 +532,30 @@
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
   </div>
 
-  <!-- Title -->
+  <!-- Title. The mark is the way back to the landing page at `/`; a plain
+       press asks first (src/homeLink.js, the `#home-confirm` dialog below),
+       a press that opens a new tab does not, since it leaves nothing. -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word" translate="no">surplomb</span></h1>
+    <a class="title-home" href="/" data-home-link data-i18n-aria-label="home.link" aria-label="Surplomb — revenir à la page d’accueil" data-i18n-title="home.link" title="Surplomb — revenir à la page d’accueil"><h1><span class="title-logo brand-logo" aria-hidden="true"><svg class="brand-symbol" viewBox="0 0 360 320" aria-hidden="true" focusable="false"><circle cx="188" cy="48" r="40" fill="#F7AB7C"/><path fill="currentColor" d="M120 102H322C339 102 352 104 352 113C352 118 348 121 341 125L304 148C292 156 280 160 260 160H43C24 160 19 158 19 152C19 148 24 144 31 140L78 113C91 106 102 102 120 102Z"/><path fill="currentColor" d="M162 172C174 168 187 167 199 172L329 220C343 225 352 231 352 237C352 244 342 250 328 256L202 306C189 312 177 312 164 307L28 253C15 248 7 243 7 237C7 230 18 224 32 219L162 172Z"/></svg></span> <span class="brand-word" translate="no">surplomb</span></h1></a>
     <p class="subtitle" data-i18n="title.tagline">Aucun angle mort.</p>
   </div>
+
+  <!-- Asked when the mark is pressed: leaving closes the globe. A native
+       modal <dialog>: focus is held inside, Escape cancels, and focus returns
+       to the mark. `Confirmer` closes it with the value `confirm`, the only
+       one src/homeLink.js acts on. -->
+  <dialog id="home-confirm" aria-labelledby="home-confirm-title" aria-describedby="home-confirm-body">
+    <form method="dialog">
+      <p class="home-confirm-kicker" data-i18n="home.kicker">SURPLOMB · ACCUEIL</p>
+      <h2 id="home-confirm-title" data-i18n="home.title">Revenir à la page d’accueil ?</h2>
+      <p id="home-confirm-body" class="home-confirm-body" data-i18n="home.body">Vous allez être redirigé vers la page d’accueil de Surplomb. Le bouton Retour du navigateur vous ramènera à cette vue du globe.</p>
+      <div class="home-confirm-choices">
+        <button type="submit" value="cancel" data-i18n="home.cancel" autofocus>Annuler</button>
+        <button type="submit" value="confirm" class="home-confirm-primary" data-i18n="home.confirm">Confirmer</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Style indicator. Most style names are the same word in both languages
        (NORMAL, CRT, NVG, FLIR…); the one that is not, NUIT / NIGHT, is written

@@ -19,6 +19,8 @@
  * @module vitrine/rotation
  */
 
+import messages from './vitrine.i18n.js';
+
 /** One example on screen, in milliseconds (the spec's « 3 secondes »). */
 export const ROTATION_PERIOD_MS = 3000;
 
@@ -139,7 +141,8 @@ export function createRotation(section, {
 
   function updatePauseButton() {
     if (!pauseButton) return;
-    pauseButton.textContent = pausedByReader ? 'Reprendre' : 'Mettre en pause';
+    const m = messages();
+    pauseButton.textContent = pausedByReader ? m.resume : m.pause;
     pauseButton.setAttribute('aria-pressed', String(pausedByReader));
   }
 

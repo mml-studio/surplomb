@@ -14,6 +14,7 @@ import {
   scanHtml,
   scanModule,
   tightenBaseline,
+  walkHtml,
 } from './i18nScan.mjs';
 
 const count = (source, rule) => scanModule(source).counts[rule];
@@ -141,14 +142,13 @@ test('R5 counts message reads while the module loads, and nothing inside functio
   assert.equal(count(source, 'R5'), 6);
 });
 
-test('catalogs, the i18n layer and the landing page are exempt from R1, R2 and R4 — never from R5', () => {
+test('catalogs and the i18n layer are exempt from R1, R2 and R4 — never from R5', () => {
   assert.deepEqual(rulesFor('src/data/foo.i18n.js'), { R1: false, R2: false, R4: true, R5: true });
   assert.deepEqual(rulesFor('src/i18n/format.js'), { R1: false, R2: false, R4: false, R5: true });
   assert.deepEqual(rulesFor('src/data/foo.js'), { R1: true, R2: true, R4: true, R5: true });
-  // The showcase at `/` is French by decision D2, `Intl.NumberFormat('fr-FR')`
-  // counters included — the same decision that exempts `#vitrine` from R3.
-  assert.deepEqual(rulesFor('src/vitrine/vitrine.js'), { R1: false, R2: false, R4: false, R5: true });
-  assert.deepEqual(rulesFor('src/vitrine/counters.js'), { R1: false, R2: false, R4: false, R5: true });
+  // The showcase at `/` speaks both languages: it is counted like the globe.
+  assert.deepEqual(rulesFor('src/vitrine/vitrine.js'), { R1: true, R2: true, R4: true, R5: true });
+  assert.deepEqual(rulesFor('src/vitrine/counters.js'), { R1: true, R2: true, R4: true, R5: true });
 });
 
 test('the escape hatch covers single lines, next lines and blocks', () => {
@@ -195,7 +195,8 @@ test('R3 counts index.html text and attributes without data-i18n', () => {
 <html lang="fr"><head><title>Surplomb — La France au rayon X.</title>
 <script>var x = '<b>not text</b>';</script><style>.a::after { content: 'Texte'; }</style></head>
 <body>
-  <div id="vitrine"><h1>Tout ce que vous n’auriez jamais pensé à chercher</h1></div>
+  <div id="vitrine"><h1 data-i18n="hero.title">La France <br />au rayon X.</h1><p>Aucun <br />angle mort.</p></div>
+  <a data-locale-only="fr" href="/globe?waitlist=1">Liste d’attente</a>
   <!-- <p>commented out</p> -->
   <button data-i18n="share.button" data-i18n-title="share.title" title="Partager la vue">
     <span class="material-symbols-outlined">share</span> Partager
@@ -210,6 +211,7 @@ test('R3 counts index.html text and attributes without data-i18n', () => {
 </body></html>`;
   const { count: n, findings } = scanHtml(html);
   assert.deepEqual(findings.map((f) => f.text), [
+    'Aucun angle mort.',
     '[title] Fermer',
     '[aria-label] Fermer le panneau',
     'Chargement du globe…',
@@ -217,8 +219,15 @@ test('R3 counts index.html text and attributes without data-i18n', () => {
     '[alt] Logo Surplomb',
     'Bienvenue',
   ]);
-  assert.equal(n, 6);
-  assert.equal(findings[0].line, 10, 'comments keep their lines');
+  assert.equal(n, 7);
+  assert.equal(findings[1].line, 11, 'comments keep their lines');
+});
+
+test('a <br> does not split a message, and a one-language element has nothing to translate', () => {
+  const items = [];
+  walkHtml(`<h1 data-i18n="hero.title">La France <br />au rayon X.</h1>
+<p data-locale-only="en" lang="en">Built on <a href="#">God’s Eye View</a>.</p>`, (item) => items.push(item));
+  assert.deepEqual(items.map((item) => [item.text, item.key]), [['La France au rayon X.', 'hero.title']]);
 });
 
 test('the baseline only ever goes down', () => {

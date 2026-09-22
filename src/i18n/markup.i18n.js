@@ -12,12 +12,15 @@
  *       status: { fr: 'Initialisation du globe…', en: 'Starting the globe…' },
  *     },
  *
- * WHAT IS NOT HERE. The showcase (`#vitrine`) and `<head>`: the landing page
- * gets its own English document later (plan decision D2), and its root carries
- * `lang="fr"` so an English `<html lang>` never mislabels it. Values that are
- * the same word in both languages — a style name (NORMAL, CRT, NVG), a brand,
- * a provider — carry `translate="no"` in the HTML instead of a key they would
- * only echo.
+ * The landing page (`#vitrine`, the `vitrine.*` group) lives here too: it is
+ * the same document. What it shows in one language only — the French
+ * waitlist, the English credit — carries `data-locale-only` in the HTML and has
+ * no key.
+ *
+ * WHAT IS NOT HERE. `<head>`: crawlers read the French; an English page takes
+ * its title from src/boot.i18n.js. Values that are the same word in both
+ * languages — a style name (NORMAL, CRT, NVG), a brand, a provider — carry
+ * `translate="no"` in the HTML instead of a key they would only echo.
  */
 import { defineMessages } from './messages.js';
 
@@ -31,6 +34,24 @@ export default defineMessages({
   },
   title: {
     tagline: { fr: 'Aucun angle mort.', en: 'No blind spots.', note: 'The product’s slogan, under the logo.' },
+  },
+  // The mark in the corner of the globe is a link to the landing page, and
+  // asks before it leaves (src/homeLink.js).
+  home: {
+    link: {
+      fr: 'Surplomb — revenir à la page d’accueil',
+      en: 'Surplomb — back to the home page',
+      note: 'Accessible name and tooltip of the logo. “Home page” is the reader’s word for the landing page at /.',
+    },
+    kicker: { fr: 'SURPLOMB · ACCUEIL', en: 'SURPLOMB · HOME' },
+    title: { fr: 'Revenir à la page d’accueil ?', en: 'Go back to the home page?' },
+    body: {
+      fr: 'Vous allez être redirigé vers la page d’accueil de Surplomb. Le bouton Retour du navigateur vous ramènera à cette vue du globe.',
+      en: 'You will be taken to the Surplomb home page. Your browser’s Back button will bring you back to this view of the globe.',
+      note: 'True because the share link is written into the address before leaving: Back reloads the globe on the same camera and layers.',
+    },
+    cancel: { fr: 'Annuler', en: 'Cancel' },
+    confirm: { fr: 'Confirmer', en: 'Confirm', note: 'Leaves the globe for the home page.' },
   },
   style: {
     activeLabel: { fr: 'STYLE ACTIF', en: 'ACTIVE STYLE', note: 'Label of the chip naming the visual preset in use.' },
@@ -565,6 +586,145 @@ export default defineMessages({
       fr: 'Initialisation du monde photoréaliste…',
       en: 'Initializing photorealistic world…',
       note: 'First line of the loading veil; src/main.js writes the ones that follow. style.css hides it on an English page until the markup is translated, so its French never flashes.',
+    },
+  },
+  // The landing page at `/` (index.html, `#vitrine`). Its copy is argued in
+  // docs/designs/landing; the English makes the same claims, in the same
+  // register: short, concrete, second person.
+  vitrine: {
+    skip: { fr: 'Aller au contenu', en: 'Skip to content' },
+    backToTop: { fr: 'Surplomb, retour en haut', en: 'Surplomb, back to top', note: 'Accessible name of the two marks, top and bottom of the page.' },
+    slogan: { fr: 'Aucun angle mort.', en: 'No blind spots.' },
+    pause: {
+      fr: 'Mettre en pause',
+      en: 'Pause',
+      note: 'The rotating examples and the scene of views; src/vitrine/vitrine.i18n.js writes it back after « Resume ».',
+    },
+    publicCopy: {
+      fr: 'Les administrations publient. Surplomb met leurs données sur une carte : avions, bus, ventes, centrales, météo… plus de cinquante sources, au même endroit.',
+      en: 'Public agencies publish. Surplomb puts their data on a map: planes, buses, property sales, power plants, weather… more than fifty sources, in one place.',
+      note: 'Twice on the page: under « It all starts with a place » and in the footer.',
+    },
+    hero: {
+      title: {
+        fr: 'La France au rayon X.',
+        en: 'France, X-\u2060rayed.',
+        note: 'A word joiner (U+2060) follows the hyphen: at display size the line broke inside « X-rayed ». The glossary’s tagline is the same words.',
+      },
+      intro: { fr: 'Tout ce que vous n’auriez jamais pensé à chercher.', en: 'Everything you never thought to look up.' },
+      place: {
+        fr: 'Paris · le trafic, rue par rue',
+        en: 'Paris · traffic, street by street',
+        note: 'Caption of the recorded loop behind the first screen.',
+      },
+      still: { fr: 'Image fixe', en: 'Still image', note: 'Checkbox that stops every loop on the page on the frame being shown.' },
+    },
+    discover: {
+      title: { fr: 'Tout commence par un lieu.', en: 'It all starts with a place.' },
+      examples: { fr: 'Des vues à explorer', en: 'Views to explore' },
+      example0: {
+        fr: 'Le prix auquel l’appartement d’en face s’est vendu, et la parcelle qui allait avec.',
+        en: 'The price the apartment across the street sold for, and the parcel that came with it.',
+      },
+      example1: { fr: 'Ce que produit chaque centrale à cette minute.', en: 'What every power plant is producing this minute.' },
+      example2: { fr: 'Le bus qui arrive, en direct.', en: 'The bus pulling in, live.' },
+      example3: { fr: 'Les voitures qui roulent en ce moment, rue par rue.', en: 'The cars on the road right now, street by street.' },
+      example4: { fr: 'Le vélo libre le plus proche.', en: 'The nearest available bike.', note: 'A shared bike nobody has taken.' },
+      example5: {
+        fr: 'Les permis de construire accordés dans la rue.',
+        en: 'The building permits granted on the street.',
+        note: 'Held back (`data-pending`): never shown until the permits layer is fixed.',
+      },
+      example6: { fr: 'L’avion qui passe au-dessus, et d’où il vient.', en: 'The plane passing overhead, and where it came from.' },
+      example7: { fr: 'Le risque d’inondation sous le trottoir.', en: 'The flood risk under the sidewalk.' },
+      next: { fr: 'Autre exemple', en: 'Another example' },
+    },
+    counters: {
+      title: { fr: 'En ce moment au-dessus de la France', en: 'Right now, above France' },
+      avions: { fr: 'Avions', en: 'Planes' },
+      navires: { fr: 'Navires', en: 'Ships' },
+      bus: { fr: 'Bus et trams', en: 'Buses and trams' },
+      meteo: { fr: 'Stations météo qui émettent', en: 'Weather stations reporting' },
+    },
+    gallery: {
+      title: { fr: 'Choisissez une vue.', en: 'Pick a view.' },
+      open: { fr: 'Ouvrir dans le globe', en: 'Open in the globe' },
+      tabs: { fr: 'Vues', en: 'Views' },
+      tab01: { fr: 'Avions', en: 'Planes' },
+      tab02: { fr: 'Immobilier', en: 'Property' },
+      tab03: { fr: 'Trafic', en: 'Traffic' },
+      tab04: { fr: 'Énergie', en: 'Energy' },
+      tab05: { fr: 'Bus', en: 'Buses' },
+      tab06: { fr: 'Vélos', en: 'Bikes' },
+      v01: {
+        alt: { fr: 'Roissy et les avions en approche', en: 'Roissy and the planes on approach', keep: ['Roissy'] },
+        title: { fr: 'Avions en approche', en: 'Planes on approach' },
+        place: { fr: 'Roissy-Charles-de-Gaulle', en: 'Roissy-Charles-de-Gaulle', keep: ['Roissy-Charles-de-Gaulle'] },
+      },
+      v02: {
+        alt: { fr: 'Une parcelle vendue à Lyon, et son prix', en: 'A parcel sold in Lyon, and its price' },
+        title: { fr: 'Ventes immobilières', en: 'Property sales' },
+        place: { fr: 'Une parcelle vendue à Lyon, et son prix', en: 'A parcel sold in Lyon, and its price' },
+      },
+      v03: {
+        alt: { fr: 'Les voitures en direct dans les rues, avec les bouchons', en: 'Live cars in the streets, traffic jams included' },
+        title: { fr: 'Trafic routier', en: 'Road traffic' },
+        place: { fr: 'Les bouchons en direct, rue par rue', en: 'Live traffic jams, street by street' },
+      },
+      v04: {
+        alt: { fr: 'Le réseau électrique et ce qu’il produit', en: 'The power grid and what it produces' },
+        title: { fr: 'Réseau électrique', en: 'Power grid' },
+        place: { fr: 'La production en France', en: 'Output across France' },
+      },
+      v05: {
+        alt: { fr: 'Les bus de Bordeaux, en direct', en: 'Bordeaux’s buses, live' },
+        title: { fr: 'Bus en direct', en: 'Live buses' },
+        place: { fr: 'Le réseau de Bordeaux', en: 'The Bordeaux network' },
+      },
+      v06: {
+        alt: {
+          fr: 'Les vélos et scooters partagés de Paris',
+          en: 'The shared bikes and scooters of Paris',
+          note: 'The French « scooters » is loose here: the fleets hold e-scooters and mopeds, and “scooters” covers both.',
+        },
+        title: { fr: 'Vélos et scooters', en: 'Bikes and scooters' },
+        place: { fr: 'Les flottes partagées de Paris', en: 'The shared fleets of Paris' },
+      },
+    },
+    voice: {
+      title: { fr: 'Parlez au globe.', en: 'Talk to the globe.' },
+      microphoneAlt: { fr: 'Microphone en verre traversé par un ruban corail', en: 'A glass microphone crossed by a coral ribbon' },
+      quote: {
+        fr: '« Montre-moi les bus autour de la gare Saint-Jean. »',
+        en: '“Show me the buses around Saint-Jean station.”',
+        keep: ['Saint-Jean'],
+        note: 'A spoken request, in quotation marks; the picture under it is the globe’s answer.',
+      },
+      answerLink: { fr: 'Voir les bus de Bordeaux dans le globe', en: 'See Bordeaux’s buses in the globe' },
+      answerAlt: {
+        fr: 'Les bus autour de la gare Saint-Jean à Bordeaux',
+        en: 'The buses around Saint-Jean station in Bordeaux',
+        keep: ['Saint-Jean'],
+      },
+      caption: { fr: 'Les bus de Bordeaux, en direct.', en: 'Bordeaux’s buses, live.' },
+    },
+    footer: {
+      nav: { fr: 'Liens de pied de page', en: 'Footer links' },
+      code: { fr: 'Voir le code', en: 'See the code' },
+      codeAria: { fr: 'Voir le code open source', en: 'See the open-source code' },
+      legal: { fr: 'Mentions légales', en: 'Legal notice', note: 'The page it opens is in French (hreflang="fr").' },
+      privacy: { fr: 'Confidentialité', en: 'Privacy', note: 'The page it opens is in French (hreflang="fr").' },
+    },
+    dock: {
+      form: { fr: 'Ouvrir le globe sur un lieu', en: 'Open the globe on a place' },
+      locate: { fr: 'Utiliser ma position', en: 'Use my location' },
+      place: {
+        fr: 'une adresse, une ville, ou ma position',
+        en: 'an address, a city, or my location',
+        note: 'Placeholder of the field, and its hidden label. Lower case on purpose: it reads as the end of « Open the globe on… ».',
+      },
+      open: { fr: 'Ouvrir le globe', en: 'Open the globe' },
+      note: { fr: 'Sans compte. Sans installation.', en: 'No account. Nothing to install.' },
     },
   },
   viewSwitcher: {

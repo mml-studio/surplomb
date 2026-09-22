@@ -20,8 +20,9 @@ Two promises hold everything together:
 - The inline `/* locale-gate */` script in `index.html` decides before any
   stylesheet or module runs, and writes the answer on `<html lang>`. Order:
   `window.__GEV_LOCALE__` (QA) › `?lang=fr|en` (remembered in `localStorage`
-  under `gev:locale:v1`) › the stored choice › `navigator.languages` (off
-  until the language switch ships) › French.
+  under `gev:locale:v1`) › the stored choice › `navigator.languages` (on since
+  the switch shipped: a browser in English opens both surfaces in English) ›
+  French.
 - Every module reads the locale with `getLocale()` from `src/i18n/locale.js`,
   which reads `<html lang>` and nothing else. **Never read `navigator.language`**:
   Node 24+ has one, and a module that read it would turn `npm test` English on
@@ -31,8 +32,10 @@ Two promises hold everything together:
   store the choice, flush the share hash, drop `?lang=`, reload. The hash
   restores camera, layers and panels. No module ever repaints itself in another
   language.
-- To look at English by hand: open `/globe?lang=en` (it is remembered; `?lang=fr`
-  to come back).
+- To look at English by hand: open `/globe?lang=en` or `/?lang=en` for the
+  landing page (it is remembered; `?lang=fr` to come back), or press the FR / EN
+  switch — the globe has one in its top actions, the landing page one in its
+  header.
 
 ## 2. Catalogs
 
@@ -286,11 +289,23 @@ panel: {
   text sits in several children.
 - `<template>` contents are translated too (the first-run card).
 - `translate="no"` exempts an element (a brand name, a code).
-- The showcase (`#vitrine`) and `<head>` are out of scope: the landing page
-  gets its own English document later.
+- The landing page (`#vitrine`) is translated the same way, under `vitrine.*`.
+  A `<br>` inside a sentence does not split it: the key holds the whole
+  sentence, and the English is written into the first text node.
+- `data-locale-only="fr|en"` marks what exists in ONE language: `landing.css`
+  hides it in the other, and it needs no key. Two uses, both decisions: the
+  waitlist and « premium » are French only (the English page sells nothing),
+  and the credit to upstream (God's Eye View, by Bilawal Sidhu, both linked —
+  README.md's sentence) is English only (decision of 2026-09-22).
+- `<head>` is out of scope: crawlers and link previews read the French. An
+  English page takes its tab title from `src/boot.i18n.js` (`documentTitle`).
 - While an English page's markup is being translated, `style.css` hides the
-  loading line (`html[lang="en"]:not([data-i18n-ready])`), so its French never
-  flashes.
+  loading line (`html[lang="en"]:not([data-i18n-ready])`) and `landing.css`
+  keeps the landing page's words transparent, so their French never flashes.
+  If the translation never arrives, the landing's French shows after 3 s.
+- The landing's FR / EN links are plain `/?lang=…` addresses (they work without
+  JavaScript); `src/vitrine/vitrine.js` routes a press through `switchLocale()`
+  so the address comes back as `/`.
 
 ## 7. Server errors
 
@@ -364,11 +379,10 @@ count goes **up** against `src/i18n/i18n-baseline.json`:
 | R4 | `toLocaleString/DateString/TimeString('fr-FR')` and `Intl.*('fr-FR')` outside `src/i18n` | 0 |
 | R5 | a catalog, formatter, `labelFor` or `getLocale` called at module top level | **0, always** |
 
-Catalogs (`*.i18n.js`), `src/i18n/` and `src/vitrine/` are exempt from R1, R2
-and R4 — the showcase at `/` is French BY DECISION (D2), the same decision that
-exempts `<head>` and `#vitrine` from R3, and counting a page nobody is
-translating would leave the ratchet a floor it can never reach. Nothing is ever
-exempt from R5. Addresses (URLs, data URIs, asset paths) and lists of CSS class
+Catalogs (`*.i18n.js`) and `src/i18n/` are exempt from R1, R2 and R4;
+`<head>` and `data-locale-only` elements from R3. The landing page is counted
+like the globe since it speaks both languages (it was exempt while it was
+French by decision). Nothing is ever exempt from R5. Addresses (URLs, data URIs, asset paths) and lists of CSS class
 tokens are not text and no rule reads them. The rules' exact definitions are at
 the top of `scripts/lib/i18nScan.mjs`.
 
@@ -451,7 +465,7 @@ match it through `inAllLocales()` or, better, on a `data-*` attribute.
 - `LOCALE_STORAGE_KEY` — `'gev:locale:v1'`.
 - `LOCALE_QUERY_PARAM` — `'lang'`.
 - `LOCALE_QA_GLOBAL` — `'__GEV_LOCALE__'`.
-- `LOCALE_AUTO_DETECT` — `false` until the switch ships (the inline gate carries the same value).
+- `LOCALE_AUTO_DETECT` — `true` since the switch shipped (the inline gate carries the same value).
 - `I18N_READY_ATTRIBUTE` — `'data-i18n-ready'`.
 - `normalizeLocale(value)` → `'fr' | 'en' | null`.
 - `localeFromLanguages(languages)` → `'fr' | 'en'`.

@@ -10,10 +10,10 @@
  *   R1  French string literals outside catalogs. Every string or template
  *       literal that src/i18n/frenchDetector.js reads as French (words,
  *       elisions, accents — not number typography, which source code is full
- *       of). Not counted: catalogs (`*.i18n.js`), src/i18n itself and the
- *       French-by-decision landing page (src/vitrine), property keys, import
- *       specifiers, directives, arguments of `console.*`, and addresses —
- *       URLs, data URIs and asset paths, which carry words by accident.
+ *       of). Not counted: catalogs (`*.i18n.js`), src/i18n itself, property
+ *       keys, import specifiers, directives, arguments of `console.*`, and
+ *       addresses — URLs, data URIs and asset paths, which carry words by
+ *       accident.
  *   R2  Literals written straight into the interface, in any language: the
  *       right-hand side of `el.textContent = …` (and `innerHTML`, `title`,
  *       `placeholder`, `alt`, `ariaLabel`…), `setAttribute('aria-label' |
@@ -26,9 +26,10 @@
  *       class tokens (`'has-glyph'`) is not counted.
  *   R3  Text in `index.html` whose element has no `data-i18n`, and `title`,
  *       `aria-label`, `placeholder`, `alt` attributes without their
- *       `data-i18n-*`. `translate="no"` and icon ligatures are exempt, and so
- *       are `<head>` and the showcase (`#vitrine`): the landing page gets its
- *       own English document later, not `data-i18n` (plan decision D2).
+ *       `data-i18n-*`. `translate="no"`, icon ligatures, `<head>` and elements
+ *       that exist in one language only (`data-locale-only`) are exempt. A
+ *       `<br>` does not end a run: a sentence broken over two lines is one
+ *       message, as its catalog entry says.
  *   R4  French formatting pinned in code: `x.toLocaleString('fr-FR' | 'fr')`,
  *       `toLocaleDateString`, `toLocaleTimeString`, and `Intl.*('fr-FR' | 'fr')`,
  *       outside src/i18n. Case mapping (`toLocaleLowerCase('fr-FR')`) and
@@ -97,26 +98,18 @@ export function listSourceFiles(root = REPO_ROOT) {
 export const isCatalogFile = (file) => /\.i18n\.js$/.test(file);
 export const isI18nInfrastructure = (file) => file.startsWith('src/i18n/');
 /**
- * The landing page at `/`, which is French BY DECISION and not by debt.
+ * Which rules look at a file.
  *
- * `src/vitrine/` draws the showcase; an English landing is explicitly out of
- * scope (plan decision D2, the same one that exempts `<head>` and `#vitrine`
- * from R3). Its French headline, its « Reprendre » button and its
- * `Intl.NumberFormat('fr-FR')` counters are correct copy for a page written
- * in one language, and counting them would leave the ratchet with a floor it
- * can never reach — measuring the globe is the point. R5 still applies: a
- * message read at module load is a bug in any language.
+ * The landing page (`src/vitrine/`) used to be exempt from R1, R2 and R4: it
+ * was French by decision. It speaks both languages now, so it is counted like
+ * every other module.
  */
-export const isLandingPage = (file) => file.startsWith('src/vitrine/');
-
-/** Which rules look at a file. */
 export function rulesFor(file) {
   const infra = isI18nInfrastructure(file);
-  const landing = isLandingPage(file);
   return {
-    R1: !infra && !landing && !isCatalogFile(file),
-    R2: !infra && !landing && !isCatalogFile(file),
-    R4: !infra && !landing,
+    R1: !infra && !isCatalogFile(file),
+    R2: !infra && !isCatalogFile(file),
+    R4: !infra,
     R5: true,
   };
 }
@@ -489,12 +482,17 @@ const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img'
 const RAW_TEXT = new Set(['script', 'style']);
 /**
  * Subtrees R3 does not count, each with its reason. `<head>` carries the
- * showcase's title and description (see the comment above `<title>`).
+ * showcase's title and description (see the comment above `<title>`); the
+ * English title is set by src/boot.js, and crawlers read the French.
  */
 export const R3_EXEMPT = Object.freeze({
-  head: 'metadata of the showcase page, which gets its own English document (D2)',
-  '#vitrine': 'the showcase itself — same reason',
+  head: 'metadata crawlers read; the English page sets its title from src/boot.i18n.js',
 });
+/**
+ * An element shown in one language only (landing.css hides it in the other):
+ * the French waitlist, the English credit. It has nothing to translate.
+ */
+export const LOCALE_ONLY_ATTRIBUTE = 'data-locale-only';
 const TRANSLATABLE_ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
 const TAG = /<(\/?)([a-zA-Z][\w:-]*)((?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*(\/?)>/y;
 const ATTR = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
@@ -528,7 +526,12 @@ function decodeEntities(text) {
  */
 export function walkHtml(html, onItem) {
   // Comments become spaces, so offsets — and line numbers — still line up.
-  const source = html.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+  // So do line breaks: `La France <br />au rayon X.` is ONE run of text, as
+  // the applicator sees it (src/i18n/markup.js writes the first text node and
+  // empties the others).
+  const source = html
+    .replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .replace(/<br\s*\/?>/gi, (tag) => ' '.repeat(tag.length));
   const lineOf = lineIndex(source);
   const stack = [];
   let textStart = 0;
@@ -578,6 +581,7 @@ export function walkHtml(html, onItem) {
     const parent = stack[stack.length - 1];
     const classes = (attrs.get('class') || '').split(/\s+/);
     const exempt = Boolean(parent?.exempt) || attrs.get('translate') === 'no'
+      || attrs.has(LOCALE_ONLY_ATTRIBUTE)
       || classes.includes('material-symbols-outlined')
       || Object.hasOwn(R3_EXEMPT, name) || (attrs.has('id') && Object.hasOwn(R3_EXEMPT, `#${attrs.get('id')}`));
     if (!exempt) {
