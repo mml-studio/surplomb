@@ -17,6 +17,8 @@
  * @module vitrine/counters
  */
 
+import { formatNumber } from '../i18n/format.js';
+
 export const PULSE_URL = '/api/pulse';
 
 /** The request is abandoned after this; the group simply stays hidden. */
@@ -24,8 +26,6 @@ export const PULSE_TIMEOUT_MS = 8000;
 
 /** `counter:<key>` in the markup ↔ `<key>` in the answer. */
 const COUNTER_PREFIX = 'counter:';
-
-const FORMAT = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
 
 /**
  * The figure one entry of the answer backs, or null.
@@ -72,7 +72,7 @@ export function applyPulse(panel, pulse, { elapsedMs = 0 } = {}) {
       continue;
     }
     counter.setAttribute('data-value', String(value));
-    slot.textContent = FORMAT.format(value);
+    slot.textContent = formatNumber(value, { maximumFractionDigits: 0 });
     counter.hidden = false;
     shown.push(key);
   }

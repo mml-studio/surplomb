@@ -6,6 +6,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The landing page speaks English.** A browser in English now opens the
+  landing page in English, like the globe, and an EN / FR pill in the header
+  switches between the two (it remembers the choice, and the address stays
+  `/`). Every sentence, label and picture description is translated; the
+  English page carries no waitlist and no « premium », and its footer credits
+  the project the globe is built on: God's Eye View, the open-source globe
+  created by Bilawal Sidhu. The tab reads « Surplomb — France, X-rayed. », and
+  the French never flashes before the English.
+- **The globe's logo leads back to the landing page.** Pressing the Surplomb
+  mark in the top-left corner asks « Revenir à la page d'accueil ? » (“Go back
+  to the home page?”) with Annuler and Confirmer; confirming opens the landing
+  page, and the browser's Back button returns to the same view of the globe.
+  Opening the logo in a new tab asks nothing.
 - **« Choisissez une vue. » is one scene that moves on by itself.** The six
   tiles in their ivory panel became one picture at the full width of the page,
   straight on the city, with the interface on its edges: the heading top left,

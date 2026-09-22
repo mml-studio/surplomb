@@ -35,6 +35,8 @@
  * @module vitrine/stage
  */
 
+import messages from './vitrine.i18n.js';
+
 /** A recording plays whole: as many passes as reach this, never fewer than one. */
 export const STAGE_MIN_DWELL_S = 10;
 
@@ -220,7 +222,8 @@ export function createStage(section, {
 
   function updatePauseButton() {
     if (!pauseButton) return;
-    const label = pausedByReader ? 'Reprendre' : 'Mettre en pause';
+    const m = messages();
+    const label = pausedByReader ? m.resume : m.pause;
     if (pauseLabel) pauseLabel.textContent = label;
     else pauseButton.setAttribute('aria-label', label);
     pauseButton.setAttribute('aria-pressed', String(pausedByReader));

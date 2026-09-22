@@ -41,10 +41,11 @@ forgetVitrineSeen();
  * The inline locale gate in `index.html` has already written `<html lang>`.
  * In French there is nothing to do and nothing is fetched: the HTML is the
  * French. Otherwise the applicator arrives as its own small chunk, rewrites
- * every `data-i18n*` element (template contents included) and sets
- * `data-i18n-ready`, which lifts the rule in `style.css` that keeps the
- * loading line hidden until then. The attribute is set even when the chunk
- * fails, so a network error costs the translation, never the loading line.
+ * every `data-i18n*` element (template contents included), gives the tab its
+ * English title, and sets `data-i18n-ready`, which lifts the rules that keep
+ * French from flashing first: the loading line (`style.css`) and the landing
+ * page's words (`landing.css`). The attribute is set even when the chunk
+ * fails, so a network error costs the translation, never the page.
  *
  * @returns {Promise<void>} resolved once the markup is final.
  */
@@ -54,14 +55,16 @@ function translateStaticMarkup() {
     .then(({ applyMarkup }) => {
       const { missing } = applyMarkup();
       if (missing.length) console.warn('[boot] markup keys without a translation:', missing.join(', '));
+      document.title = bootMessages().documentTitle;
     })
     .catch((error) => console.warn('[boot] the markup could not be translated:', error))
     .finally(() => document.documentElement.setAttribute(I18N_READY_ATTRIBUTE, ''));
 }
 
-// Started before the cockpit is even requested, and awaited before it starts:
-// the cockpit clones templates and reads labels out of the DOM, and it must
-// meet them already translated.
+// Started before the cockpit or the showcase is even requested, and awaited
+// before either starts: both read labels out of the DOM (the cockpit clones
+// templates, the showcase keeps the dock's resting line), and they must meet
+// them already translated.
 const markupReady = translateStaticMarkup();
 
 let cockpitModule = null;
@@ -146,8 +149,8 @@ function reportBootFailure(error) {
 }
 
 if (decision.vitrine) {
-  import('./vitrine/vitrine.js')
-    .then(({ initVitrine }) => initVitrine({ loadCockpit, openCockpit, onCockpitError: reportBootFailure }))
+  Promise.all([import('./vitrine/vitrine.js'), markupReady])
+    .then(([{ initVitrine }]) => initVitrine({ loadCockpit, openCockpit, onCockpitError: reportBootFailure }))
     .catch((error) => {
       // The showcase still works without its script: the form is a native GET
       // to `/globe?q=`, and every example is a plain link.

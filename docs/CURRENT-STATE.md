@@ -1,6 +1,49 @@
 # Surplomb Current State
 
-Updated: September 19, 2026
+Updated: September 22, 2026
+
+> **2026-09-22 — the landing page speaks English too, and the globe's mark
+> leads back to it.**
+>
+> - **One document, two languages.** `#vitrine` is translated like the globe:
+>   every text and label carries a `data-i18n*` key, the English lives under
+>   `vitrine.*` in `src/i18n/markup.i18n.js`, and what the scripts write
+>   (pause/resume, « Finding your location… », « Opening the globe… ») is in
+>   `src/vitrine/vitrine.i18n.js`. The page's language is the locale gate's —
+>   so a browser in English now gets the English landing page as well as the
+>   English globe. `src/boot.js` starts the showcase script only once the
+>   markup is translated (it keeps the dock's resting line), and gives an
+>   English tab the title « Surplomb — France, X-rayed. ». `<head>` stays
+>   French: crawlers and link previews read it.
+> - **No French flash.** On an English page `landing.css` keeps every child of
+>   `#vitrine` but the picture transparent until `data-i18n-ready`; if the
+>   translation never arrives the French shows after 3 s. The translation chunk
+>   is 14 kB gzipped and only an English page fetches it.
+> - **The switch.** An `EN` pill (`FR` on the English page) sits right of the
+>   slogan in the header, and slides with it when the dock folds in. It is a
+>   plain link to `/?lang=en|fr`, which works without JavaScript;
+>   `src/vitrine/vitrine.js` routes a press through `switchLocale()`, so the
+>   address comes back as `/` and `?lang=` never reaches a share link.
+> - **One language only: `data-locale-only`.** The waitlist link, the footer's
+>   « Liste d'attente premium » and the « premium » badge are French only: the
+>   English page sells nothing. The credit — “Surplomb is built on God's Eye
+>   View, the open-source globe created by Bilawal Sidhu”, both linked — is
+>   English only, in the footer (decision of 2026-09-22). `landing.css` hides
+>   each in the other language, and the i18n scanner does not ask them for a key.
+> - **The ratchets now count the landing page.** `src/vitrine/` lost its R1,
+>   R2, R4 exemption and `#vitrine` its R3 one; all stay at zero. A `<br>`
+>   inside a sentence no longer splits it for R3 or `markup.test.mjs`.
+> - **The globe's mark is a link to `/`** (`src/homeLink.js`, wired by
+>   `src/ui.js`). A plain press opens `#home-confirm`, a native modal dialog:
+>   « Revenir à la page d'accueil ? » / “Go back to the home page?”, with
+>   Annuler (focused) and Confirmer. Confirm flushes the share hash, then
+>   navigates, so Back returns to the same view; Cancel, Escape and a press on
+>   the backdrop stay. A new-tab gesture (middle button, Ctrl, ⌘, Shift) is
+>   left to the link and asks nothing. Without `<dialog>` the same question goes
+>   through `window.confirm`.
+> - **Measured.** `qa:landing` 133/134 on a build; the one failure, the
+>   phone's 400 kB first screen, already fails on `origin/main` (407 kB; this
+>   change makes it 411 kB: +1.1 kB HTML, +0.4 kB CSS, +0.4 kB JS, brotli).
 
 > **2026-09-19 — the globe is bilingual by construction.** `src/i18n/` holds the
 > whole mechanism; `docs/i18n/CONVENTIONS.md` is the rulebook every translation
@@ -37,8 +80,8 @@ Updated: September 19, 2026
 > and styles (#295) — and the voice with the server's error codes (#298).
 > Ratchets: R1 4,611 → 46, R2 1,738 → 14, R3 406 → 0, R4 135 → 1. What is left
 > is the layer modules' `name`/`source` fallbacks (the panel reads the
-> taxonomy) and `src/vitrine/*`, the French landing page, which is French by
-> decision. English plurals go through `plural()`; a test refuses a hand-made
+> taxonomy) and `src/vitrine/*`, the French landing page, which was French by
+> decision until 2026-09-22 (see the block above). English plurals go through `plural()`; a test refuses a hand-made
 > one (#292).
 >
 > **Translated as of 2026-09-20 (waves 1 and the pilot):** the static shell and

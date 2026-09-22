@@ -4,8 +4,11 @@
  *
  * Loaded by `src/boot.js` only when `html[data-vitrine]` is set, and free of
  * Cesium by construction (its imports are `gate.js`, `rotation.js`,
- * `stage.js`, `counters.js`, the loop modules beside it and `../geolocate.js`,
- * whose own graph is two small modules). Everything here works on top of a
+ * `stage.js`, `counters.js`, the loop modules beside it, `../geolocate.js`,
+ * whose own graph is two small modules, and the i18n catalog, formatters and
+ * switch). Its words are the page's language: the markup is translated by
+ * src/boot.js before this runs, and what this writes comes from
+ * `vitrine.i18n.js`. Everything here works on top of a
  * page that is already readable without it: the form is a native GET to
  * `/?q=`, the examples are links, the list is a list, the six views stand one
  * under the other, and the live figures stay hidden until an answer backs
@@ -21,6 +24,8 @@ import { HERO_LOOP } from './heroLoop.js';
 import { chooseRendition, neededVideoWidth, probeRenditions } from './renditions.js';
 import { scheduleCounters } from './counters.js';
 import { canGeolocate, geolocateErrorMessage, requestCurrentPosition } from '../geolocate.js';
+import { switchLocale } from '../i18n/switch.js';
+import messages from './vitrine.i18n.js';
 
 /** The page's own theme colour, and the cockpit's (index.html). */
 const THEME_VITRINE = '#F7F4EA';
@@ -96,6 +101,23 @@ export function initVitrine({
   // reduced motion or on data saver still switches views, on stills.
   const stage = createStage(root.querySelector('.gallery'), { documentRef });
   cleanups.push(() => stage?.dispose());
+
+  // ── The language ───────────────────────────────────────────────────────
+  // The FR / EN links are plain `/?lang=…` addresses, which the locale gate
+  // stores. A press goes through `switchLocale()` instead, so the address
+  // comes back as `/`: a `?lang=` left in it would ride into `/globe` and from
+  // there into every share link, and force its language on the recipient.
+  for (const link of root.querySelectorAll('[data-locale-link]')) {
+    listen(link, 'click', (event) => {
+      if ((event.button ?? 0) !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const switched = switchLocale(link.getAttribute('hreflang'), {
+        location: win.location,
+        history: win.history,
+        root: html,
+      });
+      if (switched) event.preventDefault();
+    });
+  }
 
   // ── The recorded loop ──────────────────────────────────────────────────
   const video = root.querySelector('.world-video');
@@ -218,7 +240,7 @@ export function initVitrine({
   async function locate() {
     if (opening) return;
     locateButton?.setAttribute('aria-busy', 'true');
-    if (note) note.textContent = 'Recherche de votre position…';
+    if (note) note.textContent = messages().locating;
     try {
       // Asked HERE, under the reader's own tap. The cockpit asks again after it
       // boots and gets the same fix back (`maximumAge`), so no coordinate is
@@ -277,7 +299,7 @@ export function initVitrine({
     // thumbnail through the hand-off.
     gallery?.dispose();
     form?.setAttribute('aria-busy', 'true');
-    if (label) label.textContent = 'Ouverture du globe…';
+    if (label) label.textContent = messages().opening;
     // `?vitrine=1` forces this page for a demo; once the globe is open it must
     // leave the address, or every share link taken from here would send its
     // recipients to the showcase. The typed text travels as `?q=` on the paths
