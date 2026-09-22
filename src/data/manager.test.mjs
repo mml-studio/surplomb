@@ -3358,6 +3358,21 @@ function makePanelElement() {
       contains(name) { return String(element.className).split(/\s+/).filter(Boolean).includes(name); },
     },
     appendChild(child) { child.parent = element; this.children.push(child); return child; },
+    // The map key is built into a fragment and swapped in whole, so a row
+    // whose members are tiles in the key needs these two to be tested at all.
+    append(...nodes) { for (const node of nodes) this.appendChild(node); },
+    replaceChildren(...nodes) {
+      this.children = [];
+      for (const node of nodes) {
+        if (node.isFragment) for (const child of node.children) this.appendChild(child);
+        else this.appendChild(node);
+      }
+    },
+    contains(node) {
+      for (let current = node; current; current = current.parent) if (current === element) return true;
+      return false;
+    },
+    focus() { if (globalThis.document) globalThis.document.activeElement = element; },
     // Chip reconciliation REMOVES the buttons a refresh no longer needs
     // (`_syncRowControls`), so a stub without this throws the moment a row
     // sheds a chip — which is what a fused row does every time a companion
@@ -4183,7 +4198,15 @@ const PEER_TAXONOMY = Object.freeze([
 function makePeerPanel() {
   const originalDocument = globalThis.document;
   const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  globalThis.document = { createElement: makePanelElement };
+  // The on-map key is mounted too: this row's member switches live there.
+  const legendHost = makePanelElement();
+  const legendItems = makePanelElement();
+  globalThis.document = {
+    createElement: makePanelElement,
+    createDocumentFragment: () => Object.assign(makePanelElement(), { isFragment: true }),
+    getElementById: (id) => (id === 'map-legend' ? legendHost : id === 'map-legend-items' ? legendItems : null),
+    activeElement: null,
+  };
   Object.defineProperty(globalThis, 'localStorage', {
     value: makeMemoryStorage(), configurable: true, writable: true,
   });
@@ -4203,6 +4226,16 @@ function makePeerPanel() {
   return {
     mgr,
     container,
+    legendHost,
+    legendItems,
+    tiles: () => findAll(legendItems, '.map-legend-tile'),
+    // Same fire-and-forget shape as `click` below, through the key's own
+    // delegated listener.
+    pressTile: async (id) => {
+      const tile = findAll(legendItems, '.map-legend-tile').find((node) => node.dataset.tileLayer === id);
+      legendItems.listeners.get('click')[0]({ target: tile });
+      for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+    },
     row: (id) => container.querySelector(`[data-layer-id="${id}"]`),
     chips: (id) => findAll(
       container.querySelector(`[data-layer-id="${id}"]`),
@@ -4261,54 +4294,73 @@ test('a fused subject is ONE chip on the strip, named after its row', async () =
   }
 });
 
-test('a peer row gives its own primary a chip, so the reader can subtract it', async () => {
+test('a tiled peer row keeps no strip: its members are tiles in the key, one press per member', async () => {
   const panel = makePeerPanel();
   try {
     await panel.mgr._setRowEnabled('local-datacenters', true);
     panel.mgr._refreshTogglePanel();
 
-    // The primary leads the strip: it is the member the row is named after, and
-    // "how do I switch the halls off" must not be found past two companions.
-    assert.deepEqual(panel.chips('local-datacenters').map((chip) => chip.textContent), [
-      'Data centers', 'Câbles', 'Antennes',
-    ]);
-    assert.deepEqual(panel.chips('local-datacenters').map((chip) => chip.dataset.chipId), [
-      'fusion:local-datacenters',
-      'fusion:telegeography-submarine-cables',
-      'fusion:anfr-fr',
-    ]);
-    for (const chip of panel.chips('local-datacenters')) {
-      assert.equal(chip.attributes['aria-pressed'], 'true');
-      assert.ok(chip.className.includes('chip-fusion'));
-    }
+    // MOVED, NOT COPIED. The row keeps its own toggle and nothing else.
+    assert.deepEqual(panel.chips('local-datacenters'), [], 'no chip strip on a tiled row');
+    assert.equal(panel.row('local-datacenters').querySelector('.data-toggle-controls').hidden, true);
 
-    // THE DEFECT THIS CLOSES. Pressing it switches the data centres off while
-    // the cables and the masts keep drawing, and the row stays ON because
-    // something in its group still is.
-    await panel.click('local-datacenters', 0);
+    // The key names the row once, then lays the members out in the table's
+    // order — the wired backbone first, the radio network after.
+    assert.equal(panel.legendHost.hidden, false, 'the row owns a block with no class to print');
+    assert.equal(panel.legendItems.querySelector('.map-legend-row-title').textContent, 'Infrastructure numérique');
+    const tiles = panel.tiles();
+    assert.deepEqual(tiles.map((tile) => tile.dataset.tileLayer), [
+      'telegeography-submarine-cables', 'local-datacenters', 'anfr-fr',
+    ]);
+    assert.deepEqual(tiles.map((tile) => tile.querySelector('.map-legend-tile-label').textContent), [
+      'Câbles', 'Data centers', 'Antennes',
+    ]);
+    for (const tile of tiles) {
+      assert.equal(tile.attributes['aria-pressed'], 'true');
+      assert.ok(tile.className.includes('is-on'));
+    }
+    // A lit tile wears the colour its layer draws, and a vendored icon.
+    assert.equal(tiles[0].style['--tile-color'], '#39d5ff');
+    assert.ok(tiles[0].style['--tile-icon'].startsWith('url("data:image/svg+xml;base64,'));
+    // The tooltip is the fusion table's own hedge, read from its catalog.
+    assert.match(tiles[0].title, /^TeleGeography — .*licence non commerciale/);
+
+    // THE DEFECT `primaryToggle` CLOSED STILL STAYS CLOSED. Pressing the halls
+    // off leaves the cables and the masts drawing, and the row in the key.
+    await panel.pressTile('local-datacenters');
     panel.mgr._refreshTogglePanel();
     assert.equal(panel.mgr.isEnabled('local-datacenters'), false);
     assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
     assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), true);
-    // The row's own button tracks the PRIMARY, exactly as it does for a
-    // companion left on by a share link: it reads OFF and stays a "switch the
-    // whole subject on" control. What says the row is still drawing is the
-    // chip strip, which only appears while something in the group is on.
+    assert.deepEqual(panel.tiles().map((tile) => tile.attributes['aria-pressed']), ['true', 'false', 'true']);
+    // The row's own button tracks the PRIMARY, as it always has.
     assert.equal(panel.row('local-datacenters').querySelector('.data-toggle-btn').dataset.feedState, 'off');
-    assert.equal(panel.chips('local-datacenters').length, 3);
-    assert.deepEqual(
-      panel.chips('local-datacenters').map((chip) => chip.attributes['aria-pressed']),
-      ['false', 'true', 'true'],
-    );
 
-    // And back on, from the same chip.
-    await panel.click('local-datacenters', 0);
+    // And back on, from the same tile.
+    await panel.pressTile('local-datacenters');
     assert.equal(panel.mgr.isEnabled('local-datacenters'), true);
 
-    // The row toggle still takes the whole group down, chip or no chip.
+    // The row toggle still takes the whole group down, and the block with it.
     await panel.mgr._setRowEnabled('local-datacenters', false);
     panel.mgr._refreshTogglePanel();
-    assert.deepEqual(panel.chips('local-datacenters'), [], 'a dark row shows no chips');
+    assert.deepEqual(panel.tiles(), []);
+    assert.equal(panel.legendHost.hidden, true, 'a dark row keys nothing');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a pressed tile keeps the keyboard focus across the repaint that rebuilds it', async () => {
+  const panel = makePeerPanel();
+  try {
+    await panel.mgr._setRowEnabled('local-datacenters', true);
+    panel.mgr._refreshTogglePanel();
+    const before = panel.tiles().find((tile) => tile.dataset.tileLayer === 'anfr-fr');
+    before.focus();
+    panel.mgr._refreshTogglePanel();
+    const after = panel.tiles().find((tile) => tile.dataset.tileLayer === 'anfr-fr');
+    assert.notEqual(after, before, 'the key is rebuilt, not reconciled');
+    assert.equal(globalThis.document.activeElement, after, 'the focus followed its control');
   } finally {
     await panel.restore();
   }
@@ -4333,10 +4385,12 @@ test('a withheld layer leaves its row, and nothing can switch it back on', async
     assert.equal(panel.mgr.isLayerWithheld('telegeography-submarine-cables'), true);
     assert.equal(panel.mgr.isLayerWithheld('anfr-fr'), false);
 
-    // No chip: the row carries the halls and the masts.
+    // No tile: the row's block in the key carries the halls and the masts.
     await panel.mgr._setRowEnabled('local-datacenters', true);
     panel.mgr._refreshTogglePanel();
-    assert.deepEqual(panel.chips('local-datacenters').map((chip) => chip.textContent), ['Data centers', 'Antennes']);
+    assert.deepEqual(panel.tiles().map((tile) => tile.querySelector('.map-legend-tile-label').textContent),
+      ['Data centers', 'Antennes']);
+    assert.deepEqual(panel.chips('local-datacenters'), [], 'and the row has no strip to carry it either');
     assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), false, 'the row\'s toggle does not bring it along');
     assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
     const listed = panel.mgr.getAll().find((layer) => layer.id === 'telegeography-submarine-cables');
@@ -5438,6 +5492,8 @@ test('the shared-mobility key: a segmented control, an action line, and a press 
     assert.equal(velo.attributes['aria-pressed'], 'false');
     assert.deepEqual({ ...velo.dataset }, {
       toggleParam: 'kinds', toggleValue: 'velo', toggleLayer: 'shared-mobility-fr', toggleFanOut: '1',
+      // What carries the keyboard focus across the next repaint.
+      focusKey: 'shared-mobility-fr:Vélos',
     });
     assert.equal(velo.title, '3 à l’écran');
 
@@ -5453,6 +5509,109 @@ test('the shared-mobility key: a segmented control, an action line, and a press 
     // A neighbour that does not take the key is not asked to.
     mgr._offerParamsToRow('shared-mobility-fr', { kinds: 'velo' });
     assert.deepEqual(received, [{ operator: 'lime' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a layer can key a second block: its own title, a two-level control, and area swatches', async () => {
+  // The masts and the coverage painted under them are two things one layer
+  // draws, and the key prints them as two blocks. The second is `legendBlocks`.
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => {
+      const fragment = makeControlElement();
+      fragment.isFragment = true;
+      return fragment;
+    },
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  const coverage = (legend) => ({
+    key: 'coverage',
+    title: 'Couverture 4G',
+    legend,
+    legendSegmentsLabel: 'Ce que la carte peint',
+    legendSegments: [
+      { key: 'gaps', label: 'Sans 4G', active: false, toggle: { param: 'coverage', value: 'gaps' } },
+      { key: 'operator', label: 'Par opérateur', active: true, busy: true, toggle: { param: 'coverage', value: 'off' } },
+    ],
+    legendSubSegments: [
+      { key: 'orange', label: 'Orange', active: true, toggle: null },
+      { key: 'sfr', label: 'SFR', active: false, toggle: { param: 'coverage', value: 'sfr' } },
+    ],
+    note: 'Estimation des opérateurs.',
+  });
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [{ label: 'Antenne 5G', color: '#ffcb2b', count: 3 }],
+    legendBlocks: [coverage([
+      { label: 'Pas de réseau', color: '#f0287a', swatch: 'area', pattern: 'hatch' },
+      { label: 'Faible', color: '#ff6aa5', swatch: 'area' },
+      { label: 'Très bon : sans teinte', color: null, swatch: 'area' },
+    ])],
+  });
+  mgr.register(layer.module);
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+
+    // Two blocks from one layer: the second keyed by its own name, and a row
+    // title above both, because the row is now split.
+    const groups = collectByClass(items, 'map-legend-group');
+    assert.equal(groups.length, 2);
+    assert.deepEqual(groups.map((group) => group.dataset.block ?? null), [null, 'coverage']);
+    assert.ok(groups.every((group) => group.dataset.layer === 'satellites'));
+    assert.deepEqual(collectByClass(items, 'map-legend-layer').map((node) => node.textContent), ['Couverture 4G']);
+
+    // The mode strip, then the follow-up strip under it.
+    const strips = collectByClass(groups[1], 'map-legend-segments');
+    assert.equal(strips.length, 2);
+    assert.equal(strips[0].attributes['aria-label'], 'Ce que la carte peint');
+    assert.equal(strips[1].className.includes('is-sub'), true);
+    const [gaps, byOperator] = strips[0].children;
+    assert.equal(gaps.attributes['aria-pressed'], 'false');
+    assert.equal(byOperator.attributes['aria-busy'], 'true', 'lit and still arriving');
+    assert.equal(byOperator.disabled, false, 'a lit mode is pressed again to switch it off');
+    const [orange, sfr] = strips[1].children;
+    assert.equal(orange.disabled, true, 'the lit operator is not a control');
+    assert.deepEqual({ toggleParam: sfr.dataset.toggleParam, toggleValue: sfr.dataset.toggleValue },
+      { toggleParam: 'coverage', toggleValue: 'sfr' });
+
+    // An area class is keyed by a patch; the hatched one carries its ink as a
+    // custom property for the stripes, and no flat fill.
+    const swatches = collectByClass(groups[1], 'map-legend-swatch');
+    assert.equal(swatches.length, 3);
+    assert.ok(swatches.every((swatch) => swatch.className.includes('is-area')));
+    assert.ok(swatches[0].className.includes('is-hatched'));
+    assert.equal(swatches[0].style['--swatch-ink'], '#f0287a');
+    assert.equal(swatches[0].style.background, undefined);
+    assert.equal(swatches[1].style.background, '#ff6aa5');
+    assert.ok(swatches[2].className.includes('is-unmapped'));
+    assert.equal(collectByClass(groups[1], 'map-legend-note')[0].textContent, 'Estimation des opérateurs.');
+
+    // A block with a control and no class yet still prints: the control is
+    // how it is switched on. One with neither does not.
+    layer.module.getRowControls = () => ({ chips: [], legend: [], legendBlocks: [coverage([])] });
+    mgr._refreshTogglePanel();
+    assert.equal(collectByClass(items, 'map-legend-group').length, 1);
+    assert.equal(collectByClass(items, 'map-legend-segment').length, 4);
+    assert.deepEqual(collectByClass(items, 'map-legend-layer').map((node) => node.textContent), ['Couverture 4G'],
+      'alone on screen, the block still goes by its own name');
+    layer.module.getRowControls = () => ({
+      chips: [], legend: [], legendBlocks: [{ key: 'empty', title: 'Rien', legend: [] }],
+    });
+    mgr._refreshTogglePanel();
+    assert.equal(host.hidden, true);
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

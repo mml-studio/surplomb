@@ -77,7 +77,7 @@ export function createCoverageTileSource({
         job.resolve(null);
       } else {
         const out = new Uint32Array(PIXELS);
-        paintCoverageTile(tile, job.lut, out, job.crop);
+        paintCoverageTile(tile, job.lut, out, job.crop, job.hatch);
         job.resolve(out.buffer);
       }
     }, job.reject);
@@ -134,12 +134,13 @@ export function createCoverageTileSource({
     get backend() { return inline ? 'inline' : 'worker'; },
 
     /**
-     * Paint one tile through `lut`.
+     * Paint one tile through `lut`, and its stripes through `hatch.lut`
+     * (see `paintCoverageTile`).
      * @returns {{promise: Promise<?ArrayBuffer>, cancel: () => void}} RGBA
      *   bytes, or null when cancelled first.
      */
-    paint(url, lut, crop = null) {
-      const job = { id: nextId++, kind: 'paint', url, lut, crop };
+    paint(url, lut, crop = null, hatch = null) {
+      const job = { id: nextId++, kind: 'paint', url, lut, crop, hatch };
       const promise = submit(job);
       return {
         promise,

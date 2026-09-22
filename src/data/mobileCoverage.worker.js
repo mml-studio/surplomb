@@ -12,11 +12,12 @@
  *
  * Messages in:
  *   { type: 'capacity', capacity }             decoded tiles kept
- *   { type: 'paint', id, url, lut, crop }      → { id, buffer } (RGBA, transferred)
+ *   { type: 'paint', id, url, lut, crop, hatch } → { id, buffer } (RGBA, transferred)
  *   { type: 'read', id, url, px, py }          → { id, code } (null off land)
  *   { type: 'cancel', id }                     the paint is no longer wanted
- * Any failure answers { id, error }. The table travels with every paint: it
- * is 1 KB, and a worker that kept tables would need the page to know which.
+ * Any failure answers { id, error }. The tables travel with every paint — the
+ * mode's, and the stripes' in `hatch` — 1 KB each, and a worker that kept
+ * tables would need the page to know which.
  *
  * On start it says whether it can decode at all ({ type: 'ready', ok }): a
  * browser with workers but no 2D OffscreenCanvas (Safari before 16.4) gets
@@ -81,7 +82,7 @@ self.onmessage = async ({ data }) => {
       return;
     }
     const out = new Uint32Array(COVERAGE_TILE_EDGE * COVERAGE_TILE_EDGE);
-    paintCoverageTile(tile, data.lut, out, data.crop);
+    paintCoverageTile(tile, data.lut, out, data.crop, data.hatch);
     self.postMessage({ id, buffer: out.buffer }, [out.buffer]);
   } catch (error) {
     cancelled.delete(id);

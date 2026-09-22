@@ -398,6 +398,8 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | zone blanche (mobile) | dead zone | No operator reaches it, not even at limited coverage. One operator only is not a dead zone. |
 | très bonne / bonne couverture, couverture limitée | very good / good / limited coverage | ARCEP's three levels. |
 | couverture théorique (ARCEP) | simulated coverage (ARCEP) | The operators' own model, checked by ARCEP — never "measured". |
+| Couverture 4G, Sans 4G, Par opérateur | 4G coverage, No 4G, By operator | The coverage block of the key and its two modes. |
+| sans teinte | left untinted | The class a coverage map leaves unpainted. |
 | Mon réseau mobile | Mon réseau mobile | ARCEP dataset title, kept in French. |
 | Direction relevée / non relevée | Direction mapped / not mapped | Public cameras. |
 
@@ -432,6 +434,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 |---|---|---|
 | Couches | Layers | Tab and panel. |
 | légende | legend | |
+| tuile (d’un membre, dans la légende) | tile | A fused row's member switch in the key. |
 | source, crédit, licence | source, credit, license | |
 | Licence Ouverte | Licence Ouverte (Etalab Open License 2.0) | Name kept, glossed. |
 | fond de carte | basemap | |

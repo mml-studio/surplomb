@@ -1,7 +1,9 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
-import { fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor } from './layerFusions.js';
+import {
+  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor,
+} from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
 import { getSelectedEntityContext } from './contextStore.js';
 import { renderZoomPrompt, zoomPromptModel, zoomPromptVisible } from '../zoomPrompt.js';
@@ -114,6 +116,48 @@ const GUIDANCE_STATUSES = Object.freeze(new Set(['zoom-in', 'empty', 'idle', 'ou
  * was measured taking its final height within 2.5 s of a click.
  */
 export const LEGEND_SELECTION_REVEAL_MS = 3000;
+
+/**
+ * The focus key of the control focused inside `list`, if any.
+ * @param {HTMLElement} list `#map-legend-items`.
+ * @returns {?string}
+ */
+function legendFocusKeyIn(list) {
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  const key = active?.dataset?.focusKey;
+  if (!key) return null;
+  return typeof list.contains === 'function' && list.contains(active) ? key : null;
+}
+
+/**
+ * The node under `root` carrying `focusKey`, by a walk rather than a selector:
+ * the key is built from layer ids and labels, and quoting it into an attribute
+ * selector is a second escaping problem for no gain.
+ * @param {HTMLElement} root
+ * @param {string} focusKey
+ * @returns {?HTMLElement}
+ */
+function findByFocusKey(root, focusKey) {
+  for (const child of root?.children || []) {
+    if (child.dataset?.focusKey === focusKey) return child;
+    const found = findByFocusKey(child, focusKey);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Set a CSS custom property on a node. `style.setProperty` is the only way a
+ * browser accepts one; the panel tests' element doubles have a plain `style`
+ * object, where the property is simply stored under its name.
+ * @param {HTMLElement} node
+ * @param {string} name `--…`
+ * @param {string} value
+ */
+function setCssVar(node, name, value) {
+  if (typeof node?.style?.setProperty === 'function') node.style.setProperty(name, value);
+  else if (node?.style) node.style[name] = value;
+}
 
 /**
  * A layer's `legendSelection`, checked and normalised, or null.
@@ -3308,25 +3352,7 @@ export class DataLayerManager {
         // applies params to whichever layer published it — the primary, or an
         // enabled companion whose own controls are shown here.
         if (chip.fusionToggle) {
-          const turningOn = !this.isEnabled(chip.targetLayerId);
-          // Only ON is briefed. Interrupting somebody who is switching a layer
-          // OFF to explain what it was would be the most annoying card in the
-          // app, and they have already seen whatever it had to say.
-          if (turningOn && this._shouldBriefCoverage(chip.targetLayerId)) {
-            void this._runCoverageBriefing(chip.targetLayerId);
-            return;
-          }
-          // The dimmed chip's tooltip ends "cliquer pour y aller", and a
-          // promise made in a tooltip is still a promise. A territorial layer
-          // with no briefing copy keeps it by flying — switched on first, so
-          // its data is in hand as the camera lands.
-          const destination = turningOn ? this._coverageFlightFor(chip.targetLayerId) : null;
-          this.setEnabled(chip.targetLayerId, turningOn, { origin: 'user' })
-            .then(() => {
-              if (!destination) return;
-              return this._coverageBriefingHandler?.flyTo?.(destination);
-            })
-            .catch((error) => console.warn(`[Data] ${chip.targetLayerId} chip toggle error:`, error));
+          this._toggleFusionMember(chip.targetLayerId);
           return;
         }
         if (chip.params) {
@@ -3341,6 +3367,36 @@ export class DataLayerManager {
     }
 
     return row;
+  }
+
+  /**
+   * Switch ONE member of a fused row, as its chip or its tile in the key asks.
+   *
+   * Fire-and-forget on purpose: the caller is a click handler, and the panel
+   * repaints from the lifecycle events either way.
+   * @param {string} layerId The member layer.
+   */
+  _toggleFusionMember(layerId) {
+    if (!layerId || !this.layers.has(layerId)) return;
+    const turningOn = !this.isEnabled(layerId);
+    // Only ON is briefed. Interrupting somebody who is switching a layer
+    // OFF to explain what it was would be the most annoying card in the
+    // app, and they have already seen whatever it had to say.
+    if (turningOn && this._shouldBriefCoverage(layerId)) {
+      void this._runCoverageBriefing(layerId);
+      return;
+    }
+    // The dimmed chip's tooltip ends "cliquer pour y aller", and a
+    // promise made in a tooltip is still a promise. A territorial layer
+    // with no briefing copy keeps it by flying — switched on first, so
+    // its data is in hand as the camera lands.
+    const destination = turningOn ? this._coverageFlightFor(layerId) : null;
+    this.setEnabled(layerId, turningOn, { origin: 'user' })
+      .then(() => {
+        if (!destination) return;
+        return this._coverageBriefingHandler?.flyTo?.(destination);
+      })
+      .catch((error) => console.warn(`[Data] ${layerId} chip toggle error:`, error));
   }
 
   /**
@@ -3555,6 +3611,10 @@ export class DataLayerManager {
     const own = read(layer.id);
     const companions = this._fusionCompanions(layer.id);
     if (!companions.length) return own;
+    // A row whose members are TILES in the key keeps no strip at all: the
+    // tiles are its member switches, and each member prints its options as
+    // segments over its own classes there. See `tiles` in layerFusions.js.
+    if (fusionTilesFor(layer.id)) return { ...(own || {}), chips: [] };
     const chips = [];
     // The row's own primary, WHEN the fusion asks for it — a peer row whose
     // members are three different objects rather than one subject seen three
@@ -3723,43 +3783,25 @@ export class DataLayerManager {
     );
     for (const layer of layers) {
       const controls = resolved.get(layer.id) || null;
-      if (controls?.legend?.length) {
-        mapLegend.push({
-          layer,
-          entries: controls.legend,
-          surfaceFill: controls.surfaceFill === true,
-          // A5's slot: what a layer had to leave out, and where its marks came
-          // from, printed WITH the key rather than in a panel that ships
-          // collapsed. Optional — a layer with nothing to disclose sends none.
-          note: typeof controls.note === 'string' ? controls.note.trim() : '',
-          // The block's OWN provenance and CLOCK. A DIFFERENT sentence from
-          // `note`, and deliberately a different slot: that one says what was
-          // left OUT of the classes and sits under them, this one says who
-          // published what IS in them and how often, and frames them from
-          // above. Four blocks land on the fused road row and they run on four
-          // different clocks — E1 is P0, and until this existed a reader had no
-          // way to tell last minute from last month.
-          source: typeof controls.legendNote === 'string' && controls.legendNote.trim()
-            ? controls.legendNote.trim()
-            : null,
-          // Ordered classes get ONE segmented bar above them instead of six
-          // stacked rows — see `_legendBar`.
-          bar: controls.legendBar === true,
-          // A segmented control over the key, when the layer has one.
-          segments: Array.isArray(controls.legendSegments) ? controls.legendSegments : [],
-          segmentsLabel: typeof controls.legendSegmentsLabel === 'string' ? controls.legendSegmentsLabel : '',
-          // Side-by-side entries laid out in this many columns, filled down
-          // first, so a ladder still reads top to bottom — see the DPE key.
-          columns: Number.isInteger(controls.legendColumns) && controls.legendColumns > 1
-            ? Math.min(controls.legendColumns, 3) : 1,
-          // WHERE these classes are, and whether any of them is on screen.
-          // A layer whose whole dataset sits 800 km away was still printing a
-          // six-class key above the layer the reader was actually looking at.
-          scope: legendScopeOf(controls.legendScope),
-          // The object the reader selected, printed under the key it is read
-          // against instead of in a card over the map — see `_legendSelection`.
-          selection: legendSelectionOf(controls.legendSelection),
-        });
+      // A row whose members are TILES in the key owns its block for as long as
+      // anything on it is on — even when no member publishes a single class,
+      // since the tiles are the only switches the row has left. See `tiles`
+      // in layerFusions.js.
+      const tiles = fusionTilesFor(layer.id);
+      if (tiles && this._rowEnabled(layer.id)) {
+        mapLegend.push({ layer, tiles: this._legendTiles(layer.id, tiles) });
+      }
+      if (controls?.legend?.length) mapLegend.push(this._legendGroupOf(layer, controls));
+      // MORE THAN ONE BLOCK FROM ONE LAYER. A layer drawing two different
+      // things — the masts, and the coverage painted under them — keys each
+      // under its own title, with its own control and its own source line, in
+      // the order it lists them after its main block. A block with a control
+      // and no class yet (the coverage while it is off) still prints: its
+      // control is how it is switched on.
+      for (const block of Array.isArray(controls?.legendBlocks) ? controls.legendBlocks : []) {
+        const group = this._legendGroupOf(layer, block);
+        if (!group.entries.length && !group.segments.length) continue;
+        mapLegend.push({ ...group, blockKey: typeof block.key === 'string' ? block.key : null, subtitle: block.title || null });
       }
 
       const row = this._toggleContainer.querySelector(`[data-layer-id="${layer.id}"]`);
@@ -4031,6 +4073,94 @@ export class DataLayerManager {
    * @returns {void}
    */
   /**
+   * One block of the on-map key, read off a layer's controls — or off one of
+   * the extra `legendBlocks` it publishes, which take the same fields.
+   * @param {object} layer `getAll()` projection.
+   * @param {object} controls `getRowControls()` answer, or one of its blocks.
+   * @returns {object} The group `_legendRows` folds into a row.
+   */
+  _legendGroupOf(layer, controls) {
+    return {
+      layer,
+      entries: Array.isArray(controls.legend) ? controls.legend : [],
+      surfaceFill: controls.surfaceFill === true,
+      // A5's slot: what a layer had to leave out, and where its marks came
+      // from, printed WITH the key rather than in a panel that ships
+      // collapsed. Optional — a layer with nothing to disclose sends none.
+      note: typeof controls.note === 'string' ? controls.note.trim() : '',
+      // The block's OWN provenance and CLOCK. A DIFFERENT sentence from
+      // `note`, and deliberately a different slot: that one says what was
+      // left OUT of the classes and sits under them, this one says who
+      // published what IS in them and how often, and frames them from
+      // above. Four blocks land on the fused road row and they run on four
+      // different clocks — E1 is P0, and until this existed a reader had no
+      // way to tell last minute from last month.
+      source: typeof controls.legendNote === 'string' && controls.legendNote.trim()
+        ? controls.legendNote.trim()
+        : null,
+      // Ordered classes get ONE segmented bar above them instead of six
+      // stacked rows — see `_legendBar`.
+      bar: controls.legendBar === true,
+      // A segmented control over the key, when the layer has one — and a
+      // second strip under it for a choice that only exists once the first
+      // is made (« Par opérateur », then which operator).
+      segments: Array.isArray(controls.legendSegments) ? controls.legendSegments : [],
+      subSegments: Array.isArray(controls.legendSubSegments) ? controls.legendSubSegments : [],
+      segmentsLabel: typeof controls.legendSegmentsLabel === 'string' ? controls.legendSegmentsLabel : '',
+      // Side-by-side entries laid out in this many columns, filled down
+      // first, so a ladder still reads top to bottom — see the DPE key.
+      columns: Number.isInteger(controls.legendColumns) && controls.legendColumns > 1
+        ? Math.min(controls.legendColumns, 3) : 1,
+      // WHERE these classes are, and whether any of them is on screen.
+      // A layer whose whole dataset sits 800 km away was still printing a
+      // six-class key above the layer the reader was actually looking at.
+      scope: legendScopeOf(controls.legendScope),
+      // The object the reader selected, printed under the key it is read
+      // against instead of in a card over the map — see `_legendSelection`.
+      selection: legendSelectionOf(controls.legendSelection),
+    };
+  }
+
+  /**
+   * The member tiles of a row, with the state each one shows right now.
+   *
+   * Same states and the same coverage sentence as the chip it replaces: a
+   * member off its territory is DIMMED and says where it works, never
+   * disabled, because pressing it is how a reader asks to be taken there.
+   * @param {string} rowId The row's primary.
+   * @param {ReadonlyArray<object>} tiles From `fusionTilesFor`.
+   * @returns {Array<object>}
+   */
+  _legendTiles(rowId, tiles) {
+    return tiles
+      // A withheld layer (`withholdLayers`) has no control anywhere, a tile
+      // included — the same filter `_fusionCompanions` applies to the chips.
+      .filter((tile) => this.layers.has(tile.id) && !this._withheldLayerIds.has(tile.id))
+      .map((tile) => {
+        const coverage = this.coverageStateFor(tile.id);
+        const offCoverage = coverage === 'out' || coverage === 'dark';
+        const notice = offCoverage
+          ? coverageNoticeFor(
+            tile.id,
+            coverage,
+            coverage === 'dark' ? layerDarkAreaAt(tile.id, this._coverageView) : null,
+            { clickable: true },
+          )
+          : '';
+        const title = tile.title || '';
+        return {
+          id: tile.id,
+          label: tile.label,
+          color: tile.color,
+          icon: tile.icon,
+          active: this.isEnabled(tile.id),
+          offCoverage,
+          title: notice ? `${title || tile.label} — ${notice}` : title,
+        };
+      });
+  }
+
+  /**
    * Fold the per-layer legend groups into the PANEL ROWS they belong to.
    *
    * Pure, and exported through `_legendRowsForTest` so the shape can be pinned
@@ -4060,25 +4190,37 @@ export class DataLayerManager {
           || this.layers.get(rowId)?.module?.name
           || this._displayName(group.layer);
         row = {
-          rowId, title, split: false, members: [],
+          rowId, title, split: false, tiles: null, members: [],
         };
         byRowId.set(rowId, row);
         rows.push(row);
       }
+      // The row's own switches, not a block of classes: they sit under the
+      // row's name, and they are what makes the row a split one even while a
+      // single member — or none — has classes to print.
+      if (Array.isArray(group.tiles)) {
+        row.tiles = group.tiles;
+        row.split = true;
+        continue;
+      }
       row.members.push({
         layer: group.layer,
+        blockKey: group.blockKey || null,
         entries: group.entries,
         note: group.note || null,
         source: group.source || null,
         bar: group.bar === true,
         segments: group.segments || [],
+        subSegments: group.subSegments || [],
         segmentsLabel: group.segmentsLabel || '',
         columns: group.columns || 1,
         scope: group.scope || null,
         selection: group.selection || null,
-        subtitle: fusionMemberChipFor(rowId, group.layer.id) || this._displayName(group.layer),
+        subtitle: group.subtitle
+          || fusionMemberChipFor(rowId, group.layer.id)
+          || this._displayName(group.layer),
       });
-      row.split = row.members.length > 1;
+      row.split = Boolean(row.tiles) || row.members.length > 1;
     }
     // WHAT IS ON SCREEN LEADS ITS OWN ROW. A fused row can hold a viewport
     // layer next to a national one, and the national one is not smaller for
@@ -4113,6 +4255,13 @@ export class DataLayerManager {
       const close = event.target?.closest?.('.map-legend-selection-close[data-selection-layer]');
       if (close) {
         this.layers.get(close.dataset.selectionLayer)?.module?.clearSelectedCard?.();
+        return;
+      }
+      // A member tile switches its whole layer, exactly as the chip it
+      // replaces did on the row.
+      const tile = event.target?.closest?.('.map-legend-tile[data-tile-layer]');
+      if (tile) {
+        this._toggleFusionMember(tile.dataset.tileLayer);
         return;
       }
       const button = event.target?.closest?.('.is-toggle[data-toggle-layer]');
@@ -4221,19 +4370,25 @@ export class DataLayerManager {
         rowTitle.textContent = row.title;
         rowNode.appendChild(rowTitle);
       }
+      if (row.tiles?.length) rowNode.appendChild(this._legendTileGrid(row));
       for (const {
-        layer, entries, note, source, subtitle, bar, scope, segments, segmentsLabel, selection, columns,
+        layer, blockKey, entries, note, source, subtitle, bar, scope, segments, subSegments, segmentsLabel,
+        selection, columns,
       } of row.members) {
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
         // Which layer this block keys: a filming harness keeps one block on
         // screen, and a test can find it without matching translated titles.
         if (layer?.id) group.dataset.layer = layer.id;
+        // And which of its blocks, when the layer publishes more than one.
+        if (blockKey) group.dataset.block = blockKey;
 
         // A sub-title that would only repeat the row's says nothing, so it is
         // dropped rather than printed — the rule and the indent already say
         // "this belongs to the block above".
-        const heading = row.split ? subtitle : this._displayName(layer);
+        // An extra block always goes by its own name: « Couverture 4G » alone
+        // on screen is still not « Antennes ».
+        const heading = row.split || blockKey ? subtitle : this._displayName(layer);
         if (heading && heading !== (row.split ? row.title : null)) {
           const title = document.createElement('div');
           title.className = 'map-legend-layer';
@@ -4264,43 +4419,14 @@ export class DataLayerManager {
         // the dots. Same click path as a toggling key line: one delegated
         // listener, one param per press, and `fanOut` offers it to the row.
         if (segments.length) {
-          const strip = document.createElement('div');
-          strip.className = 'map-legend-segments';
-          strip.setAttribute('role', 'group');
-          if (segmentsLabel) strip.setAttribute('aria-label', segmentsLabel);
-          // SWATCH SEGMENTS: a segment carrying `color` is drawn filled in it,
-          // with its label in dark ink — the DPE's seven lettered plates. The
-          // strip then reads as the classes themselves, and a class pressed
-          // off is dimmed rather than emptied, so its colour stays findable.
-          if (segments.some((segment) => typeof segment.color === 'string' && segment.color)) {
-            strip.classList.add('is-swatches');
+          group.appendChild(this._legendSegmentStrip(layer, segments, segmentsLabel, `${blockKey || layer.id}:`));
+          // The follow-up choice, under the one that opened it: smaller, and
+          // indented, so « Orange · SFR » reads as a detail of « Par opérateur ».
+          if (subSegments.length) {
+            const sub = this._legendSegmentStrip(layer, subSegments, '', `${blockKey || layer.id}:sub:`);
+            sub.className += ' is-sub';
+            group.appendChild(sub);
           }
-          for (const segment of segments) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'map-legend-segment';
-            button.textContent = segment.label;
-            if (typeof segment.color === 'string' && segment.color) {
-              button.classList.add('is-swatch');
-              button.style.background = segment.color;
-            }
-            button.setAttribute('aria-pressed', segment.active ? 'true' : 'false');
-            if (segment.title) button.title = segment.title;
-            const toggle = segment.toggle && typeof segment.toggle.param === 'string' ? segment.toggle : null;
-            if (toggle) {
-              button.classList.add('is-toggle');
-              this._bindLegendToggle(button, layer, toggle);
-              // A segment that would blank the map is refused, not hidden:
-              // the control keeps its shape under the reader's hand.
-              if (segment.disabled === true) button.disabled = true;
-            } else {
-              // The lit « Tous »: pressing where one already is does nothing,
-              // and says so rather than looking pressable.
-              button.disabled = true;
-            }
-            strip.appendChild(button);
-          }
-          group.appendChild(strip);
         }
 
         // ORDERED CLASSES GET ONE BAR. Six stacked rows spend six lines saying
@@ -4431,7 +4557,18 @@ export class DataLayerManager {
         swatch.className = item.glyph
           ? 'map-legend-swatch has-glyph'
           : (item.color ? 'map-legend-swatch' : 'map-legend-swatch is-unmapped');
-        if (item.color) swatch.style.background = item.color;
+        // AN AREA IS KEYED BY A PATCH, not a dot: a class painted over the
+        // ground (a coverage rung) reads as a surface only if its swatch is
+        // one. `pattern: 'hatch'` draws the patch the way the map draws that
+        // class — stripes of the full colour over its translucent fill.
+        if (item.swatch === 'area' && !item.glyph) swatch.className += ' is-area';
+        const hatched = item.pattern === 'hatch' && Boolean(item.color) && !item.glyph;
+        if (hatched) {
+          swatch.className += ' is-hatched';
+          setCssVar(swatch, '--swatch-ink', item.color);
+        } else if (item.color) {
+          swatch.style.background = item.color;
+        }
         if (item.glyph) {
           const mask = `url("${item.glyph}")`;
           swatch.style.webkitMaskImage = mask;
@@ -4480,7 +4617,13 @@ export class DataLayerManager {
       }
       fragment.appendChild(rowNode);
     }
+    // The key is rebuilt, not reconciled, so a focused control is a NEW node
+    // after this line. Its focus key finds its successor and hands the focus
+    // over; without it a keyboard reader who pressed a tile or a segment was
+    // dropped back to the page within a second, by the next repaint.
+    const focusKey = legendFocusKeyIn(list);
     list.replaceChildren(fragment);
+    if (focusKey) findByFocusKey(list, focusKey)?.focus?.({ preventScroll: true });
     // A NEW selection is brought into view once; a repaint of the same one
     // leaves the reader's scroll where they put it. The key repaints about
     // once a second, and scrolling on every pass would pin the list.
@@ -4488,6 +4631,107 @@ export class DataLayerManager {
       this._revealLegendSelection(list);
     }
     this._legendSelectionKey = selectionKey;
+  }
+
+  /**
+   * One strip of segments — a filter or a mode over the classes under it.
+   *
+   * Same click path as a toggling key line: one delegated listener, one param
+   * per press, and `fanOut` offers it to the row. `focusPrefix` keys each
+   * button for {@link _refreshMapLegend}'s focus carry-over.
+   * @param {{id: string}} layer
+   * @param {Array<object>} segments
+   * @param {string} label The strip's accessible name.
+   * @param {string} focusPrefix
+   * @returns {HTMLElement}
+   */
+  _legendSegmentStrip(layer, segments, label, focusPrefix) {
+    const strip = document.createElement('div');
+    strip.className = 'map-legend-segments';
+    strip.setAttribute('role', 'group');
+    if (label) strip.setAttribute('aria-label', label);
+    // SWATCH SEGMENTS: a segment carrying `color` is drawn filled in it,
+    // with its label in dark ink — the DPE's seven lettered plates. The
+    // strip then reads as the classes themselves, and a class pressed
+    // off is dimmed rather than emptied, so its colour stays findable.
+    if (segments.some((segment) => typeof segment.color === 'string' && segment.color)) {
+      strip.className += ' is-swatches';
+    }
+    segments.forEach((segment, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      let className = 'map-legend-segment';
+      button.textContent = segment.label;
+      button.dataset.focusKey = `${focusPrefix}${segment.key || segment.label || index}`;
+      if (typeof segment.color === 'string' && segment.color) {
+        className += ' is-swatch';
+        button.style.background = segment.color;
+      }
+      button.setAttribute('aria-pressed', segment.active ? 'true' : 'false');
+      // Asked for and still arriving: the segment is lit, and says it is busy.
+      if (segment.busy === true) button.setAttribute('aria-busy', 'true');
+      if (segment.title) button.title = segment.title;
+      const toggle = segment.toggle && typeof segment.toggle.param === 'string' ? segment.toggle : null;
+      if (toggle) {
+        className += ' is-toggle';
+        this._bindLegendToggle(button, layer, toggle);
+        // A segment that would blank the map is refused, not hidden:
+        // the control keeps its shape under the reader's hand.
+        if (segment.disabled === true) button.disabled = true;
+      } else {
+        // The lit « Tous »: pressing where one already is does nothing,
+        // and says so rather than looking pressable.
+        button.disabled = true;
+      }
+      button.className = className;
+      strip.appendChild(button);
+    });
+    return strip;
+  }
+
+  /**
+   * A row's members as TILES: icon, name and switch, one per member, in the
+   * order the fusion table lays them out.
+   *
+   * A tile is a `<button aria-pressed>` — a switch a screen reader announces
+   * as one — and it goes through the same path as the chip it replaces
+   * ({@link _toggleFusionMember}), briefing and coverage flight included. A
+   * lit tile wears its layer's MAP colour on its icon and border, so it also
+   * says what that member looks like on the globe.
+   * @param {{title: string, tiles: Array<object>}} row
+   * @returns {HTMLElement}
+   */
+  _legendTileGrid(row) {
+    const grid = document.createElement('div');
+    grid.className = 'map-legend-tiles';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', row.title);
+    for (const tile of row.tiles) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'map-legend-tile'
+        + (tile.active ? ' is-on' : '')
+        + (tile.offCoverage ? ' is-offcoverage' : '');
+      button.dataset.tileLayer = tile.id;
+      button.dataset.focusKey = `tile:${tile.id}`;
+      button.setAttribute('aria-pressed', tile.active ? 'true' : 'false');
+      if (tile.title) button.title = tile.title;
+      setCssVar(button, '--tile-color', tile.color);
+      if (tile.icon) setCssVar(button, '--tile-icon', `url("${tile.icon}")`);
+
+      const icon = document.createElement('span');
+      icon.className = 'map-legend-tile-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      const toggle = document.createElement('span');
+      toggle.className = 'map-legend-tile-switch';
+      toggle.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'map-legend-tile-label';
+      label.textContent = tile.label;
+      button.append(icon, toggle, label);
+      grid.appendChild(button);
+    }
+    return grid;
   }
 
   /**

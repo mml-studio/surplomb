@@ -53,14 +53,23 @@ export function coverageTileCode(tile, px, py) {
  * `crop` magnifies a square of the tile to the whole output, nearest
  * neighbour — a smoothed edge would invent colours between two rungs. That is
  * how a level past the pyramid is drawn (see `coverageOverzoomSource`).
+ *
+ * With `hatch`, the output pixels on a stripe — `(x + y) % period < width`,
+ * lower left to upper right — are painted through `hatch.lut` instead. That
+ * table differs from `lut` on the no-coverage rung only (`coverageHatchLut`),
+ * which is how the hatching lands there and nowhere else. The stripes are laid
+ * on the OUTPUT, after the magnification, so they keep one width at every
+ * level instead of doubling with each level past the pyramid.
  * @param {{codes: Uint8Array, land: ?Uint8Array}} tile
  * @param {Uint32Array} lut 256 packed colours, `ImageData` byte order.
  * @param {Uint32Array} out PIXELS entries.
  * @param {?{sx:number, sy:number, size:number}} [crop]
+ * @param {?{lut: Uint32Array, period: number, width: number}} [hatch]
  */
-export function paintCoverageTile(tile, lut, out, crop = null) {
+export function paintCoverageTile(tile, lut, out, crop = null, hatch = null) {
   const { codes, land } = tile;
-  if (!crop || crop.size >= COVERAGE_TILE_EDGE) {
+  const whole = !crop || crop.size >= COVERAGE_TILE_EDGE;
+  if (whole && !hatch) {
     if (!land) {
       for (let i = 0; i < PIXELS; i++) out[i] = lut[codes[i]];
       return out;
@@ -68,13 +77,20 @@ export function paintCoverageTile(tile, lut, out, crop = null) {
     for (let i = 0; i < PIXELS; i++) out[i] = (land[i >> 3] >> (i & 7)) & 1 ? lut[codes[i]] : 0;
     return out;
   }
-  const { sx, sy, size } = crop;
-  const shift = Math.log2(COVERAGE_TILE_EDGE / size);
+  const sx = whole ? 0 : crop.sx;
+  const sy = whole ? 0 : crop.sy;
+  const shift = whole ? 0 : Math.log2(COVERAGE_TILE_EDGE / crop.size);
+  const period = hatch?.period || 1;
+  const width = hatch ? hatch.width : 0;
   for (let y = 0, o = 0; y < COVERAGE_TILE_EDGE; y++) {
     const row = (sy + (y >> shift)) * COVERAGE_TILE_EDGE + sx;
     for (let x = 0; x < COVERAGE_TILE_EDGE; x++, o++) {
       const i = row + (x >> shift);
-      out[o] = !land || (land[i >> 3] >> (i & 7)) & 1 ? lut[codes[i]] : 0;
+      if (land && !((land[i >> 3] >> (i & 7)) & 1)) {
+        out[o] = 0;
+        continue;
+      }
+      out[o] = hatch && (x + y) % period < width ? hatch.lut[codes[i]] : lut[codes[i]];
     }
   }
   return out;

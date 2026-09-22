@@ -47,6 +47,7 @@ import * as Cesium from 'cesium';
 
 import { isPhoneShell } from '../inputMode.js';
 import {
+  COVERAGE_HATCH,
   COVERAGE_TILE_PX,
   coverageTileAt,
   coverageTileExists,
@@ -116,10 +117,16 @@ export function coverageOverzoomSource(level, x, y, maxZoom) {
  *
  * @param {object} meta The pyramid's meta.json
  * @param {Uint32Array} lut
- * @param {{credit?: string, drape?: boolean, tiles?: object}} [options] `drape`:
- *   for a tileset's `imageryLayers`, one level past the pyramid — see the header.
+ * @param {{credit?: string, drape?: boolean, hatchLut?: ?Uint32Array, tiles?: object}} [options]
+ *   `drape`: for a tileset's `imageryLayers`, one level past the pyramid — see
+ *   the header. `hatchLut`: the colours of the pixels on a stripe of
+ *   `COVERAGE_HATCH` — that table differs from `lut` on rung 0 only, which is
+ *   how the hatching lands on that rung and nowhere else.
  */
-export function createCoverageImageryProvider(meta, lut, { credit, drape = false, tiles = coverageTileSource() } = {}) {
+export function createCoverageImageryProvider(meta, lut, {
+  credit, drape = false, hatchLut = null, tiles = coverageTileSource(),
+} = {}) {
+  const hatch = hatchLut ? { lut: hatchLut, period: COVERAGE_HATCH.period, width: COVERAGE_HATCH.width } : null;
   const [west, south, east, north] = meta.bounds || [-5.5, 41.2, 9.8, 51.2];
   const provider = new Cesium.UrlTemplateImageryProvider({
     url: coverageTileUrl(meta.edition, '{z}', '{x}', '{y}').replace(/%7B/g, '{').replace(/%7D/g, '}'),
@@ -146,11 +153,11 @@ export function createCoverageImageryProvider(meta, lut, { credit, drape = false
     if (!coverageTileExists(meta, source.z, source.x, source.y)) return Promise.resolve(emptyImage());
     const url = absoluteUrl(coverageTileUrl(meta.edition, source.z, source.x, source.y, meta.builtAt));
     const crop = source.z === level ? null : source;
-    if (!request) return track(tiles.paint(url, lut, crop).promise.then(toImageData));
+    if (!request) return track(tiles.paint(url, lut, crop, hatch).promise.then(toImageData));
     let job = null;
     request.url = url;
     request.requestFunction = () => {
-      job = tiles.paint(url, lut, crop);
+      job = tiles.paint(url, lut, crop, hatch);
       return job.promise;
     };
     request.cancelFunction = () => job?.cancel();

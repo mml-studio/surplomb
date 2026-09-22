@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import {
   COVERAGE_ALPHA,
   COVERAGE_DRAPE_ALPHA,
+  COVERAGE_HATCH,
   COVERAGE_MODES,
   COVERAGE_OPERATORS,
   COVERAGE_RAMP,
   coverageCardText,
+  coverageHatchLut,
   coverageLegend,
   coverageLevel,
   coverageLut,
@@ -108,6 +110,56 @@ test('painting decoded pixels uses the code in R and leaves sea transparent what
   assert.deepEqual([...bytes.slice(4, 12)], [0, 0, 0, 0, 0, 0, 0, 0]);
 });
 
+test('rung 0 is hatched: its stripes add ink of its own colour, every other code paints as the plain table', () => {
+  for (const [mode, alpha] of [['gaps', COVERAGE_ALPHA], ['sfr', COVERAGE_DRAPE_ALPHA]]) {
+    const plain = coverageLut(mode, alpha);
+    const hatch = coverageHatchLut(mode, alpha);
+    const stripeAlpha = Math.round(COVERAGE_HATCH.alpha * 255);
+    for (let code = 0; code < 256; code++) {
+      if (coverageRung(code, mode) === 0) {
+        assert.equal(hatch[code] & 0xffffff, plain[code] & 0xffffff, `code ${code} keeps rung 0's colour`);
+        // More ink, never less: the hatched class stays the darkest (B3).
+        assert.equal(hatch[code] >>> 24, stripeAlpha);
+        assert.ok(stripeAlpha > (plain[code] >>> 24));
+      } else {
+        assert.equal(hatch[code], plain[code], `code ${code} is not hatched`);
+      }
+    }
+  }
+  // The stripe period divides the tile edge, so stripes run on across tiles.
+  assert.equal(256 % COVERAGE_HATCH.period, 0);
+});
+
+test('painting with the hatch table stripes rung 0 along x + y and leaves every other code alone', () => {
+  const lut = coverageLut('gaps');
+  const hatch = { lut: coverageHatchLut('gaps'), period: COVERAGE_HATCH.period, width: COVERAGE_HATCH.width };
+  const { period, width } = COVERAGE_HATCH;
+  const tile = (code) => ({ codes: new Uint8Array(256 * 256).fill(code), land: null });
+  const paint = (code, stripes, crop = null) => paintCoverageTile(tile(code), lut, new Uint32Array(256 * 256), crop, stripes);
+  const alphaAt = (out, x, y) => out[y * 256 + x] >>> 24;
+  const stripe = Math.round(COVERAGE_HATCH.alpha * 255);
+  const fill = Math.round(COVERAGE_ALPHA * 255);
+  const dead = paint(encodeCoverage([0, 0, 0, 0]), hatch);
+  for (const [x, y] of [[0, 0], [1, 1], [5, 250], [255, 255]]) {
+    assert.equal(alphaAt(dead, x, y), (x + y) % period < width ? stripe : fill, `(${x}, ${y})`);
+  }
+  // Without a hatch table the painter is exactly what it was.
+  assert.equal(alphaAt(paint(encodeCoverage([0, 0, 0, 0]), null), 0, 0), fill);
+  // A rung that is not 0 carries no stripe at all.
+  const one = paint(encodeCoverage([3, 0, 0, 0]), hatch);
+  assert.equal(alphaAt(one, 0, 0), fill);
+  assert.equal(alphaAt(one, 4, 4), fill);
+  // Past the pyramid the stripes are laid on the OUTPUT: a quarter magnified
+  // twice keeps three pixels in eight, not six in sixteen.
+  const magnified = paint(encodeCoverage([0, 0, 0, 0]), hatch, { sx: 128, sy: 128, size: 128 });
+  for (const [x, y] of [[0, 0], [3, 0], [7, 0], [8, 0]]) {
+    assert.equal(alphaAt(magnified, x, y), (x + y) % period < width ? stripe : fill, `magnified (${x}, ${y})`);
+  }
+  // Off land stays transparent, stripe or not.
+  const coast = { codes: new Uint8Array(256 * 256), land: new Uint8Array(256 * 256 / 8) };
+  assert.equal(paintCoverageTile(coast, lut, new Uint32Array(256 * 256), null, hatch)[0], 0);
+});
+
 test('a tile past the finest zoom magnifies the quarter of its zoom-12 ancestor that it covers', () => {
   // Within the pyramid: the tile itself, whole.
   assert.deepEqual(coverageOverzoomSource(12, 2074, 1409, 12), { z: 12, x: 2074, y: 1409, sx: 0, sy: 0, size: 256 });
@@ -146,17 +198,24 @@ const META = {
 
 test('the French key names each colour in everyday words, and the uncoloured class too', () => {
   assert.deepEqual(coverageLegend(META, 'gaps').map((e) => [e.label, e.color ?? null]), [
-    ['Réseau 4G : opérateurs qui captent', null],
-    ['Aucun opérateur : zone blanche', COVERAGE_RAMP[0]],
+    ['Opérateurs qui captent', null],
+    ['Aucun : zone blanche', COVERAGE_RAMP[0]],
     ['1 seul opérateur', COVERAGE_RAMP[1]],
     ['2 opérateurs', COVERAGE_RAMP[2]],
     ['3 opérateurs', COVERAGE_RAMP[3]],
-    ['Les 4 opérateurs : pas de couleur', null],
+    ['Les 4 : sans teinte', null],
   ]);
   assert.equal(coverageLegend(META, 'gaps')[0].heading, true);
   assert.deepEqual(coverageLegend(META, 'orange').map((e) => e.label), [
-    'Réseau 4G Orange', 'Pas de réseau', 'Faible : dehors seulement', 'Bon', 'Très bon : pas de couleur',
+    'Réseau Orange', 'Pas de réseau', 'Faible : dehors seulement', 'Bon', 'Très bon : sans teinte',
   ]);
+  // Every class paints the ground, so each is keyed by a patch; rung 0 is
+  // keyed hatched, as the map draws it, in both modes and nowhere else.
+  for (const mode of ['gaps', 'orange']) {
+    const classes = coverageLegend(META, mode).filter((entry) => !entry.heading);
+    assert.ok(classes.every((entry) => entry.swatch === 'area'), mode);
+    assert.deepEqual(classes.map((entry) => entry.pattern ?? null), ['hatch', null, null, null, null].slice(0, classes.length), mode);
+  }
   // A key names colours; it carries no paragraph under them.
   for (const entry of coverageLegend(META, 'gaps')) assert.equal(entry.blurb, undefined);
   assert.deepEqual(coverageLegend(META, 'off'), []);

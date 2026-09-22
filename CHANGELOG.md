@@ -307,6 +307,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The digital-infrastructure row is controlled from the map key.** Its
+  block in the key now opens with one tile per member — Câbles (where the
+  site offers it), Data centers, Antennes — each with its icon and a switch, lit in the colour that layer
+  draws on the map; the row in the Layers panel keeps its own toggle and no
+  longer carries eight chips. The 4G coverage has its own block under the
+  antennas, « Couverture 4G », with two choices, « Sans 4G » and « Par
+  opérateur » (then Orange, SFR, Bouygues or Free); pressing the lit choice
+  again removes the coverage. Where no operator has 4G — or, per operator,
+  where it has none — the ground is now hatched, on the map and in the key,
+  so the dead zones no longer depend on telling two shades of pink apart.
 - **The hosted site no longer uses Google News RSS, Google Street View or the
   TeleGeography cable map; a clone keeps all three.** Google News allows
   personal, non-commercial use only, the cable map is CC BY-NC-SA, and
@@ -314,7 +324,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `GEV_NONCOMMERCIAL_SOURCES=off`: the cockpit's Regional News comes from
   GDELT alone and says so (« GDELT · REQUÊTE PAR LIEU · RÉCENT »); a CCTV
   camera whose frame fails shows « IMAGE · INDISPONIBLE » instead of a Street
-  View still; the Câbles chip leaves « Infrastructure numérique », voice's
+  View still; the Câbles switch leaves « Infrastructure numérique », voice's
   "infrastructure mode" no longer asks for it, and a share link naming it
   explains that the site does not offer it. The server no longer hands out the
   cable files: they left the build's `assets/` and come through

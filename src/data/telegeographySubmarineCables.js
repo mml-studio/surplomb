@@ -20,7 +20,8 @@ import { SUBMARINE_CABLE_FILES, submarineCableUrl } from './submarineCableFiles.
 const cableUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.cables);
 const landingPointUrl = submarineCableUrl(SUBMARINE_CABLE_FILES.landingPoints);
 
-const BASE_CABLE_COLOR = '#39d5ff';
+/** The cables' colour — also the lit colour of their tile in the key (layerFusions.js). */
+export const BASE_CABLE_COLOR = '#39d5ff';
 const BASE_LANDING_COLOR = '#8fffd2';
 const STEM_TARGET_PX = 66;
 const CABLE_REFERENCE_LABEL_MAX_DISTANCE_M = 9000000;

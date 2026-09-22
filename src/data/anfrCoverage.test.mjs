@@ -1,5 +1,6 @@
-// The ARCEP coverage as the `anfr-fr` row exposes it: five chips, a share-
-// linked mode, an imagery layer on the globe, a key, and a card on the ground.
+// The ARCEP coverage as the `anfr-fr` layer exposes it: its own block of the
+// key with a two-level mode control, a share-linked mode, an imagery layer on
+// the globe, and a card on the ground.
 // Kept apart from anfrFrance.test.mjs because the coverage state is module-
 // level and every test here sets it on purpose.
 import test from 'node:test';
@@ -108,29 +109,63 @@ test('the mode is a share-linked param, accepted before the layer is on and norm
   assert.equal(anfrFranceLayer.setParams({}), true);
 });
 
-test('no chips until the server is known to have a map; five once it is, and the active one turns it off', () => {
+/** The coverage block the key prints, or undefined. */
+function coverageBlock() {
+  return anfrFranceLayer.getRowControls().legendBlocks?.find((block) => block.key === 'coverage');
+}
+
+test('no chip on the row, and no coverage block until the server is known to have a map', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'off', meta: null, status: 'missing', enabled: true });
-  assert.deepEqual(anfrFranceLayer.getRowControls().chips, []);
+  assert.deepEqual(anfrFranceLayer.getRowControls().chips, [], 'the row is a tile in the key now');
+  assert.equal(coverageBlock(), undefined);
 
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'off', meta: META, enabled: true });
-  const chips = anfrFranceLayer.getRowControls().chips;
-  assert.deepEqual(chips.map((chip) => chip.label), ['Zones blanches', 'Orange', 'SFR', 'Bouygues', 'Free']);
-  assert.ok(chips.every((chip) => chip.state === 'idle'));
-  assert.deepEqual(chips[0].params, { coverage: 'gaps' });
-
-  _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'orange', meta: META, enabled: true });
-  const active = anfrFranceLayer.getRowControls().chips.find((chip) => chip.active);
-  assert.equal(active.label, 'Orange');
-  assert.deepEqual(active.params, { coverage: 'off' });
+  const block = coverageBlock();
+  assert.equal(block.title, 'Couverture 4G');
+  assert.deepEqual(block.legendSegments.map((segment) => segment.label), ['Sans 4G', 'Par opérateur']);
+  assert.ok(block.legendSegments.every((segment) => segment.active === false));
+  assert.deepEqual(block.legendSegments.map((segment) => segment.toggle), [
+    { param: 'coverage', value: 'gaps' },
+    { param: 'coverage', value: 'orange' },
+  ], '« Par opérateur » opens on Orange before any operator was shown');
+  assert.deepEqual(block.legendSubSegments, [], 'no operator strip until « Par opérateur » is lit');
+  assert.deepEqual(block.legend, [], 'nothing painted, no class');
+  assert.equal(block.note, undefined);
 });
 
-test('a link that asks for coverage on a server without the map keeps its chip, in error, and says why', () => {
+test('a lit mode is pressed again to take the coverage away; the operators follow « Par opérateur »', () => {
+  _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: META, enabled: true });
+  let [gaps, byOperator] = coverageBlock().legendSegments;
+  assert.equal(gaps.active, true);
+  assert.deepEqual(gaps.toggle, { param: 'coverage', value: 'off' });
+  assert.match(gaps.title, /Appuyez de nouveau pour retirer la couverture\.$/);
+  assert.equal(byOperator.active, false);
+
+  anfrFranceLayer.setParams({ coverage: 'sfr' });
+  const block = coverageBlock();
+  [gaps, byOperator] = block.legendSegments;
+  assert.equal(byOperator.active, true);
+  assert.deepEqual(byOperator.toggle, { param: 'coverage', value: 'off' });
+  assert.deepEqual(block.legendSubSegments.map((segment) => [segment.label, segment.active]), [
+    ['Orange', false], ['SFR', true], ['Bouygues', false], ['Free', false],
+  ]);
+  // The lit operator would change nothing, so it is not a control.
+  assert.equal(block.legendSubSegments[1].toggle, null);
+  assert.deepEqual(block.legendSubSegments[3].toggle, { param: 'coverage', value: 'free' });
+
+  // Back to « Sans 4G », then « Par opérateur » again: it reopens on SFR.
+  anfrFranceLayer.setParams({ coverage: 'gaps' });
+  assert.deepEqual(coverageBlock().legendSegments[1].toggle, { param: 'coverage', value: 'sfr' });
+});
+
+test('a link that asks for coverage on a server without the map keeps its block, unlit, and says why', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: null, status: 'missing', enabled: true });
-  const chips = anfrFranceLayer.getRowControls().chips;
-  const gaps = chips.find((chip) => chip.id === 'coverage-gaps');
-  assert.equal(gaps.state, 'error');
+  const block = coverageBlock();
+  const [gaps] = block.legendSegments;
   assert.equal(gaps.active, false);
   assert.equal(gaps.title, 'Carte indisponible sur ce serveur.');
+  assert.equal(block.note, 'Carte indisponible sur ce serveur.');
+  assert.deepEqual(block.legend, []);
 });
 
 test('one imagery layer on the globe for the mode, swapped on a mode change, gone when the row is off', () => {
@@ -161,16 +196,20 @@ test('one imagery layer on the globe for the mode, swapped on a mode change, gon
 test('the key carries the coverage block, whose estimate it is, and how to use it — on Google 3D too', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: META, enabled: true });
   const controls = anfrFranceLayer.getRowControls();
-  const labels = controls.legend.map((entry) => entry.label);
-  assert.ok(labels.includes('Réseau 4G : opérateurs qui captent'));
-  assert.ok(labels.includes('Aucun opérateur : zone blanche'));
-  assert.equal(controls.legendNote, undefined, 'the source sits under the coverage classes, not above the antennas');
-  assert.equal(controls.note,
+  const block = coverageBlock();
+  const labels = block.legend.map((entry) => entry.label);
+  assert.ok(labels.includes('Opérateurs qui captent'));
+  assert.ok(labels.includes('Aucun : zone blanche'));
+  // Its own block, not five lines at the foot of the antenna colours.
+  assert.equal(controls.legend.some((entry) => entry.label === 'Aucun : zone blanche'), false);
+  assert.equal(controls.note, undefined, 'the antenna block carries no coverage sentence');
+  assert.equal(block.legendNote, undefined, 'the source sits under the coverage classes');
+  assert.equal(block.note,
     'Estimation des opérateurs, publiée par l’ARCEP (mars 2026). Cliquez sur la carte pour voir le réseau à un endroit. Métropole seulement.');
 
   // The colours are draped on the mesh now, so the key is the same key.
   _setAnfrCoverageForTest({ viewer: viewerDouble({ globeShow: false, tileset: tilesetDouble() }), mode: 'gaps', meta: META, enabled: true });
-  assert.deepEqual(anfrFranceLayer.getRowControls().legend, controls.legend);
+  assert.deepEqual(coverageBlock().legend, block.legend);
 });
 
 test('the mode is draped on Google’s mesh too, bought late or early, swapped and removed with the globe’s', () => {

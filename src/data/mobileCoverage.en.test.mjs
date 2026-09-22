@@ -26,12 +26,12 @@ const viewer = { imageryLayers: { add() {}, remove() {} }, scene: { globe: { sho
 test('the key reads in English, one plain name per colour', () => {
   const gaps = withLocale('en', () => coverageLegend(META, 'gaps'));
   assert.deepEqual(gaps.map((entry) => entry.label), [
-    '4G: operators with signal', 'No operator: dead zone', 'Only 1 operator', '2 operators', '3 operators',
-    'All 4 operators: no colour',
+    'Operators with signal', 'None: dead zone', 'Only 1 operator', '2 operators', '3 operators',
+    'All 4: left untinted',
   ]);
   const free = withLocale('en', () => coverageLegend(META, 'free'));
   assert.deepEqual(free.map((entry) => entry.label), [
-    'Free 4G', 'No signal', 'Weak: outdoors only', 'Good', 'Very good: no colour',
+    'Free network', 'No signal', 'Weak: outdoors only', 'Good', 'Very good: left untinted',
   ]);
   assertNoFrench([...gaps, ...free].map((entry) => entry.label));
 });
@@ -51,15 +51,23 @@ test('the card answers first, then names each operator', () => {
   assert.match(outside, /^No data here\nThe map covers mainland France, not the sea\.$/);
 });
 
-test('the chips, the clock line and the disclosure are English on the loaded layer', () => {
+test('the coverage block, its segments, its clock line and its disclosure are English on the loaded layer', () => {
   _setAnfrCoverageForTest({ viewer, mode: 'gaps', meta: META, enabled: true });
-  const controls = withLocale('en', () => anfrFranceLayer.getRowControls());
-  assert.deepEqual(controls.chips.map((chip) => chip.label), ['Dead zones', 'Orange', 'SFR', 'Bouygues', 'Free']);
-  assert.equal(controls.note,
+  const [block] = withLocale('en', () => anfrFranceLayer.getRowControls().legendBlocks);
+  assert.equal(block.title, '4G coverage');
+  assert.deepEqual(block.legendSegments.map((segment) => segment.label), ['No 4G', 'By operator']);
+  assert.equal(block.note,
     'Operators’ estimate, published by ARCEP (March 2026). Click the map to see the signal at a spot. Mainland France only.');
+  _setAnfrCoverageForTest({ viewer, mode: 'bouygues', meta: META, enabled: true });
+  const [byOperator] = withLocale('en', () => anfrFranceLayer.getRowControls().legendBlocks);
+  assert.deepEqual(byOperator.legendSubSegments.map((segment) => segment.label), ['Orange', 'SFR', 'Bouygues', 'Free']);
   assertNoFrench([
-    ...controls.chips.map((chip) => chip.title),
-    controls.note,
+    block.title,
+    block.legendSegmentsLabel,
+    ...block.legendSegments.map((segment) => segment.title),
+    ...byOperator.legendSegments.map((segment) => segment.title),
+    ...byOperator.legendSubSegments.map((segment) => segment.title),
+    block.note,
   ]);
   _setAnfrCoverageForTest({ viewer, mode: 'off', meta: null, status: 'idle', enabled: false });
 });

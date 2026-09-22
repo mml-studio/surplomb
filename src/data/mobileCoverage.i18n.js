@@ -18,17 +18,33 @@
 import { defineMessages } from '../i18n/messages.js';
 
 export default defineMessages({
-  /** The five chips on the Antennes row, and their tooltips. */
-  chip: {
+  /**
+   * The coverage block of the map key: its title, and its two-level mode
+   * control — « Sans 4G » or « Par opérateur », then which operator.
+   */
+  block: {
+    title: { fr: 'Couverture 4G', en: '4G coverage' },
+    segmentsLabel: { fr: 'Ce que la carte peint', en: 'What the map paints' },
     gaps: {
-      fr: 'Zones blanches',
-      en: 'Dead zones',
-      note: 'Chip: paints where fewer than four operators have 4G, darkest where none does.',
+      fr: 'Sans 4G',
+      en: 'No 4G',
+      note: 'Segment: paints where fewer than four operators have 4G, hatched where none does.',
     },
     gapsTitle: {
-      fr: 'Où la 4G manque : plus c’est foncé, moins il y a d’opérateurs.',
-      en: 'Where 4G is missing: the darker, the fewer operators.',
+      fr: 'Où la 4G manque : hachuré là où aucun opérateur ne capte, plus clair quand certains captent.',
+      en: 'Where 4G is missing: hatched where no operator has it, lighter where some do.',
     },
+    byOperator: { fr: 'Par opérateur', en: 'By operator' },
+    byOperatorTitle: {
+      fr: 'Le réseau 4G d’un seul opérateur.',
+      en: 'One operator’s 4G network.',
+    },
+    pressAgain: {
+      fr: (title) => `${title} Appuyez de nouveau pour retirer la couverture.`,
+      en: (title) => `${title} Press again to remove the coverage.`,
+      sample: ['Where 4G is missing.'],
+    },
+    operatorsLabel: { fr: 'Opérateur', en: 'Operator' },
     operatorTitle: {
       fr: (name) => `Où ${name} capte mal ou pas en 4G.`,
       en: (name) => `Where ${name} has weak or no 4G.`,
@@ -49,26 +65,26 @@ export default defineMessages({
 
   legend: {
     headingGaps: {
-      fr: 'Réseau 4G : opérateurs qui captent',
-      en: '4G: operators with signal',
+      fr: 'Opérateurs qui captent',
+      en: 'Operators with signal',
     },
     headingOperator: {
-      fr: (name) => `Réseau 4G ${name}`,
-      en: (name) => `${name} 4G`,
+      fr: (name) => `Réseau ${name}`,
+      en: (name) => `${name} network`,
       sample: ['Orange'],
     },
     gaps: {
-      0: { fr: 'Aucun opérateur : zone blanche', en: 'No operator: dead zone' },
+      0: { fr: 'Aucun : zone blanche', en: 'None: dead zone', note: 'Drawn hatched on the map and in the key.' },
       1: { fr: '1 seul opérateur', en: 'Only 1 operator' },
       2: { fr: '2 opérateurs', en: '2 operators' },
       3: { fr: '3 opérateurs', en: '3 operators' },
-      4: { fr: 'Les 4 opérateurs : pas de couleur', en: 'All 4 operators: no colour' },
+      4: { fr: 'Les 4 : sans teinte', en: 'All 4: left untinted' },
     },
     operator: {
-      none: { fr: 'Pas de réseau', en: 'No signal' },
+      none: { fr: 'Pas de réseau', en: 'No signal', note: 'Drawn hatched on the map and in the key.' },
       cl: { fr: 'Faible : dehors seulement', en: 'Weak: outdoors only' },
       bc: { fr: 'Bon', en: 'Good' },
-      tbc: { fr: 'Très bon : pas de couleur', en: 'Very good: no colour' },
+      tbc: { fr: 'Très bon : sans teinte', en: 'Very good: left untinted' },
     },
     source: {
       fr: (month) => `Estimation des opérateurs, publiée par l’ARCEP (${month}).`,
