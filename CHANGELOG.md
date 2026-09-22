@@ -34,6 +34,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   number and the licence are gone from it. The key names each colour in two or
   three words — « Antenne 5G », « En projet, n’émet pas » — without the national
   statistics that used to follow every swatch.
+- **The globe says when a model is talking.** A small « IA » badge (« AI » in
+  English) now sits on the microphone's ring, upper left, on every screen
+  size — phones included, and with the dock's panels open — beside the
+  premium crown where the hosted demo shows one. Pointing at it, or a screen
+  reader, gives the full sentence: « Assistant d’intelligence artificielle —
+  voix de synthèse » (“Artificial intelligence assistant — synthetic voice”).
+  The HUD summary line wears the same badge while its words come from the
+  model (« Résumé rédigé par une intelligence artificielle (OpenAI) ») and
+  drops it while the local telemetry line stands in. Both texts are also
+  marked `data-ai-generated="true"` for machines, as is the assistant's side
+  of the voice transcript. This is the disclosure the EU AI Act (article
+  50(1)) asks for since 2026-08-02; the old `AI AGENT` lettering was English
+  only, 0 px wide on a desktop and hidden on phones.
 - **The landing page speaks English.** A browser in English now opens the
   landing page in English, like the globe, and an EN / FR pill in the header
   switches between the two (it remembers the choice, and the address stays
