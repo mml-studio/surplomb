@@ -322,8 +322,17 @@ async function main() {
         Number.isFinite(card?.height) && Math.abs(card.height - clicked.height) < 50 && card.height > 500,
         `card ${card?.height?.toFixed?.(0)} m, clicked ${clicked?.height?.toFixed?.(0)} m`);
     }
+    // Lot 2 of the mock: the table is in the coverage block of the key, and
+    // the globe keeps a tag over the spot.
+    const groundKey = await keyCard(page, '[data-layer="anfr-fr"][data-block="coverage"]');
+    check('the key prints « Au point sélectionné » under the coverage block',
+      groundKey?.title === 'Au point sélectionné', JSON.stringify(groundKey));
+    check('with one row per operator, its level in words and as bars',
+      groundKey?.rows?.length === 4 && groundKey.rows.every((row) => row.bars === 3 && row.value),
+      JSON.stringify(groundKey?.rows));
     await render(page, 10);
     await page.screenshot({ path: path.join(SHOTS_DIR, `${SHOT_PREFIX}card-ground.png`) });
+    await railShot(page, path.join(SHOTS_DIR, `${SHOT_PREFIX}rail-ground.png`));
 
     if (PHOTOREAL) {
       console.log('\nThe line of sight of a mast: globe only, skipped on Google 3D');
@@ -385,15 +394,62 @@ async function main() {
       viewshed?.radiusM > 5_000 && viewshed?.radiusM <= 40_000, String(viewshed?.radiusM));
     const legend = (await coverageState(page))?.legend || [];
     check('the key names the line of sight', legend.includes('Terrain d’où l’on voit l’antenne'), legend.join(' | '));
+    const mastKey = await keyCard(page, '[data-layer="anfr-fr"]:not([data-block])');
+    check('the key prints the antenna’s card under the antenna classes', Boolean(mastKey?.title), JSON.stringify(mastKey));
+    check('with a plate per network on the air', mastKey?.chips?.length > 0 && mastKey.chips.every((chip) => /^[2-5]G$/.test(chip)),
+      JSON.stringify(mastKey?.chips));
+    check('and the line of sight as its figure', /\d+\s?%/.test(mastKey?.metric || ''), mastKey?.metric);
     await render(page, 20);
     await sleep(2_000);
     await render(page, 10);
     await page.screenshot({ path: path.join(SHOTS_DIR, 'line-of-sight.png') });
+    await railShot(page, path.join(SHOTS_DIR, 'rail-mast.png'));
   } finally {
     await browser.close();
     console.log(`\n${failures ? `${failures} check(s) failed` : 'All checks passed'}`);
     process.exitCode = failures ? 1 : 0;
   }
+}
+
+/**
+ * The selection card printed in one block of the key, as a reader sees it:
+ * its title, its network plates, its figure and its table. Waits for it,
+ * because the key repaints on the layer's announcement, not in the click.
+ */
+async function keyCard(page, blockSelector, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let card = null;
+  while (Date.now() < deadline) {
+    card = await page.evaluate((selector) => {
+      const node = document.querySelector(`#map-legend-items .map-legend-group${selector} .map-legend-selection`);
+      if (!node) return null;
+      const text = (className) => node.querySelector(`.${className}`)?.textContent || null;
+      return {
+        title: text('map-legend-selection-title'),
+        chips: [...node.querySelectorAll('.map-legend-selection-chip')].map((chip) => chip.textContent),
+        metric: text('map-legend-selection-value'),
+        rows: [...node.querySelectorAll('.map-legend-selection-rows tr')].map((row) => ({
+          name: row.querySelector('th')?.textContent,
+          value: row.querySelector('td')?.textContent,
+          bars: row.querySelectorAll('.map-legend-selection-bars i').length,
+        })),
+      };
+    }, blockSelector);
+    if (card?.title && !/Chargement…/.test(JSON.stringify(card))) break;
+    await sleep(500);
+  }
+  return card;
+}
+
+/** The key alone, clipped out of the page. */
+async function railShot(page, file) {
+  const rect = await page.evaluate(() => {
+    const box = document.getElementById('map-legend')?.getBoundingClientRect();
+    return box?.width ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
+  });
+  if (!rect) return;
+  await page.screenshot({ path: file, clip: rect });
+  console.log(`  · screenshot ${file}`);
 }
 
 main().catch((error) => {

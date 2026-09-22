@@ -5152,12 +5152,12 @@ test('a new selection card is revealed again while the rail settles, until the r
   const listeners = new Map();
   const card = { scrollIntoView: (options) => { assert.deepEqual(options, { block: 'nearest' }); scrolls += 1; } };
   const list = {
-    querySelector: (selector) => (selector === '.map-legend-selection' ? card : null),
     addEventListener: (type, listener) => listeners.set(type, listener),
     removeEventListener: (type, listener) => { if (listeners.get(type) === listener) listeners.delete(type); },
   };
-  const mgr = {};
-  const reveal = () => DataLayerManager.prototype._revealLegendSelection.call(mgr, list);
+  // The card is looked up by key on every pass: the key is rebuilt around it.
+  const mgr = { _legendSelections: new Map([['dvf-sales|sale:1', { node: card }]]), _legendSelectionTouched: new Set() };
+  const reveal = () => DataLayerManager.prototype._revealLegendSelection.call(mgr, list, 'dvf-sales|sale:1');
   try {
     reveal();
     assert.equal(scrolls, 1, 'revealed when it lands');
@@ -5165,6 +5165,8 @@ test('a new selection card is revealed again while the rail settles, until the r
     assert.equal(scrolls, 2, 'and again when the rail hands the key its height');
     listeners.get('wheel')();
     assert.equal(observers[0].disconnected, true, 'the reader scrolling ends the watch');
+    assert.deepEqual([...mgr._legendSelectionTouched], ['dvf-sales|sale:1'],
+      'and hands them the list for THAT selection');
     assert.equal(listeners.size, 0);
     assert.equal(mgr._stopLegendReveal, null);
 
@@ -5178,6 +5180,78 @@ test('a new selection card is revealed again while the rail settles, until the r
   } finally {
     if (originalObserver === undefined) delete globalThis.ResizeObserver;
     else globalThis.ResizeObserver = originalObserver;
+  }
+});
+
+test('a selection card that learns more is revealed again, until the reader takes the list over', async () => {
+  // Measured 2026-09-22 at 1280 × 800: the coverage card was revealed at one
+  // line, « Chargement… », and its table then grew under the fold.
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => makeControlElement(),
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  let selection = { key: 'coverage:1', title: 'Au point sélectionné', lines: ['Chargement…'] };
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [{ label: 'NAV', color: '#4fd8ff', count: 2 }],
+    legendSelection: selection,
+  });
+  mgr.register(layer.module);
+  let reveals = 0;
+  mgr._revealLegendSelection = () => { reveals += 1; };
+  try {
+    mgr.buildTogglePanel(makeControlElement());
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'revealed when it opens');
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'a repaint of the same card does not scroll');
+    selection = { ...selection, lines: ['Seul Orange capte ici'], rows: { items: [{ label: 'Orange', value: 'bon' }] } };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 2, 'the card grew its answer: brought back into view');
+    mgr._legendSelectionTouched.add('satellites|coverage:1'); // the reader scrolled the list
+    selection = { ...selection, lines: ['Les 4 opérateurs captent ici'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 2, 'not under the reader’s hand');
+    selection = { key: 'coverage:2', title: 'Au point sélectionné', lines: ['Chargement…'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 3, 'a new spot is revealed whatever the reader did with the last one');
+    assert.deepEqual([...mgr._legendSelectionTouched], [], 'the card that left takes its mark with it');
+
+    // TWO LAYERS CAN HOLD A CARD AT ONCE — a DVF sale and an antenna do not
+    // dismiss each other. The card revealed is the one that opened or learned
+    // something, not whichever block was rendered last.
+    const second = makeRowControlLayer();
+    second.module.id = 'anfr-fr';
+    let other = null;
+    second.module.getRowControls = () => ({
+      chips: [],
+      legend: [{ label: 'NAV', color: '#4fd8ff', count: 2 }],
+      legendSelection: other,
+    });
+    mgr.register(second.module);
+    assert.equal(await mgr.setEnabled('anfr-fr', true), true);
+    reveals = 0;
+    other = { key: 'anfr-fr:1', title: 'Vallorcine', lines: ['Chargement…'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'the antenna card opens: revealed once');
+    assert.deepEqual([...mgr._legendSelections.keys()].sort(),
+      ['anfr-fr|anfr-fr:1', 'satellites|coverage:2'], 'both cards are tracked');
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 1, 'neither card moved: no scroll');
+    other = { ...other, lines: ['Pylône de 31 m'] };
+    mgr._refreshTogglePanel();
+    assert.equal(reveals, 2, 'the antenna card learned its support, under the other layer’s card');
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
   }
 });
 
@@ -5270,12 +5344,106 @@ test('a legend selection carries its classes and its records, and only https lin
     caption: 'Classes présentes',
     items: [{ label: 'C', color: '#cbfc34' }],
     text: 'De C à E',
+    outline: false,
   }, 'a chip with no label is dropped');
   assert.equal(card.list.items.length, 2, 'a record with nothing to print is dropped');
   assert.equal(card.list.items[0].href, 'https://observatoire-dpe-audit.ademe.fr/afficher-dpe/2569E2000837C');
   assert.equal(card.list.items[1].href, null, 'a register-written URL that is not https is refused');
   assert.equal(legendSelectionOf({ title: 'x', list: { items: [{ text: 'a' }] } }).list, null,
     'a list with no button to open it is not printed');
+});
+
+test('a legend selection takes several meta lines, ringed chips, a titled figure and a table with meters', () => {
+  const card = legendSelectionOf({
+    title: 'Saint-Sever',
+    meta: ['Sur un château d’eau, à 68 m de haut', ' ', 'Orange · SFR · Bouygues · Free'],
+    chips: { items: [{ label: '2G', color: '#4c6076' }], outline: true },
+    metric: { heading: ' Visibilité du terrain ', value: '28 % · rayon 39 km', caption: 'Calcul géométrique' },
+    rows: {
+      items: [
+        { label: 'Orange', value: 'très bon', meter: { value: 3, max: 3 } },
+        { label: 'SFR', value: 'bon', meter: { value: 9, max: 3 } },
+        { label: 'Free', value: 'aucun réseau', meter: { value: 1.5, max: 3 } },
+        { label: '', value: 'orphan' },
+      ],
+    },
+  });
+  assert.deepEqual(card.meta, ['Sur un château d’eau, à 68 m de haut', 'Orange · SFR · Bouygues · Free']);
+  assert.deepEqual(legendSelectionOf({ title: 'x', meta: ' Vente ' }).meta, ['Vente'], 'one line is a list of one');
+  assert.deepEqual(legendSelectionOf({ title: 'x' }).meta, []);
+  assert.equal(card.chips.outline, true);
+  assert.equal(card.metric.heading, 'Visibilité du terrain');
+  assert.deepEqual(card.rows.items, [
+    { label: 'Orange', value: 'très bon', meter: { value: 3, max: 3 } },
+    { label: 'SFR', value: 'bon', meter: { value: 3, max: 3 } },
+    { label: 'Free', value: 'aucun réseau', meter: null },
+  ], 'a meter past its maximum is clamped, a fractional one is not a meter, a nameless row is dropped');
+  assert.equal(legendSelectionOf({ title: 'x', rows: { items: [{ value: 'a' }] } }).rows, null);
+});
+
+test('the key prints the table as rows of bars and words, and rings an outlined chip in its colour', async () => {
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => {
+      const fragment = makeControlElement();
+      fragment.isFragment = true;
+      return fragment;
+    },
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [{ label: 'NAV', color: '#4fd8ff', count: 2 }],
+    legendSelection: {
+      key: 'coverage:6.86520,45.83260',
+      title: 'Au point sélectionné',
+      meta: ['Sur un toit', 'Orange · Free'],
+      chips: { items: [{ label: '2G', color: '#4c6076' }], outline: true },
+      metric: { heading: 'Visibilité du terrain', value: '28 %' },
+      rows: {
+        items: [
+          { label: 'Orange', value: 'bon', meter: { value: 2, max: 3 } },
+          { label: 'Free', value: 'aucun réseau', meter: { value: 0, max: 3 } },
+        ],
+      },
+    },
+  });
+  mgr.register(layer.module);
+  try {
+    mgr.buildTogglePanel(makeControlElement());
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+    const card = collectByClass(items, 'map-legend-selection')[0];
+    assert.deepEqual(collectByClass(card, 'map-legend-selection-meta').map((node) => node.textContent),
+      ['Sur un toit', 'Orange · Free']);
+    const chip = collectByClass(card, 'map-legend-selection-chip')[0];
+    assert.equal(chip.className, 'map-legend-selection-chip is-outline');
+    assert.equal(chip.style['--chip-ink'], '#4c6076', 'ringed in its colour, not filled with it');
+    assert.equal(chip.style.background, undefined);
+    assert.deepEqual(collectByClass(card, 'is-heading').map((node) => node.textContent), ['Visibilité du terrain']);
+
+    const [table] = collectByClass(card, 'map-legend-selection-rows')[0].children;
+    const rows = table.children[0].children;
+    assert.equal(rows.length, 2);
+    const [name, value] = rows[0].children;
+    assert.equal(name.textContent, 'Orange');
+    assert.equal(name.scope, 'row', 'the operator heads its row for a screen reader');
+    const [bars, words] = value.children;
+    assert.equal(bars.className, 'map-legend-selection-bars');
+    assert.equal(bars.attributes['aria-hidden'], 'true', 'the words say it; the bars are for the eye');
+    assert.deepEqual(bars.children.map((bar) => bar.className), ['is-on', 'is-on', '']);
+    assert.equal(words.textContent, 'bon');
+    assert.deepEqual(rows[1].children[1].children[0].children.map((bar) => bar.className), ['', '', '']);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
 });
 
 test('the DPE key: coloured plates that filter, counts in columns, and a folded list that stays open', async () => {

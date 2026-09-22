@@ -118,6 +118,32 @@ export default defineMessages({
     },
   },
 
+  /**
+   * The antenna's card in the map key (`anfrSelectionPanel`). It reuses the
+   * card's lines; these are the few words only the key prints — the caption
+   * over the network plates, the planned ones beside them, and the folded
+   * list of what each operator runs on the mast.
+   */
+  panel: {
+    networks: { fr: 'Réseaux en service', en: 'Networks on the air' },
+    planned: {
+      fr: (generations, n) => `${generations} ${plural(n, 'prévue', 'prévues')}`,
+      en: (generations, n) => `${generations} planned`,
+      note: '`n` is how many planned generations, for the French agreement.',
+      sample: ['5G', 1],
+    },
+    equipment: {
+      fr: (count, n) => `Voir les équipements · ${count} ${plural(n, 'antenne', 'antennes')}`,
+      en: (count, n) => `See the equipment · ${count} ${plural(n, 'antenna', 'antennas')}`,
+      sample: ['36', 36],
+    },
+    operatorLine: {
+      fr: (name, generations, count, n) => `${name} · ${generations} · ${count} ${plural(n, 'antenne', 'antennes')}`,
+      en: (name, generations, count, n) => `${name} · ${generations} · ${count} ${plural(n, 'antenna', 'antennas')}`,
+      sample: ['Orange', '5G, 4G, 3G, 2G', '12', 12],
+    },
+  },
+
   /** What the antenna carries: the networks on the air, and the planned ones. */
   networks: {
     live: {
@@ -370,6 +396,19 @@ export default defineMessages({
       en: 'Visibility area: switch to Satellite, IGN map or OSM',
     },
     failed: { fr: 'Zone de visibilité indisponible', en: 'Visibility area unavailable' },
+    /** The same answer as `ready`, as the figure of the card in the map key. */
+    panel: {
+      heading: { fr: 'Visibilité du terrain', en: 'Visibility over the terrain' },
+      value: {
+        fr: (share, radius) => `${share} · rayon ${radius}`,
+        en: (share, radius) => `${share} · ${radius} radius`,
+        sample: ['28%', '39 km'],
+      },
+      caption: {
+        fr: 'Part du terrain d’où l’on voit l’antenne, d’après le relief seul : une géométrie, pas une couverture radio.',
+        en: 'Share of the land the antenna can be seen from, over the relief alone: geometry, not radio coverage.',
+      },
+    },
     legend: {
       label: { fr: 'Terrain d’où l’on voit l’antenne', en: 'Ground the antenna can be seen from' },
       blurb: {

@@ -230,6 +230,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **In the clean view, clicking a sale, an energy rating or an antenna showed
+  its name and nothing else.** The card went to the map key, which the clean
+  view had just taken off the screen — it is hidden there, but a hidden panel
+  still measures as one, so the globe kept only its tag. Clicked in the clean
+  view, or with the key hidden after the click, an object shows its whole card
+  on the globe again.
 - **The Sentinel-2 satellite base painted the Americas, Asia, southern Africa
   and Australia as white land.** It used EOX's 2017 release, which covers
   Europe, North Africa and the Middle East only; it went unseen while it only
@@ -317,6 +323,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   again removes the coverage. Where no operator has 4G — or, per operator,
   where it has none — the ground is now hatched, on the map and in the key,
   so the dead zones no longer depend on telling two shades of pink apart.
+- **A clicked antenna or dead-zone spot opens its card in the map key.** The
+  globe keeps a small tag over the object — the town, or « Point sélectionné »
+  — and the full card sits beside the key it is read against. An antenna
+  shows its town, what it stands on and whose it is, one plate per network on
+  the air (2G to 5G), the wave measurement, how much of the land around can
+  see it (« 28 % · rayon 39 km », never called coverage), the register's date,
+  and a folded list of what each operator runs on it. A spot on the coverage
+  shows who has signal there and a table of the four operators, each with its
+  level in words and as phone bars. On a phone, or with the key folded, the
+  whole card stays on the globe. Compound town names are no longer printed
+  « Saint-sever ».
 - **The hosted site no longer uses Google News RSS, Google Street View or the
   TeleGeography cable map; a clone keeps all three.** Google News allows
   personal, non-commercial use only, the cable map is CC BY-NC-SA, and

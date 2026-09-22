@@ -245,11 +245,13 @@ import {
   coverageLegend,
   coverageLut,
   coverageMonthLabel,
+  coverageSelectionPanel,
   normalizeCoverageMode,
 } from './mobileCoverage.js';
 import coverageMessages from './mobileCoverage.i18n.js';
 import { coverageTileSource, createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
 import { VIEWSHED_COLOR, computeMastViewshed, createViewshedImageryLayer } from './mastViewshedImagery.js';
+import { mapKeyCarriesSelection } from './mapKeySelection.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
 export const ANFR_FR_LAYER_ID = 'anfr-fr';
@@ -529,6 +531,12 @@ let _mapStackListener = null;
 let _coverageRead = null;
 /** The ground card: `{ position, text }`, or null. One card at a time with the support's. */
 let _coverageCard = null;
+/**
+ * The ground card the globe and the key are SHOWING. It is `_coverageCard`
+ * except between a second click and its answer, when the first card stays on
+ * screen (see `openCoverageCard`).
+ */
+let _coverageCardShown = null;
 let _coverageCardGeneration = 0;
 
 // --- The selected mast's line of sight ---------------------------------------
@@ -1175,8 +1183,26 @@ const ANFR_ABBREVIATIONS = Object.freeze({
   SCI: 'SCI', SA: 'SA', SARL: 'SARL', EPIC: 'EPIC',
 });
 /** Particles that stay lowercase inside a French proper name. */
-const ANFR_PARTICLES = new Set(['DE', 'DU', 'DES', 'LA', 'LE', 'LES', 'ET', 'SUR', 'SOUS', 'AUX', 'AU', 'D', 'L']);
+const ANFR_PARTICLES = new Set(['DE', 'DU', 'DES', 'LA', 'LE', 'LES', 'LÈS', 'EN', 'ET', 'SUR', 'SOUS', 'AUX', 'AU', 'D', 'L']);
 // i18n-ignore-end
+
+/**
+ * One shouted word of a name, cased part by part: `SAINT-SEVER` →
+ * `Saint-Sever`, `D’ASCQ` → `d’Ascq`. A particle stays lowercase except at
+ * the head of the whole text — `La Rochelle`, not `la Rochelle`: the commune
+ * is the title of the antenna's card in the key.
+ * @param {string} word
+ * @param {boolean} head Whether this is the first word of the text.
+ * @returns {string}
+ */
+function anfrCaseWord(word, head) {
+  return word.split('-').map((part, index) => part.split('’').map((piece, inner) => {
+    const lower = piece.toLocaleLowerCase('fr-FR');
+    const atHead = head && index === 0 && inner === 0;
+    if (!atHead && ANFR_PARTICLES.has(piece.toUpperCase())) return lower;
+    return lower.charAt(0).toLocaleUpperCase('fr-FR') + lower.slice(1);
+  }).join('’')).join('-');
+}
 
 /** `30 R PETRICOT RES HORIZON` → `30 rue Petricot résidence Horizon`. */
 export function anfrPlainText(value) {
@@ -1188,16 +1214,15 @@ export function anfrPlainText(value) {
   const mixed = /[a-zàâçéèêëîïôûùüÿñæœ]/.test(text);
   return text
     .split(' ')
-    .map((word) => {
+    .map((word, index) => {
       const bare = word.replace(/[^A-Za-zÀ-ÿ-]/g, '');
       const expanded = ANFR_ABBREVIATIONS[bare.toUpperCase()];
       if (expanded) return word.replace(bare, expanded);
       if (mixed) return word;
-      if (ANFR_PARTICLES.has(bare.toUpperCase())) return word.toLocaleLowerCase('fr-FR');
       // `6E` is the sixth arrondissement, not an initial. Ordinals keep their
       // digits and lose the shout.
       if (/^\d/.test(word)) return word.replace(/(\d)(E|ER|EME|ÈME)\b/gi, (_, digit, suffix) => digit + suffix.toLocaleLowerCase('fr-FR'));
-      return word.charAt(0).toUpperCase() + word.slice(1).toLocaleLowerCase('fr-FR');
+      return anfrCaseWord(word, index === 0);
     })
     .join(' ');
 }
@@ -1433,7 +1458,207 @@ export function anfrViewshedLine(viewshed) {
   }
 }
 
+/**
+ * What each operator runs on the mast, newest generation first — the key's
+ * folded « Voir les équipements ». Null until Cartoradio has answered, and
+ * null when it filed no operator: a button that opens onto nothing is not
+ * printed.
+ * @param {?object} detail Cartoradio payload.
+ * @returns {?object} The `list` slot of the key's card.
+ */
+function anfrEquipmentList(detail) {
+  const rows = Array.isArray(detail?.antennas?.byOperator) ? detail.antennas.byOperator : [];
+  const m = messages().panel;
+  const rank = (name) => {
+    const index = ANFR_BRAND_ORDER.indexOf(name);
+    return index < 0 ? ANFR_BRAND_ORDER.length : index;
+  };
+  const items = rows
+    .map((row) => ({
+      name: anfrOperatorShort(row?.name),
+      generations: (row?.generations || []).map((entry) => entry?.generation).filter(Boolean),
+      antennas: Number(row?.antennas) || 0,
+    }))
+    .filter((row) => row.name && row.generations.length)
+    .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name, 'fr'))
+    .map((row) => ({
+      text: m.operatorLine(row.name, row.generations.join(', '), fr(row.antennas), row.antennas),
+    }));
+  if (!items.length) return null;
+  const antennas = Number(detail.antennas.antennas) || 0;
+  return { summary: m.equipment(fr(antennas), antennas), items };
+}
+
+/**
+ * The selected antenna as the map key prints it (`legendSelection`), after the
+ * approved mock of 2026-09-22: the place as the name, what it stands on and
+ * whose it is, one plate per network on the air, the waves, the line of sight
+ * as the figure, the register's edition, and what each operator runs folded
+ * under one button.
+ *
+ * The place is Cartoradio's commune, so it arrives with the second answer; the
+ * card is titled like the globe's until then, and keeps its key throughout so
+ * the key does not scroll to it twice. A maillage dot whose support is not
+ * known yet prints the globe card's own lines.
+ *
+ * The plates are RINGED in the colours the dots are drawn in — the 2G slate is
+ * too dark to carry black text — so the card still reads against the classes
+ * above it.
+ *
+ * @param {?object} record Render record.
+ * @param {?object} [payload] The document the record came from.
+ * @param {?object} [viewshed] The state `ensureViewshed` keeps.
+ * @returns {?object}
+ */
+export function anfrSelectionPanel(record, payload = null, viewshed = null) {
+  if (!record?.id) return null;
+  const m = messages();
+  const key = String(record.id);
+  const source = m.card.source(anfrEditionLabel(payload?.edition) || '—');
+  if (record.mesh && !record.support) {
+    const [title, ...lines] = buildAnfrMeshLabel(record).split('\n');
+    return { key, title, lines, footnote: source };
+  }
+  const support = record.support || {};
+  const detail = record.detail || null;
+  const operators = anfrCardOperators(support);
+  const liveMask = Number(support.live) || 0;
+  const live = anfrDecodeMask(liveMask, ANFR_GENERATIONS);
+  const planned = anfrDecodeMask((Number(support.plan) || 0) & ~liveMask, ANFR_GENERATIONS);
+  const commune = anfrPlainCommune(detail?.site);
+  const lines = [];
+  if (!operators.length) lines.push(m.card.titleNoOperator);
+  if (!live.length) lines.push(anfrNetworksLine(support));
+  if (record.detailPending || record.lookupPending) {
+    lines.push(m.card.loading);
+  } else {
+    const waves = anfrExposureLine(detail);
+    if (waves) lines.push(waves);
+  }
+  const mine = viewshed?.recordId === record.id ? viewshed : null;
+  let metric = null;
+  if (mine?.status === 'ready') {
+    metric = {
+      heading: m.viewshed.panel.heading,
+      color: VIEWSHED_COLOR,
+      value: m.viewshed.panel.value(formatPercent(Math.round(mine.share * 100)), viewshedKm(mine.radiusM)),
+      caption: m.viewshed.panel.caption,
+    };
+  } else {
+    const line = anfrViewshedLine(mine);
+    if (line) lines.push(line);
+  }
+  return {
+    key,
+    title: commune || anfrCardTitle(live.at(-1) || null, operators.length),
+    meta: [anfrPlacementLine(support.nature, support.heightM), operators.join(' · ')],
+    chips: live.length
+      ? {
+        caption: m.panel.networks,
+        items: live.map((generation) => ({ label: generation, color: anfrBandColor(generation.toLowerCase()) })),
+        text: planned.length ? m.panel.planned(planned.join(', '), planned.length) : null,
+        outline: true,
+      }
+      : null,
+    lines,
+    metric,
+    footnote: source,
+    list: anfrEquipmentList(detail),
+  };
+}
+
 // --- Selection --------------------------------------------------------------
+
+// ── THE CARD IS IN THE MAP KEY, THE GLOBE KEEPS A TAG ───────────────────────
+//
+// Since lot 2 of the digital-infrastructure mock (2026-09-22), a selected
+// antenna and a read coverage spot print their card in the key's block
+// (`anfrSelectionPanel`, `coverageSelectionPanel`), as the DVF sale and the
+// DPE site already did. The globe keeps the title alone over the object, so
+// map and card still point at each other — and the whole card again wherever
+// the key cannot carry it: on a phone, or with the key folded away.
+
+/** How long one answer to "does the key carry the card?" is trusted, in ms. */
+const KEY_CARRIES_TTL_MS = 250;
+let _keyCarries = false;
+let _keyCarriesAt = -Infinity;
+/** Whether the card on the globe was last published as a tag alone. */
+let _publishedTagOnly = false;
+/** Watches the key being folded or hidden while something is selected. */
+let _keyObserver = null;
+
+/**
+ * `mapKeyCarriesSelection`, asked at most every {@link KEY_CARRIES_TTL_MS}.
+ * The tag is republished on every frame while something is selected, and the
+ * question reads the key's layout boxes; a reader folding the key still gets
+ * the whole card back within a quarter of a second.
+ */
+function keyCarriesSelection() {
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  if (now - _keyCarriesAt > KEY_CARRIES_TTL_MS) {
+    _keyCarries = mapKeyCarriesSelection();
+    _keyCarriesAt = now;
+  }
+  return _keyCarries;
+}
+
+/**
+ * Ask the shell to repaint the key now. This layer's own repaint is its six-
+ * hour poll away, and a card that waits for another layer's tick to appear is
+ * a click that seems to do nothing. The literal is `LAYER_DRAW_CHANGED_EVENT`
+ * of `addressScanLayer.js`, as in `rteGeneration.js`.
+ */
+function announceSelectionChanged() {
+  if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+    detail: { layerId: ANFR_FR_LAYER_ID, selection: true },
+  }));
+}
+
+/**
+ * Put the whole card back on the globe when the key is folded or hidden, and
+ * take it off again when the key comes back — while something is selected.
+ *
+ * Nothing republishes the card per frame (#339), so without this a reader who
+ * folds the key after a click keeps a tag and loses the card. TWO nodes are
+ * watched, because the key is hidden from two places: its own `class` and
+ * `hidden` when it is folded, and the BODY's class when the clean view takes
+ * the whole interface away (`body.ui-clean-view`). A change is acted on only
+ * when it flips the answer the card was published with, so the key's repaint
+ * — which writes neither — cannot feed the watch.
+ */
+function watchKeyVisibility() {
+  if (_keyObserver || typeof MutationObserver !== 'function' || typeof document === 'undefined') return;
+  const key = document.getElementById?.('map-legend');
+  if (!key) return;
+  _keyObserver = new MutationObserver(() => {
+    _keyCarriesAt = -Infinity;
+    if (keyCarriesSelection() === _publishedTagOnly) return;
+    if (_selectedId) {
+      const entry = selectedSupportEntry(_records.get(_selectedId));
+      if (entry) _overlayHost.setEntries(ANFR_FR_OVERLAY_SOURCE_ID, [entry], ANFR_FR_OVERLAY_SOURCE_OPTIONS);
+    } else {
+      publishCoverageCard();
+    }
+    governorRequestRender('anfr-fr-card');
+  });
+  _keyObserver.observe(key, { attributes: true, attributeFilter: ['class', 'hidden'] });
+  if (document.body) _keyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
+
+function unwatchKeyVisibility() {
+  _keyObserver?.disconnect();
+  _keyObserver = null;
+}
+
+/** The selected support on the globe: its whole card, or its title as a tag. */
+function selectedSupportEntry(record) {
+  _publishedTagOnly = keyCarriesSelection();
+  if (!_publishedTagOnly) return createAnfrSelectedOverlayEntry(record, activePayload(), _viewshed);
+  const panel = anfrSelectionPanel(record, activePayload(), _viewshed);
+  if (!panel || !record?.position) return null;
+  return selectedOverlayEntry(record.id, record.position, panel.title);
+}
 
 function restoreRecordStyle(record) {
   if (!record?.point) return;
@@ -1447,11 +1672,14 @@ function clearSelection() {
   // either is clearing the one card on screen.
   const hadCoverageCard = Boolean(_coverageCard);
   _coverageCard = null;
+  _coverageCardShown = null;
   _coverageCardGeneration += 1;
+  unwatchKeyVisibility();
   if (!_selectedId) {
     if (hadCoverageCard) {
       _overlayHost.clearSource(ANFR_FR_OVERLAY_SOURCE_ID);
       governorRequestRender('anfr-fr-coverage-card');
+      announceSelectionChanged();
     }
     return;
   }
@@ -1461,6 +1689,7 @@ function clearSelection() {
   removeViewshed();
   _overlayHost.clearSource(ANFR_FR_OVERLAY_SOURCE_ID);
   governorRequestRender('anfr-fr-deselect');
+  announceSelectionChanged();
 }
 
 /** Redraw the selected card in place, if `id` is still what is selected. */
@@ -1473,11 +1702,12 @@ function repaintSelectedCard(id) {
   // A maillage dot only learns WHICH support it is when its lookup lands —
   // and with it the height the line of sight starts from.
   if (record) ensureViewshed(record);
-  const entry = createAnfrSelectedOverlayEntry(record, activePayload(), _viewshed);
+  const entry = selectedSupportEntry(record);
   if (entry) {
     _overlayHost.setEntries(ANFR_FR_OVERLAY_SOURCE_ID, [entry], ANFR_FR_OVERLAY_SOURCE_OPTIONS);
   }
   governorRequestRender('anfr-fr-card');
+  announceSelectionChanged();
 }
 
 /**
@@ -1513,6 +1743,9 @@ function selectSupport(id) {
   if (!record) return;
   if ((_selectedId && _selectedId !== id) || _coverageCard) clearSelection();
   _selectedId = id;
+  // A new click asks the key afresh rather than trusting a quarter-second-old answer.
+  _keyCarriesAt = -Infinity;
+  watchKeyVisibility();
   if (record.point) {
     record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
     record.point.pixelSize = SELECTED_POINT_PX;
@@ -2419,12 +2652,17 @@ async function applyCoverage() {
 }
 
 function publishCoverageCard() {
-  // No text yet: the answer is still being read, and a card is only shown
-  // once there is something to say (see `openCoverageCard`).
-  if (!_coverageCard?.text) return;
+  // The card with an answer: a card is only shown once there is something to
+  // say, and the previous one stays until then (see `openCoverageCard`).
+  const card = _coverageCardShown;
+  if (!card?.text) return;
+  // The tag alone while the key prints the table — see the section above
+  // `keyCarriesSelection`.
+  _publishedTagOnly = keyCarriesSelection();
+  const copy = _publishedTagOnly ? coverageMessages().panel.tag : card.text;
   _overlayHost.setEntries(
     ANFR_FR_OVERLAY_SOURCE_ID,
-    [selectedOverlayEntry(COVERAGE_CARD_ID, _coverageCard.position, _coverageCard.text)],
+    [selectedOverlayEntry(COVERAGE_CARD_ID, card.position, copy)],
     ANFR_FR_OVERLAY_SOURCE_OPTIONS,
   );
 }
@@ -2450,6 +2688,8 @@ function openCoverageCard(viewer, windowPosition) {
   if (!point) return false;
   if (_selectedId) clearSelection();
   _coverageCardGeneration += 1;
+  _keyCarriesAt = -Infinity;
+  watchKeyVisibility();
   const generation = _coverageCardGeneration;
   const m = coverageMessages();
   // The picked surface's own height: on Google 3D the globe is hidden and
@@ -2468,25 +2708,34 @@ function openCoverageCard(viewer, windowPosition) {
     height,
     position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height + POINT_LIFT_M),
     text: null,
+    // What the key's card is built from (`coverageSelectionPanel`).
+    reading: null,
+    failed: false,
   };
   _coverageCard = card;
-  const show = (text) => {
+  const show = (text, reading = null, failed = false) => {
     if (generation !== _coverageCardGeneration || _coverageCard !== card) return;
     card.text = text;
+    card.reading = reading;
+    card.failed = failed;
+    // The key follows the globe: the previous card stays in both until this
+    // one has something to say.
+    _coverageCardShown = card;
     publishCoverageCard();
     governorRequestRender('anfr-fr-coverage-card');
+    announceSelectionChanged();
   };
   let answered = false;
   const slow = setTimeout(() => {
     if (!answered) show(`${m.card.readingTitle}\n${m.card.reading}`);
   }, LOADING_CARD_DELAY_MS);
   _coverageRead(point.lon, point.lat)
-    .then((reading) => coverageCardText(_coverageMeta, reading))
-    .catch(() => `${m.card.readingTitle}\n${m.card.failed}`)
-    .then((text) => {
+    .then((reading) => ({ text: coverageCardText(_coverageMeta, reading), reading: reading || { inside: false } }))
+    .catch(() => ({ text: `${m.card.readingTitle}\n${m.card.failed}`, reading: null, failed: true }))
+    .then(({ text, reading, failed }) => {
       answered = true;
       clearTimeout(slow);
-      show(text);
+      show(text, reading, failed);
     });
   return true;
 }
@@ -2814,9 +3063,27 @@ const anfrFranceLayer = {
       legend.push({ label: m.label, color: VIEWSHED_COLOR, blurb: m.blurb });
     }
     const controls = { chips: [], legend };
+    // The selected antenna's card, under the classes it is read against —
+    // see the section above `keyCarriesSelection`.
+    const selected = _selectedId ? _records.get(_selectedId) : null;
+    if (selected) controls.legendSelection = anfrSelectionPanel(selected, activePayload(), _viewshed);
     const coverage = coverageKeyBlock();
-    if (coverage) controls.legendBlocks = [coverage];
+    if (coverage) {
+      if (_coverageCardShown) coverage.legendSelection = coverageSelectionPanel(_coverageCardShown);
+      controls.legendBlocks = [coverage];
+    }
     return controls;
+  },
+
+  /**
+   * The key's close on either card: the same dismissal as Escape, or as a
+   * click on empty ground.
+   * @returns {boolean} Whether there was a card to close.
+   */
+  clearSelectedCard() {
+    if (!_selectedId && !_coverageCard) return false;
+    clearSelection();
+    return true;
   },
 
   /**
@@ -3077,6 +3344,7 @@ export function _setAnfrCoverageForTest({
   _coverageError = null;
   _coverageMetaPromise = null;
   _coverageCard = null;
+  _coverageCardShown = null;
   _coverageCardGeneration += 1;
   _coverageRead = read || (meta ? createCoveragePointReader(meta) : null);
   syncCoverageImagery();
