@@ -15,7 +15,8 @@ remain subject to their own licenses and terms. Notably:
   - TeleGeography Submarine Cable Map (src/data/local_data/
     telegeography_submarine_cables/): CC BY-NC-SA 3.0 — NonCommercial +
     ShareAlike. NOT for commercial use. If you use this project commercially,
-    remove these files or obtain a commercial license from TeleGeography.
+    set GEV_NONCOMMERCIAL_SOURCES=off (the server then refuses these files),
+    remove them, or obtain a commercial license from TeleGeography.
   - Datacenters and Dams (OpenStreetMap / Open Infrastructure Map extracts):
     Open Database License (ODbL) 1.0 — attribution + share-alike on the data.
   - NASA FIRMS active-fire snapshot: CC0 / U.S. public domain (citation

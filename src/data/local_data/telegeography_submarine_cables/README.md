@@ -12,8 +12,14 @@ MIT license that covers Surplomb's source code.**
 
 - **Attribution required:** "© TeleGeography — submarinecablemap.com"
 - **NonCommercial:** the data may not be used commercially. If you use this
-  project commercially, **remove these files** (`cable-geo.json`,
-  `landing-point-geo.json`) or obtain a commercial license from TeleGeography.
+  project commercially, set `GEV_NONCOMMERCIAL_SOURCES=off` (the server then
+  refuses these files and the page withholds the layer), **remove these
+  files** (`cable-geo.json`, `landing-point-geo.json`), or obtain a commercial
+  license from TeleGeography.
+
+They are not part of the build output: the server reads them from this folder
+and serves them at `/api/submarine-cables/<file>` (see
+`src/data/submarineCableFiles.js`), so the switch above can refuse them.
 - **ShareAlike:** redistributed/adapted copies of the data must stay under
   CC BY-NC-SA 3.0.
 

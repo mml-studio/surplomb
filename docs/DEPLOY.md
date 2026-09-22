@@ -918,9 +918,10 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
 
 ## Sources a commercial deployment may not use
 
-Some free sources are free for non-commercial use only. A clone run for
-yourself is that use; a hosted site run by a company is not. One variable turns
-all of them off at once:
+Some free sources are free for non-commercial use only, and one — Street
+View — may not be shown beside a non-Google map in the EEA. A clone run for
+yourself keeps them; a hosted site run by a company may not use them. One
+variable turns all of them off at once:
 
 ```sh
 # in /opt/gev/.env
@@ -929,13 +930,17 @@ GEV_NONCOMMERCIAL_SOURCES=off
 
 Unset (or `on`) keeps them, which is the open-source default; any other value
 turns them off, so a typo errs on the licence's side. The list lives in
-`src/nonCommercialSources.js`, one line per source. Today it holds three:
+`src/nonCommercialSources.js`, one line per source, each with the clause that
+keeps it off (`reason`: `non-commercial`, or `display-terms` for Street View):
 
 | Source | Why | What the switch removes |
 | --- | --- | --- |
 | Open-Meteo (free API) | [Terms](https://open-meteo.com/en/terms): “You may only use the free API services for non-commercial purposes.” | The weather of the cockpit's Local Info page, the `WX` toggle and its cloud pass, and the Open-Meteo line of the Data attribution popover. `/api/regional-brief` answers `weatherStatus: "off"` and never calls Open-Meteo; `/api/weather-effects` answers `{"status":"off"}` without a fetch. |
 | Esri World Imagery, anonymous endpoint (`services.arcgisonline.com`) | Esri staff, for this URL: “as is stated in the terms of use, this service is not available for commercial use” ([Esri Community](https://community.esri.com/t5/arcgis-location-platform-developers-ques/inquiry-about-world-imagery/td-p/1569266)). | The satellite beyond France under the Satellite stack becomes Sentinel-2 cloudless 2016 (10 m), unless the build has an ArcGIS key — [below](#the-satellite-beyond-france-an-arcgis-location-platform-key). The browser fetches these tiles itself, so the page is the check: it never asks the endpoint unless `/api/trial` positively allows it, even before that answer has arrived. |
 | OpenSky Network (REST API) | [Terms](https://opensky-network.org/about/terms-of-use): “Any use by a for-profit or commercial entity … requires a written license from OpenSky Network, regardless of purpose.” | OpenSky itself: `/api/opensky` never calls it, not even for an OAuth token, and serves adsb.lol instead — the four 250 NM circles over metropolitan France merged when the view is over France, one circle around the view elsewhere; `/api/opensky-track` answers 404 `{"status":"off"}` (the followed aircraft's trail starts from what the tab has seen); `/api/pulse` counts « avions » from the four French circles. The OpenSky line leaves the Data attribution popover, and the Flights row names adsb.lol. `OPENSKY_*` credentials can stay in `.env`; nothing reads them. |
+| Google News RSS | [Terms](https://www.google.com/intl/en_us/terms_google_news.html): “You may only display the content of the Service for your own personal use (i.e., non-commercial use).” | The RSS request itself: `/api/regional-brief` asks GDELT alone (paced at one request every 6.25 s), names it `GDELT` and adds `googleNewsStatus: "off"`. The Regional News source line reads « GDELT · REQUÊTE PAR LIEU · RÉCENT »; the Google News line leaves the popover. |
+| Google Street View Static (CCTV fallback) | [EEA terms](https://developers.google.com/maps/comms/eea/street-view-static): “Customer may not use any Google Maps Content from the Street View Static API With any Map.” | Every Street View call. A camera whose frame fails answers `404` with `X-CCTV-Source: unavailable`; the CCTV panel reads « IMAGE · INDISPONIBLE ». The Street View credit leaves the popover. |
+| TeleGeography cable map (bundled) | CC BY-NC-SA 3.0 | The files: `/api/submarine-cables/*.json` answers `404` with `X-Source-Off: telegeography` without reading them. The page withholds the layer (no chip, voice and share links refused with a one-line reason) and drops its credit. |
 
 Every request to api.adsb.lol — the French circles, a regional circle, the
 military list — leaves through one paced queue, at least 20 s apart
@@ -946,9 +951,10 @@ visitor, so the cost is set by how many different circles are watched, not by
 how many people watch: France alone is four circles, each refreshed every 80 s
 (100 s while the military list is wanted too).
 
-Google News RSS, whose terms also say personal, non-commercial use
-([`DATA_SOURCES.md`](../DATA_SOURCES.md)), is **not** on the list yet: adding
-it is one line in that file plus the check in the news fetch.
+The cable files are not in the build output at all — since 2026-09-22 the
+server serves them from the checkout — so on a deployment that predates that,
+`/assets/cable-geo-*.json` still answers 200 whatever the variable says. After
+the deploy the old hashed name falls through to the SPA's `index.html`.
 
 - **Switching it on** (no rebuild — the variable is read per request; `up -d`
   recreates the container so it reads the edited `.env`):
@@ -960,9 +966,12 @@ it is one line in that file plus the check in the news fetch.
 - **Checking it:**
 
   ```sh
-  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo","esri-world-imagery","opensky"]
-  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo","esri-world-imagery","opensky"]
+  curl -s https://<your-host>/healthz | jq -c .sourcesOff     # ["open-meteo","esri-world-imagery","opensky","google-news","google-street-view","telegeography"]
+  curl -s https://<your-host>/api/trial | jq -c .sourcesOff   # the same list
   curl -s 'https://<your-host>/api/weather-effects?latitude=48.86&longitude=2.35' | jq .status   # "off"
+  curl -s 'https://<your-host>/api/regional-brief?latitude=44.84&longitude=-0.58' | jq -c '[.newsSource, .googleNewsStatus]'   # ["GDELT","off"] (null source if GDELT had nothing)
+  curl -s -o /dev/null -w '%{http_code}\n' https://<your-host>/api/submarine-cables/cable-geo.json   # 404
+  curl -s -o /dev/null -w '%{http_code} %{content_type}\n' https://<your-host>/assets/cable-geo-i2PzBJi6.json   # 200 text/html (the SPA page, not the data)
   curl -sD- -o /dev/null 'https://<your-host>/api/opensky?lat=48.86&lon=2.35' | grep -i x-flight   # source adsb.lol, area fr-metro
   ```
 
