@@ -23,16 +23,16 @@ const trial = {
 test('each way into the card has its own English, and every one says the globe stays free', () => {
   const exhausted = waitlistCopy('exhausted', trial);
   assert.equal(exhausted.title, 'Trial over');
-  assert.equal(exhausted.lede, 'Your 5 tries at the premium features are used up. The globe and its layers stay free.');
+  assert.equal(exhausted.lede, 'Your 5 tries on this hosted demo are used up. The globe and its layers stay free.');
 
   const oneTry = waitlistCopy('exhausted', { limit: 1 });
   assert.match(oneTry.lede, /^Your 1 try /, 'the plural is chosen by rule, not by a “+ s”');
 
   const unknownCount = waitlistCopy('exhausted', {});
-  assert.equal(unknownCount.lede, 'Your tries at the premium features are used up. The globe and its layers stay free.');
+  assert.equal(unknownCount.lede, 'Your tries on this hosted demo are used up. The globe and its layers stay free.');
 
   const voice = waitlistCopy('voice', { limit: 5, voice: { limit: 3 } });
-  assert.equal(voice.title, 'Voice is a premium feature');
+  assert.equal(voice.title, 'Voice is capped on this hosted demo');
   assert.equal(voice.lede, 'Your 3 free spoken requests are used up. The globe and its layers stay free.');
   assert.match(waitlistCopy('voice', { voice: { limit: 1 } }).lede, /^Your free spoken request is used up\./);
   assert.match(waitlistCopy('voice', {}).lede, /^It arrives at launch\./, 'a card opened before /api/trial answered');
@@ -111,10 +111,10 @@ test('nothing a reader sees on the card reads as French', () => {
 });
 
 test('the mic’s premium line counts its requests by rule', () => {
-  assert.equal(voicePremiumText('trial', 3), 'Premium feature · 3 free spoken requests');
-  assert.equal(voicePremiumText('trial', 1), 'Premium feature · 1 free spoken request');
-  assert.equal(voicePremiumText('spent', 3), 'Premium feature · free requests used up');
-  assert.equal(voicePremiumText('closed'), 'Premium feature · available at launch');
+  assert.equal(voicePremiumText('trial', 3), 'Hosted demo · 3 free spoken requests');
+  assert.equal(voicePremiumText('trial', 1), 'Hosted demo · 1 free spoken request');
+  assert.equal(voicePremiumText('spent', 3), 'Hosted demo · free requests used up');
+  assert.equal(voicePremiumText('closed'), 'Hosted demo · voice available at launch');
   assert.equal(voicePremiumText(null), '');
   for (const state of ['trial', 'spent', 'closed']) assertNoFrench(voicePremiumText(state, 3));
   // Same module, same call, the other language — the property the catalogs rest on.
