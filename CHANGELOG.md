@@ -210,6 +210,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **In English, the voice trial no longer calls itself premium.** The mic's
+  help line reads “Hosted demo · 3 free spoken requests”, and the card that
+  closes the trial says “Voice is capped on this hosted demo” under a
+  “SURPLOMB · HOSTED” kicker: the limit is this server's, and no tier is for
+  sale yet. The French is unchanged.
 - **Shared vehicles answer at every scale.** Above 250 km the layer shows one
   label per city with a network — its name over a bar of its operators'
   colours, 81 cities over France — and pressing one flies there; between the

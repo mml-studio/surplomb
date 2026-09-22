@@ -622,6 +622,12 @@ Updated: September 19, 2026
 > trial has moved. `describeTrial(req, config, experiments)` adds
 > `experiments: { firstRun: { variants } } | null` to the response.
 >
+> **English says “hosted demo”, never “premium”.** The mic's help line
+> (`src/voicePremium.i18n.js`) and the waitlist card (`src/waitlistCard.i18n.js`)
+> name the limit of this server (“Hosted demo · 3 free spoken requests”,
+> kicker “SURPLOMB · HOSTED”) rather than a paid tier, which nothing sells
+> yet; the French keeps « premium ». The crown stays.
+>
 > **The wiring.** `src/main.js` no longer passes `variant: 'A'`; the reveal is
 > `whenBootFlightEnds(() => { void startFirstRunExperience({ styleManager,
 > dataManager, phoneSheet, probe: trialProbe }); })`. `startFirstRunExperience`
