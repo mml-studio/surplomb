@@ -48,6 +48,7 @@ test('every URL the proxies send reaches the ceiling its publisher states', () =
     ['https://nominatim.openstreetmap.org/reverse?lat=45.7&lon=4.8', 'nominatim', 1],
     ['https://routing.openstreetmap.de/routed-bike/table/v1/driving/4.8,45.7;4.9,45.8', 'fossgis-osrm', 1],
     ['https://routing.openstreetmap.de/routed-foot/route/v1/foot/4.8,45.7;4.9,45.8', 'fossgis-osrm', 1],
+    ['https://api.gdeltproject.org/api/v2/doc/doc?query=%22Lyon%22&mode=artlist&format=json', 'gdelt-doc', 0.2],
   ];
   for (const [url, id, perSecond] of cases) {
     const limit = upstreamLimitFor(url);

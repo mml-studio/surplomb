@@ -161,6 +161,18 @@ export const UPSTREAM_LIMITS = Object.freeze([
     publishedPerSecond: 1,
     source: 'https://routing.openstreetmap.de/about.html',
   },
+  // GDELT DOC 2.0 API, the cockpit's regional headlines — the only headline
+  // source where GEV_NONCOMMERCIAL_SOURCES=off drops Google News. It publishes
+  // its ceiling in the refusal itself: a second request inside five seconds
+  // answers 429 « Please limit requests to one every 5 seconds » (read
+  // 2026-09-22 from this machine, two requests six seconds apart).
+  {
+    id: 'gdelt-doc',
+    hosts: Object.freeze(['api.gdeltproject.org']),
+    path: /^\/api\/v2\/doc\//,
+    publishedPerSecond: 0.2,
+    source: 'https://api.gdeltproject.org/api/v2/doc/doc',
+  },
 ]);
 
 /**
