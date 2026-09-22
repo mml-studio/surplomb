@@ -18,17 +18,18 @@ RUN npm ci --include=dev
 
 COPY . .
 
-# GOOGLE_MAPS_API_KEY and CESIUM_ION_TOKEN are inlined into the browser bundle
-# at build time (see the `define` block in vite.config.js), so they have to be
-# present here, not only at runtime.
+# GOOGLE_MAPS_API_KEY, CESIUM_ION_TOKEN and ARCGIS_API_KEY are inlined into the
+# browser bundle at build time (see the `define` block in vite.config.js), so
+# they have to be present here, not only at runtime.
 ARG GOOGLE_MAPS_API_KEY=""
 ARG CESIUM_ION_TOKEN=""
+ARG ARCGIS_API_KEY=""
 # The one absolute URL in the bundle: the social card's image. Unset, the build
 # points it at the public site — correct for the hosted image, and the reason a
 # self-hosted one needs a way to say otherwise. See `absolutizeSocialUrls()`.
 ARG GEV_PUBLIC_ORIGIN=""
 RUN GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" CESIUM_ION_TOKEN="$CESIUM_ION_TOKEN" \
-    GEV_PUBLIC_ORIGIN="$GEV_PUBLIC_ORIGIN" npm run build
+    ARCGIS_API_KEY="$ARCGIS_API_KEY" GEV_PUBLIC_ORIGIN="$GEV_PUBLIC_ORIGIN" npm run build
 
 EXPOSE 4173
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
