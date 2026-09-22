@@ -8,10 +8,11 @@
  * it as a noun, because it is the register's name.
  *
  * WHAT THIS LAYER REFUSES TO SAY is as translated as what it says: it never
- * averages letters, and a cell carries a SHARE of F and G rather than a grade
- * for the block. Every one of those refusals is a sentence here.
+ * averages letters, and a shape seen from altitude is painted by its most
+ * frequent class, named as such, never by a mean. Every one of those refusals
+ * is a sentence here.
  */
-import { countNoun } from '../i18n/format.js';
+import { countNoun, formatInteger } from '../i18n/format.js';
 import { plural } from '../i18n/format.js';
 import { defineMessages } from '../i18n/messages.js';
 
@@ -314,149 +315,173 @@ export default defineMessages({
     },
   },
 
-  /** Above 600 m: one disc per patch of ground, and never a grade for it. */
-  cells: {
-    classes: {
-      veryHigh: {
-        label: { fr: '25 % et plus', en: '25% and over' },
-        blurb: {
-          fr: 'Au moins un logement diagnostiqué sur quatre est classé F ou G — deux fois et demie '
-            + 'la part du registre national.',
-          en: 'At least one rated dwelling in four is F or G — two and a half times the share '
-            + 'of the national register.',
-        },
-      },
-      high: {
-        label: { fr: '15 à 25 %', en: '15% to 25%' },
-        blurb: {
-          fr: 'Nettement au-dessus de la part du registre national.',
-          en: 'Clearly above the share of the national register.',
-        },
-      },
-      near: {
-        label: { fr: '5 à 15 %', en: '5% to 15%' },
-        blurb: {
-          fr: 'La bande où tombe le registre national (9,75 %) : un îlot ordinaire à cette échelle.',
-          en: 'The band the national register falls in (9.75%): an ordinary block at this scale.',
-        },
-      },
-      low: {
-        label: { fr: 'moins de 5 %', en: 'less than 5%' },
-        blurb: {
-          fr: 'Deux fois moins de passoires que le registre national.',
-          en: 'Half as many energy-inefficient homes as the national register.',
-        },
-      },
-      none: {
-        label: { fr: 'aucune', en: 'none' },
-        blurb: {
-          fr: 'Aucun diagnostic F ou G publié dans cette cellule.',
-          en: 'No F or G rating published in this cell.',
-        },
-      },
+  /**
+   * Above 600 m: the cadastre, painted on the A–G scale — every parcel that
+   * holds a rating up to 1 800 m, every cadastral section above. Each shape
+   * takes the most frequent class of its own ratings, the rule a building
+   * follows below 600 m, and says so.
+   */
+  area: {
+    box: { fr: 'la boîte', en: 'the box' },
+    painted: {
+      fr: (unit) => (unit === 'sections' ? 'Sections peintes' : 'Parcelles peintes'),
+      en: (unit) => (unit === 'sections' ? 'Sections painted' : 'Parcels painted'),
+      note: 'The channel the key\'s counts are in: shapes, not ratings.',
+      sample: ['parcels'],
     },
-    tooFew: {
-      label: {
-        fr: (minimum) => `moins de ${minimum} DPE`,
-        en: (minimum) => `fewer than ${minimum} ratings`,
-        sample: [8],
-      },
-      blurb: {
-        fr: (minimum) => `Trop peu de diagnostics pour publier un taux : sous ${minimum}, un seul `
-          + 'DPE déplace la part de plus de douze points et le chiffre porterait '
-          + 'l\'échantillonnage, pas l\'îlot. La cellule est quand même dessinée, à la taille '
-          + 'que son nombre lui vaut.',
-        en: (minimum) => `Too few ratings to publish a share: under ${minimum}, one rating `
-          + 'moves the share by more than twelve points and the figure would carry the '
-          + 'sampling, not the block. The cell is drawn all the same, at the size its count '
-          + 'earns it.',
-        sample: [8],
-      },
-    },
-    anchor: {
-      fr: (national) => `Part de passoires (F ou G) · ${national} % dans le registre national`,
-      en: (national) => `Share of energy-inefficient homes (F or G) · ${national}% in the `
-        + 'national register',
-      sample: ['9.75'],
-    },
-    here: {
-      fr: (share) => `${share} % ici`,
-      en: (share) => `${share}% here`,
-      sample: ['12.4'],
+    poorHere: {
+      fr: (share, national) => `${share} % de passoires (F ou G) ici, ${national} % dans le `
+        + 'registre national',
+      en: (share, national) => `${share}% energy-inefficient homes (F or G) here, `
+        + `${national}% in the national register`,
+      sample: ['12.4', '9.75'],
     },
     registerNotStock: {
       fr: 'un DPE est obligatoire à la vente et à la location : le registre n’est pas le parc',
       en: 'a rating is compulsory on a sale or a new let: the register is not the housing stock',
       note: 'A2 — the denominator is the register, not the housing stock.',
     },
-    discSize: {
-      fr: 'taille du disque = nombre de DPE',
-      en: 'disc size = number of ratings',
-    },
-    box: { fr: 'la boîte', en: 'the box' },
-    aggregated: {
-      fr: (span) => `vue agrégée sur ${span} de côté`,
-      en: (span) => `view aggregated over ${span} a side`,
-      sample: ['2.2 km'],
-    },
-    inCells: {
-      fr: (ratings, cells) => `${ratings} en ${countNoun(cells, 'cellule', 'cellules', FR)}`,
-      en: (ratings, cells) => `${ratings} in ${countNoun(cells, 'cell', 'cells', EN)}`,
-      note: '`ratings` is already counted and named.',
-      sample: ['1,324 ratings', 96],
-    },
     tilesMissing: {
       fr: (missing, tiles) => `${missing} tuile(s) sur ${tiles} sans réponse : `
         + 'ce sol est vide faute de donnée, pas faute de diagnostic',
       en: (missing, tiles) => `${missing} ${plural(missing, 'tile', 'tiles', { locale: 'en' })} of ${tiles} did not answer: `
         + 'this ground is empty for want of data, not for want of a rating',
-      sample: [2, 16],
+      sample: [1, 4],
     },
-    truncated: {
-      fr: 'agrégation écrêtée par l’API : la grille est un sous-ensemble du sol',
-      en: 'aggregation capped by the API: the grid is a subset of the ground',
+    visibleOnly: {
+      fr: (tiles, inBox) => `seule la partie à l’écran est chargée : ${tiles} tuile(s) sur ${inBox}`,
+      en: (tiles, inBox) => `only the part on screen is loaded: ${tiles} of ${inBox} tiles`,
+      note: 'The tiles off screen are not asked for at all.',
+      sample: [2, 4],
     },
-    descendForBuildings: {
-      fr: (metres) => `descendre sous ${metres} m pour retrouver chaque bâtiment, `
-        + 'son emprise et ses étiquettes',
-      en: (metres) => `drop below ${metres} m to get each building back, its footprint and `
-        + 'its labels',
-      sample: [600],
+    partial: {
+      fr: 'une partie de la boîte n’a été lue qu’en partie : ses parcelles peuvent manquer de DPE',
+      en: 'part of the box was only partly read: its parcels may be missing ratings',
     },
-    inCell: {
-      fr: (ratings) => `${ratings} dans cette cellule`,
-      en: (ratings) => `${ratings} in this cell`,
-      sample: ['14 ratings'],
+    communesMissing: {
+      fr: (count) => `cadastre indisponible pour ${countNoun(count, 'commune', 'communes', FR)} : `
+        + 'ses DPE ne sont pas dessinés',
+      en: (count) => `cadastre unavailable for ${countNoun(count, 'municipality', 'municipalities', EN)}: `
+        + 'its ratings are not drawn',
+      sample: [1],
     },
-    noShare: {
-      fr: (minimum) => `moins de ${minimum} diagnostics : aucun taux publié`,
-      en: (minimum) => `fewer than ${minimum} ratings: no share published`,
-      sample: [8],
+    unplaced: {
+      fr: (ratings) => `${ratings} sans parcelle sous leur point d’adresse, non dessinés`,
+      en: (ratings) => `${ratings} with no parcel under their address point, not drawn`,
+      note: '`ratings` is already counted and named (`157 ratings`).',
+      sample: ['157 ratings'],
     },
-    poorShare: {
-      fr: (poor, share) => `${poor} — ${share} %`,
-      en: (poor, share) => `${poor} — ${share}%`,
-      note: '`poor` is already counted and named (`3 energy-inefficient homes (F or G)`).',
-      sample: ['3 energy-inefficient homes (F or G)', '12.4'],
+    /** 600 m to 1 800 m: every parcel a rating in the box stands on. */
+    parcels: {
+      unit: {
+        fr: 'sol teinté = la parcelle, peinte par la classe la plus fréquente de ses DPE '
+          + '(à égalité, la plus mauvaise)',
+        en: 'tinted ground = the parcel, painted by the most frequent class of its ratings '
+          + '(a tie goes to the worse)',
+      },
+      drawn: {
+        fr: (span, ratings, parcels) => `vue sur ${span} de côté : ${ratings} sur `
+          + `${countNoun(parcels, 'parcelle', 'parcelles', FR)}`,
+        en: (span, ratings, parcels) => `view over ${span} a side: ${ratings} on `
+          + `${countNoun(parcels, 'parcel', 'parcels', EN)}`,
+        note: '`ratings` is already counted and named.',
+        sample: ['2.2 km', '22,567 ratings', 2469],
+      },
+      snapped: {
+        fr: (ratings, metres) => `${ratings} posés sur la parcelle dont leur point d’adresse `
+          + `touche la façade (à moins de ${metres} m)`,
+        en: (ratings, metres) => `${ratings} placed on the parcel whose frontage their address `
+          + `point touches (under ${metres} m)`,
+        note: 'A BAN point stands on the front door, which is on the parcel line.',
+        sample: ['11,204 ratings', 3],
+      },
+      descend: {
+        fr: (metres) => `descendre sous ${metres} m pour retrouver chaque bâtiment et ses `
+          + 'étiquettes',
+        en: (metres) => `drop below ${metres} m to get each building and its labels back`,
+        sample: [600],
+      },
+      fallbackTitle: {
+        fr: (idu) => `Parcelle ${idu}`,
+        en: (idu) => `Parcel ${idu}`,
+        sample: ['69382000AV0052'],
+      },
+      moreAddresses: {
+        fr: (count) => `et ${countNoun(count, 'autre adresse', 'autres adresses', FR)}`,
+        en: (count) => `and ${countNoun(count, 'other address', 'other addresses', EN)}`,
+        sample: [2],
+      },
+      snappedCard: {
+        fr: (count) => `${count} posé(s) depuis la façade : point d’adresse hors de la parcelle, `
+          + 'sur sa limite',
+        en: (count) => `${count} placed from the frontage: address point just outside the `
+          + 'parcel, on its boundary',
+        sample: [12],
+      },
     },
-    national: {
-      fr: (share) => `registre national ${share} %`,
-      en: (share) => `national register ${share}%`,
-      sample: ['9.75'],
-    },
-    notAGrade: {
-      fr: 'part de F et G, jamais une note moyenne du quartier',
-      en: 'a share of F and G, never an average grade for the neighborhood',
-    },
-    descendForLabels: {
-      fr: (metres) => `descendre sous ${metres} m pour les étiquettes bâtiment par bâtiment`,
-      en: (metres) => `drop below ${metres} m for the labels building by building`,
-      sample: [600],
-    },
-    discName: {
-      fr: (share) => `${share} % de passoires`,
-      en: (share) => `${share}% energy-inefficient`,
-      sample: ['12.4'],
+    /** Above 1 800 m: every cadastral section the register's grid falls in. */
+    sections: {
+      unit: {
+        fr: 'section cadastrale peinte par la classe la plus fréquente de ses DPE '
+          + '(à égalité, la plus mauvaise)',
+        en: 'cadastral section painted by the most frequent class of its ratings '
+          + '(a tie goes to the worse)',
+      },
+      drawn: {
+        fr: (span, sections, ratings) => `vue sur ${span} de côté : `
+          + `${countNoun(sections, 'section cadastrale', 'sections cadastrales', FR)}, ${ratings}`,
+        en: (span, sections, ratings) => `view over ${span} a side: `
+          + `${countNoun(sections, 'cadastral section', 'cadastral sections', EN)}, ${ratings}`,
+        note: '`ratings` is already counted and named.',
+        sample: ['8.9 km', 402, '227,114 ratings'],
+      },
+      grid: {
+        fr: (metres) => `DPE comptés par carré de ${metres} m, chaque carré donné à la section `
+          + 'sous son centre',
+        en: (metres) => `ratings counted per ${metres} m square, each square given to the section `
+          + 'under its centre',
+        sample: [50],
+      },
+      descend: {
+        fr: (metres) => `descendre sous ${formatInteger(metres, FR)} m pour voir chaque parcelle`,
+        en: (metres) => `drop below ${formatInteger(metres, EN)} m to see each parcel`,
+        sample: [1800],
+      },
+      title: {
+        fr: (code, commune) => `Section ${code} · ${commune}`,
+        en: (code, commune) => `Section ${code} · ${commune}`,
+        note: '`code` is the cadastre\'s own section code (AB, 0C…).',
+        sample: ['AP', 'Lyon 7e Arrondissement'],
+        keep: ['Lyon 7e Arrondissement'],
+      },
+      neutral: {
+        label: {
+          fr: (min) => `moins de ${min} DPE sûrs`,
+          en: (min) => `fewer than ${min} certain ratings`,
+          sample: [3],
+        },
+        blurb: {
+          fr: (min, metres) => `Une section n’est peinte que si au moins ${min} DPE tombent dans `
+            + `des carrés de ${metres} m entièrement à l’intérieur : un carré à cheval sur deux `
+            + 'sections ne dit pas de quel côté sont ses logements.',
+          en: (min, metres) => `A section is painted only when at least ${min} ratings fall in `
+            + `${metres} m squares lying wholly inside it: a square astride two sections does `
+            + 'not say which side its dwellings are on.',
+          sample: [3, 50],
+        },
+      },
+      whole: {
+        fr: (count) => `${countNoun(count, 'DPE', 'DPE', FR)} dans des carrés entièrement dans `
+          + 'la section',
+        en: (count) => `${countNoun(count, 'rating', 'ratings', EN)} in squares lying wholly `
+          + 'inside the section',
+        sample: [412],
+      },
+      neutralCard: {
+        fr: (min) => `trop peu de DPE sûrs pour peindre la section (moins de ${min})`,
+        en: (min) => `too few certain ratings to paint the section (fewer than ${min})`,
+        sample: [3],
+      },
     },
   },
 });

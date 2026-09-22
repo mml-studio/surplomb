@@ -7,24 +7,41 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  DPE_AGG_MAX_CELLS,
-  DPE_CELL_BREAKS,
-  DPE_CELL_MIN_TOTAL,
+  DPE_AREA_FIELDS,
   DPE_DEFAULT_RADIUS_M,
   DPE_FIELDS,
+  DPE_GRID_M,
   DPE_LABELS,
   DPE_MAX_RADIUS_M,
   DPE_POOR_SHARE_NATIONAL,
-  buildDpeCellUrl,
+  DPE_TILE_PAGE_SIZE,
+  buildDpeGridUrl,
+  buildDpeTileRowsUrl,
   buildDpeUrl,
   clampDpeRadius,
+  finishDpeShape,
+  letterCountsTotal,
   parseGeopoint,
+  placeDpePointsOnShapes,
   projectDpe,
-  projectDpeCells,
+  projectDpeGrid,
+  reduceDpeRowsToPoints,
 } from './dpeFeed.js';
+import { lambert93ToWgs84, isPlausibleFrenchPoint } from '../../scripts/lib/lambert93.mjs';
 
 const SAMPLE = JSON.parse(readFileSync(
   new URL('./fixtures/ademe-dpe-existant-sample.json', import.meta.url),
+  'utf8',
+));
+// Captured 2026-09-22 through `buildDpeTileRowsUrl` (size cut to 6) over one
+// 0.01° tile of Lyon 1er–2e, and through `buildDpeGridUrl` over a 0.04° tile of
+// central Paris, trimmed to two communes × two columns × two squares.
+const AREA_ROWS = JSON.parse(readFileSync(
+  new URL('./fixtures/ademe-dpe-area-rows-sample.json', import.meta.url),
+  'utf8',
+));
+const GRID = JSON.parse(readFileSync(
+  new URL('./fixtures/ademe-dpe-grid-sample.json', import.meta.url),
   'utf8',
 ));
 
@@ -178,106 +195,143 @@ test('the coverage of the pivot is reported, not assumed', () => {
   assert.equal(projectDpe(null, {}).rnbCoverage, 0);
 });
 
-// ── the cell regime ────────────────────────────────────────────────────────
-// `geo_agg` is what makes a whole-view answer affordable: 5.3 KB of buckets
-// against ~10 MB of rows for the same ground. These pin the two calls that
-// produce it and the join between them.
-test('the aggregation asks for buckets and for no sample rows at all', () => {
-  const box = { south: 45.770, west: 4.845, north: 45.780, east: 4.855 };
-  const url = new URL(buildDpeCellUrl({ box }));
-  assert.ok(url.pathname.endsWith('/geo_agg'));
+// ── the area regimes ───────────────────────────────────────────────────────
+// Above 600 m the layer paints the cadastre. The parcel band reads a tile's
+// ROWS (four fields), the section band a 50 m GRID the ADEME aggregates itself.
+const BOX = { south: 45.760, west: 4.830, north: 45.770, east: 4.840 };
+
+test('a tile is read with four fields and the largest page data-fair serves', () => {
+  const url = new URL(buildDpeTileRowsUrl({ box: BOX }));
+  assert.ok(url.pathname.endsWith('/lines'));
   // west,south,east,north — the opposite order from `geo_distance`'s
   // lon,lat,radius, which is exactly the kind of swap this file exists to pin.
-  assert.equal(url.searchParams.get('bbox'), '4.845,45.77,4.855,45.78');
-  assert.equal(url.searchParams.get('agg_size'), String(DPE_AGG_MAX_CELLS));
-  // Left at its default the same call answered in 10.6 MB: data-fair embeds a
-  // full 230-field row in EVERY bucket.
-  assert.equal(url.searchParams.get('size'), '0');
-  assert.equal(url.searchParams.get('qs'), null);
+  assert.equal(url.searchParams.get('bbox'), '4.83,45.76,4.84,45.77');
+  assert.equal(url.searchParams.get('size'), String(DPE_TILE_PAGE_SIZE));
+  assert.deepEqual(url.searchParams.get('select').split(','), [...DPE_AREA_FIELDS]);
+  // No `page`: data-fair refuses to page past 10 000 rows by number, and the
+  // next page is the `after` cursor its answer carries.
+  assert.equal(url.searchParams.get('page'), null);
 });
 
-test('the numerator is the same call, filtered to F and G', () => {
-  const box = { south: 45.770, west: 4.845, north: 45.780, east: 4.855 };
-  const url = new URL(buildDpeCellUrl({ box, poorOnly: true }));
-  assert.equal(url.searchParams.get('qs'), 'etiquette_dpe:(F OR G)');
-  assert.equal(url.searchParams.get('bbox'),
-    new URL(buildDpeCellUrl({ box })).searchParams.get('bbox'));
+test('the captured rows carry exactly the four fields asked for', () => {
+  for (const row of AREA_ROWS.results) {
+    for (const field of DPE_AREA_FIELDS) assert.ok(field in row, `${field} present`);
+  }
 });
 
-test('a box that is not a box is refused rather than sent', () => {
-  assert.throws(() => buildDpeCellUrl({ box: null }));
-  assert.throws(() => buildDpeCellUrl({ box: { south: 1, west: 2, north: Number.NaN, east: 4 } }));
+test('rows fold into one point per geocode, with its letters and its address', () => {
+  const rows = [
+    ...AREA_ROWS.results,
+    // The same doorway filed twice more, once with no letter.
+    { ...AREA_ROWS.results[0], etiquette_dpe: 'F' },
+    { ...AREA_ROWS.results[0], etiquette_dpe: '' },
+    { _geopoint: '', etiquette_dpe: 'D' },
+  ];
+  const { points, withoutPoint } = reduceDpeRowsToPoints(rows);
+  assert.equal(withoutPoint, 1, 'a row with no geocode is counted, never placed at 0,0');
+  const first = points.get(AREA_ROWS.results[0]._geopoint);
+  assert.equal(first.insee, '69382');
+  assert.equal(first.address, '3 Rue des Quatre Chapeaux 69002 Lyon');
+  // Latitude first on the wire, longitude first once parsed.
+  assert.ok(first.lat > 45 && first.lon < 5);
+  assert.equal(first.counts[DPE_LABELS.indexOf('D')], 1);
+  assert.equal(first.counts[DPE_LABELS.indexOf('F')], 1);
+  assert.equal(first.ungraded, 1);
+  const total = [...points.values()].reduce(
+    (sum, point) => sum + letterCountsTotal(point.counts) + point.ungraded, 0,
+  );
+  assert.equal(total, rows.length - 1);
 });
 
-test('the two aggregations join on the geohash key', () => {
-  const totals = {
-    total: 300,
-    aggs: [
-      { value: 'u05kqk3', total: 200, centroid: { lat: 45.775, lon: 4.850 }, bbox: [4.849, 45.774, 4.851, 45.776] },
-      { value: 'u05kqk9', total: 100, centroid: { lat: 45.777, lon: 4.852 }, bbox: [4.851, 45.776, 4.853, 45.778] },
-    ],
+test('points fold into the map they are given, so four tiles make one set', () => {
+  const into = new Map();
+  reduceDpeRowsToPoints(AREA_ROWS.results.slice(0, 3), into);
+  reduceDpeRowsToPoints(AREA_ROWS.results.slice(3), into);
+  assert.equal(into.size, reduceDpeRowsToPoints(AREA_ROWS.results).points.size);
+});
+
+test('placing points counts inside, snapped and unplaced apart', () => {
+  const points = [
+    { lon: 1, lat: 1, insee: 'a', address: 'A 1', counts: [0, 0, 2, 1, 0, 0, 0], ungraded: 0 },
+    { lon: 2, lat: 2, insee: 'a', address: 'A 2', counts: [0, 0, 0, 3, 0, 0, 0], ungraded: 1 },
+    { lon: 3, lat: 3, insee: 'a', address: null, counts: [0, 0, 0, 0, 0, 5, 0], ungraded: 0 },
+    { lon: 9, lat: 9, insee: 'a', address: 'nowhere', counts: [0, 0, 0, 0, 0, 0, 7], ungraded: 0 },
+  ];
+  const where = {
+    1: { id: 'P1', inside: true },
+    2: { id: 'P1', inside: false, distanceM: 1.2 },
+    3: { id: 'P2', inside: true, whole: true },
   };
-  const poor = { total: 20, aggs: [{ value: 'u05kqk3', total: 20 }] };
-  const { cells, total, truncated } = projectDpeCells(totals, poor);
-  assert.equal(total, 300);
-  assert.equal(truncated, false);
-  const byKey = new Map(cells.map((cell) => [cell.key, cell]));
-  assert.equal(byKey.get('u05kqk3').poorShare, 10);
-  // A bucket the filtered call never named holds no F and no G — a real zero,
-  // not a missing value.
-  assert.equal(byKey.get('u05kqk9').poor, 0);
-  assert.equal(byKey.get('u05kqk9').poorShare, 0);
+  const placed = placeDpePointsOnShapes(points, (point) => where[point.lon] || null);
+  assert.equal(placed.inside, 3 + 5);
+  assert.equal(placed.snapped, 4);
+  assert.equal(placed.unplaced, 7);
+  assert.equal(placed.unplacedPoints, 1);
+  const p1 = finishDpeShape(placed.shapes.get('P1'));
+  assert.deepEqual(p1.counts, [0, 0, 2, 4, 0, 0, 0]);
+  assert.equal(p1.ungraded, 1);
+  assert.equal(p1.snapped, 4, 'the card can say how many came from the frontage');
+  // Busiest address first.
+  assert.deepEqual(p1.addresses, ['A 2', 'A 1']);
+  assert.equal(p1.moreAddresses, 0);
+  assert.equal(p1.whole, undefined, 'a parcel never carries the section band\'s whole count');
+  const p2 = finishDpeShape(placed.shapes.get('P2'));
+  assert.equal(p2.whole, 5);
+  assert.equal(p2.addresses, undefined, 'a grid square names no address');
 });
 
-test('a thin cell publishes no share at all, rather than a loud zero', () => {
-  const { cells } = projectDpeCells({
-    total: 3,
-    aggs: [{
-      value: 'u05kqk3',
-      total: DPE_CELL_MIN_TOTAL - 1,
-      centroid: { lat: 45.775, lon: 4.850 },
-      bbox: [4.849, 45.774, 4.851, 45.776],
-    }],
-  }, { total: 0, aggs: [] });
-  // Three flats sold with no F among them has not shown the block is sound.
-  assert.equal(cells[0].poorShare, null);
-  assert.equal(cells[0].total, DPE_CELL_MIN_TOTAL - 1);
-});
-
-test('a missing numerator degrades to zero F and G, never to a missing grid', () => {
-  const { cells } = projectDpeCells({
-    total: 50,
-    aggs: [{ value: 'k', total: 50, centroid: { lat: 45.775, lon: 4.850 }, bbox: [4.849, 45.774, 4.851, 45.776] }],
-  }, null);
-  assert.equal(cells.length, 1);
-  assert.equal(cells[0].poor, 0);
-});
-
-test('a bucket with no geometry is dropped rather than drawn at zero, zero', () => {
-  const { cells } = projectDpeCells({
-    total: 10,
-    aggs: [
-      { value: 'a', total: 10 },
-      { value: 'b', total: 10, centroid: { lat: Number.NaN, lon: 4.85 }, bbox: [4.849, 45.774, 4.851, 45.776] },
-    ],
-  }, null);
-  assert.equal(cells.length, 0);
-});
-
-test('an answer at the cap says so', () => {
-  const aggs = Array.from({ length: DPE_AGG_MAX_CELLS }, (unused, index) => ({
-    value: `cell-${index}`,
-    total: 10,
-    centroid: { lat: 45.775, lon: 4.850 },
-    bbox: [4.849, 45.774, 4.851, 45.776],
+test('a parcel names its three busiest addresses and counts the rest', () => {
+  const points = ['a', 'b', 'c', 'd', 'e'].map((name, i) => ({
+    lon: 1, lat: 1, address: name, counts: [i + 1, 0, 0, 0, 0, 0, 0], ungraded: 0,
   }));
-  assert.equal(projectDpeCells({ total: 1_000, aggs }, null).truncated, true);
+  const shape = finishDpeShape(
+    placeDpePointsOnShapes(points, () => ({ id: 'P', inside: true })).shapes.get('P'),
+  );
+  assert.deepEqual(shape.addresses, ['e', 'd', 'c']);
+  assert.equal(shape.moreAddresses, 2);
+});
+
+test('the grid asks the ADEME for 50 m squares under the commune, over the letters', () => {
+  const url = new URL(buildDpeGridUrl({ box: BOX }));
+  assert.ok(url.pathname.endsWith('/values_agg'));
+  assert.equal(url.searchParams.get('field'),
+    'code_insee_ban;coordonnee_cartographique_x_ban;coordonnee_cartographique_y_ban;etiquette_dpe');
+  assert.equal(url.searchParams.get('interval'), `value;${DPE_GRID_M};${DPE_GRID_M};value`);
+  // No sample rows: the default embeds a 230-field row in every bucket.
+  assert.equal(url.searchParams.get('size'), '0');
+  assert.equal(url.searchParams.get('bbox'), '4.83,45.76,4.84,45.77');
+  assert.throws(() => buildDpeGridUrl({ box: null }));
+  assert.throws(() => buildDpeTileRowsUrl({ box: { south: 1, west: 2, north: Number.NaN, east: 4 } }));
+});
+
+test('the captured grid projects to squares whose counts add up to its total', () => {
+  const { points, total, outside, truncated } = projectDpeGrid(GRID, lambert93ToWgs84, isPlausibleFrenchPoint);
+  assert.equal(truncated, false);
+  assert.equal(outside, 0);
+  const sum = points.reduce((acc, point) => acc + letterCountsTotal(point.counts) + point.ungraded, 0);
+  assert.equal(sum, total);
+  const first = points[0];
+  assert.equal(first.insee, '75105');
+  // The square's CENTRE, reprojected: central Paris.
+  assert.ok(first.lat > 48.8 && first.lat < 48.9 && first.lon > 2.3 && first.lon < 2.4,
+    `${first.lat}, ${first.lon}`);
+  assert.equal(first.key, `75105|${first.x}|${first.y}`);
+  // The corner is kept for the whole-square test.
+  assert.equal(first.x, 652150);
+  assert.equal(first.y, 6861050);
+});
+
+test('a square that does not land in France is dropped and counted, not drawn at sea', () => {
+  const { points, outside } = projectDpeGrid(GRID, () => ({ lon: -30, lat: 10 }), isPlausibleFrenchPoint);
+  assert.equal(points.length, 0);
+  assert.equal(outside, GRID.total);
+});
+
+test('a grid the API capped says so', () => {
+  const capped = { ...GRID, aggs: [{ ...GRID.aggs[0], total_other: 12 }] };
+  assert.equal(projectDpeGrid(capped, lambert93ToWgs84).truncated, true);
 });
 
 test('the national anchor is a property of the REGISTER and is published as a number', () => {
   assert.ok(DPE_POOR_SHARE_NATIONAL > 0 && DPE_POOR_SHARE_NATIONAL < 100);
-  for (const breaks of Object.values(DPE_CELL_BREAKS)) {
-    const ascending = [...breaks].every((edge, index) => index === 0 || edge > breaks[index - 1]);
-    assert.ok(ascending);
-  }
 });

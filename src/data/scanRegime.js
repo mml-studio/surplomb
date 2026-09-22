@@ -218,6 +218,138 @@ export function readScanCellBox(search) {
 }
 
 /**
+ * How close to the screen's ground a tile may lie and still be loaded, in
+ * degrees — about a hundred metres. « Ne charge que ce qui est dans la vue, et
+ * à la limite vraiment très proche de la vue » (2026-09-22): the margin covers
+ * the few metres between the ellipsoid rectangle Cesium reports and the
+ * terrain the reader sees, and nothing more.
+ */
+export const SCAN_VIEW_MARGIN_DEG = 0.001;
+
+/**
+ * Which of a box's tiles the screen shows: a mask, one boolean per tile in
+ * {@link scanTiles} order, or null when the view is unknown (every tile, as
+ * before this existed).
+ *
+ * A BOX IS FOUR TILES WHATEVER THE SCREEN SHOWS, and from 700 m over a street
+ * the screen shows one or two of them. Each tile the layer loads is a request
+ * to a register that answers in 0.2 s to 11 s (the DPE's, measured), so the
+ * tiles off screen are dropped from the question rather than fetched for a
+ * pan that may never come.
+ *
+ * The view is `viewGate.cameraViewBox` — the camera's rectangle on the
+ * ellipsoid, which on a tilted camera runs to the horizon. That is harmless
+ * here, and it is why this may use it where the box itself may not: the box is
+ * still built from the look-at point and still caps the question at four
+ * tiles; the rectangle only ever REMOVES tiles from it, and a tile at the top
+ * of a tilted screen is on screen.
+ *
+ * @param {{south: number, west: number, north: number, east: number}} box
+ * @param {number} tileDeg
+ * @param {?{south: number, west: number, north: number, east: number}} view
+ * @param {number} [marginDeg]
+ * @returns {?boolean[]}
+ */
+export function scanTileMask(box, tileDeg, view, marginDeg = SCAN_VIEW_MARGIN_DEG) {
+  if (!box || !view || ![view.south, view.west, view.north, view.east].every(Number.isFinite)) return null;
+  const mask = scanTiles(box, tileDeg).map((tile) => tile.south <= view.north + marginDeg
+    && tile.north >= view.south - marginDeg
+    && tile.west <= view.east + marginDeg
+    && tile.east >= view.west - marginDeg);
+  // A view that misses the whole box is a camera looking elsewhere than its
+  // own centre — a moment mid-flight — and asking for nothing would draw an
+  // empty box; the box is asked for whole instead.
+  return mask.some(Boolean) ? mask : null;
+}
+
+/**
+ * The `tiles` query parameter for a mask — `'1010'` — or null when every tile
+ * is asked for, so a whole box keeps the query string it always had.
+ * @param {?boolean[]} mask @returns {?string}
+ */
+export function scanTileMaskParam(mask) {
+  if (!Array.isArray(mask) || mask.every(Boolean)) return null;
+  return mask.map((on) => (on ? '1' : '0')).join('');
+}
+
+/**
+ * Read the mask back off a request. Anything but a string of `0` and `1` of
+ * the box's own tile count, with at least one `1`, is the WHOLE box: a mask can
+ * only take tiles away from a question already validated, so a bad one is
+ * answered with the question it narrowed, never with a different one.
+ * @param {URLSearchParams} search
+ * @param {object} box @param {{tileDeg: number}} band
+ * @returns {boolean[]}
+ */
+export function readScanTileMask(search, box, band) {
+  const count = scanTiles(box, band.tileDeg).length;
+  const raw = String(search?.get?.('tiles') ?? '');
+  if (raw.length !== count || !/^[01]+$/.test(raw) || !raw.includes('1')) {
+    return Array.from({ length: count }, () => true);
+  }
+  return [...raw].map((digit) => digit === '1');
+}
+
+/**
+ * The bounding box of some tiles — what an answer covering only part of its
+ * box actually loaded.
+ * @param {Array<{south: number, west: number, north: number, east: number}>} tiles
+ * @returns {?{south: number, west: number, north: number, east: number}}
+ */
+export function scanTilesBox(tiles) {
+  if (!Array.isArray(tiles) || !tiles.length) return null;
+  return {
+    south: Math.min(...tiles.map((tile) => tile.south)),
+    west: Math.min(...tiles.map((tile) => tile.west)),
+    north: Math.max(...tiles.map((tile) => tile.north)),
+    east: Math.max(...tiles.map((tile) => tile.east)),
+  };
+}
+
+/**
+ * The ring of tiles around some tiles: every tile touching one of them, edge
+ * or corner, that is not one of them — up to twelve around a 2 × 2 view —
+ * nearest the reader's point first.
+ *
+ * WHAT IT IS FOR: the tiles a reader reaches by moving about a kilometre,
+ * which the proxy loads in the background once the view is drawn (see the
+ * DPE route). The ring is on the SAME grid as the tiles, so a tile loaded
+ * ahead is the very tile a later box will ask for, byte for byte.
+ *
+ * @param {Array<{south: number, west: number, north: number, east: number}>} tiles
+ * @param {number} tileDeg
+ * @param {?{lat: number, lon: number}} [centre]
+ * @returns {Array<{south: number, west: number, north: number, east: number}>}
+ */
+export function scanTileRing(tiles, tileDeg, centre = null) {
+  if (!Array.isArray(tiles) || !tiles.length || !(tileDeg > 0)) return [];
+  const round = (value) => Number(value.toFixed(6));
+  const keyOf = (tile) => `${tile.south.toFixed(6)},${tile.west.toFixed(6)}`;
+  const own = new Set(tiles.map(keyOf));
+  const ring = new Map();
+  for (const tile of tiles) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (!dx && !dy) continue;
+        const south = round(tile.south + (dy * tileDeg));
+        const west = round(tile.west + (dx * tileDeg));
+        const next = { south, west, north: round(south + tileDeg), east: round(west + tileDeg) };
+        if (next.south < -90 || next.north > 90 || next.west < -180 || next.east > 180) continue;
+        const key = keyOf(next);
+        if (!own.has(key) && !ring.has(key)) ring.set(key, next);
+      }
+    }
+  }
+  const out = [...ring.values()];
+  if (centre && Number.isFinite(centre.lat) && Number.isFinite(centre.lon)) {
+    const far = (tile) => Math.hypot(((tile.south + tile.north) / 2) - centre.lat,
+      (((tile.west + tile.east) / 2) - centre.lon) * Math.cos((centre.lat * Math.PI) / 180));
+    out.sort((a, b) => far(a) - far(b));
+  }
+  return out;
+}
+
+/**
  * A stable cache key for a box, at the precision the grid is snapped to.
  * @param {{south: number, west: number, north: number, east: number}} box
  * @returns {string}

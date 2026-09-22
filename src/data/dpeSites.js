@@ -107,37 +107,55 @@ export function dpeGradeOf(entry) {
  *   mixed: boolean, letters: Array<string>}}
  */
 export function dpeBuildingSummary(points) {
-  const counts = new Map();
-  let graded = 0;
+  const counts = [0, 0, 0, 0, 0, 0, 0];
   let ungraded = 0;
   for (const point of points || []) {
-    const letter = dpeGradeOf(point);
-    if (!letter) { ungraded += 1; continue; }
-    graded += 1;
-    counts.set(letter, (counts.get(letter) || 0) + 1);
+    const index = DPE_LABELS.indexOf(dpeGradeOf(point));
+    if (index < 0) ungraded += 1;
+    else counts[index] += 1;
   }
+  return dpeSummaryFromCounts(counts, ungraded);
+}
+
+/**
+ * The same summary, from counts already added up — seven integers in A–G
+ * order and the ungraded ones. The area regimes carry counts, not rows: a
+ * parcel above 600 m and a cadastral section above 1 800 m are summarised by
+ * THIS rule, so a building, the parcel under it and the section around it
+ * cannot be painted by three different answers.
+ *
+ * @param {ArrayLike<number>} counts
+ * @param {number} [ungraded]
+ * @returns {ReturnType<typeof dpeBuildingSummary>}
+ */
+export function dpeSummaryFromCounts(counts, ungraded = 0) {
+  let graded = 0;
   let grade = null;
   let votes = 0;
   let best = null;
   let worst = null;
+  const letters = [];
   // A to G, taking a tie: the LAST letter to match the running maximum wins,
   // and the labels are ordered worst-last, so a tie resolves pessimistically
   // without a second comparison.
-  for (const letter of DPE_LABELS) {
-    const n = counts.get(letter) || 0;
-    if (!n) continue;
+  for (let i = 0; i < DPE_LABELS.length; i += 1) {
+    const n = Number(counts?.[i]) || 0;
+    if (n <= 0) continue;
+    const letter = DPE_LABELS[i];
+    graded += n;
+    letters.push(letter);
     if (best === null) best = letter;
     worst = letter;
     if (n >= votes) { votes = n; grade = letter; }
   }
-  const letters = DPE_LABELS.filter((letter) => counts.has(letter));
   const spread = best === null ? 0 : DPE_LABELS.indexOf(worst) - DPE_LABELS.indexOf(best);
+  const unlabelled = Math.max(0, Number(ungraded) || 0);
   return {
     grade,
     votes,
     graded,
-    ungraded,
-    total: graded + ungraded,
+    ungraded: unlabelled,
+    total: graded + unlabelled,
     best,
     worst,
     spread,

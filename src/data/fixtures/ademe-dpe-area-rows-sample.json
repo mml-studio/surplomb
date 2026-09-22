@@ -1,0 +1,41 @@
+{
+ "total": 8338,
+ "results": [
+  {
+   "adresse_ban": "3 Rue des Quatre Chapeaux 69002 Lyon",
+   "code_insee_ban": "69382",
+   "_geopoint": "45.76267897473277,4.834561996938495",
+   "etiquette_dpe": "D"
+  },
+  {
+   "adresse_ban": "18 Rue Palais Grillet 69002 Lyon",
+   "code_insee_ban": "69382",
+   "_geopoint": "45.76247497926301,4.835203050582689",
+   "etiquette_dpe": "D"
+  },
+  {
+   "adresse_ban": "23 Rue Longue 69001 Lyon",
+   "code_insee_ban": "69381",
+   "_geopoint": "45.765417013034025,4.833941982758167",
+   "etiquette_dpe": "D"
+  },
+  {
+   "adresse_ban": "7 Rue Mercière 69002 Lyon",
+   "code_insee_ban": "69382",
+   "_geopoint": "45.76425604150021,4.832552031776917",
+   "etiquette_dpe": "B"
+  },
+  {
+   "adresse_ban": "53 Rue de la Bourse 69002 Lyon",
+   "code_insee_ban": "69382",
+   "_geopoint": "45.76392399444947,4.836906947875506",
+   "etiquette_dpe": "E"
+  },
+  {
+   "adresse_ban": "38 Rue de l'Arbre Sec 69001 Lyon",
+   "code_insee_ban": "69381",
+   "_geopoint": "45.766700985248136,4.8373529371219215",
+   "etiquette_dpe": "C"
+  }
+ ]
+}

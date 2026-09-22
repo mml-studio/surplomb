@@ -148,7 +148,7 @@ import {
   traceBetweenPr,
 } from './scripts/lib/rrnCarriageway.mjs';
 import { simplifyPolyline, CENTRELINE_SIMPLIFY_M } from './scripts/lib/rrnCentreline.mjs';
-import { lambert93ToWgs84 } from './scripts/lib/lambert93.mjs';
+import { isPlausibleFrenchPoint, lambert93ToWgs84 } from './scripts/lib/lambert93.mjs';
 import {
   powerGridBoxKey,
   powerGridIncludesTowers,
@@ -180,6 +180,7 @@ import {
   aggregateSalesIntoPlots,
   aggregateSalesIntoSections,
   buildDvfUrl,
+  decodeParts,
   encodeParts,
   clampDvfRadius,
   dvfCoverage,
@@ -190,21 +191,35 @@ import {
 import {
   boxSamplePoints,
   readScanCellBox,
+  readScanTileMask,
   scanBoxKey,
+  scanTileRing,
   scanTiles,
+  scanTilesBox,
 } from './src/data/scanRegime.js';
 import {
   parseAvisSubject,
   projectAvisValeur,
 } from './src/data/avisValeurFeed.js';
 import {
-  DPE_CELL_MIN_TOTAL,
-  buildDpeCellUrl,
+  DPE_GRID_M,
+  DPE_LABELS,
+  DPE_PARCEL_SNAP_M,
+  DPE_SECTION_SNAP_M,
+  DPE_TILE_MAX_PAGES,
+  buildDpeGridUrl,
+  buildDpeTileRowsUrl,
   buildDpeUrl,
   clampDpeRadius,
+  emptyLetterCounts,
+  finishDpeShape,
+  letterCountsTotal,
+  placeDpePointsOnShapes,
   projectDpe,
-  projectDpeCells,
+  projectDpeGrid,
+  reduceDpeRowsToPoints,
 } from './src/data/dpeFeed.js';
+import { createShapeLocator } from './src/data/shapeLocator.js';
 import {
   DPE_SITE_MAX,
   geometryParts,
@@ -213,7 +228,7 @@ import {
 } from './src/data/dpeSites.js';
 import { projectRnbBuilding, projectRnbFirst, rnbBuildingUrl, rnbClosestUrl } from './src/data/rnbPivot.js';
 import { pointInPolygons } from './src/data/ringGeometry.js';
-import { foldToCommune } from './src/data/communeCode.js';
+import { foldToCommune, isArrondissementCode } from './src/data/communeCode.js';
 import {
   LOYERS_SEGMENTS,
   decodeLoyersCsv,
@@ -529,6 +544,7 @@ import {
   cadastreSectionsUrl,
   communeCadastreCodes,
   discoverSitadelRid,
+  isArrondissementCommune,
   geoCommuneUrl,
   indexCadastreParcels,
   newestCadastreEdition,
@@ -23835,6 +23851,60 @@ function georisquesProxy() {
 }
 
 /**
+ * The commune's cadastral SECTIONS, by their ten-character id — the shapes
+ * the coarse band of BOTH area layers paints, property prices and energy
+ * ratings, loaded once for the two. A whole commune is a few dozen to a few
+ * hundred sections and a few kilobytes, so the whole file is kept, encoded,
+ * in memory and on disk.
+ */
+const _sectionIndexes = new Map();
+const SECTION_INDEX_MAX = 40;
+
+function loadCommuneSections(insee) {
+  if (_sectionIndexes.has(insee)) return _sectionIndexes.get(insee);
+  const pending = (async () => {
+    // `e5`: rings encoded at 1e-5 degree (`dvfFeed.encodeRing`). A file in
+    // any other form is a different name, never a misread one.
+    const diskPath = path.join(ADDRESS_CACHE_DIR, `dvf-sections-e5-${insee}.json`);
+    try {
+      const stat = await fsp.stat(diskPath);
+      if (Date.now() - stat.mtimeMs < DVF_DISK_TTL_MS) {
+        return new Map(JSON.parse(await fsp.readFile(diskPath, 'utf8')));
+      }
+    } catch { /* no disk copy yet */ }
+    const index = new Map();
+    for (const code of communeCadastreCodes(insee)) {
+      const collection = await fetchCadastreSections(code);
+      for (const feature of collection?.features || []) {
+        const id = feature?.properties?.id;
+        const geometry = feature?.geometry;
+        if (!id || !geometry) continue;
+        const parts = geometry.type === 'Polygon'
+          ? [geometry.coordinates]
+          : (geometry.type === 'MultiPolygon' ? geometry.coordinates : null);
+        // Encoded once, here: the whole file is kept, and flat integers are
+        // the compact form of it (`dvfFeed.encodeRing`).
+        if (parts) index.set(id, encodeParts(parts));
+      }
+    }
+    try {
+      await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });
+      await fsp.writeFile(diskPath, JSON.stringify([...index]));
+    } catch { /* cache is an optimisation, never a requirement */ }
+    return index;
+  })().catch((error) => {
+    _sectionIndexes.delete(insee);
+    console.warn(`[cadastre-sections] ${insee} unavailable:`, error?.message || error);
+    return new Map();
+  });
+  _sectionIndexes.set(insee, pending);
+  while (_sectionIndexes.size > SECTION_INDEX_MAX) {
+    _sectionIndexes.delete(_sectionIndexes.keys().next().value);
+  }
+  return pending;
+}
+
+/**
  * DVF — what property actually sold for, per commune-year, parsed server-side,
  * and the estimate built on top of it.
  *
@@ -24109,59 +24179,6 @@ function dvfProxy() {
       if (parts) out.push({ id, parts });
     }
     return out;
-  }
-
-  /**
-   * The commune's cadastral SECTIONS, by their ten-character id — the shapes
-   * the coarse band paints. A whole commune is a few dozen to a few hundred
-   * sections and a few kilobytes, so the whole file is kept, encoded, in
-   * memory and on disk.
-   */
-  const sectionIndexes = new Map();
-  const SECTION_INDEX_MAX = 40;
-
-  function loadCommuneSections(insee) {
-    if (sectionIndexes.has(insee)) return sectionIndexes.get(insee);
-    const pending = (async () => {
-      // `e5`: rings encoded at 1e-5 degree (`dvfFeed.encodeRing`). A file in
-      // any other form is a different name, never a misread one.
-      const diskPath = path.join(ADDRESS_CACHE_DIR, `dvf-sections-e5-${insee}.json`);
-      try {
-        const stat = await fsp.stat(diskPath);
-        if (Date.now() - stat.mtimeMs < DVF_DISK_TTL_MS) {
-          return new Map(JSON.parse(await fsp.readFile(diskPath, 'utf8')));
-        }
-      } catch { /* no disk copy yet */ }
-      const index = new Map();
-      for (const code of communeCadastreCodes(insee)) {
-        const collection = await fetchCadastreSections(code);
-        for (const feature of collection?.features || []) {
-          const id = feature?.properties?.id;
-          const geometry = feature?.geometry;
-          if (!id || !geometry) continue;
-          const parts = geometry.type === 'Polygon'
-            ? [geometry.coordinates]
-            : (geometry.type === 'MultiPolygon' ? geometry.coordinates : null);
-          // Encoded once, here: the whole file is kept, and flat integers are
-          // the compact form of it (`dvfFeed.encodeRing`).
-          if (parts) index.set(id, encodeParts(parts));
-        }
-      }
-      try {
-        await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });
-        await fsp.writeFile(diskPath, JSON.stringify([...index]));
-      } catch { /* cache is an optimisation, never a requirement */ }
-      return index;
-    })().catch((error) => {
-      sectionIndexes.delete(insee);
-      console.warn(`[DVF Proxy] cadastral sections for ${insee} unavailable:`, error?.message || error);
-      return new Map();
-    });
-    sectionIndexes.set(insee, pending);
-    while (sectionIndexes.size > SECTION_INDEX_MAX) {
-      sectionIndexes.delete(sectionIndexes.keys().next().value);
-    }
-    return pending;
   }
 
   /**
@@ -24626,96 +24643,589 @@ async function resolveDpeSites(projected, point, radiusM) {
  * @returns {import('vite').Plugin}
  */
 function dpeProxy() {
+  /* ── the area regimes: parcels from 600 m, sections from 1 800 m ────────
+   *
+   * Until 2026-09-22 the box regime answered with geohash cells and a share of
+   * F and G per cell, and the layer drew them as discs. It now answers with the
+   * cadastre's own shapes, painted on the A–G scale — the same two bands the
+   * price layer uses, for the same reason (a disc names no ground a reader can
+   * see). What each band costs, and why the two are read differently, is in
+   * `dpeFeed.js`: the ROWS of four 0.01° tiles for the parcels, a 50 m GRID
+   * aggregated by the ADEME for the sections.
+   */
+
   /**
-   * The cell answer for a box: four tiles, two aggregations each.
+   * How long a tile's answer is kept, in memory and on disk: a week, the
+   * price layer's shelf life for its editions. The register is republished
+   * rarely — its last edition is dated 2026-06-30 — and a cold tile is the
+   * whole of this layer's wait: measured cold on 2026-09-22, one 10 000-row
+   * page took 0.2 s to 11 s from the ADEME for the same size of answer, while
+   * everything done here with it takes under 0.1 s.
+   */
+  const DPE_TILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  /**
+   * Tiles kept in memory: a view is four and the ring loaded around it twelve
+   * more (below), so this holds a reader's last few kilometres. A tile is its
+   * points — about 300 KB for a dense one.
+   */
+  const DPE_TILE_MEMORY_MAX = 64;
+  const _dpeTiles = new Map();
+
+  /**
+   * One upstream call to the ADEME, retried ONCE on HTTP 429.
    *
-   * FOUR TILES AND NOT ONE BOX, because the ADEME chooses the geohash precision
-   * from the span it is given — a 0.02° box is answered in 853 m cells while
-   * its four 0.01° quarters come back in 107 m ones. Asking tile by tile is
-   * what buys the fine band its resolution, and it is also what makes panning
-   * cheap: tiles are grid-aligned, so a reader stepping one tile east re-uses
-   * three of the four answers out of the cache below.
+   * The 429 this register sends is not always a quota. Measured on
+   * 2026-09-22, its Elasticsearch answers 429 with « Data too large » when
+   * the cluster's heap is momentarily over its breaker — the same request
+   * passes seconds later. One retry after 1.5 s absorbs that; a second 429
+   * is a real refusal, and the tile is reported missing.
+   */
+  async function fetchDpeUpstream(url) {
+    let status = null;
+    const first = await fetchAddressSource(url, {
+      timeoutMs: 30_000,
+      onFailure: (verdict) => { status = verdict.status; },
+    });
+    if (first || status !== 429) return first;
+    await new Promise((resolve) => { setTimeout(resolve, 1_500); });
+    return fetchAddressSource(url, { timeoutMs: 30_000 });
+  }
+
+  /**
+   * A tile's answer, from memory, from disk, or from `load`. The disk copy is
+   * what makes a server restart cheap: the register is republished monthly,
+   * and a day is well inside that.
+   */
+  function cachedDpeTile(kind, tile, load) {
+    const key = `${kind}-${scanBoxKey(tile)}`;
+    const held = _dpeTiles.get(key);
+    if (held && Date.now() - held.at < DPE_TILE_TTL_MS) return held.pending;
+    const diskPath = path.join(ADDRESS_CACHE_DIR, `dpe-${key.replace(/[^0-9a-z.,_-]/gi, '_')}.json`);
+    const pending = (async () => {
+      try {
+        const stat = await fsp.stat(diskPath);
+        if (Date.now() - stat.mtimeMs < DPE_TILE_TTL_MS) {
+          return JSON.parse(await fsp.readFile(diskPath, 'utf8'));
+        }
+      } catch { /* no disk copy yet */ }
+      const answer = await load();
+      if (answer && !answer.partial) {
+        try {
+          await fsp.mkdir(ADDRESS_CACHE_DIR, { recursive: true });
+          await fsp.writeFile(diskPath, JSON.stringify(answer));
+        } catch { /* cache is an optimisation, never a requirement */ }
+      }
+      return answer;
+    })().catch((error) => {
+      console.warn(`[dpe-proxy] tile ${key}:`, error?.message || error);
+      return null;
+    });
+    _dpeTiles.set(key, { at: Date.now(), pending });
+    // A failed tile is forgotten at once, so the next settle asks again — but
+    // only if nothing newer has taken its place in the meantime.
+    pending.then((answer) => {
+      if (!answer && _dpeTiles.get(key)?.pending === pending) _dpeTiles.delete(key);
+    });
+    while (_dpeTiles.size > DPE_TILE_MEMORY_MAX) {
+      _dpeTiles.delete(_dpeTiles.keys().next().value);
+    }
+    return pending;
+  }
+
+  /**
+   * One 0.01° tile's diagnostics, folded into points (`reduceDpeRowsToPoints`).
+   * Serialised as an array, because a Map does not survive `JSON.stringify`.
+   */
+  function loadDpeTilePoints(tile) {
+    return cachedDpeTile('points', tile, async () => {
+      const points = new Map();
+      let withoutPoint = 0;
+      let rows = 0;
+      let total = null;
+      let url = buildDpeTileRowsUrl({ box: tile });
+      let pages = 0;
+      while (url && pages < DPE_TILE_MAX_PAGES) {
+        const page = await fetchDpeUpstream(url);
+        // A page that fails after the first leaves a PARTIAL tile: drawn, but
+        // counted as truncated and never written to disk.
+        if (!page) {
+          if (!pages) return null;
+          break;
+        }
+        pages += 1;
+        if (total === null && Number.isFinite(page.total)) total = page.total;
+        const results = Array.isArray(page.results) ? page.results : [];
+        rows += results.length;
+        withoutPoint += reduceDpeRowsToPoints(results, points).withoutPoint;
+        url = typeof page.next === 'string' && results.length ? page.next : null;
+      }
+      return {
+        points: [...points.values()],
+        rows,
+        total: total ?? rows,
+        withoutPoint,
+        partial: total !== null && rows < total,
+      };
+    });
+  }
+
+  /** One 0.04° tile's 50 m grid (`projectDpeGrid`). */
+  function loadDpeTileGrid(tile) {
+    return cachedDpeTile('grid', tile, async () => {
+      const body = await fetchDpeUpstream(buildDpeGridUrl({ box: tile }));
+      if (!body) return null;
+      const projected = projectDpeGrid(body, (x, y) => lambert93ToWgs84(x, y), isPlausibleFrenchPoint);
+      return { ...projected, partial: projected.truncated };
+    });
+  }
+
+  /**
+   * The Etalab files a set of register codes is looked up in.
    *
-   * TWO CALLS PER TILE, and the second one is the numerator. `geo_agg` counts
-   * rows per bucket and this API exposes no nested aggregation, so the share of
-   * F and G is a filtered count joined onto an unfiltered one — see
-   * `projectDpeCells`. Eight requests for a camera settle, constant whatever
-   * the band, and cached per tile.
+   * The register files most of Paris, Lyon and Marseille under the
+   * ARRONDISSEMENT (75111, 69381) and a few rows under the whole city (75056:
+   * 21 of 12 231 over Paris 11e). Expanding the city code would load twenty
+   * files for those 21 rows, so it is expanded only when none of its
+   * arrondissements is already in the set — the points it carries are then
+   * looked up in the files the others brought.
+   */
+  function cadastreCodesFor(codes) {
+    const wanted = new Set();
+    const cities = [];
+    for (const code of codes) {
+      if (!code) continue;
+      if (isArrondissementCommune(code)) cities.push(code);
+      else wanted.add(code);
+    }
+    for (const city of cities) {
+      const arrondissements = communeCadastreCodes(city);
+      if (!arrondissements.some((code) => wanted.has(code))) {
+        for (const code of arrondissements) wanted.add(code);
+      }
+    }
+    return [...wanted];
+  }
+
+  /**
+   * Every parcel of one Etalab commune file, indexed for point lookups.
    *
-   * A TILE THAT FAILS IS A HOLE, NOT A ZERO. Its cells are simply absent and
-   * `tilesMissing` says how many, because ground with no data and ground with
-   * no diagnostics are different statements and only one of them is this
-   * layer's to make.
+   * THE WHOLE FILE, where the price layer keeps only the parcels its sales
+   * name: the register names no parcel, so any of them may be the one a
+   * diagnostic stands on. Kept for six communes — a 0.02° box touches two to
+   * five — and on disk as the file's own gzip, which the parcel proxies
+   * already fetch (`fetchSitadelParcels`).
+   */
+  const _dpeParcelLocators = new Map();
+  // Eight: the ring loaded ahead can name a commune or two beyond the view's,
+  // and an index is now 46 MB for Toulouse's 91 938 parcels, the largest
+  // commune file measured, and 19 MB for Nantes (`shapeLocator.js`).
+  const DPE_PARCEL_LOCATORS_MAX = 8;
+
+  function dpeParcelLocator(code) {
+    if (_dpeParcelLocators.has(code)) return _dpeParcelLocators.get(code);
+    const pending = (async () => {
+      const collection = await fetchSitadelParcels(code);
+      const shapes = [];
+      for (const feature of collection?.features || []) {
+        const id = feature?.properties?.id;
+        const geometry = feature?.geometry;
+        if (!id || !geometry) continue;
+        const parts = geometry.type === 'Polygon'
+          ? [geometry.coordinates]
+          : (geometry.type === 'MultiPolygon' ? geometry.coordinates : null);
+        if (parts) shapes.push({ id, parts });
+      }
+      return createShapeLocator(shapes, { cellDeg: 0.0005 });
+    })().catch((error) => {
+      _dpeParcelLocators.delete(code);
+      console.warn(`[dpe-proxy] cadastre for ${code} unavailable:`, error?.message || error);
+      return null;
+    });
+    _dpeParcelLocators.set(code, pending);
+    while (_dpeParcelLocators.size > DPE_PARCEL_LOCATORS_MAX) {
+      _dpeParcelLocators.delete(_dpeParcelLocators.keys().next().value);
+    }
+    return pending;
+  }
+
+  /**
+   * Start loading the parcel files a tile's points name, without waiting.
+   * The whole-city codes are left to `cadastreCodesFor`, which only expands
+   * one once it has seen the whole box.
+   */
+  function warmCadastreFor(answer) {
+    for (const code of new Set((answer?.points || []).map((point) => point.insee))) {
+      if (code && !isArrondissementCommune(code)) void dpeParcelLocator(code);
+    }
+  }
+
+  /* ── the ring, loaded ahead ─────────────────────────────────────────────
    *
+   * THE READER'S NEXT KILOMETRE, LOADED WHILE THEY LOOK AT THIS ONE. The wait
+   * is the ADEME's and it is a matter of rows (see `loadDpeParcels`), so a
+   * move of half a tile — the box shifts by a row, two new tiles — used to
+   * cost one to two seconds each time. Of three measured options (load the
+   * ring around the view, load only the rest of the box, load nothing) the
+   * operator chose the ring, on 2026-09-22, knowing its price: about 10 to
+   * 15 s of the ADEME's time in the background for each new area, then
+   * nothing for the week a tile is kept.
+   *
+   *   - SERVER-SIDE ONLY. The browser still receives the tiles on its screen
+   *     and nothing else; the ring stays in this process and on its disk.
+   *   - AFTER the answer the reader asked for, ONE TILE AT A TIME, and paused
+   *     whenever a reader's own request is waiting on the ADEME — at most the
+   *     one tile already in flight stands in front of it.
+   *   - The ring of the LATEST view replaces any older one: a reader who flew
+   *     away does not want the last city's surroundings.
+   *   - A refusal stops it for a minute. The register is a free public
+   *     service, and a 429 twice over is it saying so.
+   */
+  const DPE_PREFETCH_POLL_MS = 250;
+  const DPE_PREFETCH_BACKOFF_MS = 60_000;
+  /** Requests of readers currently waiting on the ADEME. */
+  let _dpeForeground = 0;
+  let _dpePrefetchQueue = [];
+  let _dpePrefetchRunning = false;
+  let _dpePrefetchBlockedUntil = 0;
+
+  /** Run a reader's request with the ring held back until it is answered. */
+  async function asForeground(work) {
+    _dpeForeground += 1;
+    try {
+      return await work();
+    } finally {
+      _dpeForeground -= 1;
+    }
+  }
+
+  /** Whether a tile's points are already in memory and fresh. */
+  function dpeTileHeld(tile) {
+    const held = _dpeTiles.get(`points-${scanBoxKey(tile)}`);
+    return Boolean(held && Date.now() - held.at < DPE_TILE_TTL_MS);
+  }
+
+  /** Queue the ring around the tiles just served, nearest the reader first. */
+  function scheduleDpePrefetch(tiles, tileDeg, point) {
+    if (Date.now() < _dpePrefetchBlockedUntil) return;
+    _dpePrefetchQueue = scanTileRing(tiles, tileDeg, point).filter((tile) => !dpeTileHeld(tile));
+    if (!_dpePrefetchRunning && _dpePrefetchQueue.length) void runDpePrefetch();
+  }
+
+  async function runDpePrefetch() {
+    _dpePrefetchRunning = true;
+    const startedAt = Date.now();
+    let loaded = 0;
+    try {
+      while (_dpePrefetchQueue.length) {
+        if (_dpeForeground > 0) {
+          await new Promise((resolve) => { setTimeout(resolve, DPE_PREFETCH_POLL_MS); });
+          continue;
+        }
+        const tile = _dpePrefetchQueue.shift();
+        if (dpeTileHeld(tile)) continue;
+        const answer = await loadDpeTilePoints(tile);
+        if (!answer) {
+          _dpePrefetchBlockedUntil = Date.now() + DPE_PREFETCH_BACKOFF_MS;
+          _dpePrefetchQueue = [];
+          console.warn('[dpe-proxy] the ADEME refused a tile loaded ahead; the ring waits a minute');
+          break;
+        }
+        loaded += 1;
+        warmCadastreFor(answer);
+      }
+    } finally {
+      _dpePrefetchRunning = false;
+      if (loaded) {
+        console.log(`[dpe-proxy] ahead: ${loaded} tile(s) around the view in ${((Date.now() - startedAt) / 1000).toFixed(1)} s`);
+      }
+    }
+  }
+
+  /** A commune's sections, decoded and indexed, from the shared section files. */
+  const _dpeSectionLocators = new Map();
+  async function dpeSectionLocator(code) {
+    if (_dpeSectionLocators.has(code)) return _dpeSectionLocators.get(code);
+    const index = await loadCommuneSections(code);
+    const shapes = [];
+    for (const [id, encoded] of index) shapes.push({ id, parts: decodeParts(encoded) });
+    const locator = shapes.length ? createShapeLocator(shapes, { cellDeg: 0.005 }) : null;
+    // Only a real answer is kept: an empty index is a download that failed,
+    // and `loadCommuneSections` has already forgotten it.
+    if (locator) {
+      _dpeSectionLocators.set(code, locator);
+      while (_dpeSectionLocators.size > SECTION_INDEX_MAX) {
+        _dpeSectionLocators.delete(_dpeSectionLocators.keys().next().value);
+      }
+    }
+    return locator;
+  }
+
+  /**
+   * A `locate` over several communes' shapes: inside first, in the point's
+   * own commune before the others, then the nearest edge within `snapM`.
+   * A diagnostic filed under Lyon 2e may stand on a parcel of Lyon 1er when
+   * its door is on the boundary street, so no commune is ruled out.
+   */
+  function combinedLocate(locators, snapM) {
+    return (point, { snap = true } = {}) => {
+      const own = locators.get(point.insee);
+      const order = own ? [own, ...[...locators.values()].filter((entry) => entry !== own)]
+        : [...locators.values()];
+      for (const locator of order) {
+        const hit = locator.locate(point.lon, point.lat);
+        if (hit) return hit;
+      }
+      if (!snap) return null;
+      let best = null;
+      for (const locator of order) {
+        const hit = locator.locate(point.lon, point.lat, { snapM });
+        if (hit && (!best || hit.distanceM < best.distanceM)) best = hit;
+      }
+      return best;
+    };
+  }
+
+  /** A shape's rings, from whichever of the box's communes indexed it. */
+  function partsFrom(locators, id) {
+    for (const locator of locators.values()) {
+      const parts = locator.partsOf(id);
+      if (parts) return parts;
+    }
+    return null;
+  }
+
+  /** The letters of a box, summed from its points. */
+  function boxDistribution(points) {
+    const counts = emptyLetterCounts();
+    let ungraded = 0;
+    for (const point of points) {
+      for (let i = 0; i < counts.length; i += 1) counts[i] += point.counts[i] || 0;
+      ungraded += point.ungraded || 0;
+    }
+    return {
+      distribution: Object.fromEntries(DPE_LABELS.map((letter, i) => [letter, counts[i]])),
+      graded: letterCountsTotal(counts),
+      ungraded,
+    };
+  }
+
+  /**
+   * Place a box's points on the shapes of the communes they name, and report
+   * the four ways a diagnostic can land. Shared by both bands.
+   */
+  async function placeBoxPoints(points, { loadLocator, codesFor, snapM, refine = null }) {
+    const registerCodes = new Set(points.map((point) => point.insee).filter(Boolean));
+    const codes = codesFor([...registerCodes]);
+    const locators = new Map();
+    const missing = [];
+    // Two at a time: a Paris box is four to six arrondissement files, and six
+    // ~600 KB downloads in one burst is not a thing to ask of a public host.
+    const loaded = await mapWithConcurrency(codes, 2, async (code) => [code, await loadLocator(code)]);
+    for (const [code, locator] of loaded) {
+      if (locator) locators.set(code, locator);
+      else missing.push(code);
+    }
+    const locate = combinedLocate(locators, snapM);
+    const placed = placeDpePointsOnShapes(points, refine
+      ? (point) => refine(point, locate(point), locate)
+      : locate);
+    return { placed, locators, missing, codes };
+  }
+
+  /**
+   * The parcel band: every parcel a diagnostic in the box stands on.
    * @param {object} box @param {object} band
    * @returns {Promise<?object>}
    */
-  async function loadDpeCells(box, band) {
-    const tiles = scanTiles(box, band.tileDeg);
-    const cells = [];
-    let total = 0;
-    let poor = 0;
-    let truncated = false;
-    let missing = 0;
+  async function loadDpeParcels(box, band, mask, point) {
+    // Only the tiles the reader's screen shows (`scanRegime.readScanTileMask`).
+    const tilesInBox = scanTiles(box, band.tileDeg);
+    const tiles = tilesInBox.filter((tile, index) => mask[index]);
+    // Two at a time, and the cadastre asked for as soon as a tile names its
+    // communes. The wait is the ADEME's — Bordeaux centre, cold: 4.7 s of rows,
+    // then 0.9 s of cadastre, then 37 ms of placement — and it is a matter of
+    // ROWS, not of calls: measured on 2026-09-22 over untouched tiles, 1 row
+    // answers in 0.10–0.17 s, 500 in 0.15–0.25 s, ~5 000 in 0.65–1.0 s, and the
+    // register gets through 0.14–0.31 ms per row whether it is asked one, two
+    // or four tiles at a time. More in flight wins nothing, so it is not asked
+    // of a free public service; what can be won is the cadastre, started
+    // under the wait instead of after it.
     const answers = await mapWithConcurrency(tiles, 2, async (tile) => {
-      const [totals, poorOnly] = await Promise.all([
-        fetchAddressSource(buildDpeCellUrl({ box: tile })),
-        fetchAddressSource(buildDpeCellUrl({ box: tile, poorOnly: true })),
-      ]);
-      // The denominator is the answer; without it the tile has nothing to say.
-      // A missing NUMERATOR is different and survivable — every cell of that
-      // tile reads as "no F or G found", which is what a zero count means.
-      if (!totals) return null;
-      return projectDpeCells(totals, poorOnly);
+      const answer = await loadDpeTilePoints(tile);
+      warmCadastreFor(answer);
+      return answer;
     });
-    // MERGED BY GEOHASH KEY, NEVER CONCATENATED. A geohash cell does not
-    // respect our tile grid: one straddling two tiles comes back TWICE, each
-    // copy counting only the rows on its own side. Concatenating them threw —
-    // `An entity with id dpe-cell:u05kqke already exists in this collection` —
-    // and even without the throw it would have published a share computed on
-    // half a denominator. Summing both halves is the only reading that makes
-    // the cell what it claims to be.
-    const byKey = new Map();
+    // Merged by GEOCODE, first copy kept. A point on a tile edge comes back in
+    // both tiles — data-fair's bbox is inclusive — and the two copies are the
+    // same rows, so adding them would double a doorway's diagnostics.
+    const merged = new Map();
+    let missing = 0;
+    let partial = 0;
+    let withoutPoint = 0;
     for (const answer of answers) {
       if (!answer) { missing += 1; continue; }
-      total += answer.total;
-      poor += answer.poor;
-      truncated = truncated || answer.truncated;
-      for (const cell of answer.cells) {
-        const held = byKey.get(cell.key);
-        if (!held) { byKey.set(cell.key, { ...cell }); continue; }
-        // The centroid is a mean of positions, so the halves are recombined by
-        // WEIGHT. Averaging the two centroids unweighted would put the disc of
-        // a cell that is 90 % in one tile halfway into the other.
-        const weight = held.total + cell.total;
-        held.lon = Number((((held.lon * held.total) + (cell.lon * cell.total)) / weight).toFixed(6));
-        held.lat = Number((((held.lat * held.total) + (cell.lat * cell.total)) / weight).toFixed(6));
-        held.total = weight;
-        held.poor += cell.poor;
+      if (answer.partial) partial += 1;
+      withoutPoint += answer.withoutPoint || 0;
+      for (const point of answer.points) {
+        const key = `${point.lat},${point.lon}`;
+        if (!merged.has(key)) merged.set(key, point);
       }
     }
-    for (const cell of byKey.values()) {
-      // Recomputed, never carried: each half arrived with a share of its own
-      // and neither of them describes the whole cell.
-      cell.poorShare = cell.total >= DPE_CELL_MIN_TOTAL
-        ? Math.round((cell.poor / cell.total) * 1000) / 10
-        : null;
-      cells.push(cell);
+    if (missing === tiles.length) return null;
+    const points = [...merged.values()];
+    const { placed, locators, missing: communesMissing } = await placeBoxPoints(points, {
+      loadLocator: dpeParcelLocator,
+      codesFor: cadastreCodesFor,
+      snapM: DPE_PARCEL_SNAP_M,
+    });
+    const parcels = [];
+    for (const shape of placed.shapes.values()) {
+      const parts = partsFrom(locators, shape.id);
+      if (!parts) continue;
+      parcels.push({
+        ...finishDpeShape(shape),
+        communeCode: String(shape.id).slice(0, 5),
+        parts: encodeParts(parts),
+      });
     }
-    if (!cells.length && missing === tiles.length) return null;
-    cells.sort((a, b) => b.total - a.total);
+    // The reader's answer is built; the ground around it goes into the queue.
+    scheduleDpePrefetch(tiles, band.tileDeg, point);
+    const { distribution, graded, ungraded } = boxDistribution(points);
     return {
-      box,
+      // What was LOADED, so the drawn edge and the key's span describe it; the
+      // box it was cut from travels beside it.
+      box: scanTilesBox(tiles),
+      scanBox: box,
       band: band.id,
-      cells,
+      parcels,
       summary: {
-        basis: 'cells',
-        cells: cells.length,
-        total,
-        poor,
-        poorShare: total ? Math.round((poor / total) * 1000) / 10 : null,
+        basis: 'parcels',
+        parcels: parcels.length,
+        total: graded + ungraded,
+        graded,
+        ungraded,
+        distribution,
+        inside: placed.inside,
+        snapped: placed.snapped,
+        unplaced: placed.unplaced,
+        withoutPoint,
+        communesMissing,
+        tiles: tiles.length,
+        tilesInBox: tilesInBox.length,
+        tilesMissing: missing,
+        tilesPartial: partial,
+      },
+    };
+  }
+
+  /**
+   * The section band: every cadastral section a 50 m square of the register
+   * falls in, each painted by its own diagnostics.
+   * @param {object} box @param {object} band
+   * @returns {Promise<?object>}
+   */
+  async function loadDpeSections(box, band, mask) {
+    const tilesInBox = scanTiles(box, band.tileDeg);
+    const tiles = tilesInBox.filter((tile, index) => mask[index]);
+    const answers = await mapWithConcurrency(tiles, 2, loadDpeTileGrid);
+    // Merged by SQUARE, and SUMMED — the opposite of the parcel band, and for
+    // the opposite reason: a 50 m square does not respect our tile grid, and
+    // each tile counts only the rows on its own side of the line.
+    const merged = new Map();
+    let missing = 0;
+    let truncated = false;
+    let outside = 0;
+    for (const answer of answers) {
+      if (!answer) { missing += 1; continue; }
+      truncated = truncated || answer.truncated === true;
+      outside += answer.outside || 0;
+      for (const point of answer.points) {
+        const held = merged.get(point.key);
+        if (!held) {
+          merged.set(point.key, { ...point, counts: [...point.counts] });
+          continue;
+        }
+        for (let i = 0; i < held.counts.length; i += 1) held.counts[i] += point.counts[i] || 0;
+        held.ungraded += point.ungraded || 0;
+      }
+    }
+    if (missing === tiles.length) return null;
+    const points = [...merged.values()];
+    const { placed, locators, missing: communesMissing } = await placeBoxPoints(points, {
+      loadLocator: dpeSectionLocator,
+      codesFor: cadastreCodesFor,
+      snapM: DPE_SECTION_SNAP_M,
+      // Whether the WHOLE square lies in the section its centre fell in: its
+      // four corners, half a metre in, tested inside only. See
+      // `DPE_SECTION_MIN_GRADED` for what it guards against.
+      refine: (point, hit, locate) => {
+        if (!hit?.inside || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return hit;
+        const far = DPE_GRID_M - 0.5;
+        for (const [dx, dy] of [[0.5, 0.5], [far, 0.5], [0.5, far], [far, far]]) {
+          const corner = lambert93ToWgs84(point.x + dx, point.y + dy);
+          const at = locate({ lon: corner.lon, lat: corner.lat, insee: point.insee }, { snap: false });
+          if (at?.id !== hit.id) return { ...hit, whole: false };
+        }
+        return { ...hit, whole: true };
+      },
+    });
+    const sections = [];
+    for (const shape of placed.shapes.values()) {
+      const parts = partsFrom(locators, shape.id);
+      if (!parts) continue;
+      // A grid square carries no address, so a section never names one.
+      const { addresses: _addresses, moreAddresses: _more, ...record } = finishDpeShape(shape);
+      sections.push({
+        ...record,
+        communeCode: String(shape.id).slice(0, 5),
+        parts: encodeParts(parts),
+      });
+    }
+    // The name of each commune drawn, for the section cards: « Section AB ·
+    // Lyon 2e Arrondissement ». The register publishes codes only, so each is
+    // named once through the BAN at one of its own squares — memoised, and a
+    // name that does not come back leaves the code on the card.
+    const names = {};
+    const firstPoint = new Map();
+    for (const point of points) if (point.insee && !firstPoint.has(point.insee)) firstPoint.set(point.insee, point);
+    const drawnCodes = [...new Set(sections.map((section) => section.communeCode))];
+    await mapWithConcurrency(drawnCodes, 3, async (code) => {
+      const point = firstPoint.get(code);
+      if (!point) return;
+      const commune = await resolveCommuneCode(point.lon, point.lat).catch(() => null);
+      if (!commune?.name) return;
+      // The BAN names a Lyon arrondissement « Lyon », which would put nine
+      // different sections under one name; INSEE's own name carries the rank
+      // (« Lyon 7e Arrondissement »), the form the price layer prints too.
+      // 75101–75120 and 13201–13216 end in the rank; Lyon runs 69381–69389.
+      const rank = code.startsWith('6938') ? Number(code.slice(-1)) : Number(code.slice(-2));
+      names[code] = isArrondissementCode(code) && !/arrondissement/i.test(commune.name)
+        ? `${commune.name} ${rank}${rank === 1 ? 'er' : 'e'} Arrondissement` // i18n-ignore-line — an INSEE name
+        : commune.name;
+    });
+    const { distribution, graded, ungraded } = boxDistribution(points);
+    return {
+      box: scanTilesBox(tiles),
+      scanBox: box,
+      band: band.id,
+      sections,
+      communeNames: names,
+      summary: {
+        basis: 'sections',
+        sections: sections.length,
+        total: graded + ungraded,
+        graded,
+        ungraded,
+        distribution,
+        inside: placed.inside,
+        snapped: placed.snapped,
+        unplaced: placed.unplaced,
+        outside,
+        gridM: DPE_GRID_M,
+        communesMissing,
         truncated,
         tiles: tiles.length,
+        tilesInBox: tilesInBox.length,
         tilesMissing: missing,
       },
     };
@@ -24729,16 +25239,26 @@ function dpeProxy() {
       const cellScan = readScanCellBox(url.searchParams);
       if (cellScan) {
         const { box, band } = cellScan;
+        // The shape is the band's, as for the prices: parcels on the fine
+        // band, sections on the coarse one (`SCAN_BANDS[].dvfUnit`, which
+        // names the cadastre's unit and is the same for both layers).
+        const unit = band.dvfUnit === 'sections' ? 'sections' : 'parcels';
+        const mask = readScanTileMask(url.searchParams, box, band);
         return {
-          key: `dpe-cells|${scanBoxKey(box)}|${band.id}`,
-          load: () => loadDpeCells(box, band),
+          // `dpe-area`, not `dpe-cells`: the answer changed shape on
+          // 2026-09-22, and a key that outlived it would serve discs to a
+          // client that no longer draws them.
+          key: `dpe-area|${scanBoxKey(box)}|${band.id}|${mask.map(Number).join('')}`,
+          load: () => asForeground(() => (unit === 'sections'
+            ? loadDpeSections(box, band, mask)
+            : loadDpeParcels(box, band, mask, point))),
         };
       }
       const radiusM = clampDpeRadius(url.searchParams.get('radius'));
       const limit = Number.parseInt(url.searchParams.get('limit') || '', 10) || 100;
       return {
         key: addressCacheKey('dpe', point, radiusM, limit),
-        load: async () => {
+        load: () => asForeground(async () => {
           const payload = await fetchAddressSource(buildDpeUrl({ ...point, radiusM, limit }));
           if (!payload) return null;
           const projected = projectDpe(payload, { radiusM });
@@ -24750,7 +25270,7 @@ function dpeProxy() {
             console.warn('[dpe-proxy] sites unresolved:', error?.message || error);
             return projected;
           }
-        },
+        }),
       };
     });
   }

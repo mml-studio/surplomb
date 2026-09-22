@@ -228,157 +228,347 @@ export function projectDpe(payload, { radiusM } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// The cell regime — one mark per patch of ground, not per diagnostic
+// The area regimes — the cadastre's own shapes, painted on the DPE scale
 // ---------------------------------------------------------------------------
 /**
- * Rows the ADEME will aggregate into geohash buckets in one answer.
+ * Above 600 m the layer paints the CADASTRE, the way the price layer does:
+ * every parcel that holds a diagnostic from 600 m to 1 800 m, every cadastral
+ * section above. Until 2026-09-22 it drew discs over geohash cells, sized by
+ * their count and coloured by their share of F and G; the operator asked for
+ * « directement les parcelles des bâtiments concernés », on the A–G scale.
  *
- * data-fair caps this at 100 and MEASURED headroom is wide: a 0.01° tile over
- * central Lyon returns 32 buckets and a 0.04° one 39. A tile that came back at
- * exactly the cap would be truncated, so the projection reports it rather than
- * drawing a partial grid as if it were whole.
+ * The register names no parcel and no section, so both are reached BY
+ * GEOMETRY: a diagnostic's BAN point, placed on the shape it stands on
+ * (`shapeLocator.js`, which also holds the measurements behind its 3 m snap).
+ * What differs between the two bands is how the points are read.
  */
-export const DPE_AGG_MAX_CELLS = 100;
 
 /**
- * The letters this layer counts as *passoires thermiques*.
+ * The fields a box's diagnostics are read with in the parcel band.
  *
- * F and G, which is the definition with a legal consequence attached to it —
- * the one cut of this register a reader acts on — and the same one
- * `dpeFrance.js` already makes on a building's card.
+ * FOUR, NOT THE DISC REGIME'S FIFTEEN. The shape only needs where and which
+ * letter; the commune says whose cadastre to load; the address is what the
+ * card of a parcel is titled with. Measured on one 0.01° tile of Lyon 1er
+ * (8 338 rows): 128 KB gzipped without the address, 177 KB with it.
  */
-export const DPE_POOR_LABELS = Object.freeze(['F', 'G']);
+export const DPE_AREA_FIELDS = Object.freeze([
+  '_geopoint',
+  'etiquette_dpe',
+  'code_insee_ban',
+  'adresse_ban',
+]);
+
+/** The largest page data-fair serves. */
+export const DPE_TILE_PAGE_SIZE = 10_000;
 
 /**
- * Share of F and G across the WHOLE register, the anchor the cell colours are
- * read against.
+ * Pages read per 0.01° tile, at most.
  *
- * **9.75 %** — 967 510 F and 549 691 G out of 15 557 428 labelled diagnostics,
- * measured against `values_agg` on 2026-09-14.
- *
- * IT IS A PROPERTY OF THE REGISTER, NOT OF THE HOUSING STOCK, and the legend
- * has to say so. A DPE is compulsory on a sale or a new let, so the register
- * over-represents dwellings that changed hands recently and under-represents
- * the ones nobody has moved in thirty years. Calling this "9.75 % of French
- * housing" would be a different and unsupported claim.
+ * The densest tiles measured are Paris: 12 231 (11e), 11 953 (9e) and 14 074
+ * (15e) diagnostics — two pages. Four leaves room for a denser block and
+ * bounds what one camera settle can cost; a tile that needed a fifth is
+ * reported as truncated rather than drawn as if it were whole.
  */
-export const DPE_POOR_SHARE_NATIONAL = 9.75;
+export const DPE_TILE_MAX_PAGES = 4;
 
 /**
- * Fewest diagnostics a cell needs before its share of F and G is published.
+ * URL for one page of a tile's diagnostics, the fields above only.
  *
- * Eight. Below that one diagnostic moves the share by more than twelve points,
- * which is wider than every class break below — the number would be carrying
- * the sampling, not the block. The cell still draws, at the size its count
- * earns it, in the layer's unknown colour.
- */
-export const DPE_CELL_MIN_TOTAL = 8;
-
-/**
- * URL for one geohash aggregation over a box.
+ * `bbox` is `west,south,east,north`, data-fair's order. The next page is the
+ * `next` link the answer carries (an `after` cursor), never a `page` number:
+ * data-fair refuses to page past 10 000 rows by number.
  *
- * WHY `geo_agg` AND NOT PAGES OF ROWS. Measured on 2026-09-14 over one Lyon
- * viewport: the raw rows are ~12 000 diagnostics, twelve pages and about 10 MB;
- * the same ground as buckets is **5.3 KB in one request**, a factor of roughly
- * two thousand. Nothing is lost that the drawing could have used — at this
- * altitude a reader cannot resolve a building, and a mark per diagnostic is ink
- * spent on a distinction the screen cannot carry.
- *
- * THE CELL SIZE IS NOT ASKED FOR. data-fair picks the geohash precision from
- * the span of the bbox, and the bands in `scanRegime.js` are built around what
- * it picks: a 0.01° box is answered in precision 7 (107 × 152 m cells at this
- * latitude) and a 0.04° box in precision 6 (853 × 607 m). So the cells get
- * coarser as the camera climbs without either side negotiating a resolution.
- *
- * @param {{box: {south: number, west: number, north: number, east: number},
- *   poorOnly?: boolean}} query
+ * @param {{box: {south: number, west: number, north: number, east: number}}} query
  * @returns {string}
  */
-export function buildDpeCellUrl({ box, poorOnly = false }) {
+export function buildDpeTileRowsUrl({ box }) {
   if (!box || ![box.south, box.west, box.north, box.east].every(Number.isFinite)) {
-    throw new Error('dpe: a cell scan needs a finite box');
+    throw new Error('dpe: a tile scan needs a finite box');
   }
   const params = new URLSearchParams({
     bbox: `${box.west},${box.south},${box.east},${box.north}`,
-    agg_size: String(DPE_AGG_MAX_CELLS),
-    // Zero sample rows per bucket. Left at its default the same call answered
-    // in 10.6 MB, because data-fair embeds a full 230-field row in every
-    // bucket — the single most expensive default in this feed.
-    size: '0',
+    size: String(DPE_TILE_PAGE_SIZE),
+    select: DPE_AREA_FIELDS.join(','),
   });
-  if (poorOnly) params.set('qs', `etiquette_dpe:(${DPE_POOR_LABELS.join(' OR ')})`);
-  return `${API_ROOT}/geo_agg?${params}`;
+  return `${API_ROOT}/lines?${params}`;
+}
+
+/** Seven zeros, one per letter, in {@link DPE_LABELS} order. */
+export function emptyLetterCounts() {
+  return [0, 0, 0, 0, 0, 0, 0];
+}
+
+/** Sum of a seven-letter count array. */
+export function letterCountsTotal(counts) {
+  let total = 0;
+  for (const n of counts || []) total += Number(n) || 0;
+  return total;
 }
 
 /**
- * Join one tile's two aggregations into cells.
+ * Fold rows into POINTS — one per distinct BAN geocode, with its letters.
  *
- * TWO CALLS, ONE PER NUMERATOR AND DENOMINATOR, joined on the geohash key. The
- * alternative — a nested aggregation returning the seven letters per bucket —
- * is not something this API exposes, and counting the letters ourselves would
- * mean downloading the rows this whole regime exists to avoid.
+ * A block of flats files one diagnostic per sale on the same geocode, so this
+ * is where the volume goes: 8 338 rows over Lyon 1er are 1 107 points. The
+ * point keeps the commune the register filed it under (whose cadastre it will
+ * be looked up in) and the address it was filed at.
  *
- * `poorShare` IS NULL, NEVER ZERO, BELOW {@link DPE_CELL_MIN_TOTAL}. A cell
- * holding three diagnostics of which none is an F has not shown that its block
- * is sound; it has shown that three flats were sold there. The two are drawn
- * differently — see the layer's unknown class.
- *
- * @param {?object} totals Unfiltered `geo_agg` body.
- * @param {?object} poor The same call filtered to F and G.
- * @returns {{cells: Array<object>, total: number, poor: number, truncated: boolean}}
+ * @param {Array<object>} rows `/lines` results with {@link DPE_AREA_FIELDS}.
+ * @param {Map<string, object>} [into] Points already folded, merged into.
+ * @returns {{points: Map<string, object>, withoutPoint: number}}
  */
-export function projectDpeCells(totals, poor) {
-  const poorByKey = new Map();
-  for (const bucket of poor?.aggs || []) {
-    if (bucket?.value) poorByKey.set(String(bucket.value), Number(bucket.total) || 0);
+export function reduceDpeRowsToPoints(rows, into = new Map()) {
+  let withoutPoint = 0;
+  for (const row of rows || []) {
+    const key = String(row?._geopoint ?? '').trim();
+    const at = parseGeopoint(key);
+    if (!at) { withoutPoint += 1; continue; }
+    let point = into.get(key);
+    if (!point) {
+      point = {
+        lon: at.lon,
+        lat: at.lat,
+        insee: String(row?.code_insee_ban ?? '').trim() || null,
+        address: String(row?.adresse_ban ?? '').trim() || null,
+        counts: emptyLetterCounts(),
+        ungraded: 0,
+      };
+      into.set(key, point);
+    }
+    const index = DPE_LABELS.indexOf(label(row?.etiquette_dpe));
+    if (index >= 0) point.counts[index] += 1;
+    else point.ungraded += 1;
   }
-  const cells = [];
-  for (const bucket of totals?.aggs || []) {
-    const key = String(bucket?.value ?? '');
-    const total = Number(bucket?.total);
-    const box = Array.isArray(bucket?.bbox) && bucket.bbox.length === 4 ? bucket.bbox : null;
-    if (!key || !Number.isFinite(total) || total <= 0 || !box) continue;
-    const centroid = bucket.centroid || bucket.center || null;
-    const lon = Number(centroid?.lon);
-    const lat = Number(centroid?.lat);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-    const poorCount = poorByKey.get(key) || 0;
-    cells.push({
-      key,
-      lon: Number(lon.toFixed(6)),
-      lat: Number(lat.toFixed(6)),
-      west: box[0],
-      south: box[1],
-      east: box[2],
-      north: box[3],
-      total,
-      poor: poorCount,
-      poorShare: total >= DPE_CELL_MIN_TOTAL
-        ? Math.round((poorCount / total) * 1000) / 10
-        : null,
-    });
+  return { points: into, withoutPoint };
+}
+
+/**
+ * How far off a parcel's edge a diagnostic's point may stand and still be
+ * placed on it, in metres. See `shapeLocator.js` for the measurement: over
+ * Lyon 1er, 534 of 1 107 points stood within 2 m of a parcel and outside it
+ * — on the front door's line, facing the street.
+ */
+export const DPE_PARCEL_SNAP_M = 3;
+
+/**
+ * How far off a section a 50 m grid square's centre may stand. Half the
+ * square's diagonal: a square whose centre falls on a road between two
+ * sections still holds addresses, and they are on one side or the other.
+ */
+export const DPE_SECTION_SNAP_M = 36;
+
+/**
+ * Place points on shapes and add up each shape's letters.
+ *
+ * One function for both bands — a point is a geocode in the parcel band and a
+ * grid square in the section band — so both count the same four things: the
+ * diagnostics placed INSIDE a shape, those placed by the snap, those placed
+ * nowhere, and the points behind the last.
+ *
+ * @param {Iterable<object>} points `{lon, lat, insee, counts, ungraded, address?}`.
+ * @param {(point: object) => ?{id: string, inside: boolean, whole?: boolean}} locate
+ *   Given the whole point, so a caller can look in the commune the register
+ *   filed it under before the others. `whole` is the section band's: the
+ *   grid square lies ENTIRELY inside the shape, not just its centre.
+ * @returns {{shapes: Map<string, object>, inside: number, snapped: number,
+ *   unplaced: number, unplacedPoints: number}}
+ */
+export function placeDpePointsOnShapes(points, locate) {
+  const shapes = new Map();
+  let inside = 0;
+  let snapped = 0;
+  let unplaced = 0;
+  let unplacedPoints = 0;
+  for (const point of points || []) {
+    const total = letterCountsTotal(point.counts) + (point.ungraded || 0);
+    if (!total) continue;
+    const hit = locate(point);
+    if (!hit) {
+      unplaced += total;
+      unplacedPoints += 1;
+      continue;
+    }
+    let shape = shapes.get(hit.id);
+    if (!shape) {
+      shape = {
+        id: hit.id, counts: emptyLetterCounts(), ungraded: 0, snapped: 0, whole: 0, addresses: new Map(),
+      };
+      shapes.set(hit.id, shape);
+    }
+    for (let i = 0; i < DPE_LABELS.length; i += 1) shape.counts[i] += point.counts[i] || 0;
+    if (hit.whole) shape.whole += letterCountsTotal(point.counts);
+    shape.ungraded += point.ungraded || 0;
+    if (hit.inside) inside += total;
+    else { snapped += total; shape.snapped += total; }
+    if (point.address) shape.addresses.set(point.address, (shape.addresses.get(point.address) || 0) + total);
   }
-  cells.sort((a, b) => b.total - a.total);
+  return { shapes, inside, snapped, unplaced, unplacedPoints };
+}
+
+/** Addresses a parcel's card names, busiest first. */
+export const DPE_PARCEL_MAX_ADDRESSES = 3;
+
+/**
+ * One placed shape, as it travels: the letters and the admissions, and its
+ * addresses capped, busiest first.
+ * @param {object} shape From {@link placeDpePointsOnShapes}.
+ * @returns {object}
+ */
+export function finishDpeShape(shape) {
+  const ranked = [...(shape?.addresses || new Map())]
+    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+    .map(([address]) => address);
   return {
-    cells,
-    total: Number(totals?.total) || 0,
-    poor: Number(poor?.total) || 0,
-    // At the cap the grid is a subset of the ground and says so. Never seen in
-    // eight measured city tiles; carried because a silent subset drawn as a
-    // whole is the failure this layer has spent the most comments avoiding.
-    truncated: (totals?.aggs || []).length >= DPE_AGG_MAX_CELLS,
+    id: shape.id,
+    counts: [...shape.counts],
+    ungraded: shape.ungraded,
+    snapped: shape.snapped,
+    ...(shape.whole ? { whole: shape.whole } : {}),
+    ...(ranked.length ? {
+      addresses: ranked.slice(0, DPE_PARCEL_MAX_ADDRESSES),
+      moreAddresses: Math.max(0, ranked.length - DPE_PARCEL_MAX_ADDRESSES),
+    } : {}),
   };
 }
 
 /**
- * Size classes for a DPE cell, per band, as counts of diagnostics.
+ * The grid the section band reads the register on, in Lambert-93 metres.
  *
- * MEASURED over 445 precision-7 cells across eight city tiles — Lyon, Paris,
- * Bordeaux, Marseille, Nantes, Grenoble, Reims — on 2026-09-14: median 79
- * diagnostics per cell, ninth decile 225, densest 404. The coarse band's
- * breaks are those scaled by the ~32× area ratio between the two precisions.
+ * WHY A GRID, AND NOT THE ROWS. A 0.08° box seen from above 1 800 m holds
+ * 227 114 diagnostics over Lyon, 513 554 over central Paris and 140 309 over
+ * Bordeaux–Mérignac (measured 2026-09-22) — 14 to 52 pages of rows per camera
+ * settle. The ADEME aggregates for us instead: `values_agg` nests a histogram
+ * on the register's own Lambert-93 coordinates (`coordonnee_cartographique_x_ban`
+ * / `_y_ban`) under the commune and over the letters, so one request per
+ * 0.04° tile returns every 50 m square that holds a diagnostic, with its seven
+ * counts. Central Paris, 102 104 diagnostics: 5 230 squares, 92 KB, 3.2 s,
+ * and the counts add up to the total exactly.
+ *
+ * FIFTY METRES, BECAUSE TWENTY-FIVE TRIPS THE CLUSTER. The same Paris tile at
+ * 25 m was refused twice with HTTP 429 and Elasticsearch's own « Data too
+ * large, data for [allocated_buckets] » — a circuit breaker on the ADEME's
+ * side, not a quota; Lyon passed at 25 m (17 870 squares, 117 KB). A square
+ * is placed whole on the section under its centre, so a square that straddles
+ * two sections gives all its diagnostics to one of them. Sections run 200 to
+ * 600 m across in a city; the error is at their edges, and the card says how
+ * each section's letters were counted.
  */
-export const DPE_CELL_BREAKS = Object.freeze({
-  fine: Object.freeze([15, 50, 100, 180, 300]),
-  coarse: Object.freeze([100, 400, 1_000, 2_000, 4_000]),
-});
+export const DPE_GRID_M = 50;
+
+/** Communes one grid request may name — a 0.04° tile of open country holds a score. */
+export const DPE_GRID_MAX_COMMUNES = 40;
+
+/**
+ * URL for one tile's grid.
+ * @param {{box: {south: number, west: number, north: number, east: number}}} query
+ * @returns {string}
+ */
+export function buildDpeGridUrl({ box }) {
+  if (!box || ![box.south, box.west, box.north, box.east].every(Number.isFinite)) {
+    throw new Error('dpe: a grid scan needs a finite box');
+  }
+  const params = new URLSearchParams({
+    field: 'code_insee_ban;coordonnee_cartographique_x_ban;coordonnee_cartographique_y_ban;etiquette_dpe',
+    interval: `value;${DPE_GRID_M};${DPE_GRID_M};value`,
+    // Histograms return every non-empty bucket whatever this says; the terms
+    // levels (communes, letters) are the ones it caps. Kept small on purpose:
+    // the breaker above is sized on what the request could allocate.
+    agg_size: `${DPE_GRID_MAX_COMMUNES};100;100;${DPE_LABELS.length}`,
+    bbox: `${box.west},${box.south},${box.east},${box.north}`,
+    // No sample rows per bucket — the same default that turned a 5 KB geohash
+    // answer into 10.6 MB.
+    size: '0',
+  });
+  return `${API_ROOT}/values_agg?${params}`;
+}
+
+/**
+ * The grid squares of one answer, as points on the square's centre.
+ *
+ * `toWgs84` is injected — `scripts/lib/lambert93.mjs` in the proxy — so this
+ * module stays free of projection arithmetic and a test can pass a plain
+ * function. A square whose centre does not come back inside France is not
+ * Lambert-93 at all (an overseas row keeps its local UTM coordinates in the
+ * same column) and is dropped and counted rather than drawn in the Atlantic.
+ *
+ * @param {?object} body `values_agg` answer.
+ * @param {(x: number, y: number) => {lon: number, lat: number}} toWgs84
+ * @param {(lon: number, lat: number) => boolean} [plausible]
+ * @returns {{points: Array<object>, total: number, outside: number, truncated: boolean}}
+ */
+export function projectDpeGrid(body, toWgs84, plausible = () => true) {
+  const points = [];
+  let outside = 0;
+  let truncated = Number(body?.total_other) > 0;
+  const half = DPE_GRID_M / 2;
+  for (const commune of body?.aggs || []) {
+    const insee = String(commune?.value ?? '').trim() || null;
+    if (Number(commune?.total_other) > 0) truncated = true;
+    for (const column of commune?.aggs || []) {
+      const x = Number(column?.value);
+      if (Number(column?.total_other) > 0) truncated = true;
+      for (const square of column?.aggs || []) {
+        const y = Number(square?.value);
+        const total = Number(square?.total) || 0;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || total <= 0) continue;
+        const counts = emptyLetterCounts();
+        for (const bucket of square?.aggs || []) {
+          const index = DPE_LABELS.indexOf(label(bucket?.value));
+          if (index >= 0) counts[index] += Number(bucket?.total) || 0;
+        }
+        const at = toWgs84(x + half, y + half);
+        if (!at || !plausible(at.lon, at.lat)) { outside += total; continue; }
+        points.push({
+          key: `${insee}|${x}|${y}`,
+          // The square's own corner, kept so the proxy can test whether the
+          // WHOLE square lies in one section (see DPE_SECTION_MIN_GRADED).
+          x,
+          y,
+          lon: at.lon,
+          lat: at.lat,
+          insee,
+          counts,
+          ungraded: Math.max(0, total - letterCountsTotal(counts)),
+        });
+      }
+    }
+  }
+  return { points, total: Number(body?.total) || 0, outside, truncated };
+}
+
+/**
+ * Fewest labelled diagnostics a SECTION must hold in grid squares lying
+ * WHOLLY inside it before it is painted.
+ *
+ * Three, the price layer's own floor for the same shape and for the same
+ * reason: a section's area is the cadastre's, and one house must not colour a
+ * hillside. A PARCEL has no floor — it is one building's ground, painted from
+ * what was filed there, exactly as the building is below 600 m.
+ *
+ * WHOLLY INSIDE, because a square astride two sections is given to the one
+ * under its centre, and that is where the grid can paint a section nobody
+ * lives in. Measured on 2026-09-22 against the rows placed point by point,
+ * over one 0.01° tile of Lyon 1er–2e: 40 % of the diagnostics sit in squares
+ * astride a boundary and 5.6 % end up in a neighbouring section; two sections
+ * holding NO diagnostic received 3 and 89 (a square, a quay), and were painted
+ * D. Counting only whole squares toward the floor turns both neutral, and
+ * every section still painted wears the same letter as the exact placement
+ * (14 of 14). The price of it is one real section of 25 diagnostics, too small
+ * to hold a whole square, drawn neutral.
+ */
+export const DPE_SECTION_MIN_GRADED = 3;
+
+/**
+ * Letters counted as *passoires thermiques* — F and G, the cut with a legal
+ * consequence attached, which the key reports beside the scale.
+ */
+export const DPE_POOR_LABELS = Object.freeze(['F', 'G']);
+
+/**
+ * Share of F and G across the WHOLE register — **9.75 %**, 967 510 F and
+ * 549 691 G out of 15 557 428 labelled diagnostics, measured against
+ * `values_agg` on 2026-09-14. A property of the register, not of the housing
+ * stock: a rating is compulsory on a sale or a new let, so the register
+ * over-represents what has changed hands recently.
+ */
+export const DPE_POOR_SHARE_NATIONAL = 9.75;
