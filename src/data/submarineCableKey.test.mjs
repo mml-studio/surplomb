@@ -122,6 +122,8 @@ test('on the globe, the card lists the first four cables and counts the rest', (
     title: 'Marseille',
     details: ['Point d’atterrissement · France', '6 câbles arrivent ici', 'A, B, C, D et 2 autres'],
   });
+  const five = withLocale('fr', () => landingCardLines({ id: 'm', name: 'Marseille, France' }, six.slice(0, 5)));
+  assert.equal(five.details[2], 'A, B, C, D et 1 autre');
 });
 
 test('the key and the card read in English', () => {

@@ -3296,14 +3296,21 @@ PART of its layer (`part` in the fusion table): `anfr-fr` is split into
 `coverage` (`{coverage: 'gaps'}` / `{coverage: 'off'}`). The manager keeps the
 layer following its parts (`_toggleFusionTile`): pressed with the layer off, a
 part comes on alone; the last lit part put out switches the layer off and
-back to the params the row lights it with (masts on, coverage off). `anfr-fr`
+back to the params the row lights it with (masts on, coverage off). While a
+part tile is switching the layer on, the layer counts as on for the next press
+(`_tileLayerOn`), so a double press is on-then-off and a second tile pressed in
+that window joins the first. A part the loaded module says it cannot draw
+(`tilePartNotice`: the coverage on a server without the pyramid, or whose map
+failed) is dimmed with the reason in its tooltip. `anfr-fr`
 gained the `masts` param, share-linked as `lo=an.m.0` and omitted while true,
 so every earlier link keeps its masts; with the masts out the layer asks the
 register nothing (no mesh, no supports), keys no mast class and drops a
 selected mast, while a read coverage spot stays open; a layer switched on with
 neither part lit shows its masts (`anfrMastsShownOnEnable`). The *Couverture
 4G* block is printed while the coverage is on, and its segments only choose
-the mode: a lit segment is no longer pressed again to remove the coverage.
+the mode: a lit segment sends its own mode again — nothing changes, the
+keyboard focus stays on it, and a map that failed to load is retried — and no
+longer removes the coverage.
 
 The submarine cables publish a key (`getRowControls`, words in
 `src/data/submarineCableKey.js`): « Tracé publié » as a stroke

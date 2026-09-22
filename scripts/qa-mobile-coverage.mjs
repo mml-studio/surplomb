@@ -183,6 +183,11 @@ async function main() {
     check('the coverage block has its two modes, « Sans 4G » lit',
       state.segments.length === 2 && state.segments[0].active === true,
       state.segments.map((segment) => `${segment.label}:${segment.active}`).join(' '));
+    // The key repaints on its own clock: wait for the tiles to be painted.
+    for (const until = Date.now() + 15_000; state.tile === null && Date.now() < until;) {
+      await sleep(500);
+      state = await coverageState(page);
+    }
     check('the Antennes tile in the key is lit', state.tile === 'true', String(state.tile));
     check('and so is the Couverture 4G tile', state.coverageTile === 'true', String(state.coverageTile));
     check('an imagery layer is on the globe', state.stats.drawn === true);

@@ -262,7 +262,7 @@ export function landingCardLines(landing, cables) {
   if (cables.length) details.push(m.count(formatNumber(cables.length), cables.length));
   const names = cables.slice(0, GLOBE_CARD_CABLES).map((cable) => cable.name).join(', ');
   const rest = cables.length - GLOBE_CARD_CABLES;
-  if (names) details.push(rest > 0 ? `${names} ${m.more(formatNumber(rest))}` : names);
+  if (names) details.push(rest > 0 ? `${names} ${m.more(formatNumber(rest), rest)}` : names);
   details.push(...panel.lines);
   return { title: panel.title, details };
 }

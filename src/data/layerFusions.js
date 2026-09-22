@@ -200,10 +200,13 @@ function declaredChip(entry, layerId, own) {
  * member split this way lists one tile per part, never a whole-layer tile
  * beside them. Each part names the layer params that light it (`on`) and put
  * it out (`off`), which must be options the share link already carries, so a
- * link keeps what the tiles say. `lit` says whether the ROW's toggle lights
- * that part — the state the layer comes back in when its last lit part is put
- * out — so at least one part per layer has it, or the row toggle would switch
- * on a layer that draws nothing. The label and tooltip of a part come from the
+ * link keeps what the tiles say. `lit` says which parts the layer is lit with
+ * by default — the state it goes back to when its last lit part is put out, so
+ * that the row's toggle then lights it the way it always has; at least one
+ * part per layer has it, or that toggle would switch on a layer that draws
+ * nothing. (The row's toggle itself restores whatever the reader left: put out
+ * and back on, a row showing the coverage alone shows it alone again.) The
+ * label and tooltip of a part come from the
  * catalog's `tiles` entry (`<id>:<part>`), and fall back to the member's chip.
  *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It

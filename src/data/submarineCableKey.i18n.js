@@ -56,9 +56,9 @@ export default defineMessages({
     },
     /** The globe card's list, when the key cannot carry the card. */
     more: {
-      fr: (count) => `et ${count} autres`,
-      en: (count) => `and ${count} more`,
-      sample: ['9'],
+      fr: (count, n) => (n === 1 ? 'et 1 autre' : `et ${count} autres`),
+      en: (count, n) => (n === 1 ? 'and 1 more' : `and ${count} more`),
+      sample: ['9', 9],
     },
   },
 });

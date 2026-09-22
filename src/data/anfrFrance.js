@@ -2834,7 +2834,10 @@ function coverageKeyBlock() {
       active: active && !failed,
       busy: active && loading,
       title: segmentTitle,
-      toggle: active ? null : { param: 'coverage', value },
+      // A lit segment sends its own mode again: nothing changes, but it stays
+      // a control, so the keyboard focus a press left on it is not dropped
+      // when the key repaints — and a mode that failed to load is retried.
+      toggle: { param: 'coverage', value: active ? _coverageMode : value },
     };
   };
   const block = {
@@ -3139,6 +3142,20 @@ const anfrFranceLayer = {
   },
 
   /**
+   * Why the key's tile for one part of this layer cannot draw here, or null —
+   * the coverage on a server without the map, or whose map failed to load.
+   * Read by the manager for the « Couverture 4G » tile.
+   * @param {string} part `masts` or `coverage`.
+   * @returns {?string}
+   */
+  tilePartNotice(part) {
+    if (part !== 'coverage') return null;
+    if (_coverageStatus === 'missing') return coverageMessages().block.missing;
+    if (_coverageStatus === 'failed') return coverageMessages().block.failed;
+    return null;
+  },
+
+  /**
    * The key's close on either card: the same dismissal as Escape, or as a
    * click on empty ground.
    * @returns {boolean} Whether there was a card to close.
@@ -3161,6 +3178,11 @@ const anfrFranceLayer = {
    * @returns {boolean}
    */
   setParams(params = {}) {
+    // The same mode again retries a map that failed to load, and does nothing else.
+    if (params.coverage !== undefined && normalizeCoverageMode(params.coverage) === _coverageMode
+        && _coverageMode !== 'off' && _coverageStatus === 'failed') {
+      void applyCoverage();
+    }
     if (params.masts !== undefined) {
       const masts = normalizeMastsParam(params.masts);
       if (masts === null) return false;

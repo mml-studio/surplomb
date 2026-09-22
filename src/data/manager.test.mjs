@@ -4240,6 +4240,15 @@ function makePeerPanel() {
     // Same fire-and-forget shape as `click` below, through the key's own
     // delegated listener.
     antennaParams,
+    /** Press without waiting: two of these in a row are a double press. */
+    pressTileNow: (id, part = null) => {
+      const tile = findAll(legendItems, '.map-legend-tile')
+        .find((node) => node.dataset.tileLayer === id && (node.dataset.tilePart || null) === part);
+      legendItems.listeners.get('click')[0]({ target: tile });
+    },
+    settle: async () => {
+      for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+    },
     pressTile: async (id, part = null) => {
       const tile = findAll(legendItems, '.map-legend-tile')
         .find((node) => node.dataset.tileLayer === id && (node.dataset.tilePart || null) === part);
@@ -4404,8 +4413,35 @@ test('the 4G coverage is a tile of its own: the antennas follow their two parts,
     panel.mgr._refreshTogglePanel();
     assert.equal(globalThis.document.activeElement?.dataset.tilePart, 'coverage');
 
+    // A double press is on then off, and the params the row lights the layer
+    // with come back; a second tile pressed while the first is switching the
+    // layer on joins it rather than replacing it.
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    panel.pressTileNow('anfr-fr', 'coverage');
+    panel.pressTileNow('anfr-fr', 'coverage');
+    await panel.settle();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    assert.deepEqual(panel.antennaParams, { coverage: 'off', masts: true });
+    panel.pressTileNow('anfr-fr', 'coverage');
+    panel.pressTileNow('anfr-fr', 'masts');
+    await panel.settle();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
+    assert.deepEqual(panel.antennaParams, { coverage: 'gaps', masts: true });
+
+    // A part the layer says it cannot draw here is dimmed, and says why.
+    const module = panel.mgr.layers.get('anfr-fr').module;
+    module.tilePartNotice = (part) => (part === 'coverage' ? 'Carte indisponible sur ce serveur.' : null);
+    panel.mgr._refreshTogglePanel();
+    const dimmed = panel.tiles().find((tile) => tile.dataset.tilePart === 'coverage');
+    assert.ok(dimmed.className.includes('is-offcoverage'));
+    assert.match(dimmed.title, /Carte indisponible sur ce serveur\.$/);
+    assert.ok(!panel.tiles().find((tile) => tile.dataset.tilePart === 'masts').className.includes('is-offcoverage'));
+    delete module.tilePartNotice;
+
     // Off its territory the layer opens with a briefing; turned down, it
     // leaves the layer off with the params the row lights it with.
+    await panel.pressTile('anfr-fr', 'masts');
     await panel.pressTile('anfr-fr', 'coverage');
     assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
     panel.mgr._shouldBriefCoverage = () => true;

@@ -140,15 +140,16 @@ test('no chip on the row, and no coverage block while the coverage is off — it
   assert.equal(coverageBlock(), undefined, '« Couverture 4G » is a tile, not a block waiting to be pressed');
 });
 
-test('the segments choose what the coverage paints; a lit one is not a control, and the operators follow « Par opérateur »', () => {
+test('the segments choose what the coverage paints; a lit one changes nothing, and the operators follow « Par opérateur »', () => {
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: META, enabled: true });
   let block = coverageBlock();
   assert.equal(block.title, 'Couverture 4G');
   assert.deepEqual(block.legendSegments.map((segment) => segment.label), ['Sans 4G', 'Par opérateur']);
   let [gaps, byOperator] = block.legendSegments;
   assert.equal(gaps.active, true);
-  // Pressing it would change nothing: the tile is what takes the coverage away.
-  assert.equal(gaps.toggle, null);
+  // Pressing it sends the same mode — nothing changes, and it stays a control
+  // so the keyboard focus is kept; the tile is what takes the coverage away.
+  assert.deepEqual(gaps.toggle, { param: 'coverage', value: 'gaps' });
   assert.equal(byOperator.active, false);
   assert.deepEqual(byOperator.toggle, { param: 'coverage', value: 'orange' },
     '« Par opérateur » opens on Orange before any operator was shown');
@@ -158,7 +159,7 @@ test('the segments choose what the coverage paints; a lit one is not a control, 
   block = coverageBlock();
   [gaps, byOperator] = block.legendSegments;
   assert.equal(byOperator.active, true);
-  assert.equal(byOperator.toggle, null);
+  assert.deepEqual(byOperator.toggle, { param: 'coverage', value: 'sfr' });
   assert.deepEqual(gaps.toggle, { param: 'coverage', value: 'gaps' });
   assert.deepEqual(block.legendSubSegments.map((segment) => [segment.label, segment.active]), [
     ['Orange', false], ['SFR', true], ['Bouygues', false], ['Free', false],
@@ -173,7 +174,12 @@ test('the segments choose what the coverage paints; a lit one is not a control, 
 });
 
 test('a link that asks for coverage on a server without the map keeps its block, unlit, and says why', () => {
+  _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'off', meta: null, status: 'idle', enabled: true });
+  assert.equal(anfrFranceLayer.tilePartNotice('coverage'), null, 'nothing known yet, nothing said');
   _setAnfrCoverageForTest({ viewer: viewerDouble(), mode: 'gaps', meta: null, status: 'missing', enabled: true });
+  // The key's « Couverture 4G » tile is dimmed with the same reason.
+  assert.equal(anfrFranceLayer.tilePartNotice('coverage'), 'Carte indisponible sur ce serveur.');
+  assert.equal(anfrFranceLayer.tilePartNotice('masts'), null);
   const block = coverageBlock();
   const [gaps] = block.legendSegments;
   assert.equal(gaps.active, false);

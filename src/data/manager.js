@@ -3436,13 +3436,45 @@ export class DataLayerManager {
   }
 
   /**
+   * What a split layer says about one of its parts it cannot draw, or ''.
+   * Asked of a loaded module only (`tilePartNotice`): a lazy stub knows nothing
+   * yet, and loading the chunk to ask would cost the download the stub exists
+   * to avoid.
+   * @param {{id: string, part: string}} tile
+   * @returns {string}
+   */
+  _tilePartNotice(tile) {
+    const module = this.layers.get(tile.id)?.module;
+    if (typeof module?.tilePartNotice !== 'function') return '';
+    try {
+      const notice = module.tilePartNotice(tile.part);
+      return typeof notice === 'string' ? notice.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
    * Whether a tile that switches PART of a layer is lit: the layer is on and
    * its params do not put that part out. See `part` in layerFusions.js.
    * @param {{id: string, off: object}} tile
    * @returns {boolean}
    */
   _tilePartLit(tile) {
-    return this.isEnabled(tile.id) && !tilePartIsOff(this.getLayerParams(tile.id), tile);
+    return this._tileLayerOn(tile.id) && !tilePartIsOff(this.getLayerParams(tile.id), tile);
+  }
+
+  /**
+   * Whether a split layer is on, or on its way on from a part tile. While the
+   * module loads, `isEnabled` still says no: without this a second press in
+   * that window read the layer as off, re-asked for it, and the first press —
+   * superseded — put the row's params back under the second (a double press on
+   * « Couverture 4G » drew the masts alone).
+   * @param {string} layerId
+   * @returns {boolean}
+   */
+  _tileLayerOn(layerId) {
+    return this.isEnabled(layerId) || Boolean(this._tileLayerEnabling?.has(layerId));
   }
 
   /**
@@ -3473,7 +3505,9 @@ export class DataLayerManager {
         return;
       }
       // Off FIRST, then back to the row's own params: set on a layer still
-      // drawing, they would light its other part for a frame.
+      // drawing, they would light its other part for a frame. An earlier press
+      // still switching it on is over: this one has the last word.
+      this._tileLayerEnabling?.delete(layerId);
       this.setEnabled(layerId, false, { origin: 'user' })
         .then(() => {
           if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
@@ -3481,18 +3515,26 @@ export class DataLayerManager {
         .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
       return;
     }
-    if (this.isEnabled(layerId)) {
+    if (this._tileLayerOn(layerId)) {
       this.setLayerParams(layerId, tile.on, { origin: 'user' });
       return;
     }
     // Off: the layer comes on showing the pressed part alone — unless the
     // reader turns down the briefing a layer off its territory opens with, in
-    // which case it stays off with the params the row lights it with.
+    // which case it stays off with the params the row lights it with. Until it
+    // is on, the layer counts as on for the next press (`_tileLayerOn`).
     const alone = Object.assign({}, ...parts.filter((entry) => entry !== tile).map((entry) => entry.off), tile.on);
     this.setLayerParams(layerId, alone, { origin: 'user' });
+    if (!this._tileLayerEnabling) this._tileLayerEnabling = new Map();
+    const press = {};
+    this._tileLayerEnabling.set(layerId, press);
     Promise.resolve(this._toggleFusionMember(layerId))
       .then(() => {
+        // A later press owns the layer now, and has said what it wants.
+        if (this._tileLayerEnabling.get(layerId) !== press) return;
+        this._tileLayerEnabling.delete(layerId);
         if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
+        this._refreshTogglePanel();
       })
       .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
   }
@@ -4246,6 +4288,21 @@ export class DataLayerManager {
           )
           : '';
         const title = tile.title || '';
+        // A part the layer knows it cannot draw here — the coverage on a
+        // server without the map — is dimmed and says why, never removed.
+        const unavailable = tile.part ? this._tilePartNotice(tile) : '';
+        if (unavailable) {
+          return {
+            id: tile.id,
+            part: tile.part,
+            label: tile.label,
+            color: tile.color,
+            icon: tile.icon,
+            active: this._tilePartLit(tile),
+            offCoverage: true,
+            title: `${title || tile.label} — ${unavailable}`,
+          };
+        }
         return {
           id: tile.id,
           part: tile.part || null,
