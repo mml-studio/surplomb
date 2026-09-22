@@ -1085,8 +1085,20 @@ the row simply does not appear.
 
 `"legal": false` means at least one required variable is empty; the page
 itself lists which, and a public origin (`GEV_PUBLIC_HOST` set) logs
-`[legal-pages] … incomplete` at boot. Unset, both pages still answer — with a
+`[legal-pages] … incomplete` at boot. Unset, the pages still answer — with a
 visible « non renseigné » where the publisher goes, never a blank.
+
+`/cgv`, the terms of sale of the paid offer (professionals only), names the
+**seller** from the same variables — publisher, registration, address and
+email; no phone, no director — so there is nothing more to set. A company's
+documents meant for third parties also state its legal form and share capital
+(Code de commerce, R123-238): put both in `GEV_LEGAL_PUBLISHER` (« Exemple SAS,
+au capital de 1 000 € »), which feeds every legal page. The page carries a notice that the paid offer is not open yet;
+the pull request that opens payment removes it. Check it with:
+
+```sh
+curl -s https://<your-host>/cgv | grep -c 'class="missing'   # 0
+```
 
 The privacy page shows the trial-cookie row only when `GEV_TRIAL_LIMIT` is at
 least 1, and the waitlist rows only when `GEV_WAITLIST_BUTTONDOWN` is set: an

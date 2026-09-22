@@ -139,8 +139,8 @@ The exceptions are deliberate and narrow:
 - **Data is not prose.** Commune names, DVF property types, crime categories
   and every other value read from a French source stay as published; only
   their display label is translated.
-- **The legal pages** (`mentions-legales.html`, `confidentialite.html`) are
-  French and the French text governs.
+- **The legal pages** (`mentions-legales.html`, `confidentialite.html`,
+  `cgv.html`) are French and the French text governs.
 - **[`docs/GLOSSARY.md`](docs/GLOSSARY.md)** pairs the French terms with the
   English ones the docs and the interface use — *commune* → *municipality*,
   *DVF* → *property sales (DVF)*. Use its words; add a missing term to the

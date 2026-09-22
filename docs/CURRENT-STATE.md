@@ -56,6 +56,28 @@ Updated: September 22, 2026
 > - Checked by `npm run qa:ai-badge` (1440×900, panel open, 820 px, phone,
 >   English; it sets `data-voice-premium` itself so the crown is drawn).
 
+> **2026-09-22 — terms of sale at `/cgv`.** A third legal page, `cgv.html`,
+> built and served exactly like the two others: a third entry of
+> `LEGAL_PAGES` (`src/legalNotice.js`), so the Rollup inputs, the Cesium-free
+> page list and `legalPagesPlugin` take it with no new path, and `/cgv` and
+> `/cgv.html` both answer, `no-cache`. French in both locales; the French text
+> governs. Its `gev:legal:seller` region is filled per request from the
+> legal notice's `GEV_LEGAL_*` (publisher, registration, address, email — no
+> phone, no director), so `/healthz` `legal: true` also means the seller is
+> named. Twelve articles for a B2B sale: professionals only (SIREN or VAT
+> number at ordering, no consumer withdrawal right), the comfort features sold
+> against the globe and layers that stay free, the price of the order page
+> (excl. VAT; the page quotes none, and a test keeps `€` off it), monthly tacit
+> renewal cancelled at the end of the running month without refund, the late
+> payment terms of Code de commerce L441-10 II and D441-5, the data, valuation,
+> risk and AI disclaimers, best-effort availability, liability capped at twelve
+> months of payments, French law and the Paris commercial court. A `.notice`
+> under the title says the paid offer is not open; a test holds it there
+> until payment opens. Linked from the landing footer (« CGV » / “Terms of
+> sale”, `vitrine.footer.terms`), the globe's credit line
+> (`src/legalLinks.js`, now three links) and the two other legal pages'
+> footers; every legal page links to the other two (tested).
+
 > **2026-09-22 — the landing page speaks English too, and the globe's mark
 > leads back to it.**
 >
