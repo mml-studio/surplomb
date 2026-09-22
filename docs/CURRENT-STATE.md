@@ -355,7 +355,7 @@ Updated: September 22, 2026
 >   native 3 (5.2 MB for Roissy); it takes the 960, like its stills. A scene
 >   reached before the loops' list arrives starts on a still's 8 s, and the
 >   view gets the rest of its recording when the length is learned.
->   Views 01 and 04 play films in place of their recorded loops (below).
+>   Views 01, 02 and 04 play films in place of their recorded loops (below).
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
@@ -383,6 +383,26 @@ Updated: September 22, 2026
 >   773 kB / 1.8 MB, HEVC 474 kB / 1.4 MB / 2.7 MB, H.264 480 545 kB. The
 >   publish step reads every `film/*` directory holding a manifest before the
 >   gallery's, and writes `galleryLoops.js` in key order.
+> - **View 02 is the Lyon film** (2026-09-22). The 10 s
+>   `surplomb-lyon-reveal.mp4` (a dive onto the Terreaux, the property sales,
+>   a scan line that puts them out and paints the energy-rating parcels, a
+>   climb to 693 m) is cut from the app on the photorealistic globe by a
+>   harness outside the repository. The landing plays the cut WITHOUT the promo
+>   video's two dataset captions (`lyon-reveal-landing-clean.mp4`): the stage's
+>   heading sits exactly where the first one does, and the view's title already
+>   names both registers. It is exactly 10.0 s (300 frames): at 9.97 s the
+>   stage's ten-second floor (`STAGE_MIN_DWELL_S`) played it twice, which
+>   `qa:landing` now asserts against. Encoded by `build-landing-film.mjs
+>   --view 02 --start 4.5` into `.context/landing-assets/film/view-02`: the
+>   still is mid-sweep, sales on one side and parcels on the other. AV1
+>   485 kB / 1.2 MB / 2.2 MB, HEVC 695 kB / 2.2 MB / 4.6 MB, H.264 480 1.2 MB,
+>   VMAF 91–93. « Ouvrir dans le globe » opens the film's last pose (`l=dp`,
+>   693 m, heading 92°, −40°), in the parcel band, where 2,856 parcels are
+>   painted. The encoder's work directory is keyed on its source
+>   (`sourceTag`): keyed on the view, crop and start alone, it had handed the
+>   caption-free cut the captioned cut's encodes. A republish needs every
+>   film's staging: view 04's was rebuilt from the committed files and
+>   `galleryLoops.js` on 2026-09-22 (same bytes, same names).
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the

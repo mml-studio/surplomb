@@ -192,8 +192,21 @@ function parseCli(argv) {
 }
 
 /** The lossless reference a width is encoded from and scored against. */
-function reference({ src, film, width, work, crop, startFrame }) {
-  const file = path.join(work, `ref-${film.stem}-${width}-x${crop.x}w${crop.width}-s${startFrame}.mkv`);
+/**
+ * Which source a cached encode came from: its name, size and modification
+ * time. The work directory is reused across films of one view, and a cache
+ * keyed on the view, crop and start alone handed a new film of the same length
+ * the previous film's encodes (2026-09-22: the Lyon film without its captions
+ * published as the one with them).
+ * @param {string} src @param {{size: number, mtimeMs: number}} stat
+ * @returns {string} eight hex characters
+ */
+export function sourceTag(src, { size, mtimeMs }) {
+  return createHash('sha256').update(`${path.basename(src)}\n${size}\n${Math.round(mtimeMs)}`).digest('hex').slice(0, 8);
+}
+
+function reference({ src, film, width, work, crop, startFrame, tag }) {
+  const file = path.join(work, `ref-${film.stem}-${width}-x${crop.x}w${crop.width}-s${startFrame}-${tag}.mkv`);
   if (existsSync(file) && statSync(file).mtimeMs > statSync(src).mtimeMs) return file;
   ffmpeg(['-i', src, '-filter_complex', referenceFilter({ crop, width, startFrame }), '-map', '[v]',
     '-c:v', 'libx264', '-qp', '0', '-preset', 'veryfast', '-an', ...COLOUR_TAGS, file]);
@@ -210,6 +223,7 @@ async function main() {
     if (file.startsWith(`${film.stem}-`) && file.endsWith('.mp4')) rmSync(path.join(out, file));
   }
   const started = Date.now();
+  const tag = sourceTag(src, statSync(src));
   const info = probe(src);
   const crop = boxCrop(info, BOX_ASPECT);
   const durationS = info.durationS;
@@ -224,11 +238,11 @@ async function main() {
   for (const [widthKey, codecs] of Object.entries(film.codecsByWidth)) {
     const width = Number(widthKey);
     if (width > crop.width) throw new Error(`${width} px asked of a ${crop.width} px crop`);
-    const ref = reference({ src, film, width, work, crop, startFrame });
+    const ref = reference({ src, film, width, work, crop, startFrame, tag });
     for (const codec of codecs) {
       const name = `${film.stem}-${width}-${codec}`;
       const encode = async (crf) => {
-        const output = path.join(work, `${name}-crf${crf}.mp4`);
+        const output = path.join(work, `${name}-${tag}-crf${crf}.mp4`);
         const recipe = `${RECIPE} ${codec} crf=${crf} g=${GOP}`;
         const reusable = !reencode && existsSync(output) && existsSync(`${output}.json`)
           && statSync(output).mtimeMs > statSync(ref).mtimeMs && probe(output).comment === recipe;

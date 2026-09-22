@@ -897,16 +897,27 @@ const CASES = {
     check('gallery: the view after it is fetched ahead of its turn', Boolean(nextFetched), String(nextFetched));
     await shot(page, 'gallery-scene-energie');
 
-    // The clock moves on by itself: a six-second loop stays two passes.
+    // A film plays once, a loop as many passes as reach ten seconds: the Lyon
+    // film is cut to exactly 10 s, and 9.97 s would have played it twice.
     await page.evaluate(() => document.querySelector('#vitrine [data-tab="02"]').click());
+    const film = await waitFor(page, () => {
+      const d = window.__gevVitrine.getDiagnostics();
+      return d.stage.view === '02' && d.stage.dwellMs ? d.stage : null;
+    }, { timeout: 5000 });
+    check('gallery: a film plays once — the Lyon film stays its own 10 s', film?.dwellMs === 10000, JSON.stringify(film));
+
+    // The clock moves on by itself: a six-second loop stays two passes. View 03
+    // is one; 01, 02 and 04 are films, which play once.
+    await page.evaluate(() => document.querySelector('#vitrine [data-tab="03"]').click());
     const pickedAt = Date.now();
-    const moved = await waitFor(page, () => (window.__gevVitrine.getDiagnostics().stage.view === '03' ? true : null),
+    const moved = await waitFor(page, () => (window.__gevVitrine.getDiagnostics().stage.view === '04' ? true : null),
       { timeout: 20_000, interval: 100 });
     const after = (Date.now() - pickedAt) / 1000;
     check('gallery: the scene moves on by itself after two passes of a six-second loop',
       moved && after > 10.5 && after < 14.5, `${after.toFixed(1)} s`);
 
     // « Mettre en pause »: the clock and the picture stop; « Reprendre » starts both.
+    // The scene is on view 04 now, where the six-second loop of 03 handed over.
     await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').click());
     await sleep(600);
     const pausedA = await diag();
@@ -914,14 +925,14 @@ const CASES = {
     const pausedB = await diag();
     const pauseLabel = await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').textContent.trim());
     check('gallery: « Mettre en pause » stops the clock and the picture, and offers « Reprendre »',
-      pausedB.stage.paused && !pausedB.stage.running && pausedB.gallery.items['view:03'].paused !== false
-        && Math.abs((pausedB.gallery.items['view:03'].currentTime ?? 0) - (pausedA.gallery.items['view:03'].currentTime ?? 0)) < 0.05
+      pausedB.stage.paused && !pausedB.stage.running && pausedB.gallery.items['view:04'].paused !== false
+        && Math.abs((pausedB.gallery.items['view:04'].currentTime ?? 0) - (pausedA.gallery.items['view:04'].currentTime ?? 0)) < 0.05
         && pauseLabel === 'Reprendre',
       JSON.stringify({ stage: pausedB.stage, label: pauseLabel }));
     await page.evaluate(() => document.querySelector('#vitrine [data-stage-pause]').click());
     const resumed = await waitFor(page, () => {
       const d = window.__gevVitrine.getDiagnostics();
-      return d.stage.running && d.gallery.items['view:03'].paused === false ? true : null;
+      return d.stage.running && d.gallery.items['view:04'].paused === false ? true : null;
     }, { timeout: 8000 });
     check('gallery: « Reprendre » starts the clock and the picture again', Boolean(resumed));
 
@@ -929,7 +940,7 @@ const CASES = {
     await page.evaluate(() => document.querySelector('#vitrine-still').click());
     await sleep(500);
     const still = await diag();
-    check('gallery: « Image fixe » stops the scene and its loop', still.stage.paused && still.gallery.items['view:03'].paused !== false,
+    check('gallery: « Image fixe » stops the scene and its loop', still.stage.paused && still.gallery.items['view:04'].paused !== false,
       JSON.stringify(still.stage));
     await page.evaluate(() => document.querySelector('#vitrine-still').click());
     await sleep(800);
