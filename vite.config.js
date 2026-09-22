@@ -99,6 +99,16 @@ import {
   voiceTrialSpend,
 } from './src/trialQuota.js';
 import { isSourceOn, sourcesOff } from './src/nonCommercialSources.js';
+import { createFlightInfoMiddleware, createStandingDataStore } from './src/vrsStandingData.js';
+import {
+  ADSBLOL_RADIUS_NM,
+  FRANCE_CELLS,
+  createAdsbLolScheduler,
+  franceSnapshot,
+  inFranceZone,
+  mergeCellSnapshots,
+  regionalSnapshot,
+} from './src/adsbLolFeed.js';
 import { overpassRequestHeaders, resolveRelayEndpoint, withOverpassRelay } from './src/data/overpassRelay.js';
 import { UpstreamBusyError, createUpstreamPacing } from './src/upstreamPacing.js';
 import {
@@ -734,7 +744,6 @@ import {
   normalizeRegionalPlace,
   normalizeRegionalWeather,
 } from './src/data/regionalBrief.js';
-import { normalizeAdsbLolPointResponse } from './src/data/adsbLolFallback.js';
 import {
   BRAIN_RELAY_LIMITS,
   OPENROUTER_VOICE_MODEL_DEFAULT,
@@ -895,14 +904,27 @@ let _openskyAuthModeWarned = false;
 const OPENSKY_AUTH_MODE_DEFAULT = 'oauth';
 /** Set of valid OPENSKY_AUTH_MODE values. */
 const OPENSKY_AUTH_MODE_SET = new Set(['basic', 'oauth', 'auto', 'anon']);
-/** Regional civilian fallback cache, keyed by a coarse 0.25° view anchor. */
-const _adsbLolPointCache = new Map();
-/** Per-anchor single-flight map for concurrent regional fallback requests. */
-const _adsbLolPointInFlight = new Map();
-const ADSBLOL_POINT_CACHE_MS = 12000;
-const ADSBLOL_POINT_CACHE_MAX = 80;
-const ADSBLOL_POINT_RADIUS_NM = 250;
-const ADSBLOL_POINT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+/**
+ * Every api.adsb.lol request this server makes — civil circles, the four
+ * French circles, the military list — leaves through this one paced queue, at
+ * least 20 s apart (src/adsbLolFeed.js says why).
+ */
+let _adsbLolFeed = createAdsbLolScheduler();
+
+/**
+ * Test seam: a fresh queue (e.g. `{ gapMs: 0 }`), so a route test does not
+ * wait 20 s between two upstream answers it stubs itself.
+ * @param {Parameters<typeof createAdsbLolScheduler>[0]} [options]
+ */
+export function _resetAdsbLolFeedForTest(options = {}) {
+  _adsbLolFeed.dispose();
+  _adsbLolFeed = createAdsbLolScheduler(options);
+  _adsbLolFranceBody = { signature: '', body: '' };
+}
+/** Serialized bodies, one per queue answer, so a shared answer is stringified once. */
+const _adsbLolBodies = new WeakMap();
+/** The last merged France body and the answers it was built from. */
+let _adsbLolFranceBody = { signature: '', body: '' };
 
 // ---------------------------------------------------------------------------
 // Overpass API proxy constants and cache state
@@ -12956,7 +12978,7 @@ function terrainHeightsProxy() {
         diskDirty = mem.size > 0;
       }
     } catch { /* no disk cache yet */ }
-    // Periodic flush, same shape as adsbdbProxy: coalesce writes instead of
+    // Periodic flush: coalesce writes instead of
     // hitting disk on every request.
     setInterval(async () => {
       if (!diskDirty) return;
@@ -13052,122 +13074,20 @@ function terrainHeightsProxy() {
 }
 
 /**
- * adsbdb.com enrichment proxy: callsign → route (airline + origin/destination
- * airports) and hex → aircraft type/registration. Free community API — cached
- * aggressively: ONE upstream request per new key ever (404s negative-cached),
- * persisted to disk so restarts don't re-hammer it. Adapted from skylight
- * (MIT) server/src/enrich/routes.ts.
+ * Flight routes, airlines and aircraft types, answered from the server's own
+ * copy of Virtual Radar Server's standing data (CC0 1.0) — see
+ * `src/vrsStandingData.js`. Replaced the adsbdb.com proxy, whose route data
+ * may not be copied or incorporated into another database: nothing per flight
+ * leaves the server now, one archive is downloaded a day.
+ *
+ * Routes: `/api/flight-info/route/:callsign` and `/api/flight-info/type/:hex`.
  */
-function adsbdbProxy() {
-  const TTL_MS = 24 * 3600_000;
-  const CACHE_PATH = path.join(process.cwd(), '.gev-cache', 'adsbdb.json');
-  let cache = { routes: {}, aircraft: {} };
-  let dirty = false;
-  let loaded = false;
-  const inflight = new Map();
-
-  async function loadOnce() {
-    if (loaded) return;
-    loaded = true;
-    try {
-      const parsed = JSON.parse(await fsp.readFile(CACHE_PATH, 'utf8'));
-      cache = { routes: parsed.routes ?? {}, aircraft: parsed.aircraft ?? {} };
-    } catch { /* first run */ }
-    setInterval(async () => {
-      if (!dirty) return;
-      dirty = false;
-      try {
-        await fsp.mkdir(path.dirname(CACHE_PATH), { recursive: true });
-        await fsp.writeFile(CACHE_PATH, JSON.stringify(cache), 'utf8');
-      } catch { dirty = true; } // retry next tick
-    }, 15_000).unref?.();
-  }
-
-  const fresh = (e) => e && Date.now() - e.at < TTL_MS;
-
-  function parseRoute(json) {
-    const fr = json?.response?.flightroute;
-    if (!fr?.origin || !fr?.destination) return null;
-    const airport = (a) => ({
-      code: a.iata_code || a.icao_code || '',
-      name: a.municipality || a.name || '',
-      lat: Number.isFinite(a.latitude) ? a.latitude : null,
-      lon: Number.isFinite(a.longitude) ? a.longitude : null,
-    });
-    return { airline: fr.airline?.name || null, origin: airport(fr.origin), destination: airport(fr.destination) };
-  }
-
-  function parseAircraft(json) {
-    const a = json?.response?.aircraft;
-    if (!a) return null;
-    return {
-      typeCode: a.icao_type || null, // ICAO designator, e.g. "B738" — feeds classifyAircraft
-      typeName: a.manufacturer && a.type ? `${a.manufacturer} ${a.type}` : (a.type || null),
-      registration: a.registration || null,
-    };
-  }
-
-  function lookup(kind, key) {
-    const store = kind === 'route' ? cache.routes : cache.aircraft;
-    if (fresh(store[key])) return Promise.resolve(store[key].data);
-    const ik = `${kind}:${key}`;
-    if (!inflight.has(ik)) {
-      inflight.set(ik, (async () => {
-        try {
-          const url = kind === 'route'
-            ? `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(key)}`
-            : `https://api.adsbdb.com/v0/aircraft/${encodeURIComponent(key)}`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-          if (res.ok) {
-            const data = kind === 'route' ? parseRoute(await res.json()) : parseAircraft(await res.json());
-            store[key] = { at: Date.now(), data }; // data may be null — negative cache
-            dirty = true;
-            return data;
-          }
-          if (res.status === 404) {
-            store[key] = { at: Date.now(), data: null }; // known-missing — cache the miss
-            dirty = true;
-          }
-          // other statuses: leave uncached so we retry later
-          return fresh(store[key]) ? store[key].data : null;
-        } catch {
-          return fresh(store[key]) ? store[key].data : null; // network error → stale if any
-        } finally {
-          inflight.delete(ik);
-        }
-      })());
-    }
-    return inflight.get(ik);
-  }
-
+function flightInfoProxy() {
+  const handler = createFlightInfoMiddleware({ store: createStandingDataStore() });
   return {
-    name: 'adsbdb-proxy',
+    name: 'flight-info-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/adsbdb', async (req, res) => {
-        await loadOnce();
-        const send = (status, obj) => {
-          res.writeHead(status, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(obj));
-        };
-        try {
-          const [, kind, rawKey] = String(req.url || '').split('?')[0].split('/');
-          if (kind === 'route') {
-            const cs = String(rawKey || '').toUpperCase();
-            if (!/^[A-Z0-9]{2,8}$/.test(cs)) return send(400, { error: 'invalid callsign' });
-            const data = await lookup('route', cs);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          if (kind === 'type') {
-            const hex = String(rawKey || '').toLowerCase();
-            if (!/^[0-9a-f]{6}$/.test(hex)) return send(400, { error: 'invalid hex' });
-            const data = await lookup('aircraft', hex);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          return send(404, { error: 'unknown endpoint' });
-        } catch (err) {
-          return send(500, { error: String(err?.message || err) });
-        }
-      });
+      server.middlewares.use('/api/flight-info', handler);
     },
   };
 }
@@ -13759,59 +13679,32 @@ export function adsbLolFallbackAnchor(req) {
   return { latitude, longitude };
 }
 
+/** The JSON body of one queue answer, stringified once however many visitors read it. */
+function adsbLolBody(record) {
+  let body = _adsbLolBodies.get(record);
+  if (body === undefined) {
+    body = JSON.stringify({ time: record.time, states: record.states });
+    _adsbLolBodies.set(record, body);
+  }
+  return body;
+}
+
+/**
+ * One 250 NM adsb.lol circle around the view anchor, through the paced queue
+ * (src/adsbLolFeed.js). A circle already wanted within 100 NM is shared; a
+ * cold one waits at most 25 s for its slot. Null when there is no anchor or
+ * nothing to serve.
+ */
 async function fetchAdsbLolPointFallback(req) {
   const anchor = adsbLolFallbackAnchor(req);
   if (!anchor) return null;
-  const roundedLat = Math.round(anchor.latitude * 4) / 4;
-  const roundedLon = Math.round(anchor.longitude * 4) / 4;
-  const cacheKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
-  const cached = _adsbLolPointCache.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.cachedAt < ADSBLOL_POINT_CACHE_MS) {
-    return { ...cached, cacheStatus: 'HIT' };
-  }
-
-  const request = coalesceProxyRequest(_adsbLolPointInFlight, cacheKey, async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      const upstream = await fetch(
-        `https://api.adsb.lol/v2/lat/${roundedLat}/lon/${roundedLon}/dist/${ADSBLOL_POINT_RADIUS_NM}`,
-        {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'surplomb-adsblol-regional-fallback/1.0',
-          },
-          signal: controller.signal,
-        },
-      );
-      if (!upstream.ok) throw new Error(`upstream HTTP ${upstream.status}`);
-      const payload = await readResponseJsonCapped(upstream, ADSBLOL_POINT_MAX_RESPONSE_BYTES);
-      const normalized = normalizeAdsbLolPointResponse(payload);
-      const record = {
-        body: JSON.stringify(normalized),
-        cachedAt: Date.now(),
-        count: normalized.states.length,
-      };
-      _adsbLolPointCache.delete(cacheKey);
-      _adsbLolPointCache.set(cacheKey, record);
-      while (_adsbLolPointCache.size > ADSBLOL_POINT_CACHE_MAX) {
-        _adsbLolPointCache.delete(_adsbLolPointCache.keys().next().value);
-      }
-      return record;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  });
-  try {
-    const record = await request.promise;
-    return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
-  } catch (error) {
-    if (!request.shared && error?.name !== 'AbortError') {
-      console.warn('[adsb.lol Flights Fallback]', error?.message || error);
-    }
-    return cached ? { ...cached, cacheStatus: 'STALE' } : null;
-  }
+  const snapshot = await regionalSnapshot(_adsbLolFeed, { lat: anchor.latitude, lon: anchor.longitude });
+  if (!snapshot) return null;
+  return {
+    body: adsbLolBody(snapshot.record),
+    count: snapshot.record.count,
+    cacheStatus: snapshot.stale ? 'STALE' : 'HIT',
+  };
 }
 
 async function serveAdsbLolPointFallback(req, res, requestedMode, reason) {
@@ -13837,11 +13730,76 @@ async function serveAdsbLolPointFallback(req, res, requestedMode, reason) {
     // as a radius rather than a sentence — the sentence the visitor reads is
     // French, and a French sentence has no business in an HTTP header, whose
     // values are ISO-8859-1 by spec. `flights.js` words it.
-    'X-Flight-Coverage-Nm': String(ADSBLOL_POINT_RADIUS_NM),
+    'X-Flight-Coverage-Nm': String(ADSBLOL_RADIUS_NM),
     'X-Flight-Count': String(fallback.count),
+    // How often the circle is refreshed, now that it shares a paced queue:
+    // the page judges the snapshot's age against this, not a fixed guess.
+    'X-Flight-Ttl-Seconds': String(Math.round(_adsbLolFeed.roundSeconds())),
   });
   res.end(fallback.body);
   return true;
+}
+
+/**
+ * The merged France snapshot, or null. `complete` asks for all four circles
+ * (the home page's figure claims France, so it may not count three quarters).
+ */
+function adsbLolFranceRecords({ complete = false } = {}) {
+  const now = Date.now();
+  const records = FRANCE_CELLS
+    .map((cell) => _adsbLolFeed.record(cell.key))
+    .filter((record) => record && now - record.fetchedAt <= 10 * 60_000);
+  if (!records.length || (complete && records.length < FRANCE_CELLS.length)) return null;
+  return records;
+}
+
+/**
+ * The flights endpoint where OpenSky is off (GEV_NONCOMMERCIAL_SOURCES=off —
+ * the hosted build): adsb.lol is the primary source. A view over France gets
+ * the four French circles merged, shared by every visitor and refreshed one
+ * circle per queue slot; a view anywhere else gets one circle around it. The
+ * server never calls OpenSky on this path, not even for a token.
+ */
+async function serveAdsbLolPrimary(req, res) {
+  const anchor = adsbLolFallbackAnchor(req);
+  const overFrance = !anchor || inFranceZone(anchor.latitude, anchor.longitude);
+  if (!overFrance) {
+    if (await serveAdsbLolPointFallback(req, res, 'none', 'opensky_off_regional')) return;
+  } else {
+    const snapshot = await franceSnapshot(
+      _adsbLolFeed,
+      anchor ? { lat: anchor.latitude, lon: anchor.longitude } : null,
+    );
+    if (snapshot) {
+      const signature = FRANCE_CELLS
+        .map((cell) => _adsbLolFeed.record(cell.key)?.fetchedAt ?? 0)
+        .join(',');
+      if (_adsbLolFranceBody.signature !== signature) {
+        _adsbLolFranceBody = { signature, body: JSON.stringify({ time: snapshot.time, states: snapshot.states }) };
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'X-Flight-Source': 'adsb.lol',
+        // The area, as a code the page words ("France métropolitaine"), and
+        // how many of its four circles answered — three of four is a map with
+        // a hole in it, and the header says so.
+        'X-Flight-Coverage-Area': snapshot.area,
+        'X-Flight-Coverage-Cells': `${snapshot.cells}/${FRANCE_CELLS.length}`,
+        'X-Flight-Count': String(snapshot.states.length),
+        'X-Flight-Ttl-Seconds': String(Math.round(snapshot.roundSeconds)),
+      });
+      res.end(_adsbLolFranceBody.body);
+      return;
+    }
+  }
+  res.writeHead(503, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Flight-Source': 'adsb.lol',
+    'Retry-After': '30',
+  });
+  res.end(JSON.stringify({ error: 'adsb.lol unavailable' }));
 }
 
 function openSkySourceEpochMs(body) {
@@ -13887,6 +13845,22 @@ function openSkyProxy() {
     name: 'opensky-proxy',
     configureServer(server) {
       server.middlewares.use('/api/opensky', async (req, res) => {
+        // A commercial deployment (GEV_NONCOMMERCIAL_SOURCES=off) does not use
+        // OpenSky at all: "Any use by a for-profit or commercial entity …
+        // requires a written license". adsb.lol is its primary source, and
+        // nothing below — not even the OAuth token — is reached.
+        if (!isSourceOn('opensky')) {
+          try {
+            await serveAdsbLolPrimary(req, res);
+          } catch (error) {
+            console.error('[Flights adsb.lol]', error?.message || error);
+            if (!res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json', 'X-Flight-Source': 'adsb.lol' });
+              res.end(JSON.stringify({ error: 'adsb.lol proxy error' }));
+            }
+          }
+          return;
+        }
         try {
           const requestedMode = normalizeOpenSkyAuthMode(process.env.OPENSKY_AUTH_MODE);
           const now = Date.now();
@@ -18389,48 +18363,47 @@ function cctvProxy() {
 }
 
 /**
- * Vite plugin: adsb.lol military aircraft proxy with 12 s response cache.
+ * Vite plugin: adsb.lol military aircraft proxy.
  *
- * Proxies GET /api/adsblol/mil to https://api.adsb.lol/v2/mil. On upstream
- * failure, serves a stale cached response if one exists.
+ * Proxies GET /api/adsblol/mil to https://api.adsb.lol/v2/mil through the
+ * same paced queue as every other adsb.lol request (src/adsbLolFeed.js): the
+ * list is refreshed while somebody wants it, at most once per queue slot, and
+ * every visitor reads the newest copy. A cold request waits at most 25 s for
+ * its slot; the newest copy is served as long as it is under ten minutes old.
  *
  * @returns {import('vite').Plugin}
  */
 function adsbLolProxy() {
-  /** @type {string|null} Cached upstream JSON body. */
-  let _cache = null;
-  /** @type {number} Epoch-ms when the cache was populated. */
-  let _cacheAt = 0;
-  /** Response cache TTL (ms). */
-  const CACHE_MS = 12000;
+  const MIL_KEY = 'mil';
+  const MIL_SPEC = {
+    url: 'https://api.adsb.lol/v2/mil',
+    // Passed through as adsb.lol wrote it, after checking it is JSON at all.
+    parse: (text) => { JSON.parse(text); return { body: text }; },
+    pinned: true,
+  };
+  const MAX_AGE_MS = 10 * 60_000;
   return {
     name: 'adsblol-proxy',
     configureServer(server) {
       server.middlewares.use('/api/adsblol/mil', async (req, res) => {
         try {
-          const now = Date.now();
-          if (_cache && now - _cacheAt < CACHE_MS) {
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-ADS-B-Cache': 'HIT' });
-            res.end(_cache);
+          let record = _adsbLolFeed.want(MIL_KEY, MIL_SPEC);
+          if (!record) record = await _adsbLolFeed.next(MIL_KEY, 25_000);
+          if (record && Date.now() - record.fetchedAt <= MAX_AGE_MS) {
+            const age = Date.now() - record.fetchedAt;
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+              'X-ADS-B-Cache': age <= _adsbLolFeed.roundSeconds() * 1000 ? 'HIT' : 'STALE',
+              'X-ADS-B-Age-Seconds': String(Math.round(age / 1000)),
+            });
+            res.end(record.body);
             return;
           }
-          const upstream = await fetch('https://api.adsb.lol/v2/mil', {
-            headers: { 'User-Agent': 'surplomb-adsblol-proxy/1.0' },
-          });
-          const body = await upstream.text();
-          if (upstream.ok) {
-            _cache = body;
-            _cacheAt = now;
-          }
-          res.writeHead(upstream.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-ADS-B-Cache': 'MISS' });
-          res.end(body);
+          res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'ADS-B proxy error' }));
         } catch (e) {
           console.error('[adsb.lol Proxy]', e.message);
-          if (_cache) {
-            res.writeHead(200, { 'Content-Type': 'application/json', 'X-ADS-B-Cache': 'STALE' });
-            res.end(_cache);
-            return;
-          }
           res.writeHead(502, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'ADS-B proxy error' }));
         }
@@ -18592,6 +18565,15 @@ function trackBackfillProxies() {
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ error: 'icao24 must be a 6-char hex string' }));
+          return;
+        }
+        // Where OpenSky is off, the followed aircraft's trail starts from the
+        // positions this tab has seen; the page reads a 404 as "no history".
+        if (!isSourceOn('opensky')) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ status: 'off', error: 'OpenSky is not used by this deployment' }));
           return;
         }
         const token = await getOpenSkyToken();
@@ -27550,7 +27532,21 @@ function countPulse(now) {
   // The worldwide OpenSky snapshot, whoever asked for it last. Parsed once per
   // body: a 3 MB parse per minute is nothing, per request it would be.
   let avions = { value: null, why: PULSE_WHY.cold };
-  if (_openskyCacheBody && _openskyCacheStatus === 200) {
+  if (!isSourceOn('opensky')) {
+    // Where OpenSky is off, the four French adsb.lol circles — all four, or
+    // the figure would count part of France under a label that says France.
+    // Warm only while somebody has the flights layer on over France, like the
+    // OpenSky snapshot before it.
+    const records = adsbLolFranceRecords({ complete: true });
+    if (records) {
+      const signature = records.map((record) => record.fetchedAt).join(',');
+      if (_pulseAircraft.body !== signature) {
+        const merged = mergeCellSnapshots(records);
+        _pulseAircraft = { body: signature, reading: countAircraftOverFrance(merged, territory) };
+      }
+      avions = _pulseAircraft.reading;
+    }
+  } else if (_openskyCacheBody && _openskyCacheStatus === 200) {
     if (_pulseAircraft.body !== _openskyCacheBody) {
       _pulseAircraft = {
         body: _openskyCacheBody,
@@ -29976,7 +29972,7 @@ export default defineConfig(({ mode, command }) => {
       ndbcProxy(),
       rocketLaunchesProxy(),
       terrainHeightsProxy(),
-      adsbdbProxy(),
+      flightInfoProxy(),
       overpassProxy(),
       militaryInstallationsProxy(),
       powerGridProxy(),

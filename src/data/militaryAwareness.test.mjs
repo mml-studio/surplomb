@@ -787,7 +787,7 @@ test('production military tracked-subject label falls back to registration befor
 
 test('a cached Context subject re-reads its label when enrichment lands after selection', async () => {
   // The subject snapshot is captured once at selection. Selecting a
-  // callsign-less aircraft BEFORE adsbdb enrichment answers used to freeze the
+  // callsign-less aircraft BEFORE enrichment answers used to freeze the
   // ICAO hex into Context while every other surface later swapped to the
   // registration. The refresh path must re-resolve the label, never the id.
   const id = 'ae1fa4';

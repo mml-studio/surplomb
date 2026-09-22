@@ -11,7 +11,7 @@
  *
  * What it proves, on a live sky:
  *
- *   A. THE CONTROL APPEARS ONLY WHEN THERE IS A ROUTE. adsbdb answers a
+ *   A. THE CONTROL APPEARS ONLY WHEN THERE IS A ROUTE. The standing data answers a
  *      callsign, not an airframe, and `routePlausible` rejects a wrong-leg
  *      answer outright — so the harness tracks live contacts until one has a
  *      plausible leg, and checks the button is offered then and hidden before.
@@ -175,7 +175,7 @@ function readRouteState(page) {
  *
  * The route lookup only fires for the TRACKED plane (it is the head-of-queue
  * enrichment, deliberately), so there is no way to ask this question without
- * selecting contacts one at a time and waiting on adsbdb.
+ * selecting contacts one at a time and waiting on the route lookup.
  */
 async function findContactWithRoute(page) {
   const tried = new Set();
@@ -183,7 +183,7 @@ async function findContactWithRoute(page) {
     const picked = await page.evaluate((seen, view) => {
       const layer = window.__godsEyeView?.dataManager?.layers?.get('flights')?.module;
       const contacts = layer?.getAllPositions?.(400) || [];
-      // A callsign is what adsbdb answers; a contact without one cannot have a
+      // A callsign is what the route lookup answers; a contact without one cannot have a
       // route, so trying it would only spend the attempt budget.
       // Near the framed view, not anywhere on the planet: `getAllPositions`
       // is worldwide, and a contact over Peru would have the harness prove the
@@ -208,7 +208,7 @@ async function findContactWithRoute(page) {
       continue;
     }
     tried.add(picked.id);
-    // adsbdb is rate-limited and the answer lands asynchronously.
+    // the lookup is queued and the answer lands asynchronously.
     for (let wait = 0; wait < 8; wait += 1) {
       await pump(page, 3, 90);
       const state = await page.evaluate(() => (
@@ -284,7 +284,7 @@ async function main() {
     const found = await findContactWithRoute(page);
     if (!found) {
       console.error(`[qa] no contact with a plausible route after ${TRACK_ATTEMPTS} attempts.`);
-      console.error('[qa] this is a LIVE-SKY precondition, not a regression: adsbdb only knows');
+      console.error('[qa] this is a LIVE-SKY precondition, not a regression: the standing data only knows');
       console.error('[qa] scheduled callsigns, and the sky over Paris may be all GA right now.');
       process.exitCode = 2;
       return;

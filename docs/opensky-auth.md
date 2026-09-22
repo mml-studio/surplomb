@@ -9,6 +9,12 @@ Surplomb uses explicit auth modes for `/api/opensky`:
 
 Reference: OpenSky REST API docs recommend OAuth2 Client Credentials flow.
 
+None of this applies where `GEV_NONCOMMERCIAL_SOURCES=off` (a commercial
+deployment — OpenSky's terms require a written licence for any use by a
+company): the server then never calls OpenSky, not even for a token, and the
+flights come from adsb.lol only. See `docs/DEPLOY.md`, "Sources a commercial
+deployment may not use".
+
 ## Quick Start (OAuth Client JSON)
 
 Import credentials from JSON (`clientId`/`clientSecret` or `client_id`/`client_secret`) into Keychain:

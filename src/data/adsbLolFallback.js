@@ -43,7 +43,7 @@ function emitterCategory(value) {
  * the emitter category at [17] — which is `0`/"no info" for ~94 % of
  * contacts, so nearly every aircraft used to reach the classifier with
  * nothing to classify on and fell back to the placeholder silhouette while
- * waiting on a rationed adsbdb lookup. adsb.lol has both fields in the
+ * waiting on a rationed type lookup. adsb.lol has both fields in the
  * payload; dropping them here was throwing away the answer we were paying to
  * fetch. The client reads by index and never checks the length, so appending
  * is backward-compatible with any consumer that only knows the 18 entries.

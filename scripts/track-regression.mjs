@@ -350,11 +350,11 @@ async function main() {
         if (isAppRequest && url.pathname === '/api/adsblol/trace') {
           return Promise.resolve(jsonResponse({ timestamp: Math.floor(Date.now() / 1000), trace: [] }));
         }
-        // adsbdb enrichment (fires for tracked/model-eligible planes): empty
+        // flight-info enrichment (fires for tracked/model-eligible planes): empty
         // object → typeCode stays null → the synthetic planes' class (and so
         // their 3D scale + ground-snap belly offset) is DETERMINISTIC, never a
         // live-proxy lookup of a fake hex.
-        if (isAppRequest && /^\/api\/adsbdb\/(?:type|route)\/[^/]+$/.test(url.pathname)) {
+        if (isAppRequest && /^\/api\/flight-info\/(?:type|route)\/[^/]+$/.test(url.pathname)) {
           return Promise.resolve(jsonResponse({}));
         }
         // Contacts enables the optional AIS source alongside aircraft. Keep

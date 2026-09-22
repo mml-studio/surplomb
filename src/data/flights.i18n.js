@@ -45,6 +45,11 @@ export default defineMessages({
       sample: [250],
     },
     worldwide: { fr: 'couverture mondiale', en: 'worldwide coverage' },
+    france: {
+      fr: 'France métropolitaine et ses abords',
+      en: 'mainland France and its borders',
+      note: 'Four 250 NM circles over France, merged by the proxy (src/adsbLolFeed.js).',
+    },
   },
   /** The snapshot the source itself served stale. */
   staleSource: {

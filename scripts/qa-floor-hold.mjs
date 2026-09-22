@@ -99,7 +99,7 @@ await page.evaluateOnNewDocument((site, icao) => {
       }));
     }
     if (app && url.pathname === '/api/opensky-track') return Promise.resolve(json({ path: [] }));
-    if (app && /^\/api\/adsbdb\//.test(url.pathname)) return Promise.resolve(json({}));
+    if (app && /^\/api\/flight-info\//.test(url.pathname)) return Promise.resolve(json({}));
     return realFetch(input, init);
   };
 }, SITE, ICAO);

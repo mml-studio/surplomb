@@ -9,7 +9,7 @@
  *    consume the returned result set — the engine/surface seam is the
  *    `items` array with stable {layerKey, id} identities.
  *  - v1 scope is CLIENT-SIDE DATA ONLY. The one enrichment path (flight
- *    routes) reads the already-cached adsbdb results surfaced by the layer
+ *    routes) reads the already-cached route results surfaced by the layer
  *    accessor; the engine never fetches. Fleet-wide route search is
  *    explicitly out of scope.
  *  - Follow-up memory: the previous result set can be re-queried ("which of

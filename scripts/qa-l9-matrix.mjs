@@ -1181,7 +1181,7 @@ check({
 const MANUAL = [
   ['M1', 'Voice mic round trip 1/3 — "when is the next ISS pass?" (next_iss_pass)'],
   ['M2', 'Voice mic round trip 2/3 — connect/disconnect twice in one tab + keyed set_context_mode and control_cockpit'],
-  ['M3', 'Voice mic round trip 3/3 — adsbdb enrichment readout on a live tracked flight'],
+  ['M3', 'Voice mic round trip 3/3 — route and type enrichment readout on a live tracked flight'],
   ['M4', 'LAN warning path — HOST=0.0.0.0 banner, LAN URL, and a throttled response'],
   ['M5', 'Live AIS vessel one-click camera transfer — requires status=live, not cached rows (never verified against a live feed)'],
   ['M6', 'CCTV dense-city interaction — cold fill, hover, select, card removal, monitor plane, coverage, auto-hop suspend'],

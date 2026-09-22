@@ -54,18 +54,18 @@
  * because that is what the request queue deduplicates on. Two aircraft never
  * share one, but one aircraft seen across twelve snapshots is one lookup.
  *
- * AND THE YIELD IS MEASURED TOO, on a small sample. A budget sized on demand
- * alone would be sized on requests rather than on answers, and adsbdb does not
- * know every callsign: `--yield N` asks the live API for N of the callsigns
- * actually observed (default 40, off with `--yield 0`) and reports the share
- * that resolves to a leg. That sample is polite by construction — 40 requests
- * against a 512-per-60 s limiter — and it is the number that says whether the
- * spend buys anything.
+ * AND THE YIELD IS MEASURED TOO. A budget sized on demand alone would be sized
+ * on requests rather than on answers, and the route source does not know every
+ * callsign: `--yield N` looks N of the callsigns actually observed up in the
+ * server's VRS standing data (default 40, off with `--yield 0`) and reports
+ * the share that resolves to a leg — the number that says whether the spend
+ * buys anything. (It asked api.adsbdb.com until 2026-09-22.)
  *
  * Usage: node scripts/qa-enrich-budget.mjs [--minutes 12] [--interval 30]
  *                                          [--yield 40]
  */
 import { normalizeAdsbLolPointResponse } from '../src/data/adsbLolFallback.js';
+import { createStandingDataStore, lookupRoute } from '../src/vrsStandingData.js';
 
 /** Mirrors vite.config.js ADSBLOL_POINT_RADIUS_NM — the proxy's own radius. */
 const RADIUS_NM = 250;
@@ -93,7 +93,7 @@ const getOpt = (name, dflt) => {
 };
 const MINUTES = getOpt('--minutes', DEFAULT_MINUTES);
 const INTERVAL_SEC = getOpt('--interval', DEFAULT_INTERVAL_SEC);
-/** How many observed callsigns to actually ask adsbdb about. 0 disables. */
+/** How many observed callsigns to look up in the standing data. 0 disables. */
 const YIELD_SAMPLE = getOpt('--yield', 40);
 
 /** The callsign shape `flights.js` requires before it will spend a lookup. */
@@ -284,43 +284,33 @@ async function main() {
 /**
  * How many of the callsigns actually in the sky resolve to a leg.
  *
- * A budget sized on demand alone is sized on REQUESTS. This asks the live API
- * for a sample of the callsigns the run observed and reports the share that
- * comes back with an origin and a destination — the only number that says
- * whether widening the sweep buys a reader anything.
- *
- * Deliberately small and serial: adsbdb allows 512 requests per rolling 60 s
- * per IP, and a harness is a guest on someone else's free API.
+ * A budget sized on demand alone is sized on REQUESTS. This looks a sample of
+ * the callsigns the run observed up in the same VRS standing data the server
+ * answers from (src/vrsStandingData.js, the copy under .gev-cache/, downloaded
+ * once if absent) and reports the share that comes back with an origin and a
+ * destination — the only number that says whether widening the sweep buys a
+ * reader anything. No request per callsign leaves the machine.
  *
  * @param {Set<string>} callsigns Every airline-style callsign the run saw.
  */
 async function reportYield(callsigns) {
   if (YIELD_SAMPLE <= 0 || !callsigns.size) return;
   const sample = [...callsigns].slice(0, YIELD_SAMPLE);
-  console.log(`--- Rendement : ${sample.length} indicatifs demandés à adsbdb ---\n`);
+  console.log(`--- Yield: ${sample.length} callsigns looked up in the VRS standing data ---\n`);
+  const index = await createStandingDataStore({ log: { info() {}, warn() {} } }).ready();
+  if (!index) { console.log('  ○ standing data unavailable — not measurable here\n'); return; }
   let found = 0;
   let withDestinationCoords = 0;
-  let errors = 0;
   for (const cs of sample) {
-    try {
-      const res = await fetch(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) { if (res.status !== 404) errors += 1; await sleep(250); continue; }
-      const route = (await res.json())?.response?.flightroute;
-      if (route?.origin && route?.destination) {
-        found += 1;
-        if (Number.isFinite(route.destination.latitude)) withDestinationCoords += 1;
-      }
-    } catch { errors += 1; }
-    await sleep(250); // ≤4 req/s, well under the 512 / 60 s limiter
+    const route = lookupRoute(index, cs);
+    if (!route) continue;
+    found += 1;
+    if (Number.isFinite(route.destination.lat)) withDestinationCoords += 1;
   }
-  const asked = sample.length - errors;
-  if (asked <= 0) { console.log('  ○ adsbdb injoignable — non mesurable ici\n'); return; }
-  console.log(`  résolus en trajet          : ${found} / ${asked}  (${((found / asked) * 100).toFixed(1)} %)`);
-  console.log(`  dont destination géocodée  : ${withDestinationCoords} / ${asked}  `
+  const asked = sample.length;
+  console.log(`  resolved to a leg          : ${found} / ${asked}  (${((found / asked) * 100).toFixed(1)} %)`);
+  console.log(`  with destination coords    : ${withDestinationCoords} / ${asked}  `
     + `(${((withDestinationCoords / asked) * 100).toFixed(1)} %)`);
-  if (errors) console.log(`  ${errors} demande(s) en erreur, exclues du taux`);
   console.log('');
 }
 

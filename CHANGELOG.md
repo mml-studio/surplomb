@@ -307,6 +307,44 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   and without the switch is unchanged. The “Data attribution” popover now
   names only the world bases this page can draw, and
   `npm run qa:world-imagery-licence` checks the network log in a browser.
+- **Flight routes, airline names and aircraft type names now come from the
+  server's own copy of the VRS standing data, and adsbdb is gone.** The route
+  line under a followed flight (« CDG → BUD · 812 km »), the SHOW ROUTE arc,
+  the cockpit's FROM/TO panel, an airport card's « N en approche », the voice's
+  route and airline answers and the « Air France · Airbus A320neo » line were
+  fed by api.adsbdb.com, whose route data may not be copied into another
+  database; the server kept a copy for every visitor. It now downloads Virtual
+  Radar Server's standing data (CC0) once a day and answers from memory, so no
+  request per flight leaves it. Over France, 84 % of airline flights find their
+  route and 80 % pass the check against the aircraft's position (measured on
+  756 flights, 2026-09-22), about what adsbdb gave; a flight number flown over
+  several legs now shows the leg the aircraft is on. What a clone loses: on
+  OpenSky's feed, which names no aircraft type, only the 28 % of aircraft the
+  standing data knows get their silhouette at once — the rest keep the
+  placeholder until adsb.lol names them. The Data attribution popover credits
+  the standing data.
+- **The hosted site no longer uses OpenSky: its flights come from adsb.lol,
+  and over France from four circles instead of one.** OpenSky's terms require a
+  written licence for any use by a company. With `GEV_NONCOMMERCIAL_SOURCES=off`
+  (set on surplomb.app) the server never calls OpenSky — no snapshot, no
+  history for a followed flight, no token — and the OpenSky credit leaves the
+  Data attribution popover. A view over France gets four 250 NM adsb.lol
+  circles merged into one map of France and its borders: 1 033 aircraft inside
+  France's box on 2026-09-22 at 14:51 UTC, against 1 090 on OpenSky's snapshot
+  and 605 in a single Paris-centred circle. Nearly all of them now carry their
+  type and tail (97 %), so silhouettes are right at once; aircraft parked or
+  taxiing at the Paris airports are missing, because adsb.lol's receivers do
+  not see the aprons. A view elsewhere in the world gets one circle around it.
+  The Flights row says « France métropolitaine et ses abords » or the circle's
+  radius, and names adsb.lol, whose credit no longer calls it a fallback. A
+  clone is unchanged: OpenSky stays its primary source.
+- **Every request to adsb.lol now waits its turn, 20 s apart.** adsb.lol
+  refuses a burst from one address after the second or third request and
+  accepts one every 20 s. The civil circles, the four French ones and the
+  military list now share one queue on the server, which only runs while
+  somebody is looking and shares each answer with every visitor. Each French
+  circle is refreshed every 80 s (100 s with the military list), and the
+  military list every 20 to 100 s instead of 12.
 - **A commercial deployment can switch off the sources licensed for
   non-commercial use only, and Open-Meteo is the first.** Open-Meteo's free
   API terms say “You may only use the free API services for non-commercial

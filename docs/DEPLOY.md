@@ -929,12 +929,22 @@ GEV_NONCOMMERCIAL_SOURCES=off
 
 Unset (or `on`) keeps them, which is the open-source default; any other value
 turns them off, so a typo errs on the licence's side. The list lives in
-`src/nonCommercialSources.js`, one line per source. Today it holds two:
+`src/nonCommercialSources.js`, one line per source. Today it holds three:
 
 | Source | Why | What the switch removes |
 | --- | --- | --- |
 | Open-Meteo (free API) | [Terms](https://open-meteo.com/en/terms): “You may only use the free API services for non-commercial purposes.” | The weather of the cockpit's Local Info page, the `WX` toggle and its cloud pass, and the Open-Meteo line of the Data attribution popover. `/api/regional-brief` answers `weatherStatus: "off"` and never calls Open-Meteo; `/api/weather-effects` answers `{"status":"off"}` without a fetch. |
 | Esri World Imagery, anonymous endpoint (`services.arcgisonline.com`) | Esri staff, for this URL: “as is stated in the terms of use, this service is not available for commercial use” ([Esri Community](https://community.esri.com/t5/arcgis-location-platform-developers-ques/inquiry-about-world-imagery/td-p/1569266)). | The satellite beyond France under the Satellite stack becomes Sentinel-2 cloudless 2016 (10 m), unless the build has an ArcGIS key — [below](#the-satellite-beyond-france-an-arcgis-location-platform-key). The browser fetches these tiles itself, so the page is the check: it never asks the endpoint unless `/api/trial` positively allows it, even before that answer has arrived. |
+| OpenSky Network (REST API) | [Terms](https://opensky-network.org/about/terms-of-use): “Any use by a for-profit or commercial entity … requires a written license from OpenSky Network, regardless of purpose.” | OpenSky itself: `/api/opensky` never calls it, not even for an OAuth token, and serves adsb.lol instead — the four 250 NM circles over metropolitan France merged when the view is over France, one circle around the view elsewhere; `/api/opensky-track` answers 404 `{"status":"off"}` (the followed aircraft's trail starts from what the tab has seen); `/api/pulse` counts « avions » from the four French circles. The OpenSky line leaves the Data attribution popover, and the Flights row names adsb.lol. `OPENSKY_*` credentials can stay in `.env`; nothing reads them. |
+
+Every request to api.adsb.lol — the French circles, a regional circle, the
+military list — leaves through one paced queue, at least 20 s apart
+(`src/adsbLolFeed.js`): adsb.lol refused the fourth request of a burst from one
+address on 2026-09-22 and passed every request spaced 20 s apart. The queue
+only runs while somebody wants an answer. Its answers are shared by every
+visitor, so the cost is set by how many different circles are watched, not by
+how many people watch: France alone is four circles, each refreshed every 80 s
+(100 s while the military list is wanted too).
 
 Google News RSS, whose terms also say personal, non-commercial use
 ([`DATA_SOURCES.md`](../DATA_SOURCES.md)), is **not** on the list yet: adding
@@ -950,10 +960,16 @@ it is one line in that file plus the check in the news fetch.
 - **Checking it:**
 
   ```sh
-  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo","esri-world-imagery"]
-  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo","esri-world-imagery"]
+  curl -s https://<your-host>/healthz | jq .sourcesOff        # ["open-meteo","esri-world-imagery","opensky"]
+  curl -s https://<your-host>/api/trial | jq .sourcesOff      # ["open-meteo","esri-world-imagery","opensky"]
   curl -s 'https://<your-host>/api/weather-effects?latitude=48.86&longitude=2.35' | jq .status   # "off"
+  curl -sD- -o /dev/null 'https://<your-host>/api/opensky?lat=48.86&lon=2.35' | grep -i x-flight   # source adsb.lol, area fr-metro
   ```
+
+  The first flights request after a restart waits for one adsb.lol answer
+  (the circle nearest the view) and serves one quarter of France; the other
+  three circles follow one per 20 s, so a full France is on screen within a
+  minute of the first visitor switching flights on.
 
   `[]` means the variable did not reach the container, or the live deploy
   predates the switch; `null` means the deploy predates it.

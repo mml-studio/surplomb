@@ -567,7 +567,7 @@ async function main() {
         // best-effort ADSBDB enrichment has no bearing on this scenario. Stub
         // it rather than letting one unrelated public-provider 502 turn a
         // renderer/heading result into a console-cleanliness false negative.
-        if (url.includes('/api/adsbdb/')) return Promise.resolve(jsonResponse({ found: false }));
+        if (url.includes('/api/flight-info/')) return Promise.resolve(jsonResponse({ found: false }));
         return realFetch(input, init);
       };
     }, TURN);

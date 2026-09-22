@@ -33,6 +33,11 @@ export const NONCOMMERCIAL_SOURCES = Object.freeze([
   { id: 'open-meteo', name: 'Open-Meteo', terms: 'https://open-meteo.com/en/terms', credits: ['open-meteo'] },
   // "As is stated in the terms of use, this service is not available for commercial use." (Esri staff.) Fetched by the browser, so the page is the check: src/data/worldImagery.js. A build with ARCGIS_API_KEY never asks it.
   { id: 'esri-world-imagery', name: 'Esri World Imagery (anonymous endpoint)', terms: 'https://community.esri.com/t5/arcgis-location-platform-developers-ques/inquiry-about-world-imagery/td-p/1569266', credits: ['world-satellite-keyless'] },
+  // "Any use by a for-profit or commercial entity — including government and
+  // military contractors — requires a written license from OpenSky Network,
+  // regardless of purpose." Off, the flights proxy makes adsb.lol its primary
+  // source and never asks OpenSky for a snapshot, a track or a token.
+  { id: 'opensky', name: 'OpenSky Network', terms: 'https://opensky-network.org/about/terms-of-use', credits: ['opensky'] },
 ].map((source) => Object.freeze({ ...source, credits: Object.freeze([...source.credits]) })));
 
 const KNOWN_IDS = new Set(NONCOMMERCIAL_SOURCES.map((source) => source.id));

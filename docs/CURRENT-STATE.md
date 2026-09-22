@@ -2,6 +2,50 @@
 
 Updated: September 22, 2026
 
+> **2026-09-22 — flights on the commercial build: OpenSky off, adsb.lol
+> primary over four French circles, and adsbdb replaced by the VRS standing
+> data in both builds.**
+>
+> - **OpenSky joins the switch.** `src/nonCommercialSources.js` lists
+>   `opensky` (terms: "Any use by a for-profit or commercial entity … requires
+>   a written license"). Where `GEV_NONCOMMERCIAL_SOURCES=off`, `/api/opensky`
+>   serves adsb.lol only and never fetches OpenSky or its OAuth token;
+>   `/api/opensky-track` answers 404 `{status: "off"}`; `/api/pulse` counts
+>   « avions » from the four French circles (all four required);
+>   `sourcesOff` ends in `"opensky"` (after `"open-meteo", "esri-world-imagery"`); the OpenSky credit is
+>   withdrawn, and the Flights row names adsb.lol (the dormant stub via
+>   `src/main.js`, the loaded module via `flights.js` `init`). A clone keeps
+>   OpenSky primary, with the adsb.lol circle when its snapshot is stale.
+> - **France in four circles.** `src/adsbLolFeed.js`: circles of 250 NM
+>   centred on the quarters of 41.3–51.1 N, 5.2 W–9.6 E (farthest point of the
+>   box 412 km from a centre, radius 463 km), merged per hex on the freshest
+>   last contact, `time` = the oldest circle's. An anchor inside the box gets
+>   them (`X-Flight-Coverage-Area: fr-metro`, the chip reads « France
+>   métropolitaine et ses abords » / “mainland France and its borders”);
+>   elsewhere, one circle, shared within 100 NM. From cold, the circle
+>   nearest the anchor answers first and the three others follow one per
+>   slot. Measured 2026-09-22 14:51 UTC: 1 033 aircraft in the box (974
+>   airborne, 97 % with a designator) against OpenSky's 1 090 (971 airborne)
+>   and 605 for one Paris circle; 1 855 drawn in all, borders included.
+>   adsb.lol sees no ground traffic on the Paris aprons.
+> - **One paced queue for api.adsb.lol**, ≥ 20 s between departures (the
+>   limiter measured at ~3 requests/min per IP with a burst of 2), shared by
+>   the civil circles and `/v2/mil`; idle when nobody asks; 429/420 pause it
+>   60 s. France alone: each circle refreshed every 80 s, 100 s with the
+>   military list wanted (the flights layer's military registry asks for it
+>   every 60 s).
+> - **Routes and type names: VRS standing data (CC0).**
+>   `src/vrsStandingData.js` downloads github.com/vradarserver/standing-data
+>   as one tarball a day and answers `/api/flight-info/route/:callsign` and
+>   `/api/flight-info/type/:hex` in the shapes adsbdb's proxy had. Type
+>   requests carry the feed designator (`?t=`); route requests carry the fix,
+>   so a multi-leg number answers the leg the aircraft is on. On 756 airborne
+>   airline callsigns over France: 637 found (84.3 %), 602 plausible (79.6 %),
+>   every found one with its airline name; 946/946 designators named. The
+>   airframe table holds 16 873 hexes (267 of 939 OpenSky contacts over
+>   France), so on a clone's OpenSky feed most silhouettes wait for adsb.lol.
+>   The adsbdb proxy, its calls and its cache are gone.
+
 > **2026-09-22 — the world base under the Satellite stack follows its licence:
 > ArcGIS Location Platform with `ARCGIS_API_KEY`, the anonymous Esri endpoint
 > only where the deployment allows it, Sentinel-2 cloudless 2016 everywhere
@@ -548,8 +592,9 @@ Updated: September 22, 2026
 >   silently.
 >   The server (`pulseProxy`, vite.config.js; rules in `src/data/pulse.js`)
 >   counts from caches it already holds and fetches nothing: aircraft over
->   French LAND from the OpenSky snapshot (warm only while a reader has the
->   flights layer on), vessels within the 12-mile territorial sea from the
+>   French LAND from the OpenSky snapshot — or, where OpenSky is off, from the
+>   four French adsb.lol circles, only when all four are in hand (warm only
+>   while a reader has the flights layer on), vessels within the 12-mile territorial sea from the
 >   AISStream map (warm whenever the key is set and the feed is live — 97.8 %
 >   of 10-min windows from 2026-09-12 to 09-19), buses only when EVERY
 >   network of the GTFS-RT index was heard in the window (never so far: 0.5 %
@@ -2084,7 +2129,7 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   Identity stays `icao24` on every keyed surface (`getNearby().icao24`, the
 >   detection `sourceId` declutter hashes, and the `id` that `trackById` and the
 >   Context cohorts resolve) — only the displayed string follows the chain.
->   Because adsbdb enrichment can answer *after* selection, the Context subject
+>   Because enrichment can answer *after* selection, the Context subject
 >   re-resolves its label each refresh (`resolveSubjectLabel()`) instead of
 >   freezing the selection-time snapshot.
 > - **Phase 5 tracked military aircraft label:** The military tracking entity
@@ -2564,8 +2609,8 @@ its criteria cannot be silently ignored.
 
 | Layer | Source | File | Proxy | Update Interval |
 |-------|--------|------|-------|-----------------|
-| Live Flights ✈️ | OpenSky Network; bounded adsb.lol regional fallback | `src/data/flights.js` | `/api/opensky` (OAuth + fallback) | 30s |
-| Military Flights 🎖️ | adsb.lol /v2/mil | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
+| Live Flights ✈️ | OpenSky Network on a clone, with an adsb.lol regional circle when its snapshot is stale; adsb.lol only where `GEV_NONCOMMERCIAL_SOURCES=off` (four merged circles over France, one circle elsewhere); routes, airline and type names from the VRS standing data | `src/data/flights.js` | `/api/opensky` (OAuth, or adsb.lol through the paced queue), `/api/flight-info` | 30s |
+| Military Flights 🎖️ | adsb.lol /v2/mil (paced queue, `src/adsbLolFeed.js`) | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
 | Live AIS Vessels 🚢 | AISStream websocket | `src/data/aisLiveVessels.js` | `/api/ais-live` | 60s (+800ms visibility pass) |
 | Mapped Installations ⌖ | OpenStreetMap mapped context | `src/data/militaryInstallations.js` | `/api/military-installations` | viewport-driven; while unavailable, auto-retry 30 s → 240 s backoff |
 | Earthquakes | USGS — M2.5+, trailing 24 h, drawn as a 3D phenomenon since 2026-09-03. A POINT at the epicentre whose diameter is in CONSTANT SCREEN PIXELS and carries the MAGNITUDE (6 px at M2.5, +3 px per unit, frozen domain M2.5–M9.5); a vertical RULER rising from it whose length in world metres at 1:1 is the FOCAL DEPTH — declared in the legend as a READING SCALE and not the position of the focus, because both underground options were built and measured away (with `disableDepthTestDistance` the stem draws THROUGH the planet: parked at the antipode of the day's deepest event, 26 of 28 marks were phantoms from the far hemisphere; `scene.globe.translucency` took the WHOLE scene from 0.30 ms to 1.30–2.40 ms median and is a scene property no layer owns); and one COLOUR shared by point and ruler carrying the AGE inside the 24 h window on four frozen bands, re-banded at every 60 s poll and never per frame. **Since 2026-09-10 the key and the card split the job** (D1): the on-map key carries the colour ramp with its counts plus ONE line per shape channel publishing its frozen domain — measured in Chrome at 1440×900 on a 29-event feed, 827 px of content in a 216 px window became 215 px, and 31 lines / 375 words became 11 / 93 — while **clicking a mark, or its floating `M4.1` label, opens a card** carrying that event's magnitude, place, UTC instant + age, focal depth and USGS id, each next to the caveat that belongs to it (`×31,6` of energy per magnitude unit, no footprint, the ruler's direction, the 1 km floor). The click leaves a separate cyan RING rather than repainting the mark, because every channel of the mark is already a datum; Escape, a click on the world, a poll that ages the event out, and switching the layer off all take the card down | `src/data/earthquakes.js` | — | 60s |
@@ -3008,8 +3053,9 @@ which is the same standard `buildPlacementLines` already holds this card to.
 #### Flight and airport, both directions (September 2026)
 
 `AUS → LAX` becomes `AUS → LAX · 1994 km` on the tracked contact's readout.
-adsbdb has published the destination's coordinates since `adsbdbProxy` was
-written and only `flightRouteArc` ever read them. `_remainingLegKm` measures
+The route source publishes the destination's coordinates (adsbdb did, and the
+VRS standing data that replaced it on 2026-09-22 does), and until then only
+`flightRouteArc` read them. `_remainingLegKm` measures
 from the BILLBOARD's position — the same fix `_routeIsPlausible` uses, so the
 two halves of one line cannot come from two different positions — and returns
 `null` rather than a guess when the leg carries no coordinate.
@@ -3018,8 +3064,9 @@ The other direction is a join: `flights/boundFor` on the board, read by
 `airportCardDetails`, which gains a line like `1 en approche — TVF57PQ`. Only a
 route `routePlausible` accepts is counted, for the same reason the route LINE
 is gated on it: a wrong-leg answer would put traffic on a field the aircraft is
-nowhere near. Two codes are passed because adsbdb publishes ONE and it is not
-always the same one (`iata_code || icao_code`), and the pack has both columns.
+nowhere near. Two codes are passed because the route carries ONE and it is not
+always the same one (IATA when the airport has one, ICAO otherwise), and the
+pack has both columns.
 
 **Its ceiling is low today and the code says so.** `_requestRouteEnrichment`
 fires for the TRACKED contact only, so a fresh session resolves no routes and
@@ -4889,6 +4936,9 @@ inert again.
   eight-second timeout; the timer is cleared on every success or failure path.
 - OpenSky response cache stores successful upstream responses only; OAuth token refresh calls are coalesced.
 - A cold OpenSky failure uses the current camera subpoint only to request a cached adsb.lol point fallback capped at 250 nm. A fresh OpenSky response or last-good cache wins; a nominally successful worldwide snapshot more than two minutes old prefers viewport-scoped adsb.lol when available, otherwise the stale source is reported honestly. The fallback is visibly source-labeled and is never presented as a worldwide snapshot.
+- Where `GEV_NONCOMMERCIAL_SOURCES=off`, `/api/opensky` never reaches the OpenSky branch (no snapshot, no OAuth token): an anchor inside 41.3–51.1 N, 5.2 W–9.6 E (or no anchor) is answered with the four French adsb.lol circles merged (`X-Flight-Coverage-Area: fr-metro`, `X-Flight-Coverage-Cells: n/4`), anywhere else with one circle (`X-Flight-Coverage-Nm: 250`); both carry `X-Flight-Source: adsb.lol` and `X-Flight-Ttl-Seconds` (the queue's round, which the page judges age against); nothing to serve after a 25 s wait is a 503 `{error: "adsb.lol unavailable"}`.
+- **adsb.lol pacing (`src/adsbLolFeed.js`).** Every api.adsb.lol request — French circles, regional circles, `/v2/mil` — leaves through one queue, ≥ 20 s apart: waiters first, then never-fetched jobs, then the oldest answer; a job not wanted for 75 s stops refreshing; a 429 or 420 pauses the queue 60 s. An answer older than max(150 s, 1.5 rounds) means the queue went idle: the request waits (≤ 25 s) for a fresh one — France reopens on the circle nearest the view and fills in — and falls back to answers up to 10 min old only if adsb.lol does not answer. A regional circle is shared by any anchor within 100 NM of its centre. `/api/adsblol/mil` serves the queue's newest copy (`X-ADS-B-Cache`, `X-ADS-B-Age-Seconds`) and waits at most 25 s when it has none.
+- `/api/flight-info/route/:callsign[?lat&lon&alt&vr]` and `/api/flight-info/type/:hex[?t=]` answer from the VRS standing data (`src/vrsStandingData.js`): one tarball a day from codeload.github.com under `.gev-cache/vrs-standing-data/`, indexed in memory (~0.4 s, ~30 MB), refreshed in the background after 24 h, a failed download retried after an hour and never replacing a working copy; 503 while no copy exists (the page then forgets that key). The adsbdb proxy and its `.gev-cache/adsbdb.json` are gone (the file is deleted on first load).
 - GBFS response size is capped; CCTV health map is bounded.
 - Proxy error payloads are sanitized (no internal error details returned to clients).
 - `OPENAI_API_KEY` is server-side only; the browser receives ephemeral Realtime client secrets from `/api/realtime/token`.
@@ -4899,7 +4949,7 @@ inert again.
 - `/api/military-installations` uses an independent limiter with the same 90-per-client/300-global one-minute bounds, so viewport installation refreshes never consume `/api/overpass` annotation/traffic capacity.
 - `/api/route` proxies bounded OSRM route requests for annotation routes, with profile allowlisting, distance caps, response caps, caching, and sanitized "no route found" errors.
 - **Upstream pacing (`src/upstreamPacing.js`).** Every visitor of a hosted instance reaches the public APIs from the server's one address, so a ceiling published "per IP" is a ceiling for the whole audience. One pacer per upstream, shared by every route that reaches it, spaces departures evenly at 80 % of the published ceiling: Géorisques v1 `resultats_rapport_risque` (1/s → one per 1.25 s) and the rest of `api/v1/**` (5/s → 4/s); Géoplateforme isochrone (5/s → 4/s), WFS (30/s → 24/s), and the geocoder plus `api-adresse.data.gouv.fr` as ONE bucket (50/s → 40/s — the old host is served by the Géoplateforme); INSEE Melodi (20/s per its CGU → 16/s); Nominatim and `routing.openstreetmap.de` (1/s → one per 1.25 s). Each entry cites its source URL. A call waits at most 5 s for its slot and one visitor (`clientKey`) may hold at most half of a queue; past either bound the call is refused, never queued further. What the visitor gets: an address route (`installAddressRoute`) with nothing left answers **503 + `Retry-After`**, code `upstream-paced` (worded in both languages in `serverMessages.i18n.js`); one missing only a paced part is served `no-store` and not cached, server or browser; `/api/geocode` falls through from Nominatim to the IGN geocoder (503 + `Retry-After` only if both are refused); `/api/route` answers 503 + `Retry-After` and the annotation keeps its straight segments; the regional brief comes back partial and uncached; the INSEE grid and national view serve their stale copy or 503 + `Retry-After`. An upstream 429 despite the pacing pauses that pacer for its `Retry-After` (5 s default, 60 s cap). The visitor is carried to the calls by `AsyncLocalStorage` (`runForVisitor` / `asVisitor`); a background call is paced but not capped per visitor. Refusals log one line per upstream per minute (`[upstream-pacing]`). Not paced by this: WMS-V, Overpass (its own slots and relay), OpenSky, AISStream, Bison Futé Action b (its own ≤ 1 file/s).
-- Track endpoints: `/api/ais-live/track?mmsi=` (server-accumulated ring buffers; sub-route handled before the rows snapshot), `/api/opensky-track?icao24=` (OAuth, 60s cache, sanitized errors, independent OpenSky credit bucket), `/api/adsblol/trace?hex=` (60s cache, 5MB cap, ODbL attribution required in UI).
+- Track endpoints: `/api/ais-live/track?mmsi=` (server-accumulated ring buffers; sub-route handled before the rows snapshot), `/api/opensky-track?icao24=` (OAuth, 60s cache, sanitized errors, independent OpenSky credit bucket; 404 `{status: "off"}` without any fetch where OpenSky is off), `/api/adsblol/trace?hex=` (60s cache, 5MB cap, ODbL attribution required in UI).
 - Realtime debug logs redact API keys, bearer tokens, client secrets, and image data URLs before writing to disk; request bodies are size-capped.
 
 ## UI/UX Runtime Defaults
@@ -4983,7 +5033,7 @@ inert again.
 - **Cockpit left-panel clearance:** the Cockpit Contact card and peripheral HUD participate in the adaptive left accordion's live obstacle measurements, including live viewport-height changes. Expanding Layers or Scenes keeps the active panel in the available upper-left corridor with internal scrolling; it does not cover the Contact card, lower Cockpit controls, or Cesium credit line. Outside Cockpit the hidden card does not alter the normal corridor.
 - **Cockpit Context scope:** the 250 km radius applies to the air/sea proximity cohorts. Installation counts come only from the currently loaded viewport and are labeled `CURRENT VIEWPORT ONLY` in the cockpit as well as the normal Context panel; neither surface presents them as a complete 250 km installation survey.
 - **Cockpit camera anchor:** first-person mode does not write feed-boundary corrections directly into the camera. A cockpit-only inertial anchor advances from the selected aircraft's displayed course and speed, then converges toward the authoritative delayed track with correction capped below forward motion. The displayed kinematics are derived from the same consecutive fix segment as the rendered position, with raw feed speed/course used only as fallback; a transient zero/missing feed speed therefore cannot freeze a visibly moving aircraft after layer enable or a map/cockpit handoff. Rendered altitude continues to come from that interpolated track position. Late ADS-B fixes and short render stalls can remove drift without accelerating or reversing the view. Camera placement runs before scene update/culling at a bounded 20 Hz so a moving cockpit does not force Photoreal 3D Tiles to retraverse on every display frame; textual instruments update at 10 Hz and context/layout work at 4 Hz. Every far Cockpit contact pip shares one stable Cesium texture-atlas entry and skips unused screen-projected course calculations, while only in-range 2D aircraft silhouettes pay the screen-projected rotation cost; ambient glTF collections are hidden/retained rather than synchronously destroyed at cockpit entry, and context rails lay out only on explicit content/state changes and viewport resize. The deliberate 15/30-second layer interpolation delays and per-Cesium-frame position caches remain unchanged.
-- **Cockpit route, vision, and view controls:** visible on-screen `COCKPIT`, `RESET`, and `EXIT COCKPIT` controls replace reliance on the `C` shortcut. RESET uses the same canonical globe route as the map and voice actions, exits Cockpit, and releases its camera ownership rather than exposing the hidden map-style top action. When the tracked commercial flight has a plausible ADSBDB route, the top of the right briefing rail shows a compact `FROM → TO` airport strip and the visor shows a centered estimated-destination chevron with its relative bearing; absent or implausible route data hides the strip and cue rather than guessing. The cockpit-local vision control is an interactive `PREV / CURRENT / NEXT` carousel over the inherited map preset, `CRT`, `NVG`, `FLIR`, and `NOIR`; its previous/next actions wrap, and activating the current value advances to the next style. The inherited entry is named directly, such as `NOIR`, and retains that map shader. There is no empty `NONE` entry. CRT, NVG, FLIR, and NOIR temporarily activate the existing Cesium post-process stages, while returning to the inherited entry or exiting Cockpit restores the pre-entry visual style. The regional-news page uses a free Google News RSS locality query first, with the existing GDELT query retained only as a fail-soft fallback; linked headlines remain reporting, not verified incidents or risk intelligence.
+- **Cockpit route, vision, and view controls:** visible on-screen `COCKPIT`, `RESET`, and `EXIT COCKPIT` controls replace reliance on the `C` shortcut. RESET uses the same canonical globe route as the map and voice actions, exits Cockpit, and releases its camera ownership rather than exposing the hidden map-style top action. When the tracked commercial flight has a plausible scheduled route (VRS standing data), the top of the right briefing rail shows a compact `FROM → TO` airport strip and the visor shows a centered estimated-destination chevron with its relative bearing; absent or implausible route data hides the strip and cue rather than guessing. The cockpit-local vision control is an interactive `PREV / CURRENT / NEXT` carousel over the inherited map preset, `CRT`, `NVG`, `FLIR`, and `NOIR`; its previous/next actions wrap, and activating the current value advances to the next style. The inherited entry is named directly, such as `NOIR`, and retains that map shader. There is no empty `NONE` entry. CRT, NVG, FLIR, and NOIR temporarily activate the existing Cesium post-process stages, while returning to the inherited entry or exiting Cockpit restores the pre-entry visual style. The regional-news page uses a free Google News RSS locality query first, with the existing GDELT query retained only as a fail-soft fallback; linked headlines remain reporting, not verified incidents or risk intelligence.
 - **Cockpit weather status:** the earlier multi-canvas atmospheric compositor remains fail-closed and is not attached to the live viewer. Cockpit clouds are a separate transparent WebGL pass with a capped 520×320 framebuffer, 24 ray steps, three FBM octaves, and a 12 FPS ceiling. It defaults off and starts only when local storage explicitly contains the persisted `WX ON` opt-in (`'1'`). When opted in, observations refresh after five minutes or 25 km of aircraft movement, fail transparent when unavailable or clear, and stop on exit or disable. `WX OFF` governs atmospheric rendering only: the briefing still fetches source-backed Nominatim, headline, and Open-Meteo local-information data, aborting and replacing any in-flight request when the selected aircraft changes. No weather effect runs in map mode and no synthetic fallback is shown. Under `GEV_NONCOMMERCIAL_SOURCES=off` (the hosted deployment) there is no Open-Meteo at all: no `WX` toggle, no cloud pass, and a Local Info page with the place and position only (2026-09-22 note at the top).
 - **Cockpit trail visibility:** entering cockpit hides the selected aircraft's trail body and head so they cannot cross the first-person view; exit restores them. This cockpit-only presentation change does not alter the normal map-mode invariant that aircraft trails render through terrain using their depth-fail material.
 - **Aircraft course slew:** civilian and military 3D models retain the 60°/s course limiter, but each rendered frame can consume at most 250 ms of accumulated slew time. A long tile/render stall therefore catches up over multiple visible frames instead of turning one delayed frame into a heading snap.
