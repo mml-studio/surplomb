@@ -1,5 +1,5 @@
 /**
- * The two legal links, at the end of the globe's credit line.
+ * The legal links, at the end of the globe's credit line.
  *
  * The credit line is the only footer the globe has: bottom-left on a desktop,
  * the last row of the sheet on a phone (`phoneSheet.js` moves the whole
@@ -18,22 +18,23 @@
  * `target="_blank"` because leaving the globe loses the camera and every
  * layer that is not in the share-link yet.
  *
- * The LABELS are translated and the PAGES are not: the two legal pages are
- * French and the French text governs (CONTRIBUTING.md, "Language"), so an
- * English reader gets *Legal notice* and *Privacy* on links that open the
- * same French documents.
+ * The LABELS are translated and the PAGES are not: the legal pages are French
+ * and the French text governs (CONTRIBUTING.md, "Language"), so an English
+ * reader gets *Legal notice*, *Privacy* and *Terms of sale* on links that open
+ * the same French documents.
  */
 
 import messages from './legalLinks.i18n.js';
 
 /**
- * The two links, in order. `label` is a GETTER: the row is built when this
+ * The links, in order. `label` is a GETTER: the row is built when this
  * module loads and read when the credit line is written, so the words follow
  * the page's language rather than the import (ratchet R5).
  */
 export const LEGAL_LINKS = Object.freeze([
   Object.freeze({ href: '/mentions-legales', get label() { return messages().notice; } }),
   Object.freeze({ href: '/confidentialite', get label() { return messages().privacy; } }),
+  Object.freeze({ href: '/cgv', get label() { return messages().terms; } }),
 ]);
 
 export const LEGAL_LINKS_CLASS = 'gev-legal-links';

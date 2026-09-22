@@ -91,7 +91,9 @@ test('the clean path and the file path both name a legal page, nothing else does
   assert.equal(legalPageForUrl('/mentions-legales.html'), 'mentions-legales.html');
   assert.equal(legalPageForUrl('/mentions-legales/?ref=globe'), 'mentions-legales.html');
   assert.equal(legalPageForUrl('/confidentialite#cookies'), 'confidentialite.html');
-  for (const url of ['/', '/fiche.html', '/api/confidentialite', '/MENTIONS-LEGALES', '/x/../mentions-legales', '/constructor']) {
+  assert.equal(legalPageForUrl('/cgv'), 'cgv.html');
+  assert.equal(legalPageForUrl('/cgv.html#paiement'), 'cgv.html');
+  for (const url of ['/', '/fiche.html', '/api/confidentialite', '/api/cgv', '/CGV', '/MENTIONS-LEGALES', '/x/../mentions-legales', '/constructor']) {
     assert.equal(legalPageForUrl(url), null, url);
   }
 });
@@ -100,6 +102,7 @@ test('each shipped page is well-formed for the substitution', () => {
   const expected = {
     'mentions-legales.html': ['publisher', 'hosting'],
     'confidentialite.html': ['controller'],
+    'cgv.html': ['seller'],
   };
   for (const file of Object.values(LEGAL_PAGES)) {
     const html = page(file);
@@ -175,5 +178,66 @@ test('the welcome-card test is disclosed only where it runs', () => {
     assert.doesNotMatch(on, /<!--\/?gev:/);
     // The no-cross-referencing promise names the trial cookie only where one exists.
     assert.equal(/gev_trial/.test(on), Boolean(trial.GEV_TRIAL_LIMIT));
+  }
+});
+
+test('the terms of sale name the seller, and nothing a contract does not need', () => {
+  const html = renderLegalPage(page('cgv.html'), FULL_ENV);
+  const seller = html.slice(html.indexOf('id="parties"'), html.indexOf('id="professionnels"'));
+  assert.match(seller, /<dt>Vendeur<\/dt><dd>Exemple SAS, au capital de 1 000 €<\/dd>/);
+  assert.match(seller, /RCS Nulle-Part 000 000 000/);
+  assert.match(seller, /1 rue de l’Exemple, 00000 Nulle-Part/);
+  // Article 5 sends a cancellation to this address: it must be a link.
+  assert.match(seller, /<a href="mailto:contact@example\.org">contact@example\.org<\/a>/);
+  assert.doesNotMatch(html, /Camille Exemple|tel:|Hébergeur A/, 'no director, phone or host on a contract');
+  assert.doesNotMatch(html, /class="missing/);
+  assert.doesNotMatch(html, /<!--\/?gev:/, 'every marker is consumed');
+});
+
+test('terms of sale with no seller say so, and name what is missing', () => {
+  const html = renderLegalPage(page('cgv.html'), {});
+  assert.match(html, /Cette instance n’a pas renseigné son vendeur/);
+  assert.match(html, /Variables manquantes : <code>GEV_LEGAL_PUBLISHER<\/code>/);
+});
+
+test('the terms of sale say the paid offer is not open, and quote no price', () => {
+  const html = page('cgv.html');
+  // Until payment exists nobody may read this page as an offer. The pull
+  // request that opens it removes the notice — and this assertion — on purpose.
+  assert.match(html, /<p class="notice"[^>]*><strong>L’offre payante n’est pas encore ouverte\.<\/strong>/);
+  assert.match(html, /Version du \d{1,2} \S+ 20\d\d\./);
+  // The price is the order page's (art. 4): a figure here would be a second
+  // price list, and the first to go stale.
+  assert.doesNotMatch(html, /€|\bEUR\b|\bHT\b/);
+});
+
+test('the terms of sale carry what French B2B law requires of them', () => {
+  const text = page('cgv.html').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+  // Professionals only, and no consumer withdrawal right.
+  assert.match(text, /réservée aux professionnels/);
+  assert.match(text, /numéro SIREN ou son numéro de TVA intracommunautaire/);
+  assert.match(text, /droit de rétractation prévu par le Code de la consommation ne s’applique pas/);
+  // Payment terms and late-payment penalties (Code de commerce, L441-1 I and
+  // L441-10 II): the ECB rate plus ten points, the €40 flat indemnity
+  // (D441-5), due the day after the payment date without a reminder.
+  assert.match(text, /art\. L441-10, II/);
+  assert.match(text, /Banque centrale européenne à son opération de refinancement la plus récente, majoré de 10 points de pourcentage/);
+  assert.match(text, /indemnité forfaitaire pour frais de recouvrement de 40 euros \(art\. D441-5\)/);
+  assert.match(text, /sans qu’un rappel soit nécessaire/);
+  // Monthly, tacitly renewed, cancelled at the end of the running month,
+  // which is not refunded.
+  assert.match(text, /renouvelle tacitement chaque mois/);
+  assert.match(text, /prend effet à la fin de la période mensuelle en cours/);
+  assert.match(text, /n’est pas remboursé/);
+  assert.match(text, /plafonnée au montant payé par le Client .* douze mois/);
+  assert.match(text, /tribunal de commerce de Paris/);
+});
+
+test('every legal page links to the other two', () => {
+  for (const [name, file] of Object.entries(LEGAL_PAGES)) {
+    const footer = /<footer class="colophon">([\s\S]*?)<\/footer>/.exec(page(file))?.[1] || '';
+    for (const other of Object.keys(LEGAL_PAGES).filter((n) => n !== name)) {
+      assert.match(footer, new RegExp(`href="/${other}"`), `${file} → /${other}`);
+    }
   }
 });

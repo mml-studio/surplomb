@@ -68,6 +68,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Zone de chalandise | Catchment area | |
 | la chronique | the chronicle | Server-side archive of live feeds. |
 | essai, liste d’attente | trial, waitlist | |
+| Mentions légales, Confidentialité, Conditions générales de vente (CGV) | Legal notice, Privacy, Terms of sale | The three legal pages. Only the labels of the links are translated; the pages stay French. |
 | Pass propriétaire | owner pass | |
 | barème national | national scale | The percentile ladder behind the Address X-ray. |
 | note, lettre, rang | score, letter, rank | |

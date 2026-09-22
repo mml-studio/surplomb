@@ -46,6 +46,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   of the voice transcript. This is the disclosure the EU AI Act (article
   50(1)) asks for since 2026-08-02; the old `AI AGENT` lettering was English
   only, 0 px wide on a desktop and hidden on phones.
+- **Terms of sale for the paid offer, at `/cgv`.** The *conditions générales
+  de vente* say who sells (the site's publisher, read from the same settings
+  as the legal notice), that the offer is for professionals only, what is sold
+  and what stays free, how the monthly subscription renews and is cancelled,
+  the late-payment penalties French law requires, and what the data, the
+  valuations and the AI answers do not promise. A notice at the top says the
+  paid offer is not open yet: nothing can be bought today. The page is French
+  in both languages, like the other two legal pages; the landing page's
+  footer, the globe's credit line and the two other legal pages link to it
+  (« CGV », “Terms of sale”).
 - **The landing page speaks English.** A browser in English now opens the
   landing page in English, like the globe, and an EN / FR pill in the header
   switches between the two (it remembers the choice, and the address stays

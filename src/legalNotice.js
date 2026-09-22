@@ -12,7 +12,7 @@
  *   - A postal address and a phone number in a public git history are a spam
  *     and phishing target that no later commit can take back.
  *
- * So the two legal pages ship with a FALLBACK between markers — a visible
+ * So the legal pages ship with a FALLBACK between markers — a visible
  * « non renseigné » — and the server replaces it with the values below when
  * the deployment sets them. A page served without this middleware (a plain
  * static host, a stale build) shows the fallback, never a blank: a missing
@@ -22,13 +22,17 @@
  * inlined at build time, so editing the deployment's `.env` and recreating the
  * container is enough — no rebuild.
  *
- * AND IT IS FRENCH, ON PURPOSE. `mentions-legales.html` and
- * `confidentialite.html` are French and the French text governs
+ * AND IT IS FRENCH, ON PURPOSE. `mentions-legales.html`,
+ * `confidentialite.html` and `cgv.html` are French and the French text governs
  * (CONTRIBUTING.md, "Language"): they are legal documents, not interface, and
  * a translated notice would be a second version of something that has exactly
  * one. The rows this module fills are those pages' own words, so they stay
- * where they are, in French, in both locales. The two LINKS that lead here do
- * get English labels — see `src/legalLinks.js`.
+ * where they are, in French, in both locales. The LINKS that lead here do get
+ * English labels — see `src/legalLinks.js`.
+ *
+ * The terms of sale (`cgv.html`) name the SELLER from the same variables: the
+ * publisher of the site is the company that sells its paid offer, and a second
+ * set of variables would be a second place for the same identity to drift.
  */
 
 import { firstRunExperimentFromEnv } from './firstRunAb.js';
@@ -59,7 +63,7 @@ export const LEGAL_FIELDS = Object.freeze([
 export const HOSTING_SEPARATOR = '|';
 
 /** The marked regions the server fills, by name. */
-export const LEGAL_BLOCKS = Object.freeze(['publisher', 'hosting', 'controller']);
+export const LEGAL_BLOCKS = Object.freeze(['publisher', 'hosting', 'controller', 'seller']);
 
 /**
  * Sections that only describe a feature when the deployment turned it on.
@@ -149,11 +153,21 @@ export function renderLegalBlocks(notice) {
     row('Directeur de la publication', escapeHtml(notice.director)),
   ].join('');
   const hosting = notice.hosting.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('');
+  // The seller of the terms of sale: who contracts, where, and the address a
+  // customer cancels at. No phone and no publication director — neither is a
+  // term of the contract.
+  const seller = [
+    row('Vendeur', escapeHtml(notice.publisher)),
+    notice.registration ? row('Immatriculation', escapeHtml(notice.registration)) : '',
+    row('Adresse', escapeHtml(notice.address)),
+    row('Courriel', mailLink(notice.email)),
+  ].join('');
   return {
     publisher: `<dl class="identity">${publisher}</dl>`,
     hosting: `<ul class="providers">${hosting}</ul>`,
     controller: `<p>Le responsable du traitement est l’éditeur du site : `
       + `${escapeHtml(notice.publisher)}, joignable à ${mailLink(notice.email)}.</p>`,
+    seller: `<dl class="identity">${seller}</dl>`,
     // i18n-ignore-end
   };
 }
@@ -212,6 +226,7 @@ export function renderLegalPage(html, env = {}) {
 export const LEGAL_PAGES = Object.freeze({
   'mentions-legales': 'mentions-legales.html',
   confidentialite: 'confidentialite.html',
+  cgv: 'cgv.html',
 });
 
 /** @param {string} url @returns {string|null} The page's file name. */

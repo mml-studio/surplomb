@@ -8,7 +8,7 @@ test('every link on the credit line lands on a page the server fills', () => {
   for (const { href } of LEGAL_LINKS) {
     assert.ok(legalPageForUrl(href), `${href} is not a legal page`);
   }
-  assert.equal(LEGAL_LINKS.length, 2);
+  assert.deepEqual(LEGAL_LINKS.map(({ href }) => href), ['/mentions-legales', '/confidentialite', '/cgv']);
 });
 
 test('the links open beside the globe, never over it', () => {
@@ -16,6 +16,7 @@ test('the links open beside the globe, never over it', () => {
   assert.equal(markup.match(/target="_blank" rel="noopener"/g)?.length, LEGAL_LINKS.length);
   assert.match(markup, /Mentions légales/);
   assert.match(markup, /Confidentialité/);
+  assert.match(markup, /<a href="\/cgv" target="_blank" rel="noopener">CGV<\/a>/);
 });
 
 /** A container that finds by class among everything appended under it. */

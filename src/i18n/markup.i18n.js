@@ -717,6 +717,11 @@ export default defineMessages({
       codeAria: { fr: 'Voir le code open source', en: 'See the open-source code' },
       legal: { fr: 'Mentions légales', en: 'Legal notice', note: 'The page it opens is in French (hreflang="fr").' },
       privacy: { fr: 'Confidentialité', en: 'Privacy', note: 'The page it opens is in French (hreflang="fr").' },
+      terms: {
+        fr: 'CGV',
+        en: 'Terms of sale',
+        note: 'Conditions générales de vente, the B2B terms of the paid offer. The page it opens is in French (hreflang="fr").',
+      },
     },
     dock: {
       form: { fr: 'Ouvrir le globe sur un lieu', en: 'Open the globe on a place' },
