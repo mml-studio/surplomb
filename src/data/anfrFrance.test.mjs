@@ -1439,7 +1439,7 @@ test('the drawn shafts are one collection per look, so the field is a handful of
 /** A viewer whose camera box a test can move, over real collections that count their adds. */
 function countingViewer(box) {
   const added = [];
-  const counts = { billboards: 0, shafts: 0 };
+  const counts = { billboards: 0, removed: 0, shafts: 0 };
   const viewer = {
     camera: { computeViewRectangle: () => Cesium.Rectangle.fromDegrees(box.west, box.south, box.east, box.north) },
     scene: {
@@ -1461,6 +1461,11 @@ function countingViewer(box) {
     counts.billboards += 1;
     return addBillboard(options);
   };
+  const removeBillboard = points.remove.bind(points);
+  points.remove = (billboard) => {
+    counts.removed += 1;
+    return removeBillboard(billboard);
+  };
   const addBand = masts.add.bind(masts);
   masts.add = (band, index) => {
     const addShaft = band.add.bind(band);
@@ -1476,8 +1481,9 @@ function countingViewer(box) {
 test('a rest on the same masts creates no primitive, and a pan creates only its newcomers', async () => {
   // Every rest used to empty the dots and add one per mast in view: 2 954
   // billboards destroyed and re-created per rest over Paris at 5 km. A mast
-  // that stays in view now keeps its record, its billboard and its shaft, and
-  // a newcomer takes a billboard and a shaft that a leaver put away.
+  // that stays in view now keeps its record, its billboard and its shaft; a
+  // leaver's billboard is removed and a newcomer's added, and a newcomer's
+  // shaft is one a leaver of the same look put away.
   const box = { west: 2.325, south: 48.850, east: 2.340, north: 48.860 };
   const { viewer, points, masts, counts } = countingViewer(box);
   let pack = PACK;
@@ -1495,6 +1501,7 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   // The same masts again — a rest that did not move, or a refresh.
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(counts.billboards, SUPPORTS.length, 'no billboard created');
+  assert.equal(counts.removed, 0, 'none removed');
   assert.equal(counts.shafts, 14, 'no shaft created');
   for (const row of SUPPORTS) {
     assert.equal(record(row), first.get(row.id), 'the same record');
@@ -1507,9 +1514,10 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   const arriving = leaving.map((row, i) => ({ ...row, id: 990_000 + i, lat: row.lat + 0.002 }));
   pack = { ...PACK, supports: [...SUPPORTS.slice(3), ...arriving], inBox: SUPPORTS.length };
   await _loadAnfrViewportForTest(viewer, { force: true });
-  assert.equal(counts.billboards, SUPPORTS.length, 'the newcomers wear the leavers\' billboards');
-  assert.equal(points.length, SUPPORTS.length, 'and the collection did not grow');
-  assert.equal(counts.shafts, 14, 'and stand on their shafts');
+  assert.equal(counts.billboards, SUPPORTS.length + 3, 'three billboards for three newcomers');
+  assert.equal(counts.removed, 3, 'and three removed for three leavers');
+  assert.equal(points.length, SUPPORTS.length);
+  assert.equal(counts.shafts, 14, 'the newcomers stand on the leavers\' shafts');
   for (const row of SUPPORTS.slice(3)) {
     assert.equal(record(row), first.get(row.id));
     assert.equal(record(row).point, billboards.get(row.id));
@@ -1517,31 +1525,33 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   for (const row of leaving) assert.equal(record(row), null);
   for (const row of arriving) {
     const arrived = record(row);
-    assert.equal(arrived.point.show, true);
-    assert.equal(arrived.point.id, arrived.id, 'a recycled billboard answers to its new mast');
+    assert.equal(arrived.point.id, arrived.id);
     assert.ok(Cesium.Cartesian3.equals(arrived.point.position, arrived.position));
   }
   assert.equal(drawnShafts(masts).length, _anfrMastTallyForTest().masts);
 
-  // A pan onto fewer masts puts five away; the next one, onto thirteen new
-  // ones, takes those five back and adds the eight it still lacks.
-  pack = { ...PACK, supports: [...SUPPORTS.slice(3, 10), ...arriving] };
+  // A rest that only re-dresses masts it kept — here the register lit 5G on
+  // one of them — writes that billboard and asks for one vertex rebuild,
+  // through one hidden add and remove (see `rebuildMarksOnce`).
+  const upgraded = SUPPORTS.slice(3).find((row) => row.live && !(row.live & 8));
+  assert.ok(upgraded, 'the fixture has a mast without 5G');
+  pack = {
+    ...pack,
+    supports: pack.supports.map((row) => (row === upgraded ? { ...row, live: row.live | 8 } : row)),
+  };
+  const before = { ...counts };
   await _loadAnfrViewportForTest(viewer, { force: true });
-  assert.equal(counts.billboards, SUPPORTS.length, 'nothing created to draw fewer');
-  const more = SUPPORTS.slice(3, 8).map((row, i) => ({ ...row, id: 991_000 + i, lon: row.lon + 0.002 }));
-  pack = { ...PACK, supports: [...SUPPORTS, ...arriving, ...more] };
-  await _loadAnfrViewportForTest(viewer, { force: true });
-  assert.equal(counts.billboards, SUPPORTS.length + 13 - 5, 'thirteen newcomers, five spares: eight created');
-  assert.equal(_anfrStatsForTest().count, SUPPORTS.length + arriving.length + more.length);
-  const visible = [];
-  for (let i = 0; i < points.length; i += 1) if (points.get(i).show) visible.push(points.get(i).id);
-  assert.equal(visible.length, _anfrStatsForTest().count, 'one visible billboard per mast');
-  assert.equal(new Set(visible).size, visible.length, 'and no mast drawn twice');
+  assert.equal(record(upgraded).style.band, '5g');
+  assert.equal(record(upgraded).point, billboards.get(upgraded.id), 'the same billboard, re-dressed');
+  assert.equal(record(upgraded).point.scale, anfrGlyphScale(record(upgraded).style.sizePx));
+  assert.equal(counts.billboards - before.billboards, 1);
+  assert.equal(counts.removed - before.removed, 1);
+  assert.equal(points.length, SUPPORTS.length, 'and the collection holds one billboard per mast');
 
   anfrFranceLayer.destroy(viewer);
 });
 
-test('the maillage keeps its dots across a pan and takes them back from the pool', async () => {
+test('the maillage keeps its dots across a pan and draws only the ones that come back', async () => {
   const box = { west: -5, south: 41, east: 10, north: 51.5 };
   const { viewer, points, counts } = countingViewer(box);
   const http = async () => ({ ok: true, json: async () => MESH_PAYLOAD });
@@ -1557,25 +1567,28 @@ test('the maillage keeps its dots across a pan and takes them back from the pool
   Object.assign(box, { west: -4.5, east: 10.5 });
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(counts.billboards, drawn);
+  assert.equal(counts.removed, 0);
   for (const [id, point] of billboardOf) if (point) assert.equal(_anfrRecordForTest(id).point, point);
 
-  // A pan that leaves part of Paris behind the west edge: the leavers are
-  // hidden, not destroyed, and the ones that stay keep their billboards.
+  // A pan that leaves part of Paris behind the west edge: the leavers go, and
+  // the ones that stay keep their billboards.
   Object.assign(box, { west: 2.448, south: 48.5, east: 3.448, north: 49.5 });
   const part = await _loadAnfrViewportForTest(viewer, { force: true });
   assert.ok(part.count > 0 && part.count < drawn, `${part.count} of ${drawn} still in view`);
-  assert.equal(counts.billboards, drawn);
-  assert.equal(points.length, drawn, 'the leavers are kept, hidden');
-  let hidden = 0;
-  for (let i = 0; i < points.length; i += 1) if (!points.get(i).show) hidden += 1;
-  assert.equal(hidden, drawn - part.count);
+  assert.equal(counts.billboards, drawn, 'nothing created to draw fewer');
+  assert.equal(counts.removed, drawn - part.count);
+  assert.equal(points.length, part.count);
+  for (const [id, point] of billboardOf) {
+    const kept = _anfrRecordForTest(id);
+    if (kept) assert.equal(kept.point, point);
+  }
 
-  // And back: every dot returns on a spare billboard.
+  // And back: only the dots that left are drawn again.
   Object.assign(box, { west: -5, south: 41, east: 10, north: 51.5 });
   const back = await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(back.count, drawn);
-  assert.equal(counts.billboards, drawn, 'no billboard created on the way back');
-  for (let i = 0; i < points.length; i += 1) assert.equal(points.get(i).show, true);
+  assert.equal(counts.billboards, drawn + (drawn - part.count));
+  assert.equal(points.length, drawn);
 
   anfrFranceLayer.destroy(viewer);
 });

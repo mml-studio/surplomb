@@ -495,27 +495,35 @@ function dressSelected(billboard) {
 // billboard per mast in view, although a pan keeps most of them — the world
 // pick is built so that it does (`anfrMesh.js`), and a supports box shares
 // most of its masts with the box before it. Measured on the reference
-// ThinkCentre at 4× CPU throttling, antennas alone, six pan-and-rest cycles
-// (2026-09-23): over Paris at 5 km, 2 954 billboards destroyed and re-created
-// per rest and 106 ms of main thread in `reconcileSupports`; over France, two
-// rebuilds of 631 per rest.
+// ThinkCentre at 4× CPU throttling, antennas alone (2026-09-23): over Paris at
+// 5 km, 2 954 billboards destroyed and re-created per rest; over France, 631
+// twice per rest.
 //
 // Now the marks are keyed by their record id, which is the mast's identity in
 // both regimes (`anfrSupportId`, `anfrMeshRecordId`). A mast still in view
 // keeps its record — and with it any lookup or card in flight — and its
-// billboard, moved only if its seat moved and re-dressed only if its style
-// changed. A mast that leaves has its billboard hidden and put in a pool; a
-// newcomer takes one from the pool before a new one is added. A rest on the
+// billboard, untouched unless its seat moved or its style changed. A mast that
+// leaves has its billboard removed; a newcomer gets a new one. A rest on the
 // same view touches nothing.
 //
-// Hidden billboards are not free — the collection walks them every frame and
-// writes them on every rebuild — so the pool keeps what a pan's churn needs
-// ({@link SPARE_MARKS_FLOOR}, or half the marks drawn) and gives the rest back.
+// ── WHY THE LEAVERS ARE REMOVED, NOT HIDDEN AND POOLED ──────────────────────
+// Hiding a billboard and handing it to a newcomer looks cheaper than removing
+// one and adding another, and on this collection it is not. A
+// `BillboardCollection` re-derives its buffer usage from what was written
+// since its last rebuild: a one-off write of `show` or `position` flips those
+// attributes to STREAM_DRAW, which is a full vertex rebuild, and the next
+// frame with no write flips them back to STATIC_DRAW, which is a second one.
+// Measured with a pool, interleaved with the former code on the same machine:
+// two rebuilds per rest instead of one, 55 ms of them over Paris against 46.
+// An `add` or `remove` instead marks the collection for ONE rebuild that zeroes
+// the write counts, so the rest's writes all ride on it — and the newcomers,
+// a few hundred at most on a pan, are cheap to build (≈ 7 µs each at 4×
+// throttling, measured).
+//
+// The same flip is why a rest that only re-seats or re-dresses masts it kept —
+// no newcomer, no leaver — asks for that single rebuild itself ({@link
+// rebuildMarksOnce}).
 
-/** Hidden billboards waiting for the next rest's newcomers. */
-let _spareMarks = [];
-/** Fewest spare billboards kept after a rest; half the drawn marks when that is more. */
-const SPARE_MARKS_FLOOR = 512;
 /** The supports' fade with distance, one instance: the billboard copies it. */
 const SUPPORT_FADE = new Cesium.NearFarScalar(500, 1.0, 400_000, 0.45);
 
@@ -529,8 +537,7 @@ function sameMarkStyle(a, b) {
 }
 
 /**
- * A billboard for a mast that was not drawn: a spare one, re-dressed, or a
- * new one when the pool is empty.
+ * A billboard for a mast that was not drawn.
  * @param {string} id Record id, which is also the pick id.
  * @param {object} position Cartesian3.
  * @param {object} style `anfrSupportStyle` / `anfrMeshStyle`.
@@ -539,39 +546,23 @@ function sameMarkStyle(a, b) {
  */
 function takeMark(id, position, style, fade) {
   if (!_points) return null;
-  const spare = _spareMarks.pop();
-  if (!spare) {
-    return _points.add(mastBillboardOptions(id, position, style, fade ? { translucencyByDistance: fade } : {}));
-  }
-  spare.id = id;
-  spare.position = position;
-  spare.translucencyByDistance = fade;
-  dressMastSprite(spare, style);
-  spare.show = true;
-  return spare;
+  return _points.add(mastBillboardOptions(id, position, style, fade ? { translucencyByDistance: fade } : {}));
 }
 
-/** Hide a billboard whose mast left the view, and keep it for a newcomer. */
+/** Remove the billboard of a mast that left the view. */
 function releaseMark(billboard) {
-  if (!billboard) return;
-  billboard.show = false;
-  billboard.id = undefined;
-  _spareMarks.push(billboard);
+  if (billboard && _points && !_points.isDestroyed()) _points.remove(billboard);
 }
 
-/** Give back the spare billboards a pan will not need. */
-function trimSpareMarks() {
-  const keep = Math.max(SPARE_MARKS_FLOOR, Math.ceil(_records.size / 2));
-  while (_spareMarks.length > keep) {
-    const billboard = _spareMarks.pop();
-    if (_points && !_points.isDestroyed?.()) _points.remove(billboard);
-  }
-}
-
-/** Empty the collection and the pool with it: they hold the same billboards. */
-function clearMarks() {
-  _points?.removeAll();
-  _spareMarks = [];
+/**
+ * One vertex rebuild for writes to billboards the rest kept, instead of the
+ * two the buffer-usage flip would cost. Through the public API: an `add` and a
+ * `remove` are documented to rewrite the vertex buffer, and that rewrite is
+ * what zeroes the write counts the flip reads.
+ */
+function rebuildMarksOnce() {
+  if (!_points || _points.isDestroyed()) return;
+  _points.remove(_points.add({ show: false, position: Cesium.Cartesian3.ZERO }));
 }
 
 /**
@@ -579,6 +570,7 @@ function clearMarks() {
  * style are written to its billboard only when they differ. The selected
  * mast's billboard is left as the diamond; `restoreSelectionAfterRebuild`
  * owns it.
+ * @returns {boolean} Whether the billboard was written.
  */
 function keepMark(record, position, style, fade) {
   const restyled = !sameMarkStyle(record.style, style);
@@ -586,11 +578,18 @@ function keepMark(record, position, style, fade) {
   record.style = style;
   if (!record.point) {
     record.point = takeMark(record.id, position, style, fade);
-    return;
+    return false;
   }
-  // The setter compares before it marks the billboard dirty.
-  record.point.position = position;
-  if (restyled && record.id !== _selectedId) dressMastSprite(record.point, style);
+  let written = false;
+  if (!Cesium.Cartesian3.equals(record.point.position, position)) {
+    record.point.position = position;
+    written = true;
+  }
+  if (restyled && record.id !== _selectedId) {
+    dressMastSprite(record.point, style);
+    written = true;
+  }
+  return written;
 }
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
@@ -1153,13 +1152,15 @@ function clearMastField() {
  *
  * A SHAFT IS KEYED BY ITS SUPPORT, like the dot on top of it (see "A rest
  * keeps the marks it can" above). A support still drawn keeps its shaft,
- * rewritten only if its seat moved; one that leaves has its shaft hidden and
- * kept; a newcomer takes a hidden shaft of its own look before a new one is
- * added. Nothing is cleared: `removeAll()` sets `_createVertexArray` and
- * rebuilds the whole vertex array on the next frame, which is exactly the
- * stutter G2 says a pan must not have. Measured before this: over Paris at
- * 2.5 km (≈ 345 shafts), 32 ms of main thread per rest at 4× CPU throttling,
- * every shaft's positions and colour rewritten, twice.
+ * rewritten only if its seat moved. Unlike the dots, a shaft that leaves is
+ * hidden and kept, and a newcomer takes a hidden shaft of its own look before
+ * a new one is added: a `PolylineCollection` writes `show` through its batch
+ * table without a rebuild, and keeps a position buffer it has streamed for 100
+ * quiet frames before turning it static again, so the pool costs it none of
+ * the double rebuild it costs a `BillboardCollection`. Measured before this:
+ * over Paris at 2.5 km (≈ 345 shafts), 36 ms of main thread per rest at 4× CPU
+ * throttling, every shaft's positions and colour rewritten, twice; with it,
+ * 15 ms, interleaved on the same machine.
  *
  * ONE COLLECTION PER APPEARANCE is what lets a slot be reused by identity
  * without losing the batching. Cesium breaks a draw command whenever two
@@ -2037,6 +2038,7 @@ function reconcileMesh(box) {
   const previous = _records;
   const next = new Map();
   const arrivals = [];
+  let written = 0;
 
   for (const tuple of pick.picked) {
     if (next.size >= MAX_RENDERED_SUPPORTS) break;
@@ -2053,7 +2055,9 @@ function reconcileMesh(box) {
       previous.delete(id);
       const moved = Number(kept.tuple?.[MESH_LAT]) !== lat || Number(kept.tuple?.[MESH_LON]) !== lon;
       kept.tuple = tuple;
-      keepMark(kept, moved ? Cesium.Cartesian3.fromDegrees(lon, lat, POINT_LIFT_M) : kept.position, style, undefined);
+      if (keepMark(kept, moved ? Cesium.Cartesian3.fromDegrees(lon, lat, POINT_LIFT_M) : kept.position, style, undefined)) {
+        written += 1;
+      }
       next.set(id, kept);
       continue;
     }
@@ -2077,7 +2081,7 @@ function reconcileMesh(box) {
       detail: support ? _details.get(support.id) || null : null,
       detailPending: false,
       detailError: null,
-      // Drawn below, once the leavers have handed their billboards back.
+      // Drawn below, once the leavers are gone.
       point: null,
       position,
       style,
@@ -2089,8 +2093,8 @@ function reconcileMesh(box) {
     const record = next.get(id);
     record.point = takeMark(id, record.position, record.style, undefined);
   }
+  if (written && !arrivals.length && !previous.size) rebuildMarksOnce();
   _records = next;
-  trimSpareMarks();
   _count = _records.size;
   _inView = pick.inBox;
   // The maillage tuple carries no height, so there is nothing to extrude and
@@ -2196,6 +2200,7 @@ function reconcileSupports(payload) {
   const previous = _records;
   const next = new Map();
   const arrivals = [];
+  let written = 0;
   const warm = [];
   for (const support of payload?.supports || []) {
     if (!Number.isFinite(support?.lat) || !Number.isFinite(support?.lon)) continue;
@@ -2211,7 +2216,7 @@ function reconcileSupports(payload) {
       // The selected support is one of these, and keeps its card in flight.
       previous.delete(id);
       Object.assign(kept, { support, groundPosition: ground, mastHeightM: heightM });
-      keepMark(kept, top, style, SUPPORT_FADE);
+      if (keepMark(kept, top, style, SUPPORT_FADE)) written += 1;
       next.set(id, kept);
       continue;
     }
@@ -2223,7 +2228,7 @@ function reconcileSupports(payload) {
       detail: _details.get(support.id) || null,
       detailPending: false,
       detailError: null,
-      // Drawn below, once the leavers have handed their billboards back.
+      // Drawn below, once the leavers are gone.
       point: null,
       position: top,
       groundPosition: ground,
@@ -2237,8 +2242,8 @@ function reconcileSupports(payload) {
     const record = next.get(id);
     record.point = takeMark(id, record.position, record.style, SUPPORT_FADE);
   }
+  if (written && !arrivals.length && !previous.size) rebuildMarksOnce();
   _records = next;
-  trimSpareMarks();
   _count = _records.size;
   _inView = Number(payload?.inBox) || _count;
   warmGroundFloor(warm.slice(0, GROUND_WARM_LIMIT));
@@ -2388,7 +2393,7 @@ async function loadViewport({ force = false } = {}) {
 function dropMasts() {
   _requestGeneration += 1;
   if (_selectedId) clearSelection();
-  clearMarks();
+  _points?.removeAll();
   clearMastField();
   _sectors?.removeAll();
   _records = new Map();
@@ -3097,7 +3102,6 @@ const anfrFranceLayer = {
     viewer.scene.primitives.add(_masts);
     _mastBands = new Map();
     _mastLines = new Map();
-    _spareMarks = [];
     _sectors = new Cesium.PolylineCollection();
     _sectors.show = false;
     viewer.scene.primitives.add(_sectors);
@@ -3172,7 +3176,7 @@ const anfrFranceLayer = {
       window.removeEventListener('gev:map-stack-changed', _mapStackListener);
       _mapStackListener = null;
     }
-    clearMarks();
+    _points?.removeAll();
     clearMastField();
     _sectors?.removeAll();
     _records = new Map();
