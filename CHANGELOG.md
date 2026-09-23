@@ -6,6 +6,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The landing page's sixth view is the digital-infrastructure film.**
+  « Vélos » (“Bikes”) showed six seconds of the shared fleets of Paris, a
+  view the original God's Eye View can already draw. The tab is now
+  « Numérique » (“Digital”) and plays a 25-second film shot on the
+  photorealistic globe: Europe in the dark, France lighting up antenna by
+  antenna to 72,746 sites, the Alps where no operator reaches with 4G, the
+  data centres of Île-de-France with their power (1,555 MW published), then
+  one antenna on a La Défense rooftop, its card, and a wave that turns blue
+  every piece of ground and every tower it can see. The film ends where it
+  began, so it loops without a jump. The view is titled « Antennes et data
+  centers » (“Antennas and data centres”), and « Ouvrir dans le globe »
+  opens Paris and La Défense from 11 km with the antennas and the data
+  centres on. The thumbnail is the wave halfway across the towers.
 - **The camera has a navigation bar at the bottom of the screen, with words.**
   « Vue précédente » steps back to the framing you had before your last move
   or search; « Vue du dessus » looks straight down without turning the map;

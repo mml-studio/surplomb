@@ -19,7 +19,7 @@ const tagsWith = (fragment) => [...SHOWCASE.matchAll(/<[a-z]+\b[^>]*>/g)].map((m
 
 test('every word of the showcase has its English, and the English has no French in it', () => {
   const en = markupMessages('en').vitrine;
-  assertNoFrench(en, { allow: ['Roissy', 'Roissy-Charles-de-Gaulle', 'Saint-Jean', 'Lyon', 'Bordeaux', 'Paris'] });
+  assertNoFrench(en, { allow: ['Roissy', 'Roissy-Charles-de-Gaulle', 'Saint-Jean', 'Lyon', 'Bordeaux', 'Paris', 'La Défense'] });
   // The sentences a reader meets first.
   // The glossary's tagline, with a word joiner so the line never breaks
   // inside « X-rayed ».

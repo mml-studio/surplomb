@@ -752,7 +752,7 @@ Updated: September 23, 2026
 >   edges: the heading top left, « Mettre en pause » top right, the view's
 >   title and place bottom left, « Ouvrir dans le globe » bottom right (the
 >   picture is the same link), and a bar of six tabs under it — Avions,
->   Immobilier, Trafic, Énergie, Bus, Vélos, Lucide icons
+>   Immobilier, Trafic, Énergie, Bus, Numérique, Lucide icons
 >   (`licenses/lucide/`). Markup `.stage` in `index.html`, the bar and the
 >   clock in `src/vitrine/stage.js`. On a desktop the scene is sized to fit
 >   the screen under the header band (1 143 × 761 px on 1440 × 900); on a
@@ -798,7 +798,7 @@ Updated: September 23, 2026
 >   native 3 (5.2 MB for Roissy); it takes the 960, like its stills. A scene
 >   reached before the loops' list arrives starts on a still's 8 s, and the
 >   view gets the rest of its recording when the length is learned.
->   Views 01, 02 and 04 play films in place of their recorded loops (below).
+>   Views 01, 02, 04 and 06 play films in place of their recorded loops (below).
 >   `src/vitrine/galleryLoops.js` is generated like `heroLoop.js`. The loop
 >   assembly (`assembleLoop`) had repeated one frame in six (concat time base)
 >   and one in three on orbits (half-frame phase); fixed, hero re-assembled.
@@ -846,6 +846,34 @@ Updated: September 23, 2026
 >   caption-free cut the captioned cut's encodes. A republish needs every
 >   film's staging: view 04's was rebuilt from the committed files and
 >   `galleryLoops.js` on 2026-09-22 (same bytes, same names).
+> - **View 06 is the digital-infrastructure film** (2026-09-23), in place of
+>   the shared bikes and scooters of Paris, which the upstream God's Eye View
+>   draws too. Tab « Numérique » (Lucide `radio-tower`), title « Antennes et
+>   data centers ». The 24.87 s film (746 frames) is cut from the app on the
+>   photorealistic globe by a harness outside the repository: Europe in the
+>   dark, France lit antenna by antenna to 72,746 sites, the Alps' 4G dead
+>   zones on the relief, Île-de-France's data centres and their 1,555 MW,
+>   then the SFR mast on a La Défense roof (ANFR support 647445, 167 m), its
+>   card, and its line of sight as a wave over the 3D towers, and a 0.8 s
+>   climb back to the opening's dark Europe — the last frame is the first
+>   (PSNR 69.5 dB), so the file loops without a seam. Staged, video only: the
+>   row imposes Satellite in the app, the film is on Google 3D; the line of
+>   sight is drawn over the 3D mesh, which the app does not do; the pings and
+>   counters are overlays; no submarine cable is in frame (TeleGeography's
+>   licence). The landing's cut moves the promo cut's two counters from the
+>   bottom-left corner, where the stage's title covered them, to mid-left
+>   (film x 285, y 360–470): measured, the stage's heading and pause cover
+>   film y 47–192 and its title, place and door y ≥ 546 on a phone, y ≥ 652
+>   on a 1280 × 720 desktop. Only those frames (36–135 and 360–438) were shot
+>   again, on the code of the promo take; the other 567 are the promo take's
+>   own. Encoded by `build-landing-film.mjs --view 06 --start 18.5`: the still
+>   is the wave halfway across the towers, the mast's card open.
+>   AV1 1.39 MB / 3.41 MB / 6.20 MB, HEVC 1.22 MB / 3.71 MB / 7.12 MB, H.264
+>   480 1.45 MB, VMAF 91–92 — 88 for the 480 HEVC and H.264, held by their
+>   1.5 MB cap: 25 s of pulsing antennas weigh more than Roissy's 29 s at
+>   480. « Ouvrir dans le globe » opens the film's climb pose over
+>   Paris towards La Défense (`l=d.an`, 11,190 m, heading 300°, −48°), where
+>   the row holds Satellite and Dusk.
 > - **The hand-off (≥ 1 001 px).** The press moves the address to `/globe` by
 >   `replaceState` — no navigation, no reload, the same document throughout
 >   (`rewriteAddress`, asserted by `qa:landing` case `handoff`) — freezes the
