@@ -510,7 +510,19 @@ import {
   writeAmenitiesPack,
 } from './src/data/amenitiesPack.js';
 
+import { isPlaceholderCctvFrame, isTruncatedJpegFrame } from './src/data/cctvFrameChecks.js';
+import {
+  cctvTimelapseOptionsFromEnv,
+  cctvTimelapseResponse,
+  createCctvTimelapseRecorder,
+  createSharpFrameEncoder,
+  installCctvTimelapseRecorder,
+  parseCctvTimelapsePath,
+} from './src/data/cctvTimelapse.js';
+
 export { readResponseJsonCapped, readResponseTextCapped };
+// Re-exported: the Grand Lyon tests import both from this file.
+export { isPlaceholderCctvFrame, isTruncatedJpegFrame };
 // Add to the top import block of vite.config.js, beside the other src/data feed
 // imports. Nothing else is needed: this proxy reuses `makeRateLimiter`,
 // `clientKey`, `readResponseJsonCapped`, `coalesceProxyRequest`,
@@ -16397,37 +16409,8 @@ const GRANDLYON_MAX_FRAME_AGE_MS = 12 * 60 * 60 * 1000;
  * of six (the same waste the 2026-07-30 field note recorded for London/Austin).
  */
 const GRANDLYON_UPSTREAM_CADENCE_MS = 60 * 1000;
-/**
- * SHA-256 of the "Image indisponible" graphic the Métropole serves in place of
- * a frame when a Criter camera is down (a 300x200, 22,966-byte drawing of
- * traffic cones). Verified byte-identical across repeated fetches on
- * 2026-08-26, on CWL7033.
- *
- * It has to be caught by CONTENT, because none of the usual signals work: the
- * catalog has no in-service flag, the row's `last_update` keeps advancing every
- * minute while the placeholder is being served, and the response is a perfectly
- * valid HTTP 200 image. Without this the panel would report SNAPSHOT · OK over
- * a picture of road cones.
- *
- * Fails OPEN: if the Métropole ever redraws the graphic this stops matching and
- * the frame is served unchanged — never the reverse.
- */
-/**
- * How far back from the end to look for the JPEG EOI marker.
- *
- * Bounded at both ends on purpose. Too small and a camera that appends
- * trailing metadata after EOI is condemned as truncated — a false positive
- * sends a healthy camera to Street View forever, which is the expensive
- * mistake. Too large (scanning the whole file) and an EXIF thumbnail's OWN
- * end-of-image marker, which sits near the start of the file, would be
- * mistaken for the real one and a genuinely truncated frame would pass. These
- * frames run 64 KB to 600 KB, so 4 KB clears any realistic trailer while
- * staying far from the thumbnail.
- */
-const JPEG_EOI_SCAN_BYTES = 4096;
-const CCTV_PLACEHOLDER_FRAME_SHA256 = Object.freeze([
-  '8be14bdafb0b8b688651206d02fad0656c0be2095c0e18c36945f74a8f598bdd',
-]);
+// The "Image indisponible" placeholder digest and the truncated-JPEG check
+// live in src/data/cctvFrameChecks.js, shared with the timelapse recorder.
 /** Camera CATALOGS change rarely; 15 min keeps multi-megabyte upstream list refetches (Austin rows.json + 4 Caltrans districts + TfL + Grand Lyon) infrequent. Frames are fetched per-request and are unaffected. */
 const CCTV_SOURCE_CACHE_MS = 15 * 60 * 1000;
 /** Per-provider catalog-fetch timeout. Bounds the worst-case refresh so one
@@ -16455,6 +16438,15 @@ let _cctvSourceInflight = null;
  */
 const CCTV_SOURCE_CACHE_DIR = path.join(process.cwd(), '.gev-cache');
 const CCTV_SOURCE_CACHE_PATH = path.join(CCTV_SOURCE_CACHE_DIR, 'cctv-sources.json');
+/**
+ * Shape version of the persisted rows. Bumped whenever normalizeSourceItem
+ * gains a field a route depends on: rows on disk were normalized by the OLD
+ * code and are served as they are, so without the bump a restart keeps
+ * answering without the field until the next refresh. Version 2 added
+ * `timelapse` — a pre-bump catalog would leave the recorder with no capable
+ * camera on a quiet deployment for as long as nobody opened the CCTV layer.
+ */
+const CCTV_SOURCE_CACHE_SCHEMA = 2;
 /** @type {boolean} The disk read is attempted once per process, not per call. */
 let _cctvSourceDiskChecked = false;
 
@@ -16464,7 +16456,8 @@ async function readCctvSourceDiskCache() {
   _cctvSourceDiskChecked = true;
   try {
     const parsed = JSON.parse(await fsp.readFile(CCTV_SOURCE_CACHE_PATH, 'utf8'));
-    if (Number.isFinite(parsed?.at) && Array.isArray(parsed?.sources) && parsed.sources.length) {
+    if (parsed?.schema === CCTV_SOURCE_CACHE_SCHEMA
+      && Number.isFinite(parsed?.at) && Array.isArray(parsed?.sources) && parsed.sources.length) {
       _cctvSourceCache = parsed.sources;
       _cctvSourceCacheAt = parsed.at;
     }
@@ -16475,7 +16468,11 @@ async function readCctvSourceDiskCache() {
 async function writeCctvSourceDiskCache(sources, at) {
   try {
     await fsp.mkdir(CCTV_SOURCE_CACHE_DIR, { recursive: true });
-    await fsp.writeFile(CCTV_SOURCE_CACHE_PATH, JSON.stringify({ at, sources }), 'utf8');
+    await fsp.writeFile(
+      CCTV_SOURCE_CACHE_PATH,
+      JSON.stringify({ schema: CCTV_SOURCE_CACHE_SCHEMA, at, sources }),
+      'utf8',
+    );
   } catch (err) {
     console.warn('[CCTV] source cache write failed:', err?.message || err);
   }
@@ -17611,6 +17608,10 @@ export function normalizeGrandLyonCamera(record, nowMs = Date.now()) {
     snapshotUrl: imageUrl,
     sourceKind: 'grandlyon-open-data',
     upstreamCadenceMs: GRANDLYON_UPSTREAM_CADENCE_MS,
+    // Criter publishes only the latest still, over the top of the last, so the
+    // server records the recent frames itself (src/data/cctvTimelapse.js) and
+    // the panel can play the last hour.
+    timelapse: true,
     poseSource: hasHeading ? 'curated' : undefined,
     license: 'Licence Ouverte / Open Licence 2.0 — Métropole de Lyon',
   };
@@ -17721,6 +17722,10 @@ function normalizeSourceItem(item) {
     // Hand-authored file/env entries use it, and so does the Grand Lyon pack for
     // the cameras in GRANDLYON_CURATED_HEADINGS. Passed through as-is.
     poseSource: item.poseSource === 'curated' ? 'curated' : undefined,
+    // Opt-in to server-side timelapse recording (src/data/cctvTimelapse.js).
+    // Only a pack whose frames are a still re-published on a cadence sets it;
+    // anything but a literal true is dropped.
+    timelapse: item.timelapse === true ? true : undefined,
   };
 }
 
@@ -17757,6 +17762,37 @@ async function getCctvSources() {
   if (_cctvSourceCache.length) return _cctvSourceCache;
   return _cctvSourceInflight;
 }
+
+/**
+ * How stale the catalog may get before the timelapse recorder asks for a
+ * refresh on its own. Visitors refresh it every 15 min as they use the layer;
+ * the recorder runs every minute whether anyone is there or not, and if it
+ * went through getCctvSources it would keep that 15-minute cycle alive around
+ * the clock — 7.6 MB across four providers (Caltrans alone 6 MB, measured
+ * 2026-09-14), about 730 MB a day, to learn about camera catalogs that change
+ * on the order of weeks. Six hours still drops a camera Grand Lyon retires
+ * within the day.
+ */
+const CCTV_TIMELAPSE_CATALOG_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The catalog as the timelapse recorder sees it: whatever is cached, without
+ * triggering the per-TTL refresh. A cold process (nothing cached, nothing on
+ * disk) waits for one real refresh, and a cold process whose last refresh came
+ * back empty waits a TTL before trying again rather than retrying every tick.
+ *
+ * @returns {Promise<Array<object>>}
+ */
+async function cctvSourcesForTimelapse() {
+  await readCctvSourceDiskCache();
+  const age = Date.now() - _cctvSourceCacheAt;
+  if (_cctvSourceCache.length && age < CCTV_TIMELAPSE_CATALOG_MAX_AGE_MS) return _cctvSourceCache;
+  if (!_cctvSourceCache.length && _cctvSourceCacheAt && age < CCTV_SOURCE_CACHE_MS) return _cctvSourceCache;
+  return getCctvSources();
+}
+
+/** Where recorded timelapse frames live: the volume a redeploy keeps. */
+const CCTV_TIMELAPSE_ROOT = path.join(process.cwd(), '.gev-cache', 'cctv-timelapse');
 
 /**
  * Assemble and cache the merged CCTV source list from file/env + live packs.
@@ -18011,54 +18047,6 @@ async function proxyMediaResponse(res, upstream, { sourceHeader = 'upstream' } =
  * @param {number} [options.timeoutMs=CCTV_FRAME_FETCH_TIMEOUT_MS] - Abort timeout.
  * @returns {Promise<{ok:true,body:Buffer,contentType:string}|null>}
  */
-/**
- * Is this JPEG body cut off before the end of its scan data?
- *
- * Nothing in the response says so: a valid HTTP 200, no Content-Length to fall
- * short of (the host answers chunked), no error status, and the SOF header
- * still declares the full frame size. The browser decodes the rows it received
- * and leaves the rest transparent — which is how a 1920x1440 camera renders as
- * a thin strip of sky.
- *
- * Measured on CWL5801, the largest frame in the Grand Lyon pack: 12 fetches
- * 7 s apart, 0 complete. The byte count was STABLE within each publication
- * minute (141,620 B five times, then 306,600 B seven times) and changed only
- * when a new frame was published, so this is not a read-while-write race that a
- * retry would win — the file the Métropole publishes for that camera is itself
- * incomplete, every cycle. libjpeg rejects it outright: "premature end of JPEG
- * image". Hence: no retry, straight to the fallback chain.
- *
- * The test is the JPEG end-of-image marker, scanned across the tail of the file
- * (see JPEG_EOI_SCAN_BYTES) so a camera that appends trailing metadata is not
- * called truncated. Anything that is not a JPEG is left alone — this fails OPEN
- * in every direction.
- *
- * @param {Buffer|Uint8Array|null} body
- * @returns {boolean}
- */
-export function isTruncatedJpegFrame(body) {
-  if (!body || body.length < 4) return false;
-  if (body[0] !== 0xFF || body[1] !== 0xD8) return false; // not a JPEG: not our call
-  const from = Math.max(2, body.length - JPEG_EOI_SCAN_BYTES);
-  for (let i = body.length - 2; i >= from; i -= 1) {
-    if (body[i] === 0xFF && body[i + 1] === 0xD9) return false;
-  }
-  return true;
-}
-
-/**
- * Is this frame body a known provider "camera unavailable" placeholder rather
- * than a real capture?
- *
- * @param {Buffer|Uint8Array|null} body
- * @returns {boolean}
- */
-export function isPlaceholderCctvFrame(body) {
-  if (!body || !body.length) return false;
-  const digest = createHash('sha256').update(body).digest('hex');
-  return CCTV_PLACEHOLDER_FRAME_SHA256.includes(digest);
-}
-
 export async function fetchCctvImageFromUpstream(url, {
   fetchImpl = fetch,
   timeoutMs = CCTV_FRAME_FETCH_TIMEOUT_MS,
@@ -18143,6 +18131,14 @@ export function cctvStreetViewTarget({ source = null, mapped = null, params = ne
  *   GET /api/cctv/stream/:id     — stream info (feedType, URLs) for a camera
  *   GET /api/cctv/media/:id      — proxy live video/image media from upstream
  *   GET /api/cctv/frame/:id      — single frame with fallback chain
+ *   GET /api/cctv/timelapse/:id  — manifest of the recorded last hour (JSON)
+ *   GET /api/cctv/timelapse/:id/:t.jpg — one recorded frame (immutable)
+ *
+ * The timelapse recorder (src/data/cctvTimelapse.js) is created per server in
+ * `configureServer`, which `withPreviewParity` also runs for `vite preview`;
+ * `installCctvTimelapseRecorder` keeps one per directory per process across
+ * dev-server restarts. Its switches are CCTV_TIMELAPSE, CCTV_TIMELAPSE_WINDOW_MIN
+ * and CCTV_TIMELAPSE_WARM_MIN (.env.example).
  *
  * @returns {import('vite').Plugin}
  */
@@ -18225,8 +18221,35 @@ function cctvProxy() {
   return {
     name: 'cctv-proxy',
     configureServer(server) {
+      const encoder = createSharpFrameEncoder();
+      const timelapse = installCctvTimelapseRecorder(createCctvTimelapseRecorder({
+        ...cctvTimelapseOptionsFromEnv(process.env),
+        rootDir: CCTV_TIMELAPSE_ROOT,
+        listSources: cctvSourcesForTimelapse,
+        fetchFrame: (frameUrl) => fetchCctvImageFromUpstream(frameUrl),
+        encodeFrame: encoder.encode,
+        encoderReady: encoder.ready,
+      }));
+      void timelapse.start();
+      // A dev-server restart closes the old http server; its recorder stops
+      // with it (the registry has already handed the directory to the new one).
+      server.httpServer?.once?.('close', () => timelapse.stop());
+
       server.middlewares.use('/api/cctv', async (req, res) => {
         try {
+          // Ahead of the catalog: a recorded frame needs only the recorder's
+          // index, and must not wait on a cold catalog pull.
+          const timelapseRoute = parseCctvTimelapsePath(new URL(req.url || '/', 'http://localhost').pathname);
+          if (timelapseRoute) {
+            const source = timelapseRoute.kind === 'manifest'
+              ? (await getCctvSources()).find((row) => row.id === timelapseRoute.id) || null
+              : null;
+            const answer = await cctvTimelapseResponse(timelapseRoute, { recorder: timelapse, source });
+            res.writeHead(answer.status, answer.headers);
+            res.end(answer.body);
+            return;
+          }
+
           const sources = await getCctvSources();
           const sourceById = new Map(sources.map((source) => [source.id, source]));
           const url = new URL(req.url || '/', 'http://localhost');
@@ -18252,6 +18275,8 @@ function cctvProxy() {
                 sourceKind: source.sourceKind || (source.url ? 'configured' : 'fallback'),
                 upstreamCadenceMs: source.upstreamCadenceMs,
                 poseSource: source.poseSource,
+                // Omitted (undefined) unless this server records the camera.
+                timelapse: timelapse.isCapable(source) || undefined,
                 license: source.license,
               })),
             };
@@ -18262,7 +18287,7 @@ function cctvProxy() {
 
           if (url.pathname === '/health') {
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify({ cameras: listHealth() }));
+            res.end(JSON.stringify({ cameras: listHealth(), timelapse: timelapse.stats() }));
             return;
           }
 
@@ -18354,6 +18379,9 @@ function cctvProxy() {
 
           const cameraId = decodeURIComponent(url.pathname.replace('/frame/', '').trim()) || 'camera';
           const source = sourceById.get(cameraId);
+          // Someone is watching a recordable camera: keep the recorder warm
+          // (on-demand mode) so the next camera they open already has a past.
+          if (timelapse.isCapable(source)) timelapse.noteInterest();
           const label = url.searchParams.get('label') || source?.name || cameraId;
           const city = url.searchParams.get('city') || source?.city || '';
           // Read per request, like every GEV_* switch: where it is off, no

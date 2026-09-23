@@ -1491,13 +1491,11 @@ test('an unsurveyed camera bearing is a distinct sign, not the same cone', () =>
   assert.equal(headingIsUnsurveyed(null), false);
 });
 
-test('the camera key reaches the map legend, not only the collapsed panel', () => {
-  // The CAL badge and the heading confidence were both composed into
-  // `#cctv-summary`, inside `#cctv-panel`, which ships collapsed and is hidden
-  // by the same CSS rule that hid every layer legend. `getRowControls()` is the
-  // seam the manager reads for the on-map block.
-  assert.equal(typeof cctvLayer.getRowControls, 'function');
-  // With no catalog loaded the layer stays quiet rather than publishing an
-  // empty key.
-  assert.equal(cctvLayer.getRowControls(), null);
+test('the cone key lives in the camera panel, not in the map legend', () => {
+  // 2026-09-23: the key was a second window ("Direction relevée 287 / Cône
+  // plein — …") that a reader had to open beside the camera panel to learn
+  // what a dashed cone meant. The panel now says it (`#cctv-key`, and the
+  // active camera's `headingUnsurveyed`), so the layer publishes no legend
+  // rows for the manager to draw.
+  assert.equal(cctvLayer.getRowControls, undefined);
 });

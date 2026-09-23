@@ -11,6 +11,7 @@
  * `toast.*`, `actions.*`, `detection.*`, `legend.*`, `context.*`.
  */
 import { defineMessages } from './i18n/messages.js';
+import { countNoun } from './i18n/format.js';
 
 export default defineMessages({
   cockpit: {
@@ -479,19 +480,49 @@ export default defineMessages({
     badgeCurated: { fr: 'VÉRIFIÉE', en: 'CURATED', note: 'Pose checked by hand at the catalog, not measured on site.' },
     badgeRawPrior: { fr: 'POSE BRUTE', en: 'RAW PRIOR' },
     configuredSource: { fr: 'Source configurée', en: 'Configured Source' },
-    monitor: { fr: 'MONITEUR', en: 'MONITOR' },
-    projectionOffShort: { fr: 'ÉTEINTE', en: 'OFF' },
-    meta: {
-      fr: (city, heading, fov, range, projection, badge, provider, status) =>
-        `${city} · CAP ${heading}° · CHAMP ${fov}° · PORTÉE ${range} m · ${projection}${badge} · ${provider}${status}`,
-      en: (city, heading, fov, range, projection, badge, provider, status) =>
-        `${city} · HDG ${heading}° · FOV ${fov}° · RANGE ${range}m · ${projection}${badge} · ${provider}${status}`,
-      sample: ['Paris', 41, 62, 180, 'MONITOR', ' · CALIBRATED', 'Configured Source', ''],
-    },
     loadedClick: {
-      fr: (count) => `${count} caméras chargées · cliquez-en une pour l’activer`,
-      en: (count) => `${count} cameras loaded · click a camera to activate`,
+      fr: (count) => `${count} caméras sur la carte · cliquez-en une pour voir son image`,
+      en: (count) => `${count} cameras on the map · click one to see its picture`,
       sample: [128],
+    },
+    // The panel in plain words (2026-09-23): what the picture is, who
+    // publishes it, and whether the cone's direction is real. Pose numbers
+    // and CAL badges stay out of sight.
+    live: { fr: 'EN DIRECT', en: 'LIVE', note: 'Badge over a still the camera re-publishes about once a minute.' },
+    timelapseBadge: { fr: 'ACCÉLÉRÉ', en: 'TIMELAPSE', note: 'Badge while the panel plays the recorded last hour.' },
+    streetView: {
+      fr: 'STREET VIEW · PAS D’IMAGE PUBLIQUE',
+      en: 'STREET VIEW · NO PUBLIC FEED',
+      note: 'The camera publishes no picture; Google Street View shows the place instead.',
+    },
+    osmProvider: { fr: 'Repérée sur OpenStreetMap', en: 'Mapped on OpenStreetMap' },
+    directionKnown: { fr: 'direction connue', en: 'known direction' },
+    directionUnknown: { fr: 'direction inconnue (cône en pointillé)', en: 'unknown direction (dashed cone)' },
+    plainMeta: {
+      fr: (provider, direction) => `${provider} · ${direction}`,
+      en: (provider, direction) => `${provider} · ${direction}`,
+      sample: ['Métropole de Lyon (Criter)', 'direction connue'],
+    },
+    timelapsePlay: { fr: 'Lire l’accéléré', en: 'Play the timelapse' },
+    timelapsePause: { fr: 'Mettre l’accéléré en pause', en: 'Pause the timelapse' },
+    timelapseReady: {
+      fr: (minutes, count) => `${minutes >= 55 ? 'La dernière heure' : `Les ${countNoun(minutes, 'dernière minute', 'dernières minutes')}`} en accéléré · ${countNoun(count, 'image', 'images')}`,
+      en: (minutes, count) => `${minutes >= 55 ? 'The last hour' : `The last ${countNoun(minutes, 'minute', 'minutes')}`} sped up · ${countNoun(count, 'frame', 'frames')}`,
+      sample: [60, 58],
+    },
+    timelapseBuilding: {
+      fr: (count, from) => (count
+        ? `Accéléré en préparation : ${countNoun(count, 'image', 'images')} depuis ${from}`
+        : 'Accéléré en préparation : première image dans une minute'),
+      en: (count, from) => (count
+        ? `Timelapse building: ${countNoun(count, 'frame', 'frames')} since ${from}`
+        : 'Timelapse building: first frame within a minute'),
+      sample: [3, '11:23'],
+    },
+    timelapseLoading: {
+      fr: (loaded, total) => `Chargement de l’accéléré… ${loaded}/${total}`,
+      en: (loaded, total) => `Loading the timelapse… ${loaded}/${total}`,
+      sample: [12, 60],
     },
     loadedEnable: {
       fr: (count) => `${count} caméras chargées · activez les caméras pour en choisir une`,

@@ -46,6 +46,18 @@ services:
       # a persistent volume, and therefore the only one where the accumulation
       # is worth anything. Set CHRONICLE_IRVE_DYNAMIC=0 in .env to stop it.
       CHRONICLE_IRVE_DYNAMIC: ${CHRONICLE_IRVE_DYNAMIC:-1}
+      # The camera timelapse: Lyon's Criter cameras publish only their latest
+      # still, so the server keeps the last hour itself (src/data/cctvTimelapse.js).
+      # Measured 2026-09-23 for the ~12 working cameras: ≈ 7.3 GB/day INBOUND
+      # from download.data.grandlyon.com (12 × 0.42 MB × 1 440 polls), ≈ 30 MB
+      # of disk on the volume below (frames shrunk to 640 px, 34–54 KB each),
+      # under a second of CPU a minute (45–65 ms per frame on an M-series Mac).
+      # `always` HERE because the default, on-demand, starts recording when a
+      # reader opens a camera — and on a deployment this quiet that leaves the
+      # timelapse empty exactly when someone asks for it. The chronicle learned
+      # this first: its visitor-driven feeds stopped when nobody looked. Set
+      # CCTV_TIMELAPSE=on-demand (or off) in .env to stop it.
+      CCTV_TIMELAPSE: ${CCTV_TIMELAPSE:-always}
       # Ceiling for the V8 heap, INSIDE the mem_limit below. Node sizes its
       # old space from the HOST's memory, not the cgroup's, so an unset default
       # on this 8 GB box lets the heap grow past a 1 GiB container limit and the

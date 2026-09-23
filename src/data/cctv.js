@@ -45,7 +45,6 @@
  * implements the standard layer interface (init/enable/disable/update/destroy)
  * plus CCTV-specific methods (selectCamera, cycleCamera, focusNearest, etc.).
  */
-import messages from './cctv.i18n.js';
 import * as Cesium from 'cesium';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import {
@@ -368,13 +367,6 @@ function unsurveyedHeadingMaterial(color) {
 export function headingIsUnsurveyed(camera) {
   return String(camera?.headingConfidence || '').toLowerCase() === 'low';
 }
-
-// Legend glyphs for the two cone styles. Handed to the manager as `glyph`, so
-// the swatch is MASKED to the shape while keeping the exact drawn colour — the
-// key shows the same solid/dashed distinction the map does, instead of two
-// identically coloured dots that only their captions tell apart.
-const SOLID_LINE_GLYPH = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTEgOEgxNSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==';
-const DASHED_LINE_GLYPH = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTEgOEgxNSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtZGFzaGFycmF5PSIzLjQgMi42Ii8+PC9zdmc+';
 
 // ---------------------------------------------------------------------------
 // Module-scoped mutable state
@@ -1328,6 +1320,8 @@ function buildCatalogFromSources(rawSources) {
       license: String(source.license || source.licenseNote || ''),
       upstreamCadenceMs: safeNumber(source.upstreamCadenceMs, NaN),
       poseSource,
+      // The server records this camera's last hour (`/api/cctv/timelapse`).
+      timelapse: source.timelapse === true,
     };
     ensureCameraPose(camera);
     catalog.push(camera);
@@ -3867,6 +3861,9 @@ function getPublicCameraState(record, activeId = null) {
     basePose: camera.basePose ? { ...camera.basePose } : null,
     frameUrl: frameUrlFor(camera, refreshMs),
     mediaUrl: mediaUrlFor(camera),
+    timelapse: camera.timelapse === true,
+    // The panel says it in words: a dashed cone is a placeholder bearing.
+    headingUnsurveyed: headingIsUnsurveyed(camera),
   };
 }
 
@@ -5477,51 +5474,12 @@ const cctvLayer = {
     };
   },
 
-  /**
-   * Publish the camera key to the manager — and therefore to the ON-MAP legend
-   * block, not only to the panel row.
-   *
-   * The pose-provenance distinction already existed in this module:
-   * `buildSummaryText()` composes "CAL RAW PRIOR" from `deriveCalBadge()`, and
-   * `headingConfidence` is computed with care in `osmCameras.js`. Both ended
-   * up in `#cctv-summary`, inside `#cctv-panel`, which ships collapsed and is
-   * hidden by the same CSS rule that hid the legends — so a reader saw a
-   * confident cone and had nowhere to learn it was a placeholder.
-   *
-   * Counts are computed over the records actually in the catalog, so the key
-   * never claims a class the map is not drawing.
-   * @returns {{legend: Array<object>}|null} Row controls, or null when idle.
-   */
-  getRowControls() {
-    if (!_records.length) return null;
-    let surveyed = 0;
-    let unsurveyed = 0;
-    for (const record of _records) {
-      if (headingIsUnsurveyed(record.camera)) unsurveyed += 1;
-      else surveyed += 1;
-    }
-    const m = messages();
-    const legend = [];
-    if (surveyed) {
-      legend.push({
-        label: m.mapped.label,
-        color: '#2fe0ff',
-        glyph: SOLID_LINE_GLYPH,
-        count: surveyed,
-        blurb: m.mapped.blurb,
-      });
-    }
-    if (unsurveyed) {
-      legend.push({
-        label: m.unmapped.label,
-        color: '#2fe0ff',
-        glyph: DASHED_LINE_GLYPH,
-        count: unsurveyed,
-        blurb: m.unmapped.blurb,
-      });
-    }
-    return legend.length ? { legend } : null;
-  },
+  // No `getRowControls()`: the cone key (solid = known direction, dashed =
+  // unknown) is not in the map legend any more. It sat in a second window
+  // above the camera panel and read as jargon ("Direction relevée 287 / Cône
+  // plein — l’orientation vient du champ « direction »…"); since 2026-09-23 the
+  // panel says it in one sentence (`#cctv-key`) and, for the camera on
+  // screen, in two words (`headingUnsurveyed` → « direction inconnue »).
 
   /**
    * Registers a callback that receives the full UI state on every change.

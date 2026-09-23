@@ -8416,8 +8416,132 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 
 .cctv-controls {
   display: flex;
+  /* Three buttons at their 72px floor plus long French labels ran past the
+     panel edge ("COUVERTURE ACTIVE" printed over "SAUT AUTO ÉTEINT"). */
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 0;
+}
+
+/* Sized by their label, so a row that cannot hold them wraps instead of
+   squeezing each button to its 72px floor under text that will not wrap. */
+.cctv-controls > .scene-btn {
+  flex: 1 1 auto;
+}
+
+/* Several rules below set `display` by id, which outranks the UA `[hidden]`
+   rule; the calibration block, the CAL chip and the scene summary are hidden
+   by attribute and must stay hidden. */
+#cctv-panel [hidden] {
+  display: none !important;
+}
+
+.cctv-camera-name {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.3;
+  color: #f7f4ea;
+}
+
+/* The key the map legend used to carry, as one sentence. */
+.cctv-key {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* ── Timelapse (src/cctvTimelapsePlayer.js) ───────────────────────────────
+   Drawn over the live <img>, in the same contained 16:9 box, so switching
+   between the loop and the still never moves the panel. */
+.cctv-timelapse-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.cctv-timelapse-canvas.active {
+  opacity: 1;
+}
+
+/* The time of the frame on screen, where a camera would burn its own clock. */
+.cctv-timelapse-clock {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(6, 13, 10, 0.72);
+  color: #f7f4ea;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.cctv-timelapse {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cctv-timelapse-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cctv-timelapse-toggle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(247, 171, 124, 0.4);
+  background: rgba(247, 171, 124, 0.1);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cctv-timelapse-toggle:hover,
+.cctv-timelapse-toggle:focus-visible {
+  border-color: var(--accent);
+  background: rgba(247, 171, 124, 0.2);
+}
+
+.cctv-timelapse-time {
+  flex-shrink: 0;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: #fbd6be;
+}
+
+.cctv-timelapse-scrub {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.cctv-timelapse-note {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.cctv-timelapse-note:empty {
+  display: none;
 }
 
 .cctv-calibration-block {
@@ -8496,7 +8620,9 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 }
 
 #cctv-camera-select {
-  flex: 1;
+  /* The camera's name is the widest thing on the row: it takes what PREV and
+     NEXT (sized by their labels) leave. */
+  flex: 3 1 0;
   min-width: 0;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -8781,8 +8907,10 @@ html[data-input="coarse"] .cctv-frame-wrap.has-frame .cctv-frame-expand-hint {
 
 #cctv-meta {
   font-family: var(--font-ui);
-  font-size: 9px;
-  letter-spacing: 1px;
+  /* A sentence now ("Métropole de Lyon · direction connue"), so the legend
+     floor for a sentence, not the 9px of the old field readout. */
+  font-size: 11.5px;
+  line-height: 1.4;
   color: var(--text-secondary);
 }
 

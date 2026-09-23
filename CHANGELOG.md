@@ -24,6 +24,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   de moi » or the next search takes the mark away. In France the limits come
   from the State's commune contours and IGN's départements; elsewhere from
   OpenStreetMap. They are simplified, not the legal limits.
+- **A Lyon traffic camera now plays its last hour instead of showing one
+  still.** The Métropole de Lyon publishes one picture per camera, replaced
+  about once a minute, and keeps no past. The server now records those
+  pictures (a 640-pixel copy, one a minute, the last 60 minutes) and the
+  camera panel plays them back at eight a second, pausing on the newest one,
+  with the two clock times it covers on either side of a scrubber
+  (« 10:26 ─●─ 11:26 ») and the time of the frame on screen in the corner of
+  the picture. Play/pause and the scrubber stop on any minute. Until five
+  minutes are recorded the panel shows the live picture and says the
+  timelapse is being built; « AGRANDIR » still opens the live picture at full
+  resolution. Only cameras whose publisher sends real pictures have one — in
+  France, the fifteen Lyon cameras; cameras mapped on OpenStreetMap publish
+  none.
 - **Digital infrastructure now opens on a dimmed satellite ground, and gives
   your map back when you switch it off.** Switching « Infrastructure
   numérique » on moves the map to the new « Crépuscule » (Dusk) style — the
@@ -384,6 +397,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   heading strip at the top shows with them.
 - **The CAMÉRAS panel appears only with the cameras layer.** France has few
   public cameras, and the panel used to sit in the right column of every visit.
+- **The camera panel speaks plainly, and the camera key moved into it.** The
+  map legend no longer carries a « Caméras publiques » block (« Direction
+  relevée 287 · Cône plein — l’orientation vient du champ direction… »): the
+  panel says it in one sentence (« Chaque cône montre ce que filme une
+  caméra ; en pointillé, sa direction est inconnue. »), shows the camera's
+  name above the picture, and replaces the heading/FOV/range/CAL line with who
+  publishes the picture and whether its direction is known. The badge reads
+  « EN DIRECT », « ACCÉLÉRÉ », « STREET VIEW · PAS D’IMAGE PUBLIQUE » or
+  « IMAGE · INDISPONIBLE » instead of « SNAPSHOT · OK ». The calibration form,
+  the CAL chip and the English scene summary are hidden: calibration moves
+  the drawn cone, in this browser only, never the camera, and it read as if
+  a visitor could steer it.
 - **The Layers panel is a column of groups with one list beside it.** On a
   computer, the panel now opens as a narrow column — « Chercher », then Ciel &
   mer, Bâti, Mobilité, Énergie, Risques and Réseaux, each with an icon and a
