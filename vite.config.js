@@ -20104,8 +20104,8 @@ const GEV_REALTIME_TOOLS = [
       properties: {
         style: {
           type: 'string',
-          enum: ['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow'],
-          description: '`noir` is shown as Night (Nuit).',
+          enum: ['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'dusk'],
+          description: '`noir` is shown as Night (Nuit); `dusk` as Dusk (Crépuscule), a lighter night.',
         },
       },
       required: ['style'],

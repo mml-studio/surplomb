@@ -14,6 +14,7 @@ import {
   PRESENTED_MAP_STACK_IDS,
   mapStackChipModel,
   mapStackChipModels,
+  mapStackLockNote,
   renderMapStackChips,
   syncMapStackChips,
 } from './mapStackChips.js';
@@ -45,6 +46,7 @@ function makeElement(tagName = 'div') {
     },
     appendChild(child) { element.children.push(child); return child; },
     setAttribute(name, value) { element.attributes[name] = String(value); },
+    removeAttribute(name) { delete element.attributes[name]; },
     getAttribute(name) { return element.attributes[name] ?? null; },
     addEventListener(type, handler) { (element.listeners[type] ||= []).push(handler); },
     click() { for (const handler of element.listeners.click || []) handler(); },
@@ -310,6 +312,95 @@ test('the controller is the single source of the unavailability reason', () => {
   assert.match(controller, /_unavailableReason\(stack\) \{[\s\S]*?stack\?\.requiresIon/);
 });
 
+// Shaped like `MapStackController.getLock()` output.
+const DIGITAL_LOCK = Object.freeze({
+  stackId: 'ign-ortho',
+  rowId: 'local-datacenters',
+  rowLabel: 'Infrastructure numérique',
+});
+
+test('a lock greys every other chip, keeps its own lit, and a greyed chip does nothing', () => {
+  // The lock comes and goes with a data layer, so it arrives through the SYNC,
+  // on chips rendered long before — the way `_renderMapStackState` sends it.
+  const container = makeElement();
+  const selected = [];
+  renderMapStackChips(container, CONTROLLER_STACKS, {
+    activeId: 'osm',
+    onSelect: (id) => selected.push(id),
+    doc,
+  });
+  syncMapStackChips(container, 'ign-ortho', DIGITAL_LOCK);
+
+  const satellite = chipById(container, 'ign-ortho');
+  assert.ok(satellite.classList.contains('active'), 'the imposed stack stays lit');
+  assert.ok(!satellite.classList.contains('locked'));
+  assert.equal(satellite.getAttribute('aria-disabled'), 'false');
+
+  const osm = chipById(container, 'osm');
+  assert.ok(osm.classList.contains('locked'));
+  assert.equal(osm.getAttribute('aria-disabled'), 'true');
+  assert.equal(osm.title, 'Indisponible avec la couche Infrastructure numérique');
+  assert.equal(osm.getAttribute('aria-label'), 'OSM : indisponible avec la couche Infrastructure numérique');
+  assert.equal(osm.disabled, false, 'still keyboard-reachable, so the tooltip can be read');
+  assert.deepEqual(
+    container.children.filter((chip) => chip.classList.contains('locked')).map((chip) => chip.dataset.stackId),
+    PRESENTED_MAP_STACK_IDS.filter((id) => id !== 'ign-ortho'),
+  );
+
+  osm.click();
+  chipById(container, 'photoreal').click();
+  satellite.click();
+  assert.deepEqual(selected, ['ign-ortho'], 'only the imposed stack reaches the switch path');
+
+  // Rendered while the lock already holds — the tray rebuilt mid-session.
+  const rebuilt = makeElement();
+  renderMapStackChips(rebuilt, CONTROLLER_STACKS, { activeId: 'ign-ortho', lock: DIGITAL_LOCK, doc });
+  assert.ok(chipById(rebuilt, 'ign-plan').classList.contains('locked'));
+});
+
+test('releasing the lock gives every chip back its own state', () => {
+  const container = makeElement();
+  const selected = [];
+  const stacks = CONTROLLER_STACKS.map((stack) => {
+    if (stack.id === 'bing-aerial') {
+      return { ...stack, available: false, unavailableReason: 'Cesium ion token required for Bing stacks' };
+    }
+    if (stack.id === 'ign-plan') return { ...stack, coverageNote: 'metropolitan France only' };
+    return stack;
+  });
+  renderMapStackChips(container, stacks, {
+    activeId: 'ign-ortho',
+    onSelect: (id) => selected.push(id),
+    lock: DIGITAL_LOCK,
+    doc,
+  });
+  // A chip that is unavailable anyway keeps its own reason: the lock is not
+  // why it cannot be picked, and it will still be grey once the layer is off.
+  assert.equal(chipById(container, 'bing-aerial').title, 'Cesium ion token required for Bing stacks');
+
+  syncMapStackChips(container, 'ign-ortho', null);
+  assert.ok(container.children.every((chip) => !chip.classList.contains('locked')));
+  const osm = chipById(container, 'osm');
+  assert.equal(osm.title, 'OSM');
+  assert.equal(osm.getAttribute('aria-label'), null, 'the button text is its name again');
+  assert.equal(osm.getAttribute('aria-disabled'), 'false');
+  const plan = chipById(container, 'ign-plan');
+  assert.equal(plan.getAttribute('aria-label'), 'Plan IGN — metropolitan France only');
+  assert.equal(chipById(container, 'bing-aerial').getAttribute('aria-disabled'), 'true');
+
+  osm.click();
+  chipById(container, 'bing-aerial').click();
+  assert.deepEqual(selected, ['osm']);
+});
+
+test('the note under the tray names the imposed stack and the layer', () => {
+  assert.equal(
+    mapStackLockNote(DIGITAL_LOCK, CONTROLLER_STACKS),
+    'Satellite imposé par Infrastructure numérique : les autres fonds de carte ne sont pas disponibles avec cette couche.',
+  );
+  assert.equal(mapStackLockNote(null, CONTROLLER_STACKS), '', 'nothing to say without a lock');
+});
+
 test('a missing row or document is inert rather than throwing during boot', () => {
   assert.deepEqual(renderMapStackChips(null, CONTROLLER_STACKS, { doc }), []);
   assert.deepEqual(renderMapStackChips(makeElement(), CONTROLLER_STACKS, { doc: {} }), []);
@@ -321,9 +412,11 @@ test('the active cyan survives hover', () => {
   const hover = css.indexOf('.map-stack-chip:hover');
   const active = css.indexOf('.map-stack-chip.active {');
   const unavailable = css.indexOf('.map-stack-chip.unavailable');
+  const locked = css.indexOf('.map-stack-chip.locked');
 
   assert.ok(hover > 0 && active > hover, 'active must follow hover so it wins at equal specificity');
   assert.ok(unavailable > active, 'unavailable must follow both so a keyless chip never lights up');
+  assert.ok(locked > active, 'a chip a layer greys out must not light up under the cursor either');
   assert.doesNotMatch(
     css.slice(hover, active),
     /:not\(/,
@@ -361,7 +454,7 @@ test('the keyboard focus ring survives on the ACTIVE chip', () => {
       `"${rule.selector}" must not touch outline — it would erase the focus ring`,
     );
   }
-  for (const selector of ['.map-stack-chip.active', '.map-stack-chip.unavailable']) {
+  for (const selector of ['.map-stack-chip.active', '.map-stack-chip.unavailable', '.map-stack-chip.locked']) {
     assert.ok(
       chipRules.some((rule) => rule.selector.includes(selector)),
       `expected a ${selector} rule to exist for this check to mean anything`,
@@ -408,7 +501,12 @@ test('the Visual Presets tray owns Map Source and the retired left panel is abse
   );
   assert.match(
     ui,
-    /_renderMapStackState\(state\) \{[\s\S]*?syncMapStackChips\(this\._mapStackChips, state\.activeId\)/,
-    'the active chip must be re-synced from controller state',
+    /_renderMapStackState\(state\) \{[\s\S]*?syncMapStackChips\(this\._mapStackChips, state\.activeId, state\.lock\)/,
+    'the active chip, and the lock, must be re-synced from controller state',
+  );
+  assert.match(
+    html,
+    /<section class="map-source-section"[\s\S]*?id="map-stack-chips"[\s\S]*?<p id="map-stack-lock-note" class="map-stack-lock-note"[^>]*hidden[^>]*><\/p>[\s\S]*?<\/section>/,
+    'the lock note sits under the chips, hidden until a layer holds the globe',
   );
 });

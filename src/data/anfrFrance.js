@@ -43,7 +43,7 @@
  *              worst-placed 0.35° box in France (anchored at 48.6725 N,
  *              2.19556 E — Paris and the inner suburbs) holds **6 462**
  *              supports, which the proxy serves as 112 831 bytes gzipped and
- *              which is one PointPrimitiveCollection.
+ *              which is one BillboardCollection.
  *
  * ── What the fill claims, what the size claims, what the RING claims ────────
  * FILL is the newest generation that RADIATES — `anfrBand(live)`, which reads
@@ -251,6 +251,15 @@ import {
 import coverageMessages from './mobileCoverage.i18n.js';
 import { coverageTileSource, createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
 import { VIEWSHED_COLOR, computeMastViewshed, createViewshedImageryLayer } from './mastViewshedImagery.js';
+import {
+  ANFR_HOLLOW_TRIANGLE_LEGEND_GLYPH,
+  ANFR_SELECTED_FILL,
+  ANFR_SELECTED_SCALE,
+  ANFR_TRIANGLE_LEGEND_GLYPH,
+  anfrGlyphScale,
+  anfrMastGlyph,
+  anfrSelectedGlyph,
+} from './anfrGlyphs.js';
 import { mapKeyCarriesSelection } from './mapKeySelection.js';
 
 /** Layer id — also the share-link registry key and the voice-tool enum value. */
@@ -412,7 +421,9 @@ export const ANFR_BAND_COLORS = Object.freeze({
   '2g': '#4c6076',
   '3g': '#6f8aa8',
   '4g': '#9fb4cc',
-  '5g': '#ffcb2b',
+  // Amber since the mock of 2026-09-23 (it was a yellow, #ffcb2b): the
+  // triangles glow, and a warm light over Dusk's dimmed ground reads as one.
+  '5g': '#ffb238',
 });
 
 /**
@@ -431,7 +442,6 @@ const PLAIN_OUTLINE_ALPHA = 0.6;
 const PLAIN_OUTLINE_WIDTH = 1;
 
 const SELECTED_COLOR = '#00ffff';
-const SELECTED_POINT_PX = 18;
 const POINT_MIN_PX = 4.5;
 const POINT_MAX_PX = 11;
 /**
@@ -445,6 +455,39 @@ const POINT_MAX_PX = 11;
 const SIZE_CEILING_OPERATORS = 5;
 
 
+
+/**
+ * One mast's billboard: its triangle, sized by its operators (`anfrGlyphs.js`).
+ *
+ * A billboard and not a `PointPrimitive` since the mock of 2026-09-23: a
+ * point can only be a disc. The id, the position and the depth rule are the
+ * dot's, so the pick, the sprite order and the card anchor did not move.
+ */
+function mastBillboardOptions(id, position, style, extra = {}) {
+  const glyph = anfrMastGlyph(style);
+  return {
+    id,
+    position,
+    ...(glyph ? { image: glyph.image, imageId: glyph.id } : {}),
+    scale: anfrGlyphScale(style.sizePx),
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    ...extra,
+  };
+}
+
+/** Put a mast's own triangle back on its billboard. */
+function dressMastSprite(billboard, style) {
+  const glyph = anfrMastGlyph(style);
+  if (glyph && typeof billboard.setImage === 'function') billboard.setImage(glyph.id, glyph.image);
+  billboard.scale = anfrGlyphScale(style.sizePx);
+}
+
+/** Dress a mast's billboard as the selection: the amber diamond. */
+function dressSelected(billboard) {
+  const glyph = anfrSelectedGlyph();
+  if (glyph && typeof billboard.setImage === 'function') billboard.setImage(glyph.id, glyph.image);
+  billboard.scale = ANFR_SELECTED_SCALE;
+}
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
@@ -1418,7 +1461,9 @@ function selectedOverlayEntry(id, position, copy) {
     priority: Number.MAX_SAFE_INTEGER,
     title,
     details,
-    accent: SELECTED_COLOR,
+    // The selected mast is the amber diamond (`anfrGlyphs.js`), and its tag
+    // wears the same amber.
+    accent: ANFR_SELECTED_FILL,
     interactive: false,
     anchorRadiusPx: 9,
     minAnchorGapPx: 11,
@@ -1669,9 +1714,7 @@ function selectedSupportEntry(record) {
 
 function restoreRecordStyle(record) {
   if (!record?.point) return;
-  record.point.color = Cesium.Color.fromCssColorString(record.style.color)
-    .withAlpha(record.style.alpha);
-  record.point.pixelSize = record.style.sizePx;
+  dressMastSprite(record.point, record.style);
 }
 
 function clearSelection() {
@@ -1738,10 +1781,7 @@ function restoreSelectionAfterRebuild(previous) {
     clearSelection();
     return;
   }
-  if (record.point) {
-    record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
-    record.point.pixelSize = SELECTED_POINT_PX;
-  }
+  if (record.point) dressSelected(record.point);
   repaintSelectedCard(record.id);
 }
 
@@ -1753,10 +1793,7 @@ function selectSupport(id) {
   // A new click asks the key afresh rather than trusting a quarter-second-old answer.
   _keyCarriesAt = -Infinity;
   watchKeyVisibility();
-  if (record.point) {
-    record.point.color = Cesium.Color.fromCssColorString(SELECTED_COLOR);
-    record.point.pixelSize = SELECTED_POINT_PX;
-  }
+  if (record.point) dressSelected(record.point);
   // A maillage dot knows its band and its operator count but not its identity.
   // Ask the register for it, and paint the card twice rather than making the
   // reader zoom in to find out what they clicked on.
@@ -1869,16 +1906,7 @@ function reconcileMesh(box) {
     // No ground warm-up at these altitudes: a metre of vertical error is
     // invisible and 2 200 terrain lookups per pan would not be.
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, POINT_LIFT_M);
-    const point = _points?.add({
-      id,
-      position,
-      color: Cesium.Color.fromCssColorString(style.color).withAlpha(style.alpha),
-      pixelSize: style.sizePx,
-      outlineColor: Cesium.Color.fromCssColorString(style.outlineColor)
-        .withAlpha(style.outlineAlpha),
-      outlineWidth: style.outlineWidth,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    }) || null;
+    const point = _points?.add(mastBillboardOptions(id, position, style)) || null;
     // The selected dot keeps its record — and with it any lookup still in
     // flight, which writes into this object when it lands.
     if (selected?.id === id) {
@@ -2019,17 +2047,9 @@ function reconcileSupports(payload) {
     const heightM = anfrMastHeightM(support);
     const { ground, top } = supportAnchors(support.lat, support.lon, heightM);
     const position = top;
-    const point = _points?.add({
-      id,
-      position,
-      color: Cesium.Color.fromCssColorString(style.color).withAlpha(style.alpha),
-      pixelSize: style.sizePx,
-      outlineColor: Cesium.Color.fromCssColorString(style.outlineColor)
-        .withAlpha(style.outlineAlpha),
-      outlineWidth: style.outlineWidth,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    const point = _points?.add(mastBillboardOptions(id, position, style, {
       translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 400_000, 0.45),
-    }) || null;
+    })) || null;
     if (selected?.id === id) {
       Object.assign(selected, { support, point, position, groundPosition: ground, mastHeightM: heightM, style });
       _records.set(id, selected);
@@ -2894,7 +2914,7 @@ const anfrFranceLayer = {
 
   init(viewer) {
     _viewer = viewer;
-    _points = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
+    _points = new Cesium.BillboardCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
     _points.show = false;
     viewer.scene.primitives.add(_points);
     registerSpriteCollection(ANFR_FR_LAYER_ID, _points);
@@ -3121,6 +3141,10 @@ const anfrFranceLayer = {
           label: anfrBandLabelFor(band),
           color: anfrBandColor(band),
           count: tally.get(band) || 0,
+          // The swatch is the map's own triangle in the band's colour, hollow
+          // where nothing radiates: the silhouette rides in the colour row
+          // (`glyph`, masked by manager.js), it is not a second list.
+          glyph: band === 'projet' ? ANFR_HOLLOW_TRIANGLE_LEGEND_GLYPH : ANFR_TRIANGLE_LEGEND_GLYPH,
         })));
       legend.push(...anfrMastLegend());
     }

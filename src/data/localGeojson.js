@@ -9,6 +9,9 @@ import {
 } from './airportsPack.js';
 import {
   datacenterCardDetails,
+  datacenterKeyLegend,
+  datacenterLabelPriority,
+  datacenterPowerText,
   datacenterRenderSpec,
   geometryAreaM2,
 } from './datacentersPack.js';
@@ -31,7 +34,8 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
-import { isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
+import { isOwnedByOtherLayer, isWorldPick, resolvePickId } from './pickRegistry.js';
+import { mapKeyCarriesSelection, watchMapKeyCarriesSelection } from './mapKeySelection.js';
 import { pickAt } from './pickAt.js';
 import messages from './localGeojson.i18n.js';
 
@@ -390,11 +394,13 @@ const PACK_RENDERERS = Object.freeze({
   'local-airports': Object.freeze({
     featureRender: (properties) => airportRenderSpec(properties),
   }),
-  // No `renderLegend` either: the data-centre row prints no key. Its three
-  // lines (hall, fence, hollow ring) took a panel for marks the card already
-  // names on a click.
+  // The data-centre key had no line from 2026-09-14 — its three (hall, fence,
+  // hollow ring) took a panel for marks the card names on a click — and has
+  // two since the mock of 2026-09-23: a site, and a group of sites, which no
+  // shape says unaided (`datacenterKeyLegend`).
   'local-datacenters': Object.freeze({
     featureRender: datacenterRenderSpec,
+    renderLegend: () => datacenterKeyLegend(),
   }),
   'local-dams': Object.freeze({
     featureRender: (properties) => damRenderSpec(properties),
@@ -550,6 +556,23 @@ export function polygonHierarchyAreaM2(hierarchy) {
 }
 
 /**
+ * A label's one line: the clamped name — and, for a data centre whose power
+ * anyone published, the power after it (« Equinix PA3 · 20 MW »), as the mock
+ * of 2026-09-23 labels them. The label variant has no second line, and at the
+ * national view the power is what tells two named sites apart.
+ * @param {string} title
+ * @param {object} properties
+ * @param {string} layerId
+ * @returns {string}
+ */
+function localOverlayLabelTitle(title, properties, layerId) {
+  const name = clampOverlayLabelTitle(title);
+  if (layerId !== 'local-datacenters') return name;
+  const power = datacenterPowerText(unwrapProperties(properties) || {});
+  return power ? `${name} · ${power}` : name;
+}
+
+/**
  * Build the validated local-infrastructure card copy.
  * @param {object} properties Unwrapped GeoJSON feature properties.
  * @param {string} layerId Local layer id.
@@ -682,7 +705,7 @@ export function createLocalInfrastructureOverlayEntry({
     // and hides what it is standing next to. Clamped HERE and not in the
     // pack's `cardCopy`, so the full name still reaches the context card the
     // click opens: this is a drawing limit, not a shorter name.
-    title: label ? clampOverlayLabelTitle(resolvedCopy.title) : resolvedCopy.title,
+    title: label ? localOverlayLabelTitle(resolvedCopy.title, properties, layerId) : resolvedCopy.title,
     details: label ? [] : resolvedCopy.details,
     accent,
     priority,
@@ -856,6 +879,65 @@ export function selectLocalGlobeLodMarks(records, {
 }
 
 /**
+ * Merge the marks that share a screen cell into ONE grouped mark.
+ *
+ * The data-centre layer's « Regroupement » (`markerGlyphs` + `groupCellPx`):
+ * where several sites fall in one cell of `cellPx`, the most important of them
+ * (the card cohort's order) stays on screen and says how many it stands for;
+ * the others step aside. Unlike {@link selectLocalGlobeLodMarks} nothing is
+ * capped and the count is the point: a grouped mark is DRAWN differently, so
+ * the reader knows to zoom in rather than reading one site where there are
+ * six.
+ *
+ * @param {object[]} records Candidate records, already frustum-gated.
+ * @param {object} options
+ * @param {number} options.cellPx Grid pitch, CSS pixels.
+ * @param {number} options.width Canvas width, CSS pixels.
+ * @param {number} options.height Canvas height, CSS pixels.
+ * @param {(record: object) => ?{x:number, y:number}} options.project
+ * @param {?object} [options.pinned] A record that always leads its cell.
+ * @returns {Map<object, number>} Each leading record → how many its cell holds.
+ *   A record absent from the map stepped aside.
+ */
+export function groupLocalMarks(records, {
+  cellPx,
+  width,
+  height,
+  project,
+  pinned = null,
+} = {}) {
+  const leads = new Map();
+  if (!Array.isArray(records) || records.length === 0 || typeof project !== 'function') return leads;
+  const size = Math.max(1, Number(cellPx) || 1);
+  /** @type {Map<string, {lead: object, count: number}>} */
+  const cells = new Map();
+  for (const record of records) {
+    const screen = project(record);
+    if (!Number.isFinite(screen?.x) || !Number.isFinite(screen?.y)) {
+      // Nothing to group it with: it stands alone rather than vanishing.
+      leads.set(record, 1);
+      continue;
+    }
+    if (screen.x < -size || screen.x > width + size || screen.y < -size || screen.y > height + size) {
+      leads.set(record, 1);
+      continue;
+    }
+    const key = `${Math.floor(screen.x / size)}:${Math.floor(screen.y / size)}`;
+    const cell = cells.get(key);
+    if (!cell) {
+      cells.set(key, { lead: record, count: 1 });
+      continue;
+    }
+    cell.count += 1;
+    const wins = record === pinned
+      || (cell.lead !== pinned && compareLocalOverlayRecords(record, cell.lead) < 0);
+    if (wins) cell.lead = record;
+  }
+  for (const { lead, count } of cells.values()) leads.set(lead, count);
+  return leads;
+}
+
+/**
  * The camera's culling volume, or null when the scene cannot describe one.
  *
  * Null is the historical behaviour — nothing is frustum-culled — and it is what
@@ -914,11 +996,12 @@ export function localRecordOffScreen(cullingVolume, record, stemLenM) {
  * @param {number} distance Camera-to-anchor distance in metres.
  * @param {number} pixelFactor {@link localPixelFactor} for this frame.
  * @param {number} maxM Ceiling in metres; `Infinity` for an uncapped pack.
+ * @param {number} [targetPx] On-screen height, CSS pixels — the layer's `stemPx`.
  * @returns {number}
  */
-export function localStemLiftM(distance, pixelFactor, maxM) {
+export function localStemLiftM(distance, pixelFactor, maxM, targetPx = LOCAL_STEM_TARGET_PX) {
   const effectiveDistance = Math.max(distance, 5000);
-  return Math.min(effectiveDistance * pixelFactor * LOCAL_STEM_TARGET_PX, maxM);
+  return Math.min(effectiveDistance * pixelFactor * targetPx, maxM);
 }
 
 /**
@@ -1129,6 +1212,37 @@ export function createLocalGeoJsonLayer({
    * @type {?((features:Array<object>) => (void|(() => void)))}
    */
   onFeatures = null,
+  /*
+   * ── OPTIONAL: A GLYPH FOR THE MARK, AND GROUPED MARKS ──────────────────
+   *
+   * `markerGlyphs` replaces the dot with a billboard: `() => ({ single:
+   * {image, scale}, group: {image, scale} })`, resolved once per load, null
+   * where there is no canvas (the dot stays). With `groupCellPx`, the marks
+   * that share a screen cell of that pitch merge into the `group` image above
+   * `groupMinHeightM` of camera height — below it every site is drawn, since
+   * a reader that close came to separate them. See {@link groupLocalMarks}.
+   * `stemPx` is the recall stem's on-screen height; 65 px by default.
+   * The data-centre layer is the first caller (`datacenterGlyphs.js`).
+   */
+  /** @type {?(() => ?{single: {image: string, scale: number}, group: {image: string, scale: number}})} */
+  markerGlyphs = null,
+  groupCellPx = 0,
+  groupMinHeightM = 60_000,
+  stemPx = LOCAL_STEM_TARGET_PX,
+  /*
+   * ── OPTIONAL: THE CLICKED FEATURE'S CARD IN THE MAP KEY ────────────────
+   *
+   * `keySelection: { panel, accent }`. A click then opens the feature's card
+   * in the key (`legendSelection`, built by `panel(props, {areaM2, title,
+   * id})`), keeps a tag over it on the globe — the whole card there when the
+   * key cannot carry it — shows `markerGlyphs.selected`, and does NOT fly the
+   * camera: the reader clicked to read, at the scale they chose. Escape, the
+   * key's close or a click on empty ground closes it. The antennas' mast and
+   * the cables' landing point work the same way; the data centres are the
+   * first local pack to (mock of 2026-09-23).
+   */
+  /** @type {?{panel: (props: object, context: object) => ?object, accent?: string}} */
+  keySelection = null,
 }) {
   const resolveRenderSpec = featureRender || PACK_RENDERERS[id]?.featureRender || null;
   const resolveRenderLegend = renderLegend || PACK_RENDERERS[id]?.renderLegend || null;
@@ -1368,6 +1482,138 @@ export function createLocalGeoJsonLayer({
    * @param {Cesium.Viewer} viewer
    * @returns {object} The live PolylineCollection.
    */
+  /**
+   * Show the image a mark's state calls for: `selected` for the feature whose
+   * card is open, `group` on a mark that stands for several, `single`
+   * otherwise. Written only on a change: a billboard's `image` is a Property,
+   * and assigning one allocates.
+   */
+  function refreshGlyph(record) {
+    const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
+    const billboard = record?.entity?.billboard;
+    if (!billboard || !glyphs) return;
+    const state = record === _keySelected && glyphs.selected
+      ? 'selected'
+      : (record.glyphGrouped ? 'group' : 'single');
+    if (record.glyphState === state) return;
+    record.glyphState = state;
+    billboard.image = glyphs[state].image;
+    billboard.scale = glyphs[state].scale;
+  }
+
+  function setGlyphGrouped(record, grouped) {
+    record.glyphGrouped = grouped;
+    refreshGlyph(record);
+  }
+
+  // ── The clicked feature's card in the key (`keySelection`) ──────────────
+  const SELECTED_SOURCE_ID = `${id}:selected`;
+  const SELECTED_SOURCE_OPTIONS = Object.freeze({ cohortLimit: 1, collisionCapacity: 1, moving: false });
+  /** The record whose card is open, or null. */
+  let _keySelected = null;
+  let _unwatchKeyCarry = null;
+  /** The viewer the layer was last enabled on, for the selection's teardown. */
+  let _viewerRef = null;
+
+  /** Tell the shell to repaint the key now (`LAYER_DRAW_CHANGED_EVENT`). */
+  function announceKeySelection() {
+    if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+    window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+      detail: { layerId: id, selection: true },
+    }));
+  }
+
+  function keySelectionCopy(record) {
+    const props = record.entity?.__localProperties || {};
+    const copy = localInfrastructureOverlayCopy(props, id, { areaM2: record.areaM2 });
+    return { props, copy };
+  }
+
+  /** The tag over the selected feature — or its whole card, if the key cannot carry it. */
+  function publishKeySelection() {
+    const record = _keySelected;
+    if (!record) return;
+    const { props, copy } = keySelectionCopy(record);
+    const carried = mapKeyCarriesSelection();
+    overlayHost.setVisible(SELECTED_SOURCE_ID, true);
+    overlayHost.setEntries(SELECTED_SOURCE_ID, [{
+      id: `${record.id}:selected`,
+      source: SELECTED_SOURCE_ID,
+      position: record.tip,
+      variant: 'selected',
+      selected: true,
+      protected: true,
+      paintLane: 'selected',
+      collisionGroup: 'ambient-card',
+      priority: Number.MAX_SAFE_INTEGER,
+      title: carried ? localOverlayLabelTitle(copy.title, props, id) : copy.title,
+      details: carried ? [] : copy.details,
+      accent: keySelection?.accent || color,
+      interactive: false,
+      anchorRadiusPx: 9,
+      minAnchorGapPx: 11,
+      verticalOnly: true,
+      placement: 'above',
+      edgeFade: 'keyhole',
+      horizonCull: true,
+      terrainOcclusion: false,
+    }], SELECTED_SOURCE_OPTIONS);
+  }
+
+  function onKeySelectionKeyDown(event) {
+    if (event?.key === 'Escape') clearKeySelection();
+  }
+
+  function selectInKey(viewer, record) {
+    if (!record) return;
+    const previous = _keySelected;
+    _keySelected = record;
+    // The entity context stays the voice's and the Context panel's answer to
+    // "what is selected"; only the card and the camera move away from it.
+    viewer.selectedEntity = record.entity;
+    selectEntityContext(record.entity);
+    if (previous && previous !== record) refreshGlyph(previous);
+    refreshGlyph(record);
+    publishKeySelection();
+    _unwatchKeyCarry?.();
+    _unwatchKeyCarry = watchMapKeyCarriesSelection(() => publishKeySelection(), mapKeyCarriesSelection());
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onKeySelectionKeyDown);
+    // Re-deal on the next frame: the selected site leads its screen cell, and
+    // its ambient label steps aside for the tag.
+    _stemGeometryDirty = true;
+    _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
+    announceKeySelection();
+    governorRequestRender(`local-key-selection:${id}`);
+  }
+
+  /** Close the card, wherever it is shown. @returns {boolean} Whether one was open. */
+  function clearKeySelection() {
+    const record = _keySelected;
+    if (!record) return false;
+    _keySelected = null;
+    refreshGlyph(record);
+    _unwatchKeyCarry?.();
+    _unwatchKeyCarry = null;
+    if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeySelectionKeyDown);
+    overlayHost.clearSource(SELECTED_SOURCE_ID);
+    overlayHost.setVisible(SELECTED_SOURCE_ID, false);
+    if (_viewerRef?.selectedEntity === record.entity) _viewerRef.selectedEntity = undefined;
+    clearSelectedEntityContextForLayer(id);
+    _stemGeometryDirty = true;
+    _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
+    announceKeySelection();
+    governorRequestRender(`local-key-selection:${id}`);
+    return true;
+  }
+
+  /** The card for the key, or null. */
+  function keySelectionPanel() {
+    const record = _keySelected;
+    if (!record || typeof keySelection?.panel !== 'function') return null;
+    const { props, copy } = keySelectionCopy(record);
+    return keySelection.panel(props, { areaM2: record.areaM2, title: copy.title, id: record.id }) || null;
+  }
+
   function ensureStemCollection(viewer) {
     if (_stemLines) return _stemLines;
     _stemLines = new Cesium.PolylineCollection();
@@ -1588,6 +1834,7 @@ export function createLocalGeoJsonLayer({
     if (_runwayLines) _runwayLines.show = false;
     if (_stemLines) _stemLines.show = false;
     _overlayPublisher.hide();
+    clearKeySelection();
     clearSelectedEntityContextForLayer(id);
     if (viewer?.selectedEntity?.__localLayerId === id) {
       viewer.selectedEntity = undefined;
@@ -1683,7 +1930,18 @@ export function createLocalGeoJsonLayer({
     // on its legend alone: D1 makes a legend mandatory wherever a mark carries
     // a value, and a size with no printed scale is exactly the case D1 is
     // about.
-    ...((rowControls || resolveRenderLegend) ? {
+    ...(keySelection ? {
+      /**
+       * The key's close on the card: the same dismissal as Escape, or as a
+       * click on empty ground.
+       * @returns {boolean} Whether there was a card to close.
+       */
+      clearSelectedCard() {
+        return clearKeySelection();
+      },
+    } : {}),
+
+    ...((rowControls || resolveRenderLegend || keySelection) ? {
       /**
        * The row's chips and legend.
        *
@@ -1697,8 +1955,13 @@ export function createLocalGeoJsonLayer({
       getRowControls() {
         const base = rowControls ? (rowControls(_params, _groupTally) || null) : null;
         const sizeRows = resolveRenderLegend ? (resolveRenderLegend(_renderTally) || []) : [];
-        if (!base && sizeRows.length === 0) return null;
-        return { ...(base || {}), legend: [...(base?.legend || []), ...sizeRows] };
+        const selection = keySelectionPanel();
+        if (!base && sizeRows.length === 0 && !selection) return null;
+        return {
+          ...(base || {}),
+          legend: [...(base?.legend || []), ...sizeRows],
+          ...(selection ? { legendSelection: selection } : {}),
+        };
       },
     } : {}),
 
@@ -1768,6 +2031,7 @@ export function createLocalGeoJsonLayer({
           const resolvedOverlayVariant = typeof overlayVariant === 'function'
             ? overlayVariant()
             : overlayVariant;
+          const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
 
           // Natively parse into entities and use it as our _dataSource
           loaded = await Cesium.GeoJsonDataSource.load(geojson, {
@@ -1932,8 +2196,17 @@ export function createLocalGeoJsonLayer({
             // shaft comes from `_stemPool`, sized to what is on screen. What
             // the record keeps is the two things the deal cannot re-derive —
             // the shaft's colour and its width.
-            const stemWidth = groupStyle?.stemWidth ?? 3.5;
-            feature.point = new Cesium.PointGraphics({
+            const stemWidth = renderSpec.stemWidth ?? groupStyle?.stemWidth ?? 3.5;
+            const stemCss = renderSpec.stemColor || null;
+            if (glyphs) {
+              // The pack's own mark. The id string keys the atlas, so every
+              // site shares one image (see `datacenterGlyphs.js`).
+              feature.billboard = new Cesium.BillboardGraphics({
+                image: glyphs.single.image,
+                scale: glyphs.single.scale,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              });
+            } else feature.point = new Cesium.PointGraphics({
               pixelSize: renderSpec.pixelSize ?? groupStyle?.pixelSize ?? 10,
               // A1, drawn: a HOLLOW ring is a feature whose measurement was
               // never published, and it must not be reachable by any value of
@@ -2007,7 +2280,7 @@ export function createLocalGeoJsonLayer({
               else _renderTally.set(renderSpec.key, { total: 1, visible: 0 });
             }
 
-            const priority = labelPriorityFromProperties(properties, id);
+            const priority = labelPriorityFromProperties(properties, id, { areaM2 });
             _stemRecords.push({
               id: recordId,
               entity: feature,
@@ -2016,18 +2289,26 @@ export function createLocalGeoJsonLayer({
               tip,
               nextTip: Cesium.Cartesian3.clone(tip),
               /** Colour of the pooled shaft. */
-              stemColor: markerColor,
+              stemColor: stemCss ? Cesium.Color.fromCssColorString(stemCss) : markerColor,
               /**
                * Sort key for the draw order — the CSS string the colour came
                * from, resolved ONCE here. Sorting on `toCssColorString()` would
                * allocate a string per comparison, so ~120 000 of them per
                * settle on the scene this budget exists for.
                */
-              stemColorKey: markerCss || color,
+              stemColorKey: stemCss || markerCss || color,
               /** Pool entry drawing this record's shaft, or null. See `showStem`. */
               stemEntry: null,
               /** Width of the pooled shaft, in pixels. Never splits a command. */
               stemWidth,
+              /** On-screen height of the shaft, CSS pixels (`stemPx`). */
+              stemTargetPx: stemPx,
+              /** Whether the mark stands for several sites (`groupCellPx`). */
+              glyphGrouped: false,
+              /** Which of `markerGlyphs`' images the billboard shows. */
+              glyphState: 'single',
+              /** Measured footprint, for the key's card. */
+              areaM2,
               groundHeight,
               groundSampled: false,
               lastGroundSampleMs: 0,
@@ -2122,6 +2403,7 @@ export function createLocalGeoJsonLayer({
         }
 
         // 2. Install native global click handler
+        _viewerRef = viewer;
         if (!_clickHandler) {
           _clickHandler = screenSpaceEventHandlerFactory(viewer.scene.canvas);
           _clickHandler.setInputAction((click) => {
@@ -2129,7 +2411,8 @@ export function createLocalGeoJsonLayer({
             const picked = pickAt(viewer.scene, click.position);
 
             if (picked && picked.id && picked.id.__localLayerId === id) {
-              selectLocalFeature(viewer, picked.id);
+              if (keySelection) selectInKey(viewer, _stemRecords.find((record) => record.entity === picked.id));
+              else selectLocalFeature(viewer, picked.id);
               return;
             }
             // A native pick that belongs to somebody else is not empty space:
@@ -2150,7 +2433,14 @@ export function createLocalGeoJsonLayer({
               hitTest: overlayHost.hitTest || DEFAULT_OVERLAY_HOST.hitTest,
             });
             const record = labelled ? findStemRecord(labelled) : null;
-            if (record) selectLocalFeature(viewer, record.entity);
+            if (record) {
+              if (keySelection) selectInKey(viewer, record);
+              else selectLocalFeature(viewer, record.entity);
+              return;
+            }
+            // A click on empty ground closes the card — not one on another
+            // layer's object, which belongs to that layer.
+            if (keySelection && _keySelected && isWorldPick(picked)) clearKeySelection();
           }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
         }
       }
@@ -2230,7 +2520,7 @@ export function createLocalGeoJsonLayer({
               record.offScreen = localRecordOffScreen(
                 cullingVolume,
                 record,
-                localStemLiftM(distance, pixelFactor, record.stemMaxHeightM),
+                localStemLiftM(distance, pixelFactor, record.stemMaxHeightM, record.stemTargetPx),
               );
               // Out of range cannot change without camera motion, and camera
               // motion is what sets `_stemGeometryDirty` — so skipping the stem
@@ -2342,12 +2632,35 @@ export function createLocalGeoJsonLayer({
               // dropped at orbit would otherwise stay dropped on the way down.
               for (const record of candidates) record.beyondBudget = false;
             }
+            if (groupCellPx > 0) {
+              const cameraCarto = viewer.camera.positionCartographic
+                || Cesium.Cartographic.fromCartesian(cameraPos);
+              const grouping = Number(cameraCarto?.height) > groupMinHeightM;
+              const drawn = candidates.filter((record) => !record.beyondBudget);
+              const leads = grouping
+                ? groupLocalMarks(drawn, {
+                  cellPx: groupCellPx,
+                  width: canvas.clientWidth || canvas.width || 0,
+                  height: canvas.clientHeight || canvas.height || 0,
+                  pinned: viewer.selectedEntity?.__localLayerId === id
+                    ? drawn.find((candidate) => candidate.entity === viewer.selectedEntity) || null
+                    : null,
+                  project: (record) => projectToWindow(viewer.scene, record.tip),
+                })
+                : null;
+              for (const record of drawn) {
+                const count = leads ? (leads.get(record) || 0) : 1;
+                if (count === 0) record.beyondBudget = true;
+                setGlyphGrouped(record, count >= 2);
+              }
+            }
           }
 
           for (const record of candidates) {
             const isVisible = !record.beyondBudget;
             if (record.entity.show !== isVisible) record.entity.show = isVisible;
-            if (isVisible && record.entry) visibleOverlayRecords.push(record);
+            // The selected feature's ambient label steps aside: its tag stands there.
+            if (isVisible && record.entry && record !== _keySelected) visibleOverlayRecords.push(record);
             // The stem is dealt from the pool for the DRAWN records only, and
             // only on a settle — the deal is collected first because the order
             // it is written in decides how many draw commands it costs.
@@ -2657,7 +2970,7 @@ function updateLocalStemGeometry(viewer, record, now, knownDistance = null, know
   // Capped in METRES for a layer that declares a ceiling — see `stemMaxHeightM`.
   // Uncapped (Infinity) the Math.min inside is a no-op and the geometry is
   // unchanged. The frustum gate sizes its sphere on the same call.
-  const lift = localStemLiftM(distance, pixelFactor, record.stemMaxHeightM);
+  const lift = localStemLiftM(distance, pixelFactor, record.stemMaxHeightM, record.stemTargetPx);
   const tipHeight = record.groundHeight + lift;
   Cesium.Cartesian3.fromRadians(
     record.carto.longitude,
@@ -2715,7 +3028,7 @@ function namelessTitle(props, layerId) {
   return layerTitle(layerId);
 }
 
-function labelPriorityFromProperties(props, layerId) {
+function labelPriorityFromProperties(props, layerId, measured = {}) {
   const tags = props.tags || {};
 
   let score = 0;
@@ -2723,7 +3036,7 @@ function labelPriorityFromProperties(props, layerId) {
   if (cleanLabel(tags['name:en'])) score += 700;
   if (cleanLabel(tags.operator) || cleanLabel(props.operator)) score += 180;
   if (props.output || tags['plant:output:electricity']) score += 120;
-  if (layerId === 'local-datacenters') score += 60;
+  if (layerId === 'local-datacenters') score += 60 + datacenterLabelPriority(props, measured);
   // Large harbours outrank very small ones when the label grid is crowded.
   if (layerId === 'local-ports') {
     score += 70;

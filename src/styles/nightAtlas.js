@@ -32,11 +32,29 @@
  * under `node --test`.
  */
 
+import { DUSK_STYLE } from './dusk.js';
+
 /**
  * The preset id — what the style buttons, the stages and `ui.js` key on. Not a
  * name: the reader is shown « Nuit » / "Night", and the link writes `night`.
  */
 export const NIGHT_ATLAS_STYLE = 'noir';
+
+/**
+ * Every preset that darkens the BASEMAP inside the scene and leaves each layer
+ * its own colour: the night atlas, and Dusk (`dusk.js`), the same machinery set
+ * lower. Under either one the key still decodes the map, and
+ * `nightBasemap.js` dims the ground by the stage's own `dimAmt` and `desatAmt`.
+ */
+export const BASEMAP_DARKENING_STYLES = Object.freeze([NIGHT_ATLAS_STYLE, DUSK_STYLE]);
+
+/**
+ * @param {?string} style A preset id.
+ * @returns {boolean} True for a preset that darkens the basemap and nothing else.
+ */
+export function darkensBasemapOnly(style) {
+  return BASEMAP_DARKENING_STYLES.includes(style);
+}
 
 /** Window event `ui.js` dispatches after every preset change. */
 export const STYLE_CHANGE_EVENT = 'gev:style-change';

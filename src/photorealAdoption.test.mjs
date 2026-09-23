@@ -48,12 +48,15 @@ function fakeCamera(height = 1_800_000) {
 /** A controller stub that records the stacks it was asked for. */
 function fakeController({ activeId = PHOTOREAL_ADOPTION_STACK, canLoad = true } = {}) {
   const asked = [];
+  let lock = null;
   return {
     asked,
     getActiveId: () => activeId,
     canLoadPhotoreal: () => canLoad,
+    getLock: () => lock,
     setStack: async (id) => { asked.push(id); activeId = id; },
     pick(id) { activeId = id; },
+    hold(next) { lock = next; },
   };
 }
 
@@ -142,6 +145,30 @@ test('a deliberate pick retires the watch', async () => {
   assert.deepEqual(controller.asked, []);
   assert.equal(adoption.isSpent(), true);
   assert.equal(camera.listenerCount(), 0);
+});
+
+test('a layer holding the globe on Satellite makes the watch wait, not spend', async () => {
+  // The controller would refuse the switch anyway — but `onAdopt` runs first
+  // and records a verdict, so the next visit would open on a 3D globe this
+  // reader never got.
+  const camera = fakeCamera();
+  const controller = fakeController();
+  const adopted = [];
+  const adoption = installPhotorealAdoption({ camera }, controller, {
+    onAdopt: (info) => adopted.push(info),
+  });
+  adoption.arm();
+  await camera.restAt(1_800_000);   // the app's own arrival, swallowed
+
+  controller.hold({ stackId: 'ign-ortho', rowId: 'local-datacenters' });
+  await camera.restAt(300);
+  assert.deepEqual(controller.asked, []);
+  assert.deepEqual(adopted, [], 'nothing recorded for the next visit');
+  assert.equal(adoption.isSpent(), false, 'still watching');
+
+  controller.hold(null);
+  await camera.restAt(300);
+  assert.deepEqual(controller.asked, ['photoreal']);
 });
 
 test('a build with no door, or one already refused, is not knocked on again', async () => {

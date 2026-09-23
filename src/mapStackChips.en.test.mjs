@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapStackChipModel, mapStackChipModels } from './mapStackChips.js';
+import { mapStackChipModel, mapStackChipModels, mapStackLockNote } from './mapStackChips.js';
 import { MAP_STACKS } from './mapStackController.js';
 import { withLocale } from './i18n/testing.js';
 
@@ -49,4 +49,12 @@ test('a chip that cannot be picked says why, the same way in both languages', ()
     'osm',
   ));
   assert.equal(partial.title, 'IGN map — metropolitan France only');
+});
+
+test('a layer holding the globe says so in English, naming itself', () => {
+  const lock = { stackId: 'ign-ortho', rowId: 'local-datacenters', rowLabel: 'Digital infrastructure' };
+  assert.equal(
+    withLocale('en', () => mapStackLockNote(lock, stacks())),
+    'Satellite is set by Digital infrastructure: the other map sources are not available with this layer.',
+  );
 });

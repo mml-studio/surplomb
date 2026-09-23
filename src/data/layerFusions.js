@@ -521,12 +521,12 @@ export const LAYER_FUSIONS = Object.freeze([
     primaryToggle: true,
     tiles: [
       { id: 'telegeography-submarine-cables', icon: 'cable', color: '#39d5ff' },
-      { id: 'local-datacenters', icon: 'database', color: '#00ffff' },
+      { id: 'local-datacenters', icon: 'database', color: '#a98bff' },
       {
         id: 'anfr-fr',
         part: 'masts',
         icon: 'radio-tower',
-        color: '#ffcb2b',
+        color: '#ffb238',
         on: { masts: true },
         off: { masts: false },
         lit: true,

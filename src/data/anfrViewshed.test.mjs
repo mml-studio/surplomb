@@ -19,9 +19,10 @@ import {
   VIEWSHED_COLOR,
   assembleHeights,
   terrariumToHeights,
+  viewshedRelief,
   viewshedRgba,
 } from './mastViewshedImagery.js';
-import { VIEWSHED_HIDDEN, VIEWSHED_VISIBLE, viewshedWindow } from './mastViewshed.js';
+import { VIEWSHED_HIDDEN, VIEWSHED_OUTSIDE, VIEWSHED_VISIBLE, viewshedWindow } from './mastViewshed.js';
 
 const SUPPORT = Object.freeze({
   id: 990001,
@@ -157,7 +158,7 @@ test('terrarium tiles decode and assemble into the window, the antenna at its ce
   assert.equal(heights[window.observerRow * window.size + window.observerCol], centre.x * 1000 + centre.y);
 });
 
-test('only visible cells are painted, in the selection cyan', () => {
+test('only visible cells are painted, in the line-of-sight blues', () => {
   const window = viewshedWindow(6.8694, 45.9237, 500);
   const grid = new Uint8Array(window.size * window.size).fill(VIEWSHED_HIDDEN);
   grid[window.observerRow * window.size + window.observerCol] = VIEWSHED_VISIBLE;
@@ -166,8 +167,53 @@ test('only visible cells are painted, in the selection cyan', () => {
   for (let i = 0; i < size * size; i++) {
     if (rgba[i * 4 + 3]) {
       painted += 1;
-      assert.deepEqual([rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]], [0, 255, 255]);
+      const [r, g, b] = [rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]];
+      // A lone visible cell among hidden ones is all rim: near white, blue first.
+      assert.ok(b === 255 && g >= r, `${r},${g},${b}`);
     }
   }
   assert.ok(painted >= 1 && painted <= 2, String(painted));
+});
+
+test('the lit ground is paler at the mast, deeper far out, and rimmed only against hidden ground', () => {
+  const window = viewshedWindow(6.8694, 45.9237, 2000);
+  const { size, observerCol, observerRow, radiusPx } = window;
+  // Everything inside the circle is visible, except one hidden cell far east.
+  const grid = new Uint8Array(size * size).fill(VIEWSHED_OUTSIDE);
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const dx = col - observerCol;
+      const dy = row - observerRow;
+      if (dx * dx + dy * dy <= radiusPx * radiusPx) grid[row * size + col] = VIEWSHED_VISIBLE;
+    }
+  }
+  const hiddenCol = observerCol + Math.floor(radiusPx * 0.6);
+  grid[observerRow * size + hiddenCol] = VIEWSHED_HIDDEN;
+  // A flat relief, so only the distance and the rim shade the cells.
+  const relief = new Uint8Array(size * size).fill(128);
+  // The window is small enough that its Mercator rows and latitude rows coincide.
+  const { rgba } = viewshedRgba({ window, grid, relief });
+  const at = (col, row) => Array.from(rgba.slice((row * size + col) * 4, (row * size + col) * 4 + 4));
+  const foot = at(observerCol + 1, observerRow);
+  const far = at(observerCol, observerRow - Math.floor(radiusPx * 0.9));
+  assert.ok(foot[0] > far[0] && foot[3] > far[3], `${foot} vs ${far}`);
+  // Next to the hidden cell: the rim. At the circle's own edge: no rim.
+  const rim = at(hiddenCol - 1, observerRow);
+  assert.ok(rim[3] > 220 && rim[0] > 200, String(rim));
+  const edge = at(observerCol - radiusPx + 1, observerRow);
+  assert.ok(edge[3] < 200, String(edge));
+});
+
+test('the relief is flat at 128 and brighter on a slope facing the north-west sun', () => {
+  const size = 5;
+  const flat = viewshedRelief(new Float32Array(size * size).fill(100), size, 50);
+  assert.equal(flat[2 * size + 2], 128);
+  // Ground rising to the south-east faces the north-west.
+  const slope = new Float32Array(size * size);
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) slope[row * size + col] = 10 * (row + col);
+  }
+  assert.ok(viewshedRelief(slope, size, 50)[2 * size + 2] > 128);
+  const away = slope.map((height) => -height);
+  assert.ok(viewshedRelief(away, size, 50)[2 * size + 2] < 128);
 });

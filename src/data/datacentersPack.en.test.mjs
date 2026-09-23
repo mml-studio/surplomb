@@ -8,6 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   datacenterCardDetails,
+  datacenterKeyLegend,
+  datacenterSelectionPanel,
   datacenterSurfaceWords,
   formatFootprint,
   formatPowerMw,
@@ -85,4 +87,43 @@ test('the numbers follow the reader', () => {
   assert.equal(withLocale('fr', () => formatPowerMw(8.4)), '8,4 MW');
   assert.equal(withLocale('en', () => formatPowerMw(15.6)), '16 MW');
   assert.equal(withLocale('en', () => formatPowerMw(85)), '85 MW');
+});
+
+test('the key card reads in English: the power as its figure, who published it, and the website', () => {
+  const site = {
+    tags: { name: 'Groupama Mordelles', operator: 'Groupama', building: 'yes', website: 'https://groupama.example' },
+    dcwatch: { powerMw: 3.6, release: '2026-04-09', startYear: 2014 },
+  };
+  const english = withLocale('en', () => datacenterSelectionPanel(site, { areaM2: 4100, id: 'dc-1' }));
+  assertNoFrench(english, { allow: ['Groupama Mordelles', 'Groupama', 'DCWatch', 'OpenStreetMap', 'ODbL', 'https://groupama.example'] });
+  assert.deepEqual(english.metric.caption, ['Published power', 'DCWatch · April 9, 2026']);
+  assert.equal(english.metric.value, '3.6 MW');
+  assert.deepEqual(english.lines, ['In service since 2014']);
+  assert.equal(english.footnote, 'Source: OpenStreetMap and DCWatch (ODbL)');
+  assert.deepEqual(english.link, { href: 'https://groupama.example', label: 'Visit the website' });
+  // French, the mock's own words.
+  const french = withLocale('fr', () => datacenterSelectionPanel(site, { areaM2: 4100, id: 'dc-1' }));
+  assert.equal(french.title, 'Groupama Mordelles');
+  assert.equal(french.metric.value, '3,6 MW');
+  assert.deepEqual(french.metric.caption, ['Puissance renseignée', 'DCWatch · 9 avril 2026']);
+  // The figure keeps the formatter's own narrow no-break space.
+  assert.deepEqual(french.meta, ['Groupama', `emprise au sol ≈ ${withLocale('fr', () => formatFootprint(4100))}`]);
+  assert.equal(french.link.label, 'Voir le site');
+});
+
+test('a site with a mapped power credits OpenStreetMap, and one with none says so', () => {
+  const mapped = withLocale('fr', () => datacenterSelectionPanel({ tags: { name: 'MRS3', 'data_center:power': '24 MW' } }));
+  assert.deepEqual(mapped.metric.caption, ['Puissance renseignée', 'OpenStreetMap']);
+  assert.equal(mapped.footnote, 'Source : OpenStreetMap (ODbL)');
+  const bare = withLocale('en', () => datacenterSelectionPanel({ tags: { name: 'Plain hall', website: 'http://insecure.example' } }));
+  assert.equal(bare.metric, null);
+  assert.deepEqual(bare.lines, ['Power not published']);
+  assert.equal(bare.link, null, 'only an https website becomes a link');
+  assert.equal(datacenterSelectionPanel({ tags: {} }), null, 'no name, no card');
+});
+
+test('the key names the two marks in English', () => {
+  const rows = withLocale('en', () => datacenterKeyLegend());
+  assert.deepEqual(rows.map((row) => row.label), ['Site', 'Group of sites']);
+  assertNoFrench(rows.map((row) => [row.label, row.blurb || '']));
 });

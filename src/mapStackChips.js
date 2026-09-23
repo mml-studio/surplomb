@@ -21,6 +21,13 @@
 // `_setMapStack()` path the dropdown's `change` handler used, and the active
 // state is re-synced from controller state (never optimistically), so a failed
 // or superseded switch still leaves the truly-active stack lit.
+//
+// LOCKED is not UNAVAILABLE. A data layer can hold the globe on one stack
+// while it is lit (`basemapLock.js`, « Infrastructure numérique » → Satellite),
+// and the other chips grey out for as long as it does. Availability is fixed
+// for the session and rendered once; the lock comes and goes with the layer,
+// so it is painted by `syncMapStackChips` and read at CLICK time, never baked
+// into the handler.
 
 import messages from './mapStackChips.i18n.js';
 
@@ -81,6 +88,63 @@ export function mapStackChipModel(stack, activeId) {
   };
 }
 
+/** The model each rendered chip was built from, so a re-sync can undo a lock. */
+const chipModels = new WeakMap();
+
+/** The layer a lock names, in the page's language (`setLock` resolved it). */
+const lockLayerName = (lock) => String(lock?.rowLabel || lock?.rowId || '');
+
+/**
+ * The accessible name a chip carries when nothing holds it — see the render
+ * loop below for why only two kinds of chip need one.
+ * @param {object} model - {@link mapStackChipModel} output.
+ * @returns {string} Empty when the button text is already the name.
+ */
+function chipAriaLabel(model) {
+  if (!model.available) return messages().unavailableAriaLabel(model.label, model.unavailableHint);
+  if (model.coverageNote) return messages().coverageAriaLabel(model.label, model.coverageNote);
+  return '';
+}
+
+/**
+ * Grey a chip out while a lock holds another stack, or give it back its own
+ * state once the lock is released.
+ *
+ * An UNAVAILABLE chip keeps its own reason in its tooltip: it will still be
+ * unavailable once the layer is off, and the lock is not why.
+ * @param {object} chip - Rendered chip button.
+ * @param {object} model - The model it was rendered from.
+ * @param {?{stackId: string, rowId?: string, rowLabel?: string}} lock
+ * @returns {void}
+ */
+function paintChipLock(chip, model, lock) {
+  const locked = Boolean(lock?.stackId) && model.id !== lock.stackId;
+  chip.classList?.toggle('locked', locked);
+  chip.setAttribute?.('aria-disabled', String(locked || !model.available));
+  if (locked && model.available) {
+    const layer = lockLayerName(lock);
+    chip.title = messages().lockedHint(layer);
+    chip.setAttribute?.('aria-label', messages().lockedAriaLabel(model.label, layer));
+    return;
+  }
+  chip.title = model.title;
+  const ariaLabel = chipAriaLabel(model);
+  if (ariaLabel) chip.setAttribute?.('aria-label', ariaLabel);
+  else chip.removeAttribute?.('aria-label');
+}
+
+/**
+ * The sentence under the tray while a layer holds the globe on one stack.
+ * @param {?{stackId: string, rowId?: string, rowLabel?: string}} lock
+ * @param {Array<object>} [stacks] - `getStacks()` output, for the stack's name.
+ * @returns {string} Empty when nothing holds the globe.
+ */
+export function mapStackLockNote(lock, stacks = []) {
+  if (!lock?.stackId) return '';
+  const stack = (Array.isArray(stacks) ? stacks : []).find((entry) => entry?.id === lock.stackId);
+  return messages().lockNote(String(stack?.label ?? lock.stackId), lockLayerName(lock));
+}
+
 /**
  * @param {Array<object>} stacks - `MapStackController.getStacks()` output.
  * @param {string|null} activeId - Currently active stack id.
@@ -103,10 +167,16 @@ export function mapStackChipModels(stacks, activeId) {
  * @param {object} [options]
  * @param {string|null} [options.activeId] - Currently active stack id.
  * @param {(stackId: string) => void} [options.onSelect] - Selection callback.
+ * @param {?object} [options.lock] - The controller's lock, if one holds.
  * @param {Document} [options.doc] - Document override (tests).
  * @returns {Array<object>} The rendered chip models.
  */
-export function renderMapStackChips(container, stacks, { activeId = null, onSelect = null, doc } = {}) {
+export function renderMapStackChips(container, stacks, {
+  activeId = null,
+  onSelect = null,
+  lock = null,
+  doc,
+} = {}) {
   if (!container) return [];
   const ownerDoc = doc || container.ownerDocument || globalThis.document;
   if (!ownerDoc?.createElement) return [];
@@ -123,17 +193,13 @@ export function renderMapStackChips(container, stacks, { activeId = null, onSele
       model.available ? '' : 'unavailable',
     ].filter(Boolean).join(' ');
     chip.dataset.stackId = model.id;
-    chip.title = model.title;
     chip.setAttribute('aria-pressed', String(model.active));
-    chip.setAttribute('aria-disabled', String(!model.available));
-    if (!model.available) {
-      chip.setAttribute('aria-label', messages().unavailableAriaLabel(model.label, model.unavailableHint));
-    } else if (model.coverageNote) {
-      // A `title` alone is mouse-only. A partial-coverage source has to say so
-      // to a screen reader too, and it is not "unavailable" — so it gets a
-      // plain accessible name, not the unavailable phrasing.
-      chip.setAttribute('aria-label', messages().coverageAriaLabel(model.label, model.coverageNote));
-    }
+    // Title, `aria-disabled` and the accessible name. An unavailable chip reads
+    // its reason; a partial-coverage one says where it works, because a
+    // `title` alone is mouse-only and it is not "unavailable"; a locked one
+    // names the layer holding the globe.
+    chipModels.set(chip, model);
+    paintChipLock(chip, model, lock);
 
     const label = ownerDoc.createElement('span');
     label.className = 'map-stack-chip-label';
@@ -148,7 +214,7 @@ export function renderMapStackChips(container, stacks, { activeId = null, onSele
     }
 
     chip.addEventListener('click', () => {
-      if (!model.available) return;
+      if (!model.available || chip.classList?.contains?.('locked')) return;
       onSelect?.(model.id);
     });
     container.appendChild(chip);
@@ -158,13 +224,15 @@ export function renderMapStackChips(container, stacks, { activeId = null, onSele
 }
 
 /**
- * Re-points the active chip at controller state. Availability never changes at
- * runtime (it tracks the ion token), so only the active/pressed pair is synced.
+ * Re-points the active chip at controller state, and greys out or restores the
+ * chips a lock holds. Availability never changes at runtime (it tracks the ion
+ * token), so it is left as rendered.
  * @param {HTMLElement} container - Row element.
  * @param {string|null} activeId - Currently active stack id.
+ * @param {?object} [lock] - The controller's lock, or null once released.
  * @returns {void}
  */
-export function syncMapStackChips(container, activeId) {
+export function syncMapStackChips(container, activeId, lock = null) {
   const chips = container?.children;
   if (!chips) return;
   for (const chip of Array.from(chips)) {
@@ -173,5 +241,7 @@ export function syncMapStackChips(container, activeId) {
     const active = stackId === activeId;
     chip.classList?.toggle('active', active);
     chip.setAttribute?.('aria-pressed', String(active));
+    const model = chipModels.get(chip);
+    if (model) paintChipLock(chip, model, lock);
   }
 }

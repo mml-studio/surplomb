@@ -40,6 +40,9 @@
  * a pick of `photoreal` itself — retires this for the session: an automatic
  * switch that overrides somebody's choice is a bug, not a feature. So does a
  * refused purchase, which the controller has already greyed the chip for.
+ * And while a data layer holds the globe on Satellite (`basemapLock.js`) the
+ * watch waits: the controller would refuse the switch, but only after
+ * `onAdopt` had recorded a verdict the reader never got.
  *
  * THE SIGNAL IS THE READER'S HAND, NOT THEIR STILLNESS. Waiting for the camera
  * to come to REST means the swap starts after the reader has finished moving:
@@ -221,6 +224,9 @@ export function installPhotorealAdoption(viewer, controller, {
       dispose();
       return;
     }
+    // "Not yet", like the altitude below: a layer holds the globe, and the
+    // next rest once it lets go asks again.
+    if (controller.getLock?.()) return;
     const height = currentAltitude();
     if (height > altitudeM) return;
 

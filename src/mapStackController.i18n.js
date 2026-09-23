@@ -101,6 +101,18 @@ export default defineMessages({
     },
   },
 
+  /**
+   * Why a switch was refused while a data layer holds the basemap
+   * (`basemapLock.js`). Unlike the diagnostics above, this one is read by
+   * anyone who asks for a basemap, so it is French on the French page.
+   */
+  locked: {
+    fr: (stack, layer) => `${stack} n’est pas disponible avec la couche ${layer}`,
+    en: (stack, layer) => `${stack} is not available with the ${layer} layer`,
+    note: 'Toast and voice answer when a basemap is asked for while a layer imposes another.',
+    sample: ['OSM', 'Digital infrastructure'],
+  },
+
   /** The notice a boot that fell back to another basemap leaves on the chip. */
   bootFallback: {
     fr: (reason, stack) => `Google 3D Tiles failed to load: ${reason} — showing ${stack}`,

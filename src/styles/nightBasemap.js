@@ -34,7 +34,8 @@
  * crossfade in and out, a restore from a share link, and Cockpit's vision
  * override (which writes intensities directly, see `cockpitVisionPolicy.js`).
  * Following it means the ground dims on exactly the frames the vignette and
- * the bloom fade in, whichever path turned them on.
+ * the bloom fade in, whichever path turned them on. Dusk (`dusk.js`) is the
+ * same ground at a lower setting, read off its own stage the same way.
  */
 import * as Cesium from 'cesium';
 
@@ -67,6 +68,33 @@ export function nightBasemapAdjustment(intensity, dim, desat) {
   };
 }
 
+/**
+ * The two knobs for every darkening stage at once — Night and Dusk. Pure.
+ *
+ * Multiplied, not maxed: during the 500 ms crossfade from one preset to the
+ * other both stages are part-way, and a product passes smoothly from one
+ * ground to the other where a max would step at the half-way frame. At rest
+ * only one stage has a non-zero intensity and the product is that stage's own.
+ *
+ * @param {object|ReadonlyArray<object>} states One `{intensity, dim, desat}`
+ *   per stage, or a single one.
+ * @returns {{active: boolean, brightness: number, saturation: number}}
+ */
+export function combinedNightAdjustment(states) {
+  const list = Array.isArray(states) ? states : [states];
+  let brightness = 1;
+  let saturation = 1;
+  let active = false;
+  for (const state of list) {
+    if (!state || !(Number(state.intensity) > 0.001)) continue;
+    active = true;
+    const one = nightBasemapAdjustment(state.intensity, state.dim, state.desat);
+    brightness *= one.brightness;
+    saturation *= one.saturation;
+  }
+  return { active, brightness, saturation };
+}
+
 const TILESET_SHADER = /* glsl */ `
   void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
     vec3 color = material.diffuse;
@@ -91,8 +119,9 @@ function createTilesetShader() {
  *
  * @param {object} options
  * @param {Cesium.Scene} options.scene
- * @param {() => {intensity: number, dim: number, desat: number}} options.readState
- *   The Noir stage's live values.
+ * @param {() => ({intensity: number, dim: number, desat: number}|Array<object>)} options.readState
+ *   The live values of the Noir stage — or of every darkening stage, Noir's
+ *   and Dusk's, in an array.
  * @param {() => ?Cesium.Cesium3DTileset} [options.getTileset] The photoreal
  *   tileset, or null while another stack is active.
  * @param {() => ReadonlyArray<Cesium.ImageryLayer>} [options.getImageryLayers]
@@ -119,9 +148,7 @@ export function createNightBasemap({ scene, readState, getTileset, getImageryLay
   };
 
   function apply() {
-    const state = readState?.() || {};
-    const active = Number(state.intensity) > 0.001;
-    const { brightness, saturation } = nightBasemapAdjustment(state.intensity, state.dim, state.desat);
+    const { active, brightness, saturation } = combinedNightAdjustment(readState?.() || {});
 
     const tileset = getTileset?.() || null;
     if (shaderTileset && shaderTileset !== tileset) detachShader();

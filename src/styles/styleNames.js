@@ -15,6 +15,7 @@
  * "Night", and the share link writes `style=night` (`sharelink.js`).
  */
 
+import { DUSK_STYLE } from './dusk.js';
 import { NIGHT_ATLAS_STYLE } from './nightAtlas.js';
 import messages from './styleNames.i18n.js';
 
@@ -25,7 +26,6 @@ const SAME_IN_BOTH_LANGUAGES = Object.freeze({
   surveillance: 'NVG',
   thermal: 'FLIR',
   anime: 'ANIME',
-  snow: 'SNOW',
 });
 
 /**
@@ -34,17 +34,19 @@ const SAME_IN_BOTH_LANGUAGES = Object.freeze({
  */
 export function styleDisplayName(styleName) {
   if (styleName === NIGHT_ATLAS_STYLE) return messages().night;
+  if (styleName === DUSK_STYLE) return messages().dusk;
   return SAME_IN_BOTH_LANGUAGES[styleName] || String(styleName || 'normal').toUpperCase();
 }
 
 /**
  * The name spelled out, for a sentence or a screen reader. Only the night
- * atlas differs from {@link styleDisplayName}; an acronym has no spelled form
+ * atlas and dusk differ from {@link styleDisplayName}; an acronym has no spelled form
  * this module could honestly invent.
  * @param {?string} styleName A preset id.
  * @returns {string}
  */
 export function styleSpelledName(styleName) {
   if (styleName === NIGHT_ATLAS_STYLE) return messages().nightSpelled;
+  if (styleName === DUSK_STYLE) return messages().duskSpelled;
   return styleDisplayName(styleName);
 }

@@ -19,6 +19,7 @@ import {
   localInfrastructureOverlayCopy,
   localRecordOffScreen,
   localStemLiftM,
+  groupLocalMarks,
   selectLocalGlobeLodMarks,
   selectLocalInfrastructureOverlayCohort,
 } from './localGeojson.js';
@@ -346,8 +347,9 @@ test('an UNGRADED, UNMEASURED local pack exposes no row controls at all', async 
   // The manager decides whether to build a row's control strip by testing for
   // this method. Defining it unconditionally would give ports and airports an
   // empty strip. `local-ports` is the case: no groups, no size channel.
-  // `local-datacenters` is the other: it draws three signs and prints no key.
-  for (const id of ['local-ports', 'local-datacenters']) {
+  // (`local-datacenters` was the other until 2026-09-23, when its key gained
+  // a site row and a group-of-sites row — see the test below.)
+  for (const id of ['local-ports']) {
     const layer = createLocalGeoJsonLayer({
       id,
       url: '/none.geojsonl',
@@ -1653,8 +1655,13 @@ test('the datacenter pack draws three different footprints without being wired t
         assert.equal(valueOf(entity.point.color).alpha, 1);
       }
 
-      // …and the row prints no key: no chips, no legend, so no control strip.
-      assert.equal(harness.layer.getRowControls, undefined);
+      // …and the key prints the two marks and nothing else: a site, and a
+      // group of sites, each with its silhouette. No chip, so no params.
+      const controls = harness.layer.getRowControls();
+      assert.deepEqual(controls.legend.map((row) => row.label), ['Site', 'Regroupement']);
+      assert.ok(controls.legend.every((row) => row.glyph?.startsWith('data:image/svg+xml,')));
+      assert.equal(controls.chips, undefined);
+      assert.equal(harness.layer.setParams, undefined);
     } finally {
       await harness.layer.destroy?.(harness.viewer);
       harness.cleanup();
@@ -1754,6 +1761,70 @@ test('a display floor empties the size legend it hides, rather than lying about 
     await harness.layer.destroy?.(harness.viewer);
     harness.cleanup();
   }
+});
+
+test('a data centre opens its card in the key, keeps a tag on the globe, and leaves the camera alone', async () => {
+  let clickHandler = null;
+  const published = new Map();
+  const panels = [];
+  const harness = await createMeasuredLayerHarness({
+    features: [
+      { lon: 2.30, lat: 48.80, size: 0.0004, properties: { tags: { name: 'Hall', building: 'yes' }, dcwatch: { powerMw: 3.6, release: '2026-04-09' } } },
+    ],
+    overlayHost: {
+      setVisible() {},
+      setEntries(sourceId, entries) { published.set(sourceId, entries); },
+      clearSource(sourceId) { published.delete(sourceId); },
+    },
+    screenSpaceEventHandlerFactory: () => ({
+      setInputAction(handler) { clickHandler = handler; },
+      destroy() {},
+    }),
+    keySelection: {
+      panel: (props, context) => {
+        panels.push(context);
+        return { key: `dc:${context.id}`, title: context.title, meta: [] };
+      },
+      accent: '#ffb238',
+    },
+  });
+  try {
+    const [hall] = harness.entities;
+    let flights = 0;
+    harness.viewer.camera.flyTo = () => { flights += 1; };
+    harness.viewer.scene.pick = () => ({ id: hall });
+    clickHandler({ position: { x: 400, y: 300 } });
+
+    assert.equal(flights, 0, 'the reader clicked to read, not to travel');
+    assert.equal(harness.viewer.selectedEntity, hall);
+    const controls = harness.layer.getRowControls();
+    assert.equal(controls.legendSelection.title, 'Hall');
+    assert.ok(panels.at(-1).areaM2 > 0, 'the card is given the measured footprint');
+    // The key is not on screen under node, so the globe carries the whole card.
+    const tag = published.get('local-datacenters:selected')?.[0];
+    assert.equal(tag?.title, 'Hall');
+    assert.equal(tag?.accent, '#ffb238');
+
+    // A click on empty ground closes it, and so does the key's close.
+    harness.viewer.scene.pick = () => null;
+    clickHandler({ position: { x: 10, y: 10 } });
+    assert.equal(harness.layer.getRowControls().legendSelection, undefined);
+    assert.equal(published.has('local-datacenters:selected'), false);
+    assert.equal(harness.viewer.selectedEntity, undefined);
+
+    harness.viewer.scene.pick = () => ({ id: hall });
+    clickHandler({ position: { x: 400, y: 300 } });
+    assert.equal(harness.layer.clearSelectedCard(), true);
+    assert.equal(harness.layer.clearSelectedCard(), false, 'nothing left to close');
+  } finally {
+    await harness.layer.destroy?.(harness.viewer);
+    harness.cleanup();
+  }
+});
+
+test('a pack with no keySelection offers the key no card to close', () => {
+  const layer = createLocalGeoJsonLayer({ id: 'local-ports', url: '/none.geojsonl', name: 'Ports', color: '#ffb14e' });
+  assert.equal(layer.clearSelectedCard, undefined);
 });
 
 /**
@@ -2016,6 +2087,29 @@ test('the globe budget draws one mark per occupied screen cell, and the right on
   assert.ok(kept.has(elsewhere), 'a sparse cell keeps its only member, however small');
   assert.equal(kept.has(first), false);
   assert.equal(kept.has(third), false);
+});
+
+test('grouped marks: a shared cell is led by its most important site, which says how many it holds', () => {
+  const first = lodRecord('a', 10, { x: 10, y: 10 });
+  const best = lodRecord('b', 900, { x: 20, y: 20 });
+  const third = lodRecord('c', 50, { x: 25, y: 5 });
+  const alone = lodRecord('d', 1, { x: 300, y: 300 });
+  const leads = groupLocalMarks([first, best, third, alone], {
+    cellPx: 30, width: 800, height: 600, project: (record) => record.screen,
+  });
+  assert.equal(leads.get(best), 3, 'the stack stands for the three');
+  assert.equal(leads.get(alone), 1, 'a site alone is a site');
+  assert.equal(leads.has(first), false);
+  assert.equal(leads.has(third), false);
+  // The selected site leads its cell whatever its rank: the reader clicked it.
+  const pinned = groupLocalMarks([first, best, third], {
+    cellPx: 30, width: 800, height: 600, project: (record) => record.screen, pinned: first,
+  });
+  assert.equal(pinned.get(first), 3);
+  assert.equal(pinned.has(best), false);
+  // Nothing is capped, and an unprojectable site stands alone rather than vanishing.
+  const lost = lodRecord('e', 5, { x: Number.NaN, y: 0 });
+  assert.equal(groupLocalMarks([lost], { cellPx: 30, width: 800, height: 600, project: (r) => r.screen }).get(lost), 1);
 });
 
 test('the budget ceiling cuts cells by importance, not by arrival order', () => {
