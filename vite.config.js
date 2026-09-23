@@ -375,6 +375,7 @@ import {
 } from './src/data/gtfsRealtime.js';
 import { boundsOfPoints, boxKey, boxesIntersect, snapBoxOutward, validBox } from './src/data/viewportBox.js';
 import { buildDepartementIndex, departementsInBox } from './src/data/franceDepartements.js';
+import { createPlaceOutlineService, parsePlaceOutlineRequest } from './src/placeOutline.js';
 import {
   projectIrveDepartements,
   sweepStripeTruncated,
@@ -22672,6 +22673,91 @@ function keylessGeocodeProxy() {
   };
 }
 
+/**
+ * `/api/place-outline?level=municipality|department|region&lat=&lon=` — the
+ * limits a place search draws around a town, a département or a région
+ * (src/placeOutline.js has the why and the sources). 404 `{status:
+ * 'not-found'}` outside metropolitan France: the client then asks
+ * OpenStreetMap. The commune comes from geo.api.gouv.fr; the département and
+ * the région from the bundled IGN outlines, so only a commune costs an
+ * upstream call, and each is kept once resolved.
+ */
+const _placeOutlineRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 120 });
+const _placeOutlineInFlight = new Map();
+let _placeOutlineTerritoires = null;
+const _placeOutlineService = createPlaceOutlineService({
+  loadDepartementIndex: loadIrveDepartementIndex,
+  async loadTerritoires() {
+    if (_placeOutlineTerritoires) return _placeOutlineTerritoires;
+    const file = path.join(process.cwd(), 'src', 'data', 'local_data', 'france_territoires', 'territoires.json');
+    _placeOutlineTerritoires = JSON.parse(await fsp.readFile(file, 'utf8'));
+    return _placeOutlineTerritoires;
+  },
+  fetchJson: (url) => fetchRegionalJson(url, { timeoutMs: 8000 }),
+});
+
+function placeOutlineProxy() {
+  function install(middlewares) {
+    middlewares.use('/api/place-outline', async (req, res) => {
+      const send = (status, payload) => {
+        res.writeHead(status, {
+          'Content-Type': 'application/json; charset=utf-8',
+          // Administrative limits change once a year at most.
+          'Cache-Control': status === 200 || status === 404 ? 'public, max-age=86400' : 'no-store',
+        });
+        res.end(JSON.stringify(payload));
+      };
+      if (req.method !== 'GET') {
+        send(405, { error: 'Method Not Allowed' });
+        return;
+      }
+      const request = parsePlaceOutlineRequest(new URL(req.url || '', 'http://localhost').searchParams);
+      if (request.error) {
+        send(400, { error: request.error });
+        return;
+      }
+      if (!_placeOutlineRateLimiter(clientKey(req))) {
+        res.setHeader('Retry-After', '5');
+        send(429, { error: 'Rate limit exceeded' });
+        return;
+      }
+      try {
+        const key = `${request.level}|${request.lat.toFixed(3)},${request.lon.toFixed(3)}`;
+        const { promise } = coalesceProxyRequest(
+          _placeOutlineInFlight,
+          key,
+          () => runForVisitor(req, () => _placeOutlineService.resolve(request)),
+        );
+        const { value: outline } = await promise;
+        if (!outline) {
+          send(404, { status: 'not-found' });
+          return;
+        }
+        send(200, {
+          ...outline,
+          source: outline.level === 'municipality' ? 'geo.api.gouv.fr' : 'IGN ADMIN EXPRESS',
+          attribution: outline.level === 'municipality'
+            ? 'API Géo (geo.api.gouv.fr), Licence Ouverte'
+            : 'IGN ADMIN EXPRESS, Licence Ouverte',
+        });
+      } catch (error) {
+        console.error('[Place outline]', error?.message || error);
+        send(502, { error: 'Outline upstream unavailable' });
+      }
+    });
+  }
+
+  return {
+    name: 'place-outline-proxy',
+    configureServer(server) {
+      install(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      install(server.middlewares);
+    },
+  };
+}
+
 /** What `/api/submarine-cables/*` answers where the TeleGeography map is switched off. */
 export const SUBMARINE_CABLES_OFF_PAYLOAD = Object.freeze({
   status: 'off',
@@ -30293,6 +30379,7 @@ export default defineConfig(({ mode, command }) => {
       voiceBrainProxy(),
       googlePlacesContextProxy(),
       keylessGeocodeProxy(),
+      placeOutlineProxy(),
       georisquesProxy(),
       dvfProxy(),
       dpeProxy(),

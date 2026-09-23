@@ -484,6 +484,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Vue épurée | Clean view | Hides every control. |
 | Lieux récents, Grandes villes | Recent places, Major cities | The place search's menu. |
 | Plus d’actions | More actions | The « … » menu of the top bar. |
+| limites (d’une commune, d’un département, d’une région) | limits, outline | What a place search draws around an area it found. |
 
 ## Panel chips and fused rows
 

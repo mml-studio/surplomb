@@ -182,6 +182,17 @@ export const DATA_CREDITS = [
       '(BAN &mdash; Licence Ouverte 2.0)',
   },
   {
+    key: 'search-outline',
+    html:
+      'Place search outlines: communes from ' +
+      '<a href="https://geo.api.gouv.fr" target="_blank" rel="noopener">API G&eacute;o (geo.api.gouv.fr)</a>, ' +
+      'd&eacute;partements and r&eacute;gions from ' +
+      '<a href="https://geoservices.ign.fr/adminexpress" target="_blank" rel="noopener">IGN &mdash; ADMIN EXPRESS</a> ' +
+      '(Licence Ouverte 2.0); outside France, ' +
+      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap contributors</a> ' +
+      'via Overpass (ODbL 1.0). Simplified: not the legal limits',
+  },
+  {
     key: 'open-meteo',
     html:
       'Cockpit current conditions: ' +
