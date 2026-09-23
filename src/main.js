@@ -80,6 +80,7 @@ import {
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 import { initPhoneSheet } from './phoneSheet.js';
 import { initGlobeShell } from './globeShell.js';
+import { initGlobeNav } from './globeNav.js';
 import { applyPhoneRenderDetail } from './phoneRender.js';
 import { applyTouchCameraProfile } from './touchCamera.js';
 import { getPickDiagnostics } from './data/pickAt.js';
@@ -971,6 +972,11 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // line above — null on a phone, before touching the DOM — and after it for
     // the same reason: the controls it adopts must already be wired.
     styleManager.attachGlobeShell(initGlobeShell({ ui: styleManager, viewer }));
+
+    // THE NAVIGATION BAR at the bottom centre (src/globeNav.js): previous
+    // view, top view, 2D / 3D, north, zoom, reset. Desktop only, like the top
+    // row, and after it: it takes the reset button the « … » menu was given.
+    initGlobeNav({ ui: styleManager, viewer });
 
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)

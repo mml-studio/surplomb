@@ -166,6 +166,30 @@ export const LUCIDE_ICONS = Object.freeze({
   'chevron-right': Object.freeze([
     '<path d="m9 18 6-6-6-6"/>',
   ]),
+  // The navigation bar at the bottom (src/globeNav.js): « Vue précédente »…
+  'chevron-left': Object.freeze([
+    '<path d="m15 18-6-6 6-6"/>',
+  ]),
+  // …« Vue du dessus », a frame seen square-on…
+  scan: Object.freeze([
+    '<path d="M3 7V5a2 2 0 0 1 2-2h2"/>',
+    '<path d="M17 3h2a2 2 0 0 1 2 2v2"/>',
+    '<path d="M21 17v2a2 2 0 0 1-2 2h-2"/>',
+    '<path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  ]),
+  // …zoom out and in…
+  minus: Object.freeze([
+    '<path d="M5 12h14"/>',
+  ]),
+  plus: Object.freeze([
+    '<path d="M5 12h14"/>',
+    '<path d="M12 5v14"/>',
+  ]),
+  // …and « Réinitialiser ».
+  'rotate-ccw': Object.freeze([
+    '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>',
+    '<path d="M3 3v5h5"/>',
+  ]),
 });
 
 const _cache = new Map();

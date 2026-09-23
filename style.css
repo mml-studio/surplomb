@@ -14851,8 +14851,9 @@ html.globe-shell #command-dock > #control-panel {
 }
 
 html.globe-shell #command-dock {
-  grid-template-areas: 'voice';
+  grid-template-areas: 'nav';
   grid-template-columns: auto;
+  align-items: end;
   width: auto;
   padding: 0;
   background: none;
@@ -14861,6 +14862,204 @@ html.globe-shell #command-dock {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+
+/* While the voice control still lives in the dock, it sits beside the bar.
+   Once it has a corner of its own, the dock holds the bar alone. */
+html.globe-shell #command-dock:has(> #gev-voice-control) {
+  grid-template-areas: 'nav voice';
+  grid-template-columns: auto auto;
+  column-gap: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE NAVIGATION BAR ON A DESKTOP — src/globeNav.js (2026-09-23)
+
+   The camera's controls in one row at the bottom centre, on the top row's
+   surface: words, not glyphs, at 13 px, with the chip naming the view above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#globe-nav[hidden],
+#globe-nav-place[hidden] { display: none !important; }
+
+html.globe-shell #globe-nav {
+  grid-area: nav;
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+html.globe-shell .globe-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  font-family: var(--font-ui);
+}
+
+html.globe-shell .globe-nav-sep {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: rgba(247, 244, 234, 0.14);
+}
+
+html.globe-shell .globe-nav-btn,
+html.globe-shell .globe-nav-segment button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+}
+
+html.globe-shell .globe-nav-btn .shell-icon { width: 17px; height: 17px; }
+
+html.globe-shell .globe-nav-btn:hover:not(:disabled),
+html.globe-shell .globe-nav-segment button:hover:not([aria-pressed="true"]) {
+  background: rgba(247, 244, 234, 0.08);
+}
+
+html.globe-shell .globe-nav-btn:focus-visible,
+html.globe-shell .globe-nav-segment button:focus-visible {
+  outline: 2px solid rgba(247, 171, 124, 0.7);
+  outline-offset: 1px;
+}
+
+html.globe-shell .globe-nav-btn:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* « Vue du dessus » while the view looks straight down. */
+html.globe-shell #globe-nav-top[aria-pressed="true"]:not(:disabled) { color: var(--accent); }
+
+html.globe-shell .globe-nav-icon-btn { width: 36px; padding: 0; }
+
+/* 2D / 3D: two halves of one control, the chosen one filled. */
+html.globe-shell .globe-nav-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(247, 244, 234, 0.06);
+  border-radius: 9px;
+}
+
+html.globe-shell .globe-nav-segment button {
+  min-width: 40px;
+  height: 32px;
+  padding: 0 10px;
+  font-weight: 600;
+}
+
+html.globe-shell .globe-nav-segment button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #13261f;
+  cursor: default;
+}
+
+/* The needle points north on the screen; red is the north end, as on every
+   compass the reader has held. */
+html.globe-shell .globe-nav-north { gap: 4px; padding: 0 8px; }
+
+html.globe-shell .globe-nav-needle {
+  width: 22px;
+  height: 22px;
+  transform: rotate(var(--globe-nav-heading, 0deg));
+  transition: transform 90ms linear;
+}
+
+html.globe-shell .globe-nav-needle-north { fill: #ff5a4e; }
+html.globe-shell .globe-nav-needle-south { fill: rgba(247, 244, 234, 0.62); }
+
+html.globe-shell .globe-nav-north-letter {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--shell-text-2);
+}
+
+html.globe-shell .globe-nav-north.is-north .globe-nav-north-letter { color: var(--text-primary); }
+
+html.globe-shell .globe-nav-zoom { display: inline-flex; gap: 2px; }
+
+/* The reset button, adopted from the « Plus d'actions » menu. */
+html.globe-shell #globe-nav #reset-globe-view {
+  position: static;
+  width: auto;
+  min-width: 0;
+  box-shadow: none;
+}
+
+/* A scene playback hides the reset (see `body.scene-playback-mode`): its
+   divider goes with it. */
+body.scene-playback-mode #globe-nav .globe-nav-sep:last-of-type { display: none; }
+
+/* The chip above the bar: which place, which view. */
+html.globe-shell .globe-nav-place {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(420px, 80vw);
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+html.globe-shell .globe-nav-place .shell-icon { width: 14px; height: 14px; color: var(--accent); }
+
+html.globe-shell #globe-nav-place-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Narrower than the bar with its words: icons only, the words kept for
+   screen readers and in the tooltips. */
+@media (max-width: 1180px) {
+  html.globe-shell #globe-nav .globe-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  html.globe-shell #globe-nav .globe-nav-btn:not(.globe-nav-north) { padding: 0 9px; }
+}
+
+/* A toast rises above the chip rather than over it. */
+html.globe-shell #toast { bottom: 132px; }
 
 /* The heading tape is a technical readout: it shows with the HUD. */
 html.globe-shell body:has(#intel-hud:not(.active)) #globe-heading-tape { display: none; }

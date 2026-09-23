@@ -691,7 +691,7 @@
       <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
     </button>
     <button id="reset-globe-view" type="button"
-            data-i18n-aria-label="actions.resetGlobe" aria-label="Revenir au globe entier"
+            data-i18n-aria-label="actions.resetGlobe" aria-label="Réinitialiser : revenir au globe entier"
             data-i18n-title="actions.resetGlobeTitle" title="Réinitialiser la caméra et revenir au globe entier">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
@@ -1398,6 +1398,66 @@
       </div>
     </div>
   </div>
+  <!--
+    THE NAVIGATION BAR — desktop only (src/globeNav.js).
+
+    The camera's controls, each with its name and a tooltip that says what it
+    does: step back to the previous framing, look straight down, a flat 2D map
+    or the 3D view, turn north up, zoom, and « Réinitialiser » — the reset
+    button of the « Plus d'actions » menu, moved in at boot with its listener.
+    The chip above names the place at the centre of the view. Ships `hidden`:
+    the phone never shows it.
+  -->
+  <nav id="globe-nav" data-i18n-aria-label="globeNav.label" aria-label="Navigation dans la vue" hidden>
+    <p id="globe-nav-place" class="globe-nav-place" hidden>
+      <span class="shell-icon" data-shell-icon="map-pin" aria-hidden="true"></span>
+      <span id="globe-nav-place-text"></span>
+    </p>
+    <div class="globe-nav-row">
+      <button id="globe-nav-back" class="globe-nav-btn" type="button" disabled
+              data-i18n-title="globeNav.backTitle" title="Revenir au cadrage d’avant le dernier déplacement">
+        <span class="shell-icon" data-shell-icon="chevron-left" aria-hidden="true"></span>
+        <span class="globe-nav-label" data-i18n="globeNav.back">Vue précédente</span>
+      </button>
+      <span class="globe-nav-sep" aria-hidden="true"></span>
+      <button id="globe-nav-top" class="globe-nav-btn" type="button" aria-pressed="false">
+        <span class="shell-icon" data-shell-icon="scan" aria-hidden="true"></span>
+        <span class="globe-nav-label" data-i18n="globeNav.top">Vue du dessus</span>
+      </button>
+      <span class="globe-nav-sep" aria-hidden="true"></span>
+      <div class="globe-nav-segment" role="group" data-i18n-aria-label="globeNav.mode" aria-label="Mode de vue">
+        <button id="globe-nav-2d" type="button" aria-pressed="false"
+                data-i18n-title="globeNav.flatTitle" title="Carte à plat : vue du dessus, nord en haut, inclinaison bloquée"><span translate="no">2D</span></button>
+        <button id="globe-nav-3d" type="button" aria-pressed="true"
+                data-i18n-title="globeNav.reliefTitle" title="Vue en relief : la caméra s’incline librement"><span translate="no">3D</span></button>
+      </div>
+      <span class="globe-nav-sep" aria-hidden="true"></span>
+      <button id="globe-nav-north" class="globe-nav-btn globe-nav-north" type="button"
+              data-i18n-aria-label="globeNav.north" aria-label="Remettre le nord en haut"
+              data-i18n-title="globeNav.north" title="Remettre le nord en haut">
+        <svg id="globe-nav-needle" class="globe-nav-needle" viewBox="0 0 24 24" aria-hidden="true">
+          <path class="globe-nav-needle-north" d="M12 2.5 15.4 12H8.6Z" />
+          <path class="globe-nav-needle-south" d="M12 21.5 8.6 12h6.8Z" />
+        </svg>
+        <span class="globe-nav-north-letter" aria-hidden="true" translate="no">N</span>
+      </button>
+      <span class="globe-nav-sep" aria-hidden="true"></span>
+      <div class="globe-nav-zoom" role="group" data-i18n-aria-label="globeNav.zoom" aria-label="Zoomer ou dézoomer">
+        <button id="globe-nav-zoom-out" class="globe-nav-btn globe-nav-icon-btn" type="button"
+                data-i18n-aria-label="globeNav.zoomOut" aria-label="Dézoomer"
+                data-i18n-title="globeNav.zoomOut" title="Dézoomer">
+          <span class="shell-icon" data-shell-icon="minus" aria-hidden="true"></span>
+        </button>
+        <button id="globe-nav-zoom-in" class="globe-nav-btn globe-nav-icon-btn" type="button"
+                data-i18n-aria-label="globeNav.zoomIn" aria-label="Zoomer"
+                data-i18n-title="globeNav.zoomIn" title="Zoomer">
+          <span class="shell-icon" data-shell-icon="plus" aria-hidden="true"></span>
+        </button>
+      </div>
+      <span class="globe-nav-sep" aria-hidden="true"></span>
+      <!-- « Réinitialiser » (#reset-globe-view) is moved in here at boot. -->
+    </div>
+  </nav>
   </div>
 
   <div id="left-panel-stack">

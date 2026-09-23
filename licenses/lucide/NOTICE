@@ -10,7 +10,7 @@ Source: https://github.com/lucide-icons/lucide
         icons/<name>.svg
         Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
 
-WHAT WAS TAKEN. Twenty-five icons, in two files.
+WHAT WAS TAKEN. Thirty icons, in two files.
 
 `index.html`, the landing page's scene « Choisissez une vue. »
 (src/vitrine/stage.js), draws them in its tab bar, its pause control and its
@@ -76,6 +76,20 @@ bar, its place search and its Appearance panel (`src/globeShell.js`):
 `chevron-right` are icons Lucide derived from Feather, so the MIT notice
 covers them; `sliders-horizontal` and `map-pin` are Lucide's own, under ISC.
 They are drawn exactly as the Layers panel's are: copied verbatim, used as a
+CSS mask.
+
+And five more (retrieved 2026-09-23 at the same commit) in the globe's
+navigation bar at the bottom of the screen (`src/globeNav.js`):
+
+    chevron-left — « Vue précédente »,
+    scan         — « Vue du dessus »,
+    minus        — « Dézoomer »,
+    plus         — « Zoomer »,
+    rotate-ccw   — « Réinitialiser ».
+
+`chevron-left`, `minus`, `plus` and `rotate-ccw` are icons Lucide derived
+from Feather, so the MIT notice covers them; `scan` is Lucide's own, under
+ISC. They are drawn exactly as the top bar's are: copied verbatim, used as a
 CSS mask.
 
 They are INTERFACE icons, drawn at 18-22 CSS px in a menu bar, which is the job

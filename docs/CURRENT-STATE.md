@@ -2,6 +2,52 @@
 
 Updated: September 23, 2026
 
+> **2026-09-23 — the desktop globe has a navigation bar at the bottom
+> centre: previous view, top view, 2D / 3D, north, zoom, reset, and a chip
+> naming the place at the centre of the view.**
+>
+> - **Where (`src/globeNav.js`).** `<nav id="globe-nav">` inside
+>   `#command-dock`, so the cockpit, the clean view and the recording mode hide
+>   it with the dock. Desktop only: `initGlobeNav` returns null on the phone
+>   shell. The dock is `grid-template-areas: 'nav'`, and `'nav voice'` while
+>   `#gev-voice-control` is still a child of it. `#reset-globe-view` is MOVED
+>   from the « … » menu into the bar with its listener (`resetToGlobeView`),
+>   labelled « Réinitialiser »; its accessible name is now « Réinitialiser :
+>   revenir au globe entier ». Under 1180 px wide the labels are visually
+>   hidden (kept for screen readers and tooltips). `#toast` sits at 132 px.
+> - **Camera.** A press takes the camera like a drag (ui.js
+>   `takeCameraForGlobeNav`: stops verbs, orbit and flight, no
+>   `_stampNavigation`, so the search mark stays); every control but zoom
+>   first releases a followed object. Turns and zooms orbit the point at the
+>   screen centre (`pickPosition` when it is ground, else the ellipsoid; none →
+>   turn in place) with `lookAt` + `lookAtTransform(IDENTITY)` per frame, 650 ms
+>   (zoom 380 ms, log-scale distance), instant under reduced motion; a canvas
+>   pointerdown or wheel, or a newer camera tween, cancels them.
+> - **Controls.** « Vue du dessus » flies to pitch -89.9° keeping the heading
+>   (at -90° `lookAt` forces north up) and back to the previous pitch (default
+>   -45°). 2D: heading 0, pitch -90°, `enableTilt` and `enableLook` off; a
+>   settle more than 3° off that pose (a search, a share link) is levelled
+>   again; the cockpit class or « Réinitialiser » leaves 2D without a move; 3D
+>   restores the gestures and the pitch. North: heading 0 at the same pitch.
+>   − / +: distance to the centre × 2 / ÷ 2, between 60 m and 27 000 km;
+>   while following, `camera.zoomIn/zoomOut` in the follow frame. The needle
+>   is rotated by `-heading` (sampled on `preRender` every 100 ms, written
+>   when it moves 0.5°).
+> - **« Vue précédente ».** `createViewHistory`, 30 framings: each
+>   `camera.moveEnd` outside the cockpit and not following records the pose
+>   (world position, direction, up). A settle within 0.35 camera heights, a
+>   zoom ratio under 1.6, a turn under 25° and a tilt under 12° of the
+>   framing's FIRST pose refines it; anything else opens a new one. Back pops
+>   the current framing and flies to the previous one's last pose (1 s under
+>   50 km, Cesium's duration beyond).
+> - **Chip.** 350 ms after a settle, the centre point is looked up at
+>   `geo.api.gouv.fr/communes?lat=&lon=&fields=nom,departement,region` when it
+>   is inside a box around metropolitan France, Corsica or a DROM: commune
+>   under 60 km of range, département under 350 km, région under 1 400 km,
+>   nothing beyond or on the sea. 64 answers cached by point rounded to 3 dp;
+>   a failed lookup is not cached. Text « Paris · Vue 3D » (Vue 2D, Vue du
+>   dessus).
+
 > **2026-09-23 — a place search leaves a mark: a pin on a precise place, the
 > limits of a commune, a département or a région.**
 >

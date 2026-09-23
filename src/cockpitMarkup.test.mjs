@@ -230,7 +230,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(html, /data-cockpit-display-slot="detection"[\s\S]*?data-cockpit-display-slot="parameters"[\s\S]*?data-cockpit-display-slot="models3d"/);
   assert.doesNotMatch(html, /data-cockpit-display-slot="presets"/);
   assert.match(html, /id="clear-selected-layers"[\s\S]{0,200}?aria-label="Éteindre les couches sélectionnées"/);
-  assert.match(html, /id="reset-globe-view"[\s\S]{0,200}?aria-label="Revenir au globe entier"/);
+  assert.match(html, /id="reset-globe-view"[\s\S]{0,200}?aria-label="Réinitialiser : revenir au globe entier"/);
   assert.match(css, /#top-center-actions\s*\{[\s\S]*?left:\s*50%;[\s\S]*?display:\s*flex;[\s\S]*?transform:\s*translateX\(-50%\)/);
   assert.match(css, /body\.ui-clean-view #top-center-actions/);
   assert.match(css, /body\.recording-mode #top-center-actions/);
