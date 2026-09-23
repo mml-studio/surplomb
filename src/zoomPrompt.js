@@ -40,6 +40,7 @@
  *   waiting later is different news.
  */
 
+import { writeProperty } from './data/domWrite.js';
 import messages from './zoomPrompt.i18n.js';
 
 /**
@@ -240,10 +241,14 @@ const zoomPromptHideTimers = new WeakMap();
  * @returns {void}
  */
 function hideZoomPrompt(host) {
+  // Written only where they differ: a hidden card is hidden again on every
+  // panel refresh, which is every stats tick of every lit layer, and three
+  // identical attribute writes a pass were the last mutations a still globe
+  // made with « Infrastructure numérique » on (see `data/domWrite.js`).
   const finish = () => {
-    host.hidden = true;
-    host.dataset.signature = '';
-    host.dataset.leaving = '';
+    writeProperty(host, 'hidden', true);
+    writeProperty(host.dataset, 'signature', '');
+    writeProperty(host.dataset, 'leaving', '');
     host.classList?.remove?.('zoom-prompt-leaving');
     if (typeof host.replaceChildren === 'function') host.replaceChildren();
     zoomPromptHideTimers.delete(host);
