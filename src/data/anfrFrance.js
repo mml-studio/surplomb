@@ -251,6 +251,7 @@ import {
 import coverageMessages from './mobileCoverage.i18n.js';
 import { coverageTileSource, createCoverageImageryProvider, createCoveragePointReader } from './mobileCoverageImagery.js';
 import { VIEWSHED_COLOR, computeMastViewshed, createViewshedImageryLayer } from './mastViewshedImagery.js';
+import { createAnfrSupportCells } from './anfrSupportCells.js';
 import {
   ANFR_HOLLOW_TRIANGLE_LEGEND_GLYPH,
   ANFR_SELECTED_FILL,
@@ -2080,22 +2081,33 @@ function reconcileSupports(payload) {
   governorRequestRender('anfr-fr-supports');
 }
 
+/** One `/supports` answer for a block of cells — see `anfrSupportCells.js`. */
+function fetchSupportsBlock(box) {
+  return fetchJson(`${SUPPORTS_URL}?${new URLSearchParams(box)}`, {
+    validate: (body) => Array.isArray(body?.supports),
+  });
+}
+
+/**
+ * The city view's supports, kept by grid cell: a camera stop asks only about
+ * ground this session has not drawn yet, where it used to ask about its exact
+ * box each time the camera moved 11 m. A cell is asked for again after the
+ * poll's six hours — when the browser's copy of the answer has expired too.
+ */
+const _supportCells = createAnfrSupportCells({
+  fetchBlock: fetchSupportsBlock,
+  maxBoxDeg: ANFR_MAX_BOX_DEG,
+  maxAgeMs: POLL_INTERVAL_MS,
+});
+
 async function loadSupports(box, { force = false } = {}) {
   const key = boxKeyOf(box);
   if (!force && _pack && _packBoxKey === key) return;
   _error = null;
   _loading = true;
   const generation = ++_requestGeneration;
-  const params = new URLSearchParams({
-    south: box.south.toFixed(5),
-    west: box.west.toFixed(5),
-    north: box.north.toFixed(5),
-    east: box.east.toFixed(5),
-  });
   try {
-    const payload = await fetchJson(`${SUPPORTS_URL}?${params}`, {
-      validate: (body) => Array.isArray(body?.supports),
-    });
+    const payload = await _supportCells.load(box);
     if (generation !== _requestGeneration || !_enabled || _regime !== 'supports') return;
     _pack = payload;
     _packBoxKey = key;
@@ -3271,6 +3283,7 @@ const anfrFranceLayer = {
     _mesh = null;
     _pack = null;
     _packBoxKey = null;
+    _supportCells.clear();
     _meshLookups.clear();
     _details.clear();
     _viewer = null;
@@ -3296,6 +3309,7 @@ export function _setAnfrStateForTest({
   _mastsShown = mastsShown;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
   _http = http || DEFAULT_HTTP;
+  _supportCells.clear();
   _mesh = mesh;
   _pack = pack;
   _packBoxKey = pack ? 'test' : null;
@@ -3389,11 +3403,17 @@ export async function _loadAnfrViewportForTest(viewer, options = {}) {
   return { regime: _regime, count: _count, inView: _inView, status: _status, error: _error };
 }
 
+/** The city view's cells, as if the six-hour poll had come round: the next load asks again. */
+export function _expireAnfrSupportCellsForTest() {
+  _supportCells.expire();
+}
+
 /** Exercise the production clear path and restore the production seams. */
 export function _clearAnfrSelectionForTest() {
   clearSelection();
   _overlayHost = DEFAULT_OVERLAY_HOST;
   _http = DEFAULT_HTTP;
+  _supportCells.clear();
   _mesh = null;
   _pack = null;
   _packBoxKey = null;

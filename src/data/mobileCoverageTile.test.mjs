@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { COVERAGE_TILE_PX, coverageLut, encodeCoverage } from './mobileCoverage.js';
+import {
+  COVERAGE_HATCH, COVERAGE_MODES, COVERAGE_TILE_PX, coverageHatchLut, coverageLut, encodeCoverage,
+} from './mobileCoverage.js';
 import {
   COVERAGE_TILE_EDGE,
   coverageTileCode,
@@ -52,6 +54,62 @@ test('a crop magnifies its square nearest-neighbour, rung by rung, and keeps the
   // Output rows 254–255 magnify source row 255, the sea.
   assert.equal(out[255 * 256], 0);
   assert.equal(out[253 * 256], lut[dead]);
+});
+
+/**
+ * The paint as it was before the stripes became a pass of their own: one test
+ * per pixel. Kept here as the definition the faster paint must reproduce.
+ */
+function paintOnePass(tile, lut, out, crop, hatch) {
+  const { codes, land } = tile;
+  const whole = !crop || crop.size >= COVERAGE_TILE_EDGE;
+  const sx = whole ? 0 : crop.sx;
+  const sy = whole ? 0 : crop.sy;
+  const shift = whole ? 0 : Math.log2(COVERAGE_TILE_EDGE / crop.size);
+  for (let y = 0, o = 0; y < COVERAGE_TILE_EDGE; y++) {
+    const row = (sy + (y >> shift)) * COVERAGE_TILE_EDGE + sx;
+    for (let x = 0; x < COVERAGE_TILE_EDGE; x++, o++) {
+      const i = row + (x >> shift);
+      if (land && !((land[i >> 3] >> (i & 7)) & 1)) { out[o] = 0; continue; }
+      out[o] = hatch && (x + y) % (hatch.period || 1) < hatch.width ? hatch.lut[codes[i]] : lut[codes[i]];
+    }
+  }
+  return out;
+}
+
+test('the stripes painted as a second pass are the pixels the one-pass paint gave, in every mode and crop', () => {
+  let seed = 11;
+  const random = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+  const dead = encodeCoverage([0, 0, 0, 0]);
+  // Mostly dead zone, some of every other code, and a coast cutting the tile.
+  const codes = (i) => (random() < 0.4 ? dead : Math.floor(random() * 256));
+  const inland = decodeCoverageRgba(rgbaOf(codes));
+  const coastal = decodeCoverageRgba(rgbaOf(codes, (i) => (i % 256) + (i >> 8) < 90));
+  assert.equal(inland.land, null);
+  assert.ok(coastal.land);
+  const expected = new Uint32Array(PIXELS);
+  const actual = new Uint32Array(PIXELS);
+  const plain = new Uint32Array(PIXELS);
+  let striped = 0;
+  for (const mode of COVERAGE_MODES.filter((m) => m !== 'off')) {
+    const lut = coverageLut(mode);
+    const hatch = { lut: coverageHatchLut(mode), period: COVERAGE_HATCH.period, width: COVERAGE_HATCH.width };
+    for (const tile of [inland, coastal]) {
+      for (const crop of [null, { sx: 64, sy: 128, size: 128 }, { sx: 224, sy: 0, size: 32 }]) {
+        for (const stripes of [null, hatch, { ...hatch, width: 9 }, { ...hatch, period: 0 }]) {
+          paintOnePass(tile, lut, expected, crop, stripes);
+          actual.fill(0xdeadbeef);
+          paintCoverageTile(tile, lut, actual, crop, stripes);
+          assert.deepEqual(actual, expected, `${mode}, crop ${JSON.stringify(crop)}, hatch ${JSON.stringify(stripes && { period: stripes.period, width: stripes.width })}`);
+          if (stripes === hatch) {
+            paintOnePass(tile, lut, plain, crop, null);
+            striped += expected.filter((v, i) => v !== plain[i]).length;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(striped > 0, 'the comparison went through tiles that actually carry stripes');
 });
 
 test('the store decodes a URL once however many ask at once, and forgets the least recent first', async () => {

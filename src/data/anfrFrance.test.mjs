@@ -71,6 +71,7 @@ import anfrFranceLayer, {
   _anfrSelectedIdForTest,
   _anfrStatsForTest,
   _clearAnfrSelectionForTest,
+  _expireAnfrSupportCellsForTest,
   _loadAnfrViewportForTest,
   _selectAnfrForTest,
   _setAnfrStateForTest,
@@ -168,6 +169,22 @@ const PACK = {
   national: NATIONAL,
   fetchedAt: 1_767_000_000_000,
 };
+/**
+ * The load-path tests draw the city view, a box under 0.35°, and the fixture's
+ * supports are spread over France and its overseas territories. So for those
+ * tests they are laid on a small grid in central Paris — 449714 stays where it
+ * is, because its card's exposure measurement is anchored there — and the
+ * stub answers as the proxy does: the supports inside the box it is asked about.
+ */
+const CITY_SUPPORTS = SUPPORTS.map((row, i) => (row.id === 449714
+  ? row
+  : { ...row, lat: 48.851 + (i % 4) * 0.002, lon: 2.326 + Math.floor(i / 4) * 0.003 }));
+function supportsAnswer(url, supports = CITY_SUPPORTS) {
+  const params = new URLSearchParams(url.split('?')[1]);
+  const [south, west, north, east] = ['south', 'west', 'north', 'east'].map((key) => Number(params.get(key)));
+  const inside = supports.filter((row) => row.lat >= south && row.lat <= north && row.lon >= west && row.lon <= east);
+  return { ...PACK, supports: inside, count: inside.length, inBox: inside.length };
+}
 const MESH_TUPLES = buildAnfrMesh(FOLD.supports);
 const MESH_PAYLOAD = {
   mesh: MESH_TUPLES,
@@ -802,7 +819,7 @@ test('a wide view loads the maillage and a tight one loads the supports', async 
   const http = async (url) => {
     asked.push(url.split('?')[0]);
     if (url.startsWith('/api/anfr-fr/mesh')) return { ok: true, json: async () => MESH_PAYLOAD };
-    if (url.startsWith('/api/anfr-fr/supports')) return { ok: true, json: async () => PACK };
+    if (url.startsWith('/api/anfr-fr/supports')) return { ok: true, json: async () => supportsAnswer(url) };
     return { ok: true, json: async () => DETAIL };
   };
   _setAnfrStateForTest({ overlayHost: host, http, regime: 'maillage' });
@@ -819,13 +836,41 @@ test('a wide view loads the maillage and a tight one loads the supports', async 
   _clearAnfrSelectionForTest();
 });
 
+test('in the city view a pan of 11 m, a zoom in and a return ask the register nothing', async () => {
+  const asked = [];
+  const http = async (url) => {
+    asked.push(url);
+    return { ok: true, json: async () => supportsAnswer(url) };
+  };
+  _setAnfrStateForTest({ overlayHost: makeHost(), http, regime: 'maillage' });
+  const first = await _loadAnfrViewportForTest(fakeViewer(2.3013, 48.8413, 2.3587, 48.8787));
+  assert.equal(first.regime, 'supports');
+  assert.equal(first.count, 15);
+  assert.equal(asked.length, 1);
+  // The box the register is asked about is snapped to the cell grid, so the
+  // same ground is always the same URL — which the browser can then keep.
+  const params = new URLSearchParams(asked[0].split('?')[1]);
+  assert.equal(params.get('south'), '48.82500');
+  assert.equal(params.get('east'), '2.37500');
+
+  assert.equal((await _loadAnfrViewportForTest(fakeViewer(2.3014, 48.8414, 2.3588, 48.8788))).count, 15);
+  const closer = await _loadAnfrViewportForTest(fakeViewer(2.330, 48.853, 2.334, 48.857));
+  const inCloser = CITY_SUPPORTS.filter((row) => row.lat >= 48.853 && row.lat <= 48.857
+    && row.lon >= 2.330 && row.lon <= 2.334);
+  assert.ok(inCloser.length > 0 && inCloser.length < 15);
+  assert.equal(closer.count, inCloser.length, 'the zoom draws what is inside the new box, and only that');
+  assert.equal((await _loadAnfrViewportForTest(fakeViewer(2.3013, 48.8413, 2.3587, 48.8787))).count, 15);
+  assert.equal(asked.length, 1, 'three camera stops, no request');
+  _clearAnfrSelectionForTest();
+});
+
 test('with the masts put out the layer asks the register nothing and keys no mast, and they come back on request', async () => {
   const host = makeHost();
   const asked = [];
   const http = async (url) => {
     asked.push(url.split('?')[0]);
     if (url.startsWith('/api/anfr-fr/mesh')) return { ok: true, json: async () => MESH_PAYLOAD };
-    return { ok: true, json: async () => PACK };
+    return { ok: true, json: async () => supportsAnswer(url) };
   };
   const viewer = fakeViewer(2.30, 48.84, 2.36, 48.88);
   _setAnfrStateForTest({ viewer, overlayHost: host, http, pack: PACK });
@@ -856,13 +901,15 @@ test('a failed refresh keeps the map it has and says the refresh failed', async 
   let fail = false;
   const http = async (url) => {
     if (fail) throw new Error('ECONNREFUSED');
-    if (url.startsWith('/api/anfr-fr/supports')) return { ok: true, json: async () => PACK };
+    if (url.startsWith('/api/anfr-fr/supports')) return { ok: true, json: async () => supportsAnswer(url) };
     return { ok: true, json: async () => MESH_PAYLOAD };
   };
   _setAnfrStateForTest({ overlayHost: host, http, regime: 'maillage' });
   const first = await _loadAnfrViewportForTest(fakeViewer(2.30, 48.84, 2.36, 48.88));
   assert.equal(first.count, 15);
   fail = true;
+  // Six hours later: the poll asks the register again, and the register is down.
+  _expireAnfrSupportCellsForTest();
   const second = await _loadAnfrViewportForTest(fakeViewer(2.30, 48.84, 2.36, 48.88), { force: true });
   // Fifteen real masts are still fifteen real masts. Blanking the screen would
   // say France has no antennas.
@@ -939,7 +986,7 @@ test('init builds the three real collections, and the draw path fills them', asy
 
   const http = async (url) => ({
     ok: true,
-    json: async () => (url.startsWith('/api/anfr-fr/supports') ? PACK : MESH_PAYLOAD),
+    json: async () => (url.startsWith('/api/anfr-fr/supports') ? supportsAnswer(url) : MESH_PAYLOAD),
   });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   // `_setAnfrStateForTest` does not touch the collection init() made, so the
@@ -997,6 +1044,7 @@ test('a reload of the view keeps the selected mast and its card, and lets go onc
   assert.equal(host.entries?.[0]?.id, id, 'its card is still published');
 
   pack = { ...PACK, supports: PACK.supports.filter((row) => row.id !== 449714) };
+  _expireAnfrSupportCellsForTest();
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(_anfrSelectedIdForTest(), null, 'gone from the view, gone from the selection');
   assert.equal(host.entries, null);
@@ -1230,7 +1278,7 @@ test('the drawn shafts and rays are world geometry, and go away with the selecti
   anfrFranceLayer.init(viewer);
   const [, masts, sectors] = added;
 
-  const http = async () => ({ ok: true, json: async () => PACK });
+  const http = async (url) => ({ ok: true, json: async () => supportsAnswer(url) });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   // A 0.015° box is inside the shaft sub-regime, so the load path draws them.
   await _loadAnfrViewportForTest(viewer);
@@ -1353,7 +1401,7 @@ test('a shaft owns its material, so a teardown does not destroy the same one twi
   };
   anfrFranceLayer.init(viewer);
   const [, masts, sectors] = added;
-  const http = async () => ({ ok: true, json: async () => PACK });
+  const http = async (url) => ({ ok: true, json: async () => supportsAnswer(url) });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   await _loadAnfrViewportForTest(viewer);
   assert.ok(masts.length > 1, 'more than one shaft, or there is nothing to double-destroy');
@@ -1398,7 +1446,7 @@ test('the drawn shafts are grouped by appearance, so the field is a handful of d
   };
   anfrFranceLayer.init(viewer);
   const [, masts] = added;
-  const http = async () => ({ ok: true, json: async () => PACK });
+  const http = async (url) => ({ ok: true, json: async () => supportsAnswer(url) });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   await _loadAnfrViewportForTest(viewer);
 

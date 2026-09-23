@@ -375,6 +375,28 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Selecting an antenna no longer freezes the map while its line of sight is
+  worked out.** The ground the mast can see is now computed in the
+  background: the page used to stall for a quarter to a third of a second on
+  the click (226 to 356 ms, measured in Chrome), and the lit ground now appears
+  a little sooner too, because it is no longer turned into a picture file and
+  read back.
+- **The antennas' city view stops re-downloading what it already has.** Close
+  in, the map used to ask the server again every time the camera moved more
+  than about eleven metres — nine camera stops over central Paris cost nine
+  requests and 4.6 MB. It now keeps what it has seen in squares of about 2 by
+  3 km and asks only for new ground: the same nine stops cost nothing. The
+  national antenna list (394 kB compressed) is also kept by the browser for
+  six hours instead of being downloaded again at every visit, and both now
+  travel compressed from the server.
+- **On a phone, the glow of « Crépuscule » and « Nuit » costs less to draw.**
+  A phone draws the map at twice its screen size; the glow is now computed at
+  half that size and laid back over the sharp map, which nearly halves the texture
+  reads of that pass. The picture is the same (0.5 in 255 of mean
+  difference, measured on an emulated iPhone 13); the time saved on a real
+  phone's graphics chip has not been measured.
+- **The dead-zone hatching of « Couverture 4G » is painted twice as fast**
+  (0.51 → 0.26 ms per tile, off the main thread), pixel for pixel the same.
 - **The globe fills the screen, and the place search sits at the top.** The
   black circle that framed the view — and blacked out both sides of a wide
   screen — is off by default; a light shade toward the corners replaces it,

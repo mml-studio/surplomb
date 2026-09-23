@@ -18,11 +18,15 @@ import anfrFranceLayer, {
 import {
   VIEWSHED_COLOR,
   assembleHeights,
+  createViewshedRunner,
   terrariumToHeights,
   viewshedRelief,
   viewshedRgba,
 } from './mastViewshedImagery.js';
-import { VIEWSHED_HIDDEN, VIEWSHED_OUTSIDE, VIEWSHED_VISIBLE, viewshedWindow } from './mastViewshed.js';
+import { paintMastViewshed } from './mastViewshedPaint.js';
+import {
+  VIEWSHED_HIDDEN, VIEWSHED_OUTSIDE, VIEWSHED_VISIBLE, computeViewshed, viewshedWindow,
+} from './mastViewshed.js';
 
 const SUPPORT = Object.freeze({
   id: 990001,
@@ -216,4 +220,77 @@ test('the relief is flat at 128 and brighter on a slope facing the north-west su
   assert.ok(viewshedRelief(slope, size, 50)[2 * size + 2] > 128);
   const away = slope.map((height) => -height);
   assert.ok(viewshedRelief(away, size, 50)[2 * size + 2] < 128);
+});
+
+test('the painted result is the one the pieces give, and carries only what the page needs', async () => {
+  // A ridge running north–south east of the mast, so some ground is hidden.
+  const loadDemTile = async (tile) => {
+    const heights = new Float32Array(512 * 512);
+    for (let row = 0; row < 512; row++) {
+      for (let col = 0; col < 512; col++) {
+        const worldX = tile.x * 512 + col;
+        heights[row * 512 + col] = 600 + 400 * Math.exp(-(((worldX % 900) - 450) ** 2) / 2000);
+      }
+    }
+    return heights;
+  };
+  const input = { lon: 6.8694, lat: 45.9237, antennaM: 30 };
+  const result = await paintMastViewshed({ ...input, loadDemTile });
+  const window = viewshedWindow(input.lon, input.lat, result.radiusM);
+  const tiles = await Promise.all(window.tiles.map(async (tile) => ({ tile, heights: await loadDemTile(tile) })));
+  const heights = assembleHeights(window, tiles);
+  const grid = computeViewshed({ heights, antennaM: 30, ...window, observerCol: window.observerCol });
+  const expected = viewshedRgba({ window, grid, relief: viewshedRelief(heights, window.size, window.pixelM) });
+  assert.equal(result.size, window.size);
+  assert.deepEqual(result.rgba, expected.rgba);
+  assert.ok(result.area.share > 0 && result.area.share < 1, 'the ridge hides some of the disc');
+  assert.equal(result.capped, false);
+  assert.equal(result.grid, undefined, 'the grids stay where they were computed');
+  assert.equal(result.relief, undefined);
+});
+
+/** A worker double: records what it is sent, answers when told to. */
+function viewshedWorkerDouble() {
+  const worker = {
+    sent: [],
+    terminated: false,
+    postMessage(message) { worker.sent.push(message); },
+    terminate() { worker.terminated = true; },
+    answer(data) { worker.onmessage({ data }); },
+  };
+  return worker;
+}
+
+test('the line of sight runs in the worker, and only the mast crosses to it', async () => {
+  const worker = viewshedWorkerDouble();
+  const runner = createViewshedRunner({ createWorker: () => worker, computeInline: async () => { throw new Error('not here'); } });
+  assert.equal(runner.backend, 'worker');
+  const job = runner.run({ lon: 6.87, lat: 45.92, antennaM: 30, fetchImpl: () => {} });
+  assert.deepEqual(worker.sent, [{ id: 1, lon: 6.87, lat: 45.92, antennaM: 30 }]);
+  worker.answer({ id: 1, result: RESULT });
+  assert.equal(await job, RESULT);
+  const failed = runner.run({ lon: 6.87, lat: 45.92, antennaM: 30 });
+  worker.answer({ id: 2, error: 'HTTP 503' });
+  await assert.rejects(failed, /HTTP 503/);
+});
+
+test('a worker that cannot decode, or crashes, hands the line of sight back to the main thread', async () => {
+  for (const fail of [(worker) => worker.answer({ type: 'ready', ok: false }), (worker) => worker.onerror(new Event('error'))]) {
+    const worker = viewshedWorkerDouble();
+    const inline = [];
+    const runner = createViewshedRunner({
+      createWorker: () => worker,
+      computeInline: async (input) => { inline.push(input.antennaM); return RESULT; },
+    });
+    const owed = runner.run({ lon: 6.87, lat: 45.92, antennaM: 30 });
+    fail(worker);
+    assert.equal(worker.terminated, true);
+    assert.equal(runner.backend, 'inline');
+    assert.equal(await owed, RESULT);
+    assert.equal(await runner.run({ lon: 6.87, lat: 45.92, antennaM: 48 }), RESULT);
+    assert.deepEqual(inline, [30, 48]);
+  }
+  const none = createViewshedRunner({ createWorker: () => null, computeInline: async () => RESULT });
+  assert.equal(none.backend, 'inline');
+  assert.equal(await none.run({ lon: 0, lat: 0, antennaM: 1 }), RESULT);
 });
