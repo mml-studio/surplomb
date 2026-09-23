@@ -1,8 +1,8 @@
-// The Gironde megafire layer, end to end in both languages: the real module,
-// the real pack from disk, a viewer double with no WebGL. The row's chips, its
-// legend and its stats are read at CALL time, so one loaded layer answers in
-// whichever language the page is in — the property the whole catalog design
-// rests on (src/i18n/messages.js).
+// « Grands incendies » (the Gironde replay), end to end in both languages: the
+// real module, the real pack from disk, a viewer double with no WebGL. The key
+// and the stats are read at CALL time, so one loaded layer answers in whichever
+// language the page is in — the property the whole catalog design rests on
+// (src/i18n/messages.js).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,12 +16,15 @@ globalThis.fetch = async (url) => {
   return { ok: true, status: 200, json: async () => JSON.parse(body) };
 };
 
+const bands = JSON.parse(readFileSync(new URL('./local_data/gironde_megafire_2026/bands.json', import.meta.url), 'utf8'));
+const hotspots = JSON.parse(readFileSync(new URL('./local_data/gironde_megafire_2026/hotspots.json', import.meta.url), 'utf8'));
+
 const viewer = {
   scene: {
     primitives: { add: (primitive) => primitive, contains: () => false, remove() {} },
     postRender: { addEventListener: () => () => {} },
-    // No depth texture: ground polylines are declared unsupported, as on a
-    // machine without them, and the layer draws the rest.
+    // No depth texture and no ground collection: the layer draws its points
+    // and nothing else, as on a machine without ground primitives.
     frameState: { context: { depthTexture: false } },
   },
 };
@@ -32,81 +35,61 @@ layer.init(viewer);
 await layer.enable();
 console.warn = warn;
 
-/** Everything the reader can see on the row, the key and the stats line. */
-const visible = () => {
-  const { chips, legend } = layer.getRowControls();
-  const { cursor, coverage, acquired } = layer.getStats();
-  return { chips: chips.map(({ label, title }) => ({ label, title })), legend: legend.map(({ label, blurb }) => ({ label, blurb })), cursor, coverage, acquired };
+/** Everything the reader can read in the key. */
+const key = () => {
+  const { legend, legendNote, note } = layer.getRowControls();
+  return { legend: legend.map(({ label, blurb }) => ({ label, blurb })), legendNote, note };
 };
 
-// Satellite names are proper nouns, not French.
-const SENSORS = ['Pléiades Neo'];
-
-test('opened on the closing frame, in English', () => {
-  const en = withLocale('en', visible);
-  assertNoFrench(en, { allow: SENSORS });
-  assert.equal(en.coverage, '■ Aug 1 12:44 UTC · last detection');
-  assert.equal(en.chips[0].label, '↺ Replay');
-  assert.equal(en.chips[0].title, 'Replay the 10 days in 24 s — ■ Aug 1 12:44 UTC · last detection');
-  assert.deepEqual(en.chips.slice(1).map((chip) => chip.label),
-    ['Jul 24 09:05', 'Jul 26 10:12', 'Jul 27 16:16', 'Jul 29 14:07', 'Aug 1 11:38']);
-  assert.equal(en.chips[1].title, 'Pléiades Neo (Legion) · VHR2 — 5,775.4 ha burned in this image');
-  assert.equal(en.legend[0].blurb, 'Last detection of the window. The last image dates from Aug 1 11:38: '
-    + 'after it, nobody redrew this fire. ↺ replays it from the start.');
-  assert.equal(en.legend[1].label, 'perimeter on Aug 1 11:38');
-  assert.equal(en.legend.at(-1).label, 'final EFFIS perimeter');
-  assert.match(en.legend.at(-1).blurb, /^37,191 ha — EFFIS’s automatic detection/);
-  assert.match(en.legend.at(-1).blurb, /announces 47,910\.$/);
-  assert.equal(en.acquired, 'Aug 1 11:38 UTC');
-});
-
-test('the same layer, a moment later, in French — byte for byte what it printed before', () => {
-  const fr = withLocale('fr', visible);
-  assert.equal(fr.coverage, '■ 1ᵉʳ août 12:44 UTC · dernière détection');
-  assert.equal(fr.chips[0].label, '↺ Rejouer');
-  assert.equal(fr.chips[0].title, 'Rejouer les 10 jours en 24 s — ■ 1ᵉʳ août 12:44 UTC · dernière détection');
-  assert.equal(fr.chips[1].label, '24 juil. 09:05');
-  assert.equal(fr.chips[1].title, 'Pléiades Neo (Legion) · VHR2 — 5\u202f775,4 ha brûlés à cette image');
-  assert.equal(fr.legend[0].blurb, 'Dernière détection de la fenêtre. La dernière image, elle, date du 1ᵉʳ août 11:38 : '
-    + 'après elle, plus personne n’a redessiné ce feu. ↺ pour rejouer depuis le départ.');
-  assert.equal(fr.legend.at(-1).blurb, '37\u202f191 ha — la détection automatique d’EFFIS, sans zone d’intérêt ni '
-    + 'échéance, continue après l’arrêt des cartographes. GDACS, qui note une ALERTE et non une surface, en annonce 47 910.');
-});
-
-test('play on the closing frame rewinds to the first detection', () => {
-  layer.setParams({ play: true });
-  layer.setParams({ play: false });
-  const en = withLocale('en', visible);
-  assertNoFrench(en, { allow: SENSORS });
-  assert.equal(en.chips[0].label, '▶ Play');
-  assert.equal(en.coverage, '▶ Jul 22 11:55 UTC · first detection');
-  assert.equal(withLocale('fr', () => layer.getRowControls().chips[0].label), '▶ Jouer');
-});
-
-test('a step with fronts and flames, paused and playing, in English', (t) => {
-  t.after(() => layer.destroy(viewer));
-  layer.setParams({ step: 'del-product' });
-  const paused = withLocale('en', visible);
-  assertNoFrench(paused, { allow: SENSORS });
-  assert.equal(paused.chips[0].label, '▶ Resume');
-  assert.equal(paused.coverage, '❚❚ Jul 24 09:05 UTC · day 2 of 10');
-  assert.deepEqual(paused.legend.slice(0, 4).map((line) => line.label), [
-    '❚❚ Jul 24 09:05 UTC · day 2 of 10', 'perimeter on Jul 24 09:05', 'active fire front', 'visible flames',
+test('opened on the finished fire: three rings, every detection, in English', () => {
+  const en = withLocale('en', key);
+  assertNoFrench(en, { allow: ['EFFIS', 'Copernicus EMS', 'NASA FIRMS'] });
+  assert.deepEqual(en.legend.map((line) => line.label), [
+    'The fire, day by day', 'July 22-23', 'July 24-25', 'July 26 → August 1',
+    'Heat seen by satellite', 'Estimated final area (EFFIS)',
   ]);
-  assert.equal(paused.legend[0].blurb, 'Cursor stopped. ▶ resumes playing the 10 days in 24 s.');
-  assert.equal(paused.legend[1].blurb, '5,775.4 ha burned, as mapped by Copernicus EMS on a Pléiades Neo (Legion) '
-    + 'image of Jul 24 09:05 UTC. The figure is the publisher’s own, never recomputed from the drawing.');
-  assert.ok(paused.legend.some((line) => line.label === 'hotspot < 10 MW'));
-  // French, same state: the pinned strings of the harness.
-  assert.equal(withLocale('fr', () => layer.getRowControls().legend[2].label), 'front de feu actif');
-
-  layer.setParams({ play: true });
-  const playing = withLocale('en', visible);
-  assertNoFrench(playing, { allow: SENSORS });
-  assert.match(playing.chips[0].label, /^❚❚ Jul 24 09:05 UTC$/);
-  assert.equal(playing.chips[0].title, '▶ Jul 24 09:05 UTC · day 2 of 10 — click to pause');
-  assert.equal(playing.legend[0].blurb, 'Playing the 10 days in 24 s. Nothing is interpolated between two satellite '
-    + 'images: the map holds the last measurement, and the hotspots carry the gap.');
-  layer.setParams({ play: false });
+  assert.equal(en.legend.at(-1).blurb, '37,191 ha, measured after the last survey.');
+  assert.equal(en.note, 'A ring shows where satellites saw the heat arrive, not the flame front.');
+  const stats = layer.getStats();
+  assert.equal(stats.atEnd, true);
+  assert.equal(stats.bandsShown, 3);
+  assert.equal(stats.count, hotspots.rows.length, 'the finished fire shows every detection');
 });
 
+test('the same key in French, in the reader’s words', () => {
+  const fr = withLocale('fr', key);
+  assert.deepEqual(fr.legend.map((line) => line.label), [
+    'Le feu, jour après jour', '22-23 juillet', '24-25 juillet', '26 juillet → 1ᵉʳ août',
+    'Chaleur vue par satellite', 'Surface finale estimée (EFFIS)',
+  ]);
+  assert.equal(fr.legend.at(-1).blurb, '37 191 ha, mesurés après le dernier relevé.');
+  // No count in the key: the numbers belong to the bar under the map.
+  assert.ok(layer.getRowControls().legend.every((line) => line.count === undefined));
+});
+
+test('a stop parks the replay at the end of its stage: one ring, its detections only', () => {
+  layer.setParams({ band: 'jul-22-23' });
+  const stats = layer.getStats();
+  assert.equal(stats.bandsShown, 1);
+  assert.equal(stats.playing, false);
+  const epoch = Date.parse(hotspots.epoch);
+  const end = Date.parse(bands.bands[0].to);
+  const expected = hotspots.rows.filter((row) => epoch + row[2] * 60_000 <= end).length;
+  assert.equal(stats.count, expected, 'causal: nothing after the stage’s end is drawn');
+  // The key does not move with the cursor.
+  assert.equal(withLocale('en', key).legend.length, 6);
+});
+
+test('play from the end rewinds to the first detection; pause holds it', (t) => {
+  t.after(() => layer.destroy(viewer));
+  layer.setParams({ band: 2 });
+  layer.setParams({ play: true });
+  let stats = layer.getStats();
+  assert.equal(stats.playing, true);
+  assert.equal(stats.atStart, true);
+  assert.equal(stats.bandsShown, 0);
+  layer.setParams({ play: false });
+  stats = layer.getStats();
+  assert.equal(stats.playing, false);
+  assert.equal(stats.atStart, true);
+});

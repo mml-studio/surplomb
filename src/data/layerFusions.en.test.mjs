@@ -53,5 +53,5 @@ test('a tooltip keeps its claim, its number and its hedge', () => {
   assert.equal(title('power-grid', 'fr-hydro-plants'),
     'The ODRÉ register — the whole French hydro fleet, plus 592 plants mapped outside France');
   assert.equal(title('local-firms', 'gironde-megafire-2026'),
-    'The July 2026 megafire — reconstructed day by day, with no FIRMS key');
+    'Replay the Gironde fire of July 2026 — no key needed');
 });

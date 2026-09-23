@@ -28,8 +28,8 @@ export default defineMessages({
     label: {
       fr: 'Une détection, colorée par sa puissance radiative',
       en: 'One detection, coloured by radiative power',
-      note: 'Same words as girondeMegafire: one detection is one satellite '
-        + 'pixel, and the colour is the pixel’s own FRP.',
+      note: 'The glossary’s words (« puissance radiative »): one detection is one '
+        + 'satellite pixel, and the colour is the pixel’s own FRP.',
     },
     blurb: {
       fr: 'Sous ~750 km, chaque point est une détection satellite : '

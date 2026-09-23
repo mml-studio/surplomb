@@ -664,16 +664,30 @@ Three publishers, three obligations:
   photographed. Same public-domain terms and the same acknowledgement as the
   live layer above.
 
-**One thing on this layer is a DRAWING, and it says so.** Since 2026-09-10 the
-scene carries flame and smoke plumes. What is measured about them is where they
-stand — a plume only rises where FIRMS detected a thermal anomaly within twelve
-hours of the cursor, sized by that cluster's radiative power and never below the
-pack's own bottom FRP rung of 10 MW — and which way they lean, which is the
-direction the photo-interpreted flames actually moved between two Copernicus
-frames. Column height, puff size, rise rate and drift speed are a rendering:
-nobody measured the smoke of this fire, and the on-map key names the plume line
-*rendu, non mesuré* (“rendered, not measured”) beside the polygons that were traced. See
-`src/data/megafireFireMath.js`.
+**What the map draws is DERIVED from these sources, and says how.** Since
+2026-09-23 the replay (« Grands incendies ») draws three rings, one per group
+of local days (22-23 July, 24-25 July, 26 July → 1 August): each ring encloses
+the ground where the FIRMS detections of those days first reached, inside the
+burnt footprint Copernicus mapped (the union of its five perimeters). This is a
+"day-of-burning" map built from coarse satellite fire detections, the method
+published by Parks (2014, *International Journal of Wildland Fire*). The disc
+each detection stamps (1 050 m) is calibrated on SHAPE: it is the smallest
+radius whose region, built at the instant of each Copernicus image, overlaps
+that image's burnt polygons best (mean intersection-over-union 0.67 over the
+26 and 27 July products; 0.79 and 0.78 on 29 July and 1 August, which were
+not used to fit). Matching the AREA instead picks 300 m, the worst shape of
+the range, which pushes 11 % of the ground Copernicus had already seen burnt
+into a later ring; the 24 July
+delineation is left out because the satellites' own detections of that night
+already reach past it (939 of the 3 776 earlier ones lie more than 500 m
+outside). A ring therefore says where the heat ARRIVED, never where a flame
+front stood, and the key says so. The two sources disagree after 27 July
+— Copernicus gains about 3 300 ha between 27 July 16:16 and 29 July 14:07,
+while FIRMS sees almost no new ground — and the rings keep both: the last ring
+is the Copernicus footprint itself. Built offline by
+`node scripts/build-gironde-megafire-bands.mjs` into `bands.json` (keyless,
+from the two files above); see the script's header. The smoke plumes the
+layer drew from 2026-09-10 were a rendering nobody measured and were removed.
 
 Hectare counts on screen are always the PUBLISHER's, never re-derived from the
 simplified drawing; the raw geometry was checked against them once and lands

@@ -36,7 +36,7 @@ const ENGLISH = [
   'Risks (Géorisques)',
   'Météo-France weather warning',
   'Île-de-France Mobilités network and frequency',
-  'Gironde megafire (Jul. 2026)',
+  'Gironde · summer 2026',
   'font: 600 13px Inter, sans-serif',
   'don’t, it’s, I’m, O’Brien',
   'EST, UN, LA, DE, AU (acronyms)',

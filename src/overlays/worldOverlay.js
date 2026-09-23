@@ -111,6 +111,9 @@ export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   '#right-context-rail',
   '#pp-toggles',
   '#command-dock',
+  // The replay bar of « Grands incendies » (`megafireTimeline.js`), which
+  // stands where a ring's date label would otherwise be parked.
+  '#megafire-timeline',
   '#gev-voice-control',
   '#cesium-credits',
   '.hud-top-left',

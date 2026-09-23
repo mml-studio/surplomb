@@ -7873,9 +7873,15 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   font-size: 13px;
   letter-spacing: 0.3px;
   line-height: 1.2;
+  /* Two lines before an ellipsis, not one: « Détections récentes » is a mode
+     name, and « Détections récent… » read as a truncation bug (2026-09-23).
+     A label that fits keeps its single line and the tile its height. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .map-legend-tile.is-on {
@@ -15870,4 +15876,470 @@ html.globe-shell:has(#voice-corner #gev-voice-control:is(:hover, :focus-within, 
 
 @media (prefers-reduced-motion: reduce) {
   html.globe-shell #voice-corner .gev-voice-visualizer span { transition: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE MEGAFIRE REPLAY BAR (« la frise ») — src/data/megafireTimeline.js
+   (2026-09-23)
+
+   The replay of the Gironde megafire, driven from one panel under the fire,
+   laid out as the approved mock-up draws it:
+
+     PROGRESSION DU FEU                           [↺ Rejouer]  [‹] [›]
+     24 juillet 2026
+     24-25 juillet · 3 775 détections
+     ─────────────────────────────────────────────────────────────────────
+     ·━━━━━━━━━━━●━━━━━━━━━━━○───────────○                 Fin des détections
+            22-23 juil.  24-25 juil.  26 juil. → 1er août
+
+   The dock's glass (`rgba(12, 24, 20, 0.84)`, blurred) with the shell's
+   hairline, radius and shadow, so it reads as a sibling of the navigation bar
+   under it and of the map key beside it. Stages sit at equal steps; the fill
+   takes each stage's ring colour from the map.
+
+   WHERE. Centred on the navigation bar, 10 px above it (the bar is 48 px tall,
+   2vh off the bottom), where the place chip was — that chip is hidden while
+   the bar is up (`html.megafire-timeline-open`). WIDTH. As close to the
+   mock-up's 880 px as the map key allows: the key is 330 px wide, 52 px off the
+   right edge, so a centred bar clears it by 18 px at `100vw - 800px` —
+   872 px at 1672 × 941, 640 px at 1440, 480 px at 1280. The left launchers
+   (176 px) are cleared by 170 px or more. Narrower than 680 px the header takes
+   the full width; wider, it stops at the end tag's column, as in the mock-up.
+
+   z-index 144: under the dock (145) and the mic's card (150), over the panels.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.megafire-timeline {
+  position: fixed;
+  left: 50%;
+  bottom: calc(2vh + 58px);
+  z-index: 144;
+  box-sizing: border-box;
+  width: clamp(420px, calc(100vw - 800px), 880px);
+  max-width: calc(100vw - 16px);
+  padding: 13px 20px 10px;
+  background: rgba(12, 24, 20, 0.84);
+  border: 1px solid var(--shell-border, rgba(177, 190, 181, 0.26));
+  border-radius: var(--shell-radius, 12px);
+  box-shadow: var(--shell-shadow, 0 10px 28px rgba(0, 0, 0, 0.38));
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  transform: translateX(-50%);
+  container-type: inline-size;
+  animation: megafire-timeline-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes megafire-timeline-in {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+.megafire-timeline-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head head'
+    'rule rule'
+    'track end';
+  column-gap: 20px;
+}
+
+/* Wide enough, the header stops at the end tag's column: the buttons end
+   where the tag begins, as in the mock-up. */
+@container (min-width: 680px) {
+  .megafire-timeline-body {
+    grid-template-areas:
+      'head .'
+      'rule rule'
+      'track end';
+  }
+}
+
+.megafire-timeline p { margin: 0; }
+
+/* ── The header: what is shown, and the three buttons ──────────────────── */
+.megafire-timeline-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.megafire-timeline-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.megafire-timeline-titles > p {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.megafire-timeline-eyebrow {
+  margin-bottom: 2px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.megafire-timeline-heading {
+  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.megafire-timeline-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.megafire-timeline-detail[hidden] { display: none; }
+
+.megafire-timeline-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.megafire-timeline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 36px;
+  min-width: 36px;
+  margin: 0;
+  padding: 0 14px;
+  background: rgba(247, 244, 234, 0.03);
+  border: 1px solid rgba(247, 244, 234, 0.24);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.megafire-timeline-btn:hover:not(:disabled) {
+  background: rgba(247, 244, 234, 0.09);
+  border-color: rgba(247, 244, 234, 0.38);
+}
+
+.megafire-timeline-btn:focus-visible,
+.megafire-timeline-stop:focus-visible {
+  outline: 2px solid rgba(247, 171, 124, 0.7);
+  outline-offset: 1px;
+}
+
+.megafire-timeline-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+/* Wide enough for « Reprendre »: the button keeps its size when a press
+   changes its label under the pointer. */
+.megafire-timeline-main {
+  min-width: 118px;
+  margin-right: 8px;
+}
+
+.megafire-timeline-step { width: 36px; padding: 0; }
+
+.megafire-timeline-step .shell-icon { width: 18px; height: 18px; }
+
+/* The main glyph: Lucide's rotate-ccw for « Rejouer » (a mask, like every
+   shell icon); a triangle and two bars drawn here for play and pause, which
+   the vendored set does not carry. */
+.megafire-timeline-glyph { width: 16px; height: 16px; }
+
+.megafire-timeline-glyph:is([data-glyph="play"], [data-glyph="pause"]) {
+  width: 12px;
+  height: 13px;
+  -webkit-mask: none;
+  mask: none;
+}
+
+.megafire-timeline-glyph[data-glyph="play"] {
+  clip-path: polygon(8% 0, 100% 50%, 8% 100%);
+}
+
+.megafire-timeline-glyph[data-glyph="pause"] {
+  background: linear-gradient(90deg, currentColor 0 34%, transparent 34% 66%, currentColor 66% 100%);
+  border-radius: 1px;
+}
+
+/* ── The hairline between header and track ───────────────────────────────── */
+.megafire-timeline-rule {
+  grid-area: rule;
+  height: 1px;
+  margin: 11px 0 9px;
+  background: rgba(247, 244, 234, 0.09);
+}
+
+/* ── The track ────────────────────────────────────────────────────────────
+   Two layers with the same side insets: the rail (a 2 px line, its fills
+   and the knob) and, in flow over it, the list of stops — one equal column
+   per stage, each stop centred on its column's END, where its stage ends.
+   The right inset leaves the last label room to centre on the rail's end. */
+.megafire-timeline-track {
+  grid-area: track;
+  position: relative;
+  min-width: 0;
+  --mt-inset-start: 8px;
+  --mt-inset-end: 46px;
+}
+
+.megafire-timeline-rail {
+  position: absolute;
+  top: 10px;
+  left: var(--mt-inset-start);
+  right: var(--mt-inset-end);
+  height: 2px;
+  margin-top: -1px;
+  background: rgba(247, 244, 234, 0.34);
+  border-radius: 1px;
+}
+
+.megafire-timeline-start {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background: rgba(247, 244, 234, 0.7);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* One fill per stage, scaled from its left end: a frame of the replay moves
+   one transform, and each stage keeps its ring's colour. */
+.megafire-timeline-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--mt-i, 0) / var(--mt-count, 1) * 100%);
+  width: calc(100% / var(--mt-count, 1));
+  background: var(--mt-color, var(--accent));
+  border-radius: 1px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--mt-color, var(--accent)) 55%, transparent);
+  transform: scaleX(var(--mt-fill, 0));
+  transform-origin: left center;
+}
+
+/* Where the replay stands between two stops. On a stop, the stop says it. */
+.megafire-timeline-knob {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--mt-at, 0) * 100%);
+  width: 10px;
+  height: 10px;
+  background: #fff7ec;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(247, 171, 124, 0.24), 0 0 10px rgba(247, 171, 124, 0.6);
+  transform: translate(-50%, -50%);
+}
+
+.megafire-timeline-knob[hidden] { display: none; }
+
+.megafire-timeline-stops {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--mt-count, 1), minmax(0, 1fr));
+  margin: 0 var(--mt-inset-end) 0 var(--mt-inset-start);
+  padding: 0;
+  list-style: none;
+}
+
+.megafire-timeline-stop-item {
+  justify-self: end;
+  max-width: calc(100% - 6px);
+  translate: 50% 0;
+}
+
+.megafire-timeline-stop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 4px 6px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.megafire-timeline-stop:hover { color: var(--text-primary); }
+
+/* The dot's box is the largest dot's, so nothing moves when a stop lights. */
+.megafire-timeline-dot {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.megafire-timeline-dot::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  box-sizing: border-box;
+  background: #0c1814;
+  border: 1.5px solid rgba(247, 244, 234, 0.62);
+  border-radius: 50%;
+  transition: inset var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.megafire-timeline-stop[data-state="reached"] { color: var(--text-primary); }
+
+.megafire-timeline-stop[data-state="reached"] .megafire-timeline-dot::before {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* Inside this stop's stage, on the way to it: a ring in the accent. */
+.megafire-timeline-stop[data-state="target"] .megafire-timeline-dot::before {
+  inset: 2px;
+  border: 2px solid var(--accent);
+}
+
+.megafire-timeline-stop[data-state="current"] .megafire-timeline-dot::before {
+  inset: 0;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(247, 171, 124, 0.16), 0 0 12px rgba(247, 171, 124, 0.55);
+}
+
+.megafire-timeline-stop-label {
+  position: relative;
+  max-width: 100%;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.megafire-timeline-stop:is([data-state="current"], [data-state="target"]) {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* The mock-up's short underline under the current stage. */
+.megafire-timeline-stop:is([data-state="current"], [data-state="target"]) .megafire-timeline-stop-label::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: min(100%, 44px);
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+
+/* ── The end tag: where the data stops ───────────────────────────────────── */
+.megafire-timeline-end {
+  grid-area: end;
+  align-self: start;
+  /* Centred between the dots and their labels, as in the mock-up. */
+  margin-top: 6px;
+  padding: 5px 12px;
+  background: rgba(247, 244, 234, 0.08);
+  border: 1px solid rgba(247, 244, 234, 0.05);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.megafire-timeline[data-ended="true"] .megafire-timeline-end {
+  background: rgba(247, 244, 234, 0.12);
+  color: var(--text-primary);
+}
+
+/* Narrow (a 1280 px screen gives the bar 480 px): the end tag folds onto two
+   lines and the track takes the room, so the stage labels keep one line. */
+@container (max-width: 560px) {
+  .megafire-timeline-body { column-gap: 12px; }
+  .megafire-timeline-head { gap: 12px; }
+  .megafire-timeline-controls { gap: 8px; }
+  .megafire-timeline-main { min-width: 100px; margin-right: 2px; padding: 0 12px; }
+  .megafire-timeline-track { --mt-inset-end: 34px; }
+  .megafire-timeline-end {
+    max-width: 6.2em;
+    margin-top: 2px;
+    padding: 4px 8px;
+    font-size: 11.5px;
+    line-height: 14px;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+/* Read by screen readers, never drawn. */
+.megafire-timeline-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── What the bar displaces while it is up ───────────────────────────────── */
+/* The place chip stood where the bar stands. */
+html.globe-shell.megafire-timeline-open .globe-nav-place { display: none; }
+
+/* A toast rises above the bar instead of over it (≈ 150 px tall). */
+html.globe-shell.megafire-timeline-open #toast { bottom: calc(2vh + 58px + 162px); }
+
+/* ── Where it is not wanted ──────────────────────────────────────────────── */
+body.ui-clean-view .megafire-timeline,
+body.recording-mode .megafire-timeline {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.cockpit-mode .megafire-timeline { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .megafire-timeline,
+  .megafire-timeline *,
+  .megafire-timeline *::before,
+  .megafire-timeline *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

@@ -5,6 +5,7 @@ import {
   LAYER_FUSIONS,
   fusedIntoFor,
   fusionCompanionsFor,
+  fusionIsExclusive,
   fusionTilesFor,
   fusionToggleGroupFor,
   tilePartDefaults,
@@ -15,6 +16,7 @@ import { ANFR_BAND_COLORS } from './anfrFrance.js';
 import { DATACENTER_HALL_COLOR } from './datacentersPack.js';
 import { COVERAGE_RAMP } from './mobileCoverage.js';
 import { BASE_CABLE_COLOR } from './telegeographySubmarineCables.js';
+import { MEGAFIRE_BANDS } from './megafirePack.js';
 import {
   DISABLED_LAYER_IDS,
   REGISTERED_LAYER_IDS,
@@ -258,9 +260,47 @@ test('the digital-infrastructure row is laid out as tiles, each lit in the colou
   ]);
   for (const tile of tiles) assert.ok(tile.icon.startsWith('data:image/svg+xml;base64,'), `${tile.id}:${tile.part}`);
   assert.match(tiles[3].title, /ARCEP/);
-  // Every other row keeps its chips.
+  // Every other row keeps its chips, bar « Incendies » (next test).
   const tiled = LAYER_FUSIONS.filter((fusion) => fusionTilesFor(fusion.primary));
-  assert.deepEqual(tiled.map((fusion) => fusion.primary), ['local-datacenters']);
+  assert.deepEqual(tiled.map((fusion) => fusion.primary), ['local-datacenters', 'local-firms']);
+});
+
+test('« Incendies » is two mode tiles, one lit at a time', () => {
+  const tiles = fusionTilesFor('local-firms');
+  assert.deepEqual(tiles.map((tile) => [tile.id, tile.part]), [
+    ['local-firms', null],
+    ['gironde-megafire-2026', null],
+  ]);
+  assert.deepEqual(tiles.map((tile) => tile.label), ['Détections récentes', 'Grands incendies']);
+  // The heat key's orange for the live detections, the first ring's ember red
+  // for the replay: each tile is a swatch of what its mode draws.
+  assert.deepEqual(tiles.map((tile) => tile.color), ['#ffa500', MEGAFIRE_BANDS[0].ring]);
+  assert.equal(fusionIsExclusive('local-firms'), true);
+  assert.equal(fusionIsExclusive('gironde-megafire-2026'), true, 'asked of a member, answered for its row');
+  assert.equal(fusionIsExclusive('local-datacenters'), false);
+  // Still opt-in: the row's own toggle lights the live detections alone.
+  assert.deepEqual(fusionCompanionsFor('local-firms').map((entry) => [entry.id, entry.optIn]),
+    [['gironde-megafire-2026', true]]);
+});
+
+test('validation refuses an `exclusive` row that is not whole-layer tiles', () => {
+  const ids = ['a', 'b'];
+  const row = (extra) => [{
+    primary: 'a', primaryChip: 'A', primaryToggle: true, companions: [{ id: 'b', chip: 'B' }], ...extra,
+  }];
+  const tile = (id, more = {}) => ({ id, icon: 'database', color: '#00ffff', ...more });
+  assert.equal(validateLayerFusions(row({ exclusive: true, tiles: [tile('a'), tile('b')] }), ids), true);
+  assert.throws(() => validateLayerFusions(row({ exclusive: true }), ids), /exclusive needs tiles/);
+  assert.throws(() => validateLayerFusions(row({ exclusive: 'yes', tiles: [tile('a'), tile('b')] }), ids),
+    /exclusive must be a boolean/);
+  assert.throws(() => validateLayerFusions(row({
+    exclusive: true,
+    tiles: [
+      tile('a'),
+      tile('b', { part: 'x', on: { x: true }, off: { x: false }, lit: true }),
+      tile('b', { part: 'y', on: { y: true }, off: { y: false }, lit: false }),
+    ],
+  }), ids), /exclusive tiles must switch whole layers/);
 });
 
 test('validation refuses a tile set that leaves a member without a switch', () => {

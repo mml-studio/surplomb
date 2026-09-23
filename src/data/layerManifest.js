@@ -532,18 +532,18 @@ export const LAYER_MANIFEST = Object.freeze([
     id: 'local-firms',
     name: 'FIRMS Active Fires',
     icon: '▲',
-    source: 'NASA FIRMS · LIVE',
+    source: 'NASA FIRMS · 24 h',
     capabilities: Object.freeze(['destroy', 'getStats']),
     load: () => import('./localLayers.js')
       .then((module) => module.default.find((layer) => layer.id === 'local-firms')),
   }),
   Object.freeze({
     id: 'gironde-megafire-2026',
-    name: 'Mégafeu de Gironde (juil. 2026)',
+    name: 'Gironde · été 2026',
     icon: '🜂',
     source: 'Copernicus EMS · EFFIS · NASA FIRMS',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ cursorMs: null, playing: false }),
+    defaultParams: Object.freeze({ cursorMs: null, position: null, playing: false }),
     load: () => import('./girondeMegafire.js').then((module) => module.default),
   }),
 ]);

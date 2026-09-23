@@ -43,8 +43,8 @@ export default defineMessages({
     note: 'Not drawn — read on every vessel card, and GeoNames makes attribution a condition.',
   },
   'gironde-megafire': {
-    fr: 'Mégafeu de Gironde (juil. 2026) : Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
-    en: 'Gironde megafire (Jul. 2026): Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
+    fr: 'Incendie de Gironde (juil. 2026) : Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
+    en: 'Gironde fire (Jul. 2026): Contains modified Copernicus EMS Rapid Mapping data (<a href="https://mapping.emergency.copernicus.eu/activations/EMSR899/" target="_blank" rel="noopener">EMSR899</a>) 2026 · European Forest Fire Information System — <a href="https://forest-fire.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a>, Copernicus EMS · thermal detections from NASA FIRMS (VIIRS S-NPP / NOAA-20 / NOAA-21 and MODIS)',
     note: 'The Copernicus wording is PRESCRIBED by Regulation (EU) No 1159/2013 and is not paraphrased in either language.',
   },
   datacenters: {

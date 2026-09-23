@@ -267,62 +267,42 @@ export const MEGAFIRE_MIN_HOLE_HA = 0.25;
 /** @constant {number} Decimal places every shipped coordinate is rounded to (~1.1 m). */
 export const MEGAFIRE_COORD_DP = 5;
 
+/** @constant {string} EFFIS's closing perimeter, drawn as a dashed outline only. */
+export const MEGAFIRE_EFFIS_COLOR = '#b6c2cc';
+
 /**
- * The colour of a perimeter, by its rank in {@link MEGAFIRE_STEPS}.
+ * THE CINEMATIC REPLAY — three rings, one per group of days (2026-09-23).
  *
- * A sequential ramp and not five categorical colours, because the five steps
- * are one growing quantity read in one direction. Dark red is the first frame,
- * so the scene gets brighter as more ground is lost — the opposite of the
- * instinct to fade old data out, and the right way round: the last frame is the
- * one that still matters in September.
+ * The replay no longer paints the five Copernicus fills one after the other:
+ * drawn side by side (2026-09-23), their outer edges
+ * coincide from 26 July on, so five dates read as two shapes, and the 27 July
+ * grading product draws the Landes parcel grid. It draws instead where the
+ * satellites saw heat ARRIVE, grouped by local days (`bands.json`, built by
+ * `scripts/build-gironde-megafire-bands.mjs`): the start, the two days that
+ * burnt most of the forest, and the rest.
  *
- * @constant {ReadonlyArray<string>}
+ * The colour says WHEN, never how hot: an ember red for the first days rising
+ * to a warm ivory for the last, so the latest ring — the edge that is still
+ * true today — is the brightest thing on a night map and the one the bloom
+ * picks up. The same colour paints the detections of those days, which is
+ * what lets one legend line explain both.
+ *
+ * `ring` is the outline, `fill` the translucent surface inside it, `fillAlpha`
+ * how much of the ground that surface covers: enough that each group of days
+ * reads as its own zone on a Dusk ground (at 0.20 / 0.13 / 0.07 the zones
+ * merged into one scar, 2026-09-23), less for each later band, and never so
+ * much that the forest under it is lost.
+ *
+ * @constant {ReadonlyArray<{id: string, ring: string, fill: string, fillAlpha: number, point: string}>}
  */
-export const MEGAFIRE_STEP_COLORS = Object.freeze([
-  '#7f1d1d', '#b91c1c', '#dc2626', '#ea580c', '#f59e0b',
+export const MEGAFIRE_BANDS = Object.freeze([
+  Object.freeze({ id: 'jul-22-23', ring: '#ff4a36', fill: '#e8261a', fillAlpha: 0.4, point: '#ff6a4a' }),
+  Object.freeze({ id: 'jul-24-25', ring: '#ffa03e', fill: '#ff8a1f', fillAlpha: 0.3, point: '#ffae5c' }),
+  Object.freeze({ id: 'jul-26-aug-01', ring: '#fff0d4', fill: '#ffd98a', fillAlpha: 0.22, point: '#ffe7c2' }),
 ]);
 
-/** @constant {number} Fill alpha for a perimeter. */
-export const MEGAFIRE_FILL_ALPHA = 0.45;
-
-/** @constant {string} Fire fronts — photo-interpreted lines, drawn on the ground. */
-export const MEGAFIRE_FRONT_COLOR = '#fde047';
-/** @constant {string} Active flames — photo-interpreted points. */
-export const MEGAFIRE_FLAME_COLOR = '#fef08a';
-/** @constant {string} EFFIS's closing perimeter, drawn as an outline only. */
-export const MEGAFIRE_EFFIS_COLOR = '#94a3b8';
-
-/**
- * The FRP ladder for a FIRMS detection, in megawatts.
- *
- * FROZEN DOMAIN thresholds, never quantiles of what is on screen — the same C1
- * rule the rest of the repo works to. The ladder is geometric because fire
- * radiative power is: measured on this pack's own 9 562 detections, the
- * distribution runs from 0.3 MW to 1 573.57 MW with a median near 6 MW, so
- * equal intervals would put ~97 % of the set in one class.
- *
- * @constant {ReadonlyArray<{min: number, color: string, label: string}>}
- */
-export const MEGAFIRE_FRP_LADDER = Object.freeze([
-  Object.freeze({ min: 0, color: '#fbbf24', label: '< 10 MW' }),
-  Object.freeze({ min: 10, color: '#f97316', label: '10 – 50 MW' }),
-  Object.freeze({ min: 50, color: '#ef4444', label: '50 – 200 MW' }),
-  Object.freeze({ min: 200, color: '#fca5a5', label: '≥ 200 MW' }),
-]);
-
-/**
- * Which rung of {@link MEGAFIRE_FRP_LADDER} a fire radiative power sits on.
- * @param {number} frpMw - Fire radiative power, megawatts.
- * @returns {number} Index into the ladder; 0 for anything non-finite.
- */
-export function megafireFrpLevel(frpMw) {
-  if (!Number.isFinite(frpMw)) return 0;
-  let level = 0;
-  for (let i = 1; i < MEGAFIRE_FRP_LADDER.length; i += 1) {
-    if (frpMw >= MEGAFIRE_FRP_LADDER[i].min) level = i;
-  }
-  return level;
-}
+/** @constant {string} A detection at the instant it appears, before it settles to its band's colour. */
+export const MEGAFIRE_FLASH_COLOR = '#fffaf0';
 
 /**
  * The step whose imagery is the most recent at `instantMs`, or null before the

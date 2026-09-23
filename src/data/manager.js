@@ -2,7 +2,8 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
 import {
-  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor, tilePartDefaults, tilePartIsOff,
+  fusedIntoFor, fusionIsExclusive, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor,
+  tilePartDefaults, tilePartIsOff,
 } from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
 import { getSelectedEntityContext } from './contextStore.js';
@@ -3600,6 +3601,38 @@ export class DataLayerManager {
   }
 
   /**
+   * Whether a member is on or on its way: its visibility INTENT when the
+   * manager holds one, else its settled state (or a part tile's press still
+   * switching it on).
+   * @param {string} layerId
+   * @returns {boolean}
+   */
+  _memberWanted(layerId) {
+    const entry = this.layers.get(layerId);
+    if (typeof entry?.visibilityIntentEnabled === 'boolean') return entry.visibilityIntentEnabled;
+    return this._tileLayerOn(layerId);
+  }
+
+  /**
+   * Put out every other lit member of an `exclusive` row: the tile just
+   * pressed is that row's one mode from now on. See `exclusive` in
+   * layerFusions.js.
+   * @param {string} layerId The member being lit.
+   */
+  _putOutOtherModes(layerId) {
+    const rowId = fusedIntoFor(layerId) || layerId;
+    for (const tile of fusionTilesFor(rowId) || []) {
+      // The INTENT, not the settled state: a mode still coming on (its data in
+      // flight) when the other tile is pressed must be put out too, or two
+      // quick presses leave both lit once the first one lands.
+      if (tile.id === layerId || !this._memberWanted(tile.id)) continue;
+      this._tileLayerEnabling?.delete(tile.id);
+      this.setEnabled(tile.id, false, { origin: 'user' })
+        .catch((error) => console.warn(`[Data] ${tile.id} mode switch error:`, error));
+    }
+  }
+
+  /**
    * What a split layer says about one of its parts it cannot draw, or ''.
    * Asked of a loaded module only (`tilePartNotice`): a lazy stub knows nothing
    * yet, and loading the chunk to ask would cost the download the stub exists
@@ -3656,6 +3689,9 @@ export class DataLayerManager {
    */
   _toggleFusionTile(layerId, part = null) {
     if (!part) {
+      // A mode tile (`exclusive`) lit by a press puts the row's other modes
+      // out first, so the row never shows two of them for a frame.
+      if (fusionIsExclusive(layerId) && !this._tileLayerOn(layerId)) this._putOutOtherModes(layerId);
       this._toggleFusionMember(layerId);
       return;
     }
@@ -4092,7 +4128,10 @@ export class DataLayerManager {
       // since the tiles are the only switches the row has left. See `tiles`
       // in layerFusions.js.
       const tiles = fusionTilesFor(layer.id);
-      if (tiles && this._rowEnabled(layer.id)) {
+      // On, OR on its way: a mode tile pressed while the other mode goes out
+      // has a layer still loading, and a block keyed on the settled state
+      // vanished from the key for that second (« Incendies », 2026-09-23).
+      if (tiles && (this._rowEnabled(layer.id) || tiles.some((tile) => this._memberWanted(tile.id)))) {
         mapLegend.push({ layer, tiles: this._legendTiles(layer.id, tiles) });
       }
       if (controls?.legend?.length) mapLegend.push(this._legendGroupOf(layer, controls));
@@ -4423,6 +4462,11 @@ export class DataLayerManager {
       // The object the reader selected, printed under the key it is read
       // against instead of in a card over the map — see `_legendSelection`.
       selection: legendSelectionOf(controls.legendSelection),
+      // The block's own NAME, when it is not the member's chip: a tile named
+      // « Grands incendies » keys ONE of them, « Gironde · été 2026 », and a
+      // block titled by the tile above it would say nothing the tile does not.
+      ...(typeof controls.legendTitle === 'string' && controls.legendTitle.trim()
+        ? { subtitle: controls.legendTitle.trim() } : {}),
     };
   }
 
@@ -4474,7 +4518,8 @@ export class DataLayerManager {
           label: tile.label,
           color: tile.color,
           icon: tile.icon,
-          active: tile.part ? this._tilePartLit(tile) : this.isEnabled(tile.id),
+          // The press shows at once, not when the layer's data lands.
+          active: tile.part ? this._tilePartLit(tile) : this._memberWanted(tile.id),
           offCoverage,
           title: notice ? `${title || tile.label} — ${notice}` : title,
         };

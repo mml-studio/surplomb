@@ -42,7 +42,8 @@ test('the names a reader recognises the fork by', () => {
   assert.equal(label('amenities-fr'), 'Everyday amenities');
   assert.equal(label('medecins-fr'), 'Health & emergency services');
   assert.equal(label('vigicrues'), 'Rivers (Vigicrues)');
-  assert.equal(label('gironde-megafire-2026'), 'Gironde megafire (Jul. 2026)');
+  assert.equal(label('gironde-megafire-2026'), 'Gironde · summer 2026');
+  assert.equal(label('local-firms'), 'Fires');
   assert.equal(label('idfm-network'), 'IDFM network and frequency (Paris)');
   assert.equal(label('velo-pulse-fr'), 'Cycling pulse (typical week)');
   assert.equal(label('irve-fr'), 'EV charging stations');

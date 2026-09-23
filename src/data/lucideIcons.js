@@ -190,6 +190,17 @@ export const LUCIDE_ICONS = Object.freeze({
     '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>',
     '<path d="M3 3v5h5"/>',
   ]),
+  // A flame — the « Détections récentes » tile of « Incendies ».
+  flame: Object.freeze([
+    '<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"/>',
+  ]),
+  // A clock turning back — the « Grands incendies » tile: fires replayed.
+  // Lucide's former `history`, renamed upstream.
+  'rotate-ccw-clock': Object.freeze([
+    '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>',
+    '<path d="M3 3v5h5"/>',
+    '<path d="M12 7v5l4 2"/>',
+  ]),
 });
 
 const _cache = new Map();

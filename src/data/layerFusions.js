@@ -209,6 +209,14 @@ function declaredChip(entry, layerId, own) {
  * label and tooltip of a part come from the
  * catalog's `tiles` entry (`<id>:<part>`), and fall back to the member's chip.
  *
+ * `exclusive: true` MAKES THE TILES MODES. Pressing a dark tile lights its
+ * member and puts every other lit member of the row out, so exactly one is on
+ * at a time — « Incendies », whose two tiles are two ways of looking at fire
+ * on two different grounds. Only whole-layer tiles, and only with `tiles`:
+ * the row's toggle still lights what it always lit (the primary and its
+ * followers), and a share link can still carry both, since the rule is about
+ * a press and not a state.
+ *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It
  * is for a companion whose cost is real and whose value is conditional — the
  * reader asks for it by pressing the chip. Every other companion follows the
@@ -559,7 +567,7 @@ export const LAYER_FUSIONS = Object.freeze([
     ],
   }),
 
-  // ── 16. Active fires ─────────────────────────────────────────────────────
+  // ── 16. Fires (« Incendies ») ────────────────────────────────────────────
   // The README already says what these two rows are: "what burns now / what
   // burnt". Same sensor (VIIRS through FIRMS), same subject, two tenses — and
   // the past tense was holding a row of its own for an event that ended on
@@ -581,8 +589,24 @@ export const LAYER_FUSIONS = Object.freeze([
   // reading of a row whose live half is gated and whose historical half is
   // not, and the chip title says so rather than leaving a reader to discover
   // that the greyed row still has something to show.
+  //
+  // TWO MODES, AS TILES IN THE KEY (2026-09-23), after the approved mock of
+  // « Incendies »: « Détections récentes » and « Grands incendies » are the
+  // row's two ways of looking at fire, so each is a tile, and they are
+  // `exclusive` — pressing one puts the other out. The recent world
+  // detections and a replayed July fire answer different questions on
+  // different grounds (a plain globe, a night map over Gironde), and drawn
+  // together they would read as one set of dots.
   fusionRow({
     primary: 'local-firms',
+    primaryToggle: true,
+    exclusive: true,
+    tiles: [
+      // The orange of the detections' heat key, and the ember red of the
+      // replay's first ring.
+      { id: 'local-firms', icon: 'flame', color: '#ffa500' },
+      { id: 'gironde-megafire-2026', icon: 'rotate-ccw-clock', color: '#ff4a36' },
+    ],
     companions: [
       { id: 'gironde-megafire-2026', optIn: true },
     ],
@@ -637,6 +661,13 @@ function validateTileParts(id, tiles) {
  * @throws {Error} On any malformed or incomplete tile set.
  */
 function validateFusionTiles(fusion, primary) {
+  if (fusion.exclusive !== undefined) {
+    if (typeof fusion.exclusive !== 'boolean') throw new Error(`Fusion exclusive must be a boolean: ${primary}`);
+    if (fusion.exclusive && fusion.tiles === undefined) throw new Error(`Fusion exclusive needs tiles: ${primary}`);
+    if (fusion.exclusive && fusion.tiles.some((tile) => tile?.part !== undefined)) {
+      throw new Error(`Fusion exclusive tiles must switch whole layers: ${primary}`);
+    }
+  }
   if (fusion.tiles === undefined) return;
   if (!Array.isArray(fusion.tiles) || fusion.tiles.length === 0) {
     throw new Error(`Fusion tiles must be a non-empty array: ${primary}`);
@@ -900,6 +931,16 @@ const TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
  */
 export function fusionTilesFor(layerId) {
   return TILES_BY_PRIMARY.get(layerId) || null;
+}
+
+/**
+ * Whether a row's tiles are MODES — one lit at a time (`exclusive`).
+ * @param {string} layerId The row's primary, or any of its members.
+ * @returns {boolean}
+ */
+export function fusionIsExclusive(layerId) {
+  const rowId = fusedIntoFor(layerId) || layerId;
+  return LAYER_FUSIONS.some((fusion) => fusion.primary === rowId && fusion.exclusive === true);
 }
 
 /**

@@ -1897,3 +1897,67 @@ html[data-shell="phone"] #loading-screen .loader-logo {
 html[data-shell="phone"] #loading-screen h2 {
   font-size: 24px;
 }
+
+/* ═══ THE MEGAFIRE REPLAY BAR (« la frise ») ════════════════════════════════
+   src/data/megafireTimeline.js; the desktop rules are in `style.css` under the
+   same title. On a phone the bar spans the width less 8 px a side and loses
+   its eyebrow and its detail line: the date and the three buttons, then the
+   track. It rides the sheet like the other floating surfaces, one row above
+   the voice column — help (40 px), an 8 px gap, the mic (56 px), 12 px off the
+   sheet — so it never covers the mic. A live voice session grows its chips
+   upward over the bar's right end (the dock is z-index 145, the bar 144):
+   they are brief, and they are the thing being spoken to. At `full` the sheet
+   is being read and the bar steps aside, like the dock. */
+html[data-shell="phone"] .megafire-timeline {
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--phone-sheet-height, 116px) + 12px + 104px + 10px);
+  width: auto;
+  max-width: none;
+  padding: 10px 12px 6px;
+  transform: none;
+}
+
+html[data-shell="phone"] body:has(#phone-sheet[data-snap='full']) .megafire-timeline {
+  visibility: hidden;
+}
+
+html[data-shell="phone"] .megafire-timeline :is(.megafire-timeline-eyebrow, .megafire-timeline-detail) {
+  display: none;
+}
+
+html[data-shell="phone"] .megafire-timeline-heading {
+  font-size: 16px;
+  line-height: 20px;
+}
+
+html[data-shell="phone"] .megafire-timeline-head { gap: 10px; }
+
+html[data-shell="phone"] .megafire-timeline-controls { gap: 6px; }
+
+/* 40 px: the phone's floor for a control that is not the primary one. */
+html[data-shell="phone"] .megafire-timeline-btn {
+  height: 40px;
+  min-width: 40px;
+  font-size: 13.5px;
+}
+
+html[data-shell="phone"] .megafire-timeline-main {
+  min-width: 0;
+  margin-right: 0;
+  padding: 0 12px;
+}
+
+html[data-shell="phone"] .megafire-timeline-step { width: 40px; }
+
+html[data-shell="phone"] .megafire-timeline-rule { margin: 8px 0 7px; }
+
+html[data-shell="phone"] .megafire-timeline-stop { font-size: 11.5px; line-height: 14px; }
+
+/* No sticky hover on a tap (see « Hover, on a device with no cursor »). */
+html[data-shell="phone"] .megafire-timeline-btn:hover:not(:disabled) {
+  background: rgba(247, 244, 234, 0.03);
+  border-color: rgba(247, 244, 234, 0.24);
+}
+
+html[data-shell="phone"] .megafire-timeline-stop[data-state="ahead"]:hover { color: var(--text-secondary); }

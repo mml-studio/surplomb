@@ -4274,7 +4274,7 @@ const PEER_TAXONOMY = Object.freeze([
   },
 ]);
 
-function makePeerPanel() {
+function makePeerPanel({ taxonomy = PEER_TAXONOMY, categories = PEER_CATEGORIES } = {}) {
   const originalDocument = globalThis.document;
   const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   // The on-map key is mounted too: this row's member switches live there.
@@ -4294,7 +4294,7 @@ function makePeerPanel() {
   // The antennas carry the two params their tiles switch, as the real module
   // does: whether the masts are drawn, and which coverage is painted.
   const antennaParams = { coverage: 'off', masts: true };
-  for (const { id } of PEER_TAXONOMY) {
+  for (const { id } of taxonomy) {
     const { module } = makeSlowLayer(id, { updateInterval: -1 });
     if (id === 'anfr-fr') {
       module.setParams = (params) => { Object.assign(antennaParams, params); return true; };
@@ -4303,9 +4303,9 @@ function makePeerPanel() {
     mgr.register(module);
   }
   mgr.finalizeRegistrations(
-    PEER_TAXONOMY.map(({ id }) => ({ id, disposition: id === 'anfr-fr' ? 'enabled+options' : 'enabled-only' })),
-    PEER_TAXONOMY,
-    PEER_CATEGORIES,
+    taxonomy.map(({ id }) => ({ id, disposition: id === 'anfr-fr' ? 'enabled+options' : 'enabled-only' })),
+    taxonomy,
+    categories,
   );
   const container = makePanelElement();
   mgr.buildTogglePanel(container);
@@ -4363,6 +4363,93 @@ function makePeerPanel() {
     },
   };
 }
+
+/**
+ * « Incendies »: the same key tiles, as MODES (`exclusive` in the real table).
+ * Shipped ids again, for the same reason as above.
+ */
+const FIRE_TAXONOMY = Object.freeze([
+  {
+    id: 'local-firms',
+    category: 'risks',
+    label: 'Incendies',
+    kind: 'dataset',
+    coverage: 'global',
+    scopeChip: null,
+    companions: [{ id: 'gironde-megafire-2026', chip: 'Grands incendies', title: 'Rejouer', optIn: true }],
+    fusedInto: null,
+  },
+  {
+    id: 'gironde-megafire-2026',
+    category: 'risks',
+    label: 'Gironde · été 2026',
+    kind: 'dataset',
+    coverage: 'fr',
+    scopeChip: null,
+    companions: null,
+    fusedInto: 'local-firms',
+  },
+]);
+
+test('« Incendies » is two modes: pressing one tile puts the other out', async () => {
+  const panel = makePeerPanel({
+    taxonomy: FIRE_TAXONOMY,
+    categories: [{ id: 'risks', label: 'RISQUES & ENVIRONNEMENT', icon: '⚠' }],
+  });
+  const pressed = () => panel.tiles().map((tile) => tile.attributes['aria-pressed']);
+  try {
+    // The row's toggle lights the live detections alone: the replay is opt-in.
+    await panel.mgr._setRowEnabled('local-firms', true);
+    panel.mgr._refreshTogglePanel();
+    assert.deepEqual(panel.tiles().map((tile) => tile.dataset.tileLayer), ['local-firms', 'gironde-megafire-2026']);
+    assert.deepEqual(pressed(), ['true', 'false']);
+
+    // « Grands incendies »: the replay comes on, the live detections go.
+    await panel.pressTile('gironde-megafire-2026');
+    await panel.settle();
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('gironde-megafire-2026'), true);
+    assert.equal(panel.mgr.isEnabled('local-firms'), false);
+    assert.deepEqual(pressed(), ['false', 'true']);
+
+    // And back — with the live detections SLOW to load, as they are over the
+    // network. The replay goes out at once; the row must not drop out of the
+    // key for the second the other mode takes, and the pressed tile lights
+    // on the press, not on the data.
+    const live = panel.mgr.layers.get('local-firms').module;
+    const enable = live.enable;
+    let release = null;
+    live.enable = (...args) => new Promise((resolve) => {
+      release = () => resolve(enable.apply(live, args));
+    });
+    await panel.pressTile('local-firms');
+    await panel.settle();
+    panel.mgr._refreshTogglePanel();
+    let midSwitch;
+    try {
+      midSwitch = { replayOn: panel.mgr.isEnabled('gironde-megafire-2026'), pressed: pressed() };
+    } finally {
+      // Released before asserting: a failed check must not leave the enable
+      // pending and the run hanging.
+      release?.();
+      await panel.settle();
+      live.enable = enable;
+    }
+    assert.equal(midSwitch.replayOn, false);
+    assert.deepEqual(midSwitch.pressed, ['true', 'false'], 'both tiles stay in the key, the pressed one lit');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('local-firms'), true);
+    assert.equal(panel.mgr.isEnabled('gironde-megafire-2026'), false);
+
+    // Putting the lit mode out touches nothing else: no mode is also a state.
+    await panel.pressTile('local-firms');
+    await panel.settle();
+    assert.equal(panel.mgr.isEnabled('local-firms'), false);
+    assert.equal(panel.mgr.isEnabled('gironde-megafire-2026'), false);
+  } finally {
+    await panel.restore();
+  }
+});
 
 test('a fused subject is ONE chip on the strip, named after its row', async () => {
   const panel = makePeerPanel();

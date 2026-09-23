@@ -2,6 +2,66 @@
 
 Updated: September 23, 2026
 
+> **2026-09-23 — « Incendies » replaces « Feux actifs (FIRMS) »: two mode
+> tiles, and the Gironde fire of July 2026 replays as three rings of light.**
+>
+> - **The row.** `local-firms` keeps the row, named « Incendies » / "Fires"
+>   (`layerTaxonomy.i18n.js`); its fusion (`layerFusions.js`, entry 16) is now
+>   `tiles` + `primaryToggle` + the new `exclusive`: « Détections récentes »
+>   (`flame`, `#ffa500`) and « Grands incendies » (`rotate-ccw-clock`,
+>   `#ff4a36`) are tiles in the key, and pressing a dark one puts the other out
+>   first (`manager._putOutOtherModes`, by visibility INTENT, so two quick
+>   presses never leave both lit). Every tiled row now keeps its block in the
+>   key while a member is on OR ON ITS WAY, and a whole-layer tile lights on
+>   the press (`manager._memberWanted`): switching modes used to empty the key
+>   for the second the new mode loaded. The row's toggle still lights the live
+>   detections alone (the replay stays `optIn`). A tile label may wrap to two
+>   lines (`.map-legend-tile-label`). The FIRMS source line reads « NASA FIRMS
+>   · 24 h », not « LIVE ».
+> - **Grands incendies** (`gironde-megafire-2026`, named « Gironde · été
+>   2026 »). Pressing its tile (a `user` or `voice` origin) brings Dusk
+>   (`ROW_PRESETS`) and Satellite (`ROW_BASEMAPS`, `ign-ortho`) — a member of a
+>   row can now be keyed there alone — and `ui.js` calls the layer's new
+>   `onReaderEnable()`, which flies the camera to a low oblique view over the
+>   scar (heading 16°, pitch −34°, aimed a little right of the scar so the key
+>   does not cover it). A share link or a session keeps its own camera.
+> - **What it draws** (`girondeMegafire.js`). Three rings from `bands.json`
+>   (`scripts/build-gironde-megafire-bands.mjs`, method in DATA_SOURCES.md):
+>   for each band a translucent fill (one `GroundPrimitive`, one colour, α 0.40
+>   / 0.30 / 0.22) and a dark casing + halo + core ring
+>   (`GroundPolylinePrimitive`s with a `Color` material whose halo alpha flares
+>   for 1.3 s when the ring appears), laid down LATEST FIRST and by kind (all
+>   casings, then halos, then cores), so where two regions share an edge it
+>   shows the earlier zone's colour and every zone keeps a whole outline; the
+>   regions reach the scar's own edge (the build divides the band blur by the
+>   blurred footprint); the 9 524 FIRMS
+>   detections as one `PointPrimitiveCollection` sorted by paced position
+>   (a cursor move is a binary search), 2.1 px at α 0.42 in their band's colour,
+>   flashing to 7 px ivory for 0.12 of a stage as the replay reaches them; the
+>   EFFIS perimeter dashed (`PolylineDash`) on the finished state only; one
+>   date label per ring on the world overlay (source
+>   `gironde-megafire-bands`, anchors from `bands.json`). No Copernicus fill,
+>   front, flame or smoke is drawn any more: `megafireFire.js` and
+>   `megafireFireMath.js` are deleted.
+> - **The replay.** `megafireClock.js` takes `segments` (the three band ends)
+>   and gives each the same share of an 18 s playthrough, time linear inside
+>   each (`position` 0…3; `seekMegafireSegment` parks at a stage's end). The
+>   bar is `megafireTimeline.js` (`#megafire-timeline`, style.css and
+>   phone.css « THE MEGAFIRE REPLAY BAR »): fixed above the nav bar, width
+>   `clamp(420px, 100vw − 800px, 880px)`, date and detection count on the
+>   left, Lire / Pause / Reprendre / Rejouer and ‹ › on the right, three stops
+>   and « Fin des détections ». While it is mounted `<html>` carries
+>   `megafire-timeline-open` (the place chip hides) and the world overlay
+>   keeps labels off it. A stop or an arrow parks the replay at that stage's
+>   end and eases the camera over it; « Rejouer » from the end reframes the
+>   whole scar. The key (`legendTitle` « Gironde · été 2026 », a new manager
+>   field that names a block other than by its tile) does not change while
+>   the replay runs.
+> - **Proof.** `npm run qa:gironde-megafire` (rewritten, 34 checks: the mode
+>   tiles by DOM click, Dusk and Satellite, the oblique arrival, one colour per fill, causal
+>   detections at a stop, governor held while playing and released after the
+>   last flare, arrows, switch-off).
+
 > **2026-09-23 — on a desktop the mic rests in the bottom-right corner as
 > « Parler à Surplomb », and opens into a card only while it is used.**
 >
@@ -2968,7 +3028,8 @@ its criteria cannot be silently ignored.
 | Datacenters ▣ | OSM extract (bundled, 4 351 objects) — the footprint is drawn where it is, in WORLD METRES, and the anchor dot drops from 10 px to 6 px so size stops being the channel. Four marks, measured on the pack: extruded volume 461 (10.6 %), flat slab 2 739 (63.0 % — the A1 sign for “footprint known, height unknown”), site outline 317 (7.3 %), hollow ring with no footprint 834 (19.2 %). Height is read from `height` first (154 objects) then converted from `building:levels` (374) by a MEASURED factor: the 59 objects carrying both give a median 5.0 m per level (p25 4.0, p75 6.7) — a data hall, not an office floor. A site outline is NEVER extruded, even where a mapper put a height on it (5 cases) | `src/data/localLayers.js`, `src/data/datacentersPack.js`, `src/data/localGeojson.js` | — | static |
 | Barrages & digues ▰ | OSM via Overpass for France + a 69-feature OpenInfraMap tail elsewhere (bundled, **6 840 features**) — `height` is MEASURED at 143 of 6 840 (2.09 %) and therefore REFUSED, with the refusal locked by an assertion. The size channel carries `spanM` instead, the longest dimension measured on the geometry at build time, present on 5 328 (77.89 %), 25 m → 6 399 m (median 100, p95 539), in CONSTANT SCREEN PIXELS — four frozen span classes (100/300/1 000 m) at 18/13/9/6 px plus a hollow 8 px ring for the 1 512 unmeasured (22.1 %). **The row was renamed and simplified on 2026-09-14**: 1 267 of its French features are digues, so the name says so; the 592 hydroelectric stations its world half held moved to `world_hydro/` and the *Centrales hydro* layer; and the second chip row (TOUS/NOMMÉS/GRANDS) was deleted, because GRANDS kept 494 features of which only 65 carry a height — it was a hydro filter wearing a size label. Thinning is the zoom's job now, via a per-tier `markerMaxDistance` (900 km / 3 000 km / orbit). One chip row left: TOUS / BARRAGES / DIGUES | `src/data/localLayers.js`, `src/data/damsPack.js`, `src/data/localGeojson.js` | — | static |
 | Submarine Cables ◠ | TeleGeography public map (in the checkout, served by the server; withheld where `GEV_NONCOMMERCIAL_SOURCES=off`) | `src/data/telegeographySubmarineCables.js` | `/api/submarine-cables` | static |
-| FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
+| Incendies — Détections récentes ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
+| Incendies — Grands incendies (Gironde · été 2026) 🜂 | Frozen pack: Copernicus EMS EMSR899, EFFIS, 9 524 FIRMS detections, and `bands.json` (three day-of-burning rings) | `src/data/girondeMegafire.js`, `megafireClock.js`, `megafireTimeline.js` | none (bundled) | static |
 
 `src/data/militaryAwareness.js` remains registered internally as the Contacts
 coordinator, but it is not a user-visible Data Layers entry. Its visible entry
