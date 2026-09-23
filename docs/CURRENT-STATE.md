@@ -84,6 +84,53 @@ Updated: September 23, 2026
 >   row and the `fly_to_location` enum (tool schema re-frozen: 38 327 bytes).
 > - **Removed:** `#style-indicator` (STYLE ACTIF).
 
+> **2026-09-23 — a Lyon camera plays its last hour; the camera panel is plain
+> French and carries its own key.**
+>
+> - **Recording.** `src/data/cctvTimelapse.js`, driven from `cctvProxy()`,
+>   records every catalog camera flagged `timelapse: true` (today the Grand
+>   Lyon Criter pack, set in `normalizeGrandLyonCamera`): one fetch a minute
+>   per camera, placeholder / truncated / byte-identical frames skipped, a
+>   640-pixel JPEG (sharp, q68 mozjpeg, 34–54 KB) written to
+>   `.gev-cache/cctv-timelapse/<id>/<t>.jpg`, pruned past 60 minutes, and
+>   re-indexed from disk at start so a redeploy keeps the hour. Frames are on
+>   disk only; memory holds the index. `CCTV_TIMELAPSE` = `on-demand`
+>   (default: armed by any frame or timelapse request for such a camera, for
+>   `CCTV_TIMELAPSE_WARM_MIN`, 180 min), `always` (set in
+>   `deploy/vps/docker-compose.yml`, ≈ 7.3 GB/day inbound) or `off`;
+>   `CCTV_TIMELAPSE_WINDOW_MIN` sets the hour. sharp is loaded lazily and the
+>   recorder stays off if it cannot load.
+> - **Serving.** `GET /api/cctv/timelapse/<id>` → `{ id, recording, mode,
+>   windowMs, intervalMs, from, to, lastOutcome, frames: [{ t, url }] }`,
+>   `no-store`; 404 `{ timelapse: false }` for a camera without a recording
+>   (or with recording off). `lastOutcome` is the last attempt's result
+>   (`stored`, `duplicate`, `placeholder`, `truncated`, `failed`…): CWL7033
+>   (placeholder) and CWL5801 (truncated) never store a frame, and the panel
+>   promises nothing for them. `GET /api/cctv/timelapse/<id>/<t>.jpg` → the
+>   stored copy, `public, max-age=86400, immutable`, so a reader who comes
+>   back downloads only the new minutes. `/api/cctv/sources` rows carry
+>   `timelapse: true` while recording is possible; `/api/cctv/health` gains
+>   the recorder's `timelapse` stats. The source disk cache is now
+>   `schema: 2`, so the first boot after this change pulls the catalog cold
+>   (≈ 11 s) rather than serve rows without the flag.
+> - **Playback.** `src/cctvTimelapsePlayer.js` draws the loop on
+>   `#cctv-timelapse-canvas`, over the live `#cctv-frame` that keeps
+>   refreshing underneath (AGRANDIR and the in-world projection still read
+>   it): 8 frames/s, 2 s on the newest, play/pause, a scrubber between the
+>   first and last clock times, the frame's time top-left. Five frames
+>   minimum; below that the panel says the timelapse is being built. The
+>   manifest is re-read every minute; nothing is drawn or fetched while the
+>   panel is folded, the tab hidden or the layer off. `prefers-reduced-motion`
+>   opens paused on the newest frame.
+> - **Panel.** The camera's name heads the panel; `#cctv-meta` reads
+>   « <publisher> · direction connue / inconnue (cône en pointillé) » (OSM
+>   cameras: « Repérée sur OpenStreetMap »); the badge reads EN DIRECT /
+>   ACCÉLÉRÉ / STREET VIEW · PAS D’IMAGE PUBLIQUE / IMAGE · INDISPONIBLE.
+>   `#cctv-key` carries the cone key in one sentence, and `cctvLayer` no
+>   longer has `getRowControls()`, so the map legend has no camera block. The
+>   calibration block, the CAL chip and `#cctv-summary` are `hidden` (the
+>   voice `adjust` action and saved calibrations still work).
+
 > **2026-09-22 — the hosted switch covers Google News RSS, the Street View
 > CCTV fallback and the TeleGeography cable map too; the CCTV route no longer
 > takes coordinates from the request.**
@@ -2757,7 +2804,7 @@ its criteria cannot be silently ignored.
 | Aéroports ✈ | OurAirports (public domain, bundled) — **7,466 fields**, from Roissy's 4,215 m to an 82 m strip at La Tour-du-Pin. Worldwide: every large and medium airport plus everything selling a scheduled seat; in France the whole long tail — 1,337 fields across métropole and outre-mer, altiports, hydrobases and one balloon field included. **Second publisher, second licence:** 418 French fields also carry the aerodrome boundary the IGN surveys in **BD TOPO® (Licence Ouverte 2.0, the Etalab Open License, attribution required)**, downloaded by the same build from `data.geopf.fr/wfs/ows` and joined on the ICAO code (377) or on the field's point falling inside an unkeyed outline (41) — 0 shared, 0 refused on the 5 km anchor guard, worst kept offset 1,382 m. **213 fields gain a shape they did not have**, 207 of them aéroclubs, which is the tier upstream georeferenced at 8 %. Drawn as one terrain-clamped wash for all 418 (a batched ground primitive colours by bounding rectangle) with its own 8 px screen floor, so the outline goes away between 24 km and 1,208 km depending on its size while the pastille keeps the tier's longer range; the anchor stays on the published reference point. Refused: héliports (704 of the IGN layer's 1,370 objects), anything under 1 ha (219, of which 205 are BD TOPO's 5.2 m placeholder square), and 30 outlines — 1,457 ha, mostly military, largest Lann Bihoué at 767 ha — that match no packed field | `src/data/localLayers.js`, `src/data/airportsPack.js` | — | static |
 | Ports ⚓ | NGA *World Port Index* (US public domain, bundled) — 2,951 ports | `src/data/localLayers.js` | — | static |
 | Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js`, `src/data/trafficFlowCard.js` | `/api/overpass` + `/api/tomtom` | viewport-driven; live flow also re-fetched every 125 s on a parked view (5 per camera load) |
-| CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback at the server's own camera position (none where `GEV_NONCOMMERCIAL_SOURCES=off`) | `src/data/cctv.js` | `/api/cctv` + `/api/osm-cameras` | 10s (active) |
+| CCTV | Austin + Caltrans (CA) + TfL London + Métropole de Lyon Open Data (+ opt-in viewport-loaded OSM mapped positions) + Street View fallback at the server's own camera position (none where `GEV_NONCOMMERCIAL_SOURCES=off`); Lyon cameras also play their last recorded hour | `src/data/cctv.js`, `src/cctvTimelapsePlayer.js`, `src/data/cctvTimelapse.js` | `/api/cctv` (incl. `/api/cctv/timelapse`) + `/api/osm-cameras` | 10s (active); timelapse 60 s |
 | Radio | Radio Browser (public-domain station directory) | `src/data/radio.js` | `/api/radio/stations`, `/api/radio/click/:uuid` | 45 min directory refresh |
 | Bikeshare 🚲 | GBFS (Lyft + BCycle, plus Vélib', Vélo'v, vélÔToulouse, Le Vélo TBM). A dock is a dark disc ringed in its network's hue holding a core of that hue as large as it is full (`mobilityDockMark`: core 0.62 / 0.36 of the disc, none when nearly empty, grey disc for no data or closed — two `PointPrimitive`s under one id, the core added after the disc); it stands on the shared floor (`cachedGroundFloor`, else `provisionalFloor`, re-placed by bounded retries as floors land) — until 2026-09-21 a raw `scene.sampleHeight` put all 1,518 Paris docks 46-48 km underground whenever the fleets' layer was on. While the shared fleets draw their groups, its available bikes are counted into them and the dot is not drawn (`mobilityDockBridge.js`), and the layer then stays loaded up to 250 km instead of 50 km. Its block in the « Mobilités partagées » key names each network in view in its ring colour and explains the dock levels — the only block of the row that does (`publishMobilityDockKey`) — and it repaints the key when a proximity pass settles; it takes the row's fanned-out `operator` and `kinds` filters and hides docks by `point.show`, no rebuild | `src/data/bikeshare.js` | `/api/gbfs` | 60s |
 | Transit FR 🚌 | transport.data.gouv.fr GTFS-Realtime vehicle positions (~150 French networks; observed footprints in `config/pan_gtfs_rt_feeds.json`), enriched per vehicle with the same networks' `TripUpdate` deviations (150 feeds, 63 in the same body) and `Alert` disruptions (63 feeds) — join rules in `src/data/transitSchedule.js`, companion resources measured into the index — plus, for the SELECTED vehicle, that network's static GTFS GeoJSON conversion for the line's trace and the ordered stops of the run (`config/pan_gtfs_static.json`) | `src/data/transitFrance.js`, `src/data/transitRouteView.js` | `/api/transit-fr/vehicles`, `/api/transit-fr/feeds`, `/api/transit-fr/trip` | 15s fleet, viewport-driven below ~300 km; 25s for the selected run; trip-update bodies cached 45 s and shared by both, alerts 5 min |

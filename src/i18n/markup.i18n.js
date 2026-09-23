@@ -430,6 +430,13 @@ export default defineMessages({
     },
     saveCal: { fr: 'ENREGISTRER', en: 'SAVE CAL' },
     resetCal: { fr: 'RÉINITIALISER', en: 'RESET CAL' },
+    timelapsePause: { fr: 'Mettre l’accéléré en pause', en: 'Pause the timelapse' },
+    timelapseScrub: { fr: 'Moment affiché dans l’accéléré', en: 'Moment shown in the timelapse' },
+    key: {
+      fr: 'Chaque cône montre ce que filme une caméra ; en pointillé, sa direction est inconnue.',
+      en: 'Each cone shows what a camera films; dashed, its direction is unknown.',
+      note: 'The map key for the camera cones, shown inside the camera panel instead of the map legend.',
+    },
     sceneSummary: { fr: 'RÉSUMÉ DE SCÈNE', en: 'SCENE SUMMARY' },
     summaryIdle: {
       fr: 'Activez les caméras pour obtenir des résumés liés à la caméra.',

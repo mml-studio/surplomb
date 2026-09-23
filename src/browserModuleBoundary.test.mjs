@@ -31,6 +31,8 @@ function browserModules(directory = SRC_ROOT) {
 const SERVER_ONLY = new Map([
   ['data/vigicruesFeed.js', 'node:crypto, for the geometryVersion hash the /api/vigicrues proxy stamps'],
   ['data/amenitiesPack.js', 'node:fs/zlib, for the BPE fold and the sharded pack the /api/amenities-fr proxy reads'],
+  ['data/cctvFrameChecks.js', 'node:crypto, for the placeholder-frame digest the /api/cctv proxy and the timelapse recorder check'],
+  ['data/cctvTimelapse.js', 'node:fs, for the recorded camera frames the /api/cctv/timelapse routes serve'],
   ['trialQuota.js', 'node:crypto, for the HMAC that signs the hosted trial cookie'],
   ['vrsStandingData.js', 'node:fs/zlib, for the daily VRS standing-data tarball the /api/flight-info proxy answers from'],
 ]);
@@ -59,8 +61,11 @@ test('a server-only exemption lapses the moment a browser module imports it', ()
   for (const [relative, why] of SERVER_ONLY) {
     const absolute = path.join(SRC_ROOT, relative);
     const specifier = path.basename(relative);
+    // A server-only module importing another (the timelapse recorder reads
+    // the frame checks) is still server-side: only browser importers count.
     const importers = browserModules()
       .filter((file) => file !== absolute)
+      .filter((file) => !SERVER_ONLY.has(path.relative(SRC_ROOT, file).split(path.sep).join('/')))
       .filter((file) => new RegExp(`(?:from|import\\()\\s*['"][^'"]*\\b${specifier.replace('.', '\\.')}['"]`)
         .test(readFileSync(file, 'utf8')))
       .map((file) => path.relative(SRC_ROOT, file).split(path.sep).join('/'));

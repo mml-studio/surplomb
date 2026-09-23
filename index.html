@@ -1429,14 +1429,34 @@
                 data-i18n-title="panel.collapse" title="Replier le panneau"
                 data-i18n-aria-label="panel.collapse" aria-label="Replier le panneau">+</button>
       </div>
+      <div id="cctv-camera-name" class="cctv-camera-name" hidden></div>
       <div id="cctv-frame-wrap" class="cctv-frame-wrap" role="button" tabindex="0"
            data-i18n-aria-label="cctv.openFull" aria-label="Ouvrir l’image de la caméra en pleine résolution"
            data-i18n-title="cctv.openFullTitle" title="Cliquer pour voir en pleine résolution">
         <img id="cctv-frame" data-i18n-alt="cctv.frameAlt" alt="Image du flux de la caméra" />
+        <!-- The last hour, drawn over the live frame (src/cctvTimelapsePlayer.js).
+             The <img> underneath keeps refreshing: it is what AGRANDIR opens
+             and what the projection in the world reads. -->
+        <canvas id="cctv-timelapse-canvas" class="cctv-timelapse-canvas" aria-hidden="true"></canvas>
+        <span id="cctv-timelapse-clock" class="cctv-timelapse-clock" aria-hidden="true" hidden></span>
         <span class="cctv-frame-expand-hint" aria-hidden="true" data-i18n="cctv.expand">AGRANDIR</span>
+      </div>
+      <div id="cctv-timelapse" class="cctv-timelapse" hidden>
+        <div class="cctv-timelapse-bar">
+          <button id="cctv-timelapse-toggle" class="cctv-timelapse-toggle" type="button"
+                  data-i18n-aria-label="cctv.timelapsePause" aria-label="Mettre l’accéléré en pause">❚❚</button>
+          <span id="cctv-timelapse-from" class="cctv-timelapse-time">--:--</span>
+          <input id="cctv-timelapse-scrub" class="cctv-timelapse-scrub" type="range" min="0" max="0" step="1" value="0"
+                 data-i18n-aria-label="cctv.timelapseScrub" aria-label="Moment affiché dans l’accéléré" />
+          <span id="cctv-timelapse-to" class="cctv-timelapse-time">--:--</span>
+        </div>
+        <div id="cctv-timelapse-note" class="cctv-timelapse-note" role="status" aria-live="polite"></div>
       </div>
       <div id="cctv-source-badge" role="status" aria-live="polite" data-i18n="cctv.sourceUnknown">SOURCE · INCONNUE</div>
       <div id="cctv-meta" data-i18n="cctv.enableToLoad">Activez les caméras pour charger les carrefours équipés</div>
+      <!-- What the cones on the map mean. It used to be a second window, the
+           map legend; it lives here now, next to the camera it explains. -->
+      <div id="cctv-key" class="cctv-key" data-i18n="cctv.key" hidden>Chaque cône montre ce que filme une caméra ; en pointillé, sa direction est inconnue.</div>
       <div class="cctv-controls">
         <button id="cctv-enable-btn" class="scene-btn" data-i18n="cctv.off">CAMÉRAS ÉTEINTES</button>
         <button id="cctv-nearest-btn" class="scene-btn" data-i18n="cctv.nearest">LA PLUS PROCHE</button>
@@ -1453,9 +1473,13 @@
       </div>
       <div class="cctv-controls">
         <button id="cctv-projection-btn" class="scene-btn" data-i18n="cctv.projectionOn">PROJECTION ACTIVE</button>
-        <span id="cctv-quality-chip" translate="no">CAL · --</span>
+        <span id="cctv-quality-chip" translate="no" hidden>CAL · --</span>
       </div>
-      <div class="cctv-calibration-block">
+      <!-- Calibration lines the drawn cone and the projected picture up with
+           the real view: it moves the DRAWING, saved in this browser only,
+           never the camera. It read as if a visitor could steer the camera,
+           so it is hidden; the voice `adjust` action still reaches it. -->
+      <div class="cctv-calibration-block" hidden>
         <div class="cctv-calibration-header">
           <div class="cctv-summary-label" data-i18n="cctv.calibration">CALIBRAGE</div>
           <button id="cctv-adjust-btn" class="scene-btn"
@@ -1490,8 +1514,10 @@
           <button id="cctv-calib-reset-btn" class="scene-btn" data-i18n="cctv.resetCal">RÉINITIALISER</button>
         </div>
       </div>
-      <div class="cctv-summary-label" data-i18n="cctv.sceneSummary">RÉSUMÉ DE SCÈNE</div>
-      <div id="cctv-summary" data-i18n="cctv.summaryIdle">Activez les caméras pour obtenir des résumés liés à la caméra.</div>
+      <!-- Still composed in `getUIState().summary`, no longer shown: it was
+           an English line of headings, fields of view and CAL badges. -->
+      <div class="cctv-summary-label" data-i18n="cctv.sceneSummary" hidden>RÉSUMÉ DE SCÈNE</div>
+      <div id="cctv-summary" data-i18n="cctv.summaryIdle" hidden>Activez les caméras pour obtenir des résumés liés à la caméra.</div>
     </div>
   </div>
 

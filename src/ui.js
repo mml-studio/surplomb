@@ -286,6 +286,7 @@ function bindCockpitLayers(dataManager) {
 
 import { initLocaleSwitch } from './localeSwitch.js';
 import { initHomeLink } from './homeLink.js';
+import { createCctvTimelapsePlayer, formatTimelapseClock } from './cctvTimelapsePlayer.js';
 import messages from './ui.i18n.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
@@ -2677,6 +2678,30 @@ export class StyleManager {
     this._cctvSourceBadge = document.getElementById('cctv-source-badge');
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
+    this._cctvCameraName = document.getElementById('cctv-camera-name');
+    this._cctvKey = document.getElementById('cctv-key');
+    this._cctvTimelapseBox = document.getElementById('cctv-timelapse');
+    this._cctvTimelapseCanvas = document.getElementById('cctv-timelapse-canvas');
+    this._cctvTimelapseClock = document.getElementById('cctv-timelapse-clock');
+    this._cctvTimelapseToggle = document.getElementById('cctv-timelapse-toggle');
+    this._cctvTimelapseScrub = document.getElementById('cctv-timelapse-scrub');
+    this._cctvTimelapseFrom = document.getElementById('cctv-timelapse-from');
+    this._cctvTimelapseTo = document.getElementById('cctv-timelapse-to');
+    this._cctvTimelapseNote = document.getElementById('cctv-timelapse-note');
+    this._cctvTimelapseState = null;
+    this._cctvTimelapse = this._cctvTimelapseCanvas
+      ? createCctvTimelapsePlayer({
+        canvas: this._cctvTimelapseCanvas,
+        reducedMotion: !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,
+        // Folded panel, hidden tab or switched-off layer: the loop neither
+        // draws nor downloads, and picks up where it was on return.
+        isVisible: () => !document.hidden
+          && !!this._cctvState?.enabled
+          && !this._cctvPanel?.hidden
+          && !this._cctvPanel?.classList.contains('collapsed'),
+        onChange: (state) => this._renderCctvTimelapse(state),
+      })
+      : null;
     this._shareBtn = document.getElementById('share-btn');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
@@ -7037,6 +7062,11 @@ export class StyleManager {
       this._dataManager?.setLayerParams('cctv', { calibrationMode: !current }, { origin: 'user' });
     });
 
+    this._cctvTimelapseToggle?.addEventListener('click', () => this._cctvTimelapse?.toggle());
+    this._cctvTimelapseScrub?.addEventListener('input', () => {
+      this._cctvTimelapse?.seek(Number(this._cctvTimelapseScrub.value));
+    });
+
     // Click-to-edit pose readout: each chip swaps to a number input; Enter or
     // blur commits (converted to a calibration offset against basePose),
     // Escape cancels. Delegated so re-renders never re-bind.
@@ -7322,10 +7352,89 @@ export class StyleManager {
       this._cctvSourceBadge.dataset.frameState = 'error';
       return;
     }
-    const kind = String(activeCamera.sourceKind || activeCamera.feedType || 'unknown').toUpperCase();
-    const status = String(activeCamera.sourceStatus || 'unknown').toUpperCase();
-    this._cctvSourceBadge.textContent = `${kind} · ${status}`;
+    // What the picture IS, in words: the loop, the camera's own still, a
+    // Street View stand-in, or nothing. The proxy's `sourceKind · status`
+    // ("SNAPSHOT · OK") used to be printed as is.
+    if (this._cctvTimelapseState?.status === 'ready') {
+      this._cctvSourceBadge.textContent = m.timelapseBadge;
+      this._cctvSourceBadge.dataset.frameState = 'ready';
+      return;
+    }
+    const kind = String(activeCamera.sourceKind || '').toLowerCase();
+    // A camera mapped on OpenStreetMap publishes no picture: before the first
+    // health sync names the stand-in, the one it can have is Street View.
+    if (kind === 'streetview' || kind === 'osm-camera') {
+      this._cctvSourceBadge.textContent = m.streetView;
+      this._cctvSourceBadge.dataset.frameState = 'ready';
+      return;
+    }
+    if (kind === 'synthetic' || kind === 'unavailable') {
+      this._cctvSourceBadge.textContent = m.frameUnavailable;
+      this._cctvSourceBadge.dataset.frameState = 'error';
+      return;
+    }
+    this._cctvSourceBadge.textContent = m.live;
     this._cctvSourceBadge.dataset.frameState = 'ready';
+  }
+
+  /**
+   * Paints the timelapse controls from the player's state
+   * (src/cctvTimelapsePlayer.js): the bar with its two clock times, the
+   * clock over the picture, and one line saying what is playing.
+   * @param {object} state Player state.
+   * @returns {void}
+   */
+  _renderCctvTimelapse(state) {
+    const statusChanged = this._cctvTimelapseState?.status !== state.status;
+    this._cctvTimelapseState = state;
+    const m = messages().cctv;
+    const ready = state.status === 'ready';
+    const clock = (t) => formatTimelapseClock(t);
+
+    this._cctvFrameWrap?.setAttribute('data-timelapse', ready ? (state.playing ? 'playing' : 'paused') : state.status);
+    if (this._cctvTimelapseCanvas) this._cctvTimelapseCanvas.classList.toggle('active', ready);
+    if (this._cctvTimelapseClock) {
+      this._cctvTimelapseClock.hidden = !ready;
+      this._cctvTimelapseClock.textContent = ready ? clock(state.frameTime) : '';
+    }
+    if (this._cctvTimelapseBox) this._cctvTimelapseBox.hidden = state.status === 'off';
+    const bar = this._cctvTimelapseBox?.querySelector('.cctv-timelapse-bar');
+    if (bar) bar.hidden = !ready;
+    if (ready) {
+      if (this._cctvTimelapseToggle) {
+        this._cctvTimelapseToggle.textContent = state.playing ? '❚❚' : '▶';
+        this._cctvTimelapseToggle.setAttribute('aria-label', state.playing ? m.timelapsePause : m.timelapsePlay);
+        this._cctvTimelapseToggle.title = state.playing ? m.timelapsePause : m.timelapsePlay;
+      }
+      if (this._cctvTimelapseScrub) {
+        this._cctvTimelapseScrub.max = String(Math.max(0, state.count - 1));
+        this._cctvTimelapseScrub.value = String(state.index);
+        this._cctvTimelapseScrub.setAttribute('aria-valuetext', clock(state.frameTime));
+      }
+      if (this._cctvTimelapseFrom) this._cctvTimelapseFrom.textContent = clock(state.from);
+      if (this._cctvTimelapseTo) this._cctvTimelapseTo.textContent = clock(state.to);
+    }
+    if (this._cctvTimelapseNote) {
+      let note = '';
+      if (ready) {
+        const minutes = Math.max(1, Math.round((state.to - state.from) / 60_000));
+        note = m.timelapseReady(minutes, state.count);
+      } else if (state.status === 'building') {
+        note = m.timelapseBuilding(state.recorded, clock(state.from));
+      } else if (state.status === 'loading') {
+        note = m.timelapseLoading(state.loaded, state.total);
+      }
+      // Rewritten only when it changes: the region is aria-live, and the
+      // loop repaints eight times a second.
+      if (this._cctvTimelapseNote.textContent !== note) this._cctvTimelapseNote.textContent = note;
+    }
+    // The badge is a live region too: touch it only when the state flips.
+    if (statusChanged && this._cctvSourceBadge && this._cctvState) {
+      this._syncCctvSourceBadge(
+        this._cctvState.activeCamera,
+        !!this._cctvState.enabled && !!this._dataManager?.isEnabled('cctv'),
+      );
+    }
   }
 
   /**
@@ -7593,23 +7702,24 @@ export class StyleManager {
 
     this._syncCctvCalReadout(enabled, activeCamera);
 
+    if (this._cctvCameraName) {
+      const name = enabled && activeCamera ? String(activeCamera.name || '') : '';
+      this._cctvCameraName.textContent = name;
+      this._cctvCameraName.hidden = !name;
+    }
+    if (this._cctvKey) this._cctvKey.hidden = !enabled || cameras.length === 0;
+
     if (this._cctvMeta) {
       const m = messages().cctv;
       if (activeCamera) {
-        const provider = activeCamera.sourceLabel || activeCamera.provider || m.configuredSource;
-        const statusMsg = activeCamera.sourceMessage ? ` · ${activeCamera.sourceMessage}` : '';
-        const calBadge = activeCamera.calBadge ? this._calBadgeLabel(activeCamera.calBadge) : '';
-        const projLabel = state?.showProjection !== false ? m.monitor : m.projectionOffShort;
-        this._cctvMeta.textContent = m.meta(
-          activeCamera.city,
-          Math.round(activeCamera.headingDeg),
-          Math.round(activeCamera.fovDeg),
-          Math.round(activeCamera.rangeM),
-          projLabel,
-          calBadge ? ` · ${calBadge}` : '',
-          provider,
-          statusMsg,
-        );
+        // Who publishes the picture, and whether the cone points the right
+        // way — the two things the map cannot say. Heading, field of view,
+        // range and the CAL badge were here; they described the drawing.
+        const provider = activeCamera.sourceKind === 'osm-camera'
+          ? m.osmProvider
+          : (activeCamera.provider || m.configuredSource);
+        const direction = activeCamera.headingUnsurveyed ? m.directionUnknown : m.directionKnown;
+        this._cctvMeta.textContent = m.plainMeta(provider, direction);
       } else if (cameras.length > 0) {
         this._cctvMeta.textContent = enabled ? m.loadedClick(cameras.length) : m.loadedEnable(cameras.length);
       } else {
@@ -7634,6 +7744,10 @@ export class StyleManager {
       }
     }
 
+    this._cctvTimelapse?.setCamera(enabled ? activeId || null : null, {
+      capable: !!activeCamera?.timelapse,
+    });
+
     this._syncCctvSourceBadge(activeCamera, enabled);
     this._typeCctvSummary(state?.summary || 'Enable CCTV to start camera-linked intelligence summaries.');
   }
@@ -7652,6 +7766,12 @@ export class StyleManager {
     this._lastCctvSummaryText = nextText;
 
     clearInterval(this._cctvSummaryTypingTimer);
+    this._cctvSummaryTypingTimer = null;
+    // Hidden since 2026-09-23 (index.html): no teletype nobody can see.
+    if (this._cctvSummary.hidden) {
+      this._cctvSummary.textContent = nextText;
+      return;
+    }
     this._cctvSummary.textContent = '';
     let idx = 0;
     this._cctvSummaryTypingTimer = setInterval(() => {

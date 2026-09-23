@@ -67,6 +67,8 @@ test('Grand Lyon rows normalize into keyless Lyon camera sources', () => {
   assert.equal(camera.snapshotUrl, camera.url);
   assert.match(camera.license, /Licence Ouverte/);
   assert.match(camera.provider, /Métropole de Lyon/);
+  // Criter publishes only the latest still: the server records the last hour.
+  assert.equal(camera.timelapse, true);
 });
 
 test('Grand Lyon camera names carry the site and the direction it faces', () => {
