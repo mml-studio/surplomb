@@ -526,7 +526,7 @@ export const LAYER_FUSIONS = Object.freeze([
         id: 'anfr-fr',
         part: 'masts',
         icon: 'radio-tower',
-        color: '#ffcb2b',
+        color: '#ffb238',
         on: { masts: true },
         off: { masts: false },
         lit: true,

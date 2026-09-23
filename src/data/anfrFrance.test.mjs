@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 
+import { ANFR_SELECTED_SCALE, anfrGlyphScale } from './anfrGlyphs.js';
 import anfrFranceLayer, {
   ANFR_BAND_COLORS,
   ANFR_FR_LAYER_ID,
@@ -913,8 +914,9 @@ test('the maillage says when the camera is simply not over France', () => {
 test('init builds the three real collections, and the draw path fills them', async () => {
   // The seams above run the card and legend paths with `point: null`. This one
   // runs the production `reconcileSupports` against a real
-  // PointPrimitiveCollection, so the style a test asserts on is the style a
-  // primitive actually receives. The two polyline collections beside it are
+  // BillboardCollection, so the style a test asserts on is the style a
+  // primitive actually receives. (There is no canvas under node, so the
+  // billboards carry no image: what is asserted is their scale.) The two polyline collections beside it are
   // the world-space channel: shafts, and the selected mast's azimuth rays.
   const added = [];
   const viewer = {
@@ -931,7 +933,7 @@ test('init builds the three real collections, and the draw path fills them', asy
   };
   anfrFranceLayer.init(viewer);
   assert.equal(added.length, 3);
-  assert.equal(added[0].constructor, Cesium.PointPrimitiveCollection);
+  assert.equal(added[0].constructor, Cesium.BillboardCollection);
   assert.equal(added[1].constructor, Cesium.PolylineCollection, 'the shafts');
   assert.equal(added[2].constructor, Cesium.PolylineCollection, 'the azimuth rays');
 
@@ -948,12 +950,12 @@ test('init builds the three real collections, and the draw path fills them', asy
 
   const record = _anfrRecordForTest(anfrSupportId(449714));
   assert.ok(record.point, 'the record holds its primitive');
-  assert.equal(record.point.pixelSize, record.style.sizePx);
-  const before = record.point.pixelSize;
+  assert.equal(record.point.scale, anfrGlyphScale(record.style.sizePx));
+  const before = record.point.scale;
   _selectAnfrForTest(record.id);
-  assert.ok(record.point.pixelSize > before, 'selection grows the real primitive');
+  assert.ok(record.point.scale > before, 'selection grows the real primitive');
   _clearAnfrSelectionForTest();
-  assert.equal(record.point.pixelSize, before, 'and clearing restores it');
+  assert.equal(record.point.scale, before, 'and clearing restores it');
 
   anfrFranceLayer.destroy(viewer);
   assert.equal(added.length, 0, 'destroy removes every collection it added');
@@ -986,11 +988,12 @@ test('a reload of the view keeps the selected mast and its card, and lets go onc
   await _loadAnfrViewportForTest(viewer);
   const id = anfrSupportId(449714);
   _selectAnfrForTest(id);
-  const selectedSize = _anfrRecordForTest(id).point.pixelSize;
+  const selectedSize = _anfrRecordForTest(id).point.scale;
+  assert.equal(selectedSize, ANFR_SELECTED_SCALE);
 
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(_anfrSelectedIdForTest(), id, 'still selected after the rebuild');
-  assert.equal(_anfrRecordForTest(id).point.pixelSize, selectedSize, 'and still lit, on its new dot');
+  assert.equal(_anfrRecordForTest(id).point.scale, selectedSize, 'and still lit, on its new dot');
   assert.equal(host.entries?.[0]?.id, id, 'its card is still published');
 
   pack = { ...PACK, supports: PACK.supports.filter((row) => row.id !== 449714) };
