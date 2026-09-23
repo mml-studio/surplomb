@@ -8,16 +8,16 @@ Lyon's is cut into chapters that play in order; the seconds are those of the
 film each chapter comes from. The Roissy and power-grid chapters hold one idea
 each under a title burned in for the README, punch in on the app's card or
 label at about its real size where it carries that idea, and leave out what
-carries none (Roissy's run from Terminal 1, the grid's pull-back and
-switch-off); some of their camera travel plays faster and some cards are held
+carries none (the grid's pull-back and switch-off); some of their camera travel plays faster and some cards are held
 on one frame, as the table says.
 
 | File | Shows | Film seconds | Data drawn |
 |---|---|---|---|
 | `surplomb-hero.gif` | Paris in photorealistic 3D, live traffic street by street (the head of both READMEs) | — | Road traffic layer |
-| `surplomb-roissy-1-live-departure.gif` | Flight LHX27W's take-off in the cockpit view, then a click on it opens its tag, Paris-Charles de Gaulle to Munich; title *A live departure from Paris-CDG* | 8.7–18.5 (roll ×2, pull-back ×3, tag held 2 s) | Live flights (OpenSky Network, adsb.lol); the take-off roll and the speed and altitude on the heads-up display are staged |
-| `surplomb-roissy-2-noise-zones.gif` | The climb to the airport's noise exposure plan; title *The noise zones around Paris-CDG* | 19.3–24.5 (climb ×3, last frame held 1.5 s) | DGAC noise exposure plans via the IGN Géoplateforme |
-| `surplomb-roissy-3-zone-a-card.gif` | Zone A's card at full size; title *Zone A: 70 dB and above, no new homes* | 24.9–27.4 (card held 1.6 s) | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-roissy-1-airport-live-flights.gif` | Terminal 1 at Paris-Charles de Gaulle, then the run to the threshold of runway 09R under the icons of live flights; title *Paris-CDG in 3D, live flights above it* | 1.8–8.6 (Terminal 1 0.8 s, run ×3 then ×2, threshold held 1 s) | Live flights (OpenSky Network, adsb.lol) |
+| `surplomb-roissy-2-live-departure.gif` | Flight LHX27W's take-off in the cockpit view, then a click on it opens its tag, Paris-Charles de Gaulle to Munich; title *A live departure from Paris-CDG* | 8.7–18.5 (roll ×2, pull-back ×3, tag held 2 s) | Live flights (OpenSky Network, adsb.lol); the take-off roll and the speed and altitude on the heads-up display are staged |
+| `surplomb-roissy-3-noise-zones.gif` | The climb to the airport's noise exposure plan; title *The noise zones around Paris-CDG* | 19.3–24.5 (climb ×3, last frame held 1.5 s) | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-roissy-4-zone-a-card.gif` | Zone A's card at full size; title *Zone A: 70 dB and above, no new homes* | 24.9–27.4 (card held 1.6 s) | DGAC noise exposure plans via the IGN Géoplateforme |
 | `surplomb-lyon-dvf-dpe.gif` | Lyon: property sales (DVF), then the energy ratings (DPE) of the same district | 1.6–8.6 | DVF (DGFiP, via Etalab); DPE (ADEME) |
 | `surplomb-grid-1-nuclear-columns.gif` | France's high-voltage grid and nuclear columns light up; title *France's grid and its nuclear plants* | 0.0–3.5 (first frame held 0.5 s) | High-voltage lines (© OpenStreetMap contributors); generating-unit output (RTE); columns drawn wider and three times taller than the app draws them at that scale |
 | `surplomb-grid-2-rhone-valley.gif` | The dive into the Rhône valley, then two plant labels at full size; title *Each plant: output now / capacity* | 3.5–7.8 (dive ×1.5, labels held 1.8 s) | The same, plus plant positions (EDF Open Data) |
@@ -33,8 +33,8 @@ Camera paths, captions and reveal effects were staged for filming; the table
 names the other staged parts. The infrastructure film's last 1.2 s, a
 switch-off and zoom-out that joins its end to its start on the landing page,
 is not included, nor are the power-grid film's last 3.2 s (the pull-back to
-Europe and the switch-off, a film effect) or the Roissy film's first 8.7 s
-(Terminal 1 and the run to runway 09R).
+Europe and the switch-off, a film effect) or the Roissy film's first 1.8 s
+(the camera drifting slowly over Terminal 1).
 
 The Lyon and infrastructure files are 560 px wide, the Roissy and power-grid
 files 640 px (the hero is 480 px). Each chapter plays at the highest of 12,

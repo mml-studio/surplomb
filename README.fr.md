@@ -34,19 +34,23 @@ Quatre films tournés dans l'application, chacun sur des couches ajoutées par c
 
 ### Roissy : le bruit des avions
 
-Le décollage d'un vol en direct à Paris-Charles-de-Gaulle, puis le plan d'exposition au bruit de l'aéroport et la fiche de sa zone A.
+Paris-Charles-de-Gaulle en 3D sous ses vols en direct, le décollage d'un vol en direct, puis le plan d'exposition au bruit de l'aéroport et la fiche de sa zone A.
 
 <div align="center">
 
-![1/3 : dans la vue cockpit du vol LHX27W, l'avion roule sur la piste 09R sous les indicatifs du trafic en direct et décolle ; dehors, la caméra recule et un clic sur l'avion au départ ouvre son étiquette, montrée en taille réelle : LHX27W, 5 975 ft, 272 kts, City Airlines, de CDG à MUC](docs/media/surplomb-roissy-1-live-departure.gif)
+![1/4 : au-dessus du terminal 1 de Paris-Charles-de-Gaulle en 3D photoréaliste, la caméra file à basse altitude au-dessus des voies de circulation jusqu'au seuil de la piste 09R pendant que les icônes des vols en direct remplissent le ciel](docs/media/surplomb-roissy-1-airport-live-flights.gif)
+
+<sub>Secondes 1,8–8,6 du film : le terminal 1 pendant 0,8 s, puis le vol vers la piste joué ×3 et sa fin ×2, et le seuil tenu 1 s. Vols en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
+
+![2/4 : dans la vue cockpit du vol LHX27W, l'avion roule sur la piste 09R sous les indicatifs du trafic en direct et décolle ; dehors, la caméra recule et un clic sur l'avion au départ ouvre son étiquette, montrée en taille réelle : LHX27W, 5 975 ft, 272 kts, City Airlines, de CDG à MUC](docs/media/surplomb-roissy-2-live-departure.gif)
 
 <sub>Secondes 8,7–18,5 du film : la course est jouée ×2 et le recul ×3, et l'étiquette est tenue 2 s sur une image. Mis en scène pour le film : la course au décollage dans la vue cockpit, la vitesse et l'altitude affichées par son viseur tête haute ; le cadre suit l'horizon quand l'avion se cabre. Le vol, son indicatif, son altitude, sa vitesse et sa route sont en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
 
-![2/3 : la caméra s'élève haut au-dessus de l'aéroport et le plan d'exposition au bruit apparaît, ses zones emboîtées dessinées autour des pistes](docs/media/surplomb-roissy-2-noise-zones.gif)
+![3/4 : la caméra s'élève haut au-dessus de l'aéroport et le plan d'exposition au bruit apparaît, ses zones emboîtées dessinées autour des pistes](docs/media/surplomb-roissy-3-noise-zones.gif)
 
 <sub>Secondes 19,3–24,5 du film : la montée est jouée ×3 et la dernière image tenue 1,5 s. Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
 
-![3/3 : un clic dans la zone la plus proche des pistes ouvre sa fiche, montrée en taille réelle : bruit des avions, zone A de Paris-Charles-de-Gaulle, gêne très forte, pas de nouveaux logements, 70 dB(A) et plus en moyenne sur 24 h](docs/media/surplomb-roissy-3-zone-a-card.gif)
+![4/4 : un clic dans la zone la plus proche des pistes ouvre sa fiche, montrée en taille réelle : bruit des avions, zone A de Paris-Charles-de-Gaulle, gêne très forte, pas de nouveaux logements, 70 dB(A) et plus en moyenne sur 24 h](docs/media/surplomb-roissy-4-zone-a-card.gif)
 
 <sub>Secondes 24,9–27,4 du film : la légende est hors cadre et la fiche tenue 1,6 s sur une image. Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
 

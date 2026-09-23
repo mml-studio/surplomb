@@ -46,19 +46,23 @@ Four films shot in the app, each on layers this fork adds; the longer ones are c
 
 ### Roissy: aircraft noise
 
-A live departure's take-off from Paris-Charles de Gaulle, then the airport's noise exposure plan and the card of its zone A.
+Paris-Charles de Gaulle in 3D under its live flights, a live departure's take-off, then the airport's noise exposure plan and the card of its zone A.
 
 <div align="center">
 
-![1/3: in the cockpit view of flight LHX27W, the aircraft rolls down runway 09R under the callsigns of the live traffic around it and lifts off; outside, the camera pulls back and a click on the departing aircraft opens its tag, shown at full size: LHX27W, 5,975 ft, 272 kts, City Airlines, CDG to MUC](docs/media/surplomb-roissy-1-live-departure.gif)
+![1/4: over Terminal 1 at Paris-Charles de Gaulle in photorealistic 3D, the camera flies low across the taxiways to the threshold of runway 09R while the icons of live flights fill the sky](docs/media/surplomb-roissy-1-airport-live-flights.gif)
+
+<sub>Film seconds 1.8–8.6: Terminal 1 for 0.8 s, then the run to the runway ×3 and its last part ×2, and the threshold held 1 s. Live flights: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+
+![2/4: in the cockpit view of flight LHX27W, the aircraft rolls down runway 09R under the callsigns of the live traffic around it and lifts off; outside, the camera pulls back and a click on the departing aircraft opens its tag, shown at full size: LHX27W, 5,975 ft, 272 kts, City Airlines, CDG to MUC](docs/media/surplomb-roissy-2-live-departure.gif)
 
 <sub>Film seconds 8.7–18.5: the roll plays ×2 and the pull-back ×3, and the tag is held 2 s on one frame. Staged for the film: the take-off roll in the cockpit view and the speed and altitude on its heads-up display; the frame follows the horizon down at lift-off. The flight, its callsign, altitude, speed and route are live: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
 
-![2/3: the camera climbs high above the airport and the noise exposure plan appears, its nested zones drawn around the runways](docs/media/surplomb-roissy-2-noise-zones.gif)
+![3/4: the camera climbs high above the airport and the noise exposure plan appears, its nested zones drawn around the runways](docs/media/surplomb-roissy-3-noise-zones.gif)
 
 <sub>Film seconds 19.3–24.5: the climb plays ×3 and the last frame is held 1.5 s. Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
 
-![3/3: a click in the innermost zone opens its card, shown at full size: aircraft noise, zone A of Paris-Charles de Gaulle, very strong nuisance, no new housing, 70 dB(A) and above averaged over 24 h](docs/media/surplomb-roissy-3-zone-a-card.gif)
+![4/4: a click in the innermost zone opens its card, shown at full size: aircraft noise, zone A of Paris-Charles de Gaulle, very strong nuisance, no new housing, 70 dB(A) and above averaged over 24 h](docs/media/surplomb-roissy-4-zone-a-card.gif)
 
 <sub>Film seconds 24.9–27.4: the key is cropped out and the card is held 1.6 s on one frame. Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
 
