@@ -430,9 +430,10 @@ function fillLevelOf(row) {
 // ── WHAT EVERY CAMERA REST PAID FOR, AND DID NOT NEED TO ────────────────────
 // The antennas call the world pick on every camera rest, over the whole
 // national mesh. In the browser, at 4× CPU throttling on the reference
-// ThinkCentre, a France-wide view spent 197 ms of main thread per rest in it
-// (2026-09-23; a rest can run the pick twice, see `anfrFrance.js`): the hitch a
-// reader feels each time the camera stops.
+// ThinkCentre, a France-wide view spent 289 ms of main thread per rest in it
+// (2026-09-23, eight rests; a rest can run the pick twice): the hitch a reader
+// feels each time the camera stops. With the index below, 79 ms, measured
+// interleaved with the linear version on the same machine.
 //
 // Three quarters of it recomputed things that do not depend on the view. A
 // row's cell at the finest step and its fill level are functions of the row

@@ -513,8 +513,9 @@ function dressSelected(billboard) {
 // since its last rebuild: a one-off write of `show` or `position` flips those
 // attributes to STREAM_DRAW, which is a full vertex rebuild, and the next
 // frame with no write flips them back to STATIC_DRAW, which is a second one.
-// Measured with a pool, interleaved with the former code on the same machine:
-// two rebuilds per rest instead of one, 55 ms of them over Paris against 46.
+// Measured with a pool, interleaved with the former code on the same machine
+// (under a heavy concurrent load): two rebuilds per rest instead of one, 55 ms
+// of them over Paris against 46.
 // An `add` or `remove` instead marks the collection for ONE rebuild that zeroes
 // the write counts, so the rest's writes all ride on it — and the newcomers,
 // a few hundred at most on a pan, are cheap to build (≈ 7 µs each at 4×
@@ -1158,9 +1159,9 @@ function clearMastField() {
  * table without a rebuild, and keeps a position buffer it has streamed for 100
  * quiet frames before turning it static again, so the pool costs it none of
  * the double rebuild it costs a `BillboardCollection`. Measured before this:
- * over Paris at 2.5 km (≈ 345 shafts), 36 ms of main thread per rest at 4× CPU
+ * over Paris at 2.5 km (≈ 345 shafts), 20 ms of main thread per rest at 4× CPU
  * throttling, every shaft's positions and colour rewritten, twice; with it,
- * 15 ms, interleaved on the same machine.
+ * 5 ms, interleaved on the same machine.
  *
  * ONE COLLECTION PER APPEARANCE is what lets a slot be reused by identity
  * without losing the batching. Cesium breaks a draw command whenever two
