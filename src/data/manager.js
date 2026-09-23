@@ -15,6 +15,8 @@ import {
   layerDarkAreaAt,
 } from './layerCoverage.js';
 import { formatAge, formatNumber } from '../i18n/format.js';
+import { getLocale } from '../i18n/locale.js';
+import { writeAttribute, writeProperty, writeText } from './domWrite.js';
 import messages from './manager.i18n.js';
 
 function cloneLayerParams(value) {
@@ -130,6 +132,46 @@ function legendFocusKeyIn(list) {
   const key = active?.dataset?.focusKey;
   if (!key) return null;
   return typeof list.contains === 'function' && list.contains(active) ? key : null;
+}
+
+/**
+ * Everything the on-map key is drawn from, as one string: two passes with the
+ * same signature draw the same key, node for node.
+ *
+ * The rows are the model `_refreshMapLegend` renders, whole — entries,
+ * segments, tiles, scope, selection — with one substitution: a member's
+ * `layer` is the `getAll()` projection, whose `stats` move on every tick
+ * (`lastUpdate`, a loading flag) without the key printing any of it, so it
+ * enters as the two things the key does print, its id and its name. The
+ * locale is in because `legendScopeLabel` and the card's close button read
+ * the catalog at paint time, not from the rows.
+ *
+ * What is deliberately NOT in: the open state of a card's list, which the
+ * reader changes on the live `<details>` and the manager only mirrors
+ * (`_legendSelectionListOpen`) — putting it in would rebuild the key under
+ * the reader's hand for a change the DOM already shows.
+ *
+ * @param {Array<object>} rows From `_legendRows`.
+ * @param {{locale: string, drapeNote: boolean, displayName: function(object): string}} context
+ * @returns {?string} Null when the rows cannot be serialised (a layer handed
+ *   over a cyclic object): the key is then rebuilt, as it always was.
+ */
+function legendSignature(rows, { locale, drapeNote, displayName }) {
+  try {
+    return JSON.stringify({
+      locale,
+      drapeNote: Boolean(drapeNote),
+      rows: rows.map((row) => ({
+        ...row,
+        members: row.members.map((member) => ({
+          ...member,
+          layer: member.layer ? { id: member.layer.id, name: displayName(member.layer) } : null,
+        })),
+      })),
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -3103,11 +3145,9 @@ export class DataLayerManager {
     const m = messages();
     const active = this._panelRowLayers(layers).filter((layer) => this._rowEnabled(layer.id));
 
-    strip.hidden = active.length === 0;
-    const count = strip.querySelector('.data-active-count');
-    if (count) count.textContent = String(active.length);
-    const clear = strip.querySelector('.data-active-clear');
-    if (clear) clear.hidden = active.length < 2;
+    writeProperty(strip, 'hidden', active.length === 0);
+    writeText(strip.querySelector('.data-active-count'), String(active.length));
+    writeProperty(strip.querySelector('.data-active-clear'), 'hidden', active.length < 2);
 
     const stale = new Map();
     for (const node of [...(list.children || [])]) {
@@ -3138,15 +3178,14 @@ export class DataLayerManager {
         list.appendChild(chip);
       }
       const displayName = this._displayName(layer);
-      const nameEl = chip.querySelector('.data-active-chip-name');
-      if (nameEl && nameEl.textContent !== displayName) nameEl.textContent = displayName;
+      writeText(chip.querySelector('.data-active-chip-name'), displayName);
       // A row mid-transition cannot be asked to move again; the button that
       // owns the transition is the one on the row, and this one says so.
       const transitioning = layer.lifecycleState === 'enabling' || layer.lifecycleState === 'disabling';
-      chip.disabled = transitioning;
+      writeProperty(chip, 'disabled', transitioning);
       chip.classList?.toggle?.('transitioning', transitioning);
-      chip.title = m.strip.chipTitle(displayName);
-      chip.setAttribute('aria-label', m.strip.chipAriaLabel(displayName));
+      writeProperty(chip, 'title', m.strip.chipTitle(displayName));
+      writeAttribute(chip, 'aria-label', m.strip.chipAriaLabel(displayName));
     }
     for (const node of stale.values()) node.remove();
   }
@@ -3329,7 +3368,7 @@ export class DataLayerManager {
     const countEl = section?.querySelector?.('.data-category-count');
     if (!countEl) return;
     const enabled = group.layers.filter((layer) => layer.enabled).length;
-    countEl.textContent = messages().panel.categoryCount(enabled, group.layers.length);
+    writeText(countEl, messages().panel.categoryCount(enabled, group.layers.length));
     section.classList?.toggle?.('has-active', enabled > 0);
   }
 
@@ -3992,7 +4031,7 @@ export class DataLayerManager {
       : resolvedControls;
     const chips = controls?.chips || [];
     // A legend-only layer now has nothing to show HERE: its key is on the map.
-    container.hidden = chips.length === 0;
+    writeProperty(container, 'hidden', chips.length === 0);
 
     const stale = new Map();
     for (const node of [...container.children]) {
@@ -4009,13 +4048,13 @@ export class DataLayerManager {
         container.appendChild(button);
       }
       const state = chip.state || (chip.active ? 'active' : 'idle');
-      button.className = `data-toggle-chip chip-${state}${chip.active ? ' active' : ''}`
-        + (chip.chipClass ? ` ${chip.chipClass}` : '');
-      if (button.textContent !== chip.label) button.textContent = chip.label;
-      button.title = chip.title || '';
-      button.disabled = Boolean(chip.disabled);
-      button.setAttribute('aria-pressed', chip.active ? 'true' : 'false');
-      button.setAttribute('aria-busy', chip.busy ? 'true' : 'false');
+      writeProperty(button, 'className', `data-toggle-chip chip-${state}${chip.active ? ' active' : ''}`
+        + (chip.chipClass ? ` ${chip.chipClass}` : ''));
+      writeText(button, chip.label);
+      writeProperty(button, 'title', chip.title || '');
+      writeProperty(button, 'disabled', Boolean(chip.disabled));
+      writeAttribute(button, 'aria-pressed', chip.active ? 'true' : 'false');
+      writeAttribute(button, 'aria-busy', chip.busy ? 'true' : 'false');
     }
     for (const node of stale.values()) node.remove();
   }
@@ -4077,16 +4116,16 @@ export class DataLayerManager {
         this._syncToggleButton(btn, layer);
       }
 
+      // Written only when they change, like every write of this pass: it runs
+      // on each layer's stats tick and reaches every row, lit or not — see
+      // `domWrite.js` for what an identical write costs the rails.
       const count = row.querySelector('.data-count');
       if (count) {
         const rowCount = this._rowCount(layer);
-        count.textContent = rowCount ? this._formatCount(rowCount) : '—';
+        writeText(count, rowCount ? this._formatCount(rowCount) : '—');
       }
 
-      const meta = row.querySelector('.data-toggle-meta');
-      if (meta) {
-        meta.textContent = this._buildMetaText(layer);
-      }
+      writeText(row.querySelector('.data-toggle-meta'), this._buildMetaText(layer));
 
       this._syncScopeChip(row.querySelector('.data-scope-chip'), layer.id);
 
@@ -4280,7 +4319,7 @@ export class DataLayerManager {
     const notice = offCoverage
       ? coverageNoticeFor(layerId, state, state === 'dark' ? layerDarkAreaAt(layerId, this._coverageView) : null)
       : '';
-    node.title = notice || messages().panel.coverageTitle(entry.where);
+    writeProperty(node, 'title', notice || messages().panel.coverageTitle(entry.where));
   }
 
   /**
@@ -4524,9 +4563,9 @@ export class DataLayerManager {
    * One delegated click handler for every toggling key line, attached once.
    *
    * Delegated rather than per-entry because `_refreshMapLegend` replaces the
-   * whole list on every repaint — roughly once a second — and re-binding a
-   * hundred listeners at that rate is how a key becomes the most expensive
-   * thing on the screen.
+   * whole list whenever the key changes — as often as once a second while a
+   * count in it moves — and re-binding a hundred listeners at that rate is how
+   * a key becomes the most expensive thing on the screen.
    */
   _installLegendToggleListener(list) {
     if (list.dataset.toggleListener === '1') return;
@@ -4622,15 +4661,47 @@ export class DataLayerManager {
     this._installLegendToggleListener(list);
 
     if (!groups.length) {
-      host.hidden = true;
-      list.replaceChildren();
+      // `hidden` is written only when it flips: the right rail re-measures on
+      // every write of it (`src/ui.js`), and this branch runs on each stats
+      // tick of a lit layer that has no key.
+      writeProperty(host, 'hidden', true);
+      if (list.children?.length) list.replaceChildren();
+      this._legendPainted = null;
       // The watch would go on scrolling a list that no longer holds a card.
       this._stopLegendReveal?.();
       this._legendSelections = new Map();
       this._legendSelectionTouched = new Set();
       return;
     }
-    host.hidden = false;
+    writeProperty(host, 'hidden', false);
+
+    // One shared note, not one per layer: the drape is a property of the MAP
+    // STACK, and repeating it under every zonal layer would bury the key it is
+    // meant to qualify.
+    const drapeNote = groups.some((group) => group.surfaceFill)
+      && surfaceFillDrapesBuildings(this.viewer?.scene);
+    const rows = this._legendRows(groups);
+
+    // THE KEY IS REBUILT ONLY WHEN WHAT IT SAYS CHANGED. This runs on every
+    // stats tick of every lit layer — the submarine cables tick twice a
+    // second, the data centres once — and a rebuild is never free even when
+    // it draws the same key: the list is thrown away, the right rail's
+    // observer answers with a measuring layout pass, and the globe's per-frame
+    // size check pays for the layout that pass dirtied. With « Infrastructure
+    // numérique » on and the camera still, that was 3 rebuilds a second of an
+    // identical key (ThinkCentre, CPU ×4, 2026-09-23). A skipped pass also
+    // keeps what a rebuild could only restore — the focused control, the
+    // hovered tile, an open list, the scroll.
+    const signature = legendSignature(rows, {
+      locale: getLocale(),
+      drapeNote,
+      displayName: (layer) => this._displayName(layer),
+    });
+    if (signature !== null
+        && this._legendPainted?.list === list
+        && this._legendPainted.signature === signature) {
+      return;
+    }
 
     // Every card on screen, by layer and key: TWO layers can hold a selection
     // at once (a DVF sale and an antenna do not dismiss each other), and the
@@ -4638,17 +4709,13 @@ export class DataLayerManager {
     // something — not whichever block was rendered last.
     const selections = new Map();
     const fragment = document.createDocumentFragment();
-    // One shared note, not one per layer: the drape is a property of the MAP
-    // STACK, and repeating it under every zonal layer would bury the key it is
-    // meant to qualify.
-    if (groups.some((group) => group.surfaceFill)
-        && surfaceFillDrapesBuildings(this.viewer?.scene)) {
+    if (drapeNote) {
       const note = document.createElement('div');
       note.className = 'map-legend-surface-note';
       note.textContent = SURFACE_FILL_DRAPE_NOTE;
       fragment.appendChild(note);
     }
-    for (const row of this._legendRows(groups)) {
+    for (const row of rows) {
       const rowNode = document.createElement('div');
       rowNode.className = 'map-legend-row';
       // Tier 1 exists only when tier 2 does. A single-member row keeps the
@@ -4916,10 +4983,14 @@ export class DataLayerManager {
     // dropped back to the page within a second, by the next repaint.
     const focusKey = legendFocusKeyIn(list);
     list.replaceChildren(fragment);
+    // Recorded once the list holds what it describes: a paint that threw half
+    // way must not leave a signature that skips the next attempt.
+    this._legendPainted = signature === null ? null : { list, signature };
     if (focusKey) findByFocusKey(list, focusKey)?.focus?.({ preventScroll: true });
     // A NEW selection is brought into view once; a repaint of the same one
-    // leaves the reader's scroll where they put it. The key repaints about
-    // once a second, and scrolling on every pass would pin the list.
+    // leaves the reader's scroll where they put it. The key can repaint once
+    // a second while its counts move, and scrolling on every pass would pin
+    // the list.
     //
     // A card that LEARNED something is brought back too, until the reader
     // takes THAT card's list over. A card often opens before its answer: the
@@ -5238,9 +5309,10 @@ export class DataLayerManager {
    *
    * A `<details>`, so it opens by keyboard and says whether it is open without
    * a line of script. Its OPEN STATE OUTLIVES THE REPAINT: the key is rebuilt
-   * about once a second, and a list that folded itself back every second would
-   * be a list nobody could read. The manager remembers which selection's list
-   * the reader opened, and a new selection starts folded.
+   * as often as once a second while its counts move, and a list that folded
+   * itself back every second would be a list nobody could read. The manager
+   * remembers which selection's list the reader opened, and a new selection
+   * starts folded.
    *
    * Every line is `textContent`, and a link is an `https:` URL or nothing —
    * {@link legendSelectionOf} has already dropped the rest.
@@ -5462,14 +5534,14 @@ export class DataLayerManager {
     for (const state of FEED_STATES) {
       button.classList.toggle(`feed-${state}`, layer.enabled && !uncertain && feedState === state);
     }
-    button.dataset.feedState = transitioning
+    writeProperty(button.dataset, 'feedState', transitioning
       ? layer.lifecycleState
-      : (uncertain ? 'uncertain' : feedState);
-    button.disabled = transitioning;
-    button.textContent = transitioning
+      : (uncertain ? 'uncertain' : feedState));
+    writeProperty(button, 'disabled', transitioning);
+    writeText(button, transitioning
       ? layer.lifecycleState.toUpperCase()
-      : (uncertain ? messages().feedState.uncertain : feedStateLabel(layer.enabled ? feedState : 'off'));
-    button.setAttribute('aria-label', `${this._displayName(layer)}: ${button.textContent}`);
+      : (uncertain ? messages().feedState.uncertain : feedStateLabel(layer.enabled ? feedState : 'off')));
+    writeAttribute(button, 'aria-label', `${this._displayName(layer)}: ${button.textContent}`);
   }
 
   _formatCount(n) {

@@ -223,6 +223,18 @@ const fakeViewer = (west, south, east, north) => ({
   scene: { requestRender() {} },
 });
 
+/** Every shaft of the field, band by band: `_masts` holds one collection per look. */
+const shaftsOf = (masts) => {
+  const lines = [];
+  for (let b = 0; b < masts.length; b += 1) {
+    const band = masts.get(b);
+    for (let i = 0; i < band.length; i += 1) lines.push(band.get(i));
+  }
+  return lines;
+};
+/** The shafts on screen: a spare one is hidden, waiting for a newcomer of its look. */
+const drawnShafts = (masts) => shaftsOf(masts).filter((line) => line.show);
+
 test('the layer object satisfies the manager contract it is registered under', () => {
   assert.equal(anfrFranceLayer.id, ANFR_FR_LAYER_ID);
   assert.equal(ANFR_FR_LAYER_ID, 'anfr-fr');
@@ -981,7 +993,7 @@ test('init builds the three real collections, and the draw path fills them', asy
   anfrFranceLayer.init(viewer);
   assert.equal(added.length, 3);
   assert.equal(added[0].constructor, Cesium.BillboardCollection);
-  assert.equal(added[1].constructor, Cesium.PolylineCollection, 'the shafts');
+  assert.equal(added[1].constructor, Cesium.PrimitiveCollection, 'the shafts, one collection per look');
   assert.equal(added[2].constructor, Cesium.PolylineCollection, 'the azimuth rays');
 
   const http = async (url) => ({
@@ -1283,12 +1295,12 @@ test('the drawn shafts and rays are world geometry, and go away with the selecti
   // A 0.015° box is inside the shaft sub-regime, so the load path draws them.
   await _loadAnfrViewportForTest(viewer);
   assert.equal(_anfrMastTallyForTest().mastRegime, true);
-  assert.equal(masts.length, 14, 'one shaft per published height, and none for the blank');
+  assert.equal(drawnShafts(masts).length, 14, 'one shaft per published height, and none for the blank');
   assert.equal(masts.show, true);
 
   // The shaft's LENGTH is the support's height, in metres of the world. This
   // is the B2 assertion: nothing screen-space is composed with it.
-  const line = masts.get(0);
+  const line = drawnShafts(masts)[0];
   const foot = Cesium.Cartographic.fromCartesian(line.positions[0]);
   const top = Cesium.Cartographic.fromCartesian(line.positions[1]);
   assert.ok(Math.abs(foot.longitude - top.longitude) < 1e-12, 'the shaft is vertical');
@@ -1299,7 +1311,7 @@ test('the drawn shafts and rays are world geometry, and go away with the selecti
   // A support that radiates nothing gets a dashed shaft: its height is a
   // figure on an authorised file, not a measurement of something built.
   const materials = new Set();
-  for (let i = 0; i < masts.length; i += 1) materials.add(masts.get(i).material.type);
+  for (const shaft of drawnShafts(masts)) materials.add(shaft.material.type);
   assert.ok(materials.has('Color'));
   assert.ok(materials.has('PolylineDash'), 'the project-only support is dashed');
 
@@ -1404,9 +1416,10 @@ test('a shaft owns its material, so a teardown does not destroy the same one twi
   const http = async (url) => ({ ok: true, json: async () => supportsAnswer(url) });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   await _loadAnfrViewportForTest(viewer);
-  assert.ok(masts.length > 1, 'more than one shaft, or there is nothing to double-destroy');
-  const shaftMaterials = [...Array(masts.length)].map((_, i) => masts.get(i).material);
-  assert.equal(new Set(shaftMaterials).size, masts.length, 'no shaft shares an instance');
+  const shafts = shaftsOf(masts);
+  assert.ok(shafts.length > 1, 'more than one shaft, or there is nothing to double-destroy');
+  const shaftMaterials = shafts.map((shaft) => shaft.material);
+  assert.equal(new Set(shaftMaterials).size, shafts.length, 'no shaft shares an instance');
 
   _setAnfrStateForTest({
     viewer, overlayHost: makeHost(), http, pack: PACK, regime: 'supports',
@@ -1422,13 +1435,14 @@ test('a shaft owns its material, so a teardown does not destroy the same one twi
   assert.equal(sectors.isDestroyed(), true);
 });
 
-test('the drawn shafts are grouped by appearance, so the field is a handful of draw commands', async () => {
+test('the drawn shafts are one collection per look, so the field is a handful of draw commands', async () => {
   // Cesium opens a new `DrawCommand` every time two CONSECUTIVE polylines of a
   // bucket disagree on `type + uniform values`. In register order the five
   // appearances interleave, so the fullest 0.09° box (1 913 shafts) could cost
-  // 1 913 commands for what is at most five distinct looks. Grouping the drawn
-  // set is what collapses that, and it is a rendering decision only: WHICH
-  // shafts are drawn is still decided in register order, before the sort.
+  // 1 913 commands for what is at most five distinct looks. One collection per
+  // look is what collapses that — whatever order its shafts come and go in,
+  // which is what lets a rest keep a shaft by its support rather than rewrite
+  // the field in band order.
   const added = [];
   const viewer = {
     ...fakeViewer(2.325, 48.850, 2.340, 48.860),
@@ -1450,22 +1464,179 @@ test('the drawn shafts are grouped by appearance, so the field is a handful of d
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   await _loadAnfrViewportForTest(viewer);
 
-  const appearance = (i) => {
-    const material = masts.get(i).material;
-    return `${material.type}|${material.uniforms.color.toCssColorString()}`;
-  };
-  const drawn = _anfrMastTallyForTest().masts;
   const looks = new Set();
-  let runs = 0;
-  let previous = null;
-  for (let i = 0; i < drawn; i += 1) {
-    const key = appearance(i);
-    looks.add(key);
-    if (key !== previous) runs += 1;
-    previous = key;
+  for (let b = 0; b < masts.length; b += 1) {
+    const band = masts.get(b);
+    assert.equal(band.constructor, Cesium.PolylineCollection);
+    const inBand = new Set();
+    for (let i = 0; i < band.length; i += 1) {
+      const material = band.get(i).material;
+      inBand.add(`${material.type}|${material.uniforms.color.toCssColorString()}`);
+    }
+    assert.equal(inBand.size, 1, 'a collection holds one look, so it is one command in any order');
+    looks.add([...inBand][0]);
   }
   assert.ok(looks.size > 1, 'this fixture has more than one band, or the test proves nothing');
-  assert.equal(runs, looks.size, 'one run per appearance — no band is drawn twice');
+  assert.equal(looks.size, masts.length, 'and no look is split over two collections');
+  assert.ok(masts.length <= 5);
+  assert.equal(drawnShafts(masts).length, _anfrMastTallyForTest().masts);
+
+  anfrFranceLayer.destroy(viewer);
+});
+
+/** A viewer whose camera box a test can move, over real collections that count their adds. */
+function countingViewer(box) {
+  const added = [];
+  const counts = { billboards: 0, removed: 0, shafts: 0 };
+  const viewer = {
+    camera: { computeViewRectangle: () => Cesium.Rectangle.fromDegrees(box.west, box.south, box.east, box.north) },
+    scene: {
+      requestRender() {},
+      canvas: {},
+      preRender: { addEventListener: () => () => {} },
+      primitives: {
+        add(primitive) { added.push(primitive); return primitive; },
+        remove(primitive) { return added.splice(added.indexOf(primitive), 1).length > 0; },
+        contains() { return true; },
+        raiseToTop() {},
+      },
+    },
+  };
+  anfrFranceLayer.init(viewer);
+  const [points, masts] = added;
+  const addBillboard = points.add.bind(points);
+  points.add = (options) => {
+    counts.billboards += 1;
+    return addBillboard(options);
+  };
+  const removeBillboard = points.remove.bind(points);
+  points.remove = (billboard) => {
+    counts.removed += 1;
+    return removeBillboard(billboard);
+  };
+  const addBand = masts.add.bind(masts);
+  masts.add = (band, index) => {
+    const addShaft = band.add.bind(band);
+    band.add = (options) => {
+      counts.shafts += 1;
+      return addShaft(options);
+    };
+    return addBand(band, index);
+  };
+  return { viewer, points, masts, counts };
+}
+
+test('a rest on the same masts creates no primitive, and a pan creates only its newcomers', async () => {
+  // Every rest used to empty the dots and add one per mast in view: 2 954
+  // billboards destroyed and re-created per rest over Paris at 5 km. A mast
+  // that stays in view now keeps its record, its billboard and its shaft; a
+  // leaver's billboard is removed and a newcomer's added, and a newcomer's
+  // shaft is one a leaver of the same look put away.
+  const box = { west: 2.325, south: 48.850, east: 2.340, north: 48.860 };
+  const { viewer, points, masts, counts } = countingViewer(box);
+  let pack = PACK;
+  const http = async () => ({ ok: true, json: async () => pack });
+  _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
+  await _loadAnfrViewportForTest(viewer);
+  assert.equal(_anfrMastTallyForTest().mastRegime, true, 'close enough for shafts');
+  assert.equal(counts.billboards, SUPPORTS.length);
+  assert.equal(counts.shafts, 14);
+  const record = (row) => _anfrRecordForTest(anfrSupportId(row.id));
+  const first = new Map(SUPPORTS.map((row) => [row.id, record(row)]));
+  const billboards = new Map(SUPPORTS.map((row) => [row.id, record(row).point]));
+  const shafts = new Set(drawnShafts(masts));
+
+  // The same masts again — a rest that did not move, or a refresh.
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(counts.billboards, SUPPORTS.length, 'no billboard created');
+  assert.equal(counts.removed, 0, 'none removed');
+  assert.equal(counts.shafts, 14, 'no shaft created');
+  for (const row of SUPPORTS) {
+    assert.equal(record(row), first.get(row.id), 'the same record');
+    assert.equal(record(row).point, billboards.get(row.id), 'on the same billboard');
+  }
+  assert.deepEqual(new Set(drawnShafts(masts)), shafts, 'the same shafts');
+
+  // A pan: three masts leave, three arrive with the same looks.
+  const leaving = SUPPORTS.slice(0, 3);
+  const arriving = leaving.map((row, i) => ({ ...row, id: 990_000 + i, lat: row.lat + 0.002 }));
+  pack = { ...PACK, supports: [...SUPPORTS.slice(3), ...arriving], inBox: SUPPORTS.length };
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(counts.billboards, SUPPORTS.length + 3, 'three billboards for three newcomers');
+  assert.equal(counts.removed, 3, 'and three removed for three leavers');
+  assert.equal(points.length, SUPPORTS.length);
+  assert.equal(counts.shafts, 14, 'the newcomers stand on the leavers\' shafts');
+  for (const row of SUPPORTS.slice(3)) {
+    assert.equal(record(row), first.get(row.id));
+    assert.equal(record(row).point, billboards.get(row.id));
+  }
+  for (const row of leaving) assert.equal(record(row), null);
+  for (const row of arriving) {
+    const arrived = record(row);
+    assert.equal(arrived.point.id, arrived.id);
+    assert.ok(Cesium.Cartesian3.equals(arrived.point.position, arrived.position));
+  }
+  assert.equal(drawnShafts(masts).length, _anfrMastTallyForTest().masts);
+
+  // A rest that only re-dresses masts it kept — here the register lit 5G on
+  // one of them — writes that billboard and asks for one vertex rebuild,
+  // through one hidden add and remove (see `rebuildMarksOnce`).
+  const upgraded = SUPPORTS.slice(3).find((row) => row.live && !(row.live & 8));
+  assert.ok(upgraded, 'the fixture has a mast without 5G');
+  pack = {
+    ...pack,
+    supports: pack.supports.map((row) => (row === upgraded ? { ...row, live: row.live | 8 } : row)),
+  };
+  const before = { ...counts };
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(record(upgraded).style.band, '5g');
+  assert.equal(record(upgraded).point, billboards.get(upgraded.id), 'the same billboard, re-dressed');
+  assert.equal(record(upgraded).point.scale, anfrGlyphScale(record(upgraded).style.sizePx));
+  assert.equal(counts.billboards - before.billboards, 1);
+  assert.equal(counts.removed - before.removed, 1);
+  assert.equal(points.length, SUPPORTS.length, 'and the collection holds one billboard per mast');
+
+  anfrFranceLayer.destroy(viewer);
+});
+
+test('the maillage keeps its dots across a pan and draws only the ones that come back', async () => {
+  const box = { west: -5, south: 41, east: 10, north: 51.5 };
+  const { viewer, points, counts } = countingViewer(box);
+  const http = async () => ({ ok: true, json: async () => MESH_PAYLOAD });
+  _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
+  const all = await _loadAnfrViewportForTest(viewer);
+  assert.equal(all.regime, 'maillage');
+  const drawn = all.count;
+  assert.ok(drawn > 5);
+  assert.equal(counts.billboards, drawn);
+  const billboardOf = new Map(MESH_TUPLES.map((tuple) => [anfrMeshRecordId(tuple), _anfrRecordForTest(anfrMeshRecordId(tuple))?.point]));
+
+  // A pan that keeps every dot in view re-picks the same dots: nothing is drawn.
+  Object.assign(box, { west: -4.5, east: 10.5 });
+  await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(counts.billboards, drawn);
+  assert.equal(counts.removed, 0);
+  for (const [id, point] of billboardOf) if (point) assert.equal(_anfrRecordForTest(id).point, point);
+
+  // A pan that leaves part of Paris behind the west edge: the leavers go, and
+  // the ones that stay keep their billboards.
+  Object.assign(box, { west: 2.448, south: 48.5, east: 3.448, north: 49.5 });
+  const part = await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.ok(part.count > 0 && part.count < drawn, `${part.count} of ${drawn} still in view`);
+  assert.equal(counts.billboards, drawn, 'nothing created to draw fewer');
+  assert.equal(counts.removed, drawn - part.count);
+  assert.equal(points.length, part.count);
+  for (const [id, point] of billboardOf) {
+    const kept = _anfrRecordForTest(id);
+    if (kept) assert.equal(kept.point, point);
+  }
+
+  // And back: only the dots that left are drawn again.
+  Object.assign(box, { west: -5, south: 41, east: 10, north: 51.5 });
+  const back = await _loadAnfrViewportForTest(viewer, { force: true });
+  assert.equal(back.count, drawn);
+  assert.equal(counts.billboards, drawn + (drawn - part.count));
+  assert.equal(points.length, drawn);
 
   anfrFranceLayer.destroy(viewer);
 });

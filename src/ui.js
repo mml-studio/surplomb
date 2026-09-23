@@ -471,6 +471,10 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#cesium-credits .gev-legal-links',
   '#command-dock',
   '#gev-voice-control',
+  // The mic's desktop corner (src/globeShell.js): a node that outlives the
+  // panel the voice controller rebuilds, so the size observer below keeps
+  // watching it when the mic opens into its card.
+  '#voice-corner',
 ].join(', ');
 /**
  * The tactical detection look: Dense at 75%.

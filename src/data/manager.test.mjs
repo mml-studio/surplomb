@@ -4533,13 +4533,24 @@ test('the 4G coverage is a tile of its own: the antennas follow their two parts,
   }
 });
 
-test('a pressed tile keeps the keyboard focus across the repaint that rebuilds it', async () => {
+test('a pressed tile keeps the keyboard focus across a repaint, rebuilt or not', async () => {
   const panel = makePeerPanel();
   try {
     await panel.mgr._setRowEnabled('local-datacenters', true);
     panel.mgr._refreshTogglePanel();
     const before = panel.tiles().find((tile) => tile.dataset.tileLayer === 'anfr-fr');
     before.focus();
+    // A stats tick that changes nothing in the key leaves the very same node
+    // under the keyboard — nothing to hand over.
+    panel.mgr._refreshTogglePanel();
+    const same = panel.tiles().find((tile) => tile.dataset.tileLayer === 'anfr-fr');
+    assert.equal(same, before, 'an unchanged key is not rebuilt');
+    assert.equal(globalThis.document.activeElement, before);
+
+    // A change anywhere in the key rebuilds all of it, and the focus follows
+    // its control to the new node.
+    const module = panel.mgr.layers.get('anfr-fr').module;
+    module.tilePartNotice = (part) => (part === 'coverage' ? 'Carte indisponible sur ce serveur.' : null);
     panel.mgr._refreshTogglePanel();
     const after = panel.tiles().find((tile) => tile.dataset.tileLayer === 'anfr-fr');
     assert.notEqual(after, before, 'the key is rebuilt, not reconciled');
@@ -6001,5 +6012,236 @@ test('a layer can key a second block: its own title, a two-level control, and ar
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
+  }
+});
+
+// ── A tick that changes nothing writes nothing ──────────────────────────────
+// The panel refresh runs on every lit layer's stats tick — the submarine
+// cables tick twice a second, the data centres once — and both side rails
+// answer any mutation under them with a measuring layout pass (`src/ui.js`).
+// Measured with « Infrastructure numérique » on and the camera still
+// (ThinkCentre, CPU ×4, 2026-09-23): per 10 s, 31 rebuilds of an identical
+// key, 7 500 mutation records and 92 to 110 layouts, for a screen that did
+// not change.
+
+/** A panel and a key over one layer whose controls the test rewrites. */
+function makeQuietPanel() {
+  const originalDocument = globalThis.document;
+  const host = makePanelElement();
+  const items = makePanelElement();
+  let rebuilds = 0;
+  const replace = items.replaceChildren;
+  items.replaceChildren = function (...nodes) {
+    rebuilds += 1;
+    return replace.apply(this, nodes);
+  };
+  globalThis.document = {
+    createElement: makePanelElement,
+    createDocumentFragment: () => Object.assign(makePanelElement(), { isFragment: true }),
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+    activeElement: null,
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  const state = {
+    legend: [
+      { label: 'NAV', color: '#4fd8ff', blurb: 'GNSS', count: 2 },
+      { label: 'GEO', color: '#c89bff', count: 5 },
+    ],
+    selection: null,
+  };
+  const chips = layer.module.getRowControls().chips;
+  layer.module.getRowControls = () => ({ chips, legend: state.legend, legendSelection: state.selection });
+  mgr.register(layer.module);
+  const container = makePanelElement();
+  mgr.buildTogglePanel(container);
+  return {
+    mgr,
+    module: layer.module,
+    state,
+    host,
+    items,
+    container,
+    rebuilds: () => rebuilds,
+    row: () => container.querySelector('[data-layer-id="satellites"]'),
+    labels: () => findAll(items, '.map-legend-label').map((node) => node.textContent),
+    async restore() {
+      await mgr.destroyAll();
+      if (originalDocument === undefined) delete globalThis.document;
+      else globalThis.document = originalDocument;
+    },
+  };
+}
+
+/** Count every assignment to `keys` on `node` from now on. */
+function countWrites(node, keys) {
+  const counts = Object.fromEntries(keys.map((key) => [key, 0]));
+  for (const key of keys) {
+    let value = node[key];
+    Object.defineProperty(node, key, {
+      configurable: true,
+      enumerable: true,
+      get: () => value,
+      set: (next) => { counts[key] += 1; value = next; },
+    });
+  }
+  return counts;
+}
+
+/** Count `setAttribute` calls on `nodes` from now on. */
+function countAttributeWrites(nodes) {
+  let count = 0;
+  for (const node of nodes) {
+    const setAttribute = node.setAttribute;
+    node.setAttribute = function (...args) {
+      count += 1;
+      return setAttribute.apply(this, args);
+    };
+  }
+  return () => count;
+}
+
+test('a stats tick that changes nothing writes nothing: the key is not rebuilt, no row is rewritten', async () => {
+  const panel = makeQuietPanel();
+  try {
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 1, 'the first paint draws the key');
+    assert.deepEqual(panel.labels(), ['NAV 2', 'GEO 5']);
+
+    const row = panel.row();
+    const button = row.querySelector('.data-toggle-btn');
+    const chip = row.querySelector('.data-toggle-chip');
+    assert.ok(button && chip, 'the row carries its toggle and its chip');
+    const writes = [
+      countWrites(row.querySelector('.data-count'), ['textContent']),
+      countWrites(row.querySelector('.data-toggle-meta'), ['textContent']),
+      countWrites(button, ['textContent', 'disabled']),
+      countWrites(button.dataset, ['feedState']),
+      countWrites(row.querySelector('.data-toggle-controls'), ['hidden']),
+      countWrites(chip, ['className', 'textContent', 'title', 'disabled']),
+      countWrites(panel.host, ['hidden']),
+    ];
+    const attributes = countAttributeWrites([button, chip]);
+
+    for (let tick = 0; tick < 5; tick += 1) panel.mgr._refreshTogglePanel();
+
+    assert.equal(panel.rebuilds(), 1, 'five ticks over an identical key rebuild nothing');
+    assert.deepEqual(writes, [
+      { textContent: 0 },
+      { textContent: 0 },
+      { textContent: 0, disabled: 0 },
+      { feedState: 0 },
+      { hidden: 0 },
+      { className: 0, textContent: 0, title: 0, disabled: 0 },
+      { hidden: 0 },
+    ], 'every value was already on screen');
+    assert.equal(attributes(), 0, 'nor any attribute');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a count that moves, or a card that arrives, rebuilds the key once — and the next identical tick does not', async () => {
+  // The response-arriving case: a polled layer calls its row-controls
+  // listener when an answer lands (#316), and the key must say what arrived.
+  const panel = makeQuietPanel();
+  try {
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    panel.mgr._refreshTogglePanel();
+
+    panel.state.legend = [{ ...panel.state.legend[0], count: 3 }, panel.state.legend[1]];
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 2);
+    assert.deepEqual(panel.labels(), ['NAV 3', 'GEO 5'], 'the key says what arrived');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 2);
+
+    panel.state.selection = { key: 'sat:1', title: 'ISS', lines: ['Chargement…'] };
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 3, 'a card opening is a change');
+    panel.state.selection = { ...panel.state.selection, lines: ['408 km'] };
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 4, 'a card learning something is a change');
+    assert.equal(findAll(panel.items, '.map-legend-selection-line')[0].textContent, '408 km');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 4);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the key comes back whole after it emptied, even when it has the same thing to say', async () => {
+  // The signature of the last paint must not outlive the list it describes:
+  // a key hidden and emptied, then asked for the same content, would
+  // otherwise be "unchanged" and stay empty.
+  const panel = makeQuietPanel();
+  try {
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(await panel.mgr.setEnabled('satellites', false), true);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.host.hidden, true);
+    assert.deepEqual(panel.labels(), []);
+    const hidden = countWrites(panel.host, ['hidden']);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(hidden.hidden, 0, 'a dark key is not hidden again on every tick');
+
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.host.hidden, false);
+    assert.deepEqual(panel.labels(), ['NAV 2', 'GEO 5']);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the reader opening a card’s list does not rebuild the key under their hand', async () => {
+  const panel = makeQuietPanel();
+  try {
+    panel.state.selection = {
+      key: 'dpe:1',
+      title: '12 rue de la Paix',
+      list: { summary: 'Voir les 2 diagnostics', items: [{ text: 'D · 2021' }, { text: 'E · 2019' }] },
+    };
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    panel.mgr._refreshTogglePanel();
+    const details = findAll(panel.items, '.map-legend-selection-list')[0].children
+      .find((node) => node.listeners.has('toggle'));
+    details.open = true;
+    for (const handler of details.listeners.get('toggle')) handler();
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 1, 'the open list is the same node');
+    assert.equal(details.open, true);
+
+    // A real change rebuilds it, and the list comes back open.
+    panel.state.legend = [{ ...panel.state.legend[0], count: 9 }];
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds(), 2);
+    const rebuilt = findAll(panel.items, '.map-legend-selection-list')[0].children
+      .find((node) => node.listeners.has('toggle'));
+    assert.notEqual(rebuilt, details);
+    assert.equal(rebuilt.open, true);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a key the signature cannot read is rebuilt on every pass, as it always was', async () => {
+  // A layer handing over a cyclic object must cost what it cost before, not
+  // freeze the key on its first paint.
+  const panel = makeQuietPanel();
+  try {
+    const cyclic = { label: 'NAV', color: '#4fd8ff', count: 2 };
+    cyclic.self = cyclic;
+    panel.state.legend = [cyclic];
+    assert.equal(await panel.mgr.setEnabled('satellites', true), true);
+    const before = panel.rebuilds();
+    panel.mgr._refreshTogglePanel();
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.rebuilds() - before, 2);
+    assert.deepEqual(panel.labels(), ['NAV 2']);
+  } finally {
+    await panel.restore();
   }
 });

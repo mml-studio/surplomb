@@ -1460,6 +1460,18 @@
   </nav>
   </div>
 
+  <!--
+    THE MIC'S CORNER ON A DESKTOP. src/globeShell.js MOVES the voice panel
+    (`#gev-voice-control`, built by src/voice/voiceControlDom.js) out of the
+    bottom dock into this box, where it rests as « Parler à Surplomb » and
+    opens into a small card while it is used. A stable box rather than the
+    panel itself, because the voice controller rebuilds the panel when it
+    loads, and the right rail watches this box's size to keep clear of it.
+    Ships `hidden`: on a phone the mic stays in the dock. After the dock in
+    the page, so Tab reaches the bottom bar, then the mic.
+  -->
+  <div id="voice-corner" hidden></div>
+
   <div id="left-panel-stack">
   <!-- Data Layer Toggle Panel -->
   <div id="data-panel" class="panel-collapsible collapsed active" data-panel-id="data-panel">

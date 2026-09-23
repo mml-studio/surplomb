@@ -490,6 +490,110 @@ function dressSelected(billboard) {
   billboard.scale = ANFR_SELECTED_SCALE;
 }
 
+// ── A REST KEEPS THE MARKS IT CAN, AND DRAWS ONLY THE NEW ONES ──────────────
+//
+// Every camera rest used to empty the collection (`removeAll()`) and add a
+// billboard per mast in view, although a pan keeps most of them — the world
+// pick is built so that it does (`anfrMesh.js`), and a supports box shares
+// most of its masts with the box before it. Measured on the reference
+// ThinkCentre at 4× CPU throttling, antennas alone (2026-09-23): over Paris at
+// 5 km, 2 954 billboards destroyed and re-created per rest; over France, 631
+// twice per rest.
+//
+// Now the marks are keyed by their record id, which is the mast's identity in
+// both regimes (`anfrSupportId`, `anfrMeshRecordId`). A mast still in view
+// keeps its record — and with it any lookup or card in flight — and its
+// billboard, untouched unless its seat moved or its style changed. A mast that
+// leaves has its billboard removed; a newcomer gets a new one. A rest on the
+// same view touches nothing.
+//
+// ── WHY THE LEAVERS ARE REMOVED, NOT HIDDEN AND POOLED ──────────────────────
+// Hiding a billboard and handing it to a newcomer looks cheaper than removing
+// one and adding another, and on this collection it is not. A
+// `BillboardCollection` re-derives its buffer usage from what was written
+// since its last rebuild: a one-off write of `show` or `position` flips those
+// attributes to STREAM_DRAW, which is a full vertex rebuild, and the next
+// frame with no write flips them back to STATIC_DRAW, which is a second one.
+// Measured with a pool, interleaved with the former code on the same machine
+// (under a heavy concurrent load): two rebuilds per rest instead of one, 55 ms
+// of them over Paris against 46.
+// An `add` or `remove` instead marks the collection for ONE rebuild that zeroes
+// the write counts, so the rest's writes all ride on it — and the newcomers,
+// a few hundred at most on a pan, are cheap to build (≈ 7 µs each at 4×
+// throttling, measured).
+//
+// The same flip is why a rest that only re-seats or re-dresses masts it kept —
+// no newcomer, no leaver — asks for that single rebuild itself ({@link
+// rebuildMarksOnce}).
+
+/** The supports' fade with distance, one instance: the billboard copies it. */
+const SUPPORT_FADE = new Cesium.NearFarScalar(500, 1.0, 400_000, 0.45);
+
+/** Whether two styles draw the same billboard — the glyph and its scale. */
+function sameMarkStyle(a, b) {
+  return Boolean(a && b)
+    && a.band === b.band
+    && a.hollow === b.hollow
+    && a.ringed === b.ringed
+    && a.sizePx === b.sizePx;
+}
+
+/**
+ * A billboard for a mast that was not drawn.
+ * @param {string} id Record id, which is also the pick id.
+ * @param {object} position Cartesian3.
+ * @param {object} style `anfrSupportStyle` / `anfrMeshStyle`.
+ * @param {?object} fade `SUPPORT_FADE` for a support, undefined for a maillage dot.
+ * @returns {?object} The billboard, or null with no collection.
+ */
+function takeMark(id, position, style, fade) {
+  if (!_points) return null;
+  return _points.add(mastBillboardOptions(id, position, style, fade ? { translucencyByDistance: fade } : {}));
+}
+
+/** Remove the billboard of a mast that left the view. */
+function releaseMark(billboard) {
+  if (billboard && _points && !_points.isDestroyed()) _points.remove(billboard);
+}
+
+/**
+ * One vertex rebuild for writes to billboards the rest kept, instead of the
+ * two the buffer-usage flip would cost. Through the public API: an `add` and a
+ * `remove` are documented to rewrite the vertex buffer, and that rewrite is
+ * what zeroes the write counts the flip reads.
+ */
+function rebuildMarksOnce() {
+  if (!_points || _points.isDestroyed()) return;
+  _points.remove(_points.add({ show: false, position: Cesium.Cartesian3.ZERO }));
+}
+
+/**
+ * Carry a mast that stays in view over to the new rest: a new seat and a new
+ * style are written to its billboard only when they differ. The selected
+ * mast's billboard is left as the diamond; `restoreSelectionAfterRebuild`
+ * owns it.
+ * @returns {boolean} Whether the billboard was written.
+ */
+function keepMark(record, position, style, fade) {
+  const restyled = !sameMarkStyle(record.style, style);
+  record.position = position;
+  record.style = style;
+  if (!record.point) {
+    record.point = takeMark(record.id, position, style, fade);
+    return false;
+  }
+  let written = false;
+  if (!Cesium.Cartesian3.equals(record.point.position, position)) {
+    record.point.position = position;
+    written = true;
+  }
+  if (restyled && record.id !== _selectedId) {
+    dressMastSprite(record.point, style);
+    written = true;
+  }
+  return written;
+}
+
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   setEntries: setOverlayEntries,
   setVisible: setOverlaySourceVisible,
@@ -972,18 +1076,18 @@ export function anfrEditionLabel(iso) {
 // `type + JSON(uniform values)`. Both are VALUE keys: two `Color` materials
 // carrying the same colour batch into ONE command however many instances they
 // are. What costs a draw call is a change of appearance between two
-// CONSECUTIVE polylines — a question of ORDER, which `reconcileMasts` now
-// answers, not of allocation.
+// CONSECUTIVE polylines — a question of ORDER, which `reconcileMasts` answers
+// with one collection per appearance, not of allocation.
 //
 // Measured price of the fix: 3.5 KiB per material, so 8.2 MiB at the 2 400
 // shaft cap — against a throw on every teardown.
 //
-// Each pooled polyline owns its materials on these two slots. A shaft may wear
-// either regime over its life, so it keeps one of each rather than swapping
-// instances: an orphaned instance is one Cesium will never destroy, and a
-// re-shared one is the bug above coming back.
+// A shaft keeps ONE material for life: it lives in the collection of its
+// appearance (see `reconcileMasts`), so it is never restyled and never swaps
+// instances — an orphaned instance is one Cesium will never destroy, and a
+// re-shared one is the bug above coming back. The slot below only names the
+// instance a ray owns.
 const MAST_SOLID_SLOT = '__gevSolidMaterial';
-const MAST_DASH_SLOT = '__gevDashMaterial';
 
 /**
  * Build the material ONE shaft wears. The shaft owns it from then on.
@@ -1003,58 +1107,70 @@ function createMastMaterial(style) {
 }
 
 /**
- * Dress a pooled shaft in its band, allocating at most one material per regime.
- * @param {object} line Pooled `Polyline`, which owns its materials.
- * @param {object} style Band style of the support this shaft now carries.
- * @returns {void}
- */
-function dressMast(line, style) {
-  const slot = style.hollow ? MAST_DASH_SLOT : MAST_SOLID_SLOT;
-  let material = line[slot];
-  if (!material) {
-    material = createMastMaterial(style);
-    line[slot] = material;
-  } else {
-    // A uniform write, not a new instance: same batching key, same object for
-    // Cesium to destroy exactly once.
-    material.uniforms.color = Cesium.Color.fromCssColorString(style.color).withAlpha(MAST_ALPHA);
-  }
-  if (line.material !== material) line.material = material;
-}
-
-/**
- * The appearance key two consecutive shafts are compared on.
- *
- * It is `createMaterialId`'s key in this file's vocabulary: the material type
- * plus the colour. Cesium opens a new `DrawCommand` every time it changes
- * between two neighbouring polylines of a bucket, so sorting on it is what
- * turns 2 400 shafts into at most five commands.
+ * The appearance a shaft is drawn in: `createMaterialId`'s key in this file's
+ * vocabulary, the material type plus the colour. Five of them at most.
  * @param {object} style Band style of a support.
- * @returns {string} Sort key.
+ * @returns {string}
  */
 function mastAppearanceKey(style) {
   return `${style?.hollow ? 'dash' : 'solid'}|${style?.color || ''}`;
 }
 
 /**
- * Rebuild the shaft field from the records already drawn.
- *
- * Recycles the polylines rather than clearing the collection, for the reason
- * G2 names: `removeAll()` sets `_createVertexArray` and rebuilds the whole
- * vertex array on the next frame, which is exactly the stutter a pan must not
- * have. Polylines past the end are hidden and reused on the way back in.
+ * Appearance → `{ collection, spare }`: one `PolylineCollection` per look,
+ * inside `_masts`, and its hidden shafts waiting for a newcomer of that look.
+ */
+let _mastBands = new Map();
+/** Record id → `{ line, key }`: the shaft each drawn support stands on. */
+let _mastLines = new Map();
+/** Fewest spare shafts a band keeps after a rest; a quarter of its drawn ones when that is more. */
+const SPARE_MASTS_FLOOR = 64;
+
+function mastBand(key) {
+  let band = _mastBands.get(key);
+  if (!band) {
+    band = { collection: new Cesium.PolylineCollection(), spare: [], drawn: 0 };
+    _masts.add(band.collection);
+    _mastBands.set(key, band);
+  }
+  return band;
+}
+
+/** Empty the shaft field and forget which shaft was whose. */
+function clearMastField() {
+  _masts?.removeAll();
+  _mastBands = new Map();
+  _mastLines = new Map();
+}
+
+/**
+ * Draw the shaft field for the records already drawn.
  *
  * Everything it refuses is counted: `_mastsUnpublished` are the supports the
  * register gives no height for, `_mastsClipped` is the cap biting. Both reach
- * the row label and the legend (A1, A5).
+ * the row label and the legend (A1, A5). WHICH shafts are drawn is decided in
+ * record order and the cap bites there, so a redraw never swaps one support
+ * for another.
  *
- * WHICH shafts are drawn is decided in record order and the cap bites there,
- * so a redraw never swaps one support for another. In what ORDER they are then
- * written into the pool is a rendering question and nothing else: Cesium
- * breaks a draw command whenever two neighbouring polylines disagree on
- * appearance, so the drawn set is grouped by band before it is placed. In
- * register order the five appearances interleave and the fullest box costs up
- * to 1 913 commands; grouped it costs at most five.
+ * A SHAFT IS KEYED BY ITS SUPPORT, like the dot on top of it (see "A rest
+ * keeps the marks it can" above). A support still drawn keeps its shaft,
+ * rewritten only if its seat moved. Unlike the dots, a shaft that leaves is
+ * hidden and kept, and a newcomer takes a hidden shaft of its own look before
+ * a new one is added: a `PolylineCollection` writes `show` through its batch
+ * table without a rebuild, and keeps a position buffer it has streamed for 100
+ * quiet frames before turning it static again, so the pool costs it none of
+ * the double rebuild it costs a `BillboardCollection`. Measured before this:
+ * over Paris at 2.5 km (≈ 345 shafts), 20 ms of main thread per rest at 4× CPU
+ * throttling, every shaft's positions and colour rewritten, twice; with it,
+ * 5 ms, interleaved on the same machine.
+ *
+ * ONE COLLECTION PER APPEARANCE is what lets a slot be reused by identity
+ * without losing the batching. Cesium breaks a draw command whenever two
+ * neighbouring polylines of a bucket disagree on appearance, so one shared
+ * collection had to be written in band order on every rest — in register order
+ * the five appearances interleave and the fullest box costs up to 1 913
+ * commands. A collection holds one look, so it is one command whatever order
+ * its shafts come and go in, and the field is at most five.
  */
 function reconcileMasts() {
   _mastsDrawn = 0;
@@ -1078,34 +1194,60 @@ function reconcileMasts() {
       // as they do on screen.
       drawn.push(record);
     }
-    // Stable within a band — `Array.prototype.sort` is stable — so two shafts
-    // of the same colour keep their register order and a redraw with the same
-    // records produces the same pool, frame after frame.
-    drawn.sort((a, b) => mastAppearanceKey(a.style).localeCompare(mastAppearanceKey(b.style)));
   }
-  const index = drawn.length;
-  _mastsDrawn = index;
+  _mastsDrawn = drawn.length;
   if (!_masts) return;
-  for (let i = 0; i < index; i += 1) {
-    const record = drawn[i];
+  const next = new Map();
+  const newcomers = [];
+  // 1. The supports still drawn keep their shaft, in the same look.
+  for (const record of drawn) {
+    const key = mastAppearanceKey(record.style);
+    const held = _mastLines.get(record.id);
+    if (!held || held.key !== key) {
+      newcomers.push(record);
+      continue;
+    }
+    _mastLines.delete(record.id);
+    const foot = record.groundPosition || record.position;
+    const [heldFoot, heldTop] = held.line.positions;
+    if (!Cesium.Cartesian3.equals(heldFoot, foot) || !Cesium.Cartesian3.equals(heldTop, record.position)) {
+      held.line.positions = [foot, record.position];
+    }
+    next.set(record.id, held);
+  }
+  // 2. The rest are put away, hidden, in their own band.
+  for (const held of _mastLines.values()) {
+    held.line.show = false;
+    mastBand(held.key).spare.push(held.line);
+  }
+  // 3. The newcomers take a spare of their look, or a new shaft.
+  for (const record of newcomers) {
+    const key = mastAppearanceKey(record.style);
+    const band = mastBand(key);
     const positions = [record.groundPosition || record.position, record.position];
-    let line = _masts.get(i);
-    if (!line) {
+    let line = band.spare.pop();
+    if (line) {
+      line.positions = positions;
+      line.show = true;
+    } else {
       // Handed in at the add rather than assigned after it: `add()` without a
       // `material` builds a default white one that the next line would orphan,
       // and an orphan is an instance Cesium will never destroy.
-      const material = createMastMaterial(record.style);
-      line = _masts.add({ positions, width: MAST_WIDTH_PX, material, show: true });
-      line[record.style.hollow ? MAST_DASH_SLOT : MAST_SOLID_SLOT] = material;
-    } else {
-      line.positions = positions;
-      line.width = MAST_WIDTH_PX;
-      line.show = true;
-      dressMast(line, record.style);
+      line = band.collection.add({
+        positions, width: MAST_WIDTH_PX, material: createMastMaterial(record.style), show: true,
+      });
     }
+    next.set(record.id, { line, key });
   }
-  for (let i = index; i < _masts.length; i += 1) _masts.get(i).show = false;
-  _masts.show = draw && index > 0;
+  _mastLines = next;
+  // 4. Each band keeps what a pan's churn needs and gives the rest back.
+  for (const band of _mastBands.values()) band.drawn = 0;
+  for (const held of next.values()) _mastBands.get(held.key).drawn += 1;
+  for (const band of _mastBands.values()) {
+    const keep = Math.max(SPARE_MASTS_FLOOR, Math.ceil(band.drawn / 4));
+    while (band.spare.length > keep) band.collection.remove(band.spare.pop());
+  }
+  _masts.show = draw && drawn.length > 0;
 }
 
 /** Hide every ray and forget what they said. */
@@ -1893,34 +2035,43 @@ function reconcileMesh(box) {
   _meshPick = pick;
   _meshBoxKey = boxKey;
   const selected = takeSelectionForRebuild();
-  _points?.removeAll();
-  _records = new Map();
+  // Keyed by id: a dot still picked keeps its record and its billboard (see
+  // "A rest keeps the marks it can" above), and only the newcomers are drawn.
+  const previous = _records;
+  const next = new Map();
+  const arrivals = [];
+  let written = 0;
 
   for (const tuple of pick.picked) {
-    if (_records.size >= MAX_RENDERED_SUPPORTS) break;
+    if (next.size >= MAX_RENDERED_SUPPORTS) break;
     const lat = Number(tuple[MESH_LAT]);
     const lon = Number(tuple[MESH_LON]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
     const id = anfrMeshRecordId(tuple);
-    if (_records.has(id)) continue;
+    if (next.has(id)) continue;
     const style = anfrMeshStyle(tuple);
+    const kept = previous.get(id);
+    if (kept?.mesh) {
+      // The selected dot is one of these, and keeps any lookup still in
+      // flight, which writes into this object when it lands.
+      previous.delete(id);
+      const moved = Number(kept.tuple?.[MESH_LAT]) !== lat || Number(kept.tuple?.[MESH_LON]) !== lon;
+      kept.tuple = tuple;
+      if (keepMark(kept, moved ? Cesium.Cartesian3.fromDegrees(lon, lat, POINT_LIFT_M) : kept.position, style, undefined)) {
+        written += 1;
+      }
+      next.set(id, kept);
+      continue;
+    }
     // No ground warm-up at these altitudes: a metre of vertical error is
     // invisible and 2 200 terrain lookups per pan would not be.
     const position = Cesium.Cartesian3.fromDegrees(lon, lat, POINT_LIFT_M);
-    const point = _points?.add(mastBillboardOptions(id, position, style)) || null;
-    // The selected dot keeps its record — and with it any lookup still in
-    // flight, which writes into this object when it lands.
-    if (selected?.id === id) {
-      Object.assign(selected, { tuple, point, position, style });
-      _records.set(id, selected);
-      continue;
-    }
     // A dot this session has already identified keeps its identity across pans
     // and zooms — the lookup is memoized, so re-entering a city redraws the
     // cards it earned rather than re-asking for them.
     const known = _meshLookups.get(id);
     const support = Array.isArray(known) && known.length ? known[0] : null;
-    _records.set(id, {
+    next.set(id, {
       id,
       mesh: true,
       tuple,
@@ -1932,11 +2083,20 @@ function reconcileMesh(box) {
       detail: support ? _details.get(support.id) || null : null,
       detailPending: false,
       detailError: null,
-      point,
+      // Drawn below, once the leavers are gone.
+      point: null,
       position,
       style,
     });
+    arrivals.push(id);
   }
+  for (const record of previous.values()) releaseMark(record.point);
+  for (const id of arrivals) {
+    const record = next.get(id);
+    record.point = takeMark(id, record.position, record.style, undefined);
+  }
+  if (written && !arrivals.length && !previous.size) rebuildMarksOnce();
+  _records = next;
   _count = _records.size;
   _inView = pick.inBox;
   // The maillage tuple carries no height, so there is nothing to extrude and
@@ -2036,28 +2196,33 @@ function boxKeyOf(box) {
 function reconcileSupports(payload) {
   _meshBoxKey = null;
   const selected = takeSelectionForRebuild();
-  _points?.removeAll();
-  _records = new Map();
+  // Keyed by id, as the maillage is: a support the new box shares with the
+  // last one keeps its record and its billboard, re-seated on the ground
+  // floor as it is now known; only the newcomers are drawn.
+  const previous = _records;
+  const next = new Map();
+  const arrivals = [];
+  let written = 0;
   const warm = [];
   for (const support of payload?.supports || []) {
     if (!Number.isFinite(support?.lat) || !Number.isFinite(support?.lon)) continue;
-    if (_records.size >= MAX_RENDERED_SUPPORTS) break;
+    if (next.size >= MAX_RENDERED_SUPPORTS) break;
     const id = anfrSupportId(support.id);
-    if (_records.has(id)) continue;
+    if (next.has(id)) continue;
     const style = anfrSupportStyle(support);
     const heightM = anfrMastHeightM(support);
     const { ground, top } = supportAnchors(support.lat, support.lon, heightM);
-    const position = top;
-    const point = _points?.add(mastBillboardOptions(id, position, style, {
-      translucencyByDistance: new Cesium.NearFarScalar(500, 1.0, 400_000, 0.45),
-    })) || null;
-    if (selected?.id === id) {
-      Object.assign(selected, { support, point, position, groundPosition: ground, mastHeightM: heightM, style });
-      _records.set(id, selected);
-      warm.push({ lat: support.lat, lon: support.lon });
+    warm.push({ lat: support.lat, lon: support.lon });
+    const kept = previous.get(id);
+    if (kept && !kept.mesh) {
+      // The selected support is one of these, and keeps its card in flight.
+      previous.delete(id);
+      Object.assign(kept, { support, groundPosition: ground, mastHeightM: heightM });
+      if (keepMark(kept, top, style, SUPPORT_FADE)) written += 1;
+      next.set(id, kept);
       continue;
     }
-    _records.set(id, {
+    next.set(id, {
       id,
       mesh: false,
       support,
@@ -2065,14 +2230,22 @@ function reconcileSupports(payload) {
       detail: _details.get(support.id) || null,
       detailPending: false,
       detailError: null,
-      point,
-      position,
+      // Drawn below, once the leavers are gone.
+      point: null,
+      position: top,
       groundPosition: ground,
       mastHeightM: heightM,
       style,
     });
-    warm.push({ lat: support.lat, lon: support.lon });
+    arrivals.push(id);
   }
+  for (const record of previous.values()) releaseMark(record.point);
+  for (const id of arrivals) {
+    const record = next.get(id);
+    record.point = takeMark(id, record.position, record.style, SUPPORT_FADE);
+  }
+  if (written && !arrivals.length && !previous.size) rebuildMarksOnce();
+  _records = next;
   _count = _records.size;
   _inView = Number(payload?.inBox) || _count;
   warmGroundFloor(warm.slice(0, GROUND_WARM_LIMIT));
@@ -2234,7 +2407,7 @@ function dropMasts() {
   _requestGeneration += 1;
   if (_selectedId) clearSelection();
   _points?.removeAll();
-  _masts?.removeAll();
+  clearMastField();
   _sectors?.removeAll();
   _records = new Map();
   _meshBoxKey = null;
@@ -2935,9 +3108,13 @@ const anfrFranceLayer = {
     // clamped sprites, and a shaft is depth-bearing geometry that has to sort
     // against the world — against the terrain and the buildings — rather than
     // against other sprites. See the occlusion note in the module header.
-    _masts = new Cesium.PolylineCollection();
+    //
+    // A collection OF collections, one per appearance (see `reconcileMasts`).
+    _masts = new Cesium.PrimitiveCollection();
     _masts.show = false;
     viewer.scene.primitives.add(_masts);
+    _mastBands = new Map();
+    _mastLines = new Map();
     _sectors = new Cesium.PolylineCollection();
     _sectors.show = false;
     viewer.scene.primitives.add(_sectors);
@@ -3013,7 +3190,7 @@ const anfrFranceLayer = {
       _mapStackListener = null;
     }
     _points?.removeAll();
-    _masts?.removeAll();
+    clearMastField();
     _sectors?.removeAll();
     _records = new Map();
     _meshBoxKey = null;

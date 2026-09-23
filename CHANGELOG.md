@@ -283,6 +283,29 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **With the data centres on, the globe froze over Paris for a minute or
+  more, and some sites stood 80 m under the street.** Every site within 75 km
+  of the camera — a few hundred around Paris, on screen or not — measured the
+  ground under it with a hidden render, and a site off screen never got an
+  answer, so it asked again every two seconds; the few that never got one
+  stayed at sea level. Measured over Paris at 5 km with the processor slowed
+  four times: 0.4 images per second while turning the view, 9-13 s of blocked
+  page after each stop, and 14 of the 70 sites on screen buried. The sites now
+  read the ground from the relief already loaded (a lookup, not a render), only
+  the sites you can see ask, and on Google 3D, where a render is the only way,
+  the reads wait for the city to finish loading and go a few dozen at a time.
+  The 4 649 marks are drawn as one batch instead of 4 649 objects Cesium walked
+  on every frame, and a building outline is only held while its site is drawn.
+  Same view, same computer: 55-58 images per second against 60 with the layer
+  off, under 0.1 s after a stop, and every site on the ground.
+- **With « Infrastructure numérique » on, a still globe kept redrawing the
+  layer list and the map key three times a second.** Nothing on screen
+  changed, but every redraw made the page measure its side columns again, and
+  on a slow processor that held the globe back even while nobody touched it.
+  The list and the key now change only when what they show changes — a count
+  that moves, a card that opens or learns something, a tile switched on — so
+  a focused button, an open list of diagnostics and the scroll of the key are
+  no longer reset by a redraw of the same thing.
 - **On the Satellite basemap, the sea along the French coast flashed white
   every time the camera stopped.** Past the edge of its aerial survey, IGN
   answers with white tiles instead of no tile, and only at the finer zoom
@@ -292,6 +315,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the row showed it on every coastline. The white is now made transparent
   and the world satellite picture underneath shows through; the rest of the
   orthophoto is not touched.
+- **The globe no longer catches each time the camera stops over the
+  antennas.** At every stop, « Antennes mobiles » drew every mast on screen
+  again from scratch and, at the national scale, went through all 72 746
+  masts of the register to choose which to show. It now keeps the masts that
+  stay in view and draws only the ones that come in, and chooses from an
+  index built once — the same masts as before, chosen about three times
+  faster. Measured with a phone-class CPU, antennas alone, over two runs:
+  what the layer does at a stop takes 95–102 ms instead of 207–338 over
+  France, 45–50 instead of 80 over Paris at 5 km, and about 18 instead of
+  37–48 closer in, where the masts stand on their shafts. The longest freeze
+  after a stop is about 135 ms instead of 190–215 over Paris, and barely
+  moves over France (188 → 179 ms). The frame rate while orbiting does not
+  change.
 - **In the clean view, clicking a sale, an energy rating or an antenna showed
   its name and nothing else.** The card went to the map key, which the clean
   view had just taken off the screen — it is hidden there, but a hidden panel
@@ -397,6 +433,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   phone's graphics chip has not been measured.
 - **The dead-zone hatching of « Couverture 4G » is painted twice as fast**
   (0.51 → 0.26 ms per tile, off the main thread), pixel for pixel the same.
+- **The mic rests in a corner and opens only while you speak.** On a computer
+  the mic is a single « Parler à Surplomb » button in the bottom-right corner,
+  instead of an instrument panel in the middle of the bottom bar. Pressed, it
+  opens into a small card that says what it is doing (« Je vous écoute »,
+  « Surplomb répond », « À vous »), shows the level while sound flows, puts
+  what you said and what Surplomb answered above it, and has an « Arrêter »
+  button that ends the conversation. It goes back to the button when the
+  conversation ends. On the hosted trial there is no « Arrêter », since
+  ending the session would lose the questions left. On a tablet a « ? » next
+  to the button shows how to use it. The phone keeps its mic as it was.
 - **The globe fills the screen, and the place search sits at the top.** The
   black circle that framed the view — and blacked out both sides of a wide
   screen — is off by default; a light shade toward the corners replaces it,

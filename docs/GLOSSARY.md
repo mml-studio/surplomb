@@ -522,7 +522,17 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 
 | French | English | Note |
 |---|---|---|
-| Contrôle vocal | Voice control | The mic button's screen-reader name. |
+| Parler à Surplomb | Talk to Surplomb | The desktop mic button at rest, and the start of the mic button's screen-reader name (was « Contrôle vocal »). |
+| Je vous écoute | Listening | The desktop card while the mic is open. |
+| Surplomb répond | Surplomb is answering | |
+| À vous | Your turn | A session is open and the mic is shut. |
+| J’agis sur la carte… | Working on the map… | A tool is running. |
+| Voix indisponible | Voice unavailable | |
+| Demande d’accès au micro | Requesting microphone | While the browser asks for the mic. |
+| Commande en cours | Running command | While a tool the voice called runs. |
+| Arrêter ; Arrêter la conversation avec Surplomb | Stop; Stop the conversation with Surplomb | Ends the voice session. |
+| Vous | You | Who said a line of the transcript; the other one is « Surplomb ». |
+| Fermer le message d’erreur | Close the error message | |
 | Aide vocale | Voice help | The `?` that opens the tray on a touchscreen. |
 | Cliquez le micro ou maintenez Espace pour parler | Click the mic or hold Space to speak | Cursor. |
 | Touchez le micro pour parler · il se referme seul | Tap the mic to speak · it closes itself | One request per tap. |
