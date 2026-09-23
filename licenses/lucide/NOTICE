@@ -10,7 +10,7 @@ Source: https://github.com/lucide-icons/lucide
         icons/<name>.svg
         Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
 
-WHAT WAS TAKEN. Thirteen icons, in two files.
+WHAT WAS TAKEN. Twenty-five icons, in two files.
 
 `index.html`, the landing page's scene « Choisissez une vue. »
 (src/vitrine/stage.js), draws them in its tab bar, its pause control and its
@@ -61,6 +61,22 @@ capteurs » reuses `radio-tower`, listed above. There the
 child elements are copied verbatim into an `<svg viewBox="0 0 24 24">` that
 carries Lucide's own stroke attributes (width 2), and the result is used as a
 CSS mask, so the tile's colour paints through the strokes.
+
+And six more (retrieved 2026-09-23 at the same commit) in the globe's top
+bar, its place search and its Appearance panel (`src/globeShell.js`):
+
+    sliders-horizontal — « Apparence »,
+    ellipsis           — « Plus d'actions »,
+    clock              — a recent place in the search menu,
+    map-pin            — a city in the same menu,
+    check              — the chosen map style,
+    chevron-right      — « Réglages avancés ».
+
+`ellipsis` (Feather's `more-horizontal`), `clock`, `check` and
+`chevron-right` are icons Lucide derived from Feather, so the MIT notice
+covers them; `sliders-horizontal` and `map-pin` are Lucide's own, under ISC.
+They are drawn exactly as the Layers panel's are: copied verbatim, used as a
+CSS mask.
 
 They are INTERFACE icons, drawn at 18-22 CSS px in a menu bar, which is the job
 Lucide authors for; nothing here is drawn on the globe, where the cartographic

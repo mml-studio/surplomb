@@ -53,8 +53,30 @@ export default defineMessages({
     cancel: { fr: 'Annuler', en: 'Cancel' },
     confirm: { fr: 'Confirmer', en: 'Confirm', note: 'Leaves the globe for the home page.' },
   },
-  style: {
-    activeLabel: { fr: 'STYLE ACTIF', en: 'ACTIVE STYLE', note: 'Label of the chip naming the visual preset in use.' },
+  // The place search at the top centre of a desktop (src/globeShell.js).
+  placeSearch: {
+    recents: { fr: 'Lieux récents', en: 'Recent places', note: 'Heading of the places this browser searched before.' },
+    cities: { fr: 'Grandes villes', en: 'Major cities', note: 'Heading of the shortcuts to the largest French municipalities.' },
+  },
+  // The top bar and its « Apparence » panel (src/globeShell.js): map style,
+  // base map and display settings, gathered in one place.
+  appearance: {
+    button: { fr: 'Apparence', en: 'Appearance' },
+    buttonTitle: { fr: 'Style de carte, fond de carte et affichage', en: 'Map style, base map and display' },
+    more: { fr: 'Plus d’actions', en: 'More actions', note: 'The « … » button: share, clear layers, locate, reset, language.' },
+    title: { fr: 'Apparence', en: 'Appearance' },
+    close: { fr: 'Fermer le panneau Apparence', en: 'Close the Appearance panel' },
+    styles: { fr: 'Style de carte', en: 'Map style' },
+    edgeShade: {
+      fr: 'Assombrissement des bords',
+      en: 'Edge shading',
+      note: 'A slider darkening the corners of the view, like a photographic vignette.',
+    },
+    hud: { fr: 'Mesures techniques', en: 'Technical readouts', note: 'Switches the HUD on: altitude, sun elevation, coordinates.' },
+    hudHint: { fr: 'Altitude, soleil, coordonnées · touche H', en: 'Altitude, sun, coordinates · H key' },
+    clean: { fr: 'Vue épurée', en: 'Clean view', note: 'Hides every control so only the globe is left.' },
+    cleanHint: { fr: 'Masque toutes les commandes · touche V', en: 'Hides every control · V key' },
+    advanced: { fr: 'Réglages avancés', en: 'Advanced settings' },
   },
   actions: {
     nav: { fr: 'Actions du globe', en: 'Globe actions' },

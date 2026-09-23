@@ -461,8 +461,9 @@ test('the three variants share one door, and C never becomes the card', () => {
   assert.match(init, /if \(chosen === 'C'\) \{\s*root\.remove\(\);/);
   // The bubble closes on the same surfaces the card yields to.
   assert.match(init, /isBlocked: \(\) => exclusiveSurfaceActive\(documentRef\),/);
-  // ...and on a desktop, when the LOCATION tray opens where the bubble sits.
-  assert.match(init, /tray: phoneShell \? null : documentRef\.getElementById\('location-bar'\),/);
+  // ...and on a desktop, when the search it points at opens: the top-centre
+  // field's menu (src/globeShell.js), or the LOCATION tray without it.
+  assert.match(init, /tray: phoneShell \? null : desktopTopSearch \? topSearch : documentRef\.getElementById\('location-bar'\),/);
 });
 
 test('the event contract: a throwing listener is contained, and closes name their reason', () => {
@@ -757,10 +758,15 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // (« Crépuscule », `styles/dusk.js`) took Snow's button on 2026-09-23 and
   // Snow was retired, so `set_visual_style`'s enum swapped `snow` for `dusk`
   // and its description names the new preset. +46 bytes, one cache bust.
-  assert.equal(block.length, 38303, 'tool schema byte length drifted from the frozen baseline');
+  //
+  // Re-frozen a THIRTEENTH time: Biarritz joined the city shortcuts at the
+  // owner's request (2026-09-23), and `fly_to_location`'s preset enum follows
+  // CITY_POIS (src/locations.test.mjs), so « va à Biarritz » lands on its
+  // hand-tuned framing. +24 bytes, one cache bust.
+  assert.equal(block.length, 38327, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '3c484f24bdd7ed8e92405b45b3689a8accfc92abf56eefa2dbceb91d91d4d7dd',
+    '995801b0057fc4ae94d62d772b68d5e31050a25e2aeac857f8f6a65cf0d69288',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 

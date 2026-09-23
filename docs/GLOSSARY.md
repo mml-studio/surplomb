@@ -476,6 +476,14 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Nuit, NUIT | Night, NIGHT | The night-atlas visual preset (id `noir`). The other presets — NORMAL, CRT, NVG, FLIR, ANIME — are the same word in both languages. |
 | Crépuscule, CRÉPUSCULE | Dusk, DUSK | The lighter night atlas (id `dusk`), brought by « Infrastructure numérique ». It replaced Snow on 2026-09-23. |
 | (fond) imposé par | (map source) set by | « Satellite imposé par Infrastructure numérique » — the basemap a lit row holds. |
+| Apparence, Réglages avancés | Appearance, Advanced settings | The top bar's panel on a desktop (`src/globeShell.js`); « Réglages avancés » holds the former AFFICHAGE panel. |
+| Style de carte | Map style | The previews of the visual presets in Appearance. |
+| Assombrissement des bords | Edge shading | The light corner falloff (`src/edgeShade.js`). Not the scope. |
+| lunette | scope | The circular mask of the view (`src/scopeMask.js`), off by default since 2026-09-23. |
+| Mesures techniques | Technical readouts | The HUD switch (altitude, sun, coordinates). |
+| Vue épurée | Clean view | Hides every control. |
+| Lieux récents, Grandes villes | Recent places, Major cities | The place search's menu. |
+| Plus d’actions | More actions | The « … » menu of the top bar. |
 
 ## Panel chips and fused rows
 

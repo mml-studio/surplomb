@@ -193,6 +193,7 @@ import {
   getScopeTerminusOverride,
   clampScopeTerminusPct,
 } from './scopeMask.js';
+import { setEdgeShadePct, getEdgeShadePct } from './edgeShade.js';
 import {
   fetchRegionalBrief,
   regionalDistanceM,
@@ -392,7 +393,8 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-hud .cockpit-topline',
   '#cockpit-hud .cockpit-topline > div',
   '#title-bar',
-  '#style-indicator',
+  '#place-search',
+  '#globe-top-bar',
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
@@ -413,6 +415,11 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#pp-toggles',
   '#param-slider-panel',
 ].join(', ');
+/**
+ * Panels whose contents the desktop top row adopted (src/globeShell.js): the
+ * LIEU and STYLES VISUELS dock trays, and DISPLAY.
+ */
+const GLOBE_SHELL_ADOPTED_PANEL_IDS = new Set(['location-bar', 'control-panel', 'pp-toggles']);
 /**
  * Whether an element currently occupies screen space a layout must respect.
  *
@@ -443,7 +450,8 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-hud .cockpit-topline',
   '#cockpit-hud .cockpit-topline > div',
   '#title-bar',
-  '#style-indicator',
+  '#place-search',
+  '#globe-top-bar',
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
@@ -548,7 +556,12 @@ function grantedSharpen(requested) {
 const GLOBAL_POST_DEFAULTS = {
   sharpen: { enabled: true, intensity: 49 },
   hudVariant: 'tactical',
-  hudVisible: true,
+  // Off since 2026-09-23: NORMAL / SUMMARY, ALT / SUN, AIS, the UTC clock and
+  // the vertical COLL / ONA text took four edges of the screen from a reader
+  // who had not asked for any of them. They are one switch away (Appearance ›
+  // « Mesures techniques », or H), and the CRT, NVG and FLIR presets still
+  // bring them with their look (STYLE_PRESET_DEFAULTS below).
+  hudVisible: false,
   // Detection is ON for EVERY style on a first run, Normal included (owner
   // directive 2026-08-22: "detect should also be on by default"). What it opens
   // AT is FIRST_RUN_DETECTION_PRESET — Balanced @ 50% since 2026-09-10, no
@@ -2520,7 +2533,6 @@ export class StyleManager {
     this._draggableResizeObserver = null;
 
     // DOM refs
-    this._styleIndicator = document.getElementById('active-style-name');
     this._sliderPanel = document.getElementById('param-slider-panel');
     this._sliderContainer = document.getElementById('param-sliders');
     this._ppToggles = document.getElementById('pp-toggles');
@@ -2556,6 +2568,7 @@ export class StyleManager {
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
+    this._edgeShadeSlider = document.getElementById('edge-shade-slider');
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackLockNote = document.getElementById('map-stack-lock-note');
     this._mapStackStatus = document.getElementById('map-stack-status');
@@ -2801,6 +2814,7 @@ export class StyleManager {
           scopeEnabled,
           scopeFeatherPct,
           scopeTerminusPct,
+          edgeShadePct,
           mapStack,
           panelState,
           styleParams,
@@ -2871,6 +2885,7 @@ export class StyleManager {
           const pinned = clampScopeTerminusPct(scopeTerminusPct);
           setScopeTerminusOverride(pinned == null ? null : pinned / 100);
         }
+        if (typeof edgeShadePct === 'number') this._applyEdgeShadePct(edgeShadePct);
         const mapStackRestore = mapStack
           ? this._setMapStack(mapStack, { syncShare: false })
           : Promise.resolve();
@@ -3580,6 +3595,20 @@ export class StyleManager {
    * @param {boolean} enabled - Whether sharpening should be active.
    * @returns {void}
    */
+  /**
+   * Apply an edge-shade strength and bring the slider along with it.
+   * @param {number|string} pct Corner opacity, 0..100.
+   * @returns {number} The value applied.
+   */
+  _applyEdgeShadePct(pct) {
+    const applied = setEdgeShadePct(pct);
+    if (this._edgeShadeSlider) {
+      this._edgeShadeSlider.value = String(applied);
+      this._edgeShadeSlider.setAttribute('aria-valuetext', `${applied}%`);
+    }
+    return applied;
+  }
+
   _setSharpenEnabled(enabled) {
     governorRequestRender('sharpen');
     this.sharpenEnabled = !!enabled;
@@ -3702,6 +3731,13 @@ export class StyleManager {
       const pct = Math.max(0, Math.min(100, parseInt(this._scopeFeatherSlider.value, 10) || 0));
       if (this._scopeFeatherValue) this._scopeFeatherValue.textContent = `${pct}%`;
       setScopeMaskFeather(pct / 100);
+      this._syncShareState();
+    });
+    // Edge shade — the light corner falloff that replaced the scope as the
+    // first-run treatment (src/edgeShade.js), in the Appearance panel.
+    this._edgeShadeSlider?.addEventListener('input', () => {
+      this.shareLinkManager?.claimRestoreLane?.('visual');
+      this._applyEdgeShadePct(this._edgeShadeSlider.value);
       this._syncShareState();
     });
 
@@ -4216,6 +4252,7 @@ export class StyleManager {
       scopeTerminusPct: getScopeTerminusOverride() == null
         ? null
         : Math.round(getScopeTerminusOverride() * 100),
+      edgeShadePct: getEdgeShadePct(),
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
     });
   }
@@ -5852,6 +5889,7 @@ export class StyleManager {
     if (change?.layerId === 'cctv' || change?.layerId === 'radio') {
       this._bindLayerFeedSubscriptions();
     }
+    if (change?.layerId === 'cctv') this._syncCctvPanelPresence();
     if (change?.layerId === 'radio' && [
       'visibility-transition',
       'visibility',
@@ -6868,6 +6906,22 @@ export class StyleManager {
   }
 
   /**
+   * The CAMÉRAS panel exists only while the CCTV layer is on (owner,
+   * 2026-09-23). France has very few public cameras, and a rail member that
+   * offers them to every visit is a panel most readers can do nothing with;
+   * the layer is switched on from the Layers panel (or C), and the panel
+   * follows it. `hidden` takes it out of the right rail's layout pass too.
+   * @returns {void}
+   */
+  _syncCctvPanelPresence() {
+    if (!this._cctvPanel) return;
+    const present = !!this._dataManager?.isEnabled?.('cctv');
+    if (this._cctvPanel.hidden === !present) return;
+    this._cctvPanel.hidden = !present;
+    this._scheduleRightPanelLayout?.();
+  }
+
+  /**
    * Opens the CCTV panel for a camera the operator just clicked in the world.
    *
    * `explicit: true` is the whole point. The ambient disclosure in
@@ -7430,6 +7484,7 @@ export class StyleManager {
    */
   _renderCctvState(state) {
     this._cctvState = state || null;
+    this._syncCctvPanelPresence();
     const cameras = state?.cameras || [];
     const enabled = !!state?.enabled && !!this._dataManager?.isEnabled('cctv');
     const activeId = state?.activeCameraId || '';
@@ -7858,6 +7913,9 @@ export class StyleManager {
 
     for (const obstacle of document.querySelectorAll(RIGHT_STACK_OBSTACLE_SELECTOR)) {
       if (stack.contains(obstacle)) continue;
+      // On a desktop the round buttons are the « Plus d'actions » menu, which
+      // opens OVER the rail: it must not push the rail down each time.
+      if (this._globeShell && obstacle.id === 'top-center-actions') continue;
       let hiddenByAncestor = false;
       for (let element = obstacle; element; element = element.parentElement) {
         const style = getComputedStyle(element);
@@ -8643,6 +8701,22 @@ export class StyleManager {
   } = {}) {
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
+    // THE DESKTOP TOP ROW holds what these panels held (src/globeShell.js). A
+    // request to open one by name — the voice surface's set_panel_open — opens
+    // the place its contents moved to. The two dock trays themselves stay
+    // folded: they are empty, and an unfolded one would still reshape the
+    // dock through its `:has()` rules. A restore (share link, cockpit exit)
+    // opens nothing.
+    if (this._globeShell && GLOBE_SHELL_ADOPTED_PANEL_IDS.has(panelId)) {
+      if (!collapsed && explicit && !restore) this._globeShell.openAdopted(panelId);
+      if (panelId !== 'pp-toggles') {
+        if (!panelEl.classList.contains('collapsed')) {
+          panelEl.classList.add('collapsed');
+          this._syncPanelCollapseButton(panelEl);
+        }
+        return;
+      }
+    }
     if (explicit && !restore) this.shareLinkManager?.claimRestoreLane?.('panel', panelId);
     const nextCollapsed = Boolean(collapsed);
     const wasAutoCollapsed = panelEl.classList.contains('layout-auto-collapsed');
@@ -9556,6 +9630,7 @@ export class StyleManager {
         enabled: isScopeMaskEnabled(),
         featherPct: Math.round(getScopeMaskFeather() * 100),
       },
+      edgeShade: { pct: getEdgeShadePct() },
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
       styleParams,
     };
@@ -9617,6 +9692,7 @@ export class StyleManager {
       if (this._scopeFeatherValue) this._scopeFeatherValue.textContent = `${pct}%`;
       setScopeMaskFeather(pct / 100);
     }
+    if (typeof state.edgeShade?.pct === 'number') this._applyEdgeShadePct(state.edgeShade.pct);
 
     const detectionState = state.detection || {};
     if (typeof detectionState.density === 'number' && this._detectionDensitySlider) {
@@ -9880,6 +9956,10 @@ export class StyleManager {
     if (this._cockpitDisplayPortalActive) return;
     this._sliderPanel.classList.remove('collapsed');
     this._syncPanelCollapseButton(this._sliderPanel);
+    // On a desktop the parameters sit under the style previews in the
+    // Appearance panel: they show there with the style, and choosing a style
+    // (a key, the voice) opens nothing.
+    if (this._globeShell) return;
     this.setPanelCollapsed('pp-toggles', false, { explicit: true });
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const scrollOwner = this._ppToggles;
@@ -9939,10 +10019,11 @@ export class StyleManager {
     // Update button UI
     document.querySelectorAll('.style-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.style === styleName);
+      btn.setAttribute('aria-pressed', String(btn.dataset.style === styleName));
     });
 
-    // Update style indicator
-    this._styleIndicator.textContent = styleDisplayName(styleName);
+    // Update the style readout (the dock's mini status; on a desktop the
+    // chosen preview in the Appearance panel says it instead)
     this._updateStyleMiniStatus(styleName);
 
     // Update parameter sliders
@@ -10279,6 +10360,12 @@ export class StyleManager {
     const outcome = await this.flyToAddress(query, { searchField: this._locationSearch });
     if (outcome.status === 'not-found') this._showToast(messages().toast.locationNotFound);
     else if (outcome.status === 'failed') this._showToast(messages().toast.searchFailed);
+    else if (outcome.status === 'flying') {
+      // The desktop top row keeps the places a search found (src/globeShell.js).
+      this._locationSearchForm?.dispatchEvent(new CustomEvent('place-search:found', {
+        detail: { query, label: outcome.label || query },
+      }));
+    }
   }
 
   /**
@@ -10372,7 +10459,31 @@ export class StyleManager {
    * field lives in the sheet's Recherche tab, which its own controller opens.
    * @returns {void}
    */
+  /**
+   * Take the desktop top row (src/globeShell.js) once it has adopted the
+   * search form, the style buttons and the DISPLAY panel. Null on a phone.
+   * @param {ReturnType<typeof import('./globeShell.js').initGlobeShell>} shell
+   * @returns {void}
+   */
+  attachGlobeShell(shell) {
+    this._globeShell = shell || null;
+    if (!this._globeShell) return;
+    // DISPLAY is no longer a member of the right rail: it lives in the
+    // Appearance panel, open whole under « Réglages avancés ». The dock's two
+    // trays are empty; a stored pin must not unfold one.
+    this.setPanelCollapsed('pp-toggles', false, { syncShare: false, persist: false });
+    for (const panelId of ['location-bar', 'control-panel']) {
+      this.setPanelCollapsed(panelId, true, { syncShare: false, persist: false });
+    }
+    this._scheduleRightPanelLayout();
+  }
+
   openLocationSearch() {
+    // On a desktop the field lives at the top centre (src/globeShell.js).
+    if (this._globeShell) {
+      this._globeShell.openPlaceSearch();
+      return;
+    }
     this.setPanelCollapsed('location-bar', false, { explicit: true });
     const field = this._locationSearch;
     if (!field) return;
@@ -11259,7 +11370,8 @@ export class StyleManager {
       this._hudLayoutSelect.value = 'tactical';
     }
     this._setHudVariant('tactical');
-    this.hud.setMode('on');
+    // Mirrors GLOBAL_POST_DEFAULTS.hudVisible: a first run shows no HUD.
+    this.hud.setMode(GLOBAL_POST_DEFAULTS.hudVisible ? 'on' : 'off');
     this._updateHudButtonState();
 
     // Detection toggle button

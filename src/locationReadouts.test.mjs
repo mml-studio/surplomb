@@ -17,15 +17,14 @@ function locationSearchHandler() {
   return ui.slice(start, end);
 }
 
-test('the ACTIVE STYLE indicator is written from the style name and nothing else', () => {
+test('no corner chip reports the style, and the location search never writes one', () => {
   // A free-text location search used to write the searched CITY into the
-  // top-right style slot, so the corner read "ACTIVE STYLE / TOKYO".
-  const writes = [...ui.matchAll(/this\._styleIndicator\.textContent\s*=/g)];
-  assert.equal(writes.length, 1, 'the style indicator must have exactly one writer');
-  assert.match(
-    ui.slice(writes[0].index, writes[0].index + 160),
-    /this\._styleIndicator\.textContent = styleDisplayName\(styleName\);/,
-  );
+  // top-right style slot, so the corner read "ACTIVE STYLE / TOKYO". The chip
+  // itself is gone since 2026-09-23 — the chosen preview in the Appearance
+  // panel says which style is on — and must not come back as a second
+  // writer of the style name.
+  assert.doesNotMatch(ui, /_styleIndicator/, 'the STYLE ACTIF chip has no writer left');
+  assert.doesNotMatch(ui, /active-style-name/);
 
   const handler = locationSearchHandler();
   assert.doesNotMatch(handler, /_styleIndicator/, 'location search must not touch the style indicator');

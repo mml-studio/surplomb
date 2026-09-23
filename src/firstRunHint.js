@@ -35,6 +35,10 @@ const EDGE_PX = 12;
  * @param {HTMLTemplateElement|null} input.template `template[data-first-run-variant="C"]`.
  * @param {Element|null} [input.anchor] What the caret points at.
  * @param {boolean} [input.phoneShell]
+ * @param {'above'|'below'} [input.placement] Which side of the anchor the
+ *   bubble takes. Defaults to under it on a phone (the field is the bar at
+ *   the top) and above it on a desktop; a desktop whose search is the
+ *   top-centre field (src/globeShell.js) passes `'below'` too.
  * @param {() => void} [input.openSearch] Opens the search field it advertises.
  * @param {(event: object) => void} [input.emit]
  * @param {() => void} [input.onClose]
@@ -52,6 +56,7 @@ export function initFirstRunHint({
   template,
   anchor = null,
   phoneShell = false,
+  placement = phoneShell ? 'below' : 'above',
   openSearch = () => {},
   emit = () => {},
   onClose = () => {},
@@ -69,6 +74,7 @@ export function initFirstRunHint({
 
   host.replaceChildren(template.content.cloneNode(true));
   host.dataset.firstRunVariant = 'C';
+  host.dataset.placement = placement;
   host.hidden = false;
   let open = true;
 
@@ -87,9 +93,9 @@ export function initFirstRunHint({
     host.style.setProperty('--first-run-hint-x', `${Math.round(x)}px`);
     host.style.setProperty('--first-run-hint-caret', `${Math.round(anchorX - x)}px`);
     // A phone's search bar is at the TOP of the screen, so the bubble hangs
-    // under it with the caret turned up (phone.css); a desktop's sits above
-    // LOCATION, at the bottom.
-    if (phoneShell) {
+    // under it with the caret turned up (phone.css), and so does a desktop's
+    // top-centre field; the dock's LOCATION tray had it above, at the bottom.
+    if (placement === 'below') {
       host.style.setProperty('--first-run-hint-top', `${Math.round(rect.bottom + 10)}px`);
     } else {
       const viewportHeight = Number(windowRef.innerHeight) || 0;

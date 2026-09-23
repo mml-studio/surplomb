@@ -335,6 +335,28 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The globe fills the screen, and the place search sits at the top.** The
+  black circle that framed the view — and blacked out both sides of a wide
+  screen — is off by default; a light shade toward the corners replaces it,
+  and « Assombrissement des bords » sets how light. The circle is still under
+  Apparence › Réglages avancés › Lunette. On a computer, « Rechercher une
+  adresse, une ville, un lieu… » is a field at the top centre (⌘ K, Ctrl K or
+  « / »), with the places you searched before and the city shortcuts under
+  it; Biarritz joins the cities.
+- **One « Apparence » button for the look of the map.** The STYLE ACTIF chip,
+  the STYLES VISUELS tray of the dock and the AFFICHAGE panel are now one
+  panel at the top right: the styles as small previews of what you are
+  looking at, the chosen style's settings under them, the basemap, the edge
+  shade, « Mesures techniques » (the HUD) and « Vue épurée », then everything
+  else under « Réglages avancés ». The round buttons of the top centre are the
+  « … » menu beside it, with their names written out.
+- **The technical readouts are off until you ask for them.** NORMAL /
+  SUMMARY, ALT / SUN, AIS, the UTC clock and the vertical text on the left
+  edge no longer show on a first visit; « Mesures techniques » or H brings
+  them back, and CRT, NVG and FLIR still bring them with their look. The
+  heading strip at the top shows with them.
+- **The CAMÉRAS panel appears only with the cameras layer.** France has few
+  public cameras, and the panel used to sit in the right column of every visit.
 - **The Layers panel is a column of groups with one list beside it.** On a
   computer, the panel now opens as a narrow column — « Chercher », then Ciel &
   mer, Bâti, Mobilité, Énergie, Risques and Réseaux, each with an icon and a

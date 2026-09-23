@@ -55,6 +55,7 @@ import {
   releaseContinuousRender,
 } from './renderGovernor.js';
 import { installScopeMask, setScopeMaskEnabled } from './scopeMask.js';
+import { installEdgeShade } from './edgeShade.js';
 import { installCameraNoiseFloor } from './cameraNoiseFloor.js';
 import { installContextLossRecovery } from './contextLoss.js';
 import { installGlobeHeadingTape } from './globeHeadingTape.js';
@@ -78,6 +79,7 @@ import {
 } from './perfProfile.js';
 import { getInputModeDiagnostics, initInputMode, isPhoneShell } from './inputMode.js';
 import { initPhoneSheet } from './phoneSheet.js';
+import { initGlobeShell } from './globeShell.js';
 import { applyPhoneRenderDetail } from './phoneRender.js';
 import { applyTouchCameraProfile } from './touchCamera.js';
 import { getPickDiagnostics } from './data/pickAt.js';
@@ -937,23 +939,20 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // The explicit scope mask replaces the emergent six-pass artifact —
     // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
     // toggle finds it live.
+    // The scope is OFF by default on every shell since 2026-09-23. On a phone
+    // it drew a smaller picture on a 390 px screen; on a 16:9 desktop it is
+    // sized from the viewport height and blacked out both sides, so the globe
+    // read as a view through a porthole. A share link or a stored visual state
+    // still restores it, because that is a choice and this is a default; the
+    // toggle ships unlit in index.html. What a first run draws instead is the
+    // light edge shade below (src/edgeShade.js). Switched off BEFORE the
+    // install, so its first paint is the no-op of a disabled mask.
+    setScopeMaskEnabled(false);
     installScopeMask(viewer);
+    installEdgeShade(viewer);
     // moveEnd must fire once the camera has stopped, at every pose — see
     // src/cameraNoiseFloor.js (a Lyon share link never loaded its sales).
     installCameraNoiseFloor(viewer.scene, { Camera: Cesium.Camera });
-    if (phoneShell) {
-      // A full-screen 2D canvas repainted on every altitude step, over a globe
-      // that already fills a 390 px screen — the vignette it draws reads as a
-      // treatment on a desktop and as a smaller picture on a phone. Off by
-      // default there; the DISPLAY toggle still turns it on, and a share link
-      // or a stored visual state still restores it, because that is a choice
-      // and this is a default. The button has to be told: it ships `active`
-      // in index.html, and nothing else re-reads the mask's own state at boot.
-      setScopeMaskEnabled(false);
-      const scopeBtn = document.getElementById('scope-toggle');
-      scopeBtn?.classList.remove('active');
-      scopeBtn?.setAttribute('aria-pressed', 'false');
-    }
 
     // Where north is, outside the cockpit. See src/globeHeadingTape.js: the
     // cockpit already answered this and the ordinary globe view did not.
@@ -966,6 +965,12 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // until the Viewer is built (it is a constructor argument above), and the
     // data panel has to have been rendered before « À LA UNE » can reorder it.
     const phoneSheet = initPhoneSheet({ dataManager });
+
+    // THE DESKTOP TOP ROW: the place search at the top centre and the
+    // « Apparence » bar at the top right (src/globeShell.js). The mirror of the
+    // line above — null on a phone, before touching the DOM — and after it for
+    // the same reason: the controls it adopts must already be wired.
+    styleManager.attachGlobeShell(initGlobeShell({ ui: styleManager, viewer }));
 
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)

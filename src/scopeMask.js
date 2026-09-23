@@ -1,4 +1,4 @@
-import { getKeyholeGeometry } from './celestialRing.js';
+import { getKeyholeGeometry, setKeyholeFadeActive } from './celestialRing.js';
 
 /**
  * Scope mask — the app's signature circular viewport treatment, made real.
@@ -103,7 +103,13 @@ const SCOPE_TERMINUS_SAMPLE_MS = 120;
 let _canvas = null;
 let _container = null;
 let _viewer = null;
-let _enabled = true;
+/**
+ * Off until switched on (2026-09-23). The module default matters beyond the
+ * boot: the share link reads `isScopeMaskEnabled()` the moment the UI is
+ * built, before src/main.js has run a line more, and a `true` here put
+ * `sc=1` in every link a first run generated.
+ */
+let _enabled = false;
 let _featherRatio = SCOPE_FEATHER_RATIO_DEFAULT;
 let _resizeObserver = null;
 let _dprQuery = null;
@@ -464,6 +470,8 @@ export function setScopeMaskEnabled(enabled) {
   const next = Boolean(enabled);
   const reEnabled = next && !_enabled;
   _enabled = next;
+  // Labels fade outside the circle only while the circle is drawn.
+  setKeyholeFadeActive(next);
   if (reEnabled) {
     // The camera moved freely while the scope was off and nothing sampled it,
     // so the painted terminus can be a whole altitude band stale. Re-sync once
@@ -520,7 +528,9 @@ export function _resetScopeMaskForTest() {
   _canvas = null;
   _container = null;
   _viewer = null;
+  // The scope suites exercise a drawn mask; they reset to ON explicitly.
   _enabled = true;
+  setKeyholeFadeActive(true);
   _featherRatio = SCOPE_FEATHER_RATIO_DEFAULT;
   _terminusAlpha = SCOPE_OUTSIDE_ALPHA;
   _terminusOverride = null;

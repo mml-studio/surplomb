@@ -39,6 +39,7 @@ import * as Cesium from 'cesium';
 // rather than JSON next to the media: it is code input, Vite does not import
 // from the public directory, and Node's test runner needs no import attribute.
 import { HERO_LOOP } from './heroLoop.js';
+import { EDGE_SHADE_DEFAULT_PCT } from '../edgeShade.js';
 
 /**
  * The state the hero loop was recorded in, minus the camera. `map=photoreal`
@@ -53,6 +54,9 @@ export const HERO_STATE_PARAMS = Object.freeze({
   dd: '75',
   l: 't.8',
   sc: '0',
+  // The globe's own first-run edge shade (src/edgeShade.js): a hash without
+  // `es` restores none, as an archived link must.
+  es: String(EDGE_SHADE_DEFAULT_PCT),
   map: 'photoreal',
 });
 
@@ -133,7 +137,7 @@ export function heroShareHash(pose) {
   params.set('heading', String(pose.heading));
   params.set('pitch', String(pose.pitch));
   params.set('roll', String(pose.roll));
-  for (const key of ['dm', 'dd', 'sc', 'map', 'l']) params.set(key, HERO_STATE_PARAMS[key]);
+  for (const key of ['dm', 'dd', 'sc', 'es', 'map', 'l']) params.set(key, HERO_STATE_PARAMS[key]);
   return `#${params.toString()}`;
 }
 

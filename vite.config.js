@@ -19794,6 +19794,7 @@ const GEV_REALTIME_TOOLS = [
           enum: [
             'austin', 'sf', 'nyc', 'tokyo', 'london', 'paris', 'dubai', 'dc',
             'marseille', 'lyon', 'toulouse', 'nice', 'nantes', 'montpellier', 'strasbourg',
+            'biarritz',
           ],
           description: 'Known city preset ID. Use when the requested place matches one of these cities — it flies a hand-tuned framing instead of a generic geocode.',
         },
