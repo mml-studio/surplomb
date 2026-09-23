@@ -622,6 +622,7 @@ export async function searchAndFlyTo(viewer, query, options = {}) {
         label,
         navigationMode: 'natural-region-swath',
         rangeM: swath.rangeM,
+        ...geocodedPoint(lat, lng, types),
       };
     }
     // An administrative geocode can carry a viewport far larger than the place
@@ -655,6 +656,7 @@ export async function searchAndFlyTo(viewer, query, options = {}) {
         label,
         navigationMode,
         rangeM: null,
+        ...geocodedPoint(lat, lng, types),
       };
     }
   }
@@ -682,7 +684,22 @@ export async function searchAndFlyTo(viewer, query, options = {}) {
       ? 'explicit-range'
       : (options.forceClose ? navigationMode.replace('-overview', '-close') : navigationMode),
     rangeM: Math.round(flight.range),
+    ...geocodedPoint(lat, lng, types),
   };
+}
+
+/**
+ * Where the geocoder put the place and what it said it is: what the search
+ * mark draws from (src/searchResultMark.js). The geocoded point, not the
+ * camera's target — a pin belongs on the address, not on the framing.
+ * @param {number} lat
+ * @param {number} lng
+ * @param {ReadonlyArray<string>|undefined} types
+ * @returns {{lat: number, lng: number, types: string[]}|{}}
+ */
+function geocodedPoint(lat, lng, types) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {};
+  return { lat, lng, types: Array.isArray(types) ? [...types] : [] };
 }
 
 /** Places {low,high} viewport → the geocode {southwest,northeast} bounds shape

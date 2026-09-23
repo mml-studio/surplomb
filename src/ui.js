@@ -10342,6 +10342,11 @@ export class StyleManager {
       event.preventDefault();
       void this._submitLocationSearch();
     });
+    // Emptying the field — the reader's own delete, or the field's clear
+    // button — takes the pin or the outline away, as a map search does.
+    this._locationSearch?.addEventListener('input', () => {
+      if (!this._locationSearch.value.trim()) this._clearSearchResult();
+    });
   }
 
   /**
@@ -10424,6 +10429,8 @@ export class StyleManager {
       // LOCATION panel's own readout.
       const label = destination.label || query;
       this._landOnSearchedLocation(label);
+      // A pin on a precise place, the limits of a town or a région.
+      this._showSearchResult(destination, label);
       return { status: 'flying', label };
     } catch (err) {
       console.error('[Search] Geocoding failed:', err);
@@ -10451,6 +10458,40 @@ export class StyleManager {
     this._currentPoi = null;
     this._collapsePOIRow();
     this._updateLocationMiniStatus();
+    // Whatever marked the previous place goes; a search draws its own after.
+    this._clearSearchResult();
+  }
+
+  /**
+   * Mark a place on the globe the way a map search does (src/searchResultMark.js):
+   * a pin on a precise place, the outline of a town, a département or a
+   * région. The module, and Cesium's collections for it, load with the first
+   * search. A later search, landing or clear supersedes one still loading.
+   * @param {{lat?: number, lng?: number, types?: string[], navigationMode?: string}} place
+   * @param {string} label
+   * @returns {Promise<void>}
+   */
+  async _showSearchResult(place, label) {
+    if (!Number.isFinite(place?.lat) || !Number.isFinite(place?.lng)) return;
+    this._searchResultGeneration = (this._searchResultGeneration || 0) + 1;
+    const generation = this._searchResultGeneration;
+    try {
+      const { createSearchResultMark } = await import('./searchResultMark.js');
+      if (this._disposed || generation !== this._searchResultGeneration) return;
+      this._searchResultMark ||= createSearchResultMark(this.viewer);
+      await this._searchResultMark.show({ ...place, label });
+    } catch (error) {
+      console.warn('[Search] Could not mark the place:', error);
+    }
+  }
+
+  /**
+   * Take the search mark off the globe.
+   * @returns {void}
+   */
+  _clearSearchResult() {
+    this._searchResultGeneration = (this._searchResultGeneration || 0) + 1;
+    this._searchResultMark?.clear();
   }
 
   /**
@@ -10580,6 +10621,16 @@ export class StyleManager {
     this._setActiveLocation(cityId);
     this._activePoiIndex = 0;
     this._updatePoiHighlight();
+    // The town's limits, as a typed search of its name would draw them.
+    const bounds = CITY_POIS[cityId]?.viewBounds;
+    if (bounds) {
+      this._showSearchResult({
+        lat: (bounds.southwest.lat + bounds.northeast.lat) / 2,
+        lng: (bounds.southwest.lng + bounds.northeast.lng) / 2,
+        types: ['locality'],
+        navigationMode: 'city-overview',
+      }, CITY_POIS[cityId].name);
+    }
 
     // Track current target + POI for orbit
     if (result) {
@@ -10603,6 +10654,8 @@ export class StyleManager {
     this._setActiveLocation(cityId);
     this._activePoiIndex = poiIndex;
     this._updatePoiHighlight();
+    const poi = CITY_POIS[cityId]?.pois?.[poiIndex];
+    if (poi) this._showSearchResult({ lat: poi.lat, lng: poi.lon, types: [], navigationMode: 'precise-place' }, poi.name);
 
     // Track current target + POI for orbit
     if (result) {
@@ -11603,6 +11656,8 @@ export class StyleManager {
     // listener. `destroy()` settles the first and removes the second.
     this._coverageWatchRemover?.();
     this._coverageWatchRemover = null;
+    this._searchResultMark?.dispose();
+    this._searchResultMark = null;
     for (const timer of this._zoomPromptTimers) clearTimeout(timer);
     this._zoomPromptTimers = [];
     this._layerDrawWatchRemover?.();

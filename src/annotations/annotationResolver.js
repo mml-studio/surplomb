@@ -1915,6 +1915,30 @@ function shortLabel(formattedAddress) {
 }
 
 /**
+ * The OpenStreetMap administrative boundary around a place a search already
+ * geocoded — the fallback of the search outline (src/searchResultMark.js)
+ * outside metropolitan France, where `/api/place-outline` has no data.
+ *
+ * Unlike {@link resolveRegionRingForQuery} it needs no second geocode (the
+ * search has the point and the types, and the keyless build has no geocoder
+ * here at all), and it never outlines a country: the camera already shows it
+ * whole, and a national relation is megabytes of Overpass geometry.
+ *
+ * @param {{lat: number, lon: number, name: string, types?: string[]}} place
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<?{rings: Array<Array<[number, number]>>}>}
+ */
+export async function resolveAdminOutlineAt({ lat, lon, name, types } = {}, signal) {
+  const query = String(name || '').trim();
+  if (!query || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const scope = scopeFromTypes(types);
+  if (!['state', 'county', 'city'].includes(scope)) return null;
+  const fp = await fetchAdminArea(lat, lon, query, scope, signal).catch(() => null);
+  if (!fp || isRateLimitedOutcome(fp) || !(fp.ring?.length >= 4)) return null;
+  return { rings: [fp.ring] };
+}
+
+/**
  * Region ring for ANALYST queries ("how many flights over Texas / the Alps") —
  * a name-only entry point that reuses this module's boundary machinery
  * without the annotation pipeline. Natural Earth pack first (offline,

@@ -2,6 +2,38 @@
 
 Updated: September 23, 2026
 
+> **2026-09-23 — a place search leaves a mark: a pin on a precise place, the
+> limits of a commune, a département or a région.**
+>
+> - **Which.** `searchMarkPlan` (`src/searchResultMark.js`) reads the
+>   geocode's Google-shaped `types` through `placeOutlineLevelForTypes`
+>   (`src/placeOutline.js`): `locality`/`postal_town` → commune,
+>   `administrative_area_level_2` → département, `…_level_1` → région; a
+>   `country` or a `natural-region-swath` gets nothing; everything else a pin.
+>   `searchAndFlyTo` now returns the geocoded `lat`, `lng` and `types` with its
+>   destination (all three return paths).
+> - **Outline.** `/api/place-outline?level=&lat=&lon=` (vite.config.js,
+>   `placeOutlineProxy`; 30/min per visitor, 120 global; 404 outside
+>   metropolitan France): the commune containing the point from
+>   `geo.api.gouv.fr/communes?lat=&lon=&geometry=contour` (256 vertices, 5 dp,
+>   three largest pieces, kept per ~100 m point), the bundled IGN département
+>   containing it (2 km coastal snap), or the région as the dissolve of its
+>   départements (`territoires.json` mapping). Otherwise the client asks
+>   `resolveAdminOutlineAt` (annotationResolver.js, Overpass `is_in` + relation,
+>   the voice annotations' machinery; never a country). Drawn by
+>   `drawGroundHighlight`, 3 px `rgba(255, 99, 88, 0.92)`, unpickable. No
+>   outline found → a pin on the geocoded centre.
+> - **Pin.** A filled SVG drop (`#e5484d`, rim `#5c1414`, ivory core) 30 × 42 px
+>   in a `BillboardCollection`, `CLAMP_TO_GROUND`, never depth-tested away, and
+>   the first part of the label beside it in a `LabelCollection` (DM Sans 600
+>   15 px, ≤ 48 characters).
+> - **Lifecycle.** `flyToAddress` shows it after landing (typed search, `?q=`,
+>   first-run card); a city pill outlines its commune (`viewBounds` centre), a
+>   landmark pill pins its POI. `_landOnSearchedLocation` clears it (so
+>   « Autour de moi » does), and so does emptying `#location-search`. One mark
+>   at a time: a newer show supersedes an outline still loading. The module
+>   loads with the first search.
+
 > **2026-09-23 — the desktop globe has a top row: place search at the top
 > centre, « Apparence » and « … » at the top right; the scope and the HUD are
 > off by default.**
