@@ -712,7 +712,7 @@ export default defineMessages({
       tab03: { fr: 'Trafic', en: 'Traffic' },
       tab04: { fr: 'Énergie', en: 'Energy' },
       tab05: { fr: 'Bus', en: 'Buses' },
-      tab06: { fr: 'Vélos', en: 'Bikes' },
+      tab06: { fr: 'Numérique', en: 'Digital' },
       v01: {
         alt: { fr: 'Roissy et les avions en approche', en: 'Roissy and the planes on approach', keep: ['Roissy'] },
         title: { fr: 'Avions en approche', en: 'Planes on approach' },
@@ -743,12 +743,12 @@ export default defineMessages({
       },
       v06: {
         alt: {
-          fr: 'Les vélos et scooters partagés de Paris',
-          en: 'The shared bikes and scooters of Paris',
-          note: 'The French « scooters » is loose here: the fleets hold e-scooters and mopeds, and “scooters” covers both.',
+          fr: 'Les antennes de France s’allument, puis les zones sans 4G, les data centers d’Île-de-France et tout ce que voit une antenne de La Défense',
+          en: 'France’s antennas light up, then the areas without 4G, the data centres of Île-de-France and all that one antenna at La Défense can see',
+          keep: ['Île-de-France', 'La Défense'],
         },
-        title: { fr: 'Vélos et scooters', en: 'Bikes and scooters' },
-        place: { fr: 'Les flottes partagées de Paris', en: 'The shared fleets of Paris' },
+        title: { fr: 'Antennes et data centers', en: 'Antennas and data centres' },
+        place: { fr: 'De la France entière à une antenne de La Défense', en: 'From all of France to one antenna at La Défense', keep: ['La Défense'] },
       },
     },
     voice: {

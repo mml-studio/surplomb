@@ -5,7 +5,7 @@
 // plays in (index.html): every rendition the page may choose between
 // (src/vitrine/renditions.js). A box with no entry keeps its still.
 export const GALLERY_LOOPS = Object.freeze({
-  "capturedAt": "2026-09-22T09:14:15.561Z",
+  "capturedAt": "2026-09-23T12:34:11.373Z",
   "loops": {
     "view:01": {
       "aspect": 1.66,
@@ -326,52 +326,71 @@ export const GALLERY_LOOPS = Object.freeze({
     "view:06": {
       "aspect": 1.66,
       "fps": 30,
-      "durationS": 6,
+      "durationS": 24.87,
+      "openingS": 6.37,
       "renditions": [
         {
-          "src": "/landing/view-06-480-av1.9c8bb946.mp4",
+          "src": "/landing/view-06-480-av1.08243941.mp4",
           "mime": "video/mp4; codecs=\"av01.0.00M.08\"",
           "codec": "av1",
           "width": 480,
           "height": 290,
-          "bytes": 51642,
-          "bitrateKbps": 69
+          "bytes": 1392968,
+          "bitrateKbps": 448
         },
         {
-          "src": "/landing/view-06-480-h264.16eeeb05.mp4",
+          "src": "/landing/view-06-480-hevc.09af019f.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L63.90\"",
+          "codec": "hevc",
+          "width": 480,
+          "height": 290,
+          "bytes": 1220367,
+          "bitrateKbps": 393
+        },
+        {
+          "src": "/landing/view-06-480-h264.148ff489.mp4",
           "mime": "video/mp4; codecs=\"avc1.640015\"",
           "codec": "h264",
           "width": 480,
           "height": 290,
-          "bytes": 278497,
-          "bitrateKbps": 371
+          "bytes": 1446651,
+          "bitrateKbps": 465
         },
         {
-          "src": "/landing/view-06-960-av1.1d68a79d.mp4",
+          "src": "/landing/view-06-960-av1.1c41d425.mp4",
           "mime": "video/mp4; codecs=\"av01.0.04M.08\"",
           "codec": "av1",
           "width": 960,
           "height": 582,
-          "bytes": 135313,
-          "bitrateKbps": 180
+          "bytes": 3410743,
+          "bitrateKbps": 1097
         },
         {
-          "src": "/landing/view-06-960-h264.153a3cdd.mp4",
-          "mime": "video/mp4; codecs=\"avc1.64001F\"",
-          "codec": "h264",
+          "src": "/landing/view-06-960-hevc.79b43d27.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L93.90\"",
+          "codec": "hevc",
           "width": 960,
           "height": 582,
-          "bytes": 408040,
-          "bitrateKbps": 544
+          "bytes": 3712528,
+          "bitrateKbps": 1194
         },
         {
-          "src": "/landing/view-06-1440-av1.881f0d61.mp4",
+          "src": "/landing/view-06-1440-av1.00bee6dc.mp4",
           "mime": "video/mp4; codecs=\"av01.0.08M.08\"",
           "codec": "av1",
           "width": 1440,
           "height": 872,
-          "bytes": 277776,
-          "bitrateKbps": 370
+          "bytes": 6199735,
+          "bitrateKbps": 1995
+        },
+        {
+          "src": "/landing/view-06-1440-hevc.8bd90567.mp4",
+          "mime": "video/mp4; codecs=\"hvc1.1.6.L120.90\"",
+          "codec": "hevc",
+          "width": 1440,
+          "height": 872,
+          "bytes": 7116304,
+          "bitrateKbps": 2289
         }
       ]
     },

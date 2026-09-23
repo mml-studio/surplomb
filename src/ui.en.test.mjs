@@ -12,7 +12,7 @@ import uiMessages from './ui.i18n.js';
 import markupMessages from './i18n/markup.i18n.js';
 import { assertNoFrench, useTestLocale } from './i18n/testing.js';
 
-const ALLOW = ['Open-Meteo.com', 'OPEN-METEO', 'Français', 'SECURITY.md'];
+const ALLOW = ['Open-Meteo.com', 'OPEN-METEO', 'Français', 'SECURITY.md', 'La Défense'];
 
 test('every string src/ui.js can draw has an English with no French left in it', (t) => {
   useTestLocale('en', t);
