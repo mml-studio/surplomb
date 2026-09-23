@@ -311,3 +311,267 @@ test('a world pick with no box, no budget or nothing inside says so', () => {
   assert.equal(none.thinned, true);
   assert.equal(selectGeoMeshWorld(lumpy(), { box: { south: -10, west: -10, north: -5, east: -5 }, budget: 50 }).inBox, 0);
 });
+
+// --- The index changes the speed of a world pick, never its answer -------------
+//
+// `selectGeoMeshWorld` answers from an index built once per mesh (binary search
+// on latitude, cells counted by runs, typed columns for the representative).
+// What follows is the implementation it replaced, verbatim — a linear walk of
+// every row on every call — and the picks are compared row for row: the same
+// row objects in the same order, and the same step, fill level and counts.
+
+function linearRepresentativeOf(rows, indices) {
+  const counts = [];
+  for (const index of indices) {
+    const category = rows[index][MESH_CATEGORY];
+    counts[category] = (counts[category] || 0) + 1;
+  }
+  let modal = -1;
+  let most = 0;
+  for (let category = 0; category < counts.length; category += 1) {
+    if ((counts[category] || 0) > most) {
+      most = counts[category];
+      modal = category;
+    }
+  }
+  let best = -1;
+  for (const index of indices) {
+    const row = rows[index];
+    if (row[MESH_CATEGORY] !== modal) continue;
+    if (best < 0 || (row[MESH_WEIGHT] || 0) > (rows[best][MESH_WEIGHT] || 0)) best = index;
+  }
+  return best < 0 ? indices[0] : best;
+}
+
+function linearSelectGeoMeshWorld(rows, { box, budget, minStepDeg = 1 / 1024 } = {}) {
+  if (!box) return { picked: [], inBox: 0, budget: 0, thinned: false, cells: 0 };
+  const cap = Math.max(0, Math.floor(Number.isFinite(budget) ? budget : 0));
+  const inside = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (meshRowInBox(r, box)) inside.push(r);
+  }
+  const n = inside.length;
+  if (!cap || !n) return { picked: [], inBox: n, budget: cap, thinned: n > 0, cells: 0 };
+  if (n <= cap) return { picked: inside, inBox: n, budget: cap, thinned: false, cells: 0, stepDeg: null, fillLevel: null };
+  const repCap = Math.max(1, Math.floor(cap * 0.5));
+  const finest = Math.min(8, Math.max(1 / 4096, minStepDeg));
+  const ci = new Int32Array(n);
+  const cj = new Int32Array(n);
+  let minI = Infinity;
+  let maxI = -Infinity;
+  let minJ = Infinity;
+  let maxJ = -Infinity;
+  for (let x = 0; x < n; x += 1) {
+    const i = Math.floor(inside[x][MESH_LAT] / finest);
+    const j = Math.floor(inside[x][MESH_LON] / finest);
+    ci[x] = i;
+    cj[x] = j;
+    if (i < minI) minI = i;
+    if (i > maxI) maxI = i;
+    if (j < minJ) minJ = j;
+    if (j > maxJ) maxJ = j;
+  }
+  const keysAt = (level) => {
+    const i0 = minI >> level;
+    const j0 = minJ >> level;
+    const width = (maxJ >> level) - j0 + 1;
+    const keys = new Int32Array(n);
+    for (let x = 0; x < n; x += 1) keys[x] = ((ci[x] >> level) - i0) * width + ((cj[x] >> level) - j0);
+    return keys;
+  };
+  const countDistinct = (keys) => {
+    const seen = new Set();
+    for (let x = 0; x < n; x += 1) seen.add(keys[x]);
+    return seen.size;
+  };
+  const maxLevel = Math.max(0, Math.floor(Math.log2(8 / finest)));
+  let level = 0;
+  while (((maxJ - minJ + 1) * (maxI - minI + 1)) / 4 ** level > 2 ** 30 && level < maxLevel) level += 1;
+  let keys = keysAt(level);
+  let occupied = countDistinct(keys);
+  while (occupied > repCap && level < maxLevel) {
+    level = Math.min(maxLevel, level + Math.max(1, Math.ceil(Math.log(occupied / repCap) / Math.log(4))));
+    keys = keysAt(level);
+    occupied = countDistinct(keys);
+  }
+  while (level > 0) {
+    const finer = keysAt(level - 1);
+    if (countDistinct(finer) > repCap) break;
+    level -= 1;
+    keys = finer;
+  }
+  const stepDeg = finest * 2 ** level;
+  const cells = new Map();
+  for (let x = 0; x < n; x += 1) {
+    const members = cells.get(keys[x]);
+    if (members) members.push(x);
+    else cells.set(keys[x], [x]);
+  }
+  const reps = [];
+  for (const members of cells.values()) reps.push(linearRepresentativeOf(inside, members));
+  if (reps.length >= cap) {
+    const best = reps.map((x) => inside[x]).sort(byWeight).slice(0, cap);
+    return { picked: best, inBox: n, budget: cap, thinned: true, cells: cells.size, stepDeg, fillLevel: null };
+  }
+  const isRep = new Uint8Array(n);
+  for (const x of reps) isRep[x] = 1;
+  const rowLevel = new Uint8Array(n);
+  const histogram = new Uint32Array(256);
+  for (let x = 0; x < n; x += 1) {
+    if (isRep[x]) continue;
+    const p = meshRowPriority(inside[x]);
+    const at = p > 0 ? Math.min(255, Math.floor(-4 * Math.log2(p))) : 255;
+    rowLevel[x] = at;
+    histogram[at] += 1;
+  }
+  const room = cap - reps.length;
+  let fillLevel = 256;
+  let drawn = 0;
+  while (fillLevel > 0 && drawn + histogram[fillLevel - 1] <= room) {
+    fillLevel -= 1;
+    drawn += histogram[fillLevel];
+  }
+  const picked = [];
+  for (let x = 0; x < n; x += 1) {
+    if (isRep[x] || rowLevel[x] >= fillLevel) picked.push(inside[x]);
+  }
+  return { picked, inBox: n, budget: cap, thinned: picked.length < n, cells: cells.size, stepDeg, fillLevel };
+}
+
+/** A deterministic stream in [0, 1). */
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * A national mesh in miniature: dense cities, a rural scatter and a few
+ * overseas territories across both hemispheres, on ANFR's arc-second lattice
+ * so co-sited rows share a coordinate, and a lopsided category mix.
+ */
+function nationalMesh(seed = 7) {
+  const random = seeded(seed);
+  const arc = (deg) => Math.round(deg * 3600) / 3600;
+  const out = [];
+  const add = (lat, lon) => {
+    const band = random() < 0.7 ? 4 : Math.floor(random() * 4);
+    out.push([Number(arc(lat).toFixed(5)), Number(arc(lon).toFixed(5)), 1 + Math.floor(random() * 4), band]);
+  };
+  const cities = [[48.86, 2.35, 3000, 0.25], [45.76, 4.84, 1200, 0.15], [43.3, 5.37, 1000, 0.15], [47.22, -1.55, 600, 0.1]];
+  for (const [lat, lon, count, spread] of cities) {
+    for (let i = 0; i < count; i += 1) add(lat + (random() - 0.5) * spread, lon + (random() - 0.5) * spread * 1.4);
+  }
+  for (let i = 0; i < 9000; i += 1) add(42.3 + random() * 8.8, -4.8 + random() * 13);
+  for (const [lat, lon] of [[-21.1, 55.5], [16.2, -61.5], [-17.6, -149.5], [4.9, -52.3]]) {
+    for (let i = 0; i < 250; i += 1) add(lat + (random() - 0.5) * 0.6, lon + (random() - 0.5) * 0.6);
+  }
+  // Co-sited: the same coordinate twice or three times, as 952 real supports are.
+  for (let i = 0; i < 400; i += 1) out.push([...out[Math.floor(random() * out.length)]]);
+  return out.sort(byPosition);
+}
+
+function viewBoxes(rows, seed = 11) {
+  const random = seeded(seed);
+  const boxes = [
+    { south: 41, north: 51.5, west: -5.5, east: 10 },
+    { south: -60, north: 70, west: -179, east: 179 },
+    { south: 48.5, north: 49.1, west: 1.9, east: 2.8 },
+    { south: 48.84, north: 48.88, west: 2.3, east: 2.36 },
+    { south: -22, north: -20, west: 54.5, east: 56.5 },
+    { south: 60, north: 61, west: 0, east: 1 },
+  ];
+  // Edges placed exactly on rows, so the edge rule is exercised both ways.
+  for (let i = 0; i < 6; i += 1) {
+    const a = rows[Math.floor(random() * rows.length)];
+    const b = rows[Math.floor(random() * rows.length)];
+    boxes.push({
+      south: Math.min(a[MESH_LAT], b[MESH_LAT]),
+      north: Math.max(a[MESH_LAT], b[MESH_LAT]),
+      west: Math.min(a[MESH_LON], b[MESH_LON]),
+      east: Math.max(a[MESH_LON], b[MESH_LON]),
+    });
+  }
+  for (let i = 0; i < 20; i += 1) {
+    const span = 0.02 * 2 ** (random() * 10);
+    const lat = 42 + random() * 9;
+    const lon = -5 + random() * 14;
+    boxes.push({ south: lat - span / 2, north: lat + span / 2, west: lon - span * 1.2, east: lon + span * 1.2 });
+  }
+  return boxes;
+}
+
+function assertSamePick(actual, expected, context) {
+  const { picked: a, ...restA } = actual;
+  const { picked: b, ...restB } = expected;
+  assert.deepEqual(restA, restB, context);
+  assert.equal(a.length, b.length, context);
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) assert.fail(`${context}: row ${i} differs (${meshRowId(a[i])} against ${meshRowId(b[i])})`);
+  }
+}
+
+test('the indexed world pick draws exactly what the linear one drew, box for box', () => {
+  const rows = nationalMesh();
+  const budgets = [1, 3, 40, 660, 1100, 2200, 100_000];
+  let thinned = 0;
+  for (const box of viewBoxes(rows)) {
+    for (const budget of budgets) {
+      const context = `${JSON.stringify(box)} budget ${budget}`;
+      const expected = linearSelectGeoMeshWorld(rows, { box, budget });
+      assertSamePick(selectGeoMeshWorld(rows, { box, budget }), expected, context);
+      if (expected.fillLevel !== null && expected.fillLevel !== undefined) thinned += 1;
+    }
+  }
+  // The comparison is only worth something if it crossed the density branch.
+  assert.ok(thinned > 20, `${thinned} thinned picks compared`);
+});
+
+test('the indexed world pick falls back, and still agrees, where its shortcuts do not hold', () => {
+  const sorted = nationalMesh(3);
+  const random = seeded(5);
+  // Out of position order: no binary search, no runs.
+  const shuffled = [...sorted];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  // String weights compare as text in the linear version, and a category
+  // outside a byte cannot index the typed counts: both take the generic path.
+  const oddWeights = sorted.map((r, i) => (i % 97 === 0 ? [r[0], r[1], String(r[2] * 3), r[3]] : r));
+  const oddCategories = sorted.map((r, i) => (i % 89 === 0 ? [r[0], r[1], r[2], 300] : r));
+  const junk = [...sorted.slice(0, 2000), 'nope', null, ...sorted.slice(2000)];
+  // A string edge: compared the way `meshRowInBox` compares it.
+  const stringBox = { south: '43', north: '49', west: '-2', east: '7' };
+  for (const [name, rows] of [['shuffled', shuffled], ['string weights', oddWeights], ['wide categories', oddCategories], ['junk rows', junk]]) {
+    for (const box of [...viewBoxes(sorted, 17).slice(0, 12), stringBox]) {
+      for (const budget of [3, 660, 2200]) {
+        assertSamePick(
+          selectGeoMeshWorld(rows, { box, budget }),
+          linearSelectGeoMeshWorld(rows, { box, budget }),
+          `${name} ${JSON.stringify(box)} budget ${budget}`,
+        );
+      }
+    }
+  }
+});
+
+test('the index follows its mesh: a longer array, a new first row or another step is re-indexed', () => {
+  const rows = nationalMesh(9);
+  const box = { south: 41, north: 51.5, west: -5.5, east: 10 };
+  assertSamePick(selectGeoMeshWorld(rows, { box, budget: 660 }), linearSelectGeoMeshWorld(rows, { box, budget: 660 }), 'first');
+  // Appended in place, still in position order.
+  rows.push([51.4, 9.9, 4, 4], [51.45, 9.95, 4, 4]);
+  assertSamePick(selectGeoMeshWorld(rows, { box, budget: 660 }), linearSelectGeoMeshWorld(rows, { box, budget: 660 }), 'appended');
+  rows[0] = [rows[0][0], rows[0][1], 4, 0];
+  assertSamePick(selectGeoMeshWorld(rows, { box, budget: 660 }), linearSelectGeoMeshWorld(rows, { box, budget: 660 }), 'first row replaced');
+  assertSamePick(
+    selectGeoMeshWorld(rows, { box, budget: 660, minStepDeg: 1 / 256 }),
+    linearSelectGeoMeshWorld(rows, { box, budget: 660, minStepDeg: 1 / 256 }),
+    'coarser finest step',
+  );
+});

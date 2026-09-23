@@ -315,6 +315,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the row showed it on every coastline. The white is now made transparent
   and the world satellite picture underneath shows through; the rest of the
   orthophoto is not touched.
+- **The globe no longer catches each time the camera stops over the
+  antennas.** At every stop, « Antennes mobiles » drew every mast on screen
+  again from scratch and, at the national scale, went through all 72 746
+  masts of the register to choose which to show. It now keeps the masts that
+  stay in view and draws only the ones that come in, and chooses from an
+  index built once — the same masts as before, chosen about three times
+  faster. Measured with a phone-class CPU, antennas alone, over two runs:
+  what the layer does at a stop takes 95–102 ms instead of 207–338 over
+  France, 45–50 instead of 80 over Paris at 5 km, and about 18 instead of
+  37–48 closer in, where the masts stand on their shafts. The longest freeze
+  after a stop is about 135 ms instead of 190–215 over Paris, and barely
+  moves over France (188 → 179 ms). The frame rate while orbiting does not
+  change.
 - **In the clean view, clicking a sale, an energy rating or an antenna showed
   its name and nothing else.** The card went to the map key, which the clean
   view had just taken off the screen — it is hidden there, but a hidden panel
