@@ -4702,7 +4702,6 @@ export class DataLayerManager {
         && this._legendPainted.signature === signature) {
       return;
     }
-    this._legendPainted = signature === null ? null : { list, signature };
 
     // Every card on screen, by layer and key: TWO layers can hold a selection
     // at once (a DVF sale and an antenna do not dismiss each other), and the
@@ -4984,6 +4983,9 @@ export class DataLayerManager {
     // dropped back to the page within a second, by the next repaint.
     const focusKey = legendFocusKeyIn(list);
     list.replaceChildren(fragment);
+    // Recorded once the list holds what it describes: a paint that threw half
+    // way must not leave a signature that skips the next attempt.
+    this._legendPainted = signature === null ? null : { list, signature };
     if (focusKey) findByFocusKey(list, focusKey)?.focus?.({ preventScroll: true });
     // A NEW selection is brought into view once; a repaint of the same one
     // leaves the reader's scroll where they put it. The key can repaint once
@@ -5308,8 +5310,9 @@ export class DataLayerManager {
    * A `<details>`, so it opens by keyboard and says whether it is open without
    * a line of script. Its OPEN STATE OUTLIVES THE REPAINT: the key is rebuilt
    * as often as once a second while its counts move, and a list that folded
-   * itself back every second would be a list nobody could read. The manager remembers which selection's list
-   * the reader opened, and a new selection starts folded.
+   * itself back every second would be a list nobody could read. The manager
+   * remembers which selection's list the reader opened, and a new selection
+   * starts folded.
    *
    * Every line is `textContent`, and a link is an `https:` URL or nothing —
    * {@link legendSelectionOf} has already dropped the rest.
@@ -5535,11 +5538,10 @@ export class DataLayerManager {
       ? layer.lifecycleState
       : (uncertain ? 'uncertain' : feedState));
     writeProperty(button, 'disabled', transitioning);
-    const word = String((transitioning
+    writeText(button, transitioning
       ? layer.lifecycleState.toUpperCase()
-      : (uncertain ? messages().feedState.uncertain : feedStateLabel(layer.enabled ? feedState : 'off'))) ?? '');
-    writeText(button, word);
-    writeAttribute(button, 'aria-label', `${this._displayName(layer)}: ${word}`);
+      : (uncertain ? messages().feedState.uncertain : feedStateLabel(layer.enabled ? feedState : 'off')));
+    writeAttribute(button, 'aria-label', `${this._displayName(layer)}: ${button.textContent}`);
   }
 
   _formatCount(n) {

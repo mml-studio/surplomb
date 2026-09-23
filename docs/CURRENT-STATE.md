@@ -3521,9 +3521,10 @@ so it is also that member's swatch. The row in the panel keeps its own toggle
 and NO strip: the three fusion chips and the five coverage chips moved to the
 key, they were not copied. The block stays in the key while the row is on even
 when no member prints a class, since the tiles are the row's only member
-switches; a dark row keys nothing. The key is rebuilt on every repaint, so a
-focused tile or segment hands its keyboard focus to its successor
-(`data-focus-key`). Every other fusion keeps its chips.
+switches; a dark row keys nothing. The key is rebuilt only when what it draws
+changed (see « The panel refresh writes only what changed » under the right
+rail); when it is, a focused tile or segment hands its keyboard focus to its
+successor (`data-focus-key`). Every other fusion keeps its chips.
 
 **A selected antenna and a read coverage spot are printed in the key**
 (2026-09-22, lot 2 of the same mock), as the DVF sale and the DPE site already

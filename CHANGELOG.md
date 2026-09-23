@@ -298,6 +298,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   on every frame, and a building outline is only held while its site is drawn.
   Same view, same computer: 55-58 images per second against 60 with the layer
   off, under 0.1 s after a stop, and every site on the ground.
+- **With « Infrastructure numérique » on, a still globe kept redrawing the
+  layer list and the map key three times a second.** Nothing on screen
+  changed, but every redraw made the page measure its side columns again, and
+  on a slow processor that held the globe back even while nobody touched it.
+  The list and the key now change only when what they show changes — a count
+  that moves, a card that opens or learns something, a tile switched on — so
+  a focused button, an open list of diagnostics and the scroll of the key are
+  no longer reset by a redraw of the same thing.
 - **On the Satellite basemap, the sea along the French coast flashed white
   every time the camera stopped.** Past the edge of its aerial survey, IGN
   answers with white tiles instead of no tile, and only at the finer zoom
