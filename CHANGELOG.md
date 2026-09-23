@@ -260,6 +260,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **On the Satellite basemap, the sea along the French coast flashed white
+  every time the camera stopped.** Past the edge of its aerial survey, IGN
+  answers with white tiles instead of no tile, and only at the finer zoom
+  levels the globe loads once the camera rests — so the sea went white on
+  every stop, in steps that followed the tiles, and came back when the camera
+  moved. « Infrastructure numérique » sends every reader to that basemap, so
+  the row showed it on every coastline. The white is now made transparent
+  and the world satellite picture underneath shows through; the rest of the
+  orthophoto is not touched.
 - **In the clean view, clicking a sale, an energy rating or an antenna showed
   its name and nothing else.** The card went to the map key, which the clean
   view had just taken off the screen — it is hidden there, but a hidden panel

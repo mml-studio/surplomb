@@ -159,6 +159,46 @@ test('the WMTS provider carries every parameter the Géoplateforme requires', ()
   assert.match(provider.credit.html, /IGN/);
 });
 
+test('the orthophoto reads the tiles the survey edge may cross, and only those', async (t) => {
+  // The white the Géoplateforme answers past its survey (`src/ignNoData.js`).
+  // Stubbed at the prototype so no request leaves the test: each call hands
+  // back its own promise, and identity says whether the wrapper stepped in.
+  const served = { width: 0, height: 0 };
+  const original = Cesium.WebMapTileServiceImageryProvider.prototype.requestImage;
+  t.after(() => { Cesium.WebMapTileServiceImageryProvider.prototype.requestImage = original; });
+  let last = null;
+  Cesium.WebMapTileServiceImageryProvider.prototype.requestImage = () => {
+    last = Promise.resolve(served);
+    return last;
+  };
+  const tileAt = (provider, lon, lat, level) => provider.tilingScheme.positionToTileXY(
+    Cesium.Cartographic.fromDegrees(lon, lat), level,
+  );
+
+  const ortho = createIgnWmtsProvider(stackById('ign-ortho'));
+  // Inside the verified-opaque boxes (the Massif central): untouched, unread.
+  const inland = tileAt(ortho, 2.4, 45.6, 13);
+  assert.equal(ortho.requestImage(inland.x, inland.y, 13), last);
+  // Off Socoa, where the level-13 tiles came back white: read.
+  const coast = tileAt(ortho, -1.72, 43.40, 13);
+  const keyed = ortho.requestImage(coast.x, coast.y, 13);
+  assert.notEqual(keyed, last);
+  assert.equal(await keyed, served);
+
+  // Throttled stays throttled, so Cesium asks again.
+  Cesium.WebMapTileServiceImageryProvider.prototype.requestImage = () => undefined;
+  const throttled = createIgnWmtsProvider(stackById('ign-ortho'));
+  assert.equal(throttled.requestImage(coast.x, coast.y, 13), undefined);
+
+  // Plan IGN is a drawn map, where white is a colour: never read.
+  Cesium.WebMapTileServiceImageryProvider.prototype.requestImage = () => {
+    last = Promise.resolve(served);
+    return last;
+  };
+  const plan = createIgnWmtsProvider(stackById('ign-plan'));
+  assert.equal(plan.requestImage(coast.x, coast.y, 13), last);
+});
+
 test('an IGN stack composites over a world base, bottom-first; every other stack is one layer', async () => {
   // A clone, once the server has said the anonymous Esri endpoint is allowed.
   const controller = new MapStackController(stubViewer(), { cesiumToken: '', anonymousEsriAllowed: true });
