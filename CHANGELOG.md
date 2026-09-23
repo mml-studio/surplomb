@@ -6,6 +6,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **A search marks what it found, as a map search does.** An address, a
+  building or a monument gets a red pin with its name beside it; a town, a
+  département or a région gets its limits drawn on the ground (« Biarritz »,
+  « Pyrénées-Atlantiques », « Nouvelle-Aquitaine »). The city shortcuts outline
+  their town and the landmarks get a pin. Emptying the search field, « Autour
+  de moi » or the next search takes the mark away. In France the limits come
+  from the State's commune contours and IGN's départements; elsewhere from
+  OpenStreetMap. They are simplified, not the legal limits.
 - **Digital infrastructure now opens on a dimmed satellite ground, and gives
   your map back when you switch it off.** Switching « Infrastructure
   numérique » on moves the map to the new « Crépuscule » (Dusk) style — the
