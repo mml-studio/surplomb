@@ -16,6 +16,10 @@
  *     two switches, and the former AFFICHAGE panel under « Réglages avancés ».
  *   - The top centre belonged to a row of five round buttons read by their
  *     glyph alone. They are the « Plus d'actions » menu now, with words.
+ *   - The mic sat mid-dock as an instrument (AI AGENT, OFF, STD, ~$0.00, a
+ *     level meter, VOICE STANDBY) whether or not anyone spoke. It rests in the
+ *     bottom-right corner as « Parler à Surplomb », and opens into a card —
+ *     listening, what was heard, the answer, « Arrêter » — only while it is used.
  *
  * MOVE, DON'T REBUILD. Every control that already existed is MOVED here with
  * its listeners, exactly as src/phoneSheet.js adopts panels on a phone: the one
@@ -511,6 +515,17 @@ export function initGlobeShell({ ui, viewer = null, doc = globalThis.document, s
     event.preventDefault();
     openPlaceSearch();
   });
+
+  // ── The mic ───────────────────────────────────────────────────────────────
+  // Out of the bottom dock, which the navigation bar takes, into its own
+  // corner. The panel is the boot shell of src/voice/lazyVoice.js; when the
+  // controller rebuilds it, the rebuild takes this place (voiceControlDom.js).
+  const voiceCorner = doc.getElementById('voice-corner');
+  const voicePanel = doc.getElementById('gev-voice-control');
+  if (voiceCorner) {
+    if (voicePanel) voiceCorner.append(voicePanel);
+    voiceCorner.hidden = false;
+  }
 
   paintShellIcons(doc);
   topBar.hidden = false;

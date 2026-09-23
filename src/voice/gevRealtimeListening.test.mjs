@@ -7,6 +7,7 @@
 // server takes the request, the mic shuts. Space opens it while held.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   GevRealtimeController,
   TRIAL_IDLE_CLOSE_MS,
@@ -22,6 +23,7 @@ function listeningController(t, { trialTurns = null, pushToTalk = false } = {}) 
     status: { textContent: '' },
     detail: { textContent: '', title: '' },
     errorDetail: { textContent: '' },
+    phase: { textContent: '' },
   };
   const track = { enabled: true, stop() {} };
   const controller = new GevRealtimeController({ runner: async () => ({ ok: true }), ui });
@@ -68,6 +70,68 @@ test('a click session says LISTENING, and stops saying it once the request is ta
   assert.deepEqual(shown(), ['READY', 'ready']);
   assert.equal(ui.detail.textContent, 'Micro ou Espace pour parler');
   assert.equal(controller.status, 'listening', 'the session itself stays open');
+});
+
+test('the desktop card says the same thing as the dock, in a sentence', async (t) => {
+  const { controller, ui, feed } = listeningController(t);
+  assert.equal(ui.phase.textContent, 'Je vous écoute');
+  await feed('input_audio_buffer.speech_started');
+  await feed('input_audio_buffer.committed');
+  assert.equal(ui.phase.textContent, 'Surplomb répond');
+  await feed('response.created', { response: { id: 'r1' } });
+  await feed('response.done', spokenAnswer);
+  assert.equal(ui.phase.textContent, 'À vous');
+  // « Arrêter » is stop(): the session ends, and the card goes back to the
+  // button at rest, which has no line.
+  controller.stop();
+  assert.equal(ui.root.dataset.status, 'idle');
+  assert.equal(ui.phase.textContent, '');
+});
+
+test('« Arrêter » ends the session, where the mic button only shuts the mic', (t) => {
+  const { controller, ui, track, channel } = listeningController(t);
+  controller.stopFromCard();
+  assert.equal(controller.status, 'idle');
+  assert.equal(ui.root.dataset.status, 'idle');
+  assert.equal(channel.readyState, 'closed', 'the session is closed');
+  assert.equal(controller.stream, null, 'and the microphone released');
+  assert.equal(track.enabled, true, 'released by stopping its tracks, not by muting them');
+  // Wired where the mic's own click is, and released with it on a teardown
+  // (initGevVoiceCommands needs a page; its two lines are pinned here).
+  const source = readFileSync(new URL('./gevRealtime.js', import.meta.url), 'utf8');
+  const init = source.slice(source.indexOf('export function initGevVoiceCommands('));
+  assert.match(init, /controller\.stopHandler = \(\) => controller\.stopFromCard\(\);\s*ui\.stopButton\.addEventListener\('click', controller\.stopHandler\);/);
+  assert.match(source, /this\.ui\.stopButton\.removeEventListener\('click', this\.stopHandler\);/);
+});
+
+test('on a hosted trial « Arrêter » is not drawn, and reached anyway it keeps the session', (t) => {
+  // Closing a trial session loses the requests left: the server spent them all
+  // when it minted it, and the waitlist card would open.
+  const { controller, ui, channel, shown } = listeningController(t, { trialTurns: 3 });
+  assert.equal(ui.root.dataset.trial, 'true', 'the card leaves the button out');
+  controller.stopFromCard();
+  assert.equal(channel.readyState, 'open');
+  assert.equal(controller.trialAnswersLeft, 3);
+  assert.equal(controller.microphoneLive, false, 'the mic is shut');
+  assert.deepEqual(shown(), ['READY', 'ready']);
+  controller.stop();
+  assert.equal(ui.root.dataset.trial, undefined, 'the mark goes with the trial');
+});
+
+test('focus goes back to the mic when « Arrêter » leaves with the card', (t) => {
+  const { controller, ui } = listeningController(t);
+  const stopButton = { id: 'stop' };
+  let focused = null;
+  ui.root.contains = (node) => node === stopButton;
+  ui.button.focus = () => { focused = 'mic'; };
+  const previous = globalThis.document;
+  globalThis.document = { activeElement: stopButton };
+  t.after(() => {
+    if (previous === undefined) delete globalThis.document;
+    else globalThis.document = previous;
+  });
+  controller.stopFromCard();
+  assert.equal(focused, 'mic');
 });
 
 test('a click on a shut mic opens it for the next request, without a new session', (t) => {

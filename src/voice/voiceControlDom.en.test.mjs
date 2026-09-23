@@ -13,6 +13,7 @@ import {
   resolveVoiceControlHint,
   resolveVoiceReadyPrompt,
   voiceControlAriaLabel,
+  voicePhaseLabel,
 } from './voiceControlDom.js';
 
 test('the gesture is named in English, and named for the device holding it', (t) => {
@@ -29,7 +30,8 @@ test('the gesture is named in English, and named for the device holding it', (t)
 test('the screen-reader name of the mic button is all English', (t) => {
   useTestLocale('en', t);
   const label = voiceControlAriaLabel(resolveVoiceControlHint(false, false, false));
-  assert.equal(label, 'Voice control — Click the mic or hold Space to speak');
+  // It opens with the words the desktop button shows (WCAG 2.5.3).
+  assert.equal(label, 'Talk to Surplomb — Click the mic or hold Space to speak');
   assertNoFrench(label);
 });
 
@@ -45,6 +47,23 @@ test('French is untouched: the same three sentences, byte for byte', () => {
   assert.equal(resolveVoiceReadyPrompt(false), 'Micro ou Espace pour parler');
   assert.equal(
     voiceControlAriaLabel(resolveVoiceControlHint(false, false, false)),
-    'Contrôle vocal — Cliquez le micro ou maintenez Espace pour parler',
+    'Parler à Surplomb — Cliquez le micro ou maintenez Espace pour parler',
   );
+});
+
+test('the desktop card says what the mic does in a sentence, in both languages', (t) => {
+  assert.equal(voicePhaseLabel('listening'), 'Je vous écoute');
+  assert.equal(voicePhaseLabel('answering'), 'Surplomb répond');
+  assert.equal(voicePhaseLabel('ready'), 'À vous');
+  assert.equal(voicePhaseLabel('error'), 'Voix indisponible');
+  // At rest the button carries « Parler à Surplomb »: the card has no line.
+  assert.equal(voicePhaseLabel('idle'), '');
+  assert.equal(voicePhaseLabel('toString'), '', 'only the phases, never a prototype key');
+  useTestLocale('en', t);
+  for (const shown of ['connecting', 'listening', 'answering', 'ready', 'executing', 'error']) {
+    const line = voicePhaseLabel(shown);
+    assert.ok(line, shown);
+    assertNoFrench(line);
+  }
+  assert.equal(voicePhaseLabel('listening'), 'Listening');
 });

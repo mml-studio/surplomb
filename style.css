@@ -15265,3 +15265,609 @@ html.globe-shell #cctv-sync-chip { top: 154px; }
 /* The CAMÉRAS panel follows its layer (src/ui.js `_syncCctvPanelPresence`);
    the rail's own rules set its display, so the attribute has to win here. */
 #cctv-panel[hidden] { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE COMPACT MIC ON A DESKTOP — src/globeShell.js, src/voice/voiceControlDom.js
+   (2026-09-23)
+
+   The mic sat in the middle of the bottom dock as an instrument: AI AGENT,
+   OFF, a STD chip, ~$0.00, a level meter and VOICE STANDBY, lettered at 6 to
+   8 px, whether or not anyone spoke. On a desktop it now rests in the
+   bottom-right corner as one labelled button, « Parler à Surplomb », and
+   opens into a card only while it is used:
+
+     ( ● )  Je vous écoute            what the mic is doing, in a sentence
+            ▂▃▅▂▃▅▂▃ / « À vous »     the level while sound flows, else the caption
+     STD ~$0.02          [■ Arrêter]  the estimate, and the end of the session
+
+   what was heard and what Surplomb answered stand above it, right-aligned.
+   Everything hangs off `#voice-corner`, which src/globeShell.js shows on a
+   desktop only: the phone keeps its mic in the dock (phone.css), and the
+   parts added for this card are hidden everywhere else.
+
+   48 px tall and 2vh off the bottom, like the navigation bar it sits
+   beside; 256 px wide at most, so at 1280 px the card still clears that
+   bar's right edge (≈ 990 px).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.gev-mic-caption,
+.gev-voice-phase,
+.gev-voice-stop,
+.gev-voice-transcript-who {
+  display: none;
+}
+
+html.globe-shell #voice-corner {
+  position: fixed;
+  right: 24px;
+  /* The dock's own 2vh: the button and the navigation bar rest on one line. */
+  bottom: 2vh;
+  z-index: 150;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+html.globe-shell #voice-corner[hidden] { display: none; }
+
+/* Under 980 px the card (256 px from the right) would reach the navigation
+   bar, even with its words dropped (395 px, centred): the corner rests one
+   row higher, beside nothing. */
+@media (max-width: 979px) {
+  html.globe-shell #voice-corner { bottom: calc(2vh + 60px); }
+}
+
+html.globe-shell #voice-corner > #gev-voice-control {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  color: var(--text-primary);
+  background: none;
+  border: 0;
+  border-radius: var(--shell-radius);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--font-ui);
+  transform: none;
+  pointer-events: auto;
+}
+
+/* The instrument face stays on the phone and the old dock. */
+html.globe-shell #voice-corner :is(
+  .gev-voice-kicker,
+  #gev-voice-status,
+  #gev-voice-help-btn,
+  .gev-mic-label,
+  .gev-voice-transcript-kicker,
+  .gev-voice-error-header > span
+) {
+  display: none;
+}
+
+/* ── At rest: one button ──────────────────────────────────────────────────── */
+html.globe-shell #voice-corner > #gev-voice-control[data-status='idle'] > :not(
+  #gev-voice-button,
+  .gev-voice-heading,
+  .gev-voice-help-tray,
+  .gev-voice-transcript,
+  .gev-voice-error-tray
+) {
+  display: none;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control[data-status='idle'] > .gev-voice-heading { display: none; }
+
+html.globe-shell #voice-corner #gev-voice-button {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: auto;
+  height: 48px;
+  margin: 0;
+  padding: 0 18px 0 6px;
+  color: var(--text-primary);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: 999px;
+  box-shadow: var(--shell-shadow);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+html.globe-shell #voice-corner #gev-voice-button:hover {
+  color: var(--text-primary);
+  border-color: rgba(247, 171, 124, 0.62);
+  box-shadow: var(--shell-shadow);
+}
+
+html.globe-shell #voice-corner #gev-voice-button:focus-visible {
+  border-color: rgba(247, 171, 124, 0.62);
+  outline: none;
+  box-shadow: var(--shell-shadow), 0 0 0 3px rgba(247, 171, 124, 0.24);
+}
+
+html.globe-shell #voice-corner .gev-mic-orbit {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  background: rgba(247, 244, 234, 0.08);
+  border: 1px solid rgba(247, 244, 234, 0.16);
+  border-radius: 50%;
+  box-shadow: none;
+  animation: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+/* The glyph is drawn cyan for the dock; here it is ivory, like every other
+   control of the shell. */
+html.globe-shell #voice-corner .gev-mic-orbit img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(0.95);
+  opacity: 0.94;
+  animation: none;
+}
+
+html.globe-shell #voice-corner .gev-mic-caption {
+  display: inline;
+  white-space: nowrap;
+}
+
+/* A touchscreen that is not a phone (a tablet) has no hover to raise the
+   help tray: its « ? » stands beside the button at rest, as on the phone. */
+html.globe-shell[data-input='coarse'] #voice-corner > #gev-voice-control[data-status='idle'] {
+  gap: 8px;
+}
+
+html.globe-shell[data-input='coarse'] #voice-corner > #gev-voice-control[data-status='idle'] > .gev-voice-heading {
+  display: contents;
+}
+
+html.globe-shell[data-input='coarse'] #voice-corner > #gev-voice-control[data-status='idle'] .gev-voice-heading > :not(#gev-voice-help-btn) {
+  display: none;
+}
+
+html.globe-shell[data-input='coarse'] #voice-corner > #gev-voice-control[data-status='idle'] #gev-voice-help-btn {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  color: var(--text-primary);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--shell-shadow);
+  font-size: 15px;
+}
+
+/* ── While it is used: the card ───────────────────────────────────────────── */
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-areas:
+    'mic phase'
+    'mic line'
+    'foot foot';
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  width: 256px;
+  padding: 10px 12px 10px 10px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--shell-shadow);
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) :is(.gev-voice-heading, .gev-voice-readout) {
+  display: contents;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) #gev-voice-button {
+  grid-area: mic;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) .gev-mic-caption { display: none; }
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) .gev-mic-orbit {
+  width: 40px;
+  height: 40px;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) #gev-voice-button:hover .gev-mic-orbit,
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) #gev-voice-button:focus-visible .gev-mic-orbit {
+  border-color: rgba(247, 171, 124, 0.62);
+}
+
+/* The mic open: the ring turns the brand's apricot, the glyph dark on it —
+   the one state the eye has to catch from across the screen. */
+html.globe-shell #voice-corner > #gev-voice-control[data-status='listening'] .gev-mic-orbit {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(247, 171, 124, 0.22);
+}
+
+html.globe-shell #voice-corner > #gev-voice-control[data-status='listening'] .gev-mic-orbit img {
+  filter: brightness(0);
+  opacity: 0.86;
+}
+
+html.globe-shell #voice-corner .gev-voice-phase {
+  grid-area: phase;
+  align-self: end;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) .gev-voice-phase { display: block; }
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) #gev-voice-detail {
+  grid-area: line;
+  align-self: start;
+  display: block;
+  max-width: none;
+  margin: 0;
+  overflow: hidden;
+  color: var(--shell-text-2);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+/* Words when it is quiet, the level while sound flows: the mic open, or
+   Surplomb speaking. */
+html.globe-shell #voice-corner .gev-voice-visualizer {
+  grid-area: line;
+  align-self: start;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:is([data-status='listening'], [data-status='answering'][data-speaker='ai']) .gev-voice-visualizer {
+  display: flex;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:is([data-status='listening'], [data-status='answering'][data-speaker='ai']) #gev-voice-detail {
+  display: none;
+}
+
+html.globe-shell #voice-corner .gev-voice-visualizer span {
+  flex: none;
+  width: 3px;
+  height: clamp(3px, calc(var(--audio-level, 5px) * 0.46), 16px);
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: none;
+  opacity: var(--audio-opacity, 0.56);
+  animation: none;
+  transition: height 70ms linear, opacity 90ms linear;
+}
+
+/* The estimate and the end of the session share the last row. */
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) .gev-voice-cost {
+  grid-area: foot;
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-height: none;
+  margin: 8px 0 0 2px;
+}
+
+html.globe-shell #voice-corner .gev-voice-cost [hidden] { display: none; }
+
+html.globe-shell #voice-corner .gev-voice-tier-btn {
+  height: 20px;
+  min-width: 34px;
+  padding: 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  border-radius: 5px;
+}
+
+html.globe-shell #voice-corner .gev-voice-cost-value {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']) .gev-voice-stop {
+  grid-area: foot;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  margin: 8px 0 0;
+  padding: 0 12px 0 10px;
+  color: var(--text-primary);
+  background: rgba(247, 244, 234, 0.06);
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+/* A hosted trial is one session the server already paid for: ending it would
+   lose the requests left (gevRealtime.js `stopFromCard`). */
+html.globe-shell #voice-corner > #gev-voice-control[data-trial] .gev-voice-stop { display: none; }
+
+html.globe-shell #voice-corner .gev-voice-stop::before {
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  border-radius: 2px;
+  content: '';
+}
+
+html.globe-shell #voice-corner .gev-voice-stop:hover,
+html.globe-shell #voice-corner .gev-voice-stop:focus-visible {
+  color: #ffd6da;
+  background: rgba(255, 92, 110, 0.12);
+  border-color: rgba(255, 92, 110, 0.55);
+  outline: none;
+}
+
+/* ── A failure ────────────────────────────────────────────────────────────
+   The session is already over (fatalError stops it), so nothing to stop:
+   the card names the failure, the tray above says why, and a click on the
+   mic tries again. */
+html.globe-shell #voice-corner > #gev-voice-control[data-status='error'] {
+  border-color: rgba(255, 92, 110, 0.6);
+}
+
+/* One line left: centred on the mic rather than sitting on its top half. */
+html.globe-shell #voice-corner > #gev-voice-control[data-status='error'] .gev-voice-phase {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: #ffc2c8;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control[data-status='error'] :is(#gev-voice-detail, .gev-voice-cost, .gev-voice-stop) {
+  display: none;
+}
+
+html.globe-shell #voice-corner .gev-voice-error-tray {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 8;
+  display: none;
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 48px));
+  padding: 12px 40px 12px 14px;
+  color: rgba(255, 232, 235, 0.95);
+  background: #2a1117;
+  border: 1px solid rgba(255, 92, 110, 0.5);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control[data-status='error']:not(.error-dismissed) .gev-voice-error-tray {
+  display: block;
+}
+
+html.globe-shell #voice-corner .gev-voice-error-header {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: block;
+  margin: 0;
+}
+
+html.globe-shell #voice-corner .gev-voice-error-dismiss {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: rgba(255, 232, 235, 0.8);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font-size: 0;
+  cursor: pointer;
+}
+
+html.globe-shell #voice-corner .gev-voice-error-dismiss::before {
+  font-size: 20px;
+  line-height: 1;
+  content: '×';
+}
+
+html.globe-shell #voice-corner .gev-voice-error-dismiss:hover,
+html.globe-shell #voice-corner .gev-voice-error-dismiss:focus-visible {
+  color: #fff;
+  background: rgba(255, 92, 110, 0.18);
+  outline: none;
+}
+
+html.globe-shell #voice-corner #gev-voice-error-detail {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+html.globe-shell #voice-corner .gev-voice-error-hint {
+  margin-top: 6px;
+  color: rgba(255, 232, 235, 0.72);
+  font-size: 12px;
+}
+
+/* ── Above the button: help, then what was said ──────────────────────────
+   Right-aligned over the corner instead of centred on the dock. */
+html.globe-shell #voice-corner .gev-voice-help-tray,
+html.globe-shell #voice-corner .gev-voice-transcript {
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  box-sizing: border-box;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--font-ui);
+  text-align: left;
+}
+
+html.globe-shell #voice-corner .gev-voice-help-tray {
+  gap: 6px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 48px));
+  padding: 12px 14px;
+  transform: translateY(6px);
+  transform-origin: bottom right;
+}
+
+/* At rest the whole button is the hover target; in the card only the mic is,
+   so reaching for « Arrêter » does not raise a tray over the transcript. */
+html.globe-shell #voice-corner > #gev-voice-control[data-status='idle']:hover .gev-voice-help-tray,
+html.globe-shell #voice-corner > #gev-voice-control[data-status='idle'][data-help='open'] .gev-voice-help-tray,
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='error']) #gev-voice-button:hover ~ .gev-voice-help-tray,
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='error']) #gev-voice-button:focus-visible ~ .gev-voice-help-tray {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='idle']):hover .gev-voice-help-tray {
+  visibility: hidden;
+  opacity: 0;
+}
+
+html.globe-shell #voice-corner .gev-voice-help-kicker { display: none; }
+
+html.globe-shell #voice-corner .gev-voice-help-detail {
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  /* The French sentence is 309 px at this size: it wraps inside the tray. */
+  white-space: normal;
+}
+
+html.globe-shell #voice-corner .gev-voice-help-examples {
+  gap: 3px;
+  margin-top: 2px;
+  color: var(--shell-text-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+html.globe-shell #voice-corner .gev-voice-help-premium {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+html.globe-shell #voice-corner .gev-voice-transcript {
+  gap: 8px;
+  width: min(340px, calc(100vw - 48px));
+  max-width: none;
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.4;
+  transform: none;
+}
+
+html.globe-shell #voice-corner > #gev-voice-control:not([data-status='error']):hover .gev-voice-transcript { opacity: 1; }
+
+html.globe-shell #voice-corner > #gev-voice-control #gev-voice-button:hover ~ .gev-voice-transcript { opacity: 0.12; }
+
+html.globe-shell #voice-corner .gev-voice-transcript-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+/* A row with nothing in it yet is not drawn: the transcript opens on what
+   was heard, before there is an answer. */
+html.globe-shell #voice-corner .gev-voice-transcript-row:has(.gev-voice-transcript-text:empty) { display: none; }
+
+html.globe-shell #voice-corner .gev-voice-transcript-who {
+  display: block;
+  color: var(--shell-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+html.globe-shell #voice-corner [data-role='said'] .gev-voice-transcript-who { color: var(--accent); }
+
+html.globe-shell #voice-corner :is(.gev-voice-transcript-hint, .gev-voice-picker, .gev-voice-preview) {
+  font-size: 12px;
+}
+
+/* ── Where the mic is not wanted ─────────────────────────────────────────── */
+body.ui-clean-view #voice-corner,
+body.recording-mode #voice-corner {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* The cockpit hid the dock, and the mic with it. */
+body.cockpit-mode #voice-corner { display: none !important; }
+
+/* The dev server's key chip had the same corner: it steps over the button,
+   and gives way while the card or a tray stands where it is. */
+html.globe-shell #key-setup-chip { bottom: 80px; }
+
+html.globe-shell:has(#voice-corner #gev-voice-control:is(:hover, :focus-within, [data-help='open'], :not([data-status='idle']))) #key-setup-chip {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.globe-shell #voice-corner .gev-voice-visualizer span { transition: none; }
+}

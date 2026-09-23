@@ -22,6 +22,7 @@ import {
 const indexHtml = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const uiSource = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
 const shellSource = fs.readFileSync(new URL('./globeShell.js', import.meta.url), 'utf8');
+const styleCss = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 
 function memoryStorage() {
   const map = new Map();
@@ -127,6 +128,24 @@ test('the top row ships hidden, and only the module shows it', () => {
   // One field, one submit path: the form is MOVED, never cloned.
   assert.doesNotMatch(shellSource, /cloneNode/);
   assert.equal((indexHtml.match(/id="location-search"/g) || []).length, 1);
+});
+
+test('the mic leaves the dock for its own corner on a desktop, and only there', () => {
+  // Ships hidden: the phone never runs the module, and keeps its mic in the dock.
+  assert.match(indexHtml, /<div id="voice-corner" hidden><\/div>/);
+  const mic = shellSource.slice(shellSource.indexOf('// ── The mic ─'));
+  assert.match(mic, /if \(voicePanel\) voiceCorner\.append\(voicePanel\);\s*voiceCorner\.hidden = false;/);
+  // The right rail watches the corner, not the panel the controller rebuilds.
+  const obstacles = uiSource.slice(uiSource.indexOf('const RIGHT_STACK_OBSTACLE_SELECTOR = ['));
+  assert.ok(obstacles.slice(0, obstacles.indexOf('].join')).includes("'#voice-corner'"));
+  // Every desktop rule hangs off the class the module sets; the cockpit, the
+  // clean view and a recording hide the corner as they hid the dock.
+  const block = styleCss.slice(styleCss.indexOf('THE COMPACT MIC ON A DESKTOP'));
+  assert.match(block, /html\.globe-shell #voice-corner \{\s*position: fixed;/);
+  assert.match(block, /body\.cockpit-mode #voice-corner \{ display: none !important; \}/);
+  assert.match(block, /body\.ui-clean-view #voice-corner,\s*body\.recording-mode #voice-corner \{/);
+  // The parts added for the card are hidden unless the corner shows them.
+  assert.match(block, /^\.gev-mic-caption,\s*\.gev-voice-phase,\s*\.gev-voice-stop,\s*\.gev-voice-transcript-who \{\s*display: none;/m);
 });
 
 test('a panel opened by name opens where its contents went', () => {
