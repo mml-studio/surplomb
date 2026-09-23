@@ -3171,6 +3171,45 @@ production for a layer, with no line on the sheet":
 Both join an existing theme rather than founding one of their own — the same
 "one subject, one heading" decision the layer panel just made.
 
+#### The desktop Layers panel: a rail of groups, and one list beside it (September 2026)
+
+On a desktop the Layers panel is two columns (`src/data/layerPanelRail.js`,
+mounted by `src/main.js` everywhere but the phone shell):
+
+- the **rail**, 88 px: « Chercher », then one button per group — a Lucide glyph
+  (`lucideIcons.js`), the group's short name (`categoriesShort` in
+  `layerTaxonomy.i18n.js`) and a badge counting the rows that are ON, computed
+  as the active strip counts them. Below a 760 px-high window the words go and
+  the glyphs stay, so the six groups fit a 1280 × 620 laptop without a hidden
+  scroll; the name stays the button's tooltip and accessible name;
+- the **list**, 292 px, beside it: the rows of ONE group under its full name,
+  its « n/m ACTIVES » tally, a search field, a pin and a close button. The
+  active strip still leads it.
+
+Open, the panel is 380 px (the old one was 320); closed, it is the rail alone.
+Expanding the panel from its launcher opens the list on the last group shown
+(`godsEyeView.v1.dataLayerDrawerCategory`). Pressing the open group again, the
+close button, Escape inside the panel, or a **plain click on the globe** closes
+it; a drag on the globe (more than 6 px, or longer than 700 ms) does not. The
+**pin** keeps it open through globe clicks; the choice is stored
+(`godsEyeView.v1.dataLayerDrawerPinned`), and with no stored choice a window
+1920 px wide or more starts pinned. Hover opens nothing.
+
+The **search** matches every word of the query, in any order, accents folded,
+against each row's name, source and group — and against the names of the layers
+fused into it, so « militaire » finds « Vols en direct ». Results span every
+group, each under its header; no match prints « Aucune couche ne correspond à
+« … ». ». The first Escape empties the field, the second closes the list.
+
+The rows are still the manager's: `setPanelLayout('rail')` draws every group
+and every row as the accordion does, with headings instead of header buttons
+and no collapsed group, and the rail only toggles classes (`is-rail-current`,
+`is-search-miss`, `drawer-open`, `rail-searching`), so every
+`[data-layer-id]` lookup still finds its row and the left stack's layout engine
+re-measures on each change. `revealPanelRow(layerId)` opens the group of a row
+(a fused layer resolves to its primary) — the voice surface calls it before
+scrolling to a row. The phone sheet keeps the accordion.
+
 #### Fused rows — one subject, one line (September 2026)
 
 `src/data/layerFusions.js` is the one table that says which rows are the SAME

@@ -313,6 +313,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The Layers panel is a column of groups with one list beside it.** On a
+  computer, the panel now opens as a narrow column — « Chercher », then Ciel &
+  mer, Bâti, Mobilité, Énergie, Risques and Réseaux, each with an icon and a
+  badge counting the layers switched on in it — and the layers of ONE group in
+  a list beside it, under the group's name, a search field, a pin and a close
+  button. The search looks through every group at once, accents or not.
+  A plain click on the globe closes the list and leaves the column; dragging
+  the globe does not, and the pin keeps the list open. From 1920 px wide it
+  starts pinned. On a short window the column keeps its icons and drops its
+  words. Open, the panel is 380 px wide instead of 320. The phone keeps its
+  list of groups.
 - **The digital-infrastructure row is controlled from the map key.** Its
   block in the key now opens with one tile per member — Câbles (where the
   site offers it), Data centers, Antennes — each with its icon and a switch, lit in the colour that layer

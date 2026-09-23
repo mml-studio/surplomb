@@ -3178,6 +3178,10 @@ function focusDataLayerRow(layerId, dataManager = null) {
   const fusedInto = dataManager?.getAll?.()
     ?.find((layer) => layer.id === layerId)?.fusedInto || null;
   const rowId = fusedInto || layerId;
+  // On the desktop the list shows one group at a time (`layerPanelRail.js`),
+  // so a row in another group is in the DOM but not on screen: the manager
+  // asks the rail to open that group before anything scrolls.
+  dataManager?.revealPanelRow?.(rowId);
   const row = document.querySelector(`#data-toggles [data-layer-id="${CSS.escape(rowId)}"]`);
   if (!row) return null;
   row.scrollIntoView({ block: 'center', behavior: 'smooth' });
