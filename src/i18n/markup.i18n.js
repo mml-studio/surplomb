@@ -60,10 +60,33 @@ export default defineMessages({
   },
   // The top bar and its « Apparence » panel (src/globeShell.js): map style,
   // base map and display settings, gathered in one place.
+  // The navigation bar at the bottom centre of a desktop (src/globeNav.js).
+  globeNav: {
+    label: { fr: 'Navigation dans la vue', en: 'View navigation' },
+    back: { fr: 'Vue précédente', en: 'Previous view', note: 'Steps back to the framing the camera had before the last move.' },
+    backTitle: {
+      fr: 'Revenir au cadrage d’avant le dernier déplacement',
+      en: 'Go back to the framing before the last move',
+    },
+    top: { fr: 'Vue du dessus', en: 'Top view', note: 'Turns the camera until it looks straight down at the centre of the view.' },
+    mode: { fr: 'Mode de vue', en: 'View mode', note: 'The 2D / 3D pair of buttons.' },
+    flatTitle: {
+      fr: 'Carte à plat : vue du dessus, nord en haut, inclinaison bloquée',
+      en: 'Flat map: top view, north up, tilt locked',
+    },
+    reliefTitle: {
+      fr: 'Vue en relief : la caméra s’incline librement',
+      en: 'Relief view: the camera tilts freely',
+    },
+    north: { fr: 'Remettre le nord en haut', en: 'Turn north up', note: 'The compass needle button.' },
+    zoom: { fr: 'Zoomer ou dézoomer', en: 'Zoom in or out' },
+    zoomOut: { fr: 'Dézoomer', en: 'Zoom out' },
+    zoomIn: { fr: 'Zoomer', en: 'Zoom in' },
+  },
   appearance: {
     button: { fr: 'Apparence', en: 'Appearance' },
     buttonTitle: { fr: 'Style de carte, fond de carte et affichage', en: 'Map style, base map and display' },
-    more: { fr: 'Plus d’actions', en: 'More actions', note: 'The « … » button: share, clear layers, locate, reset, language.' },
+    more: { fr: 'Plus d’actions', en: 'More actions', note: 'The « … » button: share, clear layers, locate, language.' },
     title: { fr: 'Apparence', en: 'Appearance' },
     close: { fr: 'Fermer le panneau Apparence', en: 'Close the Appearance panel' },
     styles: { fr: 'Style de carte', en: 'Map style' },
@@ -85,7 +108,7 @@ export default defineMessages({
     share: { fr: 'Copier le lien de partage', en: 'Copy share link' },
     locate: { fr: 'Autour de moi', en: 'Around me' },
     locateTitle: { fr: 'Centrer la carte sur ma position', en: 'Center the map on my location' },
-    resetGlobe: { fr: 'Revenir au globe entier', en: 'Reset to full globe view' },
+    resetGlobe: { fr: 'Réinitialiser : revenir au globe entier', en: 'Reset to full globe view', note: 'Starts with the visible label of the button in the navigation bar, « Réinitialiser » (« Reset »).' },
     resetGlobeTitle: {
       fr: 'Réinitialiser la caméra et revenir au globe entier',
       en: 'Reset camera and return to full globe view',

@@ -184,7 +184,13 @@ export function stylePreviewSize(width, height, maxPx = STYLE_PREVIEW_MAX_PX) {
 
 // ── DOM ─────────────────────────────────────────────────────────────────────
 
-function paintIcons(root) {
+/**
+ * Paint every `[data-shell-icon]` under `root` with its Lucide mask. Shared
+ * with the navigation bar (src/globeNav.js).
+ * @param {ParentNode} root
+ * @returns {void}
+ */
+export function paintShellIcons(root) {
   root.querySelectorAll('[data-shell-icon]').forEach((element) => {
     const uri = lucideIconMask(element.dataset.shellIcon);
     if (!uri) return;
@@ -272,7 +278,7 @@ export function initGlobeShell({ ui, viewer = null, doc = globalThis.document, s
       item.append(button);
       recentsList.append(item);
     }
-    paintIcons(recentsList);
+    paintShellIcons(recentsList);
     recentsSection.hidden = recents.length === 0;
   };
 
@@ -506,7 +512,7 @@ export function initGlobeShell({ ui, viewer = null, doc = globalThis.document, s
     openPlaceSearch();
   });
 
-  paintIcons(doc);
+  paintShellIcons(doc);
   topBar.hidden = false;
   doc.documentElement.classList.add('globe-shell');
 

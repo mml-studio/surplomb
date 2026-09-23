@@ -485,6 +485,12 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Lieux récents, Grandes villes | Recent places, Major cities | The place search's menu. |
 | Plus d’actions | More actions | The « … » menu of the top bar. |
 | limites (d’une commune, d’un département, d’une région) | limits, outline | What a place search draws around an area it found. |
+| Vue précédente | Previous view | The navigation bar's step back to the last framing (`src/globeNav.js`). |
+| Vue du dessus | Top view | The camera looking straight down, heading kept. |
+| Vue 2D, Vue 3D | 2D view, 3D view | 2D: flat map, north up, tilt locked. 3D: the camera tilts freely. |
+| Remettre le nord en haut | Turn north up | The compass needle's action. |
+| Zoomer, Dézoomer | Zoom in, Zoom out | |
+| Réinitialiser | Reset | The navigation bar's return to the whole globe. |
 
 ## Panel chips and fused rows
 

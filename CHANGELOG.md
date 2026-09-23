@@ -6,6 +6,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The camera has a navigation bar at the bottom of the screen, with words.**
+  « Vue précédente » steps back to the framing you had before your last move
+  or search; « Vue du dessus » looks straight down without turning the map;
+  2D is a flat map, north up, that cannot be tilted by accident, and 3D gives
+  the tilt back; the needle turns north up; − and + zoom on the centre of the
+  view; « Réinitialiser » goes back out to the whole globe (it left the « … »
+  menu). Every control has a tooltip. A chip above the bar names the town,
+  département or région at the centre of the view and the view mode
+  (« Paris · Vue 3D »), from the State's API Géo. Desktop only; under 1280 px
+  wide the bar shows its icons without the words.
 - **A search marks what it found, as a map search does.** An address, a
   building or a monument gets a red pin with its name beside it; a town, a
   département or a région gets its limits drawn on the ground (« Biarritz »,

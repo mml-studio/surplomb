@@ -3189,6 +3189,27 @@ export class StyleManager {
     return contactSelected;
   }
 
+  /**
+   * The navigation bar (src/globeNav.js) takes the camera the way a drag on
+   * the globe does: a flight, an orbit or a cinematic verb in progress stops.
+   * It does not stamp a navigation — the search mark and the searched label
+   * stay, the reader is still looking at the same place. A followed object is
+   * let go only when `release` asks: zooming on it is what the wheel does too.
+   * @param {{release?: boolean}} [options]
+   * @returns {boolean} false in the cockpit, which flies its own camera.
+   */
+  takeCameraForGlobeNav({ release = false } = {}) {
+    if (this._disposed || this.cockpitView?.active) return false;
+    if (release) {
+      this._releaseFollowCamera({ trackingOrigin: 'user' });
+      return true;
+    }
+    interruptCameraMotion('globe-nav');
+    this._stopOrbit();
+    this.viewer.camera.cancelFlight();
+    return true;
+  }
+
   /** Run one immediate destination through the shared ownership policy. */
   _runExplicitNavigation(noun, navigate, releaseOptions = undefined) {
     return runExplicitNavigation({

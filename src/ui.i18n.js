@@ -412,7 +412,7 @@ export default defineMessages({
   actions: {
     clearingLayers: { fr: 'Extinction des couches sélectionnées', en: 'Clearing selected data layers' },
     clearLayers: { fr: 'Éteindre les couches sélectionnées', en: 'Clear selected data layers' },
-    resetGlobe: { fr: 'Revenir au globe entier', en: 'Reset to full globe view' },
+    resetGlobe: { fr: 'Réinitialiser : revenir au globe entier', en: 'Reset to full globe view', note: 'Starts with the visible label of the button in the navigation bar, « Réinitialiser » (« Reset »).' },
     resetCockpit: { fr: 'Réinitialiser le cockpit et revenir au globe entier', en: 'Reset cockpit to full globe view' },
     resettingGlobe: { fr: 'Retour au globe entier…', en: 'Resetting to full globe view' },
     resettingCockpit: { fr: 'Retour du cockpit au globe entier…', en: 'Resetting cockpit to full globe view' },
