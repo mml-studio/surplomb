@@ -27,8 +27,8 @@ import sitadelFranceLayer, {
   SITADEL_FR_LAYER_ID,
   SITADEL_FR_OVERLAY_SOURCE_ID,
   SITADEL_MAX_ALTITUDE_M,
-  SITADEL_POINT_MAX_PX,
-  SITADEL_POINT_MIN_PX,
+  SITADEL_WINDOWS,
+  SITADEL_WINDOW_DEFAULT,
   buildSitadelLoadingLabel,
   buildSitadelSelectionLabel,
   createSitadelSelectedOverlayEntry,
@@ -40,27 +40,16 @@ import sitadelFranceLayer, {
   sitadelParcelOwners,
   sitadelPermitAnchor,
   sitadelPermitColor,
+  sitadelPayloadForPeriod,
+  sitadelPermitPanel,
   sitadelPermitRecords,
-  sitadelPermitSize,
   sitadelRingPositions,
-  sitadelPrismBaseRing,
   sitadelViewport,
-  SITADEL_METRES_PER_DWELLING,
-  SITADEL_PRISM_BASE_M,
-  SITADEL_PRISM_MAX_M,
-  SITADEL_NO_HEIGHT_DEMOLITION,
-  SITADEL_NO_HEIGHT_DWELLINGS,
-  sitadelHeightLegend,
-  sitadelHeightRefusal,
   sitadelFloorM,
-  sitadelPrismClipped,
-  sitadelPrismHeightM,
   _drawSitadelPackForTest,
   _drawSitadelSurfacesForTest,
-  _sitadelColdFloorPendingForTest,
   _sitadelFloorReanchorPendingForTest,
   _sitadelRefreshFloorsForTest,
-  _sitadelPrismTallyForTest,
   _clearSitadelSelectionForTest,
   _selectSitadelForTest,
   _setSitadelStateForTest,
@@ -74,8 +63,13 @@ import sitadelFranceLayer, {
   _sitadelStatsForTest,
 } from './sitadelFrance.js';
 import {
+  PERMIT_BADGE_PX,
+  PERMIT_BADGE_SELECTED_PX,
+  PERMIT_PROJECT_COLORS,
+  permitBadgeImage,
+} from './permitProjects.js';
+import {
   SITADEL_BANDS,
-  SITADEL_SIZE_CEILING_LGT,
   communeCadastreCodes,
   indexCadastreParcels,
   projectSitadelCommune,
@@ -295,21 +289,22 @@ test('every parcel fill resolves to a record, so clicking a plot selects its per
   _clearSitadelSelectionForTest();
 });
 
-test('a demolition draws at the floor, because its file counts no dwelling', () => {
-  const demolition = PACK.permits.find((permit) => permit.f === 'dem');
-  assert.equal(demolition.lgt, null, 'the permis de demolir file has 33 columns and no dwelling count');
-  assert.equal(sitadelPermitSize(demolition), SITADEL_POINT_MIN_PX);
-  assert.equal(sitadelPermitColor(demolition), SITADEL_BANDS.find((b) => b.id === 'demolition').color);
-
-  const big = PACK.permits.find((permit) => permit.lgt === 27);
-  assert.ok(sitadelPermitSize(big) > SITADEL_POINT_MIN_PX);
-  assert.ok(sitadelPermitSize(big) < SITADEL_POINT_MAX_PX);
-  // A housing permit creating zero dwellings is also at the floor, and it is a
-  // different fact from a demolition — the card is what tells them apart.
-  const zero = PACK.permits.find((permit) => permit.f === 'lgt' && permit.lgt === 0);
+test('every permit is one badge in its class colour, a demolition its own class', () => {
+  const records = sitadelPermitRecords(PACK);
+  const demolition = records.find((record) => record.permit.f === 'dem');
+  assert.equal(demolition.permit.lgt, null, 'the permis de demolir file has 33 columns and no dwelling count');
+  assert.equal(demolition.classId, 'demolition');
+  assert.equal(sitadelPermitColor(demolition.permit), SITADEL_BANDS.find((b) => b.id === 'demolition').color);
+  // The row's palette IS Sitadel's: the badges, the washes and the key agree.
+  for (const record of records) {
+    assert.equal(record.color, PERMIT_PROJECT_COLORS[record.classId], record.id);
+    assert.equal(record.basePixelSize, undefined, 'one size for every badge — the count is on the card');
+  }
+  // A housing permit creating zero dwellings is not a demolition: its class is
+  // its lifecycle band.
+  const zero = records.find((record) => record.permit.f === 'lgt' && record.permit.lgt === 0);
   assert.ok(zero);
-  assert.equal(sitadelPermitSize(zero), SITADEL_POINT_MIN_PX);
-  assert.notEqual(sitadelPermitColor(zero), sitadelPermitColor(demolition));
+  assert.notEqual(zero.classId, 'demolition');
 });
 
 test('the card publishes the commune rate AND the year rate — the join never travels alone', () => {
@@ -371,9 +366,15 @@ test('selecting a permit lights its parcels and paints exactly one card', () => 
   // clearing has to take it off the scene again — a leaked primitive keeps a
   // de-selected plot lit.
   assert.equal(viewer.added.length, 1);
-  // The dot grows in place; a batched instance cannot be restyled.
+  // The badge grows and is ringed in place; a batched instance cannot be
+  // restyled.
   const record = _sitadelRecordForTest(id);
-  assert.ok(record.point.pixelSize > record.basePixelSize);
+  assert.equal(record.badge.width, PERMIT_BADGE_SELECTED_PX);
+  assert.equal(record.badge.image, permitBadgeImage(record.classId, { selected: true }));
+
+  _selectSitadelForTest(_sitadelRecordIdsForTest().find((key) => key !== id));
+  assert.equal(record.badge.width, PERMIT_BADGE_PX, 'the previous badge is put back');
+  assert.equal(record.badge.image, permitBadgeImage(record.classId));
 
   _clearSitadelSelectionForTest();
   assert.equal(_sitadelSelectedIdForTest(), null);
@@ -418,27 +419,95 @@ test('the overlay entry hangs on the parcel it was computed for', () => {
   _clearSitadelSelectionForTest();
 });
 
-test('the legend shows only bands that are on screen, and never an unplaced row', () => {
+test('the key shows only the classes drawn, one plain line each, and never an unplaced row', () => {
   _setSitadelStateForTest({ payload: PACK });
-  const { chips, legend } = _sitadelRowControlsForTest();
-  assert.deepEqual(chips, [], 'this layer owns no serialized option group');
-  assert.ok(legend.length > 0);
+  const controls = _sitadelRowControlsForTest();
+  assert.deepEqual(controls.chips, [], 'the period is the row’s select, not a chip');
+  const { legend } = controls;
   const drawn = PACK.summary.bands.filter((band) => band.count > 0);
   assert.equal(legend.length, drawn.length);
-  assert.equal(legend.reduce((sum, row) => sum + row.count, 0), PACK.summary.placed);
   for (const row of legend) {
-    assert.ok(row.count > 0, `${row.label} must not be listed at zero`);
+    // No count and no sentence: the legend rule of 2026-09-21.
+    assert.equal(row.count, undefined, row.label);
+    assert.equal(row.blurb, undefined, row.label);
     assert.ok(/^#[0-9a-f]{6}$/i.test(row.color), row.color);
-    assert.ok(row.blurb && row.blurb.length > 20, row.label);
   }
-  // The panel's swatch IS the colour the object is painted, so a permit that is
+  assert.equal(controls.legendFold, 'Couleurs des projets');
+  // Nothing selected, no card.
+  assert.equal(controls.legendSelection, null);
+  // The swatch IS the colour the object is painted, so a permit that is
   // nowhere may not have one.
   for (const forbidden of ['ambigu', 'introuvable', 'non posé', 'sans référence']) {
     assert.ok(!legend.some((row) => row.label.toLowerCase().includes(forbidden)),
       `"${forbidden}" must not be a legend swatch`);
   }
+  // The parcels are washes, so the photoreal drape notice applies while any is drawn.
+  assert.equal(controls.surfaceFill, true);
   _clearSitadelSelectionForTest();
-  assert.deepEqual(_sitadelRowControlsForTest(), { chips: [], legend: [] });
+  assert.deepEqual(_sitadelRowControlsForTest().legend, []);
+  assert.equal(_sitadelRowControlsForTest().surfaceFill, false);
+});
+
+test('a selected permit prints its card in the key, the mock’s card', () => {
+  const host = recordingHost();
+  _setSitadelStateForTest({ payload: PACK, overlayHost: host, viewer: fakeViewer() });
+  const record = _sitadelRecordIdsForTest()
+    .map((id) => _sitadelRecordForTest(id))
+    .find((entry) => entry.permit.lgt === 27);
+  _selectSitadelForTest(record.id);
+  const card = _sitadelRowControlsForTest().legendSelection;
+  assert.equal(card, sitadelPermitPanel(record, PACK) && card);
+  assert.equal(card.kicker, 'Permis de construire');
+  assert.equal(norm(card.title), '27 logements autorisés');
+  assert.equal(card.badge.color, PERMIT_PROJECT_COLORS[record.classId]);
+  // Three moments, the first reached.
+  assert.equal(card.steps.items.length, 3);
+  assert.equal(card.steps.items[0].done, true);
+  // Placed on its own parcel by the cadastral join: never « approximatif ».
+  assert.equal(card.notice, null);
+  // The file, the rates and the credit are one click away, not gone.
+  assert.equal(card.list.summary, 'Voir les détails du permis');
+  const details = card.list.items.map((item) => norm(item.text)).join(' | ');
+  assert.ok(details.includes('Nantes : 9 des 14 autorisations posées'), details);
+  assert.ok(details.includes('Licence Ouverte'), details);
+  assert.equal(card.source, 'Source : Sitadel · SDES');
+  // The key's close button dismisses it, as Escape does.
+  sitadelFranceLayer.clearSelectedCard();
+  assert.equal(_sitadelSelectedIdForTest(), null);
+  assert.equal(_sitadelRowControlsForTest().legendSelection, null);
+  _clearSitadelSelectionForTest();
+});
+
+test('the period keeps the permits authorised inside it, and costs no request', () => {
+  const now = Date.parse('2026-09-23T12:00:00Z');
+  const pack = {
+    permits: [
+      { i: 'recent', da: '2025-06-01' },
+      { i: 'older', da: '2021-01-15' },
+      { i: 'oldest', da: '2014-03-02' },
+      { i: 'undated', da: null },
+    ],
+    parcels: [],
+  };
+  const ids = (months) => sitadelPayloadForPeriod(pack, months, now).permits.map((permit) => permit.i);
+  assert.deepEqual(ids('36'), ['recent']);
+  assert.deepEqual(ids('72'), ['recent', 'older']);
+  // The whole register keeps everything, the undated permit included.
+  assert.deepEqual(ids('156'), ['recent', 'older', 'oldest', 'undated']);
+  assert.equal(sitadelPayloadForPeriod(null, '36'), null);
+
+  // The same closed set as `ads-fr`'s window, whose share-link option this
+  // layer mirrors; anything else is refused, never clamped.
+  assert.deepEqual([...SITADEL_WINDOWS], ['36', '72', '156']);
+  assert.equal(SITADEL_WINDOW_DEFAULT, '36');
+  assert.equal(sitadelFranceLayer.acceptsParams({ months: '72' }), true);
+  assert.equal(sitadelFranceLayer.acceptsParams({ months: '24' }), false);
+  assert.equal(sitadelFranceLayer.acceptsParams({ plu: 'on' }), false);
+  assert.equal(sitadelFranceLayer.setParams({ months: '24' }), false);
+  assert.equal(sitadelFranceLayer.setParams({ months: '156' }), true);
+  assert.deepEqual(sitadelFranceLayer.getParams(), { months: '156' });
+  _clearSitadelSelectionForTest();
+  assert.deepEqual(sitadelFranceLayer.getParams(), { months: SITADEL_WINDOW_DEFAULT });
 });
 
 test('getStats() reports what was NOT placed, and its status is guidance not a fault', () => {
@@ -540,6 +609,8 @@ test('the load path carries have=, and an unchanged commune redraws nothing', as
     return { ok: true, json: async () => ({ ...PACK, fetchedAt: 1 }) };
   };
   _setSitadelStateForTest({ payload: null, viewer, fetchImpl, status: 'idle' });
+  // The whole register, so the fixture's 2013–2025 permits are all in the period.
+  sitadelFranceLayer.setParams({ months: SITADEL_WINDOWS.at(-1) });
   assert.equal(await _sitadelLoadForTest(), true);
   assert.equal(asked.length, 1);
   const first = new URL(asked[0], 'http://localhost');
@@ -697,241 +768,22 @@ test('a ring is closed once, and a degenerate ring draws nothing', () => {
   assert.ok(SITADEL_FILL_ALPHA > 0 && SITADEL_FILL_ALPHA < 1);
 });
 
-// ── The parcel as a volume ──────────────────────────────────────────────────
-//
-// The fourth property, and the one this section is about: the HEIGHT of a plot
-// is the number of dwellings the register authorised on it, and nothing else.
-// A plot with no height is a plot whose file counts no dwelling — never a plot
-// whose count went missing between the feed and the screen, and never a zero
-// drawn as an invisible film. The tests below close the three doors: the
-// scale, the two refusals, and the ground the prism has to stand on.
-
-/** Warm the shared floor grid over the fixture pack so prisms can be built. */
+/** Warm the shared floor grid over the fixture pack. */
 function warmFixtureFloors(pack, heightM = 30) {
   for (const parcel of pack.parcels) {
     if (Array.isArray(parcel?.p)) reportMeshFloorCell(parcel.p[1], parcel.p[0], heightM);
   }
 }
 
-test('height is linear in dwellings, and the ceiling is the feed’s own measured one', () => {
-  // Linear, not square-rooted: a prism encodes through a LENGTH, so twice as
-  // tall has to be twice as many. The dot's sqrt is right for a disc and would
-  // be wrong here.
-  assert.equal(sitadelPrismHeightM({ f: 'lgt', lgt: 1 }), 1 * SITADEL_METRES_PER_DWELLING);
-  assert.equal(sitadelPrismHeightM({ f: 'lgt', lgt: 27 }), 27 * SITADEL_METRES_PER_DWELLING);
-  assert.equal(
-    sitadelPrismHeightM({ f: 'lgt', lgt: 100 }) / sitadelPrismHeightM({ f: 'lgt', lgt: 50 }),
-    2,
-    'twice the dwellings is twice the height',
-  );
-  // The dot and the prism saturate on the same measured number.
-  assert.equal(SITADEL_PRISM_MAX_M, SITADEL_SIZE_CEILING_LGT * SITADEL_METRES_PER_DWELLING);
-  assert.equal(sitadelPrismHeightM({ f: 'lgt', lgt: 553 }), SITADEL_PRISM_MAX_M);
-  assert.equal(sitadelPermitSize({ f: 'lgt', lgt: 553 }), SITADEL_POINT_MAX_PX);
-  // Clipping is declared, and the card keeps the true count.
-  assert.equal(sitadelPrismClipped({ f: 'lgt', lgt: 553 }), true);
-  assert.equal(sitadelPrismClipped({ f: 'lgt', lgt: 200 }), false);
-  assert.equal(sitadelPrismClipped({ f: 'dem' }), false);
-});
-
-test('a file that counts no dwelling gets no height, and says which kind it is', () => {
-  // Structural: 33 columns on the permis de démolir file and not one of them
-  // counts a dwelling. Not a fallback, and not a zero.
-  assert.equal(sitadelHeightRefusal({ f: 'dem', lgt: null }), SITADEL_NO_HEIGHT_DEMOLITION);
-  assert.equal(sitadelPrismHeightM({ f: 'dem', lgt: null }), 0);
-  // `sitadelFeed.js` reads `finiteOrNull(NB_LGT_TOT_CREES) ?? 0`, so a
-  // published zero and a blank cell arrive here as the same number and this
-  // layer must not claim to tell them apart.
-  assert.equal(sitadelHeightRefusal({ f: 'lgt', lgt: 0 }), SITADEL_NO_HEIGHT_DWELLINGS);
-  assert.equal(sitadelHeightRefusal({ f: 'lgt', lgt: null }), SITADEL_NO_HEIGHT_DWELLINGS);
-  assert.equal(sitadelHeightRefusal({ f: 'lgt', lgt: 1 }), null);
-  // And the two are told apart on screen by the colour they already had.
-  assert.equal(sitadelPermitColor({ b: 'demolition' }), '#c92a2a');
-  assert.notEqual(sitadelPermitColor({ b: 'termine' }), sitadelPermitColor({ b: 'demolition' }));
-});
-
-test('a column stands on its dossier’s own resolved ground, or it does not stand', () => {
-  _clearMeshFloorCellsForTest();
-  const parcel = PACK.parcels.find((entry) => Array.isArray(entry?.p));
-  const [lon, lat] = parcel.p;
-  // Cold is NULL and never 0: the ellipsoid is 44–55 m under metropolitan
-  // France, and a column based there is a hole rather than a building.
-  assert.equal(sitadelFloorM(lat, lon), null);
-  assert.equal(sitadelFloorM(null, lon), null);
-  assert.equal(sitadelFloorM(lat, Number.NaN), null);
-  reportMeshFloorCell(lat, lon, 41.5);
-  assert.equal(sitadelFloorM(lat, lon), 41.5);
-  _clearMeshFloorCellsForTest();
-});
-
-test('the Nantes pack stands one column per dossier, not one per plot', () => {
+test('each parcel is washed and outlined in its owner’s colour, and nothing stands in the air', () => {
   _clearMeshFloorCellsForTest();
   warmFixtureFloors(PACK);
   const viewer = fakeViewer();
   _setSitadelStateForTest({ payload: PACK, viewer });
-  const { tally, prisms, fills } = _drawSitadelSurfacesForTest(PACK);
-
-  // Measured on the shipped fixture: nine placed permits over fourteen parcels.
-  // The wash is still per PARCEL; the height is per DOSSIER. Two demolitions
-  // and one permit creating zero dwellings carry no height, so six stand up —
-  // where the per-parcel rule stood ten boxes for the same nine files.
-  assert.equal(tally.parcels, 14);
-  assert.equal(tally.permits, 9);
-  assert.equal(tally.prisms, 6);
-  assert.equal(tally.demolition, 2);
-  assert.equal(tally.noDwellings, 1);
-  assert.equal(tally.coldFloor, 0);
-  assert.equal(
-    tally.prisms + tally.demolition + tally.noDwellings + tally.coldFloor,
-    tally.permits,
-    'every permit drawn lands in exactly one of the four outcomes',
-  );
-  // The tallest permit in the pack creates 27 dwellings; nothing is clipped.
-  assert.equal(tally.tallestM, 27 * SITADEL_METRES_PER_DWELLING);
-  assert.equal(tally.clipped, 0);
-
-  // The wash stays under EVERY parcel, column or not — at the top of this
-  // layer's altitude range a 1 m column is 0.05 px and the wash is all there is.
-  assert.ok(fills, 'the ground wash is still drawn');
-  assert.ok(prisms, 'and the columns are a second batch');
-  // A column is NOT a ground primitive: it carries no classification type,
-  // which is the whole reason it is not draped on the photoreal mesh.
-  assert.equal(prisms.classificationType, undefined);
-  assert.equal(viewer.primitives.includes(prisms), true, 'in the ordinary primitive list');
-  assert.equal(viewer.added.includes(prisms), false, 'never in groundPrimitives');
-  assert.equal(viewer.added.includes(fills), true);
-  assert.equal(prisms.geometryInstances.length, 6, 'one instance per dossier that stands');
-
-  // Opaque, because a translucent pass writes no depth and a street of
-  // see-through boxes reads as one mass.
-  assert.equal(prisms.appearance.translucent, false);
-  assert.equal(prisms.appearance.closed, true);
-  for (const instance of prisms.geometryInstances) {
-    const [r, g, b, a] = instance.attributes.color.value;
-    assert.equal(a, 255, 'every column instance is fully opaque');
-    assert.ok(r + g + b > 0);
-    // THE BASE IS THE MARK'S, NEVER THE PLOT'S. The defect this replaces made
-    // the ink dwellings × plot size: 388× apart for the same count in Nantes,
-    // and one mark of 25 426 754 m³.
-    const positions = instance.geometry._polygonHierarchy.positions;
-    assert.equal(positions.length, 4, 'a square, whatever the parcel looks like');
-    const box = Cesium.Rectangle.fromCartesianArray(positions);
-    const widthM = box.width * Cesium.Ellipsoid.WGS84.maximumRadius
-      * Math.cos(box.south);
-    assert.ok(Math.abs(widthM - SITADEL_PRISM_BASE_M) < 0.5, `${widthM} m wide`);
-  }
-  _clearSitadelSelectionForTest();
-  _clearMeshFloorCellsForTest();
-});
-
-test('the column’s base is a square of fixed metres, wherever it stands', () => {
-  const ring = sitadelPrismBaseRing(-1.5536, 47.2184);
-  assert.equal(ring.length, 4);
-  const [sw, se, ne, nw] = ring;
-  // Metres, measured on the ring itself rather than asserted from the input.
-  const midLat = (sw[1] + ne[1]) / 2;
-  const widthM = (se[0] - sw[0]) * 111_320 * Math.cos(midLat * Math.PI / 180);
-  const heightM = (ne[1] - se[1]) * 111_320;
-  assert.ok(Math.abs(widthM - SITADEL_PRISM_BASE_M) < 0.05, `${widthM} m`);
-  assert.ok(Math.abs(heightM - SITADEL_PRISM_BASE_M) < 0.05, `${heightM} m`);
-  assert.equal(nw[0], sw[0]);
-
-  // The square is the same square in Dunkerque and in Cayenne: a base that grew
-  // with latitude would put the north of France under a bigger claim than the
-  // south for the same dwelling count.
-  const north = sitadelPrismBaseRing(2.377, 51.034);
-  const northWidthM = (north[1][0] - north[0][0]) * 111_320 * Math.cos(51.034 * Math.PI / 180);
-  assert.ok(Math.abs(northWidthM - SITADEL_PRISM_BASE_M) < 0.05, `${northWidthM} m`);
-
-  assert.equal(sitadelPrismBaseRing(Number.NaN, 47.2), null);
-  assert.equal(sitadelPrismBaseRing(-1.55, Number.NaN), null);
-  assert.equal(sitadelPrismBaseRing(-1.55, 47.2, 0), null);
-});
-
-test('a cold ground leaves the plot flat and asks again, once', () => {
-  _clearMeshFloorCellsForTest();
-  const viewer = fakeViewer();
-  _setSitadelStateForTest({ payload: PACK, viewer });
-  const { tally, prisms } = _drawSitadelSurfacesForTest(PACK);
-  // Nothing is extruded from the ellipsoid. Every dossier that WOULD stand up
-  // is counted as waiting, not as a class of its own.
-  assert.equal(prisms, null);
-  assert.equal(tally.prisms, 0);
-  assert.equal(tally.coldFloor, 6);
-  assert.equal(_sitadelColdFloorPendingForTest(), true, 'one rebuild is armed');
-  // Once per commune: a genuinely unreachable terrain proxy costs one extra
-  // rebuild and not a loop.
-  _drawSitadelSurfacesForTest(PACK);
-  assert.equal(_sitadelColdFloorPendingForTest(), false);
-  _clearSitadelSelectionForTest();
-  assert.equal(_sitadelColdFloorPendingForTest(), false, 'teardown disarms the timer');
-  _clearMeshFloorCellsForTest();
-});
-
-test('the height key publishes the scale, and the count of what has none', () => {
-  const legend = sitadelHeightLegend({
-    parcels: 14, permits: 14, prisms: 10, clipped: 1, tallestM: 200,
-    demolition: 3, noDwellings: 1, coldFloor: 0,
-  });
-  const scale = legend[0];
-  // The scale row is not a colour, so it carries none — the map legend renders
-  // it as an aligned "not drawn here" line. Without it the relief is a shape
-  // nobody can read a number off (D1).
-  assert.equal(scale.color, null);
-  assert.match(scale.label, /1 logement = 1 m/);
-  assert.equal(scale.count, 10);
-  assert.match(scale.blurb, /200 m/);
-  // The base is in the key too: without it the volume reads as a building and
-  // its width as a claim about the ground, which is the defect this replaced.
-  assert.match(scale.blurb, /colonne de 12 m de côté par dossier/);
-  assert.match(scale.blurb, /la parcelle elle-même reste à plat/);
-  assert.match(scale.blurb, /écrêtée/, 'clipping is declared where the scale is (A5)');
-
-  const flat = legend[1];
-  assert.equal(flat.count, 4, 'three demolitions and one permit creating nothing');
-  assert.match(flat.label, /Sans hauteur/);
-  assert.match(flat.blurb, /33 colonnes/);
-  assert.match(flat.blurb, /confondues/, 'the published zero and the blank cell are not separated');
-
-  // The transient row only appears while something is still waiting for ground.
-  assert.equal(legend.length, 2);
-  const waiting = sitadelHeightLegend({
-    parcels: 4, permits: 4, prisms: 0, clipped: 0, tallestM: 0,
-    demolition: 0, noDwellings: 0, coldFloor: 4,
-  });
-  assert.equal(waiting.length, 1);
-  assert.match(waiting[0].label, /Sol pas encore résolu/);
-  assert.match(waiting[0].blurb, /transitoire/);
-  assert.deepEqual(sitadelHeightLegend(null), []);
-});
-
-test('the row legend carries the height key and declares the drape only while a plot is flat', () => {
-  _clearMeshFloorCellsForTest();
-  warmFixtureFloors(PACK);
-  const viewer = fakeViewer();
-  _setSitadelStateForTest({ payload: PACK, viewer });
-  _drawSitadelSurfacesForTest(PACK);
-  const controls = _sitadelRowControlsForTest();
-  const scale = controls.legend.find((entry) => /1 logement = 1 m/.test(entry.label));
-  assert.ok(scale, 'the scale is in the key that is visible with the map');
-  // Four plots are still ground-classified washes, so the photoreal drape
-  // notice applies — see surfaceFillNotice.js.
-  assert.equal(controls.surfaceFill, true);
-  // Every band row still carries its own colour and count.
-  for (const entry of controls.legend) {
-    if (entry.color === null) continue;
-    assert.match(entry.color, /^#[0-9a-f]{6}$/i);
-    assert.ok(Number.isFinite(entry.count));
-  }
-  // And the row line says the scale out loud, where nobody has to open a panel.
-  const stats = _sitadelStatsForTest();
-  assert.equal(stats.prisms, 6);
-  assert.equal(stats.metresPerDwelling, SITADEL_METRES_PER_DWELLING);
-  assert.equal(stats.prismCeilingM, SITADEL_PRISM_MAX_M);
-  assert.equal(stats.prismBaseM, SITADEL_PRISM_BASE_M);
-  assert.match(norm(stats.loadingLabel), /6 dossiers en volume/);
-  assert.match(norm(stats.loadingLabel), /1 logement = 1 m sur une colonne de 12 m, plafond 200 m/);
-  assert.match(norm(stats.loadingLabel), /3 sans hauteur/);
+  const drawn = _drawSitadelSurfacesForTest(PACK);
+  assert.ok(drawn.fills, 'the washes are one batch');
+  // No column any more: nothing in the ordinary primitive list, only ground.
+  assert.equal(viewer.primitives.length, 0);
   _clearSitadelSelectionForTest();
   _clearMeshFloorCellsForTest();
 });
@@ -945,9 +797,8 @@ test('selecting a dossier rings the ground of every plot it names', () => {
   _drawSitadelSurfacesForTest(PACK);
   const beforeWorld = viewer.primitives.length;
   const beforeGround = viewer.added.length;
-  // The 27-dwelling permit — the tallest in the pack. Its ring used to have to
-  // climb to the roof of its own 27 m box; the box is a 12 m column now and the
-  // plot under it is a wash, so the selection goes where the plot is.
+  // The 27-dwelling permit — the biggest in the pack. The plot is a wash, so
+  // the selection goes where the plot is.
   const tall = _sitadelRecordIdsForTest()
     .map((id) => _sitadelRecordForTest(id))
     .find((record) => record.permit.lgt === 27);
@@ -956,8 +807,7 @@ test('selecting a dossier rings the ground of every plot it names', () => {
   assert.equal(viewer.added.length, beforeGround + 1, 'the ring is clamped to the ground');
   assert.equal(viewer.primitives.length, beforeWorld, 'and nothing is drawn in the air');
 
-  // A demolition carries no height at all and is selected exactly the same way
-  // — one selection, one placement, and no rule that depends on the height.
+  // A demolition is selected exactly the same way.
   const flat = _sitadelRecordIdsForTest()
     .map((id) => _sitadelRecordForTest(id))
     .find((record) => record.permit.f === 'dem');
@@ -1004,9 +854,9 @@ function meshScene({ height = 30, lat = 47.2184, lon = -1.5536, camHeightM = 900
   };
 }
 
-/** The ellipsoidal height one dot was actually drawn at. */
-function dotHeightM(point) {
-  return Cesium.Cartographic.fromCartesian(point.position).height;
+/** The ellipsoidal height one badge was actually drawn at. */
+function dotHeightM(badge) {
+  return Cesium.Cartographic.fromCartesian(badge.position).height;
 }
 
 test('the floor prefers the measured DEM and falls back to the drawn surface', () => {
@@ -1023,7 +873,7 @@ test('the floor prefers the measured DEM and falls back to the drawn surface', (
 
   // The drawn surface answers while the DEM is still in flight.
   const viewer = { scene: meshScene({ height: 41.5, lat, lon }) };
-  _setSitadelStateForTest({ payload: PACK, viewer, points: new Cesium.PointPrimitiveCollection() });
+  _setSitadelStateForTest({ payload: PACK, viewer, badges: new Cesium.BillboardCollection() });
   _drawSitadelPackForTest(PACK);
   assert.equal(sitadelFloorM(lat, lon), 41.5, 'the mesh read fills the cold cell');
 
@@ -1041,15 +891,15 @@ test('every dot is drawn on the surface under it, never on the ellipsoid', () =>
   _resetProvisionalFloorsForTest();
   const scene = meshScene({ height: 47.75 });
   _setSitadelStateForTest({
-    payload: PACK, viewer: { scene }, points: new Cesium.PointPrimitiveCollection(),
+    payload: PACK, viewer: { scene }, badges: new Cesium.BillboardCollection(),
   });
-  const points = _drawSitadelPackForTest(PACK);
-  assert.equal(points.length, PACK.summary.placed);
+  const badges = _drawSitadelPackForTest(PACK);
+  assert.equal(badges.length, PACK.summary.placed);
   assert.ok(scene.calls.length > 0, 'the drawn surface was probed before a single anchor was taken');
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 0; i < badges.length; i++) {
     // 47.75 m of ground + the 1 m lift. The pre-fix number was 1.0 m flat —
     // the WGS84 ellipsoid, 44–55 m under metropolitan France.
-    assert.ok(Math.abs(dotHeightM(points.get(i)) - 48.75) < 0.01, String(dotHeightM(points.get(i))));
+    assert.ok(Math.abs(dotHeightM(badges.get(i)) - 48.75) < 0.01, String(dotHeightM(badges.get(i))));
   }
   // The card and the DETECT callout stand on the same floor as the dot, so a
   // reader never sees a label and its own mark in two places.
@@ -1071,12 +921,12 @@ test('a dot drawn on cold ground is MOVED once the floor lands, not left buried'
   // the one the whole defect lived in.
   const viewer = { scene: { canvas: { clientWidth: 1280, clientHeight: 720 }, requestRender: () => {} } };
   _setSitadelStateForTest({
-    payload: PACK, viewer, points: new Cesium.PointPrimitiveCollection(),
+    payload: PACK, viewer, badges: new Cesium.BillboardCollection(),
   });
-  const points = _drawSitadelPackForTest(PACK);
-  assert.ok(points.length > 0);
-  for (let i = 0; i < points.length; i++) {
-    assert.ok(Math.abs(dotHeightM(points.get(i)) - 1) < 0.01, 'nothing has answered yet');
+  const badges = _drawSitadelPackForTest(PACK);
+  assert.ok(badges.length > 0);
+  for (let i = 0; i < badges.length; i++) {
+    assert.ok(Math.abs(dotHeightM(badges.get(i)) - 1) < 0.01, 'nothing has answered yet');
   }
   // A pass is armed rather than the dots being abandoned where they landed.
   assert.equal(_sitadelFloorReanchorPendingForTest(), true, 'the layer comes back for them');
@@ -1086,9 +936,9 @@ test('a dot drawn on cold ground is MOVED once the floor lands, not left buried'
     if (Array.isArray(parcel?.p)) reportMeshFloorCell(parcel.p[1], parcel.p[0], 62.5);
   }
   _sitadelRefreshFloorsForTest();
-  for (let i = 0; i < points.length; i++) {
-    assert.ok(Math.abs(dotHeightM(points.get(i)) - 63.5) < 0.01,
-      `dot ${i} still at ${dotHeightM(points.get(i))} m`);
+  for (let i = 0; i < badges.length; i++) {
+    assert.ok(Math.abs(dotHeightM(badges.get(i)) - 63.5) < 0.01,
+      `dot ${i} still at ${dotHeightM(badges.get(i))} m`);
   }
   // Nothing is cold any more, so the ladder stops instead of waking forever.
   assert.equal(_sitadelFloorReanchorPendingForTest(), false);
@@ -1103,11 +953,11 @@ test('a label never outruns its own dot when a floor store forgets a cell', () =
   _resetProvisionalFloorsForTest();
   const scene = meshScene({ height: 33.5 });
   _setSitadelStateForTest({
-    payload: PACK, viewer: { scene }, points: new Cesium.PointPrimitiveCollection(),
+    payload: PACK, viewer: { scene }, badges: new Cesium.BillboardCollection(),
   });
-  const points = _drawSitadelPackForTest(PACK);
+  const badges = _drawSitadelPackForTest(PACK);
   const record = _sitadelRecordForTest(_sitadelRecordIdsForTest()[0]);
-  assert.ok(Math.abs(dotHeightM(points.get(0)) - 34.5) < 0.01);
+  assert.ok(Math.abs(dotHeightM(badges.get(0)) - 34.5) < 0.01);
 
   // The provisional store is an LRU: past 4 000 cells it drops its oldest, and
   // a commune the size of Paris plus the layers sharing it can reach that.
@@ -1122,7 +972,7 @@ test('a label never outruns its own dot when a floor store forgets a cell', () =
   // And the pass that follows leaves the seated dot alone rather than dragging
   // it down to a floor nobody can measure any more.
   _sitadelRefreshFloorsForTest();
-  assert.ok(Math.abs(dotHeightM(points.get(0)) - 34.5) < 0.01, 'a silence never overwrites a reading');
+  assert.ok(Math.abs(dotHeightM(badges.get(0)) - 34.5) < 0.01, 'a silence never overwrites a reading');
 
   _clearSitadelSelectionForTest();
   _clearMeshFloorCellsForTest();
@@ -1139,16 +989,16 @@ test('a surface that answers −415 m under Nantes is refused, not drawn', () =>
   // every one was latched and lent to the commune by the fill radius.
   const scene = meshScene({ height: -415.7 });
   _setSitadelStateForTest({
-    payload: PACK, viewer: { scene }, points: new Cesium.PointPrimitiveCollection(),
+    payload: PACK, viewer: { scene }, badges: new Cesium.BillboardCollection(),
   });
-  const points = _drawSitadelPackForTest(PACK);
+  const badges = _drawSitadelPackForTest(PACK);
   assert.ok(scene.calls.length > 0, 'the surface was asked');
   const parcel = PACK.parcels[0];
   assert.equal(sitadelFloorM(parcel.p[1], parcel.p[0]), null, 'and its answer was refused');
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 0; i < badges.length; i++) {
     // Not seated, and that is the honest outcome — but never 400 m under the
     // city, which is worse than the ellipsoid this whole change is about.
-    assert.ok(Math.abs(dotHeightM(points.get(i)) - 1) < 0.01, String(dotHeightM(points.get(i))));
+    assert.ok(Math.abs(dotHeightM(badges.get(i)) - 1) < 0.01, String(dotHeightM(badges.get(i))));
   }
   assert.equal(_sitadelFloorReanchorPendingForTest(), true, 'and the layer keeps asking');
 
@@ -1158,8 +1008,8 @@ test('a surface that answers −415 m under Nantes is refused, not drawn', () =>
   scene.height = 41.5;
   _sitadelRefreshFloorsForTest();
   assert.ok(scene.calls.length > before, 'a refused cell is re-probed, never latched');
-  for (let i = 0; i < points.length; i++) {
-    assert.ok(Math.abs(dotHeightM(points.get(i)) - 42.5) < 0.01, String(dotHeightM(points.get(i))));
+  for (let i = 0; i < badges.length; i++) {
+    assert.ok(Math.abs(dotHeightM(badges.get(i)) - 42.5) < 0.01, String(dotHeightM(badges.get(i))));
   }
 
   _clearSitadelSelectionForTest();

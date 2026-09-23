@@ -152,21 +152,27 @@ test('a published outline and a cadastral one are two different English claims',
 
 /* ── the ramp and the ledger ─────────────────────────────────────────────── */
 
-test('the ramp and the class it refuses to paint answer in English', (t) => {
+test('the key and the ramp answer in English, one plain name per colour', (t) => {
   useTestLocale('en', t);
-  const legend = adsRowControls(bordeauxPayload()).legend;
-  assert.equal(legend.length, ADS_BUILDING_THEME_LEGEND.length + 1);
-  assert.deepEqual(legend.map((row) => row.label), [
-    'Filed or under review',
-    'Granted, site not opened',
-    'Site opened',
+  const controls = adsRowControls({
+    permits: [
+      { state: 'instruction' }, { state: 'accorde' }, { state: 'commence' },
+      { state: 'termine' }, { state: 'refuse' }, { kind: 'PD', state: 'accorde' }, { state: null },
+    ],
+    emprises: [],
+  });
+  assert.deepEqual(controls.legend.map((row) => row.label), [
+    'Application under review',
+    'Permit granted',
+    'Work started',
     'Work completed',
-    'Refused or canceled',
+    'Canceled or refused',
+    'Demolition permit',
     'State not published',
   ]);
-  // The refusal to paint is argued in English with the same measurement.
-  assert.ok(legend.at(-1).blurb.includes('ΔE 11'), legend.at(-1).blurb);
-  assertNoFrench(legend);
+  assert.equal(controls.legendFold, 'Project colors');
+  assert.deepEqual(adsBuildingThemeLegend().map((row) => row.label), controls.legend.slice(0, -1).map((row) => row.label));
+  assertNoFrench(controls.legend);
 });
 
 test('the ramp’s colours do not move with the language', () => {

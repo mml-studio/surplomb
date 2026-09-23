@@ -177,8 +177,11 @@ const SPOKEN_ALIASES = Object.freeze({
   'dvf-sales': ['ventes immobilières', 'ventes immobilieres', 'ventes', 'dvf', 'transactions immobilières', 'transactions immobilieres', 'prix au mètre carré', 'prix au metre carre', 'mutations', 'property sales', 'property prices', 'price per square meter', 'real estate sales'],
   'avis-valeur': ['avis de valeur', 'estimation', 'estimation immobilière', 'estimation immobiliere', 'valeur vénale', 'valeur venale', 'valuation', 'property valuation', 'estimated value'],
   'dpe-fr': ['dpe', 'performance énergétique', 'performance energetique', 'diagnostic de performance énergétique', 'diagnostic de performance energetique', 'étiquette énergie', 'etiquette energie', 'passoires thermiques', 'energy label', 'energy performance', 'energy rating', 'energy sieves'],
-  'urbanisme-gpu': ['urbanisme', 'plu', 'plui', 'zonage', 'servitudes', 'géoportail de l’urbanisme', 'geoportail de l urbanisme', 'gpu', 'règles d’urbanisme', 'regles d urbanisme', 'zoning', 'urban planning', 'planning rules', 'land use plan', 'easements'],
-  'ads-fr': ["autorisations d'urbanisme", 'autorisations urbanisme', 'permis de construire', 'permis', 'déclarations préalables', 'declarations prealables', 'ads', 'building permits', 'planning applications', 'permit applications', 'demolition permits'],
+  'urbanisme-gpu': ['plu', 'plui', 'zonage', 'servitudes', 'géoportail de l’urbanisme', 'geoportail de l urbanisme', 'gpu', 'règles d’urbanisme', 'regles d urbanisme', 'zoning', 'urban planning', 'planning rules', 'land use plan', 'easements'],
+  // « Urbanisme » is the ROW, whose primary is `ads-fr` since 2026-09-23: the
+  // word lights the permits and leaves the zoning dark, as the row's toggle
+  // does. « PLU » and « zonage » still name the zoning alone.
+  'ads-fr': ['urbanisme', "autorisations d'urbanisme", 'autorisations urbanisme', 'permis de construire', 'permis', 'déclarations préalables', 'declarations prealables', 'ads', 'building permits', 'planning applications', 'permit applications', 'demolition permits'],
   'isochrone-fr': ['isochrone', 'isochrones', 'zone de chalandise', 'chalandise', 'temps de trajet', 'catchment', 'catchment area', 'travel time', 'drive time'],
   'implantation-fr': ['fiche implantation', 'implantation', 'site implantation', 'site report', 'site dossier'],
   'comparables-fr': ['comparables', 'biens comparables', 'sélection conseiller', 'selection conseiller', 'comparable sales', 'comparable properties'],

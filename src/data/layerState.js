@@ -770,7 +770,12 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   // enables the wrong one.
   // `sd` for Sitadel. `s` is satellites, `su` is sup-fr — the third `s` layer,
   // and the last one that could still take two characters comfortably.
-  Object.freeze({ id: 'sitadel-fr', token: 'sd', disposition: 'enabled-only' }),
+  //
+  // MIRRORS `ads-fr`'s options since 2026-09-23, as `military` mirrors
+  // `flights`: the « Urbanisme » row's « Période » steers both permit layers,
+  // and a link carries it once, as `au.w`. A link written before keeps
+  // opening Sitadel on the three years `au.w` then said by default.
+  Object.freeze({ id: 'sitadel-fr', token: 'sd', disposition: 'enabled+mirrored-options', optionOwner: 'ads-fr' }),
   Object.freeze({ id: 'sup-fr', token: 'su', disposition: 'enabled-only' }),
   Object.freeze({ id: 'telegeography-submarine-cables', token: 'u', disposition: 'enabled-only' }),
   Object.freeze({ id: 'traffic', token: 't', disposition: 'enabled-only' }),

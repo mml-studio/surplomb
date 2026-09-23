@@ -78,22 +78,27 @@ export default defineMessages({
 
   /** The key to the ground wash. */
   legend: {
+    /**
+     * One plain name per colour of the key (the legend rule of 2026-09-21):
+     * the family in words, its letter in brackets because the map writes the
+     * codes on the ground. Keyed by the colour's family; `AU` and `AUc` share
+     * a colour and a line.
+     */
+    families: {
+      U: { fr: 'Zone urbaine (U)', en: 'Urban zone (U)' },
+      AU: { fr: 'Zone à urbaniser (AU)', en: 'Zone to be developed (AU)' },
+      AUs: {
+        fr: 'Zone à urbaniser plus tard (AU)',
+        en: 'Zone to be developed later (AU)',
+        note: 'The CLOSED future-urban zones: buildable only after the PLU is revised.',
+      },
+      A: { fr: 'Zone agricole (A)', en: 'Agricultural zone (A)' },
+      Ah: { fr: 'Hameau en zone agricole', en: 'Hamlet in the agricultural zone' },
+      N: { fr: 'Zone naturelle (N)', en: 'Natural zone (N)' },
+      Nh: { fr: 'Hameau en zone naturelle', en: 'Hamlet in the natural zone' },
+    },
     unknownFamily: { fr: 'Famille non publiée', en: 'Family not published' },
-    unknownFamilyBlurb: {
-      fr: 'Le registre publie une lettre que cette grammaire ne connaît pas — '
-        + 'la zone est dessinée, pas expliquée.',
-      en: 'The register publishes a letter this grammar does not know — '
-        + 'the zone is drawn, not explained.',
-    },
     easement: { fr: 'Servitude d’utilité publique', en: 'Public utility easement (SUP)' },
-    easementBlurb: {
-      fr: 'Contour tireté, sans aplat : une seule enveloppe mesurée fait '
-        + '759 polygones sur des kilomètres, et la remplir teinterait la vue '
-        + 'au lieu d’une parcelle.',
-      en: 'Dashed outline, no fill: one measured envelope is '
-        + '759 polygons spanning kilometers, and filling it would tint the view '
-        + 'instead of one plot.',
-    },
     zonesHidden: {
       fr: (zones) => `${zones} zone${zones > 1 ? 's' : ''} de PLU masquée${zones > 1 ? 's' : ''}`,
       en: (zones) => `${zones} PLU ${plural(zones, 'zone', 'zones')} hidden`,

@@ -169,8 +169,10 @@ export default defineMessages({
     'dvf-sales': { fr: 'Prix de l’immobilier', en: 'Property prices' },
     'avis-valeur': { fr: 'Estimation d’un bien', en: 'Property valuation' },
     'dpe-fr': { fr: 'Performance énergétique (DPE)', en: 'Energy rating (DPE)' },
-    'urbanisme-gpu': { fr: 'Urbanisme', en: 'Planning' },
-    'ads-fr': { fr: 'Autorisations d’urbanisme', en: 'Planning permits' },
+    // `ads-fr` keeps the « Urbanisme » row since 2026-09-23 (`layerFusions.js`);
+    // the zoning is one of its tiles, and goes by what it is.
+    'urbanisme-gpu': { fr: 'Règles d’urbanisme', en: 'Planning rules' },
+    'ads-fr': { fr: 'Urbanisme', en: 'Planning' },
     'isochrone-fr': { fr: 'Zone de chalandise', en: 'Catchment area' },
     'implantation-fr': { fr: 'Fiche implantation', en: 'Site report' },
     'comparables-fr': { fr: 'Comparables (sélection conseiller)', en: 'Comparables (agent’s selection)' },

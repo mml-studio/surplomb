@@ -2,7 +2,8 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
 import {
-  fusedIntoFor, fusionIsExclusive, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor,
+  fusedIntoFor, fusionIsExclusive, fusionMemberChipFor, fusionPrimaryChipFor, fusionRowTileOf, fusionRowTilesFor,
+  fusionTilesFor,
   tilePartDefaults, tilePartIsOff,
 } from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
@@ -157,6 +158,97 @@ function legendFocusKeyIn(list) {
  * @returns {?string} Null when the rows cannot be serialised (a layer handed
  *   over a cyclic object): the key is then rebuilt, as it always was.
  */
+/**
+ * Make `parent`'s children exactly `nodes`, in that order — and touch the DOM
+ * only when they are not already. A move blurs a focused control, and the
+ * strip is repainted on every stats tick of a lit row.
+ * @param {HTMLElement} parent
+ * @param {HTMLElement[]} nodes
+ */
+function reorderChildren(parent, nodes) {
+  const current = [...(parent.children || [])];
+  if (current.length === nodes.length && current.every((node, index) => node === nodes[index])) return;
+  parent.replaceChildren(...nodes);
+}
+
+/**
+ * A card's timeline: one line per moment, a dot filled in the class colour
+ * when the moment is reached, hollow when the register has not received it.
+ * A list, so a screen reader counts the steps.
+ * @param {{items: Array<{label: string, value: ?string, done: boolean, color: ?string}>}} steps
+ * @returns {HTMLElement}
+ */
+function legendSelectionSteps(steps) {
+  const list = document.createElement('ol');
+  list.className = 'map-legend-selection-steps';
+  for (const item of steps.items) {
+    const row = document.createElement('li');
+    row.className = item.done ? 'is-done' : 'is-pending';
+    if (item.color) setCssVar(row, '--step-ink', item.color);
+    const label = document.createElement('span');
+    label.className = 'map-legend-selection-step-label';
+    label.textContent = item.label;
+    const value = document.createElement('span');
+    value.className = 'map-legend-selection-step-value';
+    value.textContent = item.value || '';
+    row.append(label, value);
+    list.appendChild(row);
+  }
+  return list;
+}
+
+/**
+ * Fold the key blocks of members that share a row tile into the first of them.
+ *
+ * Classes are deduplicated by colour and name — the members share a palette,
+ * so the same class printed twice is the same class — and put back in the
+ * order their `rank` gives when every one carries one. Each member's card is
+ * kept, with the layer it belongs to, so its close button still reaches that
+ * layer.
+ * @param {Array<object>} members Members of one key row.
+ * @param {(member: object) => ?string} tileOf
+ * @returns {Array<object>}
+ */
+function mergeTileMembers(members, tileOf) {
+  const out = [];
+  const byTile = new Map();
+  for (const member of members) {
+    const key = tileOf(member);
+    const card = member.selection ? { layerId: member.layer?.id ?? null, selection: member.selection } : null;
+    const host = key ? byTile.get(key) : null;
+    if (!host) {
+      const copy = { ...member, cards: card ? [card] : [] };
+      if (key) byTile.set(key, copy);
+      out.push(copy);
+      continue;
+    }
+    const seen = new Set(host.entries.map((entry) => `${entry.color}|${entry.label}`));
+    const entries = [...host.entries];
+    for (const entry of member.entries) {
+      const id = `${entry.color}|${entry.label}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      entries.push(entry);
+    }
+    host.entries = entries.every((entry) => Number.isFinite(entry.rank))
+      ? [...entries].sort((a, b) => a.rank - b.rank)
+      : entries;
+    if (member.note && member.note !== host.note) host.note = [host.note, member.note].filter(Boolean).join(' · ');
+    host.source = host.source || member.source;
+    host.fold = host.fold || member.fold;
+    host.scope = host.scope || member.scope;
+    if (!host.segments.length && member.segments.length) {
+      host.segments = member.segments;
+      host.subSegments = member.subSegments;
+      host.segmentsLabel = member.segmentsLabel;
+    }
+    if (card) host.cards.push(card);
+  }
+  // A merged block keeps no single `selection`: its cards are the list.
+  for (const member of out) if (member.cards) member.selection = null;
+  return out;
+}
+
 function legendSignature(rows, { locale, drapeNote, displayName }) {
   try {
     return JSON.stringify({
@@ -274,8 +366,25 @@ export function legendSelectionOf(selection) {
     }))
     .filter((item) => item.text || item.label);
   const listSummary = text(selection.list?.summary);
+  // A timeline: the moments of the object's life, reached or not.
+  const stepItems = (Array.isArray(selection.steps?.items) ? selection.steps.items : [])
+    .map((item) => ({
+      label: text(item?.label),
+      value: text(item?.value),
+      done: item?.done === true,
+      color: text(item?.color),
+    }))
+    .filter((item) => item.label);
+  const noticeTitle = text(selection.notice?.title);
   return {
     key: text(selection.key) || title,
+    kicker: text(selection.kicker),
+    badge: text(selection.badge?.label)
+      ? { label: text(selection.badge.label), color: text(selection.badge.color) }
+      : null,
+    steps: stepItems.length ? { items: stepItems } : null,
+    notice: noticeTitle ? { title: noticeTitle, text: text(selection.notice.text) } : null,
+    source: text(selection.source),
     title,
     meta: (Array.isArray(selection.meta) ? selection.meta : [selection.meta]).map(text).filter(Boolean),
     headline: text(selection.headline),
@@ -3192,6 +3301,105 @@ export class DataLayerManager {
   }
 
   /**
+   * The tiles, selects and hint a row draws under itself (`rowTiles`),
+   * reconciled in place like the chips — the click that pressed a tile
+   * repaints the row, and a rebuilt button would drop the keyboard focus.
+   * @param {HTMLElement} container The row's `.data-toggle-controls`.
+   * @param {Array<{key: string, label: string, title: string, active: boolean}>} tiles
+   * @param {Array<object>} selects
+   * @param {string} hint
+   */
+  _syncRowTiles(container, tiles, selects, hint) {
+    const hasClass = (node, className) => String(node?.className || '').split(/\s+/).includes(className);
+    const children = () => [...(container.children || [])];
+    const take = (className) => children().find((node) => hasClass(node, className)) || null;
+    // Every row runs through here; only a row with tiles under it has anything
+    // to draw or to take down.
+    if (!tiles.length && !selects.length && !hint
+        && !children().some((node) => hasClass(node, 'data-row-tiles')
+          || hasClass(node, 'data-row-hint') || node.dataset?.rowSelect)) return;
+    const desired = [];
+
+    let grid = take('data-row-tiles');
+    if (tiles.length) {
+      if (!grid) {
+        grid = document.createElement('div');
+        grid.className = 'data-row-tiles';
+      }
+      const stale = new Map([...(grid.children || [])].map((node) => [node.dataset.rowTile, node]));
+      const buttons = [];
+      for (const tile of tiles) {
+        let button = stale.get(tile.key);
+        stale.delete(tile.key);
+        if (!button) {
+          button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'data-row-tile';
+          button.dataset.rowTile = tile.key;
+        }
+        writeText(button, tile.label);
+        writeProperty(button, 'title', tile.title || '');
+        button.classList.toggle('active', Boolean(tile.active));
+        writeAttribute(button, 'aria-pressed', tile.active ? 'true' : 'false');
+        buttons.push(button);
+      }
+      reorderChildren(grid, buttons);
+      desired.push(grid);
+    }
+
+    for (const select of selects) {
+      const id = `${select.layerId}:${select.param}`;
+      let wrap = children().find((node) => node.dataset?.rowSelect === id) || null;
+      if (!wrap) {
+        wrap = document.createElement('label');
+        wrap.className = 'data-row-select-wrap';
+        wrap.dataset.rowSelect = id;
+        const caption = document.createElement('span');
+        caption.className = 'data-row-select-label';
+        const field = document.createElement('select');
+        field.className = 'data-row-select';
+        wrap.appendChild(caption);
+        wrap.appendChild(field);
+      }
+      const [caption, field] = wrap.children;
+      writeText(caption, select.label || '');
+      field.dataset.selectLayer = select.layerId;
+      field.dataset.selectParam = select.param;
+      if (select.fanOut === true) field.dataset.selectFanOut = '1';
+      else delete field.dataset.selectFanOut;
+      writeProperty(field, 'title', select.title || '');
+      const signature = select.options.map((option) => `${option.value}=${option.label}`).join('|');
+      if (field.dataset.options !== signature) {
+        const options = select.options.map((option) => {
+          const node = document.createElement('option');
+          node.value = String(option.value);
+          node.textContent = option.label;
+          return node;
+        });
+        if (typeof field.replaceChildren === 'function') field.replaceChildren(...options);
+        field.dataset.options = signature;
+      }
+      if (field.value !== String(select.value)) field.value = String(select.value);
+      desired.push(wrap);
+    }
+
+    let note = take('data-row-hint');
+    if (hint) {
+      if (!note) {
+        note = document.createElement('div');
+        note.className = 'data-row-hint';
+      }
+      writeText(note, hint);
+      desired.push(note);
+    }
+
+    // The chips of the strip, if any, keep their place after these.
+    const chips = children().filter((node) => node.dataset?.chipId);
+    reorderChildren(container, [...desired, ...chips]);
+  }
+
+
+  /**
    * Switch one row off from the strip, with the chip as its own busy light.
    * @param {string} layerId Primary layer id of the row.
    * @param {?object} chip The chip that was pressed.
@@ -3478,8 +3686,9 @@ export class DataLayerManager {
     count.textContent = rowCount ? this._formatCount(rowCount) : '—';
 
     const toggle = document.createElement('button');
-    toggle.className = `data-toggle-btn${layer.enabled ? ' active' : ''}`;
-    this._syncToggleButton(toggle, layer);
+    const painted = this._rowToggleProjection(layer);
+    toggle.className = `data-toggle-btn${painted.enabled ? ' active' : ''}`;
+    this._syncToggleButton(toggle, painted);
     toggle.addEventListener('click', async () => {
       toggle.disabled = true;
       try {
@@ -3488,7 +3697,14 @@ export class DataLayerManager {
         // left on still reads OFF and still turns the whole subject on — the
         // alternative, reading the group here, would make an OFF-looking
         // button switch everything off.
-        await this._setRowEnabled(layer.id, !this.isEnabled(layer.id));
+        //
+        // A row whose members are TILES UNDER IT reads the group instead, and
+        // paints it too (`_rowToggleProjection`): there the reader puts the
+        // primary out with a tile while the row stays on, and a button that
+        // read OFF over the zoning it was still drawing would be a switch
+        // lying about the map.
+        const on = fusionRowTilesFor(layer.id) ? this._rowEnabled(layer.id) : this.isEnabled(layer.id);
+        await this._setRowEnabled(layer.id, !on);
       } catch (error) {
         console.warn(`[Data] ${layer.id} toggle error:`, error);
       } finally {
@@ -3539,6 +3755,13 @@ export class DataLayerManager {
       const controls = document.createElement('div');
       controls.className = 'data-toggle-controls';
       controls.addEventListener('click', (event) => {
+        // A tile under the row switches its group of members — see `rowTiles`
+        // in layerFusions.js.
+        const tile = event.target?.closest?.('.data-row-tile[data-row-tile]');
+        if (tile) {
+          this._toggleRowTile(layer.id, tile.dataset.rowTile);
+          return;
+        }
         const button = event.target?.closest?.('.data-toggle-chip');
         if (!button || button.disabled) return;
         // Re-read the live descriptor rather than trusting the rendered
@@ -3561,11 +3784,70 @@ export class DataLayerManager {
           if (chip.fanOut) this._offerParamsToRow(owner, chip.params, layer.id);
         }
       });
+      // The row's select (« Période »): one param, sent to the layer that
+      // published it and offered to the rest of the row when it says so.
+      controls.addEventListener('change', (event) => {
+        const select = event.target?.closest?.('.data-row-select');
+        if (!select) return;
+        const owner = select.dataset.selectLayer || layer.id;
+        const params = { [select.dataset.selectParam]: select.value };
+        this.setLayerParams(owner, params, { origin: 'user' });
+        if (select.dataset.selectFanOut === '1') this._offerParamsToRow(owner, params, layer.id);
+      });
       row.appendChild(controls);
       this._syncRowControls(controls, layer);
     }
 
     return row;
+  }
+
+  /**
+   * What a row's ON/OFF button paints: the primary, or — on a row whose
+   * members are tiles under it, when the primary is out and a tile is still
+   * lit — the first lit member, so the button says ON while the row draws.
+   * @param {object} layer `getAll()` projection for the row's primary.
+   * @param {?Array<object>} [layers] This pass's `getAll()`, when the caller has it.
+   * @returns {object} A projection `_syncToggleButton` can paint.
+   */
+  _rowToggleProjection(layer, layers = null) {
+    if (layer.enabled || !fusionRowTilesFor(layer.id)) return layer;
+    const lit = this._fusionCompanions(layer.id).find((entry) => this.isEnabled(entry.id));
+    if (!lit) return layer;
+    const projection = (layers || this.getAll()).find((entry) => entry.id === lit.id);
+    return projection ? { ...projection, label: layer.label, name: layer.name } : layer;
+  }
+
+  /**
+   * Press a tile under a row: put its members out when any is lit, light them
+   * all when none is.
+   *
+   * The first member goes the way a chip goes — briefed, or flown to its
+   * territory — and the others follow it only if it came on, so a reader who
+   * turns the briefing down is not left with half a tile lit.
+   * @param {string} rowId The row's primary.
+   * @param {string} key The tile's key.
+   * @returns {Promise<void>|undefined}
+   */
+  _toggleRowTile(rowId, key) {
+    const tile = fusionRowTilesFor(rowId)?.find((entry) => entry.key === key);
+    if (!tile) return undefined;
+    const ids = tile.ids.filter((id) => this.layers.has(id) && !this._withheldLayerIds.has(id));
+    if (!ids.length) return undefined;
+    const warn = (error) => console.warn(`[Data] ${rowId}:${key} tile toggle error:`, error);
+    const lit = ids.filter((id) => this.isEnabled(id));
+    if (lit.length) {
+      return Promise.all(lit.map((id) => this.setEnabled(id, false, { origin: 'user' })))
+        .then(() => undefined)
+        .catch(warn);
+    }
+    const [lead, ...rest] = ids;
+    return Promise.resolve(this._toggleFusionMember(lead))
+      .then(() => {
+        if (!this.isEnabled(lead)) return undefined;
+        return Promise.all(rest.map((id) => this.setEnabled(id, true, { origin: 'user' })));
+      })
+      .then(() => undefined)
+      .catch(warn);
   }
 
   /**
@@ -3955,6 +4237,11 @@ export class DataLayerManager {
     // tiles are its member switches, and each member prints its options as
     // segments over its own classes there. See `tiles` in layerFusions.js.
     if (fusionTilesFor(layer.id)) return { ...(own || {}), chips: [] };
+    // A row whose members are TILES UNDER IT: the tiles, the select of the
+    // members that are on, and the lit tile's hint. See `rowTiles` in
+    // layerFusions.js.
+    const rowTiles = fusionRowTilesFor(layer.id);
+    if (rowTiles) return this._rowTileControls(layer, own, rowTiles, read);
     const chips = [];
     // The row's own primary, WHEN the fusion asks for it — a peer row whose
     // members are three different objects rather than one subject seen three
@@ -4034,6 +4321,48 @@ export class DataLayerManager {
   }
 
   /**
+   * The controls of a row whose members are tiles under it.
+   *
+   * Nothing while the row is dark, like every strip. Lit: one tile per group
+   * of members, pressed while any of them is on; then the `select` each lit
+   * member publishes (the permits' « Période »); then the hint of the first
+   * lit tile that has one, while none of its members holds a card — once a
+   * project is open, « select a project » has been done.
+   * @param {object} layer `getAll()` projection for the row's primary.
+   * @param {?object} own The primary's own controls.
+   * @param {ReadonlyArray<object>} rowTiles From `fusionRowTilesFor`.
+   * @param {(id: string) => ?object} read Controls of a member, this pass.
+   * @returns {object}
+   */
+  _rowTileControls(layer, own, rowTiles, read) {
+    const controls = { ...(own || {}), chips: [], rowTiles: [], selects: [], hint: '' };
+    delete controls.select;
+    if (!this._rowEnabled(layer.id)) return controls;
+    for (const tile of rowTiles) {
+      const ids = tile.ids.filter((id) => this.layers.has(id) && !this._withheldLayerIds.has(id));
+      if (!ids.length) continue;
+      const active = ids.some((id) => this.isEnabled(id));
+      controls.rowTiles.push({ key: tile.key, label: tile.label, title: tile.title, active });
+      if (!active) continue;
+      for (const id of ids) {
+        if (!this.isEnabled(id)) continue;
+        const select = read(id)?.select;
+        if (select && typeof select.param === 'string' && Array.isArray(select.options)) {
+          // One select per param across the row: the permit layers share the
+          // period, and two « Période » menus would be one question asked twice.
+          if (!controls.selects.some((entry) => entry.param === select.param)) {
+            controls.selects.push({ ...select, layerId: id });
+          }
+        }
+      }
+      if (!controls.hint && tile.hint && !ids.some((id) => this.isEnabled(id) && read(id)?.legendSelection)) {
+        controls.hint = tile.hint;
+      }
+    }
+    return controls;
+  }
+
+  /**
    * Render a layer's row chips — the CONTROLS, and only those. The key itself
    * is painted once, on the map, by {@link _refreshMapLegend}. The block stays
    * hidden while the layer is off (or while a dependency owner has surrendered
@@ -4066,8 +4395,12 @@ export class DataLayerManager {
       ? this._composedRowControls(layer)
       : resolvedControls;
     const chips = controls?.chips || [];
+    const rowTiles = Array.isArray(controls?.rowTiles) ? controls.rowTiles : [];
+    const selects = Array.isArray(controls?.selects) ? controls.selects : [];
+    const hint = typeof controls?.hint === 'string' ? controls.hint : '';
     // A legend-only layer now has nothing to show HERE: its key is on the map.
-    writeProperty(container, 'hidden', chips.length === 0);
+    writeProperty(container, 'hidden', chips.length === 0 && rowTiles.length === 0 && selects.length === 0);
+    this._syncRowTiles(container, rowTiles, selects, hint);
 
     const stale = new Map();
     for (const node of [...container.children]) {
@@ -4152,7 +4485,7 @@ export class DataLayerManager {
 
       const btn = row.querySelector('.data-toggle-btn');
       if (btn) {
-        this._syncToggleButton(btn, layer);
+        this._syncToggleButton(btn, this._rowToggleProjection(layer, layers));
       }
 
       // Written only when they change, like every write of this pass: it runs
@@ -4467,6 +4800,12 @@ export class DataLayerManager {
       // block titled by the tile above it would say nothing the tile does not.
       ...(typeof controls.legendTitle === 'string' && controls.legendTitle.trim()
         ? { subtitle: controls.legendTitle.trim() } : {}),
+      // The classes FOLDED under a title (« Couleurs des projets »), with the
+      // card above them: the approved mock of « Urbanisme » leads with the
+      // project the reader clicked and keeps its palette one click away.
+      fold: typeof controls.legendFold === 'string' && controls.legendFold.trim()
+        ? controls.legendFold.trim()
+        : null,
     };
   }
 
@@ -4582,10 +4921,32 @@ export class DataLayerManager {
         columns: group.columns || 1,
         scope: group.scope || null,
         selection: group.selection || null,
+        fold: group.fold || null,
         subtitle: group.subtitle
+          || fusionRowTileOf(rowId, group.layer.id)?.label
           || fusionMemberChipFor(rowId, group.layer.id)
           || this._displayName(group.layer),
       });
+      row.split = Boolean(row.tiles) || row.members.length > 1;
+    }
+    // MEMBERS THAT SHARE A TILE UNDER THE ROW SHARE ONE BLOCK. The two permit
+    // layers of « Urbanisme » are one tile and one palette (`permitProjects.js`):
+    // printed apart, the key said « Permis accordé » twice under two names the
+    // reader never pressed.
+    // And the blocks follow the tiles' order, the permits before the rules,
+    // whatever order the layers registered in.
+    for (const row of rows) {
+      const rowTiles = fusionRowTilesFor(row.rowId);
+      if (!rowTiles || row.members.length < 2) continue;
+      const tileOf = (member) => fusionRowTileOf(row.rowId, member.layer.id)?.key;
+      const rank = (member) => {
+        const index = rowTiles.findIndex((tile) => tile.key === tileOf(member));
+        return index < 0 ? rowTiles.length : index;
+      };
+      row.members = mergeTileMembers(row.members, tileOf)
+        .map((member, index) => ({ member, index }))
+        .sort((a, b) => (rank(a.member) - rank(b.member)) || (a.index - b.index))
+        .map((entry) => entry.member);
       row.split = Boolean(row.tiles) || row.members.length > 1;
     }
     // WHAT IS ON SCREEN LEADS ITS OWN ROW. A fused row can hold a viewport
@@ -4774,8 +5135,10 @@ export class DataLayerManager {
       if (row.tiles?.length) rowNode.appendChild(this._legendTileGrid(row));
       for (const {
         layer, blockKey, entries, note, source, subtitle, bar, scope, segments, subSegments, segmentsLabel,
-        selection, columns,
+        selection, columns, fold, cards: mergedCards,
       } of row.members) {
+        // Every card this block carries, each with the layer that owns it.
+        const cards = mergedCards || (selection ? [{ layerId: layer?.id ?? null, selection }] : []);
         const group = document.createElement('div');
         group.className = row.split ? 'map-legend-group is-sub' : 'map-legend-group';
         // Which layer this block keys: a filming harness keeps one block on
@@ -4789,7 +5152,12 @@ export class DataLayerManager {
         // "this belongs to the block above".
         // An extra block always goes by its own name: « Couverture 4G » alone
         // on screen is still not « Antennes ».
-        const heading = row.split || blockKey ? subtitle : this._displayName(layer);
+        // A FOLDED block is named by its fold: « Couleurs des projets » under
+        // the card says what the block is, and a sub-title above the card
+        // would name it twice.
+        const heading = fold && row.split
+          ? null
+          : (row.split || blockKey ? subtitle : this._displayName(layer));
         if (heading && heading !== (row.split ? row.title : null)) {
           const title = document.createElement('div');
           title.className = 'map-legend-layer';
@@ -4857,13 +5225,27 @@ export class DataLayerManager {
           }
         }
 
+        // THE CARD LEADS A FOLDED BLOCK. What the reader clicked is the answer;
+        // the palette it is read against waits, folded, under it.
+        if (fold) {
+          for (const card of cards) {
+            const node = group.appendChild(this._legendSelection({ id: card.layerId }, card.selection));
+            selections.set(`${card.layerId}|${card.selection.key}`, { node, text: JSON.stringify(card.selection) });
+          }
+        }
+        const foldNode = fold ? this._legendFold(row.rowId, fold, cards.length > 0) : null;
+        if (foldNode) group.appendChild(foldNode);
+        // Everything the block would have printed below its segments goes in
+        // the fold when it has one.
+        const body = foldNode ? foldNode.querySelector('.map-legend-fold-body') : group;
+
         // Entries of one CHANNEL sit side by side under the channel's name.
         // A layer painting two independent channels — shape for what, colour
         // for who — was printing two lists of the same population, and a
         // reader with no word for either added 84 and 84 and got 168.
         let channelList = null;
         let channelName = null;
-        const entryHost = () => channelList || group;
+        const entryHost = () => channelList || body;
 
         for (const item of entries) {
         const channel = typeof item.channel === 'string' && item.channel.trim() ? item.channel.trim() : null;
@@ -4874,7 +5256,7 @@ export class DataLayerManager {
               const label = document.createElement('div');
               label.className = 'map-legend-channel';
               label.textContent = channel;
-              group.appendChild(label);
+              body.appendChild(label);
             }
             channelList = document.createElement('div');
             channelList.className = 'map-legend-inline';
@@ -4888,7 +5270,7 @@ export class DataLayerManager {
               channelList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
               channelList.style.gridTemplateRows = `repeat(${Math.max(1, Math.ceil(count / columns))}, auto)`;
             }
-            group.appendChild(channelList);
+            body.appendChild(channelList);
           }
         } else {
           channelList = null;
@@ -5012,11 +5394,13 @@ export class DataLayerManager {
           const line = document.createElement('div');
           line.className = 'map-legend-note';
           line.textContent = note;
-          group.appendChild(line);
+          body.appendChild(line);
         }
-        if (selection) {
-          const card = group.appendChild(this._legendSelection(layer, selection));
-          selections.set(`${layer.id}|${selection.key}`, { node: card, text: JSON.stringify(selection) });
+        if (!fold) {
+          for (const card of cards) {
+            const node = group.appendChild(this._legendSelection({ id: card.layerId }, card.selection));
+            selections.set(`${card.layerId}|${card.selection.key}`, { node, text: JSON.stringify(card.selection) });
+          }
         }
         rowNode.appendChild(group);
       }
@@ -5237,9 +5621,14 @@ export class DataLayerManager {
     close.title = messages().legendSelection.close;
     close.textContent = '×';
     section.appendChild(close);
+    if (selection.kicker) add('map-legend-selection-kicker', selection.kicker);
     add('map-legend-selection-title', selection.title);
     for (const meta of selection.meta) add('map-legend-selection-meta', meta);
     if (selection.headline) add('map-legend-selection-headline', selection.headline);
+    if (selection.badge) {
+      const badge = add('map-legend-selection-badge', selection.badge.label, 'span');
+      if (selection.badge.color) setCssVar(badge, '--badge-ink', selection.badge.color);
+    }
     if (selection.chips) {
       if (selection.chips.caption) add('map-legend-selection-caption is-heading', selection.chips.caption);
       const strip = document.createElement('div');
@@ -5264,6 +5653,22 @@ export class DataLayerManager {
     }
     for (const line of selection.lines) add('map-legend-selection-line', line);
     if (selection.rows) section.appendChild(this._legendSelectionRows(selection.rows));
+    if (selection.steps) section.appendChild(legendSelectionSteps(selection.steps));
+    if (selection.notice) {
+      const notice = document.createElement('div');
+      notice.className = 'map-legend-selection-notice';
+      const head = document.createElement('div');
+      head.className = 'map-legend-selection-notice-title';
+      head.textContent = selection.notice.title;
+      notice.appendChild(head);
+      if (selection.notice.text) {
+        const body = document.createElement('div');
+        body.className = 'map-legend-selection-notice-text';
+        body.textContent = selection.notice.text;
+        notice.appendChild(body);
+      }
+      section.appendChild(notice);
+    }
     if (selection.metric) {
       if (selection.metric.heading) add('map-legend-selection-caption is-heading', selection.metric.heading);
       const metric = document.createElement('div');
@@ -5294,6 +5699,7 @@ export class DataLayerManager {
       link.target = '_blank';
       link.rel = 'noopener';
     }
+    if (selection.source) add('map-legend-selection-source', selection.source);
     return section;
   }
 
@@ -5346,6 +5752,39 @@ export class DataLayerManager {
     table.appendChild(body);
     block.appendChild(table);
     return block;
+  }
+
+  /**
+   * A block's classes folded under their title — « Couleurs des projets ».
+   *
+   * Open by default while no card is on screen, since the classes are then all
+   * the block says; folded under a card, as the mock draws it. The reader's own
+   * choice outlives the repaint and the next card: it is recorded from the
+   * summary's CLICK, not from `toggle`, which also fires when the open state
+   * is set here.
+   * @param {string} rowId
+   * @param {string} title
+   * @param {boolean} hasCards
+   * @returns {HTMLElement}
+   */
+  _legendFold(rowId, title, hasCards) {
+    if (!this._legendFoldOpen) this._legendFoldOpen = new Map();
+    const key = `${rowId}|${title}`;
+    const details = document.createElement('details');
+    details.className = 'map-legend-fold';
+    const chosen = this._legendFoldOpen.get(key);
+    details.open = typeof chosen === 'boolean' ? chosen : !hasCards;
+    const summary = document.createElement('summary');
+    summary.className = 'map-legend-fold-title';
+    summary.textContent = title;
+    summary.dataset.focusKey = `fold:${key}`;
+    summary.addEventListener('click', () => {
+      this._legendFoldOpen.set(key, !details.open);
+    });
+    const body = document.createElement('div');
+    body.className = 'map-legend-fold-body';
+    details.append(summary, body);
+    return details;
   }
 
   /**
@@ -5433,7 +5872,13 @@ export class DataLayerManager {
   _dormantMetaText(layer) {
     const parts = [];
     const companions = this._fusionCompanions(layer.id);
-    if (companions.length) {
+    const rowTiles = fusionRowTilesFor(layer.id);
+    if (rowTiles) {
+      // A row with tiles under it names its TILES: they are what the reader
+      // will find when the row is on, and « Autorisations, Sur parcelle » named
+      // two layers that one tile now switches together.
+      parts.push(rowTiles.map((tile) => tile.label).join(', '));
+    } else if (companions.length) {
       const primaryChip = fusionPrimaryChipFor(layer.id);
       const names = (primaryChip ? [primaryChip, ...companions] : companions)
         .map((entry) => entry.chip)
