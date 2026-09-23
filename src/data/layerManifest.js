@@ -544,7 +544,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '🜂',
     source: 'Copernicus EMS · EFFIS · NASA FIRMS',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ cursorMs: null, position: null, playing: false }),
+    defaultParams: Object.freeze({ cursorMs: null, position: null, playing: false, view: 'ground' }),
     load: () => import('./girondeMegafire.js').then((module) => module.default),
   }),
 ]);

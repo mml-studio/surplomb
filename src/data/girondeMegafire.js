@@ -24,6 +24,22 @@
  * the cursor reaches it and settles to its band's colour. Nothing moves between
  * two instants that the data does not place there.
  *
+ * ── « TEMPS EN 3D », THE SECOND VIEW ────────────────────────────────────────
+ *
+ * A switch over the key (`view: 'ground' | 'strata'`) lifts the same three
+ * stages off the map: each one floats at its own height, lowest first, with
+ * its zone filled and the outline of everything burnt by then glowing around
+ * it; each detection rides on the level of its days. Dashed verticals drop
+ * from the highest level shown to the same spots on the ground, a time axis
+ * stands beside the stack with one tick per level, and the outline of what has
+ * burnt so far stays faint on the ground. Height is the ORDER of the stages and
+ * nothing else — its geometry, and why it is not the date to scale, live in
+ * `megafireStrata.js`. The replay, the bar and the flares are the ground
+ * view's, unchanged: a stage is shown whole once its last day has played.
+ *
+ * The levels are built the first time a reader asks for them, as plain
+ * primitives in the air, and only shown or hidden afterwards.
+ *
  * ── WHAT IT NO LONGER DRAWS, AND WHY ────────────────────────────────────────
  *
  * The five Copernicus fills, their fire fronts and flames, and the smoke
@@ -73,6 +89,17 @@ import {
   setMegafirePlaying,
 } from './megafireClock.js';
 import { createMegafireTimeline } from './megafireTimeline.js';
+import {
+  MEGAFIRE_STRATA,
+  MEGAFIRE_VIEWS,
+  MEGAFIRE_VIEW_GROUND,
+  MEGAFIRE_VIEW_STRATA,
+  megafireAxisAnchor,
+  megafireFramingScale,
+  megafireGuidePoints,
+  megafireRegionFrame,
+  megafireStratumHeight,
+} from './megafireStrata.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -144,6 +171,42 @@ const POINT_FLASH_SPAN = 0.12;
  */
 const ARRIVAL = Object.freeze({ heading: 16, pitch: -34, rangeFactor: 2.65, shift: 0.16 });
 
+/**
+ * @constant {{heading: number, pitch: number, rangeFactor: number, shift: number}}
+ * The same look for « Temps en 3D », lower, so the levels stand apart instead
+ * of printing over one another as they do from above. Framed on the whole
+ * stack, ground to top level.
+ */
+const STRATA_ARRIVAL = Object.freeze({ heading: 16, pitch: -24, rangeFactor: 3.4, shift: 0.1 });
+
+/** @constant {number} A level's outline, px. */
+const STRATUM_CORE_PX = 2.4;
+/** @constant {number} Its glow, px, drawn under the outline. */
+const STRATUM_GLOW_PX = 12;
+/** @constant {number} Glow alpha at rest, and at the peak of the flare. */
+const STRATUM_GLOW_ALPHA = 0.4;
+const STRATUM_FLARE_ALPHA = 1;
+/**
+ * @constant {number} A level's fill alpha, as a share of the ground fill's.
+ * In the air nothing is under the fill but the ground far below, and three
+ * of them overlap on screen.
+ */
+const STRATUM_FILL_SHARE = 0.75;
+/** @constant {string} The rulers: verticals, axis and the ground outline. */
+const RULER_COLOR = '#f3ead8';
+/** @constant {number} Dashed verticals, px and alpha. */
+const GUIDE_PX = 1.2;
+const GUIDE_ALPHA = 0.42;
+/** @constant {number} The axis, px and alpha, and how far it rises over the top tick. */
+const AXIS_PX = 1.6;
+const AXIS_ALPHA = 0.6;
+const AXIS_OVERSHOOT = 0.3;
+/** @constant {number} An axis tick, px. */
+const AXIS_TICK_PX = 9;
+/** @constant {number} The ground outline of what has burnt so far, px and alpha. */
+const GHOST_PX = 1.6;
+const GHOST_ALPHA = 0.5;
+
 let _viewer = null;
 let _enabled = false;
 let _event = null;
@@ -171,7 +234,7 @@ let _effis = null;
 let _points = null;
 /**
  * Detections sorted by their paced position, parallel to `_points` by index.
- * @type {Array<{ms: number, position: number, band: number}>}
+ * @type {Array<{ms: number, position: number, band: number, lon: number, lat: number}>}
  */
 let _pointMeta = [];
 /** How many of `_pointMeta` are shown — always a prefix, since it is sorted. */
@@ -180,6 +243,8 @@ let _revealed = 0;
 let _flaring = new Set();
 /** Rings drawn — `completed` of the clock state they were drawn for. */
 let _ringsShown = 0;
+/** The view and stage count the date labels were last published for. */
+let _labelsKey = '';
 /** Wall-clock second each band's ring started to flare, or null. */
 let _ringFlareAt = [];
 /** @type {Array<?Cesium.BoundingSphere>} Region of each band, for the camera. */
@@ -188,6 +253,24 @@ let _bandSpheres = [];
 let _timeline = null;
 /** @type {?(() => void)} Manager callback: "this row's controls changed". */
 let _rowControlsListener = null;
+/** The view the replay is drawn in: on the ground, or « Temps en 3D ». */
+let _view = MEGAFIRE_VIEW_GROUND;
+/**
+ * « Temps en 3D », built the first time it is asked for; one entry per band
+ * in every array.
+ * @type {?{
+ *   fills: Array<?Cesium.Primitive>,
+ *   glows: Array<{primitive: ?Cesium.Primitive, material: ?Cesium.Material}>,
+ *   cores: Array<?Cesium.Primitive>,
+ *   guides: Array<?Cesium.Primitive>,
+ *   axes: Array<?Cesium.Primitive>,
+ *   ghosts: Array<?Cesium.GroundPolylinePrimitive>,
+ *   ticks: ?Cesium.PointPrimitiveCollection,
+ *   axis: ?{lon: number, lat: number},
+ *   frame: ?Cesium.BoundingSphere,
+ * }}
+ */
+let _strata = null;
 
 /** The overlay host, behind the same seam the other overlay layers use. */
 const _overlayHost = {
@@ -235,12 +318,13 @@ function groundLinesSupported() {
  * Flat `[lon, lat, ...]` → Cartesian positions, closed when asked.
  * @param {ArrayLike<number>} flat
  * @param {boolean} [close]
+ * @param {number} [height] - Metres above the ellipsoid.
  * @returns {Cesium.Cartesian3[]}
  */
-function ringPositions(flat, close = false) {
+function ringPositions(flat, close = false, height = 0) {
   const positions = [];
   for (let i = 0; i + 1 < flat.length; i += 2) {
-    positions.push(Cesium.Cartesian3.fromDegrees(flat[i], flat[i + 1]));
+    positions.push(Cesium.Cartesian3.fromDegrees(flat[i], flat[i + 1], height));
   }
   if (close && positions.length > 2) positions.push(positions[0]);
   return positions;
@@ -253,8 +337,16 @@ function bandLabel(id, length = 'long') {
 
 // --- Building the scene, once ------------------------------------------------
 
-/** One band's translucent fill: its own primitive, its own single colour. */
-function buildFill(band, style, index) {
+/** A band's style, the last one standing in for any band past the table. */
+function bandStyle(index) {
+  return MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[MEGAFIRE_BANDS.length - 1];
+}
+
+/**
+ * A band's own zone as polygon instances of one colour — draped on the ground
+ * when `height` is absent, flat at `height` metres otherwise.
+ */
+function zoneInstances(band, color, kind, height) {
   const instances = [];
   (band.band || []).forEach((polygon, polygonIndex) => {
     const outer = ringPositions(polygon[0]);
@@ -264,18 +356,41 @@ function buildFill(band, style, index) {
       .filter((hole) => hole.length >= 3)
       .map((hole) => new Cesium.PolygonHierarchy(hole));
     instances.push(new Cesium.GeometryInstance({
-      id: `${MEGAFIRE_LAYER_ID}:fill:${band.id}:${polygonIndex}`,
+      id: `${MEGAFIRE_LAYER_ID}:${kind}:${band.id}:${polygonIndex}`,
       geometry: new Cesium.PolygonGeometry({
         polygonHierarchy: new Cesium.PolygonHierarchy(outer, holes),
+        ...(height === undefined ? {} : { height }),
         vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
       }),
-      attributes: {
-        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.fromCssColorString(style.fill).withAlpha(style.fillAlpha),
-        ),
-      },
+      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(color) },
     }));
   });
+  return instances;
+}
+
+/**
+ * Every boundary of a band's cumulative region, one instance per ring, its
+ * geometry made by `geometryOf(positions)`.
+ */
+function regionRingInstances(band, kind, height, geometryOf) {
+  const instances = [];
+  (band.region || []).forEach((polygon, polygonIndex) => {
+    polygon.forEach((ring, ringIndex) => {
+      const positions = ringPositions(ring, true, height);
+      if (positions.length < 3) return;
+      instances.push(new Cesium.GeometryInstance({
+        id: `${MEGAFIRE_LAYER_ID}:${kind}:${band.id}:${polygonIndex}:${ringIndex}`,
+        geometry: geometryOf(positions),
+      }));
+    });
+  });
+  return instances;
+}
+
+/** One band's translucent fill: its own primitive, its own single colour. */
+function buildFill(band, style, index) {
+  const color = Cesium.Color.fromCssColorString(style.fill).withAlpha(style.fillAlpha);
+  const instances = zoneInstances(band, color, 'fill');
   if (!instances.length) return null;
   const primitive = new Cesium.GroundPrimitive({
     geometryInstances: instances,
@@ -290,19 +405,10 @@ function buildFill(band, style, index) {
   return _viewer.scene.groundPrimitives.add(primitive);
 }
 
-/** One stroke of a band's ring: every boundary of its cumulative region. */
+/** One stroke of a band's ring on the ground: every boundary of its cumulative region. */
 function buildStroke(band, color, width, kind) {
-  const instances = [];
-  (band.region || []).forEach((polygon, polygonIndex) => {
-    polygon.forEach((ring, ringIndex) => {
-      const positions = ringPositions(ring, true);
-      if (positions.length < 3) return;
-      instances.push(new Cesium.GeometryInstance({
-        id: `${MEGAFIRE_LAYER_ID}:${kind}:${band.id}:${polygonIndex}:${ringIndex}`,
-        geometry: new Cesium.GroundPolylineGeometry({ positions, width }),
-      }));
-    });
-  });
+  const instances = regionRingInstances(band, kind, 0,
+    (positions) => new Cesium.GroundPolylineGeometry({ positions, width }));
   if (!instances.length) return { primitive: null, material: null };
   const material = Cesium.Material.fromType('Color', { color });
   const primitive = new Cesium.GroundPolylinePrimitive({
@@ -381,9 +487,8 @@ function buildScene() {
   _fills = [];
   _rings = _bands.bands.map(() => ({ casing: null, halo: null, core: null, haloMaterial: null }));
   _bandSpheres = [];
-  const styleOf = (index) => MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[MEGAFIRE_BANDS.length - 1];
   _bands.bands.forEach((band, index) => {
-    _fills.push(buildFill(band, styleOf(index), index));
+    _fills.push(buildFill(band, bandStyle(index), index));
     _bandSpheres.push(regionSphere(band));
   });
   if (lines) {
@@ -392,19 +497,20 @@ function buildScene() {
       _rings[index].casing = buildStroke(band, CASING_COLOR, RING_CASING_PX, 'casing').primitive;
     }
     for (const { band, index } of latestFirst) {
-      const color = Cesium.Color.fromCssColorString(styleOf(index).ring);
+      const color = Cesium.Color.fromCssColorString(bandStyle(index).ring);
       const halo = buildStroke(band, color.withAlpha(RING_HALO_ALPHA), RING_HALO_PX, 'halo');
       _rings[index].halo = halo.primitive;
       _rings[index].haloMaterial = halo.material;
     }
     for (const { band, index } of latestFirst) {
-      const color = Cesium.Color.fromCssColorString(styleOf(index).ring);
+      const color = Cesium.Color.fromCssColorString(bandStyle(index).ring);
       _rings[index].core = buildStroke(band, color.withAlpha(0.97), RING_CORE_PX, 'ring').primitive;
     }
   }
   _effis = buildEffis();
   _ringFlareAt = _bands.bands.map(() => null);
   _ringsShown = 0;
+  _labelsKey = '';
 }
 
 /** Tear down every ground primitive this layer owns. */
@@ -426,6 +532,193 @@ function clearScene() {
   _rings = [];
   _effis = null;
   _ringsShown = 0;
+}
+
+// --- « Temps en 3D », built the first time it is asked for -------------------
+
+/**
+ * Where a primitive in the air says what it is: a built `Primitive` drops its
+ * instances and their ids, and a minified constructor name reads `$o`.
+ */
+export const MEGAFIRE_AIR_ROLE = Symbol.for('surplomb.megafire.air');
+
+/** A primitive in the air, hidden, added to the scene, tagged with its role. */
+function addAirPrimitive(instances, appearance, role) {
+  if (!instances.length) return null;
+  const primitive = new Cesium.Primitive({
+    geometryInstances: instances,
+    appearance,
+    // A few hundred vertices a level: built on the frame it is first shown,
+    // where a worker round-trip would leave that first frame empty.
+    asynchronous: false,
+  });
+  primitive.show = false;
+  primitive[MEGAFIRE_AIR_ROLE] = role;
+  return _viewer.scene.primitives.add(primitive);
+}
+
+/** A straight line in the air — the chart's rulers, and a level's outline. */
+function airLine(positions, width) {
+  return new Cesium.PolylineGeometry({
+    positions,
+    width,
+    arcType: Cesium.ArcType.NONE,
+    vertexFormat: Cesium.PolylineMaterialAppearance.VERTEX_FORMAT,
+  });
+}
+
+/** One level: its band's own zone filled, and its cumulative outline glowing. */
+function buildStratum(band, index, height) {
+  const style = bandStyle(index);
+  const ringColor = Cesium.Color.fromCssColorString(style.ring);
+  const fillColor = Cesium.Color.fromCssColorString(style.fill)
+    .withAlpha(style.fillAlpha * STRATUM_FILL_SHARE);
+  const fill = addAirPrimitive(
+    zoneInstances(band, fillColor, 'stratum-fill', height),
+    // Not `closed`: a level is a sheet, seen from above and from below.
+    new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true, closed: false }),
+    `stratum-fill:${band.id}`,
+  );
+  const glowMaterial = Cesium.Material.fromType('PolylineGlow', {
+    color: ringColor.withAlpha(STRATUM_GLOW_ALPHA),
+    glowPower: 0.2,
+    taperPower: 1,
+  });
+  const glow = addAirPrimitive(
+    regionRingInstances(band, 'stratum-glow', height, (positions) => airLine(positions, STRATUM_GLOW_PX)),
+    new Cesium.PolylineMaterialAppearance({ material: glowMaterial }),
+    `stratum-glow:${band.id}`,
+  );
+  const core = addAirPrimitive(
+    regionRingInstances(band, 'stratum-ring', height, (positions) => airLine(positions, STRATUM_CORE_PX)),
+    new Cesium.PolylineMaterialAppearance({
+      material: Cesium.Material.fromType('Color', { color: ringColor.withAlpha(0.97) }),
+    }),
+    `stratum-ring:${band.id}`,
+  );
+  return { fill, glow: { primitive: glow, material: glow ? glowMaterial : null }, core };
+}
+
+/** Dashed verticals from a level's silhouette down to the same spots on the ground. */
+function buildGuides(band, height, ruler) {
+  const instances = megafireGuidePoints(band.region).map((point, index) => new Cesium.GeometryInstance({
+    id: `${MEGAFIRE_LAYER_ID}:guide:${band.id}:${index}`,
+    geometry: airLine([
+      Cesium.Cartesian3.fromDegrees(point.lon, point.lat, 0),
+      Cesium.Cartesian3.fromDegrees(point.lon, point.lat, height),
+    ], GUIDE_PX),
+  }));
+  return addAirPrimitive(instances, new Cesium.PolylineMaterialAppearance({
+    material: Cesium.Material.fromType('PolylineDash', {
+      color: ruler.withAlpha(GUIDE_ALPHA),
+      gapColor: Cesium.Color.TRANSPARENT,
+      dashLength: 10,
+    }),
+  }), `guide:${band.id}`);
+}
+
+/** The time axis, from the ground to just over the level `height`. */
+function buildAxis(anchor, height, band, ruler) {
+  const top = height + MEGAFIRE_STRATA.stepM * AXIS_OVERSHOOT;
+  return addAirPrimitive([new Cesium.GeometryInstance({
+    id: `${MEGAFIRE_LAYER_ID}:axis:${band.id}`,
+    geometry: airLine([
+      Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, 0),
+      Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, top),
+    ], AXIS_PX),
+  })], new Cesium.PolylineMaterialAppearance({
+    material: Cesium.Material.fromType('Color', { color: ruler.withAlpha(AXIS_ALPHA) }),
+  }), `axis:${band.id}`);
+}
+
+/** What has burnt by the end of a band, as a faint outline on the ground. */
+function buildGhost(band, ruler) {
+  const instances = regionRingInstances(band, 'ghost', 0,
+    (positions) => new Cesium.GroundPolylineGeometry({ positions, width: GHOST_PX }));
+  if (!instances.length) return null;
+  const primitive = new Cesium.GroundPolylinePrimitive({
+    geometryInstances: instances,
+    classificationType: _classificationType,
+    appearance: new Cesium.PolylineMaterialAppearance({
+      material: Cesium.Material.fromType('Color', { color: ruler.withAlpha(GHOST_ALPHA) }),
+    }),
+    asynchronous: true,
+    releaseGeometryInstances: false,
+  });
+  primitive.show = false;
+  return _viewer.scene.groundPrimitives.add(primitive);
+}
+
+/** Build every primitive « Temps en 3D » will ever show, all hidden. */
+function buildStrata() {
+  if (_strata || !_viewer?.scene?.primitives || !_bands) return;
+  const bands = _bands.bands;
+  const ruler = Cesium.Color.fromCssColorString(RULER_COLOR);
+  const last = bands[bands.length - 1];
+  const axis = megafireAxisAnchor(last?.region, STRATA_ARRIVAL.heading);
+  const ground = groundLinesSupported() && Boolean(_viewer.scene.groundPrimitives);
+  const ticks = new Cesium.PointPrimitiveCollection();
+  ticks.show = false;
+  const top = megafireStratumHeight(bands.length - 1);
+  // The camera's sphere: the widest region, ground to top level.
+  const frame = last ? megafireRegionFrame(last.region, top / 2, top / 2) : null;
+  _strata = {
+    fills: [],
+    glows: [],
+    cores: [],
+    guides: [],
+    axes: [],
+    ghosts: [],
+    ticks: null,
+    axis,
+    frame: frame
+      ? new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(frame.lon, frame.lat, frame.heightM), frame.radiusM)
+      : null,
+  };
+  bands.forEach((band, index) => {
+    const height = megafireStratumHeight(index);
+    const level = buildStratum(band, index, height);
+    _strata.fills.push(level.fill);
+    _strata.glows.push(level.glow);
+    _strata.cores.push(level.core);
+    _strata.guides.push(buildGuides(band, height, ruler));
+    _strata.axes.push(axis ? buildAxis(axis, height, band, ruler) : null);
+    _strata.ghosts.push(ground ? buildGhost(band, ruler) : null);
+    if (axis) {
+      ticks.add({
+        position: Cesium.Cartesian3.fromDegrees(axis.lon, axis.lat, height),
+        color: Cesium.Color.fromCssColorString(bandStyle(index).ring),
+        pixelSize: AXIS_TICK_PX,
+        outlineColor: CASING_COLOR,
+        outlineWidth: 2,
+        show: false,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      });
+    }
+  });
+  _strata.ticks = _viewer.scene.primitives.add(ticks);
+}
+
+/** Tear down « Temps en 3D ». */
+function clearStrata() {
+  if (!_strata) return;
+  const air = _viewer?.scene?.primitives;
+  const ground = _viewer?.scene?.groundPrimitives;
+  const drop = (collection, primitive) => {
+    if (!primitive) return;
+    if (collection?.contains?.(primitive)) collection.remove(primitive);
+    else if (!primitive.isDestroyed?.()) primitive.destroy?.();
+  };
+  [
+    ..._strata.fills,
+    ..._strata.glows.map((glow) => glow.primitive),
+    ..._strata.cores,
+    ..._strata.guides,
+    ..._strata.axes,
+    _strata.ticks,
+  ].forEach((primitive) => drop(air, primitive));
+  _strata.ghosts.forEach((primitive) => drop(ground, primitive));
+  _strata = null;
 }
 
 /**
@@ -456,10 +749,41 @@ function buildPoints() {
       // drawn around.
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
-    return { ms: row.ms, position: megafirePositionOf(_clock, row.ms), band: row.band };
+    return {
+      ms: row.ms,
+      position: megafirePositionOf(_clock, row.ms),
+      band: row.band,
+      lon: row.lon,
+      lat: row.lat,
+    };
   });
   _revealed = 0;
   _flaring = new Set();
+}
+
+const _scratchPosition = new Cesium.Cartesian3();
+
+/**
+ * Put every detection where the current view draws it: on the ground, or on
+ * the level of its days. A point copies the position it is given, so one
+ * scratch serves all 9 524.
+ */
+function placePoints() {
+  if (!_points || !_bands || !_pointMeta.length) return;
+  const strata = _view === MEGAFIRE_VIEW_STRATA;
+  const heights = _bands.bands.map((band, index) => (strata ? megafireStratumHeight(index) : 0));
+  for (let i = 0; i < _pointMeta.length; i += 1) {
+    const meta = _pointMeta[i];
+    _points.get(i).position = Cesium.Cartesian3.fromDegrees(
+      meta.lon, meta.lat, heights[meta.band] ?? 0, undefined, _scratchPosition,
+    );
+  }
+}
+
+/** Make what is drawn match `_view`: the levels built if asked for, the dots moved. */
+function applyView() {
+  if (_view === MEGAFIRE_VIEW_STRATA) buildStrata();
+  placePoints();
 }
 
 // --- Drawing an instant ------------------------------------------------------
@@ -521,77 +845,120 @@ function paintPoints(position, flare) {
   }
 }
 
+/** Show or hide a primitive that may not exist. */
+function setShown(primitive, shown) {
+  if (primitive && primitive.show !== shown) primitive.show = shown;
+}
+
 /**
- * Show the rings (and fills and labels) of every completed stage.
+ * Show the rings (and fills and labels) of every completed stage, in the
+ * current view: on the ground, or as levels in the air.
  * @param {number} completed - Stages the cursor has reached the end of.
  * @param {boolean} flare - Whether a ring that just appeared flares.
  * @param {number} nowSec - Wall clock, seconds.
  */
 function paintRings(completed, flare, nowSec) {
   const count = _bands?.bands.length ?? 0;
+  const strata = _view === MEGAFIRE_VIEW_STRATA;
   for (let index = 0; index < count; index += 1) {
     const shown = index < completed;
-    if (_fills[index]) _fills[index].show = shown;
+    const onGround = shown && !strata;
+    const inAir = shown && strata;
+    setShown(_fills[index], onGround);
     const ring = _rings[index];
-    if (ring?.casing) ring.casing.show = shown;
-    if (ring?.halo) ring.halo.show = shown;
-    if (ring?.core) ring.core.show = shown;
+    setShown(ring?.casing, onGround);
+    setShown(ring?.halo, onGround);
+    setShown(ring?.core, onGround);
+    if (_strata) {
+      // The rulers belong to the highest level shown: every level is inside
+      // the one above it, so its silhouette is the stack's.
+      const top = inAir && index === completed - 1;
+      setShown(_strata.fills[index], inAir);
+      setShown(_strata.glows[index]?.primitive, inAir);
+      setShown(_strata.cores[index], inAir);
+      setShown(_strata.guides[index], top);
+      setShown(_strata.axes[index], top);
+      setShown(_strata.ghosts[index], top);
+      if (_strata.ticks && index < _strata.ticks.length) _strata.ticks.get(index).show = inAir;
+    }
     if (shown && index >= _ringsShown && flare) _ringFlareAt[index] = nowSec;
     if (!shown) _ringFlareAt[index] = null;
   }
+  if (_strata?.ticks) _strata.ticks.show = strata && completed > 0;
   // The dashed EFFIS line is the END state's: it is an edge drawn after the
   // last survey, and on screen before then it would read as a forecast.
   if (_effis) _effis.show = completed >= count && count > 0;
-  if (completed !== _ringsShown) {
-    _ringsShown = completed;
+  const labelsKey = `${_view}:${completed}`;
+  _ringsShown = completed;
+  if (labelsKey !== _labelsKey) {
+    _labelsKey = labelsKey;
     publishLabels();
   }
 }
 
+/** A flare's strength at `age` seconds: up fast, down slow — a flare, not a pulse. */
+function flareStrength(age) {
+  const rise = 0.18;
+  const k = age < rise ? age / rise : 1 - (age - rise) / (RING_FLARE_SECONDS - rise);
+  return Math.max(0, k);
+}
+
+/** Write a halo's alpha between its rest and its peak. */
+function setFlare(material, rest, peak, strength) {
+  const color = material?.uniforms?.color;
+  if (!color) return;
+  const alpha = rest + (peak - rest) * strength;
+  if (color.alpha !== alpha) color.alpha = alpha;
+}
+
 /**
- * Advance every ring flare; returns whether one is still running.
+ * Advance every ring flare, on the ground and in the air; returns whether one
+ * is still running.
  * @param {number} nowSec
  * @returns {boolean}
  */
 function stepFlares(nowSec) {
   let running = false;
-  _rings.forEach((ring, index) => {
-    const material = ring.haloMaterial;
-    if (!material) return;
+  for (let index = 0; index < _ringFlareAt.length; index += 1) {
     const started = _ringFlareAt[index];
-    const color = material.uniforms.color;
-    if (started === null || started === undefined) {
-      if (color.alpha !== RING_HALO_ALPHA) color.alpha = RING_HALO_ALPHA;
-      return;
+    let strength = 0;
+    if (started !== null && started !== undefined) {
+      const age = nowSec - started;
+      if (age >= RING_FLARE_SECONDS || age < 0) {
+        _ringFlareAt[index] = null;
+      } else {
+        strength = flareStrength(age);
+        running = true;
+      }
     }
-    const age = nowSec - started;
-    if (age >= RING_FLARE_SECONDS || age < 0) {
-      _ringFlareAt[index] = null;
-      color.alpha = RING_HALO_ALPHA;
-      return;
-    }
-    // Up fast, down slow: a flare, not a pulse.
-    const rise = 0.18;
-    const k = age < rise ? age / rise : 1 - (age - rise) / (RING_FLARE_SECONDS - rise);
-    color.alpha = RING_HALO_ALPHA + (RING_FLARE_ALPHA - RING_HALO_ALPHA) * Math.max(0, k);
-    running = true;
-  });
+    setFlare(_rings[index]?.haloMaterial, RING_HALO_ALPHA, RING_FLARE_ALPHA, strength);
+    setFlare(_strata?.glows[index]?.material, STRATUM_GLOW_ALPHA, STRATUM_FLARE_ALPHA, strength);
+  }
   return running;
 }
 
-/** The three date labels pinned on the rings, for the stages drawn. */
+/**
+ * The three date labels, for the stages drawn: pinned on the rings on the
+ * ground, and on the time axis's ticks in « Temps en 3D ».
+ */
 function publishLabels() {
   if (!_overlayHost || !_bands || !hasDom()) return;
+  const strata = _view === MEGAFIRE_VIEW_STRATA;
+  const axis = strata ? _strata?.axis : null;
   try {
     const entries = [];
     _bands.bands.forEach((band, index) => {
-      if (index >= _ringsShown || !band.anchor) return;
+      if (index >= _ringsShown) return;
+      let position = null;
+      if (axis) position = Cesium.Cartesian3.fromDegrees(axis.lon, axis.lat, megafireStratumHeight(index));
+      else if (!strata && band.anchor) position = Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat);
+      if (!position) return;
       entries.push({
         id: `${MEGAFIRE_LAYER_ID}:label:${band.id}`,
-        position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
+        position,
         variant: 'label',
         title: bandLabel(band.id, 'long'),
-        accent: (MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[0]).ring,
+        accent: bandStyle(index).ring,
         priority: 1000 - index,
         collisionGroup: 'ambient-label',
         paintLane: 'ambient-label',
@@ -599,9 +966,10 @@ function publishLabels() {
         edgeFade: 'keyhole',
         horizonCull: true,
         terrainOcclusion: false,
-        gapPx: 12,
-        verticalOnly: true,
-        placement: 'above',
+        // Beside its tick, on the sea side of the axis; over its ring on the ground.
+        gapPx: axis ? 10 : 12,
+        verticalOnly: !axis,
+        placement: axis ? 'left' : 'above',
       });
     });
     _overlayHost.setEntries(MEGAFIRE_LABEL_SOURCE_ID, entries, LABEL_SOURCE_OPTIONS);
@@ -714,15 +1082,16 @@ function runCommand(command) {
  * Ease the camera over a band's region, from the arrival angle.
  * @param {?Cesium.BoundingSphere} sphere
  * @param {number} [duration] - Seconds; 0 under reduced motion.
+ * @param {{heading: number, pitch: number, rangeFactor: number, shift: number}} [arrival]
  */
-function frameSphere(sphere, duration = 1.6) {
+function frameSphere(sphere, duration = 1.6, arrival = ARRIVAL) {
   const camera = _viewer?.camera;
   if (!camera || !sphere) return;
   camera.cancelFlight?.();
   // Aim a little to the RIGHT of the region (in the camera's own frame), so the
   // region lands a little to the left of the screen's centre.
-  const heading = Cesium.Math.toRadians(ARRIVAL.heading);
-  const along = sphere.radius * ARRIVAL.shift;
+  const heading = Cesium.Math.toRadians(arrival.heading);
+  const along = sphere.radius * arrival.shift;
   const frame = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
   const aim = Cesium.Matrix4.multiplyByPoint(
     frame,
@@ -732,11 +1101,32 @@ function frameSphere(sphere, duration = 1.6) {
   camera.flyToBoundingSphere(new Cesium.BoundingSphere(aim, sphere.radius), {
     offset: new Cesium.HeadingPitchRange(
       heading,
-      Cesium.Math.toRadians(ARRIVAL.pitch),
-      Math.max(6000, sphere.radius * ARRIVAL.rangeFactor),
+      Cesium.Math.toRadians(arrival.pitch),
+      Math.max(6000, sphere.radius * arrival.rangeFactor),
     ),
     duration: reducedMotion() ? 0 : duration,
   });
+}
+
+/**
+ * Frame the stage `index` (default: the last, the whole fire) in the current
+ * view. On the ground, that stage's region. In « Temps en 3D », always the
+ * whole stack: the stages still to play rise ABOVE the ones shown, and a
+ * camera closed in on the first level lost the next two off the top of the
+ * screen as soon as the replay resumed (capture of 2026-09-23). The empty
+ * height over a partial stack is where the rest of the fire will appear.
+ * @param {number} [index]
+ * @param {number} [duration]
+ */
+function frameStage(index, duration) {
+  if (_view === MEGAFIRE_VIEW_STRATA && _strata) {
+    const canvas = _viewer?.scene?.canvas;
+    const scale = megafireFramingScale(canvas?.clientWidth, canvas?.clientHeight);
+    frameSphere(_strata.frame, duration, { ...STRATA_ARRIVAL, rangeFactor: STRATA_ARRIVAL.rangeFactor * scale });
+    return;
+  }
+  const at = Number.isInteger(index) ? index : _bandSpheres.length - 1;
+  frameSphere(_bandSpheres[at] ?? null, duration, ARRIVAL);
 }
 
 // --- The tick -----------------------------------------------------------------
@@ -866,6 +1256,7 @@ const girondeMegafireLayer = {
     _enabled = true;
     await load();
     if (!_enabled) return;
+    applyView();
     if (_points) _points.show = true;
     startTicking();
     mountTimeline();
@@ -904,12 +1295,12 @@ const girondeMegafireLayer = {
   /**
    * The arrival, when a READER switched the layer on (panel or voice — never a
    * share link or a restored session, which carry their own camera): a low
-   * oblique view over the whole scar. Called by `ui.js`.
+   * oblique view over the whole scar — or the whole stack, in « Temps en 3D ».
+   * Called by `ui.js`.
    */
   onReaderEnable() {
     if (!_enabled || !_bands) return;
-    const spheres = _bandSpheres.filter(Boolean);
-    frameSphere(spheres[spheres.length - 1] ?? null, 2.4);
+    frameStage(undefined, 2.4);
   },
 
   /** @param {(() => void)|null} listener */
@@ -937,59 +1328,93 @@ const girondeMegafireLayer = {
       day: state.day,
       days: state.days,
       effisHa: _event?.effis?.main?.areaHa ?? null,
+      view: _view,
     };
   },
 
   /**
-   * The key: three dates, one kind of dot, one dashed edge. It does not change
-   * while the replay runs — the bar under the map is the clock — so a playing
-   * layer never makes the right rail rebuild its key.
+   * The key: the view switch, three dates, one kind of dot, one dashed edge.
+   * It does not change while the replay runs — the bar under the map is the
+   * clock — so a playing layer never makes the right rail rebuild its key.
+   * In « Temps en 3D » the dates are captioned by what height means.
    */
   getRowControls() {
     if (!_bands) return { chips: [], legend: [] };
     const m = messages().legend;
-    const legend = [{ label: m.heading, heading: true }];
+    const v = messages().view;
+    const strata = _view === MEGAFIRE_VIEW_STRATA;
+    const legend = [{ label: strata ? m.strataHeading : m.heading, heading: true }];
     _bands.bands.forEach((band, index) => {
       legend.push({
         label: bandLabel(band.id, 'long'),
-        color: (MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[0]).ring,
+        color: bandStyle(index).ring,
         swatch: 'line',
       });
     });
     legend.push({
       label: m.detections,
       color: MEGAFIRE_BANDS[1].point,
-      blurb: m.detectionsBlurb,
+      blurb: strata ? m.strataDetectionsBlurb : m.detectionsBlurb,
     });
     if (_event?.effis?.main) {
+      const hectares = formatNumber(Math.round(_event.effis.main.areaHa));
       legend.push({
         label: m.effis,
         color: MEGAFIRE_EFFIS_COLOR,
         swatch: 'line',
-        blurb: m.effisBlurb(formatNumber(Math.round(_event.effis.main.areaHa))),
+        blurb: strata ? m.strataEffisBlurb(hectares) : m.effisBlurb(hectares),
       });
     }
+    // A lit segment sends its own view again: nothing changes, but it stays a
+    // control, so the focus a press left on it survives the key's repaint.
+    const segment = (key, label, title) => ({
+      key,
+      label,
+      title,
+      active: _view === key,
+      toggle: { param: 'view', value: key },
+    });
     return {
       chips: [],
       // Named by the event, under the tile that names the mode.
       legendTitle: taxonomyMessages().labels[MEGAFIRE_LAYER_ID],
+      legendSegmentsLabel: v.label,
+      legendSegments: [
+        segment(MEGAFIRE_VIEW_GROUND, v.ground, v.groundTitle),
+        segment(MEGAFIRE_VIEW_STRATA, v.strata, v.strataTitle),
+      ],
       legend,
       legendNote: m.source,
-      note: m.note,
+      note: strata ? m.strataNote : m.note,
     };
   },
 
   /**
    * Drive the replay.
    *
-   * `play` starts, pauses, or — from the end — rewinds and starts; `band`
-   * parks the cursor at the END of that stage (its ring just drawn) and, with
-   * `frame`, eases the camera over it. Both are what the bar sends; the voice
-   * tools send the same.
+   * `view` draws the replay on the ground or as « Temps en 3D » and eases the
+   * camera to that view's framing — kept, and applied on load, when it
+   * arrives first. `play` starts, pauses, or — from the end — rewinds and
+   * starts; `band` parks the cursor at the END of that stage (its ring just
+   * drawn) and, with `frame`, eases the camera over it. `view` is what the key's
+   * switch sends, the others what the bar sends; the voice tools send the same.
    *
-   * @param {{play?: boolean, band?: number|string, frame?: boolean}} [params]
+   * @param {{view?: string, play?: boolean, band?: number|string, frame?: boolean}} [params]
+   * @returns {boolean|undefined} `false` for a view that does not exist.
    */
   setParams(params = {}) {
+    if (params.view !== undefined) {
+      if (!MEGAFIRE_VIEWS.includes(params.view)) return false;
+      if (params.view !== _view) {
+        _view = params.view;
+        if (_enabled && _clock && _bands) {
+          applyView();
+          syncToCursor();
+          frameStage();
+        }
+        notifyRow();
+      }
+    }
     if (!_clock || !_bands) return;
     if (params.band !== undefined) {
       const index = typeof params.band === 'string'
@@ -1000,7 +1425,7 @@ const girondeMegafireLayer = {
       const held = seekMegafireSegment(_clock, index);
       if (wasPlaying) releaseContinuousRender(MEGAFIRE_LAYER_ID);
       syncToCursor({ flare: true });
-      if (params.frame) frameSphere(_bandSpheres[held] ?? null);
+      if (params.frame) frameStage(held);
       notifyRow();
       return;
     }
@@ -1018,12 +1443,13 @@ const girondeMegafireLayer = {
     }
   },
 
-  /** @returns {{cursorMs: ?number, position: ?number, playing: boolean}} */
+  /** @returns {{cursorMs: ?number, position: ?number, playing: boolean, view: string}} */
   getParams() {
     return {
       cursorMs: _clock?.cursorMs ?? null,
       position: _clock?.position ?? null,
       playing: Boolean(_clock?.playing),
+      view: _view,
     };
   },
 
@@ -1031,6 +1457,7 @@ const girondeMegafireLayer = {
     if (_enabled) this.disable();
     stopTicking();
     unmountTimeline();
+    clearStrata();
     clearScene();
     try {
       _overlayHost?.clearSource?.(MEGAFIRE_LABEL_SOURCE_ID);
@@ -1051,6 +1478,8 @@ const girondeMegafireLayer = {
     _groundLinesSupported = null;
     _rowControlsListener = null;
     _bandSpheres = [];
+    _view = MEGAFIRE_VIEW_GROUND;
+    _labelsKey = '';
     _status = 'idle';
   },
 };

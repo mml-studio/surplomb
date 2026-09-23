@@ -22,7 +22,12 @@
  *        runs, the rings come in order, the detection count only climbs, and
  *        at the end every hold is handed back (the last ring's flare included)
  *   v.   the arrows step from stop to stop
- *   vi.  switching the layer off takes the bar away, hides everything it drew,
+ *   vi.  « Temps en 3D »: a DOM click on the key's segment lifts the three
+ *        stages into levels in the air — the ground zones go, each detection
+ *        rides at its level's height, the rulers belong to the top level shown,
+ *        the camera stands back to frame the whole stack — a stop hides the
+ *        levels after it, and « Au sol » puts everything back down
+ *   vii. switching the layer off takes the bar away, hides everything it drew,
  *        and gives the preset back
  *
  * Screenshots are OPT-IN (`--shots`), under the gitignored
@@ -148,13 +153,29 @@ function sceneProbe(page) {
     let points = 0;
     let pointsShown = 0;
     let collectionShown = null;
+    // Heights of the shown detections, to the kilometre — 0 on the ground.
+    const pointHeights = new Set();
+    // « Temps en 3D »: primitives in the air say their role on a symbol.
+    const air = [];
+    const role = Symbol.for('surplomb.megafire.air');
+    const ellipsoid = scene.globe.ellipsoid;
     for (let i = 0; i < scene.primitives.length; i += 1) {
       const primitive = scene.primitives.get(i);
+      if (primitive?.[role]) {
+        const [kind, band] = String(primitive[role]).split(':');
+        air.push({ role: kind, band, show: primitive.show !== false });
+        continue;
+      }
       if (typeof primitive?.get !== 'function' || primitive.length < 5000) continue;
       if (typeof primitive.get(0)?.pixelSize !== 'number') continue;
       points = primitive.length;
       collectionShown = primitive.show !== false;
-      for (let p = 0; p < primitive.length; p += 1) if (primitive.get(p).show) pointsShown += 1;
+      for (let p = 0; p < primitive.length; p += 1) {
+        const point = primitive.get(p);
+        if (!point.show) continue;
+        pointsShown += 1;
+        if (p % 25 === 0) pointHeights.add(Math.round(ellipsoid.cartesianToCartographic(point.position).height / 1000));
+      }
     }
     const bar = document.getElementById('megafire-timeline');
     return {
@@ -163,6 +184,8 @@ function sceneProbe(page) {
       points,
       pointsShown,
       collectionShown,
+      pointHeights: [...pointHeights].sort((a, b) => a - b),
+      air,
       bar: bar ? {
         stops: bar.querySelectorAll('.megafire-timeline-stop').length,
         playing: bar.getAttribute('data-playing'),
@@ -180,6 +203,7 @@ function sceneProbe(page) {
 }
 
 const shown = (probe, role) => probe.ground.filter((entry) => entry.role === role && entry.show);
+const aloft = (probe, role) => probe.air.filter((entry) => entry.role === role && entry.show);
 const held = (probe) => (probe.governor?.holds || []).some((hold) => String(hold).startsWith(LAYER_ID));
 
 /** Click a node by selector, the DOM way (a Puppeteer mouse click can hang here). */
@@ -340,13 +364,68 @@ async function main() {
     probe = await sceneProbe(page);
     check('« next » goes forward one stage', probe.stats.bandsShown === 2);
 
-    console.log('\nvi. éteindre retire tout');
+    console.log('\nvi. « Temps en 3D » : les étapes en étages');
+    await domClick(page, '#megafire-timeline .megafire-timeline-stop[data-index="2"]');
+    await pump(page, 4, 60);
+    const lifted = await domClick(page, '#map-legend-items .map-legend-segment[data-toggle-value="strata"]');
+    check('the key offers « Temps en 3D »', lifted);
+    await pollUntil(page, (id) => window.__godsEyeView.dataManager.layers.get(id)?.module?.getStats?.()?.view === 'strata',
+      { tries: 20, gapMs: 250, arg: LAYER_ID });
+    await sleep(2200); // the flight to the stack
+    await pump(page, 12, 120);
+    probe = await sceneProbe(page);
+    const pressedStrata = await page.evaluate(() => document.querySelector(
+      '#map-legend-items .map-legend-segment[data-toggle-value="strata"]',
+    )?.getAttribute('aria-pressed'));
+    check('the segment reads pressed', pressedStrata === 'true', String(pressedStrata));
+    check('three levels in the air, outline and glow each',
+      aloft(probe, 'stratum-fill').length === 3 && aloft(probe, 'stratum-ring').length === 3
+        && aloft(probe, 'stratum-glow').length === 3,
+      JSON.stringify(probe.air.filter((entry) => entry.show)));
+    check('the ground zones and rings are gone', shown(probe, 'fill').length === 0 && shown(probe, 'ring').length === 0);
+    check('the rulers are the top level’s: one set of verticals, one axis, one ground outline',
+      aloft(probe, 'guide').length === 1 && aloft(probe, 'axis').length === 1 && shown(probe, 'ghost').length === 1
+        && aloft(probe, 'guide')[0].band === BANDS.bands.at(-1).id,
+      `guide=${aloft(probe, 'guide').length} axis=${aloft(probe, 'axis').length} ghost=${shown(probe, 'ghost').length}`);
+    check('each detection rides on the level of its days (6, 12, 18 km)',
+      JSON.stringify(probe.pointHeights) === '[6,12,18]', JSON.stringify(probe.pointHeights));
+    check('every detection is still shown', probe.pointsShown === HOTSPOTS.rows.length);
+    const stackCamera = await page.evaluate(() => {
+      const c = window.__godsEyeView.viewer.camera;
+      return { pitch: c.pitch * 180 / Math.PI, heading: c.heading * 180 / Math.PI, height: c.positionCartographic.height };
+    });
+    check('the camera stands back, lower, to frame the whole stack',
+      stackCamera.pitch > -30 && stackCamera.pitch < -18 && Math.abs(stackCamera.heading - 16) < 3
+        && stackCamera.height > 20_000 && stackCamera.height < 120_000,
+      JSON.stringify(stackCamera));
+    await shoot(page, '03-time-in-3d.png');
+    await domClick(page, '#megafire-timeline .megafire-timeline-stop[data-index="0"]');
+    await pump(page, 6, 80);
+    probe = await sceneProbe(page);
+    check('a stop in the air hides the levels after it', aloft(probe, 'stratum-fill').length === 1
+      && aloft(probe, 'stratum-fill')[0].band === BANDS.bands[0].id);
+    check('…and keeps the replay causal', probe.pointsShown === firstEnd, `${probe.pointsShown} vs ${firstEnd}`);
+    check('…and its rulers are the first level’s', aloft(probe, 'guide').length === 1
+      && aloft(probe, 'guide')[0].band === BANDS.bands[0].id);
+    await domClick(page, '#megafire-timeline .megafire-timeline-stop[data-index="2"]');
+    await domClick(page, '#map-legend-items .map-legend-segment[data-toggle-value="ground"]');
+    await pollUntil(page, (id) => window.__godsEyeView.dataManager.layers.get(id)?.module?.getStats?.()?.view === 'ground',
+      { tries: 20, gapMs: 250, arg: LAYER_ID });
+    await pump(page, 6, 80);
+    probe = await sceneProbe(page);
+    check('« Au sol » puts the three zones back down', shown(probe, 'fill').length === 3 && shown(probe, 'ring').length === 3);
+    check('…and nothing stays in the air', probe.air.every((entry) => !entry.show) && shown(probe, 'ghost').length === 0);
+    check('…and every detection is back on the ground', JSON.stringify(probe.pointHeights) === '[0]',
+      JSON.stringify(probe.pointHeights));
+
+    console.log('\nvii. éteindre retire tout');
     await domClick(page, `#map-legend-items .map-legend-tile[data-tile-layer="${LAYER_ID}"]`);
     await pollUntil(page, (id) => !window.__godsEyeView.dataManager.isEnabled(id), { tries: 40, gapMs: 250, arg: LAYER_ID });
     await pump(page, 4, 60);
     probe = await sceneProbe(page);
     check('the bar is gone', probe.bar === null);
-    check('nothing this layer drew is still shown', probe.ground.every((entry) => !entry.show) && probe.collectionShown === false);
+    check('nothing this layer drew is still shown',
+      probe.ground.every((entry) => !entry.show) && probe.air.every((entry) => !entry.show) && probe.collectionShown === false);
     check('the preset goes back to Normal', probe.style === 'normal', `style=${probe.style}`);
   } catch (error) {
     failures.push(`harness: ${error?.message || error}`);

@@ -2,6 +2,47 @@
 
 Updated: September 23, 2026
 
+> **2026-09-23 — « Grands incendies » has a second view, « Temps en 3D »:
+> the three stages of the Gironde fire float at their own heights.**
+>
+> - **The switch.** Two segments over the key (`legendSegments`, caption
+>   « Vue »): « Au sol » and « Temps en 3D ». They send
+>   `setParams({ view: 'ground' | 'strata' })`; any other view returns `false`.
+>   `getParams()` and `getStats()` report `view`. The view is module state: it
+>   survives switching the layer off and on, and a view set before the pack
+>   loads is applied when it lands.
+> - **What it draws** (`girondeMegafire.js`, geometry in the pure
+>   `megafireStrata.js`). Built on first use, then only shown or hidden: per
+>   band a level at 6, 12 and 18 km (`MEGAFIRE_STRATA`, equal steps — height
+>   is the ORDER of the stages, not the date to scale) made of the band's own
+>   zone filled (`Primitive`, `PolygonGeometry` with `height`, α 0.75 of the
+>   ground fill's) and the band's cumulative outline as a `PolylineGlow` halo
+>   (12 px, α 0.40, flares to 1 with the ground rings' clock) under a 2.4 px
+>   core; for the highest level shown only, dashed verticals from up to eight
+>   silhouette tips down to the ground, the time axis (4.5 km west of the
+>   scar, over the sea — the east tail sent it under the key when it stood on
+>   the right), and the band's outline on the ground (`GroundPolylinePrimitive`,
+>   α 0.5); one tick per level on the axis (`PointPrimitiveCollection`) with
+>   the date label beside it on the world overlay. Each FIRMS detection moves to
+>   its band's height (`placePoints`, one scratch `Cartesian3` for 9 524 writes).
+>   The ground zones and rings are hidden; EFFIS stays dashed on the ground at
+>   the end. Primitives in the air carry their role on
+>   `Symbol.for('surplomb.megafire.air')` for the harness.
+> - **The camera.** Switching views flies to the view's framing; in « Temps en
+>   3D » every stop, arrow and replay frames the WHOLE stack (heading 16°,
+>   pitch −24°, 3.4 × its radius), because the stages still to play rise above
+>   the ones shown. `megafireFramingScale` backs the camera off on narrower
+>   windows (by the map the key leaves free, up to ×1.6) and in portrait (by
+>   height / width, up to ×2.4).
+> - **The key** in « Temps en 3D »: « Plus haut = plus tard » over the three
+>   dates, the dots « à l’étage de ses jours », EFFIS « au sol », and the note
+>   « Une strate montre où les satellites ont vu la chaleur arriver, pas le front
+>   des flammes. La hauteur ne mesure rien. »
+> - **Proof.** `npm run qa:gironde-megafire`, 48 checks (section vi: the
+>   segment by DOM click, three levels aloft and the ground zones gone, the top
+>   level's rulers, detections at 6/12/18 km, the stack framing, a stop in the
+>   air, and « Au sol » putting everything back).
+
 > **2026-09-23 — « Incendies » replaces « Feux actifs (FIRMS) »: two mode
 > tiles, and the Gironde fire of July 2026 replays as three rings of light.**
 >
