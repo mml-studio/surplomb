@@ -14,7 +14,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   view; « Réinitialiser » goes back out to the whole globe (it left the « … »
   menu). Every control has a tooltip. A chip above the bar names the town,
   département or région at the centre of the view and the view mode
-  (« Paris · Vue 3D »), from the State's API Géo. Desktop only; under 1180 px
+  (« Paris · Vue 3D »), from the State's API Géo. Desktop only; under 1280 px
   wide the bar shows its icons without the words.
 - **A search marks what it found, as a map search does.** An address, a
   building or a monument gets a red pin with its name beside it; a town, a

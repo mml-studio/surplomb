@@ -15042,9 +15042,11 @@ html.globe-shell #globe-nav-place-text {
   text-overflow: ellipsis;
 }
 
-/* Narrower than the bar with its words: icons only, the words kept for
-   screen readers and in the tooltips. */
-@media (max-width: 1180px) {
+/* Narrower than the bar with its words beside the voice control's corner
+   (256 px wide while it listens, 24 px from the right edge): icons only, the
+   words kept for screen readers and in the tooltips. At 1280 px the 684 px
+   bar ends at 982 px and the corner starts at 1000. */
+@media (max-width: 1279px) {
   html.globe-shell #globe-nav .globe-nav-label {
     position: absolute;
     width: 1px;

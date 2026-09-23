@@ -184,6 +184,14 @@ try {
   check(state.chip === null, 'the chip says nothing over the whole globe', String(state.chip));
   console.log(`  shot ${await shoot('globe')}`);
 
+  // At 1280 px the bar keeps its words and ends before the voice corner,
+  // whose card is 256 px wide 24 px from the right edge while it listens.
+  await page.setViewport({ width: 1280, height: 720 });
+  await settle(1_000);
+  state = await bar();
+  const clear = state.rect && state.rect.x + state.rect.w <= 1280 - 24 - 256 - 12;
+  check(clear && state.rect.w > 600, 'at 1280 px the bar keeps its words and clears the voice corner', JSON.stringify(state.rect));
+
   // Narrow window: the words go, the bar stays on one row.
   await page.setViewport({ width: 1100, height: 760 });
   await settle(1_000);

@@ -13,7 +13,7 @@ Updated: September 23, 2026
 >   `#gev-voice-control` is still a child of it. `#reset-globe-view` is MOVED
 >   from the « … » menu into the bar with its listener (`resetToGlobeView`),
 >   labelled « Réinitialiser »; its accessible name is now « Réinitialiser :
->   revenir au globe entier ». Under 1180 px wide the labels are visually
+>   revenir au globe entier ». Under 1280 px wide the labels are visually
 >   hidden (kept for screen readers and tooltips). `#toast` sits at 132 px.
 > - **Camera.** A press takes the camera like a drag (ui.js
 >   `takeCameraForGlobeNav`: stops verbs, orbit and flight, no
