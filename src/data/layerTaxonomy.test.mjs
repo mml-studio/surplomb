@@ -12,6 +12,7 @@ import {
   layerTaxonomyFor,
   validateLayerTaxonomy,
 } from './layerTaxonomy.js';
+import { lucideIconMask } from './lucideIcons.js';
 
 test('the shipped taxonomy covers the registered layer set exactly', () => {
   assert.equal(validateLayerTaxonomy(), true);
@@ -75,6 +76,19 @@ test('every category label carries its French accents', () => {
   assert.equal(byId.get('built-environment'), 'BÂTI & TERRITOIRE');
   assert.equal(byId.get('ground-mobility'), 'MOBILITÉ TERRESTRE');
   assert.equal(byId.get('comms-sensors'), 'RÉSEAUX & CAPTEURS');
+});
+
+test('every category has a rail head: a short label and a vendored Lucide glyph', () => {
+  // The desktop rail is 88 px wide. A long header there wraps onto three lines,
+  // and a glyph name the icon module does not carry draws an empty button.
+  for (const category of LAYER_CATEGORIES) {
+    assert.ok(category.shortLabel, `${category.id} has no short label`);
+    assert.ok(category.shortLabel.length <= 12, `${category.id}: « ${category.shortLabel} » is too long for the rail`);
+    assert.ok(lucideIconMask(category.glyph), `${category.id}: no vendored Lucide icon « ${category.glyph} »`);
+  }
+  const byId = new Map(LAYER_CATEGORIES.map((entry) => [entry.id, entry.shortLabel]));
+  assert.equal(byId.get('built-environment'), 'Bâti');
+  assert.equal(byId.get('energy'), 'Énergie');
 });
 
 test('grouping preserves category order and drops coordinators', () => {

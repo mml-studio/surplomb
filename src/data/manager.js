@@ -436,6 +436,17 @@ export class DataLayerManager {
     // byte-identical to what it has always been while it is.
     this._featuredPanelLayerIds = null;
     this._collapsedCategories = new Set();
+    // How the groups are drawn. `accordion` — one collapsible header per group,
+    // every row in one scrolling column — is what the phone sheet and every
+    // unit-test manager get. `rail` is the desktop's: the groups become a
+    // column of buttons beside the list (`layerPanelRail.js`), so the headers
+    // stop being buttons and no group is ever collapsed. See `setPanelLayout`.
+    this._panelLayout = 'accordion';
+    // Told after every paint of the panel, so the rail can re-apply which
+    // group is showing after a rebuild and re-count its badges after a refresh.
+    this._panelPaintListeners = new Set();
+    // Set by the rail: how to bring one row into view (`revealPanelRow`).
+    this._panelRevealHandler = null;
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
     // Plugged datasets: registered AFTER the seal, by the dataset box, and
@@ -494,6 +505,108 @@ export class DataLayerManager {
    */
   refreshControls() {
     return this._refreshTogglePanel();
+  }
+
+  /**
+   * Choose how the panel draws its groups: `accordion` or `rail`.
+   *
+   * THE RAIL DRAWS EVERY GROUP, AND SHOWS ONE. The rows are built exactly as
+   * the accordion builds them — every lookup by `[data-layer-id]` (the voice
+   * surface, the phone badges, the refresh pass) keeps finding them — and the
+   * rail decides with a class which group the list shows. What changes here is
+   * the header: a heading, not a button, and never collapsed. A group the
+   * visitor once closed on the accordion would otherwise open on the rail as
+   * an empty list, with nothing left on screen to reopen it.
+   *
+   * @param {'accordion'|'rail'} layout
+   * @returns {void}
+   */
+  setPanelLayout(layout) {
+    const next = layout === 'rail' ? 'rail' : 'accordion';
+    if (next === this._panelLayout) return;
+    this._panelLayout = next;
+    this._renderToggles();
+  }
+
+  /**
+   * Be told after each paint of the panel.
+   *
+   * `rebuilt: true` when `_renderToggles` threw the rows away and drew new ones
+   * (registration, seal, a dataset plugged, a layout change); `false` after the
+   * ordinary refresh pass, which only rewrites rows in place.
+   *
+   * @param {function({rebuilt: boolean}): void} callback
+   * @returns {function(): void} Unsubscribe.
+   */
+  subscribePanelPaint(callback) {
+    if (typeof callback !== 'function') return () => {};
+    this._panelPaintListeners.add(callback);
+    return () => this._panelPaintListeners.delete(callback);
+  }
+
+  /** @param {boolean} rebuilt @returns {void} */
+  _notifyPanelPaint(rebuilt) {
+    for (const callback of this._panelPaintListeners) {
+      try {
+        callback({ rebuilt });
+      } catch (error) {
+        console.warn('[Data] panel paint listener error:', error);
+      }
+    }
+  }
+
+  /**
+   * The panel's groups as the rail reads them: one entry per group that has a
+   * row, in panel order, with how many of its rows are lit.
+   *
+   * Lit is `_rowEnabled` — the definition the active strip uses — so a badge
+   * on the rail and the strip above the list can never disagree.
+   *
+   * @returns {Array<{id: string, label: string, shortLabel: string, icon: string,
+   *   glyph: ?string, total: number, active: number, layerIds: string[]}>}
+   */
+  getPanelGroups() {
+    if (!this._registrationCategories) return [];
+    return this._groupedPanelLayers()
+      .filter((group) => group.layers.length > 0)
+      .map((group) => ({
+        id: group.id,
+        label: group.label,
+        shortLabel: group.shortLabel || group.label,
+        icon: group.icon,
+        glyph: group.glyph || null,
+        total: group.layers.length,
+        active: group.layers.filter((layer) => this._rowEnabled(layer.id)).length,
+        layerIds: group.layers.map((layer) => layer.id),
+      }));
+  }
+
+  /**
+   * Install how one row is brought into view. The rail sets it: a row can sit
+   * in a group the list is not showing.
+   * @param {?function(string): boolean} handler Receives the ROW's layer id.
+   * @returns {void}
+   */
+  setPanelRevealHandler(handler) {
+    this._panelRevealHandler = typeof handler === 'function' ? handler : null;
+  }
+
+  /**
+   * Make a layer's row visible in the panel, for a caller about to scroll to
+   * it (the voice surface). A fused layer resolves to the row it lives on.
+   *
+   * @param {string} layerId Registered layer id.
+   * @returns {?string} The row's layer id, or null when the layer has none.
+   */
+  revealPanelRow(layerId) {
+    if (!this.layers.has(layerId)) return null;
+    const rowId = this._registrationTaxonomy?.get(layerId)?.fusedInto || layerId;
+    try {
+      this._panelRevealHandler?.(rowId);
+    } catch (error) {
+      console.warn('[Data] panel reveal error:', error);
+    }
+    return rowId;
   }
 
   register(layerModule) {
@@ -2837,16 +2950,19 @@ export class DataLayerManager {
         if (!layer.showInTogglePanel) continue;
         this._toggleContainer.appendChild(this._buildToggleRow(layer));
       }
+      this._notifyPanelPaint(true);
       return;
     }
 
+    const rail = this._panelLayout === 'rail';
     for (const group of this._groupedPanelLayers()) {
       // A group whose every member is hidden — a coordinator-only category, or
       // one whose layers all opted out — draws no header. An empty accordion
       // section is a promise of content that is not there.
       if (!group.layers.length) continue;
 
-      const collapsed = this._collapsedCategories.has(group.id);
+      // The rail has no collapsed group: see `setPanelLayout`.
+      const collapsed = !rail && this._collapsedCategories.has(group.id);
       const bodyId = `data-category-body-${group.id}`;
 
       const section = document.createElement('div');
@@ -2855,13 +2971,19 @@ export class DataLayerManager {
 
       // The caret glyph is in the markup rather than a CSS pseudo-element so
       // the header still reads as expandable if the stylesheet fails to load;
-      // CSS only rotates it.
-      const header = document.createElement('button');
+      // CSS only rotates it. On the rail the header opens nothing — it names
+      // the group in the search results — so it is a heading with no caret.
+      const header = document.createElement(rail ? 'div' : 'button');
       header.className = 'data-category-header';
-      header.type = 'button';
-      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      header.setAttribute('aria-controls', bodyId);
-      header.innerHTML = '<span class="data-category-caret" aria-hidden="true">▾</span>'
+      if (rail) {
+        header.setAttribute('role', 'heading');
+        header.setAttribute('aria-level', '3');
+      } else {
+        header.type = 'button';
+        header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        header.setAttribute('aria-controls', bodyId);
+      }
+      header.innerHTML = (rail ? '' : '<span class="data-category-caret" aria-hidden="true">▾</span>')
         + `<span class="data-category-icon" aria-hidden="true">${group.icon || ''}</span>`
         + `<span class="data-category-label">${group.label}</span>`;
 
@@ -2875,7 +2997,7 @@ export class DataLayerManager {
       body.hidden = collapsed;
       for (const layer of group.layers) body.appendChild(this._buildToggleRow(layer));
 
-      header.addEventListener('click', () => {
+      if (!rail) header.addEventListener('click', () => {
         const nowCollapsed = !this._collapsedCategories.has(group.id);
         if (nowCollapsed) this._collapsedCategories.add(group.id);
         else this._collapsedCategories.delete(group.id);
@@ -2890,6 +3012,7 @@ export class DataLayerManager {
       this._syncCategoryHeader(section, group);
       this._toggleContainer.appendChild(section);
     }
+    this._notifyPanelPaint(true);
   }
 
   /**
@@ -3165,7 +3288,9 @@ export class DataLayerManager {
     const groups = categories.map((category) => ({
       id: category.id,
       label: category.label,
+      shortLabel: category.shortLabel,
       icon: category.icon,
+      glyph: category.glyph,
       layers: buckets.get(category.id) || [],
     }));
     const featuredIds = this._featuredPanelLayerIds;
@@ -3990,6 +4115,7 @@ export class DataLayerManager {
         if (section) this._syncCategoryHeader(section, group);
       }
     }
+    this._notifyPanelPaint(false);
     return true;
   }
 

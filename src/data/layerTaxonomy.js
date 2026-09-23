@@ -49,7 +49,7 @@ import { mapIconMask } from './mapIcons.js';
 import messages from './layerTaxonomy.i18n.js';
 
 /**
- * One group header: its id and its icon are data, its label is a getter.
+ * One group header: its id and its icons are data, its labels are getters.
  *
  * The label is read when the header is drawn rather than stored, which is what
  * lets one table head the panel in either language. In French it is UPPERCASE
@@ -57,15 +57,25 @@ import messages from './layerTaxonomy.i18n.js';
  * preserves an accent that is already there and invents none, so a plain
  * `ENERGIE` would render as a typo forever.
  *
- * @param {string} id Category id, and its key in the catalog.
- * @param {string} icon The glyph drawn beside the header.
- * @returns {{id: string, icon: string, label: string}} Frozen entry.
+ * TWO ICONS, TWO LABELS, BECAUSE THE GROUP HAS TWO HEADS. The phone draws the
+ * groups as an accordion, each under its full uppercase header and a
+ * character icon. The desktop draws them as a column of buttons 88 px wide
+ * (`layerPanelRail.js`): « RISQUES & ENVIRONNEMENT » does not fit there, and a
+ * colour emoji beside five monochrome glyphs reads as a sticker. So the rail
+ * reads `shortLabel` and `glyph`, a Lucide icon name (`lucideIcons.js`).
+ *
+ * @param {string} id Category id, and its key in the catalogs.
+ * @param {string} icon The character drawn beside the accordion header.
+ * @param {string} glyph The Lucide icon the category rail draws.
+ * @returns {{id: string, icon: string, glyph: string, label: string, shortLabel: string}} Frozen entry.
  */
-function categoryEntry(id, icon) {
+function categoryEntry(id, icon, glyph) {
   return Object.freeze({
     id,
     icon,
+    glyph,
     get label() { return messages().categories[id]; },
+    get shortLabel() { return messages().categoriesShort[id]; },
   });
 }
 
@@ -81,7 +91,7 @@ export const LAYER_CATEGORIES = Object.freeze([
   // uppercase, a disclosure triangle and a collapsed state to say what the row
   // already says. The id stays `air-space` so stored collapsed-state keys and
   // any test fixture keyed on it survive the rename.
-  categoryEntry('air-space', '✈️'),
+  categoryEntry('air-space', '✈️', 'plane'),
   // SECOND, and not last. This is the group that makes the fork: prices, DPE,
   // urbanism, buildings, population, health, schools, shops, parcels. It used to
   // close the panel as "base reference data", which is true of the DATA and
@@ -89,16 +99,16 @@ export const LAYER_CATEGORIES = Object.freeze([
   // visitor concludes the app has nothing for their street. What opens the panel
   // is still the live tracking (the reason anyone stays for the first minute);
   // what comes immediately after is France.
-  categoryEntry('built-environment', '▤'),
-  categoryEntry('ground-mobility', '🚗'),
+  categoryEntry('built-environment', '▤', 'building'),
+  categoryEntry('ground-mobility', '🚗', 'car'),
   // Deliberately "ÉNERGIE" and not "ÉNERGIE & RÉSEAUX": `comms-sensors` below is
   // "RÉSEAUX & CAPTEURS", and two categories whose labels both lead with the same
   // noun are two categories nobody can tell apart at a glance. The six layers
   // here — mix, production groups, plants, HV grid, gas, dams — are all covered
   // honestly by the single word.
-  categoryEntry('energy', '⚡'),
-  categoryEntry('hazards', '⚠'),
-  categoryEntry('comms-sensors', '≋'),
+  categoryEntry('energy', '⚡', 'zap'),
+  categoryEntry('hazards', '⚠', 'triangle-alert'),
+  categoryEntry('comms-sensors', '≋', 'radio-tower'),
   // The LAST group, and the only one that is empty at boot. It is where a
   // dataset lands when its manifest names no category — plugged from the
   // panel, or shipped in `datasets/*.json` without a stated home. Empty, it
@@ -106,7 +116,7 @@ export const LAYER_CATEGORIES = Object.freeze([
   // costs nothing until the first dataset is plugged. A manifest MAY name
   // any of the six groups above instead; this one says "the reader added
   // this", which is a fact about provenance the other six cannot carry.
-  categoryEntry('plugged', '🔌'),
+  categoryEntry('plugged', '🔌', 'plug'),
 ]);
 
 /**

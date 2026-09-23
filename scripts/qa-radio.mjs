@@ -2055,6 +2055,9 @@ async function main() {
         .filter((row) => row.querySelector('.data-toggle-btn'));
       const toggleRow = toggleRows.find((row) => String(row.dataset.layerId).startsWith('local-'))
         || toggleRows.find((row) => !/flight|military|vessel|ais|radio/i.test(row.dataset.layerId || ''));
+      // On the desktop the list shows one group at a time (layerPanelRail.js):
+      // open the row's group first, as the voice surface does.
+      if (toggleRow) window.__godsEyeView.dataManager.revealPanelRow?.(toggleRow.dataset.layerId);
       toggleRow?.scrollIntoView({ block: 'center' });
       await waitForLayout();
       const toggleLayerId = toggleRow?.dataset.layerId || null;

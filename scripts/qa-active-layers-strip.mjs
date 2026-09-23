@@ -199,6 +199,10 @@ async function main() {
     await shoot(page, '02-lit.png');
 
     // ── 3. Sticky: still on screen with the list scrolled to the bottom ───
+    // On the desktop the list shows one group at a time (layerPanelRail.js);
+    // « Bâti & territoire » is the one long enough to scroll at 1440 × 900.
+    await page.evaluate(() => window.__godsEyeView.layerPanelRail?.open('built-environment'));
+    await sleep(600);
     // NO `requestAnimationFrame` ANYWHERE IN HERE. The render governor parks
     // this app when nothing moves, and headless Chromium then never ticks rAF
     // — a promise resolved inside one does not merely arrive late, it never
