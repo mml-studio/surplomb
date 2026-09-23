@@ -4,6 +4,11 @@
 # the machine that wrote the change. The allocation microbenchmarks have
 # budgets calibrated for Node 24 and skip themselves elsewhere, so 24 is the
 # leg that enforces them.
+#
+# The two legs also run in two timezones. A test that hard-codes a clock hour
+# passes in exactly one of them: UTC-only tests reached main and failed on
+# every laptop in Paris, where each agent re-proved them "pre-existing" by
+# checking out main again.
 name: CI
 
 on:
@@ -30,6 +35,7 @@ jobs:
     env:
       PUPPETEER_SKIP_DOWNLOAD: '1'
       GEV_REQUIRE_ALLOCATION_GATE: ${{ matrix.node == '24.14.0' && '1' || '0' }}
+      TZ: ${{ matrix.node == '24.14.0' && 'UTC' || 'Europe/Paris' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4

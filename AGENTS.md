@@ -39,7 +39,13 @@ same things at more length.
 
 ## Before you push
 
-1. `npm test` and `TZ=UTC npm test` (CI runs in UTC).
+1. `npm test` and `TZ=UTC npm test` (CI runs Node 24 in UTC and Node 26 in
+   Europe/Paris).
+   A failure in a file your diff does not touch: run `gh run list --repo
+   mml-studio/surplomb --branch main --limit 1` before anything else. If main
+   is green, the cause is your machine — a key in `.env`, a missing tool — not
+   main; do not check main out again to prove it. Fix the test so it no
+   longer depends on that, in its own pull request.
 2. `npm run build` whenever `index.html`, a CSS file or anything Vite
    transforms changed: `npm test` parses neither CSS nor HTML.
 3. `npm run layers:manifest:check` when a layer module changed.
