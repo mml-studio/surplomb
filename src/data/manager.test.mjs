@@ -3759,6 +3759,85 @@ test('corrupt collapse storage opens every group instead of throwing', async () 
   }
 });
 
+// ─── The desktop rail (`setPanelLayout('rail')`, src/data/layerPanelRail.js) ──
+
+test('on the rail every group is drawn open, under a heading that opens nothing', async () => {
+  // A group closed on the accordion would otherwise open on the rail as an
+  // empty list, with no header left on screen to reopen it.
+  const seeded = makeMemoryStorage({
+    'godsEyeView.v1.dataLayerCategoriesCollapsed': JSON.stringify(['maritime']),
+  });
+  const panel = makeGroupedPanel({ storage: seeded });
+  try {
+    panel.mgr.setPanelLayout('rail');
+    for (const section of panel.sections()) {
+      const header = section.querySelector('.data-category-header');
+      assert.equal(section.querySelector('.data-category-body').hidden, false, section.dataset.categoryId);
+      assert.ok(!section.classList.contains('collapsed'));
+      assert.equal(header.getAttribute('role'), 'heading');
+      assert.equal(header.getAttribute('aria-expanded'), null);
+      assert.doesNotMatch(header.innerHTML, /data-category-caret/);
+      assert.equal(header.listeners.get('click'), undefined, 'a heading has no click to toggle');
+    }
+    assert.ok(panel.container.querySelector('[data-layer-id="ais-live-vessels"]'), 'rows keep their address');
+
+    panel.mgr.setPanelLayout('accordion');
+    const maritime = panel.container.querySelector('.data-category[data-category-id="maritime"]');
+    assert.equal(maritime.querySelector('.data-category-body').hidden, true, 'the accordion keeps its memory');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the rail reads the groups with their lit rows counted as the strip counts them', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    await panel.mgr.setEnabled('flights', true);
+    const groups = panel.mgr.getPanelGroups();
+    assert.deepEqual(groups.map((group) => group.id), ['air-space', 'maritime', 'energy']);
+    const air = groups[0];
+    assert.equal(air.total, 2, 'the coordinator has no row and no place in the tally');
+    assert.equal(air.active, 1);
+    assert.deepEqual(air.layerIds.sort(), ['flights', 'satellites']);
+    assert.equal(air.shortLabel, 'AIR & ESPACE', 'a category with no short label falls back to its label');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the panel says when it painted: rebuilt on render, in place on refresh', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    const seen = [];
+    const unsubscribe = panel.mgr.subscribePanelPaint(({ rebuilt }) => seen.push(rebuilt));
+    panel.mgr.setPanelLayout('rail');
+    panel.mgr.refreshControls();
+    assert.deepEqual(seen, [true, false]);
+    panel.mgr.setPanelLayout('rail');
+    assert.deepEqual(seen, [true, false], 'the same layout twice does not rebuild');
+    unsubscribe();
+    panel.mgr.refreshControls();
+    assert.equal(seen.length, 2);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('revealing a row goes through the rail, and names the row it asked for', async () => {
+  const panel = makeGroupedPanel();
+  try {
+    const asked = [];
+    panel.mgr.setPanelRevealHandler((rowId) => { asked.push(rowId); return true; });
+    assert.equal(panel.mgr.revealPanelRow('france-energy'), 'france-energy');
+    assert.equal(panel.mgr.revealPanelRow('no-such-layer'), null);
+    assert.deepEqual(asked, ['france-energy']);
+    panel.mgr.setPanelRevealHandler(null);
+    assert.equal(panel.mgr.revealPanelRow('flights'), 'flights', 'no rail, nothing to open, still an answer');
+  } finally {
+    await panel.restore();
+  }
+});
+
 test('categories naming no group, or arriving without a taxonomy, are refused', async () => {
   const mgr = new DataLayerManager({});
   mgr.register(makeSlowLayer('flights', { updateInterval: -1 }).module);

@@ -6,7 +6,14 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-Object.assign(process.env, { GEV_TRIAL_LIMIT: '', GEV_FIRST_RUN_AB: '', OPENSKY_AUTH_MODE: 'anon' });
+// The OpenSky credentials are emptied, not deleted: the config's loadEnv()
+// fills only UNSET keys, so an empty value keeps a developer's `.env` out of
+// the count. With them, `/api/opensky-track` asks for an OAuth token first and
+// the "one upstream call per request" assertions below read 3 instead of 2.
+Object.assign(process.env, {
+  GEV_TRIAL_LIMIT: '', GEV_FIRST_RUN_AB: '', OPENSKY_AUTH_MODE: 'anon',
+  OPENSKY_CLIENT_ID: '', OPENSKY_CLIENT_SECRET: '',
+});
 delete process.env.GEV_NONCOMMERCIAL_SOURCES;
 
 const { default: createViteConfig, _resetAdsbLolFeedForTest } = await import('../vite.config.js');

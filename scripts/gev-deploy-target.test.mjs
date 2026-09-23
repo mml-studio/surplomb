@@ -110,6 +110,17 @@ exit 0
 
 const BIN = fakeCommands();
 
+/**
+ * `jq` is the one command the script needs for real: it is what reads GitHub's
+ * JSON, so faking it would test the fake. The VPS and CI's ubuntu image have
+ * it, macOS ships it since 15, a stock Debian does not — and there all ten
+ * tests died with exit 127, which read like a broken deploy script.
+ */
+const JQ_MISSING = spawnSync('jq', ['--version']).error
+  ? 'jq is not installed (apt install jq / brew install jq)'
+  : false;
+const deployTest = (name, fn) => test(name, { skip: JQ_MISSING }, fn);
+
 /** A sandboxed /opt/gev: fixtures for the fakes, and the state they write. */
 function sandbox({ heads, pulls, compare, deployed, target = 'auto', gate = true, renamed = false } = {}) {
   const dir = scratchDir('gev-deploy-');
@@ -170,7 +181,7 @@ function sandbox({ heads, pulls, compare, deployed, target = 'auto', gate = true
 
 const openPullRequest = (branch, number = 155) => [{ number, head: { ref: branch } }];
 
-test('a pull request that contains main is what staging shows', () => {
+deployTest('a pull request that contains main is what staging shows', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA, 'feature-x': PR_SHA },
     pulls: openPullRequest('feature-x'),
@@ -186,7 +197,7 @@ test('a pull request that contains main is what staging shows', () => {
   assert.doesNotMatch(result.log, /No such file or directory/);
 });
 
-test('a renamed repository still shows its pull requests', () => {
+deployTest('a renamed repository still shows its pull requests', () => {
   // The repository was renamed twice on 2026-09-15 and this box kept naming it
   // by the oldest slug. GitHub redirects, so `git ls-remote` and codeload — the
   // two calls that already followed — never noticed. The REST API answers 301
@@ -205,7 +216,7 @@ test('a renamed repository still shows its pull requests', () => {
   assert.doesNotMatch(result.selection, /no open pull request/);
 });
 
-test('a pull request cut before a merge does NOT get the URL — main does', () => {
+deployTest('a pull request cut before a merge does NOT get the URL — main does', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA, 'feature-x': PR_SHA },
     pulls: openPullRequest('feature-x'),
@@ -220,7 +231,7 @@ test('a pull request cut before a merge does NOT get the URL — main does', () 
   assert.match(result.log, /Rebase the branch to preview it/);
 });
 
-test('an unreadable freshness answer resolves to main, not to the stale preview', () => {
+deployTest('an unreadable freshness answer resolves to main, not to the stale preview', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA, 'feature-x': PR_SHA },
     pulls: openPullRequest('feature-x'),
@@ -232,7 +243,7 @@ test('an unreadable freshness answer resolves to main, not to the stale preview'
   assert.match(result.selection, /freshness of PR #155 feature-x unknown/);
 });
 
-test('a pull request opened from a fork leaves no branch here, and main is shown', () => {
+deployTest('a pull request opened from a fork leaves no branch here, and main is shown', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA },
     pulls: openPullRequest('their-branch', 42),
@@ -244,7 +255,7 @@ test('a pull request opened from a fork leaves no branch here, and main is shown
   assert.match(result.log, /PR #42 their-branch has no branch in this repository/);
 });
 
-test('no open pull request at all falls back to main', () => {
+deployTest('no open pull request at all falls back to main', () => {
   const { run } = sandbox({ heads: { main: MAIN_SHA }, pulls: [] });
   const result = run();
 
@@ -252,7 +263,7 @@ test('no open pull request at all falls back to main', () => {
   assert.match(result.selection, /no open pull request/);
 });
 
-test('an explicit pin outranks the invariant, and says out loud that it is stale', () => {
+deployTest('an explicit pin outranks the invariant, and says out loud that it is stale', () => {
   const { run } = sandbox({
     target: 'feature-x',
     heads: { main: MAIN_SHA, 'feature-x': PR_SHA },
@@ -265,7 +276,7 @@ test('an explicit pin outranks the invariant, and says out loud that it is stale
   assert.match(result.log, /echo auto > .*\/target/);
 });
 
-test('the freshness verdict is cached against its pair of shas, not re-bought every tick', () => {
+deployTest('the freshness verdict is cached against its pair of shas, not re-bought every tick', () => {
   const box = sandbox({
     heads: { main: MAIN_SHA, 'feature-x': PR_SHA },
     pulls: openPullRequest('feature-x'),
@@ -279,7 +290,7 @@ test('the freshness verdict is cached against its pair of shas, not re-bought ev
   assert.match(compares[0], new RegExp(`/compare/${MAIN_SHA}\\.\\.\\.${PR_SHA}$`));
 });
 
-test('an unchanged branch@sha rebuilds nothing', () => {
+deployTest('an unchanged branch@sha rebuilds nothing', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA },
     pulls: [],
@@ -290,7 +301,7 @@ test('an unchanged branch@sha rebuilds nothing', () => {
   assert.equal(result.calls.filter((line) => line.startsWith('docker compose')).length, 0);
 });
 
-test('a ref that predates the access gate is refused rather than published open', () => {
+deployTest('a ref that predates the access gate is refused rather than published open', () => {
   const { run } = sandbox({
     heads: { main: MAIN_SHA },
     pulls: [],

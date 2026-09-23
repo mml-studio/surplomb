@@ -20,7 +20,7 @@ test('each vendored icon is a mask carrying Lucide’s elements verbatim, at Luc
 });
 
 test('an icon this module does not carry is null, never a stand-in', () => {
-  assert.equal(lucideIconMask('plane'), null);
+  assert.equal(lucideIconMask('rocket'), null);
   assert.equal(lucideIconMask('constructor'), null);
   assert.equal(lucideIconMask(''), null);
 });

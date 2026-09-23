@@ -19,6 +19,7 @@ import { LAYER_STATE_REGISTRY } from './data/layerState.js';
 import { LAYER_CATEGORIES, LAYER_TAXONOMY } from './data/layerTaxonomy.js';
 import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
+import { mountLayerPanelRail } from './data/layerPanelRail.js';
 import { registerDataCredits, withdrawDataCredits } from './data/dataCredits.js';
 import {
   SWITCHABLE_LAYER_IDS,
@@ -775,6 +776,17 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     } catch (error) {
       console.warn('[datasets] box init failed:', error);
     }
+    // THE DESKTOP'S LAYERS PANEL: the groups as a column of buttons, and the
+    // rows of one group in a list beside it (src/data/layerPanelRail.js). The
+    // phone sheet keeps the accordion, so the rail is not mounted there.
+    let layerPanelRail = null;
+    if (!phoneShell) {
+      try {
+        layerPanelRail = mountLayerPanelRail({ dataManager });
+      } catch (error) {
+        console.warn('[data] layer rail mount failed:', error);
+      }
+    }
     styleManager.attachDataManager(dataManager);
 
     // The voice agent, its annotation engine and the scene director are 360 kB
@@ -1026,6 +1038,8 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
       // to tell "waiting for the reader" from "already decided".
       photorealAdoption,
       dataManager,
+      // Null on the phone, which keeps the accordion.
+      layerPanelRail,
       // Null until the voice stack lands — `voiceReady` is how a caller waits
       // for it without polling, and `loadVoice()` how it asks for it early.
       sceneDirector: null,

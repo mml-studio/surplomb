@@ -56,6 +56,22 @@ export default defineMessages({
     plugged: { fr: 'JEUX BRANCHÉS', en: 'PLUGGED DATASETS', note: 'Where a dataset the reader plugged in lands.' },
   },
 
+  /**
+   * The same groups on the desktop's category rail: one or two short words
+   * under an icon, in a column 88 px wide. Sentence case, because they sit
+   * under a glyph like a toolbar label rather than over a list like a header.
+   * The full header above names the group once the reader opens it.
+   */
+  categoriesShort: {
+    'air-space': { fr: 'Ciel & mer', en: 'Sky & sea' },
+    'built-environment': { fr: 'Bâti', en: 'Buildings' },
+    'ground-mobility': { fr: 'Mobilité', en: 'Mobility' },
+    energy: { fr: 'Énergie', en: 'Energy' },
+    hazards: { fr: 'Risques', en: 'Risks' },
+    'comms-sensors': { fr: 'Réseaux', en: 'Networks' },
+    plugged: { fr: 'Branchés', en: 'Plugged', note: 'Datasets the reader plugged in.' },
+  },
+
   /** The scope chip, by coverage value. `global` carries none and is not here. */
   coverageChips: {
     france: { fr: 'FR', en: 'FR', note: 'The layer only has data over France.' },

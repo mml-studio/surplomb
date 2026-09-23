@@ -21,19 +21,28 @@ import { rteClassWords, rteProductionTypeLabel } from './rteGenerationFeed.js';
 import { assertNoFrench, withLocale } from '../i18n/testing.js';
 
 const NOW = Date.parse('2026-08-28T13:00:00+02:00');
+const STEP_AT = Date.parse('2026-08-28T12:00:00+02:00');
 const POSITION = { x: 1, y: 2, z: 3 };
+
+// The card prints the step on the reader's clock, so the expected hour is
+// read in whatever timezone the suite runs in: 10:00 on CI (UTC), 12:00 on a
+// laptop in Paris. A literal hour here only ever passed in one of the two.
+const readerClock = (at) => {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 
 const unit = (overrides = {}) => ({
   eic: '17W100P100P0130W', name: 'Groupe 01', code: 'GRAV5N01', class: 'nuclear',
   registryMw: 910, installedMw: 910, mw: 905,
-  at: Date.parse('2026-08-28T12:00:00+02:00'), regime: 'En service',
+  at: STEP_AT, regime: 'En service',
   history: [880, 900, 905], reporting: true, ...overrides,
 });
 const station = (overrides = {}) => ({
   id: 'GRAV5', name: 'Centrale nucléaire de Gravelines', class: 'nuclear',
   commune: 'Gravelines', departement: 'Nord', placement: 'osm-plant',
   placementRef: 'relation/20240158', anchorKm: 1.38, installedMw: 5460, mw: 4730,
-  load: 4730 / 5460, reporting: 6, latestAt: Date.parse('2026-08-28T12:00:00+02:00'),
+  load: 4730 / 5460, reporting: 6, latestAt: STEP_AT,
   units: [unit()], ...overrides,
 });
 
@@ -45,8 +54,7 @@ test('the card of a measured station reads in English', () => {
   const card = withLocale('en', () => buildRteSelectionLabel(station(), NOW));
   assertNoFrench(card, { allow: [...NAMES, 'En service'] });
   assert.match(card, /⚡ 4,730 MW of 5,460 MW installed · 87% of its maximum/);
-  // TZ=UTC in the suite: the step's 12:00+02:00 is 10:00 on the reader's clock.
-  assert.match(card, /🕐 reading for the hour of 10:00, published 60 min ago/);
+  assert.ok(card.includes(`🕐 reading for the hour of ${readerClock(STEP_AT)}, published 60 min ago`), card);
   assert.match(card, /◈ Nuclear/);
   assert.match(card, /📍 Gravelines · Nord/);
   assert.match(card, /◎ placed on the plant’s footprint as mapped in OpenStreetMap \(1\.4 km from the center of the municipality\)/);
@@ -56,7 +64,7 @@ test('the card of a measured station reads in English', () => {
 test('the same station, in French, prints exactly what it printed before', () => {
   const card = withLocale('fr', () => buildRteSelectionLabel(station(), NOW));
   assert.match(card, /⚡ 4 730 MW sur 5 460 MW installés · 87 % de son maximum/);
-  assert.match(card, /🕐 mesure de l’heure de 10:00, publiée il y a 60 min/);
+  assert.ok(card.includes(`🕐 mesure de l’heure de ${readerClock(STEP_AT)}, publiée il y a 60 min`), card);
   assert.match(card, /\(à 1,4 km du centre de la commune\)/);
 });
 

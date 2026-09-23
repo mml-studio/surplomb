@@ -155,8 +155,20 @@ async function main() {
       await sleep(800);
     }
 
+    // The desktop Layers panel shows ONE group at a time beside its rail
+    // (src/data/layerPanelRail.js), so one harvest would read one group's rows
+    // and miss the rest. Read each group in turn; the duplicates (the rail,
+    // the strip, everything outside the panel) are folded below.
     const harvest = await page.evaluate(harvestVisibleText);
-    console.log(`  · ${harvest.length} visible strings read`);
+    const railGroups = await page.evaluate(() => (window.__godsEyeView.layerPanelRail
+      ? [...document.querySelectorAll('.data-rail-item[data-rail-category]')].map((node) => node.dataset.railCategory)
+      : []));
+    for (const group of railGroups) {
+      await page.evaluate((id) => window.__godsEyeView.layerPanelRail.open(id), group);
+      await sleep(300);
+      harvest.push(...await page.evaluate(harvestVisibleText));
+    }
+    console.log(`  · ${harvest.length} visible strings read${railGroups.length ? ` across ${railGroups.length} rail groups` : ''}`);
     const counted = new Set();
     for (const item of harvest) {
       if (counted.has(`${item.where}\u0000${item.text}`)) continue;
