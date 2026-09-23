@@ -1534,16 +1534,16 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   // shaft is one a leaver of the same look put away.
   const box = { west: 2.325, south: 48.850, east: 2.340, north: 48.860 };
   const { viewer, points, masts, counts } = countingViewer(box);
-  let pack = PACK;
-  const http = async () => ({ ok: true, json: async () => pack });
+  let rows = CITY_SUPPORTS;
+  const http = async (url) => ({ ok: true, json: async () => supportsAnswer(url, rows) });
   _setAnfrStateForTest({ viewer, overlayHost: makeHost(), http, regime: 'maillage' });
   await _loadAnfrViewportForTest(viewer);
   assert.equal(_anfrMastTallyForTest().mastRegime, true, 'close enough for shafts');
   assert.equal(counts.billboards, SUPPORTS.length);
   assert.equal(counts.shafts, 14);
   const record = (row) => _anfrRecordForTest(anfrSupportId(row.id));
-  const first = new Map(SUPPORTS.map((row) => [row.id, record(row)]));
-  const billboards = new Map(SUPPORTS.map((row) => [row.id, record(row).point]));
+  const first = new Map(CITY_SUPPORTS.map((row) => [row.id, record(row)]));
+  const billboards = new Map(CITY_SUPPORTS.map((row) => [row.id, record(row).point]));
   const shafts = new Set(drawnShafts(masts));
 
   // The same masts again — a rest that did not move, or a refresh.
@@ -1551,22 +1551,24 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   assert.equal(counts.billboards, SUPPORTS.length, 'no billboard created');
   assert.equal(counts.removed, 0, 'none removed');
   assert.equal(counts.shafts, 14, 'no shaft created');
-  for (const row of SUPPORTS) {
+  for (const row of CITY_SUPPORTS) {
     assert.equal(record(row), first.get(row.id), 'the same record');
     assert.equal(record(row).point, billboards.get(row.id), 'on the same billboard');
   }
   assert.deepEqual(new Set(drawnShafts(masts)), shafts, 'the same shafts');
 
   // A pan: three masts leave, three arrive with the same looks.
-  const leaving = SUPPORTS.slice(0, 3);
+  const leaving = CITY_SUPPORTS.slice(0, 3);
   const arriving = leaving.map((row, i) => ({ ...row, id: 990_000 + i, lat: row.lat + 0.002 }));
-  pack = { ...PACK, supports: [...SUPPORTS.slice(3), ...arriving], inBox: SUPPORTS.length };
+  rows = [...CITY_SUPPORTS.slice(3), ...arriving];
+  // The register answers differently now: the cells are asked for again.
+  _expireAnfrSupportCellsForTest();
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(counts.billboards, SUPPORTS.length + 3, 'three billboards for three newcomers');
   assert.equal(counts.removed, 3, 'and three removed for three leavers');
   assert.equal(points.length, SUPPORTS.length);
   assert.equal(counts.shafts, 14, 'the newcomers stand on the leavers\' shafts');
-  for (const row of SUPPORTS.slice(3)) {
+  for (const row of CITY_SUPPORTS.slice(3)) {
     assert.equal(record(row), first.get(row.id));
     assert.equal(record(row).point, billboards.get(row.id));
   }
@@ -1581,13 +1583,11 @@ test('a rest on the same masts creates no primitive, and a pan creates only its 
   // A rest that only re-dresses masts it kept — here the register lit 5G on
   // one of them — writes that billboard and asks for one vertex rebuild,
   // through one hidden add and remove (see `rebuildMarksOnce`).
-  const upgraded = SUPPORTS.slice(3).find((row) => row.live && !(row.live & 8));
+  const upgraded = CITY_SUPPORTS.slice(3).find((row) => row.live && !(row.live & 8));
   assert.ok(upgraded, 'the fixture has a mast without 5G');
-  pack = {
-    ...pack,
-    supports: pack.supports.map((row) => (row === upgraded ? { ...row, live: row.live | 8 } : row)),
-  };
+  rows = rows.map((row) => (row === upgraded ? { ...row, live: row.live | 8 } : row));
   const before = { ...counts };
+  _expireAnfrSupportCellsForTest();
   await _loadAnfrViewportForTest(viewer, { force: true });
   assert.equal(record(upgraded).style.band, '5g');
   assert.equal(record(upgraded).point, billboards.get(upgraded.id), 'the same billboard, re-dressed');
