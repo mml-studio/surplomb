@@ -178,6 +178,25 @@ test('a null model empties and hides the card', () => {
   assert.equal(host.dataset.signature, '');
 });
 
+test('hiding a card that is already hidden writes nothing', () => {
+  // The manager hides the card on every panel refresh, which is every stats
+  // tick of every lit layer; each identical write was a mutation record.
+  const host = makeHost();
+  renderZoomPrompt(host, null);
+  const writes = [];
+  for (const [target, key] of [[host, 'hidden'], [host.dataset, 'signature'], [host.dataset, 'leaving']]) {
+    let value = target[key];
+    Object.defineProperty(target, key, {
+      configurable: true,
+      get: () => value,
+      set: (next) => { writes.push(key); value = next; },
+    });
+  }
+  for (let tick = 0; tick < 3; tick += 1) renderZoomPrompt(host, null);
+  assert.deepEqual(writes, []);
+  assert.equal(host.hidden, true);
+});
+
 test('an unchanged situation does not rebuild the card under the cursor', () => {
   const host = makeHost();
   const model = zoomPromptModel([waitingLayer('power-grid')], { canFly: () => true });
