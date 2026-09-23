@@ -96,7 +96,10 @@ const STYLE_TO_URL = {
   // The night atlas writes the word its button shows an English reader. Until
   // 2026-09-21 it wrote its id, `noir` — see LEGACY_URL_STYLES.
   noir: 'night',
-  snow: 'snow',
+  // Dusk took Snow's button on 2026-09-23 and Snow was retired: a link that
+  // still says `style=snow` names no preset and opens on Normal, like any
+  // unknown word.
+  dusk: 'dusk',
 };
 
 /**
@@ -171,9 +174,13 @@ const SHARE_STYLE_PARAM_REGISTRY = Object.freeze({
     { key: 'glowAmt', token: 'b', min: 0, max: 1 },
     { key: 'vignetteAmt', token: 'v', min: 0, max: 1 },
   ]),
-  snow: Object.freeze([
-    { key: 'density', token: 'd', min: 0, max: 1 },
-    { key: 'wind', token: 'w', min: 0, max: 1 },
+  // Night's four controls at lower defaults (`styles/dusk.js`), so Night's four
+  // tokens.
+  dusk: Object.freeze([
+    { key: 'dimAmt', token: 'd', min: 0, max: 1 },
+    { key: 'desatAmt', token: 's', min: 0, max: 1 },
+    { key: 'glowAmt', token: 'b', min: 0, max: 1 },
+    { key: 'vignetteAmt', token: 'v', min: 0, max: 1 },
   ]),
 });
 

@@ -2,11 +2,13 @@ import * as Cesium from 'cesium';
 import { retroShader } from './styles/retro.js';
 import { animeShader } from './styles/anime.js';
 import { noirShader } from './styles/noir.js';
+import { duskShader } from './styles/dusk.js';
 import { createNightBasemap } from './styles/nightBasemap.js';
-import { NIGHT_ATLAS_STYLE } from './styles/nightAtlas.js';
+import { BASEMAP_DARKENING_STYLES, darkensBasemapOnly } from './styles/nightAtlas.js';
 import { styleDisplayName, styleSpelledName } from './styles/styleNames.js';
 import { createNightAtlasRowFollower } from './styles/nightAtlasRow.js';
-import { snowShader } from './styles/snow.js';
+import { createRowBasemapLock } from './basemapLock.js';
+import taxonomyMessages from './data/layerTaxonomy.i18n.js';
 import { nightVisionShader } from './styles/surveillance.js';
 import { thermalShader } from './styles/thermal.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, PILL_CITY_IDS, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
@@ -36,7 +38,7 @@ import {
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
 } from './data/layerState.js';
-import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
+import { mapStackLockNote, renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
 import { rememberPhotorealAdoption } from './photorealAdoption.js';
 import {
   PANEL_POSITION_STORAGE_VERSION as PANEL_DRAG_STORAGE_VERSION,
@@ -290,7 +292,7 @@ const TRANSITION_DURATION_MS = 500;
 /** Past the LOCATION tray's 180 ms fade-in (`.dock-popover-content`, style.css). */
 const LOCATION_TRAY_FADE_MS = 200;
 /** Map of style name to its GLSL shader module for post-process stages. */
-const STYLES = { retro: retroShader, surveillance: nightVisionShader, thermal: thermalShader, anime: animeShader, noir: noirShader, snow: snowShader };
+const STYLES = { retro: retroShader, surveillance: nightVisionShader, thermal: thermalShader, anime: animeShader, noir: noirShader, dusk: duskShader };
 /** Versioned localStorage namespace prefix to invalidate stale panel layouts. */
 const PANEL_LAYOUT_STORAGE_VERSION = 'v6';
 const SHARE_PANEL_STATE_SPECS = Object.freeze([
@@ -653,7 +655,7 @@ const SHARPEN_SHADER = /* glsl */ `
  *
  * Responsibilities:
  * - CesiumJS PostProcessStage pipeline: registers per-style GLSL stages
- *   (NVG, FLIR, CRT, anime, noir, snow) and manages intensity crossfades.
+ *   (NVG, FLIR, CRT, anime, noir, dusk) and manages intensity crossfades.
  * - Sharpen post-processing toggle/intensity control.
  * - Draggable/collapsible panel system with localStorage persistence,
  *   z-order stacking, and viewport-clamped positioning.
@@ -2441,6 +2443,8 @@ export class StyleManager {
     this._dataManager = null;
     /** Night on, Normal off, with the grid-and-plants row; see `attachDataManager`. */
     this._nightAtlasRow = null;
+    /** Satellite while « Infrastructure numérique » is lit; see `attachDataManager`. */
+    this._basemapLock = null;
     // Territorial controls: where the camera is, and the card that explains a
     // layer before it starts. See `_installCoverageWatch`.
     this._coverageWatchRemover = null;
@@ -2553,6 +2557,7 @@ export class StyleManager {
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
     this._mapStackChips = document.getElementById('map-stack-chips');
+    this._mapStackLockNote = document.getElementById('map-stack-lock-note');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._mapStackStatus?.addEventListener('click', () => {
       const trouble = this._mapStackStatus?.dataset.trouble;
@@ -3273,7 +3278,7 @@ export class StyleManager {
     for (const [name, shader] of Object.entries(STYLES)) {
       const uniforms = { intensity: 0.0 };
 
-      // Auto-detect time uniform — animated shaders (CRT scanlines, snow, etc.)
+      // Auto-detect time uniform — animated shaders (CRT scanlines, etc.)
       // declare `uniform float time` and receive elapsed seconds each frame.
       if (shader.fragmentShader.includes('uniform float time')) {
         uniforms.time = 0.0;
@@ -3313,22 +3318,23 @@ export class StyleManager {
    * The night atlas's dark ground, which no post-process pass can paint
    * without also darkening the data — see `styles/nightBasemap.js`.
    *
-   * It follows the Noir stage's own intensity rather than `setStyle`, so the
-   * crossfade, a share-link restore and Cockpit's vision override all dim the
-   * ground on the same frames they fade the bloom in.
+   * It follows the Noir and Dusk stages' own intensities rather than
+   * `setStyle`, so the crossfade, a share-link restore and Cockpit's vision
+   * override all dim the ground on the same frames they fade the bloom in —
+   * and a crossfade from one to the other passes through both.
    * @returns {void}
    */
   _initNightBasemap() {
-    const stage = this.stages[NIGHT_ATLAS_STYLE];
+    const stages = BASEMAP_DARKENING_STYLES.map((name) => this.stages[name]).filter(Boolean);
     const stacks = this.mapStackController;
-    if (!stage || !this.viewer?.scene) return;
+    if (!stages.length || !this.viewer?.scene) return;
     this._nightBasemap = createNightBasemap({
       scene: this.viewer.scene,
-      readState: () => ({
+      readState: () => stages.map((stage) => ({
         intensity: stage.enabled ? stage.uniforms.intensity : 0,
         dim: stage.uniforms.dimAmt,
         desat: stage.uniforms.desatAmt,
-      }),
+      })),
       // The photoreal tileset outlives its stack (it is kept warm while a 2D
       // stack shows), so it is only dimmed while it is the ground.
       getTileset: () => (stacks?.getActiveId?.() === 'photoreal'
@@ -3615,7 +3621,7 @@ export class StyleManager {
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
         '4': 'thermal', '5': 'anime', '6': 'noir',
-        '7': 'snow',
+        '7': 'dusk',
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
@@ -3779,6 +3785,7 @@ export class StyleManager {
     renderMapStackChips(this._mapStackChips, this.mapStackController.getStacks(), {
       activeId: this.mapStackController.getActiveId(),
       onSelect: (stackId) => { this._setMapStack(stackId); },
+      lock: this.mapStackController.getLock?.() ?? null,
     });
 
     // THE TRAY FOLLOWS THE GLOBE, not the clicks on the tray.
@@ -3812,10 +3819,11 @@ export class StyleManager {
    * @param {string} stackId - Map stack id.
    * @param {object} [options]
    * @param {boolean} [options.syncShare=true] - Whether to update the share link.
-   * @returns {Promise<void>}
+   * @returns {Promise<?object>} Controller state after the switch; `refused`
+   *   is set when a data layer holds the globe on another stack.
    */
   async _setMapStack(stackId, { syncShare = true } = {}) {
-    if (!this.mapStackController) return;
+    if (!this.mapStackController) return null;
     if (syncShare) this.shareLinkManager?.claimRestoreLane?.('map');
     const before = this.mapStackController.getActiveId();
     this._renderMapStackState(this.mapStackController.getState('switching'));
@@ -3834,7 +3842,11 @@ export class StyleManager {
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
     }
-    // A deliberate pick of the 3D globe is the same verdict the adoption watch
+    // A data layer holds the globe (`basemapLock.js`). Said to a reader who
+    // asked — the tray's chips are greyed and never get here, the voice does —
+    // and never on a share restore, whose `map=` simply loses to the layer the
+    // same link lit.
+    if (syncShare && state?.refused) this._showToast(state.refused, { durationMs: 4000 });    // A deliberate pick of the 3D globe is the same verdict the adoption watch
     // records by itself — this reader wants the mesh — so the next visit opens
     // on it instead of building a basemap first and replacing it. Gated on
     // `syncShare`: a share link that carries `map=photoreal` is the sender's
@@ -3843,6 +3855,7 @@ export class StyleManager {
       rememberPhotorealAdoption();
     }
     if (syncShare) this._syncShareState();
+    return state ?? null;
   }
 
   /**
@@ -3854,7 +3867,12 @@ export class StyleManager {
    */
   _renderMapStackState(state) {
     if (!state) return;
-    syncMapStackChips(this._mapStackChips, state.activeId);
+    syncMapStackChips(this._mapStackChips, state.activeId, state.lock);
+    if (this._mapStackLockNote) {
+      const note = mapStackLockNote(state.lock, state.stacks);
+      this._mapStackLockNote.textContent = note;
+      this._mapStackLockNote.hidden = !note;
+    }
     if (this._mapStackStatus) {
       const stack = state.activeStack;
       const label = state.status === 'switching'
@@ -4787,6 +4805,30 @@ export class StyleManager {
         setStyle: (style) => this.setStyle(style, { applyPreset: false }),
       })
       : null;
+    // « Infrastructure numérique » holds the globe on Satellite while it is
+    // lit, whoever lit it, and gives the reader's basemap back when it goes
+    // dark (`basemapLock.js`). A lock the previous manager took is released
+    // first: its follower is gone, and nothing else would ever release it.
+    // The follower reads the rows as it is built, so a row a stored session
+    // lit before this point locks now rather than on its first change.
+    // Switches go to the controller DIRECTLY, not through `_setMapStack`: the
+    // `gev:map-stack-changed` listener then re-lights the tray and rewrites
+    // the share link, exactly as it does for the 3D adoption — a lock's
+    // switch is nobody's click, and must not toast or claim to be one.
+    const stacks = this.mapStackController;
+    stacks?.setLock?.(null);
+    this._basemapLock = this._dataManager && stacks?.setLock
+      ? createRowBasemapLock({
+        isEnabled: (layerId) => Boolean(this._dataManager?.isEnabled?.(layerId)),
+        getStack: () => stacks.getActiveId(),
+        setStack: (stackId) => { void stacks.setStack(stackId); },
+        setLock: (lock) => stacks.setLock(lock && {
+          ...lock,
+          rowLabel: taxonomyMessages().labels[lock.rowId] || lock.rowId,
+        }),
+        isAvailable: (stackId) => stacks.isStackAvailable(stackId),
+      })
+      : null;
     // Point the module-level layer bindings at the registry before anything
     // below reads one — the detection overlay's register is the same nine, in
     // the order it was originally constructed with.
@@ -4799,7 +4841,10 @@ export class StyleManager {
     }
     if (typeof this._dataManager?.subscribe === 'function') {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
-        if (change?.type === 'visibility') this._nightAtlasRow?.onVisibility(change);
+        if (change?.type === 'visibility') {
+          this._nightAtlasRow?.onVisibility(change);
+          this._basemapLock?.onVisibility(change);
+        }
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
           // A layer that wants the brackets claims detection the moment it
@@ -8884,13 +8929,15 @@ export class StyleManager {
         activeStack: this.mapStackController.getActiveId(),
       };
     }
-    await this._setMapStack(stackId);
+    const switched = await this._setMapStack(stackId);
     const state = this.mapStackController.getState();
     const landed = state.activeId === stackId;
     return {
       ok: landed,
       activeStack: state.activeId,
-      error: landed ? null : (state.lastError || 'Map stack did not switch'),
+      // A layer holding the globe answers in its own words, so the agent can
+      // tell the reader which switch to turn off rather than retry.
+      error: landed ? null : (switched?.refused || state.lastError || 'Map stack did not switch'),
     };
   }
 
@@ -9851,7 +9898,7 @@ export class StyleManager {
    * 2. Crossfades the new shader stage intensity to 1.
    * 3. Applies style preset defaults (sharpen/HUD) if applyPreset is true.
    * 4. Updates button highlights, style indicator, slider panel, HUD, and detection overlay.
-   * @param {string} styleName - Target style ('normal'|'retro'|'surveillance'|'thermal'|'anime'|'noir'|'snow').
+   * @param {string} styleName - Target style ('normal'|'retro'|'surveillance'|'thermal'|'anime'|'noir'|'dusk').
    * @param {object} [options]
    * @param {boolean} [options.applyPreset=true] - Whether to apply STYLE_PRESET_DEFAULTS for the new style.
    * @returns {void}
@@ -9942,10 +9989,11 @@ export class StyleManager {
     const block = document.getElementById('map-legend');
     const note = document.getElementById('map-legend-key-note');
     if (!block || !note) return;
-    // The night atlas darkens the BASEMAP inside the scene and leaves every
-    // layer its own colour (`styles/nightAtlas.js`), so its key still decodes.
+    // The night atlas and dusk darken the BASEMAP inside the scene and leave
+    // every layer its own colour (`styles/nightAtlas.js`), so the key still
+    // decodes under them.
     const invalid = styleName !== 'normal'
-      && styleName !== NIGHT_ATLAS_STYLE
+      && !darkensBasemapOnly(styleName)
       && Object.hasOwn(STYLES, styleName);
     block.classList.toggle('key-invalid', invalid);
     note.hidden = !invalid;
@@ -10074,7 +10122,7 @@ export class StyleManager {
           // Chain mode keeps zero-intensity stages ENABLED for pass parity —
           // only a stage that is actually VISIBLE keeps the loop (and the
           // continuous-render hold) alive, or a settled CRT session would
-          // hold the loop forever via an invisible snow stage.
+          // hold the loop forever via an invisible animated stage.
           if (stage.uniforms.intensity > 0.001) animatedStageVisible = true;
         }
       }

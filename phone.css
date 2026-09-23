@@ -1157,6 +1157,15 @@ html[data-shell="phone"] #phone-basemap-sheet .map-stack-chip-req {
   font-size: 9px;
 }
 
+/* Under the cards, at the sheet's reading size rather than the tray's 9 px. */
+html[data-shell="phone"] #phone-basemap-sheet .map-stack-lock-note {
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
 /* The three free sources carry a real picture of themselves: one tile over
    the Île de la Cité, from IGN's Géoplateforme (Licence Ouverte 2.0) and from
    OpenStreetMap (© OpenStreetMap contributors, ODbL). The five keyed sources

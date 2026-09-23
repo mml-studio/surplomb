@@ -71,7 +71,7 @@ function awarenessSnapshot(dataManager) {
   return layerModuleOf(dataManager, 'military-awareness')?.getContextSnapshot?.() || null;
 }
 
-const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
+const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'dusk']);
 const PANEL_ALIASES = new Map([
   ['data', 'data-panel'],
   ['data layers', 'data-panel'],

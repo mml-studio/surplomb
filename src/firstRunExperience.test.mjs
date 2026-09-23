@@ -752,10 +752,15 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // model asked for "le mode nuit" had only the id to go on — and NVG's
   // "night vision" beside it. `set_visual_style`'s `style` gained a
   // six-word description. No enum moved. +59 bytes, one cache bust.
-  assert.equal(block.length, 38257, 'tool schema byte length drifted from the frozen baseline');
+  //
+  // Re-frozen a TWELFTH time, for the presets themselves: Dusk
+  // (« Crépuscule », `styles/dusk.js`) took Snow's button on 2026-09-23 and
+  // Snow was retired, so `set_visual_style`'s enum swapped `snow` for `dusk`
+  // and its description names the new preset. +46 bytes, one cache bust.
+  assert.equal(block.length, 38303, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'ca4584e2c93a276eff7279e6177a6ea05836a2413dea5d4a4ddb9f8c8c96731d',
+    '3c484f24bdd7ed8e92405b45b3689a8accfc92abf56eefa2dbceb91d91d4d7dd',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 

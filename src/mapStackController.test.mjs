@@ -19,6 +19,7 @@ import {
   isRectangleCoveredByBoxes,
 } from './mapStackController.js';
 import { WORLD_IMAGERY_FAILURE_BUDGET } from './data/worldImagery.js';
+import { withLocale } from './i18n/testing.js';
 
 /** The constructor only stores the viewer, so a stub is enough for these. */
 const stubViewer = () => ({
@@ -900,4 +901,75 @@ test('a globe that has already been looked at comes back instantly', async () =>
   await controller.setStack('photoreal');
   assert.equal(viewer.scene.globe.show, false);
   assert.equal(tiles.preloadWhenHidden, false, 'never touched — the wait returned before the loan');
+});
+
+// ── The basemap a lit data layer imposes (`basemapLock.js`) ────────────────
+
+const DIGITAL_LOCK = Object.freeze({
+  stackId: 'ign-ortho',
+  rowId: 'local-datacenters',
+  rowLabel: 'Infrastructure numérique',
+});
+
+test('a lock refuses every other stack, and does not call that an error', async () => {
+  const viewer = countingViewer();
+  const changes = [];
+  const errors = [];
+  const controller = offlineController(viewer, {
+    onChange: (state) => changes.push(state),
+    onError: (message) => errors.push(message),
+  });
+  await controller.setStack('osm', { silent: true });
+
+  controller.setLock(DIGITAL_LOCK);
+  assert.deepEqual(controller.getLock(), DIGITAL_LOCK);
+  assert.deepEqual(changes.at(-1).lock, DIGITAL_LOCK, 'the tray hears the lock, to grey its chips');
+  controller.setLock({ ...DIGITAL_LOCK });
+  assert.equal(changes.length, 1, 'the same lock again is not news');
+
+  await controller.setStack('ign-ortho');
+  assert.equal(controller.getActiveId(), 'ign-ortho', 'the lock\'s own stack gets through');
+  const builds = viewer.builds.length;
+
+  const refused = await controller.setStack('osm');
+  assert.equal(refused.refused, 'OSM n’est pas disponible avec la couche Infrastructure numérique');
+  assert.equal(refused.activeId, 'ign-ortho');
+  assert.equal(controller.getActiveId(), 'ign-ortho');
+  assert.equal(viewer.builds.length, builds, 'a refusal builds nothing');
+  // Not a provider failure: the tray toasts `lastError`, and the 3D adoption
+  // has no business raising one.
+  assert.equal(refused.lastError, null);
+  assert.deepEqual(errors, []);
+
+  controller.setLock(null);
+  assert.equal(controller.getState().lock, null);
+  const released = await controller.setStack('osm');
+  assert.equal(released.refused, undefined);
+  assert.equal(controller.getActiveId(), 'osm');
+});
+
+test('a lock taken before the first activation lands the reader on its stack', async () => {
+  // Nothing is on the globe yet, so there is nothing to refuse — only a
+  // basemap that would be built and thrown away a moment later.
+  const viewer = countingViewer();
+  const controller = offlineController(viewer);
+  controller.setLock(DIGITAL_LOCK);
+  const state = await controller.setStack('osm', { silent: true });
+  assert.equal(state.refused, undefined);
+  assert.equal(controller.getActiveId(), 'ign-ortho');
+  assert.equal(viewer.builds.length, 2, 'the satellite pair, and never OSM');
+});
+
+test('the refusal is said in the page’s language', async () => {
+  const controller = offlineController(countingViewer());
+  await controller.setStack('ign-ortho', { silent: true });
+  controller.setLock({ ...DIGITAL_LOCK, rowLabel: 'Digital infrastructure' });
+  const state = await withLocale('en', () => controller.setStack('ign-plan'));
+  assert.equal(state.refused, 'IGN map is not available with the Digital infrastructure layer');
+});
+
+test('a lock on a stack that does not exist is no lock', () => {
+  const controller = offlineController(countingViewer());
+  controller.setLock({ stackId: 'hybrid', rowId: 'local-datacenters' });
+  assert.equal(controller.getLock(), null);
 });

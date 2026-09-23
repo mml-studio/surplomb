@@ -556,6 +556,9 @@ export class MapStackController {
     // A share link that opens on its own basemap must cost exactly what a plain
     // load of that basemap costs, and nothing but a counter proves it.
     this._imageryBuilds = 0;
+    // A basemap a lit data layer imposes (`basemapLock.js`), or null. While it
+    // holds, `setStack()` refuses every other stack, whoever asks.
+    this._lock = null;
 
     if (!this.getStack(this._activeId) || !this.isStackAvailable(this._activeId)) {
       // The startup ladder, mirroring the one main.js applies: the 3D globe,
@@ -630,6 +633,45 @@ export class MapStackController {
 
   getActiveId() {
     return this._activeId;
+  }
+
+  /**
+   * Hold the globe on one stack, or release it with `null`.
+   *
+   * A LOCK, NOT A SWITCH: this moves nothing. The caller switches to the
+   * lock's stack itself once the lock is taken, and back once it is released
+   * (`basemapLock.js`), so the order it does those in is what decides whether
+   * its own switch gets through. The lock lives here rather than in the tray
+   * because the tray is not the only door onto `setStack()`: the voice tool
+   * and the share restore come through `ui.js` too, and the 3D adoption
+   * (`photorealAdoption.js`) calls it directly. A lock the tray alone knew
+   * about would leave those open.
+   *
+   * Emits a change, so the tray greys its chips and says why.
+   * @param {?{stackId: string, rowId?: string, rowLabel?: string}} lock
+   *   `rowLabel` names the layer in the refusal; it falls back to `rowId`.
+   * @returns {void}
+   */
+  setLock(lock) {
+    const next = lock?.stackId && this.getStack(lock.stackId)
+      ? Object.freeze({
+        stackId: String(lock.stackId),
+        rowId: lock.rowId ?? null,
+        rowLabel: String(lock.rowLabel || lock.rowId || ''),
+      })
+      : null;
+    const prev = this._lock;
+    if (prev === next || (prev && next
+      && prev.stackId === next.stackId && prev.rowId === next.rowId && prev.rowLabel === next.rowLabel)) {
+      return;
+    }
+    this._lock = next;
+    this._emitChange();
+  }
+
+  /** @returns {?{stackId: string, rowId: ?string, rowLabel: string}} */
+  getLock() {
+    return this._lock;
   }
 
   /**
@@ -738,11 +780,26 @@ export class MapStackController {
    * @returns {Promise<object|null>} Controller state, or null for an empty registry.
    */
   async setStack(id, { silent = false } = {}) {
-    const stack = this.getStack(id) || this._fallbackStack();
+    let stack = this.getStack(id) || this._fallbackStack();
     if (!stack) return null;
 
     if (this._activated && stack.id === this._activeId && !this._isSwitching) {
       return this.getState();
+    }
+
+    const lock = this._lock;
+    if (lock && stack.id !== lock.stackId) {
+      // Nothing on the globe yet: the reader lands on the lock's stack
+      // directly rather than on one that would be thrown away a moment later.
+      if (!this._activated) {
+        stack = this.getStack(lock.stackId);
+      } else {
+        // A REFUSAL, NOT A FAILURE: nothing was tried, so `lastError` stays
+        // clean and `onError` is not called. The caller that asked decides
+        // whether to say so — the tray and the voice do, a share restore and
+        // the 3D adoption must not.
+        return { ...this.getState(), refused: messages().locked(stack.label, lock.rowLabel) };
+      }
     }
 
     if (!this.isStackAvailable(stack.id)) {
@@ -851,6 +908,7 @@ export class MapStackController {
       // toasting a boot fallback nobody requested.
       notice: this._bootNotice(),
       hasCesiumIonToken: !!this.cesiumToken,
+      lock: this._lock,
     };
   }
 

@@ -480,6 +480,11 @@ export default defineMessages({
       en: 'Night',
       note: 'Button of the night-atlas preset: dark basemap, data in full colour. Its neighbours are CRT, NVG, FLIR — keep it one short word.',
     },
+    dusk: {
+      fr: 'Crépuscule',
+      en: 'Dusk',
+      note: 'Button of the lighter night atlas: the basemap dimmed less than at night. Brought by the digital infrastructure row.',
+    },
   },
   mapSource: {
     title: { fr: 'FOND DE CARTE', en: 'MAP SOURCE' },

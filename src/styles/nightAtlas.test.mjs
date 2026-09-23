@@ -22,7 +22,7 @@ import { noirShader } from './noir.js';
 test('Noir is the night atlas, and no other preset is', () => {
   assert.equal(NIGHT_ATLAS_STYLE, 'noir');
   assert.equal(isNightAtlasStyle('noir'), true);
-  for (const style of ['normal', 'retro', 'surveillance', 'thermal', 'anime', 'snow', null, undefined]) {
+  for (const style of ['normal', 'retro', 'surveillance', 'thermal', 'anime', 'dusk', null, undefined]) {
     assert.equal(isNightAtlasStyle(style), false, String(style));
   }
 });

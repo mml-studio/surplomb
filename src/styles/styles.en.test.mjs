@@ -14,12 +14,12 @@ import assert from 'node:assert/strict';
 import { animeShader } from './anime.js';
 import { noirShader } from './noir.js';
 import { retroShader } from './retro.js';
-import { snowShader } from './snow.js';
+import { duskShader } from './dusk.js';
 import { nightVisionShader } from './surveillance.js';
 import { thermalShader } from './thermal.js';
 import { assertNoFrench, withLocale } from '../i18n/testing.js';
 
-const SHADERS = [animeShader, noirShader, retroShader, snowShader, nightVisionShader, thermalShader];
+const SHADERS = [animeShader, noirShader, retroShader, duskShader, nightVisionShader, thermalShader];
 
 /** Every slider of one style, the way `ui.js` reads them. */
 const labels = (shader) => Object.entries(shader.uniforms).map(([, meta]) => meta.label);
@@ -31,7 +31,8 @@ test('every slider keeps the English it shipped with', () => {
     // The night atlas's own controls (`nightAtlas.js`); `Vignette` is upstream's.
     noir: ['Darkness', 'Desaturation', 'Bloom', 'Vignette'],
     retro: ['Pixelation', 'Distortion', 'Instability'],
-    snow: ['Density', 'Wind'],
+    // Dusk is the night atlas set lower (`dusk.js`): the same four controls.
+    dusk: ['Darkness', 'Desaturation', 'Bloom', 'Vignette'],
     surveillance: ['Gain', 'Bloom', 'Scanlines', 'Pixelation'],
     thermal: ['Sensitivity', 'Bloom', 'WHOT/BHOT', 'Pixelation', 'Ironbow'],
   });
@@ -44,7 +45,7 @@ test('every slider now has a French one, and one control keeps one name', () => 
     anime: ['Saturation', 'Épaisseur du trait'],
     noir: ['Assombrissement', 'Désaturation', 'Halo', 'Vignettage'],
     retro: ['Pixellisation', 'Distorsion', 'Instabilité'],
-    snow: ['Densité', 'Vent'],
+    dusk: ['Assombrissement', 'Désaturation', 'Halo', 'Vignettage'],
     surveillance: ['Gain', 'Halo', 'Lignes de balayage', 'Pixellisation'],
     // The instrument's own switches stay as they are, the way a brand does.
     thermal: ['Sensibilité', 'Halo', 'WHOT/BHOT', 'Pixellisation', 'Ironbow'],

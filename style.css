@@ -1539,11 +1539,24 @@ html[lang="en"]:not([data-i18n-ready]) #loading-screen .loader-status {
 }
 
 .map-stack-chip.unavailable,
+.map-stack-chip.locked,
 .map-stack-chip[aria-disabled='true'] {
   color: rgba(247, 244, 234, 0.28);
   border-color: rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   cursor: not-allowed;
+}
+
+/* The line under the chips while a data layer holds the globe on one stack
+   (`basemapLock.js`). No `display` here: the note is shown and hidden by its
+   `hidden` attribute, which any `display` would override. */
+.map-stack-lock-note {
+  margin: 0;
+  color: rgba(247, 244, 234, 0.62);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
 }
 
 .map-stack-chip-req {

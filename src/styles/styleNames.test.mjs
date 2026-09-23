@@ -11,6 +11,13 @@ test('the night atlas is named in the reader’s language, never by its id', () 
   assert.equal(withLocale('en', () => styleSpelledName('noir')), 'Night');
 });
 
+test('dusk, the lighter night, is named in the reader’s language too', () => {
+  assert.equal(withLocale('fr', () => styleDisplayName('dusk')), 'CRÉPUSCULE');
+  assert.equal(withLocale('en', () => styleDisplayName('dusk')), 'DUSK');
+  assert.equal(withLocale('fr', () => styleSpelledName('dusk')), 'Crépuscule');
+  assert.equal(withLocale('en', () => styleSpelledName('dusk')), 'Dusk');
+});
+
 test('the other presets keep the word both languages share', () => {
   for (const locale of ['fr', 'en']) {
     withLocale(locale, () => {
@@ -19,7 +26,6 @@ test('the other presets keep the word both languages share', () => {
       assert.equal(styleDisplayName('surveillance'), 'NVG');
       assert.equal(styleDisplayName('thermal'), 'FLIR');
       assert.equal(styleDisplayName('anime'), 'ANIME');
-      assert.equal(styleDisplayName('snow'), 'SNOW');
       assert.equal(styleSpelledName('thermal'), 'FLIR');
     });
   }
