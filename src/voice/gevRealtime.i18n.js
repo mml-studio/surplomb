@@ -68,6 +68,16 @@ export default defineMessages({
       en: 'Voice session could not be started.',
       note: 'The error tray when the failure carried no message of its own.',
     },
+    requestingMic: {
+      fr: 'Demande d’accès au micro',
+      en: 'Requesting microphone',
+      note: 'The caption while the browser asks for the microphone, before the session opens.',
+    },
+    runningCommand: {
+      fr: 'Commande en cours',
+      en: 'Running command',
+      note: 'The caption while a tool the voice called is running on the map.',
+    },
   },
 
   /** The synthesis-voice picker: the first option is the app's own choice. */

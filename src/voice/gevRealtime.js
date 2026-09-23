@@ -17,6 +17,7 @@ import {
   resolveVoiceControlHint,
   resolveVoiceReadyPrompt,
   voiceControlAriaLabel,
+  voicePhaseLabel,
 } from './voiceControlDom.js';
 import { getLocale, localeTag } from '../i18n/locale.js';
 import { serverMessage } from '../i18n/serverMessages.js';
@@ -409,6 +410,10 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
     controller.tierHandler = () => controller.toggleVoiceTier();
     ui.tierButton.addEventListener('click', controller.tierHandler);
   }
+  if (ui.stopButton) {
+    controller.stopHandler = () => controller.stopFromCard();
+    ui.stopButton.addEventListener('click', controller.stopHandler);
+  }
   controller.syncCostUi();
   controller.bindPushToTalkShortcut();
   window.__gevVoiceCommands = controller;
@@ -584,6 +589,32 @@ export class GevRealtimeController {
   }
 
   /**
+   * What « Arrêter » on the desktop card does: end the conversation.
+   *
+   * A click on the mic only shuts the microphone and keeps the session for the
+   * next request; this ends it, the ordinary idle close (two minutes) brought
+   * forward by hand — the mic is released and nothing more is billed.
+   *
+   * NOT ON A HOSTED TRIAL. The server spent every request of the trial when it
+   * minted the session, so closing it would lose the ones left and open the
+   * waitlist card. The card does not draw the button then (`data-trial`), and
+   * should it be reached anyway it only shuts the mic.
+   *
+   * The button leaves with the card, so focus goes back to the mic rather
+   * than falling to the page.
+   * @returns {void}
+   */
+  stopFromCard() {
+    if (this.trialAnswersLeft !== null) {
+      this.setMicrophoneEnabled(false);
+      return;
+    }
+    const hadFocus = Boolean(this.ui?.root?.contains?.(globalThis.document?.activeElement));
+    this.stop();
+    if (hadFocus) this.ui?.button?.focus?.();
+  }
+
+  /**
    * Read which brain this server can drive, caching only a real answer.
    *
    * Caching the failure too was a bug with a nasty shape: one transient 429 in
@@ -722,7 +753,7 @@ export class GevRealtimeController {
       limits: this.voiceLimits,
     });
     this.syncCostUi();
-    this.setStatus('connecting', 'Requesting microphone');
+    this.setStatus('connecting', messages().session.requestingMic);
     this.debugLog('session.starting', {
       epoch,
       tier: this.voiceTier,
@@ -1323,6 +1354,10 @@ export class GevRealtimeController {
       this.ui.tierButton.removeEventListener('click', this.tierHandler);
       this.tierHandler = null;
     }
+    if (removeUi && this.ui?.stopButton && this.stopHandler) {
+      this.ui.stopButton.removeEventListener('click', this.stopHandler);
+      this.stopHandler = null;
+    }
     if (removeUi) {
       if (this.shortcutKeyDownHandler) document.removeEventListener('keydown', this.shortcutKeyDownHandler);
       if (this.shortcutKeyUpHandler) document.removeEventListener('keyup', this.shortcutKeyUpHandler);
@@ -1377,6 +1412,8 @@ export class GevRealtimeController {
     if (!Number.isFinite(turns) || turns <= 0) return;
     this.trialAnswersLeft = turns;
     this.trialAnswersTotal = turns;
+    // The desktop card leaves « Arrêter » out of a trial (see stopFromCard).
+    if (this.ui?.root) this.ui.root.dataset.trial = 'true';
   }
 
   clearTrialSession() {
@@ -1386,6 +1423,7 @@ export class GevRealtimeController {
     this.trialAnswersTotal = 0;
     this.trialClosing = false;
     this.assistantAudioPlaying = false;
+    if (this.ui?.root) delete this.ui.root.dataset.trial;
   }
 
   /** The dock line for a trial session, or null for an ordinary one. */
@@ -1733,7 +1771,7 @@ export class GevRealtimeController {
       return;
     }
 
-    this.setStatus('executing', 'Running command');
+    this.setStatus('executing', messages().session.runningCommand);
     this.pruneProcessedCalls();
     let sentOutput = false;
     let lastResult = null;
@@ -2083,6 +2121,8 @@ export class GevRealtimeController {
     this.ui.root.dataset.status = shown;
     this.updateVoiceButtonLabel();
     this.ui.status.textContent = STATUS[shown] || STATUS.idle;
+    // The desktop card says the same thing in a sentence (voiceControlDom.js).
+    if (this.ui.phase) this.ui.phase.textContent = voicePhaseLabel(shown);
     let resolvedDetail = this.statusDetail;
     if (shown === 'listening') {
       resolvedDetail = this.pushToTalkKeyHeld
@@ -3411,7 +3451,10 @@ export function shouldHandlePushToTalkKeyDown(event) {
   const target = event.target;
   if (target?.isContentEditable) return false;
   const editingControl = target?.closest?.('input, textarea, select, [contenteditable], [role="textbox"]');
-  return !editingControl;
+  if (editingControl) return false;
+  // Space on a focused « Arrêter » presses it: taken as push-to-talk, it
+  // would open the mic the reader had just asked to stop.
+  return !target?.closest?.('.gev-voice-stop');
 }
 
 /**

@@ -2,6 +2,59 @@
 
 Updated: September 23, 2026
 
+> **2026-09-23 — on a desktop the mic rests in the bottom-right corner as
+> « Parler à Surplomb », and opens into a card only while it is used.**
+>
+> - **Where.** `src/globeShell.js` moves `#gev-voice-control` out of
+>   `#command-dock` into `<div id="voice-corner">` (index.html, ships
+>   `hidden`; fixed, `right: 24px`, `bottom: 2vh`, z 150) and shows it. The
+>   phone never runs the module: its mic stays in the dock, unchanged.
+>   `createVoiceControl({ reset: true })` now rebuilds the panel IN PLACE
+>   (`replaceWith`), so the controller's rebuild when the voice loads stays in
+>   the corner; a panel built from nothing goes to a shown `#voice-corner`,
+>   else the dock. `#voice-corner` is a right-rail obstacle (a node the rebuild
+>   does not replace, so the rail's ResizeObserver keeps watching it).
+> - **At rest.** One 48 px button, the mic glyph in ivory and the caption
+>   `.gev-mic-caption` (« Parler à Surplomb » / « Talk to Surplomb »), « IA »
+>   and the premium crown still on the ring. Kicker, OFF, STD, ~$0.00, the
+>   meter and VOICE STANDBY are not drawn. Hover or keyboard focus raises the
+>   help tray (the gesture and three examples) above it, right-aligned.
+> - **In use** (`data-status` ≠ `idle`). A 256 px card: the mic (apricot ring
+>   while `listening`), `.gev-voice-phase` — a sentence per `data-status`
+>   written by `paintStatus()` through `voicePhaseLabel()` (Connexion…, Je vous
+>   écoute, Surplomb répond, À vous, J’agis sur la carte…, Voix indisponible) —
+>   then the level meter while sound flows (`listening`, or `answering` with
+>   `data-speaker="ai"`) or `#gev-voice-detail` otherwise (trial count, waits),
+>   and a last row with the tier chip and estimate on the left and
+>   `.gev-voice-stop` « Arrêter » on the right, which calls
+>   `controller.stopFromCard()`: `stop()`, then focus back on the mic (the mic
+>   button still only opens or shuts the mic). Not on a hosted trial:
+>   `beginTrialSession` marks the panel `data-trial`, the button is not drawn,
+>   and `stopFromCard()` only shuts the mic there, because closing a trial
+>   session loses the requests left and opens the waitlist card. Space on a
+>   focused « Arrêter » presses it (`shouldHandlePushToTalkKeyDown` skips
+>   `.gev-voice-stop`). The transcript stands above the card, labelled « Vous »
+>   and « Surplomb » (`.gev-voice-transcript-who`; HEARD/SAID stay for the
+>   phone); while you talk it may cover the foot of the right column or of an
+>   address sheet. An error drops the stop row and shows the error tray above
+>   with a ×. Only a hover on the mic raises the help tray while the card is
+>   open. A touchscreen that is not a phone (`html[data-input="coarse"]`, a
+>   tablet) keeps its « ? » beside the button at rest.
+> - **Accessible name.** The mic button's `aria-label` opens with its visible
+>   words, « Parler à Surplomb — <gesture> » (was « Contrôle vocal — … »), on
+>   both shells (WCAG 2.5.3). « Arrêter » is named « Arrêter la conversation
+>   avec Surplomb ». In the page, `#voice-corner` follows `#command-dock`, so
+>   Tab reaches the bottom bar, then the mic.
+> - **Rebuild.** In place, the rebuild no longer re-inserts `#location-bar`
+>   into the dock either: on the phone it stays in the sheet's search tab once
+>   the voice loads (the old reset path moved it back on every rebuild).
+> - **Hidden** by the clean view and a recording (opacity/visibility, as the
+>   dock) and in the cockpit (`display: none`, as the dock). The dev server's
+>   `#key-setup-chip` moves to `bottom: 80px` and hides while the card or a
+>   tray is up. `npm run qa:voice-corner` paints each state through the
+>   controller (no microphone in headless Chrome) and measures it; `--coarse`
+>   boots the tablet case (`?input=coarse`), `--phone` the phone.
+
 > **2026-09-23 — the desktop globe has a navigation bar at the bottom
 > centre: previous view, top view, 2D / 3D, north, zoom, reset, and a chip
 > naming the place at the centre of the view.**

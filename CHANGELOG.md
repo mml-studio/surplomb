@@ -390,6 +390,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The mic rests in a corner and opens only while you speak.** On a computer
+  the mic is a single « Parler à Surplomb » button in the bottom-right corner,
+  instead of an instrument panel in the middle of the bottom bar. Pressed, it
+  opens into a small card that says what it is doing (« Je vous écoute »,
+  « Surplomb répond », « À vous »), shows the level while sound flows, puts
+  what you said and what Surplomb answered above it, and has an « Arrêter »
+  button that ends the conversation. It goes back to the button when the
+  conversation ends. On the hosted trial there is no « Arrêter », since
+  ending the session would lose the questions left. On a tablet a « ? » next
+  to the button shows how to use it. The phone keeps its mic as it was.
 - **The globe fills the screen, and the place search sits at the top.** The
   black circle that framed the view — and blacked out both sides of a wide
   screen — is off by default; a light shade toward the corners replaces it,

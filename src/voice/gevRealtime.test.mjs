@@ -43,6 +43,9 @@ test('push-to-talk ignores typing targets and modified shortcuts', () => {
   const plainTarget = { isContentEditable: false, closest: () => null };
   assert.equal(shouldHandlePushToTalkKeyDown({ code: 'Space', target: plainTarget }), true);
   assert.equal(shouldHandlePushToTalkKeyDown({ code: 'Space', target: plainTarget, metaKey: true }), false);
+  // Space on a focused « Arrêter » presses it instead of opening the mic.
+  const stopTarget = { closest: (selector) => (selector === '.gev-voice-stop' ? {} : null) };
+  assert.equal(shouldHandlePushToTalkKeyDown({ code: 'Space', target: stopTarget }), false);
   assert.equal(shouldHandlePushToTalkKeyDown({
     code: 'Space',
     target: { isContentEditable: false, closest: () => ({ tagName: 'INPUT' }) },

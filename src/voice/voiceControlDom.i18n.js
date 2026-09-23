@@ -54,11 +54,17 @@ export default defineMessages({
     },
   },
 
-  /** The mic button's screen-reader name: the control, then how to use it. */
+  /**
+   * The mic button's screen-reader name: the control, then how to use it.
+   * It opens with the words the desktop button SHOWS (`caption`), so someone
+   * who drives the page by voice can say « cliquer Parler à Surplomb » and be
+   * understood (WCAG 2.5.3, label in name).
+   */
   buttonAria: {
-    fr: (hint) => `Contrôle vocal — ${hint}`,
-    en: (hint) => `Voice control — ${hint}`,
+    fr: (hint) => `Parler à Surplomb — ${hint}`,
+    en: (hint) => `Talk to Surplomb — ${hint}`,
     sample: ['Click the mic or hold Space to speak'],
+    keep: ['Surplomb'],
   },
 
   /** The `?` button, which is how a touchscreen reaches the help tray at all. */
@@ -89,5 +95,67 @@ export default defineMessages({
     fr: 'Vérifiez l’autorisation du micro et l’accès réseau, puis réessayez.',
     en: 'Check microphone permission and network access, then try again.',
     note: 'The last line of the error tray when nothing more specific is known.',
+  },
+
+  // ── The compact mic of the desktop globe (src/globeShell.js) ──────────────
+  // Sentences, not lettering: on a desktop the mic rests as one labelled
+  // button in the bottom-right corner and opens into a small card while it is
+  // used. The instrument face above stays for the phone and the old dock.
+
+  caption: {
+    fr: 'Parler à Surplomb',
+    en: 'Talk to Surplomb',
+    keep: ['Surplomb'],
+    note: 'The desktop mic button at rest. Surplomb is the product name.',
+  },
+
+  /** What the mic is doing, as the card's first line. Keyed like `data-status`. */
+  phase: {
+    connecting: { fr: 'Connexion…', en: 'Connecting…' },
+    listening: { fr: 'Je vous écoute', en: 'Listening' },
+    answering: {
+      fr: 'Surplomb répond',
+      en: 'Surplomb is answering',
+      keep: ['Surplomb'],
+      note: 'The request was taken and the answer is being prepared or spoken.',
+    },
+    ready: {
+      fr: 'À vous',
+      en: 'Your turn',
+      note: 'A session is open and the mic is shut: the next click or Space opens it.',
+    },
+    executing: { fr: 'J’agis sur la carte…', en: 'Working on the map…' },
+    error: { fr: 'Voix indisponible', en: 'Voice unavailable' },
+  },
+
+  stop: {
+    fr: 'Arrêter',
+    en: 'Stop',
+    note: 'The button that ends the voice session, in the desktop card.',
+  },
+  stopAria: {
+    fr: 'Arrêter la conversation avec Surplomb',
+    en: 'Stop the conversation with Surplomb',
+    keep: ['Surplomb'],
+    note: 'Starts with the visible word of the button (`stop`), for voice control users (WCAG 2.5.3).',
+  },
+
+  /** Who said each line of the transcript. */
+  heard: {
+    fr: 'Vous',
+    en: 'You',
+    note: 'Label of what the recogniser heard, in the desktop transcript.',
+  },
+  said: {
+    fr: 'Surplomb',
+    en: 'Surplomb',
+    keep: ['Surplomb'],
+    note: 'Label of what the assistant answered, in the desktop transcript.',
+  },
+
+  dismiss: {
+    fr: 'Fermer le message d’erreur',
+    en: 'Close the error message',
+    note: 'Tooltip of the error tray’s DISMISS button, drawn as × on the desktop card. A tooltip, not its accessible name: the phone shows the word DISMISS, and the name must contain what is shown.',
   },
 });

@@ -80,6 +80,22 @@ export function resolveVoiceReadyPrompt(coarse = isCoarseInput()) {
   return coarse ? m.coarse : m.fine;
 }
 
+/**
+ * The desktop card's first line: what the mic is doing, in a sentence.
+ *
+ * Keyed by the word `paintStatus()` writes into `data-status`, which already
+ * tells a muted session from a live mic ('ready', 'answering'). At rest the
+ * card is not drawn — the button says « Parler à Surplomb » instead — so
+ * 'idle' has no line.
+ *
+ * @param {string} shown - The panel's `data-status`.
+ * @returns {string}
+ */
+export function voicePhaseLabel(shown) {
+  const phases = messages().phase;
+  return Object.hasOwn(phases, shown) ? phases[shown] : '';
+}
+
 /** The mic's « IA » mark, named by the button's `aria-describedby`. */
 export const VOICE_AI_BADGE_ID = 'gev-voice-ai-badge';
 
@@ -103,8 +119,14 @@ function escapeAttribute(text) {
  */
 export function createVoiceControl({ reset = false } = {}) {
   let root = document.getElementById('gev-voice-control');
+  // A rebuild takes the old panel's PLACE rather than the dock's: on a
+  // desktop the panel lives in the bottom-right corner (src/globeShell.js
+  // moves it into `#voice-corner`), and a rebuild that went back to the dock
+  // would put the mic under the navigation bar the moment the voice finished
+  // loading. A panel built from nothing goes to that corner too once it shows.
+  let replaced = null;
   if (root && reset) {
-    root.remove();
+    replaced = root;
     root = null;
   }
   if (!root) {
@@ -145,7 +167,10 @@ export function createVoiceControl({ reset = false } = {}) {
              (src/voicePremium.js). -->
         <span class="gev-mic-orbit"><img src="/mic.svg" alt="" />${aiBadgeHtml('voice', { id: VOICE_AI_BADGE_ID })}<span class="gev-premium-badge">${PREMIUM_CROWN_SVG}</span></span>
         <span class="gev-mic-label">ON/OFF</span>
+        <span class="gev-mic-caption">${escapeAttribute(m.caption)}</span>
       </button>
+      <span class="gev-voice-phase"></span>
+      <button class="gev-voice-stop" type="button" aria-label="${escapeAttribute(m.stopAria)}" title="${escapeAttribute(m.stopAria)}">${escapeAttribute(m.stop)}</button>
       <div class="gev-voice-visualizer" aria-hidden="true">
         ${Array.from({ length: 15 }, (_, index) => `<span style="--bar:${index}"></span>`).join('')}
       </div>
@@ -161,12 +186,14 @@ export function createVoiceControl({ reset = false } = {}) {
       <div class="gev-voice-transcript" hidden>
         <div class="gev-voice-transcript-row" data-role="heard">
           <span class="gev-voice-transcript-kicker">HEARD</span>
+          <span class="gev-voice-transcript-who">${escapeAttribute(m.heard)}</span>
           <span class="gev-voice-transcript-text"></span>
         </div>
         <!-- Whatever lands here is the model's own words: marked as such for
              machines (src/aiDisclosure.js). HEARD is the visitor's. -->
         <div class="gev-voice-transcript-row" data-role="said">
           <span class="gev-voice-transcript-kicker">SAID</span>
+          <span class="gev-voice-transcript-who">${escapeAttribute(m.said)}</span>
           <span class="gev-voice-transcript-text" data-ai-generated="true"></span>
         </div>
         <div class="gev-voice-transcript-hint" hidden></div>
@@ -179,7 +206,7 @@ export function createVoiceControl({ reset = false } = {}) {
       <div class="gev-voice-error-tray" role="alert" aria-live="assertive">
         <div class="gev-voice-error-header">
           <span>VOICE SYSTEM ERROR</span>
-          <button class="gev-voice-error-dismiss" type="button">DISMISS</button>
+          <button class="gev-voice-error-dismiss" type="button" title="${escapeAttribute(m.dismiss)}">DISMISS</button>
         </div>
         <div id="gev-voice-error-detail"></div>
         <div class="gev-voice-error-hint">${escapeAttribute(m.errorHint)}</div>
@@ -187,7 +214,12 @@ export function createVoiceControl({ reset = false } = {}) {
     `;
     // i18n-ignore-end
     const commandDock = document.getElementById('command-dock');
-    if (commandDock) {
+    const corner = document.getElementById('voice-corner');
+    if (replaced?.parentNode) {
+      replaced.replaceWith(root);
+    } else if (corner && !corner.hidden) {
+      corner.appendChild(root);
+    } else if (commandDock) {
       const locationBar = document.getElementById('location-bar');
       const controlPanel = document.getElementById('control-panel');
       commandDock.appendChild(root);
@@ -220,5 +252,7 @@ export function createVoiceControl({ reset = false } = {}) {
     helpButton: root.querySelector('#gev-voice-help-btn'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
+    phase: root.querySelector('.gev-voice-phase'),
+    stopButton: root.querySelector('.gev-voice-stop'),
   };
 }
