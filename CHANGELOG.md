@@ -341,10 +341,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   badge counting the layers switched on in it — and the layers of ONE group in
   a list beside it, under the group's name, a search field, a pin and a close
   button. The search looks through every group at once, accents or not.
-  A plain click on the globe closes the list and leaves the column; dragging
-  the globe does not, and the pin keeps the list open. From 1920 px wide it
-  starts pinned. On a short window the column keeps its icons and drops its
-  words. Open, the panel is 380 px wide instead of 320. The phone keeps its
+  Touching the globe — a click, a drag, the wheel — folds the list back into
+  the column, and resting the mouse on the column brings it back on the same
+  group; moving the mouse away folds nothing. The pin keeps the list open. On
+  a short window the column keeps its icons and drops its words. Open, the panel is 380 px wide instead of 320. The phone keeps its
   list of groups.
 - **The digital-infrastructure row is controlled from the map key.** Its
   block in the key now opens with one tile per member — Câbles (where the

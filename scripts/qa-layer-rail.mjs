@@ -10,20 +10,27 @@
  *   2. The list shows ONE group, and the rail says which, with the lit rows
  *      counted on its badges exactly as the strip counts them.
  *   3. Pressing the open group again closes the list; another group swaps it.
- *   4. A click on the globe closes it; a DRAG on the globe does not; a pinned
- *      list survives both.
+ *   4. Touching the globe folds it — a click, a drag, a wheel alike; a pinned
+ *      list survives all three.
+ *   4b. A real mouse resting on the rail unfolds it on its last group, and
+ *      leaving the panel folds nothing; a pointer crossing the rail, or
+ *      crossing it with a button down, unfolds nothing; a click that lands
+ *      just after the list unfolded does not fold it; a list folded under
+ *      the pointer waits for the pointer to leave and come back.
  *   5. The search keeps matching rows across every group, folds accents, says
  *      so when nothing matches, and Escape empties it, then closes.
  *   6. A fused layer revealed by the voice surface opens its primary's group.
  *   7. Collapsing the panel hides the rail; expanding it again opens the list.
  *   8. On a 1280 × 620 window every rail button is on screen (no hidden
- *      scroll); from 1920 px wide the list starts pinned.
+ *      scroll); at 1920 px the list starts unpinned too.
  *
  * The globe presses are dispatched on a canvas this harness adds inside
  * `#cesiumContainer`, never on Cesium's own: a synthetic pointer event on the
  * live canvas runs a pick under software GL, which has taken whole sessions
  * down on this Mac. The rail's rule is "a canvas inside the globe's
- * container", and that is exactly what it is given.
+ * container", and that is exactly what it is given. For the same reason the
+ * real mouse of 4b only ever moves between the rail and a spot this harness
+ * lays over the right edge, never over the globe.
  *
  * Usage: node scripts/qa-layer-rail.mjs [--url http://localhost:4174] [--headful]
  */
@@ -159,8 +166,11 @@ const pressEscape = (page) => page.evaluate(() => {
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
 });
 
-/** A press on the globe: `travel` 0 is a click, anything past 6 px a pan. */
-const pressGlobe = (page, travel) => page.evaluate((dx) => {
+/**
+ * The globe, touched: `'wheel'`, or a press whose `travel` 0 is a click and
+ * anything more a pan.
+ */
+const touchGlobe = (page, gesture) => page.evaluate((how) => {
   let probe = document.getElementById('qa-layer-rail-globe');
   if (!probe) {
     probe = document.createElement('canvas');
@@ -169,13 +179,34 @@ const pressGlobe = (page, travel) => page.evaluate((dx) => {
     probe.height = 10;
     document.getElementById('cesiumContainer').appendChild(probe);
   }
+  if (how === 'wheel') {
+    probe.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120, clientX: 900, clientY: 400 }));
+    return;
+  }
   const at = (type, x) => probe.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', isPrimary: true,
     button: 0, buttons: type === 'pointerdown' ? 1 : 0, clientX: x, clientY: 400,
   }));
   at('pointerdown', 900);
-  at('pointerup', 900 + dx);
-}, travel);
+  at('pointerup', 900 + how);
+}, gesture);
+
+/** Where the real mouse goes to be off the panel without being on the globe. */
+const elsewhere = (page) => page.evaluate(() => {
+  let spot = document.getElementById('qa-layer-rail-elsewhere');
+  if (!spot) {
+    spot = document.createElement('div');
+    spot.id = 'qa-layer-rail-elsewhere';
+    spot.style.cssText = 'position:fixed;right:0;top:40%;width:80px;height:80px;z-index:2147483647;';
+    document.body.appendChild(spot);
+  }
+  const box = spot.getBoundingClientRect();
+  return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
+});
+const railButtonAt = (page, id) => page.evaluate((groupId) => {
+  const box = document.querySelector(`.data-rail-item[data-rail-category="${groupId}"]`).getBoundingClientRect();
+  return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
+}, id);
 
 async function main() {
   const executablePath = CHROME_CANDIDATES.find((candidate) => {
@@ -214,7 +245,7 @@ async function main() {
       seen.classes);
     record('open, the panel is the rail plus the list: 380 px', Math.abs(seen.width - 380) <= 2,
       `panel ${seen.width} px, rail ${seen.railWidth} px`);
-    record('below 1920 px the list starts unpinned', seen.state?.pinned === false && seen.pinPressed === 'false',
+    record('the list starts unpinned', seen.state?.pinned === false && seen.pinPressed === 'false',
       `pinned=${seen.state?.pinned}`);
 
     // 2. One group, named by the rail.
@@ -242,33 +273,91 @@ async function main() {
     record('closed, the panel is the rail alone: 88 px', Math.abs(seen.width - 88) <= 2 && seen.railShown,
       `panel ${seen.width} px`);
 
-    // 4. The globe: a pan keeps it, a click closes it, a pin keeps it.
-    await pressGroup(page, 'built-environment');
-    await sleep(500);
-    seen = await page.evaluate(readPanel);
-    record('« Bâti » opens with its ten rows', seen.visibleRows.length >= 10,
-      `${seen.visibleRows.length} rows`);
-    await pressGlobe(page, 40);
-    await sleep(300);
-    seen = await page.evaluate(readPanel);
-    record('a drag on the globe leaves the list open', seen.state?.open === true);
-    await pressGlobe(page, 0);
-    await sleep(400);
-    seen = await page.evaluate(readPanel);
-    record('a click on the globe closes the list', seen.state?.open === false && !seen.listShown);
+    // 4. The globe folds it — a click, a drag, a wheel; a pin keeps it.
+    for (const [gesture, how] of [['a click', 0], ['a drag', 40], ['a wheel', 'wheel']]) {
+      await pressGroup(page, 'built-environment');
+      await sleep(400);
+      if (how === 0) {
+        seen = await page.evaluate(readPanel);
+        record('« Bâti » opens with its ten rows', seen.visibleRows.length >= 10,
+          `${seen.visibleRows.length} rows`);
+      }
+      await touchGlobe(page, how);
+      await sleep(400);
+      seen = await page.evaluate(readPanel);
+      record(`${gesture} on the globe folds the list into the rail`,
+        seen.state?.open === false && !seen.listShown && Math.abs(seen.width - 88) <= 2, `panel ${seen.width} px`);
+    }
 
     await pressGroup(page, 'built-environment');
     await page.evaluate(() => document.querySelector('.data-drawer-pin').click());
     await sleep(300);
-    await pressGlobe(page, 0);
+    await touchGlobe(page, 40);
+    await touchGlobe(page, 'wheel');
     await sleep(400);
     seen = await page.evaluate(readPanel);
-    const storedPin = await page.evaluate(() => localStorage.getItem('godsEyeView.v1.dataLayerDrawerPinned'));
-    record('pinned, a click on the globe leaves the list open', seen.state?.open === true && seen.pinPressed === 'true',
+    const storedPin = await page.evaluate(() => localStorage.getItem('godsEyeView.v1.dataLayerDrawerPin'));
+    record('pinned, the list survives a drag and a wheel on the globe', seen.state?.open === true && seen.pinPressed === 'true',
       `stored=${storedPin}`);
     record('the pin is remembered', storedPin === 'true');
     await page.evaluate(() => document.querySelector('.data-drawer-pin').click());
     await sleep(200);
+    await touchGlobe(page, 0);
+    await sleep(300);
+
+    // 4b. The real mouse brings it back.
+    const away = await elsewhere(page);
+    const onBati = await railButtonAt(page, 'built-environment');
+    const onEnergy = await railButtonAt(page, 'energy');
+    await page.mouse.move(away.x, away.y);
+    await page.mouse.move(onEnergy.x, onEnergy.y);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('a mouse resting on the rail unfolds the list on its last group',
+      seen.state?.open === true && seen.listShown && seen.visibleSections.join() === 'built-environment',
+      `shown: ${seen.visibleSections.join(',')}`);
+    await page.mouse.move(away.x, away.y);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('the mouse leaving the panel folds nothing', seen.state?.open === true);
+
+    await touchGlobe(page, 0);
+    await sleep(200);
+    await page.mouse.move(onEnergy.x, onEnergy.y);
+    await page.mouse.move(away.x, away.y);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('a mouse crossing the rail unfolds nothing', seen.state?.open === false);
+
+    await page.mouse.down();
+    await page.mouse.move(onEnergy.x, onEnergy.y);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('a mouse dragged over the rail, button down, unfolds nothing', seen.state?.open === false);
+    await page.mouse.move(away.x, away.y);
+    await page.mouse.up();
+    await sleep(200);
+
+    await page.mouse.move(onBati.x, onBati.y);
+    await sleep(320);
+    await page.mouse.down();
+    await page.mouse.up();
+    await sleep(300);
+    seen = await page.evaluate(readPanel);
+    record('a click that lands as the list unfolds on its own group does not fold it',
+      seen.state?.open === true && seen.visibleSections.join() === 'built-environment');
+    await sleep(600);
+    await page.mouse.click(onBati.x, onBati.y);
+    await page.mouse.move(onBati.x + 3, onBati.y + 2);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('pressed again, it folds, and stays folded under the resting mouse', seen.state?.open === false);
+    await page.mouse.move(away.x, away.y);
+    await page.mouse.move(onBati.x, onBati.y);
+    await sleep(700);
+    seen = await page.evaluate(readPanel);
+    record('the mouse leaving and coming back unfolds it again', seen.state?.open === true);
+    await page.mouse.move(away.x, away.y);
 
     // 5. The search.
     await typeSearch(page, 'electrique');
@@ -341,15 +430,17 @@ async function main() {
       record('1280 × 620 page boots', false);
     }
 
-    // ── A 24-inch 1080p screen: the list starts pinned ─────────────────────
+    // ── A 24-inch 1080p screen: the list starts unpinned there too ──────────
     console.log('\nOpening at 1920 × 950 …');
     const wide = await openPage(browser, 1920, 950, consoleErrors);
     if (wide) {
       await sleep(3000);
+      seen = await wide.evaluate(readPanel);
+      record('1920 × 950: the list starts folded and unpinned',
+        seen.state?.open === false && seen.state?.pinned === false && seen.pinPressed === 'false');
       await expand(wide);
       await sleep(900);
       seen = await wide.evaluate(readPanel);
-      record('from 1920 px the list starts pinned', seen.state?.pinned === true && seen.pinPressed === 'true');
       record('1920 × 950: the rail keeps its words', seen.labelsShown > 0);
       await wide.close();
     } else {

@@ -33,7 +33,7 @@ export default defineMessages({
     pin: {
       fr: 'Garder la liste ouverte',
       en: 'Keep the list open',
-      note: 'Toggle, off. Pressed, a click on the globe no longer closes the list.',
+      note: 'Toggle, off. Pressed, touching the globe no longer folds the list away.',
     },
     unpin: {
       fr: 'Ne plus garder la liste ouverte',
