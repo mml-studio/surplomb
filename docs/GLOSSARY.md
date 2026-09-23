@@ -398,7 +398,10 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | zone blanche (mobile) | dead zone | No operator reaches it, not even at limited coverage. One operator only is not a dead zone. |
 | très bonne / bonne couverture, couverture limitée | very good / good / limited coverage | ARCEP's three levels. |
 | couverture théorique (ARCEP) | simulated coverage (ARCEP) | The operators' own model, checked by ARCEP — never "measured". |
-| Couverture 4G, Sans 4G, Par opérateur | 4G coverage, No 4G, By operator | The coverage block of the key and its two modes. |
+| Couverture 4G, Sans 4G, Par opérateur | 4G coverage, No 4G, By operator | The coverage tile and block of the key, and its two modes. |
+| point d’atterrissement, station d’atterrissement | landing point, landing station | Where a submarine cable comes ashore (ARCEP's word). |
+| Tracé publié, géométries illustratives | Published route, illustrative geometry | TeleGeography's schematic routes — never "the cable's path". |
+| câbles associés (à un point d’atterrissement) | connected cables | The cables whose route reaches a landing point. |
 | sans teinte | left untinted | The class a coverage map leaves unpainted. |
 | Mon réseau mobile | Mon réseau mobile | ARCEP dataset title, kept in French. |
 | Direction relevée / non relevée | Direction mapped / not mapped | Public cameras. |

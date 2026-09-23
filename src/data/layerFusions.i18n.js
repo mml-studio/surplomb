@@ -192,4 +192,19 @@ export default defineMessages({
       en: 'The July 2026 megafire — reconstructed day by day, with no FIRMS key',
     },
   },
+
+  /**
+   * A tile that switches PART of a layer (`part` in layerFusions.js), keyed
+   * `<layer id>:<part>`. A part with no entry here is named by its layer's
+   * chip, as the masts are.
+   */
+  tiles: {
+    'anfr-fr:coverage': {
+      label: { fr: 'Couverture 4G', en: '4G coverage' },
+      title: {
+        fr: 'Estimation des opérateurs publiée par l’ARCEP — zones sans 4G, ou le réseau d’un opérateur',
+        en: 'The operators’ estimate published by ARCEP — areas with no 4G, or one operator’s network',
+      },
+    },
+  },
 });

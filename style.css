@@ -7492,6 +7492,16 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   border-radius: 2px;
 }
 
+/* A LINE IS KEYED BY A STROKE — a submarine cable's route — at the weight
+   the map draws it, centred on the text's first line like the dot. */
+.map-legend-swatch.is-line {
+  width: 18px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
 /* The patch drawn the way the map draws that class: stripes of the full
    colour over its translucent fill (`COVERAGE_HATCH` in mobileCoverage.js —
    one stripe in eight texels, three wide, lower left to upper right). */

@@ -4212,11 +4212,19 @@ function makePeerPanel() {
   });
 
   const mgr = new DataLayerManager({});
+  // The antennas carry the two params their tiles switch, as the real module
+  // does: whether the masts are drawn, and which coverage is painted.
+  const antennaParams = { coverage: 'off', masts: true };
   for (const { id } of PEER_TAXONOMY) {
-    mgr.register(makeSlowLayer(id, { updateInterval: -1 }).module);
+    const { module } = makeSlowLayer(id, { updateInterval: -1 });
+    if (id === 'anfr-fr') {
+      module.setParams = (params) => { Object.assign(antennaParams, params); return true; };
+      module.getParams = () => ({ ...antennaParams });
+    }
+    mgr.register(module);
   }
   mgr.finalizeRegistrations(
-    PEER_TAXONOMY.map(({ id }) => ({ id, disposition: 'enabled-only' })),
+    PEER_TAXONOMY.map(({ id }) => ({ id, disposition: id === 'anfr-fr' ? 'enabled+options' : 'enabled-only' })),
     PEER_TAXONOMY,
     PEER_CATEGORIES,
   );
@@ -4231,8 +4239,19 @@ function makePeerPanel() {
     tiles: () => findAll(legendItems, '.map-legend-tile'),
     // Same fire-and-forget shape as `click` below, through the key's own
     // delegated listener.
-    pressTile: async (id) => {
-      const tile = findAll(legendItems, '.map-legend-tile').find((node) => node.dataset.tileLayer === id);
+    antennaParams,
+    /** Press without waiting: two of these in a row are a double press. */
+    pressTileNow: (id, part = null) => {
+      const tile = findAll(legendItems, '.map-legend-tile')
+        .find((node) => node.dataset.tileLayer === id && (node.dataset.tilePart || null) === part);
+      legendItems.listeners.get('click')[0]({ target: tile });
+    },
+    settle: async () => {
+      for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+    },
+    pressTile: async (id, part = null) => {
+      const tile = findAll(legendItems, '.map-legend-tile')
+        .find((node) => node.dataset.tileLayer === id && (node.dataset.tilePart || null) === part);
       legendItems.listeners.get('click')[0]({ target: tile });
       for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
     },
@@ -4310,15 +4329,15 @@ test('a tiled peer row keeps no strip: its members are tiles in the key, one pre
     assert.equal(panel.legendItems.querySelector('.map-legend-row-title').textContent, 'Infrastructure numérique');
     const tiles = panel.tiles();
     assert.deepEqual(tiles.map((tile) => tile.dataset.tileLayer), [
-      'telegeography-submarine-cables', 'local-datacenters', 'anfr-fr',
+      'telegeography-submarine-cables', 'local-datacenters', 'anfr-fr', 'anfr-fr',
     ]);
     assert.deepEqual(tiles.map((tile) => tile.querySelector('.map-legend-tile-label').textContent), [
-      'Câbles', 'Data centers', 'Antennes',
+      'Câbles', 'Data centers', 'Antennes', 'Couverture 4G',
     ]);
-    for (const tile of tiles) {
-      assert.equal(tile.attributes['aria-pressed'], 'true');
-      assert.ok(tile.className.includes('is-on'));
-    }
+    // The row lights every member, and the antennas as it always has: masts
+    // on, coverage off.
+    assert.deepEqual(tiles.map((tile) => tile.attributes['aria-pressed']), ['true', 'true', 'true', 'false']);
+    for (const tile of tiles.slice(0, 3)) assert.ok(tile.className.includes('is-on'));
     // A lit tile wears the colour its layer draws, and a vendored icon.
     assert.equal(tiles[0].style['--tile-color'], '#39d5ff');
     assert.ok(tiles[0].style['--tile-icon'].startsWith('url("data:image/svg+xml;base64,'));
@@ -4332,7 +4351,7 @@ test('a tiled peer row keeps no strip: its members are tiles in the key, one pre
     assert.equal(panel.mgr.isEnabled('local-datacenters'), false);
     assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
     assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), true);
-    assert.deepEqual(panel.tiles().map((tile) => tile.attributes['aria-pressed']), ['true', 'false', 'true']);
+    assert.deepEqual(panel.tiles().map((tile) => tile.attributes['aria-pressed']), ['true', 'false', 'true', 'false']);
     // The row's own button tracks the PRIMARY, as it always has.
     assert.equal(panel.row('local-datacenters').querySelector('.data-toggle-btn').dataset.feedState, 'off');
 
@@ -4345,6 +4364,91 @@ test('a tiled peer row keeps no strip: its members are tiles in the key, one pre
     panel.mgr._refreshTogglePanel();
     assert.deepEqual(panel.tiles(), []);
     assert.equal(panel.legendHost.hidden, true, 'a dark row keys nothing');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the 4G coverage is a tile of its own: the antennas follow their two parts, on and off', async () => {
+  const panel = makePeerPanel();
+  const pressed = () => panel.tiles()
+    .filter((tile) => tile.dataset.tileLayer === 'anfr-fr')
+    .map((tile) => [tile.dataset.tilePart, tile.attributes['aria-pressed']]);
+  try {
+    await panel.mgr._setRowEnabled('local-datacenters', true);
+    panel.mgr._refreshTogglePanel();
+    assert.deepEqual(pressed(), [['masts', 'true'], ['coverage', 'false']]);
+
+    // The coverage joins the masts.
+    await panel.pressTile('anfr-fr', 'coverage');
+    panel.mgr._refreshTogglePanel();
+    assert.deepEqual(panel.antennaParams, { coverage: 'gaps', masts: true });
+    assert.deepEqual(pressed(), [['masts', 'true'], ['coverage', 'true']]);
+
+    // The masts go, the coverage stays: the dead zones with no dot on them.
+    await panel.pressTile('anfr-fr', 'masts');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
+    assert.deepEqual(panel.antennaParams, { coverage: 'gaps', masts: false });
+    assert.deepEqual(pressed(), [['masts', 'false'], ['coverage', 'true']]);
+
+    // The last lit part goes, and the layer with it — back to the params the
+    // row's toggle lights it with, so the masts return with the row.
+    await panel.pressTile('anfr-fr', 'coverage');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    assert.deepEqual(panel.antennaParams, { coverage: 'off', masts: true });
+    assert.deepEqual(pressed(), [['masts', 'false'], ['coverage', 'false']]);
+
+    // Pressed with the layer off, a part comes on ALONE.
+    await panel.pressTile('anfr-fr', 'coverage');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
+    assert.deepEqual(panel.antennaParams, { coverage: 'gaps', masts: false });
+    assert.deepEqual(pressed(), [['masts', 'false'], ['coverage', 'true']]);
+
+    // And each part tile keeps its own focus across the repaint.
+    const coverage = panel.tiles().find((tile) => tile.dataset.tilePart === 'coverage');
+    coverage.focus();
+    panel.mgr._refreshTogglePanel();
+    assert.equal(globalThis.document.activeElement?.dataset.tilePart, 'coverage');
+
+    // A double press is on then off, and the params the row lights the layer
+    // with come back; a second tile pressed while the first is switching the
+    // layer on joins it rather than replacing it.
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    panel.pressTileNow('anfr-fr', 'coverage');
+    panel.pressTileNow('anfr-fr', 'coverage');
+    await panel.settle();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    assert.deepEqual(panel.antennaParams, { coverage: 'off', masts: true });
+    panel.pressTileNow('anfr-fr', 'coverage');
+    panel.pressTileNow('anfr-fr', 'masts');
+    await panel.settle();
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
+    assert.deepEqual(panel.antennaParams, { coverage: 'gaps', masts: true });
+
+    // A part the layer says it cannot draw here is dimmed, and says why.
+    const module = panel.mgr.layers.get('anfr-fr').module;
+    module.tilePartNotice = (part) => (part === 'coverage' ? 'Carte indisponible sur ce serveur.' : null);
+    panel.mgr._refreshTogglePanel();
+    const dimmed = panel.tiles().find((tile) => tile.dataset.tilePart === 'coverage');
+    assert.ok(dimmed.className.includes('is-offcoverage'));
+    assert.match(dimmed.title, /Carte indisponible sur ce serveur\.$/);
+    assert.ok(!panel.tiles().find((tile) => tile.dataset.tilePart === 'masts').className.includes('is-offcoverage'));
+    delete module.tilePartNotice;
+
+    // Off its territory the layer opens with a briefing; turned down, it
+    // leaves the layer off with the params the row lights it with.
+    await panel.pressTile('anfr-fr', 'masts');
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    panel.mgr._shouldBriefCoverage = () => true;
+    panel.mgr._coverageBriefingHandler = { ask: async () => 'dismiss' };
+    await panel.pressTile('anfr-fr', 'coverage');
+    assert.equal(panel.mgr.isEnabled('anfr-fr'), false);
+    assert.deepEqual(panel.antennaParams, { coverage: 'off', masts: true });
   } finally {
     await panel.restore();
   }
@@ -4389,7 +4493,7 @@ test('a withheld layer leaves its row, and nothing can switch it back on', async
     await panel.mgr._setRowEnabled('local-datacenters', true);
     panel.mgr._refreshTogglePanel();
     assert.deepEqual(panel.tiles().map((tile) => tile.querySelector('.map-legend-tile-label').textContent),
-      ['Data centers', 'Antennes']);
+      ['Data centers', 'Antennes', 'Couverture 4G']);
     assert.deepEqual(panel.chips('local-datacenters'), [], 'and the row has no strip to carry it either');
     assert.equal(panel.mgr.isEnabled('telegeography-submarine-cables'), false, 'the row\'s toggle does not bring it along');
     assert.equal(panel.mgr.isEnabled('anfr-fr'), true);
@@ -5677,6 +5781,40 @@ test('the shared-mobility key: a segmented control, an action line, and a press 
     // A neighbour that does not take the key is not asked to.
     mgr._offerParamsToRow('shared-mobility-fr', { kinds: 'velo' });
     assert.deepEqual(received, [{ operator: 'lime' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a route is keyed by a stroke, a point beside it by a dot', async () => {
+  const originalDocument = globalThis.document;
+  const host = makeControlElement();
+  const items = makeControlElement();
+  globalThis.document = {
+    createElement: makeControlElement,
+    createDocumentFragment: () => Object.assign(makeControlElement(), { isFragment: true }),
+    getElementById: (id) => (id === 'map-legend' ? host : id === 'map-legend-items' ? items : null),
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  layer.module.getRowControls = () => ({
+    chips: [],
+    legend: [
+      { label: 'Tracé publié', color: '#39d5ff', swatch: 'line' },
+      { label: 'Point d’atterrissement', color: '#8fffd2' },
+    ],
+  });
+  mgr.register(layer.module);
+  try {
+    mgr.buildTogglePanel(makeControlElement());
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+    const [route, landing] = collectByClass(items, 'map-legend-swatch');
+    assert.ok(route.className.includes('is-line'));
+    assert.equal(route.style.background, '#39d5ff');
+    assert.equal(landing.className, 'map-legend-swatch');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

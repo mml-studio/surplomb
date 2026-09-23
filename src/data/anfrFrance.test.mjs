@@ -818,6 +818,38 @@ test('a wide view loads the maillage and a tight one loads the supports', async 
   _clearAnfrSelectionForTest();
 });
 
+test('with the masts put out the layer asks the register nothing and keys no mast, and they come back on request', async () => {
+  const host = makeHost();
+  const asked = [];
+  const http = async (url) => {
+    asked.push(url.split('?')[0]);
+    if (url.startsWith('/api/anfr-fr/mesh')) return { ok: true, json: async () => MESH_PAYLOAD };
+    return { ok: true, json: async () => PACK };
+  };
+  const viewer = fakeViewer(2.30, 48.84, 2.36, 48.88);
+  _setAnfrStateForTest({ viewer, overlayHost: host, http, pack: PACK });
+  _selectAnfrForTest(anfrSupportId(SUPPORTS[0].id));
+  assert.ok(_anfrSelectedIdForTest());
+
+  // The « Antennes » tile put out while « Couverture 4G » is lit.
+  assert.equal(anfrFranceLayer.setParams({ masts: false }), true);
+  assert.equal(_anfrSelectedIdForTest(), null, 'the selected mast goes with the masts');
+  assert.deepEqual(_anfrRowControlsForTest().legend, [], 'no mast class for masts nobody sees');
+  assert.equal(anfrFranceLayer.getStats().count, 0);
+  assert.equal(anfrFranceLayer.getStats().mastsShown, false);
+  assert.deepEqual(_anfrDetectablesForTest(), []);
+  asked.length = 0;
+  const hidden = await _loadAnfrViewportForTest(viewer);
+  assert.deepEqual(asked, [], 'a pan asks the register nothing');
+  assert.equal(hidden.count, 0);
+
+  anfrFranceLayer.setParams({ masts: true });
+  const shown = await _loadAnfrViewportForTest(viewer);
+  assert.equal(shown.count, 15);
+  assert.ok(asked.includes('/api/anfr-fr/supports'));
+  _clearAnfrSelectionForTest();
+});
+
 test('a failed refresh keeps the map it has and says the refresh failed', async () => {
   const host = makeHost();
   let fail = false;

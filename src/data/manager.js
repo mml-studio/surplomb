@@ -2,7 +2,7 @@ import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { SURFACE_FILL_DRAPE_NOTE, surfaceFillDrapesBuildings } from './surfaceFillNotice.js';
 import {
-  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor,
+  fusedIntoFor, fusionMemberChipFor, fusionPrimaryChipFor, fusionTilesFor, tilePartDefaults, tilePartIsOff,
 } from './layerFusions.js';
 import { exclusiveSurfaceActive } from '../firstRunExperience.js';
 import { getSelectedEntityContext } from './contextStore.js';
@@ -3406,31 +3406,137 @@ export class DataLayerManager {
   /**
    * Switch ONE member of a fused row, as its chip or its tile in the key asks.
    *
-   * Fire-and-forget on purpose: the caller is a click handler, and the panel
-   * repaints from the lifecycle events either way.
+   * Fire-and-forget for a click handler, which the panel repaints after from
+   * the lifecycle events either way; the promise it returns settles once the
+   * press is done with — briefing answered, layer switched — for a caller that
+   * has to know what came of it.
    * @param {string} layerId The member layer.
+   * @returns {Promise<void>|undefined}
    */
   _toggleFusionMember(layerId) {
-    if (!layerId || !this.layers.has(layerId)) return;
+    if (!layerId || !this.layers.has(layerId)) return undefined;
     const turningOn = !this.isEnabled(layerId);
     // Only ON is briefed. Interrupting somebody who is switching a layer
     // OFF to explain what it was would be the most annoying card in the
     // app, and they have already seen whatever it had to say.
     if (turningOn && this._shouldBriefCoverage(layerId)) {
-      void this._runCoverageBriefing(layerId);
-      return;
+      return this._runCoverageBriefing(layerId);
     }
     // The dimmed chip's tooltip ends "cliquer pour y aller", and a
     // promise made in a tooltip is still a promise. A territorial layer
     // with no briefing copy keeps it by flying — switched on first, so
     // its data is in hand as the camera lands.
     const destination = turningOn ? this._coverageFlightFor(layerId) : null;
-    this.setEnabled(layerId, turningOn, { origin: 'user' })
+    return this.setEnabled(layerId, turningOn, { origin: 'user' })
       .then(() => {
         if (!destination) return;
         return this._coverageBriefingHandler?.flyTo?.(destination);
       })
       .catch((error) => console.warn(`[Data] ${layerId} chip toggle error:`, error));
+  }
+
+  /**
+   * What a split layer says about one of its parts it cannot draw, or ''.
+   * Asked of a loaded module only (`tilePartNotice`): a lazy stub knows nothing
+   * yet, and loading the chunk to ask would cost the download the stub exists
+   * to avoid.
+   * @param {{id: string, part: string}} tile
+   * @returns {string}
+   */
+  _tilePartNotice(tile) {
+    const module = this.layers.get(tile.id)?.module;
+    if (typeof module?.tilePartNotice !== 'function') return '';
+    try {
+      const notice = module.tilePartNotice(tile.part);
+      return typeof notice === 'string' ? notice.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Whether a tile that switches PART of a layer is lit: the layer is on and
+   * its params do not put that part out. See `part` in layerFusions.js.
+   * @param {{id: string, off: object}} tile
+   * @returns {boolean}
+   */
+  _tilePartLit(tile) {
+    return this._tileLayerOn(tile.id) && !tilePartIsOff(this.getLayerParams(tile.id), tile);
+  }
+
+  /**
+   * Whether a split layer is on, or on its way on from a part tile. While the
+   * module loads, `isEnabled` still says no: without this a second press in
+   * that window read the layer as off, re-asked for it, and the first press —
+   * superseded — put the row's params back under the second (a double press on
+   * « Couverture 4G » drew the masts alone).
+   * @param {string} layerId
+   * @returns {boolean}
+   */
+  _tileLayerOn(layerId) {
+    return this.isEnabled(layerId) || Boolean(this._tileLayerEnabling?.has(layerId));
+  }
+
+  /**
+   * Press a member tile in the key.
+   *
+   * A whole-layer tile is the chip it replaced ({@link _toggleFusionMember}).
+   * A PART tile — the 4G coverage of the antennas' layer — switches that part
+   * alone, and the layer follows its parts: it comes on with the pressed part
+   * and no other, and goes off when its last lit part is put out, back to the
+   * params the row's toggle lights it with. Otherwise the masts would come
+   * back with the coverage the next time the row was switched on, although the
+   * reader had put both out.
+   * @param {string} layerId The member layer.
+   * @param {?string} part The part the tile switches, or null for the layer.
+   */
+  _toggleFusionTile(layerId, part = null) {
+    if (!part) {
+      this._toggleFusionMember(layerId);
+      return;
+    }
+    const rowId = fusedIntoFor(layerId) || layerId;
+    const parts = (fusionTilesFor(rowId) || []).filter((tile) => tile.id === layerId && tile.part);
+    const tile = parts.find((entry) => entry.part === part);
+    if (!tile || !this.layers.has(layerId)) return;
+    if (this._tilePartLit(tile)) {
+      if (parts.some((entry) => entry !== tile && this._tilePartLit(entry))) {
+        this.setLayerParams(layerId, tile.off, { origin: 'user' });
+        return;
+      }
+      // Off FIRST, then back to the row's own params: set on a layer still
+      // drawing, they would light its other part for a frame. An earlier press
+      // still switching it on is over: this one has the last word.
+      this._tileLayerEnabling?.delete(layerId);
+      this.setEnabled(layerId, false, { origin: 'user' })
+        .then(() => {
+          if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
+        })
+        .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
+      return;
+    }
+    if (this._tileLayerOn(layerId)) {
+      this.setLayerParams(layerId, tile.on, { origin: 'user' });
+      return;
+    }
+    // Off: the layer comes on showing the pressed part alone — unless the
+    // reader turns down the briefing a layer off its territory opens with, in
+    // which case it stays off with the params the row lights it with. Until it
+    // is on, the layer counts as on for the next press (`_tileLayerOn`).
+    const alone = Object.assign({}, ...parts.filter((entry) => entry !== tile).map((entry) => entry.off), tile.on);
+    this.setLayerParams(layerId, alone, { origin: 'user' });
+    if (!this._tileLayerEnabling) this._tileLayerEnabling = new Map();
+    const press = {};
+    this._tileLayerEnabling.set(layerId, press);
+    Promise.resolve(this._toggleFusionMember(layerId))
+      .then(() => {
+        // A later press owns the layer now, and has said what it wants.
+        if (this._tileLayerEnabling.get(layerId) !== press) return;
+        this._tileLayerEnabling.delete(layerId);
+        if (!this.isEnabled(layerId)) this.setLayerParams(layerId, tilePartDefaults(parts), { origin: 'user' });
+        this._refreshTogglePanel();
+      })
+      .catch((error) => console.warn(`[Data] ${layerId} tile toggle error:`, error));
   }
 
   /**
@@ -4182,12 +4288,28 @@ export class DataLayerManager {
           )
           : '';
         const title = tile.title || '';
+        // A part the layer knows it cannot draw here — the coverage on a
+        // server without the map — is dimmed and says why, never removed.
+        const unavailable = tile.part ? this._tilePartNotice(tile) : '';
+        if (unavailable) {
+          return {
+            id: tile.id,
+            part: tile.part,
+            label: tile.label,
+            color: tile.color,
+            icon: tile.icon,
+            active: this._tilePartLit(tile),
+            offCoverage: true,
+            title: `${title || tile.label} — ${unavailable}`,
+          };
+        }
         return {
           id: tile.id,
+          part: tile.part || null,
           label: tile.label,
           color: tile.color,
           icon: tile.icon,
-          active: this.isEnabled(tile.id),
+          active: tile.part ? this._tilePartLit(tile) : this.isEnabled(tile.id),
           offCoverage,
           title: notice ? `${title || tile.label} — ${notice}` : title,
         };
@@ -4292,10 +4414,10 @@ export class DataLayerManager {
         return;
       }
       // A member tile switches its whole layer, exactly as the chip it
-      // replaces did on the row.
+      // replaces did on the row — or the part of it the tile names.
       const tile = event.target?.closest?.('.map-legend-tile[data-tile-layer]');
       if (tile) {
-        this._toggleFusionMember(tile.dataset.tileLayer);
+        this._toggleFusionTile(tile.dataset.tileLayer, tile.dataset.tilePart || null);
         return;
       }
       const button = event.target?.closest?.('.is-toggle[data-toggle-layer]');
@@ -4603,6 +4725,10 @@ export class DataLayerManager {
         // one. `pattern: 'hatch'` draws the patch the way the map draws that
         // class — stripes of the full colour over its translucent fill.
         if (item.swatch === 'area' && !item.glyph) swatch.className += ' is-area';
+        // A LINE IS KEYED BY A STROKE: a route drawn as a hairline over the sea
+        // reads as that route only if its swatch is one, not a dot — which is
+        // what the landing points beside it are.
+        else if (item.swatch === 'line' && !item.glyph) swatch.className += ' is-line';
         const hatched = item.pattern === 'hatch' && Boolean(item.color) && !item.glyph;
         if (hatched) {
           swatch.className += ' is-hatched';
@@ -4769,7 +4895,8 @@ export class DataLayerManager {
         + (tile.active ? ' is-on' : '')
         + (tile.offCoverage ? ' is-offcoverage' : '');
       button.dataset.tileLayer = tile.id;
-      button.dataset.focusKey = `tile:${tile.id}`;
+      if (tile.part) button.dataset.tilePart = tile.part;
+      button.dataset.focusKey = tile.part ? `tile:${tile.id}:${tile.part}` : `tile:${tile.id}`;
       button.setAttribute('aria-pressed', tile.active ? 'true' : 'false');
       if (tile.title) button.title = tile.title;
       setCssVar(button, '--tile-color', tile.color);

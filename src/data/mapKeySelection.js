@@ -32,3 +32,32 @@ export function mapKeyCarriesSelection() {
   }
   return typeof key.getClientRects !== 'function' || key.getClientRects().length > 0;
 }
+
+/**
+ * Watch whether the map key can carry a selection card, while one is open.
+ *
+ * The key is hidden from two places — its own `class` and `hidden` when it is
+ * folded, and the BODY's class when the clean view takes the interface away —
+ * so both are observed, and `onChange` is called only when the answer FLIPS:
+ * the key's own repaint writes neither attribute, and cannot feed the watch.
+ * The antennas carry the same watch inline (`watchKeyVisibility`); this is it
+ * for a layer that has one card and nothing else to fold into it.
+ * @param {(carries: boolean) => void} onChange
+ * @param {boolean} carries The answer the card was last published with.
+ * @returns {() => void} Stop watching.
+ */
+export function watchMapKeyCarriesSelection(onChange, carries) {
+  if (typeof MutationObserver !== 'function' || typeof document === 'undefined') return () => {};
+  const key = document.getElementById?.('map-legend');
+  if (!key) return () => {};
+  let last = carries;
+  const observer = new MutationObserver(() => {
+    const now = mapKeyCarriesSelection();
+    if (now === last) return;
+    last = now;
+    onChange(now);
+  });
+  observer.observe(key, { attributes: true, attributeFilter: ['class', 'hidden'] });
+  if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  return () => observer.disconnect();
+}

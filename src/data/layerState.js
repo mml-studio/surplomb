@@ -323,6 +323,11 @@ const OPTION_GROUPS = Object.freeze({
   // what the map says, not a preference: the same masts over Orange's gaps and
   // over the dead zones are two different arguments. One letter each, frozen
   // from the first link copied; the values are `mobileCoverage.js`'s modes.
+  //
+  // AND WHETHER THE MASTS ARE ON IT (`m`), since the coverage has a tile of
+  // its own in the key (2026-09-22): the dead zones read with no dot over them
+  // are a third argument. Omitted while the masts are drawn, which is every
+  // link written before it.
   'anfr-fr': Object.freeze([
     enumOption('coverage', 'c', 'off', ['off', 'gaps', 'orange', 'sfr', 'bouygues', 'free'], {
       off: '0',
@@ -332,6 +337,7 @@ const OPTION_GROUPS = Object.freeze({
       bouygues: 'b',
       free: 'f',
     }),
+    booleanOption('masts', 'm', true),
   ]),
   // THE SUBJECT OF THE ESTIMATE, and it has to travel. `a 60 m² flat here` and
   // `a 150 m² house here` are two different numbers over one doorway, and a

@@ -401,7 +401,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '📡',
     source: 'Observatoire des réseaux mobiles — ANFR · couverture 4G — ARCEP',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ coverage: 'off' }),
+    defaultParams: Object.freeze({ coverage: 'off', masts: true }),
     load: () => import('./anfrFrance.js').then((module) => module.default),
   }),
   Object.freeze({

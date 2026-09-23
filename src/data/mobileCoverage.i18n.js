@@ -39,11 +39,6 @@ export default defineMessages({
       fr: 'Le réseau 4G d’un seul opérateur.',
       en: 'One operator’s 4G network.',
     },
-    pressAgain: {
-      fr: (title) => `${title} Appuyez de nouveau pour retirer la couverture.`,
-      en: (title) => `${title} Press again to remove the coverage.`,
-      sample: ['Where 4G is missing.'],
-    },
     operatorsLabel: { fr: 'Opérateur', en: 'Operator' },
     operatorTitle: {
       fr: (name) => `Où ${name} capte mal ou pas en 4G.`,
