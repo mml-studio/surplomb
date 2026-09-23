@@ -6,6 +6,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Digital infrastructure now opens on a dimmed satellite ground, and gives
+  your map back when you switch it off.** Switching « Infrastructure
+  numérique » on moves the map to the new « Crépuscule » (Dusk) style — the
+  ground dimmed a little, every layer in full colour, bright marks glowing —
+  and to the Satellite basemap; switching it off returns to Normal and to the
+  basemap you had. While the row is on, the other basemaps are greyed out and
+  a line under them says why. Dusk replaces Snow in the visual presets, on key
+  7.
+- **Antennas are glowing triangles, and a selected mast's line of sight is
+  lit ground.** The masts are amber (5G) and steel triangles with a halo; the
+  selected one is an amber diamond. The ground it can see is drawn in two
+  blues with the relief showing through and a bright edge where the view is
+  blocked, instead of a flat cyan sheet.
+- **Data centres are violet sparkles, grouped where they crowd.** The tall
+  cyan beams and the wall of cards are gone: each site is a sparkle on a short
+  faint stem, sites that share a spot at the national scale merge into one
+  stacked mark, and only the few most powerful sites are named, with their
+  power (« Colt Paris 3 · 85 MW »). The key explains the two marks.
 - **The mobile antennas now show where their 4G reaches, and where it does
   not.** Five chips on the Antennes mobiles row paint the ARCEP's quarterly
   coverage map under the masts: « Zones blanches » colours the ground by how

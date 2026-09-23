@@ -18,6 +18,8 @@ import {
 import { publishJoin } from './layerJoins.js';
 import { nearestDam } from './damsPack.js';
 import { buildPortIndex } from './portDirectory.js';
+import { datacenterMarkerGlyphs } from './datacenterGlyphs.js';
+import { DATACENTER_HALL_COLOR, DATACENTER_STEM_PX } from './datacentersPack.js';
 
 // Use Vite's ?url import to properly resolve these assets in dev and build
 import airportsUrl from './local_data/airports/airports.geojsonl?url';
@@ -30,16 +32,25 @@ import portGazetteerUrl from './local_data/ports/gazetteer.json?url';
  * Registry of local GeoJSON datasets.
  * These are lazily loaded natively into Cesium when enabled.
  */
+// Since the mock of 2026-09-23 (`datacenterGlyphs.js`): a violet sparkle per
+// site on a short faint stem, a stack where several share a spot on screen,
+// and a name — not a card — on the few sites that draw the most power. It was
+// a 65 px cyan stem and a card per site, up to 700 of them, which at the
+// national view read as a field of light beams under a wall of text.
 const datacenters = createLocalGeoJsonLayer({
   id: 'local-datacenters',
   url: datacentersUrl,
   name: 'Datacenters',
-  color: '#00ffff', // Cyan
+  color: DATACENTER_HALL_COLOR,
   icon: '▣',
   source: 'Local',
   labels: true,
-  labelMax: 700,
-  labelGridPx: 138,
+  labelMax: 8,
+  labelGridPx: 240,
+  overlayVariant: 'label',
+  markerGlyphs: datacenterMarkerGlyphs,
+  groupCellPx: 30,
+  stemPx: DATACENTER_STEM_PX,
 });
 
 // OpenStreetMap dam structures — ODbL, bundled. France (métropole + outre-mer)
@@ -192,7 +203,7 @@ const airports = createLocalGeoJsonLayer({
   url: airportsUrl,
   // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
   name: 'Aéroports',
-  color: '#b388ff', // Violet — clear of cyan (datacenters), blue (dams), amber (ports)
+  color: '#b388ff', // Violet — clear of blue (dams) and amber (ports); the data centres' lilac lives in another row
   icon: '✈',
   source: 'OurAirports · IGN',
   // i18n-ignore-end

@@ -64,6 +64,19 @@ export default defineMessages({
   },
 
   /** The card's four lines. */
+  /** The key's two rows, since the mock of 2026-09-23: one mark, and a grouped one. */
+  key: {
+    site: { fr: 'Site', en: 'Site' },
+    group: {
+      fr: 'Regroupement',
+      en: 'Group of sites',
+      note: 'Several data centres merged into one mark because they share a spot on the screen.',
+    },
+    groupBlurb: {
+      fr: 'Plusieurs sites au même endroit à cette échelle : rapprochez-vous pour les séparer.',
+      en: 'Several sites in one spot at this scale: zoom in to separate them.',
+    },
+  },
   card: {
     buildingFootprint: { fr: 'emprise au sol', en: 'building footprint' },
     siteFootprint: { fr: 'emprise du site', en: 'site footprint' },

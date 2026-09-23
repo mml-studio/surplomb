@@ -1566,7 +1566,14 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   failed searches leave the current camera owner untouched, and Context Focus
 >   can return to the preserved Contact. Focus also restores the selected
 >   aircraft's canonical follow frame after a manual zoom-away.
->   Visual presets retain the order Normal, CRT, NVG, FLIR, Anime, Night, Snow.
+>   Visual presets retain the order Normal, CRT, NVG, FLIR, Anime, Night, Dusk.
+>   Dusk — « Crépuscule », `dusk` in code and in links, key `7` — took Snow's
+>   button on 2026-09-23 and Snow was retired (a `style=snow` link opens on
+>   Normal). Dusk is Night's machinery at lower defaults (`src/styles/dusk.js`:
+>   Darkness 0.14, Desaturation 0.08, Bloom 0.6, Vignette 0.25 — the ground
+>   keeps 89 % of its light and 92 % of its colour), with Night's four sliders
+>   and share tokens; `nightBasemap.js` multiplies the adjustment of both
+>   stages, so a crossfade between them is smooth.
 >   Night — « Nuit » on the French page, `noir` in code and in the stage names,
 >   `style=night` in a share link (`style=noir` is still read) — is the NIGHT
 >   ATLAS since 2026-09-21 (`src/styles/nightAtlas.js`; the one name that
@@ -3234,8 +3241,9 @@ since the coverage tile of lot 3, below) — each an icon (Lucide `cable`, `data
 `src/data/lucideIcons.js`), a name and a drawn switch. A tile is a `<button
 aria-pressed>` that goes through the same path as the chip it replaced
 (`_toggleFusionMember`: coverage briefing and flight included). A lit tile
-wears the colour its layer draws on the map (`#39d5ff`, `#00ffff`, the 5G
-`#ffcb2b`; `layerFusions.test.mjs` pins each literal to its module's constant),
+wears the colour its layer draws on the map (`#39d5ff`, the data centres'
+violet `#a98bff`, the 5G amber `#ffb238` since 2026-09-23;
+`layerFusions.test.mjs` pins each literal to its module's constant),
 so it is also that member's swatch. The row in the panel keeps its own toggle
 and NO strip: the three fusion chips and the five coverage chips moved to the
 key, they were not copied. The block stays in the key while the row is on even
@@ -3260,7 +3268,7 @@ opérateurs » until then, under one key so it is revealed once), what it stands
 on and the brands as two meta lines, one plate per generation on the air
 ringed in its dot colour (`chips.outline`: the 2G slate cannot carry black
 text) with the planned ones beside them, the wave line, the line of sight as a
-figure (« 28 % · rayon 39 km », swatch in the viewshed cyan, « une géométrie,
+figure (« 28 % · rayon 39 km », swatch in the viewshed blue, « une géométrie,
 pas une couverture radio »), « Source : ANFR, <edition> », and « Voir les
 équipements · N antennes » folding one line per operator (brand, generations,
 antenna count; no frequency). The spot card: « Au point sélectionné », the
@@ -3356,6 +3364,48 @@ row — the landing page's link included. A preset the reader picked while the
 row was on (CRT, FLIR…) stays. A share link, a restored session, a scene or a
 context mode moves layers without moving the preset. The switch lands when the first of the row's layers settles: 1.8 to
 2.8 s after the click in headless SwiftShader runs against the dev server.
+
+**The digital-infrastructure row brings Dusk and imposes Satellite**
+(2026-09-23, the operator's review of the mock). The same follower moves the
+preset to Dusk when a reader lights the row and back to Normal when they put it
+out (`ROW_PRESETS` in `nightAtlasRow.js`; with both rows lit, the one still lit
+keeps its own ground). The basemap is a condition of the row rather than a
+look, so `src/basemapLock.js` holds it for EVERY origin — a link, a stored
+session, a context mode: row lit → `MapStackController.setLock` on `ign-ortho`
+(« Satellite ») and a switch to it; row dark → release and a switch back to the
+stack the reader had. While the lock holds, `setStack()` refuses every other
+stack whoever asks (the tray, the voice's `set_map_stack` → `ok: false` with the
+reason, a share restore, the 3D adoption, which waits): a refusal is not an
+error (`refused` on the returned state, no `lastError`, no toast unless the
+reader asked). The tray greys the other chips (`locked`, `aria-disabled`, a
+tooltip naming the row), clicks on them do nothing, and a note under the row
+reads « Satellite imposé par Infrastructure numérique : les autres fonds de
+carte ne sont pas disponibles avec cette couche. » A lock taken before the
+first stack is on the globe lands the reader on Satellite directly.
+
+**The row's marks follow the mock of 2026-09-23.** Masts are billboards, not
+discs (`src/data/anfrGlyphs.js`): an upright triangle with a halo and a hot
+core, the band colour unchanged in meaning (5G now amber `#ffb238`), the size
+the operator count, the pale outline an approved project, hollow where nothing
+radiates; eleven images in the atlas whatever the view (stable `imageId`s).
+The key's band rows draw the triangle (`glyph`). The selected mast is an amber
+diamond, and its globe tag wears the amber. The line of sight
+(`mastViewshedImagery.js`) is shaded per cell from the computation's own data —
+a hillshade of the DEM (sun north-west, 45°), paler and more opaque at the
+mast's foot, a near-white rim faded over two cells where lit ground meets
+hidden ground (none on the horizon circle) — instead of one cyan at 36 %. The
+data centres (`src/data/datacenterGlyphs.js`, new `createLocalGeoJsonLayer`
+options `markerGlyphs`, `groupCellPx`, `groupMinHeightM`, `stemPx`) draw a
+violet four-pointed sparkle on an 18 px, 1.5 px faint stem (it was a 6 px cyan
+dot on a 65 px, 3.5 px cyan stem); above 60 km of camera height the sites that
+share a 30 px screen cell merge into a stacked mark led by the most important
+of them (`groupLocalMarks`; the selected site always leads its cell). Names
+are labels, not cards, eight at most on a 240 px grid, ranked by published
+power then hall area (`datacenterLabelPriority`), with the power after the
+name (« Colt Paris 3 · 85 MW »). Halls are violet, site outlines a slate
+lilac. The key prints two rows, *Site* and *Regroupement* (*Group of sites*),
+each with its silhouette. A billboard's image is a data URL, so the 4 638
+sites share two atlas entries.
 
 **What the fusion does NOT do**, and is owed separately: deduplicate the 56
 plants three registers share (`edf-power-plants`, `rte-generation`,

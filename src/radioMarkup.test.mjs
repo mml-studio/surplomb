@@ -198,11 +198,15 @@ test('no unchanged Realtime tool definition drifts silently', () => {
     // src/voice/layerVocabulary.test.mjs, which fails if the two drift again.
     'analyst_query',
     'list_layers',
+    // Its `style` enum swapped `snow` for `dusk` on 2026-09-23: Dusk
+    // (« Crépuscule ») took Snow's button and Snow was retired. An enum move,
+    // so the tool joins this list instead of re-deriving the digest again.
+    'set_visual_style',
   ]);
   const unchanged = realtimeTools()
     .filter((tool) => !TOUCHED.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
-  assert.equal(unchanged.length, 16);
+  assert.equal(unchanged.length, 15);
   const digest = createHash('sha256')
     .update(JSON.stringify(unchanged))
     .digest('hex')
@@ -216,7 +220,11 @@ test('no unchanged Realtime tool definition drifts silently', () => {
   // gained a six-word description: the night atlas's button reads "Night"
   // while its id stays `noir`, and a model asked for "mode nuit" had only the
   // id to go on. The enum did not move.
-  assert.equal(digest, 'd4426c2bb3000a23', 'an unchanged Realtime tool definition drifted');
+  //
+  // Re-derived on 2026-09-23 for the opposite reason: that tool's enum DID
+  // move, so it left this digest for TOUCHED above, and the fifteen others
+  // are hashed without it.
+  assert.equal(digest, 'bbb52bbacfb60d78', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {

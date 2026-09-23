@@ -9,6 +9,9 @@ import {
 } from './airportsPack.js';
 import {
   datacenterCardDetails,
+  datacenterKeyLegend,
+  datacenterLabelPriority,
+  datacenterPowerText,
   datacenterRenderSpec,
   geometryAreaM2,
 } from './datacentersPack.js';
@@ -390,11 +393,13 @@ const PACK_RENDERERS = Object.freeze({
   'local-airports': Object.freeze({
     featureRender: (properties) => airportRenderSpec(properties),
   }),
-  // No `renderLegend` either: the data-centre row prints no key. Its three
-  // lines (hall, fence, hollow ring) took a panel for marks the card already
-  // names on a click.
+  // The data-centre key had no line from 2026-09-14 — its three (hall, fence,
+  // hollow ring) took a panel for marks the card names on a click — and has
+  // two since the mock of 2026-09-23: a site, and a group of sites, which no
+  // shape says unaided (`datacenterKeyLegend`).
   'local-datacenters': Object.freeze({
     featureRender: datacenterRenderSpec,
+    renderLegend: () => datacenterKeyLegend(),
   }),
   'local-dams': Object.freeze({
     featureRender: (properties) => damRenderSpec(properties),
@@ -550,6 +555,23 @@ export function polygonHierarchyAreaM2(hierarchy) {
 }
 
 /**
+ * A label's one line: the clamped name — and, for a data centre whose power
+ * anyone published, the power after it (« Equinix PA3 · 20 MW »), as the mock
+ * of 2026-09-23 labels them. The label variant has no second line, and at the
+ * national view the power is what tells two named sites apart.
+ * @param {string} title
+ * @param {object} properties
+ * @param {string} layerId
+ * @returns {string}
+ */
+function localOverlayLabelTitle(title, properties, layerId) {
+  const name = clampOverlayLabelTitle(title);
+  if (layerId !== 'local-datacenters') return name;
+  const power = datacenterPowerText(unwrapProperties(properties) || {});
+  return power ? `${name} · ${power}` : name;
+}
+
+/**
  * Build the validated local-infrastructure card copy.
  * @param {object} properties Unwrapped GeoJSON feature properties.
  * @param {string} layerId Local layer id.
@@ -682,7 +704,7 @@ export function createLocalInfrastructureOverlayEntry({
     // and hides what it is standing next to. Clamped HERE and not in the
     // pack's `cardCopy`, so the full name still reaches the context card the
     // click opens: this is a drawing limit, not a shorter name.
-    title: label ? clampOverlayLabelTitle(resolvedCopy.title) : resolvedCopy.title,
+    title: label ? localOverlayLabelTitle(resolvedCopy.title, properties, layerId) : resolvedCopy.title,
     details: label ? [] : resolvedCopy.details,
     accent,
     priority,
@@ -856,6 +878,65 @@ export function selectLocalGlobeLodMarks(records, {
 }
 
 /**
+ * Merge the marks that share a screen cell into ONE grouped mark.
+ *
+ * The data-centre layer's « Regroupement » (`markerGlyphs` + `groupCellPx`):
+ * where several sites fall in one cell of `cellPx`, the most important of them
+ * (the card cohort's order) stays on screen and says how many it stands for;
+ * the others step aside. Unlike {@link selectLocalGlobeLodMarks} nothing is
+ * capped and the count is the point: a grouped mark is DRAWN differently, so
+ * the reader knows to zoom in rather than reading one site where there are
+ * six.
+ *
+ * @param {object[]} records Candidate records, already frustum-gated.
+ * @param {object} options
+ * @param {number} options.cellPx Grid pitch, CSS pixels.
+ * @param {number} options.width Canvas width, CSS pixels.
+ * @param {number} options.height Canvas height, CSS pixels.
+ * @param {(record: object) => ?{x:number, y:number}} options.project
+ * @param {?object} [options.pinned] A record that always leads its cell.
+ * @returns {Map<object, number>} Each leading record → how many its cell holds.
+ *   A record absent from the map stepped aside.
+ */
+export function groupLocalMarks(records, {
+  cellPx,
+  width,
+  height,
+  project,
+  pinned = null,
+} = {}) {
+  const leads = new Map();
+  if (!Array.isArray(records) || records.length === 0 || typeof project !== 'function') return leads;
+  const size = Math.max(1, Number(cellPx) || 1);
+  /** @type {Map<string, {lead: object, count: number}>} */
+  const cells = new Map();
+  for (const record of records) {
+    const screen = project(record);
+    if (!Number.isFinite(screen?.x) || !Number.isFinite(screen?.y)) {
+      // Nothing to group it with: it stands alone rather than vanishing.
+      leads.set(record, 1);
+      continue;
+    }
+    if (screen.x < -size || screen.x > width + size || screen.y < -size || screen.y > height + size) {
+      leads.set(record, 1);
+      continue;
+    }
+    const key = `${Math.floor(screen.x / size)}:${Math.floor(screen.y / size)}`;
+    const cell = cells.get(key);
+    if (!cell) {
+      cells.set(key, { lead: record, count: 1 });
+      continue;
+    }
+    cell.count += 1;
+    const wins = record === pinned
+      || (cell.lead !== pinned && compareLocalOverlayRecords(record, cell.lead) < 0);
+    if (wins) cell.lead = record;
+  }
+  for (const { lead, count } of cells.values()) leads.set(lead, count);
+  return leads;
+}
+
+/**
  * The camera's culling volume, or null when the scene cannot describe one.
  *
  * Null is the historical behaviour — nothing is frustum-culled — and it is what
@@ -914,11 +995,12 @@ export function localRecordOffScreen(cullingVolume, record, stemLenM) {
  * @param {number} distance Camera-to-anchor distance in metres.
  * @param {number} pixelFactor {@link localPixelFactor} for this frame.
  * @param {number} maxM Ceiling in metres; `Infinity` for an uncapped pack.
+ * @param {number} [targetPx] On-screen height, CSS pixels — the layer's `stemPx`.
  * @returns {number}
  */
-export function localStemLiftM(distance, pixelFactor, maxM) {
+export function localStemLiftM(distance, pixelFactor, maxM, targetPx = LOCAL_STEM_TARGET_PX) {
   const effectiveDistance = Math.max(distance, 5000);
-  return Math.min(effectiveDistance * pixelFactor * LOCAL_STEM_TARGET_PX, maxM);
+  return Math.min(effectiveDistance * pixelFactor * targetPx, maxM);
 }
 
 /**
@@ -1129,6 +1211,23 @@ export function createLocalGeoJsonLayer({
    * @type {?((features:Array<object>) => (void|(() => void)))}
    */
   onFeatures = null,
+  /*
+   * ── OPTIONAL: A GLYPH FOR THE MARK, AND GROUPED MARKS ──────────────────
+   *
+   * `markerGlyphs` replaces the dot with a billboard: `() => ({ single:
+   * {image, scale}, group: {image, scale} })`, resolved once per load, null
+   * where there is no canvas (the dot stays). With `groupCellPx`, the marks
+   * that share a screen cell of that pitch merge into the `group` image above
+   * `groupMinHeightM` of camera height — below it every site is drawn, since
+   * a reader that close came to separate them. See {@link groupLocalMarks}.
+   * `stemPx` is the recall stem's on-screen height; 65 px by default.
+   * The data-centre layer is the first caller (`datacenterGlyphs.js`).
+   */
+  /** @type {?(() => ?{single: {image: string, scale: number}, group: {image: string, scale: number}})} */
+  markerGlyphs = null,
+  groupCellPx = 0,
+  groupMinHeightM = 60_000,
+  stemPx = LOCAL_STEM_TARGET_PX,
 }) {
   const resolveRenderSpec = featureRender || PACK_RENDERERS[id]?.featureRender || null;
   const resolveRenderLegend = renderLegend || PACK_RENDERERS[id]?.renderLegend || null;
@@ -1368,6 +1467,22 @@ export function createLocalGeoJsonLayer({
    * @param {Cesium.Viewer} viewer
    * @returns {object} The live PolylineCollection.
    */
+  /**
+   * Show the `group` image on a mark that stands for several sites, the
+   * `single` one otherwise. Written only on a change: a billboard's `image` is
+   * a Property, and assigning one allocates.
+   */
+  function setGlyphGrouped(record, grouped) {
+    if (record.glyphGrouped === grouped) return;
+    const billboard = record.entity?.billboard;
+    const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
+    if (!billboard || !glyphs) return;
+    record.glyphGrouped = grouped;
+    const glyph = grouped ? glyphs.group : glyphs.single;
+    billboard.image = glyph.image;
+    billboard.scale = glyph.scale;
+  }
+
   function ensureStemCollection(viewer) {
     if (_stemLines) return _stemLines;
     _stemLines = new Cesium.PolylineCollection();
@@ -1768,6 +1883,7 @@ export function createLocalGeoJsonLayer({
           const resolvedOverlayVariant = typeof overlayVariant === 'function'
             ? overlayVariant()
             : overlayVariant;
+          const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
 
           // Natively parse into entities and use it as our _dataSource
           loaded = await Cesium.GeoJsonDataSource.load(geojson, {
@@ -1932,8 +2048,17 @@ export function createLocalGeoJsonLayer({
             // shaft comes from `_stemPool`, sized to what is on screen. What
             // the record keeps is the two things the deal cannot re-derive —
             // the shaft's colour and its width.
-            const stemWidth = groupStyle?.stemWidth ?? 3.5;
-            feature.point = new Cesium.PointGraphics({
+            const stemWidth = renderSpec.stemWidth ?? groupStyle?.stemWidth ?? 3.5;
+            const stemCss = renderSpec.stemColor || null;
+            if (glyphs) {
+              // The pack's own mark. The id string keys the atlas, so every
+              // site shares one image (see `datacenterGlyphs.js`).
+              feature.billboard = new Cesium.BillboardGraphics({
+                image: glyphs.single.image,
+                scale: glyphs.single.scale,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              });
+            } else feature.point = new Cesium.PointGraphics({
               pixelSize: renderSpec.pixelSize ?? groupStyle?.pixelSize ?? 10,
               // A1, drawn: a HOLLOW ring is a feature whose measurement was
               // never published, and it must not be reachable by any value of
@@ -2007,7 +2132,7 @@ export function createLocalGeoJsonLayer({
               else _renderTally.set(renderSpec.key, { total: 1, visible: 0 });
             }
 
-            const priority = labelPriorityFromProperties(properties, id);
+            const priority = labelPriorityFromProperties(properties, id, { areaM2 });
             _stemRecords.push({
               id: recordId,
               entity: feature,
@@ -2016,18 +2141,22 @@ export function createLocalGeoJsonLayer({
               tip,
               nextTip: Cesium.Cartesian3.clone(tip),
               /** Colour of the pooled shaft. */
-              stemColor: markerColor,
+              stemColor: stemCss ? Cesium.Color.fromCssColorString(stemCss) : markerColor,
               /**
                * Sort key for the draw order — the CSS string the colour came
                * from, resolved ONCE here. Sorting on `toCssColorString()` would
                * allocate a string per comparison, so ~120 000 of them per
                * settle on the scene this budget exists for.
                */
-              stemColorKey: markerCss || color,
+              stemColorKey: stemCss || markerCss || color,
               /** Pool entry drawing this record's shaft, or null. See `showStem`. */
               stemEntry: null,
               /** Width of the pooled shaft, in pixels. Never splits a command. */
               stemWidth,
+              /** On-screen height of the shaft, CSS pixels (`stemPx`). */
+              stemTargetPx: stemPx,
+              /** Which of `markerGlyphs`' two images the billboard shows. */
+              glyphGrouped: false,
               groundHeight,
               groundSampled: false,
               lastGroundSampleMs: 0,
@@ -2230,7 +2359,7 @@ export function createLocalGeoJsonLayer({
               record.offScreen = localRecordOffScreen(
                 cullingVolume,
                 record,
-                localStemLiftM(distance, pixelFactor, record.stemMaxHeightM),
+                localStemLiftM(distance, pixelFactor, record.stemMaxHeightM, record.stemTargetPx),
               );
               // Out of range cannot change without camera motion, and camera
               // motion is what sets `_stemGeometryDirty` — so skipping the stem
@@ -2341,6 +2470,28 @@ export function createLocalGeoJsonLayer({
               // tout". The flags have to be cleared rather than left: a record
               // dropped at orbit would otherwise stay dropped on the way down.
               for (const record of candidates) record.beyondBudget = false;
+            }
+            if (groupCellPx > 0) {
+              const cameraCarto = viewer.camera.positionCartographic
+                || Cesium.Cartographic.fromCartesian(cameraPos);
+              const grouping = Number(cameraCarto?.height) > groupMinHeightM;
+              const drawn = candidates.filter((record) => !record.beyondBudget);
+              const leads = grouping
+                ? groupLocalMarks(drawn, {
+                  cellPx: groupCellPx,
+                  width: canvas.clientWidth || canvas.width || 0,
+                  height: canvas.clientHeight || canvas.height || 0,
+                  pinned: viewer.selectedEntity?.__localLayerId === id
+                    ? drawn.find((candidate) => candidate.entity === viewer.selectedEntity) || null
+                    : null,
+                  project: (record) => projectToWindow(viewer.scene, record.tip),
+                })
+                : null;
+              for (const record of drawn) {
+                const count = leads ? (leads.get(record) || 0) : 1;
+                if (count === 0) record.beyondBudget = true;
+                setGlyphGrouped(record, count >= 2);
+              }
             }
           }
 
@@ -2657,7 +2808,7 @@ function updateLocalStemGeometry(viewer, record, now, knownDistance = null, know
   // Capped in METRES for a layer that declares a ceiling — see `stemMaxHeightM`.
   // Uncapped (Infinity) the Math.min inside is a no-op and the geometry is
   // unchanged. The frustum gate sizes its sphere on the same call.
-  const lift = localStemLiftM(distance, pixelFactor, record.stemMaxHeightM);
+  const lift = localStemLiftM(distance, pixelFactor, record.stemMaxHeightM, record.stemTargetPx);
   const tipHeight = record.groundHeight + lift;
   Cesium.Cartesian3.fromRadians(
     record.carto.longitude,
@@ -2715,7 +2866,7 @@ function namelessTitle(props, layerId) {
   return layerTitle(layerId);
 }
 
-function labelPriorityFromProperties(props, layerId) {
+function labelPriorityFromProperties(props, layerId, measured = {}) {
   const tags = props.tags || {};
 
   let score = 0;
@@ -2723,7 +2874,7 @@ function labelPriorityFromProperties(props, layerId) {
   if (cleanLabel(tags['name:en'])) score += 700;
   if (cleanLabel(tags.operator) || cleanLabel(props.operator)) score += 180;
   if (props.output || tags['plant:output:electricity']) score += 120;
-  if (layerId === 'local-datacenters') score += 60;
+  if (layerId === 'local-datacenters') score += 60 + datacenterLabelPriority(props, measured);
   // Large harbours outrank very small ones when the label grid is crowded.
   if (layerId === 'local-ports') {
     score += 70;

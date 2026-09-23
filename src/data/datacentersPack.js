@@ -1,4 +1,9 @@
 import { formatNumber } from '../i18n/format.js';
+import {
+  DATACENTER_GROUP_LEGEND_GLYPH,
+  DATACENTER_SITE_LEGEND_GLYPH,
+  DATACENTER_VIOLET,
+} from './datacenterGlyphs.js';
 import messages from './datacentersPack.i18n.js';
 
 /** The catalog's own copy, for the frozen table below. */
@@ -405,23 +410,10 @@ export function datacenterCardDetails(props, { areaM2 = 0 } = {}) {
   // adds a word to sites that already name their operator and nothing to any
   // site that does not.
   const operator = firstText([tags.operator, source.operator, tags.owner, tags.brand]);
-  // `data_center:power` first — it is the only key in this pack that is
-  // actually an IT-load figure, and the three the old card looked for match one
-  // feature each. They stay as tail fallbacks rather than being deleted,
-  // because a future re-extraction may well populate them.
-  //
-  // DCWatch comes LAST in this chain, not first: five French features publish
-  // `data_center:power` in OSM and all five also have a DCWatch row, so this
-  // ordering only changes what those five print — and a value somebody mapped
-  // on the ground outranks one collected from filings. Everywhere else the
-  // OSM chain is empty and DCWatch is the only figure there is.
-  const mappedPower = firstText([
-    tags['data_center:power'],
-    tags['capacity:it_load'],
-    tags.it_load,
-    tags.capacity,
-  ]);
-  const power = mappedPower || formatPowerMw(dcwatch?.powerMw);
+  // The mapped figure before DCWatch's — see `datacenterPowerText`. Whether it
+  // came from OSM decides the provenance line below.
+  const mappedPower = mappedPowerText(tags);
+  const power = datacenterPowerText(source);
   // A `ref` is industry naming worth showing — 'MRS1', 'TH3', 'BX1' — but 66 %
   // of them are already a substring of the name they sit under. Printed only
   // when it is a token the title does not already carry.
@@ -538,16 +530,30 @@ export function datacenterHeightM(tags) {
   return null;
 }
 
-/** Cyan — a hall. The layer's historical colour, now carrying a distinction. */
-export const DATACENTER_HALL_COLOR = '#00ffff';
+/**
+ * Violet — a hall, and the mark over every site. It was the layer's
+ * historical cyan until the mock of 2026-09-23, where the row's other members
+ * hold the other lights (cables cyan, antennas amber) — see
+ * `datacenterGlyphs.js`.
+ */
+export const DATACENTER_HALL_COLOR = DATACENTER_VIOLET;
 
 /**
- * Slate — a site outline. Deliberately a LOW-chroma neighbour of the cyan and
- * not a second bright hue: these two are not two categories of equal standing,
- * they are "the thing" and "the fence around the thing", and the fence must
- * not out-shout the hall it contains.
+ * Slate — a site outline. Deliberately a LOW-chroma neighbour of the violet
+ * and not a second bright hue: these two are not two categories of equal
+ * standing, they are "the thing" and "the fence around the thing", and the
+ * fence must not out-shout the hall it contains.
  */
-export const DATACENTER_SITE_COLOR = '#8fa6b5';
+export const DATACENTER_SITE_COLOR = '#9d98b5';
+
+/**
+ * The recall stem: short, thin and faint. The mark carries the light now, and
+ * the 65 px, 3.5 px cyan shafts of before read as a field of light beams at
+ * the national view — the operator's word for them.
+ */
+export const DATACENTER_STEM_PX = 18;
+export const DATACENTER_STEM_WIDTH_PX = 1.5;
+export const DATACENTER_STEM_COLOR = 'rgba(200, 184, 255, 0.55)';
 
 /**
  * ONE fill opacity for all three surface classes, so that opacity encodes
@@ -686,7 +692,91 @@ export function datacenterRenderSpec(props, { areaM2 = 0 } = {}) {
     // path in the shared loader, not a colour, and it is not done.
     fillAlpha: DATACENTER_FILL_ALPHA,
     extrudedHeightM: height ? height.heightM : null,
+    stemColor: DATACENTER_STEM_COLOR,
+    stemWidth: DATACENTER_STEM_WIDTH_PX,
   };
+}
+
+/**
+ * The site's power as the card and the map label print it, or ''.
+ *
+ * `data_center:power` first — it is the only key in this pack that is actually
+ * an IT-load figure, and the three the old card looked for match one feature
+ * each. They stay as tail fallbacks rather than being deleted, because a
+ * future re-extraction may well populate them.
+ *
+ * DCWatch comes LAST in this chain, not first: five French features publish
+ * `data_center:power` in OSM and all five also have a DCWatch row, so this
+ * ordering only changes what those five print — and a value somebody mapped
+ * on the ground outranks one collected from filings. Everywhere else the OSM
+ * chain is empty and DCWatch is the only figure there is.
+ *
+ * @param {object} props Unwrapped feature properties.
+ * @returns {string}
+ */
+export function datacenterPowerText(props) {
+  const source = props && typeof props === 'object' ? props : {};
+  const tags = source.tags && typeof source.tags === 'object' ? source.tags : {};
+  return mappedPowerText(tags) || formatPowerMw(datacenterDcwatch(source)?.powerMw);
+}
+
+/** The power somebody mapped in OSM, as written, or ''. */
+function mappedPowerText(tags) {
+  return firstText([
+    tags['data_center:power'],
+    tags['capacity:it_load'],
+    tags.it_load,
+    tags.capacity,
+  ]);
+}
+
+/**
+ * The key's two rows: a site, and a mark that stands for several.
+ *
+ * TWO FORM ROWS, which the key's rule allows only for a mark decoded wrong
+ * without one — and a stack of sparkles is: unaided it reads as a different
+ * KIND of site, not as several of the same kind merged at this scale. The
+ * site row is its pair, so the stack has something to be read against. No
+ * count: how many sites a stack holds changes with every zoom.
+ *
+ * @returns {Array<object>}
+ */
+export function datacenterKeyLegend() {
+  const words = messages().key;
+  return [
+    { label: words.site, color: DATACENTER_HALL_COLOR, glyph: DATACENTER_SITE_LEGEND_GLYPH },
+    {
+      label: words.group,
+      color: DATACENTER_HALL_COLOR,
+      glyph: DATACENTER_GROUP_LEGEND_GLYPH,
+      blurb: words.groupBlurb,
+    },
+  ];
+}
+
+/**
+ * How much a site's name deserves one of the few labels on screen.
+ *
+ * The layer names a handful of sites now, not three hundred, so which ones
+ * matters: the ones that draw the most power, where anyone published it —
+ * 333 French sites through DCWatch and the five OSM features with
+ * `data_center:power` — then the biggest halls. Logarithmic, so a 85 MW
+ * campus outranks a 4 MW one without the 4 MW ones becoming unlabelled noise.
+ *
+ * @param {object} props Unwrapped feature properties.
+ * @param {{areaM2?: number}} [measured]
+ * @returns {number} Added to the loader's own name/operator score.
+ */
+export function datacenterLabelPriority(props, { areaM2 = 0 } = {}) {
+  const source = props && typeof props === 'object' ? props : {};
+  const tags = source.tags && typeof source.tags === 'object' ? source.tags : {};
+  const mapped = Number.parseFloat(String(tags['data_center:power'] ?? '').replace(',', '.'));
+  const megawatts = Number.isFinite(mapped) && mapped > 0 ? mapped : Number(datacenterDcwatch(source)?.powerMw);
+  let score = 0;
+  if (Number.isFinite(megawatts) && megawatts > 0) score += 400 + Math.round(120 * Math.log2(1 + megawatts));
+  const area = Number(areaM2);
+  if (Number.isFinite(area) && area > 0) score += Math.round(40 * Math.log10(1 + area));
+  return score;
 }
 
 /** The surface entry behind one key, for callers that need its wording. */
