@@ -13,19 +13,21 @@
  *   - the LIST, 292 px, beside it: the rows of ONE group, under that group's
  *     name, its tally, a search field and two buttons (keep open, close).
  *
- * THE LIST IS A DRAWER, AND WHAT CLOSES IT IS A CLICK ON THE GLOBE. Open, the
- * panel is 380 px — 25 % of a 13-inch MacBook, 30 % of a 1280 px laptop — and
- * most of what a reader does after switching a layer on is look at the map. So
- * a plain click on the globe (not a drag: panning is looking) closes it, the
- * way a menu closes, and the rail stays. Hovering was the other candidate and
- * was rejected: a drag across the left edge would open it mid-gesture, a touch
- * screen has no hover, and a list that closes when the pointer leaves it closes
- * every time the reader glances at what they just switched on.
+ * THE LIST IS A DRAWER: THE GLOBE PUTS IT AWAY, THE POINTER BRINGS IT BACK.
+ * Open, the panel is 380 px — 25 % of a 13-inch MacBook, 30 % of a 1280 px
+ * laptop — and what a reader does after switching a layer on is look at the
+ * map. So touching the globe folds the list back into the rail: a press of any
+ * button (a click, the start of a pan, a tap) or a wheel over it. A mouse that
+ * rests on the rail for {@link HOVER_OPEN_DELAY_MS} unfolds it again, on the
+ * group it showed last. The pointer LEAVING the panel folds nothing: a list that
+ * closed then would close every time the reader glanced at what they had just
+ * switched on. What hover gets wrong elsewhere is kept out: a pointer crossing
+ * the rail on its way somewhere does not rest on it, a pan dragged across it
+ * holds a button down, and a touch screen, which has no hover, taps the rail.
  *
- * A PIN KEEPS IT OPEN, AND A WIDE SCREEN STARTS PINNED. At 1920 px and more
- * the open panel costs a fifth of the width or less, and closing it on every
- * click would be friction with nothing to gain. The reader's own choice, once
- * made, is stored and wins over the width.
+ * A PIN KEEPS IT OPEN. Pressed, the globe no longer folds the list, and the
+ * choice is stored. Every width starts unpinned: the first version pinned
+ * windows 1920 px wide and more, and there the list never folded at all.
  *
  * WHAT THIS MODULE DOES NOT OWN. The rows. `DataLayerManager` still builds
  * every group and every row (`setPanelLayout('rail')` makes its headers plain
@@ -44,24 +46,30 @@ import { lucideIconMask } from './lucideIcons.js';
 import managerMessages from './manager.i18n.js';
 import messages from './layerPanelRail.i18n.js';
 
-/** The reader's pin choice: `'true'` or `'false'`; absent until they press it. */
-export const DRAWER_PINNED_STORAGE_KEY = 'godsEyeView.v1.dataLayerDrawerPinned';
+/**
+ * The reader's pin choice: `'true'` or `'false'`; absent until they press it.
+ * Not the first version's `dataLayerDrawerPinned`, which a 1920 px screen read
+ * as pinned by default: a pin pressed against that default is not a choice
+ * made against this one.
+ */
+export const DRAWER_PINNED_STORAGE_KEY = 'godsEyeView.v1.dataLayerDrawerPin';
 
 /** The group the list showed last. */
 export const DRAWER_CATEGORY_STORAGE_KEY = 'godsEyeView.v1.dataLayerDrawerCategory';
 
 /**
- * From this viewport width up, the list starts pinned. The open panel is 380 px:
- * 20 % of 1920, 15 % of 2560 — narrow enough to leave open. Below it (a 1440 or
- * 1512 MacBook, a 1280 laptop at 150 %) it is a quarter of the screen or more.
+ * How long a mouse rests on the rail before the list unfolds. A sweep at
+ * 1 000 px/s crosses the 88 px rail in 90 ms; a pointer still there after
+ * this has stopped on it.
  */
-export const PINNED_BY_DEFAULT_MIN_WIDTH = 1920;
+export const HOVER_OPEN_DELAY_MS = 200;
 
-/** Travel under which a press on the globe is a click, not a pan. */
-const GLOBE_TAP_TRAVEL_PX = 6;
-
-/** A press held longer than this is somebody looking, not clicking. */
-const GLOBE_TAP_MAX_MS = 700;
+/**
+ * A click this soon after the pointer unfolded the list was aimed before the
+ * list appeared. On the group the list opened on, it asks for that group, and
+ * must not fold it the way a second press on an open group does.
+ */
+export const HOVER_CLICK_GRACE_MS = 500;
 
 /**
  * Lowercase, accents folded, spaces collapsed: « Électricité » matches
@@ -127,20 +135,12 @@ export function matchRows(index, query) {
 }
 
 /**
- * Whether the list starts pinned: the reader's stored choice, else the width.
+ * Whether the list starts pinned: only if the reader pinned it.
  * @param {?{getItem: function(string): ?string}} storage
- * @param {number} viewportWidth CSS pixels.
  * @returns {boolean}
  */
-export function resolveDrawerPinned(storage, viewportWidth) {
-  try {
-    const stored = storage?.getItem?.(DRAWER_PINNED_STORAGE_KEY);
-    if (stored === 'true') return true;
-    if (stored === 'false') return false;
-  } catch {
-    // Storage refused: fall through to the width, which is the default anyway.
-  }
-  return Number(viewportWidth) >= PINNED_BY_DEFAULT_MIN_WIDTH;
+export function resolveDrawerPinned(storage) {
+  return readStorage(storage, DRAWER_PINNED_STORAGE_KEY) === 'true';
 }
 
 /**
@@ -208,7 +208,7 @@ export function mountLayerPanelRail({
   const m = messages();
   const state = {
     open: false,
-    pinned: resolveDrawerPinned(storage, win?.innerWidth ?? 0),
+    pinned: resolveDrawerPinned(storage),
     category: readStorage(storage, DRAWER_CATEGORY_STORAGE_KEY),
     query: '',
   };
@@ -420,8 +420,23 @@ export function mountLayerPanelRail({
     state.category = resolveRailCategory(groups, state.category);
   }
 
+  // The pointer's side. `hoverArmed` drops when the list closes and comes back
+  // when the pointer next ENTERS the panel: a reader who closes the list with
+  // the pointer on the rail has not asked for it back by leaving it there.
+  let hoverTimer = null;
+  let hoverArmed = true;
+  let hoverOpenedAt = -Infinity;
+  const setTimer = (callback, ms) => (win?.setTimeout ? win.setTimeout(callback, ms) : setTimeout(callback, ms));
+  const clearTimer = (id) => (win?.clearTimeout ? win.clearTimeout(id) : clearTimeout(id));
+  const now = () => win?.performance?.now?.() ?? Date.now();
+  const cancelHover = () => {
+    if (hoverTimer !== null) clearTimer(hoverTimer);
+    hoverTimer = null;
+  };
+
   // ── Verbs ───────────────────────────────────────────────────────────────
   function open(categoryId = null) {
+    cancelHover();
     if (categoryId) {
       state.category = resolveRailCategory(groups, categoryId);
       writeStorage(storage, DRAWER_CATEGORY_STORAGE_KEY, state.category || '');
@@ -437,6 +452,8 @@ export function mountLayerPanelRail({
 
   function close() {
     if (!state.open) return;
+    cancelHover();
+    hoverArmed = false;
     state.open = false;
     clearQuery();
     applyView();
@@ -458,9 +475,11 @@ export function mountLayerPanelRail({
 
   function onGroupPressed(id) {
     if (state.open && !searching() && state.category === id) {
+      if (now() - hoverOpenedAt < HOVER_CLICK_GRACE_MS) return;
       close();
       return;
     }
+    hoverOpenedAt = -Infinity;
     clearQuery();
     open(id);
   }
@@ -504,24 +523,36 @@ export function mountLayerPanelRail({
     if (focusWasInDrawer) railButtons.get(state.category)?.focus?.({ preventScroll: true });
   });
 
-  // A plain click on the globe closes the list, unless it is pinned. Capture
-  // phase, because the globe's own handlers (picking, selection) may stop the
-  // event; the list closes whatever the click went on to do.
-  let press = null;
+  // Touching the globe folds the list, unless it is pinned. Capture phase,
+  // because the globe's own handlers (picking, the camera) may stop the event;
+  // the list folds whatever the press or the wheel went on to do.
   const isGlobe = (target) => target?.tagName === 'CANVAS' && Boolean(target.closest?.('#cesiumContainer'));
-  listen(doc, 'pointerdown', (event) => {
-    press = null;
-    if (!state.open || state.pinned || event.button !== 0 || !isGlobe(event.target)) return;
-    press = { id: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp };
-  }, { capture: true, passive: true });
-  listen(doc, 'pointerup', (event) => {
-    const start = press;
-    press = null;
-    if (!start || event.pointerId !== start.id || !state.open || state.pinned) return;
-    const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
-    if (travel > GLOBE_TAP_TRAVEL_PX || event.timeStamp - start.t > GLOBE_TAP_MAX_MS) return;
+  const foldOnGlobe = (event) => {
+    if (!state.open || state.pinned || !isGlobe(event.target)) return;
     close();
-  }, { capture: true, passive: true });
+  };
+  listen(doc, 'pointerdown', foldOnGlobe, { capture: true, passive: true });
+  listen(doc, 'wheel', foldOnGlobe, { capture: true, passive: true });
+
+  // A mouse resting on the panel unfolds the list; one crossing it, one with a
+  // button down (a pan dragged over the rail) or a finger does not.
+  listen(panel, 'pointerenter', () => {
+    hoverArmed = true;
+  }, { passive: true });
+  listen(panel, 'pointerleave', cancelHover, { passive: true });
+  listen(panel, 'pointermove', (event) => {
+    if (event.pointerType !== 'mouse' || event.buttons) {
+      cancelHover();
+      return;
+    }
+    if (state.open || !hoverArmed || hoverTimer !== null || panel.classList.contains('collapsed')) return;
+    hoverTimer = setTimer(() => {
+      hoverTimer = null;
+      if (state.open || !hoverArmed || panel.classList.contains('collapsed')) return;
+      open();
+      hoverOpenedAt = now();
+    }, HOVER_OPEN_DELAY_MS);
+  }, { passive: true });
 
   // Expanding the panel from its launcher opens the list with it: one click
   // to reach a row, as before. A panel the layout engine collapsed to make
@@ -577,6 +608,7 @@ export function mountLayerPanelRail({
       hits: [...hits],
     }),
     destroy() {
+      cancelHover();
       for (const cleanup of cleanups.splice(0)) cleanup();
       rail.remove();
       head.remove();

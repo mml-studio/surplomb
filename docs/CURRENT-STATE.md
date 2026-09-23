@@ -3195,12 +3195,18 @@ mounted by `src/main.js` everywhere but the phone shell):
 
 Open, the panel is 380 px (the old one was 320); closed, it is the rail alone.
 Expanding the panel from its launcher opens the list on the last group shown
-(`godsEyeView.v1.dataLayerDrawerCategory`). Pressing the open group again, the
-close button, Escape inside the panel, or a **plain click on the globe** closes
-it; a drag on the globe (more than 6 px, or longer than 700 ms) does not. The
-**pin** keeps it open through globe clicks; the choice is stored
-(`godsEyeView.v1.dataLayerDrawerPinned`), and with no stored choice a window
-1920 px wide or more starts pinned. Hover opens nothing.
+(`godsEyeView.v1.dataLayerDrawerCategory`). **Touching the globe folds the
+list back into the rail**: a press of any button (a click, the start of a pan,
+a right-drag zoom, a tap) or a wheel over the globe's canvas. So do pressing
+the open group again, the close button and Escape inside the panel. **A mouse
+resting on the panel for 200 ms unfolds it again** on the last group shown; the
+pointer leaving the panel folds nothing. A pointer crossing the rail, a mouse
+with a button down (a pan dragged over the rail) and a finger unfold nothing,
+and a list folded with the pointer on the panel waits for the pointer to leave
+and come back. A click on the open group within 500 ms of the hover unfolding
+it was aimed before the list appeared, and does not fold it. The **pin** keeps
+the list open through the globe; the choice is stored
+(`godsEyeView.v1.dataLayerDrawerPin`), and every width starts unpinned.
 
 The **search** matches every word of the query, in any order, accents folded,
 against each row's name, source and group — and against the names of the layers

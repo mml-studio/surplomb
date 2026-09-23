@@ -11,7 +11,8 @@ import assert from 'node:assert/strict';
 import {
   DRAWER_CATEGORY_STORAGE_KEY,
   DRAWER_PINNED_STORAGE_KEY,
-  PINNED_BY_DEFAULT_MIN_WIDTH,
+  HOVER_CLICK_GRACE_MS,
+  HOVER_OPEN_DELAY_MS,
   buildRowSearchIndex,
   matchRows,
   mountLayerPanelRail,
@@ -59,16 +60,16 @@ test('a query keeps rows holding every word, in any order, accents or not', () =
   assert.equal(matchRows(index, 'zzqx').size, 0);
 });
 
-test('the list starts pinned from 1920 px, unless the reader said otherwise', () => {
-  const store = (value) => ({ getItem: (key) => (key === DRAWER_PINNED_STORAGE_KEY ? value : null) });
-  assert.equal(PINNED_BY_DEFAULT_MIN_WIDTH, 1920);
-  assert.equal(resolveDrawerPinned(store(null), 1919), false);
-  assert.equal(resolveDrawerPinned(store(null), 1920), true);
-  assert.equal(resolveDrawerPinned(store('false'), 2560), false);
-  assert.equal(resolveDrawerPinned(store('true'), 1280), true);
-  const broken = { getItem() { throw new Error('denied'); } };
-  assert.equal(resolveDrawerPinned(broken, 2560), true);
-  assert.equal(resolveDrawerPinned(null, 1470), false);
+test('the list starts pinned only when the reader pinned it', () => {
+  const store = (value) => ({ getItem: () => value });
+  assert.equal(resolveDrawerPinned(store(null)), false);
+  assert.equal(resolveDrawerPinned(store('false')), false);
+  assert.equal(resolveDrawerPinned(store('true')), true);
+  const broken = { getItem: () => { throw new Error('denied'); } };
+  assert.equal(resolveDrawerPinned(broken), false);
+  assert.equal(resolveDrawerPinned(null), false);
+  assert.equal(DRAWER_PINNED_STORAGE_KEY, 'godsEyeView.v1.dataLayerDrawerPin',
+    'not the first version\'s key, which a 1920 px screen read as pinned by default');
 });
 
 test('the group shown is the one asked for if it still has rows, else the first', () => {
@@ -242,6 +243,30 @@ function makeDocument() {
   return doc;
 }
 
+/** `setTimeout` and `performance.now` the test moves forward by hand. */
+function makeClock() {
+  let time = 0;
+  let nextId = 1;
+  const pending = new Map();
+  return {
+    setTimeout(callback, ms) {
+      const id = nextId++;
+      pending.set(id, { at: time + ms, callback });
+      return id;
+    },
+    clearTimeout(id) { pending.delete(id); },
+    performance: { now: () => time },
+    advance(ms) {
+      time += ms;
+      for (const [id, entry] of [...pending]) {
+        if (entry.at > time) continue;
+        pending.delete(id);
+        entry.callback();
+      }
+    },
+  };
+}
+
 function makeStorage(seed = {}) {
   const store = new Map(Object.entries(seed));
   return {
@@ -305,7 +330,14 @@ function makeRail({ width = 1470, storage = makeStorage(), groups: seedGroups } 
     revealPanelRow(id) { return this.revealHandler?.(id); },
   };
   paint();
-  const rail = mountLayerPanelRail({ dataManager: manager, panel, doc, win: { innerWidth: width }, storage });
+  const clock = makeClock();
+  const win = {
+    innerWidth: width,
+    setTimeout: clock.setTimeout,
+    clearTimeout: clock.clearTimeout,
+    performance: clock.performance,
+  };
+  const rail = mountLayerPanelRail({ dataManager: manager, panel, doc, win, storage });
   const canvas = doc.createElement('canvas');
   const container = doc.createElement('div');
   container.id = 'cesiumContainer';
@@ -316,10 +348,16 @@ function makeRail({ width = 1470, storage = makeStorage(), groups: seedGroups } 
     .filter((section) => section.classList.contains('is-rail-current')
       || (panel.classList.contains('rail-searching') && !section.classList.contains('is-search-empty')))
     .map((section) => section.dataset.categoryId);
-  const pressGlobe = (travel = 0, target = canvas) => {
-    doc.fire('pointerdown', { target, button: 0, pointerId: 1, clientX: 100, clientY: 100, timeStamp: 0 });
-    doc.fire('pointerup', { target, button: 0, pointerId: 1, clientX: 100 + travel, clientY: 100, timeStamp: 120 });
+  const pressGlobe = (travel = 0, target = canvas, button = 0) => {
+    doc.fire('pointerdown', { target, button, pointerId: 1, clientX: 100, clientY: 100, timeStamp: 0 });
+    doc.fire('pointerup', { target, button, pointerId: 1, clientX: 100 + travel, clientY: 100, timeStamp: 120 });
   };
+  const wheelGlobe = (target = canvas) => doc.fire('wheel', { target, deltaY: -120 });
+  // The panel hears `pointerenter` and `pointerleave` on itself (they do not
+  // bubble) and `pointermove` from whatever it holds.
+  const enter = () => panel.dispatch('pointerenter', { pointerType: 'mouse', buttons: 0 });
+  const leave = () => panel.dispatch('pointerleave', { pointerType: 'mouse', buttons: 0 });
+  const move = (target, init = {}) => target.dispatch('pointermove', { pointerType: 'mouse', buttons: 0, ...init });
   const type = (value) => {
     const input = q('.data-drawer-search-input');
     input.value = value;
@@ -330,7 +368,10 @@ function makeRail({ width = 1470, storage = makeStorage(), groups: seedGroups } 
     paint();
     for (const callback of listeners) callback({ rebuilt: true });
   };
-  return { rail, doc, panel, list, manager, calls, storage, q, button, shownSections, pressGlobe, type, setGroups };
+  return {
+    rail, doc, panel, list, manager, calls, storage, clock, q, button, shownSections,
+    pressGlobe, wheelGlobe, enter, leave, move, type, setGroups,
+  };
 }
 
 // ─── The controller ──────────────────────────────────────────────────────────
@@ -358,13 +399,15 @@ test('the rail draws one button per group, in order, and switches the manager to
   assert.equal(t.button('energy').title, 'ÉNERGIE · 1/2 ACTIVES');
 });
 
-test('below 1920 px the list starts closed; from 1920 px it starts open and pinned', () => {
-  const small = makeRail({ width: 1470 });
-  assert.equal(small.rail.getState().open, false);
-  assert.ok(!small.panel.classList.contains('drawer-open'));
-  const wide = makeRail({ width: 2560 });
-  assert.deepEqual([wide.rail.getState().open, wide.rail.getState().pinned], [true, true]);
-  assert.equal(wide.q('.data-drawer-pin').getAttribute('aria-pressed'), 'true');
+test('at every width the list starts closed; a stored pin starts it open', () => {
+  for (const width of [1280, 1470, 1920, 2560]) {
+    const t = makeRail({ width });
+    assert.deepEqual([t.rail.getState().open, t.rail.getState().pinned], [false, false], `${width} px`);
+    assert.ok(!t.panel.classList.contains('drawer-open'));
+    assert.equal(t.q('.data-drawer-pin').getAttribute('aria-pressed'), 'false');
+  }
+  const pinned = makeRail({ storage: makeStorage({ [DRAWER_PINNED_STORAGE_KEY]: 'true' }) });
+  assert.deepEqual([pinned.rail.getState().open, pinned.rail.getState().pinned], [true, true]);
 });
 
 test('a group opens the list on itself, swaps it, and closes it when pressed again', () => {
@@ -394,23 +437,135 @@ test('the last group shown is the one the list reopens on', () => {
   assert.deepEqual(t.shownSections(), ['energy']);
 });
 
-test('a click on the globe closes the list; a pan, another surface or a pin do not', () => {
+test('touching the globe folds the list: a click, a pan, any button, a wheel', () => {
   const t = makeRail();
-  t.button('energy').click();
-  t.pressGlobe(40);
-  assert.equal(t.rail.getState().open, true, 'a drag is somebody looking');
-  t.pressGlobe(0, t.doc.createElement('canvas'));
-  assert.equal(t.rail.getState().open, true, 'a canvas outside the globe is not the globe');
-  t.pressGlobe(0);
-  assert.equal(t.rail.getState().open, false);
+  const reopen = () => t.button('energy').click();
+  const folds = [
+    ['a click', () => t.pressGlobe(0)],
+    ['a pan', () => t.pressGlobe(40)],
+    ['a right-drag zoom', () => t.pressGlobe(40, undefined, 2)],
+    ['a wheel or a pinch', () => t.wheelGlobe()],
+  ];
+  for (const [gesture, act] of folds) {
+    reopen();
+    assert.equal(t.rail.getState().open, true);
+    act();
+    assert.equal(t.rail.getState().open, false, gesture);
+    assert.ok(!t.panel.classList.contains('drawer-open'), gesture);
+  }
 
+  reopen();
+  t.pressGlobe(0, t.doc.createElement('canvas'));
+  t.wheelGlobe(t.doc.createElement('div'));
+  assert.equal(t.rail.getState().open, true, 'a canvas outside the globe, or any other surface, is not the globe');
+});
+
+test('pinned, the list survives the globe; the close button still closes it', () => {
+  const t = makeRail();
   t.button('energy').click();
   t.q('.data-drawer-pin').click();
   assert.equal(t.storage.store.get(DRAWER_PINNED_STORAGE_KEY), 'true');
-  t.pressGlobe(0);
+  t.pressGlobe(40);
+  t.wheelGlobe();
   assert.equal(t.rail.getState().open, true);
   t.q('.data-drawer-close').click();
   assert.equal(t.rail.getState().open, false, 'the close button closes a pinned list too');
+});
+
+test('a mouse resting on the rail unfolds the list on the group it showed last', () => {
+  const t = makeRail();
+  t.button('energy').click();
+  t.pressGlobe(40);
+  assert.equal(t.rail.getState().open, false);
+
+  t.enter();
+  t.move(t.button('air-space'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS - 1);
+  assert.equal(t.rail.getState().open, false, 'not before the pointer has rested');
+  t.move(t.button('air-space'));
+  t.clock.advance(1);
+  assert.equal(t.rail.getState().open, true);
+  assert.deepEqual(t.shownSections(), ['energy'], 'the list comes back as it was, not on the group under the pointer');
+
+  t.leave();
+  t.clock.advance(5_000);
+  assert.equal(t.rail.getState().open, true, 'the pointer leaving the panel folds nothing');
+});
+
+test('a pointer crossing the rail, a held button, a finger or a collapsed panel unfold nothing', () => {
+  const t = makeRail();
+  t.enter();
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS / 2);
+  t.leave();
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, false, 'a pointer passing through');
+
+  t.enter();
+  t.move(t.button('energy'), { buttons: 1 });
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, false, 'a pan dragged across the rail');
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS / 2);
+  t.move(t.button('energy'), { buttons: 1 });
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, false, 'a button pressed while the pointer rests cancels the wait');
+  t.leave();
+
+  t.enter();
+  t.move(t.button('energy'), { pointerType: 'touch' });
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, false, 'a finger');
+  t.leave();
+
+  t.panel.classList.add('collapsed');
+  t.enter();
+  t.move(t.panel);
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, false, 'a panel folded to its launcher');
+});
+
+test('a list closed under the pointer stays closed until the pointer comes back', () => {
+  const t = makeRail();
+  t.enter();
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, true);
+  t.clock.advance(HOVER_CLICK_GRACE_MS);
+
+  t.q('.data-drawer-close').click();
+  t.move(t.q('.data-drawer-close'));
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS * 5);
+  assert.equal(t.rail.getState().open, false, 'the reader just closed it');
+
+  t.leave();
+  t.enter();
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.equal(t.rail.getState().open, true);
+});
+
+test('a click aimed before the pointer unfolded the list does not fold it', () => {
+  const t = makeRail({ storage: makeStorage({ [DRAWER_CATEGORY_STORAGE_KEY]: 'energy' }) });
+  t.enter();
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  assert.deepEqual(t.shownSections(), ['energy']);
+  t.clock.advance(HOVER_CLICK_GRACE_MS - 100);
+  t.button('energy').click();
+  assert.equal(t.rail.getState().open, true, 'the click asked for the group the list opened on');
+  t.clock.advance(100);
+  t.button('energy').click();
+  assert.equal(t.rail.getState().open, false, 'once the reader has seen it, a second press folds it');
+
+  t.leave();
+  t.enter();
+  t.move(t.button('energy'));
+  t.clock.advance(HOVER_OPEN_DELAY_MS);
+  t.button('air-space').click();
+  t.button('air-space').click();
+  assert.equal(t.rail.getState().open, false, 'the grace belongs to the group the pointer unfolded, not the next one');
 });
 
 test('the search spans every group, says when nothing matches, and Escape empties then closes', () => {

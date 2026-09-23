@@ -4846,8 +4846,8 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
 
 /* ── The Layers panel on a desktop: a rail of groups, a list beside it ─────
    src/data/layerPanelRail.js. The rail (88 px) is one button per group; the
-   list (292 px) shows the rows of ONE group and closes on a plain click on the
-   globe unless pinned. Mounted only outside the phone shell, which keeps the
+   list (292 px) shows the rows of ONE group, folds when the globe is touched
+   unless pinned, and unfolds when the mouse rests on the rail. Mounted only outside the phone shell, which keeps the
    accordion, so every rule here hangs off `.has-rail`.
 
    380 px open is the old panel's 320 plus the rail's 60: the list itself keeps
