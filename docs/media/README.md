@@ -1,8 +1,64 @@
 # README media provenance
 
-## Capture GIFs
+## Surplomb captures
 
-Bilawal Sidhu created and owns the following 17 GIFs and has authorized their inclusion and redistribution as part of this public repository and its project documentation. Any appearance by Bilawal Sidhu in these captures is included with his permission.
+The maintainer of this repository filmed the following captures from Surplomb,
+for this repository and its project documentation. Every view film except
+Lyon's is cut into chapters that play in order and together cover the whole
+film; the seconds are those of the film each chapter comes from.
+
+| File | Shows | Film seconds | Data drawn |
+|---|---|---|---|
+| `surplomb-hero.gif` | Paris in photorealistic 3D, live traffic street by street (the head of both READMEs) | — | Road traffic layer |
+| `surplomb-roissy-1-runway.gif` | Terminal 1 at Paris-Charles de Gaulle, then the threshold of runway 09R | 2.7–8.7 | Live flights (OpenSky Network, adsb.lol) |
+| `surplomb-roissy-2-takeoff.gif` | Flight LHX27W's take-off in the cockpit view | 8.7–14.7 | Live flights; the camera run and the speed and altitude on the heads-up display are staged |
+| `surplomb-roissy-3-departure.gif` | A click on the departure opens its tag, Paris-Charles de Gaulle to Munich | 14.7–19.3 | Live flights |
+| `surplomb-roissy-4-noise-plan.gif` | The climb to the airport's noise exposure plan | 19.0–25.0 | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-roissy-5-zone-a.gif` | The key and zone A's card | 25.0–29.0 | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-lyon-dvf-dpe.gif` | Lyon: property sales (DVF), then the energy ratings (DPE) of the same district | 1.6–8.6 | DVF (DGFiP, via Etalab); DPE (ADEME) |
+| `surplomb-grid-1-lights-up.gif` | France's high-voltage grid and nuclear columns light up | 0.0–4.4 | High-voltage lines (© OpenStreetMap contributors); generating-unit output (RTE); columns drawn wider and three times taller than the app draws them at that scale |
+| `surplomb-grid-2-dive.gif` | The dive into the Rhône valley, labels and key | 4.4–8.4 | The same, plus plant positions (EDF Open Data) |
+| `surplomb-grid-3-cruas.gif` | The Cruas plant's card | 8.4–11.5 | Generating-unit output (RTE); plant position (EDF Open Data) |
+| `surplomb-grid-4-blackout.gif` | The pull-back to Europe and the switch-off | 11.5–14.7 | The same as chapter 1; the switch-off is a film effect |
+| `surplomb-infra-1-antennas.gif` | France's mobile antenna sites light up | 0.0–4.4 | Mobile antenna sites (ANFR) |
+| `surplomb-infra-2-no-4g.gif` | The Alps where no operator's 4G reaches | 4.4–9.2 | Simulated 4G coverage (ARCEP, Mon réseau mobile) |
+| `surplomb-infra-3-data-centers.gif` | Île-de-France's data centers and their power | 9.2–14.4 | Data centers (© OpenStreetMap contributors, DCWatch); mobile antenna sites (ANFR) |
+| `surplomb-infra-4-la-defense.gif` | A mast selected at La Défense and its line of sight | 14.4–19.9 | The mast and its registered height (ANFR); the wave is drawn for the film over the 3D tiles |
+| `surplomb-infra-5-line-of-sight.gif` | The pull-up over the ground the mast can see | 19.9–23.65 | The same as chapter 4 |
+
+All of them show Google Photorealistic 3D Tiles, served through Cesium ion.
+Camera paths, captions and reveal effects were staged for filming; the table
+names the other staged parts. The infrastructure film's last 1.2 s, a
+switch-off and zoom-out that joins its end to its start on the landing page,
+is not included.
+
+The view files are 560 px wide (the hero is 480 px). Each chapter plays at the
+highest of 12, 10 or 8 frames per second that keeps it under 5 MB (two Roissy
+chapters sit at 8 fps and between 5 and 6 MB), and its last 0.3 s cross-fade
+into its first frame, so the loop does not jump. Lyon's single GIF plays at
+8 fps without a cross-fade. Encoded with ffmpeg: `palettegen=stats_mode=diff`,
+then `paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`, 128 colors.
+
+These files are **not covered by the project's MIT License**. They are project
+documentation: Google Photorealistic 3D Tiles remain under the Google Maps
+Platform and Cesium ion terms, and every dataset drawn in them under its
+provider's terms ([DATA_SOURCES.md](../../DATA_SOURCES.md)). Keep the
+attribution printed under each capture in the README, and the in-frame credit
+line, with any reuse.
+
+A fifth view, the Gironde megafire of July 2026, is reserved in both READMEs
+(`<!-- view 5: Gironde megafire, pending -->`) and will be recorded here when
+it is added.
+
+## Upstream capture GIFs — removed
+
+Bilawal Sidhu created and owns 17 capture GIFs that `bilawalsidhu/gods-eye-view`
+publishes in its README, and authorized their inclusion and redistribution with
+this repository and its project documentation. They showed the original
+project's features — the cockpit, public cameras, the ISS, sensor styles, voice
+annotation, radio, launch replay, submarine cables. This fork removed all 17 when
+its README switched to captures of what the fork adds, made for this repository.
+They remain in the upstream repository:
 
 - `hero-open-source-reveal.gif`
 - `06-cockpit-ar.gif`
@@ -22,9 +78,10 @@ Bilawal Sidhu created and owns the following 17 GIFs and has authorized their in
 - `08-boneyard.gif`
 - `05-traffic-to-cctv.gif`
 
-Copyright © Bilawal Sidhu. These files are not covered by the project's MIT License. Permission is limited to their inclusion and redistribution with this repository and its project documentation. No permission is granted for standalone reuse or modification. Commercial reuse outside this repository requires separate permission. No share-alike license applies.
-
-The GIFs are promotional captures of God's Eye View. They include Google Photorealistic 3D Tiles and public or third-party data layers with in-frame attribution. Bilawal Sidhu's ownership and permission cover the captures and his likeness; they do not replace the terms of Google Maps Platform or any displayed data provider. Keep the visible attribution intact.
+They are recorded here so the removal is traceable, not because the files are
+still present. Their earlier terms (copyright © Bilawal Sidhu; permission
+limited to inclusion with this repository; no standalone reuse or modification)
+still apply to copies in this repository's history.
 
 ## Public README PNGs — removed
 

@@ -26,7 +26,7 @@ Maintained by **[Melvyn Raymond](https://melvynraymond.com/)**.
 
 <div align="center">
 
-**[What it is](#-what-it-is) · [Why](#-why-this-fork) · [Quick Start](#-quick-start) · [First Five Minutes](#-the-first-five-minutes) · [Talk to It](#-talk-to-it) · [What's Live](#-whats-on-the-globe) · [Under the Hood](#-under-the-hood) · [Keys & Costs](#-api-keys) · [Credits](#-built-on-gods-eye-view)**
+**[What it is](#-what-it-is) · [Views](#-views-from-the-globe) · [Why](#-why-this-fork) · [Quick Start](#-quick-start) · [First Five Minutes](#-the-first-five-minutes) · [Talk to It](#-talk-to-it) · [What's Live](#-whats-on-the-globe) · [Under the Hood](#-under-the-hood) · [Keys & Costs](#-api-keys) · [Credits](#-built-on-gods-eye-view)**
 
 </div>
 
@@ -37,6 +37,106 @@ Maintained by **[Melvyn Raymond](https://melvynraymond.com/)**.
 Surplomb is a 3D globe of France that runs in the browser. It puts the registers the French State publishes — property sales, the cadastre, building permits, energy ratings, schools, doctors, recorded crime, power plants, live buses — on one map, next to the live world layers (flights, ships, satellites, public cameras) of the project it forked, [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view). Click a building, a parcel or a bus and its card says what the register says about it, with the source and the date.
 
 It runs on your own machine with no key and no account ([Quick Start](#-quick-start)); the hosted version is [surplomb.app](https://surplomb.app). The code is MIT-licensed; each dataset keeps its own terms ([DATA_SOURCES.md](DATA_SOURCES.md)).
+
+---
+
+## 🎞️ Views from the globe
+
+Four films shot in the app, each on layers this fork adds; the longer ones are cut into chapters that play in order. The camera paths, captions and reveal effects were staged for filming. The shapes, colors and figures come from each layer's data, except where the line under a chapter says otherwise.
+
+### Roissy: aircraft noise
+
+From Terminal 1 at Paris-Charles de Gaulle to a departure's take-off, then up to the airport's noise exposure plan and its zone A.
+
+<div align="center">
+
+![1/5: the camera leaves Terminal 1 at Paris-Charles de Gaulle and flies low to the threshold of runway 09R](docs/media/surplomb-roissy-1-runway.gif)
+
+<sub>Live flights: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+
+![2/5: in the cockpit view of flight LHX27W, the aircraft rolls down runway 09R and lifts off](docs/media/surplomb-roissy-2-takeoff.gif)
+
+<sub>Staged for the film: the camera run and the speed and altitude on the heads-up display. The callsign and route are live: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+
+![3/5: out of the cockpit, the camera climbs over the runways and a click on the departing aircraft opens its tag: LHX27W, Paris-Charles de Gaulle to Munich](docs/media/surplomb-roissy-3-departure.gif)
+
+<sub>Live flights: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+
+![4/5: the camera rises high above the airport and the noise exposure plan draws its nested zones around the runways](docs/media/surplomb-roissy-4-noise-plan.gif)
+
+<sub>Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
+
+![5/5: the key opens and a click in the innermost zone shows its card: aircraft noise, zone A of Paris-Charles de Gaulle, very strong nuisance, no new housing](docs/media/surplomb-roissy-5-zone-a.gif)
+
+<sub>Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
+
+</div>
+
+### Lyon: what sold, and how it rates
+
+Property sales (DVF) around the Terreaux, one of them annotated at €410,000; a line sweeps the district and the sales give way to the energy rating (DPE) of every rated plot.
+
+<div align="center">
+
+![Over Lyon's Presqu'île, property sales (DVF) appear as dots and one is annotated at €410,000; a line sweeps across the district, the sales go out behind it and the plots light up by energy rating: 14 ratings, C to G](docs/media/surplomb-lyon-dvf-dpe.gif)
+
+<sub>Data: property sales (DVF), DGFiP via Etalab · energy ratings (DPE), ADEME. Imagery: Google, via Cesium ion.</sub>
+
+</div>
+
+### Power grid: France lights up
+
+Western Europe in the dark; France's high-voltage grid comes on and each nuclear plant raises a column to its output of the hour. The camera dives into the Rhône valley and opens the Cruas plant, then pulls back as the grid goes dark.
+
+<div align="center">
+
+![1/4: Western Europe at night; France's high-voltage lines flicker on and a green column rises over each nuclear plant to what it is producing](docs/media/surplomb-grid-1-lights-up.gif)
+
+<sub>Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE. At this scale the film draws the columns wider and three times taller than the app does; their proportions are the data's. Imagery: Google, via Cesium ion.</sub>
+
+![2/4: the camera dives from France into the Rhône valley; plant labels and the key appear](docs/media/surplomb-grid-2-dive.gif)
+
+<sub>Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE · plant positions, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
+
+![3/4: a click on the Cruas nuclear plant opens its card: its output of the hour against its installed capacity, unit by unit](docs/media/surplomb-grid-3-cruas.gif)
+
+<sub>Data: generating-unit output, RTE (Actual Generation API) · plant position, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
+
+![4/4: the camera pulls back to Western Europe; the columns drain, then the grid and the plants go dark](docs/media/surplomb-grid-4-blackout.gif)
+
+<sub>The switch-off is a film effect, not an event. Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE. Imagery: Google, via Cesium ion.</sub>
+
+</div>
+
+### Digital infrastructure: from every antenna to one
+
+Europe in the dark, then France's 72,746 mobile antenna sites light up; the Alps where no operator's 4G reaches; the data centers of Île-de-France and their megawatts; and at La Défense, one mast and the ground it can see.
+
+<div align="center">
+
+![1/5: Europe at night; France's mobile antenna sites light up while a counter climbs to 72,746](docs/media/surplomb-infra-1-antennas.gif)
+
+<sub>Data: mobile antenna sites, ANFR. Imagery: Google, via Cesium ion.</sub>
+
+![2/5: daylight returns and the camera flies to the Alps, where the ground no operator's 4G reaches is painted pink and a card reads "No 4G here"](docs/media/surplomb-infra-2-no-4g.gif)
+
+<sub>Data: simulated 4G coverage, ARCEP (Mon réseau mobile). Imagery: Google, via Cesium ion.</sub>
+
+![3/5: the camera crosses to Île-de-France, where data centers appear and their published power adds up to 1,555 MW, then the antennas light up around Paris](docs/media/surplomb-infra-3-data-centers.gif)
+
+<sub>Data: data centers, © OpenStreetMap contributors and DCWatch · mobile antenna sites, ANFR. Imagery: Google, via Cesium ion.</sub>
+
+![4/5: the camera drops onto the towers of La Défense, a mast is selected and its card opens, and a wave paints in blue the ground the antenna can see](docs/media/surplomb-infra-4-la-defense.gif)
+
+<sub>Data: the selected mast and its registered height, ANFR. The wave is drawn for the film over the 3D tiles; the app computes the line of sight on the terrain alone and draws it on the globe. Imagery: Google, via Cesium ion.</sub>
+
+![5/5: the camera pulls up over the west of Paris; the blue covers the ground the mast can see, and its card gives 30% of the land within a 40 km radius](docs/media/surplomb-infra-5-line-of-sight.gif)
+
+<sub>Data: the selected mast and its registered height, ANFR. Line of sight drawn for the film over the 3D tiles. Imagery: Google, via Cesium ion.</sub>
+
+</div>
+
+<!-- view 5: Gironde megafire, pending -->
 
 ---
 
@@ -122,25 +222,10 @@ No account, no signup. The first-visit card asks for an address — or close it 
 
 1. **Light up the sky.** Turn on **Live flights** yourself in the layers panel — thousands of live aircraft, gliding on real telemetry, detection mesh already reading the scene. Click one: the camera locks on, a trail draws behind it, and its live telemetry card comes up.
 2. **Take the controls.** Hit **COCKPIT** on your tracked plane and ride it down, switching sensors mid-flight: NVG into Ironbow FLIR.
-
-![Riding with a live aircraft in cockpit view while switching sensor modes](docs/media/06-cockpit-ar.gif)
-
 3. **Drop into a busy airport.** Search one and descend to the taxiways with **3D** aircraft on — grounded contacts, taxi trails, the whole apron working in real time.
-
-![Moving from a full airport overhead down to close taxiway inspection with 3D flight models](docs/media/start-here/airport-ground-traffic-google-3d.gif)
-
 4. **Look through a public camera.** Turn on **Public cameras** over Austin, London, California, or Lyon. The feeds aren't webcam embeds — they project *into* the 3D city. Click the panel preview to blow the frame up full-screen at the publisher's own resolution (most cameras send 1920×1080 into a 360px rail; the bar always prints the real pixel size). Cycle coverage to **VIEWSHED** and every camera draws its estimated coverage volume — where it reaches, and where it goes blind.
-
-![Diving into an Austin intersection with a live public camera projected into the 3D scene](docs/media/03-austin-cctv.gif)
-
 5. **Track something in orbit.** Turn on **Satellites** and click the ISS — you ride along at orbital distance, orbit ring and all.
-
-![Tracking the ISS along its orbital path as it crosses over Ukraine](docs/media/14-iss-over-ukraine.gif)
-
 6. **Switch the optics.** Tap `1`–`7` — CRT, NVG, FLIR — and the whole live planet re-renders through a different sensor.
-
-![Cycling a dense live globe through CRT, FLIR, and NVG in one continuous view](docs/media/01-style-sweep.gif)
-
 7. **Talk to it** *(needs an OpenAI or OpenRouter key)*: *"Take me to LAX and select the nearest airborne aircraft."*
 8. **Come home.** Hit **Reset Globe** — or just say *"zoom out to a globe view."*
 
@@ -154,11 +239,7 @@ No account, no signup. The first-visit card asks for an address — or close it 
 
 Real-time cockpit mode, built from live flight data: the camera rides your contact with real terrain holding underneath, all the way down — sensor styles come along for the ride, and **Contacts** keeps the 250 km roster one click away: jump plane to plane and fall straight into the next cockpit.
 
-![Jumping between live aircraft and falling straight into a cockpit view](docs/media/12-switch-aircraft-cockpit.gif)
-
 The cockpit even carries its own briefing strip: nearby live signals, regional headlines, and real local weather — with an opt-in **WX** mode that renders volumetric clouds from actual observations around your aircraft.
-
-![A live military contact ridden through Normal, NVG, and Ironbow FLIR with dense detection](docs/media/start-here/military-cockpit-dense-google-3d.gif)
 
 *Why cockpit mode exists: you're riding a real aircraft over real terrain — and you get to pick which sensor you see the world through.*
 
@@ -190,10 +271,6 @@ Twenty-nine tools, four jobs — the commands below come straight from the produ
 **🖊️ Annotate it** — a whiteboard over the real world:
 > 🗣️ *"Outline the state of Texas."* · *"Annotate the Texas State Capitol and its grounds"* — it draws the **actual enclosing boundary**, not a circle. · *"How far is the Eiffel Tower from the Louvre?"* — a connector arrow appears and it speaks the distance. Everything persists until you say *"clear the map."*
 
-![Zilker Park and Lady Bird Lake drawing onto the 3D city as persistent vector annotations, by voice](docs/media/01-voice-annotate-zilker.gif)
-
-![A spoken distance measurement spanning an airport, inspected from orbit](docs/media/04-airport-distance.gif)
-
 **🔎 Interrogate it** — analyst queries against the live layers:
 > 🗣️ *"How many flights are over Texas right now?"* · *"Which ships are headed to Oakland?"* · *"What is the biggest fire near Los Angeles?"* · *"Is anything flying above forty thousand feet?"* · *"When does the ISS pass over next?"*
 
@@ -202,8 +279,6 @@ Twenty-nine tools, four jobs — the commands below come straight from the produ
 
 **And the rapid-fire tier** — one sentence each:
 > 🗣️ *"Show me global infrastructure."* (stages the layers and pulls back to the globe) · *"Play Orbital Watch."* (a full cinematic scene) · *"Set detection density to fifty percent."* · *"Next contact — helicopters only."* (mid-cockpit) · *"Show me space missions."* · *"Switch to Bing aerial."* · *"Sharpen the image a touch."* · *"Switch to the tactical layout."* · *"What's turned on right now?"*
-
-![The globe populating with the world's radio stations as another live layer](docs/media/15-global-radio-layer.gif)
 
 *Ask for radio near anywhere and the globe starts broadcasting — every station is a real place you can fly to.*
 
@@ -276,13 +351,7 @@ Fifty-nine layers. **Fifty-six of them need nothing at all** — no key, no acco
 | ⌁ **Power grid** | The wires themselves — the high-voltage network as OpenStreetMap has mapped it: all of France at once from a pre-built national pack (the 400/225 kV backbone from space, the 63/90 kV mesh below 600 km), then the exact routes loaded for the viewport you are looking at. Routes colored by voltage band (**400 kV** backbone down to **63 kV**), the **substations** they land in sized by the same band, and, once you are close enough for a pylon to be a thing rather than a dot, the **pylons** holding them up. Underground cable is dashed, because it has no pylons. This is the one part of the grid RTE publishes no geometry for, so it is volunteer mapping — and only what OSM has given a voltage of 50 kV or more | OpenStreetMap (Overpass) | 🟢 |
 | 🎖️ **Military sites** | Viewport-bounded military-site context from community mapping — incomplete by nature, and labeled that way | OpenStreetMap | 🟢 |
 
-![A reconstructed Falcon 9 ascent climbing and curving into its projected orbit](docs/media/08-falcon9-replay.gif)
-
-*The Space missions layer replaying a Falcon 9 ascent — labeled `RECONSTRUCTED ESTIMATE`, scrubbable 0.25×–4×.*
-
 **Also on the globe:** neighborhood overlays · an optional cockpit WX cloud effect. **Bundled static infrastructure:** Airports (7,466 — OurAirports, public domain, plus 418 IGN BD TOPO® aerodrome footprints under Licence Ouverte 2.0), Datacenters (4,638 — OSM/ODbL plus DCWatch), Dams & levees (6,840 — 6,771 of them in France, OSM/ODbL), Submarine cables (712), Ports (2,951 — NGA World Port Index, US public domain), and the 96 French department polygons the Weather layer colors.
-
-![Diving into the Bahamas and revealing labeled submarine cable routes beneath the globe](docs/media/09-undersea-cables.gif)
 
 **Missing a layer you want? Plug it.** Under the layer list, **＋ PLUG IN A DATASET** takes the address of a data.gouv.fr page, an Opendatasoft page, a WFS or a bare GeoJSON/CSV, reads what the platform says about it, and puts it on the globe — grouped, credited, with a card and a legend — without a line of code. Copy the manifest it produces into `datasets/` and it ships for everyone; `npm run dataset:manifest -- <url>` does the same from a terminal, one step after a search on the data.gouv.fr MCP server. One comes bundled: the national defibrillator base (GeoDAE), and it does not take a row of its own — its manifest declares a `fusion` block, so it lands as a chip on **Health & emergency services**. Two others were dropped for the rule that explains it: a manifest is not shipped for what a layer already draws. The IGN aerodrome footprints are inside the Airports layer, and the remarkable trees of Paris are a band of Cool islands. How it works and where it stops: [`docs/DATASETS.md`](docs/DATASETS.md). Otherwise, open an issue — or add it and send the PR.
 
@@ -307,18 +376,6 @@ Once the basics click, run these:
 | **🏗️ Orbit Three Gorges** | Sweep the dam and its terrain at a glance in photorealistic 3D — then fly to the Alps and flip on **Dams & levees**: 6,771 of its 6,840 structures are French. |
 
 *🎙️ = voice missions — they need an OpenAI **or** OpenRouter key.*
-
-![Resolving a selected aircraft's recent flight path into stacked 3D loops above the terrain](docs/media/07-helicopter-loops.gif)
-
-*Ask the planet: a military contact's last ~24 hours of real trace history, resolved as stacked 3D loops.*
-
-![Asking for a walking route and flying the generated path through the 3D city](docs/media/10-walking-route-flythrough.gif)
-
-*"Draw the walking route… now fly it" — banked turns, eased ends, the camera leading the path like a drone shot.*
-
-![Descending from regional context into dense rows of retired aircraft at the boneyard](docs/media/08-boneyard.gif)
-
-*Walk the boneyard: rows of retired airframes, fully resolved in 3D.*
 
 ---
 
@@ -372,10 +429,6 @@ Five keys cover the fully keyed experience. Three currently offer no-cost develo
 | 🟡 | **AISStream** | 🚢 Live ships (France by default, world on request) | [aisstream.io](https://aisstream.io) — free, seriously, it's a two-minute signup |
 | 🟡 | **NASA FIRMS** | 🔥 Live active fires | [firms.modaps.eosdis.nasa.gov](https://firms.modaps.eosdis.nasa.gov/api/map_key/) — free |
 | 🟡 | **TomTom** | 🚦 Real traffic instead of an approximate simulation | [developer.tomtom.com](https://developer.tomtom.com) — check the current developer allowance for your account |
-
-![Diving from city-scale live congestion straight into an intersection's public camera](docs/media/05-traffic-to-cctv.gif)
-
-*What the TomTom key buys you: rush-hour density painted on the city — then dive from the jam straight into the camera watching it.*
 
 ### Cherry on top
 
@@ -451,7 +504,7 @@ Surplomb runs on **public data, clear sources, and local-first execution.** No s
 
 **Status:** An evolving open-source client for exploration and learning — a fast, hackable foundation, not a hardened production service. Released under the **[MIT License](LICENSE)**. Bundled and live datasets carry their own terms — see **[NOTICE.md](NOTICE.md)** and **[DATA_SOURCES.md](DATA_SOURCES.md)**, and **[Commercial use](DATA_SOURCES.md#commercial-use--what-would-have-to-change)** if you plan to charge for something built on this: a few sources are free for this project and blocked for a paid one. Security model: **[SECURITY.md](SECURITY.md)**. Want to contribute? **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-<sub>Media note: Bilawal Sidhu created and owns the capture GIFs on this page and authorized their inclusion here. Any appearance by Bilawal is included with his permission. These files are project documentation, not MIT-licensed standalone assets. Platform interfaces, trademarks, avatars, data, and third-party imagery visible within them remain subject to their respective owners' terms. See [media provenance](docs/media/README.md) and [source terms](DATA_SOURCES.md).</sub>
+<sub>Media note: the captures on this page were filmed from Surplomb for this repository by its maintainer. They are project documentation, not MIT-licensed standalone assets: the Google Photorealistic 3D Tiles, trademarks, and every dataset visible in them remain under their respective owners' terms, and the attribution under each capture stays with it. See [media provenance](docs/media/README.md) and [source terms](DATA_SOURCES.md).</sub>
 
 > [!IMPORTANT]
 > Surplomb is an exploratory visualization of public and third-party data.
@@ -464,7 +517,7 @@ Surplomb runs on **public data, clear sources, and local-first execution.** No s
 
 ## 🙏 Built on God's Eye View
 
-The globe, the cockpit and the voice agent come from **[God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)**, created and open-sourced by [Bilawal Sidhu](https://github.com/bilawalsidhu). The 44 layers added here, the French registers they cross and the refusal discipline described at the top of this page are this repository's contribution, and it sends its fixes back upstream.
+The globe, the cockpit and the voice agent come from **[God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)**, created and open-sourced by [Bilawal Sidhu](https://github.com/bilawalsidhu). The 44 layers added here, the French registers they cross and the refusal discipline described at the top of this page are this repository's contribution, and it sends its fixes back upstream. The cockpit, the sensor styles and the voice agent are filmed in action in [its README](https://github.com/bilawalsidhu/gods-eye-view#readme).
 
 Where this fork branched, how far it has drifted, what is specific to France and what could go back upstream: [docs/FORK.md](docs/FORK.md).
 

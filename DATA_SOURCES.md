@@ -8,7 +8,7 @@ How to read this:
 - **If your use doesn't fit a dataset's license, remove that dataset.** Most importantly: TeleGeography is **NonCommercial** — commercial users must switch it off (`GEV_NONCOMMERCIAL_SOURCES=off`, which also drops the other non-commercial sources), delete it, or license it from TeleGeography. It's one self-contained folder.
 - **Attribution is shown in-app** and listed here. Keep it intact. The required Google/Cesium credit renders on the on-globe credit line (bottom-left, `#cesium-credits`), and every per-layer credit below is registered into the expandable **"Data attribution"** lightbox on that line (`src/data/dataCredits.js` → `viewer.creditDisplay.addStaticCredit`). Both stay visible in clean-view and recording modes.
 - **Bundled model attribution lives beside the model files.** [`public/models/README.md`](public/models/README.md) records each shipped model's creator, source, license, and modification status.
-- **README media provenance lives beside the media.** [`docs/media/README.md`](docs/media/README.md) records the creator and likeness permissions for the 17 capture GIFs, plus the public source, publication permission, and reuse boundary for the two README PNGs. Third-party content visible within this media remains subject to its provider or owner's terms.
+- **README media provenance lives beside the media.** [`docs/media/README.md`](docs/media/README.md) records who filmed the README captures, the data and imagery each one draws and the terms they stay under, plus the upstream capture GIFs and README PNGs this fork removed. Third-party content visible within this media remains subject to its provider or owner's terms.
 
 ---
 
