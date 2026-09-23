@@ -419,6 +419,275 @@ export function meshRowPriority(row) {
   return (h >>> 0) / 4294967296;
 }
 
+/** A row's fill level: it is drawn by a density pass whose threshold is at or under it. */
+function fillLevelOf(row) {
+  const p = meshRowPriority(row);
+  return p > 0 ? Math.min(FILL_MAX_LEVEL, Math.floor(-FILL_LEVELS_PER_OCTAVE * Math.log2(p))) : FILL_MAX_LEVEL;
+}
+
+// --- The world pick's index ------------------------------------------------------
+//
+// ── WHAT EVERY CAMERA REST PAID FOR, AND DID NOT NEED TO ────────────────────
+// The antennas call the world pick on every camera rest, over the whole
+// national mesh. In the browser, at 4× CPU throttling on the reference
+// ThinkCentre, a France-wide view spent 197 ms of main thread per rest in it
+// (2026-09-23; a rest can run the pick twice, see `anfrFrance.js`): the hitch a
+// reader feels each time the camera stops.
+//
+// Three quarters of it recomputed things that do not depend on the view. A
+// row's cell at the finest step and its fill level are functions of the row
+// alone, and were derived afresh on every rest; the rows inside the box were
+// found by testing all 72 746; and the occupied cells of each candidate step
+// were counted through a `Set` of up to 68 920 integers, five times a pick.
+//
+// So the per-row half is computed ONCE per mesh and kept beside it (a
+// `WeakMap`, so it goes when the mesh goes: 26 bytes a row, 1.9 MB for the
+// antennas, built in about 8 ms on the first pick), and the view-dependent half
+// walks only what it must:
+//
+//   - rows in position order are sorted by latitude, so the rows inside a box
+//     are a band found by binary search on its south and north edges, then a
+//     longitude test on that band;
+//   - in that order a cell ROW (latitude index) is a contiguous run, so the
+//     occupied cells of a step are counted with one stamp per column, renewed
+//     by a generation number at each run: no `Set`, no hashing, and each step
+//     counted once and numbered as it is counted;
+//   - the representative reads its categories and weights from typed columns.
+//
+// Measured on the real mesh, Node on the same ThinkCentre, unthrottled: a
+// France-wide pick 25 → 5.7 ms, a 0.6° box over Paris 4.2 → 0.95 ms, Brittany
+// 3.3 → 0.8 ms.
+//
+// THE ANSWER IS THE SAME, AND IS TESTED TO BE: same rows, same order, same
+// step, same fill level, row for row, against the linear implementation kept in
+// `geoMeshThinning.test.mjs` — and on the real 72 746 rows, 804 picks out of
+// 804 identical (400 random views from 0.05° to 25°, at full and lite budgets).
+// Each shortcut engages only where it provably holds: rows sorted by latitude
+// and a numeric box for the band; a view whose cell grid fits a 32-bit key,
+// which is what the linear version's `Int32Array` of keys assumed, for the
+// runs; small integer categories and numeric weights for the typed
+// representative. Anywhere else the same function does it the linear way.
+//
+// THE MESH IS READ AS IMMUTABLE. The index is keyed by the array and rebuilt
+// when its length, its first or last row, or the finest step changes; a caller
+// that rewrites rows in place must pass a new array. Every national mesh this
+// module serves is a fetched document that nobody edits.
+
+const INT32_MAX = 2147483647;
+/** Array → its index. Weak, so a replaced mesh takes its index with it. */
+const _worldIndexes = new WeakMap();
+
+/**
+ * The per-row half of a world pick, for one mesh and one finest step.
+ *
+ * `sorted` gates the binary search and the run count; `plain` gates the typed
+ * representative, which reads categories and weights from typed arrays and is
+ * only the same function when every category is a small integer and every
+ * weight a number (two string weights compare as text in the linear version).
+ */
+function worldIndexOf(rows, finest) {
+  const n = rows.length;
+  const cached = _worldIndexes.get(rows);
+  if (cached && cached.length === n && cached.finest === finest
+      && cached.first === rows[0] && cached.last === rows[n - 1]) {
+    return cached;
+  }
+  const ci = new Int32Array(n);
+  const cj = new Int32Array(n);
+  const lon = new Float64Array(n);
+  const weight = new Float64Array(n);
+  const category = new Uint8Array(n);
+  const fill = new Uint8Array(n);
+  let sorted = true;
+  let plain = true;
+  let previous = -Infinity;
+  for (let x = 0; x < n; x += 1) {
+    const row = rows[x];
+    if (!Array.isArray(row)) {
+      sorted = false;
+      plain = false;
+      continue;
+    }
+    const lat = Number(row[MESH_LAT]);
+    // NaN fails this too, which is what keeps a junk row off the fast path.
+    if (!(lat >= previous)) sorted = false;
+    previous = lat;
+    ci[x] = Math.floor(row[MESH_LAT] / finest);
+    cj[x] = Math.floor(row[MESH_LON] / finest);
+    lon[x] = Number(row[MESH_LON]);
+    const c = row[MESH_CATEGORY];
+    const w = row[MESH_WEIGHT];
+    if (Number.isInteger(c) && c >= 0 && c < 256 && (typeof w === 'number' || w == null)) {
+      category[x] = c;
+      weight[x] = w || 0;
+    } else {
+      plain = false;
+    }
+    fill[x] = fillLevelOf(row);
+  }
+  const index = {
+    length: n, first: rows[0], last: rows[n - 1], finest, sorted, plain, ci, cj, lon, weight, category, fill,
+  };
+  _worldIndexes.set(rows, index);
+  return index;
+}
+
+/**
+ * Indices of the rows inside a box, in input order. Sorted rows and a numeric
+ * box: a latitude band by binary search, then a longitude test on the band —
+ * the same comparisons {@link meshRowInBox} makes, on the same coerced values.
+ * Anything else: {@link meshRowInBox} over every row.
+ * @returns {Int32Array}
+ */
+function rowsInBox(rows, index, box) {
+  const n = rows.length;
+  const { south, north, west, east } = box;
+  const numeric = [south, north, west, east].every((v) => typeof v === 'number');
+  if (!index.sorted || !numeric) {
+    const out = new Int32Array(n);
+    let count = 0;
+    for (let x = 0; x < n; x += 1) {
+      if (meshRowInBox(rows[x], box)) out[count++] = x;
+    }
+    return out.subarray(0, count);
+  }
+  const lat = (x) => Number(rows[x][MESH_LAT]);
+  let a = 0;
+  let b = n;
+  while (a < b) {
+    const mid = (a + b) >>> 1;
+    if (lat(mid) < south) a = mid + 1;
+    else b = mid;
+  }
+  const lo = a;
+  b = n;
+  while (a < b) {
+    const mid = (a + b) >>> 1;
+    if (lat(mid) <= north) a = mid + 1;
+    else b = mid;
+  }
+  const { lon } = index;
+  const out = new Int32Array(Math.max(0, a - lo));
+  let count = 0;
+  for (let x = lo; x < a; x += 1) {
+    if (lon[x] >= west && lon[x] <= east) out[count++] = x;
+  }
+  return out.subarray(0, count);
+}
+
+// One stamp per grid column, reused across picks: `_stampGen[c]` names the run
+// that last touched column `c`, `_stampSlot[c]` the cell it opened there. The
+// generation stays a small integer, so the loop below never leaves int32.
+let _stampGen = new Int32Array(0);
+let _stampSlot = new Int32Array(0);
+let _gen = 0;
+const GEN_CEILING = 1 << 30;
+
+/**
+ * The cells of one step, for the rows of one view: a cell number per row, in
+ * order of first appearance — the order a `Map` keyed by cell iterates in —
+ * and how many there are.
+ *
+ * @param {Int32Array} ci Latitude index of each row in view, at the finest step.
+ * @param {Int32Array} cj Longitude index, likewise.
+ * @param {boolean} sorted Whether `ci` never decreases (rows in position order).
+ * @param {number} level Right shift from the finest step.
+ * @param {{minI:number, maxI:number, minJ:number, maxJ:number}} bounds
+ * @param {?Int32Array} slotOf Filled with each row's cell number, when given.
+ * @returns {number} Occupied cells.
+ */
+function cellsAt(ci, cj, sorted, level, bounds, slotOf) {
+  const n = ci.length;
+  const i0 = bounds.minI >> level;
+  const j0 = bounds.minJ >> level;
+  const width = (bounds.maxJ >> level) - j0 + 1;
+  const height = (bounds.maxI >> level) - i0 + 1;
+  if (sorted && n && height * width <= INT32_MAX) {
+    // Runs of one latitude index, each counted on its own stamps.
+    if (_stampGen.length < width) {
+      _stampGen = new Int32Array(width);
+      _stampSlot = new Int32Array(width);
+      _gen = 0;
+    }
+    // A run per row at most: start the generations over before they grow past int32.
+    if (_gen > GEN_CEILING - n - 1) {
+      _stampGen.fill(0);
+      _gen = 0;
+    }
+    const gens = _stampGen;
+    const slotAt = _stampSlot;
+    let gen = _gen + 1;
+    let runRow = ci[0] >> level;
+    let slots = 0;
+    for (let k = 0; k < n; k += 1) {
+      const r = ci[k] >> level;
+      if (r !== runRow) {
+        runRow = r;
+        gen += 1;
+      }
+      const c = (cj[k] >> level) - j0;
+      if (gens[c] !== gen) {
+        gens[c] = gen;
+        slotAt[c] = slots;
+        slots += 1;
+      }
+      if (slotOf) slotOf[k] = slotAt[c];
+    }
+    _gen = gen;
+    return slots;
+  }
+  // The linear way, kept exactly — keys in an Int32Array, wrap included.
+  const keys = new Int32Array(n);
+  for (let k = 0; k < n; k += 1) keys[k] = ((ci[k] >> level) - i0) * width + ((cj[k] >> level) - j0);
+  const seen = new Map();
+  for (let k = 0; k < n; k += 1) {
+    let slot = seen.get(keys[k]);
+    if (slot === undefined) {
+      slot = seen.size;
+      seen.set(keys[k], slot);
+    }
+    if (slotOf) slotOf[k] = slot;
+  }
+  return seen.size;
+}
+
+const _categoryCounts = new Int32Array(256);
+
+/**
+ * {@link representativeOf} over typed columns: the same rule — modal category,
+ * lower on a tie, heaviest of it, first on a tie — for a mesh whose index is
+ * `plain`.
+ */
+function representativeTyped(category, weight, members) {
+  const counts = _categoryCounts;
+  let top = 0;
+  for (let m = 0; m < members.length; m += 1) {
+    const c = category[members[m]];
+    counts[c] += 1;
+    if (c > top) top = c;
+  }
+  let modal = -1;
+  let most = 0;
+  for (let c = 0; c <= top; c += 1) {
+    if (counts[c] > most) {
+      most = counts[c];
+      modal = c;
+    }
+    counts[c] = 0;
+  }
+  let best = -1;
+  let bestWeight = 0;
+  for (let m = 0; m < members.length; m += 1) {
+    const k = members[m];
+    if (category[k] !== modal) continue;
+    if (best < 0 || weight[k] > bestWeight) {
+      best = k;
+      bestWeight = weight[k];
+    }
+  }
+  return best < 0 ? members[0] : best;
+}
+
 /**
  * Pick a bounded subset of the rows inside a box that a PAN DOES NOT RESHUFFLE.
  *
@@ -450,7 +719,10 @@ export function meshRowPriority(row) {
  * per-cell totals use the `lattice` option of {@link selectGeoMesh}.
  *
  * @param {Array<Array<number>>} rows In position order ({@link byPosition}),
- *   as every national mesh this module serves already is.
+ *   as every national mesh this module serves already is, and not edited in
+ *   place once passed: the pick keeps an index beside the array (see "The
+ *   world pick's index" above). Rows out of order are still picked right,
+ *   by the linear walk.
  * @param {object} options
  * @param {{south:number, west:number, north:number, east:number}} options.box
  * @param {number} options.budget Row cap.
@@ -461,100 +733,118 @@ export function meshRowPriority(row) {
 export function selectGeoMeshWorld(rows, { box, budget, minStepDeg = MESH_WORLD_MIN_STEP_DEG } = {}) {
   if (!box) return { picked: [], inBox: 0, budget: 0, thinned: false, cells: 0 };
   const cap = Math.max(0, Math.floor(Number.isFinite(budget) ? budget : 0));
-  const inside = [];
-  for (const row of Array.isArray(rows) ? rows : []) {
-    if (meshRowInBox(row, box)) inside.push(row);
-  }
-  const n = inside.length;
+  const list = Array.isArray(rows) ? rows : [];
+  const finest = Math.min(MESH_LATTICE_MAX_STEP_DEG, Math.max(MESH_LATTICE_MIN_STEP_DEG, minStepDeg));
+  const index = worldIndexOf(list, finest);
+  const ins = rowsInBox(list, index, box);
+  const n = ins.length;
   if (!cap || !n) {
     return { picked: [], inBox: n, budget: cap, thinned: n > 0, cells: 0 };
   }
+  const inside = new Array(n);
+  for (let k = 0; k < n; k += 1) inside[k] = list[ins[k]];
   if (n <= cap) {
     return { picked: inside, inBox: n, budget: cap, thinned: false, cells: 0, stepDeg: null, fillLevel: null };
   }
 
-  // 1. Coverage — cell indices at the finest step, once; a coarser step is a
-  // right shift of the same integers, so every level stays graticule-locked.
+  // 1. Coverage — cell indices at the finest step, read from the index; a
+  // coarser step is a right shift of the same integers, so every level stays
+  // graticule-locked.
   const repCap = Math.max(1, Math.floor(cap * MESH_WORLD_REP_SHARE));
-  const finest = Math.min(MESH_LATTICE_MAX_STEP_DEG, Math.max(MESH_LATTICE_MIN_STEP_DEG, minStepDeg));
   const ci = new Int32Array(n);
   const cj = new Int32Array(n);
   let minI = Infinity;
   let maxI = -Infinity;
   let minJ = Infinity;
   let maxJ = -Infinity;
-  for (let x = 0; x < n; x += 1) {
-    const i = Math.floor(inside[x][MESH_LAT] / finest);
-    const j = Math.floor(inside[x][MESH_LON] / finest);
-    ci[x] = i;
-    cj[x] = j;
+  for (let k = 0; k < n; k += 1) {
+    const x = ins[k];
+    const i = index.ci[x];
+    const j = index.cj[x];
+    ci[k] = i;
+    cj[k] = j;
     if (i < minI) minI = i;
     if (i > maxI) maxI = i;
     if (j < minJ) minJ = j;
     if (j > maxJ) maxJ = j;
   }
-  // Small integer keys — offsets from the view's first cell at that level —
-  // because a Set of doubles past 2^31 made the France-wide pick 20 ms.
-  const keysAt = (level) => {
-    const i0 = minI >> level;
-    const j0 = minJ >> level;
-    const width = (maxJ >> level) - j0 + 1;
-    const keys = new Int32Array(n);
-    for (let x = 0; x < n; x += 1) keys[x] = ((ci[x] >> level) - i0) * width + ((cj[x] >> level) - j0);
-    return keys;
-  };
-  const countDistinct = (keys) => {
-    const seen = new Set();
-    for (let x = 0; x < n; x += 1) seen.add(keys[x]);
-    return seen.size;
+  const bounds = { minI, maxI, minJ, maxJ };
+  // Each step's cells are counted once per pick, and numbered as they are
+  // counted, so the step the search settles on is already grouped.
+  const counted = new Map();
+  const cellsOf = (level) => {
+    let cells = counted.get(level);
+    if (!cells) {
+      const slotOf = new Int32Array(n);
+      cells = { count: cellsAt(ci, cj, index.sorted, level, bounds, slotOf), slotOf };
+      counted.set(level, cells);
+    }
+    return cells;
   };
   // A level merges at most four cells into one, so a count `c` over the cap
   // rules out the next ceil(log4(c / cap)) - 1 levels: skip them, then step
-  // back while the finer level still fits.
+  // back while the finer level still fits. The first jump is taken from the
+  // row count, which bounds the first level's cells, rather than from a pass
+  // over the rows to count them: the level the search settles on is the finest
+  // that fits, however it was approached (a coarser step merges cells, so the
+  // count never rises with the level), and on the national meshes the rows
+  // nearly all sit in cells of their own at the finest step (65 698 cells for
+  // 68 920 antennas over France), so the bound is the count.
   const maxLevel = Math.max(0, Math.floor(Math.log2(MESH_LATTICE_MAX_STEP_DEG / finest)));
   let level = 0;
   while (((maxJ - minJ + 1) * (maxI - minI + 1)) / 4 ** level > 2 ** 30 && level < maxLevel) level += 1;
-  let keys = keysAt(level);
-  let occupied = countDistinct(keys);
+  let occupied = n;
   while (occupied > repCap && level < maxLevel) {
     level = Math.min(maxLevel, level + Math.max(1, Math.ceil(Math.log(occupied / repCap) / Math.log(4))));
-    keys = keysAt(level);
-    occupied = countDistinct(keys);
+    occupied = cellsOf(level).count;
   }
   while (level > 0) {
-    const finer = keysAt(level - 1);
-    if (countDistinct(finer) > repCap) break;
+    if (cellsOf(level - 1).count > repCap) break;
     level -= 1;
-    keys = finer;
   }
   const stepDeg = finest * 2 ** level;
-  const cells = new Map();
-  for (let x = 0; x < n; x += 1) {
-    const members = cells.get(keys[x]);
-    if (members) members.push(x);
-    else cells.set(keys[x], [x]);
+  // The cells of that step, numbered in order of first appearance, and their
+  // members in position order — a counting sort rather than a Map of arrays.
+  const { count: cellCount, slotOf } = cellsOf(level);
+  const starts = new Int32Array(cellCount + 1);
+  for (let k = 0; k < n; k += 1) starts[slotOf[k] + 1] += 1;
+  for (let s = 0; s < cellCount; s += 1) starts[s + 1] += starts[s];
+  const members = new Int32Array(n);
+  const cursor = starts.slice(0, cellCount);
+  for (let k = 0; k < n; k += 1) members[cursor[slotOf[k]]++] = k;
+  let category = null;
+  let weight = null;
+  if (index.plain) {
+    category = new Uint8Array(n);
+    weight = new Float64Array(n);
+    for (let k = 0; k < n; k += 1) {
+      category[k] = index.category[ins[k]];
+      weight[k] = index.weight[ins[k]];
+    }
   }
-  const reps = [];
-  for (const members of cells.values()) reps.push(representativeOf(inside, members));
+  const reps = new Array(cellCount);
+  for (let s = 0; s < cellCount; s += 1) {
+    const cell = members.subarray(starts[s], starts[s + 1]);
+    reps[s] = category ? representativeTyped(category, weight, cell) : representativeOf(inside, cell);
+  }
   if (reps.length >= cap) {
     // Even the coarsest step holds more cells than budget (a world view over
     // scattered territories): the heaviest representatives, as `selectGeoMesh`
     // does, so the budget stays a ceiling.
     const best = reps.map((x) => inside[x]).sort(byWeight).slice(0, cap);
-    return { picked: best, inBox: n, budget: cap, thinned: true, cells: cells.size, stepDeg, fillLevel: null };
+    return { picked: best, inBox: n, budget: cap, thinned: true, cells: cellCount, stepDeg, fillLevel: null };
   }
 
-  // 2. Density — the other rows under a fixed-priority threshold.
+  // 2. Density — the other rows under a fixed-priority threshold, each row's
+  // level read from the index.
   const isRep = new Uint8Array(n);
   for (const x of reps) isRep[x] = 1;
   const rowLevel = new Uint8Array(n);
   const histogram = new Uint32Array(FILL_MAX_LEVEL + 1);
-  for (let x = 0; x < n; x += 1) {
-    if (isRep[x]) continue;
-    const p = meshRowPriority(inside[x]);
-    const at = p > 0 ? Math.min(FILL_MAX_LEVEL, Math.floor(-FILL_LEVELS_PER_OCTAVE * Math.log2(p))) : FILL_MAX_LEVEL;
-    rowLevel[x] = at;
-    histogram[at] += 1;
+  for (let k = 0; k < n; k += 1) {
+    const at = index.fill[ins[k]];
+    rowLevel[k] = at;
+    if (!isRep[k]) histogram[at] += 1;
   }
   // A row is drawn at threshold level `m` when its own level is `m` or more.
   const room = cap - reps.length;
@@ -565,15 +855,15 @@ export function selectGeoMeshWorld(rows, { box, budget, minStepDeg = MESH_WORLD_
     drawn += histogram[fillLevel];
   }
   const picked = [];
-  for (let x = 0; x < n; x += 1) {
-    if (isRep[x] || rowLevel[x] >= fillLevel) picked.push(inside[x]);
+  for (let k = 0; k < n; k += 1) {
+    if (isRep[k] || rowLevel[k] >= fillLevel) picked.push(inside[k]);
   }
   return {
     picked,
     inBox: n,
     budget: cap,
     thinned: picked.length < n,
-    cells: cells.size,
+    cells: cellCount,
     stepDeg,
     fillLevel,
   };
