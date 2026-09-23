@@ -8,17 +8,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  MEGAFIRE_EMBER_FLOOR,
-  MEGAFIRE_FADE_HOURS,
   MEGAFIRE_PLAY_SECONDS,
   advanceMegafireClock,
   createMegafireClock,
   megafireClockState,
   megafireCursorLabel,
   megafireCursorReadout,
-  megafireEmberStrength,
+  megafireInstantAt,
+  megafirePositionOf,
   megafireWindowDays,
   seekMegafireClock,
+  seekMegafireSegment,
   setMegafirePlaying,
 } from './megafireClock.js';
 import { MEGAFIRE_STEPS, MEGAFIRE_WINDOW_END, MEGAFIRE_WINDOW_START } from './megafirePack.js';
@@ -73,7 +73,7 @@ test('a backgrounded tab cannot jump the fire in one frame', () => {
   setMegafirePlaying(clock, true);
   advanceMegafireClock(clock, 600);
   const span = END - START;
-  // 0.25 s of the 24 s playthrough, and not the 600 s that were asked for.
+  // 0.25 s of the playthrough, and not the 600 s that were asked for.
   assert.ok(clock.cursorMs - START < span * 0.02,
     'a 10-minute delta was not clamped — the whole event would pass in one frame');
   assert.equal(clock.playing, true);
@@ -125,28 +125,6 @@ test('a step becomes true at its acquisition instant and stays true until the ne
   assert.equal(megafireClockState(clock).stepIndex, 0, 'the gap is held, never tweened');
   seekMegafireClock(clock, second);
   assert.equal(megafireClockState(clock).stepIndex, 1);
-});
-
-test('an ember is absent before its detection and never fades to nothing after', () => {
-  const at = Date.parse('2026-07-24T12:00:00Z');
-  assert.equal(megafireEmberStrength(at, at - 1), 0, 'the future is absent, not dim');
-  assert.equal(megafireEmberStrength(at, at), 1, 'a fresh detection burns at full strength');
-  const half = megafireEmberStrength(at, at + (MEGAFIRE_FADE_HOURS / 2) * HOUR);
-  assert.ok(half > MEGAFIRE_EMBER_FLOOR && half < 1);
-  assert.equal(megafireEmberStrength(at, at + MEGAFIRE_FADE_HOURS * HOUR), MEGAFIRE_EMBER_FLOOR);
-  assert.equal(megafireEmberStrength(at, at + 400 * HOUR), MEGAFIRE_EMBER_FLOOR,
-    'a week later the ground is still burnt — the record must not disappear');
-  assert.equal(megafireEmberStrength(NaN, at), 0);
-});
-
-test('the ember fade is monotonic across the horizon', () => {
-  const at = Date.parse('2026-07-24T12:00:00Z');
-  let previous = Infinity;
-  for (let hours = 0; hours <= MEGAFIRE_FADE_HOURS; hours += 0.5) {
-    const strength = megafireEmberStrength(at, at + hours * HOUR);
-    assert.ok(strength <= previous, `strength climbed at ${hours} h`);
-    previous = strength;
-  }
 });
 
 test('the cursor label is UTC, French, and matches the pack', () => {
@@ -243,4 +221,79 @@ test('the readout says the instant, the day, and whether anything is moving', ()
     seekMegafireClock(clock, Date.parse(iso));
     assert.ok(readout().includes(megafireCursorLabel(Date.parse(iso))));
   }
+});
+
+// --- The replay in stages ---------------------------------------------------
+
+const BAND_ENDS = [
+  Date.parse('2026-07-23T22:00:00Z'),
+  Date.parse('2026-07-25T22:00:00Z'),
+  END,
+];
+const staged = () => createMegafireClock({ startMs: START, endMs: END, segments: BAND_ENDS });
+
+test('a staged clock opens on the finished fire, every stage completed', () => {
+  const state = megafireClockState(staged());
+  assert.equal(state.position, 3);
+  assert.equal(state.completed, 3);
+  assert.equal(state.segmentIndex, 2);
+  assert.equal(state.atEnd, true);
+});
+
+test('stages that end outside the window, or out of order, are refused', () => {
+  assert.throws(() => createMegafireClock({ startMs: START, endMs: END, segments: [BAND_ENDS[1], BAND_ENDS[0], END] }), RangeError);
+  assert.throws(() => createMegafireClock({ startMs: START, endMs: END, segments: [BAND_ENDS[0]] }), RangeError);
+  assert.throws(() => createMegafireClock({ startMs: START, endMs: END, segments: [START, END] }), RangeError);
+});
+
+test('every stage gets the same share of the playthrough, time running linearly inside it', () => {
+  const clock = staged();
+  assert.equal(megafireInstantAt(clock, 0), START);
+  assert.equal(megafireInstantAt(clock, 1), BAND_ENDS[0]);
+  assert.equal(megafireInstantAt(clock, 1.5), (BAND_ENDS[0] + BAND_ENDS[1]) / 2);
+  assert.equal(megafireInstantAt(clock, 3), END);
+  for (const t of [START, BAND_ENDS[0] - HOUR, BAND_ENDS[1] + 5 * HOUR, END]) {
+    assert.ok(Math.abs(megafireInstantAt(clock, megafirePositionOf(clock, t)) - t) < 1, 'position ↔ instant round-trips');
+  }
+  // The same wall-clock time crosses each stage, however long it is in days:
+  // 34 h for the first, 159 h for the last.
+  setMegafirePlaying(clock, true);
+  const stageSeconds = [];
+  let seconds = 0;
+  let stage = 0;
+  while (clock.playing && seconds < 60) {
+    advanceMegafireClock(clock, 0.05);
+    seconds += 0.05;
+    const done = megafireClockState(clock).completed;
+    if (done > stage) {
+      stageSeconds.push(seconds);
+      stage = done;
+    }
+  }
+  assert.equal(stageSeconds.length, 3);
+  const lengths = stageSeconds.map((at, i) => at - (stageSeconds[i - 1] ?? 0));
+  for (const length of lengths) {
+    assert.ok(Math.abs(length - MEGAFIRE_PLAY_SECONDS / 3) < 0.2, `a stage took ${length.toFixed(2)} s`);
+  }
+});
+
+test('a stop parks the cursor at the END of its stage, paused, with that ring completed', () => {
+  const clock = staged();
+  setMegafirePlaying(clock, true);
+  assert.equal(seekMegafireSegment(clock, 0), 0);
+  assert.equal(clock.playing, false);
+  assert.equal(clock.cursorMs, BAND_ENDS[0]);
+  assert.equal(megafireClockState(clock).completed, 1);
+  assert.equal(seekMegafireSegment(clock, 9), 2, 'clamped to the last stage');
+  assert.equal(megafireClockState(clock).atEnd, true);
+  assert.equal(seekMegafireSegment(clock, -3), 0);
+});
+
+test('a seek to an instant keeps the position and the instant together', () => {
+  const clock = staged();
+  seekMegafireClock(clock, BAND_ENDS[1] + 3 * HOUR);
+  const state = megafireClockState(clock);
+  assert.ok(state.position > 2 && state.position < 2.1);
+  assert.equal(state.completed, 2);
+  assert.equal(state.segmentIndex, 2);
 });

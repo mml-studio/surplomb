@@ -57,8 +57,11 @@ function page({ stack = 'osm', lit = [], available = () => true } = {}) {
   };
 }
 
-test('the digital infrastructure row imposes Satellite', () => {
-  assert.deepEqual(ROW_BASEMAPS, { 'local-datacenters': 'ign-ortho' });
+test('the digital infrastructure row and the replayed fire impose Satellite', () => {
+  assert.deepEqual(ROW_BASEMAPS, {
+    'local-datacenters': 'ign-ortho',
+    'gironde-megafire-2026': 'ign-ortho',
+  });
 });
 
 test('on, Satellite; off, the basemap the reader had', () => {

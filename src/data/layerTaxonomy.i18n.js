@@ -136,11 +136,14 @@ export default defineMessages({
 
     // ── RISKS & ENVIRONMENT ──
     earthquakes: { fr: 'Séismes (24 h)', en: 'Earthquakes (24 h)' },
-    'local-firms': { fr: 'Feux actifs (FIRMS)', en: 'Active fires (FIRMS)' },
+    // The row's name: live detections are its primary (`layerFusions.js`,
+    // entry 16), the replayed fires its second tile.
+    'local-firms': { fr: 'Incendies', en: 'Fires' },
     'gironde-megafire-2026': {
-      fr: 'Mégafeu de Gironde (juil. 2026)',
-      en: 'Gironde megafire (Jul. 2026)',
-      note: 'The July 2026 fire, reconstructed day by day. Gironde is a place name.',
+      fr: 'Gironde · été 2026',
+      en: 'Gironde · summer 2026',
+      note: 'The July 2026 fire, replayed. Gironde is a place name.',
+      keep: ['Gironde'],
     },
     vigicrues: {
       fr: "Cours d'eau",

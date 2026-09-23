@@ -46,11 +46,23 @@ import { fusionCompanionsFor } from '../data/layerFusions.js';
 import { DUSK_STYLE } from './dusk.js';
 import { NIGHT_ATLAS_STYLE } from './nightAtlas.js';
 
-/** The rows — fusion primaries — whose switch brings a darker ground, and which. */
+/**
+ * The rows — fusion primaries — whose switch brings a darker ground, and which.
+ *
+ * An entry may also be ONE MEMBER of a row, when only that member is drawn
+ * for the dark: « Grands incendies » (`gironde-megafire-2026`) glows on Dusk,
+ * while « Détections récentes », the other mode of « Incendies », is read on
+ * the plain globe. A member keyed here is followed alone — it has no
+ * companions of its own — so pressing its tile is what brings the night.
+ */
 export const ROW_PRESETS = Object.freeze({
   'power-grid': NIGHT_ATLAS_STYLE,
   // « Infrastructure numérique », whose primary is the data centres.
   'local-datacenters': DUSK_STYLE,
+  // The replayed fire of « Incendies » (mock of 2026-09-23): rings of light
+  // over the forest they burnt. Dusk and not Night, at the operator's request:
+  // the ground stays readable under the zones.
+  'gironde-megafire-2026': DUSK_STYLE,
 });
 
 /** The rows whose switch brings the night atlas itself. */

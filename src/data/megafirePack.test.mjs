@@ -15,17 +15,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  MEGAFIRE_BANDS,
   MEGAFIRE_BBOX,
   MEGAFIRE_CREDITS,
-  MEGAFIRE_FRP_LADDER,
   MEGAFIRE_MIN_HOLE_HA,
   MEGAFIRE_MIN_RING_HA,
   MEGAFIRE_SCHEMA,
   MEGAFIRE_STEPS,
-  MEGAFIRE_STEP_COLORS,
   MEGAFIRE_WINDOW_END,
   MEGAFIRE_WINDOW_START,
-  megafireFrpLevel,
   megafirePolygonAreaM2,
   megafireRingAreaM2,
   megafireStepAt,
@@ -39,26 +37,6 @@ const event = JSON.parse(fs.readFileSync(path.join(PACK, 'event.json'), 'utf8'))
 const hotspots = JSON.parse(fs.readFileSync(path.join(PACK, 'hotspots.json'), 'utf8'));
 
 // --- Pure helpers -----------------------------------------------------------
-
-test('the FRP ladder is geometric and ordered', () => {
-  const mins = MEGAFIRE_FRP_LADDER.map((rung) => rung.min);
-  assert.deepEqual(mins, [...mins].sort((a, b) => a - b), 'thresholds must climb');
-  assert.equal(mins[0], 0, 'the first rung has to catch everything');
-  for (let i = 2; i < mins.length; i += 1) {
-    assert.ok(mins[i] / mins[i - 1] >= 2, `rung ${i} is not a geometric step up`);
-  }
-});
-
-test('a detection lands on the rung its power says', () => {
-  assert.equal(megafireFrpLevel(0), 0);
-  assert.equal(megafireFrpLevel(9.9), 0);
-  assert.equal(megafireFrpLevel(10), 1);
-  assert.equal(megafireFrpLevel(49.9), 1);
-  assert.equal(megafireFrpLevel(50), 2);
-  assert.equal(megafireFrpLevel(1573.57), 3, 'the pack’s own maximum is on the top rung');
-  assert.equal(megafireFrpLevel(NaN), 0, 'a missing power is the bottom rung, never a throw');
-  assert.equal(megafireFrpLevel(undefined), 0);
-});
 
 test('the projection round-trips to within the shipped precision', () => {
   for (const [lon, lat] of [[-1.03, 44.89], [-1.45, 44.30], [-0.55, 45.15]]) {
@@ -261,10 +239,25 @@ test('all four satellites contributed, and the peak day is the one the record na
   assert.equal(peak[0], '2026-07-24', 'the run of 24 July is the busiest day in the record');
 });
 
-test('there is one colour per step, and one credit per publisher in the pack', () => {
-  assert.ok(MEGAFIRE_STEP_COLORS.length >= MEGAFIRE_STEPS.length);
-  const unique = new Set(MEGAFIRE_STEP_COLORS.slice(0, MEGAFIRE_STEPS.length));
-  assert.equal(unique.size, MEGAFIRE_STEPS.length, 'two steps sharing a colour cannot be told apart');
+test('there is one colour per band, rising in brightness, and one credit per publisher', () => {
+  assert.deepEqual(MEGAFIRE_BANDS.map((band) => band.id), ['jul-22-23', 'jul-24-25', 'jul-26-aug-01']);
+  for (const key of ['ring', 'fill', 'point']) {
+    const colours = MEGAFIRE_BANDS.map((band) => band[key]);
+    assert.equal(new Set(colours).size, colours.length, `two bands share a ${key} colour`);
+  }
+  // The latest ring is the brightest thing on a night map — the edge that is
+  // still true today is the one the bloom picks up.
+  const luma = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const lumas = MEGAFIRE_BANDS.map((band) => luma(band.ring));
+  assert.deepEqual(lumas, [...lumas].sort((x, y) => x - y), 'rings must brighten with time');
+  // Less of the ground covered for each later band: the forest stays readable.
+  const alphas = MEGAFIRE_BANDS.map((band) => band.fillAlpha);
+  assert.deepEqual(alphas, [...alphas].sort((x, y) => y - x));
+  // Each zone reads as its own on a Dusk ground, and the forest still shows through.
+  assert.ok(alphas.every((alpha) => alpha >= 0.15 && alpha <= 0.45));
   const sources = MEGAFIRE_CREDITS.map((credit) => credit.source);
   assert.deepEqual(sources, ['Copernicus EMS Rapid Mapping', 'EFFIS', 'NASA FIRMS']);
   for (const credit of event.credits) {

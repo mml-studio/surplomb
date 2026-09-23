@@ -4940,6 +4940,12 @@ export class StyleManager {
         if (change?.type === 'visibility') {
           this._nightAtlasRow?.onVisibility(change);
           this._basemapLock?.onVisibility(change);
+          // A layer that owns a view takes the reader there when THEY switch
+          // it on — « Grands incendies » settles the camera over the scar. A
+          // share link or a restored session carries its own camera.
+          if (change.enabled && isExplicitUserIntentOrigin(change.origin, change.layerId)) {
+            this._dataManager?.layers?.get?.(change.layerId)?.module?.onReaderEnable?.();
+          }
         }
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);

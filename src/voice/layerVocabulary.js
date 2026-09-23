@@ -193,7 +193,8 @@ const SPOKEN_ALIASES = Object.freeze({
   satellites: ['satellites', 'satellite'],
   'rocket-launches': ['missions spatiales', 'lancements', 'lancement', 'fusées', 'fusees', 'décollages', 'decollages', 'space missions', 'rocket launches', 'liftoffs'],
   earthquakes: ['séismes', 'seismes', 'séisme', 'seisme', 'tremblements de terre', 'magnitude', 'quakes', 'seismic activity'],
-  'local-firms': ['feux', 'feu', 'feux actifs', 'incendies', 'incendie', 'firms', 'active fires', 'wildfires'],
+  'local-firms': ['feux', 'feu', 'feux actifs', 'incendies', 'incendie', 'firms', 'active fires', 'wildfires',
+    'détections récentes', 'detections recentes', 'recent detections', 'fires'],
   // Deliberately NOT 'feux' or 'incendie': those belong to the live row above,
   // and a bare "montre les feux" must keep meaning "what is burning now". Every
   // phrase here names the EVENT — a place, a month, or the word mégafeu.
@@ -202,7 +203,7 @@ const SPOKEN_ALIASES = Object.freeze({
     'incendie du bassin d’arcachon', 'incendie du bassin d arcachon', 'incendie d’arcachon',
     'incendie d arcachon', 'feu d’arcachon', 'feu d arcachon', 'saumos', 'le porge',
     'cap ferret', 'lège-cap-ferret', 'lege cap ferret', 'gironde wildfire', 'gironde megafire',
-    'arcachon fire'],
+    'arcachon fire', 'grands incendies', 'grand incendie', 'major fires', 'gironde fire'],
   traffic: ['trafic routier', 'circulation', 'embouteillages', 'congestion', 'road traffic', 'traffic jams'],
   cctv: ['caméras', 'cameras', 'caméras publiques', 'cameras publiques', 'vidéosurveillance', 'videosurveillance', 'webcams', 'public cameras', 'street cameras'],
   radio: ['radio', 'radios', 'stations de radio', 'radio stations'],

@@ -6,6 +6,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Incendies » replaces « Feux actifs », and the Gironde fire of July 2026
+  replays as three rings of light.** The row has two modes, as tiles in the
+  key, one lit at a time: « Détections récentes » (NASA FIRMS, last 24 h,
+  worldwide) and « Grands incendies ». « Grands incendies » moves the map to
+  Dusk on the Satellite basemap and settles the camera low over the Bassin
+  d'Arcachon, then draws the fire as three zones — 22-23 July in red, 24-25
+  July in orange, 26 July → 1 August in ivory — each tinted and closed by its
+  own glowing outline, around the ground where satellites first saw the heat
+  arrive, over the 9 524 detections that drew them, each dot in the colour of
+  its days, with the date pinned beside each zone. The outer ring is
+  the burnt area Copernicus mapped; EFFIS's final perimeter is dashed. A bar
+  under the map replays the three stages in 18 seconds (each ring flares as it
+  closes, each detection as it appears), steps from one stage to the next, and
+  jumps to any stage, easing the camera over it. The key reads in plain words
+  and says what a ring is: where the heat arrived, not a flame front. The
+  simulated smoke plumes, the five Copernicus fills and the date chips are
+  gone.
 - **The landing page's sixth view is the digital-infrastructure film.**
   « Vélos » (“Bikes”) showed six seconds of the shared fleets of Paris, a
   view the original God's Eye View can already draw. The tab is now

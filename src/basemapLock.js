@@ -29,10 +29,16 @@
 
 import { nightAtlasRowMembers } from './styles/nightAtlasRow.js';
 
-/** The rows — fusion primaries — that impose a basemap, and which. */
+/**
+ * The rows — fusion primaries, or one member of a row, as in
+ * `nightAtlasRow.js` — that impose a basemap, and which.
+ */
 export const ROW_BASEMAPS = Object.freeze({
   // « Infrastructure numérique », whose primary is the data centres.
   'local-datacenters': 'ign-ortho',
+  // « Grands incendies »: the rings are drawn over the forest they burnt, on
+  // the IGN orthophoto the mock was drawn on — not over a street plan.
+  'gironde-megafire-2026': 'ign-ortho',
 });
 
 /**

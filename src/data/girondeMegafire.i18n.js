@@ -1,114 +1,84 @@
 /**
  * Strings of src/data/girondeMegafire.js — see docs/i18n/CONVENTIONS.md.
  *
- * Every number arrives already formatted (`formatNumber`), every instant
- * already labelled (`megafireStepLabel`, `megafireCursorReadout`): a message
- * only places words around them.
+ * Every number arrives already formatted (`formatNumber`), every month already
+ * named (`monthName`): a message only places words around them.
+ *
+ * The key is written for any reader (see the power grid's `plainLegend`): a
+ * line is a date or a thing in everyday words, one short sentence at most, and
+ * the fine print — pixel size, sensors, who measured what — belongs to the
+ * source line and to DATA_SOURCES.md, not to the classes.
  */
 import { defineMessages } from '../i18n/messages.js';
 
 export default defineMessages({
-  // The play chip. Three stopped states, one button: the label says which.
-  play: {
-    replay: { fr: '↺ Rejouer', en: '↺ Replay', note: 'The cursor is on the last detection.' },
-    start: { fr: '▶ Jouer', en: '▶ Play', note: 'The cursor is on the first detection.' },
-    resume: { fr: '▶ Reprendre', en: '▶ Resume', note: 'Stopped halfway.' },
-    pauseTitle: {
-      fr: (readout) => `${readout} — cliquer pour mettre en pause`,
-      en: (readout) => `${readout} — click to pause`,
-      sample: ['▶ Jul 26 04:12 UTC · day 4 of 10'],
+  // The three rings, by band id (`MEGAFIRE_BANDS`). Local days, Europe/Paris.
+  bands: {
+    'jul-22-23': {
+      long: { fr: '22-23 juillet', en: 'July 22-23' },
+      short: { fr: '22-23 juil.', en: 'Jul 22-23', note: 'Label pinned on the map beside the ring, and under its stop on the replay bar.' },
     },
-    replayTitle: {
-      fr: (days, seconds, readout) => `Rejouer les ${days} jours en ${seconds} s — ${readout}`,
-      en: (days, seconds, readout) => `Replay the ${days} days in ${seconds} s — ${readout}`,
-      sample: [10, 24, '■ Aug 1 12:44 UTC · last detection'],
+    'jul-24-25': {
+      long: { fr: '24-25 juillet', en: 'July 24-25' },
+      short: { fr: '24-25 juil.', en: 'Jul 24-25' },
     },
-  },
-  stepTitle: {
-    fr: (sensor, resolution, hectares) => `${sensor} · ${resolution} — ${hectares} ha brûlés à cette image`,
-    en: (sensor, resolution, hectares) => `${sensor} · ${resolution} — ${hectares} ha burned in this image`,
-    note: 'Tooltip of a step chip. `sensor` is a satellite name (Pléiades Neo, Sentinel-2).',
-    sample: ['Sentinel-2', 'VHR2', '5,775.4'],
+    'jul-26-aug-01': {
+      long: { fr: '26 juillet → 1ᵉʳ août', en: 'July 26 → August 1' },
+      short: { fr: '26 juil. → 1ᵉʳ août', en: 'Jul 26 → Aug 1' },
+    },
   },
   legend: {
-    playing: {
-      fr: (days, seconds) => `Lecture des ${days} jours en ${seconds} s. `
-        + 'Entre deux images satellite rien n’est interpolé : la carte tient la dernière '
-        + 'mesure, et ce sont les points chauds qui portent l’intervalle.',
-      en: (days, seconds) => `Playing the ${days} days in ${seconds} s. `
-        + 'Nothing is interpolated between two satellite images: the map holds the last '
-        + 'measurement, and the hotspots carry the gap.',
-      sample: [10, 24],
+    heading: {
+      fr: 'Le feu, jour après jour',
+      en: 'The fire, day by day',
+      note: 'Caption over the three ring lines of the key.',
     },
-    ended: {
-      fr: (lastImage) => `Dernière détection de la fenêtre. La dernière image, elle, date du ${lastImage} : `
-        + 'après elle, plus personne n’a redessiné ce feu. ↺ pour rejouer depuis le départ.',
-      en: (lastImage) => `Last detection of the window. The last image dates from ${lastImage}: `
-        + 'after it, nobody redrew this fire. ↺ replays it from the start.',
-      note: '`lastImage` is a step label (`Aug 1 11:38`).',
-      sample: ['Aug 1 11:38'],
+    detections: { fr: 'Chaleur vue par satellite', en: 'Heat seen by satellite' },
+    detectionsBlurb: {
+      fr: 'Un point par détection, de la couleur de ses jours.',
+      en: 'One dot per detection, in the colour of its days.',
     },
-    paused: {
-      fr: (days, seconds) => `Curseur arrêté. ▶ reprend la lecture des ${days} jours en ${seconds} s.`,
-      en: (days, seconds) => `Cursor stopped. ▶ resumes playing the ${days} days in ${seconds} s.`,
-      sample: [10, 24],
-    },
-    perimeter: {
-      fr: (stamp) => `périmètre au ${stamp}`,
-      en: (stamp) => `perimeter on ${stamp}`,
-      sample: ['Jul 24 09:05'],
-    },
-    perimeterBlurb: {
-      fr: (hectares, sensor, stamp) => `${hectares} ha brûlés, relevés par Copernicus EMS sur `
-        + `une image ${sensor} du ${stamp} UTC. Le chiffre est celui du publieur, `
-        + 'jamais recalculé sur le dessin.',
-      en: (hectares, sensor, stamp) => `${hectares} ha burned, as mapped by Copernicus EMS on `
-        + `a ${sensor} image of ${stamp} UTC. The figure is the publisher’s own, `
-        + 'never recomputed from the drawing.',
-      sample: ['5,775.4', 'Sentinel-2', 'Jul 24 09:05'],
-    },
-    fronts: { fr: 'front de feu actif', en: 'active fire front' },
-    frontsBlurb: {
-      fr: 'Lignes photo-interprétées sur l’image, là où le feu avançait encore à l’heure de la prise de vue.',
-      en: 'Lines photo-interpreted on the image, where the fire was still advancing when it was taken.',
-    },
-    flames: { fr: 'flammes visibles', en: 'visible flames' },
-    flamesBlurb: {
-      fr: 'Points où un interprète a vu des flammes sur une image à 30 cm.',
-      en: 'Points where an interpreter saw flames on a 30 cm image.',
-    },
-    smoke: { fr: 'colonne de fumée', en: 'smoke column' },
-    smokeBlurb: {
-      fr: 'Rendu, non mesuré. Un panache se dresse là où FIRMS a vu une anomalie '
-        + 'thermique dans les 12 h précédant le curseur, et penche du côté où le feu a '
-        + 'réellement progressé. Sa hauteur et sa vitesse ne sont mesurées par personne.',
-      en: 'Rendered, not measured. A plume rises where FIRMS saw a thermal anomaly '
-        + 'in the 12 h before the cursor, and leans the way the fire actually spread. '
-        + 'Nobody measures its height or its speed.',
-      note: 'Kept to three lines: the on-map key clips a longer blurb, and this is the '
-        + 'sentence that says what is invented.',
-    },
-    hotspot: {
-      fr: (rung) => `point chaud ${rung}`,
-      en: (rung) => `hotspot ${rung}`,
-      note: '`rung` is a fire radiative power class (`< 10 MW`).',
-      sample: ['< 10 MW'],
-    },
-    hotspotBlurb: {
-      fr: 'Détection thermique VIIRS ou MODIS. La puissance radiative est celle du pixel, '
-        + 'pas celle du feu : un pixel VIIRS mesure 375 m de côté.',
-      en: 'VIIRS or MODIS thermal detection. The radiative power is the pixel’s, '
-        + 'not the fire’s: a VIIRS pixel is 375 m across.',
-    },
-    effis: { fr: 'périmètre final EFFIS', en: 'final EFFIS perimeter' },
+    effis: { fr: 'Surface finale estimée (EFFIS)', en: 'Estimated final area (EFFIS)' },
     effisBlurb: {
-      fr: (hectares) => `${hectares} ha — la détection automatique `
-        + 'd’EFFIS, sans zone d’intérêt ni échéance, continue après l’arrêt des cartographes. '
-        + 'GDACS, qui note une ALERTE et non une surface, en annonce 47 910.',
-      en: (hectares) => `${hectares} ha — EFFIS’s automatic detection, with no area of `
-        + 'interest and no deadline, keeps going after the mappers stop. GDACS, which '
-        + 'scores an ALERT rather than an area, announces 47,910.',
+      fr: (hectares) => `${hectares} ha, mesurés après le dernier relevé.`,
+      en: (hectares) => `${hectares} ha, measured after the last survey.`,
       sample: ['37,191'],
+    },
+    source: {
+      fr: 'NASA FIRMS · Copernicus EMS · EFFIS',
+      en: 'NASA FIRMS · Copernicus EMS · EFFIS',
+      note: 'Publisher names, identical in both languages.',
+    },
+    note: {
+      fr: 'Un anneau montre où les satellites ont vu la chaleur arriver, pas le front des flammes.',
+      en: 'A ring shows where satellites saw the heat arrive, not the flame front.',
+      note: 'The one caveat the key must carry: the rings are derived from thermal detections.',
+    },
+  },
+  // The replay bar under the map (`megafireTimeline.js`).
+  replay: {
+    day: {
+      fr: (day, month, year) => `${day === 1 ? '1ᵉʳ' : day} ${month} ${year}`,
+      en: (day, month, year) => `${month} ${day}, ${year}`,
+      note: 'A local calendar day (Europe/Paris). `month` is the long month name.',
+      sample: [24, 'July', 2026],
+    },
+    start: {
+      fr: 'Première détection satellite',
+      en: 'First satellite detection',
+      note: 'Not “start of the fire”: the fire was reported six hours later.',
+    },
+    running: {
+      fr: (count) => `${count} détections satellite`,
+      en: (count) => `${count} satellite detections`,
+      note: '`count` is already formatted.',
+      sample: ['3,812'],
+    },
+    end: {
+      fr: (count) => `${count} détections · fin des relevés`,
+      en: (count) => `${count} detections · end of the record`,
+      note: 'Not “end of the fire”, which no dataset records.',
+      sample: ['9,524'],
     },
   },
 });

@@ -1,593 +1,842 @@
 /**
  * @module girondeMegafire
  *
- * **Mégafeu de Gironde · juillet 2026** — one closed event, replayed on the
- * globe along a cursor. The first layer in this repo whose subject is a thing
- * that already finished.
+ * **Gironde · été 2026** — one closed event, replayed on the globe. The first
+ * layer in this repo whose subject is a thing that already finished, and the
+ * « Grands incendies » half of the « Incendies » row.
  *
- * ── WHAT IS ON SCREEN, AND WHO MEASURED IT ──────────────────────────────────
+ * ── WHAT IS ON SCREEN (the cinematic replay of 2026-09-23) ──────────────────
  *
- * Five perimeters, each one a Copernicus EMS delineation drawn by human
- * photo-interpreters on a dated satellite frame — four Airbus Pléiades Neo
- * passes at 0.3 m and one Sentinel-2. Their fire FRONTS (lines) and ACTIVE
- * FLAMES (points) come from the same products and the same interpreters. Under
- * them, 9 524 NASA FIRMS thermal detections carry the two days nobody
- * photographed. Over them, EFFIS's closing perimeter — 37 191 ha, the number
- * this fire will be remembered by.
+ * Three glowing RINGS, one per group of local days (22-23 July, 24-25 July,
+ * 26 July → 1 August), each drawn around the ground where satellites first saw
+ * heat arrive during those days, inside the burnt area Copernicus EMS mapped.
+ * Under them, the 9 524 NASA FIRMS thermal detections that drew those rings,
+ * one dot each, in the colour of their days. Over them, EFFIS's closing
+ * perimeter as a dashed line. A bar under the map replays the three stages;
+ * the camera settles at a low oblique angle over the Bassin d'Arcachon; the
+ * ground goes to Dusk (`nightAtlasRow.js`) on Satellite (`basemapLock.js`):
+ * the forest dimmed a little, the zones and their rings glowing over it.
  *
- * Nothing here is modelled, simulated or interpolated. Every polygon on screen
- * was traced off an image, and every dot is a satellite radiometer reading a
- * pixel that was hotter than its neighbours. The one thing the layer invents is
- * the FADE on an old detection, and it fades to a floor rather than to nothing
- * precisely so that no reader can mistake "no longer detected" for "no longer
- * burnt" — see `megafireClock.js`.
+ * The rings are built offline (`scripts/build-gironde-megafire-bands.mjs`,
+ * `bands.json`); their method and its caveats live in that script's header and
+ * in DATA_SOURCES.md. What this module adds is only light and time: a ring
+ * appears at the end of its stage with a short flare, a detection flashes when
+ * the cursor reaches it and settles to its band's colour. Nothing moves between
+ * two instants that the data does not place there.
+ *
+ * ── WHAT IT NO LONGER DRAWS, AND WHY ────────────────────────────────────────
+ *
+ * The five Copernicus fills, their fire fronts and flames, and the smoke
+ * plumes. Seen side by side, the five perimeters' outer edges coincide from
+ * 26 July on — five dates that read as two shapes, and a grading product that
+ * draws the Landes parcel grid. The plumes were a rendering nobody measured,
+ * and the approved mock has none. The pack still carries every Copernicus
+ * geometry (`event.json`); the rings' outermost edge IS that footprint.
  *
  * ── WHY THIS IS NOT A SECOND `local-firms` ──────────────────────────────────
  *
- * The repo's rule is one subject, one row. `local-firms` draws NASA FIRMS
- * detections from the last 24 hours anywhere on Earth, live, and is empty
- * without a server key. Switch it on over Gironde today and it draws nothing —
- * the fire has been out since 1 August 2026. The two rows share a sensor and
- * not a subject: one is a smoke alarm, this is a post-mortem. Only this one has
- * perimeters, fronts, flames, hectares and a clock; only that one has the rest
- * of the planet and the present tense.
- *
- * ── THE THREE FIGURES, ALL THREE SHOWN ──────────────────────────────────────
- *
- * 31 602 ha (Copernicus, 29 July), 37 191 ha (EFFIS, final), 47 910 ha (GDACS
- * alert). Three institutions, three methods, three answers to three different
- * questions — see the `megafirePack.js` header. The card names the first two
- * and says which is which; hiding the disagreement would be the only dishonest
- * option on the table.
+ * `local-firms` draws NASA FIRMS detections from the last 24 hours anywhere on
+ * Earth, live, and is empty without a server key. Switch it on over Gironde
+ * today and it draws nothing — the fire has been out since 1 August 2026. The
+ * two share a sensor and a row, not a subject: one is a smoke alarm, this is a
+ * post-mortem.
  *
  * ── RENDERING NOTES ─────────────────────────────────────────────────────────
  *
- * ONE COLOUR PER `GroundPrimitive`. Cesium classifies a batch in one stencil
- * pass and then keeps the first instance whose axis-aligned BOUNDING RECTANGLE
- * contains the pixel — never consulting the polygon — so a batch carrying two
- * colours repaints itself along rectangle edges. Here that is free: exactly one
- * step is ever drawn, and a step is exactly one colour.
+ * ONE COLOUR PER `GroundPrimitive`: Cesium classifies a batch in one stencil
+ * pass and keeps the first instance whose BOUNDING RECTANGLE holds the pixel,
+ * so each band's fill is its own primitive. The rings are ground polylines,
+ * which cull by distance to the line and have no such rule, but they still get
+ * one primitive per band and per stroke, because the flare animates a
+ * MATERIAL uniform — one write a frame — rather than every instance's colour.
  *
- * THE PERIMETER IS NOT STACKED. Only the current step's polygons are drawn, and
- * that is not a simplification: a Copernicus delineation is CUMULATIVE — the
- * 29 July product contains everything that had burnt by 29 July. Drawing five
- * translucent perimeters on top of each other would show the same ground five
- * times and read as five fires.
+ * Every primitive is built once, when the pack lands, and only its `show` and
+ * one uniform ever change afterwards. A replay costs a binary search and the
+ * handful of detections still flaring, never a rebuild.
  */
 
 import * as Cesium from 'cesium';
 import { governorRequestRender, holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { powerClassificationTypeForScene } from './powerGrid.js';
 import {
+  MEGAFIRE_BANDS,
   MEGAFIRE_EFFIS_COLOR,
-  MEGAFIRE_FILL_ALPHA,
-  MEGAFIRE_FLAME_COLOR,
-  MEGAFIRE_FRONT_COLOR,
-  MEGAFIRE_FRP_LADDER,
+  MEGAFIRE_FLASH_COLOR,
   MEGAFIRE_LAYER_ID,
-  MEGAFIRE_STEP_COLORS,
-  megafireFrpLevel,
-  megafireStepLabel,
 } from './megafirePack.js';
 import {
-  MEGAFIRE_PLAY_SECONDS,
   advanceMegafireClock,
   createMegafireClock,
   megafireClockState,
-  megafireCursorLabel,
-  megafireCursorReadout,
-  megafireEmberStrength,
-  seekMegafireClock,
+  megafirePositionOf,
+  seekMegafireSegment,
   setMegafirePlaying,
 } from './megafireClock.js';
+import { createMegafireTimeline } from './megafireTimeline.js';
 import {
-  destroyMegafireFire,
-  initMegafireFire,
-  megafireFireDiagnostics,
-  setMegafireFireEnabled,
-  updateMegafireFire,
-} from './megafireFire.js';
-import { megafireDriftVectors } from './megafireFireMath.js';
+  clearOverlaySource,
+  setOverlayEntries,
+  setOverlaySourceVisible,
+} from '../overlays/worldOverlay.js';
 import messages from './girondeMegafire.i18n.js';
 import taxonomyMessages from './layerTaxonomy.i18n.js';
-import { formatNumber } from '../i18n/format.js';
-
-/**
- * @constant {{east: number, north: number}} Drift used before the pack has
- * loaded: west-north-west, the way this fire ran out of Saumos.
- */
-const MEGAFIRE_DEFAULT_DRIFT = Object.freeze({ east: -0.92388, north: 0.38268 });
+import { formatNumber, monthName } from '../i18n/format.js';
 
 const EVENT_URL = new URL('./local_data/gironde_megafire_2026/event.json', import.meta.url).href;
 const HOTSPOTS_URL = new URL('./local_data/gironde_megafire_2026/hotspots.json', import.meta.url).href;
+const BANDS_URL = new URL('./local_data/gironde_megafire_2026/bands.json', import.meta.url).href;
 
 /** @constant {string} Shown on the row before anything is loaded. */
 const SOURCE_LABEL = 'Copernicus EMS · EFFIS · NASA FIRMS';
 
-/** @constant {number} Flame marker size, px. */
-const FLAME_PX = 9;
-/** @constant {number} Hotspot marker size at full strength, px. */
-const HOTSPOT_PX = 6;
-/** @constant {number} Hotspot marker size at the ember floor, px. */
-const EMBER_PX = 3;
-/** @constant {number} Fire-front stroke width, px. */
-const FRONT_WIDTH_PX = 3;
-/** @constant {number} EFFIS closing-outline stroke width, px. */
-const EFFIS_WIDTH_PX = 2;
+/** @constant {string} World-overlay source for the three date labels. */
+export const MEGAFIRE_LABEL_SOURCE_ID = 'gironde-megafire-bands';
+const LABEL_SOURCE_OPTIONS = Object.freeze({ cohortLimit: 3, collisionCapacity: 3, moving: false });
+
+/** @constant {number} Ring core stroke, px. */
+const RING_CORE_PX = 3.2;
+/** @constant {number} Ring halo stroke, px, drawn under the core. */
+const RING_HALO_PX = 15;
+/** @constant {number} Halo alpha at rest. */
+const RING_HALO_ALPHA = 0.32;
+/**
+ * @constant {number} The dark casing under a ring, px. Under Dusk the ground
+ * keeps 89 % of its light, and a bright line laid bare on a sunlit pine forest
+ * has no reliable background — the casing is what makes it read as an EDGE
+ * (see `batched-groundprimitive-needs-one-colour`: a casing is never
+ * decoration).
+ */
+const RING_CASING_PX = 8;
+const CASING_COLOR = Cesium.Color.fromCssColorString('#140a06').withAlpha(0.6);
+/** @constant {number} Halo alpha at the peak of a ring's flare. */
+const RING_FLARE_ALPHA = 0.85;
+/** @constant {number} How long a ring's flare lasts, wall-clock seconds. */
+const RING_FLARE_SECONDS = 1.3;
+/** @constant {number} EFFIS dashed outline, px. */
+const EFFIS_WIDTH_PX = 1.6;
+
+/** @constant {number} A settled detection, px. */
+const POINT_PX = 2.1;
+/** @constant {number} A detection at the instant it appears, px. */
+const POINT_FLASH_PX = 7;
+/**
+ * @constant {number} A settled detection's alpha: a constellation, not a
+ * carpet. 9 524 dots at 0.78 covered the eastern lobe edge to edge (first
+ * capture of 2026-09-23); the rings have to stay the brightest thing.
+ */
+const POINT_ALPHA = 0.42;
+/**
+ * @constant {number} How long a detection flares, in STAGES of the replay
+ * (0.12 of a six-second stage ≈ 0.7 s on screen, whatever the stage's length
+ * in event time). Measured in position, not in hours, so the flare reads the
+ * same in the busiest stage and the quietest.
+ */
+const POINT_FLASH_SPAN = 0.12;
 
 /**
- * @constant {number} Milliseconds of event time between two hotspot repaints.
- *
- * Repainting 9 524 point primitives every frame is ~570 k attribute writes a
- * second at 60 fps for a field that changes meaningfully about once an hour of
- * event time. Ten minutes of event time is finer than the VIIRS revisit that
- * feeds it, so nothing visible is lost.
+ * @constant {{heading: number, pitch: number, rangeFactor: number, shift: number}}
+ * The arrival: looking north-north-east from above the Bassin d'Arcachon, low
+ * enough that the rings read as a landscape and not as a diagram — the
+ * approved mock's framing. `rangeFactor` multiplies the region's bounding
+ * radius; `shift` slides the aim to the right by that share of the radius, so
+ * the scar sits in the part of the screen the key does not cover (the key
+ * takes the right fifth of a desktop window, the layer pills the left eighth).
  */
-const HOTSPOT_REPAINT_MS = 10 * 60_000;
+const ARRIVAL = Object.freeze({ heading: 16, pitch: -34, rangeFactor: 2.65, shift: 0.16 });
 
 let _viewer = null;
 let _enabled = false;
 let _event = null;
 let _hotspots = null;
+let _bands = null;
 /** @type {?ReturnType<createMegafireClock>} */
 let _clock = null;
 let _loading = false;
 let _error = null;
 let _status = 'idle';
-let _lastPaintedCursor = null;
-let _drawnStepIndex = null;
 let _tickRemover = null;
 let _lastTickMs = null;
-/** @type {?(() => void)} Manager callback: "this row's controls changed". */
-let _rowControlsListener = null;
-let _lastRowNotifyMs = 0;
-/** Plumes emitting on the previous frame — the edge the row repaints on. */
-let _lastBurning = 0;
-/** @type {Array<{east: number, north: number}>} Downwind vector per step. */
-let _driftVectors = [];
+/** Whether the flare holds the render loop open. */
+let _flareHeld = false;
+const FLARE_HOLD = `${MEGAFIRE_LAYER_ID}:flare`;
 let _classificationType = Cesium.ClassificationType.BOTH;
 
-/** @type {?Cesium.GroundPrimitive} */
-let _perimeter = null;
+/** @type {Array<?Cesium.GroundPrimitive>} One fill per band. */
+let _fills = [];
+/** @type {Array<{halo: ?Cesium.GroundPolylinePrimitive, core: ?Cesium.GroundPolylinePrimitive, haloMaterial: ?Cesium.Material}>} */
+let _rings = [];
 /** @type {?Cesium.GroundPolylinePrimitive} */
-let _fronts = null;
-/** @type {?Cesium.GroundPolylinePrimitive} */
-let _effisOutline = null;
+let _effis = null;
 /** @type {?Cesium.PointPrimitiveCollection} */
-let _flames = null;
-/** @type {?Cesium.PointPrimitiveCollection} */
-let _embers = null;
+let _points = null;
 /**
- * @type {Array<{ms: number, level: number, lon: number, lat: number, frp: number}>}
- * Parallel to `_embers`, by index — and the emitter list the plumes read.
+ * Detections sorted by their paced position, parallel to `_points` by index.
+ * @type {Array<{ms: number, position: number, band: number}>}
  */
-let _emberMeta = [];
+let _pointMeta = [];
+/** How many of `_pointMeta` are shown — always a prefix, since it is sorted. */
+let _revealed = 0;
+/** Indices still flaring. */
+let _flaring = new Set();
+/** Rings drawn — `completed` of the clock state they were drawn for. */
+let _ringsShown = 0;
+/** Wall-clock second each band's ring started to flare, or null. */
+let _ringFlareAt = [];
+/** @type {Array<?Cesium.BoundingSphere>} Region of each band, for the camera. */
+let _bandSpheres = [];
+/** @type {?ReturnType<createMegafireTimeline>} */
+let _timeline = null;
+/** @type {?(() => void)} Manager callback: "this row's controls changed". */
+let _rowControlsListener = null;
+
+/** The overlay host, behind the same seam the other overlay layers use. */
+const _overlayHost = {
+  setEntries: setOverlayEntries,
+  setVisible: setOverlaySourceVisible,
+  clearSource: clearOverlaySource,
+};
+
+const _scratchColor = new Cesium.Color();
+const _flashColor = Cesium.Color.fromCssColorString(MEGAFIRE_FLASH_COLOR);
+const _bandPointColors = MEGAFIRE_BANDS.map((band) => Cesium.Color.fromCssColorString(band.point)
+  .withAlpha(POINT_ALPHA));
+
+/** @returns {boolean} Whether the page has a DOM to hang the replay bar on. */
+function hasDom() {
+  return typeof document !== 'undefined' && Boolean(document.body);
+}
+
+/** @returns {boolean} Whether the reader asked the system for less motion. */
+function reducedMotion() {
+  try {
+    return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  } catch {
+    return false;
+  }
+}
 
 /** @returns {boolean} Whether ground polylines can be drawn at all here. */
 let _groundLinesSupported = null;
 function groundLinesSupported() {
   if (_groundLinesSupported === null && _viewer?.scene) {
-    _groundLinesSupported = Cesium.GroundPolylinePrimitive.isSupported(_viewer.scene);
+    try {
+      _groundLinesSupported = Cesium.GroundPolylinePrimitive.isSupported(_viewer.scene);
+    } catch {
+      _groundLinesSupported = false;
+    }
     if (!_groundLinesSupported) {
-      console.warn('[Data:Mégafeu FR] GroundPolylinePrimitive unsupported — fronts and the EFFIS outline are off');
+      console.warn('[Data:Gironde] GroundPolylinePrimitive unsupported — rings and the EFFIS outline are off');
     }
   }
   return _groundLinesSupported !== false;
 }
 
 /**
- * Flat `[lon, lat, ...]` → Cartesian positions.
+ * Flat `[lon, lat, ...]` → Cartesian positions, closed when asked.
  * @param {ArrayLike<number>} flat
+ * @param {boolean} [close]
  * @returns {Cesium.Cartesian3[]}
  */
-function ringPositions(flat) {
+function ringPositions(flat, close = false) {
   const positions = [];
-  for (let i = 0; i < flat.length; i += 2) {
+  for (let i = 0; i + 1 < flat.length; i += 2) {
     positions.push(Cesium.Cartesian3.fromDegrees(flat[i], flat[i + 1]));
   }
+  if (close && positions.length > 2) positions.push(positions[0]);
   return positions;
 }
 
-/** Tear down every primitive this layer owns, leaving the collections alive. */
-function clearSurfaces() {
-  const ground = _viewer?.scene?.groundPrimitives;
-  for (const key of ['_perimeter', '_fronts', '_effisOutline']) {
-    const primitive = { _perimeter, _fronts, _effisOutline }[key];
-    if (!primitive) continue;
-    if (ground?.contains(primitive)) ground.remove(primitive);
-    else if (!primitive.isDestroyed?.()) primitive.destroy?.();
-  }
-  _perimeter = null;
-  _fronts = null;
-  _effisOutline = null;
-  _drawnStepIndex = null;
+/** The label of a band, by id and length, in the page's language. */
+function bandLabel(id, length = 'long') {
+  return messages().bands[id]?.[length] ?? id;
 }
 
-/**
- * Draw one step's perimeter, fronts and flames, replacing whatever was there.
- *
- * Called only when the step CHANGES — five times in a playthrough, not sixty
- * times a second. The hotspot field is repainted separately and far more often;
- * these two cadences are the whole reason the layer stays cheap while playing.
- *
- * @param {?number} stepIndex - Index into `_event.steps`, or null for "before
- *   the first frame", which draws no perimeter at all.
- */
-function drawStep(stepIndex) {
-  clearSurfaces();
-  drawEffisOutline();
-  if (!_viewer?.scene?.groundPrimitives || stepIndex === null || !_event) {
-    if (_flames) _flames.removeAll();
-    return;
-  }
-  const step = _event.steps[stepIndex];
-  if (!step) return;
+// --- Building the scene, once ------------------------------------------------
 
-  const color = Cesium.Color.fromCssColorString(MEGAFIRE_STEP_COLORS[stepIndex]
-    ?? MEGAFIRE_STEP_COLORS[MEGAFIRE_STEP_COLORS.length - 1]).withAlpha(MEGAFIRE_FILL_ALPHA);
+/** One band's translucent fill: its own primitive, its own single colour. */
+function buildFill(band, style, index) {
   const instances = [];
-  step.rings.forEach((rings, index) => {
-    const outer = ringPositions(rings[0]);
+  (band.band || []).forEach((polygon, polygonIndex) => {
+    const outer = ringPositions(polygon[0]);
     if (outer.length < 3) return;
-    const holes = [];
-    for (let i = 1; i < rings.length; i += 1) {
-      const hole = ringPositions(rings[i]);
-      // 4 565 ha of unburnt ground on the 29 July product alone. Dropped, the
-      // fire on screen is 14 % bigger than the one that happened.
-      if (hole.length >= 3) holes.push(new Cesium.PolygonHierarchy(hole));
-    }
+    const holes = polygon.slice(1)
+      .map((ring) => ringPositions(ring))
+      .filter((hole) => hole.length >= 3)
+      .map((hole) => new Cesium.PolygonHierarchy(hole));
     instances.push(new Cesium.GeometryInstance({
-      // A stable id per polygon, so `getGeometryInstanceAttributes` can read a
-      // colour back out of the batch — which is how the QA harness proves the
-      // one-colour rule below on the real scene rather than on this source.
-      id: `${MEGAFIRE_LAYER_ID}:perimeter:${step.id}:${index}`,
+      id: `${MEGAFIRE_LAYER_ID}:fill:${band.id}:${polygonIndex}`,
       geometry: new Cesium.PolygonGeometry({
         polygonHierarchy: new Cesium.PolygonHierarchy(outer, holes),
         vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
       }),
-      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(color) },
-    }));
-  });
-  if (instances.length) {
-    _perimeter = _viewer.scene.groundPrimitives.add(new Cesium.GroundPrimitive({
-      geometryInstances: instances,
-      classificationType: _classificationType,
-      appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
-      // Retained rather than released, which is the non-default choice and
-      // costs ONE step's geometry — at most ~42 000 vertices, the 26 July
-      // product. It buys the only way to check, on a live scene, that this
-      // batch carries a single colour and that the interior rings survived the
-      // trip: `qa-gironde-megafire.mjs` reads both back off the primitive.
-      // Cesium's own default would drop the instances the moment it is ready,
-      // and the invariant would be unprovable outside this file.
-      releaseGeometryInstances: false,
-      asynchronous: true,
-    }));
-  }
-
-  if (step.fronts?.length && groundLinesSupported()) {
-    const frontInstances = [];
-    step.fronts.forEach((flat, index) => {
-      const positions = ringPositions(flat);
-      if (positions.length < 2) return;
-      frontInstances.push(new Cesium.GeometryInstance({
-        id: `${MEGAFIRE_LAYER_ID}:front:${step.id}:${index}`,
-        geometry: new Cesium.GroundPolylineGeometry({ positions, width: FRONT_WIDTH_PX }),
-        attributes: {
-          color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-            Cesium.Color.fromCssColorString(MEGAFIRE_FRONT_COLOR),
-          ),
-        },
-      }));
-    });
-    if (frontInstances.length) {
-      _fronts = _viewer.scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
-        geometryInstances: frontInstances,
-        classificationType: _classificationType,
-        appearance: new Cesium.PolylineColorAppearance({ translucent: false }),
-        // Retained for the same reason as the fill above: 50 lines at their
-        // busiest, and it is what lets a harness name this primitive in a
-        // minified bundle, where every class is called something like `$o`.
-        releaseGeometryInstances: false,
-        asynchronous: true,
-      }));
-    }
-  }
-
-  if (_flames) {
-    _flames.removeAll();
-    const flameColor = Cesium.Color.fromCssColorString(MEGAFIRE_FLAME_COLOR);
-    for (const [lon, lat] of step.flames || []) {
-      _flames.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat),
-        color: flameColor,
-        pixelSize: FLAME_PX,
-        outlineColor: Cesium.Color.fromCssColorString('#7c2d12'),
-        outlineWidth: 1,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      });
-    }
-  }
-  _drawnStepIndex = stepIndex;
-}
-
-/** The EFFIS closing perimeter, as an outline. Always on; never filled. */
-function drawEffisOutline() {
-  if (!_event?.effis?.main?.rings?.length || !groundLinesSupported()) return;
-  if (!_viewer?.scene?.groundPrimitives) return;
-  const instances = [];
-  _event.effis.main.rings.forEach((rings, index) => {
-    // Outline only the OUTER ring: an EFFIS hole is an artefact of a MODIS
-    // burnt-area classifier, not an observed island of green, and drawing it
-    // would claim a precision the source does not have.
-    const positions = ringPositions(rings[0]);
-    if (positions.length < 2) return;
-    instances.push(new Cesium.GeometryInstance({
-      id: `${MEGAFIRE_LAYER_ID}:effis:${index}`,
-      geometry: new Cesium.GroundPolylineGeometry({
-        positions: [...positions, positions[0]],
-        width: EFFIS_WIDTH_PX,
-      }),
       attributes: {
         color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-          Cesium.Color.fromCssColorString(MEGAFIRE_EFFIS_COLOR).withAlpha(0.8),
+          Cesium.Color.fromCssColorString(style.fill).withAlpha(style.fillAlpha),
         ),
       },
     }));
   });
-  if (!instances.length) return;
-  _effisOutline = _viewer.scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
+  if (!instances.length) return null;
+  const primitive = new Cesium.GroundPrimitive({
     geometryInstances: instances,
     classificationType: _classificationType,
-    appearance: new Cesium.PolylineColorAppearance({ translucent: true }),
-    releaseGeometryInstances: false,
+    appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
     asynchronous: true,
-  }));
+    // Kept for the harness: it reads the one colour back off the live batch.
+    releaseGeometryInstances: false,
+  });
+  primitive.show = false;
+  primitive[Symbol.for('surplomb.megafire.band')] = index;
+  return _viewer.scene.groundPrimitives.add(primitive);
+}
+
+/** One stroke of a band's ring: every boundary of its cumulative region. */
+function buildStroke(band, color, width, kind) {
+  const instances = [];
+  (band.region || []).forEach((polygon, polygonIndex) => {
+    polygon.forEach((ring, ringIndex) => {
+      const positions = ringPositions(ring, true);
+      if (positions.length < 3) return;
+      instances.push(new Cesium.GeometryInstance({
+        id: `${MEGAFIRE_LAYER_ID}:${kind}:${band.id}:${polygonIndex}:${ringIndex}`,
+        geometry: new Cesium.GroundPolylineGeometry({ positions, width }),
+      }));
+    });
+  });
+  if (!instances.length) return { primitive: null, material: null };
+  const material = Cesium.Material.fromType('Color', { color });
+  const primitive = new Cesium.GroundPolylinePrimitive({
+    geometryInstances: instances,
+    classificationType: _classificationType,
+    appearance: new Cesium.PolylineMaterialAppearance({ material }),
+    asynchronous: true,
+    releaseGeometryInstances: false,
+  });
+  primitive.show = false;
+  return { primitive: _viewer.scene.groundPrimitives.add(primitive), material };
+}
+
+/** EFFIS's closing perimeter, dashed: the edge a different method drew later. */
+function buildEffis() {
+  const rings = _event?.effis?.main?.rings;
+  if (!rings?.length || !groundLinesSupported()) return null;
+  const instances = [];
+  rings.forEach((polygon, index) => {
+    // Outer ring only: an EFFIS hole is an artefact of a MODIS burnt-area
+    // classifier, not an observed island of green.
+    const positions = ringPositions(polygon[0], true);
+    if (positions.length < 3) return;
+    instances.push(new Cesium.GeometryInstance({
+      id: `${MEGAFIRE_LAYER_ID}:effis:${index}`,
+      geometry: new Cesium.GroundPolylineGeometry({ positions, width: EFFIS_WIDTH_PX }),
+    }));
+  });
+  if (!instances.length) return null;
+  const primitive = new Cesium.GroundPolylinePrimitive({
+    geometryInstances: instances,
+    classificationType: _classificationType,
+    appearance: new Cesium.PolylineMaterialAppearance({
+      material: Cesium.Material.fromType('PolylineDash', {
+        color: Cesium.Color.fromCssColorString(MEGAFIRE_EFFIS_COLOR).withAlpha(0.75),
+        gapColor: Cesium.Color.TRANSPARENT,
+        dashLength: 14,
+      }),
+    }),
+    asynchronous: true,
+    releaseGeometryInstances: false,
+  });
+  primitive.show = false;
+  return _viewer.scene.groundPrimitives.add(primitive);
+}
+
+/** A bounding sphere around every vertex of a band's region. */
+function regionSphere(band) {
+  const positions = [];
+  for (const polygon of band.region || []) {
+    const outer = polygon[0] || [];
+    for (let i = 0; i + 1 < outer.length; i += 2) {
+      positions.push(Cesium.Cartesian3.fromDegrees(outer[i], outer[i + 1]));
+    }
+  }
+  return positions.length ? Cesium.BoundingSphere.fromPoints(positions) : null;
 }
 
 /**
- * Build the ember field once — one point primitive per detection, all hidden.
+ * Build every primitive the replay will ever show, all hidden.
  *
- * The set never changes size, so this runs on load and never again; playback
- * only rewrites `color`, `pixelSize` and `show` in place.
+ * INSERTION ORDER IS DRAW ORDER among ground primitives, and it is what makes
+ * each zone read as one closed shape. The regions are cumulative, so where the
+ * fire stopped early its rings COINCIDE: the edge of the 24-25 July zone on
+ * the north-west is also the edge of the whole scar. Drawn in date order, the
+ * latest ring covered every earlier one along those stretches and the orange
+ * zone had no edge of its own there (capture of 2026-09-23). So the rings go
+ * down LATEST FIRST: a shared stretch shows the earliest zone it closes, and
+ * every zone keeps a whole outline in its own colour. Strokes are layered by
+ * kind across bands — every casing, then every halo, then every core — so no
+ * halo ever washes over another band's core.
  */
-function buildEmbers() {
-  if (!_embers || !_hotspots) return;
-  _embers.removeAll();
-  _emberMeta = [];
+function buildScene() {
+  if (!_viewer?.scene?.groundPrimitives || !_bands) return;
+  const lines = groundLinesSupported();
+  _fills = [];
+  _rings = _bands.bands.map(() => ({ casing: null, halo: null, core: null, haloMaterial: null }));
+  _bandSpheres = [];
+  const styleOf = (index) => MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[MEGAFIRE_BANDS.length - 1];
+  _bands.bands.forEach((band, index) => {
+    _fills.push(buildFill(band, styleOf(index), index));
+    _bandSpheres.push(regionSphere(band));
+  });
+  if (lines) {
+    const latestFirst = _bands.bands.map((band, index) => ({ band, index })).reverse();
+    for (const { band, index } of latestFirst) {
+      _rings[index].casing = buildStroke(band, CASING_COLOR, RING_CASING_PX, 'casing').primitive;
+    }
+    for (const { band, index } of latestFirst) {
+      const color = Cesium.Color.fromCssColorString(styleOf(index).ring);
+      const halo = buildStroke(band, color.withAlpha(RING_HALO_ALPHA), RING_HALO_PX, 'halo');
+      _rings[index].halo = halo.primitive;
+      _rings[index].haloMaterial = halo.material;
+    }
+    for (const { band, index } of latestFirst) {
+      const color = Cesium.Color.fromCssColorString(styleOf(index).ring);
+      _rings[index].core = buildStroke(band, color.withAlpha(0.97), RING_CORE_PX, 'ring').primitive;
+    }
+  }
+  _effis = buildEffis();
+  _ringFlareAt = _bands.bands.map(() => null);
+  _ringsShown = 0;
+}
+
+/** Tear down every ground primitive this layer owns. */
+function clearScene() {
+  const ground = _viewer?.scene?.groundPrimitives;
+  const drop = (primitive) => {
+    if (!primitive) return;
+    if (ground?.contains?.(primitive)) ground.remove(primitive);
+    else if (!primitive.isDestroyed?.()) primitive.destroy?.();
+  };
+  _fills.forEach(drop);
+  for (const ring of _rings) {
+    drop(ring.casing);
+    drop(ring.halo);
+    drop(ring.core);
+  }
+  drop(_effis);
+  _fills = [];
+  _rings = [];
+  _effis = null;
+  _ringsShown = 0;
+}
+
+/**
+ * One point primitive per detection, all hidden, sorted by the instant the
+ * replay reaches them — so "what is shown" is always a prefix of the list and
+ * a cursor move is a binary search, forwards or backwards.
+ */
+function buildPoints() {
+  if (!_points || !_hotspots || !_clock || !_bands) return;
+  _points.removeAll();
   const epoch = Date.parse(_hotspots.epoch);
-  const index = Object.fromEntries(_hotspots.columns.map((name, i) => [name, i]));
-  for (const row of _hotspots.rows) {
-    const ms = epoch + row[index.minutes] * 60_000;
-    const level = megafireFrpLevel(row[index.frp]);
-    _embers.add({
-      position: Cesium.Cartesian3.fromDegrees(row[index.lon], row[index.lat]),
-      color: Cesium.Color.fromCssColorString(MEGAFIRE_FRP_LADDER[level].color),
-      pixelSize: HOTSPOT_PX,
+  const column = Object.fromEntries(_hotspots.columns.map((name, i) => [name, i]));
+  const ends = _bands.bands.map((band) => Date.parse(band.to));
+  const rows = _hotspots.rows.map((row) => {
+    const ms = epoch + row[column.minutes] * 60_000;
+    let band = ends.findIndex((end) => ms <= end);
+    if (band < 0) band = ends.length - 1;
+    return { lon: row[column.lon], lat: row[column.lat], ms, band };
+  }).sort((a, b) => a.ms - b.ms);
+  _pointMeta = rows.map((row) => {
+    _points.add({
+      position: Cesium.Cartesian3.fromDegrees(row.lon, row.lat),
+      color: _bandPointColors[row.band] ?? _bandPointColors[0],
+      pixelSize: POINT_PX,
       show: false,
+      // Drawn over the ground rather than into it: a 375 m pixel has no
+      // height worth testing, and a ring must never hide the heat it is
+      // drawn around.
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
-    // `lon`, `lat` and `frp` ride along for the plumes: `megafireFire.js` picks
-    // its emitters out of THIS array, so a detection's geometry has to survive
-    // the trip into the point primitive rather than being consumed by it.
-    _emberMeta.push({
-      ms,
-      level,
-      lon: row[index.lon],
-      lat: row[index.lat],
-      frp: row[index.frp],
-    });
+    return { ms: row.ms, position: megafirePositionOf(_clock, row.ms), band: row.band };
+  });
+  _revealed = 0;
+  _flaring = new Set();
+}
+
+// --- Drawing an instant ------------------------------------------------------
+
+/** How many detections sit at or before a paced position. */
+function revealedAt(position) {
+  let lo = 0;
+  let hi = _pointMeta.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (_pointMeta[mid].position <= position + 1e-9) lo = mid + 1;
+    else hi = mid;
   }
+  return lo;
+}
+
+/** Put a detection back to its settled look. */
+function settlePoint(index) {
+  const point = _points.get(index);
+  point.color = _bandPointColors[_pointMeta[index].band] ?? _bandPointColors[0];
+  point.pixelSize = POINT_PX;
 }
 
 /**
- * Repaint the ember field for an instant.
- *
- * Walks all 9 524 primitives. That is deliberate rather than lazy: the
- * alternative — a sorted index and a moving window — has to handle a cursor
- * that jumps BACKWARDS (every chip does), and the walk costs ~0.2 ms.
- *
- * @param {number} cursorMs
+ * Show exactly the detections the cursor has reached, and flare the fresh ones.
+ * @param {number} position - Paced cursor.
+ * @param {boolean} flare - Whether newly reached detections flash (playback)
+ *   or appear already settled (a seek, the first paint).
  */
-function paintEmbers(cursorMs) {
-  if (!_embers || !_emberMeta.length) return;
-  for (let i = 0; i < _emberMeta.length; i += 1) {
-    const point = _embers.get(i);
-    const meta = _emberMeta[i];
-    const strength = megafireEmberStrength(meta.ms, cursorMs);
-    if (strength <= 0) {
-      if (point.show) point.show = false;
+function paintPoints(position, flare) {
+  if (!_points || !_pointMeta.length) return;
+  const target = revealedAt(position);
+  if (target > _revealed) {
+    for (let i = _revealed; i < target; i += 1) {
+      const point = _points.get(i);
+      point.show = true;
+      if (flare) _flaring.add(i);
+      else settlePoint(i);
+    }
+  } else if (target < _revealed) {
+    for (let i = target; i < _revealed; i += 1) {
+      _points.get(i).show = false;
+      _flaring.delete(i);
+    }
+  }
+  _revealed = target;
+  for (const index of _flaring) {
+    const age = position - _pointMeta[index].position;
+    if (!flare || age >= POINT_FLASH_SPAN || age < 0) {
+      settlePoint(index);
+      _flaring.delete(index);
       continue;
     }
-    point.show = true;
-    point.color = Cesium.Color.fromCssColorString(MEGAFIRE_FRP_LADDER[meta.level].color)
-      .withAlpha(strength);
-    point.pixelSize = EMBER_PX + (HOTSPOT_PX - EMBER_PX) * strength;
+    const strength = 1 - age / POINT_FLASH_SPAN;
+    const point = _points.get(index);
+    const base = _bandPointColors[_pointMeta[index].band] ?? _bandPointColors[0];
+    point.color = Cesium.Color.lerp(base, _flashColor, strength, _scratchColor);
+    point.pixelSize = POINT_PX + (POINT_FLASH_PX - POINT_PX) * strength;
   }
-  _lastPaintedCursor = cursorMs;
 }
 
 /**
- * @constant {number} Shortest gap between two panel repaints, ms.
- *
- * The row is the only clock a reader has while playback runs, so it has to
- * repaint DURING the run and not only at the ends — but `_refreshTogglePanel`
- * rebuilds every visible row's chips and the on-map key, so it must not be
- * asked for at frame rate. Four times a second is faster than a reader can
- * read a timestamp and 15x cheaper than a per-frame refresh.
+ * Show the rings (and fills and labels) of every completed stage.
+ * @param {number} completed - Stages the cursor has reached the end of.
+ * @param {boolean} flare - Whether a ring that just appeared flares.
+ * @param {number} nowSec - Wall clock, seconds.
  */
-const ROW_NOTIFY_MS = 250;
-
-/**
- * Tell the manager this row's controls changed.
- *
- * @param {boolean} [immediate] - Skip the throttle. True on every state
- *   TRANSITION (play, pause, seek, end of run), because those are exactly the
- *   moments a stale chip lies: the layer shipped without this call, so the
- *   clock reaching the end of the window left `❚❚ Pause` painted on a button
- *   that had already stopped, with nothing in the app that would ever repaint
- *   it. Reported as "once the simulation is done, the button stays on pause".
- * @returns {void}
- */
-function notifyRow(immediate = false) {
-  if (!_rowControlsListener) return;
-  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  if (!immediate && now - _lastRowNotifyMs < ROW_NOTIFY_MS) return;
-  _lastRowNotifyMs = now;
-  _rowControlsListener();
+function paintRings(completed, flare, nowSec) {
+  const count = _bands?.bands.length ?? 0;
+  for (let index = 0; index < count; index += 1) {
+    const shown = index < completed;
+    if (_fills[index]) _fills[index].show = shown;
+    const ring = _rings[index];
+    if (ring?.casing) ring.casing.show = shown;
+    if (ring?.halo) ring.halo.show = shown;
+    if (ring?.core) ring.core.show = shown;
+    if (shown && index >= _ringsShown && flare) _ringFlareAt[index] = nowSec;
+    if (!shown) _ringFlareAt[index] = null;
+  }
+  // The dashed EFFIS line is the END state's: it is an edge drawn after the
+  // last survey, and on screen before then it would read as a forecast.
+  if (_effis) _effis.show = completed >= count && count > 0;
+  if (completed !== _ringsShown) {
+    _ringsShown = completed;
+    publishLabels();
+  }
 }
 
-/** Re-render everything that depends on the cursor, cheaply. */
-function syncToCursor({ force = false } = {}) {
+/**
+ * Advance every ring flare; returns whether one is still running.
+ * @param {number} nowSec
+ * @returns {boolean}
+ */
+function stepFlares(nowSec) {
+  let running = false;
+  _rings.forEach((ring, index) => {
+    const material = ring.haloMaterial;
+    if (!material) return;
+    const started = _ringFlareAt[index];
+    const color = material.uniforms.color;
+    if (started === null || started === undefined) {
+      if (color.alpha !== RING_HALO_ALPHA) color.alpha = RING_HALO_ALPHA;
+      return;
+    }
+    const age = nowSec - started;
+    if (age >= RING_FLARE_SECONDS || age < 0) {
+      _ringFlareAt[index] = null;
+      color.alpha = RING_HALO_ALPHA;
+      return;
+    }
+    // Up fast, down slow: a flare, not a pulse.
+    const rise = 0.18;
+    const k = age < rise ? age / rise : 1 - (age - rise) / (RING_FLARE_SECONDS - rise);
+    color.alpha = RING_HALO_ALPHA + (RING_FLARE_ALPHA - RING_HALO_ALPHA) * Math.max(0, k);
+    running = true;
+  });
+  return running;
+}
+
+/** The three date labels pinned on the rings, for the stages drawn. */
+function publishLabels() {
+  if (!_overlayHost || !_bands || !hasDom()) return;
+  try {
+    const entries = [];
+    _bands.bands.forEach((band, index) => {
+      if (index >= _ringsShown || !band.anchor) return;
+      entries.push({
+        id: `${MEGAFIRE_LAYER_ID}:label:${band.id}`,
+        position: Cesium.Cartesian3.fromDegrees(band.anchor.lon, band.anchor.lat),
+        variant: 'label',
+        title: bandLabel(band.id, 'long'),
+        accent: (MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[0]).ring,
+        priority: 1000 - index,
+        collisionGroup: 'ambient-label',
+        paintLane: 'ambient-label',
+        interactive: false,
+        edgeFade: 'keyhole',
+        horizonCull: true,
+        terrainOcclusion: false,
+        gapPx: 12,
+        verticalOnly: true,
+        placement: 'above',
+      });
+    });
+    _overlayHost.setEntries(MEGAFIRE_LABEL_SOURCE_ID, entries, LABEL_SOURCE_OPTIONS);
+    _overlayHost.setVisible?.(MEGAFIRE_LABEL_SOURCE_ID, _enabled);
+  } catch (error) {
+    console.warn('[Data:Gironde] labels unavailable:', error?.message || error);
+  }
+}
+
+/** Repaint everything the cursor governs. */
+function syncToCursor({ flare = false } = {}) {
   if (!_clock || !_enabled) return;
-  const state = megafireClockState(_clock, _event?.steps);
-  if (force || state.stepIndex !== _drawnStepIndex) drawStep(state.stepIndex);
-  if (force || _lastPaintedCursor === null
-    || Math.abs(state.cursorMs - _lastPaintedCursor) >= HOTSPOT_REPAINT_MS) {
-    paintEmbers(state.cursorMs);
-  }
+  const state = megafireClockState(_clock);
+  const nowSec = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  paintPoints(state.position, flare && state.playing);
+  paintRings(state.completed, flare, nowSec);
+  updateTimeline(state);
   governorRequestRender('gironde-megafire');
 }
 
+// --- The replay bar ------------------------------------------------------------
+
+/** A local calendar day, in the page's language: « 24 juillet 2026 ». */
+function localDay(instantMs) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Paris', year: 'numeric', month: 'numeric', day: 'numeric',
+  }).formatToParts(new Date(instantMs)).map((part) => [part.type, part.value]));
+  return messages().replay.day(Number(parts.day), monthName(Number(parts.month) - 1), Number(parts.year));
+}
+
+/** What the bar says for a clock state. */
+function timelineState(state) {
+  const m = messages().replay;
+  let detail;
+  if (state.atEnd) detail = m.end(formatNumber(_pointMeta.length));
+  else if (state.atStart) detail = m.start;
+  else detail = m.running(formatNumber(_revealed));
+  return {
+    position: state.position,
+    playing: state.playing,
+    atStart: state.atStart,
+    atEnd: state.atEnd,
+    heading: localDay(state.cursorMs),
+    detail,
+  };
+}
+
+function updateTimeline(state) {
+  if (!_timeline) return;
+  try {
+    _timeline.update(timelineState(state));
+  } catch (error) {
+    console.warn('[Data:Gironde] replay bar:', error?.message || error);
+  }
+}
+
+function mountTimeline() {
+  if (!hasDom() || !_bands || _timeline) return;
+  _timeline = createMegafireTimeline({
+    segments: _bands.bands.map((band, index) => ({
+      id: band.id,
+      label: bandLabel(band.id, 'short'),
+      color: (MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[0]).ring,
+    })),
+    onCommand: runCommand,
+  });
+  _timeline.mount();
+}
+
+function unmountTimeline() {
+  if (!_timeline) return;
+  _timeline.destroy();
+  _timeline = null;
+}
+
 /**
- * One frame of everything this layer animates.
- *
- * TWO independent animations share this listener and must not be confused: the
- * CURSOR only moves while playback runs, and the FIRE burns whenever the
- * instant under the cursor had detections and the camera is close enough —
- * including while paused, because a fire photographed burning at 14:07 was
- * burning at 14:07 whether or not the reader is running the tape.
+ * A press on the bar.
+ * @param {{type: string, index?: number}} command
+ */
+function runCommand(command) {
+  if (!_clock || !_enabled) return;
+  const state = megafireClockState(_clock);
+  const count = _clock.segments.length;
+  switch (command?.type) {
+    case 'toggle':
+      girondeMegafireLayer.setParams({ play: !state.playing });
+      return;
+    case 'prev': {
+      // From inside a stage, « previous » is that stage's START — the end of
+      // the one before — and from a stop it is the stop before.
+      const held = state.completed === state.position ? state.completed - 1 : state.segmentIndex;
+      girondeMegafireLayer.setParams({ band: Math.max(0, held - 1), frame: true });
+      return;
+    }
+    case 'next': {
+      const next = state.completed === state.position ? state.completed : state.segmentIndex;
+      girondeMegafireLayer.setParams({ band: Math.min(count - 1, next), frame: true });
+      return;
+    }
+    case 'seek':
+      girondeMegafireLayer.setParams({ band: command.index, frame: true });
+      return;
+    default:
+  }
+}
+
+// --- The camera -------------------------------------------------------------
+
+/**
+ * Ease the camera over a band's region, from the arrival angle.
+ * @param {?Cesium.BoundingSphere} sphere
+ * @param {number} [duration] - Seconds; 0 under reduced motion.
+ */
+function frameSphere(sphere, duration = 1.6) {
+  const camera = _viewer?.camera;
+  if (!camera || !sphere) return;
+  camera.cancelFlight?.();
+  // Aim a little to the RIGHT of the region (in the camera's own frame), so the
+  // region lands a little to the left of the screen's centre.
+  const heading = Cesium.Math.toRadians(ARRIVAL.heading);
+  const along = sphere.radius * ARRIVAL.shift;
+  const frame = Cesium.Transforms.eastNorthUpToFixedFrame(sphere.center);
+  const aim = Cesium.Matrix4.multiplyByPoint(
+    frame,
+    new Cesium.Cartesian3(Math.cos(heading) * along, -Math.sin(heading) * along, 0),
+    new Cesium.Cartesian3(),
+  );
+  camera.flyToBoundingSphere(new Cesium.BoundingSphere(aim, sphere.radius), {
+    offset: new Cesium.HeadingPitchRange(
+      heading,
+      Cesium.Math.toRadians(ARRIVAL.pitch),
+      Math.max(6000, sphere.radius * ARRIVAL.rangeFactor),
+    ),
+    duration: reducedMotion() ? 0 : duration,
+  });
+}
+
+// --- The tick -----------------------------------------------------------------
+
+/**
+ * One frame of everything this layer animates: the cursor while it plays, the
+ * flares while they burn. Installed on `scene.postRender` for as long as the
+ * layer is on — this app renders on request and `clock.onTick` never fires
+ * (`cesium-clock-ontick-dead-in-request-render`) — and free while nothing
+ * holds the governor, since then no frame is drawn.
  */
 function onTick() {
   const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const dt = (nowMs - (_lastTickMs ?? nowMs)) / 1000;
   _lastTickMs = nowMs;
-
   if (_clock?.playing) {
     const moved = advanceMegafireClock(_clock, dt);
-    // The clock stops ITSELF at the end of the window, and the frame it stops
-    // on is one that also MOVED — so "did it move" and "is it still playing"
-    // are independent questions, and reading only the first left the render
-    // governor held open for the rest of the session (caught by
-    // qa-gironde-megafire).
+    if (moved) syncToCursor({ flare: true });
     if (!_clock.playing) endPlayback();
-    else if (moved) syncToCursor();
   }
-  const burning = runFire(dt, nowMs / 1000);
-
-  // A row repaint is a rebuild of every visible row's chips plus the on-map
-  // key, so the two reasons to ask for one are kept apart. While the tape RUNS
-  // the clock on the row changes continuously and the throttle is what bounds
-  // it; while it is stopped nothing on the row moves except the plume count,
-  // so the refresh is asked for on the EDGE and the panel goes quiet again.
-  // Without that split a paused fire repainted the whole panel at frame rate.
-  if (_clock?.playing) notifyRow();
-  else if (burning !== _lastBurning) notifyRow();
-  _lastBurning = burning;
+  const flaring = stepFlares(nowMs / 1000);
+  // A flare outlives the tape by a second: the last ring appears on the very
+  // frame playback ends. Hold the render loop while one burns — written on
+  // the edge only, since every hold or release re-applies the render mode.
+  if (flaring !== _flareHeld) {
+    _flareHeld = flaring;
+    if (flaring) holdContinuousRender(FLARE_HOLD);
+    else releaseContinuousRender(FLARE_HOLD);
+  }
 }
 
-/**
- * Advance the plumes, if there is anything for them to stand on.
- * @returns {number} Plumes currently emitting.
- */
-function runFire(dtSec, nowSec) {
-  if (!_enabled || !_clock || !_event) return 0;
-  const stepIndex = megafireClockState(_clock, _event.steps).stepIndex;
-  updateMegafireFire({
-    detections: _emberMeta,
-    cursorMs: _clock.cursorMs,
-    drift: _driftVectors[stepIndex ?? 0] || MEGAFIRE_DEFAULT_DRIFT,
-    centre: _event.centre,
-    dtSec,
-    nowSec,
-  });
-  return megafireFireDiagnostics().burning;
-}
-
-/**
- * Start the per-frame tick, for as long as the layer is ON.
- *
- * `scene.postRender` and NOT `clock.onTick`: this app runs the scene in
- * request-render mode, and the app clock is not animating, so `onTick` fires
- * only when something else happens to tick it — measured in a headless run,
- * that was never. `postRender` fires exactly when a frame is drawn, which is
- * also the only cadence that can be right: advancing a cursor or a plume
- * nobody is rendering is work with no picture at the end of it.
- *
- * Installed for the whole enabled lifetime rather than only during playback,
- * because the fire has to react to the CAMERA as well as to the clock. While
- * nothing holds the governor this listener costs nothing at all — in idle mode
- * a frame is only drawn when the camera moves or a tile lands, which is
- * exactly when the fire's distance gate needs re-reading.
- */
 function startTicking() {
   if (!_viewer?.scene || _tickRemover) return;
   _lastTickMs = null;
   _tickRemover = _viewer.scene.postRender.addEventListener(onTick);
 }
 
-/** Remove the tick and drop every hold this layer owns. */
 function stopTicking() {
   if (_tickRemover) {
     _tickRemover();
     _tickRemover = null;
   }
   releaseContinuousRender(MEGAFIRE_LAYER_ID);
+  releaseContinuousRender(FLARE_HOLD);
+  _flareHeld = false;
   _lastTickMs = null;
 }
 
-/** Take the playback hold. The tick itself is already installed. */
 function beginPlayback() {
-  // The tick runs whenever a frame is drawn, and in idle mode that can be
-  // seconds apart — so the delta is restarted here rather than measured from
-  // whenever the camera last moved.
   _lastTickMs = null;
   holdContinuousRender(MEGAFIRE_LAYER_ID);
-  notifyRow(true);
+  notifyRow();
 }
 
-/** Release the playback hold and repaint the row on the state it settled in. */
 function endPlayback() {
   releaseContinuousRender(MEGAFIRE_LAYER_ID);
   syncToCursor();
-  notifyRow(true);
+  notifyRow();
 }
 
-/** Fetch the two pack files, once per session. */
+function notifyRow() {
+  _rowControlsListener?.();
+}
+
+// --- Loading ------------------------------------------------------------------
+
+async function fetchJson(url, name) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${name} → HTTP ${response.status}`);
+  return response.json();
+}
+
+/** Fetch the three pack files, once per session. */
 async function load() {
-  if (_event && _hotspots) return;
+  if (_event && _hotspots && _bands) return;
   if (_loading) return;
   _loading = true;
   _status = 'loading';
   _error = null;
   try {
-    const [event, hotspots] = await Promise.all([
-      fetch(EVENT_URL).then((response) => {
-        if (!response.ok) throw new Error(`event.json → HTTP ${response.status}`);
-        return response.json();
-      }),
-      fetch(HOTSPOTS_URL).then((response) => {
-        if (!response.ok) throw new Error(`hotspots.json → HTTP ${response.status}`);
-        return response.json();
-      }),
+    const [event, hotspots, bands] = await Promise.all([
+      fetchJson(EVENT_URL, 'event.json'),
+      fetchJson(HOTSPOTS_URL, 'hotspots.json'),
+      fetchJson(BANDS_URL, 'bands.json'),
     ]);
     _event = event;
     _hotspots = hotspots;
+    _bands = bands;
     _clock = createMegafireClock({
       startMs: Date.parse(event.window.start),
       endMs: Date.parse(event.window.end),
+      segments: bands.bands.map((band) => Date.parse(band.to)),
     });
-    // Which way the smoke leans, read off the pack once. See
-    // `megafireFireMath.js`: it is the direction this step's photo-interpreted
-    // flames moved since the previous Copernicus frame, i.e. the direction the
-    // fire actually ran, i.e. downwind — a measured quantity and not a guess.
-    _driftVectors = megafireDriftVectors(event.steps);
-    buildEmbers();
+    buildPoints();
+    buildScene();
     _status = 'ready';
   } catch (error) {
     _error = error?.message || String(error);
     _status = 'error';
-    console.warn('[Data:Mégafeu FR]', _error);
+    console.warn('[Data:Gironde]', _error);
   } finally {
     _loading = false;
   }
@@ -597,16 +846,10 @@ async function load() {
 
 const girondeMegafireLayer = {
   id: MEGAFIRE_LAYER_ID,
-  // The last French literal the pilot left behind, and it belongs to the
-  // REGISTRY rather than to this module: `layerTaxonomy.i18n.js` names every
-  // row of the panel, this one included, and reading it here is what stops
-  // the two from drifting. A getter, not a string, so the name follows the
-  // page — `layerManifest.js` is generated under Node, where it resolves
-  // French, which is what that file has always carried.
+  // Named by the registry (`layerTaxonomy.i18n.js`), read when drawn.
   get name() { return taxonomyMessages().labels[MEGAFIRE_LAYER_ID]; },
-  // 🔥 belongs to `local-firms`, which is the LIVE fire row; this one is the
-  // record of a fire that stopped, so it takes the burn scar rather than the
-  // flame.
+  // The flame belongs to the live row; this is the record of a fire that
+  // stopped, so it takes the burn scar.
   icon: '🜂',
   source: SOURCE_LABEL,
 
@@ -614,38 +857,28 @@ const girondeMegafireLayer = {
     _viewer = viewer;
     _enabled = false;
     _classificationType = powerClassificationTypeForScene(viewer?.scene);
-    _flames = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
-    _embers = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
-    // Embers under flames: 9 524 thermal pixels must never hide the 11 places a
-    // human being looked at an image and wrote "there are flames here".
-    _embers.show = false;
-    _flames.show = false;
-    viewer.scene.primitives.add(_embers);
-    viewer.scene.primitives.add(_flames);
-    initMegafireFire(viewer);
+    _points = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
+    _points.show = false;
+    viewer.scene.primitives.add(_points);
   },
 
   async enable() {
     _enabled = true;
     await load();
     if (!_enabled) return;
-    if (_embers) _embers.show = true;
-    if (_flames) _flames.show = true;
-    setMegafireFireEnabled(true);
+    if (_points) _points.show = true;
     startTicking();
-    syncToCursor({ force: true });
-    notifyRow(true);
+    mountTimeline();
+    // The first paint is the finished fire, drawn settled: nothing flares for
+    // a reader who has not pressed anything.
+    syncToCursor();
+    notifyRow();
   },
 
   /**
-   * There is nothing to refresh.
-   *
-   * The lifecycle requires the method, and this layer is the one row in the
-   * repo where a poll would be meaningless: the fire ended on 1 August 2026 and
-   * every byte it draws is committed. `true` and not `false`, because
-   * `DataLayerManager` reads a literal `false` as a REFUSED transition, and
-   * nothing here is refusing anything.
-   *
+   * There is nothing to refresh: the fire ended on 1 August 2026 and every
+   * byte this layer draws is committed. `true`, because the manager reads a
+   * literal `false` as a refused transition.
    * @returns {boolean}
    */
   async update() {
@@ -656,261 +889,168 @@ const girondeMegafireLayer = {
     _enabled = false;
     if (_clock) _clock.playing = false;
     stopTicking();
-    setMegafireFireEnabled(false);
-    if (_embers) _embers.show = false;
-    if (_flames) _flames.show = false;
-    clearSurfaces();
+    unmountTimeline();
+    if (_points) _points.show = false;
+    paintRings(0, false, 0);
+    for (const index of _flaring) settlePoint(index);
+    _flaring = new Set();
+    try {
+      _overlayHost?.setVisible?.(MEGAFIRE_LABEL_SOURCE_ID, false);
+    } catch { /* no overlay host on this page */ }
     governorRequestRender('gironde-megafire-off');
-    notifyRow(true);
+    notifyRow();
   },
 
   /**
-   * Install the manager's "row controls changed" callback.
-   *
-   * Without it this row is repainted only when something ELSE in the panel
-   * moves: the layer declares no `updateInterval`, so it gets no stats poll,
-   * and a cursor running ten days of fire in 24 s did it behind a chip strip
-   * frozen on whatever it said when the reader pressed play.
-   * @param {(() => void)|null} listener
-   * @returns {void}
+   * The arrival, when a READER switched the layer on (panel or voice — never a
+   * share link or a restored session, which carry their own camera): a low
+   * oblique view over the whole scar. Called by `ui.js`.
    */
+  onReaderEnable() {
+    if (!_enabled || !_bands) return;
+    const spheres = _bandSpheres.filter(Boolean);
+    frameSphere(spheres[spheres.length - 1] ?? null, 2.4);
+  },
+
+  /** @param {(() => void)|null} listener */
   setRowControlsListener(listener) {
     _rowControlsListener = typeof listener === 'function' ? listener : null;
   },
 
-  /**
-   * What the row says while the layer is on.
-   *
-   * `count` is the number of detections the cursor has REACHED, not the pack
-   * size, because the row's job is to describe what is on screen.
-   */
   getStats() {
-    if (!_clock || !_event) {
+    if (!_clock || !_bands) {
       return { count: 0, loading: _loading, status: _status === 'ready' ? 'ok' : _status, error: _error };
     }
-    const state = megafireClockState(_clock, _event.steps);
-    const step = state.stepIndex === null ? null : _event.steps[state.stepIndex];
-    let reached = 0;
-    for (const meta of _emberMeta) if (meta.ms <= state.cursorMs) reached += 1;
+    const state = megafireClockState(_clock);
     return {
-      count: reached,
+      count: _revealed,
       loading: _loading,
       status: _status === 'ready' ? 'ok' : _status,
       error: _error,
-      cursor: megafireCursorLabel(state.cursorMs),
       playing: state.playing,
-      // COVERAGE is the manager's slot for "the edge of what this layer could
-      // have drawn", and it prints on the row's own full-width line. For a
-      // layer whose subject is ten days rather than a territory, that edge IS
-      // the window — and where inside it the reader currently stands. It is the
-      // only always-visible clock the row has.
-      coverage: megafireCursorReadout(_clock, state),
+      atEnd: state.atEnd,
+      atStart: state.atStart,
+      position: state.position,
+      bandsShown: state.completed,
+      bands: _bands.bands.length,
+      detections: _pointMeta.length,
       day: state.day,
       days: state.days,
-      atEnd: state.atEnd,
-      fire: megafireFireDiagnostics(),
-      // The perimeter's hectares are Copernicus's own published figure for the
-      // frame on screen — never measured off the drawing.
-      burntHa: step?.burntHa ?? null,
-      sensor: step?.sensor ?? null,
-      acquired: step ? megafireCursorLabel(Date.parse(step.acq)) : null,
-      fronts: step?.fronts?.length ?? 0,
-      flames: step?.flames?.length ?? 0,
-      detections: _emberMeta.length,
-      effisHa: _event.effis?.main?.areaHa ?? null,
-      gdacsHa: 47910,
+      effisHa: _event?.effis?.main?.areaHa ?? null,
     };
   },
 
   /**
-   * The cursor, as a row of chips: play, then the five measured frames.
-   *
-   * The chips are NOT serialized into the share link — the layer is registered
-   * `enabled-only` — so a shared view always opens on the closing frame. That
-   * is the right default: the last frame is the only one still true.
+   * The key: three dates, one kind of dot, one dashed edge. It does not change
+   * while the replay runs — the bar under the map is the clock — so a playing
+   * layer never makes the right rail rebuild its key.
    */
   getRowControls() {
-    if (!_clock || !_event) return { chips: [], legend: [] };
-    const m = messages();
-    const state = megafireClockState(_clock, _event.steps);
-    // A step's label comes from its instant, in the page's language. The
-    // `label` stored in the pack is the French of the same function (see
-    // `MEGAFIRE_STEPS`), kept as data.
-    const stepLabel = (step) => megafireStepLabel(Date.parse(step.acq));
-    // THREE stopped states, not one. "Never played", "stopped halfway" and
-    // "finished" are different situations and the same button serves all
-    // three, so the label has to say which — a run that ends on `▶ Rejouer`
-    // looks identical to one that never started, and a run that ends on
-    // `❚❚ Pause` (which is what shipped, because nothing repainted the row)
-    // reads as still running.
-    const playLabel = state.playing
-      ? `❚❚ ${megafireCursorLabel(state.cursorMs)}`
-      : (state.atEnd ? m.play.replay : (state.atStart ? m.play.start : m.play.resume));
-    const chips = [{
-      id: 'play',
-      label: playLabel,
-      active: state.playing,
-      state: state.playing ? 'active' : 'idle',
-      title: state.playing
-        ? m.play.pauseTitle(megafireCursorReadout(_clock, state))
-        : m.play.replayTitle(state.days, MEGAFIRE_PLAY_SECONDS, megafireCursorReadout(_clock, state)),
-      params: { play: !state.playing },
-    }];
-    _event.steps.forEach((step, index) => {
-      const current = state.stepIndex === index;
-      const active = !state.playing && current;
-      chips.push({
-        id: step.id,
-        label: stepLabel(step),
-        active,
-        // While the tape runs, the chip of the frame being held lights in its
-        // own state rather than none at all. The five chips are already in
-        // chronological order, so the strip becomes the progress bar the layer
-        // was missing, for the price of a CSS class.
-        state: active ? 'active' : (state.playing && current ? 'passing' : 'idle'),
-        title: m.stepTitle(step.sensor, step.resolution, formatNumber(step.burntHa)),
-        params: { step: step.id },
+    if (!_bands) return { chips: [], legend: [] };
+    const m = messages().legend;
+    const legend = [{ label: m.heading, heading: true }];
+    _bands.bands.forEach((band, index) => {
+      legend.push({
+        label: bandLabel(band.id, 'long'),
+        color: (MEGAFIRE_BANDS[index] ?? MEGAFIRE_BANDS[0]).ring,
+        swatch: 'line',
       });
     });
-
-    // THE CLOCK LEADS THE KEY. `#map-legend` is the one surface a reader sees
-    // without opening a panel, and the one a share-link recipient gets, so the
-    // instant under the cursor belongs at the top of it. `color: null` is the
-    // manager's deliberate "not drawn on the map" swatch: this line is a
-    // reading, not a colour on the ground.
-    // The window closes on the last DETECTION, 66 minutes after the last
-    // IMAGE, so the end state has two instants and the reader can see only one
-    // of them on the line above. Naming the frame here is what keeps the
-    // perimeter's `1ᵉʳ août 11:38` from contradicting the cursor's `12:44`.
-    const lastStep = _event.steps[_event.steps.length - 1];
-    const legend = [{
-      label: megafireCursorReadout(_clock, state),
-      color: null,
-      blurb: state.playing
-        ? m.legend.playing(state.days, MEGAFIRE_PLAY_SECONDS)
-        : (state.atEnd
-          ? m.legend.ended(stepLabel(lastStep))
-          : m.legend.paused(state.days, MEGAFIRE_PLAY_SECONDS)),
-    }];
-    const step = state.stepIndex === null ? null : _event.steps[state.stepIndex];
-    if (step) {
-      legend.push({
-        label: m.legend.perimeter(stepLabel(step)),
-        color: MEGAFIRE_STEP_COLORS[state.stepIndex] ?? MEGAFIRE_STEP_COLORS[0],
-        count: Math.round(step.burntHa),
-        blurb: m.legend.perimeterBlurb(formatNumber(step.burntHa), step.sensor, stepLabel(step)),
-      });
-      if (step.fronts?.length) {
-        legend.push({
-          label: m.legend.fronts,
-          color: MEGAFIRE_FRONT_COLOR,
-          count: step.fronts.length,
-          blurb: m.legend.frontsBlurb,
-        });
-      }
-      if (step.flames?.length) {
-        legend.push({
-          label: m.legend.flames,
-          color: MEGAFIRE_FLAME_COLOR,
-          count: step.flames.length,
-          blurb: m.legend.flamesBlurb,
-        });
-      }
-    }
-    // THE ONE LINE ON THIS MAP THAT IS A DRAWING. Everything else in the key
-    // names a polygon somebody traced or a pixel a radiometer read; the plumes
-    // are a rendering, and the key says so in the same breath as it says what
-    // is measured about them — where they stand, and which way they lean.
-    const fire = megafireFireDiagnostics();
-    if (fire.burning > 0) {
-      legend.push({
-        label: m.legend.smoke,
-        color: '#8a8078',
-        count: fire.burning,
-        // Kept to three lines: the on-map key is a fixed-height block and a
-        // blurb longer than this is clipped, which would cut the sentence that
-        // says what is invented — the one part that must survive.
-        blurb: m.legend.smokeBlurb,
-      });
-    }
-    const counts = new Array(MEGAFIRE_FRP_LADDER.length).fill(0);
-    for (const meta of _emberMeta) if (meta.ms <= state.cursorMs) counts[meta.level] += 1;
-    MEGAFIRE_FRP_LADDER.forEach((rung, level) => {
-      if (!counts[level]) return;
-      legend.push({
-        label: m.legend.hotspot(rung.label),
-        color: rung.color,
-        count: counts[level],
-        blurb: m.legend.hotspotBlurb,
-      });
+    legend.push({
+      label: m.detections,
+      color: MEGAFIRE_BANDS[1].point,
+      blurb: m.detectionsBlurb,
     });
-    if (_event.effis?.main) {
+    if (_event?.effis?.main) {
       legend.push({
-        label: m.legend.effis,
+        label: m.effis,
         color: MEGAFIRE_EFFIS_COLOR,
-        count: Math.round(_event.effis.main.areaHa),
-        blurb: m.legend.effisBlurb(formatNumber(_event.effis.main.areaHa)),
+        swatch: 'line',
+        blurb: m.effisBlurb(formatNumber(Math.round(_event.effis.main.areaHa))),
       });
     }
-    return { chips, legend };
+    return {
+      chips: [],
+      // Named by the event, under the tile that names the mode.
+      legendTitle: taxonomyMessages().labels[MEGAFIRE_LAYER_ID],
+      legend,
+      legendNote: m.source,
+      note: m.note,
+    };
   },
 
   /**
-   * Press a chip.
+   * Drive the replay.
    *
-   * A step chip SEEKS and pauses; the play chip toggles, rewinding when the
-   * cursor is already parked on the closing frame.
+   * `play` starts, pauses, or — from the end — rewinds and starts; `band`
+   * parks the cursor at the END of that stage (its ring just drawn) and, with
+   * `frame`, eases the camera over it. Both are what the bar sends; the voice
+   * tools send the same.
    *
-   * @param {{play?: boolean, step?: string}} [params]
+   * @param {{play?: boolean, band?: number|string, frame?: boolean}} [params]
    */
   setParams(params = {}) {
-    if (!_clock || !_event) return;
-    if (typeof params.step === 'string') {
-      const step = _event.steps.find((candidate) => candidate.id === params.step);
-      if (!step) return;
+    if (!_clock || !_bands) return;
+    if (params.band !== undefined) {
+      const index = typeof params.band === 'string'
+        ? _bands.bands.findIndex((band) => band.id === params.band)
+        : Number(params.band);
+      if (!Number.isFinite(index) || index < 0) return;
       const wasPlaying = Boolean(_clock.playing);
-      seekMegafireClock(_clock, Date.parse(step.acq));
-      if (wasPlaying) endPlayback();
-      syncToCursor({ force: true });
-      notifyRow(true);
+      const held = seekMegafireSegment(_clock, index);
+      if (wasPlaying) releaseContinuousRender(MEGAFIRE_LAYER_ID);
+      syncToCursor({ flare: true });
+      if (params.frame) frameSphere(_bandSpheres[held] ?? null);
+      notifyRow();
       return;
     }
     if (params.play !== undefined) {
       const playing = setMegafirePlaying(_clock, params.play);
-      if (playing) beginPlayback();
-      else endPlayback();
-      syncToCursor({ force: true });
-      notifyRow(true);
+      if (playing) {
+        beginPlayback();
+        // A replay from the start is watched from the arrival angle.
+        if (megafireClockState(_clock).atStart) girondeMegafireLayer.onReaderEnable();
+      } else {
+        endPlayback();
+      }
+      syncToCursor();
+      notifyRow();
     }
   },
 
-  /** @returns {{cursorMs: ?number, playing: boolean}} */
+  /** @returns {{cursorMs: ?number, position: ?number, playing: boolean}} */
   getParams() {
-    return { cursorMs: _clock?.cursorMs ?? null, playing: Boolean(_clock?.playing) };
+    return {
+      cursorMs: _clock?.cursorMs ?? null,
+      position: _clock?.position ?? null,
+      playing: Boolean(_clock?.playing),
+    };
   },
 
   destroy(viewer) {
     if (_enabled) this.disable();
     stopTicking();
-    destroyMegafireFire(viewer);
-    clearSurfaces();
-    for (const collection of [_embers, _flames]) {
-      if (!collection) continue;
-      if (viewer?.scene?.primitives?.contains(collection)) viewer.scene.primitives.remove(collection);
-      else if (!collection.isDestroyed?.()) collection.destroy?.();
+    unmountTimeline();
+    clearScene();
+    try {
+      _overlayHost?.clearSource?.(MEGAFIRE_LABEL_SOURCE_ID);
+    } catch { /* no overlay host on this page */ }
+    if (_points) {
+      if (viewer?.scene?.primitives?.contains(_points)) viewer.scene.primitives.remove(_points);
+      else if (!_points.isDestroyed?.()) _points.destroy?.();
     }
-    _embers = null;
-    _flames = null;
-    _emberMeta = [];
+    _points = null;
+    _pointMeta = [];
+    _revealed = 0;
+    _flaring = new Set();
     _event = null;
     _hotspots = null;
+    _bands = null;
     _clock = null;
     _viewer = null;
     _groundLinesSupported = null;
-    _lastPaintedCursor = null;
     _rowControlsListener = null;
-    _driftVectors = [];
-    _lastBurning = 0;
+    _bandSpheres = [];
     _status = 'idle';
   },
 };

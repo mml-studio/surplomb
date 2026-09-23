@@ -71,9 +71,13 @@ export default defineMessages({
     // The sky
     flights: { fr: 'Civils', en: 'Civil' },
     military: { fr: 'Militaires', en: 'Military' },
-    // Fire
-    'local-firms': { fr: 'Feux en cours', en: 'Active fires' },
-    'gironde-megafire-2026': { fr: 'Archive Gironde 2026', en: 'Gironde 2026 archive' },
+    // Fires — the two modes of « Incendies », as tiles in the key.
+    'local-firms': { fr: 'Détections récentes', en: 'Recent detections' },
+    'gironde-megafire-2026': {
+      fr: 'Grands incendies',
+      en: 'Major fires',
+      note: 'Past fires replayed on the map. Only Gironde, July 2026, so far.',
+    },
   },
 
   /** The tooltip on a companion's chip: what it adds, and what it hedges. */
@@ -188,8 +192,8 @@ export default defineMessages({
       en: 'Identified military aircraft — same source, same rendering',
     },
     'gironde-megafire-2026': {
-      fr: 'Mégafeu de juillet 2026 — reconstitution jour par jour, sans clé FIRMS',
-      en: 'The July 2026 megafire — reconstructed day by day, with no FIRMS key',
+      fr: 'Rejouer le feu de Gironde, juillet 2026 — sans clé',
+      en: 'Replay the Gironde fire of July 2026 — no key needed',
     },
   },
 

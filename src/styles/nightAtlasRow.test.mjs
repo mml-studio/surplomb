@@ -48,6 +48,31 @@ test('the grid-and-plants row is the one that brings the night', () => {
   assert.deepEqual(NIGHT_ATLAS_ROWS, ['power-grid']);
   assert.deepEqual(nightAtlasRowMembers('power-grid'),
     ['power-grid', 'rte-generation', 'edf-power-plants', 'fr-hydro-plants']);
+  // A MEMBER of « Incendies », followed alone (it brings Dusk, below): the
+  // row's other mode, the recent world detections, is read on the plain globe.
+  assert.deepEqual(nightAtlasRowMembers('gironde-megafire-2026'), ['gironde-megafire-2026']);
+});
+
+test('« Grands incendies » brings Dusk, and « Détections récentes » does not', () => {
+  const state = { style: 'normal', on: new Set() };
+  const calls = [];
+  const follower = createNightAtlasRowFollower({
+    isEnabled: (id) => state.on.has(id),
+    getStyle: () => state.style,
+    setStyle: (next) => { state.style = next; calls.push(next); },
+  });
+  const move = (id, on) => {
+    if (on) state.on.add(id); else state.on.delete(id);
+    follower.onVisibility({ layerId: id, origin: 'user' });
+  };
+  move('local-firms', true);
+  assert.deepEqual(calls, []);
+  // The mode tiles are exclusive: the replay comes on as the detections go.
+  move('local-firms', false);
+  move('gironde-megafire-2026', true);
+  assert.deepEqual(calls, ['dusk']);
+  move('gironde-megafire-2026', false);
+  assert.deepEqual(calls, ['dusk', 'normal']);
 });
 
 test('on, Night; off, Normal', () => {

@@ -556,6 +556,15 @@ function writeReadme(event, hotspots) {
     '| --- | --- |',
     '| `event.json` | The five dated Copernicus perimeters, their fire fronts and active flames, the final EFFIS perimeter, and the statistics Copernicus published for each product. |',
     '| `hotspots.json` | The NASA FIRMS detections inside the window, in minutes since it opened. |',
+    '| `bands.json` | The three day-of-burning rings drawn from the two files above: where satellites had seen heat arrive by the end of 23 July, of 25 July and of 1 August, as nested polygons, with each band\'s fill and date-label anchor. Rebuilt by `node scripts/build-gironde-megafire-bands.mjs`. |',
+    '',
+    // bands.json is DERIVED from this pack: rebuild it after this script, and
+    // bring its « day-of-burning rings » section of this README back with it —
+    // the figures (radius, fit, shares) are in bands.json's `method` and in the
+    // header of scripts/build-gironde-megafire-bands.mjs.
+    '> After rebuilding this pack, rebuild `bands.json` too: '
+      + '`node scripts/build-gironde-megafire-bands.mjs`. Its method and figures are in '
+      + 'that script\'s header and in `bands.json` (`method`).',
     '',
     '## The five images',
     '',

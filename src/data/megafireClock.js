@@ -35,6 +35,20 @@
  *
  * That is why {@link megafireClockState} returns `stepIndex` as a plain lookup
  * and never a fraction.
+ *
+ * ── A REPLAY IN STAGES, NOT A LINEAR TAPE (2026-09-23) ──────────────────────
+ *
+ * The cinematic replay draws the fire as three rings, one per group of days
+ * (`bands.json`, see `megafireBandsMath.js`). On a linear tape those groups
+ * get 14 %, 20 % and 66 % of the screen time: the two days that burnt most of
+ * the forest go past in eight seconds, and then sixteen seconds of a fire that
+ * no longer gains ground. So a clock may be built with SEGMENTS — the instants
+ * the groups end — and then every segment gets the same share of the
+ * playthrough, time running linearly INSIDE each one. The cursor still holds a
+ * real instant at every moment, so everything drawn at it stays causal; only
+ * the pace changes, and the bar under the map shows stages, not a time axis.
+ * `position` is that paced coordinate: 0 at the window's start, `k` at the end
+ * of segment k.
  */
 
 import { MEGAFIRE_STEPS, megafireStepAt, megafireStepLabel } from './megafirePack.js';
@@ -43,32 +57,12 @@ import messages from './megafireClock.i18n.js';
 /**
  * @constant {number} How long one playthrough of the window takes, in seconds.
  *
- * The window is 10 days 0 h 49 min. At 24 s that is ~36 000× real time, which
- * puts the 24 July run — the day that took 3 775 detections — at about three
- * seconds of screen time. Slower and the four quiet days at the end are dead
- * air; faster and the run is a flash.
+ * Three stages of six seconds: long enough to watch a ring close around the
+ * detections that lit it, short enough that nobody waits for the last one.
+ * The linear tape this replaced ran 24 s and spent sixteen of them after the
+ * fire had stopped gaining ground.
  */
-export const MEGAFIRE_PLAY_SECONDS = 24;
-
-/**
- * @constant {number} Hotspot fade horizon, in hours of event time.
- *
- * A detection is drawn at full strength for this long after its acquisition,
- * then decays to {@link MEGAFIRE_EMBER_FLOOR}. Six hours is roughly two VIIRS
- * revisits: long enough that a pixel does not blink out between passes of the
- * same satellite, short enough that the bright band reads as a FRONT rather
- * than as the whole burn scar.
- */
-export const MEGAFIRE_FADE_HOURS = 6;
-
-/**
- * @constant {number} What an old detection fades TO, rather than off.
- *
- * Never zero. A detection that vanished would tell a reader the ground stopped
- * having burned, and the accumulated field of embers IS the record of where the
- * fire has been — it is the only thing on screen between two satellite frames.
- */
-export const MEGAFIRE_EMBER_FLOOR = 0.18;
+export const MEGAFIRE_PLAY_SECONDS = 18;
 
 const HOUR_MS = 3600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -80,23 +74,79 @@ const DAY_MS = 24 * HOUR_MS;
  * @param {number} options.startMs - Window open, epoch ms.
  * @param {number} options.endMs - Window close, epoch ms.
  * @param {number} [options.playSeconds] - Seconds for one full playthrough.
+ * @param {ReadonlyArray<number>} [options.segments] - The instants the stages
+ *   END, ascending; the last one must be `endMs`. Omitted: one stage, which
+ *   is a linear tape.
  * @returns {{startMs: number, endMs: number, playSeconds: number,
- *   cursorMs: number, playing: boolean}}
+ *   segments: number[], position: number, cursorMs: number, playing: boolean}}
  */
-export function createMegafireClock({ startMs, endMs, playSeconds = MEGAFIRE_PLAY_SECONDS }) {
+export function createMegafireClock({
+  startMs, endMs, playSeconds = MEGAFIRE_PLAY_SECONDS, segments = null,
+}) {
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
     throw new RangeError('megafire clock needs a positive window');
+  }
+  const ends = segments ? [...segments] : [endMs];
+  let previous = startMs;
+  for (const end of ends) {
+    if (!Number.isFinite(end) || end <= previous) {
+      throw new RangeError('megafire clock segments must rise inside the window');
+    }
+    previous = end;
+  }
+  if (ends[ends.length - 1] !== endMs) {
+    throw new RangeError('megafire clock segments must end with the window');
   }
   return {
     startMs,
     endMs,
     playSeconds,
+    segments: ends,
     // Opens on the LAST frame, not the first. A reader who switches the layer
     // on and never touches a chip must see the finished fire — the state that
     // is still true today — rather than an empty forest waiting to be played.
+    position: ends.length,
     cursorMs: endMs,
     playing: false,
   };
+}
+
+/**
+ * The instant at a paced position.
+ * @param {ReturnType<createMegafireClock>} clock
+ * @param {number} position - 0 … `segments.length`.
+ * @returns {number} Epoch ms, inside the window.
+ */
+export function megafireInstantAt(clock, position) {
+  const count = clock.segments.length;
+  const p = Math.min(count, Math.max(0, Number(position) || 0));
+  const index = Math.min(count - 1, Math.floor(p));
+  const from = index === 0 ? clock.startMs : clock.segments[index - 1];
+  const to = clock.segments[index];
+  return from + (p - index) * (to - from);
+}
+
+/**
+ * The paced position of an instant — the inverse of {@link megafireInstantAt}.
+ * @param {ReturnType<createMegafireClock>} clock
+ * @param {number} instantMs
+ * @returns {number} 0 … `segments.length`.
+ */
+export function megafirePositionOf(clock, instantMs) {
+  const t = Math.min(clock.endMs, Math.max(clock.startMs, Number(instantMs)));
+  let from = clock.startMs;
+  for (let index = 0; index < clock.segments.length; index += 1) {
+    const to = clock.segments[index];
+    if (t <= to) return index + (t - from) / (to - from);
+    from = to;
+  }
+  return clock.segments.length;
+}
+
+/** Write a position and the instant it stands for, together — never one alone. */
+function placeCursor(clock, position) {
+  clock.position = Math.min(clock.segments.length, Math.max(0, position));
+  clock.cursorMs = megafireInstantAt(clock, clock.position);
 }
 
 /**
@@ -115,15 +165,15 @@ export function advanceMegafireClock(clock, dtSec) {
   if (!clock?.playing) return false;
   const dt = Math.min(0.25, Math.max(0, Number(dtSec) || 0));
   if (dt <= 0) return false;
-  const span = clock.endMs - clock.startMs;
-  const next = clock.cursorMs + (dt / clock.playSeconds) * span;
-  if (next >= clock.endMs) {
-    const moved = clock.cursorMs !== clock.endMs;
-    clock.cursorMs = clock.endMs;
+  const count = clock.segments.length;
+  const next = clock.position + (dt / clock.playSeconds) * count;
+  if (next >= count) {
+    const moved = clock.position !== count;
+    placeCursor(clock, count);
     clock.playing = false;
     return moved;
   }
-  clock.cursorMs = next;
+  placeCursor(clock, next);
   return true;
 }
 
@@ -141,7 +191,7 @@ export function advanceMegafireClock(clock, dtSec) {
 export function setMegafirePlaying(clock, play) {
   if (!clock) return false;
   const next = play === undefined ? !clock.playing : Boolean(play);
-  if (next && clock.cursorMs >= clock.endMs) clock.cursorMs = clock.startMs;
+  if (next && clock.cursorMs >= clock.endMs) placeCursor(clock, 0);
   clock.playing = next;
   return clock.playing;
 }
@@ -161,9 +211,25 @@ export function seekMegafireClock(clock, instantMs) {
   if (!clock) return NaN;
   const value = Number(instantMs);
   if (!Number.isFinite(value)) return clock.cursorMs;
-  clock.cursorMs = Math.min(clock.endMs, Math.max(clock.startMs, value));
+  placeCursor(clock, megafirePositionOf(clock, value));
   clock.playing = false;
   return clock.cursorMs;
+}
+
+/**
+ * Move the cursor to the END of a stage and stop playback — what pressing a
+ * stop on the bar, or the previous / next arrows, does.
+ * @param {ReturnType<createMegafireClock>} clock - Mutated in place.
+ * @param {number} index - Stage index, clamped.
+ * @returns {number} The stage now held.
+ */
+export function seekMegafireSegment(clock, index) {
+  if (!clock) return NaN;
+  const count = clock.segments.length;
+  const target = Math.min(count - 1, Math.max(0, Math.round(Number(index) || 0)));
+  placeCursor(clock, target + 1);
+  clock.playing = false;
+  return target;
 }
 
 /**
@@ -179,9 +245,16 @@ export function megafireClockState(clock, steps = MEGAFIRE_STEPS) {
   const span = clock.endMs - clock.startMs;
   const progress = span > 0 ? (clock.cursorMs - clock.startMs) / span : 1;
   const days = megafireWindowDays(clock);
+  const count = clock.segments?.length ?? 1;
+  const position = Number.isFinite(clock.position) ? clock.position : count * progress;
   return {
     cursorMs: clock.cursorMs,
     progress,
+    position,
+    // Stages whose end the cursor has reached: their ring is drawn.
+    completed: Math.min(count, Math.floor(position + 1e-9)),
+    // The stage the cursor is inside — the last one once it has ended.
+    segmentIndex: Math.min(count - 1, Math.floor(position)),
     stepIndex: megafireStepAt(clock.cursorMs, steps),
     playing: Boolean(clock.playing),
     atEnd: clock.cursorMs >= clock.endMs,
@@ -246,27 +319,6 @@ export function megafireCursorReadout(clock, state) {
   if (state.atEnd) return `■ ${instant} · ${m.lastDetection}`;
   if (state.atStart) return `▶ ${instant} · ${m.firstDetection}`;
   return `❚❚ ${instant} · ${m.dayOf(state.day, state.days)}`;
-}
-
-/**
- * How brightly a detection acquired at `detectionMs` burns at `cursorMs`.
- *
- * Linear decay over {@link MEGAFIRE_FADE_HOURS} down to
- * {@link MEGAFIRE_EMBER_FLOOR}, and exactly 0 for a detection the cursor has
- * not reached — the future is not dim, it is absent.
- *
- * @param {number} detectionMs
- * @param {number} cursorMs
- * @returns {number} 0, or a strength in [{@link MEGAFIRE_EMBER_FLOOR}, 1].
- */
-export function megafireEmberStrength(detectionMs, cursorMs) {
-  if (!Number.isFinite(detectionMs) || !Number.isFinite(cursorMs)) return 0;
-  const age = cursorMs - detectionMs;
-  if (age < 0) return 0;
-  const horizon = MEGAFIRE_FADE_HOURS * HOUR_MS;
-  if (age >= horizon) return MEGAFIRE_EMBER_FLOOR;
-  const fresh = 1 - age / horizon;
-  return MEGAFIRE_EMBER_FLOOR + fresh * (1 - MEGAFIRE_EMBER_FLOOR);
 }
 
 /**

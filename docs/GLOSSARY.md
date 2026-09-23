@@ -283,8 +283,11 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | ICPE | classified industrial facility (ICPE) | |
 | site Seveso | Seveso site | |
 | sites et sols pollués (SIS), CASIAS | contaminated sites (SIS), former industrial sites (CASIAS) | |
-| Feux actifs (FIRMS) | Active fires (FIRMS) | |
-| Mégafeu de Gironde (juil. 2026) | Gironde megafire (Jul. 2026) | |
+| Incendies | Fires | Layer name since 2026-09-23 (was *Feux actifs (FIRMS)*). |
+| Détections récentes, Grands incendies | Recent detections, Major fires | The two mode tiles of *Incendies*. |
+| Gironde · été 2026 | Gironde · summer 2026 | Layer name since 2026-09-23 (was *Mégafeu de Gironde (juil. 2026)*). |
+| Chaleur vue par satellite | Heat seen by satellite | FIRMS detections, in plain words. |
+| Progression du feu, étape, fin des détections, fin des relevés | Fire spread, stage, end of detections, end of the record | The replay bar. |
 | Séismes (24 h) | Earthquakes (24 h) | |
 | Barrages & digues | Dams & levees | |
 | bruit, carte de bruit | noise, noise map | |
@@ -513,7 +516,7 @@ One row per subject; a fused row carries a chip per source (`layerFusions.js`).
 | Revenus, Délinquance | Income, Crime | |
 | Câbles, Antennes | Cables, Antennas | |
 | Civils / Militaires | Civil / Military | |
-| Feux en cours | Active fires | |
+| Feux en cours | Active fires | Retired chip (2026-09-23): now *Détections récentes*. |
 | Vélos et véhicules partagés | Bikes and shared vehicles | Layer name. |
 | Paris intra-muros | Paris proper | |
 | Paris et sa proche couronne | Paris and its inner suburbs | |
