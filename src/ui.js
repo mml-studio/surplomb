@@ -7,6 +7,7 @@ import { createNightBasemap } from './styles/nightBasemap.js';
 import { BASEMAP_DARKENING_STYLES, darkensBasemapOnly } from './styles/nightAtlas.js';
 import { styleDisplayName, styleSpelledName } from './styles/styleNames.js';
 import { createNightAtlasRowFollower } from './styles/nightAtlasRow.js';
+import { createNightAtlasStage, nightAtlasGlowHalved } from './styles/nightAtlasStage.js';
 import { createRowBasemapLock } from './basemapLock.js';
 import taxonomyMessages from './data/layerTaxonomy.i18n.js';
 import { nightVisionShader } from './styles/surveillance.js';
@@ -3356,11 +3357,19 @@ export class StyleManager {
         }
       }
 
-      const stage = new Cesium.PostProcessStage({
-        name: `godsEyeView_${name}`,
-        fragmentShader: shader.fragmentShader,
-        uniforms,
-      });
+      // Night and Dusk compute their bloom at half resolution on a frame drawn
+      // above CSS size — a phone's — see styles/nightAtlasStage.js.
+      const stage = BASEMAP_DARKENING_STYLES.includes(name)
+        ? createNightAtlasStage(Cesium, {
+          name: `godsEyeView_${name}`,
+          uniforms,
+          halfResolutionGlow: nightAtlasGlowHalved(this.viewer.resolutionScale),
+        })
+        : new Cesium.PostProcessStage({
+          name: `godsEyeView_${name}`,
+          fragmentShader: shader.fragmentShader,
+          uniforms,
+        });
 
       // Zero-intensity stages are DISABLED (perf wave 1). History: the
       // first attempt at this deleted the product's signature scope — the

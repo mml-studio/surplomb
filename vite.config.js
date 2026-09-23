@@ -8496,14 +8496,18 @@ function ensureAnfrRegister() {
 }
 
 /** The requested box, or null when it is malformed or wider than the ceiling. */
-function anfrBoxFrom(url) {
+export function anfrBoxFrom(url) {
   const south = Number(url.searchParams.get('south'));
   const west = Number(url.searchParams.get('west'));
   const north = Number(url.searchParams.get('north'));
   const east = Number(url.searchParams.get('east'));
   if (![south, west, north, east].every(Number.isFinite)) return null;
   if (south >= north || west >= east) return null;
-  if (north - south > ANFR_MAX_BOX_DEG || east - west > ANFR_MAX_BOX_DEG) return null;
+  // The epsilon lets a box of exactly the ceiling through: the city view asks
+  // for boxes snapped to a grid (`anfrSupportCells.js`), and 48.70000 − 48.35000
+  // is 0.3500000000000014 in floating point.
+  const ceiling = ANFR_MAX_BOX_DEG + 1e-9;
+  if (north - south > ceiling || east - west > ceiling) return null;
   return { south, west, north, east };
 }
 
@@ -8642,10 +8646,137 @@ function ensureAnfrDetail(supId, position) {
 }
 
 /**
+ * How long a browser keeps an ANFR answer before asking again: the register's
+ * own TTL. The observatoire is republished weekly, so an answer six hours old
+ * is still this week's map. An answer served STALE (a refresh failed) is kept
+ * five minutes, so the next refresh gets a chance to replace it.
+ */
+const ANFR_BROWSER_MAX_AGE_S = ANFR_TTL_MS / 1000;
+const ANFR_STALE_BROWSER_MAX_AGE_S = 5 * 60;
+/** Below this, gzip's header and trailer outweigh what it saves. */
+const ANFR_GZIP_FLOOR_BYTES = 1024;
+
+/**
+ * One ANFR answer as bytes, with the validator a browser revalidates it by.
+ *
+ * WHY. `/mesh` went out `no-store` and uncompressed: 1 666 693 bytes from the
+ * origin on every page load, 394 030 once Cloudflare had gzipped them — the
+ * same bytes, re-downloaded by every visit, for a register that changes once a
+ * week. The city view's `/supports` boxes were the same, one per camera stop.
+ *
+ * The ETag hashes the answer WITHOUT its clock (`fetchedAt`, and the mesh's
+ * `builtInMs`): the register is rebuilt every six hours from a file
+ * republished weekly, so most rebuilds produce the same masts with a new
+ * timestamp, and a revalidation then costs a 304 instead of the whole body.
+ * `stale` is hashed, so a browser holding a stale answer gets the fresh one
+ * once the register has recovered, not a 304 that keeps it six more hours. The
+ * ETag is weak (`W/`) because the body it stands for is gzipped for one client
+ * and not for another.
+ *
+ * @param {object} core The answer without its clock; `stale` included.
+ * @param {object} clock `fetchedAt`, and anything else that changes with every build.
+ * @returns {{raw: Buffer, gzip: ?Buffer, etag: string, stale: boolean}}
+ */
+export function anfrAnswer(core, clock) {
+  const etag = `W/"${createHash('sha1').update(JSON.stringify(core)).digest('base64url').slice(0, 22)}"`;
+  return { raw: Buffer.from(JSON.stringify({ ...core, ...clock })), gzip: null, etag, stale: Boolean(core.stale) };
+}
+
+/** The `/mesh` answer of one register build. */
+export function anfrMeshAnswer(entry, stale) {
+  const { builtInMs, ...mesh } = entry.payload.mesh;
+  return anfrAnswer({ ...mesh, stale }, { fetchedAt: entry.at, builtInMs });
+}
+
+/**
+ * `/supports` answers kept by register build and box, up to this many bytes:
+ * the boxes are snapped to a grid (`anfrSupportCells.js`), so readers of the
+ * same town ask for the same ones, and each costs a sweep of the 72 700
+ * supports, two serialisations, a hash and a gzip.
+ */
+const ANFR_SUPPORTS_MEMO_BYTES = 16 * 1024 * 1024;
+
+/** Whether an `If-None-Match` header names this ETag (weak comparison, RFC 9110 §13.1.2). */
+export function anfrEtagMatches(header, etag) {
+  if (!header || !etag) return false;
+  const bare = (tag) => tag.trim().replace(/^W\//, '');
+  const wanted = bare(etag);
+  return String(header).split(',').some((tag) => tag.trim() === '*' || bare(tag) === wanted);
+}
+
+/**
+ * Send an {@link anfrAnswer}: a 304 when the browser already holds it, else
+ * the body, gzipped when the client takes gzip. The gzip is made once per
+ * answer and kept on it, so a memoised answer (`/mesh`) compresses once.
+ */
+export async function sendAnfrAnswer(req, res, answer, headers = {}) {
+  const base = {
+    'Content-Type': 'application/json',
+    'Cache-Control': `private, max-age=${answer.stale ? ANFR_STALE_BROWSER_MAX_AGE_S : ANFR_BROWSER_MAX_AGE_S}`,
+    ETag: answer.etag,
+    Vary: 'Accept-Encoding',
+    ...headers,
+  };
+  if (anfrEtagMatches(req.headers?.['if-none-match'], answer.etag)) {
+    res.writeHead(304, base);
+    res.end();
+    return;
+  }
+  let body = answer.raw;
+  if (body.length >= ANFR_GZIP_FLOOR_BYTES && /\bgzip\b/.test(String(req.headers?.['accept-encoding'] || ''))) {
+    answer.gzip ??= await new Promise((resolve, reject) => {
+      zlib.gzip(answer.raw, { level: 6 }, (error, out) => (error ? reject(error) : resolve(out)));
+    });
+    body = answer.gzip;
+    base['Content-Encoding'] = 'gzip';
+  }
+  if (res.headersSent) return;
+  res.writeHead(200, { ...base, 'Content-Length': String(body.length) });
+  res.end(body);
+}
+
+/**
  * Vite plugin: ANFR mobile-network observatory proxy.
  * @returns {import('vite').Plugin}
  */
 function anfrFranceProxy() {
+  /** The `/mesh` answer of the register in memory: 1.7 MB serialised and hashed once, not per visit. */
+  let meshAnswer = null;
+  const meshAnswerFor = (entry, stale) => {
+    if (meshAnswer?.at !== entry.at || meshAnswer.answer.stale !== stale) {
+      meshAnswer = { at: entry.at, answer: anfrMeshAnswer(entry, stale) };
+    }
+    return meshAnswer.answer;
+  };
+  /** `${at}|${stale}|${box}` → answer, oldest first; see ANFR_SUPPORTS_MEMO_BYTES. */
+  const supportsAnswers = new Map();
+  let supportsAnswerBytes = 0;
+  const supportsAnswerFor = (entry, stale, box) => {
+    const key = `${entry.at}|${stale}|${box.south},${box.west},${box.north},${box.east}`;
+    let answer = supportsAnswers.get(key);
+    if (answer) {
+      supportsAnswers.delete(key);
+    } else {
+      answer = anfrAnswer({
+        ...anfrSupportsInBox(entry.payload, box),
+        national: entry.payload.national,
+        edition: entry.payload.edition,
+        source: entry.payload.source,
+        licence: entry.payload.licence,
+        natureAvailable: entry.payload.natureAvailable,
+        stale,
+      }, { fetchedAt: entry.at });
+      supportsAnswerBytes += answer.raw.length;
+    }
+    supportsAnswers.set(key, answer);
+    for (const [oldKey, old] of supportsAnswers) {
+      if (supportsAnswerBytes <= ANFR_SUPPORTS_MEMO_BYTES || old === answer) break;
+      supportsAnswers.delete(oldKey);
+      supportsAnswerBytes -= old.raw.length;
+    }
+    return answer;
+  };
+
   function install(middlewares) {
     middlewares.use('/api/anfr-fr', async (req, res) => {
       const json = (status, body, headers = {}) => {
@@ -8745,33 +8876,26 @@ function anfrFranceProxy() {
         }
       }
 
-      const pick = (payload) => (route === '/mesh'
-        ? payload.mesh
-        : {
-          ...anfrSupportsInBox(payload, box),
-          national: payload.national,
-          edition: payload.edition,
-          source: payload.source,
-          licence: payload.licence,
-          natureAvailable: payload.natureAvailable,
-        });
+      const answerOf = (entry, stale) => (route === '/mesh'
+        ? meshAnswerFor(entry, stale)
+        : supportsAnswerFor(entry, stale, box));
 
       await readAnfrDisk();
       const now = Date.now();
       if (_anfrRegister && now - _anfrRegister.at <= ANFR_TTL_MS) {
-        json(200, { ...pick(_anfrRegister.payload), fetchedAt: _anfrRegister.at, stale: false }, { 'X-ANFR-FR': 'HIT' });
+        await sendAnfrAnswer(req, res, answerOf(_anfrRegister, false), { 'X-ANFR-FR': 'HIT' });
         return;
       }
       try {
         const entry = await ensureAnfrRegister();
-        json(200, { ...pick(entry.payload), fetchedAt: entry.at, stale: false }, { 'X-ANFR-FR': 'MISS' });
+        await sendAnfrAnswer(req, res, answerOf(entry, false), { 'X-ANFR-FR': 'MISS' });
       } catch (error) {
         console.warn('[ANFR Proxy] register build unavailable:', error?.message || error);
         // The edition is a whole week and the file is republished weekly, so a
         // register a fortnight old is still a true map of French masts.
         // Serving it beats blanking the country.
         if (_anfrRegister && now - _anfrRegister.at <= ANFR_STALE_MS) {
-          json(200, { ...pick(_anfrRegister.payload), fetchedAt: _anfrRegister.at, stale: true }, { 'X-ANFR-FR': 'STALE' });
+          await sendAnfrAnswer(req, res, answerOf(_anfrRegister, true), { 'X-ANFR-FR': 'STALE' });
           return;
         }
         json(503, { error: 'The ANFR mobile-network register is temporarily unavailable' });

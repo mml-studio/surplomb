@@ -60,6 +60,15 @@ export function coverageTileCode(tile, px, py) {
  * which is how the hatching lands there and nowhere else. The stripes are laid
  * on the OUTPUT, after the magnification, so they keep one width at every
  * level instead of doubling with each level past the pyramid.
+ *
+ * The stripes are a second pass over the stripe pixels alone, not a test in
+ * the fill: a modulo and a branch on each of the 65 536 pixels made a hatched
+ * inland tile cost 0.51 ms against 0.10 ms plain, and the pass halves it to
+ * 0.26 ms (Node 26 on the ThinkCentre, load 2.6, 2026-09-23; an earlier 6.3 ms
+ * was taken on a machine at load 52 and does not reproduce). It visits the 3
+ * pixels in 8 on a stripe and writes only where `hatch.lut` differs from `lut`
+ * — rung 0 — so the result is the same pixels, asserted against the one-pass
+ * paint in the tests.
  * @param {{codes: Uint8Array, land: ?Uint8Array}} tile
  * @param {Uint32Array} lut 256 packed colours, `ImageData` byte order.
  * @param {Uint32Array} out PIXELS entries.
@@ -69,31 +78,46 @@ export function coverageTileCode(tile, px, py) {
 export function paintCoverageTile(tile, lut, out, crop = null, hatch = null) {
   const { codes, land } = tile;
   const whole = !crop || crop.size >= COVERAGE_TILE_EDGE;
-  if (whole && !hatch) {
-    if (!land) {
-      for (let i = 0; i < PIXELS; i++) out[i] = lut[codes[i]];
-      return out;
-    }
-    for (let i = 0; i < PIXELS; i++) out[i] = (land[i >> 3] >> (i & 7)) & 1 ? lut[codes[i]] : 0;
-    return out;
-  }
   const sx = whole ? 0 : crop.sx;
   const sy = whole ? 0 : crop.sy;
   const shift = whole ? 0 : Math.log2(COVERAGE_TILE_EDGE / crop.size);
-  const period = hatch?.period || 1;
-  const width = hatch ? hatch.width : 0;
-  for (let y = 0, o = 0; y < COVERAGE_TILE_EDGE; y++) {
-    const row = (sy + (y >> shift)) * COVERAGE_TILE_EDGE + sx;
-    for (let x = 0; x < COVERAGE_TILE_EDGE; x++, o++) {
-      const i = row + (x >> shift);
-      if (land && !((land[i >> 3] >> (i & 7)) & 1)) {
-        out[o] = 0;
-        continue;
+  if (whole && !land) {
+    for (let i = 0; i < PIXELS; i++) out[i] = lut[codes[i]];
+  } else if (whole) {
+    for (let i = 0; i < PIXELS; i++) out[i] = (land[i >> 3] >> (i & 7)) & 1 ? lut[codes[i]] : 0;
+  } else {
+    for (let y = 0, o = 0; y < COVERAGE_TILE_EDGE; y++) {
+      const row = (sy + (y >> shift)) * COVERAGE_TILE_EDGE + sx;
+      for (let x = 0; x < COVERAGE_TILE_EDGE; x++, o++) {
+        const i = row + (x >> shift);
+        out[o] = land && !((land[i >> 3] >> (i & 7)) & 1) ? 0 : lut[codes[i]];
       }
-      out[o] = hatch && (x + y) % period < width ? hatch.lut[codes[i]] : lut[codes[i]];
     }
   }
+  if (hatch) paintStripes(codes, land, lut, out, hatch, sx, sy, shift);
   return out;
+}
+
+/** The stripe pixels of `paintCoverageTile`, over a tile already filled. */
+function paintStripes(codes, land, lut, out, hatch, sx, sy, shift) {
+  const period = hatch.period || 1;
+  const width = Math.min(hatch.width, period);
+  const ink = hatch.lut;
+  for (let y = 0; y < COVERAGE_TILE_EDGE; y++) {
+    const row = (sy + (y >> shift)) * COVERAGE_TILE_EDGE + sx;
+    const base = y * COVERAGE_TILE_EDGE;
+    // The first x of the row where (x + y) % period is 0.
+    const first = (period - (y % period)) % period;
+    for (let k = 0; k < width; k++) {
+      for (let x = (first + k) % period; x < COVERAGE_TILE_EDGE; x += period) {
+        const i = row + (x >> shift);
+        const code = codes[i];
+        if (ink[code] === lut[code]) continue;
+        if (land && !((land[i >> 3] >> (i & 7)) & 1)) continue;
+        out[base + x] = ink[code];
+      }
+    }
+  }
 }
 
 /**
