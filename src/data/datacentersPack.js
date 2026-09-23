@@ -1,4 +1,4 @@
-import { formatNumber } from '../i18n/format.js';
+import { formatDate, formatNumber } from '../i18n/format.js';
 import {
   DATACENTER_GROUP_LEGEND_GLYPH,
   DATACENTER_SITE_LEGEND_GLYPH,
@@ -728,6 +728,85 @@ function mappedPowerText(tags) {
     tags.it_load,
     tags.capacity,
   ]);
+}
+
+/**
+ * The clicked site's card in the map key (the approved mock of 2026-09-23),
+ * in the shape `legendSelectionOf` in manager.js reads.
+ *
+ * The same facts as {@link datacenterCardDetails}, laid out for a reader who
+ * came for the power: it is the card's figure when anyone published one, with
+ * who did — OpenStreetMap, or DCWatch and the date of its release — under it.
+ * The operator and the fabric are the meta lines, the year a line, the two
+ * databases the footnote. « Voir le site » is the operator's own website (the
+ * OSM `website` tag, 929 sites, 919 of them https — the key refuses any other
+ * scheme). A site with no power says so rather than printing an empty figure.
+ *
+ * @param {object} props Unwrapped feature properties.
+ * @param {{areaM2?: number, title?: string, id?: string}} [context] The
+ *   loader's measured area, the title it already resolved (nameless sites get
+ *   the layer's word), and the record id.
+ * @returns {?object}
+ */
+export function datacenterSelectionPanel(props, { areaM2 = 0, title = '', id = '' } = {}) {
+  const source = props && typeof props === 'object' ? props : {};
+  const tags = source.tags && typeof source.tags === 'object' ? source.tags : {};
+  const name = text(title) || text(source.name || tags.name);
+  if (!name) return null;
+  const lowerName = name.toLocaleLowerCase('fr-FR');
+  const dcwatch = datacenterDcwatch(source);
+  const m = messages();
+  const words = m.panel;
+
+  const operator = firstText([tags.operator, source.operator, tags.owner, tags.brand]);
+  const ref = text(tags.ref);
+  const identity = [
+    operator && operator.toLocaleLowerCase('fr-FR') !== lowerName ? operator : '',
+    ref && !lowerName.includes(ref.toLocaleLowerCase('fr-FR')) ? ref : '',
+  ].filter(Boolean).join(' · ');
+
+  const footprint = datacenterFootprint(tags, areaM2);
+  const levels = Number.parseInt(text(tags['building:levels']), 10);
+  const height = Number.parseFloat(text(tags.height));
+  const fabric = [
+    footprint
+      ? m.card.footprint(
+        footprint.kind === 'building' ? m.card.buildingFootprint : m.card.siteFootprint,
+        formatFootprint(footprint.areaM2),
+      )
+      : '',
+    Number.isFinite(levels) && levels > 0
+      ? m.card.levels(levels)
+      : (Number.isFinite(height) && height > 0
+        ? m.card.height(formatNumber(height, { maximumFractionDigits: 1 }))
+        : ''),
+  ].filter(Boolean).join(' · ');
+
+  const mappedPower = mappedPowerText(tags);
+  const power = datacenterPowerText(source);
+  const release = /^\d{4}-\d{2}-\d{2}$/.test(text(dcwatch?.release))
+    ? formatDate(`${dcwatch.release}T12:00:00Z`, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+    : '';
+  const mappedYear = datacenterYear(tags.start_date);
+  const year = mappedYear || datacenterYear(dcwatch?.startYear);
+  const usedDcwatch = Boolean((!mappedPower && power) || (!mappedYear && year));
+  const website = text(tags.website || tags['contact:website']);
+
+  return {
+    key: `datacenter:${id || name}`,
+    title: name,
+    meta: [identity, fabric].filter(Boolean),
+    metric: power
+      ? {
+        value: power,
+        color: DATACENTER_HALL_COLOR,
+        caption: [words.powerCaption, mappedPower ? words.powerFromOsm : words.powerFromDcwatch(release)],
+      }
+      : null,
+    lines: [power ? '' : words.noPower, year ? words.inServiceSince(year) : ''].filter(Boolean),
+    footnote: words.source(usedDcwatch),
+    link: /^https:\/\//.test(website) ? { href: website, label: words.website } : null,
+  };
 }
 
 /**

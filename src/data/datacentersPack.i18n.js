@@ -77,6 +77,39 @@ export default defineMessages({
       en: 'Several sites in one spot at this scale: zoom in to separate them.',
     },
   },
+  /**
+   * The card of a clicked site in the map key (mock of 2026-09-23): the power
+   * as its figure, who published it, and the operator's website.
+   */
+  panel: {
+    powerCaption: { fr: 'Puissance renseignée', en: 'Published power' },
+    powerFromOsm: { fr: 'OpenStreetMap', en: 'OpenStreetMap' },
+    powerFromDcwatch: {
+      fr: (date) => (date ? `DCWatch · ${date}` : 'DCWatch'),
+      en: (date) => (date ? `DCWatch · ${date}` : 'DCWatch'),
+      sample: ['April 9, 2026'],
+    },
+    noPower: {
+      fr: 'Puissance non publiée',
+      en: 'Power not published',
+      note: 'A site nobody published a power for: most data centres outside France.',
+    },
+    inServiceSince: {
+      fr: (year) => `En service depuis ${year}`,
+      en: (year) => `In service since ${year}`,
+      sample: ['2019'],
+    },
+    source: {
+      fr: (withDcwatch) => (withDcwatch ? 'Source : OpenStreetMap et DCWatch (ODbL)' : 'Source : OpenStreetMap (ODbL)'),
+      en: (withDcwatch) => (withDcwatch ? 'Source: OpenStreetMap and DCWatch (ODbL)' : 'Source: OpenStreetMap (ODbL)'),
+      sample: [true],
+    },
+    website: {
+      fr: 'Voir le site',
+      en: 'Visit the website',
+      note: "The operator's own website, from the OSM `website` tag; opens in a new tab.",
+    },
+  },
   card: {
     buildingFootprint: { fr: 'emprise au sol', en: 'building footprint' },
     siteFootprint: { fr: 'emprise du site', en: 'site footprint' },

@@ -18,8 +18,8 @@ import {
 import { publishJoin } from './layerJoins.js';
 import { nearestDam } from './damsPack.js';
 import { buildPortIndex } from './portDirectory.js';
-import { datacenterMarkerGlyphs } from './datacenterGlyphs.js';
-import { DATACENTER_HALL_COLOR, DATACENTER_STEM_PX } from './datacentersPack.js';
+import { DATACENTER_SELECTED_AMBER, datacenterMarkerGlyphs } from './datacenterGlyphs.js';
+import { DATACENTER_HALL_COLOR, DATACENTER_STEM_PX, datacenterSelectionPanel } from './datacentersPack.js';
 
 // Use Vite's ?url import to properly resolve these assets in dev and build
 import airportsUrl from './local_data/airports/airports.geojsonl?url';
@@ -51,6 +51,8 @@ const datacenters = createLocalGeoJsonLayer({
   markerGlyphs: datacenterMarkerGlyphs,
   groupCellPx: 30,
   stemPx: DATACENTER_STEM_PX,
+  // A click opens the site's card in the key and leaves the camera where it is.
+  keySelection: { panel: datacenterSelectionPanel, accent: DATACENTER_SELECTED_AMBER },
 });
 
 // OpenStreetMap dam structures — ODbL, bundled. France (métropole + outre-mer)

@@ -3405,7 +3405,21 @@ power then hall area (`datacenterLabelPriority`), with the power after the
 name (« Colt Paris 3 · 85 MW »). Halls are violet, site outlines a slate
 lilac. The key prints two rows, *Site* and *Regroupement* (*Group of sites*),
 each with its silhouette. A billboard's image is a data URL, so the 4 638
-sites share two atlas entries.
+sites share three atlas entries.
+
+**A clicked data centre opens its card in the key** (same day, the mock's
+card; `keySelection` in `createLocalGeoJsonLayer`, `datacenterSelectionPanel`
+in `datacentersPack.js`). The click no longer flies the camera to 5 km: the
+site's sparkle turns amber, the globe keeps an amber tag (« Fullsave Toulouse ·
+34 MW ») — or the whole card where the key cannot carry it — and the key prints
+the name, the operator and fabric as meta lines, the power as the card's figure
+with who published it (« Puissance renseignée », « DCWatch · 9 avril 2026 » or
+« OpenStreetMap »), the year, « Source : OpenStreetMap et DCWatch (ODbL) », and
+« Voir le site » when the site's `website` is https (929 sites carry one, 919
+https). A site with no published power says « Puissance non publiée ». Escape,
+the key's close or a click on empty ground closes it; the selected site leads
+its screen cell and its ambient label steps aside for the tag. The entity
+context is still set, so the voice and the Context panel see the selection.
 
 **What the fusion does NOT do**, and is owed separately: deduplicate the 56
 plants three registers share (`edf-power-plants`, `rte-generation`,

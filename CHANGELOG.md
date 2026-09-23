@@ -24,6 +24,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   faint stem, sites that share a spot at the national scale merge into one
   stacked mark, and only the few most powerful sites are named, with their
   power (« Colt Paris 3 · 85 MW »). The key explains the two marks.
+  Clicking a site no longer flies the camera: its card opens in the key —
+  the power as its figure, who published it, the year, and a link to the
+  operator's website when there is one — and the site turns amber on the
+  map.
 - **The mobile antennas now show where their 4G reaches, and where it does
   not.** Five chips on the Antennes mobiles row paint the ARCEP's quarterly
   coverage map under the masts: « Zones blanches » colours the ground by how

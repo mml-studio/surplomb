@@ -25,6 +25,11 @@
 export const DATACENTER_VIOLET = '#a98bff';
 /** The pale core of the sparkle. */
 const CORE = '#f4efff';
+/**
+ * The selected site: the amber the row's selections wear (the antennas'
+ * diamond, `anfrGlyphs.js`), as the mock draws « Groupama Mordelles ».
+ */
+export const DATACENTER_SELECTED_AMBER = '#ffb238';
 
 /** Image pixels per CSS pixel: drawn at 2× and scaled by half. */
 const DENSITY = 2;
@@ -43,25 +48,25 @@ function sparklePath(ctx, cx, cy, rx, ry, waist) {
   ctx.closePath();
 }
 
-function glow(ctx, cx, cy, radius, alpha) {
+function glow(ctx, cx, cy, radius, alpha, rgb = '169, 139, 255') {
   const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  gradient.addColorStop(0, `rgba(169, 139, 255, ${alpha})`);
-  gradient.addColorStop(0.4, `rgba(169, 139, 255, ${alpha * 0.35})`);
-  gradient.addColorStop(1, 'rgba(169, 139, 255, 0)');
+  gradient.addColorStop(0, `rgba(${rgb}, ${alpha})`);
+  gradient.addColorStop(0.4, `rgba(${rgb}, ${alpha * 0.35})`);
+  gradient.addColorStop(1, `rgba(${rgb}, 0)`);
   ctx.fillStyle = gradient;
   ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
 }
 
-function sparkle(ctx, cx, cy, size) {
+function sparkle(ctx, cx, cy, size, { edge = DATACENTER_VIOLET, mid = '#d6c8ff', core = CORE, stroke = 'rgba(40, 20, 90, 0.55)', strokeWidth = 1.5 } = {}) {
   sparklePath(ctx, cx, cy, size * 0.62, size, size * 0.16);
   const fill = ctx.createRadialGradient(cx, cy, 0, cx, cy, size);
-  fill.addColorStop(0, CORE);
-  fill.addColorStop(0.3, '#d6c8ff');
-  fill.addColorStop(1, DATACENTER_VIOLET);
+  fill.addColorStop(0, core);
+  fill.addColorStop(0.3, mid);
+  fill.addColorStop(1, edge);
   ctx.fillStyle = fill;
   ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = 'rgba(40, 20, 90, 0.55)';
+  ctx.lineWidth = strokeWidth;
+  ctx.strokeStyle = stroke;
   ctx.stroke();
 }
 
@@ -94,7 +99,7 @@ function draw(width, height, paint) {
  * pixels above it and its chevrons hang below, like the mock's, so a group
  * stands over its stem at about the height a single site does.
  *
- * @returns {?{single: {image: string, scale: number}, group: {image: string, scale: number}}}
+ * @returns {?{single: object, group: object, selected: object}} Each `{image, scale}`.
  */
 export function datacenterMarkerGlyphs() {
   if (_glyphs !== undefined) return _glyphs;
@@ -113,10 +118,21 @@ export function datacenterMarkerGlyphs() {
     chevron(ctx, 34, 48, 12, 7);
     sparkle(ctx, 34, 29, 17);
   });
-  _glyphs = single && group
+  const selected = draw(72, 72, (ctx) => {
+    glow(ctx, 36, 36, 36, 0.95, '255, 178, 56');
+    sparkle(ctx, 36, 36, 21, {
+      edge: DATACENTER_SELECTED_AMBER,
+      mid: '#ffd99a',
+      core: '#fffaf0',
+      stroke: 'rgba(255, 246, 229, 0.95)',
+      strokeWidth: 2.5,
+    });
+  });
+  _glyphs = single && group && selected
     ? {
       single: { image: single, scale: 1.15 / DENSITY },
       group: { image: group, scale: 1.15 / DENSITY },
+      selected: { image: selected, scale: 1.15 / DENSITY },
     }
     : null;
   return _glyphs;

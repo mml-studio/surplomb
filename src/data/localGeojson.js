@@ -34,7 +34,8 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { pickOverlayLabelId } from './overlayLabelPick.js';
-import { isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
+import { isOwnedByOtherLayer, isWorldPick, resolvePickId } from './pickRegistry.js';
+import { mapKeyCarriesSelection, watchMapKeyCarriesSelection } from './mapKeySelection.js';
 import { pickAt } from './pickAt.js';
 import messages from './localGeojson.i18n.js';
 
@@ -1228,6 +1229,20 @@ export function createLocalGeoJsonLayer({
   groupCellPx = 0,
   groupMinHeightM = 60_000,
   stemPx = LOCAL_STEM_TARGET_PX,
+  /*
+   * ── OPTIONAL: THE CLICKED FEATURE'S CARD IN THE MAP KEY ────────────────
+   *
+   * `keySelection: { panel, accent }`. A click then opens the feature's card
+   * in the key (`legendSelection`, built by `panel(props, {areaM2, title,
+   * id})`), keeps a tag over it on the globe — the whole card there when the
+   * key cannot carry it — shows `markerGlyphs.selected`, and does NOT fly the
+   * camera: the reader clicked to read, at the scale they chose. Escape, the
+   * key's close or a click on empty ground closes it. The antennas' mast and
+   * the cables' landing point work the same way; the data centres are the
+   * first local pack to (mock of 2026-09-23).
+   */
+  /** @type {?{panel: (props: object, context: object) => ?object, accent?: string}} */
+  keySelection = null,
 }) {
   const resolveRenderSpec = featureRender || PACK_RENDERERS[id]?.featureRender || null;
   const resolveRenderLegend = renderLegend || PACK_RENDERERS[id]?.renderLegend || null;
@@ -1468,19 +1483,135 @@ export function createLocalGeoJsonLayer({
    * @returns {object} The live PolylineCollection.
    */
   /**
-   * Show the `group` image on a mark that stands for several sites, the
-   * `single` one otherwise. Written only on a change: a billboard's `image` is
-   * a Property, and assigning one allocates.
+   * Show the image a mark's state calls for: `selected` for the feature whose
+   * card is open, `group` on a mark that stands for several, `single`
+   * otherwise. Written only on a change: a billboard's `image` is a Property,
+   * and assigning one allocates.
    */
-  function setGlyphGrouped(record, grouped) {
-    if (record.glyphGrouped === grouped) return;
-    const billboard = record.entity?.billboard;
+  function refreshGlyph(record) {
     const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
+    const billboard = record?.entity?.billboard;
     if (!billboard || !glyphs) return;
+    const state = record === _keySelected && glyphs.selected
+      ? 'selected'
+      : (record.glyphGrouped ? 'group' : 'single');
+    if (record.glyphState === state) return;
+    record.glyphState = state;
+    billboard.image = glyphs[state].image;
+    billboard.scale = glyphs[state].scale;
+  }
+
+  function setGlyphGrouped(record, grouped) {
     record.glyphGrouped = grouped;
-    const glyph = grouped ? glyphs.group : glyphs.single;
-    billboard.image = glyph.image;
-    billboard.scale = glyph.scale;
+    refreshGlyph(record);
+  }
+
+  // ── The clicked feature's card in the key (`keySelection`) ──────────────
+  const SELECTED_SOURCE_ID = `${id}:selected`;
+  const SELECTED_SOURCE_OPTIONS = Object.freeze({ cohortLimit: 1, collisionCapacity: 1, moving: false });
+  /** The record whose card is open, or null. */
+  let _keySelected = null;
+  let _unwatchKeyCarry = null;
+  /** The viewer the layer was last enabled on, for the selection's teardown. */
+  let _viewerRef = null;
+
+  /** Tell the shell to repaint the key now (`LAYER_DRAW_CHANGED_EVENT`). */
+  function announceKeySelection() {
+    if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+    window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+      detail: { layerId: id, selection: true },
+    }));
+  }
+
+  function keySelectionCopy(record) {
+    const props = record.entity?.__localProperties || {};
+    const copy = localInfrastructureOverlayCopy(props, id, { areaM2: record.areaM2 });
+    return { props, copy };
+  }
+
+  /** The tag over the selected feature — or its whole card, if the key cannot carry it. */
+  function publishKeySelection() {
+    const record = _keySelected;
+    if (!record) return;
+    const { props, copy } = keySelectionCopy(record);
+    const carried = mapKeyCarriesSelection();
+    overlayHost.setVisible(SELECTED_SOURCE_ID, true);
+    overlayHost.setEntries(SELECTED_SOURCE_ID, [{
+      id: `${record.id}:selected`,
+      source: SELECTED_SOURCE_ID,
+      position: record.tip,
+      variant: 'selected',
+      selected: true,
+      protected: true,
+      paintLane: 'selected',
+      collisionGroup: 'ambient-card',
+      priority: Number.MAX_SAFE_INTEGER,
+      title: carried ? localOverlayLabelTitle(copy.title, props, id) : copy.title,
+      details: carried ? [] : copy.details,
+      accent: keySelection?.accent || color,
+      interactive: false,
+      anchorRadiusPx: 9,
+      minAnchorGapPx: 11,
+      verticalOnly: true,
+      placement: 'above',
+      edgeFade: 'keyhole',
+      horizonCull: true,
+      terrainOcclusion: false,
+    }], SELECTED_SOURCE_OPTIONS);
+  }
+
+  function onKeySelectionKeyDown(event) {
+    if (event?.key === 'Escape') clearKeySelection();
+  }
+
+  function selectInKey(viewer, record) {
+    if (!record) return;
+    const previous = _keySelected;
+    _keySelected = record;
+    // The entity context stays the voice's and the Context panel's answer to
+    // "what is selected"; only the card and the camera move away from it.
+    viewer.selectedEntity = record.entity;
+    selectEntityContext(record.entity);
+    if (previous && previous !== record) refreshGlyph(previous);
+    refreshGlyph(record);
+    publishKeySelection();
+    _unwatchKeyCarry?.();
+    _unwatchKeyCarry = watchMapKeyCarriesSelection(() => publishKeySelection(), mapKeyCarriesSelection());
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onKeySelectionKeyDown);
+    // Re-deal on the next frame: the selected site leads its screen cell, and
+    // its ambient label steps aside for the tag.
+    _stemGeometryDirty = true;
+    _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
+    announceKeySelection();
+    governorRequestRender(`local-key-selection:${id}`);
+  }
+
+  /** Close the card, wherever it is shown. @returns {boolean} Whether one was open. */
+  function clearKeySelection() {
+    const record = _keySelected;
+    if (!record) return false;
+    _keySelected = null;
+    refreshGlyph(record);
+    _unwatchKeyCarry?.();
+    _unwatchKeyCarry = null;
+    if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeySelectionKeyDown);
+    overlayHost.clearSource(SELECTED_SOURCE_ID);
+    overlayHost.setVisible(SELECTED_SOURCE_ID, false);
+    if (_viewerRef?.selectedEntity === record.entity) _viewerRef.selectedEntity = undefined;
+    clearSelectedEntityContextForLayer(id);
+    _stemGeometryDirty = true;
+    _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
+    announceKeySelection();
+    governorRequestRender(`local-key-selection:${id}`);
+    return true;
+  }
+
+  /** The card for the key, or null. */
+  function keySelectionPanel() {
+    const record = _keySelected;
+    if (!record || typeof keySelection?.panel !== 'function') return null;
+    const { props, copy } = keySelectionCopy(record);
+    return keySelection.panel(props, { areaM2: record.areaM2, title: copy.title, id: record.id }) || null;
   }
 
   function ensureStemCollection(viewer) {
@@ -1703,6 +1834,7 @@ export function createLocalGeoJsonLayer({
     if (_runwayLines) _runwayLines.show = false;
     if (_stemLines) _stemLines.show = false;
     _overlayPublisher.hide();
+    clearKeySelection();
     clearSelectedEntityContextForLayer(id);
     if (viewer?.selectedEntity?.__localLayerId === id) {
       viewer.selectedEntity = undefined;
@@ -1798,7 +1930,18 @@ export function createLocalGeoJsonLayer({
     // on its legend alone: D1 makes a legend mandatory wherever a mark carries
     // a value, and a size with no printed scale is exactly the case D1 is
     // about.
-    ...((rowControls || resolveRenderLegend) ? {
+    ...(keySelection ? {
+      /**
+       * The key's close on the card: the same dismissal as Escape, or as a
+       * click on empty ground.
+       * @returns {boolean} Whether there was a card to close.
+       */
+      clearSelectedCard() {
+        return clearKeySelection();
+      },
+    } : {}),
+
+    ...((rowControls || resolveRenderLegend || keySelection) ? {
       /**
        * The row's chips and legend.
        *
@@ -1812,8 +1955,13 @@ export function createLocalGeoJsonLayer({
       getRowControls() {
         const base = rowControls ? (rowControls(_params, _groupTally) || null) : null;
         const sizeRows = resolveRenderLegend ? (resolveRenderLegend(_renderTally) || []) : [];
-        if (!base && sizeRows.length === 0) return null;
-        return { ...(base || {}), legend: [...(base?.legend || []), ...sizeRows] };
+        const selection = keySelectionPanel();
+        if (!base && sizeRows.length === 0 && !selection) return null;
+        return {
+          ...(base || {}),
+          legend: [...(base?.legend || []), ...sizeRows],
+          ...(selection ? { legendSelection: selection } : {}),
+        };
       },
     } : {}),
 
@@ -2155,8 +2303,12 @@ export function createLocalGeoJsonLayer({
               stemWidth,
               /** On-screen height of the shaft, CSS pixels (`stemPx`). */
               stemTargetPx: stemPx,
-              /** Which of `markerGlyphs`' two images the billboard shows. */
+              /** Whether the mark stands for several sites (`groupCellPx`). */
               glyphGrouped: false,
+              /** Which of `markerGlyphs`' images the billboard shows. */
+              glyphState: 'single',
+              /** Measured footprint, for the key's card. */
+              areaM2,
               groundHeight,
               groundSampled: false,
               lastGroundSampleMs: 0,
@@ -2251,6 +2403,7 @@ export function createLocalGeoJsonLayer({
         }
 
         // 2. Install native global click handler
+        _viewerRef = viewer;
         if (!_clickHandler) {
           _clickHandler = screenSpaceEventHandlerFactory(viewer.scene.canvas);
           _clickHandler.setInputAction((click) => {
@@ -2258,7 +2411,8 @@ export function createLocalGeoJsonLayer({
             const picked = pickAt(viewer.scene, click.position);
 
             if (picked && picked.id && picked.id.__localLayerId === id) {
-              selectLocalFeature(viewer, picked.id);
+              if (keySelection) selectInKey(viewer, _stemRecords.find((record) => record.entity === picked.id));
+              else selectLocalFeature(viewer, picked.id);
               return;
             }
             // A native pick that belongs to somebody else is not empty space:
@@ -2279,7 +2433,14 @@ export function createLocalGeoJsonLayer({
               hitTest: overlayHost.hitTest || DEFAULT_OVERLAY_HOST.hitTest,
             });
             const record = labelled ? findStemRecord(labelled) : null;
-            if (record) selectLocalFeature(viewer, record.entity);
+            if (record) {
+              if (keySelection) selectInKey(viewer, record);
+              else selectLocalFeature(viewer, record.entity);
+              return;
+            }
+            // A click on empty ground closes the card — not one on another
+            // layer's object, which belongs to that layer.
+            if (keySelection && _keySelected && isWorldPick(picked)) clearKeySelection();
           }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
         }
       }
@@ -2498,7 +2659,8 @@ export function createLocalGeoJsonLayer({
           for (const record of candidates) {
             const isVisible = !record.beyondBudget;
             if (record.entity.show !== isVisible) record.entity.show = isVisible;
-            if (isVisible && record.entry) visibleOverlayRecords.push(record);
+            // The selected feature's ambient label steps aside: its tag stands there.
+            if (isVisible && record.entry && record !== _keySelected) visibleOverlayRecords.push(record);
             // The stem is dealt from the pool for the DRAWN records only, and
             // only on a settle — the deal is collected first because the order
             // it is written in decides how many draw commands it costs.

@@ -1763,6 +1763,70 @@ test('a display floor empties the size legend it hides, rather than lying about 
   }
 });
 
+test('a data centre opens its card in the key, keeps a tag on the globe, and leaves the camera alone', async () => {
+  let clickHandler = null;
+  const published = new Map();
+  const panels = [];
+  const harness = await createMeasuredLayerHarness({
+    features: [
+      { lon: 2.30, lat: 48.80, size: 0.0004, properties: { tags: { name: 'Hall', building: 'yes' }, dcwatch: { powerMw: 3.6, release: '2026-04-09' } } },
+    ],
+    overlayHost: {
+      setVisible() {},
+      setEntries(sourceId, entries) { published.set(sourceId, entries); },
+      clearSource(sourceId) { published.delete(sourceId); },
+    },
+    screenSpaceEventHandlerFactory: () => ({
+      setInputAction(handler) { clickHandler = handler; },
+      destroy() {},
+    }),
+    keySelection: {
+      panel: (props, context) => {
+        panels.push(context);
+        return { key: `dc:${context.id}`, title: context.title, meta: [] };
+      },
+      accent: '#ffb238',
+    },
+  });
+  try {
+    const [hall] = harness.entities;
+    let flights = 0;
+    harness.viewer.camera.flyTo = () => { flights += 1; };
+    harness.viewer.scene.pick = () => ({ id: hall });
+    clickHandler({ position: { x: 400, y: 300 } });
+
+    assert.equal(flights, 0, 'the reader clicked to read, not to travel');
+    assert.equal(harness.viewer.selectedEntity, hall);
+    const controls = harness.layer.getRowControls();
+    assert.equal(controls.legendSelection.title, 'Hall');
+    assert.ok(panels.at(-1).areaM2 > 0, 'the card is given the measured footprint');
+    // The key is not on screen under node, so the globe carries the whole card.
+    const tag = published.get('local-datacenters:selected')?.[0];
+    assert.equal(tag?.title, 'Hall');
+    assert.equal(tag?.accent, '#ffb238');
+
+    // A click on empty ground closes it, and so does the key's close.
+    harness.viewer.scene.pick = () => null;
+    clickHandler({ position: { x: 10, y: 10 } });
+    assert.equal(harness.layer.getRowControls().legendSelection, undefined);
+    assert.equal(published.has('local-datacenters:selected'), false);
+    assert.equal(harness.viewer.selectedEntity, undefined);
+
+    harness.viewer.scene.pick = () => ({ id: hall });
+    clickHandler({ position: { x: 400, y: 300 } });
+    assert.equal(harness.layer.clearSelectedCard(), true);
+    assert.equal(harness.layer.clearSelectedCard(), false, 'nothing left to close');
+  } finally {
+    await harness.layer.destroy?.(harness.viewer);
+    harness.cleanup();
+  }
+});
+
+test('a pack with no keySelection offers the key no card to close', () => {
+  const layer = createLocalGeoJsonLayer({ id: 'local-ports', url: '/none.geojsonl', name: 'Ports', color: '#ffb14e' });
+  assert.equal(layer.clearSelectedCard, undefined);
+});
+
 /**
  * One airport, a captured LEFT_CLICK handler, and a scriptable overlay hit
  * test — everything needed to drive the three-step resolution order by hand.
