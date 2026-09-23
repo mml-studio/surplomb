@@ -10,6 +10,7 @@ import {
   watchTileFailures,
 } from './data/worldImagery.js';
 import { isPhoneShell } from './inputMode.js';
+import { keyNoDataImage } from './ignNoData.js';
 import messages from './mapStackController.i18n.js';
 
 /**
@@ -99,6 +100,9 @@ export const MAP_STACKS = [
       layer: 'ORTHOIMAGERY.ORTHOPHOTOS',
       format: 'image/jpeg',
       maximumLevel: 19,
+      // Past the survey's edge the server answers white, not nothing
+      // (`src/ignNoData.js`).
+      whiteIsNoData: true,
     },
   }),
   mapStack({
@@ -389,8 +393,8 @@ const REEARTH_TERRAIN_URL = 'https://terrain.reearth.land/cesium-mesh/ellipsoid'
  * @returns {Cesium.WebMapTileServiceImageryProvider}
  */
 export function createIgnWmtsProvider(stack) {
-  const { layer, format, maximumLevel } = stack.wmts;
-  return new Cesium.WebMapTileServiceImageryProvider({
+  const { layer, format, maximumLevel, whiteIsNoData = false } = stack.wmts;
+  const provider = new Cesium.WebMapTileServiceImageryProvider({
     url: IGN_WMTS_URL,
     layer,
     style: 'normal',
@@ -410,6 +414,37 @@ export function createIgnWmtsProvider(stack) {
     // i18n-ignore-next-line — the attribution Etalab 2.0 requires, verbatim.
     credit: new Cesium.Credit('© IGN — Géoplateforme', true),
   });
+  if (whiteIsNoData) keyNoDataTiles(provider);
+  return provider;
+}
+
+/**
+ * Keys the no-data white out of every tile the survey's edge may cross.
+ *
+ * A tile inside the verified-opaque boxes is handed through untouched and
+ * unread: those boxes answered real orthophoto at every one of ~17 100 probe
+ * points, and they hold most of France, so the pixel read is paid on coasts
+ * and borders only. `undefined` from Cesium means "throttled, ask again", and
+ * is passed through as such; so is a refused tile (the server's 404
+ * `No data found` further out to sea).
+ * @param {Cesium.WebMapTileServiceImageryProvider} provider
+ */
+function keyNoDataTiles(provider) {
+  const requestImage = provider.requestImage.bind(provider);
+  provider.requestImage = (x, y, level, request) => {
+    const pending = requestImage(x, y, level, request);
+    if (!pending) return pending;
+    const tile = provider.tilingScheme.tileXYToRectangle(x, y, level);
+    const opaque = isViewFullyCoveredByIgn({
+      west: Cesium.Math.toDegrees(tile.west),
+      south: Cesium.Math.toDegrees(tile.south),
+      east: Cesium.Math.toDegrees(tile.east),
+      north: Cesium.Math.toDegrees(tile.north),
+    });
+    if (opaque) return pending;
+    // A tile that cannot be read is still a tile: drawn as served, white and all.
+    return Promise.resolve(pending).then((image) => keyNoDataImage(image).catch(() => image));
+  };
 }
 
 /**
