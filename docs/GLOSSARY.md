@@ -288,6 +288,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Gironde · été 2026 | Gironde · summer 2026 | Layer name since 2026-09-23 (was *Mégafeu de Gironde (juil. 2026)*). |
 | Chaleur vue par satellite | Heat seen by satellite | FIRMS detections, in plain words. |
 | Progression du feu, étape, fin des détections, fin des relevés | Fire spread, stage, end of detections, end of the record | The replay bar. |
+| Vue : Au sol, Temps en 3D | View: On the ground, Time in 3D | The two views of *Grands incendies* (2026-09-23). |
+| strate, étage | layer, level | One stage of the fire floating at its height in *Temps en 3D*. |
+| Plus haut = plus tard | Higher = later | What height means in *Temps en 3D*: the order of the stages, nothing else. |
 | Séismes (24 h) | Earthquakes (24 h) | |
 | Barrages & digues | Dams & levees | |
 | bruit, carte de bruit | noise, noise map | |

@@ -54,6 +54,44 @@ export default defineMessages({
       en: 'A ring shows where satellites saw the heat arrive, not the flame front.',
       note: 'The one caveat the key must carry: the rings are derived from thermal detections.',
     },
+    // « Temps en 3D »: the same three dates, each on a floating layer.
+    strataHeading: {
+      fr: 'Plus haut = plus tard',
+      en: 'Higher = later',
+      note: 'Caption over the three date lines in the 3D view. Height is the ORDER of the stages, nothing else.',
+    },
+    strataDetectionsBlurb: {
+      fr: 'Un point par détection, à l’étage de ses jours.',
+      en: 'One dot per detection, on the level of its days.',
+    },
+    strataEffisBlurb: {
+      fr: (hectares) => `${hectares} ha, au sol, mesurés après le dernier relevé.`,
+      en: (hectares) => `${hectares} ha, on the ground, measured after the last survey.`,
+      sample: ['37,191'],
+    },
+    strataNote: {
+      fr: 'Une strate montre où les satellites ont vu la chaleur arriver, pas le front des flammes. La hauteur ne mesure rien.',
+      en: 'A layer shows where satellites saw the heat arrive, not the flame front. Height measures nothing.',
+      note: 'The two caveats of the 3D view: the layers come from thermal detections, and the vertical axis is a chart axis, not a measurement.',
+    },
+  },
+  // The switch over the key between the two views of the same fire.
+  view: {
+    label: { fr: 'Vue', en: 'View', note: 'Caption of the two-segment switch over the key.' },
+    ground: { fr: 'Au sol', en: 'On the ground' },
+    groundTitle: {
+      fr: 'Les trois zones posées sur la carte',
+      en: 'The three zones laid on the map',
+    },
+    strata: {
+      fr: 'Temps en 3D',
+      en: 'Time in 3D',
+      note: 'The view where each stage of the fire floats at its own height.',
+    },
+    strataTitle: {
+      fr: 'Chaque étape du feu flotte à sa hauteur : plus haut = plus tard',
+      en: 'Each stage of the fire floats at its own height: higher = later',
+    },
   },
   // The replay bar under the map (`megafireTimeline.js`).
   replay: {

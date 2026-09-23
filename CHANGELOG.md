@@ -6,6 +6,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Grands incendies » can stand the Gironde fire up in 3D.** A switch over
+  the key, « Au sol » / « Temps en 3D », lifts the three stages of the fire off
+  the map: 22-23 July floats lowest, 24-25 July above it, 26 July → 1 August
+  on top, each level with its own zone filled and the outline of everything
+  burnt by then glowing around it, and each satellite detection riding on the
+  level of its days. Dashed lines drop from the top level to the ground, where
+  the outline of the burnt area stays faint; a time axis over the sea carries
+  one dated tick per level. The key says what height means — « Plus haut =
+  plus tard », and nothing more: not the flames, not the relief. The replay
+  bar works the same in both views, and the camera stands back to keep the
+  whole stack in frame, on a narrow window and on a phone too.
 - **« Incendies » replaces « Feux actifs », and the Gironde fire of July 2026
   replays as three rings of light.** The row has two modes, as tiles in the
   key, one lit at a time: « Détections récentes » (NASA FIRMS, last 24 h,
