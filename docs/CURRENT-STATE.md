@@ -4865,6 +4865,60 @@ POINT feature (16 834 of them, each drawn under the app's own dot) nor the HTML
 them, 1 995 276 characters on the ports pack alone) — neither was ever read.
 `npm run perf:infra` is the bench that holds all of this to a number.
 
+**Where a pack's stems read the ground, and which records ask (since
+2026-09-23).** Every record within 75 km of the camera used to read its ground
+with `scene.sampleHeight` — a synchronous offscreen pick render plus a
+`readPixels` — on every stack, on screen or not; and since `sampleHeight` only
+answers from tiles rendered in the current view, a record off screen never got
+an answer and asked again every 2 s, with the self-armed retry requesting the
+frames it asked on. Measured over Paris at 5 km with the data centres alone, on
+the ThinkCentre with the CPU throttled ×4 and the Satellite stack: **1 033
+`sampleHeight` calls in the 8 s after the switch** (21.8 s of pick rendering),
+~1 000 more every 8 s after that, **0.2 frames per second** while turning the
+view and 6.8-16.7 s of long tasks after each stop; `readPixels` was 146 s of a
+194 s CPU profile. The walk now builds one `localGroundSource(scene)` per pass
+and three rules decide the rest. (1) On the globe — every stack but Google 3D —
+the ground is `globe.getHeight`, a CPU lookup in the resident terrain; only the
+photoreal mesh, which hides the globe, still pays `sampleHeight`, and only once
+its tileset has drained, in bursts of `GROUND_MESH_SAMPLE_BUDGET` = 24 (the
+backlog comes back at the walk's 450 ms cadence rather than the 2 s give-up
+rhythm), inside the −500…9 500 m band `renderedSurface.js` holds every layer to.
+(2) Only a record the settle found on screen, in range, over the horizon and
+not filtered out reads or arms a retry. (3) A reading is stamped with its
+surface (`groundSurface`: the mesh, or the globe's terrain provider), kept
+provisional while the globe's tile queue is not empty (`groundFinal`), and
+taken again when the camera stands at half the distance it was taken from.
+Same view, same machine, after: 0 `sampleHeight` calls, 17-18 frames per second
+turning, 0.6-1.2 s of long tasks after a stop, and the drawn stems at the same
+heights (median 84.3 m). On the Mac, same probe: `main` drew **14 of the 70
+sites on screen at 0 m** — the reads that never landed — and none after.
+
+**The marks are one primitive batch, and a polygon is held only while it is
+drawn (since 2026-09-23).** With the ground fixed, the next cost of the
+data-centre pack was Cesium's own entity machinery: a `PointGraphics` or
+`BillboardGraphics` on an entity is walked by its visualizer on every frame,
+drawn or not — `BillboardVisualizer.update`, `returnPrimitive` and the cluster
+lookups were 5.9 s of a 40 s profile over 4 649 entities of which a few dozen
+were drawn. The marks now live in `_marks`, one `BillboardCollection` (a glyph
+pack) or `PointPrimitiveCollection` (every other pack) per layer, each mark
+carrying `id = entity` so a pick resolves to the feature exactly as before;
+the entity keeps its position for the selection and the voice, and
+`entity.__localMark` points at the mark for the QA harnesses. The footprints
+were the cost after that: a hidden ENTITY keeps its polygon in Cesium's
+geometry batch, where the 461 extruded halls, clamped relative to the ground,
+were re-evaluated on every frame — 14 frames per second turning over Paris
+with the 3 528 polygons resident, 22-28 with them taken off. `showSurface()`
+now writes `polygon.show`, which takes the polygon out of the batch: it is in
+only while its mark is drawn and it spans at least `OWN_SURFACE_MIN_SCREEN_PX`
+= 2 px (the airport footprints keep their 8 px floor), and a load starts with
+none in. Nothing drawn changes. Measured on the Mac at Paris 5 km, CPU ×4,
+two interleaved pairs: `main` 0.4 frames per second turning, 8.5-12.9 s of
+long tasks after a stop and 8.9-12.9 s in the 8 s after the switch; after,
+32-34 frames per second at a machine load of 12-32 and 55-58 at a load of 11,
+against 60 with the layer off; 0.06-0.6 s after a stop, 0.2-0.3 s after the
+switch, 0 at rest — and the same 55-58 with every footprint taken off, so the
+drawn ones now cost nothing measurable.
+
 **Airport names select and frame, exactly as their pastille does.** The local
 infrastructure layers (**Aéroports**, **Ports**, **Barrages & digues**, **Datacenters**)
 publish an ambient CARD carrying the feature's name at the tip of a recall stem
@@ -5294,7 +5348,7 @@ inert again.
 ### IGN terrain — DEV-ONLY SPIKE (`?ign_terrain=1`, August 2026)
 
 - `src/data/ignBilTerrain.js` is a `TerrainProvider` over IGN RGE ALTI (`ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES`, BIL float32, TileMatrixSet `WGS84G` z6-14). **It is a decision instrument, never a default.** Enabled, it replaces the keyless terrain provider (and overrides Cesium World Terrain when an ion token is present, so the spike is what you actually look at).
-- **With the flag on, ground-clamped objects are wrong, and that is expected.** `surfaceRegimeKey()` has two regimes, and `terrain-globe` MEANS "the Re:Earth point-height prior IS the ground". A different provider under a shown globe breaks that identity everywhere heights are cached from it — `groundFloor`, `meshFloorSampler`, `cctv`, `localGeojson.js` (which latches `groundSampled = true` permanently) and `traffic.js` (which precomputes a road network from one sample). The third surface regime is the chantier, not the spike.
+- **With the flag on, ground-clamped objects are wrong, and that is expected.** `surfaceRegimeKey()` has two regimes, and `terrain-globe` MEANS "the Re:Earth point-height prior IS the ground". A different provider under a shown globe breaks that identity everywhere heights are cached from it — `groundFloor`, `meshFloorSampler`, `cctv`, `localGeojson.js` (which re-reads when the terrain provider changes, but not when its heights do) and `traffic.js` (which precomputes a road network from one sample). The third surface regime is the chantier, not the spike.
 - **`getTileDataAvailable` is three-valued and all three values are used**, which cost two silent failures to establish. `true` inside France z6-14 → fetch. `false` above z14 inside France → Cesium upsamples the real z14 parent; serving a flat tile there instead replaced Mont Blanc with a plane the moment the camera came in (`globe.getHeight()` read −0.01 m over the summit). `undefined` outside France and below z6 → the flat `EllipsoidTerrainProvider` fallback; returning `false` there is fatal, because `prepareNewTile` marks the tile FAILED and never requests it, and the two level-0 roots are below z6 by definition — the entire globe rendered nothing, with no error.
 - **NoData is a smear, not a sentinel.** A Nice z14 tile holds 4143 samples exactly equal to −99999, ~6500 more within half a metre of it, and a ramp of 505 further values (−1046, −3588, −17466, −50806) produced by lossy resampling blending real heights against the sentinel. `=== -99999` and `Number.isFinite()` both pass those as craters. The rule is a per-sample plausibility floor at −100 m, with the residual stated: 14 samples of 65536 survive in (−100, 0) m on the worst tile found, the lowest at −17.2 m.
 - **The BIL grid is cell-centre registered; Cesium's heightmap is edge-inclusive.** `HeightmapTessellator` places sample *i* at `west + i·extent/(width−1)`, so feeding the raw grid straight in leaves a full-cell step at every tile boundary. `resampleToEdgeInclusive()` re-grids and linearly EXTRAPOLATES the half cell past each border (clamping reproduces the step). Measured on an Alpine pair: the seam falls from ~100 % of one sample step to 2.9 % at z14, 7.6 % at z13, 12.1 % at z12.

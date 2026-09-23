@@ -249,7 +249,8 @@ async function main() {
         // clause (a) admits worldwide. Never a size ranking.
         const tier = p.scheduled === true ? 'airline'
           : (p.type === 'large_airport' || p.type === 'medium_airport') ? 'airport' : 'airfield';
-        const point = entity.point;
+        // The mark is a primitive in the layer's batch; `entity.point` before.
+        const point = entity.__localMark ?? entity.point;
         const size = Number(point?.pixelSize?.getValue?.(now) ?? point?.pixelSize);
         const fill = point?.color?.getValue?.(now) ?? point?.color;
         const outline = point?.outlineColor?.getValue?.(now) ?? point?.outlineColor;

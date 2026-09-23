@@ -37,6 +37,13 @@ import { pickOverlayLabelId } from './overlayLabelPick.js';
 import { isOwnedByOtherLayer, isWorldPick, resolvePickId } from './pickRegistry.js';
 import { mapKeyCarriesSelection, watchMapKeyCarriesSelection } from './mapKeySelection.js';
 import { pickAt } from './pickAt.js';
+import {
+  SURFACE_MAX_M,
+  SURFACE_MIN_M,
+  SURFACE_SAMPLE_BUDGET,
+  photorealSurface,
+  photorealTilesReady,
+} from './renderedSurface.js';
 import messages from './localGeojson.i18n.js';
 
 const DEFAULT_LABEL_MAX = 900;
@@ -125,11 +132,67 @@ const LOCAL_CULL_SPHERE = new Cesium.BoundingSphere();
 // Stems are anchored at ellipsoid height 0, but high-elevation features
 // (e.g. dams in river canyons) sit hundreds of meters above the ellipsoid,
 // burying the short close-in stem inside the photoreal mesh. Once the
-// camera is near enough for tiles to be loaded, sample the real surface
-// height once per feature and lift the stem onto it.
+// camera is near enough for tiles to be loaded, read the real surface
+// height under each feature and lift the stem onto it.
 const GROUND_SAMPLE_MAX_DISTANCE_M = 75000;
 const GROUND_SAMPLE_RETRY_MS = 2000;
-const GROUND_SAMPLE_MAX_ABS_HEIGHT_M = 9000;
+
+/* ── WHERE THE GROUND IS READ FROM, AND FOR WHOM ────────────────────────────
+ *
+ * Until 2026-09-23 every record read its ground with `scene.sampleHeight`,
+ * whatever the map stack, and every record within GROUND_SAMPLE_MAX_DISTANCE_M
+ * of the camera asked — on screen or not. `sampleHeight` is a synchronous
+ * offscreen pick render followed by a `readPixels`, and it only answers from
+ * tiles rendered in the CURRENT view: a record off screen can never get an
+ * answer, so it asked again every 2 s, forever, and the self-armed retry kept
+ * requesting the frames it asked on. Over Paris at 5 km that is the whole
+ * data-centre pack of Île-de-France, a few hundred sites, each paying its own
+ * pick render per pass: measured on the ThinkCentre with the CPU throttled ×4,
+ * frames of 6 s for over a minute, `readPixels` 70 % of the profile.
+ *
+ * Three rules replace it:
+ *
+ *   1. On the globe (every stack but Google 3D) the ground is read with
+ *      `globe.getHeight`, a CPU lookup in the resident terrain tiles
+ *      (~0.02 ms), not a render. Only the photoreal mesh, where the globe is
+ *      hidden and streams nothing, still needs `sampleHeight`.
+ *   2. Only a record that can be drawn asks: on screen at the last settle, in
+ *      range, over the horizon, not filtered out by a row chip. The others ask
+ *      when a settle brings them into view.
+ *   3. The mesh reads are rationed to GROUND_MESH_SAMPLE_BUDGET per pass and
+ *      wait for the tileset to drain — a mid-stream mesh answers −6 311 m
+ *      (see `renderedSurface.js`), and the shared band refuses such answers.
+ *
+ * A reading is stamped with the surface that gave it (`groundSurface`), so a
+ * switch between stacks — or the globe's terrain provider changing under it —
+ * is a new question rather than a stale answer, and it is taken again once
+ * the camera stands at half the distance it was taken from, because both
+ * surfaces refine under an approaching camera.
+ */
+
+/**
+ * Photoreal-mesh height reads one pass may spend. `renderedSurface.js`'s
+ * budget, for its reason: ~47 ms fixed per burst plus ~3 ms per read on the
+ * mesh (`cesium-sampleheight-cost-per-batch`), so a burst is bounded, and the
+ * rest of the view is read over the next passes.
+ */
+export const GROUND_MESH_SAMPLE_BUDGET = SURFACE_SAMPLE_BUDGET;
+/** Pass cadence while a mesh burst left records waiting: the walk's own. */
+const GROUND_MESH_BACKLOG_RETRY_MS = VISIBILITY_UPDATE_MS;
+/**
+ * A reading is taken again once the camera is this fraction of the distance
+ * it was taken from: terrain and mesh both refine as the camera approaches, so
+ * a height read from 60 km is a coarse tile's, and wrong by metres at 2 km.
+ */
+const GROUND_REREAD_DISTANCE_RATIO = 0.5;
+/** A re-read closer than this to the height already drawn moves nothing. */
+const GROUND_MOVE_EPSILON_M = 0.5;
+/** Stamp of a reading taken on the photoreal mesh (a globe reading carries its terrain provider). */
+const MESH_GROUND = 'mesh';
+/** What one ground read did: nothing read, read and nothing moved, read and moved. */
+const GROUND_MISSED = 0;
+const GROUND_KEPT = 1;
+const GROUND_MOVED = 2;
 /**
  * Bounded give-up for the self-armed retry. Sampling can be SUPPORTED and still
  * never succeed (no sampleable surface under the feature), in which case each
@@ -229,6 +292,23 @@ export const GROUND_SAMPLE_MAX_ARMED_RETRIES = 30;
 const FOOTPRINT_MIN_SCREEN_PX = 8;
 
 /**
+ * Smallest a feature's OWN polygon may be on screen before it leaves the
+ * scene — the data-centre halls, and any pack whose GeoJSON is a polygon.
+ *
+ * Not the footprint floor above: those polygons are the pack's size channel,
+ * drawn at true scale so they shrink with distance the way a building does,
+ * and they must keep doing so down to where a 32 % wash two pixels wide stops
+ * reading as a shape. What the floor buys is not a picture but a batch: a
+ * polygon Cesium holds is re-evaluated by its geometry batch on EVERY frame
+ * whether it is drawn or not — measured over Paris at 5 km with the 3 528
+ * data-centre polygons resident, 14 frames per second while turning the view,
+ * against 22-28 with them taken off. A polygon under the floor, or whose mark
+ * is not drawn, is hidden with `polygon.show`, which takes it out of the batch
+ * rather than flagging it.
+ */
+const OWN_SURFACE_MIN_SCREEN_PX = 2;
+
+/**
  * Fill opacity of a drawn footprint.
  *
  * A wash, not a fill: the outline's job is to say WHERE the ground is, over a
@@ -295,11 +375,13 @@ export function localFootprintGeometry(ring) {
  *
  * @param {number} spanM Ground extent, from {@link localFootprintGeometry}.
  * @param {number} metresPerPixel `distance * pixelFactor` for this settle.
+ * @param {number} [minPx] The floor: FOOTPRINT_MIN_SCREEN_PX for a footprint,
+ *   OWN_SURFACE_MIN_SCREEN_PX for a feature's own polygon.
  * @returns {boolean}
  */
-export function localFootprintFitsScreen(spanM, metresPerPixel) {
+export function localFootprintFitsScreen(spanM, metresPerPixel, minPx = FOOTPRINT_MIN_SCREEN_PX) {
   if (!(spanM > 0) || !(metresPerPixel > 0)) return false;
-  return spanM >= metresPerPixel * FOOTPRINT_MIN_SCREEN_PX;
+  return spanM >= metresPerPixel * minPx;
 }
 
 /**
@@ -1381,16 +1463,19 @@ export function createLocalGeoJsonLayer({
    * @param {Cesium.Viewer} viewer
    * @returns {void}
    */
-  function scheduleGroundRetryRender(viewer) {
+  function scheduleGroundRetryRender(viewer, delayMs = GROUND_SAMPLE_RETRY_MS) {
     if (_groundRetryTimer || !_enabled) return;
-    if (!viewer?.scene?.sampleHeightSupported) return;
+    if (!localGroundSource(viewer?.scene).capable) return;
     if (_groundRetryArms >= GROUND_SAMPLE_MAX_ARMED_RETRIES) return;
     _groundRetryArms += 1;
     _groundRetryTimer = setTimeout(() => {
       _groundRetryTimer = null;
       if (!_enabled || _destroyed) return;
+      // The retry pass is throttled to the walk's cadence, and a backlog
+      // retry arrives on it exactly: open the gate so the frame is a pass.
+      _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
       governorRequestRender(`local-ground-retry:${id}`);
-    }, GROUND_SAMPLE_RETRY_MS);
+    }, delayMs);
   }
 
   function clearGroundRetryRender() {
@@ -1485,12 +1570,12 @@ export function createLocalGeoJsonLayer({
   /**
    * Show the image a mark's state calls for: `selected` for the feature whose
    * card is open, `group` on a mark that stands for several, `single`
-   * otherwise. Written only on a change: a billboard's `image` is a Property,
-   * and assigning one allocates.
+   * otherwise. Written only on a change: a new image is an atlas lookup, and
+   * a new scale re-writes the billboard's vertices.
    */
   function refreshGlyph(record) {
     const glyphs = typeof markerGlyphs === 'function' ? markerGlyphs() : null;
-    const billboard = record?.entity?.billboard;
+    const billboard = record?.mark;
     if (!billboard || !glyphs) return;
     const state = record === _keySelected && glyphs.selected
       ? 'selected'
@@ -1612,6 +1697,76 @@ export function createLocalGeoJsonLayer({
     if (!record || typeof keySelection?.panel !== 'function') return null;
     const { props, copy } = keySelectionCopy(record);
     return keySelection.panel(props, { areaM2: record.areaM2, title: copy.title, id: record.id }) || null;
+  }
+
+  /**
+   * The layer's marks — the dot, or the pack's glyph — in ONE primitive.
+   *
+   * ── WHY THE MARK LEFT THE ENTITY (2026-09-23) ──────────────────────────
+   *
+   * A `PointGraphics` or `BillboardGraphics` on an entity is walked by its
+   * Cesium visualizer on EVERY frame, drawn or not: a hidden entity still
+   * costs a `returnPrimitive` and a cluster lookup per frame. The data-centre
+   * pack holds 4 649 features and draws a few dozen of them over a city, so
+   * the walk was almost all waste — measured over Paris at 5 km on the
+   * ThinkCentre, CPU throttled ×4: `BillboardVisualizer.update`,
+   * `returnPrimitive` and `AssociativeArray.get` together 4.5 s of a 42 s
+   * profile, the largest single cost of the pack.
+   *
+   * A collection costs nothing per frame for a mark that did not change, and
+   * a hidden mark is one vertex attribute. The pick surface does not move:
+   * each mark carries `id = entity`, the same object a click resolved to
+   * before, and the entity keeps its position for the selection and the
+   * voice. The footprint polygon stays on the entity, where it always was.
+   * @type {?object}
+   */
+  let _marks = null;
+
+  /**
+   * The mark batch, created by the load that fills it. A glyph pack draws
+   * billboards, every other pack points — one kind per layer.
+   * @param {Cesium.Viewer} viewer
+   * @param {boolean} glyphs Whether the pack draws its own image.
+   * @returns {object} The live collection.
+   */
+  function ensureMarkCollection(viewer, glyphs) {
+    if (_marks) return _marks;
+    _marks = glyphs ? new Cesium.BillboardCollection() : new Cesium.PointPrimitiveCollection();
+    _marks[LOCAL_POOL_KIND] = 'marks';
+    _marks.show = _enabled;
+    viewer.scene.primitives.add(_marks);
+    return _marks;
+  }
+
+  /** Drop every mark; the collection stays seated for the next load. */
+  function clearMarks() {
+    if (_marks) _marks.removeAll();
+  }
+
+  /**
+   * Show or hide one record's mark and the entity behind it. The entity still
+   * carries the footprint, and `entity.show` is what other readers of the
+   * record's state have always looked at. Both written on a change only.
+   */
+  function showMark(record, visible) {
+    if (record.entity.show !== visible) record.entity.show = visible;
+    if (record.mark && record.mark.show !== visible) record.mark.show = visible;
+  }
+
+  /**
+   * The polygon follows its mark, plus its own screen floor. Written through
+   * `polygon.show` and not left to `entity.show`: a hidden ENTITY keeps its
+   * polygon in Cesium's geometry batch, re-evaluated on every frame, while a
+   * hidden POLYGON leaves the batch (see OWN_SURFACE_MIN_SCREEN_PX). Written
+   * only on a transition: each one re-builds the batch, and `PolygonGraphics.
+   * show` is a Property, so assigning a boolean allocates.
+   */
+  function showSurface(record, drawn) {
+    if (!(record.surfaceSpanM > 0)) return;
+    const show = drawn && !record.footprintTooSmall;
+    if (record.footprintShown === show) return;
+    record.footprintShown = show;
+    record.entity.polygon.show = show;
   }
 
   function ensureStemCollection(viewer) {
@@ -1833,6 +1988,7 @@ export function createLocalGeoJsonLayer({
     // after the row was switched off.
     if (_runwayLines) _runwayLines.show = false;
     if (_stemLines) _stemLines.show = false;
+    if (_marks) _marks.show = false;
     _overlayPublisher.hide();
     clearKeySelection();
     clearSelectedEntityContextForLayer(id);
@@ -2072,6 +2228,7 @@ export function createLocalGeoJsonLayer({
           // which live in a primitive the data source knows nothing about.
           clearRunwayLines();
           clearStemLines();
+          clearMarks();
           _groupTally.clear();
           _renderTally.clear();
           _stemGeometryDirty = true;
@@ -2095,6 +2252,8 @@ export function createLocalGeoJsonLayer({
             // no size line. See `datacentersPack.js` for why the number alone
             // is not enough and the `building` tag decides how it is worded.
             let areaM2 = 0;
+            /** Ground extent of the feature's own polygon, metres; 0 for a point. */
+            let ownSurfaceSpanM = 0;
             if (!pos) {
               // It's a polygon or line
               if (feature.polygon) {
@@ -2104,7 +2263,9 @@ export function createLocalGeoJsonLayer({
                 // Calculate center point for the stem
                 const hierarchy = feature.polygon.hierarchy?.getValue(Cesium.JulianDate.now());
                 if (hierarchy && hierarchy.positions && hierarchy.positions.length > 0) {
-                  pos = Cesium.BoundingSphere.fromPoints(hierarchy.positions).center;
+                  const sphere = Cesium.BoundingSphere.fromPoints(hierarchy.positions);
+                  pos = sphere.center;
+                  ownSurfaceSpanM = 2 * sphere.radius;
                   // The one walk that pays for the whole size channel: 46 596
                   // vertices over the datacenter pack, once, at load.
                   areaM2 = polygonHierarchyAreaM2(hierarchy);
@@ -2198,26 +2359,40 @@ export function createLocalGeoJsonLayer({
             // the shaft's colour and its width.
             const stemWidth = renderSpec.stemWidth ?? groupStyle?.stemWidth ?? 3.5;
             const stemCss = renderSpec.stemColor || null;
-            if (glyphs) {
+            // The mark lives in the layer's batch, not on the entity (see
+            // `_marks`), hidden until the first walk decides it is drawn. `id`
+            // is the entity, so a pick resolves to the feature as before.
+            const markBatch = ensureMarkCollection(viewer, Boolean(glyphs));
+            const mark = glyphs
               // The pack's own mark. The id string keys the atlas, so every
               // site shares one image (see `datacenterGlyphs.js`).
-              feature.billboard = new Cesium.BillboardGraphics({
+              ? markBatch.add({
+                position: tip,
                 image: glyphs.single.image,
                 scale: glyphs.single.scale,
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                show: false,
+                id: feature,
+              })
+              : markBatch.add({
+                position: tip,
+                pixelSize: renderSpec.pixelSize ?? groupStyle?.pixelSize ?? 10,
+                // A1, drawn: a HOLLOW ring is a feature whose measurement was
+                // never published, and it must not be reachable by any value
+                // of a measured one — hence a transparent centre, not a small
+                // disc.
+                color: renderSpec.hollow ? Cesium.Color.TRANSPARENT : markerColor,
+                outlineColor: renderSpec.hollow ? markerColor : Cesium.Color.BLACK,
+                outlineWidth: 2,
+                // Never depth-cull the anchor against the photoreal mesh —
+                // globe-horizon culling is handled by the pre-render occluder.
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                show: false,
+                id: feature,
               });
-            } else feature.point = new Cesium.PointGraphics({
-              pixelSize: renderSpec.pixelSize ?? groupStyle?.pixelSize ?? 10,
-              // A1, drawn: a HOLLOW ring is a feature whose measurement was
-              // never published, and it must not be reachable by any value of
-              // a measured one — hence a transparent centre, not a small disc.
-              color: renderSpec.hollow ? Cesium.Color.TRANSPARENT : markerColor,
-              outlineColor: renderSpec.hollow ? markerColor : Cesium.Color.BLACK,
-              outlineWidth: 2,
-              // Never depth-cull the anchor against the photoreal mesh —
-              // globe-horizon culling is handled by the pre-render occluder.
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            });
+            // For readers outside this file — the QA harnesses — that used to
+            // find the mark on `entity.point` / `entity.billboard`.
+            feature.__localMark = mark;
             // ── The third geometry: the surveyed ground under this feature ──
             // A hierarchy is built here, ONCE, and handed to the entity: unlike
             // the runway segments, a footprint is not re-placed per frame, so
@@ -2235,6 +2410,11 @@ export function createLocalGeoJsonLayer({
               feature.polygon.show = false;
             }
             applyLocalSurfaceStyle(feature.polygon, renderSpec, markerColor);
+            // Whichever polygon the entity ends up with — the footprint above,
+            // or the feature's own — answers to the walk from its first settle
+            // on, and stays out of Cesium's batches until then.
+            const surfaceSpanM = footprintSpanM || (feature.polygon ? ownSurfaceSpanM : 0);
+            if (surfaceSpanM > 0 && !ground) feature.polygon.show = false;
 
             // ── The second geometry: the published segments of this feature ──
             // METADATA ONLY. Nothing Cesium-side is allocated here: the drawn
@@ -2284,6 +2464,8 @@ export function createLocalGeoJsonLayer({
             _stemRecords.push({
               id: recordId,
               entity: feature,
+              /** The drawn mark, in `_marks`. */
+              mark,
               carto,
               base,
               tip,
@@ -2312,6 +2494,12 @@ export function createLocalGeoJsonLayer({
               groundHeight,
               groundSampled: false,
               lastGroundSampleMs: 0,
+              /** Surface the ground was last read from (`localGroundSource`), null until then. */
+              groundSurface: null,
+              /** Camera distance of that read, metres — see GROUND_REREAD_DISTANCE_RATIO. */
+              groundReadDistanceM: 0,
+              /** Whether that read was taken on a settled surface (`localGroundSource`). */
+              groundFinal: false,
               priority,
               groupKey,
               /** Size-legend bucket, '' for a pack that spends no size channel. */
@@ -2347,6 +2535,13 @@ export function createLocalGeoJsonLayer({
               runways,
               /** Ground extent of the drawn footprint, 0 when there is none. */
               footprintSpanM,
+              /**
+               * Ground extent of whichever polygon the entity carries — the
+               * footprint, or the feature's own — and the screen floor it
+               * answers to. 0 when there is no polygon.
+               */
+              surfaceSpanM,
+              surfaceMinPx: footprintSpanM > 0 ? FOOTPRINT_MIN_SCREEN_PX : OWN_SURFACE_MIN_SCREEN_PX,
               /**
                * Under the screen floor. Starts TRUE so a record that has not
                * met a camera settle yet stays hidden — the polygon is created
@@ -2397,6 +2592,7 @@ export function createLocalGeoJsonLayer({
           _stemRecords = [];
           clearRunwayLines();
           clearStemLines();
+          clearMarks();
           _groupTally.clear();
           _renderTally.clear();
           console.error(`Failed to load ${id}:`, e);
@@ -2483,11 +2679,12 @@ export function createLocalGeoJsonLayer({
           // culls nothing, which is exactly the behaviour that shipped before.
           const cullingVolume = refreshStemGeometry ? localCullingVolume(viewer) : null;
 
-          // A scene that cannot sample heights can never ground a record, so it
+          // A scene that cannot read its ground can never seat a record, so it
           // must never arm a retry (the arm would re-arm on every requested
           // frame, forever) and must not spend ANY per-record work trying.
-          // Read once per walk, not per record.
-          const canSampleGround = viewer.scene.sampleHeightSupported === true;
+          // Decided once per walk, not per record — and the mesh budget with it.
+          const ground = localGroundSource(viewer.scene);
+          const canSampleGround = ground.capable;
           // Capability can arrive late (WebGL context restore, a tileset that
           // finally supports sampling). A parked camera has no moveEnd to
           // re-open a spent budget, so the false→true edge does it.
@@ -2495,11 +2692,16 @@ export function createLocalGeoJsonLayer({
           _lastGroundSampleCapability = canSampleGround;
           let groundRetryPending = false;
           let groundSampleProgress = false;
+          let groundLanded = false;
           for (let i = 0; i < _stemRecords.length; i++) {
             const record = _stemRecords[i];
-            const wasGroundSampled = record.groundSampled;
+            // The horizon, asked at most once per record per walk and only when
+            // a gate below needs it.
+            let aboveHorizon = null;
+            // Camera distance, measured only by a path that needs it.
+            let distance = Number.NaN;
             if (refreshStemGeometry) {
-              const distance = Cesium.Cartesian3.distance(cameraPos, record.base);
+              distance = Cesium.Cartesian3.distance(cameraPos, record.base);
               // The MARK's own range (F6), re-decided only on camera settle:
               // between two settles the camera has not moved, so the answer
               // cannot have changed — the same assumption the stem geometry
@@ -2510,8 +2712,8 @@ export function createLocalGeoJsonLayer({
               // distance: a ground measurement stops being drawn when it stops
               // being a shape. `metresPerPixel` is `distance * pixelFactor`,
               // exactly as the runway regime reads it.
-              record.footprintTooSmall = record.footprintSpanM > 0
-                && !localFootprintFitsScreen(record.footprintSpanM, distance * pixelFactor);
+              record.footprintTooSmall = record.surfaceSpanM > 0
+                && !localFootprintFitsScreen(record.surfaceSpanM, distance * pixelFactor, record.surfaceMinPx);
               // Is any of it on the screen (§ 3.1). Decided on the settle for
               // the same reason as the two above, and sized on the stem the
               // very next call is about to place — `localStemLiftM` is the one
@@ -2531,39 +2733,61 @@ export function createLocalGeoJsonLayer({
               // not need re-placing, and the settle that brings it back on
               // screen re-places it before it is drawn.
               if (!record.outOfRange && !record.offScreen) {
-                updateLocalStemGeometry(viewer, record, now, distance, pixelFactor);
+                // Seated BEFORE it is placed, so the stem dealt at the end of
+                // this walk already stands on what was read — and only a record
+                // the settle has just found on screen asks at all.
+                if (canSampleGround && !record.filteredOut
+                  && distance < GROUND_SAMPLE_MAX_DISTANCE_M
+                  && localGroundStale(record, ground, distance)
+                  && (aboveHorizon ??= occluder.isPointVisible(record.base))) {
+                  if (seatLocalRecordOnGround(viewer.scene, record, now, ground, distance) !== GROUND_MISSED
+                    && record.groundFinal) groundLanded = true;
+                }
+                updateLocalStemGeometry(viewer, record, distance, pixelFactor);
                 if (record.runways.length > 0 && !record.filteredOut
-                  && occluder.isPointVisible(record.base)) {
+                  && (aboveHorizon ??= occluder.isPointVisible(record.base))) {
                   updateLocalRunwayGeometry(record, distance, pixelFactor, takeLine);
                 }
               }
-            } else if (canSampleGround && !record.groundSampled
+            } else if (canSampleGround && localGroundOwed(record, ground)
+              && !record.filteredOut && !record.outOfRange && !record.offScreen
               && now - record.lastGroundSampleMs >= GROUND_SAMPLE_RETRY_MS) {
-              // Capability first: without it the distance below is pure waste,
-              // once per ungrounded record per walk, forever.
-              const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, record.base);
-              if (distance < GROUND_SAMPLE_MAX_DISTANCE_M
-                && sampleLocalGroundHeight(viewer, record, now)) {
-                updateLocalStemGeometry(viewer, record, now, distance, pixelFactor);
+              // A record the last settle drew and could not seat for good yet
+              // (tiles still streaming, or the mesh budget spent). The flags are the
+              // settle's; the horizon is re-asked because the camera may be
+              // mid-drag. Capability first: without it the distance below is
+              // pure waste, once per unseated record per walk, forever.
+              distance = Cesium.Cartesian3.distance(cameraPos, record.base);
+              const seated = distance < GROUND_SAMPLE_MAX_DISTANCE_M
+                && (aboveHorizon ??= occluder.isPointVisible(record.base))
+                ? seatLocalRecordOnGround(viewer.scene, record, now, ground, distance)
+                : GROUND_MISSED;
+              // Only a FINAL read re-opens the give-up budget: a globe that
+              // never reports its queue empty must not keep the retry alive.
+              if (seated !== GROUND_MISSED && record.groundFinal) groundLanded = true;
+              if (seated === GROUND_MOVED) {
+                updateLocalStemGeometry(viewer, record, distance, pixelFactor);
                 // The segments stand on the height that just landed, so they
                 // are stale now — but they cannot be re-dealt one record at a
                 // time, because the pool is dealt in a single pass. The
                 // `groundSampleProgress` branch below re-arms that pass instead.
+                groundSampleProgress = true;
               }
             }
-            if (!wasGroundSampled && record.groundSampled) groundSampleProgress = true;
-            // Still unsampled AND close enough for a retry to succeed: this
-            // layer has no hold and no periodic update, so under the idle
-            // governor the retry's preRender never arrives on a parked camera
-            // and the stem stays at ellipsoid height (buried/floating) until
-            // the user happens to move. Schedule the frame the retry needs.
-            // Gated on a sampleable scene and in-range records only, so a far
-            // camera (or a keyless scene) stays fully idle; the distance is
-            // only computed for still-unsampled stems.
-            if (canSampleGround && !record.groundSampled && !groundRetryPending
-              && Cesium.Cartesian3.distance(viewer.camera.positionWC, record.base)
-                < GROUND_SAMPLE_MAX_DISTANCE_M) {
-              groundRetryPending = true;
+            // Drawn, in range and still owed a final read: this layer
+            // has no hold and no periodic update, so under the idle governor
+            // the retry's preRender never arrives on a parked camera and the
+            // stem stays at ellipsoid height (buried/floating) until the user
+            // happens to move. Schedule the frame the retry needs. Gated on a
+            // capable scene and on the SAME gates as the read, so a far camera,
+            // a keyless scene or a record off screen keeps the governor idle.
+            if (canSampleGround && !groundRetryPending && localGroundOwed(record, ground)
+              && !record.filteredOut && !record.outOfRange && !record.offScreen) {
+              if (Number.isNaN(distance)) distance = Cesium.Cartesian3.distance(cameraPos, record.base);
+              if (distance < GROUND_SAMPLE_MAX_DISTANCE_M
+                && (aboveHorizon ??= occluder.isPointVisible(record.base))) {
+                groundRetryPending = true;
+              }
             }
             // FOUR independent reasons to be invisible: over the horizon,
             // below the row's display floor, past the group's declared marker
@@ -2577,27 +2801,17 @@ export function createLocalGeoJsonLayer({
             // winner is not known until every candidate has been seen. What
             // fails here is hidden at once, exactly as it always was.
             const isCandidate = !record.filteredOut && !record.outOfRange
-              && !record.offScreen && occluder.isPointVisible(record.base);
+              && !record.offScreen && (aboveHorizon ?? occluder.isPointVisible(record.base));
             if (isCandidate) candidates.push(record);
             else {
-              if (record.entity.show !== false) record.entity.show = false;
+              showMark(record, false);
               // The stem is a POOLED primitive now, so `entity.show` no longer
               // reaches it. The horizon is the one gate above that is re-tested
               // on EVERY pass — the camera moves for a second or more before
               // `moveEnd` fires — so between settles a stem has to follow its
               // mark behind the globe by itself, and come back with it below.
               showStem(viewer, record, false);
-            }
-            // The polygon answers to the same reasons through
-            // `entity.show`, plus its own screen floor. Written only on a
-            // transition: `PolygonGraphics.show` is a Property, so assigning a
-            // boolean allocates a ConstantProperty every time.
-            if (record.footprintSpanM > 0) {
-              const showFootprint = !record.footprintTooSmall;
-              if (record.footprintShown !== showFootprint) {
-                record.footprintShown = showFootprint;
-                record.entity.polygon.show = showFootprint;
-              }
+              showSurface(record, false);
             }
           }
 
@@ -2658,7 +2872,8 @@ export function createLocalGeoJsonLayer({
 
           for (const record of candidates) {
             const isVisible = !record.beyondBudget;
-            if (record.entity.show !== isVisible) record.entity.show = isVisible;
+            showMark(record, isVisible);
+            showSurface(record, isVisible);
             // The selected feature's ambient label steps aside: its tag stands there.
             if (isVisible && record.entry && record !== _keySelected) visibleOverlayRecords.push(record);
             // The stem is dealt from the pool for the DRAWN records only, and
@@ -2692,11 +2907,17 @@ export function createLocalGeoJsonLayer({
           // so the records still waiting get their own bounded run of retries —
           // and re-arms the geometry pass, because a record that just landed on
           // its sampled ground has segments still standing on the old height.
-          if (groundSampleProgress) {
-            _groundRetryArms = 0;
-            _stemGeometryDirty = true;
+          if (groundSampleProgress || groundLanded) _groundRetryArms = 0;
+          if (groundSampleProgress) _stemGeometryDirty = true;
+          // A mesh burst that ran out of budget left drawn records waiting on
+          // a mesh that CAN answer: come back at the walk's own cadence rather
+          // than the 2 s give-up rhythm, so a view is seated in a few bounded
+          // bursts instead of one per record.
+          if (groundRetryPending) {
+            scheduleGroundRetryRender(viewer, ground.armed && ground.budget <= 0
+              ? GROUND_MESH_BACKLOG_RETRY_MS
+              : GROUND_SAMPLE_RETRY_MS);
           }
-          if (groundRetryPending) scheduleGroundRetryRender(viewer);
 
           const cohort = selectLocalInfrastructureOverlayCohort(visibleOverlayRecords, {
             maxEntries: labelMax,
@@ -2740,6 +2961,7 @@ export function createLocalGeoJsonLayer({
       if (_dataSource) _dataSource.show = _enabled;
       if (_runwayLines) _runwayLines.show = _enabled;
       if (_stemLines) _stemLines.show = _enabled;
+      if (_marks) _marks.show = _enabled;
       viewer.scene.requestRender?.();
     },
 
@@ -2771,6 +2993,7 @@ export function createLocalGeoJsonLayer({
       _dataSource = null;
       clearRunwayLines();
       clearStemLines();
+      clearMarks();
       _stemRecords = [];
       _groupTally.clear();
       _renderTally.clear();
@@ -2804,6 +3027,10 @@ export function createLocalGeoJsonLayer({
       if (_stemLines) {
         try { viewer?.scene?.primitives?.remove(_stemLines); } catch { /* already gone */ }
         _stemLines = null;
+      }
+      if (_marks) {
+        try { viewer?.scene?.primitives?.remove(_marks); } catch { /* already gone */ }
+        _marks = null;
       }
       _runwayPool.length = 0;
       _runwayUsed = 0;
@@ -2839,19 +3066,109 @@ function insertLocalCellContender(contenders, record) {
   if (contenders.length > LOCAL_OVERLAY_CELL_SURPLUS) contenders.length = LOCAL_OVERLAY_CELL_SURPLUS;
 }
 
-function sampleLocalGroundHeight(viewer, record, now) {
-  if (record.groundSampled || !viewer.scene.sampleHeightSupported) return false;
-  if (now - record.lastGroundSampleMs < GROUND_SAMPLE_RETRY_MS) return false;
-  record.lastGroundSampleMs = now;
-  let sampled;
-  try {
-    sampled = viewer.scene.sampleHeight(record.carto, [record.entity]);
-  } catch {
-    return false; // tiles not ready; retry on a later bounded update
+/**
+ * What one walk may read the ground from — decided once per walk, never per
+ * record. See "WHERE THE GROUND IS READ FROM" above the constants.
+ *
+ * `capable` says a read could ever succeed on this scene, and gates the
+ * self-armed retry; `armed` says one may be taken NOW (the mesh waits for its
+ * tileset to drain); `settled` says a read taken now is final — the globe
+ * answers while its tiles are still streaming, from the deepest tile it holds,
+ * so a read taken then is kept only until the queue empties; `budget` is how
+ * many mesh reads the walk has left, and the walk spends it.
+ *
+ * @param {Cesium.Scene} scene
+ * @returns {{surface: *, capable: boolean, armed: boolean, settled: boolean, budget: number}}
+ */
+export function localGroundSource(scene) {
+  if (photorealSurface(scene)) {
+    const capable = scene.sampleHeightSupported === true && typeof scene.sampleHeight === 'function';
+    const armed = capable && photorealTilesReady(scene);
+    return {
+      surface: MESH_GROUND,
+      capable,
+      armed,
+      settled: armed,
+      budget: GROUND_MESH_SAMPLE_BUDGET,
+    };
   }
-  if (!Number.isFinite(sampled) || Math.abs(sampled) > GROUND_SAMPLE_MAX_ABS_HEIGHT_M) return false;
+  const globe = scene?.globe;
+  const capable = typeof globe?.getHeight === 'function';
+  return {
+    // The terrain provider, not the globe: a stack switch that swaps the
+    // terrain under a parked camera must make every reading stale.
+    surface: capable ? (globe.terrainProvider ?? globe) : null,
+    capable,
+    armed: capable,
+    settled: capable && globe.tilesLoaded !== false,
+    budget: Number.POSITIVE_INFINITY,
+  };
+}
+
+/**
+ * Whether a record still owes this surface a FINAL read: never read here, or
+ * read while the surface was still streaming. The self-armed retry exists for
+ * these records and no others.
+ * @param {object} record Live stem record.
+ * @param {{surface: *}} source {@link localGroundSource}.
+ * @returns {boolean}
+ */
+export function localGroundOwed(record, source) {
+  if (source.surface === null) return false;
+  return record.groundSurface !== source.surface || !record.groundFinal;
+}
+
+/**
+ * Whether a record's ground is worth a read on this surface, at this range:
+ * owed ({@link localGroundOwed}), or read from more than twice as far.
+ * @param {object} record Live stem record.
+ * @param {{surface: *}} source {@link localGroundSource}.
+ * @param {number} distance Camera-to-anchor distance, metres.
+ * @returns {boolean}
+ */
+export function localGroundStale(record, source, distance) {
+  if (localGroundOwed(record, source)) return true;
+  return distance < record.groundReadDistanceM * GROUND_REREAD_DISTANCE_RATIO;
+}
+
+/**
+ * Read the ground under one record and stand its anchor on it.
+ *
+ * @param {Cesium.Scene} scene
+ * @param {object} record Live stem record.
+ * @param {number} now `performance.now()` of the walk.
+ * @param {{surface: *, armed: boolean, budget: number}} source The walk's
+ *   {@link localGroundSource}; a mesh read spends its budget.
+ * @param {number} distance Camera-to-anchor distance, metres.
+ * @returns {number} {@link GROUND_MOVED} when the anchor moved — the caller's
+ *   cue to re-place the stem — {@link GROUND_KEPT} when the read landed on the
+ *   height already drawn, {@link GROUND_MISSED} when nothing was read.
+ */
+function seatLocalRecordOnGround(scene, record, now, source, distance) {
+  if (!source.armed || source.budget <= 0) return GROUND_MISSED;
+  record.lastGroundSampleMs = now;
+  let height;
+  if (source.surface === MESH_GROUND) {
+    source.budget -= 1;
+    try {
+      height = scene.sampleHeight(record.carto, [record.entity]);
+    } catch {
+      return GROUND_MISSED; // tiles not ready; retry on a later bounded update
+    }
+  } else {
+    height = scene.globe.getHeight(record.carto);
+  }
+  // The band `renderedSurface.js` holds every layer to: a mid-stream mesh
+  // answers −6 311 m, and another layer's undepth-tested points answer −46 km.
+  if (!Number.isFinite(height) || height < SURFACE_MIN_M || height > SURFACE_MAX_M) return GROUND_MISSED;
+  record.groundSurface = source.surface;
+  record.groundReadDistanceM = distance;
+  record.groundFinal = source.settled;
+  if (record.groundSampled && Math.abs(height - record.groundHeight) <= GROUND_MOVE_EPSILON_M) {
+    return GROUND_KEPT;
+  }
   record.groundSampled = true;
-  record.groundHeight = sampled;
+  record.groundHeight = height;
   Cesium.Cartesian3.fromRadians(
     record.carto.longitude,
     record.carto.latitude,
@@ -2860,7 +3177,7 @@ function sampleLocalGroundHeight(viewer, record, now) {
     record.base,
   );
   record.entity.__localBaseCartesian = record.base;
-  return true;
+  return GROUND_MOVED;
 }
 
 /**
@@ -2961,11 +3278,13 @@ function updateLocalRunwayGeometry(record, distance, pixelFactor, take) {
   }
 }
 
-function updateLocalStemGeometry(viewer, record, now, knownDistance = null, knownFactor = null) {
+function updateLocalStemGeometry(viewer, record, knownDistance = null, knownFactor = null) {
+  // The ground is not read here: this runs for every record on screen at a
+  // settle, and the walk decides which of them may read
+  // (`seatLocalRecordOnGround`).
   const distance = Number.isFinite(knownDistance)
     ? knownDistance
     : Cesium.Cartesian3.distance(viewer.camera.positionWC, record.base);
-  if (distance < GROUND_SAMPLE_MAX_DISTANCE_M) sampleLocalGroundHeight(viewer, record, now);
   const pixelFactor = Number.isFinite(knownFactor) ? knownFactor : localPixelFactor(viewer);
   // Capped in METRES for a layer that declares a ceiling — see `stemMaxHeightM`.
   // Uncapped (Infinity) the Math.min inside is a no-op and the geometry is
@@ -2983,12 +3302,14 @@ function updateLocalStemGeometry(viewer, record, now, knownDistance = null, know
     return false;
   }
   Cesium.Cartesian3.clone(record.nextTip, record.tip);
-  // The MARK rides the tip and is still an entity, so this stays a `Property`
-  // write. The SHAFT is no longer one: it is dealt from `_stemPool` after the
-  // budget has decided which records are drawn, and it reads `record.tip`
-  // directly — which is why the double buffer that existed to make Cesium
-  // notice a positions swap is gone with it.
+  // The ENTITY rides the tip for its readers (the selection, the voice): a
+  // `Property` write. The drawn MARK is a primitive in `_marks` that copies
+  // the position it is given, so it is written too. The SHAFT is dealt from
+  // `_stemPool` after the budget has decided which records are drawn, and it
+  // reads `record.tip` directly — which is why the double buffer that existed
+  // to make Cesium notice a positions swap is gone with it.
   record.entity.position.setValue(record.tip);
+  if (record.mark) record.mark.position = record.tip;
   return true;
 }
 
