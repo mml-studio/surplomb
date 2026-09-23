@@ -218,10 +218,11 @@ test('the two chips and the key answer in English', (t) => {
     'Hide the PLU zoning — the colored fill, its outlines and the codes written on the ground');
   assert.equal(gpuRowControls({ plu: 'off', sup: 'on' }, payload).chips[0].title,
     'Show the PLU zoning — the colored fill, its outlines and the codes written on the ground');
-  // A key row is a zoning LETTER beside its sentence: the letter is data.
-  const zoneRow = legend.find((row) => row.label === 'U');
+  // A key row is the family in plain words, its letter in brackets because
+  // the map writes the codes on the ground — and no sentence under it.
+  const zoneRow = legend.find((row) => row.label === 'Urban zone (U)');
   assert.ok(zoneRow, legend.map((row) => row.label).join(', '));
-  assertNoFrench(zoneRow.blurb);
+  assert.equal(zoneRow.blurb, undefined);
   const easementRow = legend.find((row) => row.label === 'Public utility easement (SUP)');
   assert.ok(easementRow, 'the easement key names itself with its acronym glossed');
   assertNoFrench(legend);

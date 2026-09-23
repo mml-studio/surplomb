@@ -6,6 +6,32 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Urbanisme » opens on the building projects, with the PLU dark, and
+  reads like the approved mock.** Switching the row on used to wash every plot
+  with the PLU's zoning, then lay the permits of two layers over it, in two
+  palettes that contradicted each other (amber meant « accordé » in one and
+  « chantier ouvert » in the other), under a key of 18 lines with a paragraph
+  each (806 to 1,496 px tall at La Teste-de-Buch). Now:
+  - under the row, two tiles, « Permis & travaux » (“Permits & works”, lit)
+    and « Règles d’urbanisme » (“Planning rules”, dark until pressed), a
+    « Période » (“Period”) menu — 3 years, 6 years, all dates — and « Sélectionnez
+    un projet sur la carte. » (“Select a project on the map.”); eight chips are
+    gone;
+  - each project is one badge in its colour (violet granted, amber work
+    started, blue work finished, grey cancelled, red demolition), its parcel
+    washed and outlined in the same colour; the columns and the cranes are
+    gone, and a permit the Sitadel parcels already show is no longer drawn a
+    second time by the other permit layer;
+  - the key is one block, « Couleurs des projets » (“Project colors”), one plain
+    line per colour (166 px);
+  - a clicked project opens its card in the key: « 40 logements autorisés »,
+    the address, a badge naming where it is in its life, the floor area and the
+    dwellings demolished, a timeline « Permis accordé » → « Début des travaux
+    déclaré » → « Fin des travaux », « Localisation à confirmer » when the
+    marker is approximate, and the rest of the file under « Voir les détails du
+    permis »; the globe keeps a tag, « 18 logements »;
+  - the PLU key names each family in words (« Zone urbaine (U) »), one line
+    per colour.
 - **« Incendies » replaces « Feux actifs », and the Gironde fire of July 2026
   replays as three rings of light.** The row has two modes, as tiles in the
   key, one lit at a time: « Détections récentes » (NASA FIRMS, last 24 h,

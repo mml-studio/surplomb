@@ -31,6 +31,7 @@ import adsUrbanismeLayer, {
   adsBuildingThemeLine,
   adsBuildingThemePoints,
   adsBuildingThemeReduce,
+  adsPermitStyle,
   adsPermitTarget,
   adsRowControls,
   adsWindowChips,
@@ -53,6 +54,7 @@ import {
   unknownBuildingCss,
 } from './buildingTheme.js';
 import { BDTOPO_USAGE_TIERS } from './bdtopoBuildingsFeed.js';
+import { PERMIT_PROJECT_CLASS_IDS, PERMIT_PROJECT_COLORS } from './permitProjects.js';
 
 const PORTALS = JSON.parse(readFileSync(
   new URL('./fixtures/ads-portals-sample.json', import.meta.url), 'utf8',
@@ -447,24 +449,31 @@ test('a volume carrying several dossiers wears the same state as the ground unde
   // One ranking, called through one function. If the roof and the plot could
   // disagree the street would contradict itself.
   const permits = [{ state: 'termine' }, { state: 'commence' }, { state: 'accorde' }];
-  assert.equal(adsBuildingThemeReduce(permits), 'commence');
-  assert.equal(adsBuildingThemeReduce(permits), empriseStyle(permits).state);
-  assert.equal(adsBuildingThemeReduce([{ state: null }]), null);
+  // The volume wears the CLASS (`permitProjects.js`), the plot the same one.
+  assert.equal(adsBuildingThemeReduce(permits), 'started');
+  assert.equal(empriseStyle(permits).state, 'commence');
+  assert.equal(adsBuildingThemeReduce(permits), empriseStyle(permits).classId);
+  assert.equal(adsBuildingThemeReduce([{ state: null }]), 'unknown');
+  assert.equal(adsBuildingThemeReduce([]), null);
 });
 
-test('an unpublished state paints no volume, because its grey is the refusal grey', () => {
-  // ΔE76 11.2 between `#9fb0c6` (state not published) and `#8c93a3` (refused
-  // or annulled) — 10 is where two colours stop sharing a name. On a roof the
-  // reader would have no way to tell "nobody decided" from "the answer was no".
-  const distance = deltaE76(parseCssRgb('#9fb0c6'), parseCssRgb('#8c93a3'));
-  assert.ok(distance < 15, `measured ΔE ${distance.toFixed(1)}`);
+test('an unpublished state paints no volume, and every other class paints its row colour', () => {
+  // A roof painted « nobody published a decision » would sit beside the grey
+  // of « the answer was no »: the badge carries the unknown, the roof does not.
   assert.equal(adsBuildingThemeColorFor(null), null);
+  assert.equal(adsBuildingThemeColorFor('unknown'), null);
   assert.equal(adsBuildingThemeColorFor('inconnu'), null);
-  assert.equal(adsBuildingThemeColorFor('commence'), '#ff6b4a');
-  // The two states that share a colour still share it — the legend has one row
-  // per colour for exactly this reason.
-  assert.equal(adsBuildingThemeColorFor('instruction'), adsBuildingThemeColorFor('depose'));
-  assert.equal(adsBuildingThemeColorFor('accorde'), adsBuildingThemeColorFor('autorise'));
+  assert.equal(adsBuildingThemeColorFor('started'), '#f59f00');
+  // The roofs and the badges are one palette: the row's.
+  for (const entry of ADS_BUILDING_THEME_LEGEND) {
+    assert.equal(adsBuildingThemeColorFor(entry.key), PERMIT_PROJECT_COLORS[entry.key]);
+  }
+  // Two states that share a class still share its colour.
+  assert.equal(adsPermitStyle({ state: 'instruction' }).color, adsPermitStyle({ state: 'depose' }).color);
+  assert.equal(adsPermitStyle({ state: 'accorde' }).color, adsPermitStyle({ state: 'autorise' }).color);
+  // A permis de démolir is the demolition class whatever its state, as on the
+  // Sitadel parcels.
+  assert.equal(adsPermitStyle({ kind: 'PD', state: 'accorde' }).classId, 'demolition');
 });
 
 test('no painted class can be mistaken for a volume nobody filed on (A1)', () => {
@@ -476,7 +485,9 @@ test('no painted class can be mistaken for a volume nobody filed on (A1)', () =>
     }
   }
   // Measured 28.0, on `#8c93a3` against the washed `Indifférencié` grey — the
-  // tightest pair in the palette and still above the module's own bar.
+  // tightest pair in the palette and still above the module's own bar. The
+  // Sitadel grey the row took its palette from, `#6c757d`, measured 17.2 and
+  // was lightened to this one for both layers.
   assert.ok(worst >= BUILDING_THEME_MIN_DELTA_E, `nearest class is ΔE ${worst.toFixed(1)}`);
   // And the registry's own registration-time guard has nothing to warn about.
   assert.deepEqual(
@@ -512,7 +523,7 @@ test('the theme paints the existing roof and refuses the empty plot next door', 
 
   const paint = resolveBuildingThemePaint([roof, bare], theme);
   assert.equal(paint.painted, 1);
-  assert.equal(paint.colorById.get('roof'), '#ff6b4a');
+  assert.equal(paint.colorById.get('roof'), '#f59f00');
   assert.equal(paint.colorById.has('bare'), false, 'a new build paints nothing');
   assert.equal(paint.unpainted, 1);
   // The "no data" row says which of the two silences it is (A4).
@@ -556,17 +567,22 @@ test('the row line publishes the OFFER ledger and points at the paint ledger', (
   assert.equal(adsBuildingThemeLine({ total: 0 }), null);
 });
 
-test('the layer publishes its own colour key, including the class it will not paint', () => {
+test('the layer keys the classes it drew, one plain line each, folded under the row palette', () => {
   const payload = bordeauxPayload();
   const controls = adsRowControls(payload);
-  assert.equal(controls.legend.length, ADS_BUILDING_THEME_LEGEND.length + 1);
-  const unpublished = controls.legend.at(-1);
-  assert.equal(unpublished.label, 'État non publié');
-  assert.equal(unpublished.color, '#9fb0c6');
-  assert.match(unpublished.blurb, /le volume ne l’est pas/);
-  // Every drawn dossier is counted exactly once across the key.
-  const counted = controls.legend.reduce((sum, entry) => sum + entry.count, 0);
-  assert.equal(counted, payload.permits.length);
+  const drawn = new Set(payload.permits.map((permit) => adsPermitStyle(permit).classId));
+  // One line per class drawn, in the row's order, and none for a class absent.
+  assert.deepEqual(controls.legend.map((entry) => entry.classId),
+    PERMIT_PROJECT_CLASS_IDS.filter((classId) => drawn.has(classId)));
+  for (const entry of controls.legend) {
+    // No count and no sentence: the legend rule of 2026-09-21.
+    assert.equal(entry.count, undefined);
+    assert.equal(entry.blurb, undefined);
+    assert.equal(entry.color, PERMIT_PROJECT_COLORS[entry.classId]);
+  }
+  assert.equal(controls.legendFold, 'Couleurs des projets');
+  const unpublished = adsRowControls({ permits: [{ state: null }], emprises: [] }).legend;
+  assert.deepEqual(unpublished.map((entry) => entry.label), ['État non publié']);
   // The plot wash IS a ground-classified drape, so the manager's photoreal
   // notice applies — but only where a portal published a plot.
   assert.equal(controls.surfaceFill, true);

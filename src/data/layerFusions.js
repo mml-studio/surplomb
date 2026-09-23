@@ -105,6 +105,12 @@ function fusionRow(fusion) {
         ...(tile.off ? { off: Object.freeze({ ...tile.off }) } : {}),
       }))),
     } : {}),
+    ...(fusion.rowTiles ? {
+      rowTiles: Object.freeze(fusion.rowTiles.map((tile) => Object.freeze({
+        ...tile,
+        ids: Object.freeze([...tile.ids]),
+      }))),
+    } : {}),
   });
 }
 
@@ -217,6 +223,25 @@ function declaredChip(entry, layerId, own) {
  * followers), and a share link can still carry both, since the rule is about
  * a press and not a state.
  *
+ * `rowTiles` PUTS THE SWITCHES UNDER THE ROW INSTEAD, in the Layers panel —
+ * where the approved mock of « Urbanisme » (2026-09-23) draws them: two wide
+ * tiles side by side, « Permis & travaux » and « Règles d'urbanisme », then the
+ * period, then a hint. The key keeps what it is for, the classes and the card
+ * of the project the reader clicked. Like `tiles`, it replaces the row's chip
+ * strip, and a row has one or the other, never both.
+ *
+ * A row tile switches a GROUP of members (`ids`), not one: the two permit
+ * layers are one subject drawn on two footings, in one palette, and a reader
+ * has one question to ask them — show the projects or not. A tile reads lit
+ * while any of its members is on; pressed lit it puts them all out, pressed
+ * dark it lights them all. Every member the row offers sits in exactly one
+ * tile. The words come from the catalog's `rowTiles` entry (`<primary>:<key>`),
+ * and a tile may carry a `hint` there — the line the panel prints under the
+ * tiles while that tile is lit (« Sélectionnez un projet sur la carte. »).
+ *
+ * A row whose members share a tile also shares ONE block in the map key: the
+ * key merges their classes, which is only honest because they share a palette.
+ *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It
  * is for a companion whose cost is real and whose value is conditional — the
  * reader asks for it by pressing the chip. Every other companion follows the
@@ -253,9 +278,9 @@ export const LAYER_FUSIONS = Object.freeze([
   // ── 1. Planning ──────────────────────────────────────────────────────────
   // ONE question in two tenses: what MAY be built on this ground, and what HAS
   // been allowed on it. The PLU zoning draws the rule, Sitadel draws the
-  // permits granted under it, and a reader looking at a plot needs both or
-  // neither — reading a permit without the zoning is reading an answer with
-  // the question torn off.
+  // permits granted under it, and both belong on one row — reading a permit
+  // with no way to reach the zoning is reading an answer with the question
+  // torn off.
   //
   // `ads-fr` and `sitadel-fr` were already one row before this, for a narrower
   // reason that still holds: they read the SAME four Sitadel files through the
@@ -264,18 +289,33 @@ export const LAYER_FUSIONS = Object.freeze([
   // cadastral parcel. That is a precision fact about one subject. This entry
   // keeps that pair intact and puts the zoning above it.
   //
-  // THREE PEERS, SO THE PRIMARY GETS A CHIP TOO (`primaryToggle`), like
-  // « Infrastructure numérique ». A zoning polygon is not "the subject the
-  // permits qualify": it comes from another register (the Géoportail de
-  // l'urbanisme, not Sitadel), it is drawn as ground polygons rather than
-  // points, and a reader who came for the permits must be able to switch the
-  // zoning off without losing the row.
+  // THE PERMITS ARE THE ROW, AND THE ZONING IS ASKED FOR (2026-09-23). The
+  // approved mock of this row opens on « Permis & travaux » with « Règles
+  // d'urbanisme » dark, and the operator asked for exactly that: switching
+  // « Urbanisme » on used to wash every plot in view with the PLU's colours,
+  // then lay the permits' own colours over them, and a reader who came for a
+  // building site read two palettes on one parcel. So `ads-fr` keeps the row
+  // (its name, its count, its meta line), `sitadel-fr` follows it, and the
+  // zoning is `optIn`: one tile away, never lit by the row's toggle.
+  //
+  // `ads-fr` rather than `sitadel-fr` as the primary: it owns the period the
+  // tiles' select steers (`months`, the share link's `au.w`), and it sat right
+  // under the zoning in the taxonomy, so the row does not move in its group.
+  //
+  // THE MEMBERS ARE TILES UNDER THE ROW (`rowTiles`), as the mock draws them:
+  // the two permit layers are ONE tile, since they are one subject drawn on two
+  // footings and share one palette (`permitProjects.js`), and the zoning is the
+  // other. Eight chips — three members, three windows, two halves — become two
+  // tiles and one select.
   fusionRow({
-    primary: 'urbanisme-gpu',
-    primaryToggle: true,
+    primary: 'ads-fr',
     companions: [
-      { id: 'ads-fr' },
       { id: 'sitadel-fr' },
+      { id: 'urbanisme-gpu', optIn: true },
+    ],
+    rowTiles: [
+      { key: 'permits', ids: ['ads-fr', 'sitadel-fr'] },
+      { key: 'rules', ids: ['urbanisme-gpu'] },
     ],
   }),
 
@@ -704,6 +744,58 @@ function validateFusionTiles(fusion, primary) {
 }
 
 /**
+ * Check a fusion's `rowTiles`, when it declares any.
+ *
+ * Every member the row offers is in exactly one tile — a member in none would
+ * have no switch, since the strip is gone, and a member in two would be lit by
+ * one tile and put out by the other. A withdrawn (`disabled`) companion is in
+ * none.
+ * @param {object} fusion
+ * @param {string} primary
+ * @throws {Error} On any malformed or incomplete tile set.
+ */
+function validateFusionRowTiles(fusion, primary) {
+  if (fusion.rowTiles === undefined) return;
+  if (!Array.isArray(fusion.rowTiles) || fusion.rowTiles.length === 0) {
+    throw new Error(`Fusion rowTiles must be a non-empty array: ${primary}`);
+  }
+  if (fusion.tiles !== undefined) throw new Error(`Fusion has both tiles and rowTiles: ${primary}`);
+  const offered = [primary, ...fusion.companions
+    .filter((companion) => companion.disabled !== true)
+    .map((companion) => companion.id)];
+  const placed = new Set();
+  const keys = new Set();
+  for (const tile of fusion.rowTiles) {
+    const key = tile?.key;
+    if (typeof key !== 'string' || !/^[a-z][a-z0-9-]*$/.test(key)) {
+      throw new Error(`Fusion row tile key must be a kebab-case name: ${primary}`);
+    }
+    if (keys.has(key)) throw new Error(`Fusion row tile listed twice: ${primary}:${key}`);
+    keys.add(key);
+    if (!Array.isArray(tile.ids) || tile.ids.length === 0) {
+      throw new Error(`Fusion row tile has no member: ${primary}:${key}`);
+    }
+    for (const id of tile.ids) {
+      if (!offered.includes(id)) throw new Error(`Fusion row tile is not an offered member: ${primary}:${key} → ${id}`);
+      if (placed.has(id)) throw new Error(`Fusion member is in two row tiles: ${id}`);
+      placed.add(id);
+    }
+    // Read from the catalog's French side, never through a getter: this runs
+    // at import (`src/i18n/importSafety.test.mjs`). A table a test passes in
+    // carries its own label.
+    const label = fusion[FROM_CATALOG]
+      ? messages.definition.rowTiles?.[`${primary}:${key}`]?.label?.fr
+      : tile.label;
+    if (typeof label !== 'string' || !label.trim()) {
+      throw new Error(`Fusion row tile has no label: ${primary}:${key}`);
+    }
+  }
+  for (const id of offered) {
+    if (!placed.has(id)) throw new Error(`Fusion member has no row tile: ${primary} → ${id}`);
+  }
+}
+
+/**
  * Validate the fusion table against the registered layer set.
  * @param {ReadonlyArray<object>} [fusions] Table under test.
  * @param {ReadonlyArray<string>} [registeredIds] Ids the app actually registers.
@@ -776,6 +868,9 @@ export function validateLayerFusions(
       }
       claimed.set(id, primary);
     }
+    // Row tiles first: a row carrying both kinds is refused as such, before
+    // the key tiles' own rules would complain about half of it.
+    validateFusionRowTiles(fusion, primary);
     validateFusionTiles(fusion, primary);
   }
   // A companion that is itself a primary would render a row AND a chip for the
@@ -931,6 +1026,42 @@ const TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
  */
 export function fusionTilesFor(layerId) {
   return TILES_BY_PRIMARY.get(layerId) || null;
+}
+
+// Resolved once at import, like the tiles above; the words stay getters.
+const ROW_TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
+  .filter((fusion) => Array.isArray(fusion.rowTiles))
+  .map((fusion) => [fusion.primary, Object.freeze(fusion.rowTiles.map((tile) => {
+    const words = () => messages().rowTiles[`${fusion.primary}:${tile.key}`] || {};
+    return Object.freeze({
+      key: tile.key,
+      ids: tile.ids,
+      get label() { return words().label || tile.key; },
+      get title() { return words().title || ''; },
+      get hint() { return words().hint || ''; },
+    });
+  }))]));
+
+/**
+ * The tiles a row draws UNDER ITSELF in the Layers panel, or null when it has
+ * none — see `rowTiles` in the table's header. Each switches a group of
+ * members (`ids`), and is lit while any of them is on.
+ * @param {string} layerId The row's primary.
+ * @returns {?ReadonlyArray<{key: string, ids: ReadonlyArray<string>, label: string,
+ *   title: string, hint: string}>}
+ */
+export function fusionRowTilesFor(layerId) {
+  return ROW_TILES_BY_PRIMARY.get(layerId) || null;
+}
+
+/**
+ * The row tile a member belongs to, or null.
+ * @param {string} rowId The row's primary.
+ * @param {string} memberId
+ * @returns {?object}
+ */
+export function fusionRowTileOf(rowId, memberId) {
+  return fusionRowTilesFor(rowId)?.find((tile) => tile.ids.includes(memberId)) || null;
 }
 
 /**

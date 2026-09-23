@@ -335,7 +335,12 @@ export const SITADEL_BANDS = Object.freeze([
   bandRecord('autorise', 2, '#b197fc'),
   bandRecord('commence', 5, '#f59f00'),
   bandRecord('termine', 6, '#4c6ef5'),
-  bandRecord('annule', 4, '#6c757d'),
+  // `#8c93a3` and not the darker `#6c757d` it was until 2026-09-23: the
+  // « Urbanisme » row paints this class on roofs too (`ads-fr`, through
+  // `permitProjects.js`), and the darker grey sat at ΔE76 17.2 from the wash
+  // of a volume with no dossier at all — under the building theme's bar of 25.
+  // This one is at 28.0.
+  bandRecord('annule', 4, '#8c93a3'),
   bandRecord('demolition', null, '#c92a2a'),
 ]);
 
@@ -1283,6 +1288,25 @@ export function buildSitadelPermitCard(permit, parcels = []) {
   if (address) lines.push(address);
   if (permit?.dem) lines.push(permit.dem);
 
+  lines.push(...buildSitadelPermitDetails(permit, parcels));
+  return [sitadelPermitTitle(permit), ...lines];
+}
+
+/**
+ * The file behind a permit, one line each: the parcels it names, how the
+ * declared land checks out against them, how it was placed, its number.
+ *
+ * The tail of {@link buildSitadelPermitCard}, and on its own the fold of the
+ * project card in the map key (« Voir les détails du permis »): the card leads
+ * with what is being built and where it has got, and this is the rest.
+ *
+ * @param {object} permit
+ * @param {Array<object>} parcels The payload's parcel table.
+ * @returns {string[]}
+ */
+export function buildSitadelPermitDetails(permit, parcels = []) {
+  const m = messages().card;
+  const lines = [];
   const slots = Array.isArray(permit?.px) ? permit.px : [];
   const named = slots.map((slot) => parcels?.[slot]).filter(Boolean);
   if (named.length) {
@@ -1312,7 +1336,7 @@ export function buildSitadelPermitCard(permit, parcels = []) {
 
   lines.push(m.joined);
   if (permit?.i) lines.push(m.fileNumber(permit.i));
-  return [sitadelPermitTitle(permit), ...lines];
+  return lines;
 }
 
 /**

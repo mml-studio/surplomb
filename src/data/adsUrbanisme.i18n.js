@@ -1,6 +1,7 @@
 /**
- * Strings of `src/data/adsUrbanisme.js` — the cranes over a block, the plots
+ * Strings of `src/data/adsUrbanisme.js` — the badges over a block, the plots
  * under them, and the ramp that paints whole roofs with a dossier's state.
+ * The class names themselves are the row's, in `permitProjects.i18n.js`.
  *
  * WHAT MUST NOT SOFTEN IN TRANSLATION: this layer draws a coordinate that was
  * mostly COMPUTED, and every caveat says which computation. A lot deduced
@@ -48,6 +49,20 @@ export default defineMessages({
     },
     pipeline: { fr: ' — le pipeline en cours', en: ' — the pipeline under way' },
     finished: { fr: ', chantiers achevés compris', en: ', completed sites included' },
+  },
+
+  /** The same three windows as a menu under the row's tiles (« Période »). */
+  period: {
+    label: { fr: 'Période', en: 'Period' },
+    options: {
+      36: { fr: '3 dernières années', en: 'Last 3 years' },
+      72: { fr: '6 dernières années', en: 'Last 6 years' },
+      156: {
+        fr: 'Toutes les dates',
+        en: 'All dates',
+        note: 'The whole register: Sitadel starts in 2013.',
+      },
+    },
   },
 
   /**
@@ -199,7 +214,10 @@ export default defineMessages({
     },
   },
 
-  /** The 3D-building theme: its name, its ramp, and what it refuses to paint. */
+  /**
+   * The 3D-building theme: its name, and what it refuses to paint. The ramp's
+   * words are the row's, in `permitProjects.i18n.js`.
+   */
   theme: {
     label: { fr: 'Autorisations d’urbanisme', en: 'Planning permits' },
     unknown: {
@@ -208,52 +226,6 @@ export default defineMessages({
       note: 'The scan is a 400 m disc; the volumes are a box up to 53.8 km². '
         + 'The two reasons a volume is unpainted are different sentences (A4).',
       sample: [400],
-    },
-    filed: { fr: 'Déposé ou en instruction', en: 'Filed or under review' },
-    filedBlurb: {
-      fr: 'Le dossier est encore au guichet et peut encore faire l’objet d’un recours. '
-        + 'Publié seulement par Paris, Bordeaux et Nantes : ailleurs cette classe est vide '
-        + 'parce que le registre national ne contient que des permis déjà accordés.',
-      en: 'The file is still at the counter and can still be appealed. '
-        + 'Published only by Paris, Bordeaux and Nantes: elsewhere this class is empty '
-        + 'because the national register holds nothing but permits already granted.',
-    },
-    granted: { fr: 'Accordé, chantier non ouvert', en: 'Granted, site not opened' },
-    grantedBlurb: {
-      fr: 'Autorisé, et aucune ouverture de chantier n’est remontée. Le bâtiment peint '
-        + 'est celui qui existe aujourd’hui, pas celui que le permis décrit.',
-      en: 'Authorized, and no site opening has been reported. The building painted '
-        + 'is the one standing today, not the one the permit describes.',
-    },
-    started: { fr: 'Chantier ouvert', en: 'Site opened' },
-    startedBlurb: {
-      fr: 'Les travaux ont commencé sur ce volume.',
-      en: 'Work has started on this volume.',
-    },
-    completed: { fr: 'Travaux achevés', en: 'Work completed' },
-    completedBlurb: {
-      fr: 'Achèvement déclaré. Le volume BD TOPO peut être antérieur aux travaux : '
-        + 'la peinture dit qu’un dossier s’est terminé ici, pas que le levé l’a vu.',
-      en: 'Completion declared. The BD TOPO volume may predate the work: '
-        + 'the paint says a file ended here, not that the survey saw it.',
-    },
-    refused: { fr: 'Refusé ou annulé', en: 'Refused or canceled' },
-    refusedBlurb: {
-      fr: 'Le dossier a existé, le projet non. Peint parce que « rien ne changera ici » '
-        + 'est une information sur le bâtiment ; la classe garde sa propre teinte et n’est '
-        + 'pas fondue dans les volumes sans dossier.',
-      en: 'The file existed, the project did not. Painted because “nothing will change here” '
-        + 'is information about the building; the class keeps its own tint and is not '
-        + 'merged into the volumes with no file.',
-    },
-    unpublished: { fr: 'État non publié', en: 'State not published' },
-    unpublishedBlurb: {
-      fr: 'Ni Sitadel ni le portail n’a publié d’état pour ce dossier. Le marqueur est '
-        + 'dessiné, le volume ne l’est pas : ce gris est à ΔE 11 du gris de « refusé ou '
-        + 'annulé » et une toiture peinte ne pourrait pas les distinguer.',
-      en: 'Neither Sitadel nor the portal published a state for this file. The marker is '
-        + 'drawn, the volume is not: this gray sits at ΔE 11 from the gray of “refused or '
-        + 'canceled”, and a painted roof could not tell them apart.',
     },
   },
 

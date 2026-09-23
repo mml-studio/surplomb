@@ -1,6 +1,5 @@
 import * as Cesium from 'cesium';
-import { addressMarkerGlyph } from './addressMarkerIcons.js';
-import { createAddressScanLayer } from './addressScanLayer.js';
+import { createAddressScanLayer, mapKeyCarriesSelection } from './addressScanLayer.js';
 import {
   ADS_DEFAULT_MONTHS, ADS_DEFAULT_RADIUS_M, ADS_MAX_MONTHS,
   adsKindLabel, adsPurposeLabel, adsStateLabel,
@@ -9,6 +8,21 @@ import { adsLineageBasisLabel } from './cadastreLineage.js';
 import { formatNumber } from '../i18n/format.js';
 import messages from './adsUrbanisme.i18n.js';
 import { clearBuildingTheme, registerBuildingTheme } from './buildingTheme.js';
+import { askJoin, watchJoin } from './layerJoins.js';
+import {
+  PERMIT_BADGE_PX,
+  PERMIT_DRAWN_ON_PARCEL_JOIN,
+  PERMIT_PROJECT_CLASS_IDS,
+  permitBadgeImage,
+  permitClassOfAdsPermit,
+  permitProjectCard,
+  permitProjectColor,
+  permitProjectFoldTitle,
+  permitProjectLabel,
+  permitProjectLegend,
+  permitProjectTag,
+} from './permitProjects.js';
+import permitProjectsMessages from './permitProjects.i18n.js';
 // The third urbanism layer takes the second one's surface rule rather than
 // writing a third copy of it; `urbanismeGpu.test.mjs` already pins it.
 import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
@@ -29,6 +43,13 @@ import { gpuClassificationTypeForScene } from './urbanismeGpu.js';
  * that can still be objected to, an open chantier is a thing already making
  * noise, and a completed one is history. Those are different facts about the
  * same street and they get the colour channel.
+ *
+ * THE COLOURS ARE THE ROW'S, NOT THIS LAYER'S (2026-09-23). « Urbanisme »
+ * draws its permits with this layer AND `sitadel-fr`, and the two used to wear
+ * two palettes that contradicted each other on the same street. Both now take
+ * the class and its colour from `permitProjects.js` — the approved mock's
+ * palette, which is Sitadel's — and a dossier is a BADGE there, one size for
+ * all, rather than a crane sized by its state.
  *
  * WHY SOME DOTS ARE PALE. `instruction` only ever comes from a métropole
  * portal — the national register contains granted permits only, by
@@ -181,46 +202,44 @@ export function adsWindowChips(months, summary = null) {
 }
 
 /**
- * Marker size, in CSS px.
+ * The period select on the row (« Période »), the same three windows as
+ * {@link adsWindowChips} in the form the approved mock draws them: one menu
+ * under the row's tiles. `fanOut`, because `sitadel-fr` takes the same window
+ * and one period for the two permit layers is the only honest reading of one
+ * menu.
  *
- * The two states a reader is scanning for — a file still open at the counter,
- * and a chantier already running — get the pixels. A finished job is drawn
- * smaller because it is context, not news.
+ * @param {?string} months The window in force.
+ * @param {?object} summary The layer's own `summarize()` output, if any.
+ * @returns {{param: string, label: string, value: string, fanOut: boolean,
+ *   title: string, options: Array<{value: string, label: string}>}}
  */
-const SIZE_LIVE_PX = 20;
-const SIZE_GRANTED_PX = 17;
-const SIZE_HISTORY_PX = 14;
-
-/**
- * The pipeline, as colour.
- *
- * Cyan for what is still being decided, amber for granted-and-waiting, hot
- * orange for a chantier open right now, green for finished, grey for the two
- * ways a dossier dies. Deliberately NOT a single ramp: refused and annulled
- * are not "further along" than instruction, they are off the ladder, and a
- * ramp would rank them as though they were.
- */
-const STATE_STYLE = Object.freeze({
-  instruction: { color: '#3dd6c4', size: SIZE_LIVE_PX },
-  depose: { color: '#3dd6c4', size: SIZE_LIVE_PX },
-  accorde: { color: '#ffb03d', size: SIZE_GRANTED_PX },
-  autorise: { color: '#ffb03d', size: SIZE_GRANTED_PX },
-  commence: { color: '#ff6b4a', size: SIZE_LIVE_PX },
-  termine: { color: '#7ed957', size: SIZE_HISTORY_PX },
-  refuse: { color: '#8c93a3', size: SIZE_HISTORY_PX },
-  annule: { color: '#8c93a3', size: SIZE_HISTORY_PX },
-});
+export function adsPeriodSelect(months, summary = null) {
+  const m = messages().period;
+  const chips = adsWindowChips(months, summary);
+  const active = chips.find((chip) => chip.active) || null;
+  return {
+    param: 'months',
+    label: m.label,
+    value: active ? active.params.months : ADS_WINDOW_DEFAULT,
+    fanOut: true,
+    title: active ? active.title : '',
+    options: ADS_WINDOWS.map((window) => ({ value: window.months, label: m.options[window.months] })),
+  };
+}
 
 /**
  * How much ink one emprise puts on the ground.
  *
  * Lighter than the cadastre's 0.28, and deliberately: the cadastre draws
  * parcels because the parcels ARE the subject, while here the plot is the
- * ground under the news and the crane on top of it is the news. A wash this
+ * ground under the news and the badge on top of it is the news. A wash this
  * pale still separates "somebody has filed on this plot" from the block around
  * it at street zoom, without competing with the marker it belongs to.
  */
 const EMPRISE_FILL_ALPHA = 0.18;
+
+/** A badge at full size up to 500 m of camera distance, 45 % of it from 8 km. */
+const BADGE_SCALE = new Cesium.NearFarScalar(500, 1, 8_000, 0.45);
 
 /** The boundary, which is the part that survives being small. */
 const EMPRISE_OUTLINE_ALPHA = 0.85;
@@ -234,13 +253,12 @@ const EMPRISE_OUTLINE_WIDTH_PX = 1.4;
  * carries nine. So one of them has to speak for the ground, and this is the
  * order it is chosen in.
  *
- * It is NOT the pipeline order, and it must not be read as one — `STATE_STYLE`
- * above says why a ramp would be a lie. This ranks by what a reader standing
- * on the pavement would want told first: a chantier open right now is the
- * loudest fact about a plot, then a file that can still be objected to, then
- * one granted and waiting, and only then the two kinds of history. A refusal
- * ranks last not because it matters least but because it is the one state that
- * says nothing will happen here.
+ * It is NOT the pipeline order, and it must not be read as one. This ranks by
+ * what a reader standing on the pavement would want told first: a chantier
+ * open right now is the loudest fact about a plot, then a file that can still
+ * be objected to, then one granted and waiting, and only then the two kinds of
+ * history. A refusal ranks last not because it matters least but because it
+ * is the one state that says nothing will happen here.
  */
 const EMPRISE_STATE_RANK = Object.freeze({
   commence: 6,
@@ -253,17 +271,16 @@ const EMPRISE_STATE_RANK = Object.freeze({
   annule: 1,
 });
 
-/** A dossier whose state neither register published. Drawn, never guessed at. */
-const STATE_UNKNOWN = Object.freeze({ color: '#9fb0c6', size: SIZE_GRANTED_PX });
-
 /**
- * Style for one dossier's published state.
+ * The class one dossier is shown as, and its colour — see `permitProjects.js`,
+ * which the Sitadel parcels ask too.
  *
- * @param {?string} state Normalised state from `adsFeed.js`.
- * @returns {{color: string, size: number}}
+ * @param {?object} permit Normalised permit from `adsFeed.js`.
+ * @returns {{classId: string, color: string}}
  */
-export function adsStateStyle(state) {
-  return STATE_STYLE[String(state ?? '')] ?? STATE_UNKNOWN;
+export function adsPermitStyle(permit) {
+  const classId = permitClassOfAdsPermit(permit);
+  return { classId, color: permitProjectColor(classId) };
 }
 
 /** `2026-08-31` → `31/08/2026` / `Aug 31, 2026`, per the reader's language. */
@@ -340,19 +357,19 @@ export function adsPrecisionLine(permit) {
  * The state a shared plot is drawn in, and the dossier that lends it.
  *
  * @param {Array<object>} permits The dossiers standing on one emprise.
- * @returns {{color: string, size: number, state: ?string}}
+ * @returns {{classId: string, color: string, state: ?string, permit: ?object}}
  */
 export function empriseStyle(permits) {
   let bestRank = -1;
-  let bestState = null;
+  let best = null;
   for (const permit of permits || []) {
     const rank = EMPRISE_STATE_RANK[String(permit.state ?? '')] ?? 0;
     // Strictly greater, so a tie keeps the first — which is the nearest, since
     // `projectAdsPermits` served them sorted by distance. A plot must not
     // change colour because two dossiers on it were re-ordered.
-    if (rank > bestRank) { bestRank = rank; bestState = permit.state ?? null; }
+    if (rank > bestRank) { bestRank = rank; best = permit; }
   }
-  return { ...adsStateStyle(bestState), state: bestState };
+  return { ...adsPermitStyle(best), state: best?.state ?? null, permit: best };
 }
 
 /** `['063KE78', '063KE79']` → `parcelles 063KE78, 063KE79`. */
@@ -488,6 +505,24 @@ export function empriseCard(emprise, permits) {
 }
 
 /**
+ * Whether the row's Sitadel layer already draws this dossier on its parcel —
+ * then this layer lays no second badge and no second wash on the same plot.
+ *
+ * The two permit layers of « Urbanisme » read the same register; drawn by both,
+ * a permit stood twice a few metres apart on one plot. What stays here is what
+ * the Sitadel parcels cannot show: the files still at the counter in Paris,
+ * Bordeaux and Nantes, the non-residential permits and the permis d'aménager
+ * (files that layer does not read), and the permits its cadastral join could
+ * not place. The roofs are painted either way: that is this layer's own theme.
+ * @param {object} permit Normalised permit, with its `series|number` key.
+ * @param {?Set<string>} onParcel From `PERMIT_DRAWN_ON_PARCEL_JOIN`.
+ * @returns {boolean}
+ */
+export function adsDrawnElsewhere(permit, onParcel) {
+  return Boolean(onParcel && permit?.key && typeof onParcel.has === 'function' && onParcel.has(permit.key));
+}
+
+/**
  * Positions for one ring, closed. Same helper the other two polygon layers
  * keep; three points is the least that encloses anything.
  *
@@ -511,14 +546,18 @@ function ringPositions(ring) {
  * @param {object} dataSource
  * @param {object} payload Server payload.
  * @param {number} classificationType Cesium surface to clamp onto.
+ * @param {?Set<string>} [onParcel] Dossiers the Sitadel layer draws already.
  * @returns {number} Emprises drawn.
  */
-export function drawAdsEmprises(dataSource, payload, classificationType) {
+export function drawAdsEmprises(dataSource, payload, classificationType, onParcel = null) {
   const emprises = payload.emprises || [];
   if (!emprises.length) return 0;
   const byEmprise = new Map();
   for (const permit of payload.permits || []) {
     if (!Number.isFinite(permit.empriseId)) continue;
+    // Drawn on its parcel by the Sitadel layer already: that plot is washed
+    // there, in the same colour — see {@link adsDrawnElsewhere}.
+    if (adsDrawnElsewhere(permit, onParcel)) continue;
     const list = byEmprise.get(permit.empriseId);
     if (list) list.push(permit); else byEmprise.set(permit.empriseId, [permit]);
   }
@@ -670,29 +709,28 @@ export function adsPermitTarget(permit) {
 }
 
 /**
- * The colour a volume takes for one dossier state — or null, meaning leave it
- * in the "no data" wash.
+ * The colour a volume takes for one class — or null, meaning leave it in the
+ * "no data" wash.
  *
  * NULL FOR AN UNPUBLISHED STATE, and that is a departure from the marker on
- * purpose. A crane whose state neither register published is drawn in
- * `STATE_UNKNOWN` grey-blue `#9fb0c6`, because a marker has to exist for every
- * dossier. A VOLUME is a value channel, and `#9fb0c6` measures ΔE76 11.2 from
- * the `#8c93a3` of "refusé ou annulé" — on a scale where 10 is where two
- * colours stop sharing a name. Two greys that close, on a surface the size of a
- * roof, would put "nobody published a decision" and "the decision was no" in the
- * same class. So the volume is not painted, the dossier keeps its crane, and the
+ * purpose. A badge whose state neither register published is drawn in the pale
+ * slate of `permitProjects.js`, because a marker has to exist for every
+ * dossier. A VOLUME is a value channel, and a pale grey roof would put "nobody
+ * published a decision" beside "the decision was no" on a surface the size of
+ * a roof. So the volume is not painted, the dossier keeps its badge, and the
  * row counts it.
  *
- * @param {?string} state Normalised state from `adsFeed.js`.
+ * @param {?string} classId From {@link adsPermitStyle}.
  * @returns {?string} CSS colour, or null.
  */
-export function adsBuildingThemeColorFor(state) {
-  const style = STATE_STYLE[String(state ?? '')];
-  return style ? style.color : null;
+export function adsBuildingThemeColorFor(classId) {
+  const id = String(classId ?? '');
+  if (!PERMIT_PROJECT_CLASS_IDS.includes(id) || id === 'unknown') return null;
+  return permitProjectColor(id);
 }
 
 /**
- * N dossiers on one volume → the one state the volume wears.
+ * N dossiers on one volume → the one class the volume wears.
  *
  * The SAME rule the plot wash already uses, called through the same function:
  * a volume carrying several dossiers is exactly the shared-plot problem
@@ -700,47 +738,37 @@ export function adsBuildingThemeColorFor(state) {
  * would let a roof and the ground under it disagree about their own street.
  *
  * @param {Array<object>} permits Dossiers joined to one volume, nearest first.
- * @returns {?string} state
+ * @returns {?string} class id
  */
 export function adsBuildingThemeReduce(permits) {
-  return empriseStyle(permits).state;
+  const style = empriseStyle(permits);
+  return style.permit ? style.classId : null;
 }
 
 /**
- * The ramp, one row per COLOUR and not one per state.
- *
- * `instruction`/`depose` share a colour and so do `accorde`/`autorise`, and the
- * panel counts a legend row by matching its swatch against the colours actually
- * painted. Two rows with one colour would each claim the whole count.
- * Deliberately without counts: `resolveBuildingThemePaint` fills them in from
- * the volumes it really painted, which is the number a reader of the Bâti 3D
- * row needs — not the number of dossiers this layer holds.
+ * The ramp, one row per colour — every class a roof can wear, which is every
+ * class but the unpublished state. Deliberately without counts:
+ * `resolveBuildingThemePaint` fills them in from the volumes it really
+ * painted, which is the number a reader of the Bâti 3D row needs.
  */
 export const ADS_BUILDING_THEME_LEGEND = Object.freeze(
-  [
-    ['filed', '#3dd6c4'],
-    ['granted', '#ffb03d'],
-    ['started', '#ff6b4a'],
-    ['completed', '#7ed957'],
-    ['refused', '#8c93a3'],
-  ].map(([key, color]) => Object.freeze({
-    key,
-    color,
-    // The French, read off the catalog's definition rather than retyped: the
-    // palette guards and the registry's conflict check read this table at load
-    // time, and a colour has no language.
-    label: messages.definition.theme[key].fr,
-    blurb: messages.definition.theme[`${key}Blurb`].fr,
-  })),
+  PERMIT_PROJECT_CLASS_IDS
+    .filter((classId) => classId !== 'unknown')
+    .map((classId) => Object.freeze({
+      key: classId,
+      color: permitProjectColor(classId),
+      // The French, read off the catalog's definition rather than retyped: the
+      // palette guards and the registry's conflict check read this table at
+      // load time, and a colour has no language.
+      label: permitProjectsMessages.definition.classes[classId].fr,
+    })),
 );
 
 /** The same ramp in the page's language, one row per colour. */
 export function adsBuildingThemeLegend() {
-  const m = messages().theme;
   return ADS_BUILDING_THEME_LEGEND.map((entry) => Object.freeze({
-    label: m[entry.key],
+    label: permitProjectLabel(entry.key),
     color: entry.color,
-    blurb: m[`${entry.key}Blurb`],
   }));
 }
 
@@ -790,7 +818,7 @@ export function adsBuildingThemePoints(payload) {
       ledger.unplaced += 1;
       continue;
     }
-    if (!adsBuildingThemeColorFor(permit?.state)) {
+    if (!adsBuildingThemeColorFor(adsPermitStyle(permit).classId)) {
       ledger.unpublishedState += 1;
       continue;
     }
@@ -873,47 +901,153 @@ export function adsBuildingThemeLine(ledger = _themeLedger) {
 }
 
 /**
- * The layer's own colour key.
+ * The layer's own colour key: one plain line per class drawn, folded under
+ * « Couleurs des projets ».
  *
- * Six rows, because the marker palette has six colours and the marker is what
- * this row is about — the volumes have their key on the Bâti 3D row, which is
- * where the paint is. The sixth row, "état non publié", is the one that has to
- * be here: it is a colour on screen that the theme deliberately does NOT paint,
- * and a reader has to be able to look it up.
+ * NO COUNT AND NO SENTENCE per class (the legend rule of 2026-09-21): the
+ * paragraphs that used to follow each swatch — why a class is empty outside
+ * three métropoles, why a roof is not painted — were written for the author
+ * of the layer, and a reader skipped all six of them. The same classes, in the
+ * same words and colours, come from the Sitadel parcels beside this layer, and
+ * the key prints them once (`mergeTileMembers` in manager.js).
  *
  * @param {?object} payload
- * @returns {{chips: Array<object>, legend: Array<object>}}
+ * @returns {{chips: Array<object>, legend: Array<object>, legendFold: string, surfaceFill: boolean}}
  */
-export function adsRowControls(payload) {
-  const counts = new Map();
-  for (const permit of payload?.permits || []) {
-    const color = adsStateStyle(permit?.state).color;
-    counts.set(color, (counts.get(color) || 0) + 1);
-  }
-  const m = messages().theme;
-  const legend = adsBuildingThemeLegend().map((entry) => ({
-    label: entry.label,
-    color: entry.color,
-    count: counts.get(entry.color) || 0,
-    blurb: entry.blurb,
-  }));
-  legend.push({
-    label: m.unpublished,
-    color: STATE_UNKNOWN.color,
-    count: counts.get(STATE_UNKNOWN.color) || 0,
-    blurb: m.unpublishedBlurb,
-  });
-  // The plot wash IS a ground-classified area fill, so on the photoreal stack it
-  // climbs the façades and the manager's drape notice applies — wherever there
-  // is a plot at all, which since the cadastral placement is most of France and
-  // not Bordeaux alone. Claimed only when there is a wash to claim it for. The theme these colours also paint is
-  // NOT a drape: extruded volumes are real geometry that the mesh occludes
-  // instead of receiving (`surfaceFillNotice.js`).
+export function adsRowControls(payload, onParcel = null) {
+  const present = new Set((payload?.permits || [])
+    .filter((permit) => !adsDrawnElsewhere(permit, onParcel))
+    .map((permit) => adsPermitStyle(permit).classId));
+  // The plot wash IS a ground-classified area fill, so on the photoreal stack
+  // it climbs the façades and the manager's drape notice applies — wherever
+  // there is a plot at all. Claimed only when there is a wash to claim it for.
+  // The theme these colours also paint is NOT a drape: extruded volumes are
+  // real geometry that the mesh occludes instead of receiving
+  // (`surfaceFillNotice.js`).
   return {
     chips: [],
-    legend,
+    legend: permitProjectLegend(present),
+    legendFold: permitProjectFoldTitle(),
     surfaceFill: (payload?.emprises?.length || 0) > 0,
   };
+}
+
+/** Precisions whose marker is not on the dossier's own ground. */
+const APPROXIMATE_PRECISIONS = new Set(['street', 'locality', 'mere']);
+
+/**
+ * « Sitadel — SDES » → « Sitadel · SDES »; a portal's dataset title → its
+ * authority, and « + Sitadel » kept when the two registers merged the file.
+ * @param {?string} label
+ * @returns {string}
+ */
+function adsSourceShort(label) {
+  const heads = String(label ?? '').split('+')
+    .map((part) => part.split('—')[0].trim())
+    .filter(Boolean);
+  if (!heads.length) return 'Sitadel · SDES'; // i18n-ignore-line — publisher names
+  return heads.map((head) => (head === 'Sitadel' ? 'Sitadel · SDES' : head)).join(' · '); // i18n-ignore-line — publisher names
+}
+
+/**
+ * The card of one dossier, as the map key prints it — see
+ * `permitProjectCard`, which the Sitadel parcels fill the same way.
+ * @param {object} permit
+ * @param {{others?: number}} [extra]
+ * @returns {object}
+ */
+export function adsPermitPanel(permit, { others = 0 } = {}) {
+  const { classId } = adsPermitStyle(permit);
+  const card = messages().card;
+  const emprise = messages().emprise;
+  return permitProjectCard({
+    key: `ads:${permit.id}`,
+    type: adsKindLabel(permit.kind) ?? permit.kindLabel ?? permitProjectLabel(classId),
+    classId,
+    dwellings: Number.isFinite(permit.housing) ? permit.housing : null,
+    surfaceM2: Number.isFinite(permit.surfaceCreatedM2) ? permit.surfaceCreatedM2 : null,
+    nature: adsPurposeLabel(permit.purpose),
+    address: permit.address || null,
+    commune: permit.commune || null,
+    dates: {
+      filed: permit.depositedOn,
+      granted: permit.decidedOn,
+      started: permit.startedOn,
+      completed: permit.completedOn,
+    },
+    approximate: APPROXIMATE_PRECISIONS.has(String(permit.precision ?? '')),
+    details: [
+      adsStateLabel(permit),
+      adsPrecisionLine(permit),
+      permit.parcels?.length ? card.parcel(permit.parcels.join(', ')) : null,
+      adsEmpriseLine(permit),
+      others > 0 ? emprise.files(others + 1) : null,
+      permit.applicant,
+      permit.dossier,
+    ].filter(Boolean),
+    source: adsSourceShort(permit.sourceLabel),
+  });
+}
+
+/** The card the shell has open, resolved to its dossier. */
+let _selection = null;
+/** The payload the last render drew, so a selection resolves against it. */
+let _drawnPayload = null;
+/** The data source the last render drew into — for the selected badge. */
+let _drawnSource = null;
+/** Stops following the Sitadel parcels' drawn dossiers. */
+let _stopSitadelWatch = null;
+let _redrawQueued = false;
+
+/**
+ * The dossier behind a card: a badge's own, or — for a plot — the dossier
+ * that lends the plot its colour, with the count of the others on it.
+ * @param {?object} card
+ * @param {?object} payload
+ * @returns {?{permit: object, others: number}}
+ */
+export function adsResolveSelection(card, payload) {
+  const id = String(card?.id ?? '');
+  const permits = payload?.permits || [];
+  if (id.startsWith('ads:')) {
+    const permit = permits.find((entry) => `ads:${entry.id}` === id) || null;
+    return permit ? { permit, others: 0 } : null;
+  }
+  const plot = /^ads-emprise:(\d+)/.exec(id);
+  if (plot) {
+    const on = permits.filter((entry) => String(entry.empriseId) === plot[1]);
+    const lead = empriseStyle(on).permit;
+    return lead ? { permit: lead, others: on.length - 1 } : null;
+  }
+  return null;
+}
+
+/**
+ * The shell's selection hook: resolve the card, and keep the selected badge in
+ * its own colours — the shell tints a selected marker, which on a badge that
+ * already wears its class would turn violet into a colour of no class.
+ * @param {?object} card
+ */
+function onAdsSelectionChange(card) {
+  _selection = card ? adsResolveSelection(card, _drawnPayload) : null;
+  if (!card || !_drawnSource) return;
+  const entity = _drawnSource.entities?.getById?.(card.id);
+  if (entity?.billboard) entity.billboard.color = Cesium.Color.WHITE;
+}
+
+/**
+ * What the globe keeps over the selected dossier while the key carries its
+ * card: « 40 logements », and « Repère approximatif » when it is.
+ * @returns {string|boolean}
+ */
+function adsCompactCard() {
+  if (!_selection || !mapKeyCarriesSelection()) return false;
+  const { permit } = _selection;
+  return permitProjectTag({
+    dwellings: Number.isFinite(permit.housing) ? permit.housing : null,
+    classId: adsPermitStyle(permit).classId,
+    approximate: APPROXIMATE_PRECISIONS.has(String(permit.precision ?? '')),
+  });
 }
 
 const adsScanLayer = createAddressScanLayer({
@@ -933,45 +1067,53 @@ const adsScanLayer = createAddressScanLayer({
     months: runtime.months ?? ADS_WINDOW_DEFAULT,
   }),
 
-  // The layer's own colour key. Four of the five scan layers draw badge markers
-  // whose shape is their caption; this one spends COLOUR on the state of the
-  // dossier, and it now spends the same colour on whole roofs, so D1 makes the
-  // key compulsory rather than optional.
-  // The chips build from the runtime alone, so they exist before the first
+  // The layer's own colour key. This layer spends COLOUR on the class of the
+  // dossier, and the same colour on whole roofs, so D1 makes the key
+  // compulsory rather than optional.
+  // The period builds from the runtime alone, so it exists before the first
   // scan; the colour key is built from the payload that was actually drawn and
-  // is simply absent while nothing is.
+  // is simply absent while nothing is. The open card rides with the key.
   rowControls: (runtime, summary, payload) => ({
-    ...(payload ? adsRowControls(payload) : {}),
-    chips: adsWindowChips(runtime.months, summary),
+    ...(payload ? adsRowControls(payload, askJoin(PERMIT_DRAWN_ON_PARCEL_JOIN)) : {}),
+    chips: [],
+    select: adsPeriodSelect(runtime.months, summary),
+    legendSelection: payload && _selection ? adsPermitPanel(_selection.permit, _selection) : null,
   }),
+  onSelectionChange: onAdsSelectionChange,
+  compactCard: adsCompactCard,
 
   render({ payload, dataSource, viewer }) {
     // The volumes first, because the registry notifies the BD TOPO layer
     // synchronously and a repaint costs nothing while this data source is still
     // empty. Re-registering with the new points IS the data-changed signal.
     const card = messages().card;
+    _drawnPayload = payload;
+    _drawnSource = dataSource;
     syncAdsBuildingTheme(payload);
     // The ground next, the news on top of it. Emprises are counted separately
     // from the returned total: the number this callback reports is what the
     // manager shows as the layer's count, and that has always been dossiers.
-    drawAdsEmprises(dataSource, payload, gpuClassificationTypeForScene(viewer?.scene));
+    const onParcel = askJoin(PERMIT_DRAWN_ON_PARCEL_JOIN);
+    drawAdsEmprises(dataSource, payload, gpuClassificationTypeForScene(viewer?.scene), onParcel);
     let drawn = 0;
     for (const permit of payload.permits || []) {
       if (!Number.isFinite(permit.lon) || !Number.isFinite(permit.lat)) continue;
-      const style = adsStateStyle(permit.state);
+      if (adsDrawnElsewhere(permit, onParcel)) continue;
+      const style = adsPermitStyle(permit);
       dataSource.entities.add({
         id: `ads:${permit.id}`,
         position: Cesium.Cartesian3.fromDegrees(permit.lon, permit.lat),
         billboard: {
-          // A CRANE, not a disc. Turn this layer on with DVF and DPE and all
-          // three drew coloured dots over the same roofs; colour is already
-          // spent on the pipeline state here, so the shape carries the
-          // register. See `addressMarkerIcons.js`.
-          image: addressMarkerGlyph('crane'),
-          width: style.size,
-          height: style.size,
-          // The glyph is white line-art; this tint IS the state channel.
-          color: Cesium.Color.fromCssColorString(style.color),
+          // A BADGE, the approved mock's « pastille » (2026-09-23): a rounded
+          // square in the class colour with a building on it, the same mark
+          // the Sitadel parcels draw — see `permitProjects.js`. The colour is
+          // IN the image, so the billboard is not tinted.
+          image: permitBadgeImage(style.classId),
+          width: PERMIT_BADGE_PX,
+          height: PERMIT_BADGE_PX,
+          // Smaller from afar: a 400 m disc of badges seen from 8 km would
+          // otherwise be one blot.
+          scaleByDistance: BADGE_SCALE,
           // POSITIVE_INFINITY, not a distance: these are annotations ON the
           // world, not objects in it, and a finite value lets the terrain eat
           // the bottom half of every glyph at city zoom.
@@ -980,6 +1122,7 @@ const adsScanLayer = createAddressScanLayer({
         properties: {
           kind: 'ads-permit',
           state: permit.state,
+          classId: style.classId,
           family: permit.kind,
           housing: permit.housing,
           sources: permit.sources,
@@ -1093,6 +1236,18 @@ const adsUrbanismeLayer = {
 
   enable(viewer) {
     adsScanLayer.enable(viewer);
+    // The Sitadel parcels announce each new draw; the badges they cover are
+    // taken off here, from the answer already in hand. Coalesced: a republish
+    // is a take-down and a put-back, two announcements for one change.
+    _stopSitadelWatch?.();
+    _stopSitadelWatch = watchJoin(PERMIT_DRAWN_ON_PARCEL_JOIN, () => {
+      if (_redrawQueued) return;
+      _redrawQueued = true;
+      queueMicrotask(() => {
+        _redrawQueued = false;
+        adsScanLayer.redraw('sitadel-parcels');
+      });
+    });
     // Registered empty rather than not at all: the row's key, the "no data"
     // wash and the count of unpainted volumes have to appear the moment the
     // layer is switched on, not one scan later. The first `render()` replaces
@@ -1101,6 +1256,8 @@ const adsUrbanismeLayer = {
   },
 
   disable() {
+    _stopSitadelWatch?.();
+    _stopSitadelWatch = null;
     // The paint goes first. Whatever the shell does or fails to do while
     // tearing down its own listeners, the city must not be left wearing the
     // colours of a layer that is off.
@@ -1109,6 +1266,8 @@ const adsUrbanismeLayer = {
   },
 
   destroy(viewer) {
+    _stopSitadelWatch?.();
+    _stopSitadelWatch = null;
     clearAdsBuildingTheme();
     adsScanLayer.destroy(viewer);
   },
@@ -1135,12 +1294,12 @@ const adsUrbanismeLayer = {
       // The disc the question was asked over, against which the unpainted city
       // has to be read (A4).
       themeScanRadiusM: ADS_DEFAULT_RADIUS_M,
-      // Appended rather than assigned: whatever the shell is already saying
-      // about the scan itself comes first, because "this scan is incomplete"
-      // outranks "this theme is incomplete".
-      ...(line
-        ? { loadingLabel: stats.loadingLabel ? `${stats.loadingLabel} · ${line}` : line }
-        : {}),
+      // The ledger in words, for the analyst surfaces. NOT on the row's meta
+      // line any more: since 2026-09-23 this layer's row is « Urbanisme », read
+      // by anybody, and « 8 des 17 dossiers peignent le bâti 3D · retenus : 9
+      // en construction neuve » under it answered a question nobody on that
+      // row had asked. The Bâti 3D row still counts what it painted.
+      ...(line ? { themeLine: line } : {}),
     };
   },
 };

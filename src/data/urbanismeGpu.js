@@ -366,6 +366,20 @@ export function zoneFamilySentence(kind) {
 }
 
 /**
+ * A family's line in the key: its plain name, or « Famille non publiée ».
+ * @param {string|null} kind The register's `typezone`.
+ * @returns {string}
+ */
+export function zoneLegendLabel(kind) {
+  const families = messages().legend.families;
+  const key = String(kind || '').toUpperCase();
+  // AUc is the open future-urban zone, the one `AU` means today: same colour,
+  // same line.
+  const named = byUpperKey(families)[key === 'AUC' ? 'AU' : key];
+  return named || messages().legend.unknownFamily;
+}
+
+/**
  * An approval date as a person writes one.
  *
  * The register publishes `datvalid` two ways in the same national schema —
@@ -913,29 +927,24 @@ export function gpuRowControls(runtime, payload) {
   const servitudes = payload.servitudes || [];
   const legend = [];
   if (halves.zoning) {
-    const byKind = new Map();
+    // ONE LINE PER COLOUR, IN WORDS, most of the view first (the legend rule of
+    // 2026-09-21). It used to be the register's letters with a count and the
+    // family's sentence under each — « AUS 1 » over two lines of explanation
+    // — and `AU` and `AUc`, one colour, took two lines. The sentence is still
+    // on the card of every zone, where a reader asks for it.
+    const byColor = new Map();
     for (const zone of zones) {
-      const kind = String(zone?.kind || '').toUpperCase() || '?';
-      byKind.set(kind, (byKind.get(kind) || 0) + 1);
+      const color = zoneColorCss(zone?.kind);
+      const entry = byColor.get(color) || { count: 0, label: zoneLegendLabel(zone?.kind) };
+      entry.count += 1;
+      byColor.set(color, entry);
     }
-    legend.push(...[...byKind.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([kind, count]) => ({
-        label: kind === '?' ? m.legend.unknownFamily : kind,
-        color: zoneColorCss(kind),
-        count,
-        // The national grammar, which IS standard across communes — the one
-        // part of a PLU that can be spelled out without inventing.
-        blurb: zoneFamilySentence(kind) || m.legend.unknownFamilyBlurb,
-      })));
+    legend.push(...[...byColor.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([color, entry]) => ({ label: entry.label, color })));
   }
   if (halves.servitudes && servitudes.length) {
-    legend.push({
-      label: m.legend.easement,
-      color: SERVITUDE_COLOR,
-      count: servitudes.length,
-      blurb: m.legend.easementBlurb,
-    });
+    legend.push({ label: m.legend.easement, color: SERVITUDE_COLOR });
   }
   const hidden = [
     !halves.zoning && zones.length ? m.legend.zonesHidden(zones.length) : null,

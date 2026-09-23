@@ -796,10 +796,9 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'periodic',
     closeRange: true,
   }),
-  // « Urbanisme » flat, and no longer "Urbanisme (PLU & servitudes)": since the
-  // second round of fusions this row carries the permits as well, and a name
-  // that listed only the zoning would have described one chip out of three.
-  // What the row holds is said on the strip, where each half can be switched.
+  // The zoning, a tile of the « Urbanisme » row below since 2026-09-23 — the
+  // row belongs to `ads-fr`, which sits right after it, so the row keeps the
+  // place it had in its group.
   Object.freeze({
     id: 'urbanisme-gpu',
     category: 'built-environment',
@@ -809,7 +808,9 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     cadence: 'periodic',
     closeRange: true,
   }),
-  // Beside the PLU rather than beside DVF, and `periodic` although a Paris
+  // « Urbanisme »: the row's primary since 2026-09-23 (`layerFusions.js`), its
+  // name in `layerTaxonomy.i18n.js`. Beside the PLU rather than beside DVF,
+  // and `periodic` although a Paris
   // dossier can be a week old: the layer's floor is Sitadel, republished
   // monthly. The three métropole portals underneath it refresh daily, but a
   // cadence facet that claimed `live` because three communes out of 34 969 are

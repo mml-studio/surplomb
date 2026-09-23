@@ -12,16 +12,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { assertNoFrench, useTestLocale, withLocale } from '../i18n/testing.js';
 import {
-  SITADEL_METRES_PER_DWELLING,
-  SITADEL_PRISM_BASE_M,
-  SITADEL_PRISM_MAX_M,
+  _clearSitadelSelectionForTest,
+  _setSitadelStateForTest,
+  _sitadelRecordForTest,
+  _sitadelRecordIdsForTest,
   buildSitadelLoadingLabel,
   sitadelDetectLabel,
-  sitadelHeightLegend,
   sitadelJoinLines,
+  sitadelPermitPanel,
 } from './sitadelFrance.js';
 import {
-  SITADEL_SIZE_CEILING_LGT,
   indexCadastreParcels,
   projectSitadelCommune,
 } from './sitadelFeed.js';
@@ -76,31 +76,23 @@ test('a municipality where nothing was placed still gets a line, and it says 0',
   assert.equal(withLocale('en', () => sitadelJoinLines(empty, { y: '2013' })).length, 2);
 });
 
-test('the height key publishes its scale in English, cap and clipping included', (t) => {
+test('a permit’s card in the key reads in English, with the same file behind it', (t) => {
   useTestLocale('en', t);
-  const legend = sitadelHeightLegend({
-    parcels: 14, permits: 14, prisms: 10, clipped: 1, tallestM: 200,
-    demolition: 3, noDwellings: 1, coldFloor: 2,
-  });
-  const [scale, flat, cold] = legend;
-  // A height scale is not a colour, so these rows carry none.
-  assert.equal(scale.color, null);
-  assert.equal(scale.label, `Height = dwellings authorized · 1 dwelling = ${SITADEL_METRES_PER_DWELLING} m`);
-  assert.ok(scale.blurb.includes(`${SITADEL_PRISM_BASE_M} m square column per file`), scale.blurb);
-  assert.ok(scale.blurb.includes(`capped at ${SITADEL_PRISM_MAX_M} m (${SITADEL_SIZE_CEILING_LGT} dwellings`),
-    scale.blurb);
-  assert.ok(scale.blurb.endsWith('· 1 column capped, the card keeps the true count.'), scale.blurb);
-  assert.equal(flat.label, 'No height — parcel left flat, outlined in its own color');
-  assert.ok(flat.blurb.includes('33 columns and not one that counts a dwelling'), flat.blurb);
-  assert.equal(cold.label, 'Ground not resolved yet — no column meanwhile');
-  assertNoFrench(legend);
-});
-
-test('an uncapped key says so, rather than staying silent about the cap', () => {
-  const blurb = withLocale('en', () => sitadelHeightLegend({
-    parcels: 14, permits: 14, prisms: 10, clipped: 0, demolition: 0, noDwellings: 0, coldFloor: 0,
-  })[0].blurb);
-  assert.ok(blurb.endsWith('· no column capped here.'), blurb);
+  _setSitadelStateForTest({ payload: PACK });
+  const record = _sitadelRecordIdsForTest()
+    .map((id) => _sitadelRecordForTest(id))
+    .find((entry) => entry.permit.lgt === 27);
+  const card = sitadelPermitPanel(record, PACK);
+  assert.equal(card.kicker, 'Building permit');
+  assert.equal(card.title, '27 dwellings authorized');
+  assert.deepEqual(card.steps.items.map((step) => step.label),
+    ['Permit granted', 'Start of work declared', 'End of work']);
+  assert.equal(card.list.summary, 'See the permit details');
+  assert.ok(card.list.items.some((item) => item.text.startsWith('Nantes: 9 of 14 permits placed')),
+    card.list.items.map((item) => item.text).join(' | '));
+  assert.equal(card.source, 'Source: Sitadel · SDES');
+  assertNoFrench([card.kicker, card.title, card.badge.label, ...card.steps.items.map((step) => step.label)]);
+  _clearSitadelSelectionForTest();
 });
 
 test('the row line and the DETECT fallback answer in English', (t) => {
@@ -108,7 +100,7 @@ test('the row line and the DETECT fallback answer in English', (t) => {
   assert.equal(buildSitadelLoadingLabel({ payload: null, status: 'no-view', loading: false }),
     'The center of the screen does not meet the ground — aim at the terrain');
   const line = buildSitadelLoadingLabel({
-    payload: PACK, status: 'ready', loading: false, commune: 'Nantes', tally: null,
+    payload: PACK, status: 'ready', loading: false, commune: 'Nantes',
   });
   assert.ok(line.startsWith('Nantes · 9 permits placed on'), line);
   assert.ok(line.includes('municipal outline simplified'), line);

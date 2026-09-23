@@ -75,159 +75,51 @@
  * 3 032 parcels, so the collision is rare and naming it is cheaper than
  * inventing a rule for it.
  *
- * The DOT is one per placed permit, sized by DWELLINGS CREATED —
- * `NB_LGT_TOT_CREES` under `sitadelPointSize`'s square root and its 200-dwelling
- * ceiling. It carries the layer above the street: a Nantes parcel is 800 m²
- * and sub-pixel at 12 000 m, so without the dot the layer would be invisible
- * for the whole top half of its own altitude range. A demolition draws at the
- * minimum and its card says why — the permis de démolir file has 33 columns
- * and not one of them counts a dwelling.
+ * ── The mark: one badge per permit, and the parcel under it ───────────────
  *
- * The HEIGHT is the same number on a channel the perspective does not eat.
+ * Since the approved mock of « Urbanisme » (2026-09-23) a permit is a BADGE —
+ * a rounded square in its band colour with a building on it, struck through
+ * for a demolition — standing on the anchor of the largest parcel it names,
+ * with the parcel washed and outlined in the same colour under it. The badge
+ * and its colours are `permitProjects.js`'s, which `ads-fr` draws too: the
+ * row's two permit layers now wear ONE palette, and the key prints it once.
  *
- * ── The dossier stands a column, and the parcel stays flat ─────────────────
+ * WHAT IT REPLACED. A dot sized by the square root of the dwellings created,
+ * and a 12 m opaque COLUMN per dossier, one metre per dwelling. Both were
+ * honest encodings (the column was already the fix for extruding the parcel
+ * itself, which had drawn a 45-dwelling permit in Ustaritz as 404 000 m³ of
+ * orange), and neither read: a street of columns of four colours is a skyline,
+ * not an answer, and the operator asked for the mock's marks. The dwelling
+ * count moved to where it is read as a number — the tag the globe keeps over
+ * a selected permit (« 40 logements ») and the first line of its card.
  *
- * A dwelling count is an ABSOLUTE quantity, and the doctrine gives an absolute
- * exactly one honest channel: size. On a globe the screen-size channel is
- * already spent on depth, so what is left is extrusion.
+ * ONE SIZE FOR EVERY BADGE, scaled down with distance so a commune seen from
+ * 10 km is not one blot. A demolition is a badge like the others: the file has
+ * 33 columns and none counts a dwelling, and the card says what it removes.
  *
- * THE FIRST VERSION EXTRUDED THE PARCEL ITSELF, and that was wrong in a way its
- * own paragraph did not notice: a prism is a VOLUME, volume is base × height,
- * so the ink on screen was the dwelling count MULTIPLIED BY THE SIZE OF THE
- * PLOT — a number the register says nothing about. Measured on the packs this
- * header already quotes, over the parcels actually extruded, the base area ran
- * p50 403 m² / max 40 400 m² in Paris, p50 395 m² / max 153 173 m² in Nantes
- * (388× the median), p50 637 m² / max 24 955 m² in Ustaritz. Two permits for
- * one dwelling each drew marks 388 apart, and the biggest single mark in Nantes
- * was 25 426 754 m³ of opaque colour for one file.
+ * A BADGE NEEDS A FLOOR, and a cold floor is not a floor. Billboards draw
+ * through depth (`disableDepthTestDistance: Infinity`), so a badge built at
+ * the ellipsoid — 44–55 m under metropolitan France — slides across the
+ * rooftops with every camera move: measured over Paris on 2026-09-14, all
+ * 4 753 dots of the old layer sat at 1.0 m while the drawn mesh read
+ * 76.7–96.9 m. `sitadelFloorM` is the floor every mark reads — badge, card,
+ * DETECT callout — and `reanchorPoints` re-seats the badges already on screen
+ * once their floor lands.
  *
- * The report that ended it came from Ustaritz: dossier 06454721B0037, 45
- * logements over three adjoining parcels, drawn as one 45 m block of 404 000 m³
- * over a village of 8 m houses — « un gros rectangle qui n'a aucun sens ». The
- * register's own `SURFACE_PLANCHER_CREEE` for that file is 3 308 m².
+ * ── The period ──────────────────────────────────────────────────────────────
  *
- * AND THE HEIGHT WAS DRAWN ONCE PER PARCEL, so a dossier naming three plots
- * claimed its dwellings three times: ×1.87 in Ustaritz (932 dwellings of prism
- * for 499 authorised), ×1.73 in Nantes, ×1.30 in Paris.
- *
- * So the two claims are separated, which is what they always were. The PARCEL
- * keeps the ground: a classified wash in its lifecycle colour, its own edge,
- * its own card — that is "this plot". The DOSSIER stands a COLUMN of
- * {@link SITADEL_PRISM_BASE_M} metres square on its anchor, one per permit —
- * that is "this many dwellings". Volume is then proportional to the count and
- * to nothing else. `choroplethPrism.js` calls this option (b), NORMALISE THE
- * BASE, and rejects it for départements because there the polygon IS the map;
- * here the polygon is still drawn under the mark, so the objection does not
- * apply and the exactness is free.
- *
- * WHY 1 METRE PER DWELLING, LINEARLY. The dot uses a square root because a disc
- * encodes through its AREA, and doubling a radius quadruples the ink. A
- * column's height is a LENGTH: it reads directly, twice as tall is twice as
- * many, and square-rooting it would make the tallest column claim 14 times a
- * 1-dwelling one instead of 200. The unit is chosen so the column can be read
- * against the city it stands in rather than against itself: a Nantes block is
- * 10–30 m of BD TOPO volume, so a 27-dwelling permit is a 27 m column — the
- * size of the thing it replaces — and the commune's largest, at 553, is clipped
- * at 200 m, which is 56 m above the Tour Bretagne. Anything steeper would put a
- * housing estate through the cloud layer; anything flatter would make 57 % of
- * permits (the ones creating exactly one dwelling) an invisible film.
- *
- * The ceiling is {@link SITADEL_SIZE_CEILING_LGT} — the feed's own measured
- * constant, 99th percentile 190 dwellings over 22 474 permits, largest 659 —
- * so the dot and the column saturate on the same number. Every clipped column
- * is counted on the row and the card still prints the true count (A5).
- *
- * WHY THE DOT KEEPS ITS SIZE ANYWAY. Two channels for one datum is redundancy,
- * and redundancy is only defensible when the two are legible at different
- * distances — which here is arithmetic, not taste. At the 12 000 m gate a 60°
- * FOV over a 720 px canvas covers 13 856 m of ground: 19.2 m per pixel, so a
- * 200 m column is 10 px of screen height and the median 1-dwelling column is
- * 0.05 px. At 300 m the same canvas covers 346 m: 0.48 m per pixel, the
- * 1-dwelling column is 2 px tall and 25 px wide, and the 800 m² parcel it
- * stands on is ~58 px across. The dot is the layer at the top of the range, the
- * column is the layer at the bottom, and neither is doing the other's job.
- *
- * ── A permit with no height, and why it is not drawn at zero ────────────────
- *
- * Height means dwellings authorised. A plot with no height is a plot whose file
- * publishes no dwelling count — ONE meaning, and there are exactly two ways to
- * arrive at it:
- *
- * • a **permis de démolir**, whose file has 33 columns and no dwelling among
- *   them (this is structural, not missing data);
- * • a **housing permit at zero**. `sitadelFeed.js` reads
- *   `finiteOrNull(NB_LGT_TOT_CREES) ?? 0`, so a published zero and a blank cell
- *   arrive here as the same number and this layer cannot separate them. Over
- *   the 17 housing rows shipped as fixtures, 1 publishes an explicit `0` and
- *   none is blank; the row says "aucun logement créé ou non publié" rather than
- *   choosing one of the two.
- *
- * Neither gets a column of height 0, which would be an invisible claim. They
- * keep the ground fill and the parcel outline they have always had — a
- * ground-classified surface at {@link SITADEL_FILL_ALPHA}, which is a drawn,
- * clickable, coloured object and not an absence — and their PARCEL EDGE is
- * stroked in their own band colour instead of the neutral `#0b1220`. "Outlined
- * in its own colour" therefore reads as "this plot has no height, and the fill
- * tells you which kind": red is a demolition, the four pipeline colours are a
- * housing permit that creates nothing.
- *
- * A fixed-height ghost volume was the other candidate and was rejected: any
- * constant height is a number on the very scale the file did not publish, which
- * is A1 in three dimensions — the same mistake the representation audit (#78) refuses to
- * make with the GPU's non-existent constructible envelope.
- *
- * Measured on the Nantes pack shipped as fixtures — 9 placed permits over 14
- * parcels — 6 dossiers stand a column, 2 are demolitions and 1 is a
- * déclaration préalable creating zero dwellings. Tallest column 27 m, nothing
- * clipped. The wash is still drawn under all 14 plots, and the row prints both
- * totals: the parcels washed, and the dossiers that carry a height.
- *
- * ── A column needs a floor, and a cold floor is not a floor ─────────────────
- *
- * A `GroundPrimitive` is clamped by the renderer; an extruded polygon is not —
- * it is placed at absolute ellipsoidal heights and it has to be told where the
- * ground is. That comes from `sitadelFloorM`, read at the DOSSIER's own anchor,
- * which is also where its dot stands — one permit, one floor, two marks that
- * cannot disagree. (It used to be read per parcel, because the volume was the
- * parcel; a permit naming three plots across a slope had three floors and could
- * sink two of them. One column removes the question.) When no source can answer
- * the dossier stands NO column rather than one extruded from the ellipsoid,
- * which in metropolitan France is 44–55 m underground and would draw a
- * 27-dwelling permit as a hole. One retry three seconds later, once per
- * commune, in the shape `bdtopoBuildings.js` already uses for the same problem.
- *
- * THE DOTS NEEDED THE SAME DISCIPLINE AND DID NOT HAVE IT (2026-09-14). The
- * paragraph above used to say the dots "already stand on" that grid. They did
- * not: they took `0` for a cold cell — the ellipsoid — and, unlike a column,
- * nothing ever moved them afterwards. Measured over Paris, all 4 753 of them
- * sat at ellipsoidal height 1.0 m for a whole session while the drawn mesh
- * under them read 76.7–96.9 m, and because they paint through depth they slid
- * across the rooftops with every camera move. `sitadelFloorM` is the floor all
- * four marks now read — dot, column, card, DETECT callout — and `reanchorPoints`
- * is the pass that moves a dot already on screen once its floor lands.
+ * The pack is the whole commune since 2013; the row's « Période » (the same
+ * three windows as `ads-fr`, whose share-link option this layer mirrors)
+ * keeps the permits AUTHORISED inside the window and draws nothing else. The
+ * filter runs on the pack in hand: changing the period costs a redraw and no
+ * request.
  *
  * ── What changes under the photorealistic stack ─────────────────────────────
  *
- * The flat parcels stay ground-classified, so on Google 3D they classify as
+ * The parcels stay ground-classified, so on Google 3D they classify as
  * `CESIUM_3D_TILE` and the wash climbs the façades — the drape defect
  * `surfaceFillNotice.js` describes, which is why `getRowControls` declares
- * `surfaceFill` whenever any parcel is still flat.
- *
- * The COLUMNS do not have that defect at all, and this is the part worth
- * stating plainly: an extruded polygon is not a classification volume, it
- * carries no `classificationType`, and it is not draped on anything. It is
- * opaque geometry in the world, depth-tested against the photoreal mesh — so a
- * 12 m column behind a 30 m tileset building is HIDDEN by it instead of painted
- * on it (CARTOGRAPHY F1(a), F4). The colour a reader decodes off a column is
- * the colour that was declared, on every stack. Going 3D removes the constraint
- * rather than adding one; the batched-`GroundPrimitive`-colours-by-bounding-
- * rectangle trap does not exist here either, because per-instance colour on a
- * plain `Primitive` addresses the polygon itself.
- *
- * Opaque, and not translucent, for the reason `bdtopoBuildings.js` measured:
- * an alpha below 1 moves geometry into Cesium's translucent pass, which does
- * not write depth, and a street of see-through boxes reads as one mass with
- * everything showing through everything.
+ * `surfaceFill` whenever a parcel is washed.
  *
  * The commune OUTLINE is not decoration. It is the scope of the answer, and
  * without it the neighbouring commune reads as "nothing was authorised here"
@@ -317,18 +209,31 @@ import { powerClassificationTypeForScene, powerClassificationTypeForStack } from
 import {
   SITADEL_BANDS,
   SITADEL_LICENCE,
-  SITADEL_SIZE_CEILING_LGT,
   SITADEL_SOURCE,
   buildSitadelPermitCard,
+  buildSitadelPermitDetails,
   finiteOrNull,
-  sitadelBandBlurb,
   sitadelBandColor,
   sitadelBandLabel,
   sitadelLoadingLabel,
+  sitadelNatureLabel,
   sitadelPermitTitle,
-  sitadelPointSize,
+  sitadelTypeLabel,
   sitadelUnplacedLines,
 } from './sitadelFeed.js';
+import {
+  PERMIT_BADGE_PX,
+  PERMIT_BADGE_SELECTED_PX,
+  permitBadgeImage,
+  permitClassOfSitadelBand,
+  permitProjectCard,
+  permitProjectFoldTitle,
+  permitProjectLegend,
+  permitProjectTag,
+  PERMIT_DRAWN_ON_PARCEL_JOIN,
+} from './permitProjects.js';
+import { mapKeyCarriesSelection, watchMapKeyCarriesSelection } from './mapKeySelection.js';
+import { dossierKey } from './adsFeed.js';
 import { formatNumber, formatPercent } from '../i18n/format.js';
 import messages from './sitadelFrance.i18n.js';
 import { pickAt } from './pickAt.js';
@@ -390,116 +295,28 @@ export const SITADEL_OUTLINE_COLOR = '#7f8ea3';
 const OUTLINE_WIDTH_PX = 2;
 const OUTLINE_ALPHA = 0.75;
 
-/** Parcel edge, so two adjacent plots in the same band stay two plots. */
-const PARCEL_EDGE_COLOR = '#0b1220';
-const PARCEL_EDGE_ALPHA = 0.55;
-const PARCEL_EDGE_WIDTH_PX = 1.5;
-
 /**
- * The edge of a plot that carries NO height, in its own band colour.
- *
- * The second sign of "this file publishes no dwelling count", and the one that
- * survives a nadir camera — from straight above a column and a plot with none
- * look alike, and an outline does not. Brighter and half a pixel wider than the
- * neutral edge so it reads as a deliberate stroke rather than as the shared one
- * tinted by the fill under it.
+ * Parcel edge, in the parcel's own band colour: the mock outlines each plot in
+ * the colour of the badge standing on it, and two adjacent plots in the same
+ * band still read as two.
  */
-const PARCEL_EDGE_ALPHA_NO_HEIGHT = 0.95;
-const PARCEL_EDGE_WIDTH_NO_HEIGHT_PX = 2;
+const PARCEL_EDGE_ALPHA = 0.9;
+const PARCEL_EDGE_WIDTH_PX = 1.8;
 
 const SELECTED_COLOR = '#00ffff';
 const SELECTED_WIDTH_PX = 5;
-const SELECTED_POINT_BONUS_PX = 5;
-const POINT_OUTLINE_COLOR = Cesium.Color.fromCssColorString('#0b1220').withAlpha(0.85);
 
-/** Dot radius range, in pixels. 5 px is one dwelling, 22 px is 200 or more. */
-export const SITADEL_POINT_MIN_PX = 5;
-export const SITADEL_POINT_MAX_PX = 22;
+/** A badge at full size up to 500 m of camera distance, 40 % of it from 10 km. */
+const BADGE_SCALE = new Cesium.NearFarScalar(500, 1, 10_000, 0.4);
 
 /**
- * Metres of column per dwelling authorised. LINEAR — see the header.
- *
- * One metre is a scale a reader can hold: a column is as many metres tall as
- * the permit creates dwellings, so it can be read against the BD TOPO volumes
- * beside it (a Nantes block is 10–30 m) without a ruler.
+ * The windows of the row's « Période », the same three as `ads-fr`: 3 years,
+ * 6 years, and the whole of Sitadel (13 years). A closed set, like every
+ * param reachable from a share link.
  */
-export const SITADEL_METRES_PER_DWELLING = 1;
-
-/**
- * Where the column stops growing: {@link SITADEL_SIZE_CEILING_LGT} dwellings,
- * so 200 m. The dot and the column saturate on the same measured number, and
- * every clipped column is counted on the row while the card keeps the true
- * count (A5).
- */
-export const SITADEL_PRISM_MAX_M = SITADEL_SIZE_CEILING_LGT * SITADEL_METRES_PER_DWELLING;
-
-/**
- * The side of the square a column stands on, in metres.
- *
- * WHAT THIS FIXES, AND IT WAS A HOLE IN THE OWN HEADER'S ARITHMETIC. The height
- * used to be applied to the PARCEL ITSELF — the plot extruded by its dwelling
- * count. A prism is a volume and a volume is base × height, so the mark's ink
- * was the dwelling count MULTIPLIED BY THE SIZE OF THE PLOT, which the register
- * says nothing about. Measured over the three communes this header already
- * quotes, on the parcels actually extruded:
- *
- *   base area, m²          p10    p50     p90      max        max ÷ p50
- *   Paris      75056       139    403    1 717   40 400           100×
- *   Nantes     44109       104    395    1 729  153 173           388×
- *   Ustaritz   64547        95    637    2 176   24 955            39×
- *
- * So two permits creating one dwelling each drew volumes 388 apart in the same
- * commune, and Nantes' largest single mark was 25 426 754 m³ — a quarter of a
- * cubic kilometre of opaque colour for one file. The reported case was
- * Ustaritz: dossier 06454721B0037, 45 logements over three adjoining parcels
- * (8 984 m²), drawn as one 45 m block of 404 000 m³ standing over a village
- * whose houses are 8 m tall, hiding the street it was filed on. The register's
- * own `SURFACE_PLANCHER_CREEE` for it is 3 308 m²: the mark was ~40× the
- * building it describes.
- *
- * `choroplethPrism.js` had already named the disease and the cure — « same
- * height, different base areas », option (b) NORMALISE THE BASE. It rejects (b)
- * as a default for départements because the polygon IS the map there. Here it
- * is not: the parcel keeps its own ground wash and its own edge, which is what
- * says "this plot", and the column says "this many dwellings". Two marks, two
- * claims, neither borrowing the other's channel.
- *
- * WHY 12 m. It is the footprint of a small French house (144 m²), so a
- * 1-dwelling permit is a 12 × 12 × 1 m plate and a 45-dwelling one a 45 m tower
- * standing next to real roofs — the ruler the metre-per-dwelling scale was
- * always meant to be read against. It sits inside the median plot everywhere
- * measured (403 m², 395 m², 637 m²): 8.8% of Paris' columns, 6.3% of Nantes'
- * and 4.6% of Ustaritz' are wider than the parcel they are anchored on, and
- * that overhang claims no ground — the wash under it does, and the dot beside
- * it already spills further (22 px is 10 m at the bottom of this layer's
- * altitude range).
- *
- * At the bottom of the range (300 m camera, 0.48 m/px) a column is 25 px wide;
- * at the 12 000 m gate it is 0.6 px, where the dot carries the layer as it
- * always has.
- */
-export const SITADEL_PRISM_BASE_M = 12;
-
-/**
- * How long to wait before rebuilding a pack that was extruded while the shared
- * ground-floor grid was still cold.
- *
- * The same three seconds and the same once-per-key discipline
- * `bdtopoBuildings.js` uses: `resolveGroundFloorCellsBounded` gives up after
- * 1.2 s and the answer lands in the cache a moment later. Without this a
- * commune entered cold keeps every parcel flat until the camera happens to
- * cross into another commune.
- */
-export const SITADEL_COLD_FLOOR_RETRY_MS = 3_000;
-
-/**
- * Why a parcel has no height. Both are the same statement — the file publishes
- * no dwelling count — and they are told apart on screen by the band colour.
- */
-export const SITADEL_NO_HEIGHT_DEMOLITION = 'demolition';
-export const SITADEL_NO_HEIGHT_DWELLINGS = 'nodwellings';
-/** Transient, not a class: the ground cell had not been resolved yet. */
-export const SITADEL_NO_HEIGHT_COLD_FLOOR = 'coldfloor';
+export const SITADEL_WINDOWS = Object.freeze(['36', '72', '156']);
+/** The window a reader who has chosen nothing is on — `ads-fr`'s. */
+export const SITADEL_WINDOW_DEFAULT = '36';
 
 /**
  * Idle refresh.
@@ -518,9 +335,9 @@ const CAMERA_DEBOUNCE_MS = 450;
 
 /** Card anchor lift above the ground floor, in metres. */
 const CARD_LIFT_M = 4;
-/** Dot lift above the ground floor, in metres. */
+/** Badge lift above the ground floor, in metres. */
 const POINT_LIFT_M = 1;
-/** Ground-floor warm-up budget. Paris draws 4 753 dots; the floor grid is coarse. */
+/** Ground-floor warm-up budget. Paris draws 4 753 badges; the floor grid is coarse. */
 const FLOOR_WARM_LIMIT = 600;
 /**
  * How far a cell the probe budget did not reach may borrow a sampled floor
@@ -535,7 +352,7 @@ const FLOOR_WARM_LIMIT = 600;
  */
 const FLOOR_FILL_KM = 18;
 /**
- * Metres a floor has to move before a dot is rewritten.
+ * Metres a floor has to move before a badge is rewritten.
  *
  * A quarter of a metre — `renderedSurface.js`'s own seating epsilon. Below it
  * the write is invisible at any camera this layer draws at, and the comparison
@@ -585,17 +402,21 @@ let _payload = null;
 let _unpublishByParcel = null;
 /** @type {Map<number, {permit: object, index: number, permits: number}>} parcel slot → owner */
 let _owners = new Map();
-/** @type {?Cesium.PointPrimitiveCollection} */
-let _points = null;
+/** @type {?Cesium.BillboardCollection} One badge per placed permit. */
+let _badges = null;
 /** @type {?Cesium.GroundPrimitive} */
 let _fills = null;
-/** @type {?Cesium.Primitive} The extruded parcels — real geometry, not a drape. */
-let _prisms = null;
-/** What the last `drawSurfaces` did with the height channel. */
-let _prismTally = null;
-let _coldFloorTimer = null;
-let _coldFloorKey = null;
-/** Bounded ladder that re-seats the dots as the surface under them arrives. */
+/** The row's « Période », in months of authorisations drawn. */
+let _months = SITADEL_WINDOW_DEFAULT;
+/** The pack as drawn: the one in hand, cut to the period. */
+let _drawn = null;
+/** Whether the card on the globe was last published as a tag alone. */
+let _publishedTagOnly = false;
+/** Stops watching the key being folded or hidden while a permit is selected. */
+let _stopKeyWatch = null;
+/** Take-down for the drawn-dossiers offer `ads-fr` reads. */
+let _unpublishDrawn = null;
+/** Bounded ladder that re-seats the badges as the surface under them arrives. */
 let _floorRetryTimer = null;
 let _floorRetries = 0;
 /** @type {?Cesium.GroundPolylinePrimitive} */
@@ -740,65 +561,38 @@ export function sitadelPermitAnchor(permit, parcels = []) {
   return best ? { lon: best[0], lat: best[1] } : null;
 }
 
-/**
- * Dot radius for one permit.
- *
- * A demolition always draws at the minimum, and that is not a fallback: the
- * permis de démolir file has 33 columns and none of them counts a dwelling or a
- * surface, so any size above the floor would be a claim the file does not
- * make. The card says which of "nothing was created" and "nothing was
- * published" applies.
- * @param {?object} permit
- * @returns {number}
- */
-export function sitadelPermitSize(permit) {
-  if (permit?.f === 'dem') return SITADEL_POINT_MIN_PX;
-  return sitadelPointSize(permit?.lgt, SITADEL_POINT_MIN_PX, SITADEL_POINT_MAX_PX);
-}
-
 /** Colour for one permit — its lifecycle band, or the demolition band. */
 export function sitadelPermitColor(permit) {
   return sitadelBandColor(permit?.b);
 }
 
 /**
- * Why this permit carries no height, or null when it carries one.
+ * The permits of a pack authorised inside the period — the row's « Période ».
  *
- * Two answers, and they are the SAME sentence about the register: nobody
- * counted a dwelling. A demolition is structural — 33 columns, none of them a
- * dwelling. A housing permit at zero is `finiteOrNull(NB_LGT_TOT_CREES) ?? 0`
- * in `sitadelFeed.js`, which has already folded "published zero" into "blank"
- * before this file sees it, so the refusal names both and picks neither.
- * @param {?object} permit
- * @returns {?string} one of the `SITADEL_NO_HEIGHT_*` reasons.
+ * By the date of AUTHORISATION (`DATE_REELLE_AUTORISATION`), the date the
+ * `ads-fr` window counts from too, so the two permit layers answer the same
+ * question. The whole window (156 months, Sitadel's span) keeps every permit,
+ * including the few with no date at all; a shorter one keeps only those it can
+ * date inside it.
+ * @param {?object} payload
+ * @param {string} months One of {@link SITADEL_WINDOWS}.
+ * @param {number} [now] Epoch ms, for tests.
+ * @returns {?object} The payload with its `permits` cut, parcels untouched.
  */
-export function sitadelHeightRefusal(permit) {
-  if (permit?.f === 'dem') return SITADEL_NO_HEIGHT_DEMOLITION;
-  const created = finiteOrNull(permit?.lgt);
-  if (created === null || created <= 0) return SITADEL_NO_HEIGHT_DWELLINGS;
-  return null;
-}
-
-/**
- * Prism height for one permit, in metres above its own ground.
- *
- * Linear in dwellings and clipped at {@link SITADEL_PRISM_MAX_M}. Zero means
- * "no height claim" and NEVER "zero dwellings drawn flat by accident" — the
- * callers ask {@link sitadelHeightRefusal} for the reason and draw a different
- * sign, they do not extrude to nothing.
- * @param {?object} permit
- * @returns {number} metres, 0 when the file publishes no dwelling count.
- */
-export function sitadelPrismHeightM(permit) {
-  if (sitadelHeightRefusal(permit)) return 0;
-  const created = finiteOrNull(permit.lgt);
-  return Math.min(created, SITADEL_SIZE_CEILING_LGT) * SITADEL_METRES_PER_DWELLING;
-}
-
-/** True when the prism stopped short of the permit's real dwelling count. */
-export function sitadelPrismClipped(permit) {
-  const created = finiteOrNull(permit?.lgt);
-  return !sitadelHeightRefusal(permit) && created > SITADEL_SIZE_CEILING_LGT;
+export function sitadelPayloadForPeriod(payload, months, now = Date.now()) {
+  if (!payload || !Array.isArray(payload.permits)) return payload;
+  const span = Number(months);
+  if (!Number.isFinite(span) || String(months) === SITADEL_WINDOWS[SITADEL_WINDOWS.length - 1]) return payload;
+  const floor = new Date(now);
+  floor.setUTCMonth(floor.getUTCMonth() - span);
+  const since = floor.toISOString().slice(0, 10);
+  return {
+    ...payload,
+    permits: payload.permits.filter((permit) => {
+      const date = /^\d{4}-\d{2}-\d{2}/.test(String(permit?.da ?? '')) ? String(permit.da).slice(0, 10) : null;
+      return date !== null && date >= since;
+    }),
+  };
 }
 
 /**
@@ -876,7 +670,7 @@ export function sitadelPermitRecords(payload) {
       index,
       at,
       color: sitadelPermitColor(permit),
-      basePixelSize: sitadelPermitSize(permit),
+      classId: permitClassOfSitadelBand(permit?.b),
     });
   }
   return records;
@@ -909,38 +703,6 @@ export function sitadelRingPositions(ring) {
   return degrees.length >= 6 ? Cesium.Cartesian3.fromDegreesArray(degrees) : null;
 }
 
-/**
- * The square one permit's column stands on, in degrees, centred on its anchor.
- *
- * A ring rather than a Cesium box: the column is built by the same
- * `PolygonGeometry` path as everything else here, so it carries per-instance
- * colour, picks as the permit's id and closes its own base and top.
- *
- * The metres-to-degrees conversion is local and flat, which at 12 m is exact to
- * well under a centimetre — and the column is a MARK, not a survey: its
- * footprint claims no ground. The parcel wash under it is what does.
- * @param {number} lon
- * @param {number} lat
- * @param {number} [sideM]
- * @returns {?Array<number[]>} Four corners, anticlockwise, unclosed.
- */
-export function sitadelPrismBaseRing(lon, lat, sideM = SITADEL_PRISM_BASE_M) {
-  if (!Number.isFinite(lon) || !Number.isFinite(lat) || !(sideM > 0)) return null;
-  const cos = Math.cos(lat * Math.PI / 180);
-  // A column at a pole is not a French parcel, but a zero here would collapse
-  // the square into a line and Cesium would tessellate nothing at all.
-  if (!(cos > 1e-6)) return null;
-  const half = sideM / 2;
-  const dLat = half / 111_320;
-  const dLon = half / (111_320 * cos);
-  return [
-    [lon - dLon, lat - dLat],
-    [lon + dLon, lat - dLat],
-    [lon + dLon, lat + dLat],
-    [lon - dLon, lat + dLat],
-  ];
-}
-
 function removeGround(primitive) {
   if (!primitive) return;
   _viewer?.scene?.groundPrimitives?.remove?.(primitive);
@@ -957,19 +719,10 @@ function clearSurfaces() {
   removeGround(_fills);
   removeGround(_edges);
   removeGround(_outline);
-  // The prisms are NOT ground primitives — they carry no classification type
-  // and live in the ordinary primitive list, which is the whole point of them.
-  if (_prisms) _viewer?.scene?.primitives?.remove?.(_prisms);
   _fills = null;
-  _prisms = null;
   _edges = null;
   _outline = null;
   clearHighlight();
-}
-
-/** Drop the pending cold-floor rebuild. */
-function clearColdFloorRetry() {
-  if (_coldFloorTimer) { clearTimeout(_coldFloorTimer); _coldFloorTimer = null; }
 }
 
 function groundLinesSupported() {
@@ -985,7 +738,7 @@ function groundLinesSupported() {
 // --- Drawing ----------------------------------------------------------------
 
 /**
- * Rebuild the three ground batches for the whole commune, and the columns.
+ * Rebuild the three ground batches for the whole commune.
  *
  * THREE primitives and not 4 500: measured 2026-09-02, Paris' pack draws 4 500
  * parcel parts and 70 766 vertices and Nantes' 3 032 parts and 47 676, which is
@@ -994,53 +747,26 @@ function groundLinesSupported() {
  * one instance in place instead of paying a second full tessellation to light
  * one plot.
  *
- * THE GROUND IS WALKED PER PARCEL AND THE HEIGHT PER PERMIT, which is the one
- * structural change of this function and the reason the tally has two totals. A
- * dwelling count belongs to a DOSSIER: extruding every parcel a dossier names
- * drew the same 45 logements three times over three plots. Measured on the
- * packs the header quotes, the height channel was overstating the register by
- * ×1.87 in Ustaritz (932 dwellings of prism for 499 authorised), ×1.73 in
- * Nantes and ×1.30 in Paris. One column per permit cannot do that.
- * @param {?object} payload
+ * Each parcel is washed and outlined in the band of the permit that owns it,
+ * the colour of the badge standing on it.
+ * @param {?object} payload The pack as drawn (already cut to the period).
  * @param {Map<string, object>} [records] Render records, keyed by id.
  */
 function drawSurfaces(payload, records = _records) {
   clearSurfaces();
-  _prismTally = null;
   if (!_viewer?.scene?.groundPrimitives || !payload) return;
   const parcels = Array.isArray(payload.parcels) ? payload.parcels : [];
   const fillInstances = [];
-  const prismInstances = [];
   const edgeInstances = [];
-  const tally = {
-    parcels: 0,
-    permits: 0,
-    prisms: 0,
-    clipped: 0,
-    tallestM: 0,
-    demolition: 0,
-    noDwellings: 0,
-    coldFloor: 0,
-  };
 
   for (let slot = 0; slot < parcels.length; slot += 1) {
     const owner = _owners.get(slot);
     if (!owner) continue;
     const record = records.get(recordIdFor(payload, owner));
     if (!record) continue;
-    tally.parcels += 1;
     const band = Cesium.Color.fromCssColorString(record.color);
     const color = band.withAlpha(SITADEL_FILL_ALPHA);
-
-    // The parcel edge is the second sign, and it carries ONE thing: a plot
-    // outlined in its own band colour is a plot whose file publishes no
-    // dwelling count. A plot still waiting for its ground cell keeps the
-    // neutral edge, because it is going to carry a column.
-    const refusal = sitadelHeightRefusal(record.permit);
-    const edgeColor = refusal
-      ? band.withAlpha(PARCEL_EDGE_ALPHA_NO_HEIGHT)
-      : Cesium.Color.fromCssColorString(PARCEL_EDGE_COLOR).withAlpha(PARCEL_EDGE_ALPHA);
-    const edgeWidth = refusal ? PARCEL_EDGE_WIDTH_NO_HEIGHT_PX : PARCEL_EDGE_WIDTH_PX;
+    const edgeColor = band.withAlpha(PARCEL_EDGE_ALPHA);
 
     for (const part of parcels[slot]?.g || []) {
       const outer = sitadelRingPositions(part[0]);
@@ -1052,10 +778,6 @@ function drawSurfaces(payload, records = _records) {
         // filled in is ground attributed to a permit that does not cover it.
         if (hole) holes.push(new Cesium.PolygonHierarchy(hole));
       }
-      // The wash is the plot, under every parcel, column or none. At the top of
-      // this layer's altitude range a 1-dwelling column is 0.05 px of screen
-      // height and the wash is all there is; the column is added to it, never
-      // substituted for it.
       fillInstances.push(new Cesium.GeometryInstance({
         id: record.id,
         geometry: new Cesium.PolygonGeometry({
@@ -1071,7 +793,7 @@ function drawSurfaces(payload, records = _records) {
           id: record.id,
           geometry: new Cesium.GroundPolylineGeometry({
             positions: [...positions, positions[0]],
-            width: edgeWidth,
+            width: PARCEL_EDGE_WIDTH_PX,
           }),
           attributes: {
             color: Cesium.ColorGeometryInstanceAttribute.fromColor(edgeColor),
@@ -1079,51 +801,6 @@ function drawSurfaces(payload, records = _records) {
         }));
       }
     }
-  }
-
-  // ── The height channel, once per dossier ──────────────────────────────────
-  for (const record of records.values()) {
-    // A permit the pack placed nowhere has no parcel, no anchor and no column.
-    if (!record.at || !(record.permit?.px || []).length) continue;
-    tally.permits += 1;
-    // Three outcomes, decided once per permit: a column, a file the register
-    // gave no count for, or a floor that has not answered yet. Only the middle
-    // one is a CLASS; the third is a loading state and must not be given the
-    // class's sign.
-    const refusal = sitadelHeightRefusal(record.permit);
-    if (refusal === SITADEL_NO_HEIGHT_DEMOLITION) { tally.demolition += 1; continue; }
-    if (refusal === SITADEL_NO_HEIGHT_DWELLINGS) { tally.noDwellings += 1; continue; }
-    const heightM = sitadelPrismHeightM(record.permit);
-    // The column stands where the dot stands — the anchor of the largest
-    // parcel the dossier names (`sitadelPermitAnchor`) — so the two marks of
-    // one permit are in one place, and the floor is the one the dot memoised.
-    // NULL is not a floor: the ellipsoid is 44–55 m under metropolitan France
-    // and a column based there is a hole.
-    const floorM = recordFloorM(record);
-    if (floorM === null) { tally.coldFloor += 1; continue; }
-    const base = sitadelPrismBaseRing(record.at.lon, record.at.lat);
-    const ring = base && sitadelRingPositions(base);
-    if (!ring) continue;
-    prismInstances.push(new Cesium.GeometryInstance({
-      id: record.id,
-      geometry: new Cesium.PolygonGeometry({
-        polygonHierarchy: new Cesium.PolygonHierarchy(ring),
-        height: floorM,
-        extrudedHeight: floorM + heightM,
-        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-        closeTop: true,
-        // Closed: on a slope the base of a volume breaks the surface, and an
-        // open bottom shows the inside of the far walls through it.
-        closeBottom: true,
-      }),
-      // Opaque. See the header: translucent geometry does not write depth.
-      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-        Cesium.Color.fromCssColorString(record.color),
-      ) },
-    }));
-    tally.prisms += 1;
-    if (sitadelPrismClipped(record.permit)) tally.clipped += 1;
-    if (heightM > tally.tallestM) tally.tallestM = heightM;
   }
 
   if (fillInstances.length) {
@@ -1135,17 +812,6 @@ function drawSurfaces(payload, records = _records) {
       releaseGeometryInstances: false,
     }));
     _fills.show = _enabled;
-  }
-  if (prismInstances.length) {
-    _prisms = _viewer.scene.primitives.add(new Cesium.Primitive({
-      geometryInstances: prismInstances,
-      // Lit, not flat: without normals a row of one-colour boxes reads as a
-      // single mass and the shape — which is the datum — is lost.
-      appearance: new Cesium.PerInstanceColorAppearance({ closed: true, translucent: false }),
-      asynchronous: true,
-      releaseGeometryInstances: false,
-    }));
-    _prisms.show = _enabled;
   }
   if (edgeInstances.length && groundLinesSupported()) {
     _edges = _viewer.scene.groundPrimitives.add(new Cesium.GroundPolylinePrimitive({
@@ -1185,32 +851,6 @@ function drawSurfaces(payload, records = _records) {
     }));
     _outline.show = _enabled;
   }
-  _prismTally = tally;
-  scheduleColdFloorRebuild(payload, tally);
-}
-
-/**
- * Ask again once the shared ground grid has landed.
- *
- * Once per commune: a genuinely unreachable terrain proxy costs one extra
- * rebuild, not a loop. The rebuild is local — the pack is still in hand, so
- * this is a re-tessellation and no network at all.
- * @param {?object} payload
- * @param {object} tally
- */
-function scheduleColdFloorRebuild(payload, tally) {
-  clearColdFloorRetry();
-  const key = String(payload?.insee ?? '');
-  if (!tally.coldFloor || !key || _coldFloorKey === key) return;
-  _coldFloorKey = key;
-  _coldFloorTimer = setTimeout(() => {
-    _coldFloorTimer = null;
-    if (!_enabled || !_payload) return;
-    const selected = _selectedId;
-    drawSurfaces(_payload);
-    if (selected && _records.has(selected)) selectPermit(selected);
-    governorRequestRender('sitadel-fr-cold-floor');
-  }, SITADEL_COLD_FLOOR_RETRY_MS);
 }
 
 /** The render id of the permit that owns a parcel, from the owner entry. */
@@ -1218,27 +858,15 @@ function recordIdFor(payload, owner) {
   return `${SITADEL_FR_LAYER_ID}:${String(payload?.insee ?? '')}:${owner.permit?.f || 'lgt'}:${owner.index}`;
 }
 
-/** Shared, because `PointPrimitive` CLONES both of these on assignment. */
-const POINT_FADE = new Cesium.NearFarScalar(300, 1.0, 30_000, 0.4);
-const _colorCache = new Map();
-function cssColor(css) {
-  let color = _colorCache.get(css);
-  if (!color) {
-    color = Cesium.Color.fromCssColorString(css);
-    _colorCache.set(css, color);
-  }
-  return color;
-}
-
 /**
  * The floor one permit's mark stands on, remembering the last one it had.
  *
- * The memo is what keeps a permit's three marks — the dot, the selected card
- * and the DETECT callout — in ONE place. They are built at different moments
+ * The memo is what keeps a permit's three marks — the badge, the selected
+ * card and the DETECT callout — in ONE place. They are built at different moments
  * from the same shared stores, and those stores can stop answering for a cell
  * between two of them: `provisionalFloor.js` evicts its oldest entries past
  * 4 000, which a commune the size of Paris can reach on its own. Without the
- * memo the callout for a seated dot would be rebuilt at the ellipsoid and the
+ * memo the callout for a seated badge would be rebuilt at the ellipsoid and the
  * label would hang 80 m under its own mark.
  * @param {object} record
  * @returns {?number}
@@ -1269,39 +897,37 @@ function recordPosition(record, liftM) {
 }
 
 /**
- * Move the dots already on screen onto the floor that has since arrived.
+ * Move the badges already on screen onto the floor that has since arrived.
  *
- * The half of the fix that the sampling alone does not buy. The DEM answers
- * over the network and the photoreal tiles stream, so the floor under a dot is
- * routinely unknown at the instant `drawPack` builds it and known a second
- * later — and a `PointPrimitive` built at the ellipsoid stays at the ellipsoid
- * until something writes its `position` again. Nothing did: the layer's only
- * deferred pass, `scheduleColdFloorRebuild`, rebuilds the PRISMS.
+ * The DEM answers over the network and the photoreal tiles stream, so the
+ * floor under a badge is routinely unknown at the instant `drawPack` builds it
+ * and known a second later — and a billboard built at the ellipsoid stays at
+ * the ellipsoid until something writes its `position` again.
  *
- * Writes only when the floor actually moves the dot, so a settled commune
- * costs a comparison per dot and no render at all.
+ * Writes only when the floor actually moves the badge, so a settled commune
+ * costs a comparison per badge and no render at all.
  *
- * A dot whose floor is UNKNOWN is left exactly where it is. That is not
+ * A badge whose floor is UNKNOWN is left exactly where it is. That is not
  * defensive tidiness: `provisionalFloor.js` evicts its oldest cells past 4 000
  * — a commune the size of Paris plus the layers sharing the store can reach
  * that — and re-deriving a position from a missing answer would push a
- * correctly seated dot back down to the ellipsoid. Nothing may overwrite a
+ * correctly seated badge back down to the ellipsoid. Nothing may overwrite a
  * measurement with a silence.
- * @returns {number} Dots moved.
+ * @returns {number} Badges moved.
  */
 function reanchorPoints() {
-  if (!_points || _points.isDestroyed?.()) return 0;
+  if (!_badges || _badges.isDestroyed?.()) return 0;
   let moved = 0;
   for (const record of _records.values()) {
-    const point = record.point;
-    if (!point || point.isDestroyed?.() || !point.position) continue;
+    const badge = record.badge;
+    if (!badge || !badge.position) continue;
     const floor = recordFloorM(record);
     if (floor === null) continue;
     const next = Cesium.Cartesian3.fromDegrees(
       record.at.lon, record.at.lat, floor + POINT_LIFT_M,
     );
-    if (Cesium.Cartesian3.equalsEpsilon(point.position, next, 0, FLOOR_EPSILON_M)) continue;
-    point.position = next;
+    if (Cesium.Cartesian3.equalsEpsilon(badge.position, next, 0, FLOOR_EPSILON_M)) continue;
+    badge.position = next;
     moved += 1;
   }
   return moved;
@@ -1325,23 +951,16 @@ function refreshFloors() {
   });
   const moved = reanchorPoints();
   if (moved) {
-    // The card reads the same floor, so a dot that moved took its card with it
-    // — republish rather than leave the two apart.
-    const entry = _selectedId && _records.has(_selectedId)
-      ? createSitadelSelectedOverlayEntry(_records.get(_selectedId), _payload)
-      : null;
-    if (entry) {
-      _overlayHost.setEntries(
-        SITADEL_FR_OVERLAY_SOURCE_ID, [entry], SITADEL_FR_OVERLAY_SOURCE_OPTIONS,
-      );
-    }
+    // The card reads the same floor, so a badge that moved took its card with
+    // it — republish rather than leave the two apart.
+    publishSelectedCard();
     governorRequestRender('sitadel-fr-reanchor');
   }
   if (pending || hasColdFloor()) scheduleFloorReanchor();
 }
 
 /**
- * Come back for the dots the surface could not place yet.
+ * Come back for the badges the surface could not place yet.
  *
  * A probe misses while the tiles under a commune are still streaming, and the
  * DEM is a network round trip — the ordinary state for the second or two after
@@ -1372,27 +991,28 @@ function resetFloorRetries() {
 }
 
 /**
- * Rebuild every record and every primitive from the pack in hand.
+ * Rebuild every record and every primitive from the pack in hand, cut to the
+ * row's period.
  *
  * The selection is dropped rather than restored, unlike `fraicheur-fr`'s
- * refresh: this only runs when the COMMUNE changed, so the card the operator
- * was reading describes a permit that is no longer on the screen.
- * `applyClassification` re-selects, because that rebuild is the same commune.
- * @param {?object} payload
+ * refresh: this runs when the COMMUNE or the PERIOD changed, so the card the
+ * reader was looking at may describe a permit that is no longer drawn.
+ * `applyClassification` re-selects, because that rebuild is the same draw.
+ * @param {?object} payload The whole commune pack.
  */
 function drawPack(payload) {
   clearSelection();
-  clearColdFloorRetry();
   resetFloorRetries();
+  _drawn = sitadelPayloadForPeriod(payload, _months);
   _records = new Map();
-  _owners = sitadelParcelOwners(payload);
-  _points?.removeAll();
+  _owners = sitadelParcelOwners(_drawn);
+  _badges?.removeAll();
 
-  const records = sitadelPermitRecords(payload);
+  const records = sitadelPermitRecords(_drawn);
   // Ground the cold cells against the surface actually being DRAWN before a
   // single position below is taken. Synchronous, no network of ours, ≤40 probes
   // and nothing at all above 25 km of camera (`provisionalFloor.js`). Without
-  // it every dot here is built on the ellipsoid and stays there — see
+  // it every badge here is built on the ellipsoid and stays there — see
   // `sitadelFloorM`.
   sampleProvisionalFloors(_viewer?.scene, records.map((record) => record.at), {
     fillKm: FLOOR_FILL_KM, minM: SITADEL_FLOOR_MIN_M, maxM: SITADEL_FLOOR_MAX_M,
@@ -1400,22 +1020,22 @@ function drawPack(payload) {
 
   const warm = [];
   for (const record of records) {
-    if (_points) {
-      record.point = _points.add({
+    if (_badges) {
+      record.badge = _badges.add({
         id: record.id,
         position: recordPosition(record, POINT_LIFT_M),
-        color: cssColor(record.color),
-        pixelSize: record.basePixelSize,
-        outlineColor: POINT_OUTLINE_COLOR,
-        outlineWidth: 1,
+        image: permitBadgeImage(record.classId),
+        width: PERMIT_BADGE_PX,
+        height: PERMIT_BADGE_PX,
+        scaleByDistance: BADGE_SCALE,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        translucencyByDistance: POINT_FADE,
       });
     }
     _records.set(record.id, record);
     if (warm.length < FLOOR_WARM_LIMIT) warm.push(record.at);
   }
-  drawSurfaces(payload);
+  drawSurfaces(_drawn);
+  publishDrawnDossiers();
   if (warm.length) warmGroundFloor(warm);
   // The DEM is still in flight and the tiles under half the commune have not
   // streamed. Come back for both.
@@ -1427,17 +1047,11 @@ function drawPack(payload) {
 function applyClassification(next) {
   if (next === undefined || next === _classificationType) return;
   _classificationType = next;
-  // The prisms have no classification type, but they DO move: the shared floor
-  // grid prefers the rendered photoreal mesh over the DEM the moment that stack
-  // is active, so the ground a parcel stands on changes with the basemap. The
-  // rebuild below covers both, and re-arms the cold-floor retry because the
-  // mesh cells for this commune have not been sampled yet.
-  _coldFloorKey = null;
   // `classificationType` is read when a ground primitive is built, so an
   // already-built one has to be rebuilt rather than mutated. The pack is still
   // in hand, so this costs a re-tessellation and no network at all.
   const selected = _selectedId;
-  if (_payload) drawSurfaces(_payload);
+  if (_drawn) drawSurfaces(_drawn);
   // `drawSurfaces` tears down the highlight with the batch it was drawn over,
   // so a permit selected when the operator switches map stack would keep its
   // card and silently lose its outline.
@@ -1503,7 +1117,7 @@ export function sitadelJoinLines(payload, permit = null) {
  * @param {?object} [payload]
  * @returns {string}
  */
-export function buildSitadelSelectionLabel(record, payload = _payload) {
+export function buildSitadelSelectionLabel(record, payload = _drawn) {
   const permit = record?.permit;
   if (!permit) return '';
   const parcels = Array.isArray(payload?.parcels) ? payload.parcels : [];
@@ -1522,13 +1136,75 @@ export function buildSitadelSelectionLabel(record, payload = _payload) {
   return [title, ...details.filter(Boolean)].join('\n');
 }
 
-/** Protected selected-permit entry for the shared overlay host. */
-export function createSitadelSelectedOverlayEntry(record, payload = _payload) {
+/**
+ * The details a selected permit's card folds under « Voir les détails du
+ * permis »: the file (parcels, land check, placement, number), the plot's other
+ * permits, the placement rates and the credit — everything the card's head
+ * does not already say.
+ * @param {object} record
+ * @param {?object} payload The pack as drawn.
+ * @returns {string[]}
+ */
+function sitadelPermitDetails(record, payload) {
+  const permit = record.permit;
+  const parcels = Array.isArray(payload?.parcels) ? payload.parcels : [];
+  const details = buildSitadelPermitDetails(permit, parcels);
+  let shared = 0;
+  for (const slot of permit.px || []) {
+    shared = Math.max(shared, (_owners.get(slot)?.permits || 1) - 1);
+  }
+  if (shared > 0) details.push(messages().join.sharedPlot(fr(shared), shared));
+  if (permit.dem) details.push(permit.dem);
+  details.push(...sitadelJoinLines(payload, permit));
+  details.push(messages().join.credit(SITADEL_LICENCE));
+  return details.filter(Boolean);
+}
+
+/**
+ * The card of the selected permit, as the map key prints it — see
+ * `permitProjectCard`, which `ads-fr` fills the same way. Placed on its own
+ * parcel by the cadastral join, so the marker is never « approximatif » here.
+ * @param {?object} record
+ * @param {?object} [payload] The pack as drawn.
+ * @returns {?object} The `legendSelection` slot of the key.
+ */
+export function sitadelPermitPanel(record, payload = _drawn) {
+  const permit = record?.permit;
+  if (!permit) return null;
+  const created = finiteOrNull(permit.lgt);
+  return permitProjectCard({
+    key: String(record.id),
+    type: sitadelTypeLabel(permit.t)
+      || (permit.f === 'dem' ? sitadelBandLabel('demolition') : messages().detectFallback),
+    classId: permitClassOfSitadelBand(permit.b),
+    dwellings: created,
+    surfaceM2: finiteOrNull(permit.srf),
+    demolishedDwellings: finiteOrNull(permit.dlg),
+    nature: sitadelNatureLabel(permit.np) || null,
+    address: [permit.an, permit.av].filter(Boolean).join(' ') || null,
+    commune: payload?.commune || null,
+    dates: { granted: permit.da, started: permit.do, completed: permit.df },
+    details: sitadelPermitDetails(record, payload),
+    source: 'Sitadel · SDES', // i18n-ignore-line — the publisher's name
+  });
+}
+
+/**
+ * Protected selected-permit entry for the shared overlay host: the whole card,
+ * or — while the map key carries the card — the tag alone (« 40 logements »).
+ * @param {object} record
+ * @param {?object} [payload] The pack as drawn.
+ * @returns {?object}
+ */
+export function createSitadelSelectedOverlayEntry(record, payload = _drawn) {
   if (!record?.id || !record?.at) return null;
   const position = recordPosition(record, CARD_LIFT_M);
   const text = buildSitadelSelectionLabel(record, payload);
   if (!text) return null;
-  const [title, ...details] = text.split('\n');
+  _publishedTagOnly = mapKeyCarriesSelection();
+  const [title, ...details] = _publishedTagOnly
+    ? [permitProjectTag({ dwellings: finiteOrNull(record.permit?.lgt), classId: record.classId })]
+    : text.split('\n');
   return {
     id: String(record.id),
     position,
@@ -1554,27 +1230,53 @@ export function createSitadelSelectedOverlayEntry(record, payload = _payload) {
 
 // --- Selection --------------------------------------------------------------
 
+/**
+ * Tell the key the card changed. This layer's own repaint is its six-hour poll
+ * away, and a card that waits for another layer's tick to appear is a click
+ * that seems to do nothing. The literal is `LAYER_DRAW_CHANGED_EVENT` of
+ * `addressScanLayer.js`, as in `anfrFrance.js`.
+ */
+function announceSelectionChanged() {
+  if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent('gev:layer-draw-changed', {
+    detail: { layerId: SITADEL_FR_LAYER_ID, selection: true },
+  }));
+}
+
+/** Publish the selected permit's globe card, whole or as a tag, as the key allows. */
+function publishSelectedCard() {
+  const entry = _selectedId && _records.has(_selectedId)
+    ? createSitadelSelectedOverlayEntry(_records.get(_selectedId), _drawn)
+    : null;
+  if (entry) {
+    _overlayHost.setEntries(SITADEL_FR_OVERLAY_SOURCE_ID, [entry], SITADEL_FR_OVERLAY_SOURCE_OPTIONS);
+  }
+}
+
 function clearSelection() {
   clearHighlight();
+  _stopKeyWatch?.();
+  _stopKeyWatch = null;
   const record = _selectedId ? _records.get(_selectedId) : null;
-  if (record?.point && !record.point.isDestroyed?.()) {
-    record.point.pixelSize = record.basePixelSize;
-    record.point.outlineColor = POINT_OUTLINE_COLOR;
-    record.point.outlineWidth = 1;
+  if (record?.badge) {
+    record.badge.image = permitBadgeImage(record.classId);
+    record.badge.width = PERMIT_BADGE_PX;
+    record.badge.height = PERMIT_BADGE_PX;
   }
   if (_selectedId) {
     _selectedId = null;
     _overlayHost.clearSource(SITADEL_FR_OVERLAY_SOURCE_ID);
     governorRequestRender('sitadel-fr-deselect');
+    announceSelectionChanged();
   }
 }
 
 /**
- * Select one permit, from its dot or from any parcel it was drawn on.
+ * Select one permit, from its badge or from any parcel it was drawn on.
  *
- * The dot is a `PointPrimitive` and mutable, so it is enlarged in place. The
- * parcels are batched geometry instances and are not, so the plot is ringed
- * with a second ground polyline — the same technique `cadastre-fr`,
+ * The badge is a billboard and mutable, so it is enlarged and ringed in place.
+ * The parcels are batched geometry instances and are not, so the plot is
+ * ringed with a second ground polyline — the same technique `cadastre-fr`,
  * `fraicheur-fr` and `comptages-fr` use, and for the same reason: rebuilding
  * 70 766 vertices to light one plot is not a click.
  * @param {string} id
@@ -1584,18 +1286,13 @@ function selectPermit(id) {
   const record = _records.get(id);
   if (!record || !_viewer) return;
   _selectedId = id;
-  if (record.point && !record.point.isDestroyed?.()) {
-    record.point.pixelSize = record.basePixelSize + SELECTED_POINT_BONUS_PX;
-    record.point.outlineColor = Cesium.Color.fromCssColorString(SELECTED_COLOR);
-    record.point.outlineWidth = 2;
+  if (record.badge) {
+    record.badge.image = permitBadgeImage(record.classId, { selected: true });
+    record.badge.width = PERMIT_BADGE_SELECTED_PX;
+    record.badge.height = PERMIT_BADGE_SELECTED_PX;
   }
-  const parcels = Array.isArray(_payload?.parcels) ? _payload.parcels : [];
-  // THE RING GOES ON THE GROUND, on every plot the dossier names. It used to
-  // have to climb to the ROOF of the extruded plot, because the plot itself was
-  // the volume and a ground-clamped highlight under an opaque box is a
-  // selection nobody sees. The height moved onto a 12 m column
-  // ({@link SITADEL_PRISM_BASE_M}) and the plot is a wash again, so the
-  // selection is back where the thing being selected actually is.
+  const parcels = Array.isArray(_drawn?.parcels) ? _drawn.parcels : [];
+  // THE RING GOES ON THE GROUND, on every plot the dossier names.
   const cyan = Cesium.Color.fromCssColorString(SELECTED_COLOR).withAlpha(0.85);
   const groundInstances = [];
   for (const slot of record.permit?.px || []) {
@@ -1620,13 +1317,15 @@ function selectPermit(id) {
       classificationType: _classificationType,
     }));
   }
-  const entry = createSitadelSelectedOverlayEntry(record, _payload);
-  if (entry) {
-    _overlayHost.setEntries(
-      SITADEL_FR_OVERLAY_SOURCE_ID, [entry], SITADEL_FR_OVERLAY_SOURCE_OPTIONS,
-    );
-  }
+  publishSelectedCard();
+  // Folding the key after the click must bring the whole card back to the
+  // globe, and unfolding it take the card off again (`mapKeySelection.js`).
+  _stopKeyWatch = watchMapKeyCarriesSelection(() => {
+    publishSelectedCard();
+    governorRequestRender('sitadel-fr-card');
+  }, _publishedTagOnly);
   governorRequestRender('sitadel-fr-select');
+  announceSelectionChanged();
 }
 
 function onKeyDown(event) {
@@ -1723,12 +1422,13 @@ async function load({ force = false } = {}) {
       // its permits to ground it does not cover.
       _communeName = null;
       _payload = null;
+      _drawn = null;
       _records = new Map();
       _owners = new Map();
-      _points?.removeAll();
-      clearColdFloorRetry();
+      _badges?.removeAll();
       resetFloorRetries();
       clearSurfaces();
+      publishDrawnDossiers();
       governorRequestRender('sitadel-fr-no-commune');
       _status = 'no-commune';
       _error = null;
@@ -1843,56 +1543,6 @@ export function sitadelDetectType(record) {
   return m.building;
 }
 
-/**
- * The height key — the rows without a swatch.
- *
- * A height scale is not a colour, so these entries carry `color: null`, which
- * the map legend renders as an aligned "not drawn here" line rather than as a
- * class (`manager.js` handles it explicitly). Without them the columns are a
- * relief nobody can read a number off, which is D1 applied to the one channel
- * this layer just took possession of.
- *
- * The count on each row is what makes it a legend row and not a caption: the
- * scale row counts the DOSSIERS that stand up, the flat row counts the dossiers
- * that do not, and the sum is every permit drawn. Per dossier and no longer per
- * parcel, because a dwelling count belongs to a file and not to a plot — see
- * `drawSurfaces`, and the ×1.87 it stopped overstating.
- * @param {?object} tally From the last `drawSurfaces`.
- * @returns {Array<object>}
- */
-export function sitadelHeightLegend(tally) {
-  if (!tally || !tally.parcels) return [];
-  const m = messages().height;
-  const rows = [];
-  const flat = tally.demolition + tally.noDwellings;
-  if (tally.prisms) {
-    rows.push({
-      label: m.scale(SITADEL_METRES_PER_DWELLING),
-      color: null,
-      count: tally.prisms,
-      blurb: m.scaleBlurb(SITADEL_PRISM_BASE_M, SITADEL_PRISM_MAX_M, SITADEL_SIZE_CEILING_LGT)
-        + (tally.clipped ? m.clipped(fr(tally.clipped), tally.clipped) : m.notClipped),
-    });
-  }
-  if (flat) {
-    rows.push({
-      label: m.flat,
-      color: null,
-      count: flat,
-      blurb: m.flatBlurb(fr(tally.demolition), fr(tally.noDwellings), tally.noDwellings),
-    });
-  }
-  if (tally.coldFloor) {
-    rows.push({
-      label: m.coldFloor,
-      color: null,
-      count: tally.coldFloor,
-      blurb: m.coldFloorBlurb,
-    });
-  }
-  return rows;
-}
-
 // --- Row label --------------------------------------------------------------
 
 /**
@@ -1910,7 +1560,6 @@ export function buildSitadelLoadingLabel({
   status = _status,
   loading = _loading,
   commune = _communeName,
-  tally = _prismTally,
 } = {}) {
   const m = messages().row;
   if (loading) return sitadelLoadingLabel({ status: 'loading', commune });
@@ -1927,15 +1576,6 @@ export function buildSitadelLoadingLabel({
   const notes = [];
   if (payload.summary.demolitionAvailable === false) notes.push(m.noDemolitionFile);
   if (payload.outline?.simplified) notes.push(m.simplifiedOutline);
-  // The scale, on the line that is visible without opening anything. A relief
-  // whose unit is only in a panel is a relief nobody can read (D1).
-  if (tally?.prisms) {
-    notes.push(m.prisms(
-      fr(tally.prisms), SITADEL_METRES_PER_DWELLING, SITADEL_PRISM_BASE_M, SITADEL_PRISM_MAX_M,
-    ));
-    const flat = tally.demolition + tally.noDwellings;
-    if (flat) notes.push(m.flat(fr(flat)));
-  }
   return notes.length ? `${head} · ${notes.join(' · ')}` : head;
 }
 
@@ -1995,6 +1635,27 @@ function publishByParcel() {
   });
 }
 
+/**
+ * Offer the dossiers this layer has drawn on their parcels, keyed as `ads-fr`
+ * keys them (`series|number`), so the row's other permit layer lays no second
+ * badge on the same plot — see `PERMIT_DRAWN_ON_PARCEL_JOIN`.
+ *
+ * Taken down and put back on every draw rather than updated in place: the
+ * board announces a key coming and going, and that announcement is how
+ * `ads-fr` learns the set changed and redraws from the answer it holds.
+ */
+function publishDrawnDossiers() {
+  _unpublishDrawn?.();
+  _unpublishDrawn = null;
+  if (!_enabled || !_records.size) return;
+  const keys = new Set();
+  for (const record of _records.values()) {
+    const number = dossierKey(record.permit?.i);
+    if (number) keys.add(`${record.permit.f === 'dem' ? 'PD' : 'DAU'}|${number}`);
+  }
+  _unpublishDrawn = publishJoin(PERMIT_DRAWN_ON_PARCEL_JOIN, () => keys);
+}
+
 const sitadelFranceLayer = {
   id: SITADEL_FR_LAYER_ID,
   // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
@@ -2022,16 +1683,14 @@ const sitadelFranceLayer = {
     _lastUpdate = null;
     _focusKey = null;
     _communeName = null;
-    _prismTally = null;
-    _coldFloorKey = null;
-    clearColdFloorRetry();
+    _drawn = null;
     resetFloorRetries();
     _classificationType = powerClassificationTypeForScene(viewer?.scene);
 
-    _points = new Cesium.PointPrimitiveCollection({ blendOption: Cesium.BlendOption.TRANSLUCENT });
-    _points.show = false;
-    viewer.scene.primitives.add(_points);
-    registerSpriteCollection(SITADEL_FR_LAYER_ID, _points);
+    _badges = new Cesium.BillboardCollection({ scene: viewer.scene });
+    _badges.show = false;
+    viewer.scene.primitives.add(_badges);
+    registerSpriteCollection(SITADEL_FR_LAYER_ID, _badges);
     restoreSpriteOrder(viewer);
 
     if (typeof window !== 'undefined' && !_mapStackListener) {
@@ -2050,9 +1709,8 @@ const sitadelFranceLayer = {
   enable(viewer) {
     _enabled = true;
     _error = null;
-    if (_points) _points.show = true;
+    if (_badges) _badges.show = true;
     if (_fills) _fills.show = true;
-    if (_prisms) _prisms.show = true;
     if (_edges) _edges.show = true;
     if (_outline) _outline.show = true;
     // The boot-time stack settle fires no event, so re-derive on every enable
@@ -2066,6 +1724,7 @@ const sitadelFranceLayer = {
     // an `unchanged` answer from the proxy, so the load path would not run and
     // the offer would stay down under a pack that is right there.
     publishByParcel();
+    publishDrawnDossiers();
     if (!_moveEndRemover) {
       _moveEndRemover = viewer.camera.moveEnd.addEventListener(scheduleLoad);
     }
@@ -2080,12 +1739,10 @@ const sitadelFranceLayer = {
     _debounceTimer = null;
     _abort?.abort();
     _abort = null;
-    if (_points) _points.show = false;
+    if (_badges) _badges.show = false;
     if (_fills) _fills.show = false;
-    if (_prisms) _prisms.show = false;
     if (_edges) _edges.show = false;
     if (_outline) _outline.show = false;
-    clearColdFloorRetry();
     resetFloorRetries();
     _overlayHost.setVisible(SITADEL_FR_OVERLAY_SOURCE_ID, false);
     if (_clickHandler) {
@@ -2096,6 +1753,8 @@ const sitadelFranceLayer = {
     unregisterPickOwner(SITADEL_FR_LAYER_ID);
     _unpublishByParcel?.();
     _unpublishByParcel = null;
+    _unpublishDrawn?.();
+    _unpublishDrawn = null;
     if (_moveEndRemover) {
       _moveEndRemover();
       _moveEndRemover = null;
@@ -2156,18 +1815,9 @@ const sitadelFranceLayer = {
       cadastreParcels: summary?.cadastreParcels ?? null,
       millesime: _payload?.millesime ?? null,
       cadastreEdition: _payload?.cadastreEdition ?? null,
-      // The height channel, declared: how many DOSSIERS stand up, how many
-      // carry no height because their file counts no dwelling, and how many
-      // are waiting only because the ground under them is not resolved yet.
-      prisms: _prismTally?.prisms ?? null,
-      prismsClipped: _prismTally?.clipped ?? null,
-      prismTallestM: _prismTally?.tallestM ?? null,
-      flatDemolition: _prismTally?.demolition ?? null,
-      flatNoDwellings: _prismTally?.noDwellings ?? null,
-      flatColdFloor: _prismTally?.coldFloor ?? null,
-      metresPerDwelling: SITADEL_METRES_PER_DWELLING,
-      prismCeilingM: SITADEL_PRISM_MAX_M,
-      prismBaseM: SITADEL_PRISM_BASE_M,
+      // The row's « Période », and how many permits it keeps.
+      months: _months,
+      drawnInPeriod: _drawn?.permits?.length ?? null,
     };
     const label = buildSitadelLoadingLabel();
     if (label) stats.loadingLabel = label;
@@ -2190,36 +1840,67 @@ const sitadelFranceLayer = {
   },
 
   /**
-   * Colour legend for the control-panel row.
+   * The key: one plain line per class drawn, folded under « Couleurs des
+   * projets » with the selected permit's card above it.
    *
-   * ONLY the five bands, and only the ones that actually have a permit on
-   * screen. The permits that could not be placed are NOT here: the panel's
-   * swatch is the colour those objects are painted, and there is no colour for
-   * an object that is nowhere. They are on the row line, in `getStats()` and on
-   * every card instead.
+   * ONLY the classes actually drawn. The permits that could not be placed are
+   * NOT here: the swatch is the colour those objects are painted, and there is
+   * no colour for an object that is nowhere. They are on the row line, in
+   * `getStats()` and on every card instead.
    */
   getRowControls() {
-    const bands = _payload?.summary?.bands;
-    if (!Array.isArray(bands)) return { chips: [], legend: [] };
-    const legend = [];
-    for (const band of bands) {
-      if (!(band.count > 0)) continue;
-      legend.push({
-        // The band ID, not the `label` the server baked in French: the id is
-        // the stable key and the words are the reader's.
-        label: sitadelBandLabel(band.id),
-        color: band.color,
-        count: band.count,
-        blurb: sitadelBandBlurb(band.id),
-      });
+    const present = new Set([..._records.values()].map((record) => record.classId));
+    const selected = _selectedId ? _records.get(_selectedId) : null;
+    return {
+      chips: [],
+      legend: permitProjectLegend(present),
+      legendFold: permitProjectFoldTitle(),
+      // Declared while a parcel is washed: on Google 3D the wash climbs the
+      // façades (`surfaceFillNotice.js`).
+      surfaceFill: _records.size > 0,
+      legendSelection: selected ? sitadelPermitPanel(selected, _drawn) : null,
+    };
+  },
+
+  /** The key's close button: dismiss the selected permit, as Escape does. */
+  clearSelectedCard() {
+    clearSelection();
+  },
+
+  /** The row's « Période », mirrored from `ads-fr` in a share link. */
+  getParams() {
+    return { months: _months };
+  },
+
+  /**
+   * Whether a set of params is one this layer takes — the fan-out of the row's
+   * « Période » asks before it sends (`_offerParamsToRow` in manager.js).
+   * @param {object} params
+   * @returns {boolean}
+   */
+  acceptsParams(params) {
+    const keys = Object.keys(params || {});
+    return keys.length > 0 && keys.every((key) => key === 'months')
+      && SITADEL_WINDOWS.includes(String(params.months));
+  },
+
+  /**
+   * Change the period. A closed set — refused, never clamped, since a share
+   * link reaches here. Redraws from the pack in hand: no request.
+   * @param {object} params
+   * @returns {boolean}
+   */
+  setParams(params = {}) {
+    if (!Object.hasOwn(params, 'months')) return Object.keys(params).length === 0;
+    if (!this.acceptsParams(params)) return false;
+    const next = String(params.months);
+    if (next === _months) return true;
+    _months = next;
+    if (_payload && _viewer) {
+      drawPack(_payload);
+      _status = _records.size ? 'ready' : 'empty';
     }
-    legend.push(...sitadelHeightLegend(_prismTally));
-    // Declared only while something is still drawn flat: a commune whose every
-    // plot stands up has no ground-classified thematic surface left to drape.
-    const flat = _prismTally
-      ? _prismTally.demolition + _prismTally.noDwellings + _prismTally.coldFloor
-      : 0;
-    return { chips: [], legend, surfaceFill: flat > 0 };
+    return true;
   },
 
   destroy(viewer) {
@@ -2241,17 +1922,17 @@ const sitadelFranceLayer = {
       _moveEndRemover();
       _moveEndRemover = null;
     }
-    clearColdFloorRetry();
     resetFloorRetries();
     clearSurfaces();
-    if (_points) {
-      unregisterSpriteCollection(SITADEL_FR_LAYER_ID, _points);
-      (viewer || _viewer)?.scene?.primitives?.remove?.(_points);
-      _points = null;
+    if (_badges) {
+      unregisterSpriteCollection(SITADEL_FR_LAYER_ID, _badges);
+      (viewer || _viewer)?.scene?.primitives?.remove?.(_badges);
+      _badges = null;
     }
     _records.clear();
     _owners.clear();
     _payload = null;
+    _drawn = null;
     _viewer = null;
   },
 };
@@ -2262,27 +1943,30 @@ const sitadelFranceLayer = {
  * Seed rendered records so the selection, card, legend, stats and detection
  * paths run without WebGL.
  *
- * The dots are seeded as plain objects rather than Cesium primitives, so a test
- * can drive `selectPermit()` — which mutates the primitive it selected — with
- * no GL context. `viewer` is still supplied by the tests that exercise the
- * parcel highlight, which really does add a `GroundPolylinePrimitive`.
+ * The badges are seeded as plain objects rather than billboards, so a test can
+ * drive `selectPermit()` — which mutates the billboard it selected — with no GL
+ * context. The pack is seeded as drawn, whatever the period. `viewer` is still
+ * supplied by the tests that exercise the parcel highlight, which really does
+ * add a `GroundPolylinePrimitive`.
  * @param {object} [state]
  */
 export function _setSitadelStateForTest({
   viewer, payload = null, overlayHost, enabled = true, status = 'ready',
-  loading = false, fetchImpl, focusKey = null, error = null, points,
+  loading = false, fetchImpl, focusKey = null, error = null, badges,
 } = {}) {
   _fetchImpl = fetchImpl || null;
   _viewer = viewer || null;
-  // The dot collection is OPT-IN: most tests seed plain-object dots below and
-  // never draw. A test that hands one over is asking for the real `drawPack`.
-  _points = points || null;
+  // The badge collection is OPT-IN: most tests seed plain-object badges below
+  // and never draw. A test that hands one over is asking for the real
+  // `drawPack`.
+  _badges = badges || null;
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
   _payload = payload;
+  _drawn = payload;
   _owners = sitadelParcelOwners(payload);
   _records = new Map();
   for (const record of sitadelPermitRecords(payload)) {
-    record.point = { pixelSize: record.basePixelSize, outlineColor: null, outlineWidth: 1 };
+    record.badge = { image: permitBadgeImage(record.classId), width: PERMIT_BADGE_PX, height: PERMIT_BADGE_PX };
     _records.set(record.id, record);
   }
   _enabled = enabled;
@@ -2310,10 +1994,9 @@ export function _selectSitadelForTest(id) {
 /** Exercise the production clear path and restore the production seams. */
 export function _clearSitadelSelectionForTest() {
   clearSelection();
-  clearColdFloorRetry();
   resetFloorRetries();
-  _prismTally = null;
-  _coldFloorKey = null;
+  _months = SITADEL_WINDOW_DEFAULT;
+  _drawn = null;
   _fetchImpl = null;
   _overlayHost = DEFAULT_OVERLAY_HOST;
   _payload = null;
@@ -2327,7 +2010,7 @@ export function _clearSitadelSelectionForTest() {
   _focusKey = null;
   _communeName = null;
   _groundLinesSupported = null;
-  _points = null;
+  _badges = null;
   _viewer = null;
 }
 
@@ -2372,36 +2055,36 @@ export async function _sitadelLoadForTest(options = {}) {
 }
 
 /**
- * Build the three ground batches and the column batch against a seeded pack.
+ * Build the three ground batches against a seeded pack.
  *
  * `_setSitadelStateForTest` deliberately does not draw — it seeds records so the
  * card and legend paths run without a scene. This is the seam for the geometry
- * itself: it runs the REAL `drawSurfaces`, so the height decision, the edge
- * colour and the cold-floor bookkeeping are the production ones.
- * @returns {{tally: ?object, prisms: ?object, fills: ?object, edges: ?object}}
+ * itself: it runs the REAL `drawSurfaces`, so the edge colour is the
+ * production one.
+ * @returns {{fills: ?object, edges: ?object, outline: ?object}}
  */
-export function _drawSitadelSurfacesForTest(payload = _payload) {
+export function _drawSitadelSurfacesForTest(payload = _drawn) {
   drawSurfaces(payload);
-  return {
-    tally: _prismTally, prisms: _prisms, fills: _fills, edges: _edges, outline: _outline,
-  };
+  return { fills: _fills, edges: _edges, outline: _outline };
 }
 
 /**
- * Drive the real `drawPack` against a supplied `PointPrimitiveCollection`.
+ * Drive the real `drawPack` against a supplied `BillboardCollection`.
  *
  * The seam the FLOOR tests need: `_setSitadelStateForTest` seeds plain-object
- * dots, which cannot answer "where is this mark in the world". This runs the
- * production path — the provisional sampling, the anchor, the ladder — and
- * hands back the collection that was actually written to.
+ * badges, which cannot answer "where is this mark in the world". This runs the
+ * production path — the period, the provisional sampling, the anchor, the
+ * ladder — and hands back the collection that was actually written to. The
+ * period defaults to the whole register, so a fixture of any age is drawn.
  * @param {?object} payload
- * @returns {?Cesium.PointPrimitiveCollection}
+ * @param {{months?: string}} [options]
+ * @returns {?Cesium.BillboardCollection}
  */
-export function _drawSitadelPackForTest(payload = _payload) {
+export function _drawSitadelPackForTest(payload = _payload, { months = SITADEL_WINDOWS[SITADEL_WINDOWS.length - 1] } = {}) {
   _payload = payload;
-  _owners = sitadelParcelOwners(payload);
+  _months = months;
   drawPack(payload);
-  return _points;
+  return _badges;
 }
 
 /**
@@ -2422,16 +2105,6 @@ export function _sitadelRefreshFloorsForTest() {
 /** Whether a re-anchor is armed, without exposing the timer. */
 export function _sitadelFloorReanchorPendingForTest() {
   return Boolean(_floorRetryTimer);
-}
-
-/** The height bookkeeping of the last draw. */
-export function _sitadelPrismTallyForTest() {
-  return _prismTally;
-}
-
-/** Whether a cold-floor rebuild is pending, without exposing the timer. */
-export function _sitadelColdFloorPendingForTest() {
-  return Boolean(_coldFloorTimer);
 }
 
 /** What the layer thinks about its own camera state right now. */
