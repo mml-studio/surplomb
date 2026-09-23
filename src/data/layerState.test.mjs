@@ -10,6 +10,7 @@ import {
   LayerStateCoordinator,
   REGISTERED_LAYER_IDS,
   SHARE_TRACKING_RESTORE_POLICIES,
+  STORED_LAYER_STATE_REVISION,
   createDefaultLayerState,
   createSeededLayerState,
   decodeLayerStateParams,
@@ -652,6 +653,31 @@ test('pruning drops the withdrawn ids and leaves everything else, options includ
   // Nothing to prune is the identity, not a copy — this runs on every boot.
   const clean = normalizeLayerState({ ...createDefaultLayerState(), enabledLayerIds: ['flights'] });
   assert.equal(pruneDisabledLayers(clean), clean);
+});
+
+test('a session saved with « Urbanisme » on before #360 comes back without the zoning', async () => {
+  // Until #360 `urbanisme-gpu` was the row's primary, so a session saved with
+  // the row on carries it, with no revision field. Restored as is, it lit
+  // « Règles d'urbanisme » over the permits on every reload.
+  const beforeRevision = JSON.stringify({
+    v: 2,
+    l: ['urbanisme-gpu', 'ads-fr', 'sitadel-fr', 'flights'],
+    o: createDefaultLayerState().options,
+  });
+  const manager = productionManager();
+  const storage = memoryStorage(beforeRevision);
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage });
+  await coordinator.start();
+  assert.equal(manager.isEnabled('urbanisme-gpu'), false, 'the zoning came back from storage');
+  for (const id of ['ads-fr', 'sitadel-fr', 'flights']) assert.equal(manager.isEnabled(id), true, id);
+
+  // The zoning lit AFTER the revision is the reader's choice, and it stays:
+  // the next save carries `r`, and that session restores it.
+  await manager.setEnabled('urbanisme-gpu', true, { origin: 'user' });
+  const saved = storage.getItem(LAYER_STATE_STORAGE_KEY);
+  assert.equal(JSON.parse(saved).r, STORED_LAYER_STATE_REVISION);
+  coordinator.destroy();
+  assert.ok(parseStoredLayerState(saved).enabledLayerIds.includes('urbanisme-gpu'));
 });
 
 test('restore applies sanitized params after init and before enable', async () => {

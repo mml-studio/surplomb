@@ -1084,11 +1084,38 @@ export function decodeLayerStateParams(params) {
   return normalizeLayerState({ enabledLayerIds, options: rawOptions });
 }
 
+/**
+ * What a STORED session meant when it was written, as opposed to how it is
+ * spelled (`LAYER_STATE_VERSION`, shared with the share link).
+ *
+ * The spelling can hold still while the meaning moves: a row whose primary
+ * changes keeps every token, but an ON saved under the old row is not the ON
+ * a reader would give the new one. A session saved before a revision runs
+ * that revision's step once, on the way in; the next save carries the current
+ * revision, so a choice made after it is never undone. Written as `r`, absent
+ * before the first step.
+ *
+ * Stored sessions only. A share link reproduces what its sender had on screen,
+ * whenever that was.
+ */
+export const STORED_LAYER_STATE_REVISION = 1;
+
+const STORED_LAYER_STATE_STEPS = Object.freeze([
+  // 1 — « Règles d'urbanisme » stops coming on with « Urbanisme » (2026-09-23).
+  // Until #360 the zoning WAS the row's primary, so every session saved with
+  // the row on carries `urbanisme-gpu`, and it came back after #360 painting
+  // every plot in PLU colours — the default #360 removed. A session that old
+  // cannot tell a reader who asked for the zoning from one who switched the
+  // row on, so it drops the zoning; the tile lights it again in one press.
+  Object.freeze({ revision: 1, dropLayerIds: Object.freeze(['urbanisme-gpu']) }),
+]);
+
 /** Stable local-storage representation (full IDs for debuggability). */
 export function serializeStoredLayerState(state) {
   const normalized = normalizeLayerState(state);
   return JSON.stringify({
     v: LAYER_STATE_VERSION,
+    r: STORED_LAYER_STATE_REVISION,
     l: normalized.enabledLayerIds,
     o: normalized.options,
   });
@@ -1099,7 +1126,14 @@ export function parseStoredLayerState(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.v !== LAYER_STATE_VERSION || !Array.isArray(parsed.l)) return null;
-    return normalizeLayerState({ enabledLayerIds: parsed.l, options: parsed.o });
+    const revision = Number.isInteger(parsed.r) ? parsed.r : 0;
+    const dropped = new Set(STORED_LAYER_STATE_STEPS
+      .filter((step) => step.revision > revision)
+      .flatMap((step) => step.dropLayerIds));
+    return normalizeLayerState({
+      enabledLayerIds: parsed.l.filter((id) => !dropped.has(id)),
+      options: parsed.o,
+    });
   } catch {
     return null;
   }

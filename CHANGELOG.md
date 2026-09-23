@@ -350,6 +350,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **« Urbanisme » came back after a reload with « Règles d’urbanisme » lit.**
+  Until the row opened on its permits, the PLU zoning was the row itself, so
+  every browser that had saved the row switched on remembered the zoning ON,
+  and restored it over the permits. A session saved before that change now
+  comes back with the permits and without the zoning; one press on the tile
+  lights it, and from then on a reload keeps it. A share link still shows
+  exactly what its sender had on screen.
 - **With the data centres on, the globe froze over Paris for a minute or
   more, and some sites stood 80 m under the street.** Every site within 75 km
   of the camera — a few hundred around Paris, on screen or not — measured the

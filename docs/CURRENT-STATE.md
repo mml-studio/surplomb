@@ -3674,6 +3674,15 @@ menu. The row's button reads and switches the GROUP on such a row: with the
 permits out and the zoning on it reads ON, and pressing it puts everything
 out. A dark row names its tiles on its meta line.
 
+A **stored session saved before this row changed** comes back with the zoning
+dark: `urbanisme-gpu` was the row's primary then, so any session saved with
+the row on carries it, and restored as is it lit the PLU on every reload. The
+stored blob now carries a revision (`r`, `STORED_LAYER_STATE_REVISION` in
+`src/data/layerState.js`); `parseStoredLayerState` drops `urbanisme-gpu` from a
+blob without one, and every save writes the current revision, so the zoning a
+reader lights afterwards survives a reload. Share links are not rewritten: a
+link shows what its sender had on screen.
+
 In the key, members that share a row tile share ONE block: the two permit
 layers wear one palette (`src/data/permitProjects.js`) and their classes are
 merged, deduplicated and put back in the life of a permit (`mergeTileMembers`).
