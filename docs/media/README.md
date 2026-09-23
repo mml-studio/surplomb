@@ -53,9 +53,8 @@ provider's terms ([DATA_SOURCES.md](../../DATA_SOURCES.md)). Keep the
 attribution printed under each capture in the README, and the in-frame credit
 line, with any reuse.
 
-A fifth view, the Gironde megafire of July 2026, is reserved in both READMEs
-(`<!-- view 5: Gironde megafire, pending -->`) and will be recorded here when
-it is added.
+A fifth view is reserved in both READMEs (`<!-- view 5: pending -->`) and
+will be recorded here when it is added.
 
 ## Upstream capture GIFs — removed
 

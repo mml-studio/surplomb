@@ -128,7 +128,7 @@ Europe in the dark, then France's 72,746 mobile antenna sites light up; the Alps
 
 </div>
 
-<!-- view 5: Gironde megafire, pending -->
+<!-- view 5: pending -->
 
 ---
 

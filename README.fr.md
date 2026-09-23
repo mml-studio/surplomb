@@ -116,7 +116,7 @@ L'Europe dans le noir, puis les 72 746 sites d'antennes mobiles de France s'allu
 
 </div>
 
-<!-- view 5: Gironde megafire, pending -->
+<!-- view 5: pending -->
 
 ## Le lancer
 
