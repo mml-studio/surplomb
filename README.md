@@ -42,33 +42,25 @@ It runs on your own machine with no key and no account ([Quick Start](#-quick-st
 
 ## 🎞️ Views from the globe
 
-Four films shot in the app, each on layers this fork adds; the longer ones are cut into chapters that play in order. The camera paths, captions and reveal effects were staged for filming. The shapes, colors and figures come from each layer's data, except where the line under a chapter says otherwise.
+Four films shot in the app, each on layers this fork adds; the longer ones are cut into chapters that play in order. The camera paths, captions and reveal effects were staged for filming. The shapes, colors and figures come from each layer's data, except where the line under a chapter says otherwise. Each chapter holds one idea under a title burned in for this page; where the app's own card or label carries it, the chapter punches in on it at about its real size so it can be read.
 
 ### Roissy: aircraft noise
 
-From Terminal 1 at Paris-Charles de Gaulle to a departure's take-off, then up to the airport's noise exposure plan and its zone A.
+A live departure's take-off from Paris-Charles de Gaulle, then the airport's noise exposure plan and the card of its zone A.
 
 <div align="center">
 
-![1/5: the camera leaves Terminal 1 at Paris-Charles de Gaulle and flies low to the threshold of runway 09R](docs/media/surplomb-roissy-1-runway.gif)
+![1/3: in the cockpit view of flight LHX27W, the aircraft rolls down runway 09R under the callsigns of the live traffic around it and lifts off; outside, the camera pulls back and a click on the departing aircraft opens its tag, shown at full size: LHX27W, 5,975 ft, 272 kts, City Airlines, CDG to MUC](docs/media/surplomb-roissy-1-live-departure.gif)
 
-<sub>Live flights: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 8.7–18.5: the roll plays ×2 and the pull-back ×3, and the tag is held 2 s on one frame. Staged for the film: the take-off roll in the cockpit view and the speed and altitude on its heads-up display; the frame follows the horizon down at lift-off. The flight, its callsign, altitude, speed and route are live: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
 
-![2/5: in the cockpit view of flight LHX27W, the aircraft rolls down runway 09R and lifts off](docs/media/surplomb-roissy-2-takeoff.gif)
+![2/3: the camera climbs high above the airport and the noise exposure plan appears, its nested zones drawn around the runways](docs/media/surplomb-roissy-2-noise-zones.gif)
 
-<sub>Staged for the film: the camera run and the speed and altitude on the heads-up display. The callsign and route are live: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 19.3–24.5: the climb plays ×3 and the last frame is held 1.5 s. Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
 
-![3/5: out of the cockpit, the camera climbs over the runways and a click on the departing aircraft opens its tag: LHX27W, Paris-Charles de Gaulle to Munich](docs/media/surplomb-roissy-3-departure.gif)
+![3/3: a click in the innermost zone opens its card, shown at full size: aircraft noise, zone A of Paris-Charles de Gaulle, very strong nuisance, no new housing, 70 dB(A) and above averaged over 24 h](docs/media/surplomb-roissy-3-zone-a-card.gif)
 
-<sub>Live flights: OpenSky Network, adsb.lol. Imagery: Google, via Cesium ion.</sub>
-
-![4/5: the camera rises high above the airport and the noise exposure plan draws its nested zones around the runways](docs/media/surplomb-roissy-4-noise-plan.gif)
-
-<sub>Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
-
-![5/5: the key opens and a click in the innermost zone shows its card: aircraft noise, zone A of Paris-Charles de Gaulle, very strong nuisance, no new housing](docs/media/surplomb-roissy-5-zone-a.gif)
-
-<sub>Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 24.9–27.4: the key is cropped out and the card is held 1.6 s on one frame. Data: DGAC noise exposure plans, via the IGN Géoplateforme. Imagery: Google, via Cesium ion.</sub>
 
 </div>
 
@@ -86,25 +78,21 @@ Property sales (DVF) around the Terreaux, one of them annotated at €410,000; a
 
 ### Power grid: France lights up
 
-Western Europe in the dark; France's high-voltage grid comes on and each nuclear plant raises a column to its output of the hour. The camera dives into the Rhône valley and opens the Cruas plant, then pulls back as the grid goes dark.
+Western Europe in the dark; France's high-voltage grid comes on and each nuclear plant raises a column to its output of the hour. The camera dives into the Rhône valley, where each plant is labelled with its output and its capacity, and opens the Cruas plant's card.
 
 <div align="center">
 
-![1/4: Western Europe at night; France's high-voltage lines flicker on and a green column rises over each nuclear plant to what it is producing](docs/media/surplomb-grid-1-lights-up.gif)
+![1/3: Western Europe at night; France's high-voltage lines flicker on and a green column rises over each nuclear plant to what it is producing](docs/media/surplomb-grid-1-nuclear-columns.gif)
 
-<sub>Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE. At this scale the film draws the columns wider and three times taller than the app does; their proportions are the data's. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 0–3.5, the first frame held 0.5 s. Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE. At this scale the film draws the columns wider and three times taller than the app does; their proportions are the data's. Imagery: Google, via Cesium ion.</sub>
 
-![2/4: the camera dives from France into the Rhône valley; plant labels and the key appear](docs/media/surplomb-grid-2-dive.gif)
+![2/3: the camera dives from France into the Rhône valley and pushes in on two plant labels, shown at full size: Bugey, 2,746 MW of 3,580 MW, and Saint-Alban-Saint-Maurice, 1,241 MW of 2,670 MW](docs/media/surplomb-grid-2-rhone-valley.gif)
 
-<sub>Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE · plant positions, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 3.5–7.8: the dive plays ×1.5 and the labels are held 1.8 s; the key stays out of frame. Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE · plant positions, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
 
-![3/4: a click on the Cruas nuclear plant opens its card: its output of the hour against its installed capacity, unit by unit](docs/media/surplomb-grid-3-cruas.gif)
+![3/3: a click on the Cruas nuclear plant opens its card, followed at close to full size: 2,605 MW of 3,660 MW installed, 71% of its maximum for the hour of 19:00, and its fourth unit at 0 of 915 MW](docs/media/surplomb-grid-3-cruas-card.gif)
 
-<sub>Data: generating-unit output, RTE (Actual Generation API) · plant position, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
-
-![4/4: the camera pulls back to Western Europe; the columns drain, then the grid and the plants go dark](docs/media/surplomb-grid-4-blackout.gif)
-
-<sub>The switch-off is a film effect, not an event. Data: high-voltage lines, © OpenStreetMap contributors · generating-unit output, RTE. Imagery: Google, via Cesium ion.</sub>
+<sub>Film seconds 7.4–10.1: the key is cropped out, the frame follows the card as the camera drifts, and the card is held 1.3 s. Data: generating-unit output, RTE (Actual Generation API) · plant position, EDF Open Data. Imagery: Google, via Cesium ion.</sub>
 
 </div>
 

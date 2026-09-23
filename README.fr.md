@@ -30,33 +30,25 @@ La version hébergée est [surplomb.app](https://surplomb.app).
 
 ## Vues du globe
 
-Quatre films tournés dans l'application, chacun sur des couches ajoutées par ce fork ; les plus longs sont découpés en chapitres qui se suivent. Les mouvements de caméra, les cartouches et les effets d'apparition ont été mis en scène pour le tournage. Les formes, les couleurs et les chiffres viennent des données de chaque couche, sauf quand la ligne sous un chapitre dit le contraire.
+Quatre films tournés dans l'application, chacun sur des couches ajoutées par ce fork ; les plus longs sont découpés en chapitres qui se suivent. Les mouvements de caméra, les cartouches et les effets d'apparition ont été mis en scène pour le tournage. Les formes, les couleurs et les chiffres viennent des données de chaque couche, sauf quand la ligne sous un chapitre dit le contraire. Chaque chapitre porte une seule idée, sous un titre incrusté pour cette page ; quand la fiche ou l'étiquette de l'application la porte, le chapitre se resserre sur elle, presque en taille réelle, pour qu'on puisse la lire.
 
 ### Roissy : le bruit des avions
 
-Du terminal 1 de Paris-Charles-de-Gaulle au décollage d'un avion, puis jusqu'au plan d'exposition au bruit de l'aéroport et à sa zone A.
+Le décollage d'un vol en direct à Paris-Charles-de-Gaulle, puis le plan d'exposition au bruit de l'aéroport et la fiche de sa zone A.
 
 <div align="center">
 
-![1/5 : la caméra quitte le terminal 1 de Paris-Charles-de-Gaulle et file à basse altitude jusqu'au seuil de la piste 09R](docs/media/surplomb-roissy-1-runway.gif)
+![1/3 : dans la vue cockpit du vol LHX27W, l'avion roule sur la piste 09R sous les indicatifs du trafic en direct et décolle ; dehors, la caméra recule et un clic sur l'avion au départ ouvre son étiquette, montrée en taille réelle : LHX27W, 5 975 ft, 272 kts, City Airlines, de CDG à MUC](docs/media/surplomb-roissy-1-live-departure.gif)
 
-<sub>Vols en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 8,7–18,5 du film : la course est jouée ×2 et le recul ×3, et l'étiquette est tenue 2 s sur une image. Mis en scène pour le film : la course au décollage dans la vue cockpit, la vitesse et l'altitude affichées par son viseur tête haute ; le cadre suit l'horizon quand l'avion se cabre. Le vol, son indicatif, son altitude, sa vitesse et sa route sont en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
 
-![2/5 : dans la vue cockpit du vol LHX27W, l'avion roule sur la piste 09R et décolle](docs/media/surplomb-roissy-2-takeoff.gif)
+![2/3 : la caméra s'élève haut au-dessus de l'aéroport et le plan d'exposition au bruit apparaît, ses zones emboîtées dessinées autour des pistes](docs/media/surplomb-roissy-2-noise-zones.gif)
 
-<sub>Mis en scène pour le film : la course de la caméra, la vitesse et l'altitude affichées par le viseur tête haute. L'indicatif et la route sont en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 19,3–24,5 du film : la montée est jouée ×3 et la dernière image tenue 1,5 s. Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
 
-![3/5 : sortie du cockpit, la caméra monte au-dessus des pistes et un clic sur l'avion au départ ouvre son étiquette : LHX27W, de Paris-Charles-de-Gaulle à Munich](docs/media/surplomb-roissy-3-departure.gif)
+![3/3 : un clic dans la zone la plus proche des pistes ouvre sa fiche, montrée en taille réelle : bruit des avions, zone A de Paris-Charles-de-Gaulle, gêne très forte, pas de nouveaux logements, 70 dB(A) et plus en moyenne sur 24 h](docs/media/surplomb-roissy-3-zone-a-card.gif)
 
-<sub>Vols en direct : OpenSky Network, adsb.lol. Imagerie : Google, via Cesium ion.</sub>
-
-![4/5 : la caméra s'élève haut au-dessus de l'aéroport et le plan d'exposition au bruit dessine ses zones emboîtées autour des pistes](docs/media/surplomb-roissy-4-noise-plan.gif)
-
-<sub>Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
-
-![5/5 : la légende s'ouvre et un clic dans la zone la plus proche des pistes affiche sa fiche : bruit des avions, zone A de Paris-Charles-de-Gaulle, gêne très forte, pas de nouveaux logements](docs/media/surplomb-roissy-5-zone-a.gif)
-
-<sub>Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 24,9–27,4 du film : la légende est hors cadre et la fiche tenue 1,6 s sur une image. Données : plans d'exposition au bruit de la DGAC, via la Géoplateforme de l'IGN. Imagerie : Google, via Cesium ion.</sub>
 
 </div>
 
@@ -74,25 +66,21 @@ Les ventes immobilières (DVF) autour des Terreaux, dont une annotée à 410 000
 
 ### Réseau électrique : la France s'allume
 
-L'Europe de l'Ouest dans le noir ; le réseau haute tension français s'allume et chaque centrale nucléaire élève une colonne à la hauteur de sa production de l'heure. La caméra plonge dans la vallée du Rhône et ouvre la centrale de Cruas, puis remonte pendant que le réseau s'éteint.
+L'Europe de l'Ouest dans le noir ; le réseau haute tension français s'allume et chaque centrale nucléaire élève une colonne à la hauteur de sa production de l'heure. La caméra plonge dans la vallée du Rhône, où chaque centrale affiche sa production et sa puissance, et ouvre la fiche de la centrale de Cruas.
 
 <div align="center">
 
-![1/4 : l'Europe de l'Ouest de nuit ; les lignes haute tension de la France s'allument et une colonne verte s'élève sur chaque centrale nucléaire à la hauteur de ce qu'elle produit](docs/media/surplomb-grid-1-lights-up.gif)
+![1/3 : l'Europe de l'Ouest de nuit ; les lignes haute tension de la France s'allument et une colonne verte s'élève sur chaque centrale nucléaire à la hauteur de ce qu'elle produit](docs/media/surplomb-grid-1-nuclear-columns.gif)
 
-<sub>Données : lignes haute tension, © les contributeurs d'OpenStreetMap · production des groupes, RTE. À cette échelle, le film dessine les colonnes plus larges et trois fois plus hautes que l'application ; leurs proportions sont celles des données. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 0–3,5 du film, la première image tenue 0,5 s. Données : lignes haute tension, © les contributeurs d'OpenStreetMap · production des groupes, RTE. À cette échelle, le film dessine les colonnes plus larges et trois fois plus hautes que l'application ; leurs proportions sont celles des données. Imagerie : Google, via Cesium ion.</sub>
 
-![2/4 : la caméra plonge de la France vers la vallée du Rhône ; les noms des centrales et la légende apparaissent](docs/media/surplomb-grid-2-dive.gif)
+![2/3 : la caméra plonge de la France vers la vallée du Rhône et se resserre sur les étiquettes de deux centrales, montrées en taille réelle : Bugey, 2 746 MW sur 3 580 MW, et Saint-Alban-Saint-Maurice, 1 241 MW sur 2 670 MW](docs/media/surplomb-grid-2-rhone-valley.gif)
 
-<sub>Données : lignes haute tension, © les contributeurs d'OpenStreetMap · production des groupes, RTE · position des centrales, Open Data EDF. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 3,5–7,8 du film : la plongée est jouée ×1,5 et les étiquettes tenues 1,8 s ; la légende reste hors cadre. Données : lignes haute tension, © les contributeurs d'OpenStreetMap · production des groupes, RTE · position des centrales, Open Data EDF. Imagerie : Google, via Cesium ion.</sub>
 
-![3/4 : un clic sur la centrale nucléaire de Cruas ouvre sa fiche : sa production de l'heure face à sa puissance installée, groupe par groupe](docs/media/surplomb-grid-3-cruas.gif)
+![3/3 : un clic sur la centrale nucléaire de Cruas ouvre sa fiche, suivie presque en taille réelle : 2 605 MW sur 3 660 MW installés, 71 % de son maximum pour l'heure de 19 h, et son quatrième groupe à 0 sur 915 MW](docs/media/surplomb-grid-3-cruas-card.gif)
 
-<sub>Données : production des groupes, RTE (API Actual Generation) · position de la centrale, Open Data EDF. Imagerie : Google, via Cesium ion.</sub>
-
-![4/4 : la caméra remonte jusqu'à l'Europe de l'Ouest ; les colonnes se vident, puis le réseau et les centrales s'éteignent](docs/media/surplomb-grid-4-blackout.gif)
-
-<sub>L'extinction est un effet du film, pas un événement. Données : lignes haute tension, © les contributeurs d'OpenStreetMap · production des groupes, RTE. Imagerie : Google, via Cesium ion.</sub>
+<sub>Secondes 7,4–10,1 du film : la légende est hors cadre, le cadre suit la fiche pendant que la caméra dérive, et la fiche est tenue 1,3 s. Données : production des groupes, RTE (API Actual Generation) · position de la centrale, Open Data EDF. Imagerie : Google, via Cesium ion.</sub>
 
 </div>
 

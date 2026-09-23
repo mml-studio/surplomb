@@ -4,22 +4,24 @@
 
 The maintainer of this repository filmed the following captures from Surplomb,
 for this repository and its project documentation. Every view film except
-Lyon's is cut into chapters that play in order and together cover the whole
-film; the seconds are those of the film each chapter comes from.
+Lyon's is cut into chapters that play in order; the seconds are those of the
+film each chapter comes from. The Roissy and power-grid chapters hold one idea
+each under a title burned in for the README, punch in on the app's card or
+label at about its real size where it carries that idea, and leave out what
+carries none (Roissy's run from Terminal 1, the grid's pull-back and
+switch-off); some of their camera travel plays faster and some cards are held
+on one frame, as the table says.
 
 | File | Shows | Film seconds | Data drawn |
 |---|---|---|---|
 | `surplomb-hero.gif` | Paris in photorealistic 3D, live traffic street by street (the head of both READMEs) | — | Road traffic layer |
-| `surplomb-roissy-1-runway.gif` | Terminal 1 at Paris-Charles de Gaulle, then the threshold of runway 09R | 2.7–8.7 | Live flights (OpenSky Network, adsb.lol) |
-| `surplomb-roissy-2-takeoff.gif` | Flight LHX27W's take-off in the cockpit view | 8.7–14.7 | Live flights; the camera run and the speed and altitude on the heads-up display are staged |
-| `surplomb-roissy-3-departure.gif` | A click on the departure opens its tag, Paris-Charles de Gaulle to Munich | 14.7–19.3 | Live flights |
-| `surplomb-roissy-4-noise-plan.gif` | The climb to the airport's noise exposure plan | 19.0–25.0 | DGAC noise exposure plans via the IGN Géoplateforme |
-| `surplomb-roissy-5-zone-a.gif` | The key and zone A's card | 25.0–29.0 | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-roissy-1-live-departure.gif` | Flight LHX27W's take-off in the cockpit view, then a click on it opens its tag, Paris-Charles de Gaulle to Munich; title *A live departure from Paris-CDG* | 8.7–18.5 (roll ×2, pull-back ×3, tag held 2 s) | Live flights (OpenSky Network, adsb.lol); the take-off roll and the speed and altitude on the heads-up display are staged |
+| `surplomb-roissy-2-noise-zones.gif` | The climb to the airport's noise exposure plan; title *The noise zones around Paris-CDG* | 19.3–24.5 (climb ×3, last frame held 1.5 s) | DGAC noise exposure plans via the IGN Géoplateforme |
+| `surplomb-roissy-3-zone-a-card.gif` | Zone A's card at full size; title *Zone A: 70 dB and above, no new homes* | 24.9–27.4 (card held 1.6 s) | DGAC noise exposure plans via the IGN Géoplateforme |
 | `surplomb-lyon-dvf-dpe.gif` | Lyon: property sales (DVF), then the energy ratings (DPE) of the same district | 1.6–8.6 | DVF (DGFiP, via Etalab); DPE (ADEME) |
-| `surplomb-grid-1-lights-up.gif` | France's high-voltage grid and nuclear columns light up | 0.0–4.4 | High-voltage lines (© OpenStreetMap contributors); generating-unit output (RTE); columns drawn wider and three times taller than the app draws them at that scale |
-| `surplomb-grid-2-dive.gif` | The dive into the Rhône valley, labels and key | 4.4–8.4 | The same, plus plant positions (EDF Open Data) |
-| `surplomb-grid-3-cruas.gif` | The Cruas plant's card | 8.4–11.5 | Generating-unit output (RTE); plant position (EDF Open Data) |
-| `surplomb-grid-4-blackout.gif` | The pull-back to Europe and the switch-off | 11.5–14.7 | The same as chapter 1; the switch-off is a film effect |
+| `surplomb-grid-1-nuclear-columns.gif` | France's high-voltage grid and nuclear columns light up; title *France's grid and its nuclear plants* | 0.0–3.5 (first frame held 0.5 s) | High-voltage lines (© OpenStreetMap contributors); generating-unit output (RTE); columns drawn wider and three times taller than the app draws them at that scale |
+| `surplomb-grid-2-rhone-valley.gif` | The dive into the Rhône valley, then two plant labels at full size; title *Each plant: output now / capacity* | 3.5–7.8 (dive ×1.5, labels held 1.8 s) | The same, plus plant positions (EDF Open Data) |
+| `surplomb-grid-3-cruas-card.gif` | The Cruas plant's card, followed at 0.89× its size; title *Cruas: 71% of its maximum this hour* | 7.4–10.1 (card held 1.3 s) | Generating-unit output (RTE); plant position (EDF Open Data) |
 | `surplomb-infra-1-antennas.gif` | France's mobile antenna sites light up | 0.0–4.4 | Mobile antenna sites (ANFR) |
 | `surplomb-infra-2-no-4g.gif` | The Alps where no operator's 4G reaches | 4.4–9.2 | Simulated 4G coverage (ARCEP, Mon réseau mobile) |
 | `surplomb-infra-3-data-centers.gif` | Île-de-France's data centers and their power | 9.2–14.4 | Data centers (© OpenStreetMap contributors, DCWatch); mobile antenna sites (ANFR) |
@@ -30,14 +32,19 @@ All of them show Google Photorealistic 3D Tiles, served through Cesium ion.
 Camera paths, captions and reveal effects were staged for filming; the table
 names the other staged parts. The infrastructure film's last 1.2 s, a
 switch-off and zoom-out that joins its end to its start on the landing page,
-is not included.
+is not included, nor are the power-grid film's last 3.2 s (the pull-back to
+Europe and the switch-off, a film effect) or the Roissy film's first 8.7 s
+(Terminal 1 and the run to runway 09R).
 
-The view files are 560 px wide (the hero is 480 px). Each chapter plays at the
-highest of 12, 10 or 8 frames per second that keeps it under 5 MB (two Roissy
-chapters sit at 8 fps and between 5 and 6 MB), and its last 0.3 s cross-fade
-into its first frame, so the loop does not jump. Lyon's single GIF plays at
-8 fps without a cross-fade. Encoded with ffmpeg: `palettegen=stats_mode=diff`,
-then `paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`, 128 colors.
+The Lyon and infrastructure files are 560 px wide, the Roissy and power-grid
+files 640 px (the hero is 480 px). Each chapter plays at the highest of 12,
+10 or 8 frames per second that keeps it under 5 MB, and its last 0.3 s
+cross-fade into its first frame, so the loop does not jump. Lyon's single GIF
+plays at 8 fps without a cross-fade and sits at 6.7 MB. The Roissy and grid
+titles are drawn at the GIF's own 640 px and laid over the frame after it is
+scaled, so they stay sharp; the crops are area-averaged from the 1920 px film.
+Encoded with ffmpeg: `palettegen=stats_mode=diff`, then
+`paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`, 128 colors.
 
 These files are **not covered by the project's MIT License**. They are project
 documentation: Google Photorealistic 3D Tiles remain under the Google Maps
