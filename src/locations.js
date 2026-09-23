@@ -220,6 +220,20 @@ export const CITY_POIS = {
       { name: 'Barrage Vauban', lat: 48.5800, lon: 7.7392, alt: 400, pitch: -28, heading: 90, buildingHeight: 15 },
     ],
   },
+  // Coordinates from OpenStreetMap (Nominatim, 2026-09-23); bounds from the
+  // commune's box in geo.api.gouv.fr (INSEE 64122), widened by ~300 m.
+  biarritz: {
+    name: 'Biarritz',
+    groundElevation: 25,
+    viewBounds: { southwest: { lat: 43.445, lng: -1.580 }, northeast: { lat: 43.497, lng: -1.531 } },
+    pois: [
+      { name: 'Rocher de la Vierge', lat: 43.4842, lon: -1.5706, alt: 400, pitch: -28, heading: 250, buildingHeight: 15 },
+      { name: 'Grande Plage', lat: 43.4853, lon: -1.5584, alt: 450, pitch: -30, heading: 330, buildingHeight: 20 },
+      { name: 'Phare de Biarritz', lat: 43.4938, lon: -1.5539, alt: 400, pitch: -25, heading: 20, buildingHeight: 44 },
+      { name: 'Hôtel du Palais', lat: 43.4864, lon: -1.5563, alt: 420, pitch: -28, heading: 300, buildingHeight: 30 },
+      { name: 'Port des Pêcheurs', lat: 43.4831, lon: -1.5657, alt: 400, pitch: -30, heading: 270, buildingHeight: 12 },
+    ],
+  },
 };
 
 // i18n-ignore-end
@@ -227,7 +241,8 @@ export const CITY_POIS = {
 /**
  * The cities the LOCATION tray offers as pills, in commune-population order
  * (INSEE): Paris, Marseille, Lyon, Toulouse, Nice, Nantes, Montpellier,
- * Strasbourg.
+ * Strasbourg — then Biarritz, added at the owner's request (2026-09-23), out
+ * of that order on purpose.
  *
  * This list is SEPARATE from CITY_POIS on purpose. What the tray offers is a
  * product decision; what the app knows how to fly to is a data concern with
@@ -245,6 +260,7 @@ export const PILL_CITY_IDS = Object.freeze([
   'nantes',
   'montpellier',
   'strasbourg',
+  'biarritz',
 ]);
 
 /** The city the globe opens on when a visit carries no share state. */

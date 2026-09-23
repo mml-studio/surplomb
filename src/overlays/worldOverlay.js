@@ -85,6 +85,11 @@ const PAINT_LANE_INDEX = new Map(WORLD_OVERLAY_PAINT_LANES.map((lane, index) => 
  */
 export const WORLD_OVERLAY_OCCLUDER_SELECTORS = Object.freeze([
   '#title-bar',
+  // The desktop top row (src/globeShell.js): the place search and its menu,
+  // the Appearance bar, and the panel it opens.
+  '#place-search',
+  '#globe-top-bar',
+  '#appearance-panel',
   // The phone shell's bottom sheet. It owns between 14 % and 92 % of the
   // viewport depending on its snap, and it is the one occluder here whose box
   // CHANGES SIZE while nothing else on the page moves — the service caches

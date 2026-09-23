@@ -4,6 +4,7 @@ import {
   normalizeAllocationStrategy,
 } from './data/detectionPolicy.js';
 import { clampScopeTerminusPct } from './scopeMask.js';
+import { EDGE_SHADE_DEFAULT_PCT, clampEdgeShadePct } from './edgeShade.js';
 import { decodeLayerStateParams, encodeLayerStateParams } from './data/layerState.js';
 import {
   WEEK_HOUR_SHARE_PARAM,
@@ -294,7 +295,10 @@ export class ShareLinkManager {
     // question and deliberately stays at 5.
     this._detectionOutsideOpacityPct = 37;
     this._celestialRingEnabled = false;
-    this._scopeEnabled = true;
+    // Off since 2026-09-23 — mirrors the boot in src/main.js. The PARSE
+    // fallback for a link without `sc` stays `true`: such a link was authored
+    // when the scope was always drawn.
+    this._scopeEnabled = false;
     // Feather opens on a wide 49% scope-mask falloff (2026-09-10, superseding
     // the 08-24 11%, the 08-23 8% and the 08-22 hard crop) — mirrors
     // SCOPE_FEATHER_RATIO_DEFAULT in scopeMask.js and the slider's markup value.
@@ -302,6 +306,9 @@ export class ShareLinkManager {
     // null = the altitude-adaptive terminus (the default). A number pins the
     // outside-fill opacity as a percent, 94..100. (`sce`, 2026-08-17)
     this._scopeTerminusPct = null;
+    // Mirrors EDGE_SHADE_DEFAULT_PCT in src/edgeShade.js and the slider's
+    // markup value. (`es`, 2026-09-23)
+    this._edgeShadePct = EDGE_SHADE_DEFAULT_PCT;
     this._mapStack = 'photoreal';
     this._layerStateProvider = null;
     this._panelStateProvider = null;
@@ -416,6 +423,9 @@ export class ShareLinkManager {
       scopeTerminusPct: params.has('sce')
         ? clampScopeTerminusPct(params.get('sce'))
         : null,
+      // A link from before `es` restores NO edge shade: it was authored when
+      // there was none, and its scope (`sc`, default on) was the treatment.
+      edgeShadePct: params.has('es') ? clampEdgeShadePct(params.get('es'), 0) : 0,
       mapStack: params.get('map') || 'photoreal',
       layerState: decodedLayerState,
       layerStateInvalid: params.get('v') === '2'
@@ -520,6 +530,7 @@ export class ShareLinkManager {
         scopeEnabled: visualCurrent ? state.scopeEnabled : undefined,
         scopeFeatherPct: visualCurrent ? state.scopeFeatherPct : undefined,
         scopeTerminusPct: visualCurrent ? state.scopeTerminusPct : undefined,
+        edgeShadePct: visualCurrent ? state.edgeShadePct : undefined,
         mapStack: mapCurrent ? state.mapStack : undefined,
         panelState,
         styleParams: visualCurrent ? state.styleParams : undefined,
@@ -631,6 +642,9 @@ export class ShareLinkManager {
     else if (typeof extras.scopeTerminusPct === 'number') {
       this._scopeTerminusPct = clampScopeTerminusPct(extras.scopeTerminusPct);
     }
+    if (typeof extras.edgeShadePct === 'number') {
+      this._edgeShadePct = clampEdgeShadePct(extras.edgeShadePct, this._edgeShadePct);
+    }
     if (typeof extras.mapStack === 'string') this._mapStack = extras.mapStack;
     this._scheduleUpdate();
   }
@@ -739,6 +753,7 @@ export class ShareLinkManager {
     // unsupported terminus even if the field was set from somewhere else.
     const terminusPct = clampScopeTerminusPct(this._scopeTerminusPct);
     if (terminusPct != null) params.set('sce', String(terminusPct));
+    params.set('es', String(clampEdgeShadePct(this._edgeShadePct)));
     params.set('map', this._mapStack);
     // Only written when an hour is PINNED. An absent `wh` is the default —
     // each week-shaped layer following its own live clock — so a link never

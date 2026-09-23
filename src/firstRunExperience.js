@@ -356,16 +356,24 @@ export function initFirstRunExperience({
 
   if (chosen === 'C') {
     root.remove();
+    // On a desktop the field is the top-centre search once src/globeShell.js
+    // has moved it there; the dock's LOCATION tray is where it was before.
+    const topSearch = phoneShell ? null : documentRef.getElementById('place-search');
+    const desktopTopSearch = Boolean(topSearch && !topSearch.hidden);
     const hint = initFirstRunHint({
       host: hintHost,
       template,
       // On a phone the field is the bar at the top of the screen, and the
       // bubble hangs UNDER it (phone.css): the sheet no longer has a
-      // Recherche tab to point at.
+      // Recherche tab to point at. The desktop's top-centre field is the same
+      // shape at the same edge.
       anchor: phoneShell
         ? documentRef.getElementById('phone-search')
-        : documentRef.querySelector('#location-bar .location-toolbar-label'),
+        : desktopTopSearch
+          ? documentRef.getElementById('place-search-bar')
+          : documentRef.querySelector('#location-bar .location-toolbar-label'),
       phoneShell,
+      placement: phoneShell || desktopTopSearch ? 'below' : 'above',
       openSearch: phoneShell
         ? () => {
           if (phoneSheet?.openSearch) {
@@ -379,7 +387,9 @@ export function initFirstRunExperience({
       emit,
       onClose: rememberClosed,
       isBlocked: () => exclusiveSurfaceActive(documentRef),
-      tray: phoneShell ? null : documentRef.getElementById('location-bar'),
+      // The top-centre search carries `collapsed` while its menu is shut, so
+      // it closes the bubble the way the tray did.
+      tray: phoneShell ? null : desktopTopSearch ? topSearch : documentRef.getElementById('location-bar'),
       documentRef,
     });
     discardTemplates();

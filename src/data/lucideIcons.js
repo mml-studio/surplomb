@@ -130,6 +130,42 @@ export const LUCIDE_ICONS = Object.freeze({
     '<path d="M18 6 6 18"/>',
     '<path d="m6 6 12 12"/>',
   ]),
+  // The globe's top bar (src/globeShell.js): « Apparence »…
+  'sliders-horizontal': Object.freeze([
+    '<path d="M10 5H3"/>',
+    '<path d="M12 19H3"/>',
+    '<path d="M14 3v4"/>',
+    '<path d="M16 17v4"/>',
+    '<path d="M21 12h-9"/>',
+    '<path d="M21 19h-5"/>',
+    '<path d="M21 5h-7"/>',
+    '<path d="M8 10v4"/>',
+    '<path d="M8 12H3"/>',
+  ]),
+  // …« Plus d'actions »…
+  ellipsis: Object.freeze([
+    '<circle cx="12" cy="12" r="1"/>',
+    '<circle cx="19" cy="12" r="1"/>',
+    '<circle cx="5" cy="12" r="1"/>',
+  ]),
+  // …a recent place in the search menu…
+  clock: Object.freeze([
+    '<circle cx="12" cy="12" r="10"/>',
+    '<path d="M12 6v6l4 2"/>',
+  ]),
+  // …a city in the same menu…
+  'map-pin': Object.freeze([
+    '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>',
+    '<circle cx="12" cy="10" r="3"/>',
+  ]),
+  // …the chosen style in the Appearance panel…
+  check: Object.freeze([
+    '<path d="M20 6 9 17l-5-5"/>',
+  ]),
+  // …and the « Réglages avancés » disclosure.
+  'chevron-right': Object.freeze([
+    '<path d="m9 18 6-6-6-6"/>',
+  ]),
 });
 
 const _cache = new Map();

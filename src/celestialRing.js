@@ -52,6 +52,14 @@ const CELESTIAL_MAX_DEVICE_PIXEL_RATIO = 1.25;
 
 let keyholeFadeRatio = KEYHOLE_LABEL_FEATHER_RATIO;
 let keyholeOutsideOpacity = KEYHOLE_OUTSIDE_OPACITY_DEFAULT;
+/**
+ * Whether labels and cards fade outside the keyhole at all. They fade because
+ * the scope mask darkens the world there; with the scope off (the default
+ * since 2026-09-23) the world outside the circle is as visible as inside it,
+ * and a label dimmed to 37 % on a clear street reads as a fault. The scope
+ * mask sets this from its own switch (src/scopeMask.js).
+ */
+let keyholeFadeActive = true;
 
 /** Clamp a number to an inclusive range. */
 function clamp(value, min, max) {
@@ -67,6 +75,24 @@ export function setKeyholeFadeTuning({ fadeRatio, outsideOpacity } = {}) {
     keyholeOutsideOpacity = clamp(outsideOpacity, 0, 1);
   }
   return getKeyholeFadeTuning();
+}
+
+/**
+ * Turn the fade outside the keyhole on or off, and repaint once so the idle
+ * overlay shows it.
+ * @param {boolean} active
+ * @returns {void}
+ */
+export function setKeyholeFadeActive(active) {
+  const next = active !== false;
+  if (next === keyholeFadeActive) return;
+  keyholeFadeActive = next;
+  governorRequestRender('keyhole-fade');
+}
+
+/** @returns {boolean} whether labels fade outside the keyhole. */
+export function isKeyholeFadeActive() {
+  return keyholeFadeActive;
 }
 
 /** Read the current normalized keyhole fade settings. */
@@ -102,6 +128,7 @@ export function keyholeLabelAlpha(labelX, labelY, width, height) {
 /** Compute keyhole opacity from geometry already cached by a hot render loop. */
 export function keyholeLabelAlphaFromGeometry(labelX, labelY, geometry) {
   if (!geometry || !(geometry.radius > 0) || !Number.isFinite(labelX) || !Number.isFinite(labelY)) return 0;
+  if (!keyholeFadeActive) return 1;
   const feather = geometry.featherPx;
   const distance = Math.hypot(labelX - geometry.centerX, labelY - geometry.centerY);
   if (distance <= geometry.radius) return 1;

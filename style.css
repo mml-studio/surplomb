@@ -169,6 +169,17 @@ html[data-input="coarse"] #cesiumContainer canvas {
   pointer-events: none;
 }
 
+/* Edge shade — the light corner falloff a first run draws instead of the
+   scope (src/edgeShade.js). Same z1 as the mask and appended after it, so
+   with both on the shade rides above; detection (z5) and the overlay root
+   (z6) stay above both. The gradient itself is written by the module. */
+#edge-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 /* The detection surface is host-owned but parented into #cesiumContainer
    (position:absolute, z-index:auto — NOT a stacking context) so its
    `mix-blend-mode: screen` composites against the WebGL scene. z5 keeps it
@@ -14131,3 +14142,797 @@ html[data-voice-premium] #gev-voice-control .gev-premium-badge .premium-crown {
   flex: 0 0 auto;
   fill: #ffd35e;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE GLOBE'S TOP ROW ON A DESKTOP — src/globeShell.js (2026-09-23)
+
+   The place search at the top centre, the « Apparence » / « Plus d'actions »
+   bar at the top right, and the Appearance panel. Every rule hangs off
+   `html.globe-shell`, the class the module sets once it has moved the
+   controls in: on a phone, or if the module never ran, none of this applies
+   and the dock keeps its trays.
+
+   One surface for all three: the brand's night green, nearly opaque, because
+   these controls sit over the brightest part of a photographic city and a
+   glass plate there reads as a smudge. Sentence-case labels at 13-15 px:
+   the letter-spaced capitals stay for secondary readouts.
+   ═══════════════════════════════════════════════════════════════════════════ */
+html.globe-shell {
+  /* Opaque: a HUD readout or a street label behind a panel otherwise shows
+     through its text. */
+  --shell-surface: #13261f;
+  --shell-border: rgba(177, 190, 181, 0.26);
+  --shell-text-2: rgba(226, 232, 224, 0.74);
+  --shell-radius: 12px;
+  --shell-top: 24px;
+  --shell-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+}
+
+/* A Lucide glyph drawn as a mask: the element's colour paints the strokes. */
+.shell-icon {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: var(--shell-icon) center / contain no-repeat;
+  mask: var(--shell-icon) center / contain no-repeat;
+}
+
+/* ── The place search ─────────────────────────────────────────────────────── */
+html.globe-shell #place-search {
+  position: fixed;
+  top: var(--shell-top);
+  left: 50%;
+  z-index: 120;
+  width: min(560px, calc(100vw - 640px));
+  min-width: 320px;
+  transform: translateX(-50%);
+}
+
+html.globe-shell #place-search[hidden] { display: none; }
+
+html.globe-shell .place-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0 10px 0 16px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  color: var(--shell-text-2);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+html.globe-shell #place-search.menu-open .place-search-bar,
+html.globe-shell .place-search-bar:focus-within {
+  border-color: rgba(247, 171, 124, 0.62);
+  box-shadow: var(--shell-shadow), 0 0 0 3px rgba(247, 171, 124, 0.16);
+}
+
+html.globe-shell .place-search-glyph { width: 20px; height: 20px; }
+
+html.globe-shell #place-search .location-search-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The magnifier that unfolded the field in the dock has nothing to unfold. */
+html.globe-shell #place-search .search-toggle-btn { display: none; }
+
+html.globe-shell #place-search #location-search,
+html.globe-shell #place-search #location-search.expanded {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  transition: none;
+}
+
+html.globe-shell #place-search #location-search::placeholder {
+  color: var(--shell-text-2);
+  font-style: normal;
+}
+
+/* The field's own clear cross, in the brand's colours rather than the UA's. */
+html.globe-shell #place-search #location-search::-webkit-search-cancel-button {
+  filter: invert(0.85) sepia(0.2);
+  cursor: pointer;
+}
+
+html.globe-shell .place-search-kbd {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid var(--shell-border);
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--shell-text-2);
+  white-space: nowrap;
+}
+
+html.globe-shell #place-search.menu-open .place-search-kbd { visibility: hidden; }
+
+html.globe-shell .place-search-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  padding: 10px 8px 12px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+}
+
+html.globe-shell .place-search-menu[hidden] { display: none; }
+
+html.globe-shell .place-search-section:not([hidden]) ~ .place-search-section {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(247, 244, 234, 0.08);
+}
+
+html.globe-shell .place-search-section[hidden] { display: none; }
+
+html.globe-shell .place-search-heading {
+  margin: 0 8px 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--shell-text-2);
+}
+
+html.globe-shell .place-search-recents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+html.globe-shell .place-search-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+html.globe-shell .place-search-recent .shell-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--shell-text-2);
+}
+
+html.globe-shell .place-search-recent-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.globe-shell .place-search-recent:hover,
+html.globe-shell .place-search-recent:focus-visible {
+  background: rgba(247, 244, 234, 0.07);
+  outline: none;
+}
+
+html.globe-shell #place-search .location-pills {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 6px;
+  overflow: visible;
+}
+
+html.globe-shell #place-search .location-pill {
+  padding: 7px 12px;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  border-color: var(--shell-border);
+}
+
+html.globe-shell #place-search .location-pill:hover { transform: none; }
+
+html.globe-shell #place-search .poi-row-container {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+html.globe-shell #place-search .poi-row-container.expanded {
+  max-height: 120px;
+  padding-top: 8px;
+}
+
+html.globe-shell #place-search .poi-pill-name {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+/* ── The top bar ──────────────────────────────────────────────────────────── */
+html.globe-shell #globe-top-bar {
+  position: fixed;
+  top: var(--shell-top);
+  right: 24px;
+  z-index: 120;
+  display: flex;
+  gap: 8px;
+}
+
+html.globe-shell #globe-top-bar[hidden] { display: none; }
+
+html.globe-shell .top-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+html.globe-shell .top-bar-btn-icon {
+  width: 48px;
+  padding: 0;
+  justify-content: center;
+}
+
+html.globe-shell .top-bar-btn:hover,
+html.globe-shell .top-bar-btn:focus-visible {
+  border-color: rgba(247, 171, 124, 0.62);
+  outline: none;
+}
+
+html.globe-shell .top-bar-btn.active,
+html.globe-shell .top-bar-btn[aria-expanded="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #13261f;
+}
+
+/* ── « Plus d'actions »: the round buttons, as a menu with words ─────────────
+   The labels are the buttons' own accessible names (`attr(aria-label)`), which
+   the i18n applicator already translates, so the menu reads in the page's
+   language without a second copy of any string. */
+html.globe-shell.globe-actions-menu #top-center-actions {
+  top: calc(var(--shell-top) + 56px);
+  right: 24px;
+  left: auto;
+  z-index: 125;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  padding: 6px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+  transform: none;
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions:not(.menu-open) { display: none; }
+
+html.globe-shell.globe-actions-menu #top-center-actions button {
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions button::after {
+  content: attr(aria-label);
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions button:hover,
+html.globe-shell.globe-actions-menu #top-center-actions button:focus-visible {
+  background: rgba(247, 244, 234, 0.07);
+  transform: none;
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions button > * {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  color: var(--shell-text-2);
+}
+
+/* The language switch has no glyph: its two letters sit where the others'
+   glyphs do, and its accessible name is the words. */
+html.globe-shell.globe-actions-menu #top-center-actions #locale-switch {
+  font-size: 0;
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions #locale-switch::before {
+  content: attr(data-shell-code);
+  flex: none;
+  width: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--shell-text-2);
+}
+
+html.globe-shell.globe-actions-menu #top-center-actions #locale-switch::after {
+  font-size: 14px;
+}
+
+/* ── The Appearance panel ─────────────────────────────────────────────────── */
+html.globe-shell #appearance-panel {
+  position: fixed;
+  top: calc(var(--shell-top) + 56px);
+  right: 24px;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  max-height: calc(100vh - var(--shell-top) - 56px - 24px);
+  box-sizing: border-box;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+html.globe-shell #appearance-panel[hidden] { display: none; }
+
+html.globe-shell .appearance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 6px 18px;
+}
+
+html.globe-shell .appearance-head h2 {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+html.globe-shell .appearance-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+html.globe-shell .appearance-close:hover,
+html.globe-shell .appearance-close:focus-visible {
+  background: rgba(247, 244, 234, 0.08);
+  outline: none;
+}
+
+html.globe-shell .appearance-body {
+  overflow-y: auto;
+  padding: 0 18px 16px;
+  scrollbar-width: thin;
+}
+
+html.globe-shell .appearance-section {
+  padding: 12px 0;
+}
+
+html.globe-shell .appearance-section + .appearance-section,
+html.globe-shell .appearance-advanced {
+  border-top: 1px solid rgba(247, 244, 234, 0.1);
+}
+
+html.globe-shell .appearance-heading,
+html.globe-shell #appearance-panel .map-source-heading {
+  display: block;
+  margin: 0 0 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--shell-text-2);
+}
+
+/* The style buttons, as previews of the view. One capture of the canvas
+   (`--style-preview-image`) under a filter per style: an approximation of
+   each look, drawn from what the reader is looking at. Without a capture
+   the swatch is a plain gradient, still filtered. */
+html.globe-shell #appearance-panel .appearance-style-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 8px;
+  overflow: visible;
+}
+
+html.globe-shell #appearance-panel .style-btn {
+  min-width: 0;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+html.globe-shell #appearance-panel .style-btn::before { display: none; }
+html.globe-shell #appearance-panel .style-btn:hover { transform: none; background: none; }
+html.globe-shell #appearance-panel .style-btn .btn-icon { display: none; }
+
+html.globe-shell #appearance-panel .style-btn .btn-key {
+  top: 4px;
+  left: 5px;
+  right: auto;
+  z-index: 1;
+  font-size: 10px;
+  color: rgba(247, 244, 234, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+html.globe-shell #appearance-panel .style-btn .btn-label {
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+html.globe-shell #appearance-panel .style-btn.active .btn-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+html.globe-shell .style-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  background:
+    var(--style-preview-image, linear-gradient(160deg, #6f8a7e 0%, #b9b39e 45%, #53645c 100%))
+    center / cover no-repeat;
+  box-shadow: 0 0 0 1px rgba(247, 244, 234, 0.16);
+  transition: box-shadow var(--transition-fast);
+}
+
+html.globe-shell #appearance-panel .style-btn:hover .style-preview,
+html.globe-shell #appearance-panel .style-btn:focus-visible .style-preview {
+  box-shadow: 0 0 0 2px rgba(247, 171, 124, 0.55);
+}
+
+html.globe-shell #appearance-panel .style-btn:focus-visible { outline: none; }
+
+html.globe-shell #appearance-panel .style-btn.active .style-preview {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+html.globe-shell .style-preview-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #13261f;
+  -webkit-mask: none;
+  mask: none;
+  display: none;
+}
+
+html.globe-shell .style-preview-check::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: #13261f;
+  -webkit-mask: var(--shell-icon) center / contain no-repeat;
+  mask: var(--shell-icon) center / contain no-repeat;
+}
+
+html.globe-shell #appearance-panel .style-btn.active .style-preview-check { display: block; }
+
+/* Each style's look, approximated on the capture. */
+html.globe-shell .style-btn[data-style="retro"] .style-preview {
+  filter: contrast(1.25) saturate(1.5) hue-rotate(-8deg);
+}
+html.globe-shell .style-btn[data-style="retro"] .style-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+}
+html.globe-shell .style-btn[data-style="surveillance"] .style-preview {
+  filter: grayscale(1) sepia(1) hue-rotate(58deg) saturate(3.2) brightness(0.92) contrast(1.15);
+}
+html.globe-shell .style-btn[data-style="thermal"] .style-preview {
+  filter: grayscale(1) contrast(1.5) brightness(1.05);
+}
+html.globe-shell .style-btn[data-style="anime"] .style-preview {
+  filter: saturate(1.9) contrast(1.12) brightness(1.06);
+}
+html.globe-shell .style-btn[data-style="noir"] .style-preview {
+  filter: brightness(0.5) saturate(0.55) contrast(1.1);
+}
+html.globe-shell .style-btn[data-style="dusk"] .style-preview {
+  filter: brightness(0.89) saturate(0.92) sepia(0.12);
+}
+html.globe-shell .style-btn[data-style="snow"] .style-preview {
+  filter: brightness(1.25) saturate(0.35) contrast(0.9);
+}
+
+/* The base-map chips keep their own component; only its heading changes
+   voice to match the panel. */
+html.globe-shell #appearance-panel .map-source-section {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+html.globe-shell #appearance-panel .map-source-heading {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* The edge-shade slider: no number, the view is the readout. */
+html.globe-shell .appearance-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+html.globe-shell .appearance-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+html.globe-shell .appearance-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: 0;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+html.globe-shell .appearance-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+html.globe-shell .appearance-switch-label { font-size: 14px; font-weight: 500; }
+html.globe-shell .appearance-switch-hint { font-size: 12px; color: var(--shell-text-2); }
+
+html.globe-shell .appearance-switch-track {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(247, 244, 234, 0.18);
+  transition: background var(--transition-fast);
+}
+
+html.globe-shell .appearance-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--brand-ivory);
+  transition: transform var(--transition-fast);
+}
+
+html.globe-shell .appearance-switch[aria-checked="true"] .appearance-switch-track { background: var(--accent); }
+html.globe-shell .appearance-switch[aria-checked="true"] .appearance-switch-track::after { transform: translateX(18px); }
+
+html.globe-shell .appearance-switch:focus-visible {
+  outline: 2px solid rgba(247, 171, 124, 0.7);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+html.globe-shell .appearance-advanced { padding-top: 4px; }
+
+html.globe-shell .appearance-advanced-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+
+html.globe-shell .appearance-advanced-summary::-webkit-details-marker { display: none; }
+
+html.globe-shell .appearance-advanced-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--shell-text-2);
+  transition: transform var(--transition-fast);
+}
+
+html.globe-shell .appearance-advanced[open] .appearance-advanced-chevron { transform: rotate(90deg); }
+
+/* The former DISPLAY panel, adopted whole: no plate of its own inside this
+   one, no header (the summary is its header), and every group shown whatever
+   collapsed state the right rail left on it. */
+html.globe-shell #appearance-panel #pp-toggles,
+html.globe-shell #appearance-panel #pp-toggles:not(.collapsed) {
+  --pp-expanded-width: 100%;
+  width: 100%;
+  padding: 0 0 4px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  align-items: stretch;
+  gap: 7px;
+}
+
+html.globe-shell #appearance-panel #pp-toggles > .pp-header-row { display: none; }
+
+html.globe-shell #appearance-panel #pp-toggles.collapsed .pp-toggle-group,
+html.globe-shell #appearance-panel #pp-toggles.collapsed #clean-view-toggle {
+  display: block;
+}
+
+html.globe-shell #appearance-panel #pp-toggles.collapsed #param-slider-panel.active {
+  display: block;
+}
+
+/* The clean view has a switch of its own above. */
+html.globe-shell #appearance-panel #clean-view-toggle { display: none; }
+
+/* ── What the top row replaces ───────────────────────────────────────────── */
+/* The dock's LIEU and STYLES VISUELS trays are empty once their contents have
+   moved up: the dock keeps the voice. */
+html.globe-shell #command-dock > #location-bar,
+html.globe-shell #command-dock > #control-panel {
+  display: none !important;
+}
+
+html.globe-shell #command-dock {
+  grid-template-areas: 'voice';
+  grid-template-columns: auto;
+  width: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The heading tape is a technical readout: it shows with the HUD. */
+html.globe-shell body:has(#intel-hud:not(.active)) #globe-heading-tape { display: none; }
+
+body.ui-clean-view :is(#place-search, #globe-top-bar, #appearance-panel),
+body.recording-mode :is(#place-search, #globe-top-bar, #appearance-panel) {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.cockpit-mode :is(#place-search, #globe-top-bar, #appearance-panel) { display: none !important; }
+
+/* The first-run bubble under the top-centre search, caret turned up — the
+   phone's placement (phone.css), on a desktop. */
+html.globe-shell #first-run-hint[data-placement="below"] {
+  top: var(--first-run-hint-top, 84px);
+  bottom: auto;
+}
+
+html.globe-shell #first-run-hint[data-placement="below"]::after {
+  top: -0.36rem;
+  bottom: auto;
+  border: 0;
+  border-left: 1px solid rgba(247, 171, 124, 0.34);
+  border-top: 1px solid rgba(247, 171, 124, 0.34);
+}
+
+/* The style's parameters, under the previews: part of the panel, not a
+   plate of their own. */
+html.globe-shell #appearance-styles #param-slider-panel {
+  margin-top: 12px;
+  padding: 12px 0 0;
+  max-height: none;
+  background: none;
+  border: 0;
+  border-top: 1px solid rgba(247, 244, 234, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+}
+
+/* « Fondu » and « Au-dehors » dim labels outside the scope's circle: with the
+   scope off nothing is dimmed (src/celestialRing.js), so they have nothing to
+   set. */
+html.globe-shell #pp-toggles:has(#scope-toggle[aria-pressed="false"]) :is(#detection-fade-row, #detection-opacity-row) {
+  display: none !important;
+}
+
+/* The brand over a bright city: without the scope's black around it, the
+   tagline sat on white rooftops. A soft local shade, not a plate. */
+html.globe-shell #title-bar .title-glow {
+  top: -34px;
+  left: -44px;
+  width: 310px;
+  height: 128px;
+  background: radial-gradient(ellipse at 45% 50%, rgba(5, 12, 10, 0.78) 0%, rgba(5, 12, 10, 0.5) 48%, rgba(5, 12, 10, 0) 76%);
+  opacity: 1;
+}
+
+html.globe-shell #title-bar .subtitle {
+  color: rgba(247, 244, 234, 0.88);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+/* The status chips hang under the search bar instead of touching it. */
+html.globe-shell #global-loading-status { top: 84px; }
+html.globe-shell #traffic-sync-chip { top: 120px; }
+html.globe-shell #cctv-sync-chip { top: 154px; }
+
+/* The CAMÉRAS panel follows its layer (src/ui.js `_syncCctvPanelPresence`);
+   the rail's own rules set its display, so the attribute has to win here. */
+#cctv-panel[hidden] { display: none !important; }

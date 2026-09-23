@@ -558,14 +558,112 @@
     </form>
   </dialog>
 
-  <!-- Style indicator. Most style names are the same word in both languages
-       (NORMAL, CRT, NVG, FLIR…); the one that is not, NUIT / NIGHT, is written
-       by `src/styles/styleNames.js` in the page's language. Either way the
-       value carries `translate="no"`: it is already in the reader's language. -->
-  <div id="style-indicator">
-    <span class="indicator-label" data-i18n="style.activeLabel">STYLE ACTIF</span>
-    <span class="indicator-value" id="active-style-name" translate="no">NORMAL</span>
+  <!--
+    THE PLACE SEARCH, TOP CENTRE — desktop only (src/globeShell.js).
+
+    Finding a place is how a visit starts, and the field used to sit folded
+    into the « LIEU » tray of the bottom dock, behind a hover. On a desktop the
+    one search form of the page, `#location-search-form`, is MOVED here at
+    boot — as `src/phoneSheet.js` moves it into `#phone-search` on a phone — so
+    there is still one field, one submit path and one geocoder. The menu under
+    it holds the recent places and the city shortcuts that were in the tray.
+    Ships `hidden`: the phone shell never shows it, and a desktop shows it once
+    the form has landed in it.
+  -->
+  <div id="place-search" class="collapsed" hidden>
+    <div class="place-search-bar" id="place-search-bar">
+      <span class="place-search-glyph shell-icon" data-shell-icon="search" aria-hidden="true"></span>
+      <!-- ⌘ K or Ctrl K, written by the module for the reader's keyboard. -->
+      <kbd class="place-search-kbd" id="place-search-kbd" aria-hidden="true"></kbd>
+    </div>
+    <div id="place-search-menu" class="place-search-menu" hidden>
+      <section class="place-search-section" id="place-search-recents-section" hidden aria-labelledby="place-search-recents-heading">
+        <h2 class="place-search-heading" id="place-search-recents-heading" data-i18n="placeSearch.recents">Lieux récents</h2>
+        <ul id="place-search-recents" class="place-search-recents"></ul>
+      </section>
+      <section class="place-search-section" id="place-search-cities-section" aria-labelledby="place-search-cities-heading">
+        <h2 class="place-search-heading" id="place-search-cities-heading" data-i18n="placeSearch.cities">Grandes villes</h2>
+      </section>
+    </div>
   </div>
+
+  <!--
+    THE TOP BAR, TOP RIGHT — desktop only (src/globeShell.js).
+
+    « Apparence » gathers what used to live in three places: the STYLE ACTIF
+    chip in this corner, the STYLES VISUELS tray of the bottom dock and the
+    AFFICHAGE panel of the right rail. « Plus d'actions » opens the row of
+    round buttons that sat at the top centre (`#top-center-actions`) as a
+    menu with words, since the search now holds that spot.
+  -->
+  <div id="globe-top-bar" hidden>
+    <button id="appearance-toggle" class="top-bar-btn" type="button"
+            aria-expanded="false" aria-controls="appearance-panel"
+            data-i18n-title="appearance.buttonTitle" title="Style de carte, fond de carte et affichage">
+      <span class="shell-icon" data-shell-icon="sliders-horizontal" aria-hidden="true"></span>
+      <span class="top-bar-label" data-i18n="appearance.button">Apparence</span>
+    </button>
+    <button id="more-actions-toggle" class="top-bar-btn top-bar-btn-icon" type="button"
+            aria-expanded="false" aria-controls="top-center-actions"
+            data-i18n-aria-label="appearance.more" aria-label="Plus d’actions"
+            data-i18n-title="appearance.more" title="Plus d’actions">
+      <span class="shell-icon" data-shell-icon="ellipsis" aria-hidden="true"></span>
+    </button>
+  </div>
+
+  <!--
+    THE APPEARANCE PANEL. Its own controls are the edge-shade slider and two
+    switches; the rest is MOVED in at boot by src/globeShell.js, with its
+    listeners: the style buttons (`#style-buttons`, shown as previews of the
+    current view), the base-map chips (`.map-source-section`) and, under
+    « Réglages avancés », the former AFFICHAGE panel (`#pp-toggles`).
+  -->
+  <section id="appearance-panel" aria-labelledby="appearance-title" hidden>
+    <header class="appearance-head">
+      <h2 id="appearance-title" data-i18n="appearance.title">Apparence</h2>
+      <button id="appearance-close" class="appearance-close" type="button"
+              data-i18n-aria-label="appearance.close" aria-label="Fermer le panneau Apparence"
+              data-i18n-title="appearance.close" title="Fermer le panneau Apparence">
+        <span class="shell-icon" data-shell-icon="x" aria-hidden="true"></span>
+      </button>
+    </header>
+    <div class="appearance-body">
+      <section class="appearance-section" id="appearance-styles" aria-labelledby="appearance-styles-heading">
+        <h3 class="appearance-heading" id="appearance-styles-heading" data-i18n="appearance.styles">Style de carte</h3>
+      </section>
+      <section class="appearance-section" id="appearance-base-map"></section>
+      <section class="appearance-section appearance-edge">
+        <label class="appearance-heading" for="edge-shade-slider" data-i18n="appearance.edgeShade">Assombrissement des bords</label>
+        <!-- Starts at 30 %: mirrors EDGE_SHADE_DEFAULT_PCT in src/edgeShade.js
+             and `_edgeShadePct` in sharelink.js. -->
+        <input type="range" id="edge-shade-slider" class="appearance-slider" min="0" max="100" step="1" value="30" aria-valuetext="30%" />
+      </section>
+      <section class="appearance-section appearance-switches">
+        <button type="button" class="appearance-switch" id="appearance-hud-switch" role="switch" aria-checked="false"
+                data-mirror="hud-toggle" aria-describedby="appearance-hud-hint">
+          <span class="appearance-switch-text">
+            <span class="appearance-switch-label" data-i18n="appearance.hud">Mesures techniques</span>
+            <span class="appearance-switch-hint" id="appearance-hud-hint" data-i18n="appearance.hudHint">Altitude, soleil, coordonnées · touche H</span>
+          </span>
+          <span class="appearance-switch-track" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="appearance-switch" id="appearance-clean-switch" role="switch" aria-checked="false"
+                data-mirror="clean-view-toggle" aria-describedby="appearance-clean-hint">
+          <span class="appearance-switch-text">
+            <span class="appearance-switch-label" data-i18n="appearance.clean">Vue épurée</span>
+            <span class="appearance-switch-hint" id="appearance-clean-hint" data-i18n="appearance.cleanHint">Masque toutes les commandes · touche V</span>
+          </span>
+          <span class="appearance-switch-track" aria-hidden="true"></span>
+        </button>
+      </section>
+      <details class="appearance-advanced" id="appearance-advanced">
+        <summary class="appearance-advanced-summary">
+          <span class="shell-icon appearance-advanced-chevron" data-shell-icon="chevron-right" aria-hidden="true"></span>
+          <span data-i18n="appearance.advanced">Réglages avancés</span>
+        </summary>
+      </details>
+    </div>
+  </section>
 
   <!-- Top-center camera and share actions -->
   <nav id="top-center-actions" data-i18n-aria-label="actions.nav" aria-label="Actions du globe">
@@ -1101,7 +1199,10 @@
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn active" id="scope-toggle" aria-pressed="true"
+      <!-- Ships UNLIT: the scope is off by default on every shell since
+           2026-09-23 (src/main.js); the Appearance panel's edge shade is what
+           a first run draws instead. -->
+      <button class="pp-toggle-btn" id="scope-toggle" aria-pressed="false"
               data-i18n-title="display.scopeTitle" title="Lunette — le masque circulaire de la vue">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
         <span class="pp-label" data-i18n="display.scope">Lunette</span>
@@ -1316,7 +1417,9 @@
   </div>
 
   <!-- CCTV Coverage Panel -->
-  <div id="cctv-panel" class="panel-collapsible collapsed" data-panel-id="cctv-panel">
+  <!-- Ships hidden: it exists only while the CCTV layer is on (src/ui.js,
+       `_syncCctvPanelPresence`). -->
+  <div id="cctv-panel" class="panel-collapsible collapsed" data-panel-id="cctv-panel" hidden>
     <div class="panel-glow"></div>
     <div class="cctv-panel-inner">
       <div class="panel-header">

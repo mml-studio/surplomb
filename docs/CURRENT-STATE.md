@@ -1,6 +1,56 @@
 # Surplomb Current State
 
-Updated: September 22, 2026
+Updated: September 23, 2026
+
+> **2026-09-23 — the desktop globe has a top row: place search at the top
+> centre, « Apparence » and « … » at the top right; the scope and the HUD are
+> off by default.**
+>
+> - **Top row (`src/globeShell.js`).** Desktop only: `initGlobeShell` returns
+>   null on the phone shell before touching the DOM, and every rule hangs off
+>   `html.globe-shell`, the class it sets once done. It MOVES existing controls
+>   with their listeners, as `src/phoneSheet.js` does on a phone:
+>   `#location-search-form` into `#place-search`, `#location-pills` and
+>   `#poi-row` into its menu, `#style-buttons` and `#param-slider-panel` (with
+>   the cockpit portal's comment anchor) into Appearance › Style de carte,
+>   `.map-source-section` into Appearance, `#pp-toggles` into « Réglages
+>   avancés ». `#top-center-actions` is restyled as the « … » menu (labels are
+>   `attr(aria-label)`), and it is no longer a right-rail obstacle.
+> - **Search.** ⌘ K on Apple keyboards, Ctrl K elsewhere, and a bare « / »
+>   outside a field. The menu lists up to 5 recent places
+>   (`localStorage['surplomb.placeRecents.v1']`: a typed search that found
+>   somewhere, reported by ui.js as `place-search:found` on the form, or a city
+>   shortcut) and the city shortcuts, whose landmarks appear under them once a
+>   city is chosen. `#place-search` carries `collapsed` while its menu is shut,
+>   so the first-run bubble (variant C) closes when it opens; the bubble hangs
+>   under the field (`placement: 'below'`).
+> - **Panels by name.** `setPanelCollapsed` redirects an explicit open of
+>   `location-bar`, `control-panel` or `pp-toggles` (the voice surface's
+>   `set_panel_open`) to where their contents went; the two dock trays stay
+>   collapsed. Choosing a style opens nothing on a desktop
+>   (`_revealStyleParameters`): its parameters show under the previews.
+> - **Style previews.** When Appearance opens, one copy of the Cesium canvas is
+>   taken in `postRender` (the drawing buffer is not preserved), scaled to 320
+>   px on its long edge, JPEG 0.72, and set as `--style-preview-image`; each
+>   style is a CSS filter over it. Reused for 4 s.
+> - **Scope off, edge shade on (`src/edgeShade.js`).** `scopeMask.js` starts
+>   disabled (the share link reads it before `main.js` runs), and
+>   `setScopeMaskEnabled` also switches the keyhole label fade
+>   (`celestialRing.setKeyholeFadeActive`): with no circle drawn, labels
+>   outside it are not dimmed, and the Fondu / Au-dehors rows hide. The shade
+>   is one `<div id="edge-shade">` in the viewer container, CSS radial gradient
+>   shaped like the viewport, clear over 55 % of the radius, corner opacity 30
+>   % by default. Share key `es` (0-100); a link without `es` restores none, as
+>   its author saw none; the showcase hand-off writes `es=30`.
+> - **HUD off by default.** `GLOBAL_POST_DEFAULTS.hudVisible` is false and
+>   `_initHUDToggle` follows it. `hv=1` links and the CRT/NVG/FLIR presets
+>   still turn it on. `#globe-heading-tape` hides while `#intel-hud` is not
+>   `.active` (desktop shell).
+> - **CCTV panel.** `#cctv-panel` ships `hidden` and follows
+>   `dataManager.isEnabled('cctv')` (`_syncCctvPanelPresence`).
+> - **Biarritz** joins `CITY_POIS` (5 landmarks from OpenStreetMap), the pill
+>   row and the `fly_to_location` enum (tool schema re-frozen: 38 327 bytes).
+> - **Removed:** `#style-indicator` (STYLE ACTIF).
 
 > **2026-09-22 — the hosted switch covers Google News RSS, the Street View
 > CCTV fallback and the TeleGeography cable map too; the CCTV route no longer

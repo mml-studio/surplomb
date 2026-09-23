@@ -847,14 +847,16 @@ async function runVariantCSections(browser, page, { shots, consoleErrors }) {
     record('C shows the bubble and no card', state.hintVisible && !state.present,
       `hint=${state.hintVisible} launcher=${state.present}`);
     await sleep(400);
-    const geometry = await hintGeometry(page, '#location-bar .location-toolbar-label');
-    record('the bubble sits above LOCATION, inside the viewport',
-      !!geometry && state.hintVisible && geometry.hintBottom <= geometry.anchorTop + 1
+    // Since 2026-09-23 the desktop's search is the top-centre field
+    // (src/globeShell.js): the bubble hangs UNDER it, as on a phone.
+    const geometry = await hintGeometry(page, '#place-search-bar');
+    record('the bubble hangs under the top search, inside the viewport',
+      !!geometry && state.hintVisible && geometry.hintTop >= geometry.anchorBottom - 1
         && geometry.hintLeft >= 0 && geometry.hintRight <= geometry.vw,
       geometry ? JSON.stringify(geometry) : 'absent');
-    record('its caret points at LOCATION',
+    record('its caret points at the search',
       !!geometry && state.hintVisible && Math.abs(geometry.caretX - geometry.anchorCentre) <= 3,
-      geometry ? `caret ${geometry.caretX} vs label ${geometry.anchorCentre}` : 'absent');
+      geometry ? `caret ${geometry.caretX} vs field ${geometry.anchorCentre}` : 'absent');
     shots.push(await shoot(page, 'hint-C-desktop'));
 
     // A click on the globe is a click away.
@@ -878,11 +880,11 @@ async function runVariantCSections(browser, page, { shots, consoleErrors }) {
     await domClick(page, '[data-first-run-hint-open]');
     await sleep(500);
     const opened = await page.evaluate(() => ({
-      trayOpen: !document.getElementById('location-bar')?.classList.contains('collapsed'),
+      trayOpen: !document.getElementById('place-search-menu')?.hidden,
       focused: document.activeElement?.id || null,
       hint: !!document.getElementById('first-run-hint'),
     }));
-    record('a click on the bubble opens LOCATION with the caret in the search field',
+    record('a click on the bubble opens the search with the caret in its field',
       again.hintVisible && opened.trayOpen && opened.focused === 'location-search',
       JSON.stringify(opened));
     shots.push(await shoot(page, 'hint-C-opened-search'));
@@ -897,11 +899,11 @@ async function runVariantCSections(browser, page, { shots, consoleErrors }) {
 
     await open(page, { query: '?welcome=C', errorSink: consoleErrors });
     const trayCase = await firstRunState(page);
-    // Hovering LOCATION opens its popover exactly where the bubble sits.
-    await page.evaluate(() => window.__godsEyeView?.styleManager?.setPanelCollapsed?.('location-bar', false));
+    // Clicking into the search opens its menu exactly where the bubble sits.
+    await page.evaluate(() => document.getElementById('location-search')?.focus());
     await sleep(300);
     const trayOpened = await firstRunState(page);
-    record('the LOCATION tray opening in its place closes it',
+    record('the search menu opening in its place closes it',
       trayCase.hintVisible && !trayOpened.hintPresent, `hint=${trayOpened.hintPresent}`);
 
     await open(page, { query: '?welcome=C', errorSink: consoleErrors });
