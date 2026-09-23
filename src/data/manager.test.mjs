@@ -6332,3 +6332,208 @@ test('a key the signature cannot read is rebuilt on every pass, as it always was
     await panel.restore();
   }
 });
+
+// ─── « Urbanisme »: the members as tiles UNDER the row (`rowTiles`) ──────────
+//
+// The approved mock of 2026-09-23: the row opens on « Permis & travaux » with
+// « Règles d'urbanisme » dark, the period is a menu under the tiles, and the
+// key prints ONE block for the two permit layers, the card of the project
+// clicked above its folded colours. The taxonomy entries are the REAL ones, so
+// the companions and the opt-in are the shipped table's.
+
+function makeUrbanismePanel({ controls = {} } = {}) {
+  const originalDocument = globalThis.document;
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const legendHost = makePanelElement();
+  const legendItems = makePanelElement();
+  globalThis.document = {
+    createElement: makePanelElement,
+    createDocumentFragment: () => Object.assign(makePanelElement(), { isFragment: true }),
+    getElementById: (id) => (id === 'map-legend' ? legendHost : id === 'map-legend-items' ? legendItems : null),
+    activeElement: null,
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: makeMemoryStorage(), configurable: true, writable: true,
+  });
+  const ids = ['ads-fr', 'sitadel-fr', 'urbanisme-gpu'];
+  const taxonomy = ids.map((id) => ({ ...layerTaxonomyFor(id), label: layerTaxonomyFor(id).label }));
+  const params = { 'ads-fr': { months: '36' }, 'sitadel-fr': { months: '36' } };
+  const mgr = new DataLayerManager({});
+  for (const id of ids) {
+    const { module } = makeSlowLayer(id, { updateInterval: -1 });
+    if (params[id]) {
+      module.getParams = () => ({ ...params[id] });
+      module.acceptsParams = (next) => ['36', '72', '156'].includes(String(next?.months));
+      module.setParams = (next) => {
+        if (!module.acceptsParams(next)) return false;
+        Object.assign(params[id], next);
+        return true;
+      };
+    }
+    if (controls[id]) module.getRowControls = () => controls[id](params[id]);
+    mgr.register(module);
+  }
+  mgr.finalizeRegistrations(
+    ids.map((id) => ({ id, disposition: params[id] ? 'enabled+options' : 'enabled-only' })),
+    taxonomy,
+    [{ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }],
+  );
+  const container = makePanelElement();
+  mgr.buildTogglePanel(container);
+  const row = () => container.querySelector('[data-layer-id="ads-fr"]');
+  const strip = () => row().querySelector('.data-toggle-controls');
+  return {
+    mgr,
+    params,
+    legendItems,
+    row,
+    tiles: () => findAll(strip(), '.data-row-tile'),
+    select: () => strip().querySelector('.data-row-select'),
+    hint: () => strip().querySelector('.data-row-hint'),
+    async pressTile(key) {
+      const tile = findAll(strip(), '.data-row-tile').find((node) => node.dataset.rowTile === key);
+      strip().listeners.get('click')[0]({ target: tile });
+      for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+      mgr._refreshTogglePanel();
+    },
+    async restore() {
+      await mgr.destroyAll();
+      if (originalDocument === undefined) delete globalThis.document;
+      else globalThis.document = originalDocument;
+      if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
+      else delete globalThis.localStorage;
+    },
+  };
+}
+
+test('Urbanisme lights its permits and leaves the zoning dark, its tiles under the row', async () => {
+  const period = () => ({
+    select: {
+      param: 'months', label: 'Période', value: '36', fanOut: true, title: '',
+      options: [
+        { value: '36', label: '3 dernières années' },
+        { value: '72', label: '6 dernières années' },
+        { value: '156', label: 'Toutes les dates' },
+      ],
+    },
+  });
+  const panel = makeUrbanismePanel({ controls: { 'ads-fr': period } });
+  try {
+    await panel.mgr._setRowEnabled('ads-fr', true);
+    panel.mgr._refreshTogglePanel();
+    // THE DEFAULT THE OPERATOR ASKED FOR: the permits on, the PLU off.
+    assert.equal(panel.mgr.isEnabled('ads-fr'), true);
+    assert.equal(panel.mgr.isEnabled('sitadel-fr'), true);
+    assert.equal(panel.mgr.isEnabled('urbanisme-gpu'), false);
+
+    // Two tiles under the row, the mock's words, and no chip at all.
+    assert.deepEqual(panel.tiles().map((tile) => tile.textContent), ['Permis & travaux', 'Règles d’urbanisme']);
+    assert.deepEqual(panel.tiles().map((tile) => tile.attributes['aria-pressed']), ['true', 'false']);
+    assert.deepEqual(findAll(panel.row(), '.data-toggle-chip'), []);
+    // The period, as a menu, and the hint while nothing is selected.
+    assert.equal(panel.select().dataset.selectParam, 'months');
+    assert.equal(panel.select().children.length, 3);
+    assert.equal(panel.select().value, '36');
+    assert.equal(panel.hint().textContent, 'Sélectionnez un projet sur la carte.');
+
+    // The zoning is one press away…
+    await panel.pressTile('rules');
+    assert.equal(panel.mgr.isEnabled('urbanisme-gpu'), true);
+    // …and the permits go out TOGETHER, one tile for the two layers.
+    await panel.pressTile('permits');
+    assert.equal(panel.mgr.isEnabled('ads-fr'), false);
+    assert.equal(panel.mgr.isEnabled('sitadel-fr'), false);
+    assert.equal(panel.mgr.isEnabled('urbanisme-gpu'), true);
+    // The row's button reads the GROUP here: the zoning still draws, so ON.
+    assert.notEqual(panel.row().querySelector('.data-toggle-btn').dataset.feedState, 'off');
+    assert.equal(panel.hint(), null, 'no hint while the permits are dark');
+    assert.equal(panel.select(), null, 'and no period: it steers the permits');
+
+    // Pressed with something on, the row's button puts EVERYTHING out.
+    panel.row().querySelector('.data-toggle-btn').click();
+    for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+    for (const id of ['ads-fr', 'sitadel-fr', 'urbanisme-gpu']) assert.equal(panel.mgr.isEnabled(id), false, id);
+
+    // A dark row names its tiles on its meta line.
+    panel.mgr._refreshTogglePanel();
+    assert.match(panel.row().querySelector('.data-toggle-meta').textContent, /Permis & travaux, Règles d’urbanisme/);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the period menu sends its window to both permit layers', async () => {
+  const period = (own) => ({
+    select: {
+      param: 'months', label: 'Période', value: own.months, fanOut: true,
+      options: [{ value: '36', label: '3' }, { value: '72', label: '6' }, { value: '156', label: 'Tout' }],
+    },
+  });
+  const panel = makeUrbanismePanel({ controls: { 'ads-fr': period } });
+  try {
+    await panel.mgr._setRowEnabled('ads-fr', true);
+    panel.mgr._refreshTogglePanel();
+    const select = panel.select();
+    select.value = '156';
+    panel.row().querySelector('.data-toggle-controls').listeners.get('change')[0]({ target: select });
+    assert.equal(panel.params['ads-fr'].months, '156');
+    assert.equal(panel.params['sitadel-fr'].months, '156', 'the Sitadel parcels follow the same period');
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.select().value, '156');
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('the two permit layers print ONE key block: the card first, the colours folded under it', async () => {
+  const entry = (label, color, rank) => ({ label, color, rank });
+  let selected = null;
+  const panel = makeUrbanismePanel({
+    controls: {
+      'ads-fr': () => ({
+        legend: [entry('Travaux commencés', '#f59f00', 2), entry('Permis accordé', '#b197fc', 1)],
+        legendFold: 'Couleurs des projets',
+      }),
+      'sitadel-fr': () => ({
+        legend: [entry('Permis accordé', '#b197fc', 1), entry('Travaux terminés', '#4c6ef5', 3)],
+        legendFold: 'Couleurs des projets',
+        legendSelection: selected,
+      }),
+    },
+  });
+  try {
+    await panel.mgr._setRowEnabled('ads-fr', true);
+    panel.mgr._refreshTogglePanel();
+    const folds = () => findAll(panel.legendItems, '.map-legend-fold');
+    assert.equal(folds().length, 1, 'one block for the two layers');
+    const labels = () => findAll(folds()[0], '.map-legend-label').map((node) => node.textContent);
+    // Deduplicated, and back in the row's order.
+    assert.deepEqual(labels(), ['Permis accordé', 'Travaux commencés', 'Travaux terminés']);
+    assert.equal(folds()[0].open, true, 'open while no card is on screen');
+    assert.equal(findAll(panel.legendItems, '.map-legend-row-title').length, 0, 'one block, no sub-titles');
+
+    selected = {
+      key: 'p1', kicker: 'Permis de construire', title: '40 logements autorisés',
+      badge: { label: 'Travaux commencés', color: '#f59f00' },
+      steps: { items: [{ label: 'Permis accordé', value: '6 déc. 2024', done: true, color: '#f59f00' }] },
+      notice: { title: 'Localisation à confirmer', text: 'Le repère sur la carte est approximatif.' },
+      source: 'Source : Sitadel · SDES',
+    };
+    panel.mgr._refreshTogglePanel();
+    const group = findAll(panel.legendItems, '.map-legend-group')[0];
+    const order = group.children.map((node) => node.className.split(' ')[0]);
+    assert.ok(order.indexOf('map-legend-selection') < order.indexOf('map-legend-fold'), order.join(','));
+    assert.equal(folds()[0].open, false, 'folded under a card, as the mock draws it');
+    const card = findAll(panel.legendItems, '.map-legend-selection')[0];
+    assert.equal(card.querySelector('.map-legend-selection-kicker').textContent, 'Permis de construire');
+    assert.equal(card.querySelector('.map-legend-selection-badge').textContent, 'Travaux commencés');
+    assert.equal(card.querySelector('.map-legend-selection-steps').children.length, 1);
+    assert.equal(card.querySelector('.map-legend-selection-notice-title').textContent, 'Localisation à confirmer');
+    assert.equal(card.querySelector('.map-legend-selection-source').textContent, 'Source : Sitadel · SDES');
+    // The close button reaches the layer that owns the card.
+    assert.equal(card.querySelector('.map-legend-selection-close').dataset.selectionLayer, 'sitadel-fr');
+    assert.equal(panel.hint(), null, 'a project is open: the hint has been done');
+  } finally {
+    await panel.restore();
+  }
+});

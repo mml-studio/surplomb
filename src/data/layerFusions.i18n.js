@@ -18,7 +18,9 @@ import { defineMessages } from '../i18n/messages.js';
 
 export default defineMessages({
   chips: {
-    // Planning
+    // Planning — switched by the row's two tiles (`rowTiles`), so these three
+    // are read only where a member is named alone: the meta line of a dark
+    // row, and the key's heading of a member printed on its own.
     'urbanisme-gpu': { fr: 'PLU & servitudes', en: 'PLU & easements' },
     'ads-fr': { fr: 'Autorisations', en: 'Permits' },
     'sitadel-fr': { fr: 'Sur parcelle', en: 'On the parcel' },
@@ -194,6 +196,31 @@ export default defineMessages({
     'gironde-megafire-2026': {
       fr: 'Rejouer le feu de Gironde, juillet 2026 — sans clé',
       en: 'Replay the Gironde fire of July 2026 — no key needed',
+    },
+  },
+
+  /**
+   * The tiles a row draws under itself in the Layers panel (`rowTiles` in
+   * layerFusions.js), keyed `<primary>:<tile key>`. `label` is the tile,
+   * `title` its tooltip, and `hint` the line printed under the tiles while that
+   * tile is lit. Words of the approved mock of « Urbanisme » (2026-09-23).
+   */
+  rowTiles: {
+    'ads-fr:permits': {
+      label: { fr: 'Permis & travaux', en: 'Permits & works' },
+      title: {
+        fr: 'Les permis de construire et de démolir, et où en sont les travaux',
+        en: 'Building and demolition permits, and how far the work has got',
+      },
+      hint: { fr: 'Sélectionnez un projet sur la carte.', en: 'Select a project on the map.' },
+    },
+    'ads-fr:rules': {
+      label: { fr: 'Règles d’urbanisme', en: 'Planning rules' },
+      title: {
+        fr: 'Ce qu’on peut construire ici : le zonage du PLU et les servitudes',
+        en: 'What may be built here: the PLU zoning and the easements',
+        keep: ['PLU'],
+      },
     },
   },
 

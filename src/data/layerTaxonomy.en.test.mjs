@@ -36,7 +36,8 @@ test('the names a reader recognises the fork by', () => {
   const label = (id) => withLocale('en', () => layerTaxonomyFor(id).label);
   assert.equal(label('dvf-sales'), 'Property prices');
   assert.equal(label('dpe-fr'), 'Energy rating (DPE)');
-  assert.equal(label('urbanisme-gpu'), 'Planning');
+  assert.equal(label('ads-fr'), 'Planning');
+  assert.equal(label('urbanisme-gpu'), 'Planning rules');
   assert.equal(label('cadastre-fr'), 'Cadastral parcels');
   assert.equal(label('filosofi-fr'), 'Territory (INSEE 200 m grid)');
   assert.equal(label('amenities-fr'), 'Everyday amenities');

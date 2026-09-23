@@ -1421,6 +1421,18 @@ export function createAddressScanLayer(config) {
     source,
     updateInterval,
 
+    /**
+     * Rebuild the draw from the answer in hand, for a reason outside the shell
+     * — another layer's fact the render reads through `layerJoins.js` changed.
+     * No request. False while nothing is drawn.
+     * @param {string} [reason] Render-governor tag.
+     * @returns {boolean}
+     */
+    redraw(reason = 'external') {
+      if (!_enabled) return false;
+      return redrawFromPayload(reason);
+    },
+
     init(viewer) {
       _viewer = viewer;
       _dataSource = new Cesium.CustomDataSource(id);

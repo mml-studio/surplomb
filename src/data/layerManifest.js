@@ -418,7 +418,8 @@ export const LAYER_MANIFEST = Object.freeze([
     name: 'Autorisations d’urbanisme (Sitadel)',
     icon: '🏗',
     source: 'Sitadel — permis de construire et de démolir, SDES/CGDD · parcelles cadastrales Etalab (DGFiP)',
-    capabilities: Object.freeze(['destroy', 'getStats']),
+    capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
+    defaultParams: Object.freeze({ months: '36' }),
     load: () => import('./sitadelFrance.js').then((module) => module.default),
   }),
   Object.freeze({

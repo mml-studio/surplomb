@@ -6,6 +6,8 @@ import {
   fusedIntoFor,
   fusionCompanionsFor,
   fusionIsExclusive,
+  fusionRowTileOf,
+  fusionRowTilesFor,
   fusionTilesFor,
   fusionToggleGroupFor,
   tilePartDefaults,
@@ -99,8 +101,10 @@ test('the row toggle carries its followers and leaves the opt-in companions alon
 });
 
 test('a companion resolves back to the row it disappeared into', () => {
-  assert.equal(fusedIntoFor('sitadel-fr'), 'urbanisme-gpu');
-  assert.equal(fusedIntoFor('ads-fr'), 'urbanisme-gpu');
+  // « Urbanisme » belongs to its permits since 2026-09-23; the zoning is a
+  // member of the row, asked for by its tile.
+  assert.equal(fusedIntoFor('sitadel-fr'), 'ads-fr');
+  assert.equal(fusedIntoFor('urbanisme-gpu'), 'ads-fr');
   assert.equal(fusedIntoFor('marine-buoys'), 'ais-live-vessels');
   assert.equal(fusedIntoFor('gironde-megafire-2026'), 'local-firms');
   assert.equal(fusedIntoFor('bruit-fr'), 'local-airports');
@@ -108,13 +112,13 @@ test('a companion resolves back to the row it disappeared into', () => {
   assert.equal(fusedIntoFor('edf-power-plants'), 'power-grid');
   assert.equal(fusedIntoFor('rte-generation'), 'power-grid');
   assert.equal(fusedIntoFor('cctv'), null);
-  assert.equal(fusedIntoFor('urbanisme-gpu'), null);
+  assert.equal(fusedIntoFor('ads-fr'), null);
 });
 
 test('the taxonomy carries the fusion facets, and the panel projection drops the companions', () => {
   const byId = new Map(LAYER_TAXONOMY.map((entry) => [entry.id, entry]));
-  assert.equal(byId.get('sitadel-fr').fusedInto, 'urbanisme-gpu');
-  assert.equal(byId.get('urbanisme-gpu').companions.length, 2);
+  assert.equal(byId.get('sitadel-fr').fusedInto, 'ads-fr');
+  assert.equal(byId.get('ads-fr').companions.length, 2);
   assert.equal(byId.get('cadastre-fr').companions, null);
   assert.equal(byId.get('cadastre-fr').fusedInto, null);
 
@@ -366,4 +370,55 @@ test('the antennas split into masts and coverage: the row lights the masts, and 
   assert.deepEqual(decodeLayerStateParams(params).options['anfr-fr'], { coverage: 'gaps', masts: false });
   // A link written before the tile says nothing of the masts, and keeps them.
   assert.equal(decodeLayerStateParams(new URLSearchParams('v=2&l=an&lo=an.c.z')).options['anfr-fr'].masts, true);
+});
+
+test('« Urbanisme » opens on its permits: the zoning is a tile away, never lit by the row', () => {
+  // The operator's request of 2026-09-23, and the approved mock: switching the
+  // row on draws the permits and leaves the PLU dark.
+  assert.deepEqual(fusionToggleGroupFor('ads-fr'), ['ads-fr', 'sitadel-fr']);
+  assert.equal(fusionCompanionsFor('ads-fr').find((entry) => entry.id === 'urbanisme-gpu').optIn, true);
+  const tiles = fusionRowTilesFor('ads-fr');
+  assert.deepEqual(tiles.map((tile) => [tile.key, [...tile.ids]]), [
+    ['permits', ['ads-fr', 'sitadel-fr']],
+    ['rules', ['urbanisme-gpu']],
+  ]);
+  assert.deepEqual(tiles.map((tile) => tile.label), ['Permis & travaux', 'Règles d’urbanisme']);
+  assert.equal(tiles[0].hint, 'Sélectionnez un projet sur la carte.');
+  assert.equal(tiles[1].hint, '');
+  assert.equal(fusionRowTileOf('ads-fr', 'sitadel-fr').key, 'permits');
+  assert.equal(fusionRowTileOf('ads-fr', 'urbanisme-gpu').key, 'rules');
+  // A row has its tiles under it OR in the key, never both.
+  assert.equal(fusionTilesFor('ads-fr'), null);
+  assert.equal(fusionRowTilesFor('local-datacenters'), null);
+});
+
+test('row tiles are refused unless every offered member is in exactly one', () => {
+  const ids = ['a', 'b', 'c'];
+  const row = (rowTiles, extra = {}) => [{
+    primary: 'a',
+    companions: [{ id: 'b', chip: 'B' }, { id: 'c', chip: 'C', optIn: true }],
+    rowTiles,
+    ...extra,
+  }];
+  assert.equal(validateLayerFusions(row([
+    { key: 'one', ids: ['a', 'b'], label: 'Un' },
+    { key: 'two', ids: ['c'], label: 'Deux' },
+  ]), ids), true);
+  assert.throws(() => validateLayerFusions(row([{ key: 'one', ids: ['a', 'b'], label: 'Un' }]), ids),
+    /Fusion member has no row tile: a → c/);
+  assert.throws(() => validateLayerFusions(row([
+    { key: 'one', ids: ['a', 'b'], label: 'Un' },
+    { key: 'two', ids: ['b', 'c'], label: 'Deux' },
+  ]), ids), /Fusion member is in two row tiles: b/);
+  assert.throws(() => validateLayerFusions(row([
+    { key: 'one', ids: ['a', 'b', 'c'], label: 'Un' },
+    { key: 'one', ids: [], label: 'Deux' },
+  ]), ids), /Fusion row tile listed twice/);
+  assert.throws(() => validateLayerFusions(row([{ key: 'one', ids: ['a', 'b', 'c'] }]), ids),
+    /Fusion row tile has no label/);
+  assert.throws(() => validateLayerFusions(row([{ key: 'one', ids: ['a', 'b', 'c', 'z'], label: 'Un' }]), ids),
+    /not an offered member/);
+  assert.throws(() => validateLayerFusions(row([{ key: 'one', ids: ['a', 'b', 'c'], label: 'Un' }], {
+    tiles: [{ id: 'a', icon: 'cable', color: '#000000' }],
+  }), ids), /both tiles and rowTiles/);
 });

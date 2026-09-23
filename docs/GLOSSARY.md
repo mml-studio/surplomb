@@ -158,7 +158,16 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 
 | French | English | Note |
 |---|---|---|
-| Urbanisme | Planning | Layer name. |
+| Urbanisme | Planning | Layer name (the row; its primary is `ads-fr` since 2026-09-23). |
+| Règles d’urbanisme | Planning rules | The zoning's tile and its layer name. |
+| Permis & travaux | Permits & works | The permits' tile on the « Urbanisme » row. |
+| Couleurs des projets | Project colors | The permits' block of the map key. |
+| permis accordé, travaux commencés, travaux terminés, annulé ou refusé | permit granted, work started, work completed, canceled or refused | The classes of a building project. |
+| demande en cours d’examen | application under review | |
+| début des travaux déclaré, fin des travaux | start of work declared, end of work | The card's timeline. |
+| surface déclarée, démolition prévue | declared floor area, planned demolition | |
+| localisation à confirmer, repère approximatif | location to be confirmed, approximate marker | |
+| période, toutes les dates | period, all dates | |
 | PLU, PLUi | local zoning plan (PLU, PLUi) | |
 | zonage, zone U / AU / A / N | zoning, urban / future urban / agricultural / natural zone | |
 | Géoportail de l’urbanisme (GPU) | Géoportail de l’urbanisme (GPU) | Proper noun. |

@@ -482,9 +482,11 @@ const note = (ok, message) => {
       + ` ${ads.lineageOnParent} onto the parent)`);
 
     // THE WINDOW IS A CONTROL, and this is the only address layer that has one.
-    // The chips and the parameter gate are one mechanism seen from two ends, so
-    // what is checked here is that they still agree: every chip offers a value
-    // the layer accepts, exactly one is lit, and it is the one in force. The
+    // Since 2026-09-23 it is the « Période » menu under the « Urbanisme » row
+    // (`select` in the row controls) rather than three chips. The menu and the
+    // parameter gate are one mechanism seen from two ends, so what is checked
+    // here is that they still agree: every option is a value the layer
+    // accepts, and the one shown is the one in force. The
     // rescan itself is pinned in `addressScanLayer.test.mjs`, where it costs
     // nothing — switching the window here would refetch a cold Paris
     // commune-window for a behaviour a unit test already owns.
@@ -493,8 +495,11 @@ const note = (ok, message) => {
       const module = dm.layers.get('ads-fr')?.module;
       return {
         params: dm.getLayerParams('ads-fr'),
-        chips: (module?.getRowControls?.()?.chips || [])
-          .map((chip) => ({ label: chip.label, active: chip.active, months: chip.params?.months })),
+        chips: (module?.getRowControls?.()?.select?.options || []).map((option) => ({
+          label: option.label,
+          active: option.value === module.getRowControls().select.value,
+          months: option.value,
+        })),
         // A window this build does not offer must be REFUSED, not snapped to a
         // neighbour: everything reachable here is reachable from a share link.
         rejected: dm.setLayerParams('ads-fr', { months: '24' }, { origin: 'user' }),
@@ -502,12 +507,12 @@ const note = (ok, message) => {
       };
     });
     note(windowState.chips.length === 3,
-      `ADS offers ${windowState.chips.length} window chips: `
+      `ADS offers ${windowState.chips.length} periods: `
       + `${windowState.chips.map((chip) => chip.label).join(' / ') || 'none'}`);
     note(windowState.chips.filter((chip) => chip.active).length === 1,
-      'ADS lights exactly one window chip');
+      'ADS shows exactly one period');
     note(windowState.chips.find((chip) => chip.active)?.months === windowState.params?.months,
-      `ADS's lit chip is the window in force (${windowState.params?.months} months)`);
+      `ADS's period shown is the window in force (${windowState.params?.months} months)`);
     note(windowState.rejected === false && windowState.rejectedKey === false,
       'ADS refuses an unlisted window and an unknown key rather than clamping them');
 
