@@ -402,6 +402,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | point d’atterrissement, station d’atterrissement | landing point, landing station | Where a submarine cable comes ashore (ARCEP's word). |
 | Tracé publié, géométries illustratives | Published route, illustrative geometry | TeleGeography's schematic routes — never "the cable's path". |
 | câbles associés (à un point d’atterrissement) | connected cables | The cables whose route reaches a landing point. |
+| regroupement (de data centers) | group of sites | Several data centres merged into one mark because they share a spot on the screen. |
 | sans teinte | left untinted | The class a coverage map leaves unpainted. |
 | Mon réseau mobile | Mon réseau mobile | ARCEP dataset title, kept in French. |
 | Direction relevée / non relevée | Direction mapped / not mapped | Public cameras. |
@@ -472,7 +473,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Zone non publiée | Unpublished area | |
 | DÉGRADÉ, PÉRIMÉ, REPLI, INDISPONIBLE, INCERTAIN | DEGRADED, STALE, FALLBACK, UNAVAILABLE, UNCERTAIN | Fault states. Identical in both languages today; the French is the decision recorded here. |
 | Plan Google, Plan IGN | Google map, IGN map | Basemap chips; brand names are not translated. |
-| Nuit, NUIT | Night, NIGHT | The night-atlas visual preset (id `noir`). The other presets — NORMAL, CRT, NVG, FLIR, ANIME, SNOW — are the same word in both languages. |
+| Nuit, NUIT | Night, NIGHT | The night-atlas visual preset (id `noir`). The other presets — NORMAL, CRT, NVG, FLIR, ANIME — are the same word in both languages. |
+| Crépuscule, CRÉPUSCULE | Dusk, DUSK | The lighter night atlas (id `dusk`), brought by « Infrastructure numérique ». It replaced Snow on 2026-09-23. |
+| (fond) imposé par | (map source) set by | « Satellite imposé par Infrastructure numérique » — the basemap a lit row holds. |
 
 ## Panel chips and fused rows
 
