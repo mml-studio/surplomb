@@ -135,8 +135,12 @@
  * `node --test`.
  */
 
-/** Portal. Same Opendatasoft v2.1 API the ODRÉ and MESR layers already speak. */
-export const COMPTAGES_PORTAL = 'opendata.paris.fr';
+/**
+ * Portal. Same Opendatasoft v2.1 API the ODRÉ and MESR layers already speak.
+ * The Opendatasoft host rather than the city's `opendata.paris.fr` alias, which
+ * stopped resolving on 2026-09-23 — see `FRAICHEUR_PORTAL`.
+ */
+export const COMPTAGES_PORTAL = 'parisdata.opendatasoft.com';
 
 /** The measurement. 27 772 889 rows, read twice on 2026-09-01. */
 export const COMPTAGES_DATASET = 'comptages-routiers-permanents';

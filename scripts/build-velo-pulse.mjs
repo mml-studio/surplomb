@@ -305,7 +305,9 @@ async function buildLyon() {
 // ---------------------------------------------------------------------------
 // Paris — permanent bike counters
 // ---------------------------------------------------------------------------
-const PARIS_BASE = 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets';
+// The Opendatasoft host: the city's `opendata.paris.fr` alias stopped resolving
+// on 2026-09-23.
+const PARIS_BASE = 'https://parisdata.opendatasoft.com/api/explore/v2.1/catalog/datasets';
 const PARIS_COUNTS = `${PARIS_BASE}/comptage-velo-donnees-compteurs/records`;
 
 async function buildParis() {
@@ -391,7 +393,7 @@ async function buildParis() {
     unit: 'cyclistes comptés par heure',
     scale: 1,
     source: 'Ville de Paris — comptage vélo, données compteurs',
-    sourceUrl: 'https://opendata.paris.fr/explore/dataset/comptage-velo-donnees-compteurs/',
+    sourceUrl: 'https://parisdata.opendatasoft.com/explore/dataset/comptage-velo-donnees-compteurs/',
     licence: 'ODbL',
     sites,
     stats: { referential: counters.length, kept: sites.length, dropped: missing },

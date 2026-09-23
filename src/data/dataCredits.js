@@ -525,7 +525,7 @@ export const DATA_CREDITS = [
       + 'republished monthly and running about six weeks behind the counter. It holds authorisations that were '
       + 'GRANTED only &mdash; there is no national open feed of applications under instruction. Dossiers still being '
       + 'instructed come from three m&eacute;tropole portals, merged on the dossier number: '
-      + '<a href="https://opendata.paris.fr/explore/dataset/dossiers-recents-durbanisme/" target="_blank" rel="noopener">Ville de Paris</a> '
+      + '<a href="https://parisdata.opendatasoft.com/explore/dataset/dossiers-recents-durbanisme/" target="_blank" rel="noopener">Ville de Paris</a> '
       + '(<a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL 1.0</a>, rolling six months), '
       + '<a href="https://opendata.bordeaux-metropole.fr/explore/dataset/u_dosaos_s/" target="_blank" rel="noopener">Bordeaux M&eacute;tropole</a> '
       + 'and <a href="https://nantesmetropole.outscale-euw2.opendatasoft.com/explore/dataset/244400404_demandes-autorisations-decisions-urbanisme-nantes-metropole/" target="_blank" rel="noopener">Nantes M&eacute;tropole</a> '
@@ -615,7 +615,7 @@ export const DATA_CREDITS = [
     html:
       'Paris road counts: <em>Comptages routiers &mdash; donn&eacute;es trafic issues des capteurs '
       + 'permanents</em>, published by the '
-      + '<a href="https://opendata.paris.fr/explore/dataset/comptages-routiers-permanents/" target="_blank" rel="noopener">Ville de Paris</a> '
+      + '<a href="https://parisdata.opendatasoft.com/explore/dataset/comptages-routiers-permanents/" target="_blank" rel="noopener">Ville de Paris</a> '
       + '(<a href="http://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">Open Database License, ODbL</a>). '
       + 'The layer draws the last COMPLETE local Monday&ndash;Sunday week, discovered from the '
       + 'dataset&rsquo;s own newest hour, because the feed is a nightly batch that lands the day '
@@ -645,7 +645,7 @@ export const DATA_CREDITS = [
   {
     key: 'fraicheur-fr',
     html:
-      "Paris cool islands, cool green spaces and trees: <em>Îlots de fraîcheur — équipements et activités</em>, <em>Îlots de fraîcheur — espaces verts frais</em> and <em>Les arbres</em>, published by the <a href=\"https://opendata.paris.fr/explore/dataset/ilots-de-fraicheur-espaces-verts-frais/\" target=\"_blank\" rel=\"noopener\">Ville de Paris</a> (Direction de la Transition &Eacute;cologique et du Climat; Direction des Espaces Verts et de l&rsquo;Environnement), and drinking fountains: <em>Fontaines &agrave; boire</em>, published separately by <a href=\"https://opendata.paris.fr/explore/dataset/fontaines-a-boire/\" target=\"_blank\" rel=\"noopener\">Eau de Paris</a> &mdash; all four under the <a href=\"http://opendatacommons.org/licenses/odbl/\" target=\"_blank\" rel=\"noopener\">Open Database License (ODbL)</a>. Green spaces are coloured by <code>indice_veget_sup8m_2024</code>, the share of ground under vegetation taller than 8 m at the 2024 survey; the register also publishes <code>p_vegetation_h</code>, a DIFFERENT number on 903 of the 953 rows carrying both, and the card shows both rather than calling either a correction. Opening hours are drawn from the seven weekday columns and are always shown with the validity window they came from, because 682 of the 984 green spaces publish a window that has already expired. A tree whose <code>hauteurenm</code> is 0 is drawn as unmeasured, never as short.",
+      "Paris cool islands, cool green spaces and trees: <em>Îlots de fraîcheur — équipements et activités</em>, <em>Îlots de fraîcheur — espaces verts frais</em> and <em>Les arbres</em>, published by the <a href=\"https://parisdata.opendatasoft.com/explore/dataset/ilots-de-fraicheur-espaces-verts-frais/\" target=\"_blank\" rel=\"noopener\">Ville de Paris</a> (Direction de la Transition &Eacute;cologique et du Climat; Direction des Espaces Verts et de l&rsquo;Environnement), and drinking fountains: <em>Fontaines &agrave; boire</em>, published separately by <a href=\"https://parisdata.opendatasoft.com/explore/dataset/fontaines-a-boire/\" target=\"_blank\" rel=\"noopener\">Eau de Paris</a> &mdash; all four under the <a href=\"http://opendatacommons.org/licenses/odbl/\" target=\"_blank\" rel=\"noopener\">Open Database License (ODbL)</a>. Green spaces are coloured by <code>indice_veget_sup8m_2024</code>, the share of ground under vegetation taller than 8 m at the 2024 survey; the register also publishes <code>p_vegetation_h</code>, a DIFFERENT number on 903 of the 953 rows carrying both, and the card shows both rather than calling either a correction. Opening hours are drawn from the seven weekday columns and are always shown with the validity window they came from, because 682 of the 984 green spaces publish a window that has already expired. A tree whose <code>hauteurenm</code> is 0 is drawn as unmeasured, never as short.",
   },
   {
     key: 'sitadel-fr',
@@ -833,7 +833,7 @@ export const DATA_CREDITS = [
       + '<a href="https://data.grandlyon.com/portail/fr/jeux-de-donnees/historique-disponibilites-stations-velo-v-metropole-lyon/donnees" target="_blank" rel="noopener">M&eacute;tropole de Lyon / JCDecaux</a> '
       + '(<a href="https://github.com/etalab/licence-ouverte/blob/master/LO.md" target="_blank" rel="noopener">Licence Ouverte 2.0</a>) &mdash; '
       + 'dock occupancy, a STOCK. Paris: <em>Comptage v&eacute;lo, donn&eacute;es compteurs</em>, '
-      + '<a href="https://opendata.paris.fr/explore/dataset/comptage-velo-donnees-compteurs/" target="_blank" rel="noopener">Ville de Paris</a> '
+      + '<a href="https://parisdata.opendatasoft.com/explore/dataset/comptage-velo-donnees-compteurs/" target="_blank" rel="noopener">Ville de Paris</a> '
       + '(<a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL</a>) &mdash; '
       + 'cyclists counted, a FLOW. <strong>Paris publishes no V&eacute;lib&rsquo; availability archive at all</strong> '
       + '(checked 2026-09-02 against opendata.paris.fr, data.gouv.fr, transport.data.gouv.fr and the community mirror), '

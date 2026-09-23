@@ -5,7 +5,7 @@
  *
  *   npm run dataset:manifest -- https://www.data.gouv.fr/datasets/geodae-base-nationale-des-defibrillateurs/
  *   npm run dataset:manifest -- edb6a9e1-2f16-4bbf-99e7-c3eb6b90794c --id defibrillateurs
- *   npm run dataset:manifest -- https://opendata.paris.fr/explore/dataset/arbresremarquablesparis/ --dry
+ *   npm run dataset:manifest -- https://parisdata.opendatasoft.com/explore/dataset/arbresremarquablesparis/ --dry
  *
  * Reads the platform's own metadata (title, publisher, licence, columns, a
  * sample), guesses the geometry, and writes `datasets/<id>.json` — or prints
