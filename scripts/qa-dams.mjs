@@ -227,7 +227,9 @@ async function main() {
         const p = entity.__localProperties ?? {};
         const tier = (p.heightM >= 15 || p.hydro === true
           || (p.name && p.spanM >= 300)) ? 'major' : p.name ? 'named' : 'minor';
-        const size = Number(entity.point?.pixelSize?.getValue?.(now) ?? entity.point?.pixelSize);
+        // The mark is a primitive in the layer's batch; `entity.point` before.
+        const point = entity.__localMark ?? entity.point;
+        const size = Number(point?.pixelSize?.getValue?.(now) ?? point?.pixelSize);
         if (!sizes.has(tier)) sizes.set(tier, new Set());
         sizes.get(tier).add(size);
         const key = band(Number(p.spanM));

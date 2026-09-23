@@ -283,6 +283,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **With the data centres on, the globe froze over Paris for a minute or
+  more, and some sites stood 80 m under the street.** Every site within 75 km
+  of the camera — a few hundred around Paris, on screen or not — measured the
+  ground under it with a hidden render, and a site off screen never got an
+  answer, so it asked again every two seconds; the few that never got one
+  stayed at sea level. Measured over Paris at 5 km with the processor slowed
+  four times: 0.4 images per second while turning the view, 9-13 s of blocked
+  page after each stop, and 14 of the 70 sites on screen buried. The sites now
+  read the ground from the relief already loaded (a lookup, not a render), only
+  the sites you can see ask, and on Google 3D, where a render is the only way,
+  the reads wait for the city to finish loading and go a few dozen at a time.
+  The 4 649 marks are drawn as one batch instead of 4 649 objects Cesium walked
+  on every frame, and a building outline is only held while its site is drawn.
+  Same view, same computer: 55-58 images per second against 60 with the layer
+  off, under 0.1 s after a stop, and every site on the ground.
 - **On the Satellite basemap, the sea along the French coast flashed white
   every time the camera stopped.** Past the edge of its aerial survey, IGN
   answers with white tiles instead of no tile, and only at the finer zoom

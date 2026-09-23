@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 import {
+  GROUND_MESH_SAMPLE_BUDGET,
   GROUND_SAMPLE_MAX_ARMED_RETRIES,
   LOCAL_OVERLAY_COHORT_LIMIT,
   LOCAL_OVERLAY_LABEL_MAX_TITLE,
@@ -69,14 +70,36 @@ class MockLayerEvent {
 }
 
 /**
+ * A photoreal tileset as `visibleTilesetLoaded` sees one: an instance of the
+ * class, shown, and drained unless the test says otherwise.
+ * @param {boolean} [tilesLoaded]
+ */
+function fakeTileset(tilesLoaded = true) {
+  const tileset = Object.create(Cesium.Cesium3DTileset.prototype);
+  Object.defineProperty(tileset, 'show', { value: true, writable: true });
+  Object.defineProperty(tileset, 'tilesLoaded', { value: tilesLoaded, writable: true });
+  return tileset;
+}
+
+/**
  * @param {object} [options]
  * @param {boolean} [options.sampleHeightSupported] Scene height-sampling capability.
  * @param {Function} [options.sampleHeight] Initial scene.sampleHeight behavior
  *   (default: throws like a scene whose tiles are not sampleable yet).
+ * @param {'mesh'|'globe'} [options.surface] What the scene draws its ground
+ *   with: the photoreal mesh (globe hidden, a drained tileset in the scene) or
+ *   the globe, whose terrain answers `getHeight`.
+ * @param {Function} [options.getHeight] The globe's `getHeight` (globe only;
+ *   default: no terrain resident, `undefined`).
+ * @param {number} [options.features] How many copies of the dam to load, laid
+ *   out 0.01° apart eastwards.
  */
 async function createRealLocalLayerHarness({
   sampleHeightSupported = false,
   sampleHeight = () => { throw new Error('tiles not sampleable yet'); },
+  surface = 'mesh',
+  getHeight = () => undefined,
+  features = 1,
 } = {}) {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
@@ -89,23 +112,37 @@ async function createRealLocalLayerHarness({
   globalThis.fetch = async () => ({
     ok: true,
     status: 200,
-    text: async () => JSON.stringify({
+    text: async () => Array.from({ length: features }, (_, index) => JSON.stringify({
       type: 'Feature',
-      id: 'real-dam',
+      id: index === 0 ? 'real-dam' : `real-dam-${index}`,
       properties: { name: 'Runtime Dam', tags: { associated_river: 'Test River' } },
       geometry: {
         type: 'Polygon',
         coordinates: [[
-          [-97.70, 30.20],
-          [-97.69, 30.20],
-          [-97.69, 30.21],
-          [-97.70, 30.20],
+          [-97.70 + index * 0.01, 30.20],
+          [-97.69 + index * 0.01, 30.20],
+          [-97.69 + index * 0.01, 30.21],
+          [-97.70 + index * 0.01, 30.20],
         ]],
       },
-    }),
+    })).join('\n'),
   });
   globalThis.window = { dispatchEvent() {} };
   let sampleHeightImpl = sampleHeight;
+  let getHeightImpl = getHeight;
+  const heightCalls = { count: 0 };
+  const tileset = fakeTileset();
+  const globe = surface === 'globe'
+    ? {
+      show: true,
+      tilesLoaded: true,
+      terrainProvider: { name: 'terrain-a' },
+      getHeight: (...args) => {
+        heightCalls.count += 1;
+        return getHeightImpl(...args);
+      },
+    }
+    : { show: false };
   const sampleCalls = { count: 0 };
   const overlayHost = {
     setVisible: (...args) => hostCalls.push(['visible', ...args]),
@@ -140,7 +177,16 @@ async function createRealLocalLayerHarness({
           if (at >= 0) primitives.splice(at, 1);
           return at >= 0;
         },
+        // The photoreal tileset sits ahead of the layer's own batches, where
+        // `visibleTilesetLoaded` walks for it; `primitives` above stays the
+        // layer's alone.
+        get length() { return primitives.length + (surface === 'mesh' ? 1 : 0); },
+        get(index) {
+          if (surface !== 'mesh') return primitives[index];
+          return index === 0 ? tileset : primitives[index - 1];
+        },
       },
+      globe,
       preRender,
       sampleHeightSupported,
       sampleHeight: (...args) => {
@@ -178,8 +224,13 @@ async function createRealLocalLayerHarness({
     preRender,
     moveEnd,
     sampleCalls,
+    heightCalls,
+    tileset,
+    globe,
     /** Swap scene.sampleHeight mid-test (e.g. tiles finally arrive). */
     setSampleHeight(next) { sampleHeightImpl = next; },
+    /** Swap globe.getHeight mid-test. */
+    setGetHeight(next) { getHeightImpl = next; },
     cleanup() {
       if (originalWindow === undefined) delete globalThis.window;
       else globalThis.window = originalWindow;
@@ -954,7 +1005,13 @@ async function enableLayerWithFetch(fetchImpl, { dataSources, windowStub } = {})
   const viewer = {
     dataSources: dataSources || { add() {}, remove() { return true; } },
     camera: { positionWC: Cesium.Cartesian3.fromDegrees(0, 0, 1000), moveEnd: new MockLayerEvent() },
-    scene: { canvas: {}, preRender: new MockLayerEvent(), pick() { return null; } },
+    scene: {
+      canvas: {},
+      preRender: new MockLayerEvent(),
+      pick() { return null; },
+      // The marks are one primitive batch, seated by the load that fills it.
+      primitives: { add(primitive) { return primitive; }, remove() { return true; } },
+    },
   };
   const layer = createLocalGeoJsonLayer({
     id: 'local-dams',
@@ -1446,6 +1503,302 @@ test('after the cap a camera-motion frame still samples, and re-opens the budget
   );
 });
 
+// ── Who reads the ground, and from what (2026-09-23) ─────────────────────────
+//
+// Every record in range used to read its ground with `scene.sampleHeight` — a
+// pick render — whatever the stack, on screen or not, and one off screen never
+// got an answer, so it asked again every 2 s for as long as the camera stayed.
+// Over Paris that was a few hundred pick renders per pass. These tests hold the
+// three rules that replaced it.
+
+/** Heights of every record's stem base, in load order. */
+function baseHeightsM(env) {
+  return env.dataSources[0].entities.values
+    .map((entity) => Cesium.Cartographic.fromCartesian(entity.__localBaseCartesian).height);
+}
+
+/** Point the camera straight up from 20 km over the dam: nothing is on screen. */
+function lookAtTheSky(env) {
+  const position = Cesium.Cartesian3.fromDegrees(-97.695, 30.205, 20_000);
+  const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(position, new Cesium.Cartesian3());
+  const side = Cesium.Cartesian3.cross(up, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3());
+  Object.assign(env.viewer.camera, {
+    positionWC: position,
+    directionWC: up,
+    upWC: Cesium.Cartesian3.normalize(side, side),
+    frustum: new Cesium.PerspectiveFrustum({ fov: Math.PI / 3, aspectRatio: 800 / 600, near: 1, far: 1e8 }),
+  });
+}
+
+test('a record off screen never reads its ground, and asks for no frame to retry', async (t) => {
+  const env = await createRealLocalLayerHarness({ sampleHeightSupported: true, sampleHeight: () => 210 });
+  _resetRenderGovernorForTest();
+  const governorScene = { renders: 0, requestRender() { this.renders += 1; } };
+  installRenderGovernor({ scene: governorScene });
+  governorScene.renders = 0;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  lookAtTheSky(env);
+  // The precondition, or the test proves nothing: the gate must see the dam
+  // as off screen from here.
+  const probe = { base: Cesium.Cartesian3.fromDegrees(-97.695, 30.205, 0), extentRadiusM: 1_000 };
+  assert.equal(localRecordOffScreen(localCullingVolume(env.viewer), probe, 100), true);
+
+  env.moveEnd.raise();
+  runArmedRetryChain(env, t, clock, 5);
+  assert.equal(env.sampleCalls.count, 0, 'an off-screen record must not pay a pick render');
+  assert.equal(governorScene.renders, 0, 'nor keep the governor awake waiting for one');
+  assert.equal(Math.round(baseHeightM(env)), 0);
+});
+
+test('on the globe the ground is a terrain lookup, never a pick render', async (t) => {
+  const env = await createRealLocalLayerHarness({
+    sampleHeightSupported: true,
+    sampleHeight: () => { throw new Error('the globe path must not pick'); },
+    surface: 'globe',
+    getHeight: () => 183,
+  });
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  setCameraAltitude(env, 20_000);
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.equal(env.sampleCalls.count, 0);
+  assert.ok(env.heightCalls.count >= 1, 'the terrain was asked');
+  assert.ok(Math.abs(baseHeightM(env) - 183) < 1e-6, `base at ${baseHeightM(env)}`);
+
+  // Settled and final: a parked camera reads nothing more.
+  const asked = env.heightCalls.count;
+  for (let i = 0; i < 4; i += 1) {
+    clock.advance(2_100);
+    env.preRender.raise();
+  }
+  assert.equal(env.heightCalls.count, asked, 'a final reading is not taken again on a parked camera');
+});
+
+test('a globe reading taken while its tiles stream is taken again once they settle', async (t) => {
+  const env = await createRealLocalLayerHarness({ surface: 'globe', getHeight: () => 150 });
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  setCameraAltitude(env, 20_000);
+  env.globe.tilesLoaded = false;
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 150) < 1e-6, 'a coarse answer is drawn at once');
+
+  // The finer tile lands: the next pass reads it.
+  env.setGetHeight(() => 162);
+  env.globe.tilesLoaded = true;
+  clock.advance(2_100);
+  t.mock.timers.tick(2_100);
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 162) < 1e-6, `base at ${baseHeightM(env)}`);
+});
+
+test('a camera twice as close reads the ground again; a terrain switch does too', async (t) => {
+  const env = await createRealLocalLayerHarness({ surface: 'globe', getHeight: () => 150 });
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  setCameraAltitude(env, 40_000);
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 150) < 1e-6);
+
+  // A little closer: the reading stands.
+  env.setGetHeight(() => 170);
+  setCameraAltitude(env, 30_000);
+  env.moveEnd.raise();
+  clock.advance(500);
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 150) < 1e-6, 'not re-read at three quarters of the distance');
+
+  // Half the distance: read again.
+  setCameraAltitude(env, 15_000);
+  env.moveEnd.raise();
+  clock.advance(500);
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 170) < 1e-6, `base at ${baseHeightM(env)}`);
+
+  // The terrain changes under a parked camera (a stack switch): read again.
+  env.setGetHeight(() => 175);
+  env.globe.terrainProvider = { name: 'terrain-b' };
+  clock.advance(2_100);
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 175) < 1e-6, `base at ${baseHeightM(env)}`);
+});
+
+test('the mesh waits for its tileset to drain, and refuses a mid-stream answer', async (t) => {
+  const env = await createRealLocalLayerHarness({ sampleHeightSupported: true, sampleHeight: () => -6311.7 });
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  setCameraAltitude(env, 20_000);
+  env.tileset.tilesLoaded = false;
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.equal(env.sampleCalls.count, 0, 'no pick render against a streaming tileset');
+
+  // Drained, but the answer is the −6 311 m a mid-stream mesh gives: refused.
+  env.tileset.tilesLoaded = true;
+  clock.advance(2_100);
+  t.mock.timers.tick(2_100);
+  env.preRender.raise();
+  assert.equal(env.sampleCalls.count, 1);
+  assert.equal(Math.round(baseHeightM(env)), 0, 'an answer outside the band is not drawn');
+
+  env.setSampleHeight(() => 96);
+  clock.advance(2_100);
+  t.mock.timers.tick(2_100);
+  env.preRender.raise();
+  assert.ok(Math.abs(baseHeightM(env) - 96) < 1e-6, `base at ${baseHeightM(env)}`);
+});
+
+test('mesh reads are rationed per pass, and the backlog comes back at the walk cadence', async (t) => {
+  const records = 60;
+  const env = await createRealLocalLayerHarness({
+    sampleHeightSupported: true,
+    sampleHeight: () => 120,
+    features: records,
+  });
+  _resetRenderGovernorForTest();
+  const governorScene = { renders: 0, requestRender() { this.renders += 1; } };
+  installRenderGovernor({ scene: governorScene });
+  governorScene.renders = 0;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  setCameraAltitude(env, 20_000);
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.equal(env.sampleCalls.count, GROUND_MESH_SAMPLE_BUDGET, 'one bounded burst per pass');
+
+  // The backlog asks for its next pass at the walk's own cadence, not 2 s.
+  t.mock.timers.tick(460);
+  assert.equal(governorScene.renders, 1, 'the next burst is requested within one walk period');
+
+  let passes = 1;
+  while (baseHeightsM(env).some((h) => Math.abs(h - 120) > 1e-6) && passes < 10) {
+    clock.advance(460);
+    env.preRender.raise();
+    t.mock.timers.tick(460);
+    passes += 1;
+  }
+  assert.equal(passes, Math.ceil(records / GROUND_MESH_SAMPLE_BUDGET), `seated in ${passes} passes`);
+  assert.equal(env.sampleCalls.count, records, 'each record read exactly once');
+});
+
+test('the marks are one primitive batch the entity points into, not entity graphics', async (t) => {
+  // A Cesium visualizer walks every entity carrying a point or a billboard on
+  // every frame, drawn or not; a primitive batch costs nothing for a mark that
+  // did not change. The pick surface must not move with it.
+  const env = await createRealLocalLayerHarness({ features: 3 });
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+
+  const entities = env.dataSources[0].entities.values;
+  const marks = env.primitives.find((primitive) => primitive[LOCAL_POOL_KIND] === 'marks');
+  assert.ok(marks instanceof Cesium.PointPrimitiveCollection, 'a pack without glyphs draws points');
+  assert.equal(marks.length, 3);
+  for (const entity of entities) {
+    assert.equal(entity.point, undefined, 'no point graphics for a visualizer to walk');
+    assert.equal(entity.billboard, undefined, 'nor a billboard');
+    assert.equal(entity.__localMark.id, entity, 'a pick on the mark resolves to its feature');
+    assert.equal(entity.__localMark.show, false, 'hidden until a walk decides');
+  }
+
+  setCameraAltitude(env, 20_000);
+  env.moveEnd.raise();
+  env.preRender.raise();
+  for (const entity of entities) {
+    assert.equal(entity.__localMark.show, true, 'drawn once in view');
+    assert.ok(
+      Cesium.Cartesian3.equalsEpsilon(entity.__localMark.position, entity.position.getValue(), 0, 1e-6),
+      'the mark stands where the entity says the feature is',
+    );
+  }
+
+  env.layer.disable(env.viewer);
+  assert.equal(marks.show, false, 'switching the row off hides the batch');
+});
+
+test('a feature polygon stays out of the batch until its mark is drawn, and leaves with it', async (t) => {
+  // A hidden ENTITY keeps its polygon in Cesium's geometry batch, re-evaluated
+  // every frame; only `polygon.show = false` takes it out.
+  const env = await createRealLocalLayerHarness();
+  _resetRenderGovernorForTest();
+  installRenderGovernor({ scene: { requestRender() {} } });
+  const clock = installFakeClock(t);
+  t.after(() => {
+    env.layer.destroy(env.viewer);
+    env.cleanup();
+    _resetRenderGovernorForTest();
+  });
+  const entity = env.dataSources[0].entities.values[0];
+  const polygonShown = () => valueOf(entity.polygon.show);
+
+  assert.equal(polygonShown(), false, 'loaded out of the batch');
+
+  // 20 km over a dam ~1 km across: ~26 px on an 800 × 600 canvas, drawn.
+  setCameraAltitude(env, 20_000);
+  env.moveEnd.raise();
+  env.preRender.raise();
+  assert.equal(entity.show, true);
+  assert.equal(polygonShown(), true, 'in with its mark');
+
+  // The mark leaves the screen: the polygon leaves the batch with it.
+  lookAtTheSky(env);
+  env.moveEnd.raise();
+  clock.advance(500);
+  env.preRender.raise();
+  assert.equal(entity.show, false);
+  assert.equal(polygonShown(), false, 'out with its mark');
+});
+
 // ── The size channel ────────────────────────────────────────────────────────
 //
 // A measured pack spends the size channel per FEATURE, which no `groupStyles`
@@ -1651,8 +2004,8 @@ test('the datacenter pack draws three different footprints without being wired t
       // The anchor dot stops being the size channel: 6 px for all three, and
       // filled, because all three DO have a footprint.
       for (const entity of harness.entities) {
-        assert.equal(valueOf(entity.point.pixelSize), 6);
-        assert.equal(valueOf(entity.point.color).alpha, 1);
+        assert.equal(valueOf(entity.__localMark.pixelSize), 6);
+        assert.equal(valueOf(entity.__localMark.color).alpha, 1);
       }
 
       // …and the key prints the two marks and nothing else: a site, and a
@@ -1685,15 +2038,15 @@ test('a spec that says "not measured" draws a hollow ring, not a small dot', asy
   });
   try {
     const [measured, unmeasured] = harness.entities;
-    assert.equal(valueOf(measured.point.pixelSize), 14);
-    assert.equal(valueOf(measured.point.color).alpha, 1, 'a measurement is a filled disc');
+    assert.equal(valueOf(measured.__localMark.pixelSize), 14);
+    assert.equal(valueOf(measured.__localMark.color).alpha, 1, 'a measurement is a filled disc');
 
     // The hollow mark: a transparent centre and a coloured rim. It must not be
     // reachable by any value of the measured ladder — that is the whole of A1
     // for a size channel.
-    assert.equal(valueOf(unmeasured.point.pixelSize), 8);
-    assert.equal(valueOf(unmeasured.point.color).alpha, 0);
-    assert.equal(valueOf(unmeasured.point.outlineColor).alpha, 1);
+    assert.equal(valueOf(unmeasured.__localMark.pixelSize), 8);
+    assert.equal(valueOf(unmeasured.__localMark.color).alpha, 0);
+    assert.equal(valueOf(unmeasured.__localMark.outlineColor).alpha, 1);
 
     // A pack with no chips still gets a strip, because it has a scale to print.
     const controls = harness.layer.getRowControls();
@@ -1714,8 +2067,8 @@ test('the packs that spend no size channel keep exactly what they had', async ()
   });
   try {
     const [entity] = harness.entities;
-    assert.equal(valueOf(entity.point.pixelSize), 10);
-    assert.equal(valueOf(entity.point.color).alpha, 1);
+    assert.equal(valueOf(entity.__localMark.pixelSize), 10);
+    assert.equal(valueOf(entity.__localMark.color).alpha, 1);
     assert.equal(entity.polygon.extrudedHeight, undefined);
     assert.equal(entity.polygon.heightReference, undefined);
     assert.equal(entity.polygon.fill, undefined, 'the loader s own fill, untouched');
@@ -2362,7 +2715,7 @@ test('the packs carry no description table Cesium built for nobody', async () =>
   try {
     assert.equal(env.entities.length, 1);
     assert.equal(env.entities[0].description, undefined, 'the table nobody reads is gone');
-    assert.ok(env.entities[0].point, 'the app draws its own mark, as it always did');
+    assert.ok(env.entities[0].__localMark, 'the app draws its own mark, as it always did');
   } finally {
     env.cleanup();
   }
