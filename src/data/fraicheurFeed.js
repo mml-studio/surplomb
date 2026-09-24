@@ -100,8 +100,15 @@ import messages, {
   FRAICHEUR_FOUNTAIN_KINDS,
 } from './fraicheurFeed.i18n.js';
 
-/** The portal all three registers live on. Keyless, ODbL, CORS `*`. */
-export const FRAICHEUR_PORTAL = 'opendata.paris.fr';
+/**
+ * The portal all three registers live on. Keyless, ODbL, CORS `*`.
+ *
+ * The Opendatasoft host, not the city's `opendata.paris.fr` alias for it: on
+ * 2026-09-23 paris.fr's own name servers answered NXDOMAIN for the alias and
+ * every call failed, while this host served the same datasets, the same counts
+ * and the same 10 000-a-day quota. It depends on Opendatasoft alone.
+ */
+export const FRAICHEUR_PORTAL = 'parisdata.opendatasoft.com';
 
 /** 535 points — shade, mist, water and cold stone. */
 export const FRAICHEUR_EQUIPMENT_DATASET = 'ilots-de-fraicheur-equipements-activites';

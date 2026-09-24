@@ -350,6 +350,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Fixed
+- **« Îlots de fraîcheur » and « Comptages routiers » stayed empty, and
+  permits in Paris came from Sitadel alone.** On 2026-09-23 paris.fr's own
+  name servers answered NXDOMAIN for `opendata.paris.fr`, so every call the
+  three proxies made to it failed and the hosted refuge route answered 503.
+  The same Opendatasoft tenant answers at `parisdata.opendatasoft.com`, with
+  the same datasets, the same counts and the same 10 000-a-day quota; the
+  three layers, the Vélib' pulse build script and the credit links now use
+  that host, which depends on Opendatasoft alone, as the Nantes permits
+  already did. Measured through the local proxy: 984 green spaces, 535 cool
+  spots and 1,323 fountains, the road-count week in 3.0 s, and 151 Paris
+  dossiers within 500 m of the Hôtel de Ville.
 - **« Urbanisme » came back after a reload with « Règles d’urbanisme » lit.**
   Until the row opened on its permits, the PLU zoning was the row itself, so
   every browser that had saved the row switched on remembered the zoning ON,

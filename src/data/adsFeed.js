@@ -382,7 +382,9 @@ export function adsKindLabel(kind) {
 export const LOCAL_ADS_PORTALS = Object.freeze([
   Object.freeze({
     key: 'paris',
-    portal: 'opendata.paris.fr',
+    // The Opendatasoft host, as for Nantes: the city's `opendata.paris.fr`
+    // alias stopped resolving on 2026-09-23 (see `FRAICHEUR_PORTAL`).
+    portal: 'parisdata.opendatasoft.com',
     dataset: 'dossiers-recents-durbanisme',
     label: 'Ville de Paris — Autorisations d’urbanisme (6 derniers mois)', // i18n-ignore-line — the portal's own dataset title
     licence: 'ODbL 1.0',

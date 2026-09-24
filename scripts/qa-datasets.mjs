@@ -78,11 +78,11 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✔' : '✖'} ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-const TREES_URL = 'https://opendata.paris.fr/explore/dataset/arbresremarquablesparis/information/';
+const TREES_URL = 'https://parisdata.opendatasoft.com/explore/dataset/arbresremarquablesparis/information/';
 const TREES_MANIFEST = {
   id: 'qa-arbres-paris',
   label: 'QA arbres Paris',
-  source: { kind: 'opendatasoft', url: 'https://opendata.paris.fr', dataset: 'arbresremarquablesparis', geoField: 'geom_x_y', maxFeatures: 1000 },
+  source: { kind: 'opendatasoft', url: 'https://parisdata.opendatasoft.com', dataset: 'arbresremarquablesparis', geoField: 'geom_x_y', maxFeatures: 1000 },
   feature: { title: ['arbres_libellefrancais', 'arbres_genre'], details: [{ field: 'arbres_genre', label: 'Genre' }] },
   attribution: { publisher: 'Ville de Paris', licence: 'ODbL', url: TREES_URL },
 };
