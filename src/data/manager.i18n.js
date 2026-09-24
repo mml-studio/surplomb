@@ -131,4 +131,12 @@ export default defineMessages({
       + '(GEV_NONCOMMERCIAL_SOURCES=off — today the TeleGeography submarine cables). The name arrives in the page language.',
     sample: ['Submarine cables'],
   },
+
+  paused: {
+    fr: (name) => `« ${name} » est désactivée dans cette version de Surplomb.`,
+    en: (name) => `“${name}” is switched off in this version of Surplomb.`,
+    note: 'Toast when a share link, a scene or the voice agent asks for a layer the app has set aside '
+      + '(today « Fiche implantation »). The name arrives in the page language.',
+    sample: ['Site report'],
+  },
 });

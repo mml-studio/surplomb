@@ -256,6 +256,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Aérodrome & aéroclub | Airfield & flying club | |
 | piste (aéroport) | runway | |
 | enveloppe (isochrone), surface majorée | envelope, upper-bound area | |
+| Durée maximale (isochrone) | Maximum time | How many of the 5/10/15-minute rings are drawn. |
+| Surface cumulée | Cumulative area | Nested rings: the 15-minute area contains the 5-minute one. |
+| Temps de trajet estimés | Estimated travel times | |
 | expansion libre | free expansion | |
 | jour ouvré type, week-end type | typical weekday, typical weekend | |
 | semaine archivée, Mesuré, J-2 | archived week, Measured, D-2 | |

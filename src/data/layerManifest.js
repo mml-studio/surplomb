@@ -149,7 +149,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '◎',
     source: 'IGN Géoplateforme (BD TOPO®) · OpenStreetMap / OSRM pour le vélo',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ profile: 'foot', centre: 'camera' }),
+    defaultParams: Object.freeze({ profile: 'foot', centre: 'camera', max: '15', view: 'zones' }),
     load: () => import('./isochroneRings.js').then((module) => module.default),
   }),
   Object.freeze({

@@ -17,19 +17,27 @@ import isochroneRingsLayer, {
   ISOCHRONE_RING_STYLES,
   _isochroneBaseForTest,
   _isochroneModeForTest,
+  _resetIsochroneDrawingForTest,
   _setIsochroneModeForTest,
+  aboutLines,
   centreCardText,
+  centreLines,
   drawRing,
   envelopeSentences,
   expansionDigest,
   expansionSentence,
   flyToCatchmentFrame,
+  isochroneKey,
+  isochroneRowSections,
   minutesLabel,
   modeVerb,
   resolveCentre,
+  resolveMax,
   resolveMode,
+  resolveView,
   ringLabelAnchor,
   ringStyle,
+  ringsWithin,
 } from './isochroneRings.js';
 import { ISOCHRONE_STEPS } from './isochroneFeed.js';
 import { getOverlaySourceEntries } from '../overlays/worldOverlay.js';
@@ -99,10 +107,15 @@ test('an unknown mode is refused, never downgraded to walking', () => {
 });
 
 test('the mode reaches a share link, because a drive is not a walk', () => {
+  _resetIsochroneDrawingForTest();
   _setIsochroneModeForTest('foot');
-  assert.deepEqual(isochroneRingsLayer.getParams(), { profile: 'foot', centre: 'camera' });
+  assert.deepEqual(isochroneRingsLayer.getParams(), {
+    profile: 'foot', centre: 'camera', max: '15', view: 'zones',
+  });
   _setIsochroneModeForTest('car');
-  assert.deepEqual(isochroneRingsLayer.getParams(), { profile: 'car', centre: 'camera' });
+  assert.deepEqual(isochroneRingsLayer.getParams(), {
+    profile: 'car', centre: 'camera', max: '15', view: 'zones',
+  });
   _setIsochroneModeForTest('bike');
   assert.equal(isochroneRingsLayer.getParams().profile, 'bike');
   _setIsochroneModeForTest(ISOCHRONE_DEFAULT_MODE);
@@ -176,21 +189,47 @@ test('pinning a centre is refused when it is malformed, and reported when it hol
   assert.equal(isochroneRingsLayer.getStats().pinned, false);
 });
 
-test('the release chip exists only while there is something to release', () => {
+test('the release is offered only while there is something to release', () => {
   const base = _isochroneBaseForTest();
   base.setScanPin(null);
-  assert.equal(
-    isochroneRingsLayer.getRowControls().chips.find((chip) => chip.id === 'centre-camera'),
-    undefined,
-    'a chip offering to release nothing teaches the reader the wrong thing',
-  );
+  const origin = () => isochroneRingsLayer.getRowControls().rowSections.find((section) => section.key === 'origin');
+  assert.equal(origin().secondary, null,
+    'a button offering to release nothing teaches the reader the wrong thing');
+  assert.equal(origin().caption, 'Depuis le centre de la vue');
+  assert.equal(origin().action.label, 'Choisir un point');
   isochroneRingsLayer.setParams({ centre: '4.8357,45.764' });
-  const release = isochroneRingsLayer.getRowControls().chips.find((chip) => chip.id === 'centre-camera');
-  assert.ok(release);
+  const release = origin().secondary;
+  assert.equal(release.label, 'Suivre la vue');
   assert.deepEqual(release.params, { centre: 'camera' });
-  assert.equal(release.disabled, false);
-  assert.match(release.title, /45,764/, 'the chip says which point is held');
+  assert.match(release.title, /45,764/, 'the button says which point is held');
+  assert.equal(origin().caption, 'Depuis ce point');
+  assert.equal(origin().action.label, 'Changer le point');
   base.setScanPin(null);
+});
+
+test('« Changer le point » arms the next click, says so, and a switched-off layer awaits none', () => {
+  _resetIsochroneDrawingForTest();
+  const origin = () => isochroneRingsLayer.getRowControls().rowSections.find((section) => section.key === 'origin');
+  assert.equal(origin().action.pressed, false);
+  assert.equal(origin().hint, '');
+  assert.equal(isochroneRingsLayer.rowAction('pick'), true);
+  assert.equal(origin().action.pressed, true);
+  assert.equal(origin().hint, 'Touchez la carte à l’endroit voulu.');
+  assert.equal(isochroneRingsLayer.getStats().picking, true);
+  // Pressed again, it lets go.
+  isochroneRingsLayer.rowAction('pick');
+  assert.equal(origin().action.pressed, false);
+  isochroneRingsLayer.rowAction('pick');
+  const originalDocument = globalThis.document;
+  globalThis.document = { addEventListener() {}, removeEventListener() {} };
+  try {
+    isochroneRingsLayer.disable();
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+  assert.equal(isochroneRingsLayer.getStats().picking, false);
+  assert.equal(isochroneRingsLayer.rowAction('nonsense'), false);
 });
 
 test('the layer asks the proxy for all three rings in one request', () => {
@@ -203,30 +242,157 @@ test('the layer asks the proxy for all three rings in one request', () => {
   }
 });
 
-// ── The chips and the legend ────────────────────────────────────────────────
+// ── The panel's form and the key ────────────────────────────────────────────
 
-test('every mode chip can be pressed, and exactly one is active', () => {
+test('the row is the mock`s form, in the mock`s order, and carries no chip', () => {
+  _resetIsochroneDrawingForTest();
   _setIsochroneModeForTest('foot');
   _isochroneBaseForTest().setScanPin(null);
-  const { chips } = isochroneRingsLayer.getRowControls();
-  assert.equal(chips.length, 3);
-  const bike = chips.find((chip) => chip.id === 'bike');
-  assert.equal(bike.disabled, false);
-  assert.deepEqual(bike.params, { profile: 'bike' });
-  assert.match(bike.title, /OSM|OSRM/, 'the chip names the other network before it is pressed');
-  assert.equal(chips.filter((chip) => chip.active).length, 1);
-  assert.equal(chips.find((chip) => chip.active).id, 'foot');
+  const controls = isochroneRingsLayer.getRowControls();
+  assert.deepEqual(controls.chips, []);
+  assert.deepEqual(controls.rowSections.map((section) => `${section.key}:${section.kind}`),
+    ['origin:place', 'mode:choices', 'max:choices', 'about:details', 'view:select']);
 });
 
-test('the legend carries areas, because "how many rings" means nothing', () => {
-  const { legend } = isochroneRingsLayer.getRowControls();
-  assert.equal(legend.length, 3);
-  assert.deepEqual(legend.map((row) => row.label), ['5 min', '10 min', '15 min']);
-  assert.deepEqual(
-    legend.map((row) => row.color),
-    ISOCHRONE_RING_STYLES.map((style) => style.color),
-  );
-  for (const row of legend) assert.match(row.blurb, /km²/);
+test('every mode tile can be pressed, wears its glyph, and exactly one is active', () => {
+  _resetIsochroneDrawingForTest();
+  _setIsochroneModeForTest('foot');
+  const mode = isochroneRingsLayer.getRowControls().rowSections.find((section) => section.key === 'mode');
+  assert.equal(mode.caption, 'Se déplacer');
+  assert.deepEqual(mode.options.map((option) => option.label), ['À pied', 'Vélo', 'Voiture']);
+  for (const option of mode.options) {
+    assert.match(option.icon, /^data:image\/svg\+xml;base64,/, `${option.id} has no glyph`);
+  }
+  const bike = mode.options.find((option) => option.id === 'bike');
+  assert.deepEqual(bike.params, { profile: 'bike' });
+  assert.match(bike.title, /OSM|OSRM/, 'the tile names the other network before it is pressed');
+  assert.deepEqual(mode.options.filter((option) => option.active).map((option) => option.id), ['foot']);
+});
+
+test('« Durée maximale » offers the three durations, one pressed', () => {
+  _resetIsochroneDrawingForTest();
+  const max = () => isochroneRingsLayer.getRowControls().rowSections.find((section) => section.key === 'max');
+  assert.equal(max().caption, 'Durée maximale');
+  assert.deepEqual(max().options.map((option) => option.label), ['5 min', '10 min', '15 min']);
+  assert.deepEqual(max().options.map((option) => option.params), [{ max: '5' }, { max: '10' }, { max: '15' }]);
+  assert.equal(max().options.find((option) => option.active).id, '15');
+  assert.equal(isochroneRingsLayer.setParams({ max: '10' }), true);
+  assert.equal(max().options.find((option) => option.active).id, '10');
+  assert.equal(isochroneRingsLayer.getParams().max, '10');
+  // Refused, not snapped; the same value twice is no change.
+  assert.equal(isochroneRingsLayer.setParams({ max: '20' }), false);
+  assert.equal(isochroneRingsLayer.setParams({ max: '10' }), false);
+  assert.equal(isochroneRingsLayer.getParams().max, '10');
+  _resetIsochroneDrawingForTest();
+});
+
+test('« Vue » washes the zones or leaves only their outlines', () => {
+  _resetIsochroneDrawingForTest();
+  const view = () => isochroneRingsLayer.getRowControls().rowSections.find((section) => section.key === 'view');
+  assert.equal(view().param, 'view');
+  assert.equal(view().value, 'zones');
+  assert.deepEqual(view().options.map((option) => option.label), ['Zones', 'Contours']);
+  assert.equal(isochroneRingsLayer.setParams({ view: 'contours' }), true);
+  assert.equal(view().value, 'contours');
+  assert.equal(isochroneRingsLayer.setParams({ view: 'heatmap' }), false);
+  assert.equal(resolveView('CONTOURS'), 'contours');
+  assert.equal(resolveMax(15), '15');
+  assert.equal(resolveMax('7'), null);
+  _resetIsochroneDrawingForTest();
+});
+
+test('the key is the mock`s card: the mode and the ceiling, then one area per duration', () => {
+  _resetIsochroneDrawingForTest();
+  _setIsochroneModeForTest('foot');
+  const stats = {
+    ringAreas: [{ seconds: 300, areaKm2: 0.29 }, { seconds: 600, areaKm2: 0.98 }, { seconds: 900, areaKm2: 2 }],
+  };
+  const key = isochroneKey({ stats });
+  assert.deepEqual(key.legendHead, { title: 'À pied · jusqu’à 15 min', subtitle: 'Surface cumulée' });
+  assert.deepEqual(key.legend.map((row) => [row.label, row.value]),
+    [['5 min', '0,29 km²'], ['10 min', '0,98 km²'], ['15 min', '2 km²']]);
+  assert.deepEqual(key.legend.map((row) => row.color), ISOCHRONE_RING_STYLES.map((style) => style.color));
+  assert.equal(key.note, 'Temps de trajet estimés');
+  // No count, no sentence per line: the grand-public key.
+  for (const row of key.legend) {
+    assert.equal(row.count, undefined);
+    assert.equal(row.blurb, undefined);
+  }
+  // A ring the service did not return keeps its line, and never borrows the
+  // next one's area.
+  const gap = isochroneKey({ stats: { ringAreas: [{ seconds: 600, areaKm2: 0.98 }] } });
+  assert.deepEqual(gap.legend.map((row) => row.value), ['—', '0,98 km²', '—']);
+  // The ceiling cuts the key as it cuts the drawing.
+  isochroneRingsLayer.setParams({ max: '10' });
+  const ten = isochroneKey({ stats });
+  assert.equal(ten.legendHead.title, 'À pied · jusqu’à 10 min');
+  assert.deepEqual(ten.legend.map((row) => row.label), ['5 min', '10 min']);
+  // An envelope says its area is a maximum.
+  _setIsochroneModeForTest('bike');
+  assert.equal(isochroneKey({ stats }).legendHead.subtitle, 'Surface cumulée, au plus');
+  assert.equal(isochroneKey({ stats }).legendHead.title, 'Vélo · jusqu’à 10 min');
+  _setIsochroneModeForTest(ISOCHRONE_DEFAULT_MODE);
+  _resetIsochroneDrawingForTest();
+});
+
+test('the point is named on two lines, street over commune, like the mock', () => {
+  assert.deepEqual(centreLines({
+    address: '5 Rue Pierre Moussempès 64200 Biarritz',
+    addressStreet: '5 Rue Pierre Moussempès',
+    addressCity: 'Biarritz',
+    addressDistanceM: 8,
+  }), ['5 Rue Pierre Moussempès', 'Biarritz']);
+  // Too far to be the door clicked: the commune alone.
+  assert.deepEqual(centreLines({
+    address: 'Route de X', addressStreet: 'Route de X', addressCity: 'Dax', addressDistanceM: 400,
+  }), ['Dax']);
+  // Neither: the coordinate.
+  assert.deepEqual(centreLines({}, { lon: -1.5536, lat: 47.2184 }), ['47,2184 N · 1,5536 O']);
+  assert.deepEqual(centreLines({}, null), []);
+});
+
+test('« Sources et calcul » says what computed the rings, in plain words', () => {
+  _resetIsochroneDrawingForTest();
+  _setIsochroneModeForTest('foot');
+  const stats = {
+    ringAreas: [{ seconds: 300, areaKm2: 0.28 }, { seconds: 600, areaKm2: 0.97 }, { seconds: 900, areaKm2: 2.01 }],
+    expansion: [
+      { fromSeconds: 300, toSeconds: 600, share: 86.6 },
+      { fromSeconds: 600, toSeconds: 900, share: 92.1 },
+    ],
+    snapM: 40,
+    resourceVersion: '2026-08-25',
+  };
+  const lines = aboutLines(stats);
+  assert.match(lines[0], /^Temps calculés par l’IGN/);
+  assert.match(lines[1], /^15 min à pied couvrent autant qu’un disque de \d+ m de rayon/);
+  assert.match(lines[2], /^Après 10 min, la zone grandit moins vite/);
+  assert.match(lines[3], /rattaché au réseau à 40 m/);
+  assert.equal(lines[4], 'Réseau BD TOPO® du 25 août 2026.');
+  // The reading follows the ceiling: at 10 minutes, the pair that ends there.
+  isochroneRingsLayer.setParams({ max: '10' });
+  assert.match(aboutLines(stats)[1], /^10 min à pied/);
+  assert.match(aboutLines(stats)[2], /^Après 5 min/);
+  // At five there is no pair left to read.
+  isochroneRingsLayer.setParams({ max: '5' });
+  assert.ok(!aboutLines(stats).some((line) => /^Après/.test(line)));
+  // By bike the source is another network, and the area a maximum.
+  _setIsochroneModeForTest('bike');
+  assert.match(aboutLines(stats)[0], /OpenStreetMap/);
+  assert.match(aboutLines(stats)[0], /maximum/);
+  assert.ok(!aboutLines(stats).some((line) => /BD TOPO® du/.test(line)), 'no IGN edition for an OSM ring');
+  _setIsochroneModeForTest(ISOCHRONE_DEFAULT_MODE);
+  _resetIsochroneDrawingForTest();
+});
+
+test('a ceiling keeps the rings under it, and only those', () => {
+  const rings = [{ seconds: 300 }, { seconds: 600 }, { seconds: 900 }];
+  assert.deepEqual(ringsWithin(rings, '5').map((ring) => ring.seconds), [300]);
+  assert.deepEqual(ringsWithin(rings, '10').map((ring) => ring.seconds), [300, 600]);
+  assert.deepEqual(ringsWithin(rings, '15').map((ring) => ring.seconds), [300, 600, 900]);
+  // An unknown ceiling draws everything rather than nothing.
+  assert.equal(ringsWithin(rings, 'x').length, 3);
+  assert.deepEqual(ringsWithin(null, '15'), []);
 });
 
 test('the three ring colours are distinct, which is also what keeps Cesium honest', () => {
@@ -246,10 +412,16 @@ test('a ring draws a fill, an outline and exactly one pickable label', () => {
   });
   assert.equal(cards, 1, 'one card-bearing entity per ring');
   const ids = dataSource.added.map((entity) => entity.id);
-  assert.deepEqual(ids, ['isochrone:600:fill', 'isochrone:600:outline', 'isochrone:600:label']);
-  const [fill, outline, label] = dataSource.added;
+  assert.deepEqual(ids, [
+    'isochrone:600:fill', 'isochrone:600:glow', 'isochrone:600:outline', 'isochrone:600:label',
+  ]);
+  const [fill, glow, outline, label] = dataSource.added;
   assert.ok(fill.polygon && !fill.polygon.outline, 'the fill never draws its own outline');
   assert.equal(fill.polygon.classificationType, Cesium.ClassificationType.TERRAIN);
+  // The neon edge: a wide halo under a thin core, both on the ground.
+  assert.ok(glow.polyline.material instanceof Cesium.PolylineGlowMaterialProperty);
+  assert.ok(glow.polyline.width > outline.polyline.width);
+  assert.equal(glow.polyline.clampToGround, true);
   assert.equal(outline.polyline.clampToGround, true);
   // A clamped polyline is ground-classification geometry and `scene.pick`
   // returns null on it, so the LABEL is the only reachable card. It must have
@@ -259,6 +431,24 @@ test('a ring draws a fill, an outline and exactly one pickable label', () => {
   assert.match(label.description, /0.94 km²/);
   assert.match(label.description, /cercle équivalent/);
   assert.match(label.description, /BD TOPO 2026-08-25/);
+});
+
+test('« Contours » draws the outline and the tag, and no wash', () => {
+  const dataSource = fakeDataSource();
+  drawRing(dataSource, RING(600, 0.94, 0.004), {
+    mode: 'foot', expansion: [], classificationType: Cesium.ClassificationType.TERRAIN, view: 'contours',
+  });
+  assert.deepEqual(dataSource.added.map((entity) => entity.id),
+    ['isochrone:600:glow', 'isochrone:600:outline', 'isochrone:600:label']);
+});
+
+test('an envelope keeps its dashes under the new edge', () => {
+  const dataSource = fakeDataSource();
+  drawRing(dataSource, { ...RING(900, 5.4, 0.02), envelope: true }, {
+    mode: 'bike', expansion: [], classificationType: Cesium.ClassificationType.TERRAIN,
+  });
+  const outline = dataSource.added.find((entity) => entity.id === 'isochrone:900:outline');
+  assert.ok(outline.polyline.material instanceof Cesium.PolylineDashMaterialProperty);
 });
 
 test('a ring with too few vertices draws nothing rather than a degenerate polygon', () => {
@@ -466,7 +656,8 @@ test('a dropped ring is named on the card, not silently drawn smaller', () => {
 
 test('the card says which of the two centres it is describing', () => {
   const pinned = centreCardText({ payload: catchmentPayload(), mode: 'foot', point: PIN });
-  assert.ok(pinned.details.at(-1).includes('LIBÉRER'));
+  assert.ok(pinned.details.at(-1).includes('« Suivre la vue »'),
+    'the card names the button that releases the point, now in the panel');
   const followed = centreCardText({
     payload: catchmentPayload(), mode: 'foot', point: { ...PIN, pinned: false },
   });
@@ -563,11 +754,14 @@ async function scanOnce(t, payload, { pin = PIN } = {}) {
   return { flights, urls, stats: isochroneRingsLayer.getStats() };
 }
 
-test('a click frames the catchment and puts its card up, off the wash', async (t) => {
+test('a click frames the catchment, and opens no card by itself', async (t) => {
   _setIsochroneModeForTest('foot');
+  _resetIsochroneDrawingForTest();
   const { flights, stats } = await scanOnce(t, catchmentPayload());
   assert.equal(stats.ringsDrawn, 3);
-  assert.equal(stats.selectedId, 'isochrone:centre', 'the card opened without a second click');
+  // The panel names the point and the key prints the areas (the mock of
+  // 2026-09-24): a card opening under the shape would say both again.
+  assert.equal(stats.selectedId, null, 'nothing opens without a click on it');
   assert.equal(stats.address, '8 Rue Gambetta 40100 Dax');
 
   assert.equal(flights.length, 1, 'one flight per catchment, not one per frame');
@@ -583,10 +777,27 @@ test('a click frames the catchment and puts its card up, off the wash', async (t
   assert.ok(stats.framing.anchor.lat < stats.framing.bounds.south + 1e-9);
 });
 
-test('the centre marker carries exactly what the card says', async (t) => {
+test('a smaller ceiling over a held pin reframes on the ring it keeps', async (t) => {
   _setIsochroneModeForTest('foot');
+  _resetIsochroneDrawingForTest();
+  const { flights } = await scanOnce(t, catchmentPayload());
+  assert.equal(flights.length, 1);
+  const wide = isochroneRingsLayer.getStats().framing.altitudeM;
+  assert.equal(isochroneRingsLayer.setParams({ max: '5' }), true);
+  assert.equal(flights.length, 2, 'five minutes is a ninth of fifteen: the frame follows');
+  assert.ok(isochroneRingsLayer.getStats().framing.altitudeM < wide);
+  // A drawing choice asks the proxy for nothing, and draws only what it kept.
+  const source = _isochroneBaseForTest();
+  assert.equal(source.getStats().ringsDrawn, 3, 'all three are still in hand');
+  _resetIsochroneDrawingForTest();
+});
+
+test('the pin opens, on a click, exactly what the card says', async (t) => {
+  _setIsochroneModeForTest('foot');
+  _resetIsochroneDrawingForTest();
   const payload = catchmentPayload();
   await scanOnce(t, payload);
+  _isochroneBaseForTest().selectCard('isochrone:centre');
   const [entry] = getOverlaySourceEntries('isochrone-fr');
   const expected = centreCardText({ payload, mode: 'foot', point: PIN });
   assert.equal(entry.title, expected.title);

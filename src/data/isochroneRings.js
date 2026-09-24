@@ -1,5 +1,4 @@
 import * as Cesium from 'cesium';
-import { addressMarkerGlyph } from './addressMarkerIcons.js';
 import { createAddressScanLayer, renderedGroundM } from './addressScanLayer.js';
 import {
   BIKE_ENVELOPE_BEARINGS,
@@ -8,9 +7,10 @@ import {
   centreTitle,
   equivalentRadiusM,
 } from './isochroneFeed.js';
-import { estimateCardBoxPx, solveCatchmentFrame } from './isochroneFraming.js';
+import { solveCatchmentFrame } from './isochroneFraming.js';
+import { lucideIconMask } from './lucideIcons.js';
 import { getOverlayPaintRect } from '../overlays/worldOverlay.js';
-import { formatNumber } from '../i18n/format.js';
+import { formatDate, formatNumber } from '../i18n/format.js';
 import messages from './isochroneRings.i18n.js';
 
 /**
@@ -69,6 +69,16 @@ import messages from './isochroneRings.i18n.js';
  * geocodes the pin through the BAN and the card is titled with the street, the
  * commune when the nearest address is too far to be the one clicked, and the
  * coordinate when there is neither.
+ *
+ * AND THE MOCK OF 2026-09-24 REDREW IT. The approved mock draws the layer the
+ * way « Urbanisme » and « Aéroports » were redrawn: a short form under the row
+ * (where the measure starts, how one travels, how long, how it was computed,
+ * how it is drawn), a key that is a card (the mode and the ceiling, then one
+ * area per duration), and on the globe glowing outlines tagged with their
+ * duration, around a pin. Nothing opens by itself any more: the address is in
+ * the panel and the areas are in the key, so the card that used to open under
+ * the shape said twice what the screen already said. The pin and each tag
+ * still open theirs on a click.
  *
  * WHY THE FILLS STACK. The three rings are nested, drawn far to near, each at a
  * low alpha, so the centre is the sum of three and the outer band is one. That
@@ -134,16 +144,31 @@ export const ISOCHRONE_MIN_SHIFT_KM = Object.freeze({
 /**
  * The three rings, near to far, with the colour each is drawn in.
  *
- * Bright teal at five minutes to deep indigo at fifteen: a single perceptual
- * ramp, so the nesting reads as one gradient rather than three unrelated
- * shapes. Alphas are low because they STACK — see the module header.
+ * Teal at five minutes, blue at ten, violet at fifteen — the approved mock's
+ * ramp (2026-09-24). One cool ramp, so the nesting reads as one gradient
+ * rather than three unrelated shapes, and ending in violet rather than the
+ * indigo it replaced, which sank into dark imagery. Alphas are low because
+ * they STACK — see the module header. `widthPx` is the outline's bright core,
+ * `glowPx` the halo it sits in.
  */
 export const ISOCHRONE_RING_STYLES = Object.freeze([
   // i18n-ignore-next-line — a CSS hex the detector reads as a French word.
-  Object.freeze({ seconds: 300, color: '#3ce0c8', fillAlpha: 0.22, widthPx: 3 }),
-  Object.freeze({ seconds: 600, color: '#3b9ae0', fillAlpha: 0.16, widthPx: 3 }),
-  Object.freeze({ seconds: 900, color: '#5560c8', fillAlpha: 0.12, widthPx: 3 }),
+  Object.freeze({ seconds: 300, color: '#3ce0c8', fillAlpha: 0.2, widthPx: 2, glowPx: 26 }),
+  Object.freeze({ seconds: 600, color: '#4f8dff', fillAlpha: 0.13, widthPx: 2, glowPx: 26 }),
+  Object.freeze({ seconds: 900, color: '#b46bff', fillAlpha: 0.1, widthPx: 2, glowPx: 26 }),
 ]);
+
+/**
+ * « Durée maximale »: the durations the drawing may stop at, in minutes. The
+ * three rings are always measured — they come back in one answer — and the
+ * choice only says how many of them are drawn, so switching costs no request.
+ */
+export const ISOCHRONE_MAX_MINUTES = Object.freeze(['5', '10', '15']);
+export const ISOCHRONE_DEFAULT_MAX = '15';
+
+/** « Vue »: the zones washed in their colour, or only their outlines. */
+export const ISOCHRONE_VIEWS = Object.freeze(['zones', 'contours']);
+export const ISOCHRONE_DEFAULT_VIEW = 'zones';
 
 const STYLE_BY_SECONDS = new Map(ISOCHRONE_RING_STYLES.map((style) => [style.seconds, style]));
 const FALLBACK_STYLE = ISOCHRONE_RING_STYLES[ISOCHRONE_RING_STYLES.length - 1];
@@ -168,11 +193,15 @@ const isochroneMode = (id, envelope, feed) => Object.freeze({
 });
 
 // i18n-ignore-start — service and dataset names: proper nouns, not prose.
+// In the mock's order: on foot, by bike, by car — slowest to fastest.
 export const ISOCHRONE_MODES = Object.freeze([
   isochroneMode('foot', false, 'IGN Géoplateforme — Valhalla sur BD TOPO®'),
-  isochroneMode('car', false, 'IGN Géoplateforme — Valhalla sur BD TOPO®'),
   isochroneMode('bike', true, 'OpenStreetMap — table OSRM cyclable (FOSSGIS)'),
+  isochroneMode('car', false, 'IGN Géoplateforme — Valhalla sur BD TOPO®'),
 ]);
+
+/** The Lucide glyph each mode's tile wears (`lucideIcons.js`). */
+const MODE_ICONS = Object.freeze({ foot: 'footprints', bike: 'bike', car: 'car' });
 // i18n-ignore-end
 
 const MODE_BY_ID = new Map(ISOCHRONE_MODES.map((mode) => [mode.id, mode]));
@@ -187,6 +216,16 @@ export const ISOCHRONE_DEFAULT_MODE = 'foot';
 
 /** @type {string} The mode currently drawn. */
 let _mode = ISOCHRONE_DEFAULT_MODE;
+/** @type {string} The longest duration drawn, in minutes (`ISOCHRONE_MAX_MINUTES`). */
+let _max = ISOCHRONE_DEFAULT_MAX;
+/** @type {string} `zones` or `contours`. */
+let _view = ISOCHRONE_DEFAULT_VIEW;
+/**
+ * « Changer le point » was pressed and the next click on the map is awaited.
+ * A click on the map moves the point either way; this is the state the button
+ * and the hint under it show, and the crosshair the canvas wears meanwhile.
+ */
+let _picking = false;
 
 /**
  * Resolve a requested mode to one that can actually be measured.
@@ -204,6 +243,38 @@ export function resolveMode(value) {
   const key = String(value ?? '').trim().toLowerCase();
   const mode = ISOCHRONE_MODES.find((entry) => entry.id === key);
   return mode?.available ? mode.id : null;
+}
+
+/**
+ * Resolve a requested « Durée maximale » to one the layer draws, or null.
+ * Minutes, as a string — the share link's enum (`layerState.js`) is one.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export function resolveMax(value) {
+  const key = String(value ?? '').trim();
+  return ISOCHRONE_MAX_MINUTES.includes(key) ? key : null;
+}
+
+/**
+ * Resolve a requested « Vue » to one the layer draws, or null.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export function resolveView(value) {
+  const key = String(value ?? '').trim().toLowerCase();
+  return ISOCHRONE_VIEWS.includes(key) ? key : null;
+}
+
+/**
+ * The rings the drawing keeps under a « Durée maximale ».
+ * @param {Array<object>} rings
+ * @param {string} max Minutes.
+ * @returns {Array<object>}
+ */
+export function ringsWithin(rings, max) {
+  const ceiling = Number(resolveMax(max) ?? ISOCHRONE_DEFAULT_MAX) * 60;
+  return (Array.isArray(rings) ? rings : []).filter((ring) => Number(ring?.seconds) <= ceiling);
 }
 
 /** The style a duration is drawn in. */
@@ -415,13 +486,113 @@ function cartesianRing(ring) {
     .map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat));
 }
 
+/**
+ * The panels' night green, the plate every tag sits on. OPAQUE: the tag is
+ * centred on its own outline, and at 90 % the bright core showed through the
+ * plate as a line struck across the duration.
+ */
+const TAG_PLATE = 'rgb(14, 24, 21)';
+/** Ivory, the chrome's ink. */
+const TAG_INK = '#f7f4ea';
+/** The chrome's face (`--font-ui`). */
+const TAG_FONT = '600 13px "DM Sans", system-ui, sans-serif'; // i18n-ignore-line — a CSS font, not prose
+
+/** @type {Map<string, {image: string, width: number, height: number}>} */
+const _tagCache = new Map();
+
+/**
+ * A ring's tag on the globe: its duration on a dark plate ringed in the
+ * ring's colour, with a faint glow of it — the pill the approved mock sets on
+ * the northern edge of each outline.
+ *
+ * Painted on a canvas at twice its size, and handed to Cesium as a data-URI
+ * STRING: Cesium shares a billboard atlas entry only between string images,
+ * and a canvas would take a fresh entry on every redraw of a layer that
+ * redraws each time the camera settles. Cached once the chrome's face has
+ * loaded, so a tag drawn in the fallback face is not kept.
+ *
+ * @param {string} text « 15 min ».
+ * @param {string} color The ring's CSS colour.
+ * @returns {?{image: string, width: number, height: number}} CSS size; null
+ *   without a DOM (the tests), where the caller writes a plain label.
+ */
+export function ringTagImage(text, color) {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+  const key = `${text}|${color}`;
+  const cached = _tagCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext?.('2d');
+  if (!ctx || typeof canvas.toDataURL !== 'function') return null;
+  const scale = 2;
+  const font = TAG_FONT.replace('13px', `${13 * scale}px`);
+  ctx.font = font;
+  const textWidth = ctx.measureText(text).width;
+  // Room around the plate for its glow, which a canvas edge would cut.
+  const margin = 5 * scale;
+  const plateW = Math.ceil(textWidth + 20 * scale);
+  const plateH = 24 * scale;
+  canvas.width = plateW + margin * 2;
+  canvas.height = plateH + margin * 2;
+  ctx.font = font;
+  const plate = () => {
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(margin, margin, plateW, plateH, 7 * scale);
+    else ctx.rect(margin, margin, plateW, plateH);
+  };
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6 * scale;
+  plate();
+  ctx.fillStyle = TAG_PLATE;
+  ctx.fill();
+  ctx.restore();
+  plate();
+  ctx.lineWidth = 1.5 * scale;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.fillStyle = TAG_INK;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + scale / 2);
+  const tag = { image: canvas.toDataURL('image/png'), width: canvas.width / scale, height: canvas.height / scale };
+  const faceReady = typeof document.fonts?.check !== 'function' || document.fonts.check(TAG_FONT);
+  if (faceReady) _tagCache.set(key, tag);
+  return tag;
+}
+
+/** The origin pin's body: the interface's apricot, the colour of a pressed control. */
+export const ORIGIN_PIN_FILL = '#f7ab7c';
+/** Its rim, dark enough to part it from a red roof. */
+const ORIGIN_PIN_RIM = '#5a2c12';
+/** Its core, the panels' night green. */
+const ORIGIN_PIN_CORE = '#1d3029';
+
+/**
+ * The point the measure starts from, as a PIN: a filled drop in apricot with
+ * a dark core ringed in ivory — the approved mock's marker, the shape of the
+ * place search's pin in the colour of the panel's pressed controls, so the two
+ * never read as one another. Drawn at twice its screen size.
+ * @returns {string} `data:image/svg+xml;…`
+ */
+export function originPinImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="84" viewBox="0 0 30 42">'
+    + '<path d="M15 1.2C7.4 1.2 1.2 7.3 1.2 14.9c0 9.9 11.2 21.5 13 25.3.3.6 1.3.6 1.6 0 1.8-3.8 13-15.4 13-25.3C28.8 7.3 22.6 1.2 15 1.2z" '
+    + `fill="${ORIGIN_PIN_FILL}" stroke="${ORIGIN_PIN_RIM}" stroke-width="1.6"/>`
+    + `<circle cx="15" cy="14.8" r="5.6" fill="${ORIGIN_PIN_CORE}" stroke="${TAG_INK}" stroke-width="1.8"/>`
+    + '</svg>';
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export function drawRing(dataSource, ring, {
-  mode, expansion = [], classificationType, index = 0,
+  mode, expansion = [], classificationType, index = 0, view = ISOCHRONE_DEFAULT_VIEW,
 }) {
   const positions = cartesianRing(ring.ring);
   if (positions.length < 3) return 0;
   const style = ringStyle(ring.seconds);
   const css = Cesium.Color.fromCssColorString(style.color);
+  // The outline's core: the ring's colour a third of the way to white.
+  const core = Cesium.Color.lerp(css, Cesium.Color.WHITE, 0.35, new Cesium.Color());
   const label = minutesLabel(ring.seconds);
   const radiusM = equivalentRadiusM(ring.areaKm2);
   const step = expansion.find((entry) => entry.toSeconds === ring.seconds) || null;
@@ -442,30 +613,45 @@ export function drawRing(dataSource, ring, {
       .filter((hole) => hole.length >= 3)
       .map((hole) => new Cesium.PolygonHierarchy(hole));
     const suffix = partIndex === 0 ? '' : `:${partIndex}`;
+    // « Vue : Contours » leaves the ground unwashed, so the map under the
+    // shape reads as it is; the outlines and their tags are the same.
+    if (view !== 'contours') {
+      dataSource.entities.add({
+        id: `isochrone:${ring.seconds}:fill${suffix}`,
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(outer, holes),
+          material: css.withAlpha(style.fillAlpha),
+          classificationType,
+          outline: false,
+        },
+      });
+    }
+    const loop = [...outer, outer[0]];
+    // A GLOWING OUTLINE, the mock's neon edge: a wide halo fading out from
+    // the line — Cesium's glow material — under a thin core lifted toward
+    // white, which is what makes the edge read as lit rather than painted.
     dataSource.entities.add({
-      id: `isochrone:${ring.seconds}:fill${suffix}`,
-      polygon: {
-        hierarchy: new Cesium.PolygonHierarchy(outer, holes),
-        material: css.withAlpha(style.fillAlpha),
+      id: `isochrone:${ring.seconds}:glow${suffix}`,
+      polyline: {
+        positions: loop,
+        width: style.glowPx,
+        material: new Cesium.PolylineGlowMaterialProperty({ color: css.withAlpha(0.9), glowPower: 0.07 }),
+        clampToGround: true,
         classificationType,
-        outline: false,
       },
     });
     dataSource.entities.add({
       id: `isochrone:${ring.seconds}:outline${suffix}`,
       polyline: {
-        positions: [...outer, outer[0]],
+        positions: loop,
         width: style.widthPx,
         // DASHED FOR AN ENVELOPE. The one visual difference that survives being
         // looked at from across the room, and the reason it is a line style
         // rather than a colour: the three colours are already carrying the
         // duration ramp, and overloading them would cost the gradient.
         material: ring.envelope
-          ? new Cesium.PolylineDashMaterialProperty({
-            color: css.withAlpha(0.95),
-            dashLength: 18,
-          })
-          : new Cesium.ColorMaterialProperty(css.withAlpha(0.95)),
+          ? new Cesium.PolylineDashMaterialProperty({ color: core, dashLength: 18 })
+          : new Cesium.ColorMaterialProperty(core),
         clampToGround: true,
         classificationType,
       },
@@ -490,22 +676,37 @@ export function drawRing(dataSource, ring, {
 
   const anchor = ringLabelAnchor(ring.ring);
   if (!anchor) return 0;
+  // The tag sits ON the outline, centred on its northernmost vertex, as the
+  // mock sets it. Without a DOM to paint it on, a plain label says the same.
+  const tag = ringTagImage(label, style.color);
   dataSource.entities.add({
     id: `isochrone:${ring.seconds}:label`,
     position: Cesium.Cartesian3.fromDegrees(anchor[0], anchor[1]),
-    label: {
-      text: label,
-      font: 'bold 13px "Roboto Mono", monospace',
-      fillColor: css,
-      // Black outline, not a lighter one: it survives over both a pale
-      // orthophoto and the dark end of a stacked fill, and it is the same
-      // discipline the urbanism zone codes use.
-      outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
-      outlineWidth: 3,
-      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      pixelOffset: new Cesium.Cartesian2(0, -6 - index * 2),
-    },
+    ...(tag
+      ? {
+        billboard: {
+          image: tag.image,
+          width: tag.width,
+          height: tag.height,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      }
+      : {
+        label: {
+          text: label,
+          font: TAG_FONT,
+          fillColor: css,
+          // Black outline, not a lighter one: it survives over both a pale
+          // orthophoto and the dark end of a stacked fill, and it is the same
+          // discipline the urbanism zone codes use.
+          outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          pixelOffset: new Cesium.Cartesian2(0, -6 - index * 2),
+        },
+      }),
     properties: { kind: 'isochrone-ring', seconds: ring.seconds },
     name: messages().ring.name(label, modeVerb(mode)),
     description: [
@@ -628,6 +829,8 @@ const base = createAddressScanLayer({
   // and useless for "what does THIS door reach", the question the layer is for.
   groundClick: ({ lon, lat }) => {
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+    // The point awaited by « Changer le point » has arrived.
+    setPicking(false);
     isochroneRingsLayer.setParams({ centre: `${lon},${lat}` });
     // Consumed whether or not the pin MOVED. A second click on the same spot
     // changes nothing and must still not fall through to the dismissal path,
@@ -637,44 +840,38 @@ const base = createAddressScanLayer({
   params: () => ({ profile: _mode, seconds: ISOCHRONE_STEPS.join(',') }),
 
   /**
-   * Frame the catchment and open its card, once it is drawn and indexed.
+   * Frame the catchment, once it is drawn and indexed.
    *
    * ONLY FOR A PINNED CENTRE. A camera-following scan is the reader driving,
    * and a layer that re-aimed the camera after every scan would take the map
    * away from them — the request was for a click to show its answer, not for
    * the map to keep re-centring itself.
    *
-   * The flight is spent once per catchment, keyed on the pin AND the mode: a
-   * driving ring is an order of magnitude wider than the walking one it
-   * replaces, so switching mode over a fixed pin has to reframe. A redraw for
-   * the same catchment — a basemap change — re-opens the card and stays put.
+   * The flight is spent once per catchment, keyed on the pin, the mode AND
+   * the « Durée maximale »: a driving ring is an order of magnitude wider than
+   * the walking one it replaces, and five minutes a ninth of fifteen, so
+   * either change over a fixed pin has to reframe. A redraw for the same
+   * catchment — a basemap change — stays put.
+   *
+   * No card is opened any more (the mock of 2026-09-24): the panel names the
+   * point and the key prints the areas, so the frame reserves no band for one.
    */
-  afterDraw({ payload, point, viewer, selectCard }) {
+  afterDraw({ payload, point, viewer }) {
     if (!point?.pinned) {
       _frame = null;
       _framedFor = null;
       return;
     }
-    const signature = `${point.lon},${point.lat}|${payload?.profile ?? _mode}`;
-    if (signature !== _framedFor) {
-      _framedFor = signature;
-      const card = centreCardText({
-        payload, mode: resolveMode(payload?.profile) || _mode, point,
-      });
-      _frame = solveCatchmentFrame({
-        viewer,
-        rings: payload?.rings,
-        centre: point,
-        // The card is measured BEFORE it is painted, because the band the
-        // frame reserves for it has to be its real height.
-        card: estimateCardBoxPx(card.title, card.details),
-      });
-      flyToCatchmentFrame(viewer, _frame);
-    }
-    // After the anchor is in hand, never before: the card is painted at the
-    // position `cardAnchor` gives it, and opening it first would put it on the
-    // marker for as long as the flight lasts.
-    selectCard('isochrone:centre');
+    const signature = `${point.lon},${point.lat}|${payload?.profile ?? _mode}|${_max}`;
+    if (signature === _framedFor) return;
+    _framedFor = signature;
+    _frame = solveCatchmentFrame({
+      viewer,
+      rings: ringsWithin(payload?.rings, _max),
+      centre: point,
+      card: null,
+    });
+    flyToCatchmentFrame(viewer, _frame);
   },
 
   /**
@@ -699,7 +896,9 @@ const base = createAddressScanLayer({
     const classificationType = viewer?.scene?.globe?.show === false
       ? Cesium.ClassificationType.CESIUM_3D_TILE
       : Cesium.ClassificationType.TERRAIN;
-    const rings = Array.isArray(payload.rings) ? payload.rings : [];
+    // Only the rings under the « Durée maximale »: all three were measured,
+    // in one answer, and the choice is what the reader asked to SEE.
+    const rings = ringsWithin(payload.rings, _max);
     const mode = resolveMode(payload.profile) || _mode;
     let drawn = 0;
 
@@ -709,7 +908,7 @@ const base = createAddressScanLayer({
     const ordered = [...rings].sort((a, b) => b.seconds - a.seconds);
     for (const [index, ring] of ordered.entries()) {
       drawn += drawRing(dataSource, ring, {
-        mode, expansion: payload.expansion || [], classificationType, index,
+        mode, expansion: payload.expansion || [], classificationType, index, view: _view,
       });
     }
 
@@ -719,14 +918,14 @@ const base = createAddressScanLayer({
         id: 'isochrone:centre',
         position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
         billboard: {
-          // A TARGET RING, not a pin. Every other address layer plants a glyph
-          // for a thing standing on the ground — a sale, a diagnostic, a
-          // hazard. This one marks the ORIGIN of a measurement, and the shape
-          // is what tells the four apart when they land on the same address.
-          image: addressMarkerGlyph('target'),
-          width: 26,
-          height: 26,
-          color: Cesium.Color.fromCssColorString(ISOCHRONE_RING_STYLES[0].color),
+          // A PIN, the mock's: the one mark on this layer that stands for the
+          // reader's own choice, and the shape they already know for « here ».
+          // Apricot, where the place search pins in red, so a searched
+          // address and the point measured from never read as one another.
+          image: originPinImage(),
+          width: 30,
+          height: 42,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         properties: { kind: 'isochrone-centre' },
@@ -749,6 +948,14 @@ const base = createAddressScanLayer({
       ringsDrawn: rings.length,
       ringsMissing: payload.missing ?? 0,
       areasKm2: rings.map((ring) => ring.areaKm2),
+      // Keyed by duration, for the key: a ring the service did not return
+      // must not shift the next one's area onto its line.
+      ringAreas: rings.map((ring) => ({ seconds: ring.seconds, areaKm2: ring.areaKm2 })),
+      // Every pair's reading, for « Sources et calcul », which prints the one
+      // ending at the « Durée maximale ».
+      expansion: (payload.expansion || [])
+        .filter((step) => Number.isFinite(step?.share))
+        .map((step) => ({ fromSeconds: step.fromSeconds, toSeconds: step.toSeconds, share: step.share })),
       outerAreaKm2: outer?.areaKm2 ?? null,
       outerRadiusM: outer ? equivalentRadiusM(outer.areaKm2) : null,
       // The obstruction reading, as a single number a row can carry: the
@@ -760,6 +967,9 @@ const base = createAddressScanLayer({
       // Reported apart from the title so a reader of the row — or of the QA
       // harness — can tell a street the pin is on from a commune it is merely in.
       address: payload.address?.label ?? null,
+      // The street line on its own (« 5 Rue Pierre Moussempès »), which the
+      // panel prints over the commune as the mock does.
+      addressStreet: [payload.address?.housenumber, payload.address?.street].filter(Boolean).join(' ') || null,
       addressCity: payload.address?.city ?? null,
       addressDistanceM: Number.isFinite(payload.address?.distanceM)
         ? payload.address.distanceM
@@ -803,14 +1013,199 @@ export function resolveCentre(value) {
   return { lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5 };
 }
 
+/** The viewer the layer was last enabled on — whose canvas wears the crosshair. */
+let _pickViewer = null;
+
+/**
+ * Arm or disarm « Changer le point ». The crosshair is the one sign on the
+ * map itself that a click there is awaited.
+ * @param {boolean} on
+ */
+function setPicking(on) {
+  _picking = Boolean(on);
+  const style = _pickViewer?.scene?.canvas?.style;
+  if (style) style.cursor = _picking ? 'crosshair' : '';
+}
+
+/**
+ * The point the measure starts from, as the panel prints it: the street over
+ * the commune when the nearest address is the one clicked (« 5 Rue Pierre
+ * Moussempès » / « Biarritz »), the commune alone when it is too far to be,
+ * the coordinate when there is neither — the same three answers the pin's
+ * card is titled with (`centreTitle`).
+ * @param {object} stats The layer's stats (summary of the answer in hand).
+ * @param {?{lon: number, lat: number}} point
+ * @returns {string[]}
+ */
+export function centreLines(stats, point) {
+  const distance = stats?.addressDistanceM;
+  const near = !Number.isFinite(distance) || distance <= CENTRE_ADDRESS_MAX_M;
+  if (near && stats?.addressStreet && stats?.addressCity) return [stats.addressStreet, stats.addressCity];
+  if (near && stats?.address) return [stats.address];
+  if (stats?.addressCity) return [stats.addressCity];
+  if (point && Number.isFinite(point.lon) && Number.isFinite(point.lat)) {
+    return [centreTitle(null, point)];
+  }
+  return [];
+}
+
+/**
+ * The BD TOPO® edition as a reader writes a date (« 19 septembre 2026 »). An
+ * ISO day is read in UTC, so no time zone moves it to the day before; anything
+ * else is printed as the service wrote it.
+ * @param {string} version
+ * @returns {string}
+ */
+function editionLabel(version) {
+  const text = String(version);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  return formatDate(`${text}T00:00:00Z`, {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  });
+}
+
+/**
+ * « Sources et calcul »: what computed the rings, how big the drawn outer one
+ * is against a circle, how the network holds it back, and where the measure
+ * really starts. Plain sentences, read by whoever opens the disclosure.
+ * @param {object} stats
+ * @returns {string[]}
+ */
+export function aboutLines(stats) {
+  const m = messages().panel.about;
+  const spec = modeSpec(_mode);
+  const lines = [spec.envelope ? m.bike : m.ign];
+  const ceiling = Number(_max) * 60;
+  const outer = (Array.isArray(stats?.ringAreas) ? stats.ringAreas : [])
+    .filter((ring) => ring.seconds <= ceiling && Number.isFinite(ring.areaKm2))
+    .at(-1);
+  if (outer) {
+    lines.push(m.circle(minutesLabel(outer.seconds), modeVerb(_mode), equivalentRadiusM(outer.areaKm2)));
+  }
+  const step = (Array.isArray(stats?.expansion) ? stats.expansion : [])
+    .find((entry) => entry.toSeconds === ceiling);
+  if (step) {
+    lines.push(step.share >= 100 ? m.opens(minutesLabel(step.fromSeconds)) : m.brakes(minutesLabel(step.fromSeconds)));
+  }
+  if (Number.isFinite(stats?.snapM) && stats.snapM > 25) lines.push(messages().ring.snapped(stats.snapM));
+  if (!spec.envelope && stats?.resourceVersion) lines.push(m.edition(editionLabel(stats.resourceVersion)));
+  return lines;
+}
+
+/**
+ * The row's form (`rowSections` — see `rowSectionsOf` in manager.js), in the
+ * mock's order: where the measure starts, how one travels, how long, how it
+ * was computed, how it is drawn.
+ * @param {{stats: object, pin: ?{lon: number, lat: number}}} input
+ * @returns {Array<object>}
+ */
+export function isochroneRowSections({ stats, pin }) {
+  const m = messages().panel;
+  const point = pin || stats?.scanCentre || null;
+  return [
+    {
+      key: 'origin',
+      kind: 'place',
+      caption: pin ? m.place.pinned : m.place.following,
+      lines: stats?.dormant && !pin ? [] : centreLines(stats, point),
+      action: {
+        id: 'pick',
+        label: pin ? m.place.change : m.place.choose,
+        title: m.place.pickTitle,
+        pressed: _picking,
+      },
+      // The release, which the LIBÉRER chip used to be: only while a pin is
+      // held, since offering to release nothing teaches the wrong thing.
+      secondary: pin
+        ? {
+          id: 'follow',
+          label: m.place.follow,
+          title: messages().release.title(fr(pin.lat, 5), fr(pin.lon, 5)),
+          params: { centre: 'camera' },
+        }
+        : null,
+      hint: _picking ? m.place.hint : '',
+    },
+    {
+      key: 'mode',
+      kind: 'choices',
+      ruled: true,
+      caption: m.modeCaption,
+      options: ISOCHRONE_MODES.filter((mode) => mode.available).map((mode) => ({
+        id: mode.id,
+        label: mode.label,
+        title: mode.blurb,
+        icon: lucideIconMask(MODE_ICONS[mode.id]),
+        active: _mode === mode.id,
+        params: { profile: mode.id },
+      })),
+    },
+    {
+      key: 'max',
+      kind: 'choices',
+      caption: m.maxCaption,
+      options: ISOCHRONE_MAX_MINUTES.map((minutes) => ({
+        id: minutes,
+        label: messages().minutes(Number(minutes)),
+        active: _max === minutes,
+        params: { max: minutes },
+      })),
+    },
+    { key: 'about', kind: 'details', ruled: true, caption: m.about.caption, lines: aboutLines(stats) },
+    {
+      key: 'view',
+      kind: 'select',
+      ruled: true,
+      caption: m.view.caption,
+      param: 'view',
+      value: _view,
+      options: ISOCHRONE_VIEWS.map((view) => ({ value: view, label: m.view[view] })),
+    },
+  ];
+}
+
+/**
+ * The key, drawn as the mock's card: « À pied · jusqu'à 15 min », « Surface
+ * cumulée », then one line per drawn duration with its area at the right
+ * edge, and « Temps de trajet estimés » under them. The areas are nested — the
+ * fifteen-minute zone contains the five — which is what « cumulée » says.
+ * @param {{stats: object}} input
+ * @returns {{legend: Array<object>, legendHead: object, note: string}}
+ */
+export function isochroneKey({ stats }) {
+  const m = messages().key;
+  const envelope = modeSpec(_mode).envelope;
+  const areas = new Map((Array.isArray(stats?.ringAreas) ? stats.ringAreas : [])
+    .map((ring) => [ring.seconds, ring.areaKm2]));
+  const legend = ISOCHRONE_RING_STYLES
+    .filter((style) => style.seconds <= Number(_max) * 60)
+    .map((style) => {
+      const area = areas.get(style.seconds);
+      return {
+        label: minutesLabel(style.seconds),
+        color: style.color,
+        value: Number.isFinite(area) ? m.area(fr(area)) : '—',
+      };
+    });
+  return {
+    legend,
+    legendHead: {
+      title: m.title(modeSpec(_mode).label, messages().minutes(Number(_max))),
+      subtitle: envelope ? m.cumulativeAtMost : m.cumulative,
+    },
+    note: envelope ? m.noteBike : m.note,
+  };
+}
+
 /**
  * The layer, wrapping the shared address-scan factory with a mode control.
  *
  * Spread rather than subclassed: every method the factory returns is a closure
  * over its own state and none of them read `this`, so copying the references
- * onto a new object is exact. What is added is the four things the factory has
- * no opinion about — which travel mode is drawn, where the centre is, how those
- * reach a share link, and the chips and legend that let a reader change them.
+ * onto a new object is exact. What is added is what the factory has no
+ * opinion about — which travel mode is drawn, where the centre is, how far and
+ * how the rings are drawn, how those reach a share link, and the form and the
+ * key that let a reader change and read them.
  */
 const isochroneRingsLayer = {
   ...base,
@@ -820,17 +1215,20 @@ const isochroneRingsLayer = {
    *
    * `profile` CHANGES THE QUESTION, so unlike the carroyage's indicator it has
    * to refetch: a driving ring is not a recolouring of a walking ring. `centre`
-   * changes WHERE the question is asked, which the shell refetches for.
+   * changes WHERE the question is asked, which the shell refetches for. `max`
+   * and `view` change only the DRAWING of the answer in hand, so they redraw
+   * it and ask nothing.
    *
-   * Both are handled in one call and independently: a chip sends one key, and
-   * a caller that sends both gets both, with the return value true when either
-   * moved.
+   * All are handled in one call and independently: a control sends one key,
+   * and a caller that sends several gets them all, with the return value true
+   * when any moved.
    *
-   * @param {{profile?: string, centre?: string}} [params]
+   * @param {{profile?: string, centre?: string, max?: string, view?: string}} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
     let changed = false;
+    let redraw = false;
     if (params.profile !== undefined) {
       const next = resolveMode(params.profile);
       // An unsupported mode is refused rather than downgraded — see `resolveMode`.
@@ -839,6 +1237,18 @@ const isochroneRingsLayer = {
         _mode = next;
         changed = true;
       }
+    }
+    for (const [key, resolve, read, write] of [
+      ['max', resolveMax, () => _max, (value) => { _max = value; }],
+      ['view', resolveView, () => _view, (value) => { _view = value; }],
+    ]) {
+      if (params[key] === undefined) continue;
+      const next = resolve(params[key]);
+      if (!next) return false;
+      if (next === read()) continue;
+      write(next);
+      changed = true;
+      redraw = true;
     }
     if (params.centre !== undefined) {
       const centre = resolveCentre(params.centre);
@@ -857,72 +1267,66 @@ const isochroneRingsLayer = {
     // `setScanPin` already rescans when it moved the pin; a mode change has to
     // ask for one, because nothing else in the shell knows the query changed.
     if (params.profile !== undefined) void base.update();
+    // A drawing choice rebuilds from the answer in hand — and a pinned
+    // catchment is reframed on its new outer ring by `afterDraw`.
+    else if (redraw) base.redraw('isochrone-drawing');
     return true;
   },
 
   /**
    * What a share link, and the panel, have to carry.
    *
-   * `profile` is encoded (see `layerState.js`). `centre` is NOT — the option
-   * encoders are enums and a coordinate is not one — so a shared link reopens
-   * following the camera, which lands on the same view the sender was looking
-   * at. Reported here anyway, because the row reads it to decide whether to
-   * offer the release chip.
+   * `profile`, `max` and `view` are encoded (see `layerState.js`). `centre` is
+   * NOT — the option encoders are enums and a coordinate is not one — so a
+   * shared link reopens following the camera, which lands on the same view the
+   * sender was looking at. Reported here anyway, because the panel reads it to
+   * say where the measure starts.
    *
-   * @returns {{profile: string, centre: string}}
+   * @returns {{profile: string, centre: string, max: string, view: string}}
    */
   getParams() {
     const pin = base.getScanPin();
     return {
       profile: _mode,
       centre: pin ? `${pin.lon},${pin.lat}` : 'camera',
+      max: _max,
+      view: _view,
     };
   },
 
+  /**
+   * An action from the panel's form — one the layer PERFORMS rather than a
+   * param a share link could replay.
+   *
+   * `pick` arms « Changer le point »: the button shows pressed, a hint says to
+   * touch the map, and the canvas wears a crosshair until the click lands (or
+   * the button is pressed again). The click itself is the one this layer has
+   * always taken — see `groundClick`.
+   * @param {string} id
+   * @returns {boolean} True when the action was known.
+   */
+  rowAction(id) {
+    if (id !== 'pick') return false;
+    setPicking(!_picking);
+    return true;
+  },
+
+  /**
+   * The row's form and the key's card — the approved mock of 2026-09-24.
+   *
+   * No chip any more: the modes are tiles in « Se déplacer », the release is
+   * « Suivre la vue » under the point, and the durations are « Durée
+   * maximale ». The key prints the mode and the ceiling as its title, then
+   * one area per drawn duration at the right edge of its line.
+   */
   getRowControls() {
     const stats = base.getStats();
-    const areas = Array.isArray(stats.areasKm2) ? stats.areasKm2 : [];
     const pin = base.getScanPin();
-    const chips = ISOCHRONE_MODES.map((mode) => ({
-      id: mode.id,
-      label: mode.label,
-      active: mode.available && _mode === mode.id,
-      state: mode.available ? (_mode === mode.id ? 'active' : 'idle') : 'unavailable',
-      disabled: !mode.available,
-      title: mode.blurb,
-      params: mode.available ? { profile: mode.id } : undefined,
-    }));
-    // The release. Present ONLY while a pin is held, because a chip offering to
-    // release nothing is a chip that teaches a reader the wrong thing about
-    // what the layer is doing — and its absence is how the row says "this is
-    // following the camera" without spending a word on it.
-    if (pin) {
-      chips.push({
-        id: 'centre-camera',
-        label: messages().release.label,
-        active: false,
-        state: 'idle',
-        disabled: false,
-        title: messages().release.title(fr(pin.lat, 5), fr(pin.lon, 5)),
-        params: { centre: 'camera' },
-      });
-    }
-    const envelope = modeSpec(_mode).envelope;
-    const legend = ISOCHRONE_RING_STYLES.map((style, index) => ({
-      label: minutesLabel(style.seconds),
-      color: style.color,
-      // The COUNT column carries the area, because for this layer "how many"
-      // has no meaning and "how big" is the entire subject. Rounded to a whole
-      // number of hectares' worth of precision, which is what the source's own
-      // vertex resolution supports.
-      count: Number.isFinite(areas[index]) ? areas[index] : 0,
-      blurb: messages().legend.blurb(
-        minutesLabel(style.seconds),
-        modeVerb(_mode),
-        envelope ? messages().legend.envelopeArea : messages().legend.exactArea,
-      ),
-    }));
-    return { chips, legend };
+    return {
+      chips: [],
+      rowSections: isochroneRowSections({ stats, pin }),
+      ...isochroneKey({ stats }),
+    };
   },
 
   /**
@@ -935,7 +1339,14 @@ const isochroneRingsLayer = {
   enable(viewer) {
     _frame = null;
     _framedFor = null;
+    _pickViewer = viewer;
     base.enable(viewer);
+  },
+
+  /** A layer switched off awaits no click. */
+  disable() {
+    setPicking(false);
+    return base.disable();
   },
 
   getStats() {
@@ -969,6 +1380,9 @@ const isochroneRingsLayer = {
       // the QA harness never has to open a ring to find out.
       envelope: spec.envelope,
       pinned: Boolean(stats.scanPin),
+      picking: _picking,
+      max: _max,
+      view: _view,
       maxAltitudeM: ceilingM,
       feedSource: spec.envelope
         ? 'OpenStreetMap via OSRM (FOSSGIS) — ODbL'
@@ -995,6 +1409,15 @@ export function _isochroneModeForTest() {
 /** Force the drawn mode without going through the manager. Test seam. */
 export function _setIsochroneModeForTest(mode) {
   _mode = resolveMode(mode) || ISOCHRONE_DEFAULT_MODE;
+}
+
+/** Put the drawing choices, the armed pick and the frame back to their defaults. Test seam. */
+export function _resetIsochroneDrawingForTest() {
+  _max = ISOCHRONE_DEFAULT_MAX;
+  _view = ISOCHRONE_DEFAULT_VIEW;
+  _picking = false;
+  _frame = null;
+  _framedFor = null;
 }
 
 /** @returns {object} The wrapped factory layer. Test seam. */

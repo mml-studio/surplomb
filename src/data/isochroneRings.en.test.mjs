@@ -14,6 +14,8 @@ import {
   envelopeSentences,
   expansionDigest,
   expansionSentence,
+  isochroneKey,
+  isochroneRowSections,
   minutesLabel,
   modeVerb,
 } from './isochroneRings.js';
@@ -26,11 +28,11 @@ const NAMES = ['BD TOPO', 'Géoplateforme', 'Rue de la Ré', 'Lyon'];
 test('the three modes name what they are cut from, and which is an envelope', () => {
   const chips = withLocale('en', () => ISOCHRONE_MODES.map(({ id, label, blurb }) => ({ id, label, blurb })));
   assertNoFrench(chips, { allow: NAMES });
-  assert.deepEqual(chips.map((chip) => chip.label), ['ON FOOT', 'BY CAR', 'BY BIKE']);
+  assert.deepEqual(chips.map((chip) => chip.label), ['On foot', 'Bike', 'Car']);
   assert.equal(chips[0].blurb, 'Walking, on BD TOPO’s pedestrian and road network. Exact polygon.');
-  assert.match(chips[2].blurb, /^Cycling, on the OSM cycle network \(OSRM\): IGN publishes no cycling profile\./);
-  assert.match(chips[2].blurb, /Upper-bound area\.$/);
-  assert.equal(withLocale('fr', () => ISOCHRONE_MODES[2].label), 'VÉLO');
+  assert.match(chips[1].blurb, /^Cycling, on the OSM cycle network \(OSRM\): IGN publishes no cycling profile\./);
+  assert.match(chips[1].blurb, /Upper-bound area\.$/);
+  assert.equal(withLocale('fr', () => ISOCHRONE_MODES[1].label), 'Vélo');
 });
 
 test('minutes and the verb that goes with a mode', () => {
@@ -97,7 +99,7 @@ test('the centre card: what the shape is, how big, and the circle it refuses', (
   assert.equal(card.details[0], 'Catchment area on foot around this point');
   assert.equal(card.details[1], '5 min 0.28 km², 10 min 0.94 km², 15 min 2.16 km²');
   assert.match(card.details[2], /^the same area as a disc of \d+ m radius$/);
-  assert.equal(card.details.at(-1), 'center pinned by this click — RELEASE to hand it back');
+  assert.equal(card.details.at(-1), 'point pinned by this click — “Follow the view” releases it');
   // Following the camera instead, and a service that returned nothing.
   const following = withLocale('en', () => centreCardText({
     payload: { rings: [], missing: 2, envelope: true },
@@ -121,4 +123,38 @@ test('a point with no address at all falls back to its coordinate', () => {
   assertNoFrench(en);
   assert.equal(en, '47.2184 N · 1.5536 W');
   assert.equal(withLocale('fr', () => formatCoordinates(-1.5536, 47.2184)), '47,2184 N · 1,5536 O');
+});
+
+test('the row`s form and the key card, in English', () => {
+  const stats = {
+    ringAreas: [{ seconds: 300, areaKm2: 0.29 }, { seconds: 600, areaKm2: 0.98 }, { seconds: 900, areaKm2: 2 }],
+    expansion: [{ fromSeconds: 600, toSeconds: 900, share: 92 }],
+    addressStreet: '5 Rue Pierre Moussempès',
+    addressCity: 'Biarritz',
+    addressDistanceM: 8,
+    resourceVersion: '2026-08-25',
+  };
+  const pin = { lon: -1.5565, lat: 43.4814 };
+  const { key, sections } = withLocale('en', () => ({
+    key: isochroneKey({ stats }),
+    sections: isochroneRowSections({ stats, pin }),
+  }));
+  const prose = {
+    // The colours are CSS hexes, not words.
+    key: { ...key, legend: key.legend.map(({ label, value }) => ({ label, value })) },
+    captions: sections.map((section) => section.caption),
+    actions: [sections[0].action.label, sections[0].secondary.label],
+    modes: sections[1].options.map((option) => option.label),
+    about: sections[3].lines,
+    views: sections[4].options.map((option) => option.label),
+  };
+  assertNoFrench(prose, { allow: [...NAMES, 'Rue Pierre Moussempès', 'Biarritz', 'IGN', 'OSRM'] });
+  assert.deepEqual(key.legendHead, { title: 'On foot · up to 15 min', subtitle: 'Cumulative area' });
+  assert.equal(key.legend[0].value, '0.29 km²');
+  assert.equal(key.note, 'Estimated travel times');
+  assert.deepEqual(prose.captions, ['From this point', 'Getting around', 'Maximum time', 'Sources and method', 'View:']);
+  assert.deepEqual(prose.actions, ['Change the point', 'Follow the view']);
+  assert.deepEqual(prose.modes, ['On foot', 'Bike', 'Car']);
+  assert.deepEqual(prose.views, ['Areas', 'Outlines']);
+  assert.equal(prose.about.at(-1), 'BD TOPO® network as of August 25, 2026.');
 });

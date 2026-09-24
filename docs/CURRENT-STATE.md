@@ -3542,7 +3542,8 @@ a separate measured decision, and one this change deliberately did not make.
 `src/data/ficheSheet.js` is a layer-owned, self-mounting panel — the same idiom
 as `veloPulseHud.js` — that FRAMES `fiche.html` at the point the globe is
 scanning. It is opened by a `RADIOGRAPHIE` chip on the `Zone de chalandise`
-row, published by `implantation-fr`.
+row, published by `implantation-fr` — which is withheld since 2026-09-24
+(`src/data/pausedLayers.js`), so the chip is not offered today.
 
 WHY IT EXISTS. Two surfaces answered the same question about the same door and
 nothing linked them: the globe's fiche card is capped at six lines
@@ -4822,6 +4823,41 @@ when there is neither. The details were rewritten short for the same reason the
 band exists: the card is painted beside a catchment it is reserved out of, so
 every character is width the shape does not get. The full expansion sentences
 survive on the ring cards, which a reader reaches by asking about one ring.
+
+**And on 2026-09-24 the layer was redrawn after its approved mock**, the way
+« Urbanisme » and « Aéroports » were. The row is a short form under its name
+(`rowSections`, a generic slot of `manager.js`): « Depuis ce point » and the
+address on two lines under a pin (« Depuis le centre de la vue » while nothing
+is pinned), a « Changer le point » button that arms the next click on the map
+(pressed, a hint under it, a crosshair on the canvas — the click itself is the
+one the layer always took), « Suivre la vue » under it while a point is held
+(the old LIBÉRER chip); « Se déplacer », three tiles with Lucide glyphs
+(`footprints`, `bike`, `car`) in the mock's order À pied / Vélo / Voiture;
+« Durée maximale » 5 / 10 / 15 min; « Sources et calcul », a closed
+disclosure saying in plain words what computed the rings, the equivalent
+circle, how the network holds the last band back, the snap and the BD TOPO®
+edition; « Vue : Zones / Contours ». `max` and `view` are drawing choices over
+the three rings already in hand — all three are still asked for in one
+request — so they redraw without a request, and a smaller ceiling over a held
+pin reframes on the ring it keeps. Both travel in a share link (`is.d`, `is.v`,
+omitted at their defaults 15 and `zones`). The key is a card: « À pied ·
+jusqu'à 15 min », « Surface cumulée » (« …, au plus » for the cycling
+envelope), one line per drawn duration with its area at the right edge
+(`value`, a generic slot of the key) and « Temps de trajet estimés » under
+them. On the globe each outline is a thin core lifted toward white over a
+wide glow in the mock's teal / blue / violet, the durations are dark tags ringed
+in their colour on each outline's northern vertex, and the point is an apricot
+pin (the place search pins in red). **Nothing opens by itself any more**: the
+panel names the point and the key prints the areas, so the frame reserves no
+card band; the pin and each tag still open their card on a click.
+
+**« Fiche implantation » is set aside** the same day, at the owner's request:
+its code, token and taxonomy entry stay, and `src/data/pausedLayers.js` hands
+it to `withholdLayers(…, { reason: 'paused' })` at boot, before the registry is
+sealed. So the « Fiche » chip is gone from the row, and a share link, a scene
+or the voice agent asking for it is refused with « … est désactivée dans cette
+version de Surplomb » rather than the licence sentence. A stored session saved
+with it on drops it once (stored-state revision 2).
 
 These five carry the first **two-character** share tokens — `gr`, `dv`, `dp`,
 `ur`, `if` — `cadastre-fr` is the sixth, `cd`, and `ads-fr` later took `au`. The single-character space

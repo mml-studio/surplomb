@@ -24,21 +24,21 @@ import { plural } from '../i18n/format.js';
 export default defineMessages({
   modes: {
     foot: {
-      label: { fr: 'PIÉTON', en: 'ON FOOT' },
+      label: { fr: 'À pied', en: 'On foot' },
       blurb: {
         fr: 'Marche, sur le réseau piéton et routier de la BD TOPO. Polygone exact.',
         en: 'Walking, on BD TOPO’s pedestrian and road network. Exact polygon.',
       },
     },
     car: {
-      label: { fr: 'VOITURE', en: 'BY CAR' },
+      label: { fr: 'Voiture', en: 'Car' },
       blurb: {
         fr: 'Voiture, sur le réseau routier de la BD TOPO. Polygone exact.',
         en: 'Driving, on BD TOPO’s road network. Exact polygon.',
       },
     },
     bike: {
-      label: { fr: 'VÉLO', en: 'BY BIKE' },
+      label: { fr: 'Vélo', en: 'Bike' },
       blurb: {
         fr: 'Vélo, sur le réseau cyclable OSM (OSRM) : IGN ne publie aucun profil vélo. '
           + 'Enveloppe mesurée sur 36 directions — chaque sommet est un temps réel, '
@@ -130,8 +130,8 @@ export default defineMessages({
       sample: [36],
     },
     pinned: {
-      fr: 'centre fixé par ce clic — LIBÉRER pour le rendre',
-      en: 'center pinned by this click — RELEASE to hand it back',
+      fr: 'point fixé par ce clic — « Suivre la vue » le relâche',
+      en: 'point pinned by this click — “Follow the view” releases it',
     },
     following: {
       fr: 'centre suivi par la caméra — cliquez pour le figer',
@@ -207,7 +207,6 @@ export default defineMessages({
   },
 
   release: {
-    label: { fr: 'LIBÉRER', en: 'RELEASE' },
     title: {
       fr: (lat, lon) => `Centre fixé à ${lat}, ${lon} — relâcher pour resuivre la caméra.`,
       en: (lat, lon) => `Center pinned at ${lat}, ${lon} — release to follow the camera again.`,
@@ -215,14 +214,108 @@ export default defineMessages({
     },
   },
 
-  legend: {
-    blurb: {
-      fr: (minutes, verb, area) => `${minutes} ${verb} — ${area}, en km²`,
-      en: (minutes, verb, area) => `${minutes} ${verb} — ${area}, in km²`,
-      sample: ['15 min', 'on foot', 'the area actually reachable'],
+  /**
+   * The row's form — the approved mock of 2026-09-24: where the measure
+   * starts, how one travels, how long, how it was computed, how it is drawn.
+   */
+  panel: {
+    place: {
+      pinned: { fr: 'Depuis ce point', en: 'From this point' },
+      following: {
+        fr: 'Depuis le centre de la vue',
+        en: 'From the center of the view',
+        note: 'Caption over the address while no point is pinned and the measure follows the camera.',
+      },
+      change: { fr: 'Changer le point', en: 'Change the point' },
+      choose: { fr: 'Choisir un point', en: 'Choose a point' },
+      pickTitle: {
+        fr: 'Puis touchez la carte à l’endroit voulu',
+        en: 'Then tap the map where you want it',
+      },
+      hint: {
+        fr: 'Touchez la carte à l’endroit voulu.',
+        en: 'Tap the map where you want it.',
+        note: 'Shown under the button while it waits for the click on the map.',
+      },
+      follow: {
+        fr: 'Suivre la vue',
+        en: 'Follow the view',
+        note: 'Releases the pinned point: the measure then starts from the center of the view again.',
+      },
     },
-    envelopeArea: { fr: 'surface majorée de l’enveloppe', en: 'the envelope’s upper-bound area' },
-    exactArea: { fr: 'surface réellement atteignable', en: 'the area actually reachable' },
+    modeCaption: { fr: 'Se déplacer', en: 'Getting around' },
+    maxCaption: {
+      fr: 'Durée maximale',
+      en: 'Maximum time',
+      note: 'How many of the three rings (5, 10, 15 min) are drawn.',
+    },
+    about: {
+      caption: { fr: 'Sources et calcul', en: 'Sources and method' },
+      ign: {
+        fr: 'Temps calculés par l’IGN (Géoplateforme) sur les routes et les chemins de la BD TOPO®.',
+        en: 'Times computed by IGN (Géoplateforme) on the roads and paths of BD TOPO®.',
+      },
+      bike: {
+        fr: 'L’IGN ne calcule pas le vélo : temps mesurés sur les pistes et les rues d’OpenStreetMap '
+          + '(OSRM), dans 36 directions. Le contour relie ces mesures, la surface est donc un maximum.',
+        en: 'IGN does not compute cycling: times measured on OpenStreetMap’s cycle paths and streets '
+          + '(OSRM), in 36 directions. The outline joins those measurements, so the area is a maximum.',
+      },
+      circle: {
+        fr: (minutes, verb, radius) => `${minutes} ${verb} couvrent autant qu’un disque de ${radius} m de rayon, `
+          + 'mais la forme suit les rues.',
+        en: (minutes, verb, radius) => `${minutes} ${verb} cover as much as a disc of ${radius} m radius, `
+          + 'but the shape follows the streets.',
+        sample: ['15 min', 'on foot', 800],
+      },
+      brakes: {
+        fr: (from) => `Après ${from}, la zone grandit moins vite qu’en terrain dégagé : `
+          + 'une rivière, une voie ferrée ou des impasses freinent.',
+        en: (from) => `After ${from}, the area grows more slowly than on open ground: `
+          + 'a river, a railway or dead ends hold it back.',
+        sample: ['10 min'],
+      },
+      opens: {
+        fr: (from) => `Après ${from}, la zone grandit plus vite qu’en terrain dégagé : le réseau s’ouvre.`,
+        en: (from) => `After ${from}, the area grows faster than on open ground: the network opens up.`,
+        sample: ['10 min'],
+      },
+      edition: {
+        fr: (version) => `Réseau BD TOPO® du ${version}.`,
+        en: (version) => `BD TOPO® network as of ${version}.`,
+        sample: ['August 25, 2026'],
+      },
+    },
+    view: {
+      caption: { fr: 'Vue :', en: 'View:' },
+      zones: { fr: 'Zones', en: 'Areas', note: 'The reachable areas washed in their colour.' },
+      contours: { fr: 'Contours', en: 'Outlines', note: 'Only the outlines, the map left unwashed.' },
+    },
+  },
+
+  /** The key, drawn as the mock's card. */
+  key: {
+    title: {
+      fr: (mode, minutes) => `${mode} · jusqu’à ${minutes}`,
+      en: (mode, minutes) => `${mode} · up to ${minutes}`,
+      sample: ['On foot', '15 min'],
+    },
+    cumulative: {
+      fr: 'Surface cumulée',
+      en: 'Cumulative area',
+      note: 'The rings are nested: the 15-minute area contains the 5-minute one.',
+    },
+    cumulativeAtMost: { fr: 'Surface cumulée, au plus', en: 'Cumulative area, at most' },
+    area: {
+      fr: (area) => `${area} km²`,
+      en: (area) => `${area} km²`,
+      sample: ['0.29'],
+    },
+    note: { fr: 'Temps de trajet estimés', en: 'Estimated travel times' },
+    noteBike: {
+      fr: 'Temps estimés · contour approché',
+      en: 'Estimated times · approximate outline',
+    },
   },
 
   row: {

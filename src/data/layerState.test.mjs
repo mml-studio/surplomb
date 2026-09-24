@@ -1878,3 +1878,38 @@ test('the boot defaults are a parameter, so a phone can open with nothing on', a
 test('the zero state stays zero — it is what a share and a session fall back to', () => {
   assert.deepEqual(createDefaultLayerState().enabledLayerIds, []);
 });
+
+test('the catchment carries its « Durée maximale » and its « Vue » in a link, and only when chosen', () => {
+  // The approved mock of 2026-09-24 added two drawing choices over the same
+  // three measured rings. A link reopens the picture its sender saw; a link
+  // that did not choose them stays as short as it was.
+  const state = createDefaultLayerState();
+  state.enabledLayerIds = ['isochrone-fr'];
+  assert.deepEqual(state.options['isochrone-fr'], { profile: 'foot', max: '15', view: 'zones' });
+  const plain = encode(state);
+  state.options['isochrone-fr'] = { profile: 'bike', max: '10', view: 'contours' };
+  const chosen = encode(state);
+  assert.ok(chosen.length > plain.length);
+  const decoded = decodeLayerStateParams(new URLSearchParams(chosen));
+  assert.deepEqual(decoded.options['isochrone-fr'], { profile: 'bike', max: '10', view: 'contours' });
+  // A hand-edited value is refused, not snapped.
+  const bad = normalizeLayerState({
+    enabledLayerIds: ['isochrone-fr'],
+    options: { 'isochrone-fr': { profile: 'foot', max: '20', view: 'heatmap' } },
+  });
+  assert.deepEqual(bad.options['isochrone-fr'], { profile: 'foot', max: '15', view: 'zones' });
+});
+
+test('a session saved with « Fiche implantation » on comes back without it', () => {
+  // Set aside on 2026-09-24 (src/data/pausedLayers.js): kept in the code, no
+  // longer switchable from the app. A session that still names it would be
+  // refused at every visit, so it is dropped once, on the way in.
+  const before = JSON.stringify({
+    v: 2,
+    r: 1,
+    l: ['isochrone-fr', 'implantation-fr', 'flights'],
+    o: createDefaultLayerState().options,
+  });
+  assert.deepEqual([...parseStoredLayerState(before).enabledLayerIds].sort(), ['flights', 'isochrone-fr']);
+  assert.ok(STORED_LAYER_STATE_REVISION >= 2);
+});
