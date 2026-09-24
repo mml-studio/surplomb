@@ -172,6 +172,19 @@ function reorderChildren(parent, nodes) {
 }
 
 /**
+ * The first direct child of `parent` carrying `className`, or null. A walk of
+ * `children` rather than a selector, so it reads the same in a browser and in
+ * the panel tests' element doubles.
+ * @param {?HTMLElement} parent
+ * @param {string} className
+ * @returns {?HTMLElement}
+ */
+function childByClass(parent, className) {
+  return [...(parent?.children || [])]
+    .find((node) => String(node?.className || '').split(/\s+/).includes(className)) || null;
+}
+
+/**
  * A member's `picker`, checked and normalised, or null.
  *
  * The picker is the menu a lit tile puts at the head of its row — the
@@ -209,6 +222,98 @@ export function rowPickerOf(picker) {
     value: options.some((option) => option.value === value) ? value : '',
     options,
   };
+}
+
+/** The kinds of section a row's form can hold — see {@link rowSectionsOf}. */
+const ROW_SECTION_KINDS = new Set(['place', 'choices', 'details', 'select']);
+
+/**
+ * A layer's `rowSections`, checked and normalised: the FORM a lit row draws
+ * under itself, in order. Empty when there is none.
+ *
+ * Written for the approved mock of « Zone de chalandise » (2026-09-24), whose
+ * row is not a strip of chips but a short form: where the measure starts,
+ * how one travels, how long, how it was computed, how it is drawn. Four
+ * kinds, each keyed so a repaint rewrites it in place:
+ *
+ * - `place` — a caption, one or two `lines` naming a point, and a button.
+ *   The button's `action` is either `params` (sent to the layer like a chip)
+ *   or a bare `id`, handed to the layer's `rowAction(id)`: an action is
+ *   something the layer DOES (listen for the next click on the map), which a
+ *   share link must not replay. An optional quiet `secondary` button, and a
+ *   `hint` shown while the action is armed.
+ * - `choices` — a caption over a segmented row of buttons, each sending its
+ *   `params` to the layer, one `active`. With an `icon` on every option they
+ *   are tiles, glyph over name.
+ * - `details` — a disclosure, closed until the reader opens it: a caption and
+ *   `lines` of prose. Its open state lives on the node and survives repaints.
+ * - `select` — a caption and a menu setting one `param`, drawn as one line.
+ *
+ * `ruled` draws a hairline above the section, as the mock separates its
+ * groups. Anything malformed is dropped rather than drawn half-way.
+ * @param {*} sections
+ * @returns {Array<object>}
+ */
+export function rowSectionsOf(sections) {
+  const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+  const params = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : null);
+  const action = (value) => {
+    const id = text(value?.id);
+    const label = text(value?.label);
+    if (!id || !label) return null;
+    return {
+      id, label, title: text(value.title), pressed: value.pressed === true, params: params(value.params),
+    };
+  };
+  const out = [];
+  const seen = new Set();
+  for (const section of Array.isArray(sections) ? sections : []) {
+    const key = text(section?.key);
+    const kind = text(section?.kind);
+    if (!key || seen.has(key) || !ROW_SECTION_KINDS.has(kind)) continue;
+    const base = { key, kind, caption: text(section.caption), ruled: section.ruled === true };
+    if (kind === 'place') {
+      const main = action(section.action);
+      if (!main) continue;
+      const lines = (Array.isArray(section.lines) ? section.lines : []).map(text).filter(Boolean).slice(0, 2);
+      out.push({
+        ...base, lines, action: main, secondary: action(section.secondary), hint: text(section.hint),
+      });
+    } else if (kind === 'choices') {
+      const options = (Array.isArray(section.options) ? section.options : [])
+        .map((option) => ({
+          id: text(option?.id),
+          label: text(option?.label),
+          title: text(option?.title),
+          icon: text(option?.icon) || null,
+          active: option?.active === true,
+          params: params(option?.params),
+        }))
+        .filter((option) => option.id && option.label && option.params);
+      if (!options.length) continue;
+      out.push({ ...base, options, tiles: options.every((option) => option.icon) });
+    } else if (kind === 'details') {
+      const lines = (Array.isArray(section.lines) ? section.lines : []).map(text).filter(Boolean);
+      if (!base.caption || !lines.length) continue;
+      out.push({ ...base, lines });
+    } else {
+      const param = text(section.param);
+      const options = (Array.isArray(section.options) ? section.options : [])
+        .map((option) => ({ value: text(String(option?.value ?? '')), label: text(option?.label) }))
+        .filter((option) => option.value && option.label);
+      if (!param || !options.length) continue;
+      const value = text(String(section.value ?? ''));
+      out.push({
+        ...base,
+        param,
+        title: text(section.title),
+        value: options.some((option) => option.value === value) ? value : options[0].value,
+        options,
+      });
+    }
+    seen.add(key);
+  }
+  return out;
 }
 
 /**
@@ -710,6 +815,8 @@ export class DataLayerManager {
     // every other, so share tokens and the taxonomy still resolve, but with no
     // row or chip, and refused if anything asks to switch them on.
     this._withheldLayerIds = new Set();
+    // Why each one is withheld: a licence, or the app setting it aside.
+    this._withheldReasons = new Map();
     // WHERE THE CAMERA IS, for the controls that have a territory.
     //
     // Pushed in by the shell (`setCoverageView`) rather than read off a viewer
@@ -1026,14 +1133,20 @@ export class DataLayerManager {
    * `_visibilityBlockReason` with `withheldLayerReason`. One already on (a
    * share link restored before the deployment said anything) is switched off.
    *
+   * THE SECOND CASE: a layer the app itself has set aside (`reason:
+   * 'paused'`), its code kept — « Fiche implantation » since 2026-09-24. Same
+   * treatment, and a refusal that says so instead of blaming a licence.
+   *
    * @param {Iterable<string>} layerIds
+   * @param {{reason?: 'licence'|'paused'}} [options]
    * @returns {string[]} The ids newly withheld.
    */
-  withholdLayers(layerIds) {
+  withholdLayers(layerIds, { reason = 'licence' } = {}) {
     const added = [];
     for (const id of layerIds || []) {
       if (typeof id !== 'string' || !this.layers.has(id) || this._withheldLayerIds.has(id)) continue;
       this._withheldLayerIds.add(id);
+      this._withheldReasons.set(id, reason === 'paused' ? 'paused' : 'licence');
       added.push(id);
     }
     if (!added.length) return added;
@@ -1063,7 +1176,7 @@ export class DataLayerManager {
     if (!this._withheldLayerIds.has(layerId)) return null;
     const entry = this.layers.get(layerId);
     const name = this._registrationTaxonomy?.get(layerId)?.label || entry?.module?.name || layerId;
-    return messages().withheld(name);
+    return this._withheldReasons.get(layerId) === 'paused' ? messages().paused(name) : messages().withheld(name);
   }
 
   _registerLayer(layerModule) {
@@ -3412,18 +3525,21 @@ export class DataLayerManager {
    * @param {Array<object>} selects
    * @param {string} hint
    * @param {?object} [picker] A lit member's menu, from {@link rowPickerOf}.
+   * @param {?HTMLElement} [form] The row's form, from {@link _syncRowSections}.
    */
-  _syncRowTiles(container, tiles, selects, hint, picker = null) {
+  _syncRowTiles(container, tiles, selects, hint, picker = null, form = null) {
     const hasClass = (node, className) => String(node?.className || '').split(/\s+/).includes(className);
     const children = () => [...(container.children || [])];
     const take = (className) => children().find((node) => hasClass(node, className)) || null;
     // Every row runs through here; only a row with tiles under it has anything
     // to draw or to take down.
-    if (!tiles.length && !selects.length && !hint && !picker
+    if (!tiles.length && !selects.length && !hint && !picker && !form
         && !children().some((node) => hasClass(node, 'data-row-tiles')
           || hasClass(node, 'data-row-hint') || hasClass(node, 'data-row-picker')
-          || node.dataset?.rowSelect)) return;
-    const desired = [];
+          || hasClass(node, 'data-row-form') || node.dataset?.rowSelect)) return;
+    // The form heads the row: it is the row's whole set of controls when a
+    // layer publishes one (`rowSections`).
+    const desired = form ? [form] : [];
 
     let menu = take('data-row-picker');
     if (picker) {
@@ -3602,6 +3718,262 @@ export class DataLayerManager {
     writeText(code, chosen?.code || '');
     writeProperty(code, 'hidden', !chosen?.code);
     return wrap;
+  }
+
+  /**
+   * The form a row draws under itself (`rowSections`, see
+   * {@link rowSectionsOf}), reconciled in place and keyed by section: the
+   * click that pressed a choice repaints the row, and a rebuilt button would
+   * drop the keyboard focus — or close the disclosure the reader opened.
+   * @param {HTMLElement} container The row's `.data-toggle-controls`.
+   * @param {Array<object>} sections Normalised by {@link rowSectionsOf}.
+   * @param {string} layerId The layer the form belongs to.
+   */
+  _syncRowSections(container, sections, layerId) {
+    let form = childByClass(container, 'data-row-form');
+    if (!sections.length) return null;
+    if (!form) {
+      form = document.createElement('div');
+      form.className = 'data-row-form';
+    }
+    const stale = new Map([...(form.children || [])].map((node) => [node.dataset.rowSection, node]));
+    const nodes = [];
+    for (const section of sections) {
+      let node = stale.get(section.key) || null;
+      stale.delete(section.key);
+      // A section that changed KIND is a different control: rebuilt, not bent.
+      if (node && node.dataset.kind !== section.kind) node = null;
+      if (!node) {
+        node = document.createElement(section.kind === 'details' ? 'details' : 'div');
+        node.dataset.rowSection = section.key;
+        node.dataset.kind = section.kind;
+      }
+      writeProperty(node, 'className', `data-row-section is-${section.kind}${section.ruled ? ' is-ruled' : ''}`);
+      if (section.kind === 'place') this._fillRowPlace(node, section);
+      else if (section.kind === 'choices') this._fillRowChoices(node, section);
+      else if (section.kind === 'details') this._fillRowDetails(node, section);
+      else this._fillRowSelect(node, section, layerId);
+      nodes.push(node);
+    }
+    reorderChildren(form, nodes);
+    return form;
+  }
+
+  /**
+   * The caption at the head of a section, created once and kept first.
+   * @param {HTMLElement} node
+   * @param {string} text
+   * @param {string} [tag] `summary` for a disclosure.
+   * @returns {?HTMLElement}
+   */
+  _rowSectionCaption(node, text, tag = 'div') {
+    let caption = childByClass(node, 'data-row-section-caption');
+    if (!caption && text) {
+      caption = document.createElement(tag);
+      caption.className = 'data-row-section-caption';
+      reorderChildren(node, [caption, ...(node.children || [])]);
+    }
+    if (caption) {
+      writeText(caption, text);
+      writeProperty(caption, 'hidden', !text);
+    }
+    return caption;
+  }
+
+  /**
+   * `place`: the caption, the point in one or two lines under a pin, the
+   * button, and — while its action is armed — the hint saying what to do next.
+   * @param {HTMLElement} node
+   * @param {object} section
+   */
+  _fillRowPlace(node, section) {
+    if (!childByClass(node, 'data-row-place-where')) {
+      const where = document.createElement('div');
+      where.className = 'data-row-place-where';
+      const pin = document.createElement('span');
+      pin.className = 'data-row-place-pin';
+      pin.setAttribute('aria-hidden', 'true');
+      const lines = document.createElement('span');
+      lines.className = 'data-row-place-lines';
+      where.append(pin, lines);
+      const actions = document.createElement('div');
+      actions.className = 'data-row-place-actions';
+      const hint = document.createElement('div');
+      hint.className = 'data-row-place-hint';
+      hint.setAttribute('role', 'status');
+      node.append(where, actions, hint);
+    }
+    this._rowSectionCaption(node, section.caption);
+    const where = childByClass(node, 'data-row-place-where');
+    const lines = childByClass(where, 'data-row-place-lines');
+    const lineNodes = section.lines.map((line, index) => {
+      const child = lines.children[index] || document.createElement('span');
+      writeProperty(child, 'className', index === 0 ? 'data-row-place-line is-first' : 'data-row-place-line');
+      writeText(child, line);
+      return child;
+    });
+    reorderChildren(lines, lineNodes);
+    writeProperty(where, 'hidden', !section.lines.length);
+    const actions = childByClass(node, 'data-row-place-actions');
+    const buttons = [section.action, section.secondary].filter(Boolean).map((action, index) => {
+      let button = [...(actions.children || [])].find((child) => child.dataset.rowAction === action.id) || null;
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.rowAction = action.id;
+      }
+      button.dataset.rowSection = section.key;
+      writeProperty(button, 'className', `data-row-action ${index === 0 ? 'is-primary' : 'is-quiet'}`
+        + (action.pressed ? ' is-pressed' : ''));
+      writeText(button, action.label);
+      writeProperty(button, 'title', action.title || '');
+      writeAttribute(button, 'aria-pressed', action.pressed ? 'true' : 'false');
+      return button;
+    });
+    reorderChildren(actions, buttons);
+    const hint = childByClass(node, 'data-row-place-hint');
+    writeText(hint, section.hint || '');
+    writeProperty(hint, 'hidden', !section.hint);
+  }
+
+  /**
+   * `choices`: a caption over one segmented row; tiles when every option
+   * carries a glyph. The pressed option is filled in the accent.
+   * @param {HTMLElement} node
+   * @param {object} section
+   */
+  _fillRowChoices(node, section) {
+    this._rowSectionCaption(node, section.caption);
+    let group = childByClass(node, 'data-row-choices');
+    if (!group) {
+      group = document.createElement('div');
+      group.setAttribute('role', 'group');
+      node.appendChild(group);
+    }
+    writeProperty(group, 'className', `data-row-choices${section.tiles ? ' is-tiles' : ''}`);
+    writeAttribute(group, 'aria-label', section.caption || '');
+    const stale = new Map([...(group.children || [])].map((child) => [child.dataset.choice, child]));
+    const buttons = section.options.map((option) => {
+      let button = stale.get(option.id) || null;
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.choice = option.id;
+        const icon = document.createElement('span');
+        icon.className = 'data-row-choice-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.className = 'data-row-choice-label';
+        button.append(icon, label);
+      }
+      button.dataset.rowSection = section.key;
+      const [icon, label] = button.children;
+      if (option.icon) setCssVar(icon, '--row-choice-icon', `url("${option.icon}")`);
+      writeProperty(icon, 'hidden', !option.icon);
+      writeText(label, option.label);
+      writeProperty(button, 'className', `data-row-choice${option.active ? ' active' : ''}`);
+      writeProperty(button, 'title', option.title || '');
+      writeAttribute(button, 'aria-pressed', option.active ? 'true' : 'false');
+      return button;
+    });
+    reorderChildren(group, buttons);
+  }
+
+  /**
+   * `details`: a native disclosure, so the keyboard and the screen reader get
+   * the real control; only its text is rewritten, never its open state.
+   * @param {HTMLElement} node A `<details>`.
+   * @param {object} section
+   */
+  _fillRowDetails(node, section) {
+    this._rowSectionCaption(node, section.caption, 'summary');
+    let body = childByClass(node, 'data-row-details-body');
+    if (!body) {
+      body = document.createElement('div');
+      body.className = 'data-row-details-body';
+      node.appendChild(body);
+    }
+    const lines = section.lines.map((line, index) => {
+      const child = body.children[index] || document.createElement('p');
+      writeText(child, line);
+      return child;
+    });
+    reorderChildren(body, lines);
+  }
+
+  /**
+   * `select`: one line, the caption then the menu. The menu is the row's own
+   * `.data-row-select`, so the change reaches the layer by the path the
+   * permits' « Période » already takes.
+   * @param {HTMLElement} node
+   * @param {object} section
+   * @param {string} layerId
+   */
+  _fillRowSelect(node, section, layerId) {
+    let wrap = childByClass(node, 'data-row-select-line');
+    if (!wrap) {
+      wrap = document.createElement('label');
+      wrap.className = 'data-row-select-line';
+      const caption = document.createElement('span');
+      caption.className = 'data-row-select-line-caption';
+      const menu = document.createElement('select');
+      menu.className = 'data-row-select';
+      wrap.append(caption, menu);
+      node.appendChild(wrap);
+    }
+    const [caption, field] = wrap.children;
+    writeText(caption, section.caption);
+    field.dataset.selectLayer = layerId;
+    field.dataset.selectParam = section.param;
+    writeProperty(field, 'title', section.title || '');
+    const signature = section.options.map((option) => `${option.value}=${option.label}`).join('|');
+    if (field.dataset.options !== signature) {
+      const options = section.options.map((option) => {
+        const child = document.createElement('option');
+        child.value = option.value;
+        child.textContent = option.label;
+        return child;
+      });
+      if (typeof field.replaceChildren === 'function') field.replaceChildren(...options);
+      field.dataset.options = signature;
+    }
+    if (field.value !== section.value) field.value = section.value;
+  }
+
+  /**
+   * A press inside a row's form: a choice sends its params, an action its
+   * params or its id — both read off the LIVE descriptor, never the button,
+   * so a stale row cannot apply a choice the layer no longer offers.
+   * @param {object} layer `getAll()` projection for the row.
+   * @param {HTMLElement} target The element pressed.
+   * @returns {boolean} True when the press belonged to the form.
+   */
+  _pressRowSection(layer, target) {
+    const choice = target?.closest?.('.data-row-choice[data-choice]');
+    const action = choice ? null : target?.closest?.('.data-row-action[data-row-action]');
+    const pressed = choice || action;
+    if (!pressed) return false;
+    const sections = rowSectionsOf(this._composedRowControls(layer)?.rowSections);
+    const section = sections.find((entry) => entry.key === pressed.dataset.rowSection);
+    if (!section) return true;
+    if (choice) {
+      const option = section.options?.find((entry) => entry.id === choice.dataset.choice);
+      if (option && !option.active) this.setLayerParams(layer.id, option.params, { origin: 'user' });
+      return true;
+    }
+    const chosen = [section.action, section.secondary].find((entry) => entry?.id === action.dataset.rowAction);
+    if (!chosen) return true;
+    if (chosen.params) {
+      this.setLayerParams(layer.id, chosen.params, { origin: 'user' });
+      return true;
+    }
+    try {
+      this.layers.get(layer.id)?.module?.rowAction?.(chosen.id);
+    } catch (error) {
+      console.warn(`[Data] ${layer.id} row action error:`, error);
+    }
+    this._refreshTogglePanel();
+    return true;
   }
 
 
@@ -3968,6 +4340,8 @@ export class DataLayerManager {
           this._toggleRowTile(layer.id, tile.dataset.rowTile);
           return;
         }
+        // The row's form (`rowSections`): a choice or an action.
+        if (this._pressRowSection(layer, event.target)) return;
         const button = event.target?.closest?.('.data-toggle-chip');
         if (!button || button.disabled) return;
         // Re-read the live descriptor rather than trusting the rendered
@@ -4624,10 +4998,13 @@ export class DataLayerManager {
     const selects = Array.isArray(controls?.selects) ? controls.selects : [];
     const hint = typeof controls?.hint === 'string' ? controls.hint : '';
     const picker = controls?.picker && typeof controls.picker === 'object' ? controls.picker : null;
+    // Controls are read only from a lit layer, so an off row has no form.
+    const sections = rowSectionsOf(controls?.rowSections);
     // A legend-only layer now has nothing to show HERE: its key is on the map.
     writeProperty(container, 'hidden', chips.length === 0 && rowTiles.length === 0 && selects.length === 0
-      && !picker);
-    this._syncRowTiles(container, rowTiles, selects, hint, picker);
+      && !picker && sections.length === 0);
+    const form = this._syncRowSections(container, sections, layer.id);
+    this._syncRowTiles(container, rowTiles, selects, hint, picker, form);
 
     const stale = new Map();
     for (const node of [...container.children]) {
@@ -5624,6 +6001,15 @@ export class DataLayerManager {
         }
 
         entry.append(swatch, text);
+        // A MEASURE, NOT A COUNT: a class whose figure is an area or a length
+        // carries it formatted (`value`, « 0,29 km² ») and it is printed at the
+        // line's right edge, where the eye runs down a column of them.
+        if (typeof item.value === 'string' && item.value.trim()) {
+          const value = document.createElement('span');
+          value.className = 'map-legend-value';
+          value.textContent = item.value.trim();
+          entry.appendChild(value);
+        }
         entryHost().appendChild(entry);
         }
         // Under the classes, not above them: the classes are what the key is

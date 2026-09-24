@@ -443,8 +443,15 @@ const OPTION_GROUPS = Object.freeze({
   // have to carry the promise that the same pin still means the same thing —
   // so a shared link reopens following the camera, which lands on the view the
   // sender was looking at anyway.
+  //
+  // `max` and `view` joined on 2026-09-24 with the approved mock: how far the
+  // drawing goes (« Durée maximale ») and whether the zones are washed or only
+  // outlined (« Vue »). Both are drawing choices over the same three measured
+  // rings, and a link that carries them reopens the picture its sender saw.
   'isochrone-fr': Object.freeze([
     enumOption('profile', 'p', 'foot', ['foot', 'car', 'bike'], { foot: 'f', car: 'c', bike: 'b' }),
+    enumOption('max', 'd', '15', ['5', '10', '15'], { 5: '5', 10: 'a', 15: 'f' }),
+    enumOption('view', 'v', 'zones', ['zones', 'contours'], { zones: 'z', contours: 'c' }),
   ]),
   'filosofi-fr': Object.freeze([
     enumOption('metric', 'm', 'niveau', [
@@ -1098,7 +1105,7 @@ export function decodeLayerStateParams(params) {
  * Stored sessions only. A share link reproduces what its sender had on screen,
  * whenever that was.
  */
-export const STORED_LAYER_STATE_REVISION = 1;
+export const STORED_LAYER_STATE_REVISION = 2;
 
 const STORED_LAYER_STATE_STEPS = Object.freeze([
   // 1 — « Règles d'urbanisme » stops coming on with « Urbanisme » (2026-09-23).
@@ -1108,6 +1115,10 @@ const STORED_LAYER_STATE_STEPS = Object.freeze([
   // cannot tell a reader who asked for the zoning from one who switched the
   // row on, so it drops the zoning; the tile lights it again in one press.
   Object.freeze({ revision: 1, dropLayerIds: Object.freeze(['urbanisme-gpu']) }),
+  // 2 — « Fiche implantation » is set aside (2026-09-24, src/data/pausedLayers.js).
+  // A session saved with it on would otherwise ask for it at every visit and be
+  // refused every time; it is dropped once, silently.
+  Object.freeze({ revision: 2, dropLayerIds: Object.freeze(['implantation-fr']) }),
 ]);
 
 /** Stable local-storage representation (full IDs for debuggability). */

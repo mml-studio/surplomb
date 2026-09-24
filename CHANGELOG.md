@@ -6,6 +6,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Zone de chalandise » (“Catchment area”) reads like its approved mock.**
+  The row is a short form: « Depuis ce point » (“From this point”) and the
+  address under a pin, a « Changer le point » (“Change the point”) button that
+  waits for a click on the map, « Suivre la vue » (“Follow the view”) to let the
+  point go; « Se déplacer » (“Getting around”) as three tiles, À pied / Vélo /
+  Voiture; « Durée maximale » (“Maximum time”) 5, 10 or 15 minutes;
+  « Sources et calcul » (“Sources and method”), a closed disclosure in plain
+  words; « Vue : Zones / Contours » (“View: Areas / Outlines”). The duration and
+  the view redraw at once, without a new request, and travel in a share link.
+- **The catchment key is a card**: « À pied · jusqu'à 15 min », « Surface
+  cumulée » (“Cumulative area”), one line per duration with its area at the
+  right edge — « 5 min … 0,29 km² » — and « Temps de trajet estimés »
+  (“Estimated travel times”).
+- **The catchment glows on the globe**: each outline is a bright line in a
+  soft glow, teal at 5 minutes, blue at 10, violet at 15, each tagged with its
+  duration on a dark pill, around an orange pin on the point measured from.
+  No card opens by itself any more; the pin and each tag still open theirs.
+
 - **« Aéroports » reads like its approved mock.** The row opens, while
   « Bruit & urbanisme » (“Noise & planning”) is lit, on an airport menu: the
   224 airports that have a noise exposure plan, named the way a reader knows
@@ -373,6 +391,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   before the first paint, so an English page never flashes French.
 
 ### Removed
+- **« Fiche » (“Report”) is off the « Zone de chalandise » row.** The site
+  report is set aside, its code kept: nothing in the app switches it on — not
+  the row, a share link, a scene or the voice agent, which is told it is
+  switched off in this version.
 - **« Bruit (PEB) » draws the noise exposure plan alone.** The chip under
   « Aéroports » also drew a second DGAC document it never named, the noise
   nuisance plan (*plan de gêne sonore*, PGS): violet rings around 11 of the

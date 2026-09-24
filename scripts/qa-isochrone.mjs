@@ -17,7 +17,7 @@
  *         obstruct differently, which is the whole point of measuring it
  *   iv.   switching to VOITURE refetches and the areas grow by an order of
  *         magnitude — a drive is not a recolouring of a walk
- *   v.    the VÉLO chip works, and what it draws declares itself an ENVELOPE:
+ *   v.    the Vélo tile works, and what it draws declares itself an ENVELOPE:
  *         a second upstream (OSM/OSRM), a dashed outline, a majorant area
  *   vi.   the ceiling follows the mode — 30 km is dormant on foot and drawing
  *         by car, which is the whole point of measuring a driving catchment
@@ -26,6 +26,9 @@
  *   viii. the share link carries the mode
  *   ix.   every ring label is pickable and opens a card — the ONLY reachable
  *         card path, since a clamped outline answers scene.pick with null
+ *   x.    the row is the approved mock's form (2026-09-24): « Durée maximale »
+ *         and « Vue » redraw without a request, a tile pressed in the DOM
+ *         reaches the layer, and « Fiche » is gone from the row
  *
  * Run: node scripts/qa-isochrone.mjs --url http://localhost:4173
  */
@@ -119,7 +122,10 @@ async function waitForSettled(page, { timeoutMs = 40000, expect = null } = {}) {
       };
     }, LAYER);
     if (state.error) return state;
-    if (state.dormant) return state;
+    // Dormant is an answer only when no particular one is awaited: a camera
+    // that just came down from 40 km is still dormant for the few hundred
+    // milliseconds before its debounced scan starts.
+    if (state.dormant && !expect) return state;
     // `lastUpdate` moving is NOT enough on its own. The layer runs one scan at
     // a time and QUEUES a second, so a scan already in flight for the previous
     // question lands first and satisfies a bare freshness test — after which
@@ -157,11 +163,13 @@ function probe(page) {
     const entities = source ? [...source.entities.values] : [];
     return {
       stats,
-      chips: controls.chips.map((chip) => ({
-        id: chip.id, active: chip.active, disabled: Boolean(chip.disabled),
-        state: chip.state, title: chip.title,
-      })),
-      legend: controls.legend.map((row) => ({ label: row.label, count: row.count })),
+      // The row's form (the mock of 2026-09-24): which tile is pressed, and
+      // what the point says it can do.
+      modes: (controls.rowSections.find((section) => section.key === 'mode')?.options || [])
+        .map((option) => ({ id: option.id, active: option.active, title: option.title })),
+      origin: controls.rowSections.find((section) => section.key === 'origin') || null,
+      legend: controls.legend.map((row) => ({ label: row.label, value: row.value })),
+      legendHead: controls.legendHead || null,
       entityIds: entities.map((entity) => String(entity.id)),
       // What a click could actually reach: an entity with a position AND a
       // description is a card; a clamped polyline is neither.
@@ -288,7 +296,13 @@ async function main() {
   const browser = await puppeteer.launch({
     headless: !HEADFUL,
     executablePath: chrome,
-    args: ['--enable-unsafe-swiftshader', '--no-sandbox', '--window-size=1600,1000'],
+    // The GPU flags `qa-airports.mjs` boots with. On SwiftShader alone the
+    // WebGL context was lost during the first camera move and the app's
+    // context-loss recovery reloaded the page under the harness.
+    args: [
+      '--no-sandbox', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist',
+      '--enable-unsafe-swiftshader', '--window-size=1600,1000',
+    ],
     defaultViewport: { width: 1600, height: 1000 },
     protocolTimeout: 120000,
   });
@@ -325,15 +339,15 @@ async function main() {
     await pump(page, 6);
     let state = await probe(page);
     check('nothing is drawn', state.stats.count === 0, `count=${state.stats.count}`);
-    check('the row says to descend rather than reporting an error',
-      /descends/i.test(state.stats.loadingLabel || ''), state.stats.loadingLabel || 'no label');
+    check('the row says to zoom in rather than reporting an error',
+      /zoome/i.test(state.stats.loadingLabel || ''), state.stats.loadingLabel || 'no label');
     check('no request was spent on a view it would refuse', isochroneRequests === 0,
       `${isochroneRequests} requests`);
     await shoot(page, '01-too-high.png');
 
     // ── ii. Lyon on foot ──────────────────────────────────────────────────
     console.log('\n[2] Place Bellecour, on foot: three nested rings');
-    await setView(page, LYON);
+    await setView(page, LYON, (state) => state.profile === 'foot' && !state.dormant);
     await pump(page, 10);
     const lyonFoot = await probe(page);
     check('three rings are drawn', lyonFoot.stats.ringsDrawn === 3,
@@ -376,8 +390,8 @@ async function main() {
     await waitForSettled(page, { expect: (state) => state.profile === 'car' });
     await pump(page, 10);
     const lyonCar = await probe(page);
-    check('the active chip moved', lyonCar.chips.find((chip) => chip.active)?.id === 'car',
-      lyonCar.chips.find((chip) => chip.active)?.id);
+    check('the pressed tile moved', lyonCar.modes.find((mode) => mode.active)?.id === 'car',
+      lyonCar.modes.find((mode) => mode.active)?.id);
     check('a request WAS spent — a drive is a different question, not a recolour',
       isochroneRequests > beforeCar, `${isochroneRequests - beforeCar} extra`);
     const carAreas = lyonCar.stats.areasKm2 || [];
@@ -387,12 +401,11 @@ async function main() {
     console.log(`      ${carAreas.join(' / ')} km² · cercle équivalent ${lyonCar.stats.outerRadiusM} m`);
 
     // ── v. the cycling envelope ───────────────────────────────────────────
-    console.log('\n[5] VÉLO measures on a second network, and says so');
-    const bikeChip = lyonCar.chips.find((chip) => chip.id === 'bike');
-    check('the chip is there and can be pressed', bikeChip?.disabled === false,
-      JSON.stringify(bikeChip));
+    console.log('\n[5] Vélo measures on a second network, and says so');
+    const bikeTile = lyonCar.modes.find((mode) => mode.id === 'bike');
+    check('the tile is there', Boolean(bikeTile), JSON.stringify(lyonCar.modes));
     check('it names the other network before it is pressed',
-      /OSM|OSRM/.test(bikeChip?.title || ''), bikeChip?.title);
+      /OSM|OSRM/.test(bikeTile?.title || ''), bikeTile?.title);
     const beforeBike = isochroneRequests;
     const tookBike = await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
       id, { profile: 'bike' }, { origin: 'user' },
@@ -419,9 +432,8 @@ async function main() {
       lyonBike.outlineMaterials.join(','));
     check('the centre card refuses to be read as the IGN polygon',
       /majorée|enveloppe/i.test(lyonBike.centreCard || ''), (lyonBike.centreCard || '').slice(0, 120));
-    check('the legend calls the area a majorant',
-      /majorée/.test(await page.evaluate((id) => window.__godsEyeView.dataManager.layers
-        .get(id).module.getRowControls().legend[0].blurb, LAYER)));
+    check('the key calls the area a maximum',
+      /au plus/.test(lyonBike.legendHead?.subtitle || ''), JSON.stringify(lyonBike.legendHead));
     await shoot(page, '05-lyon-velo.png');
     console.log(`      ${bikeAreas.join(' / ')} km² · enveloppe sur 36 directions`);
 
@@ -446,7 +458,7 @@ async function main() {
     check('on foot at 30 km the layer is dormant', highFoot.stats.dormant === true,
       `dormant=${highFoot.stats.dormant}`);
     check('and the sentence offers both ways out',
-      /descends/i.test(highFoot.stats.loadingLabel || '')
+      /zoome/i.test(highFoot.stats.loadingLabel || '')
       && /clique/i.test(highFoot.stats.loadingLabel || ''), highFoot.stats.loadingLabel);
     await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
       id, { profile: 'car' }, { origin: 'user' },
@@ -482,16 +494,20 @@ async function main() {
       JSON.stringify(pinned.stats.scanCentre));
     check('the centre marker says so on its card',
       /fixé/i.test(pinned.centreCard || ''), (pinned.centreCard || '').slice(0, 120));
-    check('a release chip appeared',
-      pinned.chips.some((chip) => chip.id === 'centre-camera'),
-      pinned.chips.map((chip) => chip.id).join(','));
+    check('the panel offers « Suivre la vue »',
+      pinned.origin?.secondary?.id === 'follow', JSON.stringify(pinned.origin?.secondary));
+    check('and names the point « Depuis ce point »',
+      pinned.origin?.caption === 'Depuis ce point' && pinned.origin?.lines?.length > 0,
+      JSON.stringify(pinned.origin));
     await shoot(page, '07-point-fixe.png');
 
     // ── vii-b. the frame, the title and the card that opens itself ────────
-    console.log('\n[7b] The click frames the catchment and captions it');
+    console.log('\n[7b] The click frames the catchment, and opens nothing by itself');
     await waitForFlight(page);
     const framed = await measureFrame(page);
-    check('the card opened on its own', framed.stats.selectedId === 'isochrone:centre',
+    // The mock of 2026-09-24: the panel names the point, the key prints the
+    // areas, so no card opens over the map to say both again.
+    check('no card opened on its own', framed.stats.selectedId === null,
       String(framed.stats.selectedId));
     check('and it is titled with a place, not with the layer`s own state',
       Boolean(pinned.centreTitle) && !/point fix/i.test(pinned.centreTitle || ''),
@@ -523,21 +539,12 @@ async function main() {
       && Math.max(framed.rings.w / box.w, framed.rings.h / box.h) > 0.6,
       `${framed.rings && box ? Math.max(framed.rings.w / box.w, framed.rings.h / box.h).toFixed(2) : 'n/a'}`);
 
-    // THE COMPLAINT THIS FIXES: the card used to be painted on the catchment.
-    check('the card is beside the catchment, not on top of it',
-      Boolean(framed.stats.cardRectPx) && !overlaps(framed.stats.cardRectPx, framed.rings),
-      `card ${JSON.stringify(framed.stats.cardRectPx)} rings ${JSON.stringify(framed.rings)}`);
-    check('and it is clear of the panels too',
-      Boolean(framed.stats.cardRectPx)
-      && !framed.chrome.some((rect) => overlaps(framed.stats.cardRectPx, rect)),
-      JSON.stringify(framed.chrome));
-    check('the catchment itself clears the panels',
+    check('the catchment clears the panels',
       Boolean(framed.rings) && !framed.chrome.some((rect) => overlaps(framed.rings, rect)),
       `rings ${JSON.stringify(framed.rings)}`);
     await shoot(page, '07b-cadrage.png');
     console.log(`      cadré à ${framed.stats.framing?.altitudeM} m · `
-      + `anneau ${Math.round(framed.rings?.w || 0)}×${Math.round(framed.rings?.h || 0)} px · `
-      + `fiche ${JSON.stringify(framed.stats.cardRectPx)}`);
+      + `anneau ${Math.round(framed.rings?.w || 0)}×${Math.round(framed.rings?.h || 0)} px`);
 
     // A DIFFERENT-SIZED catchment over the same pin has to be reframed, or the
     // mode chip draws a walking ring at a driving altitude and the ring the
@@ -560,9 +567,6 @@ async function main() {
         reframed.rings.h / reframed.stats.framing.box.h,
       ) > 0.6,
       `rings ${JSON.stringify(reframed.rings)} box ${JSON.stringify(reframed.stats.framing.box)}`);
-    check('the card followed it and is still beside it',
-      Boolean(reframed.stats.cardRectPx) && !overlaps(reframed.stats.cardRectPx, reframed.rings),
-      `card ${JSON.stringify(reframed.stats.cardRectPx)}`);
     await shoot(page, '07c-cadrage-pieton.png');
 
     // ── vii-d. the panel the reader actually has open ─────────────────────
@@ -570,13 +574,14 @@ async function main() {
     // opaque chrome down the left of the map. A frame measured against the
     // collapsed chip proves nothing about that.
     console.log('\n[7d] With the DATA LAYERS panel open, the frame moves over');
+    // The shell of 2026-09-23 opens the panel on a group: the rail, then the
+    // list of « Bâti & territoire » beside it.
     const opened = await page.evaluate(() => {
+      const gev = window.__godsEyeView;
+      gev.styleManager.setPanelCollapsed('data-panel', false, { explicit: true });
+      gev.dataManager.revealPanelRow('isochrone-fr');
       const panel = document.querySelector('#data-panel');
-      if (!panel) return null;
-      if (panel.classList.contains('collapsed')) {
-        document.querySelector('.panel-collapse-btn[data-collapse-target="data-panel"]')?.click();
-      }
-      return !panel.classList.contains('collapsed');
+      return Boolean(panel) && !panel.classList.contains('collapsed');
     });
     await pump(page, 8);
     check('the panel opened', opened === true, String(opened));
@@ -594,7 +599,11 @@ async function main() {
     });
     await waitForFlight(page);
     const withPanel = await measureFrame(page);
-    const panelRect = withPanel.chrome[1];
+    // Since the shell of 2026-09-23, `#data-panel` is the 88 px rail and the
+    // list opens beside it inside `#left-panel-stack`: the wider box is the one
+    // the frame has to clear.
+    const panelRect = [withPanel.chrome[0], withPanel.chrome[1]].filter(Boolean)
+      .sort((a, b) => b.w - a.w)[0];
     check('the panel is really open and wide', Boolean(panelRect) && panelRect.w > 250,
       JSON.stringify(panelRect));
     check('the frame starts past the panel',
@@ -604,17 +613,9 @@ async function main() {
     check('and nothing drawn is under it',
       Boolean(withPanel.rings) && !withPanel.chrome.some((rect) => overlaps(withPanel.rings, rect)),
       `rings ${JSON.stringify(withPanel.rings)}`);
-    check('the card is still beside the catchment and clear of the chrome',
-      Boolean(withPanel.stats.cardRectPx)
-      && !overlaps(withPanel.stats.cardRectPx, withPanel.rings)
-      && !withPanel.chrome.some((rect) => overlaps(withPanel.stats.cardRectPx, rect)),
-      `card ${JSON.stringify(withPanel.stats.cardRectPx)}`);
     await shoot(page, '07d-cadrage-panneau-ouvert.png');
     await page.evaluate(() => {
-      const panel = document.querySelector('#data-panel');
-      if (panel && !panel.classList.contains('collapsed')) {
-        document.querySelector('.panel-collapse-btn[data-collapse-target="data-panel"]')?.click();
-      }
+      window.__godsEyeView.styleManager.setPanelCollapsed('data-panel', true, { explicit: true });
     });
     await pump(page, 6);
 
@@ -697,6 +698,74 @@ async function main() {
     await shoot(page, '04-paris-pied.png');
     console.log(`      ${parisAreas.join(' / ')} km² · cercle équivalent ${paris.stats.outerRadiusM} m`
       + ` · expansion ${paris.stats.expansionShare} %`);
+
+    // ── x. the row's form ─────────────────────────────────────────────────
+    console.log('\n[10] The row is the mock`s form, and its drawing choices cost no request');
+    const pinnedAgain = await page.evaluate(() => {
+      const canvas = window.__godsEyeView.viewer.scene.canvas;
+      return { x: Math.round(canvas.clientWidth * 0.55), y: Math.round(canvas.clientHeight * 0.5) };
+    });
+    await page.mouse.click(pinnedAgain.x, pinnedAgain.y);
+    await waitForSettled(page, { expect: (state) => Boolean(state.centre) && state.profile === 'foot' });
+    await waitForFlight(page);
+    const full = await probe(page);
+    const beforeDrawing = isochroneRequests;
+    const fullAltitude = full.stats.framing?.altitudeM;
+    await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
+      id, { max: '5' }, { origin: 'user' },
+    ), LAYER);
+    await waitForFlight(page);
+    const five = await probe(page);
+    check('« 5 min » draws one ring and keys one line',
+      five.entityIds.filter((id) => id.endsWith(':outline')).length === 1
+      && five.legend.length === 1 && five.legendHead?.title?.includes('5 min'),
+      `${five.entityIds.filter((id) => id.endsWith(':outline')).join(',')} · ${JSON.stringify(five.legendHead)}`);
+    check('and reframes on it', five.stats.framing?.altitudeM < fullAltitude * 0.7,
+      `${fullAltitude} m → ${five.stats.framing?.altitudeM} m`);
+    await shoot(page, '10-cinq-minutes.png');
+    await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
+      id, { max: '15', view: 'contours' }, { origin: 'user' },
+    ), LAYER);
+    await waitForFlight(page);
+    const outlines = await probe(page);
+    check('« Contours » leaves the ground unwashed',
+      outlines.entityIds.filter((id) => id.includes(':fill')).length === 0
+      && outlines.entityIds.filter((id) => id.endsWith(':outline')).length === 3,
+      outlines.entityIds.join(','));
+    check('and neither choice spent a request', isochroneRequests === beforeDrawing,
+      `${isochroneRequests - beforeDrawing} extra`);
+    await shoot(page, '10-contours.png');
+    await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
+      id, { view: 'zones' }, { origin: 'user' },
+    ), LAYER);
+    // A tile pressed IN THE PANEL — by the DOM, which is the path a reader's
+    // click takes — reaches the layer.
+    const dom = await page.evaluate(() => {
+      window.__godsEyeView.styleManager.setPanelCollapsed('data-panel', false, { explicit: true });
+      window.__godsEyeView.dataManager.revealPanelRow('isochrone-fr');
+      const row = document.querySelector('#data-panel [data-layer-id="isochrone-fr"]');
+      const form = row?.querySelector('.data-row-form');
+      const sections = [...(form?.children || [])].map((node) => node.dataset.rowSection);
+      const bike = form?.querySelector('.data-row-choice[data-choice="bike"]');
+      bike?.click();
+      return {
+        sections,
+        fiche: Boolean(row?.querySelector('[data-chip-id="fusion:implantation-fr"]')),
+        withheld: window.__godsEyeView.dataManager.isLayerWithheld('implantation-fr'),
+        pressed: Boolean(bike),
+      };
+    });
+    check('the form draws the mock`s five sections, in order',
+      dom.sections.join(',') === 'origin,mode,max,about,view', dom.sections.join(','));
+    check('« Fiche » is off the row, and nothing can switch it on',
+      dom.fiche === false && dom.withheld === true, JSON.stringify(dom));
+    await waitForSettled(page, { expect: (state) => state.profile === 'bike' });
+    const domBike = await probe(page);
+    check('a tile pressed in the panel reaches the layer',
+      dom.pressed && domBike.stats.mode === 'bike', `mode=${domBike.stats.mode}`);
+    await page.evaluate((id) => window.__godsEyeView.dataManager.setLayerParams(
+      id, { profile: 'foot', centre: 'camera' }, { origin: 'user' },
+    ), LAYER);
 
     // ── the plumbing ──────────────────────────────────────────────────────
     const badResponses = isochroneResponses.filter((entry) => entry.status !== 200);

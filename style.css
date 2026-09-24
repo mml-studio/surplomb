@@ -7620,6 +7620,301 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   color: #0b1210;
 }
 
+/* A ROW'S FORM (`rowSections`) — the approved mock of « Zone de chalandise »
+   (2026-09-24): where the measure starts, how one travels, how long, how it
+   was computed, how it is drawn. Groups are parted by a hairline, as the mock
+   parts them; a pressed choice is FILLED in the accent, the mock's orange. */
+.data-row-form {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.data-row-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.data-row-section.is-ruled {
+  padding-top: 14px;
+  border-top: 1px solid rgba(247, 244, 234, 0.12);
+}
+
+.data-row-section-caption {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: rgba(247, 244, 234, 0.94);
+}
+
+/* Where the measure starts: « Depuis ce point », the address under a pin,
+   the button that moves it. */
+.data-row-section.is-place .data-row-section-caption {
+  margin-top: -4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.data-row-place-where {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+}
+
+/* The same drop the globe pins the point with, filled in the accent. */
+.data-row-place-pin {
+  width: 16px;
+  height: 22px;
+  margin-top: 1px;
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 42'%3E%3Cpath fill-rule='evenodd' d='M15 1.2C7.4 1.2 1.2 7.3 1.2 14.9c0 9.9 11.2 21.5 13 25.3.3.6 1.3.6 1.6 0 1.8-3.8 13-15.4 13-25.3C28.8 7.3 22.6 1.2 15 1.2zM15 9.4a5.4 5.4 0 1 0 0 10.8a5.4 5.4 0 1 0 0-10.8z'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 42'%3E%3Cpath fill-rule='evenodd' d='M15 1.2C7.4 1.2 1.2 7.3 1.2 14.9c0 9.9 11.2 21.5 13 25.3.3.6 1.3.6 1.6 0 1.8-3.8 13-15.4 13-25.3C28.8 7.3 22.6 1.2 15 1.2zM15 9.4a5.4 5.4 0 1 0 0 10.8a5.4 5.4 0 1 0 0-10.8z'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+.data-row-place-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.data-row-place-line {
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(247, 244, 234, 0.86);
+  overflow-wrap: anywhere;
+}
+
+.data-row-place-line.is-first {
+  font-weight: 500;
+  color: rgba(247, 244, 234, 0.96);
+}
+
+.data-row-place-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.data-row-action {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.data-row-action.is-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 14px 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+/* Lucide's `map-pin`, inline (licenses/lucide/NOTICE). */
+.data-row-action.is-primary::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+.data-row-action.is-primary:hover,
+.data-row-action.is-primary:focus-visible {
+  background: var(--accent-dim);
+}
+
+/* Armed: the next click on the map moves the point. */
+.data-row-action.is-primary.is-pressed {
+  background: var(--accent);
+  color: #1b130d;
+}
+
+.data-row-action.is-quiet {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: rgba(247, 244, 234, 0.3);
+  text-underline-offset: 3px;
+}
+
+.data-row-action.is-quiet:hover,
+.data-row-action.is-quiet:focus-visible {
+  color: rgba(247, 244, 234, 0.94);
+}
+
+.data-row-action:focus-visible,
+.data-row-choice:focus-visible {
+  outline: 1px solid rgba(251, 214, 190, 0.7);
+  outline-offset: 2px;
+}
+
+.data-row-place-hint {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--accent);
+}
+
+/* A segmented choice: every option the same width, on one line. With a glyph
+   on each they are tiles, the glyph over the name. */
+.data-row-choices {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.data-row-choice {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(251, 214, 190, 0.2);
+  border-radius: 8px;
+  background: rgba(6, 11, 9, 0.28);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: rgba(247, 244, 234, 0.86);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.data-row-choices.is-tiles .data-row-choice {
+  flex-direction: column;
+  gap: 7px;
+  min-height: 64px;
+  padding: 10px 6px 8px;
+}
+
+.data-row-choice-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask-image: var(--row-choice-icon);
+  mask-image: var(--row-choice-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.data-row-choice:hover {
+  border-color: var(--glass-border-hover);
+  background: rgba(251, 214, 190, 0.08);
+}
+
+.data-row-choice.active,
+.data-row-choice.active:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #1b130d;
+  font-weight: 600;
+}
+
+/* « Sources et calcul »: a native disclosure, a chevron that turns open. */
+.data-row-section.is-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.data-row-section.is-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.data-row-section.is-details > summary::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f7f4ea' stroke-opacity='0.7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    no-repeat center / 14px 14px;
+  transition: transform 140ms ease;
+}
+
+.data-row-section.is-details[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.data-row-section.is-details > summary:focus-visible {
+  outline: 1px solid rgba(251, 214, 190, 0.7);
+  outline-offset: 2px;
+}
+
+.data-row-details-body p {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.data-row-details-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* « Vue : Zones »: one line, the caption then the menu, its chevron at the
+   right edge. */
+.data-row-select-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  cursor: pointer;
+}
+
+.data-row-select-line-caption {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(247, 244, 234, 0.94);
+}
+
+.data-row-select-line .data-row-select {
+  min-height: 28px;
+  padding: 3px 24px 3px 0;
+  border: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f7f4ea' stroke-opacity='0.7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+      no-repeat right 0 center / 14px 14px,
+    transparent;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
 /* What to do next, while nothing is selected: « Sélectionnez un projet sur la
    carte. » A quiet box, the panel's glass one step lighter. */
 .data-row-hint {
@@ -7977,6 +8272,18 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   display: flex;
   align-items: flex-start;
   gap: 9px;
+}
+
+/* A MEASURE at the line's right edge (`value`, « 0,29 km² »): the key of the
+   catchment area prints one per duration, and the eye runs down the column. */
+.map-legend-value {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: rgba(247, 244, 234, 0.94);
 }
 
 /* A key line that is also its own switch. It keeps the geometry of a plain

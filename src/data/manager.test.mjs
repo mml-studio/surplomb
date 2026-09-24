@@ -24,6 +24,7 @@ import {
   legendLinkOf,
   legendSelectionOf,
   rowPickerOf,
+  rowSectionsOf,
 } from './manager.js';
 import {
   contextSnapshotLayerIds,
@@ -6682,6 +6683,154 @@ test('the two permit layers print ONE key block: the card first, the colours fol
     // The close button reaches the layer that owns the card.
     assert.equal(card.querySelector('.map-legend-selection-close').dataset.selectionLayer, 'sitadel-fr');
     assert.equal(panel.hint(), null, 'a project is open: the hint has been done');
+  } finally {
+    await panel.restore();
+  }
+});
+
+// ── A row's form (`rowSections`) — the mock of « Zone de chalandise » ───────
+
+test('a row form is normalised: a malformed section is dropped, never drawn half-way', () => {
+  const sections = rowSectionsOf([
+    { key: 'origin', kind: 'place', caption: 'Depuis ce point', lines: ['5 Rue X', 'Biarritz', 'extra'],
+      action: { id: 'pick', label: 'Changer le point', pressed: true } },
+    { key: 'orphan', kind: 'place', lines: ['nowhere'] },
+    { key: 'mode', kind: 'choices', caption: 'Se déplacer', options: [
+      { id: 'foot', label: 'À pied', icon: 'data:x', active: true, params: { profile: 'foot' } },
+      { id: 'bike', label: 'Vélo', icon: 'data:y', params: { profile: 'bike' } },
+      { id: 'broken', label: 'Sans params' },
+    ] },
+    { key: 'max', kind: 'choices', options: [{ id: '5', label: '5 min', params: { max: '5' } }] },
+    { key: 'about', kind: 'details', caption: 'Sources et calcul', lines: [] },
+    { key: 'view', kind: 'select', caption: 'Vue :', param: 'view', value: 'nope',
+      options: [{ value: 'zones', label: 'Zones' }, { value: 'contours', label: 'Contours' }] },
+    { key: 'mode', kind: 'choices', options: [{ id: 'car', label: 'Voiture', params: {} }] },
+    { key: 'what', kind: 'slider' },
+  ]);
+  assert.deepEqual(sections.map((section) => section.key), ['origin', 'mode', 'max', 'view']);
+  assert.deepEqual(sections[0].lines, ['5 Rue X', 'Biarritz'], 'two lines at most');
+  assert.equal(sections[0].action.pressed, true);
+  assert.equal(sections[0].secondary, null);
+  assert.deepEqual(sections[1].options.map((option) => option.id), ['foot', 'bike']);
+  assert.equal(sections[1].tiles, true, 'a glyph on every option makes tiles');
+  assert.equal(sections[2].tiles, false);
+  assert.equal(sections[3].value, 'zones', 'an unknown value falls on the first option');
+  assert.deepEqual(rowSectionsOf(null), []);
+});
+
+test('a row form is drawn under the row, and each press reaches the layer the right way', async () => {
+  const actions = [];
+  const form = (params) => ({
+    chips: [],
+    legend: [{ label: '5 min', color: '#3ce0c8', value: '0,29 km²' }],
+    rowSections: [
+      {
+        key: 'origin', kind: 'place', caption: 'Depuis ce point', lines: ['5 Rue X', 'Biarritz'],
+        action: { id: 'pick', label: 'Changer le point', pressed: actions.length % 2 === 1 },
+        secondary: { id: 'follow', label: 'Suivre la vue', params: { centre: 'camera' } },
+        hint: actions.length % 2 === 1 ? 'Touchez la carte.' : '',
+      },
+      {
+        key: 'mode', kind: 'choices', caption: 'Se déplacer', ruled: true,
+        options: ['foot', 'bike'].map((id) => ({
+          id, label: id, icon: 'data:image/svg+xml;base64,AA==', active: params.profile === id, params: { profile: id },
+        })),
+      },
+      { key: 'about', kind: 'details', caption: 'Sources et calcul', lines: ['Une phrase.', 'Une autre.'] },
+      {
+        key: 'view', kind: 'select', caption: 'Vue :', param: 'view', value: params.view,
+        options: [{ value: 'zones', label: 'Zones' }, { value: 'contours', label: 'Contours' }],
+      },
+    ],
+  });
+  const panel = makeFusedRowPanel({
+    ids: ['isochrone-fr'],
+    params: { 'isochrone-fr': { profile: 'foot', view: 'zones', centre: '1,43' } },
+    categories: [{ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }],
+    controls: { 'isochrone-fr': form },
+    modules: { 'isochrone-fr': { rowAction: (id) => { actions.push(id); return true; } } },
+  });
+  const strip = () => panel.row().querySelector('.data-toggle-controls');
+  const press = async (target) => {
+    strip().listeners.get('click')[0]({ target });
+    for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+    panel.mgr._refreshTogglePanel();
+  };
+  try {
+    assert.equal(strip().querySelector('.data-row-form'), null, 'an off row draws no form');
+    await panel.mgr.setEnabled('isochrone-fr', true, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+    const formNode = strip().querySelector('.data-row-form');
+    assert.ok(formNode);
+    assert.equal(strip().children[0], formNode, 'the form heads the row');
+    assert.equal(strip().hidden, false);
+    assert.deepEqual(formNode.children.map((node) => node.dataset.rowSection), ['origin', 'mode', 'about', 'view']);
+    assert.match(formNode.children[1].className, /is-ruled/);
+
+    // Where the measure starts.
+    assert.deepEqual(findAll(formNode, '.data-row-place-line').map((node) => node.textContent), ['5 Rue X', 'Biarritz']);
+    const pick = findAll(formNode, '.data-row-action').find((node) => node.dataset.rowAction === 'pick');
+    assert.equal(pick.textContent, 'Changer le point');
+    assert.equal(pick.attributes['aria-pressed'], 'false');
+
+    // A choice sends its params, like a chip; the tile is kept, not rebuilt.
+    const tiles = findAll(formNode, '.data-row-choice');
+    assert.deepEqual(tiles.map((node) => node.attributes['aria-pressed']), ['true', 'false']);
+    assert.match(formNode.querySelector('.data-row-choices').className, /is-tiles/);
+    const bike = tiles[1];
+    await press(bike);
+    assert.equal(panel.params['isochrone-fr'].profile, 'bike');
+    assert.equal(findAll(strip(), '.data-row-choice')[1], bike, 'reconciled in place, so focus survives');
+    assert.equal(bike.attributes['aria-pressed'], 'true');
+
+    // An action is the layer's, never a param a link could replay.
+    await press(pick);
+    assert.deepEqual(actions, ['pick']);
+    assert.equal(pick.attributes['aria-pressed'], 'true', 'the panel repaints the armed state at once');
+    assert.equal(strip().querySelector('.data-row-place-hint').textContent, 'Touchez la carte.');
+    // The quiet button carries params: sent like a choice.
+    const follow = findAll(strip(), '.data-row-action').find((node) => node.dataset.rowAction === 'follow');
+    await press(follow);
+    assert.equal(panel.params['isochrone-fr'].centre, 'camera');
+    assert.deepEqual(actions, ['pick']);
+
+    // The disclosure and the menu.
+    const about = findAll(strip(), '.data-row-section').find((node) => node.dataset.rowSection === 'about');
+    assert.equal(about.querySelector('.data-row-section-caption').textContent, 'Sources et calcul');
+    assert.deepEqual(findAll(about, '.data-row-details-body')[0].children.map((node) => node.textContent),
+      ['Une phrase.', 'Une autre.']);
+    const menu = strip().querySelector('.data-row-select');
+    assert.equal(menu.dataset.selectParam, 'view');
+    assert.equal(menu.dataset.selectLayer, 'isochrone-fr');
+    assert.equal(menu.value, 'zones');
+
+    // The key prints the measure at the line's right edge.
+    const value = findAll(panel.legendItems, '.map-legend-value')[0];
+    assert.equal(value?.textContent, '0,29 km²');
+    assert.equal(findAll(panel.legendItems, '.map-legend-label')[0].textContent, '5 min', 'no count glued to the label');
+
+    // Switched off, the form goes with the row's other controls.
+    await panel.mgr.setEnabled('isochrone-fr', false, { origin: 'user' });
+    panel.mgr._refreshTogglePanel();
+    assert.equal(strip().querySelector('.data-row-form'), null);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a layer the app set aside is refused with its own sentence, not a licence', async () => {
+  const panel = makeFusedRowPanel({
+    ids: ['isochrone-fr'],
+    categories: [{ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }],
+  });
+  const changes = [];
+  panel.mgr.subscribe((change) => changes.push(change));
+  try {
+    assert.deepEqual(panel.mgr.withholdLayers(['isochrone-fr'], { reason: 'paused' }), ['isochrone-fr']);
+    assert.equal(panel.mgr.isLayerWithheld('isochrone-fr'), true);
+    assert.equal(await panel.mgr.setEnabled('isochrone-fr', true, { origin: 'user' }), false);
+    const blocked = changes.find((change) => change.type === 'visibility-blocked');
+    assert.equal(blocked?.reason, '« Zone de chalandise » est désactivée dans cette version de Surplomb.');
   } finally {
     await panel.restore();
   }

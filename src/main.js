@@ -16,6 +16,7 @@ import { DataLayerManager } from './data/manager.js';
 import { LAYER_MANIFEST } from './data/layerManifest.js';
 import { createLazyLayer } from './data/lazyLayer.js';
 import { LAYER_STATE_REGISTRY } from './data/layerState.js';
+import { PAUSED_LAYER_IDS } from './data/pausedLayers.js';
 import { LAYER_CATEGORIES, LAYER_TAXONOMY } from './data/layerTaxonomy.js';
 import { CATALOG_DATASET_MANIFESTS } from './data/datasetsCatalog.js';
 import { initDatasetBox } from './data/datasetBox.js';
@@ -740,6 +741,10 @@ async function init({ handoff: requestedHandoff = null, fromVitrine = false, loc
     // hand-offs). The stub takes the reference now and passes it on the moment
     // its module loads; the manifest says which two ask for it.
     for (const layer of layers) layer.attachDataManager?.(dataManager);
+    // Layers the app has set aside, code kept (src/data/pausedLayers.js).
+    // Withheld BEFORE the seal, so the restoration that follows it can never
+    // switch one on and have it switched off again a moment later.
+    dataManager.withholdLayers(PAUSED_LAYER_IDS, { reason: 'paused' });
     // Restoration starts only after the complete production registry is sealed.
     dataManager.finalizeRegistrations(LAYER_STATE_REGISTRY, LAYER_TAXONOMY, LAYER_CATEGORIES);
     // The layers a switched-off source alone feeds (GEV_NONCOMMERCIAL_SOURCES —

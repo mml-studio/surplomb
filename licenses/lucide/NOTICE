@@ -10,7 +10,7 @@ Source: https://github.com/lucide-icons/lucide
         icons/<name>.svg
         Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
 
-WHAT WAS TAKEN. Thirty-three icons, in two files.
+WHAT WAS TAKEN. Thirty-five icons, in two files.
 
 `index.html`, the landing page's scene « Choisissez une vue. »
 (src/vitrine/stage.js), draws them in its tab bar, its pause control and its
@@ -113,6 +113,20 @@ tiles' are: copied verbatim, used as a CSS mask. And `style.css` draws
 `arrow-up-right`, listed above, on the key's « Consulter le plan officiel »
 button, inline as a CSS mask. (The noise layer's airport tags on the globe
 draw Maki's `airport`, not this `plane`: see `licenses/maki/NOTICE`.)
+
+And two more (retrieved 2026-09-24 at the same commit) as the mode tiles
+under the « Zone de chalandise » row of the Layers panel
+(`src/data/lucideIcons.js`):
+
+    footprints — « À pied »,
+    bike       — « Vélo ».
+
+Both are Lucide's own, under ISC. The row's third tile, « Voiture », reuses
+`car`, listed above. Drawn exactly as the other tiles' are: copied verbatim,
+used as a CSS mask. `style.css` draws `map-pin`, listed above, on the row's
+« Changer le point » button, inline as a CSS mask. (The point the catchment
+is measured from is drawn on the globe, and beside its address in the panel,
+as a filled pin of this app's own, not as Lucide's `map-pin`.)
 
 They are INTERFACE icons, drawn at 18-22 CSS px in a menu bar, which is the job
 Lucide authors for; nothing here is drawn on the globe, where the cartographic
