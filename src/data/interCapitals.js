@@ -118,7 +118,7 @@ export function interCapitalMarkup(letter, options) {
 /**
  * Any vendored Inter outline placed as SVG markup — the placement
  * {@link interCapitalMarkup} makes, for a glyph from any table cut from the
- * same instance (`interDigits.js` holds the figures).
+ * same instance.
  *
  * @param {?{cx:number, d:string}} glyph One entry of such a table.
  * @param {Object} options

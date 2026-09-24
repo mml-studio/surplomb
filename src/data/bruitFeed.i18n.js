@@ -70,24 +70,6 @@ export const PEB_ZONE_SENTENCES = defineMessages({
   },
 });
 
-/**
- * What each PGS zone entitles the ground under it to.
- *
- * The PGS is not a building rule at all — it is the map of who the *taxe sur
- * les nuisances sonores aériennes* pays to soundproof.
- */
-export const PGS_ZONE_SENTENCES = defineMessages({
-  1: {
-    fr: 'zone I : insonorisation financée, au taux le plus élevé',
-    en: 'zone I: soundproofing funded, at the highest rate',
-  },
-  2: { fr: 'zone II : insonorisation financée', en: 'zone II: soundproofing funded' },
-  3: {
-    fr: 'zone III : insonorisation financée, au taux le plus bas',
-    en: 'zone III: soundproofing funded, at the lowest rate',
-  },
-});
-
 export default defineMessages({
   /** How each index is explained on a card, once, in full. */
   index: {

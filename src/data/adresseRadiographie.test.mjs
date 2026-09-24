@@ -295,9 +295,8 @@ test('inside a plan, the band is named with its index, its range and its arrêt�
   assert.equal(peb.value, 'Lden 56–65');
   assert.match(peb.note, /P\. CH\. DE GAULLE \(LFPG\)/);
   assert.match(peb.note, /arrêté du 2007-04-03/);
-  // The two documents are printed apart and never summed: a PEB zones what may
-  // be BUILT, a PGS who may be HELPED to soundproof.
-  assert.ok(nuisances.lines.some((row) => /du PGS$/.test(row.label)));
+  // The noise-nuisance plan (PGS) is no longer read: one band, one line.
+  assert.equal(nuisances.lines.filter((row) => /^Zone /.test(row.label)).length, 1);
   assert.equal(byLabel['Plan d’exposition au bruit'], undefined);
 });
 
@@ -308,7 +307,6 @@ test('an overview band, tested against no point, never reaches the sheet', () =>
   const overview = {
     ...BRUIT_ROISSY,
     peb: BRUIT_ROISSY.peb.map((band) => ({ ...band, atPoint: false })),
-    pgs: [],
   };
   const under = composeRadiographie({
     point: { lat: 49.0097, lon: 2.5479 },

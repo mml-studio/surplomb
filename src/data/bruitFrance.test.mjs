@@ -29,7 +29,6 @@ import {
   projectBruit, projectBruitArea,
 } from './bruitFeed.js';
 import { INTER_CAPITALS } from './interCapitals.js';
-import { INTER_DIGITS } from './interDigits.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 import bruitFranceLayer, {
   ADDRESS_SCAN_CEILING_M,
@@ -45,7 +44,6 @@ import bruitFranceLayer, {
   BRUIT_UNKNOWN_ZONE_COLOR,
   BRUIT_WINNER_RULES,
   PEB_ZONE_COLORS,
-  PGS_ZONE_COLORS,
   bruitAerodromeDescription,
   bruitAerodromeTitle,
   bruitAreaEmphasis,
@@ -98,12 +96,10 @@ const now = () => Cesium.JulianDate.now();
 const badgesOf = (dataSource) => dataSource.entities.values
   .filter((entity) => /-zone-badge$/.test(entity.properties?.getValue(now())?.kind ?? ''));
 
-const EMPTY_PGS = read('bruit-peb-empty-sample.json');
-
 /** Assemble a proxy payload exactly the way the `/api/bruit-fr` route does. */
-function payloadFor(pebFixture, point, { pgs = EMPTY_PGS, nearest = null, register = null } = {}) {
+function payloadFor(pebFixture, point, { nearest = null, register = null } = {}) {
   return {
-    ...projectBruit({ peb: pebFixture, pgs, point, nearest }),
+    ...projectBruit({ peb: pebFixture, point, nearest }),
     register: register ?? {
       count: 224, total: 224, short: false, truncated: false, psophique: 70, lden: 154,
     },
@@ -131,19 +127,7 @@ const TOUSSUS = payloadFor(read('bruit-peb-empty-sample.json'), TOUSSUS_POINT, {
     documentUrl: 'http://piece-jointe-carto.developpement-durable.gouv.fr/NAT003/PEB/PEB_LFPG_03_04_2007.pdf',
   },
 });
-/** Roissy's plan de gêne sonore, on the sibling schema. */
-const PGS_POINT = { lat: 49.00920, lon: 2.54790 };
-const PGS = {
-  ...projectBruit({
-    peb: EMPTY_PGS, pgs: read('bruit-pgs-lfpg-sample.json'), point: PGS_POINT,
-  }),
-  register: { count: 224, total: 224, short: false },
-};
-
-const answers = (payload) => ({
-  peb: chooseBruitAnswer(payload.peb, 'peb'),
-  pgs: chooseBruitAnswer(payload.pgs, 'pgs'),
-});
+const answers = (payload) => ({ peb: chooseBruitAnswer(payload.peb) });
 
 test('the layer object is the one the registry, the taxonomy and the proxy agree on', () => {
   assert.equal(bruitFranceLayer.id, BRUIT_FR_LAYER_ID);
@@ -164,7 +148,7 @@ test('the most exposed zone wins, and the card names the clause that decided it'
   // between them. A/B is not a tie to break: the PEB's restrictions are
   // cumulative-strictest, so it is zone A that forbids housing there, and
   // answering "zone B" because it came back first understates the rule.
-  const peb = chooseBruitAnswer(LFPZ.peb, 'peb');
+  const peb = chooseBruitAnswer(LFPZ.peb);
   assert.equal(peb.eligible, 2);
   assert.equal(peb.winner.zone, 'A');
   assert.equal(peb.rule, 'zone');
@@ -178,8 +162,8 @@ test('the most exposed zone wins, and the card names the clause that decided it'
 });
 
 test('the runner-up stays on the card, so a reader can see what was not chosen', () => {
-  const { peb, pgs } = answers(LFPZ);
-  const card = norm(bruitScanDescription(LFPZ, peb, pgs));
+  const { peb } = answers(LFPZ);
+  const card = norm(bruitScanDescription(LFPZ, peb));
   assert.ok(card.includes('2 zones ici, retenue : la plus exposée'), card);
   assert.ok(card.includes(BRUIT_WINNER_RULES.zone), card);
   assert.ok(card.includes('aussi sous le repère : zone B — ancien indice de 89 à 96 — pas des décibels'), card);
@@ -188,16 +172,16 @@ test('the runner-up stays on the card, so a reader can see what was not chosen',
 });
 
 test('two airports at one point are two facts, and the strictest of them is the headline', () => {
-  const { peb, pgs } = answers(LEBOURGET);
+  const { peb } = answers(LEBOURGET);
   assert.equal(peb.eligible, 2);
   assert.equal(peb.winner.oaci, 'LFPB');
   assert.equal(peb.winner.zone, 'A');
   assert.equal(peb.rule, 'zone');
   assert.equal(peb.overlapping, false, 'two airports is not one plan overlapping itself');
-  const card = norm(bruitScanDescription(LEBOURGET, peb, pgs));
+  const card = norm(bruitScanDescription(LEBOURGET, peb));
   assert.ok(card.includes('deux aéroports ici : LFPB, LFPG'), card);
   assert.ok(card.includes('aussi sous le repère : zone D — de 50 à 56 dB(A)'), card);
-  assert.equal(norm(bruitMarkerTitle(LEBOURGET, peb, pgs)),
+  assert.equal(norm(bruitMarkerTitle(LEBOURGET, peb)),
     'Bruit des avions · zone A — PARIS LE BOURGET');
 });
 
@@ -206,7 +190,7 @@ test('a band the point is NOT in can never become the answer', () => {
   // returned zone C" is not "you are in zone C", and a rule that ranked by
   // severity alone over everything returned would still be right here — so the
   // test that matters is the one where the NEARBY band is the LOUDER one.
-  const peb = chooseBruitAnswer(LFMD.peb, 'peb');
+  const peb = chooseBruitAnswer(LFMD.peb);
   assert.equal(peb.eligible, 1);
   assert.equal(peb.winner.zone, 'B');
   assert.equal(peb.rule, 'only');
@@ -214,7 +198,7 @@ test('a band the point is NOT in can never become the answer', () => {
   assert.equal(peb.nearby[0].zone, 'C');
   // Flip the flags: a louder zone the point is not in must still lose.
   const flipped = LFMD.peb.map((band) => ({ ...band, atPoint: band.zone === 'C' }));
-  const other = chooseBruitAnswer(flipped, 'peb');
+  const other = chooseBruitAnswer(flipped);
   assert.equal(other.winner.zone, 'C');
   assert.equal(other.eligible, 1);
   assert.equal(other.nearby.length, 1, 'zone B is now the one beside the point');
@@ -224,33 +208,32 @@ test('a zone letter the grammar does not know ranks LAST, and is never the answe
   // The coercion trap: `PEB_ZONE_ORDER.indexOf(null)` is -1, and -1 sorts ahead
   // of zone A. An unlabelled polygon would become the answer at every airport
   // that published one.
-  assert.equal(bruitZoneRank('peb', 'A'), 0);
-  assert.equal(bruitZoneRank('peb', 'D'), 3);
-  assert.equal(bruitZoneRank('peb', null), 4);
-  assert.equal(bruitZoneRank('peb', ''), 4);
-  assert.equal(bruitZoneRank('peb', undefined), 4);
-  assert.equal(bruitZoneRank('peb', 0), 4, 'a number is not a zone letter');
-  assert.equal(bruitZoneRank('peb', 'Z'), 4);
-  assert.equal(bruitZoneRank('pgs', '1'), 0);
-  assert.equal(bruitZoneRank('pgs', 3), 3, 'the PGS letters are published as STRINGS');
+  assert.equal(bruitZoneRank('A'), 0);
+  assert.equal(bruitZoneRank('D'), 3);
+  assert.equal(bruitZoneRank(null), 4);
+  assert.equal(bruitZoneRank(''), 4);
+  assert.equal(bruitZoneRank(undefined), 4);
+  assert.equal(bruitZoneRank(0), 4, 'a number is not a zone letter');
+  assert.equal(bruitZoneRank('Z'), 4);
+  assert.equal(bruitZoneRank('1'), 4, 'the PGS figures are no longer a zone of this layer');
   const mixed = chooseBruitAnswer([
     { id: 'x', zone: null, atPoint: true, oaci: 'LFXX', effectiveDate: '2020-01-01' },
     { id: 'y', zone: 'D', atPoint: true, oaci: 'LFXX', effectiveDate: '2020-01-01' },
-  ], 'peb');
+  ]);
   assert.equal(mixed.winner.zone, 'D');
-  assert.equal(bruitZoneColorCss('peb', null), BRUIT_UNKNOWN_ZONE_COLOR);
-  assert.equal(bruitZoneColorCss('peb', 'A'), PEB_ZONE_COLORS.A);
-  assert.equal(bruitZoneColorCss('pgs', '1'), PGS_ZONE_COLORS[1]);
+  assert.equal(bruitZoneColorCss(null), BRUIT_UNKNOWN_ZONE_COLOR);
+  assert.equal(bruitZoneColorCss('A'), PEB_ZONE_COLORS.A);
+  assert.equal(bruitZoneColorCss('1'), BRUIT_UNKNOWN_ZONE_COLOR);
 });
 
 test('the tie-breaks below the zone letter are deterministic, in the order the card claims', () => {
-  const base = { atPoint: true, zone: 'B', kind: 'peb' };
+  const base = { atPoint: true, zone: 'B' };
   // Same letter → the newest effective arrêté. Never observed in the register;
   // written down because the day it happens the alternative is arbitrary.
   const byDate = chooseBruitAnswer([
     { ...base, id: 'a', oaci: 'LFAA', effectiveDate: '1999-01-01' },
     { ...base, id: 'b', oaci: 'LFBB', effectiveDate: '2019-01-01' },
-  ], 'peb');
+  ]);
   assert.equal(byDate.winner.id, 'b');
   assert.equal(byDate.rule, 'arrete');
   assert.equal(byDate.ruleLabel, BRUIT_WINNER_RULES.arrete);
@@ -259,14 +242,14 @@ test('the tie-breaks below the zone letter are deterministic, in the order the c
   const byOaci = chooseBruitAnswer([
     { ...base, id: 'b', oaci: 'LFBB', effectiveDate: '2019-01-01' },
     { ...base, id: 'a', oaci: 'LFAA', effectiveDate: '2019-01-01' },
-  ], 'peb');
+  ]);
   assert.equal(byOaci.winner.oaci, 'LFAA');
   assert.equal(byOaci.rule, 'oaci');
   // A band with no date at all does not win on an empty string sorting low.
   const undated = chooseBruitAnswer([
     { ...base, id: 'a', oaci: 'LFAA', effectiveDate: null },
     { ...base, id: 'b', oaci: 'LFBB', effectiveDate: '1974-01-01' },
-  ], 'peb');
+  ]);
   assert.equal(undated.winner.id, 'b');
   // Identical on every clause → the feature id, so the answer cannot depend on
   // the order GeoServer shuffled the response into.
@@ -274,14 +257,14 @@ test('the tie-breaks below the zone letter are deterministic, in the order the c
     { ...base, id: 'peb:2', oaci: 'LFAA', effectiveDate: '2019-01-01' },
     { ...base, id: 'peb:1', oaci: 'LFAA', effectiveDate: '2019-01-01' },
   ];
-  assert.equal(chooseBruitAnswer(identical, 'peb').winner.id, 'peb:1');
-  assert.equal(chooseBruitAnswer([...identical].reverse(), 'peb').winner.id, 'peb:1');
-  assert.equal(chooseBruitAnswer(identical, 'peb').rule, 'id');
+  assert.equal(chooseBruitAnswer(identical).winner.id, 'peb:1');
+  assert.equal(chooseBruitAnswer([...identical].reverse()).winner.id, 'peb:1');
+  assert.equal(chooseBruitAnswer(identical).rule, 'id');
 });
 
 test('nothing to choose from is a null winner, not the first thing in the array', () => {
   for (const bands of [null, undefined, [], 'nope']) {
-    const answer = chooseBruitAnswer(bands, 'peb');
+    const answer = chooseBruitAnswer(bands);
     assert.equal(answer.winner, null);
     assert.equal(answer.rule, null);
     assert.equal(answer.eligible, 0);
@@ -289,16 +272,16 @@ test('nothing to choose from is a null winner, not the first thing in the array'
   }
   // Bands exist but the point is in none of them: still no answer, and the
   // bands are kept as context.
-  const beside = chooseBruitAnswer(LFMD.peb.map((band) => ({ ...band, atPoint: false })), 'peb');
+  const beside = chooseBruitAnswer(LFMD.peb.map((band) => ({ ...band, atPoint: false })));
   assert.equal(beside.winner, null);
   assert.equal(beside.nearby.length, 2);
 });
 
 test('an empty answer names the nearest aerodrome that HAS a plan, from its published point', () => {
-  const { peb, pgs } = answers(TOUSSUS);
+  const { peb } = answers(TOUSSUS);
   assert.equal(peb.winner, null);
-  assert.equal(norm(bruitMarkerTitle(TOUSSUS, peb, pgs)), 'Bruit des avions — aucun plan sur ce point');
-  const card = norm(bruitScanDescription(TOUSSUS, peb, pgs));
+  assert.equal(norm(bruitMarkerTitle(TOUSSUS, peb)), 'Bruit des avions — aucun plan sur ce point');
+  const card = norm(bruitScanDescription(TOUSSUS, peb));
   assert.ok(card.includes('aucun plan d’exposition au bruit ne couvre ce point'), card);
   assert.ok(card.includes('P. CH. DE-GAULLE (LFPG), à 39,4 km'), card);
   assert.ok(card.includes('arrêté 03/04/2007'), card); // in the nearest-aerodrome sentence
@@ -329,10 +312,10 @@ test('standing ON an aerodrome that answers nothing is the most informative empt
 test('"the service did not answer" and "there is nothing here" are different sentences', () => {
   // Both are zero features downstream. Only `available` tells them apart, and
   // getting this wrong turns an outage into a clean bill of health.
-  const down = { ...TOUSSUS, available: { peb: false, pgs: false } };
-  const { peb, pgs } = answers(down);
-  assert.equal(norm(bruitMarkerTitle(down, peb, pgs)), 'Bruit des avions — service sans réponse');
-  const card = norm(bruitScanDescription(down, peb, pgs));
+  const down = { ...TOUSSUS, available: { peb: false } };
+  const { peb } = answers(down);
+  assert.equal(norm(bruitMarkerTitle(down, peb)), 'Bruit des avions — service sans réponse');
+  const card = norm(bruitScanDescription(down, peb));
   assert.ok(card.includes('le service PEB n’a pas répondu — ce n’est pas « aucune zone ici »'), card);
   assert.ok(!card.includes('aucun plan d’exposition au bruit ne couvre ce point'), card);
   // And the healthy empty answer says the opposite.
@@ -343,8 +326,8 @@ test('"the service did not answer" and "there is nothing here" are different sen
 
 test('every threshold on screen carries its unit, or says it could not be settled', () => {
   // Saint-Cyr is on a 1985 arrêté: 96 is an indice psophique and NOT 96 dB.
-  const { peb, pgs } = answers(LFPZ);
-  const card = norm(bruitScanDescription(LFPZ, peb, pgs));
+  const { peb } = answers(LFPZ);
+  const card = norm(bruitScanDescription(LFPZ, peb));
   assert.ok(card.includes('ancien indice 96 et plus'), card);
   assert.ok(!/96 dB/.test(card), card);
   // THE DENIAL RIDES ON THE THRESHOLD LINE, and that is what makes it
@@ -360,20 +343,18 @@ test('every threshold on screen carries its unit, or says it could not be settle
   assert.ok(roomy.includes('pas convertible en dB(A)'), roomy);
   // Gap is the opposite case: a 1985 register row on a 2017 document is Lden.
   const gap = answers(LFNA);
-  const gapCard = norm(bruitScanDescription(LFNA, gap.peb, gap.pgs));
+  const gapCard = norm(bruitScanDescription(LFNA, gap.peb));
   assert.ok(gapCard.includes('70 dB(A) et plus'), gapCard);
   assert.ok(gapCard.includes('arrêté préfectoral du 11/04/2017'), gapCard);
   assert.ok(gapCard.includes('date reprise du document'), gapCard);
   // A band whose index could not be settled prints no unit at all.
-  const unsettled = bruitBandLabel({
-    kind: 'peb', zone: 'C', low: 84, high: 96, index: 'unknown',
-  });
+  const unsettled = bruitBandLabel({ zone: 'C', low: 84, high: 96, index: 'unknown' });
   assert.equal(norm(unsettled), 'zone C — de 84 à 96, unité non déterminée');
   assert.ok(!/dB/.test(unsettled));
 });
 
 test('the band card repeats the register\'s own contradictions rather than tidying them', () => {
-  const answer = chooseBruitAnswer(LFMD.peb, 'peb');
+  const answer = chooseBruitAnswer(LFMD.peb);
   const zoneB = norm(bruitBandDescription(answer.winner, answer));
   assert.ok(zoneB.includes('de 65 à 70 dB(A)'), zoneB);
   assert.ok(zoneB.includes('seuils publiés à l’envers'), zoneB);
@@ -391,7 +372,7 @@ test('the band card repeats the register\'s own contradictions rather than tidyi
   assert.ok(zoneC.includes('zone voisine — le repère n’est pas dedans'), zoneC);
   assert.ok(!zoneC.includes('retenue :'), zoneC);
   // The merged pieces of one band are stated rather than hidden.
-  const merged = chooseBruitAnswer(LFPZ.peb, 'peb');
+  const merged = chooseBruitAnswer(LFPZ.peb);
   assert.ok(norm(bruitBandDescription(merged.winner, merged)).includes('publiée en 2 polygones, fusionnés'));
 });
 
@@ -404,7 +385,7 @@ test('a date is a French day or it is nothing, never an Invalid Date', () => {
 });
 
 test('the wash, the holes and a stroke on every ring — the louder zone begins at a hole', () => {
-  const answer = chooseBruitAnswer(LEBOURGET.peb, 'peb');
+  const answer = chooseBruitAnswer(LEBOURGET.peb);
   const zoneD = answer.inside[0];
   assert.equal(zoneD.zone, 'D');
   const source = new Cesium.CustomDataSource('bruit-test');
@@ -491,12 +472,12 @@ test('a band beside the point is dashed and thinner — two channels saying "not
 test('the loudest zone is painted LAST, because two classification washes blend', () => {
   // Saint-Cyr's zone B has no hole where zone A sits, so the two washes overlap
   // on real ground. Draw order is the only lever a ground primitive gives.
-  const order = bruitDrawOrder(LFPZ.peb, 'peb').map((band) => band.zone);
+  const order = bruitDrawOrder(LFPZ.peb).map((band) => band.zone);
   assert.deepEqual(order, ['B', 'A']);
   // Context under answers, then quietest to loudest.
   const mixed = bruitDrawOrder([
     { zone: 'A', atPoint: true }, { zone: 'C', atPoint: false }, { zone: 'D', atPoint: true },
-  ], 'peb').map((band) => `${band.zone}${band.atPoint ? '*' : ''}`);
+  ]).map((band) => `${band.zone}${band.atPoint ? '*' : ''}`);
   assert.deepEqual(mixed, ['C', 'D*', 'A*']);
 });
 
@@ -554,20 +535,16 @@ test('a band too narrow to hold four characters is drawn and left unlabelled', (
 
 test('a zone badge is the app\'s glass panel framed in the zone\'s colour, one atlas entry per zone', () => {
   const svgOf = (uri) => Buffer.from(uri.split(',')[1], 'base64').toString('utf8');
-  const a = bruitZoneBadge('peb', 'A');
+  const a = bruitZoneBadge('A');
   assert.ok(a.startsWith('data:image/svg+xml;base64,'));
   // A STRING, and the same string for the same zone: Cesium shares an atlas
   // entry only between billboards whose image is an identical string.
-  assert.equal(bruitZoneBadge('peb', ' a '), a);
-  assert.notEqual(bruitZoneBadge('peb', 'B'), a);
+  assert.equal(bruitZoneBadge(' a '), a);
+  assert.notEqual(bruitZoneBadge('B'), a);
   assert.ok(svgOf(a).includes(`stroke="${PEB_ZONE_COLORS.A}"`));
   assert.ok(svgOf(a).includes(INTER_CAPITALS.A.d), 'the letter is Inter\'s own outline, untouched');
-  // The PGS writes figures, from the same instance of the same typeface.
-  const pgs = svgOf(bruitZoneBadge('pgs', '1'));
-  assert.ok(pgs.includes(INTER_DIGITS[1].d));
-  assert.ok(pgs.includes(`stroke="${PGS_ZONE_COLORS[1]}"`));
   // No outline, no badge — the caller writes the code as text instead.
-  for (const zone of ['?', 'AB', '', null]) assert.equal(bruitZoneBadge('peb', zone), null, String(zone));
+  for (const zone of ['?', 'AB', '', null, '1']) assert.equal(bruitZoneBadge(zone), null, String(zone));
 });
 
 test('a zone code with no outline is still written, as text, where its badge would go', () => {
@@ -644,7 +621,7 @@ test('a band always keeps one badge, even with no clear spot left on its ring', 
 test('every overview band is named by a badge on its own outer ring', () => {
   const { dataSource } = _drawBruitForTest(AREA, null);
   const badges = badgesOf(dataSource);
-  const bands = [...AREA.peb, ...AREA.pgs].filter((band) => band.anchor);
+  const bands = AREA.peb.filter((band) => band.anchor);
   for (const band of bands) {
     const own = badges.filter((entity) => entity.id.startsWith(`bruit:${band.id}:badge:`));
     assert.ok(own.length >= 1, `${band.id} has a badge`);
@@ -670,21 +647,15 @@ test('every overview band is named by a badge on its own outer ring', () => {
   }
 });
 
-test('the PGS is drawn in its own colours and named as its own document', () => {
-  const { peb, pgs } = answers(PGS);
-  assert.equal(peb.winner, null, 'Roissy answers no PEB at this exact point');
-  assert.equal(pgs.winner.zone, '3');
-  assert.equal(norm(bruitBandLabel(pgs.winner)), 'PGS zone 3 — de 55 à 65 dB(A)');
-  const card = norm(bruitScanDescription(PGS, peb, pgs));
-  assert.ok(card.includes('insonorisation financée : PGS zone 3'), card);
-  // No colour in common with the PEB ramp: the two plans are not two grades of
-  // one thing.
-  const shared = Object.values(PGS_ZONE_COLORS).filter((c) => Object.values(PEB_ZONE_COLORS).includes(c));
-  assert.deepEqual(shared, []);
-  const { dataSource } = _drawBruitForTest(PGS, PGS_POINT);
-  const marker = dataSource.entities.getById('bruit:scan-point');
-  assert.ok(Cesium.Color.fromCssColorString(PGS_ZONE_COLORS[3])
-    .equals(marker.billboard.color.getValue(now())));
+test('a payload still carrying a PGS half draws, keys and counts the PEB alone', () => {
+  // The proxy's per-aerodrome cache outlives a deploy by up to thirty days, and
+  // entries written before the plan de gêne sonore was dropped still hold it.
+  // Nothing may read it back: one plan, one ramp, one heading.
+  const stale = { ...LFMD, pgs: LFMD.peb.map((band) => ({ ...band, id: `pgs:${band.id}` })) };
+  assert.deepEqual(bruitLegend(stale), bruitLegend(LFMD));
+  assert.equal(summarizeBruit(stale).zonesDrawn, LFMD.peb.length);
+  const ids = _drawBruitForTest(stale, LFMD_POINT).dataSource.entities.values.map((entity) => entity.id);
+  assert.equal(ids.some((id) => id.includes('pgs:')), false, ids.join(', '));
 });
 
 test('what is NOT in this layer is stated on every card, not left to be inferred', () => {
@@ -709,10 +680,10 @@ test('what is NOT in this layer is stated on every card, not left to be inferred
 
 test('an incomplete arrêté register is reported, because "the nearest" would be wrong', () => {
   const short = { ...TOUSSUS, register: { count: 12, total: 12, short: true, truncated: false } };
-  const { peb, pgs } = answers(short);
-  const card = norm(bruitScanDescription(short, peb, pgs));
+  const { peb } = answers(short);
+  const card = norm(bruitScanDescription(short, peb));
   assert.ok(card.includes('registre des arrêtés incomplet'), card);
-  const healthy = norm(bruitScanDescription(TOUSSUS, peb, pgs));
+  const healthy = norm(bruitScanDescription(TOUSSUS, peb));
   assert.ok(!healthy.includes('registre des arrêtés incomplet'), healthy);
 });
 
@@ -727,7 +698,7 @@ test('the row legend lists what is on screen, and separates under from beside', 
   assert.equal(legend.some((row) => row.label === 'Bruit très fort'), false);
   // A zone letter the grammar does not know still gets a line rather than
   // vanishing from a key the reader is comparing against the map.
-  const odd = bruitLegend({ peb: [{ zone: 'Z', atPoint: true }], pgs: [] });
+  const odd = bruitLegend({ peb: [{ zone: 'Z', atPoint: true }] });
   assert.deepEqual(odd.map((row) => row.label), ['Ce qu’on peut construire', 'Zone non précisée']);
   assert.equal(odd[1].color, BRUIT_UNKNOWN_ZONE_COLOR);
   assert.equal(odd[1].blurb, 'le plan officiel ne dit pas laquelle');
@@ -735,17 +706,16 @@ test('the row legend lists what is on screen, and separates under from beside', 
 });
 
 test('the key speaks to anyone: no acronym, no unit, no bare count on a line a reader sees', () => {
-  const legend = [...bruitLegend(AREA), ...bruitLegend(LFMD), ...bruitLegend(PGS)];
+  const legend = [...bruitLegend(AREA), ...bruitLegend(LFMD)];
   for (const row of legend) {
     const seen = row.heading ? row.label : `${row.label} ${row.blurb ?? ''}`;
-    assert.equal(/\b(PEB|PGS|dB|Lden|OACI)\b/.test(seen), false, seen);
+    assert.equal(/\b(PEB|dB|Lden|OACI)\b/.test(seen), false, seen);
     assert.equal(row.count, undefined, `${row.label}: a count of drawn bands means nothing to a reader`);
   }
-  // The official names are not lost: they are the headings' hover titles.
+  // The official name is not lost: it is the heading's hover title.
   const headings = bruitLegend(AREA).filter((row) => row.heading);
-  assert.deepEqual(headings.map((row) => row.label), ['Ce qu’on peut construire', 'Aide pour isoler son logement']);
+  assert.deepEqual(headings.map((row) => row.label), ['Ce qu’on peut construire']);
   assert.ok(headings[0].blurb.includes('Plan d’exposition au bruit (PEB)'));
-  assert.ok(headings[1].blurb.includes('Plan de gêne sonore (PGS)'));
   assert.ok(headings.every((row) => row.color === null), 'a caption takes no swatch');
 });
 
@@ -755,8 +725,6 @@ test('each zone\'s swatch is the code the map writes on its badges, cut out of a
   assert.ok(svgOf(zoneA.glyph).includes(INTER_CAPITALS.A.d));
   assert.ok(svgOf(zoneA.glyph).includes('<mask'), 'a mask: the manager tints it with the zone colour');
   assert.equal(zoneA.color, PEB_ZONE_COLORS.A);
-  const pgsOne = bruitLegend(AREA).find((row) => row.color === PGS_ZONE_COLORS[1]);
-  assert.ok(svgOf(pgsOne.glyph).includes(INTER_DIGITS[1].d));
   assert.equal(bruitZoneLegendGlyph('?'), null);
 });
 
@@ -852,7 +820,6 @@ test('the marker glyph is tint-safe line art with no hue of its own', () => {
 const AREA = {
   ...projectBruitArea({
     peb: [read('bruit-peb-area-cdg-sample.json'), read('bruit-peb-area-lebourget-sample.json')],
-    pgs: [read('bruit-pgs-area-cdg-sample.json')],
     probed: [
       { oaci: 'LFPG', name: 'PARIS CHARLES DE GAULLE', lat: 49.0097, lon: 2.5479 },
       { oaci: 'LFPB', name: 'PARIS LE BOURGET', lat: 48.9694, lon: 2.4414 },
@@ -911,9 +878,9 @@ test('an overview draws every band of every aerodrome, and not one of them dashe
     assert.ok(line.polyline.material instanceof Cesium.ColorMaterialProperty, 'never dashed');
     assert.equal(line.polyline.width.getValue(now()), BRUIT_OUTLINE_WIDTH_PX.inside);
   }
-  // Four bands each at two aerodromes, plus Roissy's three PGS zones.
+  // Four bands each at two aerodromes.
   const fills = values.filter((entity) => entity.polygon);
-  assert.ok(fills.length >= 11, `${fills.length} washes drawn`);
+  assert.ok(fills.length >= 8, `${fills.length} washes drawn`);
   // One marker per aerodrome, named by the register and carrying the whole
   // plan on its card — the overview's equivalent of the scan point.
   const markers = values.filter((entity) => entity.properties?.getValue(now())?.kind === 'bruit-aerodrome');
@@ -964,7 +931,7 @@ test('an overview that is capped, silent or empty says which, on the row and on 
     .includes('3 de plus dans le cadre'));
   // Silent is not empty: four aerodromes asked and none answering leaves holes
   // that look exactly like ground with no plan on it.
-  const degraded = { ...AREA, missing: 4, available: { peb: false, pgs: false } };
+  const degraded = { ...AREA, missing: 4, available: { peb: false } };
   assert.equal(bruitStatus({ ...summarizeBruit(degraded), lastUpdate: 1 }), 'unavailable');
   assert.ok(norm(bruitGuidanceLabel({ ...summarizeBruit(degraded), lastUpdate: 1 }))
     .includes('4 aérodromes — la vue est incomplète'));
@@ -972,7 +939,7 @@ test('an overview that is capped, silent or empty says which, on the row and on 
   // somewhere to live, so the centre of the view carries it.
   const empty = {
     ...projectBruitArea({
-      peb: [], pgs: [], probed: [], centre: { lat: 47, lon: 3 }, radiusKm: 100,
+      peb: [], probed: [], centre: { lat: 47, lon: 3 }, radiusKm: 100,
       nearest: {
         oaci: 'LFLN', name: 'SAINT-YAN', lat: 46.41, lon: 4.01,
         arreteDate: '1998-06-15', index: 'psophique', distanceKm: 84.2,
@@ -994,17 +961,14 @@ test('the overview legend explains colours, and never dashes that are not drawn'
   const legend = bruitLegend(AREA);
   assert.deepEqual(legend.map((row) => row.label), [
     'Ce qu’on peut construire', 'Bruit très fort', 'Bruit fort', 'Bruit modéré', 'Bruit plus faible',
-    'Aide pour isoler son logement', 'Bruit très fort', 'Bruit fort', 'Bruit modéré',
   ]);
   // `atPoint` is false on every overview band. The point-mode line would read
   // that as "beside the marker" and explain dashes nobody can see.
   for (const row of legend) {
     assert.equal(/pointillés/.test(row.blurb ?? ''), false, row.blurb);
   }
-  // Every PEB zone says what it means for a home; the PGS heading says it once
-  // for all three of its zones.
-  assert.ok(legend.slice(1, 5).every((row) => row.blurb.length > 0));
-  assert.ok(legend.slice(6).every((row) => row.blurb === undefined));
+  // Every zone says what it means for a home.
+  assert.ok(legend.slice(1).every((row) => row.blurb.length > 0));
   // The point-mode legend still explains its dashes, on the same function.
   assert.ok(bruitLegend(LFMD).some((row) => /pointillés/.test(row.blurb ?? '')));
 });
@@ -1013,7 +977,7 @@ test('getStats in an overview counts aerodromes, not bands under a marker', () =
   const stats = summarizeBruit(AREA);
   assert.equal(stats.area, true);
   assert.equal(stats.aerodromes, 2);
-  assert.equal(stats.zonesDrawn, 11, 'eight PEB bands and three PGS zones');
+  assert.equal(stats.zonesDrawn, 8, 'four bands each at two aerodromes');
   // `zonesHere` is the count of bands the marker is inside, and there is no
   // marker — so it is zero, and `bruitStatus` must not read it here or every
   // dezoomed view would report itself as empty with a dozen plans on screen.

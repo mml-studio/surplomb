@@ -252,8 +252,7 @@ export const SCENE_RECIPES = [
     // Roissy in one continuous move: what the upstream globe already does —
     // the photorealistic airport, a take-off run down 09R, live flights,
     // following an aircraft, its Cockpit — and then what France publishes under the departure track: the
-    // noise exposure plan (PEB) and the noise nuisance plan (PGS), zone by
-    // zone, from the DGAC's WMS.
+    // noise exposure plan (PEB), zone by zone, from the DGAC's WMS.
     //
     // Written for an EAST flow, Roissy's usual one: departures roll on 09R.
     // The poses were scouted on the photorealistic mesh (2026-09-21): Terminal

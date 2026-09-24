@@ -207,8 +207,8 @@ export default defineMessages({
       en: 'Sitadel — SDES + planning-permit portals',
     },
     'bruit-fr': {
-      fr: 'Plans d’exposition au bruit et plans de gêne sonore — DGAC, via la Géoplateforme (data.geopf.fr)',
-      en: 'Noise exposure and noise nuisance plans — DGAC, through the Géoplateforme (data.geopf.fr)',
+      fr: 'Plans d’exposition au bruit — DGAC, via la Géoplateforme (data.geopf.fr)',
+      en: 'Noise exposure plans — DGAC, through the Géoplateforme (data.geopf.fr)',
       keep: ['Géoplateforme'],
     },
     'cadastre-fr': {

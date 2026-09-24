@@ -317,7 +317,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Stations Hub’Eau | Hub’Eau stations | |
 | Bruit des aéroports, PEB (plan d’exposition au bruit) | Airport noise, noise exposure plan (PEB) | |
 | gêne très forte / forte / modérée | very strong / strong / moderate nuisance | PEB zones. |
-| PGS (plan de gêne sonore), insonorisation | noise nuisance plan (PGS), soundproofing | The map key names it by its use: *Aide pour isoler son logement* / *Help to soundproof a home*. |
+| PGS (plan de gêne sonore), insonorisation | noise nuisance plan (PGS), soundproofing | No longer drawn since 2026-09-24; the term survives in comments and in the data credits' history. |
 | secteur bâti (Ah, Nh) | built pocket | Zoning. |
 | houlographe | wave buoy | |
 | poste (météo) | station | |

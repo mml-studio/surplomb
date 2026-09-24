@@ -32,7 +32,6 @@ import {
   BRUIT_LDEN_MAX_OBSERVED,
   BRUIT_PEB_LAYER,
   BRUIT_PEB_MIN_SCALE_DENOMINATOR,
-  BRUIT_PGS_LAYER,
   BRUIT_PROBE_FEATURE_COUNT,
   BRUIT_PROBE_PIXELS,
   BRUIT_PROBE_PIXEL_DEG,
@@ -40,8 +39,6 @@ import {
   BRUIT_PSOPHIQUE_MIN_OBSERVED,
   PEB_ZONE_LABELS,
   PEB_ZONE_ORDER,
-  PGS_ZONE_LABELS,
-  PGS_ZONE_ORDER,
   arreteDocumentDate,
   bandText,
   buildBruitProbeUrl,
@@ -85,14 +82,10 @@ const LFDC = read('bruit-peb-lfdc-sample.json');
 const LFDC_POINT = { lat: 45.273609, lon: -0.453333 };
 /** Toussus-le-Noble: an arrêté, and no polygon at any scale. */
 const EMPTY = read('bruit-peb-empty-sample.json');
-/** Roissy's plan de gêne sonore — the sibling layer's different schema. */
-const PGS = read('bruit-pgs-lfpg-sample.json');
-const PGS_POINT = { lat: 49.00920, lon: 2.54790 };
-
-const zones = (payload, point, kind = 'peb') => projectBruitZones(payload, { kind, point });
+const zones = (payload, point) => projectBruitZones(payload, { point });
 
 test('the probe URL sends latitude first, because WMS 1.3.0 with EPSG:4326 says so', () => {
-  const url = new URL(buildBruitProbeUrl('peb', { lat: 48.81025, lon: 2.07712 }));
+  const url = new URL(buildBruitProbeUrl({ lat: 48.81025, lon: 2.07712 }));
   const params = url.searchParams;
   assert.equal(params.get('VERSION'), '1.3.0');
   assert.equal(params.get('CRS'), 'EPSG:4326');
@@ -105,11 +98,10 @@ test('the probe URL sends latitude first, because WMS 1.3.0 with EPSG:4326 says 
   assert.equal(params.get('QUERY_LAYERS'), BRUIT_PEB_LAYER);
   assert.equal(params.get('INFO_FORMAT'), 'application/json');
   assert.equal(params.get('FEATURE_COUNT'), String(BRUIT_PROBE_FEATURE_COUNT));
-  assert.equal(buildBruitProbeUrl('pgs', { lat: 48, lon: 2 }).includes(BRUIT_PGS_LAYER), true);
 });
 
 test('the queried pixel is the CENTRE of the frame, not a corner between four', () => {
-  const params = new URL(buildBruitProbeUrl('peb', { lat: 49, lon: 2 })).searchParams;
+  const params = new URL(buildBruitProbeUrl({ lat: 49, lon: 2 })).searchParams;
   assert.equal(Number(params.get('WIDTH')), BRUIT_PROBE_PIXELS);
   assert.equal(Number(params.get('HEIGHT')), BRUIT_PROBE_PIXELS);
   // Odd frame, integer centre: 101 pixels, I = J = 50.
@@ -138,10 +130,10 @@ test('the pinned scale stays above the floor where the service goes silent with 
 
 test('a coordinate that is not a coordinate throws instead of probing the Gulf of Guinea', () => {
   for (const bad of [{}, { lat: null, lon: 2 }, { lat: 48, lon: '' }, { lat: NaN, lon: 2 }]) {
-    assert.throws(() => buildBruitProbeUrl('peb', bad), /finite numbers/);
+    assert.throws(() => buildBruitProbeUrl(bad), /finite numbers/);
   }
-  assert.throws(() => buildBruitProbeUrl('peb', { lat: 91, lon: 2 }), /out of range/);
-  assert.throws(() => buildBruitProbeUrl('peb', { lat: 48, lon: 181 }), /out of range/);
+  assert.throws(() => buildBruitProbeUrl({ lat: 91, lon: 2 }), /out of range/);
+  assert.throws(() => buildBruitProbeUrl({ lat: 48, lon: 181 }), /out of range/);
 });
 
 test('a pre-2002 arrêté is an index, not decibels — Saint-Cyr publishes 96 and it is not a level', () => {
@@ -361,45 +353,19 @@ test('geometry that is not geometry is skipped, not crashed on and not half-draw
   assert.equal(mixed.holes, 0);
 });
 
-test('the PGS is a different schema on a sibling layer, not a rename', () => {
-  const properties = PGS.features[0].properties;
-  // Integers, not strings; `date_arrete`, not `date_arret`; `indice_lde` and a
-  // truncated `indice_l_1`. Read with the PEB field names, every threshold on
-  // this row is `undefined`.
-  assert.equal(typeof properties.indice_lde, 'number');
-  assert.equal(properties.indldenext, undefined);
-  assert.equal(properties.date_arret, undefined);
-  assert.equal(properties.date_arrete, '2013-12-11Z');
-  const [band] = zones(PGS, PGS_POINT, 'pgs');
-  assert.equal(band.zone, '3');
-  assert.equal(band.low, 55);
-  assert.equal(band.high, 65);
-  assert.equal(band.index, 'lden');
-  assert.equal(band.arreteDate, '2013-12-11');
-  assert.equal(band.updatedOn, '2018-10-05');
-  assert.equal(norm(bandText(band)), 'de 55 à 65 dB(A) en moyenne sur 24 h');
-  // Reading the same row with the PEB field map yields a band with no numbers.
-  const wrong = zones(PGS, PGS_POINT, 'peb')[0];
-  assert.equal(wrong.low, null);
-  assert.equal(wrong.high, null);
-});
-
 test('an empty FeatureCollection is an empty answer, not an exception', () => {
   assert.equal(EMPTY.features.length, 0);
   assert.deepEqual(zones(EMPTY, { lat: 48.7498, lon: 2.1112 }), []);
-  const built = projectBruit({ peb: EMPTY, pgs: null, point: { lat: 48.7498, lon: 2.1112 } });
+  const built = projectBruit({ peb: EMPTY, point: { lat: 48.7498, lon: 2.1112 } });
   assert.deepEqual(built.airports, []);
   assert.equal(built.nearbyCount, 0);
   assert.equal(built.mixedIndex, false);
-  // The half that was never asked for is reported as absent rather than empty:
-  // "no PGS here" and "the PGS service did not answer" are different sentences.
-  assert.deepEqual(built.available, { peb: true, pgs: false });
+  // An empty answer is still an answer: the service replied.
+  assert.deepEqual(built.available, { peb: true });
 });
 
 test('the assembled document reports what is beside the point and which units are in play', () => {
-  const built = projectBruit({
-    peb: LFMD, pgs: null, point: LFMD_POINT, nearest: null,
-  });
+  const built = projectBruit({ peb: LFMD, point: LFMD_POINT, nearest: null });
   assert.equal(built.peb.length, 2);
   assert.equal(built.airports.length, 1);
   assert.equal(built.nearbyCount, 1, 'zone C came back beside the probe, not under it');
@@ -423,7 +389,6 @@ test('"two indices here" counts the bands the point is IN, not everything return
   // trigger-happy one.
   const built = projectBruit({
     peb: { features: [...LFPZ.features, ...LEBOURGET.features] },
-    pgs: null,
     point: LFPZ_POINT,
   });
   assert.ok(built.peb.some((band) => band.index === 'lden'), 'the Lden bands are in the answer');
@@ -432,9 +397,8 @@ test('"two indices here" counts the bands the point is IN, not everything return
   assert.equal(built.nearbyCount, 2, 'the two Lden bands are beside the point, and counted');
 });
 
-test('the two zone vocabularies are ordered most-exposed-first and cover what is published', () => {
+test('the zone vocabulary is ordered most-exposed-first and covers what is published', () => {
   assert.deepEqual([...PEB_ZONE_ORDER], ['A', 'B', 'C', 'D']);
-  assert.deepEqual([...PGS_ZONE_ORDER], ['1', '2', '3']);
   // THE UNIT INVARIANT LIVES ON THE THRESHOLD LINE, not in the explanation.
   // `bandText` is the only thing that ever prints a number, so that is where
   // "a value is never shown without what it is measured in" has to hold — and
@@ -454,8 +418,7 @@ test('the two zone vocabularies are ordered most-exposed-first and cover what is
   // Nothing in the vocabulary outgrows the card. `worldOverlayDraw` wraps at
   // about sixty characters, so a longer line does not say more — it costs a
   // second row and pushes a fact off a six-line card.
-  for (const [name, table] of [['PEB', PEB_ZONE_LABELS], ['PGS', PGS_ZONE_LABELS],
-    ['index', BRUIT_INDEX_SENTENCES]]) {
+  for (const [name, table] of [['PEB', PEB_ZONE_LABELS], ['index', BRUIT_INDEX_SENTENCES]]) {
     for (const [key, text] of Object.entries(table)) {
       assert.ok(text.length <= 60, `${name} ${key} is ${text.length} characters: ${text}`);
     }
@@ -474,14 +437,12 @@ test('the two zone vocabularies are ordered most-exposed-first and cover what is
 const AREA_CDG = read('bruit-peb-area-cdg-sample.json');
 /** Le Bourget's, read the same way — and it returns two of Roissy's bands too. */
 const AREA_LBG = read('bruit-peb-area-lebourget-sample.json');
-/** Roissy's plan de gêne sonore at the overview scale: all three zones. */
-const AREA_PGS = read('bruit-pgs-area-cdg-sample.json');
 const CDG = { oaci: 'LFPG', name: 'PARIS CHARLES DE GAULLE', lat: 49.0097, lon: 2.5479 };
 const LBG = { oaci: 'LFPB', name: 'PARIS LE BOURGET', lat: 48.9694, lon: 2.4414 };
 
 test('the overview probe asks for the measured scale, and rejects a scale that is not one', () => {
   const params = new URL(
-    buildBruitProbeUrl('peb', { lat: 49.0097, lon: 2.5479 }, BRUIT_AREA_PIXEL_DEG),
+    buildBruitProbeUrl({ lat: 49.0097, lon: 2.5479 }, BRUIT_AREA_PIXEL_DEG),
   ).searchParams;
   const [south, west, north, east] = params.get('BBOX').split(',').map(Number);
   // 101 pixels at 1e-2° is a 1.01° box, a hundred times the pinned probe's.
@@ -502,8 +463,8 @@ test('the overview probe asks for the measured scale, and rejects a scale that i
   // Well clear of the floor the PEB layer goes silent below, in the safe
   // direction: this layer stops rendering when zoomed IN past 1:25,000.
   assert.ok(BRUIT_AREA_SCALE_DENOMINATOR > BRUIT_PEB_MIN_SCALE_DENOMINATOR);
-  assert.throws(() => buildBruitProbeUrl('peb', { lat: 49, lon: 2 }, 0), /positive/);
-  assert.throws(() => buildBruitProbeUrl('peb', { lat: 49, lon: 2 }, Number.NaN), /positive/);
+  assert.throws(() => buildBruitProbeUrl({ lat: 49, lon: 2 }, 0), /positive/);
+  assert.throws(() => buildBruitProbeUrl({ lat: 49, lon: 2 }, Number.NaN), /positive/);
 });
 
 test('two overview probes that overlap do not publish one polygon twice', () => {
@@ -515,7 +476,7 @@ test('two overview probes that overlap do not publish one polygon twice', () => 
   assert.equal(AREA_CDG.features.length + AREA_LBG.features.length, 10);
   assert.equal(merged.features.length, 8);
   assert.equal(merged.duplicates, 2);
-  const bands = projectBruitZones(merged, { kind: 'peb', point: null });
+  const bands = projectBruitZones(merged, { point: null });
   assert.equal(bands.length, 8, 'four bands each, at two aerodromes');
   // The failure this prevents: left in, the repeat merges on the band's
   // identity and the card reads "publiée en 2 polygones, fusionnés" — a
@@ -529,7 +490,6 @@ test('two overview probes that overlap do not publish one polygon twice', () => 
 test('an overview band is never described as being near a marker there is none of', () => {
   const area = projectBruitArea({
     peb: [AREA_CDG, AREA_LBG],
-    pgs: [AREA_PGS],
     probed: [CDG, LBG],
     centre: { lat: 48.99, lon: 2.5 },
     radiusKm: 50,
@@ -551,7 +511,6 @@ test('an overview band is never described as being near a marker there is none o
   assert.equal(cdg.probed, true);
   assert.equal(cdg.name, 'PARIS CHARLES DE GAULLE', 'the register names it, not the plan layer');
   assert.deepEqual(area.aerodromes.map((entry) => entry.oaci).sort(), ['LFPB', 'LFPG']);
-  assert.deepEqual(area.pgsAerodromes.map((entry) => entry.zones), [3]);
   // The register's own point, never a centroid of the polygons.
   assert.equal(cdg.lat, CDG.lat);
   assert.equal(cdg.lon, CDG.lon);
@@ -580,7 +539,7 @@ test('an aerodrome nobody aimed at still gets drawn, and says so', () => {
 
 test('an empty overview reports what was asked, dropped and silent — three numbers', () => {
   const empty = projectBruitArea({
-    peb: [], pgs: [], probed: [], centre: { lat: 47, lon: 3 }, radiusKm: 100,
+    peb: [], probed: [], centre: { lat: 47, lon: 3 }, radiusKm: 100,
     candidates: 0, missing: 0,
     nearest: { oaci: 'LFLN', name: 'SAINT-YAN', distanceKm: 84.2, lat: 46.4, lon: 4.0 },
   });
@@ -589,7 +548,7 @@ test('an empty overview reports what was asked, dropped and silent — three num
   assert.equal(empty.available.peb, true, 'nothing here is not the same as nothing answered');
   const degraded = projectBruitArea({
     peb: [AREA_CDG], probed: [CDG], centre: CDG, radiusKm: 50,
-    candidates: 12, missing: 4, available: { peb: false, pgs: false },
+    candidates: 12, missing: 4, available: { peb: false },
   });
   assert.equal(degraded.missing, 4);
   assert.equal(degraded.candidates, 12);
@@ -599,10 +558,10 @@ test('an empty overview reports what was asked, dropped and silent — three num
 
 test('folding aerodromes never lets an unknown zone letter lead', () => {
   const bands = [
-    { id: 'a', oaci: 'LFXX', zone: 'Z', kind: 'peb' },
-    { id: 'b', oaci: 'LFXX', zone: 'B', kind: 'peb' },
+    { id: 'a', oaci: 'LFXX', zone: 'Z' },
+    { id: 'b', oaci: 'LFXX', zone: 'B' },
   ];
-  const [entry] = foldAerodromes(bands, 'peb', []);
+  const [entry] = foldAerodromes(bands, []);
   // Same trap as the point-mode ranking: `indexOf(unknown)` is -1 and -1 sorts
   // ahead of zone A, so an unlabelled polygon would become the aerodrome's
   // headline everywhere one is published.
@@ -779,7 +738,7 @@ test('a band published as two polygons is only as fine as its worst piece', () =
   const coarseTwin = { ...LFPZ.features[1], properties: { ...LFPZ.features[1].properties, [BRUIT_SCALE_PROPERTY]: BRUIT_AREA_SCALE_DENOMINATOR } };
   const bands = projectBruitZones(
     { type: 'FeatureCollection', features: [fineOne, coarseTwin] },
-    { kind: 'peb', point: LFPZ_POINT },
+    { point: LFPZ_POINT },
   );
   // Saint-Cyr publishes one band as two features. Refining one lobe and not
   // the other must not let the card claim a fine outline for the shape as a

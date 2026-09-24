@@ -7,8 +7,6 @@ import {
   BRUIT_SOURCE,
   PEB_ZONE_LABELS,
   PEB_ZONE_ORDER,
-  PGS_ZONE_LABELS,
-  PGS_ZONE_ORDER,
   bandText,
   bruitBandIsFine,
   bruitGroundResolutionText,
@@ -17,7 +15,6 @@ import { formatDate, formatDecimal, formatNumber } from '../i18n/format.js';
 import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
 import messages from './bruitFrance.i18n.js';
 import { INTER_CAPITALS, interOutlineMarkup } from './interCapitals.js';
-import { INTER_DIGITS } from './interDigits.js';
 import { pointInPolygons, ringLabelAnchor } from './ringGeometry.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 
@@ -79,8 +76,7 @@ import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
  * clause that separated the winner from the runner-up. In order:
  *
  *   1. `atPoint` — a band the point is not inside is not a candidate at all.
- *   2. THE MOST EXPOSED ZONE WINS. A/B/C/D on the PEB, I/II/III on the PGS.
- *      This is not a tie-break dressed up as a rule: the PEB's restrictions are
+ *   2. THE MOST EXPOSED ZONE WINS, A over B over C over D. This is not a tie-break dressed up as a rule: the PEB's restrictions are
  *      cumulative-strictest, so on ground covered by both A and B it is zone A
  *      that forbids housing. Answering "zone B" at Saint-Cyr because it came
  *      back first would understate the rule that actually applies there. The
@@ -261,23 +257,6 @@ export const PEB_ZONE_COLORS = Object.freeze({
   D: '#9fd0ff', // information only — no building restriction
 });
 
-/**
- * The PGS ramp: a violet family, and deliberately no colour in common with the
- * PEB.
- *
- * The two plans are drawn over the same aerodromes and they are NOT the same
- * document. The PEB says what may be built; the PGS says whose windows the
- * *taxe sur les nuisances sonores aériennes* pays to replace. Sharing a ramp
- * would say they were two grades of one thing. Measured, the overlap is real
- * and small: 11 of the 224 aerodromes answer a PGS probe at their own published
- * point, against 215 for the PEB.
- */
-export const PGS_ZONE_COLORS = Object.freeze({
-  1: '#e05bff', // zone I — highest aid rate
-  2: '#b06bf0', // zone II
-  3: '#7d6fe0', // zone III
-});
-
 /** A zone letter this grammar does not know. Neutral, and never ranked first. */
 export const BRUIT_UNKNOWN_ZONE_COLOR = '#c9d4e0';
 
@@ -380,8 +359,8 @@ export const BRUIT_BADGE_SEPARATION_M = Object.freeze({ point: 300, area: 750 })
  * A second piece of the same band gets its own badge only if it is at least
  * this share of the widest piece. Measured on the 2026-09-21 overview around
  * Roissy (18 aerodromes, 72 bands): Roissy's two zone-A lobes are 8.05 and
- * 8.00 km wide and both deserve a badge, while Orly's PGS zone 2 arrives as 27
- * pieces of which 25 are under 20 m — fragments, not lobes.
+ * 8.00 km wide and both deserve a badge, while a band published as dozens of
+ * pieces under 20 m wide is fragments, not lobes.
  */
 const BRUIT_BADGE_SECONDARY_SHARE = 0.5;
 
@@ -399,24 +378,24 @@ const _badgeCache = new Map();
  * FILL AND INK ARE BAKED IN and the billboard is drawn untinted. A tint cannot
  * do this job: `billboard.color` multiplies, so it could colour the frame only
  * by also colouring the ivory code and darkening the glass. The cost is one
- * atlas entry per zone colour — seven at most, PEB and PGS together.
+ * atlas entry per zone colour — four, plus one for a letter the grammar does
+ * not know.
  *
  * Returned as a data-URI STRING because Cesium shares an atlas entry between
  * billboards only when their image is a string; a canvas gets a fresh entry
  * per billboard.
  *
- * @param {'peb'|'pgs'} kind
  * @param {?string} zone
  * @param {number} [px] Raster size: three times the drawn size, because the
  *   billboard atlas has no mipmaps and a 22 px mark must survive a 2× screen.
  * @returns {?string} `data:image/svg+xml;base64,…`, or null for a code with no
  *   vendored outline — the caller then writes it as text.
  */
-export function bruitZoneBadge(kind, zone, px = 72) {
+export function bruitZoneBadge(zone, px = 72) {
   const code = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
-  const glyph = code.length === 1 ? (INTER_CAPITALS[code] ?? INTER_DIGITS[code]) : null;
+  const glyph = code.length === 1 ? INTER_CAPITALS[code] : null;
   if (!glyph) return null;
-  const frame = bruitZoneColorCss(kind, zone);
+  const frame = bruitZoneColorCss(zone);
   const key = `${code}|${frame}|${px}`;
   const cached = _badgeCache.get(key);
   if (cached) return cached;
@@ -554,12 +533,12 @@ export function bruitBadgeSpots(bands, separationM, obstacles = []) {
 }
 
 /**
- * The badges' claim order for one plan: answers before context, most exposed
- * first — {@link bruitDrawOrder} read backwards, since paint goes quietest
- * first for the opposite reason.
+ * The badges' claim order: answers before context, most exposed first —
+ * {@link bruitDrawOrder} read backwards, since paint goes quietest first for
+ * the opposite reason.
  */
-function bruitBadgeOrder(bands, kind, referenceFor) {
-  return bruitDrawOrder(bands, kind).reverse()
+function bruitBadgeOrder(bands, referenceFor) {
+  return bruitDrawOrder(bands).reverse()
     .filter((band) => band.anchor && band.anchor.widthDeg >= BRUIT_LABEL_MIN_WIDTH_DEG)
     .map((band) => ({ id: band.id, parts: band.parts, reference: referenceFor(band) }));
 }
@@ -571,8 +550,8 @@ function bruitBadgeOrder(bands, kind, referenceFor) {
  * A code with no vendored outline — a zone the grammar does not know — is
  * written as text at the same spot instead of being dropped.
  */
-function addBruitBadges(dataSource, band, kind, spots, style) {
-  const image = bruitZoneBadge(kind, band.zone);
+function addBruitBadges(dataSource, band, spots, style) {
+  const image = bruitZoneBadge(band.zone);
   for (const [index, spot] of (spots || []).entries()) {
     const mark = image
       ? {
@@ -589,7 +568,7 @@ function addBruitBadges(dataSource, band, kind, spots, style) {
         label: {
           text: String(band.zone ?? '?'),
           font: 'bold 15px "Roboto Mono", monospace',
-          fillColor: Cesium.Color.fromCssColorString(bruitZoneColorCss(kind, band.zone)),
+          fillColor: Cesium.Color.fromCssColorString(bruitZoneColorCss(band.zone)),
           outlineColor: Cesium.Color.BLACK.withAlpha(0.85),
           outlineWidth: 3,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -626,18 +605,17 @@ export const BRUIT_WINNER_RULES = Object.freeze({
   get id() { return messages().winnerRules.id; },
 });
 
-/** Colour a band by its plan and its zone letter. */
-export function bruitZoneColorCss(kind, zone) {
-  const table = kind === 'pgs' ? PGS_ZONE_COLORS : PEB_ZONE_COLORS;
-  // Object.hasOwn and not `table[zone] || fallback`: `zone` arrives as a string
-  // or as null, and a lookup that falls through on a falsy VALUE would be a
-  // different bug the day a colour is ever the empty string.
+/** Colour a band by its zone letter. */
+export function bruitZoneColorCss(zone) {
+  // Object.hasOwn and not `PEB_ZONE_COLORS[zone] || fallback`: `zone` arrives
+  // as a string or as null, and a lookup that falls through on a falsy VALUE
+  // would be a different bug the day a colour is ever the empty string.
   const key = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
-  return Object.hasOwn(table, key) ? table[key] : BRUIT_UNKNOWN_ZONE_COLOR;
+  return Object.hasOwn(PEB_ZONE_COLORS, key) ? PEB_ZONE_COLORS[key] : BRUIT_UNKNOWN_ZONE_COLOR;
 }
 
 /**
- * Severity rank of a zone within its own plan — LOWER IS MORE EXPOSED.
+ * Severity rank of a zone — LOWER IS MORE EXPOSED.
  *
  * A zone the register spells in a way this grammar does not know ranks LAST,
  * never first. That is deliberate and it is the coercion trap in miniature:
@@ -645,18 +623,16 @@ export function bruitZoneColorCss(kind, zone) {
  * unlabelled polygon would become the answer at every airport that published
  * one.
  */
-export function bruitZoneRank(kind, zone) {
-  const order = kind === 'pgs' ? PGS_ZONE_ORDER : PEB_ZONE_ORDER;
+export function bruitZoneRank(zone) {
   const key = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
-  const index = order.indexOf(key);
-  return index === -1 ? order.length : index;
+  const index = PEB_ZONE_ORDER.indexOf(key);
+  return index === -1 ? PEB_ZONE_ORDER.length : index;
 }
 
 /** What each zone means for the ground under it, or null for an unknown letter. */
-export function bruitZoneSentence(kind, zone) {
-  const table = kind === 'pgs' ? PGS_ZONE_LABELS : PEB_ZONE_LABELS;
+export function bruitZoneSentence(zone) {
   const key = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
-  return Object.hasOwn(table, key) ? table[key] : null;
+  return Object.hasOwn(PEB_ZONE_LABELS, key) ? PEB_ZONE_LABELS[key] : null;
 }
 
 /**
@@ -695,12 +671,11 @@ export function bruitAreaEmphasis(band, aerodrome) {
  * Rank two eligible bands. Exported so the ordering itself can be tested
  * without going through the whole selection.
  *
- * @param {'peb'|'pgs'} kind
  * @returns {(a: object, b: object) => number}
  */
-export function bruitBandComparator(kind) {
+export function bruitBandComparator() {
   return (a, b) => (
-    bruitZoneRank(kind, a?.zone) - bruitZoneRank(kind, b?.zone)
+    bruitZoneRank(a?.zone) - bruitZoneRank(b?.zone)
     // Newest effective arrêté first. Dates are `YYYY-MM-DD` strings, which sort
     // correctly as strings; a band with no date at all sorts last rather than
     // winning on an empty string comparing low.
@@ -711,18 +686,17 @@ export function bruitBandComparator(kind) {
 }
 
 /**
- * Pick ONE band as the answer for a plan, and say which clause decided it.
+ * Pick ONE band as the answer, and say which clause decided it.
  *
  * See the module header for why the strictest zone wins and why every clause
  * below it exists. Nothing is discarded: `inside` is the other bands the point
  * is genuinely in, `nearby` is what the buffer found beside it.
  *
- * @param {Array<object>} bands Output of `projectBruitZones` for one plan.
- * @param {'peb'|'pgs'} kind
+ * @param {Array<object>} bands Output of `projectBruitZones`.
  * @returns {{winner: ?object, inside: Array<object>, nearby: Array<object>,
  *   rule: ?string, ruleLabel: ?string, eligible: number, overlapping: boolean}}
  */
-export function chooseBruitAnswer(bands, kind = 'peb') {
+export function chooseBruitAnswer(bands) {
   const rows = Array.isArray(bands) ? bands : [];
   const eligible = rows.filter((band) => band?.atPoint === true);
   const nearby = rows.filter((band) => band?.atPoint !== true);
@@ -732,11 +706,11 @@ export function chooseBruitAnswer(bands, kind = 'peb') {
       eligible: 0, overlapping: false,
     };
   }
-  const ranked = [...eligible].sort(bruitBandComparator(kind));
+  const ranked = [...eligible].sort(bruitBandComparator());
   const [winner, runnerUp] = ranked;
   let rule = 'only';
   if (runnerUp) {
-    if (bruitZoneRank(kind, winner.zone) !== bruitZoneRank(kind, runnerUp.zone)) rule = 'zone';
+    if (bruitZoneRank(winner.zone) !== bruitZoneRank(runnerUp.zone)) rule = 'zone';
     else if (String(winner.effectiveDate ?? '') !== String(runnerUp.effectiveDate ?? '')) rule = 'arrete';
     else if (String(winner.oaci ?? '') !== String(runnerUp.oaci ?? '')) rule = 'oaci';
     else rule = 'id';
@@ -767,16 +741,13 @@ export function chooseBruitAnswer(bands, kind = 'peb') {
  * `short`, because every caller of this is a SECONDARY mention — a band beside
  * the one the card is about, or one of four in a list — where the card has
  * already spelled the index out once at full length. Measured on the Roissy
- * ground card, the long form pushed "insonorisation financée : PGS zone 3 …" to
- * 75 characters and wrapped it onto a second row.
+ * ground card, the long form of a secondary mention ran to 75 characters and
+ * wrapped it onto a second row.
  */
 export function bruitBandLabel(band) {
   const zone = typeof band?.zone === 'string' && band.zone.trim() ? band.zone.trim() : '?';
-  // The PGS is named on its own bands, not only in the sentence that
-  // introduces them: a card that says "zone 3" beside a card that says "zone C"
-  // invites reading the two documents as one scale.
   const m = messages().band;
-  const prefix = band?.kind === 'pgs' ? m.pgsZone(zone) : m.zone(zone);
+  const prefix = m.zone(zone);
   const text = bandText(band, { short: true });
   return text ? m.withThreshold(prefix, text) : prefix;
 }
@@ -818,7 +789,7 @@ export function bruitBandDescription(band, answer = null, { area = false } = {})
   const isWinner = Boolean(answer?.winner && answer.winner.id === band?.id);
   const arrete = bruitDayText(band?.effectiveDate);
   return [
-    bruitZoneSentence(band?.kind, band?.zone),
+    bruitZoneSentence(band?.zone),
     bandText(band),
     BRUIT_INDEX_SENTENCES[band?.index ?? 'unknown'],
     // `atPoint` is false on EVERY overview band, because nothing was tested
@@ -901,13 +872,8 @@ export function bruitNearestSentence(nearest) {
  */
 export function bruitBandHeadline(band) {
   const zone = typeof band?.zone === 'string' && band.zone.trim() ? band.zone.trim() : '?';
-  // The PGS is a different document with a different purpose, so it gets a
-  // different subject rather than a shared one with a qualifier: a card that
-  // said "bruit des avions · zone 1" over a PGS band would read as a fifth PEB
-  // ring, which is exactly the confusion the two palettes exist to prevent.
   const m = messages().headline;
-  const subject = band?.kind === 'pgs' ? m.pgs : m.peb;
-  const head = m.line(subject, zone);
+  const head = m.line(m.peb, zone);
   return band?.airport ? m.withAirport(head, band.airport) : head;
 }
 
@@ -918,12 +884,9 @@ export function bruitBandHeadline(band) {
  * layer's honesty: an empty FeatureCollection and a service that did not answer
  * are the same 0 features downstream, and only `available` tells them apart.
  */
-export function bruitMarkerTitle(payload, peb, pgs) {
-  if (payload?.available?.peb === false && payload?.available?.pgs === false) {
-    return messages().headline.serviceDown;
-  }
-  const winner = peb?.winner || pgs?.winner;
-  if (winner) return bruitBandHeadline(winner);
+export function bruitMarkerTitle(payload, peb) {
+  if (payload?.available?.peb === false) return messages().headline.serviceDown;
+  if (peb?.winner) return bruitBandHeadline(peb.winner);
   return messages().headline.nothingHere;
 }
 
@@ -951,13 +914,12 @@ export function bruitMarkerTitle(payload, peb, pgs) {
  * point covered by two overlapping zones printed its provenance and dropped the
  * fact that there had been a choice at all.
  */
-export function bruitScanDescription(payload, peb, pgs) {
+export function bruitScanDescription(payload, peb) {
   const m = messages().scan;
   const winner = peb?.winner || null;
   const lines = [];
-  // The PEB outage leads, because it is the line that stops a blank answer from
-  // being read as "nothing here". The PGS outage does not: it would push the
-  // answer the reader came for down one line to report a secondary document.
+  // The outage leads, because it is the line that stops a blank answer from
+  // being read as "nothing here".
   if (payload?.available?.peb === false) {
     lines.push(m.pebDown);
   }
@@ -965,7 +927,7 @@ export function bruitScanDescription(payload, peb, pgs) {
     // Rule, then threshold — the same order as the two cards a click produces,
     // because the answer to "what does this mean for this ground" is the rule
     // and the threshold is its evidence.
-    lines.push(bruitZoneSentence('peb', winner.zone));
+    lines.push(bruitZoneSentence(winner.zone));
     lines.push(bandText(winner));
   } else if (payload?.available?.peb !== false) {
     lines.push(m.noPlan);
@@ -997,11 +959,6 @@ export function bruitScanDescription(payload, peb, pgs) {
   const nearby = peb?.nearby?.length || 0;
   if (nearby) {
     lines.push(m.drawnDashed(nearby));
-  }
-  if (pgs?.winner) {
-    lines.push(m.pgsWinner(bruitBandLabel(pgs.winner)));
-  } else if (payload?.available?.pgs === false) {
-    lines.push(m.pgsDown);
   }
   if (payload?.mixedIndex) {
     lines.push(m.mixedIndex);
@@ -1141,10 +1098,9 @@ export function bruitAerodromeTitle(aerodrome) {
  *
  * @param {object} aerodrome A `foldAerodromes` entry.
  * @param {object} payload
- * @param {?object} [pgs] The same aerodrome's PGS entry, when it has one.
  * @returns {string}
  */
-export function bruitAerodromeDescription(aerodrome, payload, pgs = null) {
+export function bruitAerodromeDescription(aerodrome, payload) {
   const m = messages().aerodrome;
   const count = aerodrome?.zones ?? 0;
   const arrete = bruitDayText(aerodrome?.top?.effectiveDate);
@@ -1162,7 +1118,6 @@ export function bruitAerodromeDescription(aerodrome, payload, pgs = null) {
         ? messages().bandCard.orderRevised(arrete)
         : messages().bandCard.order(arrete))
       : BRUIT_INDEX_SENTENCES[aerodrome?.top?.index ?? 'unknown'],
-    pgs?.zones ? m.pgsZones(pgs.zones) : null,
     // An aerodrome nobody aimed at. Its plan is whatever fell inside a
     // neighbour's buffer, which is not a promise that the plan is complete.
     aerodrome?.probed === false ? m.notProbed : null,
@@ -1239,17 +1194,13 @@ export function bruitAreaSummary(payload) {
  */
 export function bruitGroundCard({ lon, lat, payload }) {
   if (!payload || !Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-  const hit = (kind) => (payload[kind] || [])
+  const [lead, ...others] = (payload.peb || [])
     .filter((band) => pointInPolygons(band.parts, lon, lat))
-    .sort(bruitBandComparator(kind));
-  const peb = hit('peb');
-  const pgs = hit('pgs');
-  const lead = peb[0] || pgs[0] || null;
+    .sort(bruitBandComparator());
   if (!lead) return null;
   const m = messages().ground;
   const area = payload.area === true;
   const arrete = bruitDayText(lead.effectiveDate);
-  const others = (lead.kind === 'peb' ? peb : pgs).slice(1);
   return {
     title: bruitBandHeadline(lead),
     // THE CONSEQUENCE LEADS, NOT THE NUMBER. What a reader wants from a
@@ -1257,7 +1208,7 @@ export function bruitGroundCard({ lon, lat, payload }) {
     // the evidence for that answer, not the answer. This used to open on
     // "70 Lden dB(A)" and put the rule third.
     details: bruitCardDetails([
-      bruitZoneSentence(lead.kind, lead.zone),
+      bruitZoneSentence(lead.zone),
       bandText(lead),
       // The OACI code rides with the arrêté because that is what it identifies:
       // the PDF is named `PEB_<OACI>_<date>.pdf`, so the two together are what
@@ -1274,7 +1225,6 @@ export function bruitGroundCard({ lon, lat, payload }) {
       others.length
         ? m.alsoHere(others.map((band) => bruitBandLabel(band)).join(' ; '))
         : null,
-      peb.length && pgs.length ? messages().scan.pgsWinner(bruitBandLabel(pgs[0])) : null,
       // The sentence that stops a coloured pixel from passing for a legal
       // limit. At the overview scale a hundred metres of boundary is well under
       // one vertex, so near an edge this answer is a guess.
@@ -1436,14 +1386,13 @@ export function drawBruitParts(dataSource, idPrefix, parts, style) {
  * strictest zone legible on the ground the rule actually applies to.
  *
  * @param {Array<object>} bands
- * @param {'peb'|'pgs'} kind
  * @returns {Array<object>}
  */
-export function bruitDrawOrder(bands, kind = 'peb') {
+export function bruitDrawOrder(bands) {
   return [...(bands || [])].sort((a, b) => (
     // Context under answers, then quietest to loudest.
     Number(a?.atPoint === true) - Number(b?.atPoint === true)
-    || bruitZoneRank(kind, b?.zone) - bruitZoneRank(kind, a?.zone)
+    || bruitZoneRank(b?.zone) - bruitZoneRank(a?.zone)
   ));
 }
 
@@ -1461,7 +1410,7 @@ export function bruitDrawOrder(bands, kind = 'peb') {
  */
 export function bruitZoneLegendGlyph(zone) {
   const code = typeof zone === 'string' ? zone.trim().toUpperCase() : '';
-  const glyph = code.length === 1 ? (INTER_CAPITALS[code] ?? INTER_DIGITS[code]) : null;
+  const glyph = code.length === 1 ? INTER_CAPITALS[code] : null;
   if (!glyph) return null;
   const key = `legend|${code}`;
   const cached = _badgeCache.get(key);
@@ -1481,16 +1430,14 @@ export function bruitZoneLegendGlyph(zone) {
 
 /**
  * The map key: one entry per zone actually on screen, under a heading that
- * says what each plan is FOR.
+ * says what the plan is FOR.
  *
  * WRITTEN FOR A READER WHO KNOWS NO ACRONYM. The first key led every line with
  * « PEB zone A 14 » — two acronyms and a count of drawn bands nobody could
- * place. Each plan is now named by its use (« Ce qu’on peut construire »,
- * « Aide pour isoler son logement »), with its official name one hover away on
- * the heading; each zone by how loud it is, its swatch carrying the same code
- * the map writes on its badges; and a PEB zone by what it means for a new
- * home. The PGS zones need no second line: every one of them means the same
- * thing, said once by the heading.
+ * place. The plan is now named by its use (« Ce qu’on peut construire »), with
+ * its official name one hover away on the heading; each zone by how loud it
+ * is, its swatch carrying the same code the map writes on its badges, and by
+ * what it means for a new home.
  *
  * Built from what was DRAWN, not from the vocabulary, so a line never claims a
  * band the reader cannot see, and a heading never stands over nothing.
@@ -1498,43 +1445,35 @@ export function bruitZoneLegendGlyph(zone) {
 export function bruitLegend(payload) {
   if (!payload) return [];
   const m = messages().legend;
-  const legend = [];
-  for (const [kind, order] of [['peb', PEB_ZONE_ORDER], ['pgs', PGS_ZONE_ORDER]]) {
-    const bands = payload[kind] || [];
-    const entries = [];
-    for (const zone of order) {
-      const rows = bands.filter((band) => String(band?.zone ?? '').trim().toUpperCase() === zone);
-      if (!rows.length) continue;
-      const here = rows.filter((band) => band.atPoint === true).length;
-      // `atPoint` is false on every overview band by construction, so the
-      // point-mode line would report all of them as "beside the marker" — an
-      // explanation of dashes that are not on screen.
-      const aside = payload.area === true ? 0 : rows.length - here;
-      const blurb = [
-        kind === 'peb' ? m.pebRule[zone] : null,
-        aside === 0 ? null : m.aside(aside),
-      ].filter(Boolean).join(' — ');
-      entries.push({
-        label: m.loudness[zone],
-        color: bruitZoneColorCss(kind, zone),
-        glyph: bruitZoneLegendGlyph(zone),
-        ...(blurb ? { blurb } : {}),
-      });
-    }
-    if (bands.some((band) => bruitZoneRank(kind, band?.zone) === order.length)) {
-      entries.push({ label: m.unknown, color: BRUIT_UNKNOWN_ZONE_COLOR, blurb: m.unknownBlurb });
-    }
-    if (!entries.length) continue;
-    legend.push({
-      label: kind === 'pgs' ? m.pgsHeading : m.pebHeading,
-      color: null,
-      // A caption, not a class — the manager draws it without a swatch, and
-      // its official name travels as the hover title.
-      heading: true,
-      blurb: kind === 'pgs' ? m.pgsHeadingTitle : m.pebHeadingTitle,
-    }, ...entries);
+  const bands = payload.peb || [];
+  const entries = [];
+  for (const zone of PEB_ZONE_ORDER) {
+    const rows = bands.filter((band) => String(band?.zone ?? '').trim().toUpperCase() === zone);
+    if (!rows.length) continue;
+    const here = rows.filter((band) => band.atPoint === true).length;
+    // `atPoint` is false on every overview band by construction, so the
+    // point-mode line would report all of them as "beside the marker" — an
+    // explanation of dashes that are not on screen.
+    const aside = payload.area === true ? 0 : rows.length - here;
+    entries.push({
+      label: m.loudness[zone],
+      color: bruitZoneColorCss(zone),
+      glyph: bruitZoneLegendGlyph(zone),
+      blurb: [m.pebRule[zone], aside === 0 ? null : m.aside(aside)].filter(Boolean).join(' — '),
+    });
   }
-  return legend;
+  if (bands.some((band) => bruitZoneRank(band?.zone) === PEB_ZONE_ORDER.length)) {
+    entries.push({ label: m.unknown, color: BRUIT_UNKNOWN_ZONE_COLOR, blurb: m.unknownBlurb });
+  }
+  if (!entries.length) return [];
+  return [{
+    label: m.pebHeading,
+    color: null,
+    // A caption, not a class — the manager draws it without a swatch, and
+    // its official name travels as the hover title.
+    heading: true,
+    blurb: m.pebHeadingTitle,
+  }, ...entries];
 }
 
 /**
@@ -1802,7 +1741,6 @@ export function scheduleBruitRefinePoll({ payload, rescan }, clock = {}) {
 /** Last payload drawn, for the row legend the shell has no hook for. */
 let _payload = null;
 let _peb = null;
-let _pgs = null;
 
 /**
  * Draw one scan. Exported so a test can drive the production path against a
@@ -1820,48 +1758,44 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
   stopBruitRefinePoll();
   if (payload?.area === true) {
     _peb = null;
-    _pgs = null;
     return renderBruitArea({ payload, dataSource, classificationType });
   }
-  const peb = chooseBruitAnswer(payload?.peb, 'peb');
-  const pgs = chooseBruitAnswer(payload?.pgs, 'pgs');
+  const peb = chooseBruitAnswer(payload?.peb);
   _peb = peb;
-  _pgs = pgs;
   let drawn = 0;
   const reference = point && Number.isFinite(point.lon) && Number.isFinite(point.lat)
     ? { lon: point.lon, lat: point.lat } : null;
-  const spots = bruitBadgeSpots([
-    ...bruitBadgeOrder(payload?.peb, 'peb', () => reference),
-    ...bruitBadgeOrder(payload?.pgs, 'pgs', () => reference),
-  ], BRUIT_BADGE_SEPARATION_M.point, reference ? [reference] : []);
+  const spots = bruitBadgeSpots(
+    bruitBadgeOrder(payload?.peb, () => reference),
+    BRUIT_BADGE_SEPARATION_M.point,
+    reference ? [reference] : [],
+  );
 
-  for (const [kind, answer] of [['peb', peb], ['pgs', pgs]]) {
-    for (const band of bruitDrawOrder(payload?.[kind], kind)) {
-      const emphasis = bruitEmphasis(band, answer.winner);
-      const css = bruitZoneColorCss(kind, band.zone);
-      const description = bruitBandDescription(band, answer);
-      const name = bruitBandLabel(band);
-      addBruitBadges(dataSource, band, kind, spots.get(band.id), {
-        name,
-        description,
-        properties: { kind: `${kind}-zone-badge`, zone: band.zone, atPoint: band.atPoint },
-        scaleByDistance: new Cesium.NearFarScalar(800, 1.0, 14_000, 0.6),
-        translucencyByDistance: new Cesium.NearFarScalar(9000, 1.0, 20_000, 0.0),
-      });
-      // i18n-ignore-next-line — an entity id prefix, not a word.
-      drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
-        css,
-        fillAlpha: BRUIT_FILL_ALPHA[emphasis],
-        width: emphasis === 'nearby' ? BRUIT_OUTLINE_WIDTH_PX.nearby : BRUIT_OUTLINE_WIDTH_PX.inside,
-        // The dash is the second channel, beside the wash, saying "the service
-        // found this near your pixel, you are not standing in it".
-        dashed: emphasis === 'nearby',
-        classificationType,
-        name,
-        description,
-        properties: { kind: `${kind}-zone`, zone: band.zone, atPoint: band.atPoint, emphasis },
-      });
-    }
+  for (const band of bruitDrawOrder(payload?.peb)) {
+    const emphasis = bruitEmphasis(band, peb.winner);
+    const css = bruitZoneColorCss(band.zone);
+    const description = bruitBandDescription(band, peb);
+    const name = bruitBandLabel(band);
+    addBruitBadges(dataSource, band, spots.get(band.id), {
+      name,
+      description,
+      properties: { kind: 'peb-zone-badge', zone: band.zone, atPoint: band.atPoint },
+      scaleByDistance: new Cesium.NearFarScalar(800, 1.0, 14_000, 0.6),
+      translucencyByDistance: new Cesium.NearFarScalar(9000, 1.0, 20_000, 0.0),
+    });
+    // i18n-ignore-next-line — an entity id prefix, not a word.
+    drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
+      css,
+      fillAlpha: BRUIT_FILL_ALPHA[emphasis],
+      width: emphasis === 'nearby' ? BRUIT_OUTLINE_WIDTH_PX.nearby : BRUIT_OUTLINE_WIDTH_PX.inside,
+      // The dash is the second channel, beside the wash, saying "the service
+      // found this near your pixel, you are not standing in it".
+      dashed: emphasis === 'nearby',
+      classificationType,
+      name,
+      description,
+      properties: { kind: 'peb-zone', zone: band.zone, atPoint: band.atPoint, emphasis },
+    });
   }
 
   // ALWAYS, when there is a point — unlike the zoning layer, which plants no
@@ -1879,15 +1813,13 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
         width: 26,
         height: 26,
         color: Cesium.Color.fromCssColorString(
-          peb.winner ? bruitZoneColorCss('peb', peb.winner.zone)
-            : pgs.winner ? bruitZoneColorCss('pgs', pgs.winner.zone)
-              : BRUIT_UNKNOWN_ZONE_COLOR,
+          peb.winner ? bruitZoneColorCss(peb.winner.zone) : BRUIT_UNKNOWN_ZONE_COLOR,
         ),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'bruit-scan-point' },
-      name: bruitMarkerTitle(payload, peb, pgs),
-      description: bruitScanDescription(payload, peb, pgs),
+      name: bruitMarkerTitle(payload, peb),
+      description: bruitScanDescription(payload, peb),
     });
     drawn += 1;
   }
@@ -1922,59 +1854,53 @@ export const BRUIT_AREA_LABEL_FADE = Object.freeze({ near: 100_000, far: 200_000
 export function renderBruitArea({ payload, dataSource, classificationType }) {
   let drawn = 0;
   const byBand = new Map();
-  for (const kind of ['peb', 'pgs']) {
-    const entries = kind === 'pgs' ? payload?.pgsAerodromes : payload?.aerodromes;
-    for (const aerodrome of entries || []) {
-      for (const band of aerodrome.bands || []) byBand.set(band.id, aerodrome);
-    }
+  for (const aerodrome of payload?.aerodromes || []) {
+    for (const band of aerodrome.bands || []) byBand.set(band.id, aerodrome);
   }
   const aerodromePoint = (band) => {
     const aerodrome = byBand.get(band.id);
     return aerodrome && Number.isFinite(aerodrome.lon) && Number.isFinite(aerodrome.lat)
       ? { lon: aerodrome.lon, lat: aerodrome.lat } : null;
   };
-  const spots = bruitBadgeSpots([
-    ...bruitBadgeOrder(payload?.peb, 'peb', aerodromePoint),
-    ...bruitBadgeOrder(payload?.pgs, 'pgs', aerodromePoint),
-  ], BRUIT_BADGE_SEPARATION_M.area, (payload?.aerodromes || [])
-    .filter((entry) => Number.isFinite(entry.lon) && Number.isFinite(entry.lat))
-    .map((entry) => ({ lon: entry.lon, lat: entry.lat })));
-  for (const kind of ['peb', 'pgs']) {
-    for (const band of bruitDrawOrder(payload?.[kind], kind)) {
-      const aerodrome = byBand.get(band.id) || null;
-      const emphasis = bruitAreaEmphasis(band, aerodrome);
-      const css = bruitZoneColorCss(kind, band.zone);
-      const description = bruitBandDescription(band, null, { area: true });
-      const name = bruitBandLabel(band);
-      addBruitBadges(dataSource, band, kind, spots.get(band.id), {
-        name,
-        description,
-        properties: { kind: `${kind}-zone-badge`, zone: band.zone, area: true },
-        scaleByDistance: new Cesium.NearFarScalar(
-          BRUIT_AREA_LABEL_SCALE.near, 1.0, BRUIT_AREA_LABEL_SCALE.far, 0.65,
-        ),
-        translucencyByDistance: new Cesium.NearFarScalar(
-          BRUIT_AREA_LABEL_FADE.near, 1.0, BRUIT_AREA_LABEL_FADE.far, 0.0,
-        ),
-      });
-      // i18n-ignore-next-line — an entity id prefix, not a word.
-      drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
-        css,
-        fillAlpha: BRUIT_FILL_ALPHA[emphasis],
-        // Never `nearby`: there is no marker to be beside. See
-        // `bruitAreaEmphasis`.
-        width: BRUIT_OUTLINE_WIDTH_PX.inside,
-        dashed: false,
-        classificationType,
-        name,
-        description,
-        properties: { kind: `${kind}-zone`, zone: band.zone, area: true, emphasis },
-      });
-    }
+  const spots = bruitBadgeSpots(
+    bruitBadgeOrder(payload?.peb, aerodromePoint),
+    BRUIT_BADGE_SEPARATION_M.area,
+    (payload?.aerodromes || [])
+      .filter((entry) => Number.isFinite(entry.lon) && Number.isFinite(entry.lat))
+      .map((entry) => ({ lon: entry.lon, lat: entry.lat })),
+  );
+  for (const band of bruitDrawOrder(payload?.peb)) {
+    const aerodrome = byBand.get(band.id) || null;
+    const emphasis = bruitAreaEmphasis(band, aerodrome);
+    const css = bruitZoneColorCss(band.zone);
+    const description = bruitBandDescription(band, null, { area: true });
+    const name = bruitBandLabel(band);
+    addBruitBadges(dataSource, band, spots.get(band.id), {
+      name,
+      description,
+      properties: { kind: 'peb-zone-badge', zone: band.zone, area: true },
+      scaleByDistance: new Cesium.NearFarScalar(
+        BRUIT_AREA_LABEL_SCALE.near, 1.0, BRUIT_AREA_LABEL_SCALE.far, 0.65,
+      ),
+      translucencyByDistance: new Cesium.NearFarScalar(
+        BRUIT_AREA_LABEL_FADE.near, 1.0, BRUIT_AREA_LABEL_FADE.far, 0.0,
+      ),
+    });
+    // i18n-ignore-next-line — an entity id prefix, not a word.
+    drawn += drawBruitParts(dataSource, `bruit:${band.id}`, band.parts, {
+      css,
+      fillAlpha: BRUIT_FILL_ALPHA[emphasis],
+      // Never `nearby`: there is no marker to be beside. See
+      // `bruitAreaEmphasis`.
+      width: BRUIT_OUTLINE_WIDTH_PX.inside,
+      dashed: false,
+      classificationType,
+      name,
+      description,
+      properties: { kind: 'peb-zone', zone: band.zone, area: true, emphasis },
+    });
   }
 
-  const pgsByOaci = new Map((payload?.pgsAerodromes || [])
-    .filter((entry) => entry.oaci).map((entry) => [entry.oaci, entry]));
   for (const aerodrome of payload?.aerodromes || []) {
     if (!Number.isFinite(aerodrome.lat) || !Number.isFinite(aerodrome.lon)) continue;
     dataSource.entities.add({
@@ -1985,16 +1911,12 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
         image: bruitMarkerGlyph(),
         width: 24,
         height: 24,
-        color: Cesium.Color.fromCssColorString(
-          bruitZoneColorCss('peb', aerodrome.top?.zone),
-        ),
+        color: Cesium.Color.fromCssColorString(bruitZoneColorCss(aerodrome.top?.zone)),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       properties: { kind: 'bruit-aerodrome', oaci: aerodrome.oaci, area: true },
       name: bruitAerodromeTitle(aerodrome),
-      description: bruitAerodromeDescription(
-        aerodrome, payload, aerodrome.oaci ? pgsByOaci.get(aerodrome.oaci) ?? null : null,
-      ),
+      description: bruitAerodromeDescription(aerodrome, payload),
     });
     drawn += 1;
   }
@@ -2046,12 +1968,11 @@ export function summarizeBruit(payload) {
       // marker the overview does not have.
       aerodromes: payload.aerodromes?.length || 0,
       zonesHere: 0,
-      zonesDrawn: (payload.peb?.length || 0) + (payload.pgs?.length || 0),
+      zonesDrawn: payload.peb?.length || 0,
       dropped: payload.dropped ?? 0,
       missing: payload.missing ?? 0,
       radiusKm: payload.radiusKm ?? null,
       nearbyCount: 0,
-      pgsAerodromes: payload.pgsAerodromes?.length || 0,
       mixedIndex: payload.mixedIndex === true,
       disputed: payload.disputed === true,
       revised: payload.revised === true,
@@ -2075,13 +1996,12 @@ export function summarizeBruit(payload) {
       available: payload?.available ?? null,
     };
   }
-  const peb = chooseBruitAnswer(payload?.peb, 'peb');
-  const pgs = chooseBruitAnswer(payload?.pgs, 'pgs');
+  const peb = chooseBruitAnswer(payload?.peb);
   const airports = new Set((payload?.peb || [])
     .filter((band) => band.atPoint === true).map((band) => band.oaci).filter(Boolean));
   return {
     zonesHere: peb.eligible,
-    zonesDrawn: (payload?.peb?.length || 0) + (payload?.pgs?.length || 0),
+    zonesDrawn: payload?.peb?.length || 0,
     nearbyCount: payload?.nearbyCount ?? 0,
     winnerZone: peb.winner?.zone ?? null,
     winnerRule: peb.rule,
@@ -2094,7 +2014,6 @@ export function summarizeBruit(payload) {
     revised: payload?.revised === true,
     overlapping: peb.overlapping,
     airportsHere: airports.size,
-    pgsZone: pgs.winner?.zone ?? null,
     nearestKm: Number.isFinite(payload?.nearest?.distanceKm) ? payload.nearest.distanceKm : null,
     nearestOaci: payload?.nearest?.oaci ?? null,
     register: payload?.register ?? null,
@@ -2106,7 +2025,7 @@ export function summarizeBruit(payload) {
 const bruitScanLayer = createAddressScanLayer({
   id: BRUIT_FR_LAYER_ID,
   // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
-  name: 'Bruit des aéroports (PEB/PGS)',
+  name: 'Bruit des aéroports (PEB)',
   icon: '🔊',
   source: BRUIT_SOURCE,
   // i18n-ignore-end
@@ -2173,14 +2092,13 @@ const bruitFranceLayer = {
 /** Seed the drawn state, for tests that do not construct a viewer. */
 export function _setBruitStateForTest(payload) {
   _payload = payload;
-  _peb = chooseBruitAnswer(payload?.peb, 'peb');
-  _pgs = chooseBruitAnswer(payload?.pgs, 'pgs');
-  return { peb: _peb, pgs: _pgs };
+  _peb = chooseBruitAnswer(payload?.peb);
+  return { peb: _peb };
 }
 
-/** The chosen answers for the last drawn payload. */
+/** The chosen answer for the last drawn payload. */
 export function _bruitAnswersForTest() {
-  return { peb: _peb, pgs: _pgs };
+  return { peb: _peb };
 }
 
 /** Row controls, for tests that do not construct a viewer. */

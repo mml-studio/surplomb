@@ -8199,9 +8199,7 @@
 },
 "bruit": {
 "peb": [],
-"pgs": [],
 "airports": [],
-"pgsAirports": [],
 "point": {
 "lat": 48.83,
 "lon": 2.376
@@ -8223,10 +8221,9 @@
 },
 "scaleDenominator": 39757,
 "available": {
-"peb": true,
-"pgs": true
+"peb": true
 },
-"source": "Plans d’exposition au bruit et plans de gêne sonore — DGAC, via la Géoplateforme (data.geopf.fr)",
+"source": "Plans d’exposition au bruit — DGAC, via la Géoplateforme (data.geopf.fr)",
 "register": {
 "count": 224,
 "total": 224,
