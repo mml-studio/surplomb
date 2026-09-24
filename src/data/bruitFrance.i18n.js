@@ -342,11 +342,6 @@ export default defineMessages({
    * hover away, on the heading.
    */
   legend: {
-    pebHeading: { fr: 'Ce qu’on peut construire', en: 'What can be built' },
-    pebHeadingTitle: {
-      fr: 'Plan d’exposition au bruit (PEB) : la règle d’urbanisme autour de l’aéroport',
-      en: 'Noise exposure plan (PEB): the planning rule around the airport',
-    },
     /** How loud each zone is, in words. */
     loudness: {
       A: { fr: 'Bruit très fort', en: 'Very loud' },
@@ -360,16 +355,6 @@ export default defineMessages({
           + '“Quieter” is relative on purpose.',
       },
     },
-    /** What a PEB zone means for a new home, in a few words. */
-    pebRule: {
-      A: { fr: 'pas de nouveaux logements', en: 'no new homes' },
-      B: { fr: 'presque pas de nouveaux logements', en: 'almost no new homes' },
-      C: {
-        fr: 'quelques logements neufs, isolation obligatoire',
-        en: 'a few new homes, insulation required',
-      },
-      D: { fr: 'construction libre, isolation obligatoire', en: 'building allowed, insulation required' },
-    },
     unknown: { fr: 'Zone non précisée', en: 'Zone not given' },
     unknownBlurb: {
       fr: 'le plan officiel ne dit pas laquelle',
@@ -379,6 +364,61 @@ export default defineMessages({
       fr: (count) => `${count} en pointillés : à côté du repère, pas dessous`,
       en: (count) => `${count} dashed: beside the marker, not under it`,
       sample: [2],
+    },
+    /**
+     * The key drawn as a card, in the words of the approved mock of
+     * « Aéroports » (2026-09-24). Its title is the row's tile, « Bruit &
+     * urbanisme »; its kicker the airport.
+     */
+    cardSubtitle: {
+      fr: 'Plan d’exposition au bruit · PEB',
+      en: 'Noise exposure plan · PEB',
+      keep: ['PEB'],
+    },
+    clickHint: {
+      fr: 'Des règles s’appliquent aux constructions. Cliquez sur une zone pour les comprendre.',
+      en: 'Rules apply to what is built here. Click a zone to read them.',
+    },
+    notLive: {
+      fr: 'Ce plan ne mesure pas le bruit en direct.',
+      en: 'This plan does not measure noise live.',
+      note: 'A PEB is a planning document drawn from forecast traffic, not a sound meter.',
+    },
+    planLink: { fr: 'Consulter le plan officiel', en: 'Open the official plan' },
+    /**
+     * What a zone means for a new home, as the first line of its card in the
+     * key — the rule in words, the zone's loudness being its title already.
+     */
+    zoneRule: {
+      A: { fr: 'Pas de nouveaux logements.', en: 'No new homes.' },
+      B: { fr: 'Presque pas de nouveaux logements.', en: 'Almost no new homes.' },
+      C: {
+        fr: 'Quelques logements neufs, isolation obligatoire.',
+        en: 'A few new homes, insulation required.',
+      },
+      D: { fr: 'Construction possible, isolation obligatoire.', en: 'Building allowed, insulation required.' },
+    },
+    /** An airport's tag, clicked: its plan in one line. */
+    airportZones: {
+      fr: (count) => `${count} zone${count > 1 ? 's' : ''} de bruit autour de l’aéroport.`,
+      en: (count) => `${count} noise ${count > 1 ? 'zones' : 'zone'} around the airport.`,
+      sample: [4],
+    },
+    /** The clicked zone, as its card in the key and its tag on the globe name it. */
+    zoneTitle: {
+      fr: (zone, loudness) => `Zone ${zone} · ${loudness}`,
+      en: (zone, loudness) => `Zone ${zone} · ${loudness}`,
+      sample: ['B', 'Loud'],
+    },
+  },
+
+  /** The airport menu at the head of the « Aéroports » row. */
+  picker: {
+    label: { fr: 'Aéroport', en: 'Airport' },
+    placeholder: { fr: 'Choisir un aéroport', en: 'Choose an airport' },
+    title: {
+      fr: 'Aller au plan d’exposition au bruit d’un aéroport',
+      en: 'Go to an airport’s noise exposure plan',
     },
   },
 

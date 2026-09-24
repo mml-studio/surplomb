@@ -272,7 +272,7 @@ async function main() {
         }
       }
       return {
-        chips: (controls?.chips || []).map((chip) => chip.id),
+        floors: (controls?.select?.options || []).map((option) => option.value),
         legend: (controls?.legend || []).map((item) => ({ label: item.label, count: item.count })),
         colours: [...colours.entries()].map(([tier, set]) => [tier, [...set]]),
         sizes: [...sizeByClass.entries()].map(([klass, set]) => [klass, [...set]]),
@@ -283,7 +283,7 @@ async function main() {
     });
 
     record('the row offers the three display floors',
-      tiers.chips.join(',') === 'all,airports,airlines', tiers.chips.join(','));
+      tiers.floors.join(',') === 'all,airports,airlines', tiers.floors.join(','));
     // Three tier rows, and that is the whole key. It was ten, then five: the
     // four length classes and the unmeasured ring went first — one 40-word
     // blurb repeated four times to restate metre bounds nobody reads back off

@@ -6,6 +6,29 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **« Aéroports » reads like its approved mock.** The row opens, while
+  « Bruit & urbanisme » (“Noise & planning”) is lit, on an airport menu: the
+  224 airports that have a noise exposure plan, named the way a reader knows
+  them — « Paris-Charles-de-Gaulle · CDG », not the register's « P. CH.
+  DE-GAULLE » — and picking one flies the camera to its whole plan. Under it,
+  two tiles drawn as lines with a glyph, a line of what they show and a round
+  light: « Les aéroports » (“Airports”) and « Bruit & urbanisme ». The
+  airports' TOUS / AÉROPORTS / LIGNES chips became an « Afficher » (“Show”)
+  menu. The mock's third tile, « Aides à l'isolation », was the PGS, which
+  left the app the same day.
+- **The noise key is a card.** It names the airport the view is about, then
+  « Bruit & urbanisme », « Plan d’exposition au bruit · PEB », the four zones
+  by how loud they are, « Des règles s’appliquent aux constructions. Cliquez
+  sur une zone pour les comprendre. Ce plan ne mesure pas le bruit en direct. »
+  (“Rules apply to what is built here. Click a zone to read them. This plan
+  does not measure noise live.”) and a « Consulter le plan officiel » (“Open
+  the official plan”) button to the airport's arrêté. A clicked zone prints
+  its card under it — « Zone A · Bruit très fort » and what it means for a new
+  home — and the globe keeps only that name.
+- **Each airport whose plan is drawn wears its name on the globe**: a plane,
+  « Paris-Charles-de-Gaulle · CDG », in the panels' green, where a loudspeaker
+  glyph stood. The tags step aside while « Les aéroports » is on, since its
+  own labels already name every field.
 - **« Grands incendies » can stand the Gironde fire up in 3D.** A switch over
   the key, « Au sol » / « Temps en 3D », lifts the three stages of the fire off
   the map: 22-23 July floats lowest, 24-25 July above it, 26 July → 1 August

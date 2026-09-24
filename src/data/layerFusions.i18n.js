@@ -204,6 +204,9 @@ export default defineMessages({
    * layerFusions.js), keyed `<primary>:<tile key>`. `label` is the tile,
    * `title` its tooltip, and `hint` the line printed under the tiles while that
    * tile is lit. Words of the approved mock of « Urbanisme » (2026-09-23).
+   * A tile drawn as a line (one with an icon) prints `blurb` under its name:
+   * what it shows, in the words of the approved mock of « Aéroports »
+   * (2026-09-24).
    */
   rowTiles: {
     'ads-fr:permits': {
@@ -220,6 +223,22 @@ export default defineMessages({
         fr: 'Ce qu’on peut construire ici : le zonage du PLU et les servitudes',
         en: 'What may be built here: the PLU zoning and the easements',
         keep: ['PLU'],
+      },
+    },
+    'local-airports:airports': {
+      label: { fr: 'Les aéroports', en: 'Airports' },
+      blurb: { fr: 'Repérer les aéroports et leurs environs', en: 'Find airports and what surrounds them' },
+      title: {
+        fr: 'Aéroports, aérodromes et aéroclubs, avec leurs pistes et leur emprise',
+        en: 'Airports, airfields and flying clubs, with their runways and their grounds',
+      },
+    },
+    'local-airports:noise': {
+      label: { fr: 'Bruit & urbanisme', en: 'Noise & planning' },
+      blurb: { fr: 'Voir l’exposition au bruit (PEB)', en: 'See the noise exposure plan (PEB)', keep: ['PEB'] },
+      title: {
+        fr: 'Le plan d’exposition au bruit : où le bruit des avions limite ce qu’on peut construire',
+        en: 'The noise exposure plan: where aircraft noise limits what may be built',
       },
     },
   },

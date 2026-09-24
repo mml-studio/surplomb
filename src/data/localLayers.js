@@ -4,6 +4,7 @@ import submarineCablesLayer from './telegeographySubmarineCables.js';
 import {
   AIRPORT_DISPLAY_FLOORS,
   AIRPORT_TIER_STYLES,
+  airportFloorSelect,
   airportTier,
   airportTierLegend,
   airportTierVisible,
@@ -200,7 +201,31 @@ const ports = createLocalGeoJsonLayer({
 // for no attribution and the IGN requires one, so the credit is not optional
 // here: it is on the row, on the card line that prints the outline, and in the
 // attribution popover.
-const airports = createLocalGeoJsonLayer({
+/**
+ * The airports' labels are on the globe while this layer is ON — published for
+ * the noise layer, whose airport tags (`bruitFrance.js`) step aside then, so a
+ * field is named once and never twice. A board entry and not an import, as
+ * every join between layers is (`layerJoins.js`); the pack's own `onFeatures`
+ * offer would not do, since it outlives a disable.
+ * @param {object} layer
+ * @returns {object}
+ */
+function withAirportLabelsJoin(layer) {
+  let release = null;
+  const drop = () => { release?.(); release = null; };
+  return {
+    ...layer,
+    enable: async (...args) => {
+      const enabled = await layer.enable(...args);
+      if (enabled !== false && !release) release = publishJoin('airports/labels', () => true);
+      return enabled;
+    },
+    disable: (...args) => { drop(); return layer.disable(...args); },
+    destroy: (...args) => { drop(); return layer.destroy?.(...args); },
+  };
+}
+
+const airports = withAirportLabelsJoin(createLocalGeoJsonLayer({
   id: 'local-airports',
   url: airportsUrl,
   // i18n-ignore-start — registry fields, not copy: see src/data/layerTaxonomy.i18n.js.
@@ -236,20 +261,19 @@ const airports = createLocalGeoJsonLayer({
   stemMaxHeightM: 150,
   // Opens on TOUS: a visitor who turns the layer on asked to see the airports,
   // and a layer that hides 1 126 of them before being asked would be answering
-  // a question nobody put. The chip is there the moment they want it.
+  // a question nobody put. The menu is there the moment they want it.
+  //
+  // A MENU, NOT CHIPS (2026-09-24): the row's members are tiles under it
+  // (`rowTiles` in layerFusions.js), which take the chip strip's place, so the
+  // floors are the « Afficher » select under « Les aéroports », as the
+  // permits' period is under « Permis & travaux ».
   defaultParams: { floor: AIRPORT_DISPLAY_FLOORS[0].id },
   rowControls: (params, tally) => ({
-    chips: AIRPORT_DISPLAY_FLOORS.map((floor) => ({
-      id: floor.id,
-      label: floor.label,
-      active: params.floor === floor.id,
-      state: params.floor === floor.id ? 'active' : 'idle',
-      title: floor.title,
-      params: { floor: floor.id },
-    })),
+    chips: [],
+    select: airportFloorSelect(params),
     legend: airportTierLegend(tally),
   }),
-});
+}));
 
 // Live NASA FIRMS fires (VIIRS ×3 NRT via the /api/firms proxy). The id keeps
 // the historical `local-` prefix for persistence + voice-tool-enum compat,

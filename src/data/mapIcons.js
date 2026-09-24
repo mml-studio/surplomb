@@ -120,8 +120,8 @@ export const MAP_ICON_HALO_COLOR = 'rgba(0,0,0,0.62)';
  * Retrieved 2026-09-02 (aerialway, harbor), 2026-09-14 (bicycle, scooter,
  * car, charging-station, communications-tower, doctor, hospital) and 2026-09-15
  * (restaurant, bakery, bank, fitness-centre, library, grocery, pharmacy, post,
- * fuel, police, swimming) at commit 28e2a3602e4b from `icons/<name>.svg` — the
- * same upstream HEAD on all three dates.
+ * fuel, police, swimming), and 2026-09-24 (airport) at commit 28e2a3602e4b from
+ * `icons/<name>.svg` — the same upstream HEAD on all four dates.
  *
  * @see licenses/maki/NOTICE
  */
@@ -300,7 +300,12 @@ export const MAKI_PATHS = Object.freeze({
   // The wave band is what carries it small: by 12 px the swimmer has become a
   // mass, but the two horizontal ripples under it are still two ripples, and
   // nothing else in this set has them.
-  swimming: 'M10.1113,2C9.9989,2,9.6758,2.1465,9.6758,2.1465L6.3535,3.8262 C5.9111,4.0024,5.7358,4.7081,6.002,5.0605l0.9707,1.4082L3.002,8.498L5,9.998l2.502-1.5l2.5,1.5l1.002-1.002l-3-4l2.5566-1.5293 c0.5286-0.2662,0.4434-0.7045,0.4434-0.9707C10.9999,2.2861,10.6437,2,10.1113,2z M12.252,5C11.2847,5,10.5,5.7827,10.5,6.75 s0.7847,1.752,1.752,1.752s1.75-0.7847,1.75-1.752S13.2192,5,12.252,5z M2.5,10L0,11.5V13l2.5-1.5L5,13l2.502-1.5l2.5,1.5L12,11.5 l3,1.5v-1.5L12,10l-1.998,1.5l-2.5-1.5L5,11.5L2.5,10z',
+  swimming: 'M10.1113,2C9.9989,2,9.6758,2.1465,9.6758,2.1465L6.3535,3.8262 C5.9111,4.0024,5.7358,4.7081,6.002,5.0605l0.9707,1.4082L3.002,8.498L5,9.998l2.502-1.5l2.5,1.5l1.002-1.002l-3-4l2.5566-1.5293 c0.5286-0.2662,0.4434-0.7045,0.4434-0.9707C10.9999,2.2861,10.6437,2,10.1113,2z M12.252,5C11.2847,5,10.5,5.7827,10.5,6.75 s0.7847,1.752,1.752,1.752s1.75-0.7847,1.75-1.752S13.2192,5,12.252,5z M2.5,10L0,11.5V13l2.5-1.5L5,13l2.502-1.5l2.5,1.5L12,11.5 l3,1.5v-1.5L12,10l-1.998,1.5l-2.5-1.5L5,11.5L2.5,10z',  // An airliner seen from above — the tag the noise layer puts over each
+  // airport whose plan it draws (`bruitFrance.js`), beside the field's name.
+  // Retrieved 2026-09-24 at the same commit; the path's own line breaks
+  // (`&#xA;&#x9;` in the published file) are written as spaces.
+  airport: 'M15,6.8182L15,8.5l-6.5-1 l-0.3182,4.7727L11,14v1l-3.5-0.6818L4,15v-1l2.8182-1.7273L6.5,7.5L0,8.5V6.8182L6.5,4.5v-3c0,0,0-1.5,1-1.5s1,1.5,1,1.5v2.8182 L15,6.8182z',
+
 });
 
 /**

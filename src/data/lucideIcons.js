@@ -201,6 +201,16 @@ export const LUCIDE_ICONS = Object.freeze({
     '<path d="M3 3v5h5"/>',
     '<path d="M12 7v5l4 2"/>',
   ]),
+  // Bars of a sound level — the « Bruit & urbanisme » tile of « Aéroports »,
+  // under the row. « Les aéroports » beside it reuses `plane`.
+  'audio-lines': Object.freeze([
+    '<path d="M2 10v3"/>',
+    '<path d="M6 6v11"/>',
+    '<path d="M10 3v18"/>',
+    '<path d="M14 8v7"/>',
+    '<path d="M18 5v13"/>',
+    '<path d="M22 10v3"/>',
+  ]),
 });
 
 const _cache = new Map();

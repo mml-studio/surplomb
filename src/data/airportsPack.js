@@ -1127,24 +1127,45 @@ export const AIRPORT_DISPLAY_FLOORS = Object.freeze([
   Object.freeze({
     id: 'all',
     get label() { return messages().floors.all.label; },
+    get option() { return messages().floors.all.option; },
     keep: Object.freeze(['airline', 'airport', 'airfield']),
     get title() { return messages().floors.all.title; },
   }),
   Object.freeze({
     id: 'airports',
     get label() { return messages().floors.airports.label; },
+    get option() { return messages().floors.airports.option; },
     keep: Object.freeze(['airline', 'airport']),
     get title() { return messages().floors.airports.title; },
   }),
   Object.freeze({
     id: 'airlines',
     get label() { return messages().floors.airlines.label; },
+    get option() { return messages().floors.airlines.option; },
     keep: Object.freeze(['airline']),
     get title() { return messages().floors.airlines.title; },
   }),
 ]);
 
 const FLOOR_BY_ID = new Map(AIRPORT_DISPLAY_FLOORS.map((floor) => [floor.id, floor]));
+
+/**
+ * The « Afficher » menu under the row's tiles: the display floors as a select,
+ * in the shape the Layers panel draws for a row tile's member (`select`).
+ * @param {{floor?: string}} [params] Layer runtime params.
+ * @returns {{param: string, label: string, value: string, title: string,
+ *   options: Array<{value: string, label: string}>}}
+ */
+export function airportFloorSelect(params = {}) {
+  const floor = airportDisplayFloor(params?.floor);
+  return {
+    param: 'floor',
+    label: messages().floorMenu,
+    value: floor.id,
+    title: floor.title,
+    options: AIRPORT_DISPLAY_FLOORS.map((entry) => ({ value: entry.id, label: entry.option })),
+  };
+}
 
 /** The floor a params object selects, falling back to "show everything". */
 export function airportDisplayFloor(floorId) {
