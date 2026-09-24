@@ -6053,17 +6053,23 @@ easier to meet (detection is now on more often), but does not create it.
   healthy while the junction someone is watching still has both flows moving.
   What it deliberately does not model: junction geometry, turning movements,
   and local phase offsets.
-- **Traffic hands its dots to the detection overlay only through the `CADRES`
-  row chip** (2026-09-21, param `vehicleFrames`, OFF by default, session-only
-  like the other two chips). The dots are simulated cars, so a bracket and a
-  `VEH-0412` id over one claimed a tracked object that does not exist; with the
-  chip off `getDetectableObjects()` returns nothing, which is what removes the
-  frames for a first-run visitor (detection itself is on at Balanced there).
-  The chip keeps the old claim: `DETECTION_DEMANDING_LAYERS` (`ui.js`) is ORed
-  into the Contacts detection claim, gated on the module's
-  `demandsDetection()`, and a `params` event re-runs the sync — so turning the
-  frames on switches detection on (tactical Dense @ 75 %) if it was off, and
-  turning them (or the layer) off replays the snapshot.
+- **Traffic hands its dots to the detection overlay through the `CADRES`
+  row chip** (param `vehicleFrames`, session-only like the other two chips),
+  **ON by default again since 2026-09-24.** It was OFF from 2026-09-21 (#308),
+  because the dots are simulated cars and a bracket and a `VEH-0412` id over
+  one claimed a tracked object; the owner then missed the framed cars — what
+  made the layer read as traffic at a glance — and asked for them back. The key
+  and the flow card still say the cars are simulated. With the chip off
+  `getDetectableObjects()` returns nothing. The chip carries the claim:
+  `DETECTION_DEMANDING_LAYERS` (`ui.js`) is ORed into the Contacts detection
+  claim, gated on the module's `demandsDetection()`, and a `params` event
+  re-runs the sync — so with the frames on, detection is switched on (tactical
+  Dense @ 75 %) if it was off, and turning them (or the layer) off replays the
+  snapshot. A first run already has detection on at Balanced, so the claim
+  changes nothing there. The brackets live on the detection overlay's
+  `screen`-blended surface: they glow over the satellite and photoreal
+  basemaps (the default) and nearly vanish over the light OSM and IGN Plan
+  maps, where a pale colour screened over a pale ground stays pale.
 - Traffic runs in `sim` mode (light-grey dots, class-table speeds capped by OSM
   `maxspeed`) unless `TOMTOM_API_KEY`
   is configured (env or Keychain `tomtom-api`/`api-key`), which enables `live` mode:

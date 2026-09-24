@@ -275,8 +275,8 @@ test('re-entrancy is decided by the saved snapshot, not the engine state', () =>
 
 test('a layer that wants the brackets claims the SAME snapshot Contacts uses', () => {
   // Road traffic renders ~2 000 bare points and can ask for the bracket. Since
-  // 2026-09-21 it asks only through its `CADRES` chip (the diagnostic view):
-  // the cars are simulated, and a default frame + id claimed a tracked object.
+  // 2026-09-21 it asks only through its `CADRES` chip (ON by default again
+  // since 2026-09-24), so the chip — not the layer — is the claim.
   // It rides the Contacts mechanism rather than a second one — two owners each
   // holding their own pre-state would restore each other's.
   assert.match(
