@@ -689,17 +689,18 @@ let _flowRibbon = 'on';
 let _flowFetchedAt = null;
 /**
  * `CADRES` row chip: hand the dots to the detection overlay as `VEH-…`
- * contacts. OFF by default since 2026-09-21.
+ * contacts. ON by default again since 2026-09-24.
  *
- * A bracket and an id say "this object is tracked". Nothing tracks these: they
- * are simulated cars on a measured road, and a frame with `VEH-0412` over one
- * was the loudest thing on the layer while being the least true. The frame is
- * still one chip away for whoever wants to watch the simulation work — the
- * diagnostic view — and turning it on still claims detection through the same
- * snapshot Contacts uses (`ui.js` DETECTION_DEMANDING_LAYERS).
+ * It was OFF from 2026-09-21 (#308): a bracket and an id say "this object is
+ * tracked", and nothing tracks these simulated cars. Three days later the
+ * owner found the layer had lost what made it read as traffic at a glance —
+ * the moving cars, each in its small frame — and asked for it back. The key
+ * and the flow card still say the vehicles are simulated; the chip turns the
+ * frames off for whoever wants the bare dots. Turning it on claims detection
+ * through the same snapshot Contacts uses (`ui.js` DETECTION_DEMANDING_LAYERS).
  * @type {'on'|'off'}
  */
-let _vehicleFrames = 'off';
+let _vehicleFrames = 'on';
 /** @type {boolean|null} GroundPolylinePrimitive.isSupported, checked once. */
 let _heatSupported = null;
 /** @type {number} Altitude of the last render, for late-flow heat rebuilds. */
@@ -4970,11 +4971,11 @@ const trafficLayer = {
    * Whether this layer is asking for the detection overlay right now.
    *
    * Read by `ui.js` for DETECTION_DEMANDING_LAYERS: the claim follows the
-   * `CADRES` chip, not the layer. A reader who had switched detection off no
-   * longer gets it switched back on — under the tactical Dense @ 75 % preset —
-   * because the default traffic layer loaded. (A first run already has
-   * detection on at Balanced; what removes the frames there is
-   * `getDetectableObjects` answering nothing.)
+   * `CADRES` chip, not the layer. With the chip on (the default), a reader who
+   * had switched detection off gets it back — under the tactical Dense @ 75 %
+   * preset — when the traffic layer loads; turning the chip off withdraws the
+   * claim. (A first run already has detection on at Balanced, so the claim
+   * changes nothing there.)
    * @returns {boolean}
    */
   demandsDetection() {
@@ -4994,7 +4995,7 @@ const trafficLayer = {
    * @returns {Array<{position:Cesium.Cartesian3, id:string, type:string}>}
    */
   getDetectableObjects(options = {}) {
-    // Frames and `VEH-…` ids are the diagnostic view — see `_vehicleFrames`.
+    // Frames and `VEH-…` ids follow the `CADRES` chip — see `_vehicleFrames`.
     if (!_enabled || _vehicleFrames !== 'on' || _dots.length === 0) return [];
     const maxCount = Number.isFinite(options.maxCount)
       ? Math.max(1, Math.floor(options.maxCount))

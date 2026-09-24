@@ -524,10 +524,10 @@ const FIRST_RUN_DETECTION_PRESET = Object.freeze({ mode: 'balanced', densityPct:
  * turn one into a READ object — a bracket, an id, and in live mode a
  * congestion-tiered frame whose canvas sits above the post-FX chain. It was
  * asked for as the default on 2026-09-14 ("je voudrais que le cadre soit par
- * défaut sur ce datalayer"), and withdrawn on 2026-09-21: the cars are
- * simulated, so a frame and a `VEH-0412` over one claimed a tracked identity
- * that does not exist, and it was the loudest mark on the layer. The claim now
- * belongs to the layer's `CADRES` chip — the diagnostic view — read through the
+ * défaut sur ce datalayer"), withdrawn on 2026-09-21 (the cars are simulated,
+ * so a frame and a `VEH-0412` over one claimed a tracked identity), and made
+ * the default again on 2026-09-24, when the owner missed the framed cars. The
+ * claim belongs to the layer's `CADRES` chip, ON by default, read through the
  * module's `demandsDetection()`.
  *
  * The mechanism is the one Contacts already uses, unchanged: claiming takes a

@@ -509,6 +509,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The traffic cars have their frames back.** Each simulated car on « Trafic
+  routier » is framed again, in the colour of its road (coral when jammed,
+  amber when slowed, mint when free), and a few carry their `VEH-…` number —
+  the way the layer read before 2026-09-21, when the frames went behind the
+  « CADRES » chip. The chip still takes them off, and the key and the road card
+  still say the cars are simulated. On the light road maps (OSM, IGN Plan) the
+  frames are hard to see: they are painted to glow over photographs.
 - **Selecting an antenna no longer freezes the map while its line of sight is
   worked out.** The ground the mast can see is now computed in the
   background: the page used to stall for a quarter to a third of a second on

@@ -20,6 +20,7 @@ import trafficLayer, {
 } from './traffic.js';
 import { withLocale } from '../i18n/testing.js';
 import { DataLayerManager, layerFeedState } from './manager.js';
+import { LAYER_MANIFEST } from './layerManifest.js';
 
 /**
  * The app's live markers. Case-SENSITIVE on purpose: uppercase LIVE/GPS is
@@ -367,18 +368,25 @@ test('one parked view spends a bounded number of refreshes on the shared budget'
 
 // ─── The diagnostic frames ────────────────────────────────────────────────
 
-test('the VEH frames are off by default and are the only claim on detection', () => {
-  assert.equal(trafficLayer.getParams().vehicleFrames, 'off');
+test('the VEH frames are on by default and are the only claim on detection', () => {
+  assert.equal(trafficLayer.getParams().vehicleFrames, 'on');
+  // A disabled layer frames nothing and claims nothing, chip or not.
   assert.deepEqual(trafficLayer.getDetectableObjects({ maxCount: 10 }), []);
   assert.equal(trafficLayer.demandsDetection(), false);
-  trafficLayer.setParams({ vehicleFrames: 'on' });
+  trafficLayer.setParams({ vehicleFrames: 'off' });
   try {
-    assert.equal(trafficLayer.getParams().vehicleFrames, 'on');
-    // A disabled layer claims nothing, chip or not.
+    assert.equal(trafficLayer.getParams().vehicleFrames, 'off');
     assert.equal(trafficLayer.demandsDetection(), false);
+    trafficLayer.setParams({ vehicleFrames: 'sideways' });
+    assert.equal(trafficLayer.getParams().vehicleFrames, 'off', 'an unknown value is ignored');
   } finally {
-    trafficLayer.setParams({ vehicleFrames: 'off' });
+    trafficLayer.setParams({ vehicleFrames: 'on' });
   }
-  trafficLayer.setParams({ vehicleFrames: 'sideways' });
-  assert.equal(trafficLayer.getParams().vehicleFrames, 'off', 'an unknown value is ignored');
+});
+
+test('the manifest opens the traffic layer with its VEH frames on', () => {
+  const traffic = LAYER_MANIFEST.find((entry) => entry.id === 'traffic');
+  assert.equal(traffic.defaultParams.vehicleFrames, 'on');
+  assert.equal(traffic.defaultParams.vehicleFrames, trafficLayer.getParams().vehicleFrames,
+    'the module and the manifest agree on the default');
 });
