@@ -422,3 +422,39 @@ test('row tiles are refused unless every offered member is in exactly one', () =
     tiles: [{ id: 'a', icon: 'cable', color: '#000000' }],
   }), ids), /both tiles and rowTiles/);
 });
+
+test('« Aéroports » draws its members as two lines under the row, each with a glyph', () => {
+  // The approved mock of 2026-09-24. Its third line, « Aides à l'isolation »,
+  // was the PGS, which left the app with #364.
+  assert.deepEqual(fusionToggleGroupFor('local-airports'), ['local-airports', 'bruit-fr']);
+  const tiles = fusionRowTilesFor('local-airports');
+  assert.deepEqual(tiles.map((tile) => [tile.key, [...tile.ids]]), [
+    ['airports', ['local-airports']],
+    ['noise', ['bruit-fr']],
+  ]);
+  assert.deepEqual(tiles.map((tile) => tile.label), ['Les aéroports', 'Bruit & urbanisme']);
+  assert.deepEqual(tiles.map((tile) => tile.blurb), [
+    'Repérer les aéroports et leurs environs',
+    'Voir l’exposition au bruit (PEB)',
+  ]);
+  assert.ok(tiles.every((tile) => tile.icon.startsWith('data:image/svg+xml;base64,')));
+  // « Urbanisme » keeps its squares: no glyph, no blurb.
+  assert.ok(fusionRowTilesFor('ads-fr').every((tile) => tile.icon === null && tile.blurb === ''));
+});
+
+test('row tiles give a glyph to every tile or to none, and only a vendored one', () => {
+  const ids = ['a', 'b'];
+  const row = (rowTiles) => [{ primary: 'a', companions: [{ id: 'b', chip: 'B' }], rowTiles }];
+  assert.equal(validateLayerFusions(row([
+    { key: 'one', ids: ['a'], label: 'Un', icon: 'plane' },
+    { key: 'two', ids: ['b'], label: 'Deux', icon: 'audio-lines' },
+  ]), ids), true);
+  assert.throws(() => validateLayerFusions(row([
+    { key: 'one', ids: ['a'], label: 'Un', icon: 'plane' },
+    { key: 'two', ids: ['b'], label: 'Deux' },
+  ]), ids), /icon on some tiles only/);
+  assert.throws(() => validateLayerFusions(row([
+    { key: 'one', ids: ['a'], label: 'Un', icon: 'plane' },
+    { key: 'two', ids: ['b'], label: 'Deux', icon: 'no-such-glyph' },
+  ]), ids), /unknown icon: a:two → no-such-glyph/);
+});

@@ -172,6 +172,74 @@ function reorderChildren(parent, nodes) {
 }
 
 /**
+ * A member's `picker`, checked and normalised, or null.
+ *
+ * The picker is the menu a lit tile puts at the head of its row — the
+ * airport whose noise plan « Bruit & urbanisme » shows. It is not a `select`:
+ * a select sets a layer param the share link carries, while a pick is an
+ * ACTION the layer performs (it flies the camera), so the choice is handed to
+ * the layer's `pickRowOption(id, value)` and the menu then shows whatever the
+ * layer reports as `value`. An option may carry a short `code` (« CDG »),
+ * printed beside the name. `value` is '' while nothing is picked, and the
+ * `placeholder` shows instead.
+ * @param {*} picker
+ * @returns {?{id: string, label: string, title: string, icon: ?string,
+ *   placeholder: string, value: string,
+ *   options: Array<{value: string, label: string, code: ?string}>}}
+ */
+export function rowPickerOf(picker) {
+  const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+  const id = text(picker?.id);
+  if (!id || !Array.isArray(picker.options)) return null;
+  const options = picker.options
+    .map((option) => ({
+      value: text(option?.value),
+      label: text(option?.label),
+      code: text(option?.code) || null,
+    }))
+    .filter((option) => option.value && option.label);
+  if (!options.length) return null;
+  const value = text(picker.value);
+  return {
+    id,
+    label: text(picker.label),
+    title: text(picker.title),
+    icon: text(picker.icon) || null,
+    placeholder: text(picker.placeholder),
+    value: options.some((option) => option.value === value) ? value : '',
+    options,
+  };
+}
+
+/**
+ * The head of a block drawn as a card (`legendHead`): kicker, title, subtitle.
+ * @param {{kicker: ?string, title: string, subtitle: ?string}} head
+ * @param {?string} extent The block's scope clause, when it has one.
+ * @returns {HTMLElement}
+ */
+function legendHeadNode(head, extent) {
+  const node = document.createElement('div');
+  node.className = 'map-legend-head';
+  const line = (className, text) => {
+    const child = document.createElement('div');
+    child.className = className;
+    child.textContent = text;
+    node.appendChild(child);
+    return child;
+  };
+  if (head.kicker) line('map-legend-head-kicker', head.kicker);
+  const title = line('map-legend-head-title', head.title);
+  if (extent) {
+    const span = document.createElement('span');
+    span.className = 'map-legend-scope';
+    span.textContent = extent;
+    title.appendChild(span);
+  }
+  if (head.subtitle) line('map-legend-head-subtitle', head.subtitle);
+  return node;
+}
+
+/**
  * A card's timeline: one line per moment, a dot filled in the class colour
  * when the moment is reached, hollow when the register has not received it.
  * A list, so a screen reader counts the steps.
@@ -295,6 +363,40 @@ function findByFocusKey(root, focusKey) {
 function setCssVar(node, name, value) {
   if (typeof node?.style?.setProperty === 'function') node.style.setProperty(name, value);
   else if (node?.style) node.style[name] = value;
+}
+
+/**
+ * A block's own head (`legendHead`), checked and normalised, or null.
+ *
+ * The key names a block by its member's chip or tile, in the rail's small
+ * capitals. A block that is a CARD — the approved mock of « Aéroports »
+ * (2026-09-24) prints the noise plan as one — says instead what it is about
+ * (`kicker`, the airport), what it is (`title`) and the document it draws
+ * (`subtitle`). A head with no `title` takes the block's own name — the tile
+ * the reader pressed, « Bruit & urbanisme » — so a layer does not restate a
+ * word the row already owns. A head with none of the three is no head.
+ * @param {*} head
+ * @returns {?{kicker: ?string, title: ?string, subtitle: ?string}}
+ */
+export function legendHeadOf(head) {
+  const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+  const kicker = text(head?.kicker);
+  const title = text(head?.title);
+  const subtitle = text(head?.subtitle);
+  return kicker || title || subtitle ? { kicker, title, subtitle } : null;
+}
+
+/**
+ * A block's own link (`legendLink`), or null: the button under a block that
+ * opens the document it is drawn from (« Consulter le plan officiel »).
+ * `https:` only, like a selection's link — the URL may come from a register.
+ * @param {*} link
+ * @returns {?{href: string, label: string}}
+ */
+export function legendLinkOf(link) {
+  const href = typeof link?.href === 'string' ? link.href.trim() : '';
+  const label = typeof link?.label === 'string' ? link.label.trim() : '';
+  return /^https:\/\//.test(href) && label ? { href, label } : null;
 }
 
 /**
@@ -3305,20 +3407,29 @@ export class DataLayerManager {
    * reconciled in place like the chips — the click that pressed a tile
    * repaints the row, and a rebuilt button would drop the keyboard focus.
    * @param {HTMLElement} container The row's `.data-toggle-controls`.
-   * @param {Array<{key: string, label: string, title: string, active: boolean}>} tiles
+   * @param {Array<{key: string, label: string, title: string, icon?: ?string,
+   *   blurb?: string, active: boolean}>} tiles
    * @param {Array<object>} selects
    * @param {string} hint
+   * @param {?object} [picker] A lit member's menu, from {@link rowPickerOf}.
    */
-  _syncRowTiles(container, tiles, selects, hint) {
+  _syncRowTiles(container, tiles, selects, hint, picker = null) {
     const hasClass = (node, className) => String(node?.className || '').split(/\s+/).includes(className);
     const children = () => [...(container.children || [])];
     const take = (className) => children().find((node) => hasClass(node, className)) || null;
     // Every row runs through here; only a row with tiles under it has anything
     // to draw or to take down.
-    if (!tiles.length && !selects.length && !hint
+    if (!tiles.length && !selects.length && !hint && !picker
         && !children().some((node) => hasClass(node, 'data-row-tiles')
-          || hasClass(node, 'data-row-hint') || node.dataset?.rowSelect)) return;
+          || hasClass(node, 'data-row-hint') || hasClass(node, 'data-row-picker')
+          || node.dataset?.rowSelect)) return;
     const desired = [];
+
+    let menu = take('data-row-picker');
+    if (picker) {
+      menu = this._syncRowPicker(menu, picker);
+      desired.push(menu);
+    }
 
     let grid = take('data-row-tiles');
     if (tiles.length) {
@@ -3326,6 +3437,9 @@ export class DataLayerManager {
         grid = document.createElement('div');
         grid.className = 'data-row-tiles';
       }
+      // Tiles with a glyph are LINES (`rowTiles` in layerFusions.js).
+      const listed = tiles.some((tile) => tile.icon);
+      grid.classList.toggle('is-list', listed);
       const stale = new Map([...(grid.children || [])].map((node) => [node.dataset.rowTile, node]));
       const buttons = [];
       for (const tile of tiles) {
@@ -3337,7 +3451,8 @@ export class DataLayerManager {
           button.className = 'data-row-tile';
           button.dataset.rowTile = tile.key;
         }
-        writeText(button, tile.label);
+        if (listed) this._fillRowTileLine(button, tile);
+        else writeText(button, tile.label);
         writeProperty(button, 'title', tile.title || '');
         button.classList.toggle('active', Boolean(tile.active));
         writeAttribute(button, 'aria-pressed', tile.active ? 'true' : 'false');
@@ -3396,6 +3511,97 @@ export class DataLayerManager {
     // The chips of the strip, if any, keep their place after these.
     const chips = children().filter((node) => node.dataset?.chipId);
     reorderChildren(container, [...desired, ...chips]);
+  }
+
+  /**
+   * One row tile drawn as a LINE: its glyph, its name over what it shows, and
+   * a round light lit with it. Built once per button and then only rewritten,
+   * like the rest of the strip.
+   * @param {HTMLElement} button
+   * @param {{label: string, icon?: ?string, blurb?: string}} tile
+   */
+  _fillRowTileLine(button, tile) {
+    let name = button.querySelector?.('.data-row-tile-name') || null;
+    let blurb = button.querySelector?.('.data-row-tile-blurb') || null;
+    if (!name) {
+      const icon = document.createElement('span');
+      icon.className = 'data-row-tile-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      const words = document.createElement('span');
+      words.className = 'data-row-tile-words';
+      name = document.createElement('span');
+      name.className = 'data-row-tile-name';
+      blurb = document.createElement('span');
+      blurb.className = 'data-row-tile-blurb';
+      words.append(name, blurb);
+      const light = document.createElement('span');
+      light.className = 'data-row-tile-light';
+      light.setAttribute('aria-hidden', 'true');
+      button.replaceChildren(icon, words, light);
+    }
+    if (tile.icon) setCssVar(button, '--row-tile-icon', `url("${tile.icon}")`);
+    writeText(name, tile.label);
+    writeText(blurb, tile.blurb || '');
+    writeProperty(blurb, 'hidden', !tile.blurb);
+  }
+
+  /**
+   * The picker at the head of a row: a native `<select>` for the keyboard and
+   * the screen reader, laid over a face that prints the choice the way the
+   * mock does — a glyph, the name, its code in a small box.
+   * @param {?HTMLElement} wrap The node drawn last pass, if any.
+   * @param {object} picker From {@link rowPickerOf}, with its `layerId`.
+   * @returns {HTMLElement}
+   */
+  _syncRowPicker(wrap, picker) {
+    if (!wrap) {
+      wrap = document.createElement('label');
+      wrap.className = 'data-row-picker';
+      const icon = document.createElement('span');
+      icon.className = 'data-row-picker-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      const face = document.createElement('span');
+      face.className = 'data-row-picker-name';
+      face.setAttribute('aria-hidden', 'true');
+      const code = document.createElement('span');
+      code.className = 'data-row-picker-code';
+      code.setAttribute('aria-hidden', 'true');
+      const field = document.createElement('select');
+      field.className = 'data-row-picker-field';
+      wrap.append(icon, face, code, field);
+    }
+    const [icon, face, code, field] = wrap.children;
+    wrap.dataset.rowPicker = `${picker.layerId}:${picker.id}`;
+    if (picker.icon) setCssVar(wrap, '--row-picker-icon', `url("${picker.icon}")`);
+    writeProperty(icon, 'hidden', !picker.icon);
+    field.dataset.pickerLayer = picker.layerId;
+    field.dataset.pickerId = picker.id;
+    writeAttribute(field, 'aria-label', picker.label || picker.placeholder);
+    writeProperty(wrap, 'title', picker.title || '');
+    // The placeholder is an option of its own, so the menu can say « nothing
+    // picked » without claiming the first airport of the list.
+    const signature = `${picker.placeholder}|${picker.options.map((option) => `${option.value}=${option.label}`).join('|')}`;
+    if (field.dataset.options !== signature) {
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = picker.placeholder;
+      blank.disabled = true;
+      const options = picker.options.map((option) => {
+        const node = document.createElement('option');
+        node.value = option.value;
+        node.textContent = option.code ? `${option.label} · ${option.code}` : option.label;
+        return node;
+      });
+      if (typeof field.replaceChildren === 'function') field.replaceChildren(blank, ...options);
+      field.dataset.options = signature;
+    }
+    if (field.value !== picker.value) field.value = picker.value;
+    const chosen = picker.options.find((option) => option.value === picker.value) || null;
+    writeText(face, chosen ? chosen.label : picker.placeholder);
+    wrap.classList.toggle('is-empty', !chosen);
+    writeText(code, chosen?.code || '');
+    writeProperty(code, 'hidden', !chosen?.code);
+    return wrap;
   }
 
 
@@ -3787,6 +3993,14 @@ export class DataLayerManager {
       // The row's select (« Période »): one param, sent to the layer that
       // published it and offered to the rest of the row when it says so.
       controls.addEventListener('change', (event) => {
+        // The row's picker hands the choice to the layer that published it.
+        const pick = event.target?.closest?.('.data-row-picker-field');
+        if (pick) {
+          if (pick.value) {
+            this.layers.get(pick.dataset.pickerLayer)?.module?.pickRowOption?.(pick.dataset.pickerId, pick.value);
+          }
+          return;
+        }
         const select = event.target?.closest?.('.data-row-select');
         if (!select) return;
         const owner = select.dataset.selectLayer || layer.id;
@@ -4327,7 +4541,8 @@ export class DataLayerManager {
    * of members, pressed while any of them is on; then the `select` each lit
    * member publishes (the permits' « Période »); then the hint of the first
    * lit tile that has one, while none of its members holds a card — once a
-   * project is open, « select a project » has been done.
+   * project is open, « select a project » has been done. A lit member's
+   * `picker` (the airport menu) goes above all of it.
    * @param {object} layer `getAll()` projection for the row's primary.
    * @param {?object} own The primary's own controls.
    * @param {ReadonlyArray<object>} rowTiles From `fusionRowTilesFor`.
@@ -4335,17 +4550,27 @@ export class DataLayerManager {
    * @returns {object}
    */
   _rowTileControls(layer, own, rowTiles, read) {
-    const controls = { ...(own || {}), chips: [], rowTiles: [], selects: [], hint: '' };
+    const controls = { ...(own || {}), chips: [], rowTiles: [], selects: [], hint: '', picker: null };
     delete controls.select;
     if (!this._rowEnabled(layer.id)) return controls;
     for (const tile of rowTiles) {
       const ids = tile.ids.filter((id) => this.layers.has(id) && !this._withheldLayerIds.has(id));
       if (!ids.length) continue;
       const active = ids.some((id) => this.isEnabled(id));
-      controls.rowTiles.push({ key: tile.key, label: tile.label, title: tile.title, active });
+      controls.rowTiles.push({
+        key: tile.key,
+        label: tile.label,
+        title: tile.title,
+        icon: tile.icon || null,
+        blurb: tile.blurb || '',
+        active,
+      });
       if (!active) continue;
       for (const id of ids) {
         if (!this.isEnabled(id)) continue;
+        // The first lit member's picker heads the row (`rowPickerOf`).
+        const picker = controls.picker ? null : rowPickerOf(read(id)?.picker);
+        if (picker) controls.picker = { ...picker, layerId: id };
         const select = read(id)?.select;
         if (select && typeof select.param === 'string' && Array.isArray(select.options)) {
           // One select per param across the row: the permit layers share the
@@ -4398,9 +4623,11 @@ export class DataLayerManager {
     const rowTiles = Array.isArray(controls?.rowTiles) ? controls.rowTiles : [];
     const selects = Array.isArray(controls?.selects) ? controls.selects : [];
     const hint = typeof controls?.hint === 'string' ? controls.hint : '';
+    const picker = controls?.picker && typeof controls.picker === 'object' ? controls.picker : null;
     // A legend-only layer now has nothing to show HERE: its key is on the map.
-    writeProperty(container, 'hidden', chips.length === 0 && rowTiles.length === 0 && selects.length === 0);
-    this._syncRowTiles(container, rowTiles, selects, hint);
+    writeProperty(container, 'hidden', chips.length === 0 && rowTiles.length === 0 && selects.length === 0
+      && !picker);
+    this._syncRowTiles(container, rowTiles, selects, hint, picker);
 
     const stale = new Map();
     for (const node of [...container.children]) {
@@ -4806,6 +5033,10 @@ export class DataLayerManager {
       fold: typeof controls.legendFold === 'string' && controls.legendFold.trim()
         ? controls.legendFold.trim()
         : null,
+      // A block drawn as a card: its head over the classes, its document's
+      // link under them — see `legendHeadOf` and `legendLinkOf`.
+      head: legendHeadOf(controls.legendHead),
+      link: legendLinkOf(controls.legendLink),
     };
   }
 
@@ -4922,6 +5153,8 @@ export class DataLayerManager {
         scope: group.scope || null,
         selection: group.selection || null,
         fold: group.fold || null,
+        head: group.head || null,
+        link: group.link || null,
         subtitle: group.subtitle
           || fusionRowTileOf(rowId, group.layer.id)?.label
           || fusionMemberChipFor(rowId, group.layer.id)
@@ -5135,7 +5368,7 @@ export class DataLayerManager {
       if (row.tiles?.length) rowNode.appendChild(this._legendTileGrid(row));
       for (const {
         layer, blockKey, entries, note, source, subtitle, bar, scope, segments, subSegments, segmentsLabel,
-        selection, columns, fold, cards: mergedCards,
+        selection, columns, fold, head, link, cards: mergedCards,
       } of row.members) {
         // Every card this block carries, each with the layer that owns it.
         const cards = mergedCards || (selection ? [{ layerId: layer?.id ?? null, selection }] : []);
@@ -5155,9 +5388,16 @@ export class DataLayerManager {
         // A FOLDED block is named by its fold: « Couleurs des projets » under
         // the card says what the block is, and a sub-title above the card
         // would name it twice.
-        const heading = fold && row.split
+        // A block with its own head is a card and names itself.
+        const heading = (fold && row.split) || head
           ? null
           : (row.split || blockKey ? subtitle : this._displayName(layer));
+        if (head) {
+          // The member's own name on its row — the tile it is pressed by —
+          // whether or not the row is split.
+          const name = head.title || subtitle || this._displayName(layer);
+          group.appendChild(legendHeadNode({ ...head, title: name }, legendScopeLabel(scope)));
+        }
         if (heading && heading !== (row.split ? row.title : null)) {
           const title = document.createElement('div');
           title.className = 'map-legend-layer';
@@ -5395,6 +5635,18 @@ export class DataLayerManager {
           line.className = 'map-legend-note';
           line.textContent = note;
           body.appendChild(line);
+        }
+        // The document the block is drawn from, last: the key is read first,
+        // and the source is where a reader who wants more goes next.
+        if (link) {
+          const anchor = document.createElement('a');
+          anchor.className = 'map-legend-link';
+          anchor.href = link.href;
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          anchor.textContent = link.label;
+          anchor.dataset.focusKey = `link:${layer?.id ?? ''}`;
+          body.appendChild(anchor);
         }
         if (!fold) {
           for (const card of cards) {

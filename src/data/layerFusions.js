@@ -242,6 +242,13 @@ function declaredChip(entry, layerId, own) {
  * A row whose members share a tile also shares ONE block in the map key: the
  * key merges their classes, which is only honest because they share a palette.
  *
+ * A ROW TILE WITH AN `icon` IS A LINE, NOT A SQUARE. The approved mock of
+ * « Aéroports » (2026-09-24) stacks its tiles one per line: a glyph, the name,
+ * one line saying what it shows (the catalog's `blurb`), and a round light that
+ * is lit with the tile. `icon` names a glyph of `lucideIcons.js`, as a key
+ * tile's does. A row gives an icon to every tile or to none, since a list half
+ * of squares and half of lines would be two layouts in one strip.
+ *
  * `optIn: true` means the row's toggle does NOT switch that companion on. It
  * is for a companion whose cost is real and whose value is conditional — the
  * reader asks for it by pressing the chip. Every other companion follows the
@@ -397,10 +404,20 @@ export const LAYER_FUSIONS = Object.freeze([
   // argument for filing it with the aircraft. The ground-level reading is
   // owed elsewhere: the address radiography, where a PEB zone is a fact about
   // a door.
+  //
+  // THE MEMBERS ARE TILES UNDER THE ROW (2026-09-24), one per line as the
+  // approved mock draws them: « Les aéroports » and « Bruit & urbanisme ». The
+  // mock's third tile, « Aides à l'isolation », was the PGS, which has left the
+  // app. The chip strip goes with them, so the airports' display floor is a
+  // menu under the tiles, as the permits' period is.
   fusionRow({
     primary: 'local-airports',
     companions: [
       { id: 'bruit-fr' },
+    ],
+    rowTiles: [
+      { key: 'airports', ids: ['local-airports'], icon: 'plane' },
+      { key: 'noise', ids: ['bruit-fr'], icon: 'audio-lines' },
     ],
   }),
 
@@ -765,6 +782,10 @@ function validateFusionRowTiles(fusion, primary) {
     .map((companion) => companion.id)];
   const placed = new Set();
   const keys = new Set();
+  const withIcon = fusion.rowTiles.filter((tile) => tile?.icon !== undefined).length;
+  if (withIcon !== 0 && withIcon !== fusion.rowTiles.length) {
+    throw new Error(`Fusion row tiles have an icon on some tiles only: ${primary}`);
+  }
   for (const tile of fusion.rowTiles) {
     const key = tile?.key;
     if (typeof key !== 'string' || !/^[a-z][a-z0-9-]*$/.test(key)) {
@@ -772,6 +793,9 @@ function validateFusionRowTiles(fusion, primary) {
     }
     if (keys.has(key)) throw new Error(`Fusion row tile listed twice: ${primary}:${key}`);
     keys.add(key);
+    if (tile.icon !== undefined && !Object.hasOwn(LUCIDE_ICONS, String(tile.icon))) {
+      throw new Error(`Fusion row tile has an unknown icon: ${primary}:${key} → ${tile.icon}`);
+    }
     if (!Array.isArray(tile.ids) || tile.ids.length === 0) {
       throw new Error(`Fusion row tile has no member: ${primary}:${key}`);
     }
@@ -1036,8 +1060,10 @@ const ROW_TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
     return Object.freeze({
       key: tile.key,
       ids: tile.ids,
+      icon: tile.icon ? lucideIconMask(tile.icon) : null,
       get label() { return words().label || tile.key; },
       get title() { return words().title || ''; },
+      get blurb() { return words().blurb || ''; },
       get hint() { return words().hint || ''; },
     });
   }))]));
@@ -1047,8 +1073,8 @@ const ROW_TILES_BY_PRIMARY = new Map(LAYER_FUSIONS
  * none — see `rowTiles` in the table's header. Each switches a group of
  * members (`ids`), and is lit while any of them is on.
  * @param {string} layerId The row's primary.
- * @returns {?ReadonlyArray<{key: string, ids: ReadonlyArray<string>, label: string,
- *   title: string, hint: string}>}
+ * @returns {?ReadonlyArray<{key: string, ids: ReadonlyArray<string>, icon: ?string,
+ *   label: string, title: string, blurb: string, hint: string}>}
  */
 export function fusionRowTilesFor(layerId) {
   return ROW_TILES_BY_PRIMARY.get(layerId) || null;

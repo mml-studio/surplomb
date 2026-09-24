@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { createAddressScanLayer } from './addressScanLayer.js';
+import { cameraPoseKey, createAddressScanLayer } from './addressScanLayer.js';
 import {
   BRUIT_AREA_SCALE_DENOMINATOR,
   BRUIT_INDEX_SENTENCES,
@@ -15,6 +15,20 @@ import { formatDate, formatDecimal, formatNumber } from '../i18n/format.js';
 import { DEFAULT_LOCALE, getLocale } from '../i18n/locale.js';
 import messages from './bruitFrance.i18n.js';
 import { INTER_CAPITALS, interOutlineMarkup } from './interCapitals.js';
+import { sceneGroundPoint } from './groundPick.js';
+import { hasJoin, watchJoin } from './layerJoins.js';
+import { lucideIconMask } from './lucideIcons.js';
+import { MAKI_PATHS } from './mapIcons.js';
+import { mapKeyCarriesSelection } from './mapKeySelection.js';
+import { governorRequestRender } from '../renderGovernor.js';
+import {
+  focusedPebAirport,
+  pebAirportCamera,
+  pebAirportCode,
+  pebAirportLabel,
+  pebAirportOptions,
+  pebPlanUrl,
+} from './pebAirports.js';
 import { pointInPolygons, ringLabelAnchor } from './ringGeometry.js';
 import { ZONE_FILL_MAX_ALPHA } from './urbanismeGpu.js';
 
@@ -1252,6 +1266,104 @@ export function bruitGroundCard({ lon, lat, payload }) {
   };
 }
 
+/**
+ * The airport's tag on the globe: an airliner, its name, its code — the chip the
+ * approved mock of « Aéroports » (2026-09-24) draws over each field whose plan
+ * is on screen, in place of the loudspeaker this layer used to plant there.
+ *
+ * Painted on a canvas in the interface's own face (DM Sans, `--font-ui`), at
+ * twice its size so the billboard stays sharp. The glyph is Maki's `airport`,
+ * as everything this app draws ON the globe is a cartographic glyph (Maki,
+ * Temaki), never an interface one. Null without a DOM — the tests
+ * — and the caller falls back to {@link bruitMarkerGlyph}.
+ *
+ * @param {string} label « Paris-Charles-de-Gaulle ».
+ * @param {?string} code « CDG ».
+ * @returns {?{image: HTMLCanvasElement, width: number, height: number}} CSS size.
+ */
+export function bruitAirportChip(label, code) {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+  const key = `${label}|${code ?? ''}`;
+  const cached = _chipCache.get(key);
+  if (cached) return cached;
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext?.('2d');
+  if (!ctx || typeof Path2D !== 'function') return null;
+  const nameFont = `600 ${12.5 * scale}px "DM Sans", system-ui, sans-serif`; // i18n-ignore-line — a CSS font.
+  const codeFont = `500 ${11 * scale}px "DM Sans", system-ui, sans-serif`; // i18n-ignore-line — a CSS font.
+  const text = code ? `${label} · ` : label;
+  ctx.font = nameFont;
+  const nameWidth = ctx.measureText(text).width;
+  ctx.font = codeFont;
+  const codeWidth = code ? ctx.measureText(code).width : 0;
+  const pad = 9 * scale;
+  const icon = 14 * scale;
+  const gap = 7 * scale;
+  const height = 26 * scale;
+  const width = Math.ceil(pad + icon + gap + nameWidth + codeWidth + pad);
+  canvas.width = width;
+  canvas.height = height;
+  // The panels' night green, and the hairline they are drawn with.
+  const radius = 7 * scale;
+  ctx.beginPath();
+  ctx.roundRect?.(scale / 2, scale / 2, width - scale, height - scale, radius);
+  ctx.fillStyle = 'rgba(20, 32, 28, 0.9)';
+  ctx.fill();
+  ctx.lineWidth = scale;
+  ctx.strokeStyle = 'rgba(247, 244, 234, 0.28)';
+  ctx.stroke();
+  // Maki's airliner, filled in ivory, in its own 15-unit box.
+  ctx.save();
+  ctx.translate(pad, (height - icon) / 2);
+  ctx.scale(icon / 15, icon / 15);
+  ctx.fillStyle = '#f7f4ea';
+  ctx.fill(new Path2D(MAKI_PATHS.airport));
+  ctx.restore();
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#f7f4ea';
+  ctx.font = nameFont;
+  const x = pad + icon + gap;
+  ctx.fillText(text, x, height / 2 + scale / 2);
+  if (code) {
+    ctx.font = codeFont;
+    ctx.fillStyle = 'rgba(247, 244, 234, 0.78)';
+    ctx.fillText(code, x + nameWidth, height / 2 + scale / 2);
+  }
+  const chip = { image: canvas, width: width / scale, height: height / scale };
+  _chipCache.set(key, chip);
+  return chip;
+}
+
+/** @type {Map<string, {image: HTMLCanvasElement, width: number, height: number}>} */
+const _chipCache = new Map();
+
+/**
+ * How far off an airport's tag is drawn: a field with scheduled flights up to
+ * 150 km of camera distance, any other up to 50 km. From a hundred kilometres
+ * over Paris the basin holds sixteen plans, and sixteen names are a cloud over
+ * shapes a few pixels wide; the airports a reader flies from are the ones
+ * worth a word at that height.
+ */
+export const BRUIT_CHIP_RANGE_M = Object.freeze({ scheduled: 150_000, other: 50_000 });
+
+/** The tags drawn by the last overview, shown or hidden as a whole. */
+const _chipEntities = [];
+
+/**
+ * Whether the tags step aside: « Les aéroports » is on and already names every
+ * field (`airports/labels`, published by `localLayers.js`).
+ * @returns {boolean}
+ */
+function airportsNamedElsewhere() {
+  return hasJoin('airports/labels');
+}
+
+watchJoin('airports/labels', (present) => {
+  for (const entity of _chipEntities) entity.show = !present;
+  governorRequestRender('bruit-fr-airport-tags');
+});
+
 /** @type {Map<number, string>} raster size → data URI. */
 const _glyphCache = new Map();
 const _b64 = (text) => (typeof btoa === 'function'
@@ -1429,18 +1541,23 @@ export function bruitZoneLegendGlyph(zone) {
 }
 
 /**
- * The map key: one entry per zone actually on screen, under a heading that
- * says what the plan is FOR.
+ * The map key: one entry per zone actually on screen.
  *
  * WRITTEN FOR A READER WHO KNOWS NO ACRONYM. The first key led every line with
  * « PEB zone A 14 » — two acronyms and a count of drawn bands nobody could
- * place. The plan is now named by its use (« Ce qu’on peut construire »), with
- * its official name one hover away on the heading; each zone by how loud it
- * is, its swatch carrying the same code the map writes on its badges, and by
- * what it means for a new home.
+ * place. Each zone is named by how loud it is, its swatch carrying the same
+ * code the map writes on its badges.
+ *
+ * THE RULE IS ONE CLICK AWAY, NOT ON THE LINE (2026-09-24). The approved mock
+ * of « Aéroports » prints the key as a card — the airport, « Bruit &
+ * urbanisme », the four zones by loudness — and sends the reader to the zone
+ * for what it means: « Cliquez sur une zone pour les comprendre ». The rule
+ * each line used to carry (« pas de nouveaux logements ») opens the zone's
+ * card instead, where it is the headline (`bruitZoneSentence`). The card's
+ * head, sentences and link are in `bruitKeyCard`.
  *
  * Built from what was DRAWN, not from the vocabulary, so a line never claims a
- * band the reader cannot see, and a heading never stands over nothing.
+ * band the reader cannot see.
  */
 export function bruitLegend(payload) {
   if (!payload) return [];
@@ -1459,21 +1576,166 @@ export function bruitLegend(payload) {
       label: m.loudness[zone],
       color: bruitZoneColorCss(zone),
       glyph: bruitZoneLegendGlyph(zone),
-      blurb: [m.pebRule[zone], aside === 0 ? null : m.aside(aside)].filter(Boolean).join(' — '),
+      ...(aside === 0 ? {} : { blurb: m.aside(aside) }),
     });
   }
   if (bands.some((band) => bruitZoneRank(band?.zone) === PEB_ZONE_ORDER.length)) {
     entries.push({ label: m.unknown, color: BRUIT_UNKNOWN_ZONE_COLOR, blurb: m.unknownBlurb });
   }
-  if (!entries.length) return [];
-  return [{
-    label: m.pebHeading,
-    color: null,
-    // A caption, not a class — the manager draws it without a swatch, and
-    // its official name travels as the hover title.
-    heading: true,
-    blurb: m.pebHeadingTitle,
-  }, ...entries];
+  return entries;
+}
+
+/**
+ * The airports whose plan a payload DRAWS, each with a coordinate when one is
+ * known: the overview's aerodromes, or the airports of a point scan's bands,
+ * placed by the register.
+ * @param {?object} payload
+ * @param {?Map<string, object>} register `/api/bruit-fr/index` rows by ICAO code.
+ * @returns {Array<{oaci: string, lat: ?number, lon: ?number}>}
+ */
+export function bruitDrawnAirports(payload, register = null) {
+  if (!payload) return [];
+  if (payload.area === true) {
+    return (payload.aerodromes || [])
+      .filter((entry) => typeof entry?.oaci === 'string' && entry.oaci)
+      .map((entry) => ({ oaci: entry.oaci, lat: entry.lat, lon: entry.lon }));
+  }
+  const codes = [...new Set((payload.peb || []).map((band) => band?.oaci).filter(Boolean))];
+  return codes.map((oaci) => {
+    const row = register?.get(oaci) || null;
+    return { oaci, lat: row?.lat ?? null, lon: row?.lon ?? null };
+  });
+}
+
+/**
+ * The key drawn as a card, around the classes of {@link bruitLegend}: the
+ * airport it is about over its name, the two sentences under the zones, and
+ * the plan's own document as a button.
+ *
+ * The kicker and the link need an airport; with none on screen — a point scan
+ * that found no plan — the card keeps its subtitle and its sentences only.
+ * « Cliquez sur une zone » goes once a zone is open: it has been done.
+ * @param {?{oaci: string, label: string, documentUrl?: ?string}} airport
+ * @param {{selected?: boolean}} [options]
+ * @returns {{legendHead: object, note: string, legendLink: ?object}}
+ */
+export function bruitKeyCard(airport, { selected = false } = {}) {
+  const m = messages().legend;
+  const href = pebPlanUrl(airport?.documentUrl);
+  return {
+    legendHead: { kicker: airport?.label || null, subtitle: m.cardSubtitle },
+    note: selected ? m.notLive : `${m.clickHint} ${m.notLive}`,
+    legendLink: href ? { href, label: m.planLink } : null,
+  };
+}
+
+/**
+ * The band a card is about: the one its entity was drawn for (`bruit:<band
+ * id>:…`), or — for a click on the bare wash — the strictest band under the
+ * point, the one `bruitGroundCard` headlines. Null for an airport's tag.
+ * @param {?{id?: string, lon?: number, lat?: number}} card
+ * @param {?object} payload
+ * @returns {?object}
+ */
+export function bruitCardBand(card, payload) {
+  const bands = payload?.peb || [];
+  const drawn = /^bruit:(peb:[^:]+)/.exec(String(card?.id ?? ''));
+  if (drawn) return bands.find((band) => band.id === drawn[1]) || null;
+  if (!String(card?.id ?? '').endsWith(':ground')) return null;
+  if (!Number.isFinite(card?.lon) || !Number.isFinite(card?.lat)) return null;
+  return bands
+    .filter((band) => pointInPolygons(band.parts, card.lon, card.lat))
+    .sort(bruitBandComparator())[0] || null;
+}
+
+/**
+ * A zone named for a reader: « Zone B · Bruit fort ». The airport is not in
+ * it — the key card's kicker says which one.
+ * @param {?object} band
+ * @returns {?string}
+ */
+export function bruitZoneTitle(band) {
+  const zone = typeof band?.zone === 'string' ? band.zone.trim().toUpperCase() : '';
+  if (!zone) return null;
+  const m = messages().legend;
+  return m.loudness[zone] ? m.zoneTitle(zone, m.loudness[zone]) : m.unknown;
+}
+
+/**
+ * The card of the zone the reader clicked, as the key prints it — TWO LINES
+ * under its name (2026-09-24, « simplifie encore »): what the zone means for a
+ * new home, then how loud it is on average. The globe card's other lines stay
+ * on the globe card, which is what a phone or a folded key still shows: the
+ * arrêté is one press away on « Consulter le plan officiel » right above, and
+ * « avions seulement … tracé à ~11 m près » answers questions a reader of this
+ * card did not ask.
+ *
+ * The level is printed in Lden only. A pre-2002 plan's « ancien indice 89 à
+ * 96 » is a number on a scale nobody reads, and a number of unsettled unit is
+ * never printed at all (`bandText`).
+ *
+ * The airport is named over the zone only when it is not the one the card
+ * above is about — Le Bourget's zone A inside Roissy's zone D.
+ * @param {{id: string, title: string, details?: string[]}} card The shell's card.
+ * @param {?{label: string}} airport The zone's airport, when the card above
+ *   names another one.
+ * @param {?object} [band] From {@link bruitCardBand}.
+ * @returns {object} A `legendSelection`.
+ */
+export function bruitZoneSelection(card, airport, band = null) {
+  const zone = typeof band?.zone === 'string' ? band.zone.trim().toUpperCase() : '';
+  const lines = band
+    ? [
+      messages().legend.zoneRule[zone] || null,
+      band.index === 'lden' ? bandText(band) : null,
+    ].filter(Boolean)
+    : (Array.isArray(card?.details) ? card.details : []);
+  return {
+    key: String(card?.id ?? ''),
+    kicker: airport?.label || null,
+    title: bruitZoneTitle(band) || card?.title || '',
+    lines,
+  };
+}
+
+/**
+ * The card of an airport's tag, clicked, as the key prints it: its name and
+ * how many zones its plan has.
+ * @param {{id: string}} card
+ * @param {{oaci?: string, zones?: number}} aerodrome A `foldAerodromes` entry.
+ * @param {string} label From `pebAirportLabel`.
+ * @returns {object} A `legendSelection`.
+ */
+export function bruitAirportSelection(card, aerodrome, label) {
+  const count = Number.isFinite(aerodrome?.zones) ? aerodrome.zones : (aerodrome?.bands?.length ?? 0);
+  return {
+    key: String(card?.id ?? ''),
+    title: label,
+    lines: count > 0 ? [messages().legend.airportZones(count)] : [],
+  };
+}
+
+/**
+ * The airport menu at the head of the row: every airport with a plan, the
+ * one the view is about chosen.
+ * @param {ReadonlyArray<object>} airports `/api/bruit-fr/index` rows.
+ * @param {?string} value ICAO code shown as chosen.
+ * @returns {?object} A `picker` for the Layers panel, or null before the
+ *   register has arrived.
+ */
+export function bruitAirportPicker(airports, value) {
+  const options = pebAirportOptions(airports, getLocale());
+  if (!options.length) return null;
+  const m = messages().picker;
+  return {
+    id: 'airport',
+    label: m.label,
+    title: m.title,
+    icon: lucideIconMask('plane'),
+    placeholder: m.placeholder,
+    value: value || '',
+    options,
+  };
 }
 
 /**
@@ -1743,6 +2005,199 @@ let _payload = null;
 let _peb = null;
 
 /**
+ * The arrêté register, by ICAO code, once `/api/bruit-fr/index` has answered:
+ * the airport menu's lines, the key's kicker and the plan's link.
+ * @type {?Map<string, object>}
+ */
+let _register = null;
+let _registerRequested = false;
+/** The airport the reader picked in the menu, while its flight is not over. */
+let _picked = null;
+let _pickPending = false;
+/** The zone card the key carries (`onSelectionChange`), or null. */
+let _selectedCard = null;
+let _viewer = null;
+let _rowControlsListener = null;
+
+/** Ask the Layers panel to repaint this row. */
+function repaintRow() {
+  try { _rowControlsListener?.(); } catch { /* the panel repaints on its own tick anyway */ }
+}
+
+/**
+ * Fetch the register once per session. A refusal is retried on the next
+ * enable: the menu and the kicker wait for it, the plan is drawn without it.
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<void>}
+ */
+export async function loadBruitRegister(fetchImpl = (...args) => fetch(...args)) {
+  if (_register || _registerRequested) return;
+  _registerRequested = true;
+  try {
+    const response = await fetchImpl(`${BRUIT_FR_ENDPOINT}/index`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = await response.json();
+    const rows = (Array.isArray(body?.airports) ? body.airports : [])
+      .filter((row) => typeof row?.oaci === 'string' && row.oaci);
+    _register = new Map(rows.map((row) => [row.oaci.toUpperCase(), row]));
+    renameAirportChips();
+    repaintRow();
+  } catch (error) {
+    _registerRequested = false;
+    console.warn('[Data:bruit-fr] airport register', error?.message || error);
+  }
+}
+
+/**
+ * Rename the tags an overview drew before the register arrived: they carry the
+ * register's abbreviation until then (« P. Ch. De-Gaulle »).
+ */
+function renameAirportChips() {
+  for (const entity of _chipEntities) {
+    const oaci = String(entity.properties?.oaci?.getValue?.() ?? '').toUpperCase();
+    const row = _register?.get(oaci);
+    const chip = row ? bruitAirportChip(pebAirportLabel(row), pebAirportCode(row)) : null;
+    if (!chip || !entity.billboard) continue;
+    entity.billboard.image = chip.image;
+    entity.billboard.width = chip.width;
+    entity.billboard.height = chip.height;
+  }
+  governorRequestRender('bruit-fr-airport-tags');
+}
+
+/**
+ * The airport the key and the menu are about right now, with its label, or
+ * null. See `focusedPebAirport` for the rule.
+ * @returns {?{oaci: string, label: string, code: ?string, documentUrl: ?string}}
+ */
+function bruitFocusAirport() {
+  const drawn = bruitDrawnAirports(_payload, _register);
+  // WHAT THE READER LOOKS AT, NOT WHAT WAS ASKED ABOUT. The scan centre is
+  // pulled at most 6 km from the camera's nadir (`cameraScanPoint`), then the
+  // overview snaps it to a 5.5 km grid: from the mock's framing of Roissy —
+  // 22 km up, 50° down — it lands 12 km south of the runways, and the nearest
+  // airport to it was Chelles-le-Pin. The ground at the centre of the screen
+  // is the airport the reader framed.
+  const centre = bruitScreenCentre()
+    || (_payload?.area === true ? _payload?.centre : _payload?.point);
+  const oaci = focusedPebAirport(drawn, centre, _picked);
+  if (!oaci) return null;
+  const row = _register?.get(oaci)
+    || (_payload?.aerodromes || []).find((entry) => entry?.oaci === oaci)
+    || { oaci };
+  return {
+    oaci,
+    label: pebAirportLabel(row),
+    code: pebAirportCode(row),
+    documentUrl: row.documentUrl ?? null,
+  };
+}
+
+/** The last screen-centre reading, by camera pose. */
+let _screenCentre = { pose: null, centre: null };
+
+/**
+ * The ground at the centre of the screen, or null without a viewer.
+ *
+ * Read ONCE PER CAMERA POSE. The panel asks on every refresh, about once a
+ * second while the row is lit, and on the photoreal stack the reading is a
+ * depth-buffer pick — a render pass of its own. A camera that has not moved
+ * is looking at the same ground.
+ * @returns {?{lat: number, lon: number}}
+ */
+function bruitScreenCentre() {
+  const pose = cameraPoseKey(_viewer?.camera);
+  if (pose && pose === _screenCentre.pose) return _screenCentre.centre;
+  const canvas = _viewer?.scene?.canvas;
+  const width = canvas?.clientWidth || canvas?.width || 0;
+  const height = canvas?.clientHeight || canvas?.height || 0;
+  if (!(width > 0 && height > 0)) return null;
+  let centre = null;
+  try {
+    const hit = sceneGroundPoint(_viewer, new Cesium.Cartesian2(width / 2, height / 2));
+    centre = hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon) ? { lat: hit.lat, lon: hit.lon } : null;
+  } catch { /* nothing under the centre */ }
+  _screenCentre = { pose, centre };
+  return centre;
+}
+
+/**
+ * The key's card for the open selection: over a zone, the airport THAT zone
+ * belongs to — which is not always the one the view is about (Le Bourget's
+ * zone A sits inside Roissy's zone D); over an airport's tag, no kicker, since
+ * the tag's title names it.
+ * @param {object} card
+ * @returns {object}
+ */
+function bruitSelectedZone(card) {
+  const aerodrome = bruitCardAerodrome(card);
+  if (aerodrome) return bruitAirportSelection(card, aerodrome, bruitAerodromeLabel(aerodrome));
+  const band = bruitCardBand(card, _payload);
+  const oaci = String(band?.oaci ?? '').toUpperCase();
+  const row = oaci ? (_register?.get(oaci) || { oaci, name: band.airport }) : null;
+  // Named only when the card above names another airport.
+  const other = row && oaci !== bruitFocusAirport()?.oaci;
+  return bruitZoneSelection(card, other ? { label: pebAirportLabel(row) } : null, band);
+}
+
+/**
+ * The overview aerodrome an airport tag's card belongs to, or null.
+ * @param {?{id?: string}} card
+ * @returns {?object}
+ */
+function bruitCardAerodrome(card) {
+  const match = /^bruit:aerodrome:(.+)$/.exec(String(card?.id ?? ''));
+  if (!match) return null;
+  return (_payload?.aerodromes || []).find((entry) => String(entry?.oaci) === match[1]) || null;
+}
+
+/**
+ * An overview aerodrome's name, from the register when it has arrived.
+ * @param {object} aerodrome
+ * @returns {string}
+ */
+function bruitAerodromeLabel(aerodrome) {
+  return pebAirportLabel({
+    ...aerodrome,
+    ...(_register?.get(String(aerodrome.oaci ?? '').toUpperCase()) || {}),
+  });
+}
+
+/**
+ * Fly to the airport picked in the menu, framed the way `pebAirportCamera`
+ * says. The menu shows the pick while the camera travels; once it has landed,
+ * the view decides again.
+ * @param {string} oaci
+ * @returns {boolean} Whether a flight started.
+ */
+function flyToBruitAirport(oaci) {
+  const row = _register?.get(String(oaci).toUpperCase()) || null;
+  const view = row ? pebAirportCamera(row) : null;
+  const camera = _viewer?.camera;
+  if (!view || !camera) return false;
+  _picked = row.oaci.toUpperCase();
+  _pickPending = true;
+  const settle = () => {
+    _pickPending = false;
+    repaintRow();
+  };
+  try { camera.cancelFlight?.(); } catch { /* no flight in progress */ }
+  camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(view.lon, view.lat, view.height),
+    orientation: {
+      heading: Cesium.Math.toRadians(view.headingDeg),
+      pitch: Cesium.Math.toRadians(view.pitchDeg),
+      roll: 0,
+    },
+    duration: 2.4,
+    complete: settle,
+    cancel: settle,
+  });
+  repaintRow();
+  return true;
+}
+
+/**
  * Draw one scan. Exported so a test can drive the production path against a
  * plain `CustomDataSource` with no WebGL context anywhere.
  *
@@ -1762,6 +2217,8 @@ export function renderBruit({ payload, dataSource, point, viewer }) {
   }
   const peb = chooseBruitAnswer(payload?.peb);
   _peb = peb;
+  // A point scan draws no airport tag.
+  _chipEntities.length = 0;
   let drawn = 0;
   const reference = point && Number.isFinite(point.lon) && Number.isFinite(point.lat)
     ? { lon: point.lon, lat: point.lat } : null;
@@ -1901,23 +2358,45 @@ export function renderBruitArea({ payload, dataSource, classificationType }) {
     });
   }
 
+  _chipEntities.length = 0;
+  const hidden = airportsNamedElsewhere();
   for (const aerodrome of payload?.aerodromes || []) {
     if (!Number.isFinite(aerodrome.lat) || !Number.isFinite(aerodrome.lon)) continue;
-    dataSource.entities.add({
+    // The register's row names the field the way a reader does (`pebAirports.js`);
+    // the aerodrome's own record only has the register's abbreviation.
+    const row = { ...aerodrome, ...(_register?.get(String(aerodrome.oaci ?? '').toUpperCase()) || {}) };
+    const label = pebAirportLabel(row);
+    const code = pebAirportCode(row);
+    const chip = bruitAirportChip(label, code);
+    const scheduled = typeof row.iata === 'string' && /^[A-Z]{3}$/.test(row.iata);
+    const entity = dataSource.entities.add({
       // i18n-ignore-next-line — an entity id, not a word.
       id: `bruit:aerodrome:${aerodrome.oaci ?? aerodrome.bands?.[0]?.id ?? drawn}`,
       position: Cesium.Cartesian3.fromDegrees(aerodrome.lon, aerodrome.lat),
-      billboard: {
-        image: bruitMarkerGlyph(),
-        width: 24,
-        height: 24,
-        color: Cesium.Color.fromCssColorString(bruitZoneColorCss(aerodrome.top?.zone)),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      },
+      show: !hidden,
+      billboard: chip
+        ? {
+          image: chip.image,
+          width: chip.width,
+          height: chip.height,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: new Cesium.NearFarScalar(20_000, 1, 150_000, 0.8),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
+            0, scheduled ? BRUIT_CHIP_RANGE_M.scheduled : BRUIT_CHIP_RANGE_M.other,
+          ),
+        }
+        : {
+          image: bruitMarkerGlyph(),
+          width: 24,
+          height: 24,
+          color: Cesium.Color.fromCssColorString(bruitZoneColorCss(aerodrome.top?.zone)),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
       properties: { kind: 'bruit-aerodrome', oaci: aerodrome.oaci, area: true },
-      name: bruitAerodromeTitle(aerodrome),
+      name: bruitAerodromeTitle({ ...aerodrome, name: label }),
       description: bruitAerodromeDescription(aerodrome, payload),
     });
+    _chipEntities.push(entity);
     drawn += 1;
   }
 
@@ -2052,6 +2531,19 @@ const bruitScanLayer = createAddressScanLayer({
   // `scheduleBruitRefinePoll`: its upstream improves an answer it has already
   // sent, which neither of the shell's own refetch triggers can see.
   afterDraw: scheduleBruitRefinePoll,
+  // THE ZONE'S CARD IS IN THE KEY, ITS NAME ON THE GLOBE (2026-09-24), as the
+  // antennas' and the permits' are: the key already holds the zones by
+  // loudness, and the card of the one clicked lands under them; the globe
+  // keeps only the zone's headline over the ground it names.
+  // Asked BEFORE `onSelectionChange` on a click on the wash, so it reads the
+  // card it is handed and not the selection state.
+  onSelectionChange: (card) => { _selectedCard = card || null; },
+  compactCard: (card) => {
+    if (!mapKeyCarriesSelection()) return false;
+    const aerodrome = bruitCardAerodrome(card);
+    if (aerodrome) return bruitAerodromeLabel(aerodrome);
+    return bruitZoneTitle(bruitCardBand(card, _payload)) || true;
+  },
 });
 
 /**
@@ -2074,18 +2566,52 @@ const bruitFranceLayer = {
     };
   },
 
+  async enable(viewer, options) {
+    _viewer = viewer || null;
+    loadBruitRegister();
+    return bruitScanLayer.enable(viewer, options);
+  },
+
   /**
-   * Colour legend for the toggle row — only the zones actually on screen.
-   * @returns {{chips: Array<object>, legend: Array<object>}}
+   * The row's airport menu, and the key drawn as a card — only the zones
+   * actually on screen.
+   * @returns {object}
    */
   getRowControls() {
+    const airports = _register ? [..._register.values()] : [];
     // Read back through the shell's own stats rather than a private flag: the
     // shell clears its draw when the camera climbs above the ceiling and does
     // NOT call `render`, so a legend built from the last payload alone would
     // keep describing a scan that is no longer on screen.
-    if (bruitScanLayer.getStats().dormant === true) return { chips: [], legend: [] };
-    // Ground-classified area fill — see surfaceFillNotice.js.
-    return { chips: [], legend: bruitLegend(_payload), surfaceFill: true };
+    if (bruitScanLayer.getStats().dormant === true) {
+      return { chips: [], legend: [], picker: bruitAirportPicker(airports, _pickPending ? _picked : null) };
+    }
+    const focus = bruitFocusAirport();
+    const legend = bruitLegend(_payload);
+    return {
+      chips: [],
+      picker: bruitAirportPicker(airports, _pickPending ? _picked : focus?.oaci),
+      legend,
+      ...(legend.length ? bruitKeyCard(focus, { selected: Boolean(_selectedCard) }) : {}),
+      legendSelection: _selectedCard ? bruitSelectedZone(_selectedCard) : null,
+      // Ground-classified area fill — see surfaceFillNotice.js.
+      surfaceFill: true,
+    };
+  },
+
+  /** The Layers panel hands over its repaint (`_installRowControlsListener`). */
+  setRowControlsListener(listener) {
+    _rowControlsListener = typeof listener === 'function' ? listener : null;
+  },
+
+  /**
+   * The row's airport menu was used (`picker` in `getRowControls`).
+   * @param {string} id
+   * @param {string} value ICAO code.
+   * @returns {boolean}
+   */
+  pickRowOption(id, value) {
+    return id === 'airport' ? flyToBruitAirport(value) : false;
   },
 };
 

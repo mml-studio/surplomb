@@ -20,7 +20,10 @@ import {
   legendBarWidths,
   legendScopeLabel,
   legendScopeOf,
+  legendHeadOf,
+  legendLinkOf,
   legendSelectionOf,
+  rowPickerOf,
 } from './manager.js';
 import {
   contextSnapshotLayerIds,
@@ -6342,6 +6345,20 @@ test('a key the signature cannot read is rebuilt on every pass, as it always was
 // the companions and the opt-in are the shipped table's.
 
 function makeUrbanismePanel({ controls = {} } = {}) {
+  return makeFusedRowPanel({
+    ids: ['ads-fr', 'sitadel-fr', 'urbanisme-gpu'],
+    params: { 'ads-fr': { months: '36' }, 'sitadel-fr': { months: '36' } },
+    accepts: (next) => ['36', '72', '156'].includes(String(next?.months)),
+    categories: [{ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }],
+    controls,
+  });
+}
+
+/**
+ * A Layers panel holding ONE fused row whose members are tiles under it, over
+ * the element doubles — `ids[0]` is the row's primary.
+ */
+function makeFusedRowPanel({ ids, params: seed = {}, accepts = () => true, categories, controls = {}, modules = {} }) {
   const originalDocument = globalThis.document;
   const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const legendHost = makePanelElement();
@@ -6355,15 +6372,14 @@ function makeUrbanismePanel({ controls = {} } = {}) {
   Object.defineProperty(globalThis, 'localStorage', {
     value: makeMemoryStorage(), configurable: true, writable: true,
   });
-  const ids = ['ads-fr', 'sitadel-fr', 'urbanisme-gpu'];
   const taxonomy = ids.map((id) => ({ ...layerTaxonomyFor(id), label: layerTaxonomyFor(id).label }));
-  const params = { 'ads-fr': { months: '36' }, 'sitadel-fr': { months: '36' } };
+  const params = structuredClone(seed);
   const mgr = new DataLayerManager({});
   for (const id of ids) {
     const { module } = makeSlowLayer(id, { updateInterval: -1 });
     if (params[id]) {
       module.getParams = () => ({ ...params[id] });
-      module.acceptsParams = (next) => ['36', '72', '156'].includes(String(next?.months));
+      module.acceptsParams = accepts;
       module.setParams = (next) => {
         if (!module.acceptsParams(next)) return false;
         Object.assign(params[id], next);
@@ -6371,16 +6387,17 @@ function makeUrbanismePanel({ controls = {} } = {}) {
       };
     }
     if (controls[id]) module.getRowControls = () => controls[id](params[id]);
+    Object.assign(module, modules[id] || {});
     mgr.register(module);
   }
   mgr.finalizeRegistrations(
     ids.map((id) => ({ id, disposition: params[id] ? 'enabled+options' : 'enabled-only' })),
     taxonomy,
-    [{ id: 'built-environment', label: 'BÂTI & TERRITOIRE', icon: '▤' }],
+    categories,
   );
   const container = makePanelElement();
   mgr.buildTogglePanel(container);
-  const row = () => container.querySelector('[data-layer-id="ads-fr"]');
+  const row = () => container.querySelector(`[data-layer-id="${ids[0]}"]`);
   const strip = () => row().querySelector('.data-toggle-controls');
   return {
     mgr,
@@ -6483,6 +6500,138 @@ test('the period menu sends its window to both permit layers', async () => {
   } finally {
     await panel.restore();
   }
+});
+
+/** `bruit-fr` keeps its own group in the taxonomy; the fusion lifts it out. */
+const AIRPORT_ROW_CATEGORIES = [
+  { id: 'air-space', label: 'CIEL & MER', icon: '✈' },
+  { id: 'hazards', label: 'RISQUES', icon: '⚠' },
+];
+
+test('Aéroports draws its two tiles as lines, the airport menu over them, the floor menu under', async () => {
+  const picks = [];
+  const floor = (own) => ({
+    select: {
+      param: 'floor', label: 'Afficher', value: own.floor, title: '',
+      options: [{ value: 'all', label: 'Tous les terrains' }, { value: 'airlines', label: 'Avec vols réguliers' }],
+    },
+  });
+  const noise = () => ({
+    picker: {
+      id: 'airport',
+      label: 'Aéroport',
+      placeholder: 'Choisir un aéroport',
+      icon: 'data:image/svg+xml;base64,AA==',
+      value: 'LFPG',
+      options: [
+        { value: 'LFPG', label: 'Paris-Charles-de-Gaulle', code: 'CDG' },
+        { value: 'LFPO', label: 'Paris-Orly', code: 'ORY' },
+      ],
+    },
+  });
+  const panel = makeFusedRowPanel({
+    ids: ['local-airports', 'bruit-fr'],
+    params: { 'local-airports': { floor: 'all' } },
+    accepts: (next) => ['all', 'airports', 'airlines'].includes(String(next?.floor)),
+    categories: AIRPORT_ROW_CATEGORIES,
+    controls: { 'local-airports': floor, 'bruit-fr': noise },
+    modules: { 'bruit-fr': { pickRowOption: (id, value) => { picks.push([id, value]); return true; } } },
+  });
+  const strip = () => panel.row().querySelector('.data-toggle-controls');
+  try {
+    await panel.mgr._setRowEnabled('local-airports', true);
+    panel.mgr._refreshTogglePanel();
+    assert.equal(panel.mgr.isEnabled('bruit-fr'), true, 'the row lights both, as it always has');
+
+    // Two LINES: glyph, name, what it shows, a light.
+    const grid = strip().querySelector('.data-row-tiles');
+    assert.ok(grid.classList.contains('is-list'));
+    const names = panel.tiles().map((tile) => tile.querySelector('.data-row-tile-name').textContent);
+    assert.deepEqual(names, ['Les aéroports', 'Bruit & urbanisme']);
+    const blurbs = panel.tiles().map((tile) => tile.querySelector('.data-row-tile-blurb').textContent);
+    assert.deepEqual(blurbs, ['Repérer les aéroports et leurs environs', 'Voir l’exposition au bruit (PEB)']);
+    assert.ok(panel.tiles().every((tile) => tile.querySelector('.data-row-tile-light')));
+    assert.ok(String(panel.tiles()[0].style['--row-tile-icon']).startsWith('url("data:image/svg+xml;base64,'));
+    assert.deepEqual(findAll(panel.row(), '.data-toggle-chip'), [], 'no chip strip under tiles');
+
+    // The airport menu heads the row, and prints the choice with its code.
+    const picker = strip().querySelector('.data-row-picker');
+    assert.equal(strip().children[0], picker);
+    assert.equal(picker.querySelector('.data-row-picker-name').textContent, 'Paris-Charles-de-Gaulle');
+    assert.equal(picker.querySelector('.data-row-picker-code').textContent, 'CDG');
+    const field = picker.querySelector('.data-row-picker-field');
+    assert.equal(field.children.length, 3, 'the placeholder, then the two airports');
+    assert.equal(field.children[1].textContent, 'Paris-Charles-de-Gaulle · CDG');
+    // A pick goes to the layer that published the menu, as an action.
+    field.value = 'LFPO';
+    strip().listeners.get('change')[0]({ target: field });
+    assert.deepEqual(picks, [['airport', 'LFPO']]);
+
+    // The display floor is a menu under the airports' tile.
+    assert.equal(panel.select().dataset.selectParam, 'floor');
+
+    // The noise tile out: its menu goes with it, the airports stay.
+    await panel.pressTile('noise');
+    assert.equal(panel.mgr.isEnabled('bruit-fr'), false);
+    assert.equal(strip().querySelector('.data-row-picker'), null);
+    assert.deepEqual(panel.tiles().map((tile) => tile.attributes['aria-pressed']), ['true', 'false']);
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a row picker is normalised: an unknown value shows the placeholder, a bad option is dropped', () => {
+  const picker = rowPickerOf({
+    id: 'airport',
+    placeholder: 'Choisir',
+    value: 'LFZZ',
+    options: [{ value: 'LFPG', label: 'Roissy', code: 'CDG' }, { value: '', label: 'nothing' }, { label: 'no value' }],
+  });
+  assert.equal(picker.value, '');
+  assert.deepEqual(picker.options, [{ value: 'LFPG', label: 'Roissy', code: 'CDG' }]);
+  assert.equal(rowPickerOf({ id: 'airport', options: [] }), null);
+  assert.equal(rowPickerOf({ options: [{ value: 'a', label: 'A' }] }), null);
+  assert.equal(rowPickerOf(null), null);
+});
+
+test('a key block can be a card: its head names the tile, its link opens the document', async () => {
+  const noise = () => ({
+    legend: [{ label: 'Bruit très fort', color: '#ff2d55' }],
+    legendHead: { kicker: 'Paris-Charles-de-Gaulle', subtitle: 'Plan d’exposition au bruit · PEB' },
+    note: 'Ce plan ne mesure pas le bruit en direct.',
+    legendLink: { href: 'https://example.org/plan.pdf', label: 'Consulter le plan officiel' },
+  });
+  const panel = makeFusedRowPanel({
+    ids: ['local-airports', 'bruit-fr'],
+    categories: AIRPORT_ROW_CATEGORIES,
+    controls: { 'bruit-fr': noise },
+  });
+  try {
+    await panel.mgr._setRowEnabled('local-airports', true);
+    panel.mgr._refreshTogglePanel();
+    const group = findAll(panel.legendItems, '.map-legend-group').find((node) => node.dataset.layer === 'bruit-fr');
+    const head = group.querySelector('.map-legend-head');
+    assert.equal(head.querySelector('.map-legend-head-kicker').textContent, 'Paris-Charles-de-Gaulle');
+    assert.equal(head.querySelector('.map-legend-head-title').textContent, 'Bruit & urbanisme', 'the tile’s name');
+    assert.equal(head.querySelector('.map-legend-head-subtitle').textContent, 'Plan d’exposition au bruit · PEB');
+    assert.equal(group.querySelector('.map-legend-layer'), null, 'the head replaces the small-caps name');
+    const link = group.querySelector('.map-legend-link');
+    assert.equal(link.href, 'https://example.org/plan.pdf');
+    assert.equal(link.textContent, 'Consulter le plan officiel');
+    assert.equal(link.target, '_blank');
+    const order = group.children.map((node) => node.className.split(' ')[0]);
+    assert.ok(order.indexOf('map-legend-note') < order.indexOf('map-legend-link'), order.join(','));
+  } finally {
+    await panel.restore();
+  }
+});
+
+test('a key head needs one of its three lines, and a key link needs https and a label', () => {
+  assert.equal(legendHeadOf({}), null);
+  assert.deepEqual(legendHeadOf({ subtitle: ' PEB ' }), { kicker: null, title: null, subtitle: 'PEB' });
+  assert.equal(legendLinkOf({ href: 'http://example.org', label: 'x' }), null);
+  assert.equal(legendLinkOf({ href: 'https://example.org', label: ' ' }), null);
+  assert.deepEqual(legendLinkOf({ href: 'https://example.org', label: 'Plan' }), { href: 'https://example.org', label: 'Plan' });
 });
 
 test('the two permit layers print ONE key block: the card first, the colours folded under it', async () => {

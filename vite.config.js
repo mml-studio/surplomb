@@ -58,6 +58,7 @@ import { Readable } from 'node:stream';
 import readline from 'node:readline';
 import zlib from 'node:zlib';
 import { MEDECIN_FAMILY_INDEX, sitePrimaryFamily } from './src/data/medecinsFrFeed.js';
+import { readAirportPackNames } from './src/data/pebAirports.js';
 import {
   EMPTY_SUPPRESSION,
   buildSuppressionIndex,
@@ -11418,6 +11419,34 @@ function bruitWantsFine(searchParams, radiusKm) {
   return searchParams.get('fine') === '1' && radiusKm <= BRUIT_FINE_MAX_RADIUS_KM;
 }
 
+/** The pack's names, once read — see {@link bruitAirportNames}. */
+let _bruitAirportNames = null;
+
+/**
+ * The OurAirports name and IATA code of every coded field in the pack the app
+ * already ships, read once per server and joined onto the arrêté register by
+ * `/api/bruit-fr/index`. The register files « P. CH. DE-GAULLE »; the airport
+ * menu of the « Aéroports » row prints « Paris-Charles-de-Gaulle · CDG », and
+ * `src/data/pebAirports.js` is where the one becomes the other.
+ *
+ * A pack that cannot be read costs the names and nothing else: the register
+ * rows go out as they are, and the menu falls back to their own names.
+ * @returns {Promise<Map<string, {airportName: string, iata: ?string}>>}
+ */
+function bruitAirportNames() {
+  if (!_bruitAirportNames) {
+    const file = path.join(process.cwd(), 'src', 'data', 'local_data', 'airports', 'airports.geojsonl');
+    _bruitAirportNames = fsp.readFile(file, 'utf8')
+      .then((text) => readAirportPackNames(text))
+      .catch((err) => {
+        console.warn('[Bruit Proxy] airport names unavailable:', err?.message || err);
+        _bruitAirportNames = null;
+        return new Map();
+      });
+  }
+  return _bruitAirportNames;
+}
+
 /**
  * Vite plugin: French aircraft-noise plans proxy.
  * @returns {import('vite').Plugin}
@@ -11459,8 +11488,10 @@ function bruitFranceProxy() {
           });
           return;
         }
+        const names = await bruitAirportNames();
         json(200, {
           ...entry.payload,
+          airports: entry.payload.airports.map((airport) => ({ ...airport, ...(names.get(airport.oaci) || {}) })),
           source: BRUIT_SOURCE,
           fetchedAt: entry.at,
           stale: age > BRUIT_INDEX_TTL_MS,

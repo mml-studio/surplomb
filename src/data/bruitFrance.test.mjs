@@ -63,7 +63,14 @@ import bruitFranceLayer, {
   BRUIT_REFINE_POLL_MS,
   BRUIT_REFINE_POLL_STRIKES,
   scheduleBruitRefinePoll,
+  bruitAirportPicker,
+  bruitAirportSelection,
+  bruitDrawnAirports,
+  bruitKeyCard,
   bruitLegend,
+  bruitCardBand,
+  bruitZoneSelection,
+  bruitZoneTitle,
   bruitMarkerGlyph,
   bruitMarkerTitle,
   bruitNearestSentence,
@@ -689,39 +696,129 @@ test('an incomplete arrêté register is reported, because "the nearest" would b
 
 test('the row legend lists what is on screen, and separates under from beside', () => {
   const legend = bruitLegend(LFMD);
-  assert.deepEqual(legend.map((row) => row.label), ['Ce qu’on peut construire', 'Bruit fort', 'Bruit modéré']);
-  assert.equal(legend[0].heading, true);
-  assert.equal(legend[1].color, PEB_ZONE_COLORS.B);
-  assert.equal(legend[1].blurb, 'presque pas de nouveaux logements');
-  assert.ok(norm(legend[2].blurb).includes('à côté du repère, pas dessous'), legend[2].blurb);
+  assert.deepEqual(legend.map((row) => row.label), ['Bruit fort', 'Bruit modéré']);
+  assert.equal(legend[0].color, PEB_ZONE_COLORS.B);
+  // The rule is the zone's card now, not a line of the key.
+  assert.equal(legend[0].blurb, undefined);
+  assert.ok(norm(legend[1].blurb).includes('à côté du repère, pas dessous'), legend[1].blurb);
   // A zone the register did not publish at this point is not in the legend.
   assert.equal(legend.some((row) => row.label === 'Bruit très fort'), false);
   // A zone letter the grammar does not know still gets a line rather than
   // vanishing from a key the reader is comparing against the map.
   const odd = bruitLegend({ peb: [{ zone: 'Z', atPoint: true }] });
-  assert.deepEqual(odd.map((row) => row.label), ['Ce qu’on peut construire', 'Zone non précisée']);
-  assert.equal(odd[1].color, BRUIT_UNKNOWN_ZONE_COLOR);
-  assert.equal(odd[1].blurb, 'le plan officiel ne dit pas laquelle');
+  assert.deepEqual(odd.map((row) => row.label), ['Zone non précisée']);
+  assert.equal(odd[0].color, BRUIT_UNKNOWN_ZONE_COLOR);
+  assert.equal(odd[0].blurb, 'le plan officiel ne dit pas laquelle');
   assert.deepEqual(bruitLegend(null), []);
+});
+
+test('the key is a card: the airport, the plan, the two sentences and the official document', () => {
+  const card = bruitKeyCard({
+    label: 'Paris-Charles-de-Gaulle',
+    documentUrl: 'http://piece-jointe-carto.developpement-durable.gouv.fr/NAT003/PEB/PEB_LFPG_03_04_2007.pdf',
+  });
+  assert.deepEqual(card.legendHead, { kicker: 'Paris-Charles-de-Gaulle', subtitle: 'Plan d’exposition au bruit · PEB' });
+  assert.equal(norm(card.note), 'Des règles s’appliquent aux constructions. Cliquez sur une zone pour les comprendre. '
+    + 'Ce plan ne mesure pas le bruit en direct.');
+  // The register serves its PDFs over http; the same host answers over https,
+  // and the key prints https links only.
+  assert.deepEqual(card.legendLink, {
+    href: 'https://piece-jointe-carto.developpement-durable.gouv.fr/NAT003/PEB/PEB_LFPG_03_04_2007.pdf',
+    label: 'Consulter le plan officiel',
+  });
+  // Once a zone is open, « cliquez sur une zone » has been done.
+  assert.equal(norm(bruitKeyCard(null, { selected: true }).note), 'Ce plan ne mesure pas le bruit en direct.');
+  // No airport on screen: no kicker and no link, never a guess.
+  const bare = bruitKeyCard(null);
+  assert.equal(bare.legendHead.kicker, null);
+  assert.equal(bare.legendLink, null);
+  assert.equal(bruitKeyCard({ label: 'X', documentUrl: 'http://example.org/plan.pdf' }).legendLink, null);
+});
+
+test('a clicked zone opens its card in the key: the airport over the zone, the rule first', () => {
+  const card = {
+    id: 'bruit:peb:12:fill:0',
+    title: 'Bruit des avions · zone B — P. ORLY',
+    details: ['presque pas de nouveaux logements', 'arrêté du 03/04/2007'],
+  };
+  const band = bruitCardBand(card, {
+    peb: [
+      { id: 'peb:12', zone: 'B', index: 'lden', low: 62, high: 65 },
+      { id: 'peb:13', zone: 'C' },
+    ],
+  });
+  assert.equal(band.id, 'peb:12', 'the entity names its band');
+  // Two lines under its name: the rule, then how loud — never the arrêté or
+  // the drawing's precision, which stay on the globe's card.
+  const selection = bruitZoneSelection(card, { label: 'Paris-Orly' }, band);
+  assert.equal(selection.kicker, 'Paris-Orly');
+  assert.equal(selection.title, 'Zone B · Bruit fort');
+  assert.deepEqual(selection.lines.map(norm), [
+    'Presque pas de nouveaux logements.',
+    'de 62 à 65 dB(A) en moyenne sur 24 h',
+  ]);
+  assert.equal(bruitZoneSelection(card, null, band).kicker, null, 'the card above already names it');
+  // A pre-2002 plan's level is on a scale nobody reads: the rule alone.
+  const old = bruitZoneSelection(card, null, { ...band, index: 'psophique', low: 89, high: 96 });
+  assert.deepEqual(old.lines, ['Presque pas de nouveaux logements.']);
+  // An airport's tag: its name and how many zones its plan has.
+  assert.deepEqual(bruitAirportSelection({ id: 'bruit:aerodrome:LFPO' }, { oaci: 'LFPO', zones: 4 }, 'Paris-Orly'), {
+    key: 'bruit:aerodrome:LFPO',
+    title: 'Paris-Orly',
+    lines: ['4 zones de bruit autour de l’aéroport.'],
+  });
+  assert.equal(bruitCardBand({ id: 'bruit:aerodrome:LFPO' }, { peb: [] }), null);
+  assert.equal(bruitZoneTitle({ zone: 'Z' }), 'Zone non précisée');
+  assert.equal(bruitZoneTitle(null), null);
+});
+
+test('a click on the bare wash is about the strictest zone under it', () => {
+  const lead = LFPZ.peb.find((band) => band.parts?.length);
+  const [lon, lat] = lead.parts[0][0][0];
+  const band = bruitCardBand({ id: 'bruit-fr:ground', lon, lat }, LFPZ);
+  assert.ok(band, 'a band under a vertex of its own outline');
+  assert.equal(bruitCardBand({ id: 'bruit-fr:ground' }, LFPZ), null, 'no point, no band');
+});
+
+test('the airports a payload draws: the overview’s aerodromes, or a point scan’s, placed by the register', () => {
+  assert.deepEqual(bruitDrawnAirports(AREA).map((entry) => entry.oaci), AREA.aerodromes.map((entry) => entry.oaci));
+  const register = new Map([['LFMD', { oaci: 'LFMD', lat: 43.54, lon: 6.95 }]]);
+  const drawn = bruitDrawnAirports(LFMD, register);
+  assert.ok(drawn.some((entry) => entry.oaci === 'LFMD' && entry.lat === 43.54));
+  assert.deepEqual(bruitDrawnAirports(null), []);
+});
+
+test('the airport menu lists the register by name, with the code a passenger reads', () => {
+  const picker = bruitAirportPicker([
+    { oaci: 'LFPO', name: 'P. ORLY', airportName: 'Paris-Orly Airport', iata: 'ORY', lat: 48.72, lon: 2.37 },
+    { oaci: 'LFPG', name: 'P. CH. DE-GAULLE', airportName: 'Charles de Gaulle International Airport', iata: 'CDG', lat: 49.01, lon: 2.55 },
+  ], 'LFPG');
+  assert.equal(picker.id, 'airport');
+  assert.equal(picker.value, 'LFPG');
+  assert.equal(picker.placeholder, 'Choisir un aéroport');
+  assert.deepEqual(picker.options, [
+    { value: 'LFPG', label: 'Paris-Charles-de-Gaulle', code: 'CDG' },
+    { value: 'LFPO', label: 'Paris-Orly', code: 'ORY' },
+  ]);
+  assert.ok(picker.icon.startsWith('data:image/svg+xml;base64,'));
+  assert.equal(bruitAirportPicker([], null), null, 'no menu before the register has arrived');
 });
 
 test('the key speaks to anyone: no acronym, no unit, no bare count on a line a reader sees', () => {
   const legend = [...bruitLegend(AREA), ...bruitLegend(LFMD)];
   for (const row of legend) {
-    const seen = row.heading ? row.label : `${row.label} ${row.blurb ?? ''}`;
+    const seen = `${row.label} ${row.blurb ?? ''}`;
     assert.equal(/\b(PEB|dB|Lden|OACI)\b/.test(seen), false, seen);
     assert.equal(row.count, undefined, `${row.label}: a count of drawn bands means nothing to a reader`);
+    assert.notEqual(row.heading, true, 'the card’s head names the plan; no caption line');
   }
-  // The official name is not lost: it is the heading's hover title.
-  const headings = bruitLegend(AREA).filter((row) => row.heading);
-  assert.deepEqual(headings.map((row) => row.label), ['Ce qu’on peut construire']);
-  assert.ok(headings[0].blurb.includes('Plan d’exposition au bruit (PEB)'));
-  assert.ok(headings.every((row) => row.color === null), 'a caption takes no swatch');
+  // The official name is not lost: it is the card's subtitle, spelled out.
+  assert.equal(bruitKeyCard(null).legendHead.subtitle, 'Plan d’exposition au bruit · PEB');
 });
 
 test('each zone\'s swatch is the code the map writes on its badges, cut out of a tile', () => {
   const svgOf = (uri) => Buffer.from(uri.split(',')[1], 'base64').toString('utf8');
-  const [, zoneA] = bruitLegend(AREA);
+  const [zoneA] = bruitLegend(AREA);
   assert.ok(svgOf(zoneA.glyph).includes(INTER_CAPITALS.A.d));
   assert.ok(svgOf(zoneA.glyph).includes('<mask'), 'a mask: the manager tints it with the zone colour');
   assert.equal(zoneA.color, PEB_ZONE_COLORS.A);
@@ -734,9 +831,14 @@ test('the row controls are empty while the layer is dormant, and full once it ha
   // drawn payload is what the row describes.
   const controls = _bruitRowControlsForTest();
   assert.deepEqual(controls.chips, [], 'a chip in this manager is a BUTTON');
-  assert.deepEqual(controls.legend.map((row) => row.label), ['Ce qu’on peut construire', 'Bruit très fort', 'Bruit fort']);
+  assert.deepEqual(controls.legend.map((row) => row.label), ['Bruit très fort', 'Bruit fort']);
+  assert.equal(controls.legendHead.subtitle, 'Plan d’exposition au bruit · PEB');
+  assert.ok(norm(controls.note).includes('Cliquez sur une zone'));
+  assert.equal(controls.legendSelection, null);
   _setBruitStateForTest(null);
-  assert.deepEqual(_bruitRowControlsForTest().legend, []);
+  const empty = _bruitRowControlsForTest();
+  assert.deepEqual(empty.legend, []);
+  assert.equal(empty.legendHead, undefined, 'no card over nothing');
 });
 
 test('the zoom prompt is GUIDANCE, and never an error', () => {
@@ -881,11 +983,13 @@ test('an overview draws every band of every aerodrome, and not one of them dashe
   // Four bands each at two aerodromes.
   const fills = values.filter((entity) => entity.polygon);
   assert.ok(fills.length >= 8, `${fills.length} washes drawn`);
-  // One marker per aerodrome, named by the register and carrying the whole
-  // plan on its card — the overview's equivalent of the scan point.
+  // One marker per aerodrome, named the way a reader knows it and carrying
+  // the whole plan on its card — the overview's equivalent of the scan point.
+  // With no register in hand the register's own name is title-cased; Roissy
+  // is in the name table (`pebAirports.js`).
   const markers = values.filter((entity) => entity.properties?.getValue(now())?.kind === 'bruit-aerodrome');
   assert.deepEqual(markers.map((entity) => entity.name).sort(), [
-    'LFPB — PARIS LE BOURGET', 'LFPG — PARIS CHARLES DE GAULLE',
+    'LFPB — Paris Le Bourget', 'LFPG — Paris-Charles-de-Gaulle',
   ]);
   assert.equal(values.some((entity) => entity.id === 'bruit:scan-point'), false,
     'no scan point: there is no point');
@@ -960,15 +1064,15 @@ test('an overview that is capped, silent or empty says which, on the row and on 
 test('the overview legend explains colours, and never dashes that are not drawn', () => {
   const legend = bruitLegend(AREA);
   assert.deepEqual(legend.map((row) => row.label), [
-    'Ce qu’on peut construire', 'Bruit très fort', 'Bruit fort', 'Bruit modéré', 'Bruit plus faible',
+    'Bruit très fort', 'Bruit fort', 'Bruit modéré', 'Bruit plus faible',
   ]);
   // `atPoint` is false on every overview band. The point-mode line would read
   // that as "beside the marker" and explain dashes nobody can see.
   for (const row of legend) {
     assert.equal(/pointillés/.test(row.blurb ?? ''), false, row.blurb);
   }
-  // Every zone says what it means for a home.
-  assert.ok(legend.slice(1).every((row) => row.blurb.length > 0));
+  // What each zone means for a home is its card, one click away.
+  assert.ok(legend.every((row) => row.blurb === undefined));
   // The point-mode legend still explains its dashes, on the same function.
   assert.ok(bruitLegend(LFMD).some((row) => /pointillés/.test(row.blurb ?? '')));
 });

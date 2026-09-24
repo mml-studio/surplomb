@@ -7393,6 +7393,186 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
   font-weight: 600;
 }
 
+/* A ROW TILE WITH A GLYPH IS A LINE — the approved mock of « Aéroports »
+   (2026-09-24): one tile per line, a glyph, the name over what it shows, and a
+   round light at the end that fills in the accent when the tile is lit. The
+   name stays ivory when lit; the ring and the light carry the state, so a
+   line never reads as a link. */
+.data-row-tiles.is-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.data-row-tiles.is-list .data-row-tile {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 18px;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 62px;
+  padding: 10px 14px 10px 12px;
+  text-align: left;
+  text-wrap: pretty;
+  background: rgba(6, 11, 9, 0.28);
+  border-color: rgba(251, 214, 190, 0.14);
+}
+
+.data-row-tile-icon {
+  width: 26px;
+  height: 26px;
+  justify-self: center;
+  background: rgba(247, 244, 234, 0.82);
+  -webkit-mask-image: var(--row-tile-icon);
+  mask-image: var(--row-tile-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.data-row-tile-words {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.data-row-tile-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: rgba(247, 244, 234, 0.94);
+}
+
+.data-row-tile-blurb {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.data-row-tile-light {
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(247, 244, 234, 0.55);
+  border-radius: 50%;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.data-row-tiles.is-list .data-row-tile.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: inherit;
+  font-weight: 500;
+}
+
+.data-row-tiles.is-list .data-row-tile.active .data-row-tile-light {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px rgba(247, 244, 234, 0.92);
+}
+
+/* The picker at the head of a row: the airport whose plan the row shows. A
+   native select, transparent, laid over the whole face — the keyboard and the
+   screen reader get the real menu, the eye gets the glyph, the name and the
+   code in its box. */
+.data-row-picker {
+  position: relative;
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 44px;
+  margin: 2px 0 4px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(251, 214, 190, 0.22);
+  border-radius: 9px;
+  background: rgba(6, 11, 9, 0.35);
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+
+.data-row-picker::after {
+  content: '';
+  grid-column: 4;
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f7f4ea' stroke-opacity='0.7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat center / 14px 14px;
+}
+
+.data-row-picker:hover,
+.data-row-picker:focus-within {
+  border-color: var(--glass-border-hover);
+}
+
+.data-row-picker:focus-within {
+  outline: 1px solid rgba(251, 214, 190, 0.7);
+  outline-offset: 2px;
+}
+
+.data-row-picker-icon {
+  grid-column: 1;
+  width: 20px;
+  height: 20px;
+  background: rgba(247, 244, 234, 0.9);
+  -webkit-mask-image: var(--row-picker-icon);
+  mask-image: var(--row-picker-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* Wrapped, never cut: « Paris-Charles-de-Gaulle » is wider than the menu on
+   the panel's 230 px, and « Paris-Charles… » names no airport. */
+.data-row-picker-name {
+  grid-column: 2;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(247, 244, 234, 0.94);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.data-row-picker.is-empty .data-row-picker-name {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.data-row-picker-code {
+  grid-column: 3;
+  padding: 1px 6px;
+  border: 1px solid rgba(247, 244, 234, 0.32);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: rgba(247, 244, 234, 0.8);
+}
+
+.data-row-picker-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.data-row-picker-field option {
+  color: #0b1210;
+}
+
 /* The period: a caption over a full-width menu. */
 .data-row-select-wrap {
   flex: 1 0 100%;
@@ -7649,6 +7829,78 @@ body.cockpit-mode #intel-hud .hud-left-edge { left: 22px; }
      default break left "vue" alone under "Semaine type · Lyon et Paris, hors
      de cette". Balanced, the two lines carry roughly the same words. */
   text-wrap: balance;
+}
+
+/* A BLOCK DRAWN AS A CARD (`legendHead`) — the approved mock of « Aéroports »
+   (2026-09-24) prints the noise plan this way: what it is about in small
+   capitals, its name large, the document it draws under it. */
+.map-legend-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 8px;
+}
+
+.map-legend-head-kicker {
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(247, 244, 234, 0.72);
+}
+
+.map-legend-head-title {
+  font-family: var(--font-brand);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgba(247, 244, 234, 0.96);
+  text-wrap: balance;
+}
+
+.map-legend-head-subtitle {
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(247, 244, 234, 0.78);
+}
+
+/* The document a block is drawn from (`legendLink`): an outlined button, full
+   width, under everything the block says. */
+.map-legend-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(247, 244, 234, 0.55);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(247, 244, 234, 0.95);
+  text-decoration: none;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.map-legend-link::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 7h10v10'/%3E%3Cpath d='M7 17 17 7'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 7h10v10'/%3E%3Cpath d='M7 17 17 7'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+.map-legend-link:hover,
+.map-legend-link:focus-visible {
+  border-color: var(--accent);
+  background: rgba(251, 214, 190, 0.08);
+}
+
+.map-legend-link:focus-visible {
+  outline: 1px solid rgba(251, 214, 190, 0.7);
+  outline-offset: 2px;
 }
 
 /* The block's own PROVENANCE and CLOCK (E1). Deliberately NOT `.map-legend-note`

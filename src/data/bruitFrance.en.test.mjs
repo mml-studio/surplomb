@@ -17,6 +17,7 @@ import {
   bruitCardCaveat,
   bruitDayText,
   bruitGuidanceLabel,
+  bruitKeyCard,
   bruitLegend,
   bruitMarkerTitle,
   bruitNearestSentence,
@@ -132,13 +133,20 @@ test('a date spells its month in English, and stays DD/MM/YYYY in French', () =>
   assert.equal(bruitDayText('hier'), null);
 });
 
-test('the key names each zone and what it means for a home, in plain English', () => {
+test('the key names each zone by its loudness, and its card says the rest, in plain English', () => {
   const legend = bruitLegend(LEBOURGET);
   assert.ok(legend.length > 0);
-  assert.equal(legend[0].label, 'What can be built');
-  assert.equal(legend[1].label, 'Very loud');
-  assert.equal(legend[1].blurb.split(' — ')[0], 'no new homes');
-  assertNoFrench(legend.map((row) => `${row.label} — ${row.blurb ?? ''}`), { allow: ALLOW });
+  assert.equal(legend[0].label, 'Very loud');
+  const card = bruitKeyCard({ label: 'Paris-Le Bourget', documentUrl: 'https://example.org/plan.pdf' });
+  assert.equal(card.legendHead.subtitle, 'Noise exposure plan · PEB');
+  assert.equal(card.note, 'Rules apply to what is built here. Click a zone to read them. '
+    + 'This plan does not measure noise live.');
+  assert.equal(card.legendLink.label, 'Open the official plan');
+  assertNoFrench([
+    ...legend.map((row) => `${row.label} — ${row.blurb ?? ''}`),
+    card.note,
+    card.legendLink.label,
+  ], { allow: ALLOW });
 });
 
 test('the caveat still says what is NOT in the layer, and how coarse it is drawn', () => {

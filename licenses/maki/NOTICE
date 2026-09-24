@@ -11,8 +11,9 @@ Source: https://github.com/mapbox/maki
         Retrieved 2026-09-02 (aerialway, harbor), 2026-09-14 (bicycle,
         scooter, car, charging-station, communications-tower, doctor,
         hospital) and 2026-09-15 (restaurant, bakery, bank, fitness-centre,
-        library, grocery, pharmacy, post, fuel, police, swimming) at commit
-        28e2a3602e4b — the same upstream HEAD on all three dates.
+        library, grocery, pharmacy, post, fuel, police, swimming) and
+        2026-09-24 (airport) at commit 28e2a3602e4b — the same upstream HEAD
+        on all four dates.
 
 CC0 IMPOSES NO CONDITIONS. There is no attribution requirement, no notice to
 propagate, and no obligation to state modifications. This file exists because
@@ -21,7 +22,7 @@ the same reason `DATA_SOURCES.md` records where every feed comes from — and
 because it lets a reader audit the claims below without cloning the upstream
 repository.
 
-WHAT WAS TAKEN. Twenty-one glyphs, held in one module.
+WHAT WAS TAKEN. Twenty-two glyphs, held in one module.
 
 `src/data/mapIcons.js` holds the artwork:
 
@@ -70,6 +71,10 @@ WHAT WAS TAKEN. Twenty-one glyphs, held in one module.
     swimming         — « Bassin de natation » (F101),
                        all eleven drawn by `src/data/amenityFamilyIcons.js` for
                        the French everyday-equipment layer.
+
+    airport          — the tag over each airport whose noise plan is drawn,
+                       beside its name and code, painted on a canvas by
+                       `src/data/bruitFrance.js`.
 
 `aerialway` replaced Material Symbols' `cable_car`, which is an interface glyph:
 a boxed cabin on stubby legs that reads as a building at the 22 CSS px that

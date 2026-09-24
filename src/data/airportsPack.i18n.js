@@ -68,25 +68,34 @@ export default defineMessages({
     },
   },
 
+  /**
+   * The display floors. `label` is the chip word it was, still the one a
+   * test or a voice reply names it by; `option` is the line of the « Afficher »
+   * menu that has replaced the chips under the row's tiles (2026-09-24).
+   */
   floors: {
     all: {
       label: { fr: 'TOUS', en: 'ALL' },
+      option: { fr: 'Tous les terrains', en: 'Every field' },
       title: { fr: 'Tous les terrains du paquet', en: 'Every field in the pack' },
     },
     airports: {
       label: { fr: 'AÉROPORTS', en: 'AIRPORTS' },
+      option: { fr: 'Aéroports seulement', en: 'Airports only' },
       title: { fr: 'Masquer les aérodromes et aéroclubs', en: 'Hide airfields and flying clubs' },
     },
     airlines: {
       // SCHEDULED, not ROUTES: on a map of roads and rails, "routes" would
       // read as the wrong kind of line.
       label: { fr: 'LIGNES', en: 'SCHEDULED' },
+      option: { fr: 'Avec vols réguliers', en: 'With scheduled flights' },
       title: {
         fr: 'Ne garder que les terrains desservis par une ligne régulière',
         en: 'Keep only fields served by a scheduled route',
       },
     },
   },
+  floorMenu: { fr: 'Afficher', en: 'Show' },
 
   legend: {
     markerRange: {

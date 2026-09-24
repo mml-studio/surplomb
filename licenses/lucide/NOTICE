@@ -10,7 +10,7 @@ Source: https://github.com/lucide-icons/lucide
         icons/<name>.svg
         Retrieved 2026-09-21 at commit 951813ce76a8 (release 1.47.0).
 
-WHAT WAS TAKEN. Thirty-two icons, in two files.
+WHAT WAS TAKEN. Thirty-three icons, in two files.
 
 `index.html`, the landing page's scene « Choisissez une vue. »
 (src/vitrine/stage.js), draws them in its tab bar, its pause control and its
@@ -101,6 +101,18 @@ the « Incendies » row in the map key (`src/data/lucideIcons.js`):
 
 Both are Lucide's own, under ISC, and are drawn exactly as the other tiles'
 are: copied verbatim, used as a CSS mask.
+
+And one more (retrieved 2026-09-24 at the same commit) as a tile under the
+« Aéroports » row of the Layers panel (`src/data/lucideIcons.js`):
+
+    audio-lines — « Bruit & urbanisme ».
+
+It is Lucide's own, under ISC. The row's other tile, « Les aéroports », and
+its airport menu reuse `plane`, listed above. Drawn exactly as the other
+tiles' are: copied verbatim, used as a CSS mask. And `style.css` draws
+`arrow-up-right`, listed above, on the key's « Consulter le plan officiel »
+button, inline as a CSS mask. (The noise layer's airport tags on the globe
+draw Maki's `airport`, not this `plane`: see `licenses/maki/NOTICE`.)
 
 They are INTERFACE icons, drawn at 18-22 CSS px in a menu bar, which is the job
 Lucide authors for; nothing here is drawn on the globe, where the cartographic
