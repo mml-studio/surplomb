@@ -19,8 +19,7 @@
  * 2002, and the register keeps both eras in the same two columns with nothing
  * to tell them apart. Measured over ALL 224 airports in the arrêté index on
  * 2026-09-02, one probe each at the scale {@link BRUIT_PROBE_PIXEL_DEG} pins,
- * {@link BRUIT_PROBE_FEATURE_COUNT} features max — 298 PEB zone rows returned
- * (plus 11 PGS rows, all Lden):
+ * {@link BRUIT_PROBE_FEATURE_COUNT} features max — 298 PEB zone rows returned:
  *
  *   arrêté before 2002    75 rows, values 78 … 96   (indice psophique)
  *   arrêté 2002 or later 223 rows, values 50 … 70   (Lden dB(A))
@@ -67,10 +66,9 @@
  *
  * The cutoff sits between 1:26,505 and 1:24,848, i.e. on 1:25,000. Below it the
  * service answers HTTP 200 with an empty FeatureCollection, which reads exactly
- * like "there is no noise plan here". Its sibling `dgac_pgs_plan_wmsv` has no
- * such floor — measured down to 1:994 at Orly, still answering. So the probe
- * geometry is PINNED at {@link BRUIT_PROBE_PIXEL_DEG} per pixel (1:39,757, a
- * 59% margin over the measured floor) and never derived from the camera.
+ * like "there is no noise plan here". So the probe geometry is PINNED at
+ * {@link BRUIT_PROBE_PIXEL_DEG} per pixel (1:39,757, a 59% margin over the
+ * measured floor) and never derived from the camera.
  *
  * That pinning also buys detail: the returned outline is generalised to the
  * requested scale. Same Roissy zone C, 2,106 B at 1:312,968 and 9,660 B at
@@ -105,11 +103,7 @@
 
 import { formatQuantity } from '../i18n/format.js';
 import { pointInPolygons, polygonsBounds, ringLabelAnchor } from './ringGeometry.js';
-import messages, {
-  BRUIT_INDEX_UNITS,
-  PEB_ZONE_SENTENCES,
-  PGS_ZONE_SENTENCES,
-} from './bruitFeed.i18n.js';
+import messages, { BRUIT_INDEX_UNITS, PEB_ZONE_SENTENCES } from './bruitFeed.i18n.js';
 
 /**
  * A zone table whose sentences are read when a card is DRAWN, not when this
@@ -137,10 +131,15 @@ function zoneSentences(catalog, keys) {
 /** The keyless Géoplateforme vector WMS. `<Fees>none</Fees>`, CORS `*`. */
 export const BRUIT_WMS_BASE = 'https://data.geopf.fr/wms-v/ows';
 
-/** Plan d'exposition au bruit — where you may not build. */
+/**
+ * Plan d'exposition au bruit — where you may not build.
+ *
+ * The only DGAC plan this layer reads. Its sibling `dgac_pgs_plan_wmsv`, the
+ * *plan de gêne sonore* that maps who the noise tax pays to soundproof, was
+ * drawn beside it until 2026-09-24 and dropped: it answered at 11 of the 224
+ * aerodromes, under a panel chip that reads « Bruit (PEB) » and never named it.
+ */
 export const BRUIT_PEB_LAYER = 'dgac_peb_plan_wmsv';
-/** Plan de gêne sonore — who the insulation fund pays. */
-export const BRUIT_PGS_LAYER = 'dgac_pgs_plan_wmsv';
 
 /**
  * Attribution carried on every payload (see DATA_SOURCES.md).
@@ -149,8 +148,7 @@ export const BRUIT_PGS_LAYER = 'dgac_pgs_plan_wmsv';
  * word for word in both languages, like every other credit on the globe.
  */
 // i18n-ignore-start — a licence attribution, reproduced verbatim.
-export const BRUIT_SOURCE = 'Plans d’exposition au bruit et plans de gêne sonore — DGAC, '
-  + 'via la Géoplateforme (data.geopf.fr)';
+export const BRUIT_SOURCE = 'Plans d’exposition au bruit — DGAC, via la Géoplateforme (data.geopf.fr)';
 // i18n-ignore-end
 
 /**
@@ -397,36 +395,14 @@ export const PEB_ZONE_ORDER = Object.freeze(['A', 'B', 'C', 'D']);
  */
 export const PEB_ZONE_LABELS = zoneSentences(PEB_ZONE_SENTENCES, ['A', 'B', 'C', 'D']);
 
-/** PGS zones, most exposed first. Published as the digits 1/2/3. */
-export const PGS_ZONE_ORDER = Object.freeze(['1', '2', '3']);
-
 /**
- * What each PGS zone entitles the ground under it to.
+ * The PEB's field names for its two thresholds and its date.
  *
- * The PGS is not a building rule at all — it is the map of who the *taxe sur
- * les nuisances sonores aériennes* pays to soundproof. That is why it is drawn
- * differently from the PEB and never merged with it.
+ * The thresholds arrive as STRINGS (`'56'`, and once `'56.5'`) — see
+ * {@link threshold} — and the date as `date_arret`, which is stale on at least
+ * one aerodrome; see the module header.
  */
-export const PGS_ZONE_LABELS = zoneSentences(PGS_ZONE_SENTENCES, ['1', '2', '3']);
-
-/**
- * The two plans' field names for the same four concepts.
- *
- * Not a rename — a different schema on a sibling layer of the same service.
- * PEB publishes its thresholds as STRINGS (`'56'`, and once `'56.5'`), PGS as
- * integers; PEB spells the arrêté date `date_arret` and PGS `date_arrete`; and
- * PGS's inner threshold arrives as `indice_l_1`, truncated by whatever shapefile
- * the layer was built from. Reading one schema against the other yields
- * `undefined` for every threshold and a card with no numbers on it.
- */
-const FIELD_MAP = Object.freeze({
-  peb: Object.freeze({
-    low: 'indldenext', high: 'indldenint', date: 'date_arret', zones: PEB_ZONE_ORDER,
-  }),
-  pgs: Object.freeze({
-    low: 'indice_lde', high: 'indice_l_1', date: 'date_arrete', zones: PGS_ZONE_ORDER,
-  }),
-});
+const PEB_FIELDS = Object.freeze({ low: 'indldenext', high: 'indldenint', date: 'date_arret' });
 
 /**
  * Build one GetFeatureInfo URL for a point.
@@ -435,7 +411,6 @@ const FIELD_MAP = Object.freeze({
  * Sending lon/lat here does not fail — it answers HTTP 200 about a point in
  * another country.
  *
- * @param {'peb'|'pgs'} kind
  * @param {{lat: number, lon: number}} point
  * @param {number} [pixelDeg] Ground degrees per rendered pixel. The default is
  *   the PINNED probe scale; {@link BRUIT_AREA_PIXEL_DEG} is the overview one.
@@ -444,8 +419,7 @@ const FIELD_MAP = Object.freeze({
  *   bands come back and how generalised they are.
  * @returns {string}
  */
-export function buildBruitProbeUrl(kind, { lat, lon } = {}, pixelDeg = BRUIT_PROBE_PIXEL_DEG) {
-  const layer = kind === 'pgs' ? BRUIT_PGS_LAYER : BRUIT_PEB_LAYER;
+export function buildBruitProbeUrl({ lat, lon } = {}, pixelDeg = BRUIT_PROBE_PIXEL_DEG) {
   // i18n-ignore-start — programmer errors, never shown to a reader.
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     throw new Error('bruit: lat/lon must be finite numbers');
@@ -463,8 +437,8 @@ export function buildBruitProbeUrl(kind, { lat, lon } = {}, pixelDeg = BRUIT_PRO
     SERVICE: 'WMS',
     VERSION: '1.3.0',
     REQUEST: 'GetFeatureInfo',
-    LAYERS: layer,
-    QUERY_LAYERS: layer,
+    LAYERS: BRUIT_PEB_LAYER,
+    QUERY_LAYERS: BRUIT_PEB_LAYER,
     CRS: 'EPSG:4326',
     BBOX: [lat - half, lon - half, lat + half, lon + half].map((v) => v.toFixed(6)).join(','),
     WIDTH: String(BRUIT_PROBE_PIXELS),
@@ -563,9 +537,8 @@ export function noiseIndexOf({
 /**
  * A threshold, as a number, whatever the layer chose to publish it as.
  *
- * PEB sends strings, PGS sends integers, and one PEB row sends `'56.5'` — which
- * `parseInt` silently truncates to 56, moving a boundary half a decibel without
- * saying so.
+ * The PEB sends strings, and one row sends `'56.5'` — which `parseInt` silently
+ * truncates to 56, moving a boundary half a decibel without saying so.
  * @param {unknown} value
  * @returns {?number}
  */
@@ -651,7 +624,7 @@ function bandKey(band) {
 }
 
 /**
- * Project one plan's GetFeatureInfo answer.
+ * Project one PEB GetFeatureInfo answer.
  *
  * `point` is the coordinate the probe was aimed at, and it is what separates
  * "the zone you are standing in" from "a zone the service found near your
@@ -659,11 +632,10 @@ function bandKey(band) {
  * its own published rings, holes included.
  *
  * @param {object|null|undefined} payload GeoJSON FeatureCollection.
- * @param {{kind: 'peb'|'pgs', point: {lat: number, lon: number}}} options
+ * @param {{point: ?{lat: number, lon: number}}} options
  * @returns {Array<object>}
  */
-export function projectBruitZones(payload, { kind = 'peb', point } = {}) {
-  const fields = FIELD_MAP[kind] || FIELD_MAP.peb;
+export function projectBruitZones(payload, { point } = {}) {
   const features = Array.isArray(payload?.features) ? payload.features : [];
   const lon = Number(point?.lon);
   const lat = Number(point?.lat);
@@ -673,19 +645,18 @@ export function projectBruitZones(payload, { kind = 'peb', point } = {}) {
     const properties = feature?.properties || {};
     const geometry = projectRings(feature?.geometry);
     if (!geometry.parts.length) continue;
-    const low = threshold(properties[fields.low]);
-    const high = threshold(properties[fields.high]);
+    const low = threshold(properties[PEB_FIELDS.low]);
+    const high = threshold(properties[PEB_FIELDS.high]);
     const zone = String(properties.zone ?? '').trim() || null;
     const oaci = String(properties.code_oaci ?? '').trim() || null;
     const decided = noiseIndexOf({
-      dateArret: properties[fields.date],
+      dateArret: properties[PEB_FIELDS.date],
       refDoc: properties.ref_doc,
       low,
       high,
     });
     const band = {
-      kind,
-      id: `${kind}:${properties.id_map ?? `${oaci}-${zone}`}`,
+      id: `peb:${properties.id_map ?? `${oaci}-${zone}`}`,
       oaci,
       airport: String(properties.nom ?? '').trim() || null,
       zone,
@@ -751,8 +722,8 @@ export function projectBruitZones(payload, { kind = 'peb', point } = {}) {
   }
   const bands = [...merged.values()];
   const rank = (zone) => {
-    const index = fields.zones.indexOf(String(zone));
-    return index === -1 ? fields.zones.length : index;
+    const index = PEB_ZONE_ORDER.indexOf(String(zone));
+    return index === -1 ? PEB_ZONE_ORDER.length : index;
   };
   // Most exposed first, and a band the point is IN before one merely beside
   // it — so a consumer that takes `bands[0]` is right rather than lucky.
@@ -798,9 +769,8 @@ export function foldByAirport(bands) {
  * says which ring of the document this is.
  */
 function isInnermostZone(band) {
-  const order = band?.kind === 'pgs' ? PGS_ZONE_ORDER : PEB_ZONE_ORDER;
   const key = typeof band?.zone === 'string' ? band.zone.trim().toUpperCase() : '';
-  return key !== '' && key === order[0];
+  return key !== '' && key === PEB_ZONE_ORDER[0];
 }
 
 /**
@@ -823,8 +793,7 @@ function isInnermostZone(band) {
  *
  * ── `short` DROPS THE GLOSS AND NEVER THE WARNING ───────────────────────────
  * A card names its own band once at full length and then mentions other bands
- * in a list — "aussi sur ce point", the aerodrome's four rings, the PGS beside
- * the PEB. Repeating "en moyenne sur 24 h" in each of those says nothing new
+ * in a list — "aussi sur ce point", the aerodrome's four rings. Repeating "en moyenne sur 24 h" in each of those says nothing new
  * and wraps the line, so `short` drops it.
  *
  * It does NOT drop "— pas des décibels". That clause is not a gloss: on the
@@ -861,35 +830,23 @@ export function bandText(band, { short = false } = {}) {
 }
 
 /**
- * Assemble the two plans, the point, and what is NOT there, into one document.
- *
- * A missing half is carried in `available` rather than being an error: the PGS
- * only exists at the ten-odd airports funding an insulation scheme, so "no PGS
- * here" is the normal answer and must not read as an outage.
+ * Assemble the plan, the point, and what is NOT there, into one document.
  *
  * `nearest` is the honest empty state. When no plan covers the ground, the
  * layer names the nearest aerodrome that HAS one, from the arrêté index's own
  * published coordinate — never a guess, never a commune centroid.
  *
- * @param {{peb?: object|null, pgs?: object|null, point: {lat: number, lon: number},
+ * @param {{peb?: object|null, point: {lat: number, lon: number},
  *   nearest?: ?object}} input
  * @returns {object}
  */
-export function projectBruit({
-  peb = null, pgs = null, point, nearest = null,
-} = {}) {
-  const pebBands = projectBruitZones(peb, { kind: 'peb', point });
-  const pgsBands = projectBruitZones(pgs, { kind: 'pgs', point });
-  const pebHere = foldByAirport(pebBands);
-  const pgsHere = foldByAirport(pgsBands);
-  const all = [...pebBands, ...pgsBands];
+export function projectBruit({ peb = null, point, nearest = null } = {}) {
+  const all = projectBruitZones(peb, { point });
   const indices = [...new Set(all.filter((b) => b.atPoint).map((b) => b.index))];
   return {
-    peb: pebBands,
-    pgs: pgsBands,
+    peb: all,
     // The answer: one entry per airport whose plan actually covers this ground.
-    airports: pebHere,
-    pgsAirports: pgsHere,
+    airports: foldByAirport(all),
     point: { lat: point.lat, lon: point.lon },
     // Bands the service returned that do NOT contain the point. They are drawn
     // as context and counted here so a card can say "the louder zone is near"
@@ -906,7 +863,7 @@ export function projectBruit({
     // The scale the outlines were generalised at, carried so the card can say
     // it rather than implying a survey.
     scaleDenominator: BRUIT_PROBE_SCALE_DENOMINATOR,
-    available: { peb: Boolean(peb), pgs: Boolean(pgs) },
+    available: { peb: Boolean(peb) },
   };
 }
 
@@ -1129,14 +1086,13 @@ export function refineBruitCollection(collection, refined, {
  * on screen and nothing else.
  *
  * @param {Array<object>} bands
- * @param {'peb'|'pgs'} kind
  * @param {Array<{oaci: ?string, name: ?string, lat: number, lon: number}>} [known]
  *   The register rows that were probed, for the aerodrome's own published
  *   point. A band whose aerodrome is not among them still gets an entry — it
  *   was returned by a neighbour's probe — placed on its widest band's anchor.
  * @returns {Array<object>}
  */
-export function foldAerodromes(bands, kind = 'peb', known = []) {
+export function foldAerodromes(bands, known = []) {
   const points = new Map();
   for (const airport of known || []) {
     const key = String(airport?.oaci ?? '').trim().toUpperCase();
@@ -1144,10 +1100,9 @@ export function foldAerodromes(bands, kind = 'peb', known = []) {
       points.set(key, airport);
     }
   }
-  const order = kind === 'pgs' ? PGS_ZONE_ORDER : PEB_ZONE_ORDER;
   const rank = (zone) => {
-    const index = order.indexOf(String(zone ?? '').trim().toUpperCase());
-    return index === -1 ? order.length : index;
+    const index = PEB_ZONE_ORDER.indexOf(String(zone ?? '').trim().toUpperCase());
+    return index === -1 ? PEB_ZONE_ORDER.length : index;
   };
   const grouped = new Map();
   for (const band of bands || []) {
@@ -1156,7 +1111,6 @@ export function foldAerodromes(bands, kind = 'peb', known = []) {
     if (entry) { entry.bands.push(band); continue; }
     const registered = points.get(key) || null;
     grouped.set(key, {
-      kind,
       oaci: band?.oaci ?? null,
       // The register's name is the authority; the plan layer's `nom` is the
       // fallback for an aerodrome only a neighbour's probe reached.
@@ -1212,36 +1166,30 @@ export function foldAerodromes(bands, kind = 'peb', known = []) {
  *
  * @param {object} input
  * @param {Array<object|null>} [input.peb] PEB GetFeatureInfo answers.
- * @param {Array<object|null>} [input.pgs] PGS answers.
  * @param {Array<object>} [input.probed] Register rows the probes were aimed at.
  * @param {{lat: number, lon: number}} input.centre Camera centre the view was read around.
  * @param {number} input.radiusKm Radius the aerodromes were selected within.
  * @param {number} [input.candidates] Aerodromes in reach before the cap.
  * @param {number} [input.missing] Aerodromes whose probes did not answer.
  * @param {?object} [input.nearest] Nearest aerodrome with a plan, for an empty view.
- * @param {{peb: boolean, pgs: boolean}} [input.available]
+ * @param {{peb: boolean}} [input.available]
  * @returns {object}
  */
 export function projectBruitArea({
-  peb = [], pgs = [], probed = [], centre, radiusKm,
+  peb = [], probed = [], centre, radiusKm,
   candidates = 0, missing = 0, nearest = null,
-  available = { peb: true, pgs: true },
+  available = { peb: true },
 } = {}) {
-  const pebMerged = mergeBruitCollections(peb);
-  const pgsMerged = mergeBruitCollections(pgs);
+  const merged = mergeBruitCollections(peb);
   // `point: null` on purpose — see the docstring. Every band comes back
   // `atPoint: false`, which is the truth about a band nothing was tested
   // against, and the renderer must not read it as "beside the marker".
-  const pebBands = projectBruitZones(pebMerged, { kind: 'peb', point: null });
-  const pgsBands = projectBruitZones(pgsMerged, { kind: 'pgs', point: null });
-  const all = [...pebBands, ...pgsBands];
+  const all = projectBruitZones(merged, { point: null });
   const indices = [...new Set(all.map((band) => band.index))];
   return {
     area: true,
-    peb: pebBands,
-    pgs: pgsBands,
-    aerodromes: foldAerodromes(pebBands, 'peb', probed),
-    pgsAerodromes: foldAerodromes(pgsBands, 'pgs', probed),
+    peb: all,
+    aerodromes: foldAerodromes(all, probed),
     centre: { lat: centre.lat, lon: centre.lon },
     radiusKm,
     // What was asked, what answered, and what did not. Three numbers because
@@ -1250,7 +1198,7 @@ export function projectBruitArea({
     candidates,
     probed: probed.length,
     missing,
-    duplicates: pebMerged.duplicates + pgsMerged.duplicates,
+    duplicates: merged.duplicates,
     // A dezoomed view spans several arrêtés by construction — Roissy is Lden
     // and half the aerodromes around it are still psophique — so this is
     // NORMAL here, unlike at a point, and the card words it that way.
@@ -1270,7 +1218,7 @@ export function projectBruitArea({
     // `coarseBands` beside it are what let the card say the mixture out loud
     // rather than flattening it to its worst case.
     ...bruitAreaScale(all),
-    available: { peb: available.peb !== false, pgs: available.pgs !== false },
+    available: { peb: available.peb !== false },
   };
 }
 

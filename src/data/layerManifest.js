@@ -424,9 +424,9 @@ export const LAYER_MANIFEST = Object.freeze([
   }),
   Object.freeze({
     id: 'bruit-fr',
-    name: 'Bruit des aéroports (PEB/PGS)',
+    name: 'Bruit des aéroports (PEB)',
     icon: '🔊',
-    source: 'Plans d’exposition au bruit et plans de gêne sonore — DGAC, via la Géoplateforme (data.geopf.fr)',
+    source: 'Plans d’exposition au bruit — DGAC, via la Géoplateforme (data.geopf.fr)',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
     defaultParams: Object.freeze({  }),
     load: () => import('./bruitFrance.js').then((module) => module.default),

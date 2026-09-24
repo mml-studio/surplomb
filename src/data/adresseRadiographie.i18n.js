@@ -529,10 +529,9 @@ export default defineMessages({
       en: 'The noise exposure plans did not answer.',
     },
     zone: {
-      fr: (zone, document) => `Zone ${zone} du ${document}`,
-      en: (zone, document) => `${document} zone ${zone}`,
-      note: '`document` is PEB (what may be built) or PGS (who may be helped to soundproof).',
-      sample: ['C', 'PEB'],
+      fr: (zone) => `Zone ${zone} du PEB`,
+      en: (zone) => `PEB zone ${zone}`,
+      sample: ['C'],
     },
     psophic: { fr: 'indice psophique', en: 'psophic index' },
     order: {

@@ -1,5 +1,5 @@
 /**
- * Strings of `src/data/bruitFrance.js` — Airport noise (PEB/PGS) on the globe.
+ * Strings of `src/data/bruitFrance.js` — Airport noise (PEB) on the globe.
  *
  * ── SIX LINES OF SIXTY CHARACTERS, IN BOTH LANGUAGES ────────────────────────
  *
@@ -62,13 +62,6 @@ export default defineMessages({
       note: 'The subject of a PEB band. Leads the card because “Zone A” on a '
         + 'coloured polygon does not say what the polygon is about.',
     },
-    pgs: {
-      fr: 'Aide à l’insonorisation',
-      en: 'Soundproofing grant',
-      note: 'The PGS is a different document with a different purpose — who '
-        + 'the noise tax pays to soundproof — so it gets its own subject '
-        + 'rather than a qualified “aircraft noise”.',
-    },
     line: {
       fr: (subject, zone) => `${subject} · zone ${zone}`,
       en: (subject, zone) => `${subject} · zone ${zone}`,
@@ -95,13 +88,6 @@ export default defineMessages({
       fr: (zone) => `zone ${zone}`,
       en: (zone) => `zone ${zone}`,
       sample: ['A'],
-    },
-    pgsZone: {
-      fr: (zone) => `PGS zone ${zone}`,
-      en: (zone) => `PGS zone ${zone}`,
-      sample: ['1'],
-      note: 'The PGS is named on its own bands: “zone 3” beside “zone C” '
-        + 'invites reading two documents as one scale.',
     },
     withThreshold: {
       fr: (name, threshold) => `${name} — ${threshold}`,
@@ -236,15 +222,6 @@ export default defineMessages({
         + 'drawn dashed',
       sample: [2],
     },
-    pgsWinner: {
-      fr: (band) => `insonorisation financée : ${band}`,
-      en: (band) => `soundproofing funded: ${band}`,
-      sample: ['PGS zone 1 — 70 dB(A) and above'],
-    },
-    pgsDown: {
-      fr: 'service PGS sans réponse : rien à dire de l’insonorisation',
-      en: 'PGS service did not answer: nothing to say about soundproofing',
-    },
     mixedIndex: {
       fr: 'deux indices ici — les seuils ne se comparent pas entre eux',
       en: 'two indices here — their thresholds do not compare',
@@ -293,11 +270,6 @@ export default defineMessages({
         + `publiée${count > 1 ? 's' : ''} : ${bands}`,
       en: (count, bands) => `${count} ${plural(count, 'zone', 'zones')} published: ${bands}`,
       sample: [4, 'zone A — 70 dB(A) and above ; zone B — 65 to 70 dB(A)'],
-    },
-    pgsZones: {
-      fr: (count) => `insonorisation financée : ${count} zone${count > 1 ? 's' : ''}`,
-      en: (count) => `soundproofing funded: ${count} ${plural(count, 'zone', 'zones')}`,
-      sample: [3],
     },
     notProbed: {
       fr: 'renvoyé par la sonde d’un aérodrome voisin — son plan peut être incomplet ici',
@@ -365,9 +337,9 @@ export default defineMessages({
 
   /**
    * The colour key on the map, written for a reader who has never heard of a
-   * PEB or a PGS. Each document is named by what it is FOR, each zone by how
-   * loud it is and — for the PEB — what that means for a home. The official
-   * names and their acronyms stay one hover away, on the two headings.
+   * PEB. The plan is named by what it is FOR, each zone by how loud it is and
+   * what that means for a home. The official name and its acronym stay one
+   * hover away, on the heading.
    */
   legend: {
     pebHeading: { fr: 'Ce qu’on peut construire', en: 'What can be built' },
@@ -375,12 +347,7 @@ export default defineMessages({
       fr: 'Plan d’exposition au bruit (PEB) : la règle d’urbanisme autour de l’aéroport',
       en: 'Noise exposure plan (PEB): the planning rule around the airport',
     },
-    pgsHeading: { fr: 'Aide pour isoler son logement', en: 'Help to soundproof a home' },
-    pgsHeadingTitle: {
-      fr: 'Plan de gêne sonore (PGS) : les logements dont l’isolation peut être financée',
-      en: 'Noise nuisance plan (PGS): the homes whose soundproofing can be funded',
-    },
-    /** How loud each zone is, in words. PEB letters, then PGS figures. */
+    /** How loud each zone is, in words. */
     loudness: {
       A: { fr: 'Bruit très fort', en: 'Very loud' },
       B: { fr: 'Bruit fort', en: 'Loud' },
@@ -392,9 +359,6 @@ export default defineMessages({
           + 'zone D no grade at all: it is only the plan’s outermost ring. '
           + '“Quieter” is relative on purpose.',
       },
-      1: { fr: 'Bruit très fort', en: 'Very loud' },
-      2: { fr: 'Bruit fort', en: 'Loud' },
-      3: { fr: 'Bruit modéré', en: 'Moderate noise' },
     },
     /** What a PEB zone means for a new home, in a few words. */
     pebRule: {

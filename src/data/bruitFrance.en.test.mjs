@@ -1,4 +1,4 @@
-// Airport noise (PEB/PGS) in English, through the real projection of the real
+// Airport noise (PEB) in English, through the real projection of the real
 // captured probes — the same payloads bruitFrance.test.mjs pins in French.
 //
 // What is checked here is not "no French left": it is that the three things
@@ -27,11 +27,10 @@ import { assertNoFrench, useTestLocale, withLocale } from '../i18n/testing.js';
 
 const read = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 const norm = (value) => String(value).replace(/[\s ]+/g, ' ');
-const EMPTY_PGS = read('bruit-peb-empty-sample.json');
 
-function payloadFor(pebFixture, point, { pgs = EMPTY_PGS, nearest = null } = {}) {
+function payloadFor(pebFixture, point, { nearest = null } = {}) {
   return {
-    ...projectBruit({ peb: pebFixture, pgs, point, nearest }),
+    ...projectBruit({ peb: pebFixture, point, nearest }),
     register: { count: 224, total: 224, short: false, truncated: false },
   };
 }
@@ -49,8 +48,7 @@ const TOUSSUS = payloadFor(read('bruit-peb-empty-sample.json'), { lat: 48.7498, 
 });
 
 const answers = (payload) => ({
-  peb: chooseBruitAnswer(payload.peb, 'peb'),
-  pgs: chooseBruitAnswer(payload.pgs, 'pgs'),
+  peb: chooseBruitAnswer(payload.peb),
 });
 
 /** Proper nouns the detector must accept inside the English cards. */
@@ -59,10 +57,10 @@ const ALLOW = ['PARIS LE BOURGET', 'P. CH. DE-GAULLE', 'DGAC', 'Lden'];
 useTestLocale('en');
 
 test('the rule that chose the zone is named, which is the whole layer', () => {
-  const { peb, pgs } = answers(LFPZ);
+  const { peb } = answers(LFPZ);
   assert.equal(peb.ruleLabel, 'the most exposed');
   assert.equal(BRUIT_WINNER_RULES.only, 'the only zone under the marker');
-  const card = norm(bruitScanDescription(LFPZ, peb, pgs));
+  const card = norm(bruitScanDescription(LFPZ, peb));
   assert.ok(card.includes('2 zones here, chosen: the most exposed'), card);
   assert.ok(card.includes('also under the marker: zone B — old index 89 to 96 — not decibels'), card);
   assert.ok(card.includes('two overlapping zones here'), card);
@@ -71,8 +69,8 @@ test('the rule that chose the zone is named, which is the whole layer', () => {
 test('a pre-2002 number is still not decibels in English', () => {
   // Saint-Cyr is on a 1985 order: 96 is an indice psophique and NOT 96 dB. The
   // warning is never dropped for length, in either language.
-  const { peb, pgs } = answers(LFPZ);
-  const card = norm(bruitScanDescription(LFPZ, peb, pgs));
+  const { peb } = answers(LFPZ);
+  const card = norm(bruitScanDescription(LFPZ, peb));
   assert.ok(card.includes('old index 96 and above'), card);
   assert.ok(card.includes('not decibels'), card);
   // The full index sentence is on the BAND card, which has room for it: the
@@ -82,29 +80,29 @@ test('a pre-2002 number is still not decibels in English', () => {
 });
 
 test('two airports at one point stay two facts', () => {
-  const { peb, pgs } = answers(LEBOURGET);
-  const card = norm(bruitScanDescription(LEBOURGET, peb, pgs));
+  const { peb } = answers(LEBOURGET);
+  const card = norm(bruitScanDescription(LEBOURGET, peb));
   assert.ok(card.includes('two airports here: LFPB, LFPG — two separate orders'), card);
   assert.ok(card.includes('also under the marker: zone D — 50 to 56 dB(A)'), card);
   assert.equal(
-    norm(bruitMarkerTitle(LEBOURGET, peb, pgs)),
+    norm(bruitMarkerTitle(LEBOURGET, peb)),
     'Aircraft noise · zone A — PARIS LE BOURGET',
   );
   assertNoFrench(card, { allow: ALLOW });
 });
 
 test('“no plan here” and “the service did not answer” stay two sentences', () => {
-  const { peb, pgs } = answers(TOUSSUS);
-  assert.equal(norm(bruitMarkerTitle(TOUSSUS, peb, pgs)), 'Aircraft noise — no plan at this point');
-  const healthy = norm(bruitScanDescription(TOUSSUS, peb, pgs));
+  const { peb } = answers(TOUSSUS);
+  assert.equal(norm(bruitMarkerTitle(TOUSSUS, peb)), 'Aircraft noise — no plan at this point');
+  const healthy = norm(bruitScanDescription(TOUSSUS, peb));
   assert.ok(healthy.includes('no noise exposure plan covers this point'), healthy);
   assert.ok(healthy.includes('nearest plan: P. CH. DE-GAULLE (LFPG), 39.4 km away'), healthy);
   assert.ok(healthy.includes('order of Apr 3, 2007'), healthy);
 
-  const down = { ...TOUSSUS, available: { peb: false, pgs: false } };
+  const down = { ...TOUSSUS, available: { peb: false } };
   const a = answers(down);
-  assert.equal(norm(bruitMarkerTitle(down, a.peb, a.pgs)), 'Aircraft noise — service did not answer');
-  const outage = norm(bruitScanDescription(down, a.peb, a.pgs));
+  assert.equal(norm(bruitMarkerTitle(down, a.peb)), 'Aircraft noise — service did not answer');
+  const outage = norm(bruitScanDescription(down, a.peb));
   assert.ok(outage.includes('the PEB service did not answer — this is not “no zone here”'), outage);
   assert.ok(!outage.includes('no noise exposure plan covers this point'), outage);
 });
@@ -201,8 +199,8 @@ test('French is untouched, on the same payloads', () => {
   // winning RULE into words as it decides, which is what a page does — one
   // language per load, from the scan to the card.
   const card = withLocale('fr', () => {
-    const { peb, pgs } = answers(LFPZ);
-    return norm(bruitScanDescription(LFPZ, peb, pgs));
+    const { peb } = answers(LFPZ);
+    return norm(bruitScanDescription(LFPZ, peb));
   });
   assert.ok(card.includes('2 zones ici, retenue : la plus exposée'), card);
   assert.ok(card.includes('aussi sous le repère : zone B — ancien indice de 89 à 96 — pas des décibels'), card);

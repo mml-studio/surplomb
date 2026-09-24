@@ -349,6 +349,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   translated batch by batch in the next pull requests. The language is decided
   before the first paint, so an English page never flashes French.
 
+### Removed
+- **« Bruit (PEB) » draws the noise exposure plan alone.** The chip under
+  « Aéroports » also drew a second DGAC document it never named, the noise
+  nuisance plan (*plan de gêne sonore*, PGS): violet rings around 11 of the
+  224 aerodromes marking the homes whose soundproofing the aircraft noise tax
+  funds, with their own heading in the key (« Aide pour isoler son logement »),
+  their own line on the cards (« insonorisation financée : … ») and their own
+  line on the address sheet (« Zone 3 du PGS »). All of it is gone: the map,
+  the key, the cards and the sheet show the PEB zones A to D only, the voice
+  commands « PGS », « plan de gêne sonore » and « insonorisation » no longer
+  open the layer, and the proxy asks the DGAC service once per point instead
+  of twice.
+
 ### Fixed
 - **« Îlots de fraîcheur » and « Comptages routiers » stayed empty, and
   permits in Paris came from Sitadel alone.** On 2026-09-23 paris.fr's own

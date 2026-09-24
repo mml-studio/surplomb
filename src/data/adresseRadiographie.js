@@ -657,11 +657,6 @@ function projectNuisances({ atmo }) {
  * asks what may be built and who may live there. It is the reading the layer's
  * own header owed and never had a surface for.
  *
- * TWO DOCUMENTS, NEVER ONE SCALE. A *plan d'exposition au bruit* zones what may
- * be BUILT; a *plan de gêne sonore* zones who may be HELPED to soundproof. They
- * are drawn from the same index and mean different things, so they are printed
- * apart and never summed.
- *
  * @param {{bruit: ?object}} parts
  * @returns {{lines: object[], notes: string[]}}
  */
@@ -673,19 +668,18 @@ function projectBruit({ bruit }) {
     notes.push(m.bruit.silent);
     return { lines, notes };
   }
-  const bands = [...(bruit.peb || []), ...(bruit.pgs || [])]
+  const bands = (bruit.peb || [])
     // Only a band the probe actually landed IN is a fact about this door. The
     // overview bands the layer draws around an aerodrome carry `atPoint:false`
     // precisely because nothing was tested against a point.
     .filter((band) => band && band.atPoint !== false);
   for (const band of bands) {
-    const document = band.kind === 'pgs' ? 'PGS' : 'PEB';
     const airport = [band.airport, band.oaci ? `(${band.oaci})` : ''].filter(Boolean).join(' ');
     const index = String(band.index || '').toLowerCase() === 'psophique' ? m.bruit.psophic : 'Lden';
     const range = Number.isFinite(band.low) && Number.isFinite(band.high)
       ? `${index} ${band.low}–${band.high}`
       : index;
-    lines.push(line(m.bruit.zone(band.zone, document), range,
+    lines.push(line(m.bruit.zone(band.zone), range,
       [airport, band.arreteDate ? m.bruit.order(band.arreteDate) : ''].filter(Boolean).join(' · ')));
   }
   if (!bands.length) {

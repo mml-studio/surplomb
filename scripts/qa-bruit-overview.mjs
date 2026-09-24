@@ -458,7 +458,7 @@ const note = (ok, message) => {
       // work out that a coloured polygon was about aircraft noise. What the
       // check is for has not moved: the title must name the ring the click
       // landed in.
-      note(/^(Bruit des avions|Aide à l’insonorisation) · zone [A-D1-3]\b/
+      note(/^Bruit des avions · zone [A-D]\b/
         .test(String(card.ground?.title ?? '')),
       'the ground card names the band the click actually landed in');
     } else {

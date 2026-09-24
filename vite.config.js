@@ -534,7 +534,6 @@ import {
   bruitFeatureKey,
   bruitRefineSeeds,
   refineBruitCollection,
-  BRUIT_PROBE_PIXELS,
   BRUIT_SOURCE,
   buildBruitProbeUrl,
   projectBruit,
@@ -10450,10 +10449,10 @@ function idfmFrequencyProxy() {
 }
 
 // ---------------------------------------------------------------------------
-// Aircraft-noise plans (PEB / PGS) proxy — keyless DGAC via the Géoplateforme
+// Aircraft-noise plans (PEB) proxy — keyless DGAC via the Géoplateforme
 // ---------------------------------------------------------------------------
 /**
- * `GET /api/bruit-fr?lat=&lon=`  — the two plans under one point, plus the
+ * `GET /api/bruit-fr?lat=&lon=`  — the plan under one point, plus the
  *                                  nearest aerodrome that has one.
  * `GET /api/bruit-fr/index`      — the national arrêté register, 224 points.
  * `GET /api/bruit-fr/status`     — provenance and cache state.
@@ -10470,12 +10469,11 @@ function idfmFrequencyProxy() {
  *     sweep with one retry per point and a 1.5 s back-off completed 240 of 240.
  *     A per-address cache in front of it is what turns a pan back over the same
  *     block into zero upstream calls.
- *  2. **ONE SCAN IS THREE FACTS FROM TWO PROTOCOLS.** The PEB polygons and the
- *     PGS polygons are two WMS GetFeatureInfo calls on two different layers, and
- *     "the nearest aerodrome that HAS a plan" comes from a WFS index that is a
- *     different service entirely. Fanned out here, that is one round trip for
- *     the browser instead of three, and the register is fetched once per week
- *     rather than once per tab.
+ *  2. **ONE SCAN IS TWO FACTS FROM TWO PROTOCOLS.** The PEB polygons are a WMS
+ *     GetFeatureInfo call, and "the nearest aerodrome that HAS a plan" comes
+ *     from a WFS index that is a different service entirely. Fanned out here,
+ *     that is one round trip for the browser instead of two, and the register
+ *     is fetched once per week rather than once per tab.
  *  3. **THE REGISTER IS A DISK ARTEFACT.** 66,355 bytes, `numberMatched` 224,
  *     and the arrêtés it lists move on the order of a handful a year — 8 in the
  *     whole of the 2020s, 3 in 2022. Re-downloading it per process start is
@@ -10579,9 +10577,9 @@ const BRUIT_ZONES_TTL_MS = 30 * 24 * 60 * 60 * 1000;
  * THREE, and it is the number the service was measured tolerating. A 240-point
  * sweep at three concurrent with one retry and a 1.5 s back-off completed
  * 240 of 240; the same sweep with no back-off came back **190 of 240 as HTTP
- * 429 in a 134-byte HTML page**. A 24-aerodrome overview is at most 48 calls,
- * which at three at a time was measured at about a second on a cold cache and
- * is zero on a warm one.
+ * 429 in a 134-byte HTML page**. A 24-aerodrome overview is at most 24 calls
+ * — half the 48 that were measured at about a second on a cold cache, when the
+ * noise-nuisance plan was probed beside the PEB — and zero on a warm one.
  */
 const BRUIT_AREA_CONCURRENCY = 3;
 /**
@@ -10649,26 +10647,6 @@ function bruitAreaCentre({ lat, lon }) {
  * as if it could would pin a coarse plan for thirty days and report it as fine.
  */
 const BRUIT_ZONES_CACHE_VERSION = 2;
-/**
- * The declared footprint of `dgac_pgs_plan_wmsv`, from its own capabilities
- * document on 2026-09-02 — and the one probe the overview is allowed to skip.
- *
- * The PGS exists at the ten-odd airports funding an insulation scheme, and the
- * layer says where: `EX_GeographicBoundingBox` is -1.648 … 7.559 E, 43.348 …
- * 49.493 N, against the PEB layer's -61.6 … 55.6 E, -21.4 … 50.7 N. So for an
- * aerodrome in Brittany, in Normandy or overseas the PGS call is a round trip
- * whose answer the service has already published as empty, and skipping it
- * halves the overview's request count over most of France.
- *
- * Widened by a probe half-box (0.51°) rather than used raw: the GetFeatureInfo
- * buffer reaches past the point it is aimed at, so an aerodrome just outside
- * the declared box can still be the one that returns a zone inside it. Nantes
- * (LFRS, 1.611° W) sits 0.037° inside the western edge and does answer.
- */
-const BRUIT_PGS_BBOX = Object.freeze({
-  west: -1.647949219, east: 7.55859375, south: 43.34777832, north: 49.493286133,
-});
-const BRUIT_PGS_BBOX_MARGIN_DEG = (BRUIT_PROBE_PIXELS * BRUIT_AREA_PIXEL_DEG) / 2;
 
 /** @type {?{version: number, at: number, payload: object}} */
 let _bruitIndex = null;
@@ -10679,8 +10657,8 @@ const _bruitInFlight = new Map();
  * Its own limiter, not the shared address one.
  *
  * The four address layers answer about a building and are hit once per camera
- * settle; this one is hit twice (PEB and PGS) and its upstream is the single
- * host that has been measured refusing. 40 a minute per client is roughly one
+ * settle; this one's upstream is the single host that has been measured
+ * refusing. 40 a minute per client is roughly one
  * scan every three seconds, which is faster than a human can settle a camera,
  * and 150 globally keeps one tab from spending the whole allowance.
  */
@@ -10805,35 +10783,32 @@ async function ensureBruitIndex() {
 }
 
 /**
- * Build one scan: both plans, plus what the register says about the emptiness.
+ * Build one scan: the plan, plus what the register says about the emptiness.
  *
- * The two probes are fanned out with `Promise.all` and each carries its own
- * `catch` inside `fetchBruitJson`, so a PGS outage degrades ONE field and the
- * PEB answer still lands. `available` is what the layer reads to tell "no zone
- * here" from "no answer here" — the two look identical downstream, and getting
- * that wrong turns an outage into a clean bill of health.
+ * The probe and the register are fanned out with `Promise.all`, and a register
+ * outage costs only the "nearest aerodrome" sentence. A probe that did not
+ * answer is NOT an empty plan — the two look identical downstream, and getting
+ * that wrong turns an outage into a clean bill of health — so it is no scan at
+ * all.
  *
  * @param {{lat: number, lon: number}} point
  * @returns {Promise<object|null>}
  */
 async function buildBruitScan(point) {
-  const [peb, pgs, index] = await Promise.all([
-    fetchBruitJson(buildBruitProbeUrl('peb', point)),
-    fetchBruitJson(buildBruitProbeUrl('pgs', point)),
+  const [peb, index] = await Promise.all([
+    fetchBruitJson(buildBruitProbeUrl(point)),
     ensureBruitIndex().catch((err) => {
       console.warn('[Bruit Proxy] arrêté index:', err?.message || err);
       return null;
     }),
   ]);
-  // Both halves down is not an answer at all. One down is a degraded answer and
-  // the card says which half.
-  if (!peb && !pgs) return null;
+  if (!peb) return null;
   const register = index?.payload ?? null;
   const nearest = register
     ? nearestArrete(register.airports, point.lat, point.lon, BRUIT_NEAREST_MAX_KM)
     : null;
   return {
-    ...projectBruit({ peb, pgs, point, nearest }),
+    ...projectBruit({ peb, point, nearest }),
     source: BRUIT_SOURCE,
     register: register
       ? {
@@ -10856,7 +10831,7 @@ async function buildBruitScan(point) {
   };
 }
 
-/** @type {Map<string, {at: number, peb: ?object, pgs: ?object}>} One aerodrome's overview zones. */
+/** @type {Map<string, {at: number, peb: ?object}>} One aerodrome's overview zones. */
 const _bruitZones = new Map();
 let _bruitZonesDiskChecked = false;
 let _bruitZonesDirty = false;
@@ -11005,7 +10980,6 @@ async function bruitForeground(job) {
  * stays coarse and says so, which is the honest outcome and, on 170 measured
  * bands, one that never happened.
  *
- * @param {'peb'|'pgs'} kind
  * @param {object} feature Coarse feature to refine.
  * @param {?number} [deadline] `Date.now()` past which this pass gives up. A
  *   finite value also means THIS IS THE FOREGROUND PASS — a client is blocked
@@ -11013,7 +10987,7 @@ async function bruitForeground(job) {
  *   and `bruitRefineYield` would wait on the gate this pass is holding.
  * @returns {Promise<?object>} Fine GeoJSON geometry.
  */
-async function bruitRefineFeature(kind, feature, deadline = null) {
+async function bruitRefineFeature(feature, deadline = null) {
   const key = bruitFeatureKey(feature);
   if (key === null) return null;
   for (const seed of bruitRefineSeeds(feature.geometry)) {
@@ -11026,7 +11000,7 @@ async function bruitRefineFeature(kind, feature, deadline = null) {
       // `bruitRefineAerodrome`.
       return null;
     }
-    const answer = await fetchBruitJson(buildBruitProbeUrl(kind, seed, BRUIT_PROBE_PIXEL_DEG));
+    const answer = await fetchBruitJson(buildBruitProbeUrl(seed, BRUIT_PROBE_PIXEL_DEG));
     // `null` is the service refusing, and it is NOT a miss on this seed: trying
     // the next one would spend the whole budget on an outage. Give the band up
     // for now; the aerodrome stays unrefined and is queued again next scan.
@@ -11062,23 +11036,20 @@ async function bruitRefineYield() {
 async function bruitRefineAerodrome(oaci, deadline = null) {
   const held = _bruitZones.get(oaci);
   if (!bruitNeedsRefine(held)) return true;
-  const refined = { peb: null, pgs: null };
+  let refined = null;
   let coarse = 0;
-  for (const kind of ['peb', 'pgs']) {
-    const collection = held[kind];
-    const features = Array.isArray(collection?.features) ? collection.features : [];
-    if (!features.length) continue;
+  const features = Array.isArray(held.peb?.features) ? held.peb.features : [];
+  if (features.length) {
     const geometries = new Map();
     for (const feature of features) {
-      const geometry = await bruitRefineFeature(kind, feature, deadline);
+      const geometry = await bruitRefineFeature(feature, deadline);
       if (geometry) geometries.set(bruitFeatureKey(feature), geometry);
     }
     // PARTIAL WORK IS STILL MERGED. The bands the budget reached are stamped
     // fine and the rest stay coarse, so a truncated pass is progress the next
     // one does not repeat rather than an all-or-nothing throw.
-    const next = refineBruitCollection(collection, geometries);
-    coarse += next.coarse;
-    refined[kind] = next;
+    refined = refineBruitCollection(held.peb, geometries);
+    coarse = refined.coarse;
   }
   const current = _bruitZones.get(oaci);
   // Replaced under us while we waited — the refinement describes a collection
@@ -11094,8 +11065,7 @@ async function bruitRefineAerodrome(oaci, deadline = null) {
   const truncated = deadline !== null && Date.now() >= deadline;
   _bruitZones.set(oaci, {
     at: held.at,
-    peb: refined.peb ?? held.peb,
-    pgs: refined.pgs ?? held.pgs,
+    peb: refined ?? held.peb,
     // Only a pass that reached EVERY band closes the aerodrome out. One left
     // coarse means the entry is retried later — which turns a transient 429
     // into a delay instead of a month of facets — but not on the very next
@@ -11228,13 +11198,6 @@ function bruitDrainRefineQueue() {
   })();
 }
 
-/** Whether the PGS layer declares any ground at this aerodrome — see {@link BRUIT_PGS_BBOX}. */
-function bruitPgsInFootprint(airport) {
-  const m = BRUIT_PGS_BBOX_MARGIN_DEG;
-  return airport.lon >= BRUIT_PGS_BBOX.west - m && airport.lon <= BRUIT_PGS_BBOX.east + m
-    && airport.lat >= BRUIT_PGS_BBOX.south - m && airport.lat <= BRUIT_PGS_BBOX.north + m;
-}
-
 /**
  * One aerodrome's whole plan, at overview scale, from cache or the service.
  *
@@ -11245,7 +11208,7 @@ function bruitPgsInFootprint(airport) {
  * missing from an overview looks exactly like ground with no plan on it.
  *
  * @param {{oaci: ?string, lat: number, lon: number}} airport
- * @returns {Promise<{oaci: string, peb: ?object, pgs: ?object, cached: boolean,
+ * @returns {Promise<{oaci: string, peb: ?object, cached: boolean,
  *   failed: boolean, pending: boolean}>} `pending` is whether a second pass is
  *   queued for this aerodrome right now — see `bruitNeedsRefine`.
  */
@@ -11262,41 +11225,37 @@ async function bruitAerodromeZones(airport) {
     const pending = bruitNeedsRefine(held);
     if (pending) _bruitRefineQueue.set(oaci, true);
     return {
-      oaci, peb: held.peb, pgs: held.pgs, cached: true, failed: false, pending,
+      oaci, peb: held.peb, cached: true, failed: false, pending,
     };
   }
-  const wantsPgs = bruitPgsInFootprint(airport);
-  // Held open only for the two calls the client is actually waiting on. The
+  // Held open only for the call the client is actually waiting on. The
   // refinement runs outside it, by design — see `_bruitForeground`.
-  const [peb, pgs] = await bruitForeground(() => Promise.all([
-    fetchBruitJson(buildBruitProbeUrl('peb', airport, BRUIT_AREA_PIXEL_DEG)),
-    wantsPgs
-      ? fetchBruitJson(buildBruitProbeUrl('pgs', airport, BRUIT_AREA_PIXEL_DEG))
-      : Promise.resolve({ type: 'FeatureCollection', features: [] }),
-  ]));
+  const peb = await bruitForeground(
+    () => fetchBruitJson(buildBruitProbeUrl(airport, BRUIT_AREA_PIXEL_DEG)),
+  );
   if (!peb) {
     // Serve whatever is held rather than a hole, and say it is old.
     if (held) {
       const pending = bruitNeedsRefine(held);
       if (pending) _bruitRefineQueue.set(oaci, true);
-      return { oaci, peb: held.peb, pgs: held.pgs, cached: true, failed: false, pending };
+      return { oaci, peb: held.peb, cached: true, failed: false, pending };
     }
-    return { oaci, peb: null, pgs: pgs ?? null, cached: false, failed: true, pending: false };
+    return { oaci, peb: null, cached: false, failed: true, pending: false };
   }
-  const entry = { at: Date.now(), peb, pgs: pgs ?? null, refined: false, triedAt: null };
+  const entry = { at: Date.now(), peb, refined: false, triedAt: null };
   _bruitZones.set(oaci, entry);
   scheduleBruitZonesWrite();
   // The coarse answer goes back NOW and the fine one is fetched behind it. The
   // whole point of the second pass is that nobody waits for it.
   _bruitRefineQueue.set(oaci, true);
-  return { oaci, peb, pgs: entry.pgs, cached: false, failed: false, pending: true };
+  return { oaci, peb, cached: false, failed: false, pending: true };
 }
 
 /**
  * Run one job per item, at most {@link BRUIT_AREA_CONCURRENCY} at a time.
  *
- * `Promise.all` over twelve aerodromes is twenty-four simultaneous calls at the
- * one upstream this file has measured refusing under load. Written here rather
+ * `Promise.all` over twenty-four aerodromes is twenty-four simultaneous calls
+ * at the one upstream this file has measured refusing under load. Written here rather
  * than reached for from a helper because it is six lines and the alternative is
  * a dependency for six lines.
  */
@@ -11359,7 +11318,7 @@ async function buildBruitArea(centre, radiusKm, fine = false) {
   const probes = fine ? coarse.map((probe) => {
     const held = probe.failed ? null : _bruitZones.get(probe.oaci);
     if (!held) return probe;
-    return { ...probe, peb: held.peb, pgs: held.pgs, pending: bruitNeedsRefine(held) };
+    return { ...probe, peb: held.peb, pending: bruitNeedsRefine(held) };
   }) : coarse;
   const answered = probes.filter((probe) => !probe.failed);
   const missing = probes.length - answered.length;
@@ -11370,7 +11329,6 @@ async function buildBruitArea(centre, radiusKm, fine = false) {
   return {
     ...projectBruitArea({
       peb: answered.map((probe) => probe.peb),
-      pgs: answered.map((probe) => probe.pgs),
       probed: selected.filter((airport, i) => !probes[i].failed),
       centre,
       radiusKm,
@@ -11380,7 +11338,7 @@ async function buildBruitArea(centre, radiusKm, fine = false) {
       // for the same reason the empty point scan does.
       nearest: selected.length ? null
         : nearestArrete(register.airports, centre.lat, centre.lon, BRUIT_NEAREST_MAX_KM),
-      available: { peb: missing === 0, pgs: missing === 0 },
+      available: { peb: missing === 0 },
     }),
     // Aerodromes in reach that the request budget dropped. Reported so the
     // layer can say so rather than drawing a map that stops at twelve.
