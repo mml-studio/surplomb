@@ -283,6 +283,9 @@ Context:
   rule. Nothing else.
 - Maintainer's decision (2026-09-17): PostHog will come later. Do not
   integrate it in the test's pull request.
+- Since 2026-10-12 PostHog counts visits (`src/audienceMeasure.js`,
+  cookieless), but the A/B test still reports to its own sink: the
+  remaining work below is moving the test's events there.
 
 Consequences in runtime:
 - No funnel across days beyond the impression / return-visit pair; no
@@ -297,12 +300,15 @@ Consequences in runtime:
   TTL) stays: the draw must stay client-side so that `/` remains a static,
   cacheable page.
 - Condition for keeping the consent exemption (article 82 of the French data
-  protection act, LIL, audience measurement): PostHog EU Cloud (Frankfurt),
-  cookieless mode (`persistence: 'memory'`, no autocapture, no session
-  replay), no cross-referencing with the `gev_trial` cookie, and the refusal
-  already in place (`src/firstRunOptOut.js`) wired to it. Otherwise, a consent
-  banner. `/confidentialite` will have to name PostHog as a processor, in the
-  same pull request.
+  protection act, LIL, audience measurement), already met by the visit
+  count: PostHog EU Cloud (Frankfurt), `cookieless_mode: 'always'`, no
+  autocapture, no session replay, no cross-referencing with the `gev_trial`
+  cookie, and the refusal in `src/firstRunOptOut.js` wired to it. The
+  test's events would add the variant and the card's gestures to what
+  `/confidentialite` lists for PostHog, in the same pull request. One
+  catch: PostHog's cookieless id lasts one day, so « came back after
+  24 h » cannot be read there; the test's own 13-month id would have to
+  travel as an event property, which the privacy page must then say.
 
 ### Outside France, the hosted Satellite map is 10 m Sentinel-2 until the ArcGIS key exists
 Status: Open (waiting on the owner's key), 2026-09-22 — the licence half is fixed

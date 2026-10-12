@@ -11,9 +11,10 @@ Two consequences shape everything below:
 1. **A reachable origin is a spendable wallet.** `/api/realtime/token` and
    `/api/google/nearby-places` cost real money per call. Set
    `GEV_ACCESS_PASSWORD` before the URL exists, not after.
-2. **`GOOGLE_MAPS_API_KEY`, `CESIUM_ION_TOKEN` and `ARCGIS_API_KEY` are
-   inlined at build time** (the `define` block in `vite.config.js`), so they
-   must be present when the image is built, not only when it runs.
+2. **`GOOGLE_MAPS_API_KEY`, `CESIUM_ION_TOKEN`, `ARCGIS_API_KEY` and
+   `POSTHOG_PROJECT_TOKEN` are inlined at build time** (the `define` block in
+   `vite.config.js`), so they must be present when the image is built, not only
+   when it runs.
 
 ## Deploy your own
 
@@ -916,6 +917,47 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
   page's promise holds on its own; once the analysis is written up, delete the
   rest without waiting:
   `ssh box 'docker exec gev rm -rf /app/.gev-cache/first-run-ab'`.
+
+### Audience measurement (PostHog)
+
+Off unless `POSTHOG_PROJECT_TOKEN` is set. With it, every page sends PostHog
+EU Cloud a page view and a page leave, without a cookie
+(`src/audienceMeasure.js` lists what is sent and what is not), and
+`/confidentialite` describes it. The token is read **twice**: inlined at build
+time into the bundle, and read at request time by the privacy page and
+`/healthz`. Both come from `/opt/gev/.env`, so one line covers both — provided
+the image is rebuilt after the edit.
+
+1. **In PostHog**, on an EU Cloud project: Settings > Web analytics, turn on
+   « Cookieless server hash mode ». Without it PostHog discards every event the
+   site sends, and says so only under ingestion warnings.
+2. **The compose file** must carry the build arg (`POSTHOG_PROJECT_TOKEN:` under
+   `build.args`); copy it over if the box's copy predates it — see « The compose
+   file does not update itself » above.
+3. **The token, and the provider** — PostHog stores what the site sends, so it
+   joins `GEV_LEGAL_HOSTING` (LCEN art. 1-1), with its company name and postal
+   address from its own privacy policy. No unquoted ` #` in that value.
+
+   ```sh
+   ssh -t box 'cd /opt/gev && cp .env .env.bak-$(date +%F)-posthog && $EDITOR .env'   # POSTHOG_PROJECT_TOKEN=phc_…
+   ssh box 'cd /opt/gev && docker compose up -d --build'   # a rebuild: the token is in the bundle
+   ```
+
+4. **Check both halves:**
+
+   ```sh
+   curl -s https://<your-host>/healthz                                    # "audience": true
+   ssh box 'docker exec gev sh -c "grep -l \"\$POSTHOG_PROJECT_TOKEN\" /app/dist/assets/*.js"'   # one audienceMeasure-*.js
+   ```
+
+   Then open the site in a browser without Global Privacy Control: PostHog's
+   Activity > Live events shows a `$pageview` whose `$current_url` has no `#`
+   and no `?q=`. `node scripts/qa-audience-measure.mjs` proves the same against
+   a local build without sending anything (usage in its header).
+
+**Rolling back:** remove the line, then `docker compose up -d --build`. Until
+the rebuild, the bundle keeps measuring while the page no longer says so —
+rebuild in the same breath.
 
 ## Sources a commercial deployment may not use
 

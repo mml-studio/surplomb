@@ -252,4 +252,12 @@ async function boot() {
 // and `src/i18n/importSafety.test.mjs` imports every catalogued module with
 // `document` and `navigator` poisoned to prove nothing reads the environment
 // while loading. `window` is the one global that says "there is a page here".
-if (typeof window !== 'undefined') void boot();
+if (typeof window !== 'undefined') {
+  void boot();
+  // Audience measurement, as in src/boot.js: nothing without a build token.
+  if (import.meta.env.POSTHOG_PROJECT_TOKEN) {
+    import('./audienceMeasure.js')
+      .then(({ startAudienceMeasure }) => startAudienceMeasure())
+      .catch(() => {});
+  }
+}

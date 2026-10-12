@@ -154,7 +154,9 @@ import {
   validateKeySetupUpdates,
 } from './src/keySetupCore.mjs';
 import { hardenCredentialFile } from './src/keySetupHardening.mjs';
-import { LEGAL_PAGES, legalNoticeFromEnv, legalPageForUrl, renderLegalPage } from './src/legalNotice.js';
+import {
+  LEGAL_PAGES, audienceMeasureFromEnv, legalNoticeFromEnv, legalPageForUrl, renderLegalPage,
+} from './src/legalNotice.js';
 import { projectVigicruesFeed } from './src/data/vigicruesFeed.js';
 import { projectVigilanceProduct } from './src/data/meteoFranceVigilanceFeed.js';
 import {
@@ -30691,6 +30693,10 @@ function accessGatePlugin() {
         legal: legalNoticeFromEnv(process.env).complete,
         // Whether the first-run A/B test is collecting (GEV_FIRST_RUN_AB).
         abtest: Boolean(firstRunExperimentFromEnv(process.env)),
+        // Whether /confidentialite describes the PostHog audience measurement
+        // (POSTHOG_PROJECT_TOKEN at runtime). The bundle's copy of the token is
+        // checked apart: docs/DEPLOY.md, « Audience measurement ».
+        audience: audienceMeasureFromEnv(process.env),
         // The non-commercial sources this deployment has switched off
         // (GEV_NONCOMMERCIAL_SOURCES). `["open-meteo"]` on a commercial host.
         sourcesOff: sourcesOff(process.env),
@@ -32077,6 +32083,12 @@ export default defineConfig(({ mode, command }) => {
       // (src/data/worldImagery.js). Public by design: restrict it by referrer
       // and to the basemap privilege, see docs/DEPLOY.md.
       'import.meta.env.ARCGIS_API_KEY': JSON.stringify(env.ARCGIS_API_KEY),
+      // PostHog project token for the cookieless audience measurement
+      // (src/audienceMeasure.js). Public by design, like the two keys above;
+      // empty, the branch that loads the measurement is dropped from the
+      // bundle. The same variable at RUNTIME is what makes /confidentialite
+      // describe it (`audience` in src/legalNotice.js).
+      'import.meta.env.POSTHOG_PROJECT_TOKEN': JSON.stringify(String(env.POSTHOG_PROJECT_TOKEN || '').trim()),
       // Where the aircraft GLBs actually live. Keyed on `command`, the same
       // signal `hashedModelsDirPlugin` applies on, so the directory and the
       // path that names it can never disagree; `vite dev` serves `public/`

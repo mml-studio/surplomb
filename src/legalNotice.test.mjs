@@ -5,6 +5,7 @@ import {
   LEGAL_BLOCKS,
   LEGAL_FIELDS,
   LEGAL_PAGES,
+  audienceMeasureFromEnv,
   legalNoticeFromEnv,
   legalPageForUrl,
   renderLegalPage,
@@ -157,7 +158,7 @@ test('the trial cookie is disclosed only where a trial runs', () => {
 test('the welcome-card test is disclosed only where it runs', () => {
   const html = page('confidentialite.html');
   assert.match(html, /<!--gev:if:abtest-->/);
-  assert.match(html, /<!--gev:if:noabtest-->/);
+  assert.match(html, /<!--gev:if:nomeasure-->/);
   const noMeasure = /Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi\./;
   // Fewer than two variants is no test: the page says what it said before.
   for (const env of [FULL_ENV, { ...FULL_ENV, GEV_FIRST_RUN_AB: 'A' }, { ...FULL_ENV, GEV_FIRST_RUN_AB: '' }]) {
@@ -178,6 +179,37 @@ test('the welcome-card test is disclosed only where it runs', () => {
     assert.doesNotMatch(on, /<!--\/?gev:/);
     // The no-cross-referencing promise names the trial cookie only where one exists.
     assert.equal(/gev_trial/.test(on), Boolean(trial.GEV_TRIAL_LIMIT));
+  }
+});
+
+test('the audience measurement is disclosed only where the token is set', () => {
+  const html = page('confidentialite.html');
+  assert.match(html, /<!--gev:if:audience-->/);
+  const noMeasure = /Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi\./;
+  const buttons = (text) => text.split('data-first-run-optout>').length - 1;
+  for (const token of [undefined, '', '   ']) {
+    const env = { ...FULL_ENV, POSTHOG_PROJECT_TOKEN: token };
+    assert.equal(audienceMeasureFromEnv(env), false);
+    const off = renderLegalPage(html, env);
+    assert.doesNotMatch(off, /PostHog/);
+    assert.match(off, noMeasure);
+    assert.equal(buttons(off), 0, 'nothing measured, nothing to refuse');
+  }
+  for (const ab of [{}, { GEV_FIRST_RUN_AB: 'A,B,C' }]) {
+    const env = { ...FULL_ENV, ...ab, POSTHOG_PROJECT_TOKEN: 'phc_exemple' };
+    assert.equal(audienceMeasureFromEnv(env), true);
+    const on = renderLegalPage(html, env);
+    assert.match(on, /Mesure d’audience \(PostHog\)/);
+    assert.match(on, /Union européenne \(Francfort\)/);
+    assert.match(on, /un an chez PostHog/);
+    assert.match(on, /ni cookie ni stockage local/);
+    assert.match(on, /Cloudflare, PostHog/, 'named among the American companies');
+    assert.doesNotMatch(on, noMeasure, 'a measured page must not say it measures nothing');
+    assert.equal(buttons(on), 1, 'one refusal covers every measurement');
+    assert.equal(/test A\/B/.test(on), Boolean(ab.GEV_FIRST_RUN_AB));
+    assert.equal(/le tirage est\s+effacé/.test(on), Boolean(ab.GEV_FIRST_RUN_AB));
+    assert.doesNotMatch(on, /<!--\/?gev:/);
+    assert.doesNotMatch(on, /phc_exemple/, 'the token is never printed');
   }
 });
 

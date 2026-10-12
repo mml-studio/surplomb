@@ -13,7 +13,8 @@
     visiteurs, et la réponse à la question qu'une carte de données publiques
     pose d'abord : est-ce qu'elle montre des gens ?
 
-    CHAQUE PHRASE EST UN CONSTAT SUR LE CODE, relevé le 17/09/2026. Qui change
+    CHAQUE PHRASE EST UN CONSTAT SUR LE CODE, relevé le 17/09/2026 (mesure
+    d'audience : le 12/10/2026, `src/audienceMeasure.js`). Qui change
     un flux (un cookie, un journal, un fournisseur appelé depuis le
     navigateur) change cette page dans la même PR. Les régions balisées
     `gev:if:*` n'apparaissent que si l'instance a allumé la fonction, et
@@ -25,20 +26,27 @@
     <header class="masthead">
       <p class="eyebrow"><a href="/">Surplomb</a> · Confidentialité</p>
       <h1>Ce que Surplomb montre, et ce qu’il ne montre pas</h1>
-      <p class="subline">Mise à jour le 17 septembre 2026.</p>
+      <p class="subline">Mise à jour le 12 octobre 2026.</p>
     </header>
 
     <section>
       <h2>En bref</h2>
       <ul>
-        <!--gev:if:noabtest-->
+        <!--gev:if:nomeasure-->
         <li>Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi.</li>
-        <!--/gev:if:noabtest-->
+        <!--/gev:if:nomeasure-->
+        <!--gev:if:measure-->
+        <li>Pas de compte, pas de publicité, pas de cookie de suivi.</li>
+        <!--/gev:if:measure-->
+        <!--gev:if:audience-->
+        <li>Une mesure d’audience sans cookie : combien de visites, sur quelles
+          pages, venues de quel site. Lue en totaux, sans garder votre adresse IP,
+          sans ce que vous avez tapé.</li>
+        <!--/gev:if:audience-->
         <!--gev:if:abtest-->
-        <li>Pas de compte, pas de publicité, pas de cookie de suivi. Une seule
-          mesure : quelle carte de bienvenue vous a été montrée, et ce que vous en
-          avez fait, sous un identifiant aléatoire propre à ce navigateur, sans
-          votre adresse IP, sans ce que vous avez tapé.</li>
+        <li>Une mesure de la carte de bienvenue : laquelle vous a été montrée, et
+          ce que vous en avez fait, sous un identifiant aléatoire propre à ce
+          navigateur, sans votre adresse IP, sans ce que vous avez tapé.</li>
         <!--/gev:if:abtest-->
         <li>La carte décrit des lieux avec des données publiques. Elle ne suit personne.</li>
         <li>Ce que vous tapez ou dites sert à vous répondre. Surplomb ne le conserve pas.</li>
@@ -206,6 +214,28 @@
               test. Les rapports : quatre-vingt-dix jours sur notre serveur.</td>
           </tr>
           <!--/gev:if:abtest-->
+          <!--gev:if:audience-->
+          <tr>
+            <td>Mesure d’audience (PostHog)</td>
+            <td>À l’ouverture de chaque page, et quand vous passez de l’accueil au
+              globe, votre navigateur envoie à PostHog, dont les serveurs sont dans
+              l’Union européenne (Francfort) : l’adresse de la page, sans rien de ce
+              qui suit le <code>?</code> ou le <code>#</code> (seuls restent les
+              paramètres <code>utm_</code> d’un lien de campagne) ; la page d’où
+              vous venez ; votre navigateur, votre système, téléphone ou
+              ordinateur ; la taille de l’écran et de la fenêtre ; votre langue et
+              votre fuseau horaire. Quand vous quittez la page : le temps passé et
+              jusqu’où vous avez fait défiler. Rien n’est écrit dans votre
+              navigateur, ni cookie ni stockage local. Pour compter les visiteurs
+              sans cookie, PostHog calcule un identifiant à partir du jour, de votre
+              adresse IP, de votre navigateur et du site, mêlés à une valeur secrète
+              qu’il change chaque jour : le lendemain, la même personne ne peut plus
+              être reconnue. Il ne garde ensuite ni votre adresse IP ni la
+              signature de votre navigateur. Aucun clic, aucune saisie, aucun
+              enregistrement de l’écran. Nous n’en lisons que des totaux.</td>
+            <td>Les visites : un an chez PostHog. L’identifiant : un jour.</td>
+          </tr>
+          <!--/gev:if:audience-->
           <!--gev:if:waitlist-->
           <tr>
             <td>Liste d’attente</td>
@@ -232,30 +262,42 @@
         <li>La voix : la demande que vous faites en l’activant.</li>
         <li>Le résumé de la vue : l’intérêt légitime de nommer ce que vous
           regardez. Il ne part qu’après votre premier geste sur la page.</li>
+        <!--gev:if:audience-->
+        <li>La mesure d’audience : l’intérêt légitime de savoir combien de visites
+          reçoit le site, sur quelles pages, et d’où elles viennent. Elle est
+          dispensée de consentement (article 82 de la loi Informatique et
+          Libertés, lignes directrices de la CNIL) : pour ce seul site, lue en
+          totaux, sans recoupement avec d’autres données<!--gev:if:trial-->, pas même
+          le cookie d’essai<!--/gev:if:trial-->.</li>
+        <!--/gev:if:audience-->
         <!--gev:if:abtest-->
         <li>Le test A/B de la carte de bienvenue : l’intérêt légitime de savoir
           quelle carte aide le mieux à commencer. C’est une mesure d’audience
           dispensée de consentement (article 82 de la loi Informatique et
           Libertés, lignes directrices de la CNIL) : pour ce seul site, lue en
           totaux, sans recoupement avec d’autres données<!--gev:if:trial-->, pas même
-          le cookie d’essai<!--/gev:if:trial-->. Vous pouvez la refuser :
+          le cookie d’essai<!--/gev:if:trial-->.</li>
+        <!--/gev:if:abtest-->
+        <!--gev:if:measure-->
+        <li>Vous pouvez refuser d’être mesuré :
           <button type="button" class="optout" data-first-run-optout>Ne pas être mesuré</button>
           <span data-first-run-optout-status role="status"></span>
-          Le choix est gardé dans ce navigateur ; à la visite suivante, la carte
-          par défaut s’affiche, rien n’est envoyé et le tirage est effacé. Un
-          navigateur qui envoie le signal Global Privacy Control n’est jamais
-          mesuré.</li>
-        <!--/gev:if:abtest-->
+          Le choix est gardé dans ce navigateur ; à la visite suivante, rien n’est
+          envoyé<!--gev:if:abtest-->, la carte par défaut s’affiche et le tirage est
+          effacé<!--/gev:if:abtest-->. Un navigateur qui envoie le signal Global
+          Privacy Control n’est jamais mesuré.</li>
+        <!--/gev:if:measure-->
         <!--gev:if:waitlist-->
         <li>La liste d’attente : votre consentement, confirmé par courriel,
           retirable à tout moment.</li>
         <!--/gev:if:waitlist-->
       </ul>
-      <p>OpenAI, Google, Cloudflare<!--gev:if:waitlist--> et Buttondown<!--/gev:if:waitlist-->
+      <p>OpenAI, Google, Cloudflare<!--gev:if:audience-->, PostHog<!--/gev:if:audience--><!--gev:if:waitlist--> et Buttondown<!--/gev:if:waitlist-->
         sont des entreprises américaines. Ces transferts s’appuient sur les
         garanties qu’elles proposent : le cadre de protection des données
         UE–États-Unis ou les clauses contractuelles types de la Commission
-        européenne.</p>
+        européenne.<!--gev:if:audience--> PostHog garde la mesure d’audience dans
+        l’Union européenne.<!--/gev:if:audience--></p>
     </section>
 
     <section>

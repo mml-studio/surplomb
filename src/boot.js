@@ -159,3 +159,12 @@ if (decision.vitrine) {
 } else {
   openCockpit().catch(reportBootFailure);
 }
+
+// Audience measurement (src/audienceMeasure.js). The token is inlined by the
+// build, so a build without one drops this branch and never emits the chunk;
+// with one, the module and then the SDK arrive on their own, after the page.
+if (import.meta.env.POSTHOG_PROJECT_TOKEN) {
+  import('./audienceMeasure.js')
+    .then(({ startAudienceMeasure }) => startAudienceMeasure())
+    .catch(() => {});
+}
