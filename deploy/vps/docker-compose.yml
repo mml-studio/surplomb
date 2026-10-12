@@ -27,6 +27,10 @@ services:
         # referrers and to the basemap privilege (docs/DEPLOY.md). Unset, the
         # base is Sentinel-2 wherever GEV_NONCOMMERCIAL_SOURCES=off.
         ARCGIS_API_KEY: ${ARCGIS_API_KEY:-}
+        # The cookieless audience measurement (src/audienceMeasure.js). Read a
+        # second time at runtime through `env_file` below, which is what puts
+        # PostHog on /confidentialite: one `.env` line, both halves.
+        POSTHOG_PROJECT_TOKEN: ${POSTHOG_PROJECT_TOKEN:-}
         # The one absolute URL in the bundle: the social card's image. Unset,
         # the build uses the public hostname (`SOCIAL_ORIGIN_DEFAULT`), which is
         # correct here — this box also answers on the staging name, and a card

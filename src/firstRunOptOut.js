@@ -1,8 +1,11 @@
-// The visitor's right to refuse the first-run A/B measurement.
+// The visitor's right to refuse being measured: the first-run A/B test and the
+// audience measurement alike.
 //
 // The CNIL audience-measurement exemption holds only if a visitor can object.
-// Two ways, both honoured by `assignFirstRunVariant` (src/firstRunAb.js) on the
-// next boot — which then shows A, sends nothing, and forgets the draw:
+// Two ways, both honoured on the next boot by `assignFirstRunVariant`
+// (src/firstRunAb.js) — which then shows A, sends nothing, and forgets the
+// draw — and by `startAudienceMeasure` (src/audienceMeasure.js), which then
+// never downloads the SDK:
 //
 //   - the « Ne pas être mesuré » button on /confidentialite, which stores one
 //     key in this browser (this module, wired by src/firstRunOptOutPage.js);

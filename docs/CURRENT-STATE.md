@@ -1374,11 +1374,12 @@ Updated: September 24, 2026
 > names the route writes are ever considered.
 >
 > **The privacy page follows the switch.** `CONDITIONAL_SECTIONS` in
-> `src/legalNotice.js` gains `abtest` and `noabtest`. With the test on,
+> `src/legalNotice.js` has `abtest`, and `measure` / `nomeasure` for what the
+> A/B test shares with the audience measurement below. With the test on,
 > `/confidentialite` describes the draw, every field of a report, what is never
 > sent, the 13-month and 90-day retentions, the legal basis and the refusal
-> button; with it off, it keeps *pas de mesure d’audience* (no audience
-> measurement).
+> button; with nothing measured, it keeps *pas de mesure d’audience* (no
+> audience measurement).
 >
 > **The reading.** `node scripts/first-run-ab-report.mjs <dir>
 > [--include-forced] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--alpha]
@@ -1394,8 +1395,9 @@ Updated: September 24, 2026
 > A on activation with p < 0.025 and is not worse on the closures the visitor
 > did not choose (`esc`, `click-away`, `timeout`); one extension of three weeks
 > at most. On the VPS: `ssh vps 'docker exec gev node
-> scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'`. A product
-> analytics tool (PostHog) is deferred, decided 2026-09-17
+> scripts/first-run-ab-report.mjs /app/.gev-cache/first-run-ab'`. The test
+> still reports to this sink, not to PostHog: since 2026-10-12 PostHog counts
+> visits (next entry), and moving the test there is still open
 > (`docs/KNOWN-ISSUES.md`).
 >
 > Gates: `src/firstRunAb.test.mjs`, `src/firstRunAbRoutes.test.mjs`,
@@ -1407,6 +1409,56 @@ Updated: September 24, 2026
 > persistence, the reports written to the day file, the privacy page and the
 > refusal; `--off`, against a server without the variable, checks that nothing
 > is measured.
+
+> **2026-10-12 — audience measurement** (`src/audienceMeasure.js`). PostHog EU
+> Cloud counts visits, without a cookie, on a deployment whose build carries
+> `POSTHOG_PROJECT_TOKEN` (`define` in `vite.config.js`, a build arg in the
+> `Dockerfile` and `deploy/vps/docker-compose.yml`). Without it — a clone, a QA
+> run — `src/boot.js` and `src/fiche.js` drop the branch at build time and the
+> bundle holds no PostHog byte (measured: no `audienceMeasure` or SDK chunk).
+>
+> **What is sent.** At idle after load (`requestIdleCallback`, 1.5 s timeout),
+> a refused browser aside, the module imports the pinned SDK's slim
+> `no-external` build (54 KB gzipped, its own chunk) and sends a `$pageview`
+> to `https://eu.i.posthog.com`, a second one when the path changes in place
+> (`watchPathname`: the showcase's `/` → `/globe` hand-off; hash and query
+> rewrites are not page changes), and a `$pageleave` on `pagehide` with the
+> time spent and the scroll depth. Every event goes through
+> `cleanMeasuredEvent` (`before_send`): every `*url` / `*referrer` property
+> loses its `#` and every query parameter but `utm_*` (`?q=` is a typed
+> address, the hash is the camera), `$direct` stays, and `title` is dropped
+> (`fiche.html` writes the address into it). The rest is the SDK's own: browser,
+> OS, device type, screen and viewport, language, time zone, referrer. Measured
+> with `scripts/qa-audience-measure.mjs` on a build carrying a probe token,
+> PostHog answered locally: 13/13 — one pageview on `/` with
+> `utm_*` kept and `gclid` and the hash gone, a second on `/globe` without the
+> typed `q`, a pageleave, nothing else (no flags, config or script request),
+> distinct id `$posthog_cookieless`, no PostHog key in cookies, localStorage or
+> sessionStorage; a refused browser sends nothing and never fetches the SDK;
+> `fiche.html?q=…` counts as `/fiche.html`.
+>
+> **What keeps it exempt from consent** (art. 82 LIL, CNIL audience-measurement
+> guidelines): `cookieless_mode: 'always'` — the browser stores nothing, and
+> PostHog derives a one-day visitor id from the day, IP, user agent and host,
+> then drops the IP and user agent (the project's « Cookieless server hash
+> mode » must be on, or PostHog discards every event); `autocapture`, heatmaps,
+> dead clicks, web vitals, exceptions, session replay, surveys, product tours,
+> conversations, web experiments and flags all off in `posthogConfig()`, even
+> where the PostHog project turns them on remotely; the refusal of the A/B test
+> (`firstRunMeasureRefused`: the « Ne pas être mesuré » button, or Global
+> Privacy Control) covers it too. Cost of cookieless on PostHog's side: no
+> country or city (its GeoIP runs after the IP is stripped), and a visitor who
+> comes back the next day is a new visitor.
+>
+> **The privacy page follows the same variable at runtime**: `audience`,
+> `measure` and `nomeasure` in `CONDITIONAL_SECTIONS` add the PostHog row (what
+> is sent, the one-day id, one year at PostHog), the legal basis, PostHog among
+> the American companies, and the refusal button; `/healthz` answers
+> `"audience": true`. One `.env` line feeds both the build and the page.
+>
+> Gates: `src/audienceMeasure.test.mjs`, `src/legalNotice.test.mjs`,
+> `src/firstRunOptOut.test.mjs`; in a browser, `scripts/qa-audience-measure.mjs`
+> (usage in its header).
 
 > **2026-08-08 — performance waves 1+2:** the app idles via an explicit render
 > governor (`src/renderGovernor.js` — hold/release from every per-frame

@@ -66,6 +66,20 @@ export const HOSTING_SEPARATOR = '|';
 export const LEGAL_BLOCKS = Object.freeze(['publisher', 'hosting', 'controller', 'seller']);
 
 /**
+ * Whether this deployment measures its audience with PostHog
+ * (src/audienceMeasure.js). The build inlines the same variable into the
+ * bundle, so the page and the script read one `.env` line.
+ * @param {Record<string, string|undefined>} env
+ * @returns {boolean}
+ */
+export function audienceMeasureFromEnv(env = {}) {
+  return Boolean(String(env?.POSTHOG_PROJECT_TOKEN || '').trim());
+}
+
+/** The welcome-card test, through the one reader of `GEV_FIRST_RUN_AB`. */
+const abtestOn = (env) => Boolean(firstRunExperimentFromEnv(env || {}));
+
+/**
  * Sections that only describe a feature when the deployment turned it on.
  * Kept out of the page when it is off, so an instance never discloses a
  * processor it does not use.
@@ -75,11 +89,15 @@ export const CONDITIONAL_SECTIONS = Object.freeze({
   // one is no trial, and so no cookie.
   trial: (env) => Number(env?.GEV_TRIAL_LIMIT) >= 1,
   waitlist: (env) => Boolean(String(env?.GEV_WAITLIST_BUTTONDOWN || '').trim()),
-  // The welcome-card test, through the one reader of `GEV_FIRST_RUN_AB`
-  // (src/firstRunAb.js): fewer than two variants is no test, and so nothing
-  // measured. `noabtest` keeps the sentence the page says when nothing is.
-  abtest: (env) => Boolean(firstRunExperimentFromEnv(env || {})),
-  noabtest: (env) => !Boolean(firstRunExperimentFromEnv(env || {})),
+  // The welcome-card test (src/firstRunAb.js): fewer than two variants is no
+  // test, and so nothing measured.
+  abtest: abtestOn,
+  // The cookieless audience measurement.
+  audience: audienceMeasureFromEnv,
+  // Either measurement: one refusal button covers both. `nomeasure` keeps the
+  // sentence the page says when nothing is measured at all.
+  measure: (env) => abtestOn(env) || audienceMeasureFromEnv(env),
+  nomeasure: (env) => !abtestOn(env) && !audienceMeasureFromEnv(env),
 });
 
 /** One line of env text, trimmed; newlines folded so a value cannot open a new element. */

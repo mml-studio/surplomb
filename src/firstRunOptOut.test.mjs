@@ -87,13 +87,15 @@ test('the privacy page button says where the browser stands, and flips it', () =
   assert.equal(wireFirstRunOptOut({ querySelector: () => null }, { storage, nav: {} }), false);
 });
 
-test('the privacy page loads the opt-out, and only the A/B sections offer it', () => {
+test('the privacy page loads the opt-out, and only a measured page offers it', () => {
   const html = fs.readFileSync(new URL('../confidentialite.html', import.meta.url), 'utf8');
   assert.match(html, /<script type="module" src="\/src\/firstRunOptOutPage\.js"><\/script>/);
   const button = html.indexOf('data-first-run-optout');
-  const open = html.lastIndexOf('<!--gev:if:abtest-->', button);
-  const close = html.indexOf('<!--/gev:if:abtest-->', open);
-  assert.ok(open > 0 && button < close, 'the button lives inside an abtest section');
+  // `measure` is the A/B test OR the audience measurement (src/legalNotice.js):
+  // one refusal covers both.
+  const open = html.lastIndexOf('<!--gev:if:measure-->', button);
+  const close = html.indexOf('<!--/gev:if:measure-->', open);
+  assert.ok(open > 0 && button < close, 'the button lives inside a measure section');
   // The page entry imports nothing of the globe.
   const entry = fs.readFileSync(new URL('./firstRunOptOutPage.js', import.meta.url), 'utf8');
   assert.deepEqual([...entry.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./firstRunOptOut.js']);
