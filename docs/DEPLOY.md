@@ -1247,5 +1247,6 @@ keeps them on by default:
 - **No search-engine indexing of `/api/*`** (`X-Robots-Tag: noindex`), and
   `fiche.html` keeps its `noindex` for good: DVF sales are published on the
   condition that they are not indexed (Livre des procédures fiscales,
-  art. R*112 A-3). The launch-day removal of `noindex` concerns `index.html`
-  only.
+  art. R*112 A-3). `index.html` lost its pre-launch `noindex` at launch;
+  `fiche.html`, `mentions-legales.html`, `confidentialite.html` and `cgv.html`
+  keep theirs.

@@ -131,24 +131,6 @@
     })();
   </script>
   <!--
-    FENÊTRE DE PRÉ-LANCEMENT — À RETIRER LE 22 SEPTEMBRE 2026.
-
-    L'origine est ouverte depuis le 16/09 mais l'annonce est prévue le 22 : sans
-    cette ligne, un moteur peut indexer une page qui n'a encore été montrée à
-    personne, et la première impression publique devient un résultat de
-    recherche arrivé six jours trop tôt.
-
-    C'est `noindex` et PAS un `robots.txt` avec `Disallow: /`, délibérément. Un
-    Disallow empêche AUSSI les robots sociaux de lire la page, donc la carte de
-    partage — le travail de la PR #223 — ne s'afficherait plus dans les liens
-    envoyés en message privé, qui sont précisément le test de cette semaine.
-    `noindex` laisse lire et interdit seulement de publier au catalogue.
-
-    `fiche.html:6` porte la même ligne, elle, à demeure : la radiographie
-    d'adresse n'a pas vocation à être une porte d'entrée.
-  -->
-  <meta name="robots" content="noindex" />
-  <!--
     Le titre et la description sont ceux de la VITRINE : c'est la page que lit
     un moteur (il arrive sans `#`, en premier visiteur). Les balises de la
     carte de partage, plus bas, sont inchangées.

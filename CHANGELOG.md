@@ -1172,6 +1172,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **Search engines may now list surplomb.app.** The landing page (`index.html`)
+  lost the `noindex` it carried while the site was open but not yet announced.
+  The address sheet keeps its own for good (DVF sales are published on the
+  condition that no search engine indexes them), and so do the three legal
+  pages; `/api/*` still answers `X-Robots-Tag: noindex`.
 - **« Urbanisme » (“Planning”) can now look back six months or one year.**
   The « Période » (“Period”) menu offers « 6 derniers mois » (“Last 6
   months”), « Dernière année » (“Last year”), « 3 dernières années » (“Last 3
