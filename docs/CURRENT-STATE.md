@@ -2,6 +2,13 @@
 
 Updated: September 24, 2026
 
+> **2026-10-12 — the landing page is indexable.** `index.html` no longer
+> carries `<meta name="robots" content="noindex">`, the pre-launch line of
+> 16 September. `fiche.html`, `mentions-legales.html`, `confidentialite.html`
+> and `cgv.html` keep theirs, the owner-pass page and `/api/*` keep their
+> `X-Robots-Tag: noindex`, and there is still no `robots.txt`.
+> `src/legalNotice.test.mjs` holds both sides.
+
 > **2026-09-24 — « Aéroports » reads like its approved mock: an airport menu,
 > two tiles under the row, and the noise plan as a card in the key.**
 >

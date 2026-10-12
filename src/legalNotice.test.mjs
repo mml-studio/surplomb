@@ -141,9 +141,10 @@ test('the waitlist paragraph appears only on an instance that runs one', () => {
 test('the address sheet stays out of search engines, as the privacy page promises', () => {
   // DVF sales are published on the condition that they are not indexed by
   // online search engines (Livre des procédures fiscales, art. R*112 A-3), and
-  // `fiche.html` prints them as text. The launch-day removal of `noindex`
-  // concerns `index.html` alone.
+  // `fiche.html` prints them as text. Only the landing page lost its
+  // pre-launch `noindex` at launch.
   assert.match(page('fiche.html'), /<meta name="robots" content="noindex">/);
+  assert.doesNotMatch(page('index.html'), /<meta name="robots"/, 'the landing page is indexed');
   assert.match(page('confidentialite.html'), /moteurs de recherche/);
 });
 
