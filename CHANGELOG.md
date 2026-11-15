@@ -18,6 +18,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   -- --write` rewrites the files no reading touches.
 
 ### Added
+- **Ten small towns' permits are read again, through a relay.** Montlaux,
+  Jaillans, Larroque and Deyvillers had stopped being read (16 sources in the
+  archive check), and Péret, Sainte-Colombe, Beauville, Francaltroff, Herny
+  and Nevoy never had been: nine sit on one hosting family that silently drops
+  every connection from the hosted server, and Nevoy answers it 403, while all
+  ten serve another network normally. They carry `source.relay: true` in
+  `wpMediaCities.js`, and when `PERMIT_LIST_RELAY` is set the permit-list
+  sweep sends their GETs to `<relay>/fetch?url=<address>`; unset, nothing
+  changes. Pacing, user agent and `robots.txt` stay on the server, and a
+  relay failure reads as a site that did not answer, never as a robots
+  refusal. Measured on 2026-11-15: all ten `robots.txt` allow the media API
+  and the uploads, and the media API answered from inside the container
+  through the relay.
 - **The permit archive is copied every night and checked for sources that
   stopped reading.** On 2026-11-15 the archive — every notice the boards have
   posted since 2026-09-30, which no one can fetch again — had no copy, and
