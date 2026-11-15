@@ -320,6 +320,29 @@ function followedAct(city, html, request, since) {
     row: { board, dossier: request.act, applicant: null, address: null, postcode: city.postcode, postedOn: published } }] };
 }
 
+/** An address as a board's own links compare: no fragment, no trailing slash. */
+function boardAddress(url) {
+  const address = new URL(url);
+  address.hash = '';
+  return address.href.replace(/\/+$/, '');
+}
+
+/**
+ * Whether a page that names no act is still the board: a board read over
+ * several pages (`source.pages`) links its other pages from each of them —
+ * Sarralbe's PC shelf its DP shelf, Mantes-la-Ville's first page of acts its
+ * second. Such a page is a shelf with nothing on it today: Sarralbe's PC shelf
+ * has said « Il n'y a pas de document pour le moment » since 2026-10-28, and
+ * Mantes-la-Ville's first page held only traffic orders from 2026-11-14.
+ * Until then the first page's silence made the whole reading fail, and the
+ * acts on the other pages were not read either. A page that links none of
+ * the board's other pages (a redesign, a moved board) is not the board.
+ */
+function emptyShelf(city, html, pageUrl) {
+  const others = [city.page, ...(city.source?.pages ?? [])].map(boardAddress).filter((url) => url !== boardAddress(pageUrl));
+  return others.length > 0 && pageLinks(html, pageUrl).some((link) => others.includes(boardAddress(link.url)));
+}
+
 const postedActsProtocol = {
   start(city) {
     return [city.page, ...(city.source?.pages ?? [])].map((url) => ({ url, as: 'html' }));
@@ -329,7 +352,7 @@ const postedActsProtocol = {
     // A page drawn inside another (Villeneuve-sur-Lot's lightbox) names its files
     // from the page it is drawn in: `source.linkBase`.
     const files = postedActFiles(city, html, city.source?.linkBase ?? request.url, options.since);
-    if (!city.source?.follow) return files ? { files } : null;
+    if (!city.source?.follow) return files ? { files } : emptyShelf(city, html, request.url) ? { files: [] } : null;
     // `source.follow`: a link of the same site naming a dossier, and no file, opens the dossier's own page.
     const origin = new URL(request.url).origin;
     const next = new Map();
@@ -338,7 +361,7 @@ const postedActsProtocol = {
       const dossier = actDossier(clean(`${link.title ?? ''} ${link.words}`).replace(/_+/g, ' '), city);
       if (dossier) next.set(link.url, { url: link.url, as: 'html', act: dossier });
     }
-    return files || next.size ? { files: files ?? [], next: [...next.values()] } : null;
+    return files || next.size || emptyShelf(city, html, request.url) ? { files: files ?? [], next: [...next.values()] } : null;
   },
 };
 

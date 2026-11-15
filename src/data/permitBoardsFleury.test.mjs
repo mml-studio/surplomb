@@ -88,3 +88,30 @@ test('Guipavas uses only the newest register pair, without claiming current inst
   assert.equal(source.underReview, undefined);
   assert.ok(!LOCAL_ADS_PORTALS.find((portal) => portal.key === 'brest').communes.includes('29075'));
 });
+
+test('Fleury’s lists are found through its media API, whatever page of acts they slid to', () => {
+  // From 2026-11-10 the town filed its traffic orders under « urbanisme »:
+  // the lists of 30 October were on the page's second screen on 2026-11-15,
+  // and the town was last read on 2026-11-09.
+  assert.equal(city.source.protocol, 'wp-media');
+  assert.equal(city.source.acts, false);
+  const wp = POSTED_LIST_PROTOCOLS['wp-media'];
+  const options = { since: '2026-09-01', day: '2026-11-15' };
+  const [start] = wp.start(city, options);
+  assert.equal(new URL(start.url).origin + new URL(start.url).pathname, 'https://www.fleurylesaubrais.fr/wp-json/wp/v2/media');
+  const media = (date, file, title) => ({ date, source_url: `https://www.fleurylesaubrais.fr/wp-content/uploads/${file}`, title: { rendered: title } });
+  const body = [
+    media('2026-11-13T09:12:00', '2026/11/2026CIRC395_zone_de_stationnement_rue_du_11_novembre.pdf', '2026CIRC395_zone_de_stationnement_rue_du_11_novembre'),
+    media('2026-10-30T11:18:48', '2026/10/liste-affichage-30-10-2026.pdf', 'liste affichage 30-10-2026'),
+    media('2026-10-30T11:16:56', '2026/10/Liste-affichage-depot-30_10_2026.pdf', 'Liste affichage dépôt-30_10_2026'),
+    media('2026-10-23T12:08:59', '2026/10/liste-affichage-23-10-2026.pdf', 'liste affichage 23-10-2026'),
+    media('2026-10-23T12:06:01', '2026/10/Liste-affichage-depot-23_10_2026.pdf', 'Liste affichage dépôt-23_10_2026'),
+    media('2026-10-06T13:50:37', '2026/10/2026_054-DECISION-DE-LA-MAIRE-CENTRE-CULTUREL.pdf', '2026_054 DECISION DE LA MAIRE CENTRE CULTUREL'),
+  ];
+  const { files } = wp.index(city, body, start, options);
+  assert.deepEqual(files.map((file) => [file.board, file.layout, file.published, file.url.split('/').at(-1)])
+    .sort((a, b) => b[0].localeCompare(a[0])), [
+    ['filings', 'fleury-filings', '2026-10-30', 'Liste-affichage-depot-30_10_2026.pdf'],
+    ['decisions', 'fleury-decisions', '2026-10-30', 'liste-affichage-30-10-2026.pdf'],
+  ], 'the newest edition of each list, no traffic order, no decision of the mayor');
+});

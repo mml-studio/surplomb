@@ -23,6 +23,20 @@ test('the sieve communes are in the permit registry, their protocols and layouts
   assert.equal(BOARD_READERS['chambray-filings'], SIEVE_PAGE_READERS['chambray-filings']);
 });
 
+test('Auchel’s tables are found under their singular and their plural names', () => {
+  const auchel = city('auchel');
+  const index = (names) => BOARD_PROTOCOLS[auchel.source.protocol].index(auchel,
+    names.map((name) => `<a href="https://www.auchel.fr/wp-content/uploads/${name}">Download</a>`).join(''), { url: auchel.page });
+  // September's names, then November's: the city was last read on 2026-11-13.
+  // (`decision28092026` names no day a reader takes: its upload month stands.)
+  const before = index(['2026/09/depot28.09.2026.pdf', '2026/09/decision28092026.pdf']);
+  assert.deepEqual(before.files.map((file) => [file.board, file.layout, file.published]),
+    [['filings', 'town-filed-before', '2026-09-28'], ['decisions', 'town-decided-until', '2026-09-01']]);
+  const after = index(['2026/11/depots13.11.2026.pdf', '2026/11/decisions13.11.2026.pdf', '2026/11/PC26-08arrete.pdf', '2026/11/DP26-143arrete.pdf']);
+  assert.deepEqual(after.files.map((file) => [file.board, file.layout, file.published]),
+    [['filings', 'town-filed-before', '2026-11-13'], ['decisions', 'town-decided-until', '2026-11-13']]);
+});
+
 test('a link’s number and day are spelled out the way posted-acts reads them', () => {
   assert.equal(spelledNumber('ARRETE-2026.498-DP-076.057.25.00033.M01-NAME'), 'ARRETE 2026 498 DP 076 057 25 00033 M01 NAME');
   assert.equal(spelledNumber('tampon_AU Arrete Favorable DP 095 257 26 0 0078'), 'tampon AU Arrete Favorable DP 095 257 26 00078');

@@ -296,6 +296,15 @@ test('Arles, Saint-Cloud, Tassin and Sceaux list their editions, other files lef
     .map((name) => `<a href="/sites/st-cloud/files/inline-files/${name}.pdf">x</a>`).join(''), { url: city('saint-cloud').page });
   assert.deepEqual(cloud.files.map((file) => file.layout),
     ['saint-cloud-decisions', 'saint-cloud-decisions', 'saint-cloud-filings', 'saint-cloud-filings']);
+  // The links of 2026-11-15: decisions renamed with the accent and no counter
+  // (the city was last read on 2026-11-09); the filings keep theirs.
+  const renamed = REPORT_BOARD_PROTOCOLS['saint-cloud'].index(city('saint-cloud'), ['PC%20D%C3%A9cisions', 'DP%20D%C3%A9cisions',
+    'PC%20Instruction_131', 'DP%20Instruction_135', 'Saint-Cloud%201_3_0']
+    .map((name) => `<a href="/sites/st-cloud/files/inline-files/${name}.pdf">x</a>`).join(''), { url: city('saint-cloud').page });
+  assert.deepEqual(renamed.files.map((file) => [file.layout, decodeURIComponent(file.url.split('/').at(-1))]), [
+    ['saint-cloud-decisions', 'PC Décisions.pdf'], ['saint-cloud-decisions', 'DP Décisions.pdf'],
+    ['saint-cloud-filings', 'PC Instruction_131.pdf'], ['saint-cloud-filings', 'DP Instruction_135.pdf'],
+  ]);
   const tassin = REPORT_BOARD_PROTOCOLS['tassin-la-demi-lune'].index(city('tassin-la-demi-lune'), ['DP', 'PC', 'PA-PD-CU']
     .map((family) => `<a href="/images/cadre/Autorisations urbanisme/2026/${family} SUIVI DEPOT - AFFICHAGE AU 28-09-2026.pdf">x</a>`)
     .join('') + '<a href="/images/cadre/ZONAGE.pdf">zonage</a>', { url: city('tassin-la-demi-lune').page });

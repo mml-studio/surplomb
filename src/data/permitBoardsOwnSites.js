@@ -428,7 +428,8 @@ const thorignyProtocol = {
   start: (city) => [{ url: city.page, as: 'html' }],
   index(city, html, request) {
     const files = pageLinks(html, request.url)
-      .filter((link) => /\/sites\/default\/files\/decisions?_-_(?:pc|dp|pa|pd)(?![a-z])[^/]*\.pdf$/i.test(link.path))
+      // `decisions_-_pc.pdf` until October 2026, `decisions_pc_0.pdf` since.
+      .filter((link) => /\/sites\/default\/files\/decisions?_(?:-_)?(?:pc|dp|pa|pd)(?![a-z])[^/]*\.pdf$/i.test(link.path))
       .map((link) => ({ url: link.url, board: 'decisions', layout: 'thorigny-decisions', rolling: true }));
     return files.length ? { files: [...new Map(files.map((file) => [file.url, file])).values()] } : null;
   },

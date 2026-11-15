@@ -123,7 +123,9 @@ const CITIES = [
     // Saint-Priest's and Anzin's are. Its orders are scans, read by OCR.
     page: 'https://www.screensoft.eu/Docs2Web/1525%20-%20VILLE%20DE%20PANTIN/', robots: 'overridden', source: { ocr: true } },
   { key: 'anglet', insee: '64024', postcode: '64600', label: 'Ville d’Anglet — arrêtés d’urbanisme',
-    page: 'https://teleservices.anglet.fr/WEBDELIBERATIONS_WEB/FR/PageCategoriesArretes.awp' },
+    page: 'https://teleservices.anglet.fr/WEBDELIBERATIONS_WEB/FR/PageCategoriesArretes.awp',
+    // Its certificate, renewed 2026-10-01, is sent without its intermediate.
+    intermediate: 'digicert-g2-eu-2022' },
   // One act at a time, or weekly scanned registers (`permitBoardsActs.js`).
   { key: 'oullins-pierre-benite', insee: '69149', postcode: '69600', label: 'Ville d’Oullins-Pierre-Bénite — avis de dépôt et décisions d’urbanisme',
     // Its firewall answers 403 to a User-Agent with the word « scan » in it
@@ -155,7 +157,9 @@ const CITIES = [
     // Bourges's are — the posting the Code de l'urbanisme makes public
     // (art. R.423-6, R.424-15).
     page: 'https://arles.fr/vivre-a-arles/urbanisme/permis-de-construire/laffichage-de-lautorisation-durbanisme/laffichage-des-depots-durbanisme/',
-    robots: 'overridden' },
+    robots: 'overridden',
+    // Its certificate, renewed 2026-09-29, is sent with the wrong intermediate.
+    intermediate: 'trustsign-dv-2' },
   { key: 'decines-charpieu', insee: '69275', postcode: '69150', label: 'Ville de Décines-Charpieu — dépôts et décisions des autorisations d’urbanisme',
     page: 'https://www.decines-charpieu.fr/975-depots-et-decisions-des-autorisations-d-urbanisme.htm' },
   { key: 'saint-cloud', insee: '92064', postcode: '92210', label: 'Ville de Saint-Cloud — autorisations d’urbanisme en cours et décidées',

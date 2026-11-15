@@ -177,6 +177,14 @@ test('Garges and Le Blanc-Mesnil read both tables or none', () => {
     '<a href="/sites/default/files/dds_-_tableau_affichage_-_depot_-_25-09.pdf">x</a><a href="/sites/default/files/dds_-_tableau_affichage_-_decision_-_25-09.pdf">y</a>',
     { url: city('blanc-mesnil').page }, { day: '2026-10-02' });
   assert.deepEqual(bm.files.map((file) => file.published), ['2026-09-25', '2026-09-25']);
+  // Renamed in November 2026, the dashes gone: the city was last read on 2026-10-30.
+  const renamed = LIST_BOARD_PROTOCOLS['blanc-mesnil'].index(city('blanc-mesnil'),
+    '<a href="https://www.blancmesnil.fr/sites/default/files/dds_tableau_affichage_decision_06-11.pdf">dds_tableau_affichage_decision_06-11.pdf</a>'
+    + '<a href="https://www.blancmesnil.fr/sites/default/files/dds_tableau_affichage_depot_06-11.pdf">dds_tableau_affichage_depot_06-11.pdf</a>',
+    { url: city('blanc-mesnil').page }, { day: '2026-11-15' });
+  assert.deepEqual(renamed.files.map((file) => [file.board, file.layout, file.published]), [
+    ['filings', 'blanc-mesnil-filings', '2026-11-06'], ['decisions', 'blanc-mesnil-decisions', '2026-11-06'],
+  ]);
 });
 
 test('Troyes reads every weekly list but the signs\' lists', () => {

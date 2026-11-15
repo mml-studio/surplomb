@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { permitPublicSession } from './permitPublicSession.mjs';
+import { permitListsRobots } from './permitLists.mjs';
+import { PERMIT_LISTS, permitListLinks } from '../../src/data/permitListsFeed.js';
 
 const page = 'https://town.example/webdelibplus/jsp/legal.jsp?role=usager';
 const city = { page, source: { publicCookieRedirect: true } };
@@ -72,4 +74,37 @@ test('a large streamed index stays readable without waiting for clone cancellati
   } finally {
     clearTimeout(timer);
   }
+});
+
+test('Marseille’s page and its robots.txt are read through the same initializer since 2026-10-18', async () => {
+  const marseille = PERMIT_LISTS.find((city) => city.key === 'marseille');
+  assert.equal(marseille.source.publicCookieRedirect, true);
+  // The 288-byte answer every first request got on 2026-11-15, its token cut.
+  const initializer = (path) => `<html lang="en"><head></head><body><script>window.location.href='/redirect_JHREYU6I3QGSBR4YFBYAYDQQNU5H5OBUMCU5WB64BZSNJX7J7VIA====${path}';</script><noscript>This website requires JS enabled and cookies</noscript></body></html>`;
+  const page = '<a href="/sites/default/files/contenu/logement/ServicesetDemarches/registre-ads-en-cours-instruction-12-11-2026.pdf">Liste des&nbsp;dossiers en cours d\'instruction classés par arrondissement</a>'
+    + '<a href="/sites/default/files/contenu/logement/ServicesetDemarches/affichage-du-27.08.26-au-10.11.26.pdf">Liste des autorisations délivrées ces deux derniers mois</a>';
+  const robots = 'User-agent: *\nDisallow: /core/\nDisallow: /profiles/\n';
+  const calls = [];
+  const http = { text, async fetch(url, options) {
+    const { pathname } = new URL(url);
+    const cookie = new Headers(options?.headers).get('Cookie');
+    calls.push([pathname.startsWith('/redirect_') ? 'redirect' : pathname, cookie]);
+    if (pathname.startsWith('/redirect_')) {
+      return new Response(null, { status: 307, headers: { Location: pathname.replace(/^\/redirect_[A-Z0-9=]+/, '') } });
+    }
+    if (!cookie) return response(initializer(pathname), 'bot_mitigation_cookie=EXAMPLE');
+    if (pathname === '/robots.txt') return new Response(robots, { headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
+    return new Response(page, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+  } };
+  const verdict = await permitListsRobots(marseille, http);
+  assert.equal(verdict.final, true);
+  assert.equal(verdict.allows('/core/install.php'), false, 'the real robots.txt is read, not the initializer taken for none');
+  assert.equal(verdict.allows(new URL(marseille.page).pathname), true);
+  const answer = await permitPublicSession(marseille, http).fetch(marseille.page);
+  assert.deepEqual(permitListLinks(marseille, await answer.text()).map((list) => [list.board, list.layout, list.url.split('/').at(-1)]), [
+    ['filings', 'register', 'registre-ads-en-cours-instruction-12-11-2026.pdf'],
+    ['decisions', 'decisions', 'affichage-du-27.08.26-au-10.11.26.pdf'],
+  ]);
+  assert.deepEqual(calls.slice(-3), [[new URL(marseille.page).pathname, null], ['redirect', 'bot_mitigation_cookie=EXAMPLE'],
+    [new URL(marseille.page).pathname, 'bot_mitigation_cookie=EXAMPLE']]);
 });

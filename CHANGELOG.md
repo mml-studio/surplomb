@@ -988,6 +988,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   of twice.
 
 ### Fixed
+- **Marseille, Arles, Anglet and seven more towns post their permits to the
+  map again.** Their lists or acts had stopped reaching the daily archive
+  between 5 October and 13 November — Marseille on 17 October, whose list of
+  grants keeps a dossier two months. Marseille's site now answers every first
+  request with the anonymous-cookie page Levallois's already did, and is
+  read through it the same way (no script runs; the real `robots.txt` is read
+  too, where the sweep had been reading that page as no rules at all). Arles
+  and Anglet renewed their certificates without the intermediate that signs
+  them: the two are supplied, as for six Cart@DS hosts. Blanc-Mesnil,
+  Saint-Cloud, Thorigny-sur-Marne and Auchel renamed their files; Fleury-les-
+  Aubrais's lists slid off its page behind traffic orders and are now found
+  through its WordPress media API; Sarralbe's and Mantes-la-Ville's first page
+  held no act that day, which failed the whole town — a page with no act that
+  still links the board's other pages is now an empty page, not a failure.
+  Read on 2026-11-15: Marseille 1 967 dossiers under review and 799 granted.
 - **The lists of seventy WordPress communes are read as text again.** Since
   Sélestat joined, a commune marked for OCR had its lists marked as scans:
   every WordPress commune is, for its scanned acts, so Moëlan-sur-Mer's or
