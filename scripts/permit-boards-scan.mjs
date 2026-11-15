@@ -10,6 +10,7 @@
  *   npm run permits:scan -- --sirap-probes <file> # reuse a saved Sirap reading
  *   npm run permits:scan -- --save <prefix>      # keep both readings, <prefix>.cartds.json and .sirap.json
  *   npm run permits:scan -- --respect-robots     # leave out the boards robots.txt refuses
+ *   npm run permits:scan -- --recheck-robots     # read every robots.txt again, flag the refusing hosts, ask no board
  *   npm run permits:scan -- --probes <file> --sirap-probes <file> --ask <host>
  *                                                # ask only <host> (a seed) again, keep the rest of both readings
  *   npm run permits:scan -- --probes <file> --sirap-probes <file> --day 2026-10-01
@@ -69,9 +70,11 @@ import {
   isVendorTenant,
   keepScannedInstances,
   keepScannedSirap,
+  recheckScannedRobots,
   renderScannedModule,
   renderSirapModule,
   resolveMenuCommune,
+  scannedModuleMeta,
   tenantGuesses,
 } from './lib/permitBoardScan.mjs';
 
@@ -255,6 +258,7 @@ const { values } = parseArgs({
     'sirap-probes': { type: 'string' },
     'skip-guess': { type: 'boolean', default: false },
     'respect-robots': { type: 'boolean', default: false },
+    'recheck-robots': { type: 'boolean', default: false },
     save: { type: 'string' },
     ask: { type: 'string', multiple: true, default: [] },
     concurrency: { type: 'string', default: '2' },
@@ -467,6 +471,45 @@ async function probeSirapHost(host, day, pauseMs) {
 // layer, for no reason the boards gave.
 const day = values.day ?? new Date().toISOString().slice(0, 10);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error(`--day ${day}: expected yyyy-mm-dd`);
+
+/**
+ * Whether a host's `robots.txt` lets the board be read, as the sweep judges it
+ * (`cartdsRobotsVerdict`): no file allows, a file is read for the two paths
+ * the reader asks, and a host that does not answer, or answers 5xx, is unread.
+ */
+async function robotsAllowBoard(instance) {
+  const url = new URL(instance.base);
+  const { response, text, error } = await request(`${url.origin}/robots.txt`);
+  if (error || response.status >= 500) return null;
+  if (!response.ok) return true;
+  const base = url.pathname.replace(/\/$/, '');
+  return robotsAllows(text, `${base}${CARTDS_PAGE_PATH}`) && robotsAllows(text, `${base}${CARTDS_DATA_PATH}`);
+}
+
+// `--recheck-robots`: every robots.txt again, and only that — see `recheckScannedRobots`.
+if (values['recheck-robots']) {
+  trustCartdsIntermediates(CARTDS_INSTANCES);
+  const allows = new Map();
+  for (const instance of CARTDS_INSTANCES) {
+    if (instance.robots === 'overridden') continue;
+    allows.set(instance.key, await robotsAllowBoard(instance));
+    await sleep(Number(values.pause));
+  }
+  const { instances, added } = recheckScannedRobots(CARTDS_SCANNED_INSTANCES, allows);
+  const documented = CARTDS_INSTANCES
+    .filter((instance) => !CARTDS_SCANNED_INSTANCES.includes(instance) && allows.get(instance.key) === false)
+    .map((instance) => instance.key);
+  const unread = [...allows].filter(([, verdict]) => verdict === null).map(([key]) => key);
+  console.log(`[permits-scan] ${day}: ${allows.size} robots.txt read, ${added.length} scanned instances newly refused: ${added.join(' ')}`);
+  if (documented.length) console.log(`[permits-scan] ${documented.length} documented instances refuse without \`robots: 'overridden'\` — add it by hand in cartdsFeed.js: ${documented.join(' ')}`);
+  if (unread.length) console.log(`[permits-scan] ${unread.length} robots.txt unread (no answer or 5xx), left as they were: ${unread.join(' ')}`);
+  if (!values['dry-run'] && added.length) {
+    const meta = scannedModuleMeta(await fsp.readFile(OUTPUT_PATH, 'utf8'));
+    await fsp.writeFile(OUTPUT_PATH, renderScannedModule(instances, { ...meta, robotsDay: day }));
+    console.log(`[permits-scan] wrote ${path.relative(REPO_ROOT, OUTPUT_PATH)}`);
+  }
+  process.exit(0);
+}
 const unknownAsks = values.ask.filter((host) => !CARTDS_SCAN_SEEDS.some((seed) => seed.host === host) && !SIRAP_SCAN_HOSTS.includes(host));
 if (unknownAsks.length) console.warn(`[permits-scan] --ask names no seed: ${unknownAsks.join(' ')} (add it to CARTDS_SCAN_SEEDS or SIRAP_SCAN_HOSTS first)`);
 const [communes, epcis] = await Promise.all([getJson(COMMUNES_URL), getJson(EPCIS_URL)]);

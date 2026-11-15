@@ -388,7 +388,8 @@ function quote(value) {
  * The generated module, as text.
  *
  * @param {Array<object>} instances From {@link keepScannedInstances}.
- * @param {{day: string, hosts: number, boards: number}} meta
+ * @param {{day: string, hosts: number, boards: number, robotsDay?: string}} meta
+ *   `robotsDay` is the day `--recheck-robots` read every `robots.txt` again.
  * @returns {string}
  */
 export function renderScannedModule(instances, meta) {
@@ -399,7 +400,12 @@ export function renderScannedModule(instances, meta) {
     '//',
     `// Scan of ${meta.day}: ${meta.hosts} hosts asked, ${meta.boards} boards answered,`,
     `// ${instances.length} instances and ${communes} communes kept, none of them read by another`,
-    `// register. ${overridden} of the instances answer \`robots.txt\` with \`Disallow\` and carry`,
+    ...(meta.robotsDay
+      ? [
+        `// register. ${overridden} of the instances answered \`robots.txt\` with \`Disallow\` at the scan`,
+        `// or when \`--recheck-robots\` read it again on ${meta.robotsDay}, and carry`,
+      ]
+      : [`// register. ${overridden} of the instances answer \`robots.txt\` with \`Disallow\` and carry`]),
     "// `robots: 'overridden'`, as Trap 5 of `cartdsFeed.js` explains.",
     '',
     '/** Cart@DS instances found by the scan; `cartdsFeed.js` appends them to its own. */',
@@ -429,6 +435,49 @@ export function renderScannedModule(instances, meta) {
   }
   lines.push(']);', '');
   return lines.join('\n');
+}
+
+/**
+ * The scan's own counts, read back from the header of the module it wrote.
+ *
+ * @param {string} source `cartdsScanned.js` as text.
+ * @returns {{day: string, hosts: number, boards: number}}
+ */
+export function scannedModuleMeta(source) {
+  const match = /Scan of (\d{4}-\d{2}-\d{2}): (\d+) hosts asked, (\d+) boards answered/.exec(source);
+  if (!match) throw new Error('cartdsScanned.js: no scan header');
+  return { day: match[1], hosts: Number(match[2]), boards: Number(match[3]) };
+}
+
+/**
+ * The scanned instances with the robots exception extended to every host that
+ * refuses today.
+ *
+ * The scan writes `robots: 'overridden'` from the `robots.txt` it read that
+ * day. A host that adds `Disallow` afterwards is dropped by the daily sweep
+ * (`cartdsRobotsVerdict`) with nothing changed here: on 2026-11-15, 61 of the
+ * 194 instances kept by the scan of 2026-10-04 answered `refused: robots`, and
+ * 30 of the boards documented by hand in `cartdsFeed.js` did too. Reading
+ * them is the decision Trap 5 of `cartdsFeed.js` records, so
+ * `--recheck-robots` reads every file again and flags each refusing host.
+ *
+ * It only adds. A flagged host's file is not read by the sweep, and a host
+ * that refused once may refuse again; a full scan, which reads every file,
+ * is what clears a flag.
+ *
+ * @param {Array<object>} instances `CARTDS_SCANNED_INSTANCES`.
+ * @param {Map<string, ?boolean>} allows Instance key → whether its
+ *   `robots.txt` lets the board be read today; null or absent when unread.
+ * @returns {{instances: Array<object>, added: Array<string>}}
+ */
+export function recheckScannedRobots(instances, allows) {
+  const added = [];
+  const rechecked = instances.map((instance) => {
+    if (instance.robots === 'overridden' || allows.get(instance.key) !== false) return instance;
+    added.push(instance.key);
+    return { ...instance, robots: 'overridden' };
+  });
+  return { instances: rechecked, added };
 }
 
 /**

@@ -11,7 +11,9 @@ import {
   isVendorTenant,
   keepScannedInstances,
   menuCodes,
+  recheckScannedRobots,
   renderScannedModule,
+  scannedModuleMeta,
   keepScannedSirap,
   renderSirapModule,
   resolveMenuCommune,
@@ -242,6 +244,30 @@ test('the module the scan writes is the instances it kept', async () => {
   assert.deepEqual(JSON.parse(JSON.stringify(module.CARTDS_SCANNED_INSTANCES)), instances);
   assert.ok(Object.isFrozen(module.CARTDS_SCANNED_INSTANCES[1].communes));
   assert.ok(Object.isFrozen(module.CARTDS_SCANNED_INSTANCES[2].values));
+});
+
+test('a host that refuses after the scan gets the exception, and a flag is never taken back', async () => {
+  const scanned = [
+    { key: 'cacolmar', base: 'https://ca-colmar.geosphere.fr/guichet-unique', label: 'Colmar — affichage réglementaire', codes: 'number', communes: ['68066'] },
+    { key: 'atda03', base: 'https://atda03.geosphere.fr/guichet-unique', label: "L'Allier — affichage réglementaire", codes: 'unpadded', robots: 'overridden', communes: ['03001'] },
+    { key: 'unread', base: 'https://unread.geosphere.fr/guichet-unique', label: 'Unread — affichage réglementaire', codes: 'insee', communes: ['92020'] },
+    { key: 'open', base: 'https://open.geosphere.fr/guichet-unique', label: 'Open — affichage réglementaire', codes: 'insee', communes: ['92024'] },
+  ];
+  // Colmar's host moved to `Disallow: /` after the scan of 2026-10-04 (read 2026-11-15).
+  const allows = new Map([['cacolmar', false], ['atda03', true], ['unread', null], ['open', true]]);
+  const { instances, added } = recheckScannedRobots(scanned, allows);
+  assert.deepEqual(added, ['cacolmar']);
+  assert.deepEqual(instances.map((i) => i.robots ?? null), ['overridden', 'overridden', null, null]);
+  assert.equal(scanned[0].robots, undefined, 'the scan\'s own list is left as it was');
+  // The header keeps the scan's counts and says when the files were read again.
+  const before = renderScannedModule(scanned, { day: '2026-10-04', hosts: 381, boards: 319 });
+  assert.deepEqual(scannedModuleMeta(before), { day: '2026-10-04', hosts: 381, boards: 319 });
+  const after = renderScannedModule(instances, { ...scannedModuleMeta(before), robotsDay: '2026-11-15' });
+  assert.match(after, /Scan of 2026-10-04: 381 hosts asked, 319 boards answered/);
+  assert.match(after, /2 of the instances answered `robots.txt` with `Disallow` at the scan\n\/\/ or when `--recheck-robots` read it again on 2026-11-15/);
+  const module = await import(`data:text/javascript,${encodeURIComponent(after)}`);
+  assert.deepEqual(JSON.parse(JSON.stringify(module.CARTDS_SCANNED_INSTANCES)), instances);
+  assert.throws(() => scannedModuleMeta('// no header'), /no scan header/);
 });
 
 test('tenant names are guessed the ways the tenants found were written', () => {

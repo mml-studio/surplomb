@@ -2,7 +2,8 @@
 //
 // Scan of 2026-10-04: 381 hosts asked, 319 boards answered,
 // 194 instances and 1452 communes kept, none of them read by another
-// register. 95 of the instances answer `robots.txt` with `Disallow` and carry
+// register. 156 of the instances answered `robots.txt` with `Disallow` at the scan
+// or when `--recheck-robots` read it again on 2026-11-15, and carry
 // `robots: 'overridden'`, as Trap 5 of `cartdsFeed.js` explains.
 
 /** Cart@DS instances found by the scan; `cartdsFeed.js` appends them to its own. */
@@ -39,6 +40,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ads.dracenie.com/guichet-unique',
     label: 'CA Dracénie Provence Verdon Agglomération — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '83003', '83004', '83011', '83013', '83028', '83038', '83041', '83044',
       '83050', '83056', '83058', '83072', '83082', '83085', '83086', '83109',
@@ -50,6 +52,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://aiguesmortes.geosphere.fr/guichet-unique',
     label: 'Aigues-Mortes — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['30003']),
   }),
   Object.freeze({
@@ -73,6 +76,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ares.geosphere.fr/guichet-unique',
     label: 'Arès — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['33011']),
   }),
   Object.freeze({
@@ -142,6 +146,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     label: 'CC de la Lomagne Tarn-et-Garonnaise — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
     values: Object.freeze({ '82013': '13' }),
+    robots: 'overridden',
     communes: Object.freeze([
       '82006', '82013', '82034', '82053', '82055', '82068', '82070', '82071',
       '82074', '82106', '82129',
@@ -168,6 +173,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://bethune.geosphere.fr/guichet-unique',
     label: 'Béthune — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['62119']),
   }),
   Object.freeze({
@@ -175,6 +181,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://bievre-isere.geosphere.fr/guichet-unique',
     label: 'CC Bièvre Isère — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '38015', '38032', '38035', '38049', '38056', '38058', '38060', '38069',
       '38093', '38094', '38130', '38141', '38161', '38171', '38174', '38180',
@@ -197,6 +204,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://bormeslesmimosas.geosphere.fr/guichet-unique',
     label: 'Bormes-les-Mimosas — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83019']),
   }),
   Object.freeze({
@@ -220,6 +228,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ca-colmar.geosphere.fr/guichet-unique',
     label: 'Colmar — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['68066']),
   }),
   Object.freeze({
@@ -227,6 +236,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ca-douaisis.geosphere.fr/guichet-unique',
     label: 'Lambres-lez-Douai — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['59329']),
   }),
   Object.freeze({
@@ -234,6 +244,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ca-vesoul.geosphere.fr/guichet-unique',
     label: 'Vesoul — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['70550']),
   }),
   Object.freeze({
@@ -280,6 +291,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://canteleu.geosphere.fr/guichet-unique',
     label: 'Canteleu — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['76157']),
   }),
   Object.freeze({
@@ -329,6 +341,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://cc-clermontais.geosphere.fr/guichet-unique',
     label: 'CC du Clermontais — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['34041', '34051']),
   }),
   Object.freeze({
@@ -336,6 +349,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://cc-coevrons.geosphere.fr/guichet-unique',
     label: 'Assé-le-Bérenger — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['53010']),
   }),
   Object.freeze({
@@ -343,6 +357,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://cc-mortagne.geosphere.fr/guichet-unique',
     label: 'CC du Pays de Mortagne — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '85097', '85119', '85134', '85151', '85198', '85238', '85240', '85247',
       '85293', '85296', '85302',
@@ -353,6 +368,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://cc-paysdepontchateau.geosphere.fr/guichet-unique',
     label: 'CC du Pays de Pontchâteau St-Gildas-des-Bois — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['44053', '44098', '44129', '44161', '44189']),
   }),
   Object.freeze({
@@ -401,6 +417,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ccplainedestrees.geosphere.fr/guichet-unique',
     label: 'CC de la Plaine d\'Estrées — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['60036', '60125', '60254', '60284', '60308', '60441']),
   }),
   Object.freeze({
@@ -419,6 +436,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://challans-gois-communaute.geosphere.fr/guichet-unique',
     label: 'CC Challans-Gois Communauté — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['85024', '85029', '85047', '85062', '85095', '85204']),
   }),
   Object.freeze({
@@ -471,6 +489,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://coeurcotefleurie.geosphere.fr/guichet-unique',
     label: 'CC Coeur Côte Fleurie — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '14059', '14079', '14220', '14557', '14578', '14645', '14701', '14715',
       '14731', '14754', '14755',
@@ -489,6 +508,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://crepy-en-valois.geosphere.fr/guichet-unique',
     label: 'Crépy-en-Valois — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['60176']),
   }),
   Object.freeze({
@@ -507,6 +527,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://cuers.geosphere.fr/guichet-unique',
     label: 'Cuers — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83049']),
   }),
   Object.freeze({
@@ -544,6 +565,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://demarches-urbanisme.ville-clichy.fr/guichet-unique',
     label: 'Clichy — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['92024']),
   }),
   Object.freeze({
@@ -595,6 +617,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://flandrelys.geosphere.fr/guichet-unique',
     label: 'Lestrem — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['62502']),
   }),
   Object.freeze({
@@ -626,6 +649,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://gd-villeneuvois.geosphere.fr/guichet-unique',
     label: 'CA du Grand Villeneuvois — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['47215', '47252']),
   }),
   Object.freeze({
@@ -640,6 +664,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://golbey.geosphere.fr/guichet-unique',
     label: 'Golbey — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['88209']),
   }),
   Object.freeze({
@@ -710,6 +735,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://hautdebienne.geosphere.fr/guichet-unique',
     label: 'Hauts de Bienne — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['39368']),
   }),
   Object.freeze({
@@ -717,6 +743,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://hautjura.geosphere.fr/guichet-unique',
     label: 'CC Haut-Jura Saint-Claude — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '39032', '39046', '39068', '39274', '39286', '39293', '39339', '39413',
       '39453', '39463', '39491', '39510', '39560', '39579',
@@ -735,6 +762,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://iledyeu.geosphere.fr/guichet-unique',
     label: 'L\'Île-d\'Yeu — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['85113']),
   }),
   Object.freeze({
@@ -773,6 +801,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://latestedebuch.geosphere.fr/guichet-unique',
     label: 'La Teste-de-Buch — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['33529']),
   }),
   Object.freeze({
@@ -823,6 +852,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://lesadrets.geosphere.fr/guichet-unique',
     label: 'Les Adrets-de-l\'Estérel — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['83001']),
   }),
   Object.freeze({
@@ -838,6 +868,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://lezignan-corbieres.geosphere.fr/guichet-unique',
     label: 'Lézignan-Corbières — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['11203']),
   }),
   Object.freeze({
@@ -869,6 +900,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://loireforez.geosphere.fr/guichet-unique',
     label: 'CA Loire Forez Agglomération (LFA) — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['42019', '42147', '42197', '42211', '42279', '42299', '42318']),
   }),
   Object.freeze({
@@ -876,6 +908,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://mandelieulanapoule.geosphere.fr/guichet-unique',
     label: 'Mandelieu-la-Napoule — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['06079']),
   }),
   Object.freeze({
@@ -907,6 +940,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://maugescommunaute.geosphere.fr/guichet-unique',
     label: 'CA Mauges Communauté — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['49126', '49218']),
   }),
   Object.freeze({
@@ -914,6 +948,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://mornealeau.geosphere.fr/guichet-unique',
     label: 'Morne-à-l\'Eau — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['97116']),
   }),
   Object.freeze({
@@ -921,6 +956,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://neufchatel-hardelot.geosphere.fr/guichet-unique',
     label: 'Neufchâtel-Hardelot — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['62604']),
   }),
   Object.freeze({
@@ -967,6 +1003,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://pays-chantonnay.geosphere.fr/guichet-unique',
     label: 'CC Pays de Chantonnay — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '85034', '85051', '85192', '85202', '85220', '85232', '85246', '85266',
       '85276', '85282',
@@ -977,6 +1014,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://pays-fouesnantais.geosphere.fr/guichet-unique',
     label: 'Fouesnant — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['29058']),
   }),
   Object.freeze({
@@ -992,6 +1030,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://pays-sabolien.geosphere.fr/guichet-unique',
     label: 'CC du Pays Sabolien — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '72010', '72016', '72021', '72022', '72151', '72228', '72232', '72236',
       '72244', '72264', '72336', '72343', '72378',
@@ -1010,6 +1049,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://paysdefalaise.geosphere.fr/guichet-unique',
     label: 'CC du Pays de Falaise — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '14025', '14088', '14180', '14216', '14240', '14244', '14245', '14258',
       '14276', '14283', '14289', '14332', '14345', '14360', '14394', '14427',
@@ -1039,6 +1079,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://paysdelunel.geosphere.fr/guichet-unique',
     label: 'CA Lunel Agglo — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '34033', '34112', '34145', '34146', '34151', '34246', '34272', '34280',
       '34288', '34294', '34296', '34340',
@@ -1063,6 +1104,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://paysdevian.geosphere.fr/guichet-unique',
     label: 'CC Pays d\'Evian Vallée d\'Abondance — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '74041', '74063', '74119', '74146', '74154', '74166', '74172', '74237',
       '74249', '74286', '74308',
@@ -1073,6 +1115,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://paysduzes.geosphere.fr/guichet-unique',
     label: 'CC Pays d\'Uzès — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '30001', '30013', '30014', '30021', '30030', '30031', '30035', '30041',
       '30048', '30049', '30056', '30067', '30073', '30086', '30110', '30111',
@@ -1113,6 +1156,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://pontdugard.geosphere.fr/guichet-unique-pontdugard',
     label: 'Aramon — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['30012']),
   }),
   Object.freeze({
@@ -1120,6 +1164,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://pontivy-communaute.geosphere.fr/guichet-unique',
     label: 'CC Pontivy Communauté — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '22285', '56024', '56041', '56047', '56072', '56076', '56092', '56093',
       '56125', '56146', '56151', '56160', '56178', '56189', '56190', '56198',
@@ -1160,6 +1205,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://provence-verdon.geosphere.fr/guichet-urba',
     label: 'Artigues — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83006']),
   }),
   Object.freeze({
@@ -1167,6 +1213,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://redon.geosphere.fr/guichet-unique',
     label: 'Redon — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['35236']),
   }),
   Object.freeze({
@@ -1190,6 +1237,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://rognac.geosphere.fr/guichet-unique',
     label: 'Rognac — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13081']),
   }),
   Object.freeze({
@@ -1219,6 +1267,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://saclay.geosphere.fr/guichet-unique',
     label: 'Saclay — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['91534']),
   }),
   Object.freeze({
@@ -1234,6 +1283,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://saintmalo-agglo.geosphere.fr/guichet-unique',
     label: 'CA du Pays de Saint Malo Agglomération — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '35049', '35116', '35122', '35132', '35153', '35179', '35224', '35255',
       '35263', '35279', '35284', '35288', '35299', '35306', '35314', '35358',
@@ -1253,6 +1303,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://saumurvaldeloire.geosphere.fr/guichet-saumur',
     label: 'CA Saumur Val de Loire — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '49060', '49112', '49113', '49131', '49140', '49219', '49235', '49262',
       '49291', '49328', '49341', '49358', '49359', '49362', '49370',
@@ -1296,6 +1347,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://sitmahp.geosphere.fr/guichet-unique',
     label: 'sitmahp.geosphere.fr — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'unpadded',
+    robots: 'overridden',
     communes: Object.freeze([
       '04001', '04004', '04005', '04006', '04008', '04020', '04022', '04024',
       '04025', '04028', '04030', '04031', '04034', '04035', '04036', '04039',
@@ -1340,6 +1392,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://stremydeprovence.geosphere.fr/guichet-unique',
     label: 'Saint-Rémy-de-Provence — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13100']),
   }),
   Object.freeze({
@@ -1371,6 +1424,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://sudartois.geosphere.fr/guichet-unique',
     label: 'Bapaume — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['62080']),
   }),
   Object.freeze({
@@ -1392,6 +1446,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://tarnetagout.geosphere.fr/guichet-unique',
     label: 'Lavaur — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['81140']),
   }),
   Object.freeze({
@@ -1399,6 +1454,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://terresdemontaigu.geosphere.fr/guichet-unique',
     label: 'CA Terres de Montaigu — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '85025', '85039', '85076', '85108', '85146', '85190', '85197', '85262',
       '85295',
@@ -1617,6 +1673,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://valdemorteau.geosphere.fr/guichet-unique',
     label: 'CC du Val de Morteau — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['25050', '25160', '25240', '25285', '25296', '25321', '25403', '25411']),
   }),
   Object.freeze({
@@ -1624,6 +1681,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://valdesarthe.geosphere.fr/guichet-unique',
     label: 'valdesarthe.geosphere.fr — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '72004', '72019', '72045', '72050', '72051', '72059', '72070', '72074',
       '72075', '72083', '72096', '72107', '72127', '72131', '72133', '72136',
@@ -1638,6 +1696,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://valdesully.geosphere.fr/guichet-unique',
     label: 'Ouzouer-sur-Loire — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['45244']),
   }),
   Object.freeze({
@@ -1645,6 +1704,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://valleedugapeau.geosphere.fr/guichet-unique-lafarlede',
     label: 'La Farlède — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83054']),
   }),
   Object.freeze({
@@ -1663,6 +1723,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://vernon.geosphere.fr/guichet-unique',
     label: 'Vernon — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['27681']),
   }),
   Object.freeze({
@@ -1670,6 +1731,7 @@ export const CARTDS_SCANNED_INSTANCES = Object.freeze([
     base: 'https://ville-matoury.geosphere.fr/guichet-unique',
     label: 'Matoury — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['97307']),
   }),
   Object.freeze({
