@@ -25,10 +25,10 @@ and install into `/opt/gev`, the default `GEV_ROOT` of the scripts.
 
 ```bash
 ssh box 'mkdir -p /opt/gev'
-scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh box:/opt/gev/
-scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} deploy/vps/gev-medecins-refresh.{service,timer} box:/etc/systemd/system/
-ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh && chmod 600 /opt/gev/.env'
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer gev-medecins-refresh.timer'
+scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh deploy/vps/gev-archive-nightly.sh box:/opt/gev/
+scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} deploy/vps/gev-medecins-refresh.{service,timer} deploy/vps/gev-archive-nightly.{service,timer} box:/etc/systemd/system/
+ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh /opt/gev/gev-archive-nightly.sh && chmod 600 /opt/gev/.env'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer gev-medecins-refresh.timer gev-archive-nightly.timer'
 ```
 
 `/opt/gev/.env` needs at least:
@@ -113,6 +113,8 @@ that predates the access gate.
 | volume `gev_gev-cache`, `medecins-fr/pack/` | the doctors' pack with its names, rebuilt every Monday by `gev-medecins-refresh.timer` |
 | volume `gev_gev-cache`, `medecins-fr/suppress.txt` | the doctors who asked not to appear, one per line; never in git |
 | volume `gev_gev-cache`, `archive/cartds/` | every permit row the communes' Cart@DS boards have posted since 2026-09-30, swept daily by the server itself (`sweep.json` = the last sweep). **Irreplaceable**: a board forgets after two months. Back it up before touching the volume; `npm run cartds:archive -- --join <copy>` folds a copy back in |
+| `/opt/gev/backups/archive-YYYYMMDD.tar.gz` | the whole `archive/` directory (every family: `cartds`, `sirap`, `epermis`, `permit-lists`, `mmm`), copied every night at 02:00 UTC by `gev-archive-nightly.timer`, the 7 newest kept; a copy under 90 % of the previous one's files is marked suspect and deletes nothing. Restore: stop the container, untar into the volume's mountpoint |
+| `/var/lib/gev-archive/{backup,health}.json` | what last night's copy produced, and `npm run permits:archive-health` run inside the container: which family did not sweep, which instance stopped being read, since when |
 | `/opt/gev/state/health.log` | one line per probe, ~7 days |
 
 ### Day to day
@@ -373,6 +375,26 @@ builds them from the CNAM's *Annuaire santé Ameli* into the cache volume, with 
 fresh `medecins.json.gz` beside them, and rebuilds both every Monday, so a
 correction made at Ameli reaches the map within a week. Why, and the file
 formats: `src/data/local_data/medecins_fr/README.md`.
+
+### The permit archive: nightly copy and check
+
+The permit archive is the only data on the box that cannot be rebuilt — a
+notice taken off a board never comes back — and until 2026-11-15 it had no
+copy and no check. `gev-archive-nightly.timer` (02:00 UTC, after the sweeps)
+tars `archive/` out of the volume into `/opt/gev/backups/` and runs the
+archive's health check inside the container. The verdict's rules are in
+`scripts/lib/permitArchiveHealth.mjs`: a family whose `sweep.json` is not
+tonight's, a municipality two days behind (grouped by the instance that reads
+it, new for three days, then ongoing), a host refusing robots.
+
+```bash
+scp deploy/vps/gev-archive-nightly.sh box:/opt/gev/ && ssh box 'chmod +x /opt/gev/gev-archive-nightly.sh'
+scp deploy/vps/gev-archive-nightly.{service,timer} box:/etc/systemd/system/
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-archive-nightly.timer'
+ssh box 'systemctl start gev-archive-nightly.service'          # copy and check now
+ssh box 'jq -r .text /var/lib/gev-archive/health.json'          # the verdict, in words
+ssh box 'docker exec gev node scripts/permit-archive-health.mjs' # same, live
+```
 
 ```bash
 scp deploy/vps/gev-medecins-refresh.{service,timer} box:/etc/systemd/system/

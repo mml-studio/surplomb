@@ -4770,6 +4770,17 @@ shell (`--join <dir>` folds in an archive swept elsewhere). The archive starts
 on 2026-09-30: what a board had let go before then is lost, and older dossiers
 still come from Sitadel alone.
 
+**Whether the archive is still being written is checked, not assumed.**
+`npm run permits:archive-health` (`scripts/lib/permitArchiveHealth.mjs`)
+reads every family under `.gev-cache/archive/` and judges each municipality
+by the last day its own file was read, against the registers the sweeps are
+given: a family whose `sweep.json` is not tonight's (Montpellier's may be a
+day old), a municipality two days behind, grouped by instance and new for
+three days, a host whose `robots.txt` refused. `sweep.json` alone could not
+say it: on 2026-11-15 every stamp was tonight's while 736 Cart@DS
+municipalities had been unread since 22-25 October. On the hosted server the
+check runs every night with a copy of the whole archive (`docs/DEPLOY.md`).
+
 **Since 2026-10-01, 56 more communes answer from the other family of boards.**
 Sirap's « Portail Usager », the filing portal of the NEXT'ADS instruction
 software, serves each commune's *affichage réglementaire* as open JSON

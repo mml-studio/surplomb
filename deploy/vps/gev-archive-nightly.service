@@ -1,0 +1,11 @@
+[Unit]
+Description=Surplomb — copy the permit archive and check that every source is still read
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/gev/gev-archive-nightly.sh
+Nice=10
+IOSchedulingClass=idle
