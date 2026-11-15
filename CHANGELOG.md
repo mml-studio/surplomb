@@ -5,6 +5,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
+### Fixed
+- **Representatives' names and persons named in descriptions no longer reach
+  the map or the archive.** The applicant filter kept a company's name with
+  the person after it (« SCI … - M. NOM », « représentée par … »), and
+  nothing filtered the description the applicant typed (« isolation chez
+  Prénom NOM »): measured on 2026-11-15, ~1 800 stored rows in ~520 of the
+  archive's 4 447 files, across Cart@DS, Sirap, e-permis, the cities' lists
+  and Montpellier. Both filters now drop them, every stored row is passed
+  through today's filter as it is read — so a posting cleaned tonight stays
+  the row it was, with its first day — and `npm run permits:archive-rescrub
+  -- --write` rewrites the files no reading touches.
+
 ### Added
 - **The permit archive is copied every night and checked for sources that
   stopped reading.** On 2026-11-15 the archive — every notice the boards have

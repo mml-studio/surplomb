@@ -61,6 +61,7 @@ import { foldToCommune } from './communeCode.js';
 import { cartdsDay } from './cartdsArchive.js';
 import { ADS_KINDS, seriesOfKind } from './adsFeed.js';
 import { ADS_STATE_WORDS } from './adsFeed.i18n.js';
+import { withoutPersonMentions } from './permitApplicant.js';
 
 /** How the files are licensed: share-alike on a derived database, so they are read per scan and never bundled. */
 export const MMM_LICENCE = 'ODbL 1.0';
@@ -208,13 +209,29 @@ export function rankMmmRows(rows) {
  */
 export function scrubMmmRow(row) {
   if (!row || !mmmKind(row.modele)) return null;
-  return [...MMM_IDENTITY.map((name) => row[name] ?? null), String(row.rank ?? 0)];
+  return withoutPersonsInCells([...MMM_IDENTITY.map((name) => row[name] ?? null), String(row.rank ?? 0)]);
+}
+
+/**
+ * The free-text cells, where the Métropole's export keeps what the applicant
+ * typed — « sur la propriété de M. et Mme NOM » (counted 2026-11-15). The
+ * rank was taken on the row as published, so two twins that differ only by a
+ * name stay two rows.
+ */
+const TEXT_CELLS = Object.freeze(['nature_travaux', 'details_travaux'].map((name) => MMM_IDENTITY.indexOf(name)));
+
+function withoutPersonsInCells(cells) {
+  for (const at of TEXT_CELLS) {
+    if (typeof cells[at] === 'string') cells[at] = withoutPersonMentions(cells[at]);
+  }
+  return cells;
 }
 
 /** How the archive store reads and keeps a file's rows (`createCartdsArchiveStore`'s `kind`). */
 export const MMM_ROWS = Object.freeze({
   board: (board) => board === MMM_BOARD,
   scrub: scrubMmmRow,
+  restore: (cells) => withoutPersonsInCells([...cells]),
 });
 
 /**

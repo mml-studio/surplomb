@@ -161,6 +161,7 @@
     "cartds:archive": "node scripts/cartds-archive.mjs",
     "permits:scan": "node scripts/permit-boards-scan.mjs",
     "permits:archive-health": "node scripts/permit-archive-health.mjs",
+    "permits:archive-rescrub": "node scripts/permit-archive-rescrub.mjs",
     "permits:priorities": "node scripts/permit-source-priorities.mjs",
     "territoires:pack": "node scripts/build-fr-territoires.mjs",
     "energy-markets:pack": "node scripts/build-energy-market-areas.mjs",

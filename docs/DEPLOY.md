@@ -396,6 +396,17 @@ ssh box 'jq -r .text /var/lib/gev-archive/health.json'          # the verdict, i
 ssh box 'docker exec gev node scripts/permit-archive-health.mjs' # same, live
 ```
 
+When a filter of what may be stored changes (`organisationApplicant`,
+`withoutPersonMentions`), rows already stored are cleaned as they are read;
+the files nothing reads any more are rewritten once, after the deploy and
+away from the sweeps (~23:40-01:15 UTC):
+
+```bash
+ssh box 'systemctl start gev-archive-nightly.service'                       # a copy first
+ssh box 'docker exec gev node scripts/permit-archive-rescrub.mjs'           # dry run
+ssh box 'docker exec gev node scripts/permit-archive-rescrub.mjs --write'   # rewrite
+```
+
 ```bash
 scp deploy/vps/gev-medecins-refresh.{service,timer} box:/etc/systemd/system/
 ssh box 'systemctl daemon-reload && systemctl enable --now gev-medecins-refresh.timer'
