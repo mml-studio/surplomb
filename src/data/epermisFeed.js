@@ -141,7 +141,7 @@
  */
 
 import { COMMUNE_CODE_PATTERN } from './communeCode.js';
-import { organisationApplicant } from './permitApplicant.js';
+import { organisationApplicant, withoutPersonMentions } from './permitApplicant.js';
 import { ADS_DEFAULT_MONTHS, ADS_KINDS, adsSince, dossierKey, formatDossier, seriesOfKind } from './adsFeed.js';
 import { ADS_STATE_WORDS } from './adsFeed.i18n.js';
 import { CARTDS_LICENCE, cartdsDate, cartdsKind } from './cartdsFeed.js';
@@ -789,6 +789,8 @@ export const EPERMIS_ROW_FIELDS = Object.freeze([
 
 /** Where the applicant sits in the stored cells. */
 const APPLICANT_CELL = EPERMIS_ROW_FIELDS.indexOf('dos_dnm_t');
+/** The cell the applicant typed: the nature of the work. */
+const TEXT_CELL = EPERMIS_ROW_FIELDS.indexOf('nature');
 
 /**
  * One row as it may be stored, or null for a row that may not be.
@@ -807,6 +809,7 @@ export function scrubEpermisRow(row) {
     return value === null || value === undefined ? null : String(value);
   });
   cells[APPLICANT_CELL] = organisationApplicant(cells[APPLICANT_CELL]);
+  cells[TEXT_CELL] = withoutPersonMentions(cells[TEXT_CELL]);
   return cells;
 }
 
@@ -822,6 +825,7 @@ function rowOfCells(cells) {
 export const EPERMIS_ROWS = Object.freeze({
   board: (board) => Object.values(EPERMIS_BOARDS).includes(board),
   scrub: scrubEpermisRow,
+  restore: (cells) => scrubEpermisRow(rowOfCells(cells)),
 });
 
 /** `0` is the field's blank: 2 924 rows of 3 805 say it, most of them a DP. */

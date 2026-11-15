@@ -36,7 +36,7 @@
  */
 
 import { cartdsKind } from './cartdsFeed.js';
-import { organisationApplicant } from './permitApplicant.js';
+import { organisationApplicant, withoutPersonMentions } from './permitApplicant.js';
 
 /** Bumped whenever the stored shape changes; an unknown schema is not read. */
 export const CARTDS_ARCHIVE_SCHEMA = 1;
@@ -46,6 +46,8 @@ const CARTDS_ROW_CELLS = 9;
 
 /** The column that names the applicant, as the page heads it. */
 const APPLICANT_CELL = 3;
+/** The cells the applicant typed: the purpose (6) and the project (7). */
+const TEXT_CELLS = Object.freeze([6, 7]);
 
 /** The two boards, as `TypeInformation` sends them. */
 const BOARDS = new Set(['1', '2']);
@@ -82,6 +84,7 @@ export function scrubCartdsRow(row) {
     cells.push(value === null || value === undefined ? null : String(value));
   }
   cells[APPLICANT_CELL] = organisationApplicant(cells[APPLICANT_CELL]);
+  for (const at of TEXT_CELLS) if (at < cells.length) cells[at] = withoutPersonMentions(cells[at]);
   return cells;
 }
 
@@ -95,6 +98,7 @@ export function scrubCartdsRow(row) {
 export const CARTDS_ROWS = Object.freeze({
   board: (board) => BOARDS.has(board),
   scrub: scrubCartdsRow,
+  restore: scrubCartdsRow,
 });
 
 /** The identity of a stored row: its board and its text. */
@@ -140,11 +144,32 @@ export function readCartdsArchive(document, instance, insee, kind = CARTDS_ROWS)
     || document.insee !== empty.insee
     || document.instance !== instance.key
     || !Array.isArray(document.rows)) return { archive: empty, usable: false };
+  // Every stored row goes through TODAY's scrub (`kind.restore`) on the way
+  // in. A row's identity is its text, so a stricter filter applied only to
+  // new readings would make every posting it changes look new the next
+  // night — a second row with a fresh `first`, the old one frozen. Restored
+  // here, the old row and tonight's reading are the same row again; rows the
+  // filter made identical are merged, earliest `first`, latest `last`.
+  // 2026-11-15: representatives' names (« SCI … - M. NOM ») and persons
+  // named in descriptions had been stored before the filter knew them.
   const rows = [];
+  const byKey = new Map();
+  let restored = 0;
   for (const row of document.rows) {
     if (!row || !kind.board(row.board) || !Array.isArray(row.cells)) continue;
     if (!DAY_PATTERN.test(row.first) || !DAY_PATTERN.test(row.last)) continue;
-    rows.push({ board: row.board, cells: row.cells, first: row.first, last: row.last });
+    const cells = kind.restore?.(row.cells) ?? row.cells;
+    const key = rowKey(row.board, cells);
+    if (key !== rowKey(row.board, row.cells)) restored += 1;
+    const held = byKey.get(key);
+    if (held) {
+      if (row.first < held.first) held.first = row.first;
+      if (row.last > held.last) held.last = row.last;
+      continue;
+    }
+    const kept = { board: row.board, cells, first: row.first, last: row.last };
+    byKey.set(key, kept);
+    rows.push(kept);
   }
   return {
     archive: {
@@ -155,6 +180,7 @@ export function readCartdsArchive(document, instance, insee, kind = CARTDS_ROWS)
       rows,
     },
     usable: true,
+    restored,
   };
 }
 

@@ -128,7 +128,7 @@
  */
 
 import { foldToCommune } from './communeCode.js';
-import { organisationApplicant } from './permitApplicant.js';
+import { organisationApplicant, withoutPersonMentions } from './permitApplicant.js';
 import { ADS_KINDS, dossierKey, formatDossier, seriesOfKind } from './adsFeed.js';
 import { ADS_STATE_WORDS } from './adsFeed.i18n.js';
 import {
@@ -3229,6 +3229,8 @@ export const PERMIT_LIST_FIELDS = Object.freeze([
 
 /** Where the applicant sits in the stored cells. */
 const APPLICANT_CELL = PERMIT_LIST_FIELDS.indexOf('applicant');
+/** The cells a list copies from what the applicant typed. */
+const TEXT_CELLS = Object.freeze(['label', 'purpose'].map((field) => PERMIT_LIST_FIELDS.indexOf(field)));
 
 /**
  * One list row as it may be stored, or null for a row that may not be.
@@ -3251,6 +3253,7 @@ export function scrubPermitListRow(input) {
     return value === null || value === undefined ? null : String(value);
   });
   cells[APPLICANT_CELL] = organisationApplicant(cells[APPLICANT_CELL]);
+  for (const at of TEXT_CELLS) cells[at] = withoutPersonMentions(cells[at]);
   return cells;
 }
 
@@ -3290,6 +3293,7 @@ export function permitListVerdictState(verdict) {
 export const PERMIT_LIST_ROWS = Object.freeze({
   board: (board) => Object.hasOwn(PERMIT_LIST_BOARDS, board),
   scrub: scrubPermitListRow,
+  restore: scrubPermitListRow,
 });
 
 /**

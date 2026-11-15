@@ -62,7 +62,7 @@
  */
 
 import { COMMUNE_CODE_PATTERN } from './communeCode.js';
-import { organisationApplicant } from './permitApplicant.js';
+import { organisationApplicant, withoutPersonMentions } from './permitApplicant.js';
 import { ADS_KINDS, dossierKey, formatDossier, seriesOfKind } from './adsFeed.js';
 import { ADS_STATE_WORDS } from './adsFeed.i18n.js';
 import { CARTDS_LICENCE, cartdsKind, cartdsVerdictState } from './cartdsFeed.js';
@@ -406,6 +406,8 @@ export const SIRAP_ROW_FIELDS = Object.freeze([
 
 /** Where the applicant sits in the stored cells. */
 const APPLICANT_CELL = SIRAP_ROW_FIELDS.indexOf('demandeur');
+/** The cells the applicant typed. */
+const TEXT_CELLS = Object.freeze(['travauxNature', 'descriptionTravaux'].map((field) => SIRAP_ROW_FIELDS.indexOf(field)));
 
 /**
  * One board row as it may be stored, or null for a row that may not be.
@@ -425,6 +427,7 @@ export function scrubSirapRow(row) {
     return value === null || value === undefined ? null : String(value);
   });
   cells[APPLICANT_CELL] = organisationApplicant(cells[APPLICANT_CELL]);
+  for (const at of TEXT_CELLS) cells[at] = withoutPersonMentions(cells[at]);
   return cells;
 }
 
@@ -441,6 +444,7 @@ function rowOfCells(cells) {
 export const SIRAP_ROWS = Object.freeze({
   board: (board) => COMMUNE_CODE_PATTERN.test(String(board ?? '')),
   scrub: scrubSirapRow,
+  restore: (cells) => scrubSirapRow(rowOfCells(cells)),
 });
 
 /** `0` is the field's blank: a ravalement on a 0 m² plot is a row with none. */

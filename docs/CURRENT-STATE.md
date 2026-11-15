@@ -4770,6 +4770,25 @@ shell (`--join <dir>` folds in an archive swept elsewhere). The archive starts
 on 2026-09-30: what a board had let go before then is lost, and older dossiers
 still come from Sitadel alone.
 
+**No private person's name is kept, including the ones the filter learned
+late.** Every family scrubs a row before storing it: the applicant goes
+through `organisationApplicant` (`src/data/permitApplicant.js`), which since
+2026-11-15 also drops a representative named after the company (« SCI … -
+M. NOM », « SAS … représentée par … », « VILLE DE … M. NOM ») and returns
+nothing for a legal form left alone; the free-text cells the applicant typed
+(Cart@DS purpose and project, Sirap's two descriptions, e-permis's nature,
+the lists' label and purpose, Montpellier's two descriptions) go through
+`withoutPersonMentions`, which replaces « chez Prénom NOM », « notre client
+M NOM », « M. NOM » by `[…]` and leaves measurements (« 3 M X 7 M », « 1.50 M
+DE PROFONDEUR ») and suppliers named by one word alone. Because a stored row's
+identity is its text, a stricter filter applied only to new readings would
+make every posting it changes look new the next night; so `readCartdsArchive`
+passes every stored row through today's scrub as it reads it (`kind.restore`)
+and merges the rows that become one, earliest `first`, latest `last`. The
+audit of 2026-11-15 found ~1 800 such rows in ~520 files; `npm run
+permits:archive-rescrub -- --write` rewrites the files no reading touches any
+more.
+
 **Whether the archive is still being written is checked, not assumed.**
 `npm run permits:archive-health` (`scripts/lib/permitArchiveHealth.mjs`)
 reads every family under `.gev-cache/archive/` and judges each municipality

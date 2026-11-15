@@ -89,12 +89,44 @@ test('a reading adds new rows and moves the last day of rows already kept', () =
   assert.throws(() => recordCartdsBoards(empty, {}, '30/09/2026'), /bad day/);
 });
 
+test('a row stored before the filter knew a name is restored on read and stays the same row (2026-11-15)', () => {
+  // Stored on 2026-10-01 by the filter of the day: the company kept, its
+  // representative with it, and a description naming a private person.
+  const before = [...DECISION];
+  before[3] = 'SCI LES OLIVIERS - M. FICTIF Paul';
+  before[6] = 'Ravalement chez Jean TESTEUR';
+  const storedCells = before.map((cell) => (cell === undefined ? null : String(cell)));
+  const clean = scrubCartdsRow(before);
+  assert.equal(clean[3], 'SCI LES OLIVIERS');
+  assert.equal(clean[6], 'Ravalement chez […]');
+  const document = {
+    ...emptyCartdsArchive(MAMP, '13114'),
+    firstDay: '2026-10-01', lastDay: '2026-11-14', days: 40,
+    rows: [
+      { board: CARTDS_BOARDS.decisions, cells: storedCells, first: '2026-10-01', last: '2026-11-10' },
+      // The same posting, read once already by the stricter filter.
+      { board: CARTDS_BOARDS.decisions, cells: clean, first: '2026-11-12', last: '2026-11-14' },
+    ],
+  };
+  const { archive, usable, restored } = readCartdsArchive(document, MAMP, '13114');
+  assert.equal(usable, true);
+  assert.equal(restored, 1);
+  assert.equal(archive.rows.length, 1, 'the two copies are one row again');
+  assert.deepEqual(archive.rows[0], { board: CARTDS_BOARDS.decisions, cells: clean, first: '2026-10-01', last: '2026-11-14' });
+  assert.ok(!JSON.stringify(archive).includes('FICTIF') && !JSON.stringify(archive).includes('TESTEUR'));
+  // Tonight's reading of the same posting is that row, not a new one.
+  const tonight = recordCartdsBoards(archive, { [CARTDS_BOARDS.decisions]: [before] }, '2026-11-15');
+  assert.equal(tonight.added, 0);
+  assert.equal(tonight.archive.rows[0].first, '2026-10-01');
+  assert.equal(tonight.archive.rows[0].last, '2026-11-15');
+});
+
 test('an archive of another commune, instance or schema is not read', () => {
   const { archive } = recordCartdsBoards(emptyCartdsArchive(MAMP, '13114'), {
     [CARTDS_BOARDS.decisions]: [DECISION],
   }, '2026-09-30');
   const stored = JSON.parse(JSON.stringify(archive));
-  assert.deepEqual(readCartdsArchive(stored, MAMP, '13114'), { archive, usable: true });
+  assert.deepEqual(readCartdsArchive(stored, MAMP, '13114'), { archive, usable: true, restored: 0 });
   // No file yet is an empty archive that may be written.
   assert.equal(readCartdsArchive(null, MAMP, '13114').usable, true);
   assert.equal(readCartdsArchive(undefined, MAMP, '13114').archive.rows.length, 0);
