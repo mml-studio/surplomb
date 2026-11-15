@@ -4824,6 +4824,25 @@ leading zero (`codes: 'unpadded'`). Measured on 2026-10-01 against geo.api.gouv.
 populations: 17.5 % of the population is now seen within days, from 9.7 %;
 176 of the 1 000 most populous communes, from 79.
 
+**2026-11-15: the exception follows a host that refuses later.** The flag is
+written from the `robots.txt` read when an instance is found, and the sweep
+reads the file of every unflagged host before asking (`cartdsRobotsVerdict`).
+Ninety-two hosts had moved to `Disallow: /` since — 61 scanned instances and
+31 documented ones, Dijon Métropole, Toulon, Aix-Marseille-Provence and the
+18 `guichetunique.geosphere.fr` paths among them — and answered `refused:
+robots`: 650 communes, 2.50 million inhabitants, 3.6 % of the population,
+back on Sitadel alone for up to six weeks. They carry `robots: 'overridden'`
+since. `npm run permits:scan -- --recheck-robots` reads the file of every
+unflagged instance again (about two minutes), rewrites `cartdsScanned.js`
+with the refusing ones flagged and its header dated, prints the documented
+ones to flag by hand in `cartdsFeed.js`, and never removes a flag. Five hosts
+gave no verdict that day and were left as they were: Orléans and Miramas
+answer 503 for every path and carry `robots5xx: 'absent'`; La
+Plaine-des-Palmistes refuses Node 26's HTTP/2 (the server's Node 24 reads
+it); Coutances Mer et Bocage did not answer; the CC Pays d'Orange en Provence
+(`ccpro`, 4 communes) answered 503 without the `robots5xx` flag, which the
+sweep reads as a refusal.
+
 **Since the evening of 2026-10-01, thirteen more hosts.** Checking by hand the
 communes ranked 61 to 200 that no register read, and searching the web for the
 board's address (`"Login/AffichageReglementaire"`), found Cart@DS boards on

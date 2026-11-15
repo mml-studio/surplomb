@@ -76,6 +76,15 @@
  * asked exactly what every other instance is asked: the same identified user
  * agent, the same six-hour cache, the same daily archive sweep.
  *
+ * The flag is written from the `robots.txt` read when an instance was found,
+ * so a host that adds `Disallow` later drops out without a word: on
+ * 2026-11-15, 92 instances flagged neither way — 650 communes, 2.50 million
+ * inhabitants, Dijon and Toulon among them — answered `refused: robots`.
+ * Most had moved to `Disallow: /` since the scan of 2026-10-04. The same
+ * exception was extended to them that day: 61 through `npm run permits:scan
+ * -- --recheck-robots`, which flags the scanned ones, and 31 by hand below,
+ * the ones it names.
+ *
  * ── Trap 6: the board forgets, so the server keeps ─────────────────────────
  * Trap 1's two months are the posting period, not a window the commune
  * chooses: what leaves the board is gone from every public place. The server
@@ -203,6 +212,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://mamp.geosphere.fr/guichet-unique',
     label: 'Métropole Aix-Marseille-Provence — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '13007', '13008', '13012', '13013', '13023', '13024', '13118', '13032',
       '13046', '13028', '13084', '13080', '13109', '13056', '13059', '13073',
@@ -215,6 +225,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://paysdefayence.geosphere.fr/guichet-unique',
     label: 'Pays de Fayence — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '83008', '83029', '83055', '83080', '83081', '83117', '83124', '83133',
     ]),
@@ -224,6 +235,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://portovecchio.geosphere.fr/guichet-unique',
     label: 'Porto-Vecchio — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['2A247']),
   }),
   Object.freeze({
@@ -231,6 +243,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://chatillon.geosphere.fr/guichet-unique',
     label: 'Châtillon — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['92020']),
   }),
   // Bayeux Intercom's board, found in a web crawl's URLs (2026-10-04): Bayeux alone in its menu.
@@ -275,6 +288,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://atd24.geosphere.fr/guichet-unique',
     label: 'ATD 24 (Dordogne) — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['24037', '24296']),
   }),
   Object.freeze({
@@ -282,6 +296,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://ccbr.geosphere.fr/guichet-unique',
     label: 'Bretagne romantique — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze([
       '35009', '35010', '35029', '35050', '35078', '35092', '35094', '35095',
       '35104', '35130', '35017', '35034', '35056', '35148', '35361', '35134',
@@ -375,6 +390,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://extrageo.metropole-dijon.fr/guichet-unique',
     label: 'Dijon Métropole — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '21003', '21105', '21106', '21166', '21171', '21192', '21231', '21263',
       '21270', '21278', '21315', '21355', '21370', '21390', '21452', '21473',
@@ -393,6 +409,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://toulon.geosphere.fr/guichet-unique',
     label: 'Toulon — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['83137']),
   }),
   Object.freeze({
@@ -456,6 +473,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/beaumont',
     label: 'Beaumont — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['63032']),
   }),
   Object.freeze({
@@ -463,6 +481,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/bois-le-roi',
     label: 'Bois-le-Roi — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['77037']),
   }),
   Object.freeze({
@@ -470,6 +489,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/chateauneuf-le-rouge',
     label: 'Châteauneuf-le-Rouge — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13025']),
   }),
   Object.freeze({
@@ -477,6 +497,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/fare-les-oliviers',
     label: 'La Fare-les-Oliviers — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13037']),
   }),
   Object.freeze({
@@ -484,6 +505,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/jouques',
     label: 'Jouques — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13048']),
   }),
   Object.freeze({
@@ -491,6 +513,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/ladestrousse',
     label: 'La Destrousse — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13031']),
   }),
   Object.freeze({
@@ -498,6 +521,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/lambesc',
     label: 'Lambesc — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13050']),
   }),
   Object.freeze({
@@ -505,6 +529,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/lethoronet',
     label: 'Le Thoronet — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83136']),
   }),
   Object.freeze({
@@ -512,6 +537,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/leval',
     label: 'Le Val — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83143']),
   }),
   Object.freeze({
@@ -519,6 +545,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/nuitsstgeorges',
     label: 'Nuits-Saint-Georges — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['21464']),
   }),
   Object.freeze({
@@ -526,6 +553,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/puget-ville',
     label: 'Puget-Ville — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['83100']),
   }),
   Object.freeze({
@@ -533,6 +561,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/quint-fonsegrives',
     label: 'Quint-Fonsegrives — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['31445']),
   }),
   Object.freeze({
@@ -540,6 +569,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/rognes',
     label: 'Rognes — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['13082']),
   }),
   Object.freeze({
@@ -547,6 +577,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/saint-jean-de-moirans',
     label: 'Saint-Jean-de-Moirans — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['38400']),
   }),
   Object.freeze({
@@ -554,6 +585,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/st-lary-soulan',
     label: 'Saint-Lary-Soulan — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['65388']),
   }),
   Object.freeze({
@@ -561,6 +593,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/stprivatdesvieux',
     label: 'Saint-Privat-des-Vieux — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['30294']),
   }),
   Object.freeze({
@@ -568,6 +601,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/thaon-les-vosges',
     label: 'Thaon-les-Vosges — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['88465']),
   }),
   Object.freeze({
@@ -575,6 +609,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://guichetunique.geosphere.fr/valdisere',
     label: 'Val-d’Isère — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['73304']),
   }),
   Object.freeze({
@@ -591,6 +626,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://grandnarbonne.geosphere.fr/guichet-unique-leucate',
     label: 'Leucate — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['11202']),
   }),
   Object.freeze({
@@ -598,6 +634,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://grandnarbonne.geosphere.fr/guichet-unique-narbonne',
     label: 'Narbonne — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze(['11262']),
   }),
   Object.freeze({
@@ -633,6 +670,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://sig.clissonsevremaine.fr/guichet-unique',
     label: 'Clisson Sèvre et Maine Agglo — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     intermediate: 'globalsign-alpha-r6-2025',
     communes: Object.freeze([
       '44002', '44022', '44037', '44043', '44063', '44064', '44071', '44088',
@@ -726,6 +764,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://urbanisme.haute-bigorre.fr/guichet-unique',
     label: 'Communauté de communes de la Haute-Bigorre — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'number',
+    robots: 'overridden',
     communes: Object.freeze([
       '65042', '65059', '65078', '65123', '65198', '65221', '65320', '65335',
       '65370', '65451',
@@ -765,6 +804,7 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     base: 'https://terredemeraude.geosphere.fr/guichet-unique',
     label: 'Terre d’Émeraude Communauté — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['39333', '39397']),
   }),
   // Habsheim posts on a path of its own, `/guichet-scin`, which the scan

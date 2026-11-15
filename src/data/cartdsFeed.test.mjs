@@ -108,6 +108,12 @@ test('documented hosts with a robots.txt exception are read only by an explicit 
     // Habsheim's and Moret Seine et Loing's on 2026-10-03, Appietto's on 2026-10-04.
     'ilenapoleon.geosphere.fr', 'ilenapoleon.geosphere.fr', 'moretseineloing.geosphere.fr',
     'appietto.geosphere.fr',
+    // Thirty-one more on 2026-11-15, found refusing by `permits:scan -- --recheck-robots`.
+    'mamp.geosphere.fr', 'paysdefayence.geosphere.fr', 'portovecchio.geosphere.fr', 'chatillon.geosphere.fr',
+    'atd24.geosphere.fr', 'ccbr.geosphere.fr', 'extrageo.metropole-dijon.fr', 'toulon.geosphere.fr',
+    ...Array(18).fill('guichetunique.geosphere.fr'),
+    'grandnarbonne.geosphere.fr', 'grandnarbonne.geosphere.fr', 'sig.clissonsevremaine.fr',
+    'urbanisme.haute-bigorre.fr', 'terredemeraude.geosphere.fr',
   ];
   const documented = CARTDS_INSTANCES.filter((instance) => !CARTDS_SCANNED_INSTANCES.includes(instance));
   const overridden = documented.filter((instance) => instance.robots !== undefined);

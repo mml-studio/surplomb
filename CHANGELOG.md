@@ -6,6 +6,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Dijon, Toulon, Colmar, Saint-Malo and 646 more communes show their
+  posted permits again, 2.50 million inhabitants.** Ninety-two Cart@DS hosts
+  — 31 written by hand, 61 found by the scan of 2026-10-04 — moved their
+  `robots.txt` to `Disallow: /` after they were found. The daily sweep
+  re-reads that file, so it answered `refused: robots` for each and the
+  layer fell back to Sitadel there, without anything saying so. They now
+  carry `robots: 'overridden'`, the exception already decided for the 104
+  instances that refused when they were found (Trap 5 of `cartdsFeed.js`).
+  `npm run permits:scan -- --recheck-robots` reads every `robots.txt` again
+  in under two minutes, flags the scanned instances that refuse, names the
+  documented ones to flag by hand, and asks no board.
 - **surplomb.app can now count its visits, without a cookie.** A deployment
   whose build carries `POSTHOG_PROJECT_TOKEN` sends PostHog EU Cloud
   (Frankfurt) one page view per page, one more when the landing page hands
