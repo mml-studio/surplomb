@@ -6,6 +6,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The permit archive is copied every night and checked for sources that
+  stopped reading.** On 2026-11-15 the archive — every notice the boards have
+  posted since 2026-09-30, which no one can fetch again — had no copy, and
+  736 Cart@DS municipalities plus 16 cities' lists had not been read for up
+  to six weeks while every `sweep.json` said the night's sweep had run.
+  `npm run permits:archive-health` now judges each municipality by the last
+  day its own file was read: a family that did not sweep, an instance two
+  days behind (new for three days, then ongoing), a host refusing robots.
+  Files of municipalities no longer in their register are counted as
+  retired, not stopped. On the VPS, `gev-archive-nightly.timer` copies
+  `archive/` to `/opt/gev/backups/archive-YYYYMMDD.tar.gz` (7 kept; a copy
+  under 90 % of the previous one's files deletes nothing) and stores the
+  check's verdict in `/var/lib/gev-archive/health.json`. Measured on the
+  15 November archive: 0.6 s, 21 MB compressed.
 - **Dijon, Toulon, Colmar, Saint-Malo and 646 more communes show their
   posted permits again, 2.50 million inhabitants.** Ninety-two Cart@DS hosts
   — 31 written by hand, 61 found by the scan of 2026-10-04 — moved their

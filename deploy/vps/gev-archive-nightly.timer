@@ -1,0 +1,14 @@
+[Unit]
+Description=Copy and check the permit archive every night, after the sweeps
+
+[Timer]
+# 02:00 UTC: the board sweeps start at ~23:40 UTC and the longest (Cart@DS,
+# ~1 850 municipalities one second apart) ends around 01:15 UTC. The off-site
+# pull from the house runs at 04:30 Paris — 02:30 UTC in summer — and skips a
+# file younger than 10 minutes, so the copy must be done well before that.
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
