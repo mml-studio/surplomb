@@ -476,8 +476,10 @@ What runs, set up on 2026-11-15:
 - **On the box**: a user `relais` with `/usr/sbin/nologin`, whose one
   `authorized_keys` line is `restrict,port-forwarding,permitlisten="172.22.0.1:3128",command="/usr/sbin/nologin",from="<relay machine's addresses>"`;
   a `Match User relais` block at the end of `/etc/ssh/sshd_config` with
-  `GatewayPorts clientspecified`, `AllowTcpForwarding remote` and the same
-  `PermitListen` (no other user's effective config changes: `diff` the
+  `GatewayPorts clientspecified`, `AllowTcpForwarding remote`, the same
+  `PermitListen`, and `ClientAliveInterval 30` so that a session cut by a
+  network drop frees the port in 90 s instead of holding it for the two
+  hours of TCP keepalive (no other user's effective config changes: `diff` the
   output of `sshd -T -C user=root,…` before and after); and one ufw rule,
   `allow proto tcp from 172.22.0.0/16 to 172.22.0.1 port 3128`.
 - **`PERMIT_LIST_RELAY=http://172.22.0.1:3128`** in `/opt/gev/.env`, a
