@@ -19,10 +19,14 @@ export const POSTED_LIST_CITIES = [
     page: 'https://www.versurmer.fr/infos-pratiques/urbanisme-etat-civil/avis-de-depot-d-autorisations-d-urbanisme/liste-des-avis-de-depot-13017',
     source: { protocol: 'posted-lists', latestOnly: true,
       pages: ['https://www.versurmer.fr/infos-pratiques/urbanisme-etat-civil/avis-de-depot-d-autorisations-d-urbanisme/liste-des-decisions-13018'] } },
-  // The filing export is XLSX; the decision export is the same table as a PDF.
+  // The filing export was XLSX until September 2026 and is a PDF since; the
+  // decision export is the same table as a PDF. Read through the site's media
+  // API, not its page of acts: from 2026-11-10 the town filed its traffic
+  // orders under « urbanisme » too, and the lists slid off the page's first
+  // screen (`…/page/2/` on 2026-11-15) — the API lists every PDF by upload day.
   { key: 'fleury-les-aubrais', insee: '45147', postcode: '45400', label: 'Ville de Fleury-les-Aubrais — dépôts et décisions d’urbanisme',
     page: 'https://www.fleurylesaubrais.fr/ma-mairie/vie-municipale/publications-des-actes-administratifs/?category=urbanisme',
-    source: { protocol: 'posted-lists', latestOnly: true,
+    source: { protocol: 'wp-media', acts: false, latestOnly: true,
       lists: { filings: '\\bLISTE AFFICHAGE DEPOT\\b|\\bLISTE DES AVIS DE DEPOT\\b', decisions: '\\bLISTE AFFICHAGE \\d|\\bLISTE DES DECISIONS\\b' },
       workbookSheets: { filings: 'Liste affichage dépôt' },
       layouts: { filings: 'fleury-filings', decisions: 'fleury-decisions' } } },

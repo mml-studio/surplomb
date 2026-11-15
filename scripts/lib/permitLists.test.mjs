@@ -1280,3 +1280,18 @@ test('a board’s workbook is read by its named sheet, revalidated by its ETag, 
   const refused = await readPermitCity(city, html, { day: '2026-10-03' });
   assert.equal(refused.failed, 1, 'a sign-in page is no workbook');
 });
+
+test('a board read over several pages is read when its first page holds no act today (Mantes-la-Ville, 2026-11-15)', async () => {
+  const city = BOARD_PERMIT_SOURCES.find((c) => c.key === 'mantes-la-ville');
+  const [second, ...rest] = city.source.pages;
+  const http = fakeHttp({ pages: {
+    [city.page]: `<a href="https://www.manteslaville.fr/wp-content/uploads/2026/11/2026-727.pdf">2026-727 (221,70 Ko, pdf)</a><a href="${second}">2</a>`,
+    [second]: `<a href="https://www.manteslaville.fr/wp-content/uploads/2026/11/Arrete-favorable-DP0783622600120.pdf">Arrêté favorable DP0783622600120</a><a href="${city.page}">1</a>`,
+    ...Object.fromEntries(rest.map((url) => [url, `<a href="${city.page}">1</a>`])),
+  } });
+  const answer = await readPermitCity(city, http, { day: '2026-11-15', maxFiles: 0 });
+  assert.ok(answer, 'the first page’s silence no longer fails the town');
+  assert.equal(answer.skipped, 1);
+  assert.equal(answer.boards.decisions.length, 1);
+  assert.match(JSON.stringify(answer.boards.decisions), /DP 078362 26 00120/);
+});

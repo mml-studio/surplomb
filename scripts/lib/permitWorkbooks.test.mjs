@@ -54,7 +54,10 @@ test('XLSX bounds compressed expansion and sparse column or row allocation befor
   assert.throws(() => readXlsxSheet(xlsx().subarray(0, 50), 'Liste affichage dépôt'), /ZIP/);
 });
 
-const city = permitListFor('45147');
+// The opted-in workbook path, read from a page of links: Fleury-les-Aubrais's
+// shape until 2026-11-15, when the town moved to its media API (PDF only).
+const fleury = permitListFor('45147');
+const city = { ...fleury, source: { ...fleury.source, protocol: 'posted-lists' } };
 const url = new URL('/uploads/Liste-affichage-depot-02_10_2026.xlsx', city.page).href;
 function httpFor(bytes, { modified = false, html = null } = {}) {
   const calls = [];

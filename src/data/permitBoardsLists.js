@@ -574,11 +574,13 @@ const GARGES = rollingTables(
   { filings: 'grid-filings', decisions: 'grid-decisions' },
   (url) => municipalDate(/_(\d{2})\.(\d{2})\.(\d{4})\.pdf$/i.exec(url)?.slice(1).join('/')),
 );
+// `dds_-_tableau_affichage_-_depot_-_25-09.pdf` until October 2026,
+// `dds_tableau_affichage_depot_06-11.pdf` since.
 const BLANC_MESNIL = rollingTables(
-  { filings: /dds_-_tableau_affichage_-_depot_-_[\d-]+\.pdf$/i, decisions: /dds_-_tableau_affichage_-_decision_-_[\d-]+\.pdf$/i },
+  { filings: /dds_(?:-_)?tableau_affichage_(?:-_)?depot_(?:-_)?[\d-]+\.pdf$/i, decisions: /dds_(?:-_)?tableau_affichage_(?:-_)?decision_(?:-_)?[\d-]+\.pdf$/i },
   { filings: 'blanc-mesnil-filings', decisions: 'blanc-mesnil-decisions' },
   (url, day) => {
-    const match = /_-_(\d{2})-(\d{2})\.pdf$/i.exec(url);
+    const match = /_(\d{2})-(\d{2})\.pdf$/i.exec(url);
     return match ? dayWithoutYear(match[1], match[2], day) : null;
   },
 );

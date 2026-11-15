@@ -20,6 +20,7 @@ import {
   CARTDS_INTERMEDIATES,
 } from './cartdsArchive.mjs';
 import { CARTDS_INSTANCES } from '../../src/data/cartdsFeed.js';
+import { PERMIT_LISTS } from '../../src/data/permitListsFeed.js';
 
 const OPEN = Object.freeze({
   key: 'open', base: 'https://open.example/guichet-unique', label: 'Open — affichage réglementaire',
@@ -229,6 +230,30 @@ test('every intermediate an instance names is a CA signed by a root Node ships',
     // fifteen-year ones: it must be valid when its board was measured.
     assert.ok(new Date(certificate.validTo) > new Date('2026-10-02'), name);
   }
+});
+
+test('every intermediate a permit-list city names is a CA signed by a root Node ships, the one its leaf names', () => {
+  const roots = tls.rootCertificates.map((pem) => new X509Certificate(pem));
+  const named = PERMIT_LISTS.filter((city) => city.intermediate);
+  for (const city of named) {
+    const pem = CARTDS_INTERMEDIATES[city.intermediate];
+    assert.ok(pem, city.key);
+    const certificate = new X509Certificate(pem);
+    assert.ok(certificate.ca, city.key);
+    assert.notEqual(certificate.subject, certificate.issuer, city.key);
+    const root = roots.find((candidate) => candidate.subject === certificate.issuer);
+    assert.ok(root && certificate.checkIssued(root) && certificate.verify(root.publicKey), city.key);
+    assert.ok(new Date(certificate.validTo) > new Date('2026-11-15'), city.key);
+  }
+  // The issuers the two leaves renewed in autumn 2026 print (`openssl s_client`,
+  // 2026-11-15): Arles's names TrustSign while it sends Sectigo's DV R36,
+  // Anglet's names DigiCert's EU CA and sends nothing else.
+  const issuerOf = (key) => new X509Certificate(CARTDS_INTERMEDIATES[named.find((city) => city.key === key).intermediate]).subject;
+  assert.equal(issuerOf('arles'), 'C=FR\nO=Ziwit SAS\nCN=TrustSign RSA DV SSL CA 2');
+  assert.equal(issuerOf('anglet'), 'C=IE\nO=DigiCert Ireland Limited\nCN=DigiCert G2 TLS EU RSA4096 SHA384 2022 CA1');
+  assert.deepEqual(trustCartdsIntermediates(named.filter((city) => ['arles', 'anglet'].includes(city.key)), {
+    getCACertificates: () => [], setDefaultCACertificates: () => {},
+  }).sort(), ['digicert-g2-eu-2022', 'trustsign-dv-2']);
 });
 
 test('the intermediates are added to the default CA list once, after what is already there', () => {

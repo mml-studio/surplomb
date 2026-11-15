@@ -233,7 +233,9 @@ test('file names that abbreviate a number still name the commune’s dossier', (
 });
 
 test('the WordPress communes are in the permit registry, read by `wp-media`', () => {
-  const towns = BOARD_PERMIT_SOURCES.filter((source) => source.source.protocol === 'wp-media');
+  // `wpMediaCities.js`'s towns; a town of another file may read its own lists
+  // through the media API too (Fleury-les-Aubrais, `permitBoardsFleury.test.mjs`).
+  const towns = BOARD_PERMIT_SOURCES.filter((source) => source.source.protocol === 'wp-media' && source.key.startsWith('wp-media-'));
   assert.ok(towns.length >= 60);
   for (const town of towns) {
     assert.equal(permitListFor(town.insee), town, town.key);
@@ -447,4 +449,31 @@ test('Hagondange’s tabs say the board, its filings keep no row of their own, a
 test('an act of the whole page names its board in its words; an « avis dépôt » is a filing', () => {
   const html = link('/wp-content/uploads/2026/10/si_2_rue_exemple_DP0681622600090_avis_depot.pdf', '');
   assert.equal(postedActFiles(city('kaysersberg-vignoble'), html, 'https://www.kaysersberg-vignoble.fr/x/', '2026-08-01')[0].board, 'filings');
+});
+
+test('a board read over several pages answers a page with no act on it as an empty shelf, while it links the others', () => {
+  const acts = POSTED_LIST_PROTOCOLS['posted-acts'];
+  // Sarralbe's PC shelf on 2026-11-15, empty since 2026-10-28: until then
+  // its silence made the whole town fail, the 23 DP dossiers with it.
+  const sarralbe = city('sarralbe');
+  const empty = '<a href="pc-permis-de-construire">PC | Permis de Construire</a><p>Il n\'y a pas de document pour le moment.</p>'
+    + '<a href="dp-declaration-prealable-de-travaux">DP | Déclaration Préalable de travaux</a><a href="pd-permis-de-demolir">PD</a>';
+  assert.deepEqual(acts.index(sarralbe, empty, { url: sarralbe.page, as: 'html' }, { since: '2026-08-01' }), { files: [], next: [] });
+  // Mantes-la-Ville's first page on 2026-11-15: traffic orders only, its acts on page 2.
+  const mantes = city('mantes-la-ville');
+  const orders = link('https://www.manteslaville.fr/wp-content/uploads/2026/11/2026-850-Arrete-restrict°-provisoire-occupat°-DP-Parc-rue-Victor-Schoelcher-30-10-2026.pdf',
+    '2026-850 Arrêté restrict° provisoire occupat° DP Parc rue Victor Schoelcher 30-10-2026 (300 Ko, pdf)')
+    + link('https://www.manteslaville.fr/wp-content/uploads/2026/11/2026-727.pdf', '2026-727 (221,70 Ko, pdf)')
+    + link('https://www.manteslaville.fr/ma-mairie/vie-municipale/actes-reglementaires/page/2/', '2');
+  assert.deepEqual(acts.index(mantes, orders, { url: mantes.page, as: 'html' }, { since: '2026-08-01' }), { files: [] });
+  const second = link('https://www.manteslaville.fr/wp-content/uploads/2026/11/Arrete-favorable-DP0783622600120.pdf', 'Arrêté favorable DP0783622600120')
+    + link('https://www.manteslaville.fr/ma-mairie/vie-municipale/actes-reglementaires/', '1');
+  assert.deepEqual(acts.index(mantes, second, { url: mantes.source.pages[0], as: 'html' }, { since: '2026-08-01' }).files.map((file) => file.row.dossier),
+    ['DP 078362 26 00120']);
+  // A page that links none of the board's other pages is not the board: a redesign still fails the reading.
+  assert.equal(acts.index(mantes, link('/wp-content/uploads/2026/11/2026-727.pdf', '2026-727'), { url: mantes.page, as: 'html' }, {}), null);
+  assert.equal(acts.index(sarralbe, '<p>Page introuvable</p><a href="/">Accueil</a>', { url: sarralbe.page, as: 'html' }, {}), null);
+  // A board of one page has no other page to link: its silence is still a failure.
+  const dompierre = city('dompierre-sur-mer');
+  assert.equal(acts.index(dompierre, link(dompierre.page, 'Urbanisme'), { url: dompierre.page, as: 'html' }, {}), null);
 });

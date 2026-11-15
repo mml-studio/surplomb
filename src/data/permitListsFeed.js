@@ -216,6 +216,12 @@ export const PERMIT_LISTS = Object.freeze([
     underReview: true,
     label: 'Ville de Marseille — autorisations d’urbanisme en cours et délivrées', // i18n-ignore-line — the publisher and its lists
     page: 'https://www.marseille.fr/logement-urbanisme/plan-local-durbanisme/renseignements-durbanisme',
+    // Since 2026-10-18 every first request, robots.txt included, answers a
+    // 288-byte page that sets an anonymous cookie and sends the browser back
+    // to the same path through a literal `/redirect_…` address: Levallois's
+    // public-session initializer, the same vendor's. Followed the same way —
+    // no JavaScript, the cookie kept in the reading's memory only.
+    source: Object.freeze({ publicCookieRedirect: true }),
     lists: Object.freeze([
       // i18n-ignore-start — the words of the city's own links, matched on
       Object.freeze({ board: 'filings', layout: 'register', link: /dossiers en cours d.instruction/i }),

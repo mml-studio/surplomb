@@ -478,6 +478,17 @@ test('Thorigny-sur-Marne is in the permit registry; its page’s two sheets of d
   assert.equal(BOARD_PROTOCOLS['thorigny-sur-marne'].index(thorigny, '<a href="/contact">Contact</a>', { url: thorigny.page }, {}), null);
 });
 
+test('Thorigny-sur-Marne\'s sheets renamed in November 2026 (`decisions_pc_0.pdf`) are still its decisions', () => {
+  // The links of the page on 2026-11-15: the city was last read on 2026-10-05.
+  const html = ['<a href="/sites/default/files/decisions_pc_0.pdf">decisions_pc.pdf 90.92 Ko</a>',
+    '<a href="/sites/default/files/decisions_dp_3.pdf">decisions_dp.pdf 85.76 Ko</a>',
+    '<a href="/sites/default/files/decisions_dpe.pdf">x</a>'].join('\n');
+  assert.deepEqual(BOARD_PROTOCOLS['thorigny-sur-marne'].index(thorigny, html, { url: thorigny.page }, {}).files.map((file) => file.url), [
+    'https://www.thorigny.fr/sites/default/files/decisions_pc_0.pdf',
+    'https://www.thorigny.fr/sites/default/files/decisions_dp_3.pdf',
+  ]);
+});
+
 test('a Thorigny sheet: each row the runs a few points about its number, columns by where their cells start', () => {
   const r = (x, y, text) => ({ x, x1: x + 4.6 * text.length, y, text, size: 9 });
   const header = [r(121, 775, 'Numéro'), r(61, 769, 'Type'), r(199, 769, 'Date de dépôt'), r(289, 769, 'Nom du demandeur'),

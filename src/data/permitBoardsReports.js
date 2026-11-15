@@ -778,9 +778,10 @@ const SAINT_CLOUD = {
   start: htmlPage,
   index: (city, html, request) => {
     const files = pageLinks(html, request.url).flatMap((link) => {
-      const match = /\/(?:PC|DP) (Decisions|Instruction)_\d+\.pdf$/i.exec(link.name);
+      // `PC Decisions_118.pdf` until October 2026; `PC Décisions.pdf` since.
+      const match = /\/(?:PC|DP) (D[ée]cisions|Instruction)(?:_\d+)?\.pdf$/i.exec(link.name);
       if (!match) return [];
-      const board = /^Decisions$/i.test(match[1]) ? 'decisions' : 'filings';
+      const board = /^D[ée]cisions$/i.test(match[1]) ? 'decisions' : 'filings';
       return [{ url: link.url, board, layout: `saint-cloud-${board}` }];
     });
     return files.some((file) => file.board === 'filings') && files.some((file) => file.board === 'decisions') ? { files } : null;

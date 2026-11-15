@@ -38,10 +38,11 @@ export const SIEVE_PAGE_CITIES = [
     page: 'https://www.noisyleroi.fr/817/mairie/urbanisme/autorisations-d-urbanisme.htm',
     source: { protocol: 'posted-lists', lists: { filings: '/DEPOTS 20\\d\\d', decisions: '/DECISIONS 20\\d\\d' },
       layouts: { filings: 'town-filed-before', decisions: 'town-decided-until' } } },
-  // The same two Word tables (`depot28.09.2026.pdf`, `decision28092026.pdf`).
+  // The same two Word tables (`depot28.09.2026.pdf`, `decision28092026.pdf`;
+  // plural since November: `depots13.11.2026.pdf`, `decisions13.11.2026.pdf`).
   { key: 'auchel', insee: '62048', postcode: '62260', label: 'Ville d’Auchel — dossiers d’urbanisme déposés et décidés',
     page: 'https://www.auchel.fr/les-arretes-durbanisme/',
-    source: { protocol: 'posted-lists', lists: { filings: '/DEPOT ?\\d', decisions: '/DECISION ?\\d' },
+    source: { protocol: 'posted-lists', lists: { filings: '/DEPOTS? ?\\d', decisions: '/DECISIONS? ?\\d' },
       layouts: { filings: 'town-filed-before', decisions: 'town-decided-until' } } },
   // Every act of the town on one page, a link each: « AV DP 071 105 26 00124 - [name] N° … Mise en
   // ligne le jeudi 01 octobre 2026 »; some file names swap the day and the month.

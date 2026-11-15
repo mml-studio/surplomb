@@ -5084,7 +5084,48 @@ Marseille scan taking 48 s with Sitadel; the rows are archived like a board's
 in `.gev-cache/archive/permit-lists/` and swept on the same daily clock. The
 applicant's own address is never read, and a person's name is dropped.
 
-**Lyon and Béziers publish theirs as acts**, on Digitech's Webdelib+
+**2026-11-15: sixteen sources had stopped feeding the archive; ten read again.**
+The nightly sweep's `failed` list named them as whole-city failures (a bare
+key; `<key>:<n>` is a city read with `n` files or acts that failed). Each was
+measured from the Mac and from inside the server's container:
+
+- *Marseille* (unread since 2026-10-17): every first request, `robots.txt`
+  included, gets a 288-byte page that sets `bot_mitigation_cookie` and sends
+  the browser to `/redirect_<token>/<same path>`, which answers 307 back to
+  the path — the initializer `permitPublicSession.mjs` already follows for
+  Levallois, same vendor (`x-cp-via`). Marseille now sets
+  `source.publicCookieRedirect`: no script runs, the cookie lives in the
+  reading's memory. Its `robots.txt` had been read as that HTML page, i.e. as
+  no rules; it is now the real file (Drupal's, the lists' paths allowed).
+- *Arles* and *Anglet*: certificates renewed on 2026-09-29 and 2026-10-01,
+  sent without their intermediate (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`).
+  `trustsign-dv-2` and `digicert-g2-eu-2022` join `CARTDS_INTERMEDIATES`.
+- *Blanc-Mesnil* (`dds_tableau_affichage_depot_06-11.pdf`), *Saint-Cloud*
+  (`PC Décisions.pdf`), *Thorigny-sur-Marne* (`decisions_pc_0.pdf`) and
+  *Auchel* (`depots13.11.2026.pdf`) renamed their files; the patterns take
+  both names.
+- *Fleury-les-Aubrais*: from 2026-11-10 the town filed traffic orders under
+  « urbanisme » and its lists left the page's first screen. It is read
+  through the WordPress media API (`wp-media`, `acts: false`), newest list of
+  each board. PDF only: the town posted one XLSX filing list, on 2026-10-02.
+- *Sarralbe* and *Mantes-la-Ville*: the first page read (Sarralbe's PC shelf,
+  « Il n'y a pas de document pour le moment »; Mantes-la-Ville's first page
+  of acts, traffic orders only) named no act, and a board city whose first
+  index answers nothing is not read at all. A `posted-acts` page that names
+  no act but links one of the board's other pages (`source.pages`) now
+  answers as an empty page; one that links none still fails the reading.
+
+Not fixed, diagnosed only. *wp-media-04130* (Montlaux), *-26381* (Jaillans),
+*-81136* (Larroque) and *-88132* (Deyvillers), and the never-read *-34197*,
+*-05135*, *-47025*, *-57232* and *-57319*, are hosted on 46.18.231.x (CPRO
+Telecom), which drops TCP connections from the server's IPv4 address since
+2026-10-27 (.100) and 2026-11-14 (.82) and answers the Mac normally;
+*wp-media-45227* (Nevoy, 51.159.56.34) answers the server 403 whatever the
+user agent. A refusal of the server's address: not worked around. *La
+Rochelle* (last read 2026-11-13, swept at 00:41 Paris) and *Achères*
+(2026-11-14) read normally from the container by day; their nightly failures
+were not reproduced, and the container's logs of those nights are gone.
+, on Digitech's Webdelib+
 platform, which lists a month of acts per page (`…jsp?role=usager&date=MM-YYYY`)
 and serves each file through `openfile.jsp`, whose page moves on to
 `showFile.jsp` with a script — no cookie, no challenge. Lyon's « Arrêtés »
