@@ -448,6 +448,55 @@ exists but cannot be read hides every name until it is fixed.
 `GEV_MEDECINS_SUPPRESS` and `GEV_MEDECINS_PACK_DIR` move the list and the pair
 elsewhere, for a self-hosted instance that keeps its data outside the volume.
 
+### Towns read through a relay
+
+Ten WordPress towns' sites (`source.relay: true` in
+`src/data/wpMediaCities.js`) drop or refuse the box's own address and serve
+another network normally. The permit-list sweep reads them through a small
+HTTP relay on that other network, once a night like every other source; the
+pacing, the user agent and the `robots.txt` check stay in the container
+(`scripts/lib/permitListRelay.mjs`, `docs/CURRENT-STATE.md`).
+
+What runs, set up on 2026-11-15:
+
+- **On the relay machine**, as a dedicated unprivileged user with no shell:
+  a Python stdlib HTTP server on `127.0.0.1:3128` only. `GET
+  /fetch?url=<encoded>` performs a GET (redirects followed, each one checked),
+  forwards `Accept`, `User-Agent`, `If-None-Match` and `If-Modified-Since`,
+  and passes the status, `Content-Type`, `ETag`, `Last-Modified` and
+  `Retry-After` back. It serves an allowlist of the towns' hostnames, standard
+  ports only, 64 MB and 55 s at most, and marks its own failures with
+  `X-Relay-Error`; `GET /sante` answers `ok`. Its systemd unit denies it the
+  private ranges (the LAN, Tailscale) except the DNS resolver.
+- **A tunnel**: the same user keeps `ssh -N -R 172.22.0.1:3128:127.0.0.1:3128`
+  open to the box (systemd, `Restart=always`, `ServerAliveInterval 30`,
+  `ExitOnForwardFailure yes`). `172.22.0.1` is the gateway of the
+  `gev_default` Docker network (`docker inspect gev`), so the container
+  reaches it and no public interface listens.
+- **On the box**: a user `relais` with `/usr/sbin/nologin`, whose one
+  `authorized_keys` line is `restrict,port-forwarding,permitlisten="172.22.0.1:3128",command="/usr/sbin/nologin",from="<relay machine's addresses>"`;
+  a `Match User relais` block at the end of `/etc/ssh/sshd_config` with
+  `GatewayPorts clientspecified`, `AllowTcpForwarding remote` and the same
+  `PermitListen` (no other user's effective config changes: `diff` the
+  output of `sshd -T -C user=root,…` before and after); and one ufw rule,
+  `allow proto tcp from 172.22.0.0/16 to 172.22.0.1 port 3128`.
+- **`PERMIT_LIST_RELAY=http://172.22.0.1:3128`** in `/opt/gev/.env`, a
+  runtime variable: recreate the container (`docker compose up -d`), no
+  rebuild.
+
+```bash
+ssh box 'ss -ltn | grep 3128'                       # 172.22.0.1:3128, sshd: the tunnel is up
+ssh box 'curl -s http://172.22.0.1:3128/sante'      # ok
+ssh box "docker exec gev node -e \"fetch(process.env.PERMIT_LIST_RELAY+'/fetch?url='+encodeURIComponent('https://herny.fr/robots.txt')).then(r=>console.log(r.status))\""
+```
+
+If the Docker network is ever recreated with another gateway, the tunnel's
+bind, `permitlisten`, `PermitListen`, the ufw rule and `PERMIT_LIST_RELAY`
+all change together. With the tunnel down the ten towns read as hosts that
+did not answer, and the archive check names them two days later; a town
+added to the registry with `relay: true` must also be added to the relay's
+allowlist, or the relay refuses it the same way.
+
 ## Road data: Overpass
 
 ### Somebody pays for the first road fetch — and on a bad day, nobody gets it

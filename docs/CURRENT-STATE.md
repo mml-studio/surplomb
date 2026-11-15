@@ -6225,6 +6225,24 @@ Mauges-sur-Loire, Cesson-Sévigné, Vif, Saint-Jean-d'Angély, Bouillargues and
 Trèbes, whose media API asks for a login; and some twenty communes whose
 lists no reader takes yet. 290 504 inhabitants more.
 
+**Ten WordPress towns are read through a relay (2026-11-15).** Nine sites on
+one hosting family (46.18.231.x) — Montlaux, Jaillans, Larroque, Deyvillers,
+Péret, Sainte-Colombe, Beauville, Francaltroff, Herny — drop every connection
+from the hosted server without an answer, and Nevoy answers it 403 whatever
+the user agent; all ten serve another network normally. The first four had
+stopped being read (16 sources in the archive check), the other six had never
+been. They carry `source.relay: true` in `wpMediaCities.js`, and when
+`PERMIT_LIST_RELAY` names a relay, every GET the permit-list sweep sends to
+their hosts goes to `<relay>/fetch?url=<address>` instead
+(`scripts/lib/permitListRelay.mjs`); unset, they are asked directly, as
+everywhere in dev and CI. The pacing, the user agent and the `robots.txt`
+check are unchanged and keyed on the town's address; all ten files allowed
+`/wp-json/` and the uploads on 2026-11-15. A failure of the relay itself
+(`X-Relay-Error`: a host it does not serve, a site it could not reach) reads
+as a site that did not answer — tried again the next night, never a robots
+refusal. The relay, and how it is reached: `docs/DEPLOY.md`, « Towns read
+through a relay ».
+
 **Nineteen towns found by the sieve of communes' own sites (2026-10-03).**
 Forty communes whose site the sieve had seen posting fresh numbers, none of
 them on WordPress's media API, were read one by one; nineteen are kept, in

@@ -394,6 +394,7 @@ import {
   PERMIT_LISTS_EDITION_DIR,
 } from './scripts/lib/permitLists.mjs';
 import { createPdfOcr, pdfOcrAvailable } from './scripts/lib/pdfOcr.mjs';
+import { permitListRelayFetch } from './scripts/lib/permitListRelay.mjs';
 import {
   mmmSweepDue,
   readMmmEdition,
@@ -27719,11 +27720,14 @@ function adsFranceProxy() {
   // The `pemb.fr` hosts send their certificate without its intermediate.
   trustCartdsIntermediates([...CARTDS_INSTANCES, ...PERMIT_LISTS]);
 
-  /** One request to an instance, or null. Never throws. */
-  async function cartdsFetch(url, init = {}) {
+  /**
+   * One request to an instance, or null. Never throws. `send` is `fetch`, or
+   * the permit lists' relayed one (`permitListsHttp`).
+   */
+  async function cartdsFetch(url, init = {}, send = fetch) {
     if (!(await awaitUpstreamSlot(url)).ok) return null;
     try {
-      const response = await fetch(url, {
+      const response = await send(url, {
         ...init,
         signal: AbortSignal.timeout(CARTDS_TIMEOUT_MS),
         headers: { 'User-Agent': CARTDS_USER_AGENT, ...(init.headers || {}) },
@@ -28568,6 +28572,14 @@ function adsFranceProxy() {
     path.join(process.cwd(), PERMIT_LISTS_ARCHIVE_DIR), console, PERMIT_LIST_ROWS,
   );
   /**
+   * `fetch`, except that a GET to a town flagged `source.relay` goes through
+   * the relay `PERMIT_LIST_RELAY` names (`scripts/lib/permitListRelay.mjs`):
+   * its host drops this box's connections. Unset, it is `fetch` itself. The
+   * pacing, the user agent and the robots.txt check still key on the town's
+   * own address, which is what the two callers below hand `awaitUpstreamSlot`.
+   */
+  const permitListsSend = permitListRelayFetch(fetch, { relay: process.env.PERMIT_LIST_RELAY, cities: PERMIT_LISTS });
+  /**
    * The Cart@DS calls, with a body as bytes and a longer timeout: a city's
    * list is megabytes of PDF where a board is kilobytes of JSON.
    */
@@ -28576,7 +28588,7 @@ function adsFranceProxy() {
     // city's reader identifies PDFs and opted-in XLSX sheets with `Accept`.
     fetch: (url, init = {}) => (/\.(?:pdf|xlsx)$|\/showFile\.jsp$|\/api\/entities\/content\//i.test(new URL(url).pathname)
       || ['application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(init.headers?.Accept)
-      ? permitListPdfFetch(url, init) : cartdsFetch(url, init)),
+      ? permitListPdfFetch(url, init) : cartdsFetch(url, init, permitListsSend)),
     text: cartdsText,
     bytes: async (response, maxBytes) => {
       try {
@@ -28590,7 +28602,7 @@ function adsFranceProxy() {
   async function permitListPdfFetch(url, init) {
     if (!(await awaitUpstreamSlot(url)).ok) return null;
     try {
-      const response = await fetch(url, {
+      const response = await permitListsSend(url, {
         ...init,
         signal: AbortSignal.timeout(PERMIT_LISTS_PDF_TIMEOUT_MS),
         headers: { 'User-Agent': CARTDS_USER_AGENT, ...(init.headers || {}) },

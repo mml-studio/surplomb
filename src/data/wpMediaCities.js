@@ -14,6 +14,15 @@
  * a login; and the communes whose lists are laid out in a way no reader
  * takes yet.
  */
+/**
+ * Read through the relay `PERMIT_LIST_RELAY` names (`scripts/lib/permitListRelay.mjs`):
+ * nine of these sites' host (46.18.231.x) drops every connection from the
+ * staging box without an answer, and Nevoy answers it 403 whatever the user
+ * agent, while all ten serve another network normally. Measured on
+ * 2026-11-15, when their robots.txt allowed `/wp-json/` and the uploads.
+ */
+const RELAYED = { relay: true };
+
 // i18n-ignore-start — publishers' names
 const COMMUNES = [
   ['29075', '29490', 'Guipavas', 'https://guipavas.bzh/', { acts: false, latestOnly: true, ocr: false }],
@@ -32,14 +41,14 @@ const COMMUNES = [
   ['25057', '25200', 'Bethoncourt', 'https://www.bethoncourt.fr/'],
   ['25527', '25410', 'Saint-Vit', 'https://www.saintvit.fr/'],
   ['26124', '26800', 'Étoile-sur-Rhône', 'https://www.etoilesurrhone.fr/'],
-  ['26381', '26300', 'Jaillans', 'https://jaillans.fr/'],
+  ['26381', '26300', 'Jaillans', 'https://jaillans.fr/', RELAYED],
   ['27049', '27270', 'Mesnil-en-Ouche', 'https://www.mesnil-en-ouche.fr/'],
   ['27226', '27150', 'Étrépagny', 'https://www.etrepagny.fr/'],
   ['28298', '28130', 'Pierres', 'https://www.mairie-pierres.fr/'],
   ['29006', '29950', 'Bénodet', 'https://www.mairie-benodet.fr/'],
   ['31547', '31600', 'Seysses', 'https://www.mairie-seysses.fr/'],
   ['32208', '32700', 'Lectoure', 'https://lectoure.fr/'],
-  ['34197', '34800', 'Péret', 'https://mairie-peret.fr/'],
+  ['34197', '34800', 'Péret', 'https://mairie-peret.fr/', RELAYED],
   ['34224', '34480', 'Puissalicon', 'https://puissalicon.fr/'],
   ['34337', '34750', 'Villeneuve-lès-Maguelone', 'https://www.villeneuvelesmaguelone.fr/'],
   ['37058', '37140', 'La Chapelle-sur-Loire', 'https://www.lachapellesurloire.fr/'],
@@ -47,7 +56,7 @@ const COMMUNES = [
   ['44032', '44330', 'La Chapelle-Heulin', 'https://www.mairie-lachapelleheulin.fr/'],
   ['44117', '44330', 'Le Pallet', 'https://www.lepallet.fr/'],
   ['45173', '45150', 'Jargeau', 'https://www.jargeau.fr/'],
-  ['45227', '45500', 'Nevoy', 'https://www.nevoy.fr/'],
+  ['45227', '45500', 'Nevoy', 'https://www.nevoy.fr/', RELAYED],
   ['45327', '45470', 'Traînou', 'https://mairie-trainou.fr/'],
   ['45338', '45700', 'Villemandeur', 'https://villemandeur.fr/'],
   ['50410', '50170', 'Pontorson', 'https://www.pontorson.eu/'],
@@ -74,7 +83,7 @@ const COMMUNES = [
   ['77171', '77450', 'Esbly', 'https://www.esbly.fr/'],
   ['85084', '85140', 'Essarts-en-Bocage', 'https://www.essartsenbocage.fr/'],
   ['85236', '85150', 'Saint-Julien-des-Landes', 'https://www.stjuliendeslandes.fr/'],
-  ['88132', '88000', 'Deyvillers', 'https://deyvillers.fr/'],
+  ['88132', '88000', 'Deyvillers', 'https://deyvillers.fr/', RELAYED],
   ['95116', '95820', 'Bruyères-sur-Oise', 'https://www.bruyeres-sur-oise.com/'],
   ['95371', '95670', 'Marly-la-Ville', 'https://marly-la-ville.fr/'],
 ];
@@ -143,9 +152,9 @@ const LISTED = [
  */
 const FOUND_1004 = [
   ['01043', '01700', 'Beynost', 'https://www.beynost.fr/'],
-  ['04130', '04230', 'Montlaux', 'https://montlaux.fr/'],
+  ['04130', '04230', 'Montlaux', 'https://montlaux.fr/', RELAYED],
   ['05075', '05400', 'Manteyer', 'https://manteyer-mairie.fr/'],
-  ['05135', '05700', 'Sainte-Colombe', 'https://mairie-saintecolombe-hautesalpes.fr/'],
+  ['05135', '05700', 'Sainte-Colombe', 'https://mairie-saintecolombe-hautesalpes.fr/', RELAYED],
   ['09166', '09300', 'Leychert', 'https://leychert.fr/'],
   ['11259', '11170', 'Moussoulens', 'https://www.moussoulens.fr/'],
   ['14752', '14310', 'Villers-Bocage', 'https://www.villersbocage14.fr/'],
@@ -161,11 +170,11 @@ const FOUND_1004 = [
   ['38075', '38530', 'Chapareillan', 'https://www.chapareillan.fr/'],
   ['38456', '38710', 'Châtel-en-Trièves', 'https://chatel-en-trieves.fr/'],
   ['42168', '42410', 'Pélussin', 'https://www.pelussin.fr/'],
-  ['47025', '47470', 'Beauville', 'https://beauville-47.fr/'],
+  ['47025', '47470', 'Beauville', 'https://beauville-47.fr/', RELAYED],
   ['47238', '47310', 'Sainte-Colombe-en-Bruilhois', 'https://ville-saintecolombeenbruilhois.fr/'],
   ['50481', '50430', 'Saint-Germain-sur-Ay', 'https://saintgermainsuray.eu/'],
-  ['57232', '57670', 'Francaltroff', 'https://mairie-francaltroff.fr/'],
-  ['57319', '57580', 'Herny', 'https://herny.fr/'],
+  ['57232', '57670', 'Francaltroff', 'https://mairie-francaltroff.fr/', RELAYED],
+  ['57319', '57580', 'Herny', 'https://herny.fr/', RELAYED],
   ['57433', '57280', 'Maizières-lès-Metz', 'https://www.ville-maizieres-les-metz.fr/'],
   ['57712', '57630', 'Vic-sur-Seille', 'https://www.vic-sur-seille.fr/'],
   ['60387', '60690', 'Marseille-en-Beauvaisis', 'https://www.communemarseillebvs.com/'],
@@ -174,7 +183,7 @@ const FOUND_1004 = [
   ['66230', '66320', 'Vinça', 'https://mairiedevinca.fr/'],
   ['68109', '68140', 'Griesbach-au-Val', 'https://griesbachauval.fr/'],
   ['76106', '76160', 'Bois-d’Ennebourg', 'https://boisdennebourg.fr/'],
-  ['81136', '81140', 'Larroque', 'https://larroque81.org/'],
+  ['81136', '81140', 'Larroque', 'https://larroque81.org/', RELAYED],
   ['84082', '84570', 'Mormoiron', 'https://mormoiron.fr/'],
   ['88369', '88160', 'Ramonchamp', 'https://www.ramonchamp.fr/'],
   ['95445', '95590', 'Nerville-la-Forêt', 'https://nervillelaforet.fr/'],
