@@ -152,11 +152,14 @@ const SHUT = Object.freeze({ ...CITY, key: 'shut', page: 'https://shut.example/u
 
 test('municipal scans await OCR, retry once in the sweep, and cache only scrubbed fields', async () => {
   const dir = await tempDir();
+  // The notice is posted on 2026-09-25: read on that month's day, not today's,
+  // or the two-month window leaves it out once October is over.
+  const day = '2026-10-01';
   const city = MUNICIPAL_PERMIT_SOURCES.find((c) => c.key === 'acheres');
   const url = new URL('/files/notice.pdf', city.page).href;
   const http = fakeHttp({ pages: { [city.page]: '<a href="/files/notice.pdf">AFF 2026.09.25 – DP 26A0077 – 2 RUE EXEMPLE – ACCORD</a>' },
     files: { [url]: { bytes: Buffer.from('%PDF-1.7\nscanned') } } });
-  const first = await readPermitCity(city, http, { dir });
+  const first = await readPermitCity(city, http, { dir, day });
   assert.equal(first.pendingOcr, 1);
   assert.equal(first.boards.decisions.length, 1);
   let calls = 0;
@@ -167,11 +170,11 @@ test('municipal scans await OCR, retry once in the sweep, and cache only scrubbe
       { text: 'ARTICLE 1 : La demande est refusée', x: 30, y: 680 },
     ] }] } };
   };
-  const swept = await readPermitCity(city, http, { dir, ocr, background: true });
+  const swept = await readPermitCity(city, http, { dir, day, ocr, background: true });
   assert.equal(swept.pendingOcr, 0);
   assert.equal(calls, 1);
   assert.ok(swept.boards.decisions[0].includes('Refus'));
-  await readPermitCity(city, http, { dir, ocr, background: true });
+  await readPermitCity(city, http, { dir, day, ocr, background: true });
   assert.equal(calls, 1, 'an already read immutable PDF is not read again');
   for (const file of await fsp.readdir(dir)) assert.doesNotMatch(await fsp.readFile(path.join(dir, file), 'utf8'), /ARTICLE|scanned|title/);
 });
