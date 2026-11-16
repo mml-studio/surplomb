@@ -6337,8 +6337,11 @@ not fetched a second time. Anglet's newest filing remains 2025-12-31;
 Ustaritz's newest decision is 2026-05-13. These are historical supplements,
 not new current-filings feeds. `supplementLocalHistory` adds only dossiers
 absent from the current boards, comparing the full key and the family;
-current decisions, including later withdrawals, retain precedence. The
-ordinary Sitadel merge follows this local deduplication. Commune-edition
+current decisions, including later withdrawals, retain precedence. Historical
+fields can complete blanks, and a dated historical decision can complete an
+older filing that still only says filed; an explicit current review or
+unknown signed verdict is preserved. Both sources remain attributed after
+the ordinary Sitadel merge. Commune-edition
 cache schema 6 rebuilds projections that predate the two additions.
 
 The daily permit-list sweep now hands its OCR runner to the readers without
@@ -6354,8 +6357,16 @@ The regional source-availability baseline remains 24 communes / 216,558
 inhabitants (50.1%) with recent local sources, or 27 / 239,912 (55.5%) with
 delayed dODu, out of 189 / 432,619. Adding history inside already covered
 communes improves dossier coverage without increasing either population
-percentage. See [the regional audit](permits-pays-basque-coverage.md) for
-the remaining gaps and the limits of these metrics.
+percentage. Orx (`40213`, 647 inhabitants), discovered in the second pass,
+adds a genuinely new source: its municipal publications page holds receipts
+and signed orders, including filings dated 2026-11-12. It joins
+`postedListCities.js` with OCR and an explicit year-first convention for
+ambiguous filename dates (`yearFirstDates`), so `26-07-30` is not misread as
+2030-07-26. Robots rules allow the page and its PDFs. Once deployed this
+raises source availability to 25 communes / 217,205 inhabitants (50.2%)
+with recent sources and 28 / 240,559 (55.6%) including delayed dODu. See
+[the regional audit](permits-pays-basque-coverage.md) for the remaining gaps
+and the limits of these metrics.
 
 **Nineteen towns found by the sieve of communes' own sites (2026-10-03).**
 Forty communes whose site the sieve had seen posting fresh numbers, none of

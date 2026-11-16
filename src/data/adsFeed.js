@@ -1777,19 +1777,42 @@ function graftEmprise(permit, twin) {
 
 /**
  * Add historical local dossiers absent from the current municipal boards.
- * A delayed export must not duplicate a board's card or replace its newer
- * decision. Match both the full dossier key (including amendments) and the
- * family: PC and DP can use the same counter. Unkeyed rows cannot be matched.
+ * A delayed export must not duplicate a board's card or replace its decision.
+ * It can complete missing fields and an older filing with no known verdict.
+ * Match the full key (including amendments) and family: PC and DP can share
+ * a counter. Unkeyed rows cannot be matched.
  */
 export function supplementLocalHistory(current, history) {
   const identity = (permit) => permit.key ? `${permit.kind}|${permit.key}` : null;
-  const seen = new Set(current.map(identity).filter(Boolean));
   const permits = [...current];
+  const seen = new Map(current.flatMap((permit, i) => identity(permit) ? [[identity(permit), i]] : []));
   let overlaps = 0;
   for (const permit of history) {
     const key = identity(permit);
-    if (key && seen.has(key)) { overlaps += 1; continue; }
-    if (key) seen.add(key);
+    if (key && seen.has(key)) {
+      overlaps += 1;
+      const i = seen.get(key);
+      const live = permits[i];
+      if (live.source === permit.source) continue;
+      // A filing proves no decision. Its dated historical decision can fill
+      // that gap, but never overrides an explicit current verdict or review.
+      const decision = live.state === 'depose' && !live.decidedOn && live.stateLabel === adsStateFrench('depose')
+        && permit.decidedOn && permit.state && permit.state !== 'depose'
+        && (!live.depositedOn || permit.decidedOn >= live.depositedOn);
+      permits[i] = {
+        ...live,
+        depositedOn: live.depositedOn ?? permit.depositedOn,
+        housing: live.housing ?? permit.housing,
+        surfaceCreatedM2: live.surfaceCreatedM2 ?? permit.surfaceCreatedM2,
+        parcels: live.parcels?.length ? live.parcels : permit.parcels,
+        ...graftEmprise(live, permit),
+        ...(decision ? { state: permit.state, stateLabel: permit.stateLabel, decidedOn: permit.decidedOn } : {}),
+        sourceLabel: [...new Set([live.sourceLabel, permit.sourceLabel].filter(Boolean))].join(' + '),
+        sources: [...new Set([...(live.sources ?? [live.source]), permit.source].filter(Boolean))],
+      };
+      continue;
+    }
+    if (key) seen.set(key, permits.length);
     permits.push(permit);
   }
   return { permits, overlaps };
@@ -1820,7 +1843,7 @@ export function mergeRegisters(sitadel, local) {
       // card reads to say which register a dossier came from, and a permit
       // that reached the client without it read as sourceless rather than as
       // local-only.
-      out.push({ ...permit, sources: [permit.source] });
+      out.push({ ...permit, sources: permit.sources ?? [permit.source] });
       continue;
     }
     claimed.add(permit.key);
@@ -1858,7 +1881,7 @@ export function mergeRegisters(sitadel, local) {
       siteStateLabel: twin.stateLabel,
       // i18n-ignore-next-line — two registers' own names, relayed as attribution
       sourceLabel: `${permit.sourceLabel} + Sitadel`,
-      sources: [permit.source, 'sitadel'],
+      sources: [...new Set([...(permit.sources ?? [permit.source]), 'sitadel'])],
     });
   }
   for (const permit of sitadel) {

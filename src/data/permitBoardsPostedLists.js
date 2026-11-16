@@ -58,8 +58,9 @@ function pageLinks(html, base) {
  * The day a link names, or null: `28_09_2026`, `28 09 2026`, `21/09/2026`,
  * `2026-10-01`, `20261002`, `26-10-01` (Saverne's year first), `au 22 septembre 2026`;
  * failing that, the upload month of a WordPress or Drupal path.
+ * `yearFirst` opts a publisher's ambiguous two-digit dates into YY-MM-DD.
  */
-export function postedListDay(name, words = '') {
+export function postedListDay(name, words = '', { yearFirst = false } = {}) {
   // Do not combine the upload directory with a numeric filename into a day
   // (Quimperlé's /2026/09/09-24-… is the edition of 24 September).
   const text = fold(`${words} ${name.split('/').at(-1)}`);
@@ -81,6 +82,7 @@ export function postedListDay(name, words = '') {
   // Two digits each: the one that reads as a recent year is the year.
   match = /(?:^|\D)(\d{2})[ .](\d{2})[ .](\d{2})(?!\d)/.exec(text);
   const recent = (value) => Number(value) >= 20 && Number(value) <= 35;
+  if (match && yearFirst && recent(match[1])) return iso(match[1], match[2], match[3]);
   if (match && recent(match[3])) return iso(match[3], match[2], match[1]);
   if (match && recent(match[1])) return iso(match[1], match[2], match[3]);
   match = /\/(20\d{2})[/-](\d{2})\//.exec(name);
@@ -268,7 +270,7 @@ function actFiles(city, links, since = null) {
     // eZ Publish keeps a form's « + » for a space in the file name (Saint-Laurent-de-Gosse's `Rejet+DP+2600020.pdf`).
     const base = link.name.replace(/\/file\/?$/i, '').replace(/^.*\//, '').replace(/\.pdf$/i, '').replace(/[_.+]+/g, ' ');
     const text = clean(`${words} ${base.replace(/-/g, ' ')}`);
-    const published = postedListDay(link.name, words) ?? link.published ?? null;
+    const published = postedListDay(link.name, words, { yearFirst: city.source?.yearFirstDates }) ?? link.published ?? null;
     const dossier = actDossier(words, city) ?? actDossier(base.replace(/-/g, ' '), city) ?? actDossier(text, city)
       ?? bareDossier(city, words, published);
     const folded = fold(text);

@@ -6,6 +6,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Orx's municipal permits are now read.** Its previously undiscovered
+  municipal publications page posts filing receipts and signed orders,
+  including November 2026 documents. The existing `posted-acts` reader now
+  includes it, with background OCR for scans. Its two-digit filename dates
+  explicitly use year-month-day, so `26-07-30` is 2026-07-30 rather than a
+  future posting date. This adds one municipality and 647 inhabitants to
+  local-source availability; it does not imply complete permit extraction.
 - **Anglet and Ustaritz regain historical permit coverage, and scanned acts
   reach the nightly reader.** The dODu query now includes all five published
   municipalities. Its three-year export returned 952 Anglet dossiers and
