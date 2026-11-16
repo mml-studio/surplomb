@@ -190,5 +190,17 @@ export const POSTED_LIST_CITIES = [
   // `/wp-json/creasit/postsQuery?cpt=documents&category=284`, not read.)
   { key: 'emerainville', insee: '77169', postcode: '77184', label: 'Ville d’Émerainville — arrêtés d’urbanisme',
     page: 'https://www.mairie-emerainville.fr/systeme/documentheque/?documents_category=284', source: { protocol: 'posted-acts' } },
+  // Ayherre posts each signed order on one page, grouped by family, newest first:
+  // `arrete-2026-52-dp-2600024-<applicant>.pdf`, the link reading « Dp 2600024 <applicant> ».
+  // The file names the applicant, so only the number is read from the link; the
+  // order's own heading, read by OCR (every order is a scan), gives the site.
+  // No link names a day: the numbers of this year and the last count, 97 on
+  // 2026-11-16 against the forty a board keeps by default (`limit`). Twelve read by
+  // OCR that day gave eleven sites, ten with their parcels.
+  // Its host, e-monsite, answers https://www.ayherre.fr with another site's certificate: read over http.
+  { key: 'ayherre', insee: '64086', postcode: '64240', label: 'Commune d’Ayherre — affichage des autorisations d’urbanisme',
+    page: 'http://www.ayherre.fr/aiherrayherre/vie-municipale/affichage-urbanisme.html',
+    plainHttp: 'e-monsite serves www.ayherre.fr with the certificate of www.e-monsith.com (2026-11-16)',
+    source: { protocol: 'posted-acts', limit: 120, ocr: true } },
 ];
 // i18n-ignore-end

@@ -189,9 +189,21 @@ const FOUND_1004 = [
   ['95445', '95590', 'Nerville-la-Forêt', 'https://nervillelaforet.fr/'],
   ['95580', '95470', 'Saint-Witz', 'https://www.saint-witz.fr/'],
 ];
+
+/**
+ * Found on 2026-11-16 by asking the media API of the 30 open WordPress sites
+ * of the Pays basque and the south of the Landes that no source covered, for
+ * the PDFs they uploaded in 2026: Arbonne alone posts its permits, one signed
+ * order per dossier (`PC-2600032_ARRETE-SIGNE.pdf`), 33 since August. Every
+ * order is a scan with no text; six read by OCR on 2026-11-16 gave six sites,
+ * parcels, works and decision days.
+ */
+const FOUND_1116 = [
+  ['64035', '64210', 'Arbonne', 'https://arbonne.fr/'],
+];
 // i18n-ignore-end
 
-export const WP_MEDIA_CITIES = [...COMMUNES, ...LISTED, ...FOUND_1004].map(([insee, postcode, name, page, extras = {}]) => ({
+export const WP_MEDIA_CITIES = [...COMMUNES, ...LISTED, ...FOUND_1004, ...FOUND_1116].map(([insee, postcode, name, page, extras = {}]) => ({
   key: `wp-media-${insee}`, insee, postcode,
   label: `${name} — affichage légal d’urbanisme`, // i18n-ignore-line — the commune's name and its board's title
   page,

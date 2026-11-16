@@ -302,7 +302,9 @@ test('each layout a list names has its reader', () => {
 test('the registry gates by commune, and an arrondissement finds its city', () => {
   for (const city of PERMIT_LISTS) {
     assert.match(city.insee, COMMUNE_CODE_PATTERN);
-    assert.match(city.page, /^https:\/\//);
+    // A town whose host serves no certificate of its own is read over http, and says why (`plainHttp`).
+    if (city.plainHttp) assert.ok(/^http:\/\//.test(city.page) && city.plainHttp.length > 20, city.key);
+    else assert.match(city.page, /^https:\/\//);
     assert.ok(city.label.includes(' — '), 'the card reads the authority before the dash');
   }
   assert.equal(permitListFor('13055'), MARSEILLE);
