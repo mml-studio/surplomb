@@ -4803,7 +4803,13 @@ by its instance: a stop needs a file, so Bayonne, registered on 2026-10-02 and
 refused every night, was invisible until 2026-11-16, when the rule found it
 with four Paris-Est-Marne et Bois boards and the Lille and Pontault-Combault
 lists. On the hosted server the check runs every night with a copy of the
-whole archive (`docs/DEPLOY.md`).
+whole archive (`docs/DEPLOY.md`). A Cart@DS host whose `robots.txt` does not
+answer at all during the sweep is not a refusal: its municipalities are named
+under `failed`, like a board that did not answer. Until 2026-11-16 the sweep
+called it refused, so Capatlantique (5 municipalities, since 2026-11-13) and
+the Grand Dole (68, since 2026-10-22) were reported as refusing robots while
+their `robots.txt` answered 404 — which allows everything — every time it was
+asked by day; both stop answering during the night sweep only.
 
 **Since 2026-10-01, 56 more communes answer from the other family of boards.**
 Sirap's « Portail Usager », the filing portal of the NEXT'ADS instruction
@@ -6326,7 +6332,11 @@ links). 138 019 inhabitants more.
 (2026-10-03).** A host holds one Cart@DS board per instruction service, and
 the scan reads one per host, the first path that answers: Saumur Val de
 Loire's 17 communes are under `/guichet-saumur`, while the archive had seen
-Doué's board (`/guichet-doue`, Cizay-la-Madeleine only, which leaves). A seed
+Doué's board (`/guichet-doue`, Cizay-la-Madeleine only, which leaves). (Both
+paths answered 404 by 2026-10-23: one board under `/guichet-unique` now offers
+the 17, and Plateau Picard's and Provence Verdon's tenants moved to the same
+path by 2026-11-12; the three were rebased on 2026-11-16, Artannes-sur-Thouet
+joining Saumur's.) A seed
 now comes before the archive's and the last scan's candidates, so that its
 path wins; Saumur and fourteen communes join, and Voiron's own board
 (`portail-urbanisme.ville-voiron.fr`) joins the seeds. Montbéliard,

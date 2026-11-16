@@ -27761,14 +27761,25 @@ function adsFranceProxy() {
    * time rather than remembered as a refusal.
    */
   async function cartdsRobotsVerdict(instance) {
+    return (await cartdsRobotsAnswer(instance)).allowed;
+  }
+
+  /**
+   * The same verdict with whether the host answered at all (`final`), which
+   * the daily sweep needs to tell a refusal from a silent host.
+   */
+  async function cartdsRobotsAnswer(instance) {
     const { origin } = new URL(instance.base);
     const cached = cartdsRobots.get(origin);
-    if (cached && Date.now() - cached.at < CARTDS_ROBOTS_TTL_MS) return cached.allowed;
+    if (cached && Date.now() - cached.at < CARTDS_ROBOTS_TTL_MS) return { allowed: cached.allowed, final: true };
     const verdict = await askCartdsRobots(instance, cartdsHttp);
-    if (!verdict.final) return false;
+    if (!verdict.final) {
+      console.warn(`[ADS Proxy] Cart@DS ${origin}: robots.txt did not answer, board not read`);
+      return { allowed: false, final: false };
+    }
     if (!verdict.allowed) console.warn(`[ADS Proxy] Cart@DS ${origin}: robots.txt refuses, board not read`);
     cartdsRobots.set(origin, { at: Date.now(), allowed: verdict.allowed });
-    return verdict.allowed;
+    return { allowed: verdict.allowed, final: true };
   }
 
   /**
@@ -27872,7 +27883,7 @@ function adsFranceProxy() {
         instances: CARTDS_INSTANCES,
         store: cartdsArchive,
         http: cartdsHttp,
-        robots: async (instance) => ({ allowed: await cartdsRobotsVerdict(instance) }),
+        robots: cartdsRobotsAnswer,
         day,
       });
       await writeCartdsSweepStamp(cartdsArchive.dir, summary);
