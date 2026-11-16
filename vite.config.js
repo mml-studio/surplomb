@@ -295,6 +295,7 @@ import {
   foldSitadelFamilies,
   localRows,
   mergeRegisters,
+  supplementLocalHistory,
   normaliseLocalRow,
   normaliseSitadelRow,
   parseGeocodedCsv,
@@ -27043,8 +27044,9 @@ function adsFranceProxy() {
    *  city portals' private applicants are no longer kept (permitApplicant.js),
    *  so an edition written before cannot be served. 4: Tours's portal joins
    *  the commune edition, which an edition of 37261 written before lacks.
-   *  5: dODu joins the editions of Boucau, Cambo-les-Bains and Hasparren. */
-  const ADS_EDITION_SCHEMA = 5;
+   *  5: dODu joins the editions of Boucau, Cambo-les-Bains and Hasparren.
+   *  6: its historical rows also supplement Anglet and Ustaritz. */
+  const ADS_EDITION_SCHEMA = 6;
 
   // --- Cadastre, and what a permit's parcel became -------------------------
   /**
@@ -28998,8 +29000,8 @@ function adsFranceProxy() {
           // The métropole's file has no number to merge on: a dossier Sitadel
           // already holds on the same parcel is dropped instead.
           const metropole = dropSitadelTwins(opened.permits, fromState);
-          const fromCounter = [
-            ...edition.permits.filter((permit) => permit.source !== 'sitadel'),
+          const current = [
+            ...edition.permits.filter((permit) => permit.source !== 'sitadel' && permit.source !== 'dodu'),
             ...placed.permits,
             ...posted.permits,
             ...postedPu.permits,
@@ -29008,6 +29010,11 @@ function adsFranceProxy() {
             ...listed.permits,
             ...metropole.permits,
           ];
+          // dODu supplies older decisions for Anglet and Ustaritz as well as
+          // three communes with no current board. A current municipal record
+          // wins an exact overlap, including a later withdrawal or refusal.
+          const { permits: fromCounter } = supplementLocalHistory(current,
+            edition.permits.filter((permit) => permit.source === 'dodu'));
           const { permits, merged } = mergeRegisters(fromState, fromCounter);
           return projectAdsPermits({
             permits,

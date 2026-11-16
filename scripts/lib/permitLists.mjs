@@ -1404,7 +1404,10 @@ export async function sweepPermitLists({
     const answer = await readPermitCity(city, pacedFor(city), {
       dir, allows: verdict.allows, months, day, log, background: true,
       maxFiles: scanned ? PERMIT_LISTS_SWEEP_BULLETINS : PERMIT_LISTS_SWEEP_FILES,
-      ...(scanned || (board && city.source?.ocr) ? { ocr } : {}),
+      // Board files themselves opt into OCR (`file.ocr` / `file.scan`).
+      // Requiring the city flag too stranded posted-acts and sieve-acts scans
+      // forever, even though their protocols marked every scanned file.
+      ocr,
     });
     if (!answer) { summary.failed.push(city.key); continue; }
     if (answer.failed) summary.failed.push(`${city.key}:${answer.failed}`);

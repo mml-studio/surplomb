@@ -582,12 +582,11 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     dataset: 'dodu',
     label: 'dODu — Autorisations d’urbanisme en Pays Basque', // i18n-ignore-line — the portal's own dataset title
     licence: 'Licence Ouverte 2.0',
-    // Boucau, Cambo-les-Bains and Hasparren, harvested every day from the
-    // instruction software (wGeoPC) by the Basque agglomeration's open-data
-    // project. The file holds two more communes, read elsewhere: Anglet, whose
-    // rows stop on 2025-12-31 and whose board is read, and Ustaritz, read on
-    // publication-actes.fr (`group_by` on `insee`, 2026-11-16).
-    communes: Object.freeze(['64140', '64160', '64256']),
+    // All five published communes, harvested from the instruction software
+    // by the Basque agglomeration. Anglet's historical filings stop on
+    // 2025-12-31; Ustaritz's decisions lag by six months. Their current boards
+    // take precedence on overlaps, while this register fills the older gaps.
+    communes: Object.freeze(['64024', '64140', '64160', '64256', '64547']),
     // No geometry column: queried by commune, placed on the parcel each row
     // names, the geocoder after.
     geoColumn: null,
@@ -1774,6 +1773,26 @@ function graftEmprise(permit, twin) {
     precision: twin.precision,
     ...(twin.lineage ? { lineage: twin.lineage } : {}),
   };
+}
+
+/**
+ * Add historical local dossiers absent from the current municipal boards.
+ * A delayed export must not duplicate a board's card or replace its newer
+ * decision. Match both the full dossier key (including amendments) and the
+ * family: PC and DP can use the same counter. Unkeyed rows cannot be matched.
+ */
+export function supplementLocalHistory(current, history) {
+  const identity = (permit) => permit.key ? `${permit.kind}|${permit.key}` : null;
+  const seen = new Set(current.map(identity).filter(Boolean));
+  const permits = [...current];
+  let overlaps = 0;
+  for (const permit of history) {
+    const key = identity(permit);
+    if (key && seen.has(key)) { overlaps += 1; continue; }
+    if (key) seen.add(key);
+    permits.push(permit);
+  }
+  return { permits, overlaps };
 }
 
 export function mergeRegisters(sitadel, local) {
