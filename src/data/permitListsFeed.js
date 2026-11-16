@@ -706,7 +706,7 @@ export function typo3ListLinks(city, json) {
  *   Béziers    `DP 34032 26 T0848` — five digits, as at Tours — and
  *              `PC 34032 25T0035` on some lines, the counter stuck to the year
  */
-const DOSSIER_RE = /^(PC|DP|PA|PD|CU)\s+(\d{3}\s?\d{3}|\d{5})\s+(\d{2})\s*([A-Z]?\d{4,5})(P0)?(?:\s*([MTP]\d{1,2}))?$/i;
+const DOSSIER_RE = /^(PC|DP|PA|PD|CU|AT)\s+(\d{3}\s?\d{3}|\d{5})\s+(\d{2})\s*([A-Z]?\d{4,5})(P0)?(?:\s*([MTP]\d{1,2}))?$/i;
 
 /** The first line of a number a narrow column wraps: `DP 34032 26`. */
 const DOSSIER_HEAD_RE = /^(PC|DP|PA|PD|CU)\s+(\d{3}\s?\d{3}|\d{5})\s+\d{2}(?=\s|[A-Z]|$)/i;
@@ -3255,7 +3255,9 @@ export function scrubPermitListRow(input) {
     ? Object.fromEntries(PERMIT_LIST_FIELDS.map((field, i) => [field, input[i] ?? null]))
     : input;
   if (!row || typeof row !== 'object') return null;
-  if (!DOSSIER_RE.test(text(row.dossier) ?? '') || !cartdsKind(row.dossier)) return null;
+  // The number's family is one of `DOSSIER_RE`'s: the five of the boards, and the
+  // works authorisation of a public-access building (`AT`) a list may print beside them.
+  if (!DOSSIER_RE.test(text(row.dossier) ?? '')) return null;
   const cells = PERMIT_LIST_FIELDS.map((field) => {
     const value = row[field];
     return value === null || value === undefined ? null : String(value);

@@ -1414,3 +1414,15 @@ test('a page is read whole only when its top shows a decision\'s number, notices
   assert.equal(bulletinPageWorthReading('DOSSIER N° PC 059350 24 O0174 M01 PAGE 3 / 3\nINFORMATIONS - A LIRE ATTENTIVEMENT'), false);
   assert.equal(bulletinPageWorthReading('Arrêté Municipal\nN° 270'), false);
 });
+
+test('a works authorisation of a public-access building is kept as its own family, never merged with a permit of its digits', () => {
+  const anglet = permitListFor('64024');
+  const row = { board: 'decisions', dossier: 'AT 064024 26 00058', applicant: 'SARL EXEMPLE', address: '6 Rue Des Exemples', postcode: '64600', verdict: 'Décision signée' };
+  const at = normalisePermitListRow(anglet, 'decisions', row);
+  assert.equal(at.kind, 'AT');
+  assert.equal(at.series, 'AT');
+  assert.equal(at.kindLabel, 'Autorisation de travaux (ERP)');
+  const pc = normalisePermitListRow(anglet, 'decisions', { ...row, dossier: 'PC 064024 26 00058' });
+  assert.notEqual(at.key, pc.key);
+  assert.equal(normalisePermitListRow(anglet, 'decisions', { ...row, dossier: 'MT 064024 26 00344' }), null, 'a change of use is no building authorisation');
+});

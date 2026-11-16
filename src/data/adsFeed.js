@@ -961,7 +961,8 @@ export function dossierKey(raw) {
  */
 export function seriesOfKind(kind) {
   const family = String(kind ?? '').toUpperCase();
-  if (family === 'PA' || family === 'PD' || family === 'CU') return family;
+  // An autorisation de travaux is counted on its own too (Anglet's `AT 2600058`).
+  if (family === 'PA' || family === 'PD' || family === 'CU' || family === 'AT') return family;
   return 'DAU';
 }
 

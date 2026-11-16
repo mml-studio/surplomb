@@ -192,6 +192,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | nature du projet, destination principale | project nature, main use | |
 | lotissement | housing subdivision | |
 | certificat d’urbanisme | planning certificate | |
+| autorisation de travaux (AT) | works authorisation for a public-access building (AT) | Art. L.122-3 of the building code; Anglet posts its own. |
 | préfixe de section | section prefix | Cadastre. |
 | avis de dépôt | filing notice | The posting of a filed application (art. R.423-6). |
 | récépissé de dépôt | filing receipt | A commune that posts the receipt posts a filing. |

@@ -535,15 +535,20 @@ function readPantinFiling(document, { file }) {
 
 // --- Anglet: WebDev « arrêtés municipaux » ---------------------------------------
 
-/** The board's sub-categories of planning orders, by the `P1` its links carry: probed on 2026-10-02. */
-const ANGLET_CATEGORIES = Object.freeze([19, 20, 21, 28]);
+/**
+ * The board's sub-categories of planning orders, by the `P1` its links carry: probed on 2026-10-02.
+ * 17 holds the works authorisations of public-access buildings (`At 2600058`, 15 on 2026-11-16).
+ * 30, « Changement d'usage », is left: its orders let a private flat be let to tourists, are no
+ * building authorisation, and name the owner beside the flat's address.
+ */
+const ANGLET_CATEGORIES = Object.freeze([19, 20, 21, 28, 17]);
 // i18n-ignore-start — the publisher's words, matched on
 /** A works phrase opens with one of these; anything else in a description (a name) is left out. */
 const ANGLET_WORKS_RE = /^(?:CONSTRUCTION|INSTALLATION|POSE|RAVALEMENT|MISE|CHANGEMENT|CREATION|EXTENSION|MODIFICATION|REHABILITATION|PANNEAUX|DIVISION|DETACHEMENT|DEMOLITION|CLOTURE|SURELEVATION|REFECTION|REMPLACEMENT|AMENAGEMENT|TRAVAUX|ISOLATION|REALISATION|RENOVATION|TRANSFORMATION|ABATTAGE|DEPLACEMENT|AGRANDISSEMENT|PISCINE|ABRI|CARPORT|PERGOLA|VERANDA|LOTISSEMENT|REGULARISATION)\b/;
 /** The order a description opens with, before the number: `Refus Dp 2600508`. */
 const ANGLET_OPENING_RE = /^(refus|accord|transfert|retrait|sursis [àa] statuer|prorogation|annulation)\b/i;
 // i18n-ignore-end
-const ANGLET_NUMBER_RE = /\b(PC|DP|PA|PD)\s*(?:0?64\s*024\s*)?(\d{2})\s*([A-Z]?\d{4,5})(?:\s*([MT])\s*(\d{1,2}))?(?![\dA-Z])/;
+const ANGLET_NUMBER_RE = /\b(PC|DP|PA|PD|AT)\s*(?:0?64\s*024\s*)?(\d{2})\s*([A-Z]?\d{4,5})(?:\s*([MT])\s*(\d{1,2}))?(?![\dA-Z])/;
 const ANGLET_SITE_RE = new RegExp(`^${HOUSE_NUMBER}\\s*,?\\s*(?:${STREET_WORDS})\\b`, 'i');
 
 /**
