@@ -4797,8 +4797,13 @@ given: a family whose `sweep.json` is not tonight's (Montpellier's may be a
 day old), a municipality two days behind, grouped by instance and new for
 three days, a host whose `robots.txt` refused. `sweep.json` alone could not
 say it: on 2026-11-15 every stamp was tonight's while 736 Cart@DS
-municipalities had been unread since 22-25 October. On the hosted server the
-check runs every night with a copy of the whole archive (`docs/DEPLOY.md`).
+municipalities had been unread since 22-25 October. A municipality its
+register names that still has no file after a sweep is NEVER ARCHIVED, named
+by its instance: a stop needs a file, so Bayonne, registered on 2026-10-02 and
+refused every night, was invisible until 2026-11-16, when the rule found it
+with four Paris-Est-Marne et Bois boards and the Lille and Pontault-Combault
+lists. On the hosted server the check runs every night with a copy of the
+whole archive (`docs/DEPLOY.md`).
 
 **Since 2026-10-01, 56 more communes answer from the other family of boards.**
 Sirap's « Portail Usager », the filing portal of the NEXT'ADS instruction
@@ -6624,7 +6629,10 @@ Paris-Est-Marne et Bois board, named by the `pemb.fr` certificate; Bayonne,
 whose host sends its certificate without GandiCert, the intermediate
 DigiCert Global Root G2 signs — the scan cannot ask it, so it is written by
 hand with `intermediate: 'gandicert'`, which `trustCartdsIntermediates` adds
-as it adds Sectigo's and GlobalSign's; and 18 communes posting on paths of
+as it adds Sectigo's and GlobalSign's, and whose firewall answers 403 to a
+page of 1 000 rows, so it names `pageLength: 500` (`cartdsPageLength`), the
+largest page its own menu offers — without it no night archived Bayonne
+before 2026-11-16; and 18 communes posting on paths of
 the vendor's shared host `guichetunique.geosphere.fr/<tenant>` (Lambesc,
 Beaumont, La Fare-les-Oliviers, Thaon-les-Vosges, Nuits-Saint-Georges,
 Val-d'Isère…), which the scan leaves out as a vendor name and could only ask

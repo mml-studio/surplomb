@@ -120,11 +120,40 @@ test('a refusal on a stamp that is itself stale is not reported as tonight\'s', 
 test('a file whose municipality left its register is retired, not stopped', () => {
   const report = assessPermitArchive({
     sirap: family(DAY, [commune('siea', '01001', DAY), commune('pu16131', '16131', '2026-10-04')]),
-  }, DAY, { sirap: new Set(['01001', '01002']) });
+  }, DAY, { sirap: new Set(['01001']) });
   assert.equal(report.verdict, 'ok');
   assert.equal(report.families.sirap.retired, 1);
-  assert.equal(report.families.sirap.neverArchived, 1);
+  assert.equal(report.families.sirap.neverArchived, 0);
   assert.equal(report.families.sirap.files, 1);
+});
+
+test('a registered municipality with no file after a sweep is never archived, named by its instance', () => {
+  // Bayonne, 2 October to 16 November 2026: registered, swept every night,
+  // refused every night, and no file, so no stop to see.
+  const expected = {
+    cartds: new Map([['21231', 'dijon'], ['64102', 'bayonne'], ['94017', 'champigny'], ['94018', 'champigny']]),
+    'permit-lists': new Map([['59350', 'lille']]),
+  };
+  const report = assessPermitArchive({
+    cartds: family(DAY, [commune('dijon', '21231', DAY)]),
+    'permit-lists': family('2026-11-14', []),
+  }, DAY, expected);
+  assert.equal(report.verdict, 'act');
+  assert.equal(report.families.cartds.neverArchived, 3);
+  assert.deepEqual(report.problems.filter((p) => p.kind === 'never-archived'), [
+    { kind: 'never-archived', family: 'cartds', instance: 'champigny', communes: 2, robots: false },
+    { kind: 'never-archived', family: 'cartds', instance: 'bayonne', communes: 1, robots: false },
+  ], 'a family that did not sweep is not judged on what it has not archived yet');
+  assert.match(report.text, /Never archived: cartds\/champigny \(2 municipalities\), cartds\/bayonne\./);
+});
+
+test('a never-archived instance refused by robots.txt is named once, with the hint to recheck', () => {
+  const report = assessPermitArchive({
+    cartds: family(DAY, [commune('dijon', '21231', DAY)], { refused: ['ccpro'] }),
+  }, DAY, { cartds: new Map([['21231', 'dijon'], ['84087', 'ccpro']]) });
+  assert.deepEqual(report.problems.map((p) => [p.kind, p.instance, p.robots]), [['never-archived', 'ccpro', true]]);
+  assert.match(report.text, /Never archived: cartds\/ccpro \(robots\)\./);
+  assert.match(report.text, /--recheck-robots/);
 });
 
 test('above a dozen stops in a family, the largest are named and the rest counted', () => {
@@ -144,6 +173,8 @@ test('the registers name a set of municipalities for every family the server arc
   for (const [name, codes] of Object.entries(expected)) assert.ok(codes.size > 0, name);
   assert.ok(expected['permit-lists'].has('13055'), 'Marseille is a list city');
   assert.ok(expected.mmm.has('34172'), 'Montpellier is in the open-data family');
+  assert.equal(expected.cartds.get('64102'), 'bayonne', 'each municipality names the instance that reads it');
+  assert.equal(expected['permit-lists'].get('59350'), 'lille');
 });
 
 test('assessPermitArchive refuses a day that is not a day', () => {

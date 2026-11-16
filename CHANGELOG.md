@@ -6,6 +6,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Bayonne's permits are archived.** Its board was registered on 2026-10-02
+  and swept every night, yet no night archived it: its firewall answers 403 to
+  the 1 000-row page every Cart@DS board is asked for, and 200 to 500, the
+  largest its own menu offers. Bayonne now names `pageLength: 500`; on
+  2026-11-16 it posted 185 filings and 206 decisions (54 306 inhabitants, the
+  largest commune of the Basque coast). The archive check now names a
+  registered municipality that has no file after a sweep as **never
+  archived**, by instance: a stop needs a file, so nothing could see Bayonne.
+  The first run names six more sources: four Paris-Est-Marne et Bois boards
+  (Champigny, Charenton, Maisons-Alfort, Saint-Maurice) and the Lille and
+  Pontault-Combault lists.
 - **Representatives' names and persons named in descriptions no longer reach
   the map or the archive.** The applicant filter kept a company's name with
   the person after it (« SCI … - M. NOM », « représentée par … »), and

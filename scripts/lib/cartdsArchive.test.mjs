@@ -19,7 +19,7 @@ import {
   writeCartdsSweepStamp,
   CARTDS_INTERMEDIATES,
 } from './cartdsArchive.mjs';
-import { CARTDS_INSTANCES } from '../../src/data/cartdsFeed.js';
+import { CARTDS_INSTANCES, CARTDS_PAGE_LENGTH, cartdsPageLength } from '../../src/data/cartdsFeed.js';
 import { PERMIT_LISTS } from '../../src/data/permitListsFeed.js';
 
 const OPEN = Object.freeze({
@@ -295,4 +295,39 @@ test('a board\'s POST names the page it comes from, as the page\'s own form does
   const answer = await readCartdsBoard(OPEN, '114', '1', { token: 't', cookie: 'c=1' }, http);
   assert.equal(answer.rows.length, 1);
   assert.equal(seen[0]['User-Agent'], undefined, 'the caller\'s user agent is left alone');
+});
+
+test('an instance whose front refuses a large page is read in the pages it accepts, as Bayonne is', async () => {
+  // Bayonne's firewall answered 403 to `length=1000` and 200 to 500, the
+  // largest its own menu offers (2026-11-16): not one night had archived it.
+  const posted = Array.from({ length: 5 }, (_, i) => ROW(`DP 064 102 26 0070${i}`));
+  const asked = [];
+  const http = {
+    async fetch(url, init = {}) {
+      const form = new URLSearchParams(init.body);
+      const start = Number(form.get('start'));
+      const length = Number(form.get('length'));
+      asked.push([start, length]);
+      if (length > 2) return { ok: false, status: 403, body: 'Web Application Firewall' };
+      return { ok: true, status: 200, body: JSON.stringify({ recordsTotal: posted.length, data: posted.slice(start, start + length) }) };
+    },
+    async text(res) { return res.body; },
+  };
+  const session = { token: 't', cookie: 'c=1' };
+  assert.equal(await readCartdsBoard(OPEN, '102', '1', session, http), null, 'the default page is refused');
+  assert.deepEqual(asked, [[0, CARTDS_PAGE_LENGTH]]);
+
+  asked.length = 0;
+  const answer = await readCartdsBoard({ ...OPEN, pageLength: 2 }, '102', '1', session, http);
+  assert.deepEqual(asked, [[0, 2], [2, 2], [4, 2]]);
+  assert.equal(answer.rows.length, 5);
+  assert.equal(answer.truncated, false);
+});
+
+test('a page length an instance names is used, anything else falls back to the default', () => {
+  assert.equal(cartdsPageLength(CARTDS_INSTANCES.find((i) => i.key === 'bayonne')), 500);
+  assert.equal(cartdsPageLength(OPEN), CARTDS_PAGE_LENGTH);
+  for (const pageLength of [0, -5, 2.5, 'many', null]) {
+    assert.equal(cartdsPageLength({ ...OPEN, pageLength }), CARTDS_PAGE_LENGTH, String(pageLength));
+  }
 });
