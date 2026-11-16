@@ -1049,6 +1049,12 @@ test('a bulletin city fails closed on a challenge, a refusal or an answer that i
   assert.equal(await readPermitCity(BULLETIN, challenged, { dir: await tempDir(), day: '2026-10-01', ocr, log: quiet }), null);
   assert.deepEqual(challenged.calls, [BULLETIN.page], 'no bulletin asked after a challenge');
   assert.match(quiet.warnings.at(-1), /challenge/);
+  // The real page with the shield's beacon written into it is read.
+  const beacon = bulletinHttp({ page: `<html><script src="/_Incapsula_Resource?SWJIYLWA=1" async></script>\n${BO_PAGE}</html>` });
+  const beaconed = await readPermitCity(BULLETIN, beacon, { dir: await tempDir(), day: '2026-10-01', ocr, log: quiet });
+  assert.equal(beaconed.boards.decisions.length, 3, 'its three bulletins are read');
+  assert.equal(beacon.calls.length, 4);
+  calls.length = 0;
   // A bulletin answered by an HTML page: the reading stops there.
   const html = { ok: true, status: 200, payload: new Uint8Array(Buffer.from('<html>Incapsula incident ID</html>')), headers: { get: () => 'text/html' } };
   const swapped = bulletinHttp({ files: { 28: html } });

@@ -5293,7 +5293,11 @@ past 1 500 pages a sweep, ten seconds before every request to the host
 (`crawlDelayMs`, its `Crawl-delay: 10`). Its `robots.txt` disallows `/content/`
 and every PDF: Lille is read by the project's decision, `robots: 'overridden'`.
 The host sits behind Imperva; an answer that is a challenge or no PDF, or a
-403/429, stops the reading until the next sweep (`bulletinChallenge`). Most
+403/429, stops the reading until the next sweep (`bulletinChallenge`). A page
+that links its bulletins is read whatever script it carries: Imperva writes
+its `_Incapsula_Resource?SWJIYLWA=…` beacon into the real page it serves the
+hosted server, and until 2026-11-16 that tag alone counted as a challenge, so
+no sweep had ever read Lille. Most
 pages are other acts, so each page's top is read first and the page whole
 only when it shows a dossier number (`bulletinPageWorthReading`): 214 of 703
 pages over 14 bulletins sampled, 0.58 s a page on an M5 core against 2.4 s for
@@ -5438,7 +5442,11 @@ weekly PDF tables, Villepreux's and Igny's Digilor decisions, and the
 municipal PDF notices of La Celle-Saint-Cloud, Le Mée-sur-Seine and Crosne.
 They use the existing six-hour cache, daily permit-list archive, OCR in the
 sweep only and cadastral/BAN placement. Their public indexes and file
-requests honour robots.txt; no new override is introduced.
+requests honour robots.txt; no new override is introduced. Pontault-Combault
+posted the week of 5 May 2026 as a workbook: a weekly document that links a
+workbook is left out, and one that links no file at all still fails the
+reading. Until 2026-11-16 that workbook failed every twelve-month sweep, and
+the city had never been archived.
 
 Repeated family headers, split house-number columns and cadastral lines
 are read separately from applicants. An operative first article identifies

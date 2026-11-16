@@ -6,6 +6,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Lille's and Pontault-Combault's permit lists are archived.** Both were
+  read for visitors and failed every nightly sweep, so neither had ever
+  reached the archive. Imperva writes its `_Incapsula_Resource` beacon into
+  the real page it serves the hosted server, and that tag alone counted as a
+  challenge: the Lille reader now asks the page for its bulletin links first
+  and calls it a challenge only when it has none (209 links on 2026-11-16).
+  Pontault-Combault posted the week of 5 May 2026 as a workbook, not a PDF,
+  and the twelve months a sweep reads reached back to it: a document linking
+  a workbook is now left out, one linking no file still fails the reading.
+  Replayed on the hosted server, Pontault-Combault gave 595 rows from 98 PDFs,
+  and Lille's first three bulletins 18 decisions from 70 pages of OCR (1.7 s a
+  page); its 2026 backlog is read 40 bulletins a night, oldest first.
 - **Bayonne's permits are archived.** Its board was registered on 2026-10-02
   and swept every night, yet no night archived it: its firewall answers 403 to
   the 1 000-row page every Cart@DS board is asked for, and 200 to 500, the

@@ -2785,6 +2785,12 @@ export function bulletinLinks(city, html) {
  * the page: Imperva's interstitial (`_Incapsula_Resource`, « Incapsula
  * incident ID ») or any CAPTCHA. Such an answer is never passed: the reading
  * stops there (Trap 9).
+ *
+ * A MARK, NOT A VERDICT ON A PAGE THAT LINKS ITS BULLETINS. Imperva also
+ * writes a `_Incapsula_Resource?SWJIYLWA=…` script into the real page it
+ * serves a datacenter address — the hosted server's, measured 2026-11-16 —
+ * so the reader asks for the bulletin links first and calls a page a
+ * challenge only when it has none.
  * @param {?string} html
  * @returns {boolean}
  */
