@@ -136,7 +136,7 @@ import {
 } from './municipalPermitsFeed.js';
 import { EXTENDED_PERMIT_SOURCES, readBloisFilings, readExtendedNotice } from './municipalPermitExtensions.js';
 import { BOARD_PERMIT_SOURCES } from './permitBoardCities.js';
-import { DEMATDOC_PERMIT_SOURCES, readDematdocNotice } from './dematdocFeed.js';
+import { DEMATDOC_PERMIT_SOURCES, readDematdocNotice, readDematdocNotices } from './dematdocFeed.js';
 import { DIGILOR_TOWNS } from './digilorTowns.js';
 import {
   CARTDS_LICENCE, cartdsDate, cartdsKind, cartdsParcelIdus, cartdsProject, cartdsVerdictState, parseCartdsPlace,
@@ -706,7 +706,7 @@ export function typo3ListLinks(city, json) {
  *   Béziers    `DP 34032 26 T0848` — five digits, as at Tours — and
  *              `PC 34032 25T0035` on some lines, the counter stuck to the year
  */
-const DOSSIER_RE = /^(PC|DP|PA|PD|CU)\s+(\d{3}\s?\d{3}|\d{5})\s+(\d{2})\s*([A-Z]?\d{4,5})(P0)?(?:\s*([MTP]\d{1,2}))?$/i;
+const DOSSIER_RE = /^(PC|DP|PA|PD|CU|AT|MT)\s+(\d{3}\s?\d{3}|\d{5})\s+(\d{2})\s*([A-Z]?\d{4,5})(P0)?(?:\s*([MTP]\d{1,2}))?$/i;
 
 /** The first line of a number a narrow column wraps: `DP 34032 26`. */
 const DOSSIER_HEAD_RE = /^(PC|DP|PA|PD|CU)\s+(\d{3}\s?\d{3}|\d{5})\s+\d{2}(?=\s|[A-Z]|$)/i;
@@ -3188,12 +3188,14 @@ export const PERMIT_LIST_TEXT = Object.freeze({
   'annecy-filings': Object.freeze({ wordGapEm: 0.15 }),
   'annecy-decisions': Object.freeze({ wordGapEm: 0.15 }),
   'dematdoc-notice': Object.freeze({ wordGapEm: 0.15 }),
+  'dematdoc-notices': Object.freeze({ wordGapEm: 0.15 }),
 });
 
 /** The readers, by the `layout` a list names. */
 export const PERMIT_LIST_READERS = Object.freeze({
   'extended-notice': readExtendedNotice,
   'dematdoc-notice': readDematdocNotice,
+  'dematdoc-notices': readDematdocNotices,
   'blois-filings': readBloisFilings,
   'municipal-notice': readMunicipalNotice,
   'balma-table': readBalmaTable,
@@ -3242,7 +3244,7 @@ const TEXT_CELLS = Object.freeze(['label', 'purpose'].map((field) => PERMIT_LIST
  * One list row as it may be stored, or null for a row that may not be.
  *
  * TRAP 4 before anything is written: the applicant filtered. A row whose
- * number is not a building authorisation's is not kept at all.
+ * number is not a recognised municipal authorisation's is not kept at all.
  *
  * @param {object|Array<?string>} input One row from a reader, or cells
  *   already kept — scrubbed again, so the archive's own test holds for both.
@@ -3253,7 +3255,9 @@ export function scrubPermitListRow(input) {
     ? Object.fromEntries(PERMIT_LIST_FIELDS.map((field, i) => [field, input[i] ?? null]))
     : input;
   if (!row || typeof row !== 'object') return null;
-  if (!DOSSIER_RE.test(text(row.dossier) ?? '') || !cartdsKind(row.dossier)) return null;
+  // Each recognised family keeps its own meaning, including public-access works
+  // (`AT`) and tourist-accommodation changes of use (`MT`).
+  if (!DOSSIER_RE.test(text(row.dossier) ?? '')) return null;
   const cells = PERMIT_LIST_FIELDS.map((field) => {
     const value = row[field];
     return value === null || value === undefined ? null : String(value);
@@ -3368,7 +3372,7 @@ function registerPurpose(label) {
  * @param {{current?: boolean}} [options] `current`: the row is on the edition
  *   read last (Trap 3); it says « under review » only for a city whose list
  *   of filings is a list of dossiers under review (`underReview`).
- * @returns {?object} Null for a row that is not a building authorisation.
+ * @returns {?object} Null for a row that is not a recognised municipal authorisation.
  */
 export function normalisePermitListRow(city, board, input, { current = false } = {}) {
   const cells = Array.isArray(input) ? input : scrubPermitListRow(input);

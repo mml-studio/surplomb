@@ -145,7 +145,7 @@ import { foldToCommune } from './communeCode.js';
 import { ringAreaM2, ringLabelAnchor, sanitisePolygonParts } from './ringGeometry.js';
 import { ARRONDISSEMENT_COMMUNES, parcelParts, sitadelJoinCommune } from './sitadelFeed.js';
 import { ADS_LINEAGE_BASIS, insidePoint, sitadelParcelRefs } from './cadastreLineage.js';
-import { organisationApplicant } from './permitApplicant.js';
+import { organisationApplicant, withoutPersonMentions } from './permitApplicant.js';
 import { labelFor } from '../i18n/messages.js';
 import {
   ADS_KIND_WORDS, ADS_PRECISION_WORDS, ADS_PURPOSE_WORDS, ADS_STATE_WORDS,
@@ -576,6 +576,61 @@ export const LOCAL_ADS_PORTALS = Object.freeze([
     // nothing still under review. What it adds is the date: decisions three
     // days old on 2026-10-01, where Sitadel is weeks behind.
   }),
+  Object.freeze({
+    key: 'dodu',
+    portal: 'opendatapaysbasque.opendatasoft.com',
+    dataset: 'dodu',
+    label: 'dODu — Autorisations d’urbanisme en Pays Basque', // i18n-ignore-line — the portal's own dataset title
+    licence: 'Licence Ouverte 2.0',
+    // Boucau, Cambo-les-Bains and Hasparren, harvested every day from the
+    // instruction software (wGeoPC) by the Basque agglomeration's open-data
+    // project. The file holds two more communes, read elsewhere: Anglet, whose
+    // rows stop on 2025-12-31 and whose board is read, and Ustaritz, read on
+    // publication-actes.fr (`group_by` on `insee`, 2026-11-16).
+    communes: Object.freeze(['64140', '64160', '64256']),
+    // No geometry column: queried by commune, placed on the parcel each row
+    // names, the geocoder after.
+    geoColumn: null,
+    communeColumn: 'insee',
+    // i18n-ignore-start — column names in the portal's own schema
+    // `nom_demandeur` and `personne_phys_mor` are never asked for.
+    select: Object.freeze([
+      'insee', 'commune', 'code_postal', 'numero_dossier', 'type_dossier', 'date_depot',
+      'date_de_decision', 'decision_autorite', 'adresse_du_terrain', 'parcelle_s_cadastrale_s',
+      'description_travaux', 'nombre_de_logement',
+    ]),
+    dateColumn: 'date_depot',
+    columns: Object.freeze({
+      nom_dossier: 'numero_dossier',
+      type_dossier: 'type_dossier',
+      date_depot: 'date_depot',
+      date_decision: 'date_de_decision',
+      etat: 'decision_autorite',
+      adresse: 'adresse_du_terrain',
+      code_postal: 'code_postal',
+      objet: 'description_travaux',
+      insee: 'insee',
+      refcad: 'parcelle_s_cadastrale_s',
+      nb_logements: 'nombre_de_logement',
+    }),
+    // i18n-ignore-end
+    // `PC6414024B0025I`: the five-digit commune, no space, and the step a
+    // letter after the counter (`I` initial, `M03` third amendment, `T01`
+    // transfer) — Sitadel's `06414024B0025`. See `localDossier`.
+    fiveDigitDossier: true,
+    compactDossier: true,
+    // `AM 0140, AM 0141`, `BD 099P`: several parcels in one cell, a part of
+    // one marked by a trailing letter.
+    parcelList: true,
+    resolveParcels: true,
+    // One row per dossier, its decision blank while it is under review.
+    blankIsFiled: true,
+    // SIX MONTHS LATE. The newest decisions on 2026-11-16 were of 23-30 April
+    // 2026; the harvest publishes a dossier once decided, and keeps it. What
+    // it adds is every family — 287, 176 and 178 dossiers decided in 2025 at
+    // Boucau, Cambo and Hasparren, where Sitadel holds 27, 13 and 20 — each
+    // with its address and parcels, and the refusals Sitadel never lists.
+  }),
 ]);
 
 /** Default scan radius, in metres. A block, not a district. */
@@ -906,7 +961,8 @@ export function dossierKey(raw) {
  */
 export function seriesOfKind(kind) {
   const family = String(kind ?? '').toUpperCase();
-  if (family === 'PA' || family === 'PD' || family === 'CU') return family;
+  // Works and tourist-accommodation changes of use have their own counters too.
+  if (family === 'PA' || family === 'PD' || family === 'CU' || family === 'AT' || family === 'MT') return family;
   return 'DAU';
 }
 
@@ -1076,7 +1132,9 @@ export function localState(raw) {
   }
   if (granted || /accord|autoris|favorable/.test(value)) return { state: 'accorde', label: adsStateFrench('accorde') };
   // i18n-ignore-end
-  if (value.includes('annul') || value.includes('retir')) return { state: 'annule', label: adsStateFrench('annule') };
+  // dODu's `Retrait après décision`, and its `Classement sans suite` and
+  // `Irrecevable`, which close a dossier no one decided.
+  if (/annul|retir|retrait|sans suite|irrecevable/.test(value)) return { state: 'annule', label: adsStateFrench('annule') };
   return { state: 'depose', label: String(raw).trim() };
 }
 
@@ -1219,7 +1277,15 @@ export function localDossier(portal, raw) {
   const value = text(raw);
   if (!value || !portal.fiveDigitDossier) return value;
   const match = /^([A-Z]{2})\s+(\d{2})(\d{3})\s+(\d{2})\s+(\S.*)$/.exec(value.toUpperCase());
-  return match ? `${match[1]} 0${match[2]} ${match[3]} ${match[4]} ${match[5]}` : value;
+  if (match) return `${match[1]} 0${match[2]} ${match[3]} ${match[4]} ${match[5]}`;
+  if (!portal.compactDossier) return value;
+  // dODu runs it all together and closes it with the step: `PC6414024B0025I`
+  // is the initial filing, `PC6414021B0087M03` its third amendment. The
+  // initial `I` is dropped, as every other register leaves it unwritten.
+  const compact = /^([A-Z]{2})(\d{2})(\d{3})(\d{2})([A-Z\d]\d{4})(I|[MT]\d{2})?$/.exec(value.toUpperCase());
+  if (!compact) return value;
+  const step = compact[6] && compact[6] !== 'I' ? ` ${compact[6]}` : '';
+  return `${compact[1]} 0${compact[2]} ${compact[3]} ${compact[4]} ${compact[5]}${step}`;
 }
 
 /**
@@ -1238,7 +1304,8 @@ function localParcelIdus(refs, insee) {
   if (!insee || !/^\d{5}$/.test(insee)) return [];
   const out = [];
   for (const ref of refs) {
-    const match = /^([A-Z]{1,2})(\d{1,4})$/.exec(String(ref).replace(/\s+/g, '').toUpperCase());
+    // A trailing letter marks a part of the parcel (dODu's `BD 099P`): the parcel itself.
+    const match = /^([A-Z]{1,2})(\d{1,4})[A-Z]?$/.exec(String(ref).replace(/\s+/g, '').toUpperCase());
     if (!match || /^0+$/.test(match[2])) continue;
     const idu = `${insee}000${match[1].padStart(2, '0')}${match[2].padStart(4, '0')}`;
     if (!out.some((known) => known.idu === idu)) {
@@ -1270,7 +1337,8 @@ export function normaliseLocalRow(portal, input) {
     && (lon !== 0 || lat !== 0)
     && !isProjectedOrigin(portal, record);
   const refcad = record.refcad;
-  const parcels = (Array.isArray(refcad) ? refcad.map(text) : [text(refcad)])
+  const listed = portal.parcelList && typeof refcad === 'string' ? refcad.split(/\s*[,;]\s*/) : refcad;
+  const parcels = (Array.isArray(listed) ? listed.map(text) : [text(listed)])
     // `0` is how Tours writes a decision row's missing parcel.
     .filter((ref) => ref && !/^0+$/.test(ref));
   const communeCode = inseeCode(record.insee ?? record.code_insee_commune);
@@ -1292,7 +1360,8 @@ export function normaliseLocalRow(portal, input) {
     // A city portal names private applicants too; only an organisation's
     // name reaches the card (see permitApplicant.js).
     applicant: organisationApplicant(record.demandeur),
-    purpose: plain(record.objet ?? record.details_du_projet) ?? (ADS_KINDS[kind] ?? null),
+    // The works are typed by the applicant, who may name a person in them.
+    purpose: withoutPersonMentions(plain(record.objet ?? record.details_du_projet)) ?? (ADS_KINDS[kind] ?? null),
     address: plain(record.adresse ?? record.adresse_du_terrain),
     postcode: text(record.code_postal),
     commune: text(record.commune ?? record.nom),

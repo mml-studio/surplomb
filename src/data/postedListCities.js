@@ -202,5 +202,38 @@ export const POSTED_LIST_CITIES = [
     page: 'http://www.ayherre.fr/aiherrayherre/vie-municipale/affichage-urbanisme.html',
     plainHttp: 'e-monsite serves www.ayherre.fr with the certificate of www.e-monsith.com (2026-11-16)',
     source: { protocol: 'posted-acts', limit: 120, ocr: true } },
+  // Mauléon-Licharre (Wix) links every act from one page of « actes réglementaires »,
+  // each permit by its number and site: « DP 0643712600003 - 6 rue … », « Rejet DP … ».
+  // No link names a day; 54 permit links on 2026-11-16 (43 of the 50 declarations
+  // numbered in 2026), so `limit` keeps them all. Every act is a scan, read by OCR;
+  // the PDFs are served from Wix's file host after a redirect.
+  { key: 'mauleon-licharre', insee: '64371', postcode: '64130', label: 'Ville de Mauléon-Licharre — actes réglementaires',
+    page: 'https://www.mauleon-licharre.fr/les-actes-reglementaires',
+    source: { protocol: 'posted-acts', limit: 120, ocr: true } },
+  // Saint-Laurent-de-Gosse posts its decisions on a page per family, a « Télécharger »
+  // link each, the file named for the act and its number: `Rejet+DP+2600020.pdf`,
+  // `Decision+PC+402682600003.pdf`, `Arrete+PC2500011+M02.pdf`. 2026-11-16: 15
+  // declarations (6 of the 20 numbered in 2026), 13 building permits (all 3 of 2026),
+  // 2 development permits. Its robots.txt refuses `/content/` and every PDF
+  // (`Disallow: *.pdf$`), as Dompierre-sur-Mer's does: the legal display is read
+  // anyway, one file a second, the exception marked by `robots`. Scans: read by OCR.
+  { key: 'saint-laurent-de-gosse', insee: '40268', postcode: '40390', label: 'Commune de Saint-Laurent-de-Gosse — arrêtés d’urbanisme',
+    page: 'https://www.saintlaurentdegosse.fr/Vie-municipale/Arretes-municipaux/Urbanisme2/Declaration-prealable-de-travaux',
+    robots: 'overridden',
+    source: { protocol: 'posted-acts', ocr: true, pages: [
+      'https://www.saintlaurentdegosse.fr/Vie-municipale/Arretes-municipaux/Urbanisme2/Permis-de-construire',
+      'https://www.saintlaurentdegosse.fr/Vie-municipale/Arretes-municipaux/Urbanisme2/Permis-d-amenager',
+    ] } },
+  // Arcangues (WordPress, WP File Download) posts its legal display in a folder a year,
+  // « Urbanisme 2026 », one per family: the filings of a day as one typed file of
+  // notices (« Avis de dépôt PC reçu au 09-11-2026 », read by `dematdoc-notices`) and
+  // each signed order as a scan (« U-2026-224 - PC64038 2600012 - <applicant> », read
+  // by OCR; only the number is read from the title). The page draws them by script;
+  // the plugin's API (`wpfd`) lists them. 2026-11-16: 20 declaration files and 20
+  // permit files since 16 September, the newest posted that day.
+  { key: 'arcangues', insee: '64038', postcode: '64200', label: 'Commune d’Arcangues — affichage légal d’urbanisme',
+    page: 'https://www.arcangues.fr/affichage-legal/',
+    source: { protocol: 'wpfd', wpfdRoot: 114, ocr: true,
+      lists: { filings: '\\bAVIS (?:DE )?DEPOTS?\\b' }, layouts: { filings: 'dematdoc-notices' } } },
 ];
 // i18n-ignore-end

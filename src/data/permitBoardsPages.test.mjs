@@ -243,15 +243,23 @@ test('Anglet: a free-text description gives its number, numbered site and works,
   assert.equal(angletDescription('Sursis A Statuer Dp2600537 - Détachement D\'Un Lot - 51, Allée De L\'Impératrice', c).verdict, 'Sursis à statuer');
   assert.equal(angletDescription('Dp0640242600189 - Private Person - Arrete Rectificatif', c).address, null);
   assert.equal(angletDescription('Arrêté de circulation', c), null);
+  // A works authorisation of a public-access building is its own family; the company before the works is no works.
+  assert.deepEqual(angletDescription('At 2600058 - Private Company Aménagement D\'Un Bureau - 6, Rue Des Exemples', c),
+    { dossier: 'AT 064024 26 00058', address: '6 Rue Des Exemples', purpose: null, verdict: 'Décision signée' });
+  assert.equal(angletDescription('Pc2600117 At2600057 Ville D\'Anglet 2, Allée Des Exemples', c).dossier, 'PC 064024 26 00117');
+  assert.deepEqual(angletDescription('Mt64024260344 - Private Person - 6, Rue Des Exemples', c),
+    { dossier: 'MT 064024 26 00344', address: '6 Rue Des Exemples', purpose: null, verdict: 'Décision signée' });
+  assert.equal(angletDescription('MT6402426034411 - Private Person - 6, Rue Des Exemples', c), null);
   for (const value of ['Dp2600477 Private\n2bis, Rue Du Clos\nConstruction', 'Dp 2600451 - Private Person - 8, Avenue De La Forêt']) {
     assert.doesNotMatch(JSON.stringify(angletDescription(value, c)), /Private|Person/);
   }
 });
 
-test('Anglet: four plain GETs, the board’s own rows, null for another page', () => {
+test('Anglet: six plain GETs, the board’s own rows, null for another page', () => {
   const c = city('anglet');
   const requests = PAGE_BOARD_PROTOCOLS.anglet.start(c, options);
-  assert.deepEqual(requests.map((request) => new URL(request.url).searchParams.get('P1')), ['19', '20', '21', '28']);
+  // 17: public-access works; 30: tourist-accommodation changes of use.
+  assert.deepEqual(requests.map((request) => new URL(request.url).searchParams.get('P1')), ['19', '20', '21', '28', '17', '30']);
   const html = `<input type=hidden name="_A13_OCC" value="2"><td id="tzzrl_1_A12">2026 / 2087</td>
 <td id="zrl_1_A18" class="l-26 padding webdevclass-riche">Dp 2600451 - Private Person - 8, Avenue De La For&ecirc;t</td>
 <td id="zrl_2_A18" class="l-26">Dp2600477 Private<br>2bis, Rue Du Clos<br>Construction D'Un Mur</td>`;

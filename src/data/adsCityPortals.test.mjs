@@ -224,3 +224,97 @@ test('the decision words of Tours and Brest land on the ladder, refusals first',
   assert.equal(localState('Accordé').state, 'accorde');
   assert.equal(localState('Refusé').state, 'refuse');
 });
+
+// --- dODu: the Basque agglomeration's open-data harvest (2026-11-16) --------
+
+const DODU = LOCAL_ADS_PORTALS.find((portal) => portal.key === 'dodu');
+
+/** Two Boucau rows as the portal answered them on 2026-11-16; addresses and works invented. */
+const DODU_ROWS = Object.freeze([
+  {
+    insee: '64140', commune: 'Boucau', code_postal: '64340', numero_dossier: 'PC6414024B0025I',
+    type_dossier: 'Permis de construire', date_depot: '2024-10-02', date_de_decision: '2025-01-13',
+    decision_autorite: 'Avis favorable avec prescriptions', adresse_du_terrain: '4 impasse des Exemples  64340 BOUCAU',
+    parcelle_s_cadastrale_s: 'AM 0140, AM 0141', description_travaux: 'Construction d’une maison\r\nExtension',
+    nombre_de_logement: 1,
+  },
+  {
+    insee: '64140', commune: 'Boucau', code_postal: '64340', numero_dossier: 'DP641402600055I',
+    type_dossier: 'Déclaration préalable', date_depot: '2026-04-15', date_de_decision: null,
+    decision_autorite: null, adresse_du_terrain: '30 rue des Exemples  64340 Boucau',
+    parcelle_s_cadastrale_s: 'BD 099P', description_travaux: 'Pose d’une fenêtre chez M. Exemple',
+    nombre_de_logement: null,
+  },
+]);
+
+test('dODu is asked for Boucau, Cambo-les-Bains and Hasparren, by commune, without the applicant', () => {
+  for (const code of ['64140', '64160', '64256']) {
+    assert.deepEqual(portalsForCommune(code).map((portal) => portal.key), ['dodu'], code);
+  }
+  // Anglet's rows stop in 2025 and Ustaritz is read on publication-actes.fr.
+  assert.deepEqual(portalsForCommune('64024'), []);
+  assert.deepEqual(portalsForCommune('64547'), []);
+  const url = new URL(buildLocalAdsUrl(DODU, { communeCode: '64140', since: '2023-11-01' }));
+  assert.equal(url.host, 'opendatapaysbasque.opendatasoft.com');
+  assert.match(url.pathname, /\/datasets\/dodu\/exports\/json$/);
+  assert.equal(url.searchParams.get('where'), 'insee = "64140" and date_depot >= date\'2023-11-01\'');
+  const select = url.searchParams.get('select').split(',');
+  assert.ok(!select.includes('nom_demandeur'));
+  assert.ok(!select.includes('personne_phys_mor'));
+});
+
+test('dODu numbers meet Sitadel’s: the commune on six digits, the initial step dropped', () => {
+  assert.equal(localDossier(DODU, 'PC6414024B0025I'), 'PC 064 140 24 B0025');
+  assert.equal(localDossier(DODU, 'DP641402600059I'), 'DP 064 140 26 00059');
+  assert.equal(localDossier(DODU, 'PC6414021B0087M03'), 'PC 064 140 21 B0087 M03');
+  assert.equal(localDossier(DODU, 'PC6414021B0069T01'), 'PC 064 140 21 B0069 T01');
+  // An unknown suffix is left as written rather than guessed at.
+  assert.equal(localDossier(DODU, 'DP6425624B0005PP'), 'DP6425624B0005PP');
+  // Only a portal that runs its numbers together is read this way.
+  assert.equal(localDossier(TOURS, 'PC6414024B0025I'), 'PC6414024B0025I');
+
+  const permit = normaliseLocalRow(DODU, DODU_ROWS[0]);
+  const twin = normaliseSitadelRow(HOUSING_FILE, {
+    NUM_DAU: '06414024B0025', TYPE_DAU: 'PC', ETAT_DAU: '2', COMM: '64140',
+    DATE_REELLE_AUTORISATION: '2025-01-13',
+  });
+  assert.equal(permit.key, twin.key);
+  const { permits, merged } = mergeRegisters([twin], [permit]);
+  assert.equal(merged, 1);
+  assert.equal(permits.length, 1, 'one dossier, not the same one twice');
+});
+
+test('a dODu row stands on every parcel it names, and its works name no one', () => {
+  const decided = normaliseLocalRow(DODU, DODU_ROWS[0]);
+  assert.equal(decided.kind, 'PC');
+  assert.equal(decided.state, 'accorde');
+  assert.equal(decided.depositedOn, '2024-10-02');
+  assert.equal(decided.decidedOn, '2025-01-13');
+  assert.equal(decided.postcode, '64340');
+  assert.equal(decided.communeCode, '64140');
+  assert.equal(decided.housing, 1);
+  assert.equal(decided.applicant, null);
+  assert.deepEqual(decided.parcelIdus.map((ref) => ref.idu), ['64140000AM0140', '64140000AM0141']);
+  assert.deepEqual(decided.parcels, ['AM 140', 'AM 141']);
+  assert.equal(decided.purpose, 'Construction d’une maison Extension');
+
+  const filed = normaliseLocalRow(DODU, DODU_ROWS[1]);
+  assert.equal(filed.kind, 'DP');
+  assert.equal(filed.state, 'depose', 'a blank decision is a dossier under review');
+  // `099P` is a part of parcel 99.
+  assert.deepEqual(filed.parcelIdus, [{ idu: '64140000BD0099', provisional: false, label: 'BD 99' }]);
+  assert.ok(!/Exemple/.test(filed.purpose), filed.purpose);
+});
+
+test('dODu’s decision words land on the ladder', () => {
+  assert.equal(localState('Avis favorable').state, 'accorde');
+  assert.equal(localState('Avis favorable avec prescriptions').state, 'accorde');
+  assert.equal(localState('favorable sans prescription').state, 'accorde');
+  assert.equal(localState('Avis défavorable').state, 'refuse');
+  assert.equal(localState('Rejet tacite').state, 'refuse');
+  assert.equal(localState('Retrait après décision').state, 'annule');
+  assert.equal(localState('Classement sans suite').state, 'annule');
+  assert.equal(localState('Irrecevable').state, 'annule');
+  // A stay keeps its own words.
+  assert.deepEqual(localState('Sursis à statuer'), { state: 'depose', label: 'Sursis à statuer' });
+});

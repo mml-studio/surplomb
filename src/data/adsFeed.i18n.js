@@ -26,6 +26,10 @@ const KINDS = Object.freeze({
   PA: { fr: 'Permis d’aménager', en: 'Development permit' },
   PD: { fr: 'Permis de démolir', en: 'Demolition permit' },
   CU: { fr: 'Certificat d’urbanisme', en: 'Planning certificate' },
+  // Works in a public-access building (Code de la construction, art. L.122-3): no Sitadel
+  // file holds them; Anglet's board posts its own (2026-11-16).
+  AT: { fr: 'Autorisation de travaux (ERP)', en: 'Works authorisation (public-access building)' },
+  MT: { fr: 'Changement d’usage (meublé de tourisme)', en: 'Change of use (tourist accommodation)' },
 });
 
 /**

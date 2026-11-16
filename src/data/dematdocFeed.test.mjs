@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEMATDOC_PERMIT_SOURCES, dematdocDocuments, dematdocLazyRequest, dematdocOldest, dematdocParcels,
-  dematdocShelfRequest, dematdocTitleRow, readDematdocNotice,
+  dematdocShelfRequest, dematdocTitleRow, readDematdocNotice, readDematdocNotices,
 } from './dematdocFeed.js';
 import { normalisePermitListRow, permitListFor, scrubPermitListRow } from './permitListsFeed.js';
 
@@ -439,4 +439,53 @@ test('the works of a justified line keep their words, however wide OCR spaces th
     [39, 61, 486, 'Pour'], [64, 66, 486, ':'], [189, 227, 486, 'Clôture'], [232, 240, 486, 'en'], [244, 270, 486, 'bois'],
     [330, 380, 486, 'Destination'], [384, 386, 486, ':'], [390, 440, 486, 'Habitation']);
   assert.equal(readDematdocNotice(two, { city: bauvin, file: { board: 'decisions', title: '' } })[0].purpose, 'Clôture en bois');
+});
+
+test('two boxes side by side: the site is the « Adresse » of the Terrain box, never the applicant’s (Saint-Laurent-de-Gosse)', () => {
+  const gosse = permitListFor('40268');
+  const document = page(
+    [59, 789, 'N° PC _40 268 2600003'],
+    [289, 717, 'PERMIS DE CONSTRUIRE'],
+    [122, 599, 'Description de la demande'], [405, 599, 'Terrain'],
+    [67, 572, 'N°PC 40 268 2600003 Déposée le : 04/08/2026'], [311, 572, 'Adresse : Route de l’Exemple'],
+    [67, 558, 'Complétée le : 26/08/2026'], [311, 558, 'Lotissement « le Clos »'],
+    [66, 546, 'Par : PRIVATE PERSON'], [311, 546, '40390 SAINT-LAURENT-DE-GOSSE'],
+    [66, 531, 'Demeurant : 63 chemin Privé'], [311, 531, 'Parcelle(s) cadastrée(s) : F 0779p, F 0780p'],
+    [66, 480, 'Nature des travaux : Maison individuelle avec garage'],
+    [285, 252, 'ARRETE'],
+    [57, 228, 'ARTICLE 1 : Le permis de construire est ACCORDE pour le projet décrit dans la demande susvisée.'],
+    [57, 97, '| A SAINT-LAURENT-DE-GOSSE, le 22 septembre 2026'],
+  );
+  const [row] = readDematdocNotice(document, { city: gosse, file: { board: 'decisions' } });
+  assert.equal(row.dossier, 'PC 040268 26 00003');
+  assert.equal(row.address, 'Route de l’Exemple');
+  assert.equal(row.parcels, 'F 779, F 780', 'a trailing « p » marks a part of the parcel');
+  assert.equal(row.filedOn, '2026-08-04');
+  assert.equal(row.decidedOn, '2026-09-22', 'OCR’s « | » before the signing line');
+  assert.equal(row.verdict, 'Accord');
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE|Privé/);
+});
+
+test('a file of several notices of filing gives one row each, the number closed up, the applicant never read (Arcangues)', () => {
+  const arcangues = permitListFor('64038');
+  const document = page(
+    [250, 780, 'AVIS DE DEPOT'],
+    [60, 760, 'Numéro de dossier : D P 6 4 0 38 2 6 00 0 85'],
+    [60, 745, 'Date d’enregistrement de la demande : 05/11/2026'],
+    [60, 730, 'Nom, prénom du demandeur : PRIVATE PERSON'],
+    [60, 715, 'Adresse du terrain : 2 Bis Impasse des Exemples - 64200 Arcangues'],
+    [60, 700, 'Nature des travaux : Installation de modules photovoltaïques'],
+    [250, 500, 'AVIS DE DEPOT'],
+    [60, 480, 'Numéro de dossier : D P 6 4 0 38 2 6 00 0 86'],
+    [60, 465, 'Date d’enregistrement de la demande : 05/11/2026'],
+    [60, 450, 'Nom, prénom du demandeur : M. PRIVATE Person'],
+    [60, 435, 'Adresse du terrain : 2 Impasse de l’Exemple - 64200 ARCANGUES'],
+    [60, 420, 'Nature des travaux : Construction d’une piscine enterrée'],
+  );
+  const rows = readDematdocNotices(document, { city: arcangues, file: { board: 'filings' } });
+  assert.deepEqual(rows.map((row) => [row.board, row.dossier, row.address, row.postcode, row.filedOn, row.purpose]), [
+    ['filings', 'DP 064038 26 00085', '2 Bis Impasse des Exemples', '64200', '2026-11-05', 'Installation de modules photovoltaïques'],
+    ['filings', 'DP 064038 26 00086', '2 Impasse de l’Exemple', '64200', '2026-11-05', 'Construction d’une piscine enterrée'],
+  ]);
+  assert.doesNotMatch(JSON.stringify(rows), /PRIVATE/i);
 });

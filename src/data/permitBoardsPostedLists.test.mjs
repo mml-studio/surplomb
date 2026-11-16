@@ -477,3 +477,83 @@ test('a board read over several pages answers a page with no act on it as an emp
   const dompierre = city('dompierre-sur-mer');
   assert.equal(acts.index(dompierre, link(dompierre.page, 'Urbanisme'), { url: dompierre.page, as: 'html' }, {}), null);
 });
+
+test('Mauléon-Licharre links each act by its number and site; Saint-Laurent-de-Gosse by a file name spaced with « + »', () => {
+  const mauleon = city('mauleon-licharre');
+  assert.equal(permitListFor('64371'), mauleon);
+  assert.equal(mauleon.source.ocr, true);
+  const page = [
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_a.pdf', 'DP 0643712600003 - 6 rue des Exemples'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_b.pdf', 'Rejet DP 0643712600006 - 10 rue du Fort'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_c.pdf', 'DP 06437125L0015M01 - 7 rue des Exemples'),
+    // An undated act of 2024 is older than last year: left.
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_e.pdf', 'DP 06437124L0015M01 - 7 rue des Exemples'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_d.pdf', 'Compte-rendu du conseil municipal'),
+  ].join('');
+  const files = postedActFiles(mauleon, page, mauleon.page, '2026-08-01');
+  assert.deepEqual(files.map((file) => [file.row.dossier, file.board, file.row.address]), [
+    ['DP 064371 26 00003', 'decisions', '6 rue des Exemples'],
+    ['DP 064371 26 00006', 'decisions', '10 rue du Fort'],
+    ['DP 064371 25 L0015 M01', 'decisions', '7 rue des Exemples'],
+  ]);
+
+  const gosse = city('saint-laurent-de-gosse');
+  assert.equal(permitListFor('40268'), gosse);
+  assert.equal(gosse.robots, 'overridden');
+  assert.equal(gosse.source.pages.length, 2);
+  const shelf = [
+    link('/content/download/3206/24121/version/1/file/Rejet+DP+2600020.pdf'),
+    link('/content/download/3207/24127/version/1/file/Decision+PC+402682600003.pdf'),
+    link('/content/download/3251/24418/version/1/file/Arrete+PC2500011+M02.pdf'),
+    link('/content/download/2922/22201/version/1/file/20260206144206543.pdf'),
+  ].join('');
+  assert.deepEqual(postedActFiles(gosse, shelf, gosse.page, '2026-08-01').map((file) => file.row.dossier), [
+    'DP 040268 26 00020', 'PC 040268 26 00003', 'PC 040268 25 00011 M02',
+  ]);
+});
+
+test('Arcangues’s WP File Download folders: the years of the window, then each family’s files, newest first', () => {
+  const arcangues = city('arcangues');
+  assert.equal(permitListFor('64038'), arcangues);
+  const wpfd = POSTED_LIST_PROTOCOLS.wpfd;
+  assert.equal(BOARD_PROTOCOLS.wpfd, wpfd);
+  const [root] = wpfd.start(arcangues, { since: '2026-08-16' });
+  const rootUrl = new URL(root.url);
+  assert.equal(rootUrl.pathname, '/wp-admin/admin-ajax.php');
+  assert.equal(rootUrl.searchParams.get('task'), 'categories.display');
+  assert.equal(rootUrl.searchParams.get('id'), '114');
+
+  const years = wpfd.index(arcangues, { categories: [
+    { term_id: 285, name: 'Urbanisme 2027' }, { term_id: 284, name: 'Urbanisme 2026' }, { term_id: 200, name: 'Urbanisme 2025' },
+  ] }, root, { since: '2026-08-16' });
+  assert.deepEqual(years.next.map((request) => new URL(request.url).searchParams.get('id')), ['285', '284'], 'the years before the window are left');
+
+  const families = wpfd.index(arcangues, { categories: [
+    { term_id: 266, name: 'Permis de construire' }, { term_id: 265, name: 'Déclaration Préalable' },
+    { term_id: 267, name: 'Permis d&#039;Aménager' }, { term_id: 268, name: 'Changement d&#039;Usage' }, { term_id: 269, name: 'Divers Urbanisme' },
+  ] }, years.next[1], { since: '2026-08-16' });
+  assert.deepEqual(families.next.map((request) => [new URL(request.url).searchParams.get('task'), request.folder, request.page]),
+    [['files.display', 266, 1], ['files.display', 265, 1], ['files.display', 267, 1]]);
+
+  const item = (id, title, created) => ({ post_title: title, created_time: `${created} 15:48:00`,
+    linkdownload: `https://www.arcangues.fr/telechargement/266/permis-de-construire/${id}/file-${id}.pdf` });
+  const shelf = wpfd.index(arcangues, { files: [
+    item(30953, 'U-2026-224 - PC64038 2600012 - PRIVATE PERSON', '2026-11-13'),
+    item(30950, 'Avis de dépôt PC reçu au 09-11-2026', '2026-11-13'),
+    item(30884, 'Annulation PC64038 2600023 - SAS EXEMPLE', '2026-11-05'),
+    item(30000, 'U-2026-100 - PC64038 2600001 - PRIVATE PERSON', '2026-07-01'),
+    { post_title: 'Ailleurs PC64038 2600013', created_time: '2026-11-13 10:00:00', linkdownload: 'https://elsewhere.example/a.pdf' },
+  ] }, families.next[0], { since: '2026-08-16', day: '2026-11-16' });
+  assert.deepEqual(shelf.files.map((file) => [file.board, file.layout, file.published, file.row?.dossier ?? null]), [
+    ['filings', 'dematdoc-notices', '2026-11-09', null],
+    ['decisions', 'dematdoc-notice', '2026-11-13', 'PC 064038 26 00012'],
+    ['decisions', 'dematdoc-notice', '2026-11-05', 'PC 064038 26 00023'],
+  ], 'a list by its title, an act by its number; a file before the window or on another host is left');
+  assert.ok(shelf.files.filter((file) => file.layout === 'dematdoc-notice').every((file) => file.ocr));
+  assert.doesNotMatch(JSON.stringify(shelf.files), /PRIVATE|EXEMPLE/);
+  assert.deepEqual(shelf.next, [], 'a page that reaches before the window is the last asked');
+  const full = wpfd.index(arcangues, { files: Array.from({ length: 10 }, (_, i) => item(31000 + i, `Avis de dépôt DP reçu le ${String(i + 1).padStart(2, '0')}-11-2026`, '2026-11-13')) },
+    families.next[1], { since: '2026-08-16', day: '2026-11-16' });
+  assert.deepEqual(full.next.map((request) => [request.folder, request.page]), [[265, 2]]);
+  assert.equal(wpfd.index(arcangues, { error: 'x' }, families.next[0], {}), null);
+});

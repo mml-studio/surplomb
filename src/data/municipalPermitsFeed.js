@@ -108,8 +108,9 @@ export function municipalVerdict(value) {
   // « retrait-gonflement des argiles » is a hazard map, not a withdrawal.
   if (/RETRAIT(?![-\s]+GONFLEMENT)|RETIRE|ANNULE/.test(words)) return verdicts.withdrawn.fr;
   if (/NON[- ]?OPPOSITION|PAS FAIT OPPOSITION/.test(words)) return verdicts.unopposed.fr;
-  if (/REFUS|DEFAVORABLE|FAIT OPPOSITION|^OPPOSITION\b/.test(words)) return verdicts.refused.fr;
-  if (/ACCORD|FAVORABLE|AUTORISE|PEUVENT ETRE EXECUTES/.test(words)) return /TACITE/.test(words) ? verdicts.tacit.fr : verdicts.granted.fr;
+  // Saint-Laurent-de-Gosse's « ARRÊTÉ D'OPPOSITION À UNE DÉCLARATION », « … ne peuvent pas être réalisés ».
+  if (/REFUS|DEFAVORABLE|FAIT OPPOSITION|^OPPOSITION\b|\bARRETE D.OPPOSITION\b|NE PEUVENT PAS ETRE (?:EXECUTES|REALISES)/.test(words)) return verdicts.refused.fr;
+  if (/ACCORD|FAVORABLE|AUTORISE|PEUVENT ETRE (?:EXECUTES|REALISES)/.test(words)) return /TACITE/.test(words) ? verdicts.tacit.fr : verdicts.granted.fr;
   return null;
 }
 

@@ -53,6 +53,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   -- --write` rewrites the files no reading touches.
 
 ### Added
+- **Six more Pays basque and south Landes communes have a local permit
+  source.** The Basque agglomeration's dODu open data adds Boucau,
+  Cambo-les-Bains and Hasparren, with sites and parcels, without requesting
+  its applicant column. Publication runs six months behind decisions, so it
+  complements recent boards rather than replacing them. Mauléon-Licharre
+  and Saint-Laurent-de-Gosse add their scanned orders, read by OCR during
+  the daily sweep; Arcangues adds its WP File Download folders, grouped
+  filing notices and scanned decisions. Anglet's board also supplies works
+  authorisations for public-access buildings and tourist-accommodation
+  changes of use: 14 AT dossiers and 55 MT dossiers read on 2026-11-16.
+  Both keep their own labels and counters, so neither can merge into a
+  building permit with the same digits. Private applicants are excluded.
 - **Arbonne and Ayherre, two Pays basque communes with no permit source, are
   read.** A sieve of the 189 communes of the Basque agglomeration, Maremne
   Adour Côte-Sud and the Seignanx on 2026-11-16 — publication-actes.fr,

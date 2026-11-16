@@ -242,10 +242,11 @@ const SITE_LABELS = [
   /^(?:\S{1,8}\s+)?sis\s*(?:[àa]\s*)?:?\s+(?=\d)/i,
 ];
 const PARCEL_LABEL = /(?:r[ée]f[ée]rences?(?:\s*\(s\))?\s*cadastrales?(?:\s*\(s\))?|cadastr[ée]e?s?|cadastre|parcelles?(?:\s+cadastrales?)?(?:\s+n°)?)\s*[:|]?\s*(\S.*)$/i;
-const FILED = /(?:date\s*d[eu]\s*d[ée]p[ôo]t|date\s*de\s*r[ée]ception|d[ée]pos[ée]e?\s*(?:complet\s*)?(?:[àa]\s+la\s+mairie\s+)?le|(?:demande|dossier)\s*d[ée]pos[ée]e?\s*(?:complet\s*)?le)\s*:?\s*\|?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}\s+\S+\s+20\d{2})/i;
+const FILED = /(?:date\s*d[eu]\s*d[ée]p[ôo]t|date\s*de\s*r[ée]ception|date\s*d.enregistrement(?:\s*de\s*la\s*demande)?|d[ée]pos[ée]e?\s*(?:complet\s*)?(?:[àa]\s+la\s+mairie\s+)?le|(?:demande|dossier)\s*d[ée]pos[ée]e?\s*(?:complet\s*)?le)\s*:?\s*\|?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}\s+\S+\s+20\d{2})/i;
 const SIGNED = /\bFait\s+[àa][\s\S]{0,60}?\ble\s*:?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}(?:er)?\s+\S+\s+20\d{2})/i;
 // Failing « Fait à », a line opening with the commune's name in capitals: « ETUPES, le 30 septembre 2026 ».
-const SIGNED_AT = /(?:^|\n)\s*[A-ZÀ-Ý][A-ZÀ-Ý'’ -]{2,40},\s*le\s+(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}(?:er)?\s+\S+\s+20\d{2})/;
+// OCR may read the frame's edge before it as « | » (Saint-Laurent-de-Gosse's « | A SAINT-LAURENT-DE-GOSSE, le 22 septembre 2026 »).
+const SIGNED_AT = /(?:^|\n)\s*(?:\|\s*)?[A-ZÀ-Ý][A-ZÀ-Ý'’ -]{2,40},\s*le\s+(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}(?:er)?\s+\S+\s+20\d{2})/;
 // « BIESHEIM, le 22 septembre 2026 » alone on its line: the signing day of the orders that print no « Fait à ».
 const SIGNED_LINE = /^[\p{Lu}][\p{L}'’ .-]{2,40},\s*le\s+(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}(?:er)?\s+\S+\s+20\d{2})\s*$/mu;
 // The identifier the préfecture's télétransmission stamps on each page of an act
@@ -359,7 +360,8 @@ function trimSite(value, city) {
 export function dematdocParcels(value, city) {
   const out = [];
   const own = Number(String(city?.insee ?? '').slice(2));
-  for (const match of String(value ?? '').toUpperCase().matchAll(/(?:\b(\d{1,3})\s+|\b0{0,3})0?([A-Z]{1,2})\s*[-\s]?\s*0*(\d{1,4})\b/g)) {
+  // A trailing « p » marks a part of the parcel (Saint-Laurent-de-Gosse's « F 0779p »): the parcel itself.
+  for (const match of String(value ?? '').toUpperCase().matchAll(/(?:\b(\d{1,3})\s+|\b0{0,3})0?([A-Z]{1,2})\s*[-\s]?\s*0*(\d{1,4})P?\b/g)) {
     if (/^(?:M|ME|N|NO|M2)$/.test(match[2])) continue;
     // « Parcelles 0168 et 0169 » (Clouange): the conjunction between two numbers is no section « ET ».
     if (match[2] === 'ET' && (match[1] || /\d\s*$/.test(String(value).slice(0, match.index)))) continue;
@@ -386,6 +388,33 @@ function valueBelow(lines, i, x) {
   let text = below[0] ?? '';
   if (text && !/\d/.test(text) && /^\d+\s*(?:bis|ter)?\s*,?\s+\S/i.test(below[1] ?? '')) text = below[1];
   return text;
+}
+
+/**
+ * The site of an order printed as two boxes side by side, « Description de la
+ * demande » (the number, the days, the applicant and where the applicant
+ * lives) and « Terrain » (« Adresse : Route de l'Europe », the parcels): the
+ * value of the first « Adresse : » under the Terrain heading, read from the
+ * heading's column rightwards, so that nothing of the applicant's box is read.
+ * Saint-Laurent-de-Gosse's orders, from the Seignanx's instruction service,
+ * read by OCR on 2026-11-16.
+ */
+function terrainBoxSite(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const heading = lines[i].runs.find((run) => /^terrain$/i.test(clean(run.text)));
+    if (!heading) continue;
+    for (const line of lines.slice(i + 1, i + 4)) {
+      // The heading is centred over its box, the label at the box's left edge: 94 points left of it there.
+      // i18n-ignore-next-line — the order's own label
+      const at = line.runs.findIndex((run) => /^adresse\b/i.test(clean(run.text)) && run.x > heading.x - 150 && run.x < heading.x + 40);
+      if (at < 0) continue;
+      const runs = line.runs.slice(at);
+      // i18n-ignore-next-line — the order's own label
+      const value = valueAfter({ ...line, runs, text: clean(runs.map((run) => run.text).join(' ')) }, /^adresse\s*:\s*/i);
+      if (value?.text) return value.text;
+    }
+  }
+  return null;
 }
 
 /**
@@ -451,6 +480,13 @@ export function readDematdocNotice(document, { city, file }) {
       break;
     }
   }
+  // Two boxes side by side, « Description de la demande » and « Terrain »: the site is the
+  // « Adresse : » under the Terrain heading, read in that box only (`terrainBoxSite`).
+  if (!site) {
+    const boxed = terrainBoxSite(front);
+    const trimmed = boxed && !PERSON.test(boxed) && !NOT_A_SITE.test(boxed) ? trimSite(boxed, city) : null;
+    if (trimmed?.address && SITE_WORDS.test(trimmed.address) && /\p{L}{3}/u.test(trimmed.address)) site = trimmed;
+  }
   // The first labelled line only: a later sentence that says « parcelles » is the order's own note (Hagondange's
   // « sur les parcelles voisines … norme NF P 94-500 révisée le 30 novembre » is no parcel « P 94 » and « LE 30 »).
   const parcelLine = front.map((line) => PARCEL_LABEL.exec(line.text)?.[1]).find(Boolean);
@@ -503,6 +539,38 @@ export function readDematdocNotice(document, { city, file }) {
     row.decidedOn = file.decidedOn ?? (signed && (!filedOn || signed >= filedOn) && (!file.signedBy || signed <= file.signedBy) ? signed : null);
   }
   return [row];
+}
+
+/**
+ * Several notices of filing in one file, each under its own « AVIS DE
+ * DÉPÔT » heading — Arcangues posts its filings so, a file per family and per
+ * day of receipt (2026-11-16) — each read as {@link readDematdocNotice} reads
+ * one. The number is printed a figure or two at a time (« P C 6 4 0 38 2 6
+ * 00 0 26 »): the « Numéro de dossier » line is closed up and read as the
+ * notice's title. The applicant's line is never read.
+ *
+ * @param {{pages: Array<{runs: Array<object>, width?: number}>}} document
+ * @param {{city: object, file: object}} context
+ * @returns {Array<object>}
+ */
+export function readDematdocNotices(document, { city, file }) {
+  const rows = [];
+  for (const page of document?.pages ?? []) {
+    const lines = pageLines(page);
+    // i18n-ignore-next-line — the notice's own heading
+    const heads = lines.filter((line) => /^avis\s*de\s*d[ée]p[ôo]t$/i.test(line.text)).map((line) => line.y);
+    heads.forEach((top, i) => {
+      const bottom = heads[i + 1] ?? -Infinity;
+      const inside = (y) => y <= top + 1 && y > bottom + 1;
+      // i18n-ignore-next-line — the notice's own label
+      const label = /^.*?num[ée]ro\s*de\s*dossier\s*:?\s*/i;
+      const numbered = lines.find((line) => inside(line.y) && label.test(line.text));
+      const title = numbered ? numbered.text.replace(label, '').replace(/\s+/g, '') : '';
+      const notice = { pages: [{ ...page, runs: page.runs.filter((run) => inside(run.y)) }] };
+      rows.push(...readDematdocNotice(notice, { city, file: { ...file, row: null, title } }));
+    });
+  }
+  return rows;
 }
 
 /**

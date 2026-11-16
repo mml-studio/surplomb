@@ -43,6 +43,11 @@ test('abbreviated and wrapped numbers retain municipality, letter and modificati
 
 test('an unknown decision remains unknown; opposition and withdrawal remain distinct', () => {
   assert.equal(municipalVerdict('Décision défavorable'), 'Refus');
+  // Saint-Laurent-de-Gosse's orders on declarations (2026-11-16).
+  assert.equal(municipalVerdict('les travaux décrits dans la déclaration susvisée peuvent être réalisés.'), 'Accord');
+  assert.equal(municipalVerdict('les travaux décrits dans la déclaration préalable susvisée ne peuvent pas être réalisés.'), 'Refus');
+  assert.equal(municipalVerdict('ARRÊTÉ D’OPPOSITION À UNE DÉCLARATION PRÉALABLE'), 'Refus');
+  assert.equal(municipalVerdict('ARRÊTÉ DE NON-OPPOSITION À UNE DÉCLARATION PRÉALABLE'), 'Non-opposition');
   assert.equal(municipalVerdict('Non-opposition avec prescriptions'), 'Non-opposition');
   assert.equal(municipalVerdict('Retrait'), 'Retrait');
   const file = { title: 'PC 26-47 Extension 15 rue Exemple', board: 'decisions' };
