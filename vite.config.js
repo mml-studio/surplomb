@@ -27042,8 +27042,9 @@ function adsFranceProxy() {
   /** Bumped whenever an edition's SHAPE changes; see `loadEdition`. 3: the
    *  city portals' private applicants are no longer kept (permitApplicant.js),
    *  so an edition written before cannot be served. 4: Tours's portal joins
-   *  the commune edition, which an edition of 37261 written before lacks. */
-  const ADS_EDITION_SCHEMA = 4;
+   *  the commune edition, which an edition of 37261 written before lacks.
+   *  5: dODu joins the editions of Boucau, Cambo-les-Bains and Hasparren. */
+  const ADS_EDITION_SCHEMA = 5;
 
   // --- Cadastre, and what a permit's parcel became -------------------------
   /**
