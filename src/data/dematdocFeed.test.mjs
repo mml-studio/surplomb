@@ -440,3 +440,28 @@ test('the works of a justified line keep their words, however wide OCR spaces th
     [330, 380, 486, 'Destination'], [384, 386, 486, ':'], [390, 440, 486, 'Habitation']);
   assert.equal(readDematdocNotice(two, { city: bauvin, file: { board: 'decisions', title: '' } })[0].purpose, 'Clôture en bois');
 });
+
+test('two boxes side by side: the site is the « Adresse » of the Terrain box, never the applicant’s (Saint-Laurent-de-Gosse)', () => {
+  const gosse = permitListFor('40268');
+  const document = page(
+    [59, 789, 'N° PC _40 268 2600003'],
+    [289, 717, 'PERMIS DE CONSTRUIRE'],
+    [122, 599, 'Description de la demande'], [405, 599, 'Terrain'],
+    [67, 572, 'N°PC 40 268 2600003 Déposée le : 04/08/2026'], [311, 572, 'Adresse : Route de l’Exemple'],
+    [67, 558, 'Complétée le : 26/08/2026'], [311, 558, 'Lotissement « le Clos »'],
+    [66, 546, 'Par : PRIVATE PERSON'], [311, 546, '40390 SAINT-LAURENT-DE-GOSSE'],
+    [66, 531, 'Demeurant : 63 chemin Privé'], [311, 531, 'Parcelle(s) cadastrée(s) : F 0779p, F 0780p'],
+    [66, 480, 'Nature des travaux : Maison individuelle avec garage'],
+    [285, 252, 'ARRETE'],
+    [57, 228, 'ARTICLE 1 : Le permis de construire est ACCORDE pour le projet décrit dans la demande susvisée.'],
+    [57, 97, '| A SAINT-LAURENT-DE-GOSSE, le 22 septembre 2026'],
+  );
+  const [row] = readDematdocNotice(document, { city: gosse, file: { board: 'decisions' } });
+  assert.equal(row.dossier, 'PC 040268 26 00003');
+  assert.equal(row.address, 'Route de l’Exemple');
+  assert.equal(row.parcels, 'F 779, F 780', 'a trailing « p » marks a part of the parcel');
+  assert.equal(row.filedOn, '2026-08-04');
+  assert.equal(row.decidedOn, '2026-09-22', 'OCR’s « | » before the signing line');
+  assert.equal(row.verdict, 'Accord');
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE|Privé/);
+});

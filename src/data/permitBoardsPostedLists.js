@@ -265,7 +265,8 @@ function actFiles(city, links, since = null) {
     // A « Téléchargement » button names its file in its title (Rouvroy).
     const words = clean(`${link.words} ${(link.title ?? '').replace(/_+/g, ' ')}`);
     // DOCman serves an act at `…/2087-avis-de-depot-dp-025-228-26-00050/file` (Étupes): the segment before names it.
-    const base = link.name.replace(/\/file\/?$/i, '').replace(/^.*\//, '').replace(/\.pdf$/i, '').replace(/[_.]+/g, ' ');
+    // eZ Publish keeps a form's « + » for a space in the file name (Saint-Laurent-de-Gosse's `Rejet+DP+2600020.pdf`).
+    const base = link.name.replace(/\/file\/?$/i, '').replace(/^.*\//, '').replace(/\.pdf$/i, '').replace(/[_.+]+/g, ' ');
     const text = clean(`${words} ${base.replace(/-/g, ' ')}`);
     const published = postedListDay(link.name, words) ?? link.published ?? null;
     const dossier = actDossier(words, city) ?? actDossier(base.replace(/-/g, ' '), city) ?? actDossier(text, city)

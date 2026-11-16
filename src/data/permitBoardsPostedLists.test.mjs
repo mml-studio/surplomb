@@ -477,3 +477,37 @@ test('a board read over several pages answers a page with no act on it as an emp
   const dompierre = city('dompierre-sur-mer');
   assert.equal(acts.index(dompierre, link(dompierre.page, 'Urbanisme'), { url: dompierre.page, as: 'html' }, {}), null);
 });
+
+test('Mauléon-Licharre links each act by its number and site; Saint-Laurent-de-Gosse by a file name spaced with « + »', () => {
+  const mauleon = city('mauleon-licharre');
+  assert.equal(permitListFor('64371'), mauleon);
+  assert.equal(mauleon.source.ocr, true);
+  const page = [
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_a.pdf', 'DP 0643712600003 - 6 rue des Exemples'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_b.pdf', 'Rejet DP 0643712600006 - 10 rue du Fort'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_c.pdf', 'DP 06437125L0015M01 - 7 rue des Exemples'),
+    // An undated act of 2024 is older than last year: left.
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_e.pdf', 'DP 06437124L0015M01 - 7 rue des Exemples'),
+    link('https://www.mauleon-licharre.fr/_files/ugd/4a7145_d.pdf', 'Compte-rendu du conseil municipal'),
+  ].join('');
+  const files = postedActFiles(mauleon, page, mauleon.page, '2026-08-01');
+  assert.deepEqual(files.map((file) => [file.row.dossier, file.board, file.row.address]), [
+    ['DP 064371 26 00003', 'decisions', '6 rue des Exemples'],
+    ['DP 064371 26 00006', 'decisions', '10 rue du Fort'],
+    ['DP 064371 25 L0015 M01', 'decisions', '7 rue des Exemples'],
+  ]);
+
+  const gosse = city('saint-laurent-de-gosse');
+  assert.equal(permitListFor('40268'), gosse);
+  assert.equal(gosse.robots, 'overridden');
+  assert.equal(gosse.source.pages.length, 2);
+  const shelf = [
+    link('/content/download/3206/24121/version/1/file/Rejet+DP+2600020.pdf'),
+    link('/content/download/3207/24127/version/1/file/Decision+PC+402682600003.pdf'),
+    link('/content/download/3251/24418/version/1/file/Arrete+PC2500011+M02.pdf'),
+    link('/content/download/2922/22201/version/1/file/20260206144206543.pdf'),
+  ].join('');
+  assert.deepEqual(postedActFiles(gosse, shelf, gosse.page, '2026-08-01').map((file) => file.row.dossier), [
+    'DP 040268 26 00020', 'PC 040268 26 00003', 'PC 040268 25 00011 M02',
+  ]);
+});
