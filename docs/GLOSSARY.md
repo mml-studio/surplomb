@@ -193,6 +193,7 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | lotissement | housing subdivision | |
 | certificat d’urbanisme | planning certificate | |
 | autorisation de travaux (AT) | works authorisation for a public-access building (AT) | Art. L.122-3 of the building code; Anglet posts its own. |
+| changement d’usage (meublé de tourisme, MT) | change of use (tourist accommodation, MT) | A separate municipal authorisation family; never labelled as a building permit. |
 | préfixe de section | section prefix | Cadastre. |
 | avis de dépôt | filing notice | The posting of a filed application (art. R.423-6). |
 | récépissé de dépôt | filing receipt | A commune that posts the receipt posts a filing. |

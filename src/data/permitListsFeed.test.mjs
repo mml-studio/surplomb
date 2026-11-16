@@ -1415,7 +1415,7 @@ test('a page is read whole only when its top shows a decision\'s number, notices
   assert.equal(bulletinPageWorthReading('Arrêté Municipal\nN° 270'), false);
 });
 
-test('a works authorisation of a public-access building is kept as its own family, never merged with a permit of its digits', () => {
+test('works and tourist-accommodation authorisations keep separate identities and omit private applicants', () => {
   const anglet = permitListFor('64024');
   const row = { board: 'decisions', dossier: 'AT 064024 26 00058', applicant: 'SARL EXEMPLE', address: '6 Rue Des Exemples', postcode: '64600', verdict: 'Décision signée' };
   const at = normalisePermitListRow(anglet, 'decisions', row);
@@ -1424,5 +1424,12 @@ test('a works authorisation of a public-access building is kept as its own famil
   assert.equal(at.kindLabel, 'Autorisation de travaux (ERP)');
   const pc = normalisePermitListRow(anglet, 'decisions', { ...row, dossier: 'PC 064024 26 00058' });
   assert.notEqual(at.key, pc.key);
-  assert.equal(normalisePermitListRow(anglet, 'decisions', { ...row, dossier: 'MT 064024 26 00344' }), null, 'a change of use is no building authorisation');
+  const mt = normalisePermitListRow(anglet, 'decisions', { ...row, dossier: 'MT 064024 26 00058', applicant: 'Private Person' });
+  assert.equal(mt.kind, 'MT');
+  assert.equal(mt.series, 'MT');
+  assert.equal(mt.kindLabel, 'Changement d’usage (meublé de tourisme)');
+  assert.equal(mt.purpose, mt.kindLabel);
+  assert.equal(mt.applicant, null);
+  assert.notEqual(mt.key, at.key);
+  assert.notEqual(mt.key, pc.key);
 });

@@ -5573,11 +5573,20 @@ title (92 orders over two months), its PDFs the filing date and parcel.
 Boulogne-sur-Mer's six folders name each dossier and its site; filings are
 typed, orders scanned. Pantin's Docs2Web board is read from the tree its page
 loads (`params.js`, 3.7 MB, asked at most every six hours); orders are scans.
-Anglet's WebDev lists answer four plain GETs with 207 orders still posted;
+Anglet's WebDev lists originally answered four plain GETs with 207 orders still posted;
 no date is printed and the PDFs are session-bound, so its rows carry none,
 and only a numbered site and works phrases are kept from each free-text
 description. Through the proxy on 2026-10-02, Garges placed 28 dossiers of
 28, Cergy 33 of 38, Châlons 79 of 83 and Anglet 184 of 205.
+Since 2026-11-16 Anglet is asked for six families: category 17 adds works
+authorisations for public-access buildings (`AT`), category 30 changes of
+use for tourist accommodation (`MT`). They keep separate bilingual labels
+and identity series: an AT, MT and PC with matching digits remain distinct.
+The live board gave 14 AT dossiers (10 with sites) and 55 MT dossiers (all
+with sites); one additional ERP-board entry was already a PC, and one
+change-of-use entry had no recognised dossier number and is left out. No
+applicant is retained, and a signed order with no explicit verdict is never
+restated as a grant.
 **Fifty-six communes that post on DematDOC (2026-10-02; Aubière on 2026-10-03).**
 `src/data/dematdocFeed.js` registers the tenants of the acts platform
 `<tenant>.dematdoc.eu` whose urbanism shelves carry dossiers posted since July
@@ -6283,6 +6292,40 @@ clicmap's acts registry (`api.clicmap.fr/arrete`, urbanism only at Hendaye and
 Urrugne, already read), and the acts pages of Tarnos, Capbreton,
 Saint-Jean-de-Luz, Boucau, Ondres, Soustons and Hasparren, which post traffic
 and roadworks orders only.
+
+**Six more Pays basque and south Landes communes (2026-11-16).**
+`LOCAL_ADS_PORTALS.dodu` reads the Basque agglomeration's Opendatasoft
+dataset `dodu` for Boucau (`64140`), Cambo-les-Bains (`64160`) and Hasparren
+(`64256`). The query selects only dossier, site, parcel, project and dates;
+`nom_demandeur` is never requested. Its five-digit commune and four-digit
+counter are rewritten into the six-digit commune and five-digit counter
+used by Sitadel. One row per parcel is folded to one dossier, placed on its
+parcel and merged with Sitadel. Boucau's live three-year reading returned
+630 dossiers, 613 placed on parcels. This is a delayed source: publication
+follows a decision by six months, and the latest decisions on 2026-11-16
+were of late April. The commune-edition cache schema is 5 so editions
+written before the source was added are rebuilt.
+
+Mauléon-Licharre (`64371`) and Saint-Laurent-de-Gosse (`40268`) join
+`postedListCities.js` as `posted-acts`, with OCR in the daily sweep.
+Mauléon names the number and site in each link and keeps up to 120 files;
+six sampled orders gave six sites, parcels and verdicts. Saint-Laurent
+links separate pages for declarations, building and development permits;
+eleven of twelve sampled orders gave sites. Its `robots.txt` refuses PDFs:
+`robots: 'overridden'` records the same legal-display exception as the
+existing Dompierre-sur-Mer and Sarralbe sources. Encoded `+` spaces, parcel
+suffixes such as `F 0779p`, the town's address labels and OCR noise in the
+signature date are handled by the shared readers.
+
+Arcangues (`64038`) joins the same registry through `wpfd`. Its public
+WP File Download API at `/wp-admin/admin-ajax.php?action=wpfd` lists annual
+folders under category 114, then each building, declaration or development
+family in pages of ten files. Only folders and files inside the requested
+window are read. Grouped filing notices use `dematdoc-notices`, one row per
+number; signed orders use the existing scanned-order reader. Eight recent
+filings were read with sites and works on 2026-11-16. Names in file titles
+and applicant sections are excluded; neither file names nor OCR text are
+archived. This API is allowed by the site's robots rules.
 
 **Nineteen towns found by the sieve of communes' own sites (2026-10-03).**
 Forty communes whose site the sieve had seen posting fresh numbers, none of
