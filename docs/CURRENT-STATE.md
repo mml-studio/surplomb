@@ -6248,6 +6248,28 @@ as a site that did not answer — tried again the next night, never a robots
 refusal. The relay, and how it is reached: `docs/DEPLOY.md`, « Towns read
 through a relay ».
 
+**Arbonne and Ayherre, two Pays basque communes (2026-11-16).** A sieve of
+the 189 communes of the Basque agglomeration, Maremne Adour Côte-Sud and the
+Seignanx for sources that need no request to the town hall found these two
+alone. Arbonne (`64035`) joins `wpMediaCities.js` (`FOUND_1116`): one signed
+order per dossier, `PC-2600032_ARRETE-SIGNE.pdf`, 33 uploaded since August.
+Ayherre (`64086`) joins `postedListCities.js` as `posted-acts` with
+`limit: 120` and `ocr: true`: one page links every signed order,
+`arrete-2026-52-dp-2600024-<applicant>.pdf`, no link names a day, and 97
+numbers of 2025 and 2026 stood on it that day — more than the forty a board
+keeps by default. Its host, e-monsite, answers `https://www.ayherre.fr` with
+the certificate of another site, so the page is asked over http: the city
+says why in `plainHttp`, the one exception the registry test allows. Both
+boards are scans; the sweep reads forty a night by
+OCR, and eighteen read on 2026-11-16 gave seventeen sites, sixteen with their
+parcels. Left out after the same sieve: publication-actes.fr (only Ustaritz
+and Ciboure, already read), PanneauPocket (41 boards, no permit), Digilor
+(Saint-Jean-de-Luz's tenant holds three documents), Sirap's APGL portal,
+clicmap's acts registry (`api.clicmap.fr/arrete`, urbanism only at Hendaye and
+Urrugne, already read), and the acts pages of Tarnos, Capbreton,
+Saint-Jean-de-Luz, Boucau, Ondres, Soustons and Hasparren, which post traffic
+and roadworks orders only.
+
 **Nineteen towns found by the sieve of communes' own sites (2026-10-03).**
 Forty communes whose site the sieve had seen posting fresh numbers, none of
 them on WordPress's media API, were read one by one; nineteen are kept, in

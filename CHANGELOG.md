@@ -29,6 +29,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   -- --write` rewrites the files no reading touches.
 
 ### Added
+- **Arbonne and Ayherre, two Pays basque communes with no permit source, are
+  read.** A sieve of the 189 communes of the Basque agglomeration, Maremne
+  Adour Côte-Sud and the Seignanx on 2026-11-16 — publication-actes.fr,
+  PanneauPocket, Digilor, Sirap, clicmap's acts registry, IntraMuros, the
+  media API of 30 open WordPress sites and the acts pages of the largest
+  towns — found two that post their permits without being asked: Arbonne
+  (2 447 inhabitants) uploads one signed order per dossier to its WordPress
+  site, 33 since August, read by `wp-media`; Ayherre (1 128) links each
+  signed order from one page, 97 of 2025 and 2026, read by `posted-acts`
+  with a limit of 120 and OCR on. Both are scans: eighteen read by OCR that
+  day gave seventeen sites, sixteen with their parcels, and their works.
+  Ayherre's file names carry the applicant, so only the number is read from
+  them.
 - **Ten small towns' permits are read again, through a relay.** Montlaux,
   Jaillans, Larroque and Deyvillers had stopped being read (16 sources in the
   archive check), and Péret, Sainte-Colombe, Beauville, Francaltroff, Herny
