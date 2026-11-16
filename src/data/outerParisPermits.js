@@ -190,8 +190,17 @@ const pontaultProtocol = {
       if (!board) continue;
       const published = municipalDate(doc.date?.slice(0, 10));
       if (!published || published < since || published > day) continue;
-      const pdf = links(doc.content?.rendered, city.page).find((link) => /\.pdf$/i.test(new URL(link.url).pathname));
-      if (!pdf) return null;
+      const linked = links(doc.content?.rendered, city.page);
+      const pdf = linked.find((link) => /\.pdf$/i.test(new URL(link.url).pathname));
+      // The week of 5 May 2026 was posted as a workbook, not a PDF: a
+      // document that links a file of another kind is left out, and only one
+      // that links no file at all still fails the reading. Until 2026-11-16
+      // that workbook failed every twelve-month sweep, and the city was never
+      // archived; a visitor's two months never reached back to it.
+      if (!pdf) {
+        if (linked.some((link) => /\.(?:xlsx?|ods|docx?)$/i.test(new URL(link.url).pathname))) continue;
+        return null;
+      }
       files.push({ url: pdf.url, board, layout: `outer-pontault-${board}`, published, asOf: day });
     }
     const next = [];

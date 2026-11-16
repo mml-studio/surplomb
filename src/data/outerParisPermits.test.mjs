@@ -138,6 +138,9 @@ test('WordPress weekly documents paginate and fail closed if an announced list i
   assert.deepEqual(answer.files.map(({ board, published }) => [board, published]), [['filings', '2026-09-28']]);
   assert.equal(new URL(p.index(c, Array(100).fill(doc), request, options).next[0].url).searchParams.get('page'), '2');
   assert.equal(p.index(c, [{ ...doc, content: { rendered: '' } }], request, options), null);
+  const workbook = { ...doc, date: '2026-09-21T08:00:00', title: { rendered: 'A.U ACCORDEES' }, content: { rendered: '<a href="/2026-09-21-A.U-ACCORDEES.xlsx">XLSX</a>' } };
+  assert.deepEqual(p.index(c, [doc, workbook], request, options).files.map(({ board }) => board), ['filings'],
+    'a week posted as a workbook is left out, the others read');
   assert.equal(p.index(c, { message: 'Login required' }, request, options), null);
 });
 

@@ -529,7 +529,8 @@ function isPdf(bytes) {
  * sweep cut short keeps what it read.
  *
  * FAIL CLOSED. An answer that is a shield's challenge rather than the page or
- * the PDF (`bulletinChallenge`, or bytes that are no PDF), or a refusal
+ * the PDF (a page that links no bulletin and carries `bulletinChallenge`'s
+ * marks, or bytes that are no PDF), or a refusal
  * (403, 429), ends the reading there: what was read is kept, and nothing is
  * asked again before the next sweep.
  *
@@ -551,12 +552,15 @@ async function readBulletinCity(city, http, {
   if (!reader || !allows(new URL(city.page).pathname)) return null;
   const response = await http.fetch(city.page, { headers: { Accept: 'text/html' } });
   const html = response?.ok ? await http.text(response, PAGE_MAX_BYTES) : null;
-  if (html !== null && bulletinChallenge(html)) {
-    log.warn?.(`[permit-lists] ${city.key}: the page answered a challenge, not read`);
+  // The links decide, not the shield's script: Imperva writes its
+  // `_Incapsula_Resource` beacon into the real page it serves the hosted
+  // server, 209 bulletin links under it (2026-11-16), and Lille went unread
+  // from the first sweep on while that tag alone stood for a challenge.
+  const links = html ? bulletinLinks(city, html) : [];
+  if (!links.length) {
+    if (html !== null && bulletinChallenge(html)) log.warn?.(`[permit-lists] ${city.key}: the page answered a challenge, not read`);
     return null;
   }
-  const links = html ? bulletinLinks(city, html) : [];
-  if (!links.length) return null;
   const [first] = webdelibMonths(day, months).slice(-1);
   const since = `${first.year}-${String(first.month).padStart(2, '0')}-01`;
   const unread = links.filter((link) => link.day >= since && !ledger.bulletins[link.url]);
