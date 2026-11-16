@@ -590,12 +590,21 @@ export function cartdsSweepDue(stamp, day = cartdsDay()) {
  * 41-commune instance) and otherwise left for tomorrow and named in the
  * summary.
  *
+ * REFUSED IS WHAT `robots.txt` SAID, NOT SILENCE. A host whose `robots.txt`
+ * did not answer at all (`final: false`) has said nothing: its communes are
+ * named under `failed`, like a board that did not answer, and the instance is
+ * not called refused. Counted as refused, Capatlantique and the Grand Dole —
+ * whose `robots.txt` answers 404, a file that allows everything — were
+ * reported as refusing robots for 4 and 25 nights in 2026-11, and the hint
+ * that came with it, `--recheck-robots`, could not find them.
+ *
  * @param {object} options
  * @param {Array<object>} options.instances `CARTDS_INSTANCES`, or a subset.
  * @param {ReturnType<typeof createCartdsArchiveStore>} options.store
  * @param {CartdsHttp} options.http
- * @param {(instance: object) => Promise<{allowed: boolean}>} [options.robots]
- *   The verdict to use; defaults to asking the host.
+ * @param {(instance: object) => Promise<{allowed: boolean, final?: boolean}>} [options.robots]
+ *   The verdict to use; defaults to asking the host. `final: false` says the
+ *   host did not answer.
  * @param {string} [options.day]
  * @param {number} [options.pauseMs]
  * @param {(ms: number) => Promise<void>} [options.sleep]
@@ -627,6 +636,7 @@ export async function sweepCartdsArchive({
   for (const instance of instances) {
     summary.communes += instance.communes.length;
     const verdict = await robots(instance);
+    if (verdict.final === false) { summary.failed.push(...instance.communes); continue; }
     if (!verdict.allowed) { summary.refused.push(instance.key); continue; }
     let session = await openCartdsSession(instance, paced);
     for (const insee of instance.communes) {

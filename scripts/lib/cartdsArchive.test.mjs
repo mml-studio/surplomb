@@ -143,6 +143,25 @@ test('the sweep reads every open board into the archive, one session per instanc
   assert.deepEqual(again.refused, []);
 });
 
+test('a host whose robots.txt does not answer is a failed read, not a refusal', async () => {
+  const dir = await tempDir();
+  const store = createCartdsArchiveStore(dir);
+  const http = fakeHttp({ robots: { 'open.example': null } });
+  const summary = await sweepCartdsArchive({
+    instances: [OPEN], store, http, day: '2026-11-16', pauseMs: 0, log: {},
+  });
+  assert.equal(summary.read, 0);
+  assert.deepEqual(summary.refused, []);
+  assert.deepEqual(summary.failed, OPEN.communes);
+  assert.ok(!http.calls.some((call) => call.endsWith('AffichageReglementaire')), 'the board is not asked');
+  // A caller's verdict without `final` keeps the old meaning: not allowed is refused.
+  const caller = await sweepCartdsArchive({
+    instances: [OPEN], store, http, robots: async () => ({ allowed: false }), day: '2026-11-16', pauseMs: 0, log: {},
+  });
+  assert.deepEqual(caller.refused, ['open']);
+  assert.deepEqual(caller.failed, []);
+});
+
 test('a lapsed session is reopened once; a board that keeps failing is left for tomorrow', async () => {
   const dir = await tempDir();
   const store = createCartdsArchiveStore(dir);

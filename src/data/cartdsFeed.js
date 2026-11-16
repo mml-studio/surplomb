@@ -83,7 +83,8 @@
  * Most had moved to `Disallow: /` since the scan of 2026-10-04. The same
  * exception was extended to them that day: 61 through `npm run permits:scan
  * -- --recheck-robots`, which flags the scanned ones, and 31 by hand below,
- * the ones it names.
+ * the ones it names. Coutances Mer et Bocage's joined them on 2026-11-16,
+ * twelve nights after its host added the rule.
  *
  * ── Trap 6: the board forgets, so the server keeps ─────────────────────────
  * Trap 1's two months are the posting period, not a window the commune
@@ -287,12 +288,15 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     communes: Object.freeze(['2A017']),
   }),
   // Coutances Mer et Bocage's board, a seed of the scan that the scan of
-  // 2026-10-04 did not ask: Agon-Coutainville alone in its menu.
+  // 2026-10-04 did not ask: Agon-Coutainville alone in its menu. Its host
+  // has answered `Disallow: /` since the night of 2026-11-04, and the
+  // sweep left it unread from then on; Trap 5's exception since 2026-11-16.
   Object.freeze({
     key: 'coutances',
     base: 'https://cartads.communaute-coutances.fr/guichet-unique',
     label: 'Coutances Mer et Bocage — affichage réglementaire', // i18n-ignore-line — the publisher and its page title
     codes: 'insee',
+    robots: 'overridden',
     communes: Object.freeze(['50003']),
   }),
   Object.freeze({

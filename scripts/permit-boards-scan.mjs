@@ -96,9 +96,11 @@ const TIMEOUT_MS = 25_000;
  */
 export const CARTDS_SCAN_SEEDS = Object.freeze([
   Object.freeze({ host: 'ads-sig.douarnenez.bzh', prefixes: Object.freeze(['/guichet-unique']) }),
-  // Two boards on one host, one per instruction service: the archive saw
-  // Doué's, with one commune; Saumur's, with 17, is under this path (2026-10-03).
-  Object.freeze({ host: 'saumurvaldeloire.geosphere.fr', prefixes: Object.freeze(['/guichet-saumur', '/guichet-doue']) }),
+  // Two boards on one host until October, one per instruction service:
+  // Doué's, with one commune, and Saumur's, with 17 (2026-10-03). On
+  // 2026-11-16 both paths answered 404, and a single board under
+  // /guichet-unique offered Saumur's 17 communes.
+  Object.freeze({ host: 'saumurvaldeloire.geosphere.fr', prefixes: Object.freeze(['/guichet-unique']) }),
   // Voiron's own board, linked from its site (2026-10-03).
   Object.freeze({ host: 'portail-urbanisme.ville-voiron.fr', prefixes: Object.freeze(['/guichet-unique']) }),
   Object.freeze({ host: 'demarche-urbanisme.la-seyne.fr', prefixes: Object.freeze(['/guichet-unique']) }),

@@ -6,6 +6,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Saumur, La Neuville-Roy, Artigues and fifteen more communes are read
+  again.** Three `geosphere.fr` tenants moved their Cart@DS board to
+  `/guichet-unique` between 23 October and 12 November, and the old paths
+  answer 404: Saumur Val de Loire (15 communes, unread since 2026-10-23),
+  Provence Verdon (Artigues, since 2026-10-24) and Plateau Picard (La
+  Neuville-Roy, since 2026-11-12). The registry follows them, and Saumur's
+  menu adds Artannes-sur-Thouet, which posted on 2026-11-11. Coutances Mer et
+  Bocage's host added `Disallow: /` on 2026-11-04; Agon-Coutainville is read
+  under the robots exception again. A host whose `robots.txt` does not answer
+  during the sweep is now a failed read, not a refusal: Capatlantique and the
+  Grand Dole (73 communes) were reported as refusing robots while their file
+  answered 404 by day.
 - **Lille's and Pontault-Combault's permit lists are archived.** Both were
   read for visitors and failed every nightly sweep, so neither had ever
   reached the archive. Imperva writes its `_Incapsula_Resource` beacon into

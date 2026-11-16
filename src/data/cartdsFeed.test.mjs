@@ -90,6 +90,14 @@ test('the registry is a gate that cannot half-cover or double-cover a commune', 
   assert.equal(cartdsCommuneValue(cartdsInstanceFor('68278'), '68278'), '278');
   assert.equal(cartdsInstanceFor('83050').base, 'https://ads.dracenie.com/guichet-unique');
   assert.equal(cartdsCommuneValue(cartdsInstanceFor('83050'), '83050'), '50');
+  // Three geosphere tenants moved their board to /guichet-unique between
+  // 2026-10-23 and 2026-11-12; the old paths answer 404. Saumur's menu there
+  // also offers Artannes-sur-Thouet, which posted on 2026-11-11.
+  assert.equal(cartdsInstanceFor('49328').base, 'https://saumurvaldeloire.geosphere.fr/guichet-unique');
+  assert.equal(cartdsCommuneValue(cartdsInstanceFor('49011'), '49011'), '49011');
+  assert.equal(cartdsInstanceFor('60456').base, 'https://plateau-picard.geosphere.fr/guichet-unique');
+  assert.equal(cartdsCommuneValue(cartdsInstanceFor('83006'), '83006'), '6');
+  assert.equal(cartdsInstanceFor('83006').base, 'https://provence-verdon.geosphere.fr/guichet-unique');
   assert.equal(cartdsInstanceFor('04236').key, 'sitmahp');
   assert.equal(cartdsCommuneValue(cartdsInstanceFor('04236'), '04236'), '4236');
   assert.ok(CARTDS_SCANNED_INSTANCES.every((instance) => CARTDS_INSTANCES.includes(instance)));
@@ -114,6 +122,8 @@ test('documented hosts with a robots.txt exception are read only by an explicit 
     ...Array(18).fill('guichetunique.geosphere.fr'),
     'grandnarbonne.geosphere.fr', 'grandnarbonne.geosphere.fr', 'sig.clissonsevremaine.fr',
     'urbanisme.haute-bigorre.fr', 'terredemeraude.geosphere.fr',
+    // Coutances Mer et Bocage's host added `Disallow: /` on 2026-11-04.
+    'cartads.communaute-coutances.fr',
   ];
   const documented = CARTDS_INSTANCES.filter((instance) => !CARTDS_SCANNED_INSTANCES.includes(instance));
   const overridden = documented.filter((instance) => instance.robots !== undefined);
