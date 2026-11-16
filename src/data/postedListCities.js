@@ -235,5 +235,10 @@ export const POSTED_LIST_CITIES = [
     page: 'https://www.arcangues.fr/affichage-legal/',
     source: { protocol: 'wpfd', wpfdRoot: 114, ocr: true,
       lists: { filings: '\\bAVIS (?:DE )?DEPOTS?\\b' }, layouts: { filings: 'dematdoc-notices' } } },
+  // Joomla's municipal publications page includes receipts and signed orders.
+  // Some names begin YY-MM-DD: `26-07-30`, not 26 July 2030.
+  { key: 'orx', insee: '40213', postcode: '40230', label: 'Commune d’Orx — dépôts et décisions d’urbanisme',
+    page: 'https://mairie-orx.fr/index.php/component/content/article/publications-municipales-temp?catid=8&Itemid=101',
+    source: { protocol: 'posted-acts', limit: 120, ocr: true, yearFirstDates: true } },
 ];
 // i18n-ignore-end

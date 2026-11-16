@@ -15,6 +15,7 @@ import {
   localRows,
   localState,
   mergeRegisters,
+  supplementLocalHistory,
   normaliseLocalRow,
   normaliseSitadelRow,
   portalsForCommune,
@@ -247,13 +248,11 @@ const DODU_ROWS = Object.freeze([
   },
 ]);
 
-test('dODu is asked for Boucau, Cambo-les-Bains and Hasparren, by commune, without the applicant', () => {
-  for (const code of ['64140', '64160', '64256']) {
+test('dODu is asked for all five published communes, by commune, without the applicant', () => {
+  for (const code of ['64024', '64140', '64160', '64256', '64547']) {
     assert.deepEqual(portalsForCommune(code).map((portal) => portal.key), ['dodu'], code);
   }
-  // Anglet's rows stop in 2025 and Ustaritz is read on publication-actes.fr.
-  assert.deepEqual(portalsForCommune('64024'), []);
-  assert.deepEqual(portalsForCommune('64547'), []);
+  assert.deepEqual(portalsForCommune('64483'), [], 'unpublished communes are not invented');
   const url = new URL(buildLocalAdsUrl(DODU, { communeCode: '64140', since: '2023-11-01' }));
   assert.equal(url.host, 'opendatapaysbasque.opendatasoft.com');
   assert.match(url.pathname, /\/datasets\/dodu\/exports\/json$/);
@@ -261,6 +260,54 @@ test('dODu is asked for Boucau, Cambo-les-Bains and Hasparren, by commune, witho
   const select = url.searchParams.get('select').split(',');
   assert.ok(!select.includes('nom_demandeur'));
   assert.ok(!select.includes('personne_phys_mor'));
+});
+
+test('local history fills absent dossiers while a current board keeps its newer decision', () => {
+  const older = normaliseLocalRow(DODU, DODU_ROWS[0]);
+  const current = { ...older, id: 'board:current', source: 'permit-list',
+    state: 'annule', decidedOn: '2026-10-01', address: '8 rue du Projet' };
+  const missing = normaliseLocalRow(DODU, DODU_ROWS[1]);
+  const result = supplementLocalHistory([current], [older, missing, missing]);
+  assert.equal(result.overlaps, 2);
+  assert.equal(result.permits.length, 2);
+  assert.deepEqual(result.permits[1], missing);
+  assert.deepEqual(result.permits[0].sources, ['permit-list', 'dodu']);
+  assert.equal(result.permits[0].state, 'annule');
+  assert.equal(result.permits[0].decidedOn, '2026-10-01');
+  assert.equal(result.permits[0].address, '8 rue du Projet');
+  assert.deepEqual(supplementLocalHistory([], [older]).permits, [older], 'a board outage does not hide history');
+});
+
+test('historical decisions complete older filing notices and keep their attribution after the Sitadel join', () => {
+  const history = normaliseLocalRow(DODU, DODU_ROWS[0]);
+  const filed = { ...history, source: 'publication-actes', sourceLabel: 'Municipal board',
+    state: 'depose', stateLabel: 'Déposé', decidedOn: null, housing: null };
+  const { permits } = supplementLocalHistory([filed], [history]);
+  assert.equal(permits[0].state, history.state);
+  assert.equal(permits[0].decidedOn, history.decidedOn);
+  assert.equal(permits[0].housing, 1);
+  assert.equal(filed.decidedOn, null, 'the current input is not mutated');
+  assert.deepEqual(mergeRegisters([], permits).permits[0].sources, ['publication-actes', 'dodu']);
+  const twin = { ...history, source: 'sitadel' };
+  assert.deepEqual(mergeRegisters([twin], permits).permits[0].sources, ['publication-actes', 'dodu', 'sitadel']);
+  for (const current of [
+    { ...filed, state: 'instruction', stateLabel: 'En cours d’instruction' },
+    { ...filed, stateLabel: 'Décision signée' },
+    { ...filed, depositedOn: '2026-01-01' },
+  ]) {
+    assert.equal(supplementLocalHistory([current], [history]).permits[0].state, current.state);
+    assert.equal(supplementLocalHistory([current], [history]).permits[0].decidedOn, null);
+  }
+});
+
+test('local history distinguishes families and amendments and never matches unkeyed rows', () => {
+  const permit = normaliseLocalRow(DODU, DODU_ROWS[0]);
+  const otherFamily = { ...permit, kind: 'DP' };
+  const amendment = { ...permit, key: `${permit.key}M01` };
+  const unkeyed = { ...permit, key: null };
+  const result = supplementLocalHistory([permit], [otherFamily, amendment, unkeyed, unkeyed]);
+  assert.equal(result.overlaps, 0);
+  assert.equal(result.permits.length, 5);
 });
 
 test('dODu numbers meet Sitadel’s: the commune on six digits, the initial step dropped', () => {

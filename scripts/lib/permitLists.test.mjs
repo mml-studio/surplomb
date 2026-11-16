@@ -1160,6 +1160,40 @@ test('a board\'s scans are never downloaded for a visitor, and the sweep reads t
   assert.deepEqual(swept.boards.decisions.map((cells) => [cells[4], cells[8]]), [['12 rue Exemple', 'Non-opposition'], ['12 rue Exemple', 'Non-opposition']]);
 });
 
+test('the daily sweep retries posted scans without a city OCR flag and keeps the forty-file OCR budget', async () => {
+  const dir = await tempDir();
+  const city = BOARD_PERMIT_SOURCES.find((c) => c.key === 'coulogne');
+  assert.equal(city.source.ocr, undefined, 'the protocol opts each act into OCR');
+  const links = Array.from({ length: 42 }, (_, i) => `/2026/09/DP-062244-26-${String(i + 1).padStart(5, '0')}.pdf`);
+  const page = links.map((url) => `<a href="${url}">Arrêté</a>`).join('');
+  const files = Object.fromEntries(links.map((url, i) => [new URL(url, city.page).href,
+    { bytes: Buffer.from(`%PDF-1.7\nscan ${String(i + 1).padStart(5, '0')}`) }]));
+  const http = fakeHttp({ pages: { [city.page]: page }, files });
+  const editions = path.join(dir, 'editions');
+  const before = await readPermitCity(city, http, { dir: editions, day: '2026-10-02' });
+  assert.equal(before.pendingOcr, 42);
+  let calls = 0;
+  const ocr = async (bytes) => { calls += 1; return { document: { pages: [{ width: 595, runs: [
+    { text: `DP 062244 26 ${Buffer.from(bytes).toString().match(/scan (\d+)/)[1]}`, x: 40, y: 700, x1: 200 },
+    { text: 'Sur un terrain sis à : 12 rue Exemple', x: 40, y: 600, x1: 200 },
+    { text: 'LE MAIRE', x: 40, y: 500, x1: 90 },
+    { text: 'Article 1 : il n’est pas fait opposition', x: 40, y: 400, x1: 300 },
+  ] }] } }; };
+  const store = createCartdsArchiveStore(path.join(dir, 'archive'), { warn: () => {} }, PERMIT_LIST_ROWS);
+  const sweep = () => sweepPermitLists({ cities: [city], http, store, dir: editions,
+    day: '2026-10-02', pauseMs: 0, ocr, log: { log: () => {} } });
+  const first = await sweep();
+  assert.equal(calls, 40);
+  assert.deepEqual(first.pendingOcr, ['coulogne:2']);
+  const second = await sweep();
+  assert.equal(calls, 42, 'the next sweep reads only the two remaining scans');
+  assert.equal(second.pendingOcr, undefined);
+  const after = await readPermitCity(city, http, { dir: editions, day: '2026-10-02', ocr });
+  assert.equal(calls, 42, 'a visitor never invokes OCR');
+  assert.equal(after.pendingOcr, 0);
+  assert.equal(after.boards.decisions.filter(row => row[4] === '12 rue Exemple').length, 42);
+});
+
 test('an unread Vétraz table is incomplete and never caches an empty edition', async () => {
   const dir = await tempDir();
   const registered = PERMIT_LISTS.find((city) => city.key === 'vetraz-monthoux');

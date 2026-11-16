@@ -104,9 +104,14 @@ test('no commune is read from two of the posted and published registers', () => 
   for (const commune of PUBLICATION_ACTES_COMMUNES) claim(commune.insee, 'publication-actes');
   for (const city of PERMIT_LISTS) claim(city.insee, `permit-list ${city.key}`);
   for (const commune of MMM_COMMUNES) claim(commune.insee, `mmm ${commune.file}`);
-  // And none duplicates a métropole portal, which the layer merges as a twin.
+  // Only dODu's explicitly supplemented history may overlap a current board.
+  // `supplementLocalHistory` removes those twins before the Sitadel join.
   for (const portal of LOCAL_ADS_PORTALS) {
     for (const code of portal.communes) {
+      if (portal.key === 'dodu' && ['64024', '64547'].includes(code)) {
+        assert.equal(claimed.get(code), code === '64024' ? 'permit-list anglet' : 'publication-actes');
+        continue;
+      }
       assert.ok(!SIRAP_INSTANCES.some((instance) => instance.communes.includes(code)), `${code} on ${portal.key}`);
       assert.ok(!PERMIT_LISTS.some((city) => city.insee === code), `${code} on ${portal.key}`);
       assert.ok(!EPERMIS_INSTANCES.some((instance) => instance.communes.includes(code)), `${code} on ${portal.key}`);

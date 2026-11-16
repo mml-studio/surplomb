@@ -6,6 +6,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Orx's municipal permits are now read.** Its previously undiscovered
+  municipal publications page posts filing receipts and signed orders,
+  including November 2026 documents. The existing `posted-acts` reader now
+  includes it, with background OCR for scans. Its two-digit filename dates
+  explicitly use year-month-day, so `26-07-30` is 2026-07-30 rather than a
+  future posting date. This adds one municipality and 647 inhabitants to
+  local-source availability; it does not imply complete permit extraction.
+- **Anglet and Ustaritz regain historical permit coverage, and scanned acts
+  reach the nightly reader.** The dODu query now includes all five published
+  municipalities. Its three-year export returned 952 Anglet dossiers and
+  513 Ustaritz dossiers on 2026-11-16; historical rows supplement the current
+  municipal boards, whose decisions win exact overlaps. Families and
+  amendments keep separate identities. A second city-level OCR flag no
+  longer prevents the nightly collector from reading files their protocol
+  already marks as scans: 35 `posted-acts` and nine `sieve-acts` sources had
+  that mismatch. OCR remains limited to forty board files per pass, with
+  cached pending files retried on the next pass and no OCR during visits.
 - **Saumur, La Neuville-Roy, Artigues and fifteen more communes are read
   again.** Three `geosphere.fr` tenants moved their Cart@DS board to
   `/guichet-unique` between 23 October and 12 November, and the old paths

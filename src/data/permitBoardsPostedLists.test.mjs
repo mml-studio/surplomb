@@ -10,6 +10,24 @@ const KEYS = ['haguenau', 'saverne', 'barr', 'benfeld', 'offendorf', 'lauterbour
 const protocol = POSTED_LIST_PROTOCOLS['posted-lists'];
 const link = (href, words = 'Télécharger') => `<li><a href="${href}">${words}</a></li>`;
 
+test('Orx receipts and orders keep their year-first dates rather than future or expired posting dates', () => {
+  const orx = city('orx');
+  assert.equal(permitListFor('40213'), orx);
+  const html = link('/images/Publications/26-07-30-Arrete-PC0402132600006.pdf', 'Arrêté PC0040213260006')
+    + link('/images/Publications/26-07-20-Arrete-PC0402132600005.pdf', 'Arrêté PC0040213260005')
+    + link('/images/Publications/26-01-29-PC0402132500016.pdf', 'Arrêté PC0402132500016')
+    + link('/images/Publications/2026-11-12-DP0402132600017.pdf', 'Récépissé DP0402132600017')
+    + link('/images/Publications/roadworks.pdf', 'Arrêté de voirie');
+  const files = postedActFiles(orx, html, orx.page, '2025-12-01');
+  assert.deepEqual(files.map(f => [f.row.dossier, f.board, f.published]), [
+    ['PC 040213 26 00006', 'decisions', '2026-07-30'],
+    ['PC 040213 26 00005', 'decisions', '2026-07-20'],
+    ['PC 040213 25 00016', 'decisions', '2026-01-29'],
+    ['DP 040213 26 00017', 'filings', '2026-11-12'],
+  ]);
+  assert.equal(postedListDay('/30-07-26.pdf'), '2026-07-30', 'other towns retain day-first dates');
+});
+
 test('the new municipal snapshots retain the newest edition of both boards and all Vétraz families', () => {
   for (const [key, insee] of [['ver-sur-mer', '14739'], ['vetraz-monthoux', '74298']]) {
     assert.equal(permitListFor(insee), city(key));
