@@ -6368,6 +6368,20 @@ with recent sources and 28 / 240,559 (55.6%) including delayed dODu. See
 [the regional audit](permits-pays-basque-coverage.md) for the remaining gaps
 and the limits of these metrics.
 
+**Bidache (2026-11-16, third pass).** A recursive crawl of the 86 remaining
+municipal sites of the Pays basque and southern Landes found one more
+commune posting individual permits: Bidache (`64123`, 1,338 inhabitants).
+Its site keeps a page per family, `permis-de-construire-exemple` and
+`declarations-prealables-exemple`, each linking the signed orders of about
+two months, titled `PC 0641232600014 - 12102026`. `posted-acts` reads both
+pages with OCR. `postedListDay` gained an opt-in `compactDayFirst` reading,
+enabled by `compactDayFirstDates`, so the eight digits become 2026-10-12; no
+other source reads unseparated dates day first. A first local collection
+read 9 dossiers (8 addresses, 6 parcel references) with no failed download
+or pending scan. Its certificates page is not read. Once deployed, source
+availability reaches 26 communes / 218,543 inhabitants (50.5%) with recent
+sources and 29 / 241,897 (55.9%) including delayed dODu.
+
 **Nineteen towns found by the sieve of communes' own sites (2026-10-03).**
 Forty communes whose site the sieve had seen posting fresh numbers, none of
 them on WordPress's media API, were read one by one; nineteen are kept, in

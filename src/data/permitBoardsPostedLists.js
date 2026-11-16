@@ -58,9 +58,10 @@ function pageLinks(html, base) {
  * The day a link names, or null: `28_09_2026`, `28 09 2026`, `21/09/2026`,
  * `2026-10-01`, `20261002`, `26-10-01` (Saverne's year first), `au 22 septembre 2026`;
  * failing that, the upload month of a WordPress or Drupal path.
- * `yearFirst` opts a publisher's ambiguous two-digit dates into YY-MM-DD.
+ * `yearFirst` opts a publisher's ambiguous two-digit dates into YY-MM-DD;
+ * `compactDayFirst` reads an unseparated `12102026` as 12 October 2026.
  */
-export function postedListDay(name, words = '', { yearFirst = false } = {}) {
+export function postedListDay(name, words = '', { yearFirst = false, compactDayFirst = false } = {}) {
   // Do not combine the upload directory with a numeric filename into a day
   // (Quimperlé's /2026/09/09-24-… is the edition of 24 September).
   const text = fold(`${words} ${name.split('/').at(-1)}`);
@@ -71,6 +72,9 @@ export function postedListDay(name, words = '', { yearFirst = false } = {}) {
   };
   let match = /(?:^|\D)(20\d{2})(\d{2})(\d{2})(?!\d)/.exec(text);
   if (match) return iso(match[1], match[2], match[3]);
+  // Bidache titles each act « PC 0641232600014 - 12102026 »: eight digits, day first.
+  match = compactDayFirst ? /(?:^|\D)(\d{2})(\d{2})(20\d{2})(?!\d)/.exec(text) : null;
+  if (match) return iso(match[3], match[2], match[1]);
   // A day-first filename can append a time after its year. Read the full
   // day first, before interpreting that year and time as a second date.
   match = /(?:^|\D)(\d{1,2})[ ./](\d{1,2})[ ./](20\d{2})(?!\d)/.exec(text);
@@ -270,7 +274,7 @@ function actFiles(city, links, since = null) {
     // eZ Publish keeps a form's « + » for a space in the file name (Saint-Laurent-de-Gosse's `Rejet+DP+2600020.pdf`).
     const base = link.name.replace(/\/file\/?$/i, '').replace(/^.*\//, '').replace(/\.pdf$/i, '').replace(/[_.+]+/g, ' ');
     const text = clean(`${words} ${base.replace(/-/g, ' ')}`);
-    const published = postedListDay(link.name, words, { yearFirst: city.source?.yearFirstDates }) ?? link.published ?? null;
+    const published = postedListDay(link.name, words, { yearFirst: city.source?.yearFirstDates, compactDayFirst: city.source?.compactDayFirstDates }) ?? link.published ?? null;
     const dossier = actDossier(words, city) ?? actDossier(base.replace(/-/g, ' '), city) ?? actDossier(text, city)
       ?? bareDossier(city, words, published);
     const folded = fold(text);

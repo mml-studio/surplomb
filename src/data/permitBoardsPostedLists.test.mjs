@@ -28,6 +28,24 @@ test('Orx receipts and orders keep their year-first dates rather than future or 
   assert.equal(postedListDay('/30-07-26.pdf'), '2026-07-30', 'other towns retain day-first dates');
 });
 
+test('Bidache orders keep their number and the decision day run into eight digits', () => {
+  const bidache = city('bidache');
+  assert.equal(permitListFor('64123'), bidache);
+  const html = link('/media/bidache/publications/pc-0641232600014-arrete-signe.pdf', 'PC 0641232600014 - 12102026(pdf - 444Ko)')
+    + link('/media/bidache/publications/pc-0641232600016-arrete-signe.pdf', 'PC 0641232600016- 05102026(pdf - 722Ko)')
+    + link('/media/bidache/publications/pa-0641232600002-arrete-signe.pdf', 'PA 0641232600002- 09092026 (pdf - 398Ko)')
+    + link('/media/bidache/publications/dp-0641232600033-arrete-signe.pdf', 'DP 0641232600033 - 07102026 (pdf - 388Ko)')
+    + link('/media/bidache/publications/am-circulation.pdf', 'Arrêté de circulation');
+  const files = postedActFiles(bidache, html, bidache.page, '2026-09-01');
+  assert.deepEqual(files.map(f => [f.row.dossier, f.board, f.published, f.ocr]), [
+    ['PC 064123 26 00014', 'decisions', '2026-10-12', true],
+    ['PC 064123 26 00016', 'decisions', '2026-10-05', true],
+    ['PA 064123 26 00002', 'decisions', '2026-09-09', true],
+    ['DP 064123 26 00033', 'decisions', '2026-10-07', true],
+  ]);
+  assert.equal(postedListDay('/x.pdf', 'PC 0641232600014 - 12102026'), null, 'other towns do not read eight digits day first');
+});
+
 test('the new municipal snapshots retain the newest edition of both boards and all Vétraz families', () => {
   for (const [key, insee] of [['ver-sur-mer', '14739'], ['vetraz-monthoux', '74298']]) {
     assert.equal(permitListFor(insee), city(key));

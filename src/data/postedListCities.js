@@ -240,5 +240,13 @@ export const POSTED_LIST_CITIES = [
   { key: 'orx', insee: '40213', postcode: '40230', label: 'Commune d’Orx — dépôts et décisions d’urbanisme',
     page: 'https://mairie-orx.fr/index.php/component/content/article/publications-municipales-temp?catid=8&Itemid=101',
     source: { protocol: 'posted-acts', limit: 120, ocr: true, yearFirstDates: true } },
+  // Bidache posts each signed order on a page per family, titled with its number and
+  // decision day run together: « PC 0641232600014 - 12102026 ». 2026-11-16: 5 permits
+  // (2 September – 12 October) and 4 declarations (9 September – 7 October), about two
+  // months of decisions; every order is a scan, read by OCR. Its robots.txt allows all.
+  { key: 'bidache', insee: '64123', postcode: '64410', label: 'Commune de Bidache — arrêtés d’urbanisme',
+    page: 'https://www.bidache.fr/permis-de-construire-exemple',
+    source: { protocol: 'posted-acts', ocr: true, compactDayFirstDates: true,
+      pages: ['https://www.bidache.fr/declarations-prealables-exemple'] } },
 ];
 // i18n-ignore-end
