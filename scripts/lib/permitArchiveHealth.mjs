@@ -18,7 +18,10 @@
  *   municipalities are grouped by the instance that reads them;
  * - a stop of three days or fewer is NEW, anything older is ONGOING;
  * - an instance the sweep was refused by robots.txt is named as such (once:
- *   on its stop when its municipalities have stopped, on its own before).
+ *   on its stop when its municipalities have stopped, on its own before);
+ * - a municipality its register names that has no file at all after a sweep
+ *   was NEVER ARCHIVED, grouped by instance. Bayonne went so from 2 October to
+ *   16 November 2026 and no rule above could see it: a stop needs a file.
  * Any of these makes the verdict `act`; none of them makes it `ok`.
  * Failures of a single night (the stamp's `failed`) are counted, not judged.
  */
@@ -49,20 +52,20 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The municipalities each family's nightly sweep is configured to read, from
- * the same registers `vite.config.js` hands to the sweeps. Keys are the
- * archive's directory names.
+ * the same registers `vite.config.js` hands to the sweeps, each with the key of
+ * the instance that reads it. Keys are the archive's directory names.
  *
- * @returns {Record<string, Set<string>>}
+ * @returns {Record<string, Map<string, string>>} INSEE code → instance key.
  */
 export function expectedPermitArchive() {
-  const codes = (list) => new Set(list.map((code) => String(code).toUpperCase()));
-  const ofInstances = (instances) => codes(instances.flatMap((instance) => instance.communes));
+  const owners = (pairs) => new Map(pairs.map(([code, key]) => [String(code).toUpperCase(), key]));
+  const ofInstances = (instances) => owners(instances.flatMap((instance) => instance.communes.map((code) => [code, instance.key])));
   return {
     cartds: ofInstances(CARTDS_INSTANCES),
     sirap: ofInstances(SIRAP_INSTANCES),
     epermis: ofInstances(EPERMIS_INSTANCES),
-    'permit-lists': codes(PERMIT_LISTS.map((city) => city.insee)),
-    mmm: codes(MMM_COMMUNES.map((commune) => commune.insee)),
+    'permit-lists': owners(PERMIT_LISTS.map((city) => [city.insee, city.key])),
+    mmm: owners(MMM_COMMUNES.map((commune) => [commune.insee, 'mmm'])),
   };
 }
 
@@ -125,7 +128,8 @@ export async function readPermitArchive(dir) {
  *
  * @param {Record<string, {stamp: ?object, communes: Array<object>, unreadable: number}>} families
  * @param {string} day The judged day, `YYYY-MM-DD`, in France.
- * @param {Record<string, Set<string>>} [expected] INSEE codes each family sweeps.
+ * @param {Record<string, Map<string, string>|Set<string>>} [expected] INSEE codes each
+ *   family sweeps, mapped to the instance that reads them when known.
  * @returns {{day: string, verdict: 'ok'|'act', families: object, problems: Array<object>, text: string}}
  */
 export function assessPermitArchive(families, day, expected = {}) {
@@ -138,6 +142,13 @@ export function assessPermitArchive(families, day, expected = {}) {
     const communes = register ? families[name].communes.filter((c) => register.has(String(c.insee).toUpperCase())) : families[name].communes;
     const retired = families[name].communes.length - communes.length;
     const neverArchived = register ? register.size - communes.length : null;
+    const archived = new Set(communes.map((c) => String(c.insee).toUpperCase()));
+    const unarchivedBy = new Map();
+    for (const code of register?.keys() ?? []) {
+      if (archived.has(code)) continue;
+      const instance = (register instanceof Map ? register.get(code) : null) ?? code;
+      unarchivedBy.set(instance, (unarchivedBy.get(instance) ?? 0) + 1);
+    }
     const stampDay = typeof stamp?.day === 'string' && DAY_RE.test(stamp.day) ? stamp.day : null;
     const stampLag = stampDay ? daysBetween(stampDay, day) : null;
     const swept = stampLag !== null && stampLag <= (STAMP_LAG_DAYS[name] ?? 0);
@@ -174,7 +185,13 @@ export function assessPermitArchive(families, day, expected = {}) {
       problems.push({ kind: 'stopped', ...stop });
     }
     for (const instance of refusedNow) {
-      if (!stoppedBy.has(instance)) problems.push({ kind: 'refused', family: name, instance });
+      if (!stoppedBy.has(instance) && !unarchivedBy.has(instance)) problems.push({ kind: 'refused', family: name, instance });
+    }
+    // Judged only after a sweep: a source registered today has had no night yet.
+    if (swept) {
+      for (const [instance, count] of [...unarchivedBy.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+        problems.push({ kind: 'never-archived', family: name, instance, communes: count, robots: refusedNow.has(instance) });
+      }
     }
 
     summary[name] = {
@@ -237,9 +254,14 @@ export function describePermitArchive(day, verdict, families, problems) {
         + `${robots ? `, ${robots} refused by robots.txt` : ''}; largest ${largest.map(name).join(', ')}.`);
     }
   }
+  const never = problems.filter((p) => p.kind === 'never-archived');
+  if (never.length) {
+    lines.push(`Never archived: ${never.map((p) => `${p.family}/${p.instance}`
+      + `${p.communes > 1 || p.robots ? ` (${[p.communes > 1 ? `${p.communes} municipalities` : '', p.robots ? 'robots' : ''].filter(Boolean).join(', ')})` : ''}`).join(', ')}.`);
+  }
   const refused = problems.filter((p) => p.kind === 'refused');
   if (refused.length) lines.push(`Refused by robots.txt tonight: ${refused.map((p) => `${p.family}/${p.instance}`).join(', ')}.`);
-  if (refused.length || stops.some((p) => p.robots)) {
+  if (refused.length || stops.some((p) => p.robots) || never.some((p) => p.robots)) {
     lines.push('Robots refusals: `npm run permits:scan -- --recheck-robots` finds the hosts that changed.');
   }
   return lines.join('\n');

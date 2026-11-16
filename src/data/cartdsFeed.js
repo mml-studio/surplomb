@@ -129,9 +129,21 @@ export const CARTDS_BOARDS = Object.freeze({ filings: '1', decisions: '2' });
 /**
  * Rows asked for per page. The busiest board measured, Orléans's filing
  * notices, held 525 rows on 2026-09-30; a page this size answers it in one
- * request, and every other board of the 92 communes with it.
+ * request, and every other board of the 92 communes with it. An instance
+ * whose front refuses so large a page names its own `pageLength`
+ * ({@link cartdsPageLength}).
  */
 export const CARTDS_PAGE_LENGTH = 1000;
+
+/**
+ * Rows asked for per page of this instance's boards.
+ * @param {object} instance One of {@link CARTDS_INSTANCES}.
+ * @returns {number}
+ */
+export function cartdsPageLength(instance) {
+  const length = Number(instance?.pageLength);
+  return Number.isInteger(length) && length > 0 ? length : CARTDS_PAGE_LENGTH;
+}
 
 /** Pages read per board before giving up, and saying so. */
 export const CARTDS_MAX_PAGES = 3;
@@ -462,6 +474,10 @@ const CARTDS_DOCUMENTED_INSTANCES = Object.freeze([
     // Found on 2026-10-02 by searching the web for the board's path. The host
     // leaves GandiCert out of its chain, so the scan cannot ask it.
     intermediate: 'gandicert',
+    // Its firewall answers 403 to a page of 1 000 rows and 200 to one of 500,
+    // the largest its own menu offers (2026-11-16): until then not one night
+    // had archived Bayonne. 185 filings and 206 decisions were posted that day.
+    pageLength: 500,
     communes: Object.freeze(['64102']),
   }),
   // Tenants on paths of the vendor's shared host `guichetunique.geosphere.fr`,

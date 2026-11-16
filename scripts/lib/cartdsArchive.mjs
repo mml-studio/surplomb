@@ -22,10 +22,10 @@ import {
   CARTDS_BOARDS,
   CARTDS_DATA_PATH,
   CARTDS_MAX_PAGES,
-  CARTDS_PAGE_LENGTH,
   CARTDS_PAGE_PATH,
   buildCartdsForm,
   cartdsCommuneValue,
+  cartdsPageLength,
   cartdsDataUrl,
   cartdsPageUrl,
   cartdsRobotsUrl,
@@ -416,11 +416,12 @@ export async function openCartdsSession(instance, http) {
  */
 export async function readCartdsBoard(instance, commune, board, session, http) {
   const rows = [];
+  const length = cartdsPageLength(instance);
   let total = null;
   for (let page = 0; page < CARTDS_MAX_PAGES; page += 1) {
     const response = await http.fetch(cartdsDataUrl(instance), {
       method: 'POST',
-      body: buildCartdsForm({ commune, board, token: session.token, start: page * CARTDS_PAGE_LENGTH }),
+      body: buildCartdsForm({ commune, board, token: session.token, start: page * length, length }),
       headers: {
         Cookie: session.cookie,
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
