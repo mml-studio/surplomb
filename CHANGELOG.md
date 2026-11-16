@@ -6,6 +6,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Bidache's municipal permits are now read.** Its site posts each signed
+  order on a page per family (building and development permits, prior
+  declarations), titled with the dossier number and the decision day run
+  together: `PC 0641232600014 - 12102026`. The existing `posted-acts` reader
+  now includes both pages, with background OCR for the scans; a new
+  `compactDayFirstDates` option reads that eight-digit day for this source
+  only. A local collection on 2026-11-16 read 9 dossiers from September and
+  October 2026, 8 with an address and 6 with parcel references, and kept no
+  applicant. This adds one municipality and 1,338 inhabitants to the Pays
+  basque's local-source availability (50.2% → 50.5%).
 - **Orx's municipal permits are now read.** Its previously undiscovered
   municipal publications page posts filing receipts and signed orders,
   including November 2026 documents. The existing `posted-acts` reader now

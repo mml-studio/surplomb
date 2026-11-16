@@ -16,8 +16,10 @@ coverage calculation, so changes can be compared directly.
 The table is the deployed baseline before this pass. Orx's newly verified
 reader adds 647 inhabitants: after deployment, recent-source availability
 is 25 municipalities / 217,205 inhabitants (50.2%), and availability
-including delayed dODu is 28 / 240,559 (55.6%). That leaves 161 municipalities
-and 192,060 inhabitants without an identified local feed.
+including delayed dODu is 28 / 240,559 (55.6%). Bidache, found in a third
+pass, adds 1,338 more: 26 / 218,543 (50.5%) and 29 / 241,897 (55.9%). That
+leaves 160 municipalities and 190,722 inhabitants without an identified
+local feed.
 
 These are **population shares with an identified local source**, not the
 percentage of permits collected. The national Sitadel source remains
@@ -39,6 +41,7 @@ content and placement of dossiers in an already counted municipality.
 | Anglet history omitted because its current board was already registered | Query dODu for Anglet too; current board records win exact overlaps | Export since 2023-11-01: 952 unique dossiers, 952 addresses, 944 with parcel references |
 | Ustaritz history omitted because publication-actes.fr already supplied recent notices | Query dODu for Ustaritz too, with the same overlap rule | Same window: 513 unique dossiers, 513 addresses, 512 with parcel references |
 | Board protocols marked files for OCR, but the nightly sweep also required a city flag | Pass the runner to the reader; each file still opts in, visits never run OCR | 35 `posted-acts` and nine `sieve-acts` registry entries lacked the city flag; regression test completes 42 cached scans in two bounded passes |
+| Bidache's per-family order pages not linked from any page the first crawl followed | Add both pages to `posted-acts`, with OCR and an opt-in day-first reading of its eight-digit decision days | 5 permits and 4 declarations decided 2026-09-02 to 2026-10-12; first local collection: 9 dossiers, 8 addresses, 6 parcel references; robots allows all |
 | New sources seeded with only six PDF downloads | Complete the existing archive backlog through the established readers | Targeted collection covers Arbonne, Ayherre, Mauléon-Licharre, Saint-Laurent-de-Gosse and Arcangues |
 
 Orx's first complete local collection read 36 files without failed downloads,
@@ -70,11 +73,11 @@ text layer and 54 unplaced current-source dossiers; Anglet's current board
 reported thirteen unplaced dossiers. Those remaining extraction and
 placement gaps are not resolved by adding historical exports.
 
-## Remaining geographical gaps after Orx integration
+## Remaining geographical gaps after Orx and Bidache integration
 
 | Instruction area | Municipalities without an identified local source | Population | Share of the whole scope |
 | --- | ---: | ---: | ---: |
-| Basque agglomeration | 142 | 122,028 | 28.2% |
+| Basque agglomeration | 141 | 120,690 | 27.9% |
 | MACS | 12 | 40,559 | 9.4% |
 | Seignanx | 7 | 29,473 | 6.8% |
 
@@ -106,6 +109,15 @@ No request or message to an authority has been sent as part of this audit.
   The eightieth directory gap, Orx in the Landes, was resolved through its
   official municipal site; unlike Pagolle it publishes individual permits,
   and is integrated in this change.
+- A third pass crawled the 86 remaining municipal sites recursively and
+  probed each for the template pages of the CMS Bidache uses
+  (`/permis-de-construire-exemple`, `/publications/arretes-d-urbanisme`).
+  Only Bidache publishes individual permits. Saint-Pée-sur-Nivelle,
+  Biriatou, Bassussarry and Saint-Martin-de-Hinx post road and public-domain
+  orders only; Ascain's monthly urbanism pages stop at April 2025. The
+  Cartelmatic street kiosks of Capbreton and Seignosse have no anonymous web
+  view (their API asks for a device token), and the regional PIGMA
+  catalogue holds no municipal dossier set for the area.
 - PanneauPocket, IntraMuros, publication-actes.fr, the clicmap acts registry,
   Sirap APGL, WordPress media and the regional open-data catalogues were
   checked in the preceding same-day research. A negative result describes
