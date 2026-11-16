@@ -136,7 +136,7 @@ import {
 } from './municipalPermitsFeed.js';
 import { EXTENDED_PERMIT_SOURCES, readBloisFilings, readExtendedNotice } from './municipalPermitExtensions.js';
 import { BOARD_PERMIT_SOURCES } from './permitBoardCities.js';
-import { DEMATDOC_PERMIT_SOURCES, readDematdocNotice } from './dematdocFeed.js';
+import { DEMATDOC_PERMIT_SOURCES, readDematdocNotice, readDematdocNotices } from './dematdocFeed.js';
 import { DIGILOR_TOWNS } from './digilorTowns.js';
 import {
   CARTDS_LICENCE, cartdsDate, cartdsKind, cartdsParcelIdus, cartdsProject, cartdsVerdictState, parseCartdsPlace,
@@ -3188,12 +3188,14 @@ export const PERMIT_LIST_TEXT = Object.freeze({
   'annecy-filings': Object.freeze({ wordGapEm: 0.15 }),
   'annecy-decisions': Object.freeze({ wordGapEm: 0.15 }),
   'dematdoc-notice': Object.freeze({ wordGapEm: 0.15 }),
+  'dematdoc-notices': Object.freeze({ wordGapEm: 0.15 }),
 });
 
 /** The readers, by the `layout` a list names. */
 export const PERMIT_LIST_READERS = Object.freeze({
   'extended-notice': readExtendedNotice,
   'dematdoc-notice': readDematdocNotice,
+  'dematdoc-notices': readDematdocNotices,
   'blois-filings': readBloisFilings,
   'municipal-notice': readMunicipalNotice,
   'balma-table': readBalmaTable,

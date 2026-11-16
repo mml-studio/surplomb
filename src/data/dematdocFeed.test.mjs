@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEMATDOC_PERMIT_SOURCES, dematdocDocuments, dematdocLazyRequest, dematdocOldest, dematdocParcels,
-  dematdocShelfRequest, dematdocTitleRow, readDematdocNotice,
+  dematdocShelfRequest, dematdocTitleRow, readDematdocNotice, readDematdocNotices,
 } from './dematdocFeed.js';
 import { normalisePermitListRow, permitListFor, scrubPermitListRow } from './permitListsFeed.js';
 
@@ -464,4 +464,28 @@ test('two boxes side by side: the site is the « Adresse » of the Terrain box, 
   assert.equal(row.decidedOn, '2026-09-22', 'OCR’s « | » before the signing line');
   assert.equal(row.verdict, 'Accord');
   assert.doesNotMatch(JSON.stringify(row), /PRIVATE|Privé/);
+});
+
+test('a file of several notices of filing gives one row each, the number closed up, the applicant never read (Arcangues)', () => {
+  const arcangues = permitListFor('64038');
+  const document = page(
+    [250, 780, 'AVIS DE DEPOT'],
+    [60, 760, 'Numéro de dossier : D P 6 4 0 38 2 6 00 0 85'],
+    [60, 745, 'Date d’enregistrement de la demande : 05/11/2026'],
+    [60, 730, 'Nom, prénom du demandeur : PRIVATE PERSON'],
+    [60, 715, 'Adresse du terrain : 2 Bis Impasse des Exemples - 64200 Arcangues'],
+    [60, 700, 'Nature des travaux : Installation de modules photovoltaïques'],
+    [250, 500, 'AVIS DE DEPOT'],
+    [60, 480, 'Numéro de dossier : D P 6 4 0 38 2 6 00 0 86'],
+    [60, 465, 'Date d’enregistrement de la demande : 05/11/2026'],
+    [60, 450, 'Nom, prénom du demandeur : M. PRIVATE Person'],
+    [60, 435, 'Adresse du terrain : 2 Impasse de l’Exemple - 64200 ARCANGUES'],
+    [60, 420, 'Nature des travaux : Construction d’une piscine enterrée'],
+  );
+  const rows = readDematdocNotices(document, { city: arcangues, file: { board: 'filings' } });
+  assert.deepEqual(rows.map((row) => [row.board, row.dossier, row.address, row.postcode, row.filedOn, row.purpose]), [
+    ['filings', 'DP 064038 26 00085', '2 Bis Impasse des Exemples', '64200', '2026-11-05', 'Installation de modules photovoltaïques'],
+    ['filings', 'DP 064038 26 00086', '2 Impasse de l’Exemple', '64200', '2026-11-05', 'Construction d’une piscine enterrée'],
+  ]);
+  assert.doesNotMatch(JSON.stringify(rows), /PRIVATE/i);
 });

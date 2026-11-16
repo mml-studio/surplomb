@@ -242,7 +242,7 @@ const SITE_LABELS = [
   /^(?:\S{1,8}\s+)?sis\s*(?:[àa]\s*)?:?\s+(?=\d)/i,
 ];
 const PARCEL_LABEL = /(?:r[ée]f[ée]rences?(?:\s*\(s\))?\s*cadastrales?(?:\s*\(s\))?|cadastr[ée]e?s?|cadastre|parcelles?(?:\s+cadastrales?)?(?:\s+n°)?)\s*[:|]?\s*(\S.*)$/i;
-const FILED = /(?:date\s*d[eu]\s*d[ée]p[ôo]t|date\s*de\s*r[ée]ception|d[ée]pos[ée]e?\s*(?:complet\s*)?(?:[àa]\s+la\s+mairie\s+)?le|(?:demande|dossier)\s*d[ée]pos[ée]e?\s*(?:complet\s*)?le)\s*:?\s*\|?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}\s+\S+\s+20\d{2})/i;
+const FILED = /(?:date\s*d[eu]\s*d[ée]p[ôo]t|date\s*de\s*r[ée]ception|date\s*d.enregistrement(?:\s*de\s*la\s*demande)?|d[ée]pos[ée]e?\s*(?:complet\s*)?(?:[àa]\s+la\s+mairie\s+)?le|(?:demande|dossier)\s*d[ée]pos[ée]e?\s*(?:complet\s*)?le)\s*:?\s*\|?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}\s+\S+\s+20\d{2})/i;
 const SIGNED = /\bFait\s+[àa][\s\S]{0,60}?\ble\s*:?\s*(\d{1,2}\/\d{2}\/\d{4}|\d{1,2}(?:er)?\s+\S+\s+20\d{2})/i;
 // Failing « Fait à », a line opening with the commune's name in capitals: « ETUPES, le 30 septembre 2026 ».
 // OCR may read the frame's edge before it as « | » (Saint-Laurent-de-Gosse's « | A SAINT-LAURENT-DE-GOSSE, le 22 septembre 2026 »).
@@ -539,6 +539,38 @@ export function readDematdocNotice(document, { city, file }) {
     row.decidedOn = file.decidedOn ?? (signed && (!filedOn || signed >= filedOn) && (!file.signedBy || signed <= file.signedBy) ? signed : null);
   }
   return [row];
+}
+
+/**
+ * Several notices of filing in one file, each under its own « AVIS DE
+ * DÉPÔT » heading — Arcangues posts its filings so, a file per family and per
+ * day of receipt (2026-11-16) — each read as {@link readDematdocNotice} reads
+ * one. The number is printed a figure or two at a time (« P C 6 4 0 38 2 6
+ * 00 0 26 »): the « Numéro de dossier » line is closed up and read as the
+ * notice's title. The applicant's line is never read.
+ *
+ * @param {{pages: Array<{runs: Array<object>, width?: number}>}} document
+ * @param {{city: object, file: object}} context
+ * @returns {Array<object>}
+ */
+export function readDematdocNotices(document, { city, file }) {
+  const rows = [];
+  for (const page of document?.pages ?? []) {
+    const lines = pageLines(page);
+    // i18n-ignore-next-line — the notice's own heading
+    const heads = lines.filter((line) => /^avis\s*de\s*d[ée]p[ôo]t$/i.test(line.text)).map((line) => line.y);
+    heads.forEach((top, i) => {
+      const bottom = heads[i + 1] ?? -Infinity;
+      const inside = (y) => y <= top + 1 && y > bottom + 1;
+      // i18n-ignore-next-line — the notice's own label
+      const label = /^.*?num[ée]ro\s*de\s*dossier\s*:?\s*/i;
+      const numbered = lines.find((line) => inside(line.y) && label.test(line.text));
+      const title = numbered ? numbered.text.replace(label, '').replace(/\s+/g, '') : '';
+      const notice = { pages: [{ ...page, runs: page.runs.filter((run) => inside(run.y)) }] };
+      rows.push(...readDematdocNotice(notice, { city, file: { ...file, row: null, title } }));
+    });
+  }
+  return rows;
 }
 
 /**

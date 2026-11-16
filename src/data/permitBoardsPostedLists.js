@@ -413,10 +413,89 @@ const wpMediaProtocol = {
   },
 };
 
+// --- WP File Download --------------------------------------------------------
+
+/** The plugin's page of files: ten, newest first when asked so. */
+const WPFD_PAGE_SIZE = 10;
+const WPFD_PAGES = 10;
+// i18n-ignore-start — the communes' own folder names, matched on (folded)
+/** A year's folder (« Urbanisme 2026 »), and the families of permits inside it. */
+const WPFD_YEAR = /^URBANISME (20\d{2})$/;
+const WPFD_FAMILY = /\b(?:PERMIS|DECLARATION)\b/;
+// i18n-ignore-end
+
+/** One call of the plugin's public AJAX API, which robots.txt allows (`Allow: /wp-admin/admin-ajax.php`). */
+function wpfdRequest(city, params, extra) {
+  const url = new URL('/wp-admin/admin-ajax.php', city.page);
+  url.search = new URLSearchParams({ juwpfisadmin: 'false', action: 'wpfd', ...params }).toString();
+  return { url: url.href, as: 'json', ...extra };
+}
+const wpfdFolders = (city, id) => wpfdRequest(city,
+  { task: 'categories.display', view: 'categories', id: String(id), top: String(city.source.wpfdRoot) }, { wpfd: 'folders' });
+const wpfdShelf = (city, id, page) => wpfdRequest(city,
+  { task: 'files.display', view: 'files', id: String(id), rootcat: String(city.source.wpfdRoot), page: String(page),
+    orderCol: 'created_time', orderDir: 'desc' }, { wpfd: 'files', folder: id, page });
+
+/**
+ * A commune that posts its legal display with the WP File Download plugin
+ * (`wpfd`): its folder of urbanism (`source.wpfdRoot`) holds a folder a year,
+ * « Urbanisme 2026 », and in it one per family — « Permis de construire »,
+ * « Déclaration Préalable », « Permis d'Aménager » (the plugin's « Changement
+ * d'usage » and « Divers » are left). The page that shows them draws them by
+ * script; the plugin's API answers the same lists as JSON, ten files a page,
+ * newest first. The year folders of the window are opened, then each family's
+ * files, a page at a time while the page is full and posted in the window.
+ * Each file is a list when its title says which (`listFiles`, the commune's
+ * `lists` and `layouts`), else an act when it names one of the commune's
+ * dossiers (`actFiles`), its day the upload's. Titles name applicants: only
+ * the number is read from them.
+ */
+const wpfdProtocol = {
+  start: (city) => [wpfdFolders(city, city.source.wpfdRoot)],
+  index(city, body, request, { since, day } = {}) {
+    if (!body || typeof body !== 'object') return null;
+    if (request.wpfd === 'folders') {
+      if (!Array.isArray(body.categories)) return null;
+      const first = Number(String(since ?? '').slice(0, 4)) || 0;
+      const next = [];
+      for (const folder of body.categories) {
+        const id = Number(folder?.term_id);
+        if (!Number.isInteger(id)) continue;
+        const name = fold(decode(folder?.name));
+        const year = WPFD_YEAR.exec(name)?.[1];
+        if (year) { if (Number(year) >= first) next.push(wpfdFolders(city, id)); continue; }
+        if (WPFD_FAMILY.test(name)) next.push(wpfdShelf(city, id, 1));
+      }
+      return { files: [], next };
+    }
+    if (!Array.isArray(body.files)) return null;
+    const links = [];
+    let older = false;
+    for (const item of body.files) {
+      let url;
+      try { url = new URL(String(item?.linkdownload ?? '')); } catch { continue; }
+      const published = municipalDate(String(item?.created_time ?? '').slice(0, 10));
+      if (!/^https?:$/.test(url.protocol) || url.origin !== new URL(city.page).origin || !published) continue;
+      if (since && published < since) { older = true; continue; }
+      if (day && published > day) continue;
+      let name = url.pathname;
+      try { name = decodeURIComponent(url.pathname); } catch { /* a stray % keeps the raw path */ }
+      links.push({ url: url.href, name, words: clean(decode(String(item?.post_title ?? ''))), published });
+    }
+    const lists = listFiles(city, links) ?? [];
+    const listed = new Set(lists.map((file) => file.url));
+    const acts = actFiles(city, links.filter((link) => !listed.has(link.url)), since) ?? [];
+    const page = Number(request.page) || 1;
+    const next = body.files.length >= WPFD_PAGE_SIZE && !older && page < WPFD_PAGES ? [wpfdShelf(city, request.folder, page + 1)] : [];
+    return { files: [...lists, ...acts], next };
+  },
+};
+
 export const POSTED_LIST_PROTOCOLS = Object.freeze({
   'posted-lists': Object.freeze(postedListsProtocol),
   'posted-acts': Object.freeze(postedActsProtocol),
   'wp-media': Object.freeze(wpMediaProtocol),
+  wpfd: Object.freeze(wpfdProtocol),
 });
 export const POSTED_LIST_READERS = Object.freeze({});
 export const POSTED_LIST_TEXT = Object.freeze({});

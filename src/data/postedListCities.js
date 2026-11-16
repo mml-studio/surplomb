@@ -224,5 +224,16 @@ export const POSTED_LIST_CITIES = [
       'https://www.saintlaurentdegosse.fr/Vie-municipale/Arretes-municipaux/Urbanisme2/Permis-de-construire',
       'https://www.saintlaurentdegosse.fr/Vie-municipale/Arretes-municipaux/Urbanisme2/Permis-d-amenager',
     ] } },
+  // Arcangues (WordPress, WP File Download) posts its legal display in a folder a year,
+  // « Urbanisme 2026 », one per family: the filings of a day as one typed file of
+  // notices (« Avis de dépôt PC reçu au 09-11-2026 », read by `dematdoc-notices`) and
+  // each signed order as a scan (« U-2026-224 - PC64038 2600012 - <applicant> », read
+  // by OCR; only the number is read from the title). The page draws them by script;
+  // the plugin's API (`wpfd`) lists them. 2026-11-16: 20 declaration files and 20
+  // permit files since 16 September, the newest posted that day.
+  { key: 'arcangues', insee: '64038', postcode: '64200', label: 'Commune d’Arcangues — affichage légal d’urbanisme',
+    page: 'https://www.arcangues.fr/affichage-legal/',
+    source: { protocol: 'wpfd', wpfdRoot: 114, ocr: true,
+      lists: { filings: '\\bAVIS (?:DE )?DEPOTS?\\b' }, layouts: { filings: 'dematdoc-notices' } } },
 ];
 // i18n-ignore-end
