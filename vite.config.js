@@ -311,7 +311,7 @@ import {
   SITADEL_FILES,
 } from './src/data/adsFeed.js';
 import { PORTAL_ROWS } from './src/data/portalArchive.js';
-import { sweepPortalArchive, PORTALS_ARCHIVE_DIR, PUBACTES_ARCHIVE_DIR } from './scripts/lib/portalArchive.mjs';
+import { portalSweepDue, sweepPortalArchive, PORTALS_ARCHIVE_DIR, PUBACTES_ARCHIVE_DIR } from './scripts/lib/portalArchive.mjs';
 import {
   cartdsInstanceFor,
   foldCartdsDossiers,
@@ -29028,7 +29028,8 @@ function adsFranceProxy() {
   // --- The open-data portals, archived ------------------------------------
   /**
    * Paris, Bordeaux, Nantes, Tours, Brest and dODu are read per scan and,
-   * since 2026-11-17, also kept: every record each serves, once a night, into
+   * since 2026-11-17, also kept: every record each serves, once a day from
+   * 11:00 Paris (`PORTAL_SWEEP_FROM_HOUR`, away from the night's sweeps), into
    * `.gev-cache/archive/portals/<insee>.json` (`src/data/portalArchive.js`).
    * Paris's file only ever holds six months, so before that night every
    * dossier older than that was gone. The scans do not read the archive yet;
@@ -29059,7 +29060,7 @@ function adsFranceProxy() {
     if (portalsSweeping) return portalsSweeping;
     portalsSweeping = (async () => {
       const day = cartdsDay();
-      if (!cartdsSweepDue(await readCartdsSweepStamp(portalArchive.dir), day)) return null;
+      if (!portalSweepDue(await readCartdsSweepStamp(portalArchive.dir))) return null;
       const summary = await sweepPortalArchive({
         portals: LOCAL_ADS_PORTALS, store: portalArchive, http: portalArchiveHttp, day,
       });

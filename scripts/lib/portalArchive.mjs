@@ -17,6 +17,7 @@
 
 import path from 'node:path';
 import { cartdsDay } from '../../src/data/cartdsArchive.js';
+import { cartdsSweepDue, parisHour } from './cartdsArchive.mjs';
 import {
   portalArchiveColumns,
   portalArchiveCommune,
@@ -58,6 +59,26 @@ export const PORTAL_PAUSE_MS = 2000;
  * sweep (2026-11-17) and answered at once when asked again.
  */
 export const PORTAL_RETRY_PAUSE_MS = 30_000;
+
+/**
+ * The portals are swept in the late morning, not with the boards at ~00:40.
+ * A portal is rewritten once a day, so the hour costs no freshness, and the
+ * night is when every other family sweeps — the city lists until ~04:47
+ * with their OCR, the Cart@DS second pass from 08:00. Brest and Bordeaux
+ * each lift the process by ~300 MB for a few minutes, in a container capped
+ * at 1 GB that idles at ~410 MB: on 2026-11-17 it was killed twice during
+ * the first Brest reading. The archive check allows its stamp a day's lag.
+ */
+export const PORTAL_SWEEP_FROM_HOUR = 11;
+
+/**
+ * A sweep is due once per French calendar day, from {@link PORTAL_SWEEP_FROM_HOUR}.
+ * @param {?object} stamp The last sweep's summary.
+ * @param {Date} [now]
+ */
+export function portalSweepDue(stamp, now = new Date()) {
+  return parisHour(now) >= PORTAL_SWEEP_FROM_HOUR && cartdsSweepDue(stamp, cartdsDay(now));
+}
 
 /**
  * The day `months` calendar months before `day`, `YYYY-MM-DD`.
@@ -114,13 +135,21 @@ export function portalArcgisUrl(portal, { since = null, offset = 0 } = {}) {
   return `${portal.service}/query?${params}`;
 }
 
+/**
+ * One formatter for every date. Built per call, as `adsFeed.js` does for a
+ * scan's few hundred rows, Brest's 32 179 records × 3 dates took the
+ * container past its 1 GB ceiling on 2026-11-17 (killed twice mid-sweep):
+ * measured in a bare process, the read alone peaked at 478 MB RSS.
+ */
+const PARIS_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
 /** Milliseconds since 1970 → the `YYYY-MM-DD` it is in Paris; anything else as it came. */
 function parisDay(value) {
   const ms = Number(value);
   if (value === null || value === undefined || value === '' || !Number.isFinite(ms)) return value ?? null;
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date(ms));
+  return PARIS_DAY.format(new Date(ms));
 }
 
 /** A GeoJSON feature as one flat record, its `DATE_*` columns as Paris days. */

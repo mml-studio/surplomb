@@ -45,10 +45,11 @@ export const NEW_STOP_MAX_DAYS = 3;
 
 /**
  * Days a family's `sweep.json` may lag the judged day. Montpellier's
- * open-data edition is swept at ~08:00, after a nightly check has run, so its
- * stamp is yesterday's at that hour; every board family sweeps at ~00:40.
+ * open-data edition is swept at ~08:00 and the open-data portals at ~11:00,
+ * after the morning check has run, so their stamps are yesterday's at that
+ * hour; every board family sweeps at ~00:40.
  */
-export const STAMP_LAG_DAYS = Object.freeze({ mmm: 1 });
+export const STAMP_LAG_DAYS = Object.freeze({ mmm: 1, portals: 1 });
 
 const SWEEP_STAMP = 'sweep.json';
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
