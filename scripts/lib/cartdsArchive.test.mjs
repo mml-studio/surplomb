@@ -9,11 +9,15 @@ import os from 'node:os';
 import path from 'node:path';
 import tls from 'node:tls';
 import {
+  cartdsRetryDue,
+  cartdsRetryInstances,
   cartdsRobotsVerdict,
   cartdsSweepDue,
   createCartdsArchiveStore,
+  mergeCartdsRetry,
   readCartdsBoard,
   readCartdsSweepStamp,
+  retryCartdsSweep,
   sweepCartdsArchive,
   trustCartdsIntermediates,
   writeCartdsSweepStamp,
@@ -232,6 +236,76 @@ test('a sweep is due once per French calendar day', async () => {
   assert.equal(cartdsSweepDue(stamp, '2026-09-30'), false);
   assert.equal(cartdsSweepDue(stamp, '2026-10-01'), true);
   assert.equal(cartdsSweepDue({ read: 3 }, '2026-10-01'), true);
+});
+
+test('the morning retry is due once, from 08:00 Paris, on the night\'s day, when the night failed', () => {
+  const night = { day: '2026-11-17', read: 1776, failed: ['94042'] };
+  // 07:59 and 08:00 Paris in winter (UTC+1), 08:00 in summer (UTC+2).
+  assert.equal(cartdsRetryDue(night, new Date('2026-11-17T06:59:00Z')), false);
+  assert.equal(cartdsRetryDue(night, new Date('2026-11-17T07:00:00Z')), true);
+  assert.equal(cartdsRetryDue({ ...night, day: '2026-07-01' }, new Date('2026-07-01T06:00:00Z')), true);
+  assert.equal(cartdsRetryDue({ ...night, retry: { read: 1 } }, new Date('2026-11-17T09:00:00Z')), false);
+  assert.equal(cartdsRetryDue({ ...night, failed: [] }, new Date('2026-11-17T09:00:00Z')), false);
+  // Past midnight the night's stamp is yesterday's: the next sweep is due, not a retry.
+  assert.equal(cartdsRetryDue(night, new Date('2026-11-18T09:00:00Z')), false);
+  assert.equal(cartdsRetryDue(null, new Date('2026-11-17T09:00:00Z')), false);
+});
+
+test('the retry asks only the instances and communes the night failed', () => {
+  assert.deepEqual(cartdsRetryInstances([OPEN, SHUT], ['13113']).map(({ key, communes }) => ({ key, communes })),
+    [{ key: 'open', communes: ['13113'] }]);
+  assert.deepEqual(cartdsRetryInstances([OPEN, SHUT], []), []);
+});
+
+test('a board dark at night is read in the morning, on the night\'s day, and the stamp says so', async () => {
+  const dir = await tempDir();
+  const store = createCartdsArchiveStore(dir);
+  const boards = {
+    'open.example': {
+      114: { 1: [ROW('DP 013 114 26 00167')], 2: [] },
+      113: { 1: [ROW('DP 013 113 26 00002')], 2: [] },
+    },
+  };
+  const dark = fakeHttp({ boards: { 'open.example': { ...boards['open.example'], 113: { 1: [], 2: null } } } });
+  const night = await sweepCartdsArchive({
+    // SHUT's host is silent all night, as the Grand Dole's is.
+    instances: [OPEN, SHUT], store, http: dark,
+    robots: async (instance) => (instance.key === 'shut' ? { allowed: false, final: false } : { allowed: true, final: true }),
+    day: '2026-11-17', pauseMs: 0, log: {},
+  });
+  assert.deepEqual(night.failed, ['13113', '50129']);
+
+  const lines = [];
+  const morning = fakeHttp({ boards });
+  const stamp = await retryCartdsSweep({
+    stamp: night, instances: [OPEN, SHUT], store, http: morning,
+    robots: async (instance) => ({ allowed: instance.key === 'open', final: true }),
+    pauseMs: 0, log: { log: (line) => lines.push(line) },
+  });
+  // 13114 is not asked again; SHUT now refuses and is named as such.
+  assert.ok(!morning.calls.some((call) => call.includes('shut.example')));
+  assert.equal(morning.calls.filter((call) => call.endsWith('GetRapportDossier')).length, 2);
+  assert.equal(stamp.day, '2026-11-17');
+  assert.equal(stamp.read, 2);
+  assert.deepEqual(stamp.failed, []);
+  assert.deepEqual(stamp.refused, ['shut']);
+  assert.deepEqual(stamp.retry && { read: stamp.retry.read, failedAtNight: stamp.retry.failedAtNight },
+    { read: 1, failedAtNight: 2 });
+  assert.equal(stamp.startedAt, night.startedAt);
+  assert.match(lines[0], /^\[cartds-archive morning retry\] 2026-11-17: 1\/2 communes read/);
+  const kept = JSON.parse(await fsp.readFile(path.join(dir, '13113.json'), 'utf8'));
+  assert.equal(kept.lastDay, '2026-11-17');
+  assert.equal(cartdsRetryDue(stamp, new Date('2026-11-17T10:00:00Z')), false, 'once a day');
+});
+
+test('a retry that still fails keeps the commune failed and the night\'s counts', () => {
+  const night = { day: '2026-11-17', read: 10, added: 4, rows: 100, refused: [], failed: ['1', '2'], truncated: ['9'], unsaved: [] };
+  const morning = { startedAt: 'a', finishedAt: 'b', communes: 2, read: 1, added: 3, rows: 7, refused: [], failed: ['2'], truncated: [], unsaved: [] };
+  const merged = mergeCartdsRetry(night, morning);
+  assert.deepEqual([merged.read, merged.added, merged.rows], [11, 7, 107]);
+  assert.deepEqual(merged.failed, ['2']);
+  assert.deepEqual(merged.truncated, ['9']);
+  assert.equal(merged.retry.failedAtNight, 2);
 });
 
 test('every intermediate an instance names is a CA signed by a root Node ships', () => {

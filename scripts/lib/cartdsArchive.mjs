@@ -578,6 +578,92 @@ export function cartdsSweepDue(stamp, day = cartdsDay()) {
   return !stamp || typeof stamp.day !== 'string' || stamp.day < day;
 }
 
+/** The hour in France, 0–23. */
+export function parisHour(now = new Date()) {
+  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: '2-digit', hourCycle: 'h23' }).format(now));
+}
+
+/**
+ * The hour, in France, from which the night's failed communes are read again.
+ *
+ * Some hosts are dark for the whole night, and the sweep starts at ~00:40
+ * Paris. Measured every 20 minutes from the container on 2026-11-16/17: the
+ * five `*.pemb.fr` boards answer 500 from 00:00 to ~07:20 Paris and
+ * `sig.grand-dole.fr` does not accept a connection until ~06:20 — 73
+ * municipalities lost every night, and only those. 08:00 leaves both an hour.
+ */
+export const CARTDS_RETRY_FROM_HOUR = 8;
+
+/**
+ * A morning retry is due once, on the sweep's own French day, when the night
+ * left communes unread.
+ * @param {?object} stamp The last sweep's summary.
+ * @param {Date} [now]
+ */
+export function cartdsRetryDue(stamp, now = new Date()) {
+  return Boolean(stamp) && !stamp.retry && stamp.day === cartdsDay(now)
+    && Array.isArray(stamp.failed) && stamp.failed.length > 0
+    && parisHour(now) >= CARTDS_RETRY_FROM_HOUR;
+}
+
+/**
+ * The instances cut to the communes the night failed, in the sweep's order;
+ * an instance with none left is dropped, so its host is not asked.
+ * @param {Array<object>} instances
+ * @param {Array<string>} failed
+ */
+export function cartdsRetryInstances(instances, failed) {
+  const wanted = new Set(failed);
+  return instances
+    .map((instance) => ({ ...instance, communes: instance.communes.filter((insee) => wanted.has(insee)) }))
+    .filter((instance) => instance.communes.length > 0);
+}
+
+/**
+ * The night's summary with the morning's reading folded in: `failed` is what
+ * is still unread, the counts add up, and `retry` says what the morning did.
+ * The health check reads the stamp, so a board read at 08:00 is a board read.
+ * @param {object} night
+ * @param {object} morning
+ */
+export function mergeCartdsRetry(night, morning) {
+  const union = (a = [], b = []) => [...new Set([...a, ...b])];
+  return {
+    ...night,
+    read: night.read + morning.read,
+    added: night.added + morning.added,
+    rows: night.rows + morning.rows,
+    refused: union(night.refused, morning.refused),
+    failed: morning.failed,
+    truncated: union(night.truncated, morning.truncated),
+    unsaved: union(night.unsaved, morning.unsaved),
+    retry: {
+      startedAt: morning.startedAt,
+      finishedAt: morning.finishedAt,
+      communes: morning.communes,
+      read: morning.read,
+      added: morning.added,
+      failedAtNight: night.failed.length,
+    },
+  };
+}
+
+/**
+ * Read again the communes the night's sweep failed, on the night's day, and
+ * return the stamp to write. Same pacing and robots rules as the sweep.
+ * @param {object} options `sweepCartdsArchive`'s, plus the night's `stamp`.
+ */
+export async function retryCartdsSweep({ stamp, instances, log = console, ...options }) {
+  const morning = await sweepCartdsArchive({
+    ...options,
+    instances: cartdsRetryInstances(instances, stamp.failed),
+    day: stamp.day,
+    label: 'cartds-archive morning retry',
+    log,
+  });
+  return mergeCartdsRetry(stamp, morning);
+}
+
 /**
  * Read every board of every instance once and fold it into the archive.
  *
@@ -609,12 +695,13 @@ export function cartdsSweepDue(stamp, day = cartdsDay()) {
  * @param {number} [options.pauseMs]
  * @param {(ms: number) => Promise<void>} [options.sleep]
  * @param {{log?: Function, warn?: Function}} [options.log]
+ * @param {string} [options.label] The log line's prefix.
  * @returns {Promise<object>} The summary, as the stamp stores it.
  */
 export async function sweepCartdsArchive({
   instances, store, http, robots = (instance) => cartdsRobotsVerdict(instance, http),
   day = cartdsDay(), pauseMs = 1000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  log = console,
+  log = console, label = 'cartds-archive',
 }) {
   const paced = {
     text: http.text,
@@ -655,7 +742,7 @@ export async function sweepCartdsArchive({
     }
   }
   summary.finishedAt = new Date().toISOString();
-  log.log?.(`[cartds-archive] ${day}: ${summary.read}/${summary.communes} communes read, `
+  log.log?.(`[${label}] ${day}: ${summary.read}/${summary.communes} communes read, `
     + `${summary.added} new rows, ${summary.rows} kept`
     + (summary.failed.length ? `, failed: ${summary.failed.join(' ')}` : '')
     + (summary.refused.length ? `, robots.txt refuses: ${summary.refused.join(' ')}` : ''));

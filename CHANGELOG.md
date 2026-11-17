@@ -6,6 +6,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **73 Cart@DS municipalities were lost every night: their boards are now
+  read again in the morning.** The five Paris-Est-Marne et Bois boards answer
+  500 from midnight to ~07:20 Paris and the Grand Dole's host accepts no
+  connection until ~06:20, so the sweep that starts at ~00:40 read 1 776 of
+  1 854 municipalities on 2026-11-17 where ~1 849 answer by day. From 08:00
+  Paris the server reads once more only the communes the night failed, dated
+  on the night's day, and the stamp records what is still unread. The VPS's
+  health verdict, which the house's alarm reports, moves to 09:30 Paris
+  (`gev-archive-health.timer`): taken at 02:00 UTC it also called the city
+  lists' sweep, which ran until 04:47, absent.
 - **Bidache's municipal permits are now read.** Its site posts each signed
   order on a page per family (building and development permits, prior
   declarations), titled with the dossier number and the decision day run

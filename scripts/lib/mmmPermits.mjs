@@ -23,7 +23,7 @@ import {
   MMM_ARCHIVE_INSTANCE,
   MMM_BOARD,
 } from '../../src/data/mmmPermitsFeed.js';
-import { cartdsSweepDue } from './cartdsArchive.mjs';
+import { cartdsSweepDue, parisHour } from './cartdsArchive.mjs';
 
 /** Where the archive lives, under the server's persistent cache. */
 export const MMM_ARCHIVE_DIR = path.join('.gev-cache', 'archive', 'mmm');
@@ -40,11 +40,6 @@ export const MMM_CSV_MAX_BYTES = 64 * 1024 * 1024;
  * read yesterday's edition and date every row a day late.
  */
 export const MMM_SWEEP_FROM_HOUR = 8;
-
-/** The hour in France, 0–23. */
-function parisHour(now) {
-  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: '2-digit', hourCycle: 'h23' }).format(now));
-}
 
 /**
  * A sweep is due once per French calendar day, once that day's export is out.

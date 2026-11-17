@@ -370,11 +370,13 @@ import { organisationApplicant } from './src/data/permitApplicant.js';
 import { archivedCartdsRows, cartdsDay } from './src/data/cartdsArchive.js';
 import {
   cartdsRobotsVerdict as askCartdsRobots,
+  cartdsRetryDue,
   cartdsSweepDue,
   createCartdsArchiveStore,
   openCartdsSession,
   readCartdsCommune,
   readCartdsSweepStamp,
+  retryCartdsSweep,
   sweepCartdsArchive,
   trustCartdsIntermediates,
   writeCartdsSweepStamp,
@@ -27860,6 +27862,8 @@ function adsFranceProxy() {
    * leaves an unread board is lost, so every board is read once a French
    * calendar day. Checked hourly, due when `sweep.json` names an earlier day;
    * the stamp is on the persistent volume, so a redeploy does not sweep twice.
+   * The communes the night left unread are read once more from 08:00 Paris
+   * (`cartdsRetryDue`): some hosts are dark all night.
    *
    * ON under `vite preview` — the hosted server, whose `.gev-cache` persists —
    * and OFF under `vite dev`, whose cache is a laptop's. `CARTDS_ARCHIVE=daily`
@@ -27881,14 +27885,14 @@ function adsFranceProxy() {
     if (cartdsSweeping) return cartdsSweeping;
     cartdsSweeping = (async () => {
       const day = cartdsDay();
-      if (!cartdsSweepDue(await readCartdsSweepStamp(cartdsArchive.dir), day)) return null;
-      const summary = await sweepCartdsArchive({
-        instances: CARTDS_INSTANCES,
-        store: cartdsArchive,
-        http: cartdsHttp,
-        robots: cartdsRobotsAnswer,
-        day,
-      });
+      const stamp = await readCartdsSweepStamp(cartdsArchive.dir);
+      const reading = { instances: CARTDS_INSTANCES, store: cartdsArchive, http: cartdsHttp, robots: cartdsRobotsAnswer };
+      let summary = null;
+      if (cartdsSweepDue(stamp, day)) summary = await sweepCartdsArchive({ ...reading, day });
+      // Hosts dark all night (`CARTDS_RETRY_FROM_HOUR`) are read once more
+      // after breakfast, on the same day's stamp.
+      else if (cartdsRetryDue(stamp)) summary = await retryCartdsSweep({ ...reading, stamp });
+      if (!summary) return null;
       await writeCartdsSweepStamp(cartdsArchive.dir, summary);
       return summary;
     })().catch((error) => {

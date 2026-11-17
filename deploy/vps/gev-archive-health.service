@@ -1,0 +1,10 @@
+[Unit]
+Description=Surplomb — check that every permit source was read, after the morning retry
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/gev/gev-archive-nightly.sh health
+Nice=10
