@@ -20,6 +20,11 @@
 # SAFEGUARD. A copy holding under 90 % of the previous copy's files (archive
 # emptied, volume recreated) is kept but marked `suspect`, deletes nothing, and
 # fails the unit. Step 2 runs whatever step 1 did.
+#
+# `gev-archive-nightly.sh health` runs step 2 alone: `gev-archive-health.timer`
+# does so at 09:30 Paris, after the morning retry of the boards dark at night
+# and after the city lists' sweep (4 h on 2026-11-17, past this copy at 02:00
+# UTC). The house's alarm reads that verdict, not the night's.
 set -uo pipefail
 shopt -s nullglob
 
@@ -79,6 +84,8 @@ health() {
     return 1
   fi
 }
+
+if [ "${1:-}" = health ]; then health; exit $?; fi
 
 failed=0
 backup || { failed=1; printf '{"at":"%s","error":"backup failed, see journalctl -u gev-archive-nightly"}\n' "$(now)" >"$STATE/backup.json"; }

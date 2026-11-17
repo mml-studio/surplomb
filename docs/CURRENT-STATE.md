@@ -4810,6 +4810,17 @@ called it refused, so Capatlantique (5 municipalities, since 2026-11-13) and
 the Grand Dole (68, since 2026-10-22) were reported as refusing robots while
 their `robots.txt` answered 404 — which allows everything — every time it was
 asked by day; both stop answering during the night sweep only.
+**Communes the night failed are read again in the morning.** Measured every
+20 minutes from the container on 2026-11-16/17, the five `*.pemb.fr` boards
+answer 500 from 00:00 to ~07:20 Paris and `sig.grand-dole.fr` accepts no
+connection until ~06:20, so the ~00:40 sweep lost 73 municipalities every
+night (1 776 of 1 854 read, against ~1 849 by day). From the first hourly
+check after 08:00 Paris (`CARTDS_RETRY_FROM_HOUR`), the server reads once
+more the instances and communes the stamp names under `failed`, dated on the
+night's day, and folds the result into the same `sweep.json` (`failed` is what
+is still unread; `retry` says what the morning read). The hosted server's
+health verdict that the house's alarm reads is taken at 09:30 Paris, after
+that retry and after the city lists' sweep (4 h 08 on 2026-11-17).
 
 **Since 2026-10-01, 56 more communes answer from the other family of boards.**
 Sirap's « Portail Usager », the filing portal of the NEXT'ADS instruction

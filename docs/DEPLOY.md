@@ -26,9 +26,9 @@ and install into `/opt/gev`, the default `GEV_ROOT` of the scripts.
 ```bash
 ssh box 'mkdir -p /opt/gev'
 scp deploy/vps/docker-compose.yml deploy/vps/gev-deploy.sh deploy/vps/gev-health-probe.sh deploy/vps/gev-archive-nightly.sh box:/opt/gev/
-scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} deploy/vps/gev-medecins-refresh.{service,timer} deploy/vps/gev-archive-nightly.{service,timer} box:/etc/systemd/system/
+scp deploy/vps/gev-deploy.{service,timer} deploy/vps/gev-health-probe.{service,timer} deploy/vps/gev-warm-view.{service,timer} deploy/vps/gev-medecins-refresh.{service,timer} deploy/vps/gev-archive-nightly.{service,timer} deploy/vps/gev-archive-health.{service,timer} box:/etc/systemd/system/
 ssh box 'chmod +x /opt/gev/gev-deploy.sh /opt/gev/gev-health-probe.sh /opt/gev/gev-archive-nightly.sh && chmod 600 /opt/gev/.env'
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer gev-medecins-refresh.timer gev-archive-nightly.timer'
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-deploy.timer gev-health-probe.timer gev-warm-view.timer gev-medecins-refresh.timer gev-archive-nightly.timer gev-archive-health.timer'
 ```
 
 `/opt/gev/.env` needs at least:
@@ -386,11 +386,16 @@ archive's health check inside the container. The verdict's rules are in
 `scripts/lib/permitArchiveHealth.mjs`: a family whose `sweep.json` is not
 tonight's, a municipality two days behind (grouped by the instance that reads
 it, new for three days, then ongoing), a host refusing robots.
+`gev-archive-health.timer` (09:30 Paris) runs the check alone once more, after
+the morning retry of the Cart@DS boards dark at night and after the city
+lists' sweep, which can outlast 02:00 UTC (until 04:47 Paris on 2026-11-17).
+The house's alarm (`surplomb-alarme.timer` on nvr, 09:45 Paris) reports that
+verdict.
 
 ```bash
 scp deploy/vps/gev-archive-nightly.sh box:/opt/gev/ && ssh box 'chmod +x /opt/gev/gev-archive-nightly.sh'
-scp deploy/vps/gev-archive-nightly.{service,timer} box:/etc/systemd/system/
-ssh box 'systemctl daemon-reload && systemctl enable --now gev-archive-nightly.timer'
+scp deploy/vps/gev-archive-nightly.{service,timer} deploy/vps/gev-archive-health.{service,timer} box:/etc/systemd/system/
+ssh box 'systemctl daemon-reload && systemctl enable --now gev-archive-nightly.timer gev-archive-health.timer'
 ssh box 'systemctl start gev-archive-nightly.service'          # copy and check now
 ssh box 'jq -r .text /var/lib/gev-archive/health.json'          # the verdict, in words
 ssh box 'docker exec gev node scripts/permit-archive-health.mjs' # same, live

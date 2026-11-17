@@ -1,0 +1,15 @@
+[Unit]
+Description=Check the permit archive every morning, after the retry of the boards dark at night
+
+[Timer]
+# 09:30 Paris: the Cart@DS communes the night failed are read again from the
+# first hourly check after 08:00 Paris (`CARTDS_RETRY_FROM_HOUR`), a few
+# minutes' work; the city lists' sweep, started at ~00:40, ran until 04:47 on
+# 2026-11-17. The 02:00 UTC verdict of gev-archive-nightly saw neither. The
+# house's alarm (surplomb-alarme.timer on nvr) reads this one at 09:45.
+OnCalendar=*-*-* 09:30:00 Europe/Paris
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
