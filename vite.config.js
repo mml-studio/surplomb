@@ -307,8 +307,11 @@ import {
   ADS_MAX_MONTHS,
   ADS_MAX_RADIUS_M,
   BAN_CSV_URL,
+  LOCAL_ADS_PORTALS,
   SITADEL_FILES,
 } from './src/data/adsFeed.js';
+import { PORTAL_ROWS } from './src/data/portalArchive.js';
+import { sweepPortalArchive, PORTALS_ARCHIVE_DIR, PUBACTES_ARCHIVE_DIR } from './scripts/lib/portalArchive.mjs';
 import {
   cartdsInstanceFor,
   foldCartdsDossiers,
@@ -327,8 +330,14 @@ import {
   publicationActesSearchUrl,
   PUBLICATION_ACTES_API,
   PUBLICATION_ACTES_LICENCE,
+  PUBLICATION_ACTES_COMMUNES,
   PUBLICATION_ACTES_MAX_LISTS,
   PUBLICATION_ACTES_MAX_PAGES,
+  archivedDepositRow,
+  PUBACTES_ACTS_BOARD,
+  PUBACTES_ARCHIVE_INSTANCE,
+  PUBACTES_LISTS_BOARD,
+  PUBACTES_ROWS,
 } from './src/data/publicationActesFeed.js';
 import {
   normaliseSirapRow,
@@ -27910,11 +27919,11 @@ function adsFranceProxy() {
     // Montpellier's métropole files too, once that day's export is out.
     const sweep = () => {
       void sweepCartdsIfDue(); void sweepSirapIfDue(); void sweepPermitListsIfDue(); void sweepMmmIfDue();
-      void sweepEpermisIfDue();
+      void sweepEpermisIfDue(); void sweepPortalsIfDue(); void sweepPubActesIfDue();
     };
     setTimeout(sweep, CARTDS_SWEEP_WARMUP_MS).unref?.();
     setInterval(sweep, CARTDS_SWEEP_CHECK_MS).unref?.();
-    console.log(`[cartds-archive] armed — every Cart@DS, Sirap and e-permis board, every city list and the Montpellier métropole files once a day, into ${CARTDS_ARCHIVE_DIR}, ${SIRAP_ARCHIVE_DIR}, ${EPERMIS_ARCHIVE_DIR}, ${PERMIT_LISTS_ARCHIVE_DIR} and ${MMM_ARCHIVE_DIR}`);
+    console.log(`[cartds-archive] armed — every Cart@DS, Sirap and e-permis board, every city list, the Montpellier métropole files, the open-data portals and publication-actes.fr once a day, into ${CARTDS_ARCHIVE_DIR}, ${SIRAP_ARCHIVE_DIR}, ${EPERMIS_ARCHIVE_DIR}, ${PERMIT_LISTS_ARCHIVE_DIR}, ${MMM_ARCHIVE_DIR}, ${PORTALS_ARCHIVE_DIR} and ${PUBACTES_ARCHIVE_DIR}`);
   }
 
   /**
@@ -28312,12 +28321,16 @@ function adsFranceProxy() {
    * One commune's published acts and lists of filed dossiers, placed, held
    * for six hours like a Cart@DS board and for the same reason.
    *
-   * The acts stay on the platform, unlike a board's rows, so nothing is
-   * archived here. A LIST is immutable once published — its URL carries its
-   * hash — so its parsed rows are kept on disk for good, and a list is read
-   * once per server, not once per scan: Ustaritz's 33 lists are 4.7 MB of PDF
-   * and 5 KB of rows. What is kept is what the layer may publish: an
-   * applicant who is a person is dropped before the rows are written.
+   * Every act and every list row a reading sees is archived
+   * (`PUBACTES_ROWS`, `.gev-cache/archive/publication-actes/`), and the three
+   * communes are read once a night by `sweepPubActesIfDue` — the platform
+   * keeps its acts, but an act can be withdrawn or replaced, and what was
+   * read is ours to keep (2026-11-17). A LIST is immutable once published —
+   * its URL carries its hash — so its parsed rows are kept on disk for good,
+   * and a list is read once per server, not once per scan: Ustaritz's 33
+   * lists are 4.7 MB of PDF and 5 KB of rows. What is kept is what the layer
+   * may publish: an applicant who is a person is dropped before the rows are
+   * written.
    */
   const PUBACTES_TTL_MS = 6 * 60 * 60 * 1000;
   const PUBACTES_TIMEOUT_MS = 30_000;
@@ -28332,6 +28345,8 @@ function adsFranceProxy() {
   /** Bumped whenever the list parser changes, so every list is read again. */
   const PUBACTES_LIST_SCHEMA = 1;
   const PUBACTES_LIST_DIR = path.join(process.cwd(), '.gev-cache', 'publication-actes');
+  /** Every act and list row ever read, per commune (see above). */
+  const pubActesArchive = createCartdsArchiveStore(path.join(process.cwd(), PUBACTES_ARCHIVE_DIR), console, PUBACTES_ROWS);
   /** insee → {at, value}. */
   const pubActesCommunes = new Map();
   /** insee → the build in progress. */
@@ -28418,7 +28433,7 @@ function adsFranceProxy() {
   }
 
   /** Read, fold and place one commune's acts and lists. */
-  async function buildPublicationActesCommune(commune) {
+  async function buildPublicationActesCommune(commune, { allLists = false } = {}) {
     const report = {
       key: `publication-actes-${commune.insee}`,
       label: commune.label,
@@ -28460,10 +28475,13 @@ function adsFranceProxy() {
     const lists = commune.lists
       ? acts.filter(isDepositList)
         .sort((a, b) => String(b.date_publication ?? '').localeCompare(String(a.date_publication ?? '')))
-        .slice(0, PUBLICATION_ACTES_MAX_LISTS)
+        // The nightly sweep reads every list, the scan the newest forty: a
+        // list is read once per server, so this costs the first night only.
+        .slice(0, allLists ? Infinity : PUBLICATION_ACTES_MAX_LISTS)
       : [];
     let listsRead = 0;
     let listsScanned = 0;
+    const listRows = [];
     for (let i = 0; i < lists.length; i += PUBACTES_LIST_WAVE) {
       const wave = lists.slice(i, i + PUBACTES_LIST_WAVE);
       const answers = await Promise.all(wave.map((act) => depositListRows(act)));
@@ -28472,10 +28490,22 @@ function adsFranceProxy() {
         listsRead += 1;
         if (!rows.length) listsScanned += 1;
         for (const row of rows) {
+          listRows.push(archivedDepositRow(row, wave[k]));
           const permit = normaliseDepositRow(commune, row, wave[k]);
           if (permit) permits.push(permit);
         }
       });
+    }
+    // Kept before anything is folded or placed: the act and the list row as
+    // read. A truncated reading is not recorded — the acts it missed would
+    // look withdrawn for a day.
+    let archived = null;
+    if (!truncated) {
+      const answer = await pubActesArchive.record(PUBACTES_ARCHIVE_INSTANCE, commune.insee, {
+        [PUBACTES_ACTS_BOARD]: acts,
+        [PUBACTES_LISTS_BOARD]: listRows,
+      });
+      archived = { added: answer.added, rows: answer.archive.rows.length, saved: answer.saved };
     }
     const { permits: dossiers, folded } = foldPublicationActes(permits);
     // The parcel first, the geocoder for the rest, as for a Cart@DS board.
@@ -28505,8 +28535,48 @@ function adsFranceProxy() {
         skipped,
         truncated,
         lists: { read: listsRead, withoutText: listsScanned, of: lists.length },
+        archived,
       },
     };
+  }
+
+  /**
+   * The nightly reading of every publication-actes commune, beside the
+   * boards': each one read whole, every list included, so the archive is
+   * written even on a night nobody scans there.
+   */
+  let pubActesSweeping = null;
+  async function sweepPubActesIfDue() {
+    if (pubActesSweeping) return pubActesSweeping;
+    pubActesSweeping = (async () => {
+      const day = cartdsDay();
+      if (!cartdsSweepDue(await readCartdsSweepStamp(pubActesArchive.dir), day)) return null;
+      const summary = {
+        day, startedAt: new Date().toISOString(), finishedAt: null,
+        communes: PUBLICATION_ACTES_COMMUNES.length, read: 0, added: 0, rows: 0, failed: [], unsaved: [],
+      };
+      for (const commune of PUBLICATION_ACTES_COMMUNES) {
+        const value = await buildPublicationActesCommune(commune, { allLists: true });
+        const archived = value.portal.archived;
+        if (!value.portal.ok || !archived) { summary.failed.push(commune.insee); continue; }
+        if (!archived.saved) summary.unsaved.push(commune.insee);
+        summary.read += 1;
+        summary.added += archived.added;
+        summary.rows += archived.rows;
+        // Tonight's reading is the freshest there is: the scans get it.
+        if (!pacingRefusal()) pubActesCommunes.set(commune.insee, { at: Date.now(), value });
+      }
+      summary.finishedAt = new Date().toISOString();
+      await writeCartdsSweepStamp(pubActesArchive.dir, summary);
+      console.log(`[pubactes-archive] ${day}: ${summary.read}/${summary.communes} communes read, `
+        + `${summary.added} new rows, ${summary.rows} kept`
+        + (summary.failed.length ? `, failed: ${summary.failed.join(' ')}` : ''));
+      return summary;
+    })().catch((error) => {
+      console.warn(`[pubactes-archive] sweep failed: ${error?.message || error}`);
+      return null;
+    }).finally(() => { pubActesSweeping = null; });
+    return pubActesSweeping;
   }
 
   /**
@@ -28953,6 +29023,53 @@ function adsFranceProxy() {
       permits: entry.value.permits.filter((permit) => permit.depositYear >= year),
       portals: [entry.value.portal],
     };
+  }
+
+  // --- The open-data portals, archived ------------------------------------
+  /**
+   * Paris, Bordeaux, Nantes, Tours, Brest and dODu are read per scan and,
+   * since 2026-11-17, also kept: every record each serves, once a night, into
+   * `.gev-cache/archive/portals/<insee>.json` (`src/data/portalArchive.js`).
+   * Paris's file only ever holds six months, so before that night every
+   * dossier older than that was gone. The scans do not read the archive yet;
+   * it is kept, checked (`permits:archive-health`) and backed up with the
+   * boards'.
+   */
+  const PORTAL_ARCHIVE_TIMEOUT_MS = 180_000;
+  const portalArchive = createCartdsArchiveStore(path.join(process.cwd(), PORTALS_ARCHIVE_DIR), console, PORTAL_ROWS);
+  /** Bordeaux's export of one commune is a few MB: the boards' 20 s would cut it. */
+  async function portalArchiveFetch(url, init = {}) {
+    if (!(await awaitUpstreamSlot(url)).ok) return null;
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(PORTAL_ARCHIVE_TIMEOUT_MS),
+        headers: { 'User-Agent': CARTDS_USER_AGENT, ...(init.headers || {}) },
+      });
+      if (!response.ok) noteUpstreamStatus(url, response);
+      return response;
+    } catch (error) {
+      console.warn(`[portal-archive] ${new URL(url).host}: ${error?.message || error}`);
+      return null;
+    }
+  }
+  const portalArchiveHttp = { fetch: portalArchiveFetch, text: cartdsText };
+  let portalsSweeping = null;
+  async function sweepPortalsIfDue() {
+    if (portalsSweeping) return portalsSweeping;
+    portalsSweeping = (async () => {
+      const day = cartdsDay();
+      if (!cartdsSweepDue(await readCartdsSweepStamp(portalArchive.dir), day)) return null;
+      const summary = await sweepPortalArchive({
+        portals: LOCAL_ADS_PORTALS, store: portalArchive, http: portalArchiveHttp, day,
+      });
+      await writeCartdsSweepStamp(portalArchive.dir, summary);
+      return summary;
+    })().catch((error) => {
+      console.warn(`[portal-archive] sweep failed: ${error?.message || error}`);
+      return null;
+    }).finally(() => { portalsSweeping = null; });
+    return portalsSweeping;
   }
 
   function install(middlewares) {

@@ -6,6 +6,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Six open-data portals and publication-actes.fr were read but never kept:
+  every record they serve is now archived each night.** Paris, Bordeaux,
+  Nantes, Tours, Brest and dODu were read per scan only, and Paris's file
+  holds six months, so older dossiers were lost for good. The nightly sweep
+  now reads each portal whole (Bordeaux over 36 months) into
+  `.gev-cache/archive/portals/`, one row per distinct record with its first
+  and last day, applicant and persons filtered as on the boards; Brest's
+  changing instruction stage becomes a history. The first sweep kept 117 184
+  records in 66 files (88 MB); a second added none. publication-actes.fr's acts
+  and deposit-list rows (Ustaritz, Ciboure, Monts) are archived on every
+  reading in `.gev-cache/archive/publication-actes/`. Both families are in the
+  archive check, the rescrub and the nightly copy.
 - **73 Cart@DS municipalities were lost every night: their boards are now
   read again in the morning.** The five Paris-Est-Marne et Bois boards answer
   500 from midnight to ~07:20 Paris and the Grand Dole's host accepts no

@@ -4770,6 +4770,42 @@ shell (`--join <dir>` folds in an archive swept elsewhere). The archive starts
 on 2026-09-30: what a board had let go before then is lost, and older dossiers
 still come from Sitadel alone.
 
+**Every permit source the layer reads is archived, not only the boards
+(since 2026-11-17).** Until then two groups of sources were read per scan and
+never kept: the six open-data portals (`LOCAL_ADS_PORTALS`: Paris, Bordeaux,
+Nantes, Tours, Brest, dODu) and publication-actes.fr (Ustaritz, Ciboure,
+Monts). Paris's file only ever holds six months, so every dossier older than
+that was gone for good. The portals are now read whole once a night, beside
+the boards, and every record each serves is kept as one canonical JSON cell
+with its first and last day — `.gev-cache/archive/portals/<insee>.json`,
+`src/data/portalArchive.js` and `scripts/lib/portalArchive.mjs`, by the same
+store and the same scrub rules as the boards (applicant through
+`organisationApplicant`, free text through `withoutPersonMentions`, dODu's
+`nom_demandeur` and `personne_phys_mor` never asked for and dropped if sent).
+A record whose text changes is a second row beside the first, which is how
+Brest's instruction stage (`STADE`) becomes a history. Bordeaux, Nantes, Tours
+and dODu are asked one municipality at a time; Paris (one file, `75056`) and
+Brest (paged ArcGIS, split by the commune in the dossier number) are read
+whole. Bordeaux is read over the layer's own 36 months without certificats
+(its file starts in 2003); the others whole. Brest's file also holds Guipavas
+(29075), which the layer reads from its own lists: the archive keeps it under
+its own code. A reading that fails is asked once more 30 s later; a partial
+ArcGIS reading is not recorded. Measured on the first sweep from the Mac
+(2026-11-17): 66 files, 117 184 records (Paris 8 107, Bordeaux 39 939, Nantes
+3 935, Tours 11 999, Brest 32 179, dODu 21 025), 88 MB, 111 s; the second
+sweep added 0 rows. publication-actes.fr's acts and the rows of its deposit
+lists are kept in `.gev-cache/archive/publication-actes/<insee>.json`
+(`PUBACTES_ROWS`), on every reading — scan or the nightly sweep, which reads
+every list and not only the newest forty — and not when the reading was
+truncated. Ustaritz, read once: 282 acts and 258 list rows. Both families are
+in `permits:archive-health` (a file expected per municipality, Guipavas
+included) and `permits:archive-rescrub`, and in the nightly copy of the
+archive, which takes the whole directory. The scans do not read these two
+archives yet. Sitadel is still not archived: its four national files are
+republished monthly and DiDo keeps no earlier millésime (2024-01 and 2026-08
+answer 404 on 2026-11-17), but a month's edition is about 3 million rows,
+more than the VPS's free disk should take without a decision.
+
 **No private person's name is kept, including the ones the filter learned
 late.** Every family scrubs a row before storing it: the applicant goes
 through `organisationApplicant` (`src/data/permitApplicant.js`), which since

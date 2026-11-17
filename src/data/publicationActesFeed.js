@@ -77,6 +77,7 @@ import { organisationApplicant } from './permitApplicant.js';
 import { ADS_KINDS, dossierKey, seriesOfKind } from './adsFeed.js';
 import { ADS_STATE_WORDS } from './adsFeed.i18n.js';
 import { cartdsParcelIdus, cartdsVerdictState, foldCartdsDossiers } from './cartdsFeed.js';
+import { recordArchiveKind } from './portalArchive.js';
 
 /** The search endpoint of the platform's open API. */
 export const PUBLICATION_ACTES_API = 'https://data-api.publication-actes.fr/mq_apis/actes/v1/search';
@@ -592,4 +593,29 @@ export function foldPublicationActes(permits) {
     }),
     folded: count,
   };
+}
+
+// --- The archive ------------------------------------------------------------
+/**
+ * Every act and every row of a deposit list ever read, kept by the store the
+ * boards use (`createCartdsArchiveStore`), one file per commune under
+ * `.gev-cache/archive/publication-actes/`. The platform keeps its acts, but
+ * an act can be withdrawn or replaced, and a deposit list is a PDF whose rows
+ * exist nowhere else as data: what was read is kept, with the first and last
+ * day it was seen. Persons out, as everywhere (`recordArchiveKind`).
+ */
+export const PUBACTES_ACTS_BOARD = 'acts';
+export const PUBACTES_LISTS_BOARD = 'lists';
+export const PUBACTES_ARCHIVE_INSTANCE = Object.freeze({ key: 'publication-actes' });
+export const PUBACTES_ROWS = recordArchiveKind([PUBACTES_ACTS_BOARD, PUBACTES_LISTS_BOARD]);
+
+/**
+ * One deposit-list row as the archive keeps it: the row, and the act (the
+ * PDF) it was read from, so two lists that repeat a dossier stay two rows.
+ * @param {object} row One of {@link parseDepositList}'s rows.
+ * @param {object} act The list's act.
+ * @returns {object}
+ */
+export function archivedDepositRow(row, act) {
+  return { ...row, list: act?.publication_id ?? act?.id ?? null, listPublishedOn: act?.date_publication ?? null };
 }
