@@ -6,6 +6,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Each Sitadel edition was gone the day the next one landed: every
+  edition is now kept.** The SDES republishes its four national permit lists
+  monthly and DiDo keeps no earlier millésime, so a corrected or withdrawn
+  row left the public record without a trace. A daily job on a second
+  machine (`deploy/thinkcentre/sitadel-archive.py`, user systemd timer)
+  streams each new edition into zstd -19, checks its rows against DiDo's
+  count, and keeps it ten years with a manifest. The first edition
+  (2026-10, 3 063 819 rows, 1.47 GB of CSV) is 117 MB on disk.
 - **Rouvroy's orders and certificates are read with their street, and none
   slides out unread.** On 2026-11-17 Rouvroy's 69 acts in the production
   cache held 29 OCR'd as nothing and 29 never OCR'd: the page lists 247 acts,

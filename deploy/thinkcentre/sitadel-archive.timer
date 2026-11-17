@@ -1,0 +1,12 @@
+[Unit]
+Description=Surplomb — look for a new Sitadel edition every morning
+
+[Timer]
+# DiDo publishes at the end of the month (2026-10-28 07:45 UTC); a daily look
+# costs four small requests and keeps an edition within a day of its release.
+OnCalendar=*-*-* 10:20:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

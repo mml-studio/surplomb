@@ -4809,10 +4809,13 @@ truncated. Ustaritz, read once: 282 acts and 258 list rows. Both families are
 in `permits:archive-health` (a file expected per municipality, Guipavas
 included) and `permits:archive-rescrub`, and in the nightly copy of the
 archive, which takes the whole directory. The scans do not read these two
-archives yet. Sitadel is still not archived: its four national files are
-republished monthly and DiDo keeps no earlier millésime (2024-01 and 2026-08
-answer 404 on 2026-11-17), but a month's edition is about 3 million rows,
-more than the VPS's free disk should take without a decision.
+archives yet. Sitadel is archived too, since 2026-11-17, but not by this
+server: its four national files are republished monthly and DiDo keeps no
+earlier millésime (2024-01 and 2026-08 answer 404), and an edition is 1.40 GB
+of CSV, more than the box's 1 GB container and 89 % disk should carry. A
+second machine keeps every edition whole, zstd-compressed, for ten years
+(`deploy/thinkcentre/sitadel-archive.py`, `docs/DEPLOY.md`): millésime
+2026-10, the first, is 3 063 819 rows in 112 MB, read in 17 min.
 
 **No private person's name is kept, including the ones the filter learned
 late.** Every family scrubs a row before storing it: the applicant goes

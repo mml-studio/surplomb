@@ -453,6 +453,49 @@ exists but cannot be read hides every name until it is fixed.
 `GEV_MEDECINS_SUPPRESS` and `GEV_MEDECINS_PACK_DIR` move the list and the pair
 elsewhere, for a self-hosted instance that keeps its data outside the volume.
 
+### Sitadel's monthly editions, on a second machine
+
+The SDES republishes the four national Sitadel lists every month on DiDo and
+keeps no earlier edition (millésimes 2024-01 and 2026-08 answer 404,
+2026-11-17), so what an edition said is lost the day the next one lands.
+`deploy/thinkcentre/sitadel-archive.py` keeps each edition whole. It runs
+on a machine other than the box: an edition is 1.40 GB of CSV and the
+box's container is capped at 1 GB of memory, with a disk at 89 %.
+
+```bash
+ssh second 'mkdir -p ~/sitadel-archive/data ~/.config/systemd/user'
+ssh second 'cat > ~/sitadel-archive/sitadel-archive.py' < deploy/thinkcentre/sitadel-archive.py
+ssh second 'cat > ~/.config/systemd/user/sitadel-archive.service' < deploy/thinkcentre/sitadel-archive.service
+ssh second 'cat > ~/.config/systemd/user/sitadel-archive.timer' < deploy/thinkcentre/sitadel-archive.timer
+ssh second 'systemctl --user daemon-reload && systemctl --user enable --now sitadel-archive.timer'
+```
+
+A user unit needs `loginctl enable-linger` for its user, and `zstd` on the
+PATH. Every morning the job reads the four files' metadata; when a
+(millésime, diffusion date) is new, it streams the CSV from DiDo into
+`zstd -19 --long=27` without writing it raw, checks that the data lines are
+at least the `rows` DiDo announces, and writes
+`data/<millésime>_<diffusion day>/<list>.csv.zst` with a manifest
+(`<list>.json`: rows, lines, raw bytes, SHA-256, source, URL) written last.
+A republication of the same millésime is a new directory. Editions older
+than ten years (`SITADEL_KEEP_YEARS`, the SDES's own retention for Sitadel)
+are deleted: the lists hold the works' address and parcels, personal data
+when the applicant is a person, so the archive has a term and is never
+published as is. Events go to the house inbox (`SITADEL_INBOX`), and on
+Mondays a missing edition for over 40 days is reported.
+
+First run, 2026-11-17, millésime 2026-10 diffused 2026-10-28: four files,
+3 063 819 rows, 1 467 885 863 bytes of CSV kept as 117 MB in 17 min (the
+housing list alone 11 min); zstd peaked at 586 MB of memory; `zstd -t`
+passes on all four; a second run the same day took 3 s and fetched nothing.
+The archive is one copy on one machine: a second copy is not set up yet.
+
+Measured on the same millésime on a laptop: zstd -19 111 MB, Parquet
+with zstd 114 MB, xz 118 MB, gzip 174 MB; about 1.3 GB a year kept whole.
+Rows the edition changed, by `DPC_DERN`: ~34 000 (1.1 %) — a diff archive
+would be ~25 MB a year, chosen against because one damaged diff falsifies
+every later month.
+
 ### Towns read through a relay
 
 Ten WordPress towns' sites (`source.relay: true` in

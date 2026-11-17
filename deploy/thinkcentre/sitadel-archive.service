@@ -1,0 +1,15 @@
+[Unit]
+Description=Surplomb — keep the new Sitadel edition, if DiDo published one
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/sitadel-archive
+Environment=SITADEL_ARCHIVE_DIR=%h/sitadel-archive/data
+Environment=SITADEL_INBOX=%h/boite/messages.jsonl
+ExecStart=/usr/bin/python3 -I %h/sitadel-archive/sitadel-archive.py
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h
+StandardOutput=append:%h/sitadel-archive/sitadel-archive.log
+StandardError=append:%h/sitadel-archive/sitadel-archive.log
