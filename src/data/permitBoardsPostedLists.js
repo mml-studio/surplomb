@@ -294,7 +294,11 @@ function actFiles(city, links, since = null) {
     const row = street || section?.bare !== false
       ? { board, dossier, applicant: null, ...(street ? municipalSite(street, city) : { address: null, postcode: city.postcode }), postedOn: published ?? null }
       : null;
-    entries.push({ dossier, file: { url: link.url, board, layout: city.source?.actLayouts?.[board] ?? 'dematdoc-notice', ocr: true,
+    // The applicant's own form, posted with the order that grants it (Rouvroy's `…_-_demande-tampon.pdf`, a CERFA
+    // scan of 5 to 34 pages): its number is kept, its pages are not read by OCR — the order says where and what,
+    // and the form is where the applicant's name, address and telephone are.
+    const form = Boolean(city.source?.forms && new RegExp(city.source.forms).test(folded));
+    entries.push({ dossier, file: { url: link.url, board, layout: city.source?.actLayouts?.[board] ?? 'dematdoc-notice', ocr: !form,
       ...(published ? { published } : {}), ...(row ? { row } : {}), ...noParcels } });
   }
   // An undated act counts when its number is of this year or the last: a page

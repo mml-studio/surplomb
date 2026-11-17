@@ -6555,9 +6555,25 @@ de dépôt is a filing, an order a decision); a numbered street is taken from
 the house number on and stops before the works, the file's weight or the
 number again; its day is the name's or the words', failing that the upload
 month. An undated act counts when its number is of this year or the last,
-forty at most (Dourges keeps every year's decrees on one page). The PDF is
+forty at most (Dourges keeps every year's decrees on one page), `limit` of them
+where a commune says so: Rouvroy's 120, since it posts twenty files at once and
+lists 247 acts since 2024, none dated, so that forty let 29 orders of July to
+October slide out before the sweep's OCR read them. A commune's `forms` names
+the applicant's own form posted beside the order (Rouvroy's
+`…_-_demande-tampon.pdf`, a CERFA scan of 5 to 34 pages): it keeps its number,
+and its pages are never OCR'd — the order gives the site, and the form holds
+the applicant's name, address and telephone. The PDF is
 read by `dematdoc-notice`, by OCR in the daily sweep for scans: Rouvroy's
-eight newest gave filing days, verdicts and parcels. The reader takes a
+eight newest gave filing days, verdicts and parcels. Rouvroy's frame prints
+its site label over two lines in a column of its own, « sur un » over
+« terrain sis », the street right of the first and « 62320 ROUVROY » right of
+the second; the reader reads it there (`splitLabelSite`), down the value's
+column to the postcode, stopping at a second column 30 points on, a second
+way after « ; » or a locality after the street. Its certificates print
+« 10 Residence des Acacias 62320 ROUVROY cadastré AK 993 » right of a label
+the town hall's stamp hides from OCR: a line that holds the commune's own
+postcode, its name and « cadastré » gives the site before the postcode, back to
+the label's gutter (`communeLineSite`). The reader takes a
 decision's verdict from the operative article's first sentence, then from
 the whole article: Coulogne's « Il n'est pas fait opposition », followed by
 the notice that the act may be withdrawn, read « Retrait » before. Saint-Martin-Boulogne,

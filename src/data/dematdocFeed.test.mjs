@@ -388,6 +388,70 @@ test('a commune alone where the site should be keeps the act on its parcels; a l
   assert.equal(read([60, 712, 'Adresse du terrain : 2 rue Exemple'], [238, 120, '0 2 JUIN 2026']).decidedOn, '2026-06-02');
 });
 
+// A line of OCR words from `x`, five points a letter and three between words; « || » opens a second column 100 points on.
+const ocrLine = (x, y, text) => {
+  const runs = [];
+  let at = x;
+  for (const word of text.split(' ')) {
+    if (word === '||') { at += 100; continue; }
+    runs.push([at, at + word.length * 5, y, word]);
+    at += word.length * 5 + 3;
+  }
+  return runs;
+};
+
+test('Rouvroy’s orders print « sur un » over « terrain sis » left of the site: the street is read, not « 62320 ROUVROY »', () => {
+  const rouvroy = { insee: '62724', postcode: '62320' };
+  // The frame of 2026's orders as the sweep's OCR read them (DP 26 00032, the applicant's lines replaced).
+  const order = (...site) => readDematdocNotice(words(
+    ...ocrLine(57, 765, 'DÉCISION DE NON-OPPOSITION À UNE DÉCLARATION PRÉALABLE'),
+    ...ocrLine(57, 697, 'DOSSIER N° DP 062 724 26 00032 SURFACE DE PLANCHER'),
+    ...ocrLine(57, 685, 'déposé le 08/06/2026'),
+    ...ocrLine(57, 662, 'de PRIVATE'), ...ocrLine(57, 639, 'représentée par M. PRIVATE'),
+    ...ocrLine(57, 621, 'demeurant 9 Rue Privée'), ...ocrLine(124, 608, '59000 LILLE'),
+    ...ocrLine(57, 595, 'pour Modifications des aménagements extérieurs'),
+    ...site,
+    ...ocrLine(57, 279, 'Article Unique : Il n’est pas fait opposition à la présente déclaration préalable.'),
+    ...ocrLine(57, 235, 'Fait à ROUVROY'), ...ocrLine(57, 217, 'Le 04 août 2026,'),
+  ), { city: rouvroy, file: { board: 'decisions', row: { dossier: 'DP 062724 26 00032' } } })[0];
+  const label = (y, value, under = '62320 ROUVROY') => [...ocrLine(57, y, 'sur un'), ...ocrLine(124, y, value),
+    ...ocrLine(57, y - 11, 'terrain sis'), ...ocrLine(124, y - 11, under)];
+  const row = order(...label(575, 'Boulevard des Italiens || Destination : Habitation ( Logement)'), ...ocrLine(57, 546, 'cadastré'), ...ocrLine(124, 546, 'AK1077 ; AK41'));
+  assert.deepEqual([row.address, row.postcode, row.parcels, row.verdict, row.filedOn], ['Boulevard des Italiens', '62320', 'AK 1077, AK 41', 'Non-opposition', '2026-06-08'],
+    'the frame’s second column is no part of the site');
+  // A site over two lines, then the commune under it (PC 26 00002, PA 26 00001, DP 26 00040).
+  assert.equal(order(...label(572, 'Rue Picasso', 'Lieu-dit : Parc de la Chenaie'), ...ocrLine(124, 548, '62320 ROUVROY'),
+    ...ocrLine(57, 530, 'cadastré'), ...ocrLine(124, 530, 'AI357 ,AI426 ;AI427')).address, 'Rue Picasso', 'the locality after the street');
+  assert.equal(order(...label(572, 'Boulevard des Italiens ; Rue Marechal', 'Joffre'), ...ocrLine(124, 549, '62320 ROUVROY'),
+    ...ocrLine(57, 531, 'Cadastré'), ...ocrLine(124, 531, 'AH889 ; AH892')).address, 'Boulevard des Italiens', 'the first of two ways');
+  assert.equal(order(...label(555, '184 Rue des Mesanges'), ...ocrLine(57, 521, 'cadastré'), ...ocrLine(124, 521, 'ZA 335')).address, '184 Rue des Mesanges');
+  // Without the site's label, the applicant's lines are no site and the order gives no row.
+  assert.equal(order(...ocrLine(57, 521, 'cadastré'), ...ocrLine(124, 521, 'ZA 335')), undefined);
+});
+
+test('Rouvroy’s certificates print the site whole before « 62320 ROUVROY cadastré », right of a label the stamp hides', () => {
+  const rouvroy = { insee: '62724', postcode: '62320' };
+  const certificate = (...site) => readDematdocNotice(words(
+    ...ocrLine(58, 759, 'CERTIFICAT D\'URBANISME'), ...ocrLine(58, 743, 'D\'INFORMATION'),
+    ...ocrLine(58, 731, 'DÉLIVRÉ PAR LE MAIRE AU NOM DE LA COMMUNE'),
+    ...ocrLine(58, 660, 'DOSSIER N° CU 62724 26 00044'), ...ocrLine(58, 647, 'déposé le 07/08/2026'),
+    ...ocrLine(58, 634, 'par PRIVATE représentée par PRIVATE'), ...ocrLine(145, 615, '9 Rue Privée'),
+    ...ocrLine(58, 606, 'demeurant'), ...ocrLine(145, 594, '62580 Vimy'),
+    ...site,
+    ...ocrLine(58, 546, 'surface 786,00 m²'), ...ocrLine(58, 400, 'CERTIFIE'),
+    ...ocrLine(58, 372, 'Article 1: Les règles d\'urbanisme, la liste des taxes et participations d\'urbanisme ainsi que les'),
+  ), { city: rouvroy, file: { board: 'decisions', row: { dossier: 'CU 062724 26 00044' } } });
+  const value = '73 Route de Méricourt 62320 ROUVROY cadastré AO7';
+  // OCR read the stamped label as « a D a » (CU 26 00044), « Edreenu » (00039) or « Adresse du » (00055).
+  for (const label of ['a D a', 'Edreenu', 'Adresse du']) {
+    const [row] = certificate(...ocrLine(58, 571, label), ...ocrLine(145, 571, value), ...ocrLine(58, 565, 'terrain'));
+    assert.deepEqual([row?.dossier, row?.address, row?.parcels, row?.board], ['CU 062724 26 00044', '73 Route de Méricourt', 'AO 7', 'decisions'], label);
+  }
+  assert.equal(certificate(...ocrLine(58, 571, 'S du'), ...ocrLine(145, 571, value))[0]?.address, '73 Route de Méricourt', 'the label’s « terrain » lost');
+  assert.deepEqual(certificate(...ocrLine(58, 571, 'a D a'), ...ocrLine(145, 571, '73 Route de Méricourt 62580 VIMY cadastré AO7')), [],
+    'another commune’s postcode is no site of this one');
+});
+
 test('a label’s « à : » printed on its value’s line, a few points above it, is not the site (Lançon-Provence)', () => {
   const lancon = { insee: '13051', postcode: '13680' };
   const document = { pages: [{ runs: [

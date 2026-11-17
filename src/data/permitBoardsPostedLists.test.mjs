@@ -216,6 +216,18 @@ test('a download button names its act in its title', () => {
     ['DP 062724 26 00058', 'decisions'],
     ['DP 062724 26 00058', 'filings'],
   ]);
+  assert.deepEqual(files.map((file) => file.ocr), [true, false], 'the applicant’s form keeps its number, its pages are not OCR’d');
+  const bauvin = postedActFiles(city('bauvin'), link('/medias/a.pdf', 'Demande DP 059 052 26 00010'), 'https://villedebauvin.fr/', '2026-08-01');
+  assert.deepEqual(bauvin.map((file) => [file.board, file.ocr]), [['filings', true]], 'a commune without `forms` reads every act');
+});
+
+test('Rouvroy’s page is read 120 acts deep: a burst of twenty files no longer pushes orders out before the OCR reads them', () => {
+  // On 2026-11-17 the page listed 247 acts, newest first and none dated; 29 orders of July to October were kept
+  // as their number alone after they slid past the fortieth.
+  const html = Array.from({ length: 150 }, (_, i) => `<a href="/download/file/${18000 - i}?key=k${i}" title="Télécharger : dp_26_${String(300 - i).padStart(5, '0')}_-_sia_-_arrete-tampon.pdf - extension pdf">Téléchargement</a>`).join('');
+  const files = postedActFiles(city('rouvroy'), html, 'https://ville-rouvroy62.fr/affichage-legal', '2026-08-01');
+  assert.equal(files.length, 120);
+  assert.equal(files.at(-1).row.dossier, 'DP 062724 26 00181');
 });
 
 test('the site a link prints stops before the works, the file’s weight and the number', () => {
