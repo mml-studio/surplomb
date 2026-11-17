@@ -33,6 +33,9 @@ import { EPERMIS_INSTANCES } from '../../src/data/epermisFeed.js';
 import { MMM_COMMUNES } from '../../src/data/mmmPermitsFeed.js';
 import { PERMIT_LISTS } from '../../src/data/permitListsFeed.js';
 import { SIRAP_INSTANCES } from '../../src/data/sirapFeed.js';
+import { LOCAL_ADS_PORTALS } from '../../src/data/adsFeed.js';
+import { portalArchiveFiles } from '../../src/data/portalArchive.js';
+import { PUBLICATION_ACTES_COMMUNES } from '../../src/data/publicationActesFeed.js';
 
 /** Days a municipality may lag before it counts as stopped. */
 export const STOPPED_AFTER_DAYS = 2;
@@ -66,6 +69,8 @@ export function expectedPermitArchive() {
     epermis: ofInstances(EPERMIS_INSTANCES),
     'permit-lists': owners(PERMIT_LISTS.map((city) => [city.insee, city.key])),
     mmm: owners(MMM_COMMUNES.map((commune) => [commune.insee, 'mmm'])),
+    portals: owners(LOCAL_ADS_PORTALS.flatMap((portal) => portalArchiveFiles(portal).map((code) => [code, portal.key]))),
+    'publication-actes': owners(PUBLICATION_ACTES_COMMUNES.map((commune) => [commune.insee, 'publication-actes'])),
   };
 }
 

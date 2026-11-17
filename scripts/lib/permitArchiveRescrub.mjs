@@ -21,6 +21,8 @@ import { EPERMIS_ROWS } from '../../src/data/epermisFeed.js';
 import { MMM_ROWS } from '../../src/data/mmmPermitsFeed.js';
 import { PERMIT_LIST_ROWS } from '../../src/data/permitListsFeed.js';
 import { SIRAP_ROWS } from '../../src/data/sirapFeed.js';
+import { PORTAL_ROWS } from '../../src/data/portalArchive.js';
+import { PUBACTES_ROWS } from '../../src/data/publicationActesFeed.js';
 
 /** The kind of rows each archive directory holds, as the server hands them to its stores. */
 export const ARCHIVE_KINDS = Object.freeze({
@@ -29,6 +31,8 @@ export const ARCHIVE_KINDS = Object.freeze({
   epermis: EPERMIS_ROWS,
   'permit-lists': PERMIT_LIST_ROWS,
   mmm: MMM_ROWS,
+  portals: PORTAL_ROWS,
+  'publication-actes': PUBACTES_ROWS,
 });
 
 async function writeAtomic(file, text) {

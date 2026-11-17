@@ -169,12 +169,16 @@ test('above a dozen stops in a family, the largest are named and the rest counte
 
 test('the registers name a set of municipalities for every family the server archives', () => {
   const expected = expectedPermitArchive();
-  assert.deepEqual(Object.keys(expected).sort(), ['cartds', 'epermis', 'mmm', 'permit-lists', 'sirap']);
+  assert.deepEqual(Object.keys(expected).sort(), ['cartds', 'epermis', 'mmm', 'permit-lists', 'portals', 'publication-actes', 'sirap']);
   for (const [name, codes] of Object.entries(expected)) assert.ok(codes.size > 0, name);
   assert.ok(expected['permit-lists'].has('13055'), 'Marseille is a list city');
   assert.ok(expected.mmm.has('34172'), 'Montpellier is in the open-data family');
   assert.equal(expected.cartds.get('64102'), 'bayonne', 'each municipality names the instance that reads it');
   assert.equal(expected['permit-lists'].get('59350'), 'lille');
+  assert.equal(expected.portals.get('75056'), 'paris', 'Paris is one file');
+  assert.equal(expected.portals.get('29075'), 'brest', 'Guipavas is kept from the Brest file');
+  assert.equal(expected.portals.get('33063'), 'bordeaux');
+  assert.equal(expected['publication-actes'].get('64547'), 'publication-actes');
 });
 
 test('assessPermitArchive refuses a day that is not a day', () => {
