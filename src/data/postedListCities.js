@@ -77,8 +77,11 @@ export const POSTED_LIST_CITIES = [
     page: 'https://www.marquettelezlille.fr/ma-ville/annonces-legales/', source: { protocol: 'posted-acts' } },
   { key: 'bauvin', insee: '59052', postcode: '59221', label: 'Ville de Bauvin — affichage des autorisations d’urbanisme',
     page: 'https://villedebauvin.fr/vie-pratique/urbanisme/affichage/', source: { protocol: 'posted-acts' } },
+  // Rouvroy posts an order with the applicant's form beside it, 20 files at once (2026-11-17), and lists 247 acts
+  // since 2024 newest first, none dated: forty were too few to wait for the sweep's OCR, so that 29 orders of
+  // July-October slid out unread. The form is kept by its number only (`forms`, see `actFiles`).
   { key: 'rouvroy', insee: '62724', postcode: '62320', label: 'Ville de Rouvroy — affichage légal',
-    page: 'https://ville-rouvroy62.fr/affichage-legal', source: { protocol: 'posted-acts' } },
+    page: 'https://ville-rouvroy62.fr/affichage-legal', source: { protocol: 'posted-acts', limit: 120, forms: '\\bDEMANDE\\b' } },
   { key: 'coulogne', insee: '62244', postcode: '62137', label: 'Ville de Coulogne — affichage légal',
     page: 'https://ville-coulogne.fr/ma-mairie/democratie-locale/affichage-legal/', source: { protocol: 'posted-acts' } },
   { key: 'crespin', insee: '59160', postcode: '59154', label: 'Ville de Crespin — décisions d’urbanisme',

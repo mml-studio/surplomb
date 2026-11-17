@@ -6,6 +6,26 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Rouvroy's orders and certificates are read with their street, and none
+  slides out unread.** On 2026-11-17 Rouvroy's 69 acts in the production
+  cache held 29 OCR'd as nothing and 29 never OCR'd: the page lists 247 acts,
+  none dated, and only the forty newest were read, so orders of July to
+  October slid out while the sweep's OCR was not yet wired to posted acts.
+  Rouvroy is now read 120 acts deep. Its orders print « sur un » over
+  « terrain sis » with the street right of the first: every label read
+  « 62320 ROUVROY », so of its 23 orders 19 gave parcels only, 3 a wrong site
+  (« rue et AL462 ») and 1 nothing; all 23 now give their street (« 184 Rue
+  des Mesanges »). Its certificates print the site before « 62320 ROUVROY
+  cadastré » right of a stamped label OCR cannot read: the 20 gave no row, and
+  all 20 now give a street and parcels. The 43 orders and certificates were
+  OCR'd again on a Mac with the sweep's own OCR. Saint-Martin-Boulogne and
+  Wasquehal print the same frame: of 34 orders of six other posted-acts
+  communes OCR'd that day, 6 gain or mend their street (« 15, rue de Maquétra
+  à Saint-Martin-Boulogne, cadastré section » is « 15 Rue de Maquétra ») and
+  the other 28 read as before. The applicant's
+  form posted beside each order (`demande-tampon`, up to 34 pages) keeps its
+  number and is no longer OCR'd: the order says the same, and the form is
+  where the applicant's details are.
 - **Brest's portal was never archived: one slow page broke the whole
   reading.** From the production server, Brest's ArcGIS answers a page in
   0.4 s or holds it 60 s and answers 503, at random, so the first sweep lost

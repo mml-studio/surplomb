@@ -421,6 +421,87 @@ function terrainBoxSite(lines) {
   return null;
 }
 
+// i18n-ignore-start — the label's two halves as the frame prints them
+const SPLIT_LABEL_HEAD = /^(?:sur\s*un|adresse\s+du)$/i;
+const SPLIT_LABEL_TAIL = /^terrain(?:\s+sis)?$/i;
+// i18n-ignore-end
+
+/**
+ * The site of a frame that prints its label over two lines in a column of its
+ * own, the value right of it: « sur un » over « terrain sis » (Rouvroy's
+ * orders: « sur un | 184 Rue des Mesanges » over « terrain sis | 62320
+ * ROUVROY »), « Adresse du » over « terrain » (its certificates: « Adresse du
+ * | 10 Residence des Acacias 62320 ROUVROY cadastré AK 993 » over
+ * « terrain »). The value runs on under the label, in its column, down to the
+ * postcode line; a second way after « ; » or a locality after the street is
+ * left out (« Rue Picasso » over « Lieu-dit : Parc de la Chenaie »). Every
+ * other site label read « 62320 ROUVROY » alone, so that 2026's orders gave
+ * parcels at best, and the certificates nothing.
+ */
+function splitLabelSite(lines) {
+  // The label's last run: « terrain sis » over « terrain » when OCR reads both words.
+  const labelEnd = (runs, label) => [1, 0].find((k) => runs.length > k && label.test(clean(runs.slice(0, k + 1).map((run) => run.text).join(' ')))) ?? -1;
+  // A run 30 points past the last is a second column (« Destination : Habitation », Rouvroy's DP 26 00032).
+  const column = (runs) => {
+    const kept = runs.slice(0, 1);
+    for (const run of runs.slice(1)) {
+      if (run.x - (kept.at(-1).x1 ?? kept.at(-1).x) > 30) break;
+      kept.push(run);
+    }
+    return kept;
+  };
+  for (let i = 0; i + 1 < lines.length; i += 1) {
+    const [top, under] = [lines[i], lines[i + 1]];
+    if (top.y - under.y > 16) continue;
+    const headEnd = labelEnd(top.runs, SPLIT_LABEL_HEAD);
+    const tailEnd = headEnd < 0 ? -1 : labelEnd(under.runs, SPLIT_LABEL_TAIL);
+    if (tailEnd < 0 || Math.abs(under.runs[0].x - top.runs[0].x) > 12) continue;
+    const labelRight = Math.max(top.runs[headEnd].x1 ?? top.runs[headEnd].x, under.runs[tailEnd].x1 ?? under.runs[tailEnd].x);
+    // « terrain sis : » leaves its colon to the value.
+    const pieces = [column(top.runs.slice(headEnd + 1)), column(under.runs.slice(tailEnd + 1).filter((run, k) => k > 0 || !/^[:|]+$/.test(clean(run.text))))];
+    const valueX = Math.min(...pieces.flat().map((run) => run.x));
+    if (!Number.isFinite(valueX) || valueX < labelRight) continue;
+    let text = clean(pieces.map((runs) => runs.map((run) => run.text).join(' ')).join(' '));
+    // The lines under the label's own, in the value's column, down to the postcode.
+    for (let j = i + 2, last = under; j < lines.length && !/\b\d{5}\s+\p{L}/u.test(text); j += 1) {
+      const line = lines[j];
+      if (last.y - line.y > 16 || line.runs[0].x < valueX - 15) break;
+      text = clean(`${text} ${column(line.runs).map((run) => run.text).join(' ')}`);
+      last = line;
+    }
+    // « Rue Picasso Lieu-dit : Parc de la Chenaie »: the street; « Boulevard des Italiens ; Rue Marechal Joffre »: the first;
+    // Wasquehal's « 92 RUE … » over « terrain sis : Cadastré : BD40 »: the street, the parcels read apart.
+    const street = text.split(/\s*;\s*/)[0].replace(/\s*[:|]?\s*(?:cadastr|r[ée]f[ée]rences?\s+cadastrales?).*$/i, '')
+      .replace(/\s+lieu[- ]?dit\s*:.*$/i, (whole, at, all) => (/\p{L}{3}/u.test(all.slice(0, at)) ? '' : whole));
+    return street || null;
+  }
+  return null;
+}
+
+/**
+ * The site of a line that prints it whole before the commune and its parcels:
+ * « 10 Residence des Acacias 62320 ROUVROY cadastré AK 993 », the commune's
+ * own postcode followed by its name and « cadastré ». Rouvroy's certificates
+ * print that line right of a label the town hall's stamp covers, which OCR
+ * reads as « a D a », « Edreenu » or « RS », over a « terrain » it often
+ * loses: the site is read back from the postcode up to a gap wider than 25
+ * points, the gutter (34 to 50 points on the 20 certificates read) that sets
+ * the label apart.
+ */
+function communeLineSite(lines, city) {
+  if (!/^\d{5}$/.test(city?.postcode ?? '')) return null;
+  for (const line of lines) {
+    // i18n-ignore-next-line — the order's own word
+    if (!new RegExp(`\\b${city.postcode}\\s+\\p{Lu}[\\p{Lu}'’ -]*\\s+cadastr`, 'u').test(line.text)) continue;
+    const at = line.runs.findIndex((run) => clean(run.text) === city.postcode);
+    if (at < 1) continue;
+    let from = at - 1;
+    while (from > 0 && line.runs[from].x - (line.runs[from - 1].x1 ?? line.runs[from - 1].x) <= 25) from -= 1;
+    return clean(line.runs.slice(from, at).map((run) => run.text).join(' ')) || null;
+  }
+  return null;
+}
+
 /**
  * One DematDOC act: avis de dépôt, récépissé or decision, as the commune's
  * ADS software printed it. The site is the value of the first site label
@@ -462,6 +543,13 @@ export function readDematdocNotice(document, { city, file }) {
   // A labelled site that names no kind of way (Ayherre's lieu-dit « Gainekoplaza »): no row on its own, but
   // with the act's parcels it is the site the order prints.
   let named = null;
+  // A label printed over two lines, the site right of it (`splitLabelSite`), or a stamped one
+  // left of « <site> 62320 ROUVROY cadastré … » (`communeLineSite`).
+  for (const found of [splitLabelSite(front), communeLineSite(front, city)]) {
+    if (site || !found || PERSON.test(found) || NOT_A_SITE.test(found)) continue;
+    const trimmed = trimSite(found, city);
+    if (trimmed.address && SITE_WORDS.test(trimmed.address) && /\p{L}{3}/u.test(trimmed.address) && !CUT.test(trimmed.address)) site = trimmed;
+  }
   for (let i = 0; i < front.length && !site; i += 1) {
     for (const label of SITE_LABELS) {
       const value = valueAfter(front[i], label, 30, applicantX);
