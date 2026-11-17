@@ -1125,8 +1125,12 @@ test('a frame act’s site loses the bracket that opens an aside its line cut sh
   assert.equal(later.decidedOn, '2026-09-09');
 });
 
-test('a frame act whose site is a lieu-dit alone gives no row, the Amnéville fallback included — Saulcy’s « ANOZEL »', () => {
+test('a frame act whose site is a lieu-dit alone stands on its parcels, and gives no row without them — Saulcy’s « ANOZEL »', () => {
   const city = town('digilor-saulcy-sur-meurthe');
   const file = { board: 'decisions', title: 'DP n° 34-2026', published: '2026-08-20' };
-  assert.deepEqual(readFrameAct(FRAME_ORDER({ site: 'Sur un terrain sis à : ANOZEL' }), { city, file }), []);
+  // A lieu-dit names no way, so it places nothing by itself; its parcels do (Ayherre's « Gainekoplaza », 2026-11-17).
+  const [row] = readFrameAct(FRAME_ORDER({ site: 'Sur un terrain sis à : ANOZEL' }), { city, file });
+  assert.deepEqual([row.dossier, row.address, row.parcels], ['DP 088445 26 H0035', 'ANOZEL', 'AS 157']);
+  assert.deepEqual(readFrameAct(FRAME_ORDER({ site: 'Sur un terrain sis à : ANOZEL', parcels: 'Cadastré : //' }), { city, file }), [],
+    'the Amnéville fallback included');
 });

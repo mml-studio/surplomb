@@ -267,7 +267,9 @@ const NOT_A_SITE = /^(?:\d{1,2}\/\d{2}\/\d{4}|superficie|surface|zone|destinatio
 // Rouvroy, « 62320 ROUVROY » alone, the parcels on the next line).
 const PARCELS_FOR_SITE = /^(?:r[ée]f[ée]rences?\s+cadastrales?|cadastr|parcelles?\b|section\b)/i;
 // A site names a number or a kind of way; « Travaux sur construction existante » does not.
-const SITE_WORDS = /\d|\b(?:rue|chemin|che|avenue|av|all[ée]e|route|rte|impasse|imp|place|pl|boulevard|bd|quai|lotissement|lot|lieu[- ]?dit|cours|mont[ée]e|square|voie|cami|camin|hameau|zac|za|zi|parc|r[ée]sidence|domaine|clos|sentier|passage|faubourg|esplanade|traverse|rond[- ]point|chemin|mas|quartier|cité|cite|côte|cote|sente|venelle|ruelle|promenade|grande rue|grand rue|boucle|parvis|villa)\b/i;
+// The Basque Country names its ways in Basque, the kind after the name: « Xelaiako Bidea » (a chemin,
+// Ayherre's orders, 2026-11-17), « Karrika Nagusia » (a street), « Herriko Plaza » (a square).
+const SITE_WORDS = /\d|\b(?:\w*bidea|karrika|kalea|plaza|errepidea|bidexka|rue|chemin|che|avenue|av|all[ée]e|route|rte|impasse|imp|place|pl|boulevard|bd|quai|lotissement|lot|lieu[- ]?dit|cours|mont[ée]e|square|voie|cami|camin|hameau|zac|za|zi|parc|r[ée]sidence|domaine|clos|sentier|passage|faubourg|esplanade|traverse|rond[- ]point|chemin|mas|quartier|cité|cite|côte|cote|sente|venelle|ruelle|promenade|grande rue|grand rue|boucle|parvis|villa)\b/i;
 // A line that is a street and nothing else: a house number at most, then the kind of way.
 const WAY_FIRST = /^(?:\d{1,4}\s*(?:bis|ter|[a-d])?\s*,?\s+)?(?:rue|chemin|che|avenue|av|all[ée]e|route|rte|impasse|imp|place|boulevard|bd|quai|lotissement|lieu[- ]?dit|cours|mont[ée]e|square|voie|hameau|r[ée]sidence|domaine|clos|sentier|passage|faubourg|ruelle|grande?\s+(?:rue|place)|grand['’]\s*rue)\b/i;
 // A street cut at the end of its line: « 26 allée de », « Chemin de ».
@@ -361,7 +363,9 @@ export function dematdocParcels(value, city) {
   const out = [];
   const own = Number(String(city?.insee ?? '').slice(2));
   // A trailing « p » marks a part of the parcel (Saint-Laurent-de-Gosse's « F 0779p »): the parcel itself.
-  for (const match of String(value ?? '').toUpperCase().matchAll(/(?:\b(\d{1,3})\s+|\b0{0,3})0?([A-Z]{1,2})\s*[-\s]?\s*0*(\d{1,4})P?\b/g)) {
+  // OCR reads a section's « A » as « À » (Ayherre's « A 0255, À 0721 »): no section has an accent.
+  const plain = String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  for (const match of plain.matchAll(/(?:\b(\d{1,3})\s+|\b0{0,3})0?([A-Z]{1,2})\s*[-\s]?\s*0*(\d{1,4})P?\b/g)) {
     if (/^(?:M|ME|N|NO|M2)$/.test(match[2])) continue;
     // « Parcelles 0168 et 0169 » (Clouange): the conjunction between two numbers is no section « ET ».
     if (match[2] === 'ET' && (match[1] || /\d\s*$/.test(String(value).slice(0, match.index)))) continue;
@@ -435,7 +439,8 @@ export function readDematdocNotice(document, { city, file }) {
   const lines = pages.flat();
   if (front.length < 3) return [];
   const head = closeSpacedLetters(front.slice(0, 45).map((line) => line.text).join(' '));
-  let dossier = municipalDossier(head, city) ?? municipalDossier(file.title ?? '', city);
+  // The link's number when OCR garbles the act's own (Ayherre's « N°D 2 » over « P 64 086 24B002 »).
+  let dossier = municipalDossier(head, city) ?? municipalDossier(file.title ?? '', city) ?? file.row?.dossier ?? null;
   if (!dossier) return [];
   // The amendment suffix a link types (`N0036M01`) wins over one OCR garbles (`T4`) or drops.
   const linked = file.row?.dossier;
@@ -454,6 +459,9 @@ export function readDematdocNotice(document, { city, file }) {
     .map((run) => run.x - 4)));
   let site = null;
   let unplaced = false;
+  // A labelled site that names no kind of way (Ayherre's lieu-dit « Gainekoplaza »): no row on its own, but
+  // with the act's parcels it is the site the order prints.
+  let named = null;
   for (let i = 0; i < front.length && !site; i += 1) {
     for (const label of SITE_LABELS) {
       const value = valueAfter(front[i], label, 30, applicantX);
@@ -475,6 +483,7 @@ export function readDematdocNotice(document, { city, file }) {
       const trimmed = trimSite(text, city);
       // « 62320 ROUVROY »: the commune, not the site.
       if (!trimmed.address || /^\d{5}\s+\p{L}[\p{L}'’ .-]*$/u.test(clean(text))) unplaced = true;
+      if (trimmed.address && !unplaced && /\p{L}{3}/u.test(trimmed.address) && !CUT.test(trimmed.address)) named ??= trimmed;
       if (!trimmed.address || !SITE_WORDS.test(trimmed.address) || !/\p{L}{3}/u.test(trimmed.address) || CUT.test(trimmed.address)) continue;
       site = trimmed;
       break;
@@ -489,11 +498,14 @@ export function readDematdocNotice(document, { city, file }) {
   }
   // The first labelled line only: a later sentence that says « parcelles » is the order's own note (Hagondange's
   // « sur les parcelles voisines … norme NF P 94-500 révisée le 30 novembre » is no parcel « P 94 » and « LE 30 »).
-  const parcelLine = front.map((line) => PARCEL_LABEL.exec(line.text)?.[1]).find(Boolean);
+  // A line the label opens wins over a sentence above it that says « parcelle » (Ayherre's works, « … cette parcelle. Les
+  // vaches doivent pacager plus de 250 jours », over « Références cadastrales : E 0316 »).
+  const labelled = front.map((line) => PARCEL_LABEL.exec(line.text)).filter(Boolean);
+  const parcelLine = (labelled.find((match) => /^[\s|:]*$/.test(match.input.slice(0, match.index))) ?? labelled[0])?.[1];
   if (!site) {
-    const parcels = unplaced && !file.noParcels ? dematdocParcels(parcelLine, city) : null;
+    const parcels = (unplaced || named) && !file.noParcels ? dematdocParcels(parcelLine, city) : null;
     if (!parcels) return [];
-    site = { address: null, postcode: city.postcode ?? null, parcels };
+    site = { address: named?.address ?? null, postcode: named?.postcode ?? city.postcode ?? null, parcels };
   }
   // « 21 / 9 /2026 » (Rurange's « Date de dépôt ») as the numeric days the readers below expect.
   const body = lines.map((line) => line.text).join('\n')

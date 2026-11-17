@@ -5570,7 +5570,14 @@ per visitor scan and 400 per daily sweep, a skipped file standing on what its
 index said. An `ocr` file whose text yields no row, and a `scan` (a board that
 only ever posts scans), are read by OCR in the sweep only, at most 40 a day per
 city (`BOARD_SWEEP_OCR_FILES`), `ocrPages` pages each; a visitor's reading
-never downloads a `scan`. Files are asked for as `application/pdf`, which
+never downloads a `scan`. An OCR that yields no row is not a reading: the
+edition keeps the OCR's positioned text (`unread`, numbers rounded to a tenth
+of a point) beside the link's row and the day of the OCR (`ocrRead`), and
+every reading — the board's, Digilor's and DematDOC's — hands that text to the
+current reader, replacing the edition once it gives rows, with no download and
+no OCR. An edition from before 2026-11-17 whose rows hold the dossier number
+and postcode alone, with no `ocrRead`, is OCR'd once more by the sweep within
+the same budget. Files are asked for as `application/pdf`, which
 routes them through the proxy's 60-second PDF fetch whatever their address.
 A city's `userAgent` goes with every request to its host, robots.txt's
 included: Boulogne-sur-Mer's firewall answers 403 to any name containing

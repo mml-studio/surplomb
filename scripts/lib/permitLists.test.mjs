@@ -4,10 +4,12 @@
 // request leaves the process.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  PERMIT_LISTS_READER_SCHEMA,
   permitListsRobots,
   readPermitCity,
   readPermitList,
@@ -1192,6 +1194,76 @@ test('the daily sweep retries posted scans without a city OCR flag and keeps the
   assert.equal(calls, 42, 'a visitor never invokes OCR');
   assert.equal(after.pendingOcr, 0);
   assert.equal(after.boards.decisions.filter(row => row[4] === '12 rue Exemple').length, 42);
+});
+
+/** Ayherre's board: one signed order, a scan, linked by its number. */
+function ayherreBoard() {
+  const city = BOARD_PERMIT_SOURCES.find((c) => c.key === 'ayherre');
+  const pdf = 'http://www.ayherre.fr/medias/files/arrete-2026-47-pc-2600014-exemple.pdf';
+  const page = '<h2>Permis de construire</h2><p><a href="/medias/files/arrete-2026-47-pc-2600014-exemple.pdf">Pc 2600014 Exemple</a></p>';
+  const http = fakeHttp({ pages: { [city.page]: page }, files: { [pdf]: { bytes: Buffer.from('%PDF-1.7\nscan') } } });
+  const scan = (lines) => ({ pages: [{ width: 595, height: 842, runs: lines.map(([x, y, text]) => ({
+    x: x + 0.04, y: y + 0.04, x1: x + text.length * 4.5, size: 10.44, clip: null, text })) }] });
+  const readable = scan([
+    [313, 782, 'PERMIS DE CONSTRUIRE'], [449, 666, 'N° PC 64 086 2600014'],
+    [57, 472, 'Sur un terrain sis : | Xelaiako Bidea'], [32, 446, 'Références cadastrales : | A 1473'],
+    [27, 300, 'ARTICLE 1 : Le permis de construire est ACCORDE'],
+  ]);
+  const unreadable = scan([[27, 700, 'Illisible'], [27, 600, 'tache'], [27, 500, 'encre']]);
+  const edition = (dir) => path.join(dir, `list${PERMIT_LISTS_READER_SCHEMA}-${createHash('sha256').update(pdf).digest('hex').slice(0, 24)}.json`);
+  const site = (answer) => answer.boards.decisions.map((cells) => [cells[0], cells[4], cells[15]]);
+  return { city, pdf, http, readable, unreadable, edition, site };
+}
+
+test('a scan the OCR read but no reader understood keeps its text, read again by the reader of the day, never OCR’d twice', async () => {
+  const dir = await tempDir();
+  const { city, http, readable, unreadable, edition, site } = ayherreBoard();
+  let calls = 0;
+  const ocr = async () => { calls += 1; return { document: unreadable }; };
+  const first = await readPermitCity(city, http, { dir, day: '2026-11-16', ocr, background: true });
+  assert.equal(calls, 1);
+  assert.deepEqual(site(first), [['PC 064086 26 00014', null, null]], 'the link’s number alone, as before');
+  const kept = JSON.parse(await fsp.readFile(edition(dir), 'utf8'));
+  assert.equal(kept.ocrRead, '2026-11-16');
+  assert.equal(kept.pendingOcr, false);
+  assert.equal(kept.unread.pages[0].runs[0].x, 27, 'positions rounded to a tenth of a point');
+  assert.equal(kept.unread.pages[0].runs[0].clip, undefined, 'empty fields dropped');
+  await readPermitCity(city, http, { dir, day: '2026-11-17', ocr, background: true });
+  assert.equal(calls, 1, 'a scan the OCR read is not OCR’d again');
+  // A reader mended since, which the kept text stands for here: the text it now understands.
+  await fsp.writeFile(edition(dir), JSON.stringify({ ...kept, unread: readable }));
+  const visitor = await readPermitCity(city, http, { dir, day: '2026-11-18' });
+  assert.equal(visitor.reread, 1);
+  assert.deepEqual(site(visitor), [['PC 064086 26 00014', 'Xelaiako Bidea', 'A 1473']]);
+  const after = JSON.parse(await fsp.readFile(edition(dir), 'utf8'));
+  assert.equal(after.unread, undefined, 'a scan read is kept as rows only');
+  assert.equal(http.calls.filter((call) => call.url.endsWith('.pdf')).length, 1, 'nothing downloaded again');
+  assert.equal(calls, 1);
+});
+
+test('an act OCR’d as nothing before its text was kept is OCR’d once more by the sweep, once', async () => {
+  const { city, pdf, http, readable, edition, site } = ayherreBoard();
+  // The edition the sweep wrote for such an act until 2026-11-17: the link's number and the postcode, no mark of the OCR.
+  const frozen = (cells = {}) => ({ url: pdf, fields: PERMIT_LIST_FIELDS, pendingOcr: false, etag: null, modified: null,
+    rows: [{ board: 'decisions', cells: PERMIT_LIST_FIELDS.map((field) => cells[field] ?? null) }] });
+  const dir = await tempDir();
+  await fsp.writeFile(edition(dir), JSON.stringify(frozen({ dossier: 'PC 064086 26 00014', postcode: '64240' })));
+  let calls = 0;
+  const ocr = async () => { calls += 1; return { document: readable }; };
+  const visitor = await readPermitCity(city, http, { dir, day: '2026-11-18', ocr });
+  assert.equal(calls, 0, 'a visitor never OCRs');
+  assert.deepEqual(site(visitor), [['PC 064086 26 00014', null, null]]);
+  const swept = await readPermitCity(city, http, { dir, day: '2026-11-18', ocr, background: true });
+  assert.equal(calls, 1);
+  assert.deepEqual(site(swept), [['PC 064086 26 00014', 'Xelaiako Bidea', 'A 1473']]);
+  assert.equal(JSON.parse(await fsp.readFile(edition(dir), 'utf8')).ocrRead, '2026-11-18');
+  await readPermitCity(city, http, { dir, day: '2026-11-19', ocr, background: true });
+  assert.equal(calls, 1, 'once');
+  // An edition that holds more than the number is a reading, not a frozen one.
+  const placed = await tempDir();
+  await fsp.writeFile(edition(placed), JSON.stringify(frozen({ dossier: 'PC 064086 26 00014', postcode: '64240', address: 'Elizako Bidea' })));
+  await readPermitCity(city, http, { dir: placed, day: '2026-11-18', ocr, background: true });
+  assert.equal(calls, 1);
 });
 
 test('an unread Vétraz table is incomplete and never caches an empty edition', async () => {

@@ -6,6 +6,28 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Scanned orders that OCR read but no reader understood were never read
+  again: they now keep their text and are reread by each day's readers.**
+  On 2026-11-17 the production cache held 95 such acts on 14 boards
+  (Rouvroy 29, Ayherre 23, Étupes 11): each was kept with nothing but its
+  link's dossier number and never revisited, so a reader fixed later changed
+  nothing for it — 3 of them were already read by `main`'s reader that day.
+  An OCR that gives no row now keeps its positioned text in the edition
+  (66 KB for a four-page order) and every reading rereads it, with no
+  download and no OCR. Editions written before this change are OCR'd once
+  more by the sweep, within its 40-file budget.
+- **Ayherre's orders are read: Basque street names, localities and OCR'd
+  parcel sections.** The DematDOC notice reader took « Xelaiako Bidea » for
+  no street (*bidea* is Basque for *chemin*; *karrika*, *kalea*, *plaza*,
+  *errepidea* and *bidexka* join it), dropped a locality (*lieu-dit*) such as
+  « Gainekoplaza » even with the order's parcels below it, read OCR's « À
+  0721 » as no parcel, took « … cette parcelle … plus de 250 jours » in the
+  works for the parcel line, and lost the dossier when OCR garbled the
+  order's number although the link gives it. All 23 of Ayherre's unread
+  orders now give a site or parcels (they left 11 of its dossiers with no
+  site, off the map); across the 72 other frozen acts, 5 more are read
+  and none read before is lost. A locality alone, without parcels, is still
+  no site (Saulcy's « ANOZEL »).
 - **Six open-data portals and publication-actes.fr were read but never kept:
   every record they serve is now archived each night.** Paris, Bordeaux,
   Nantes, Tours, Brest and dODu were read per scan only, and Paris's file

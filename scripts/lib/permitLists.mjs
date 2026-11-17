@@ -186,6 +186,54 @@ function keptRows(rows, board) {
 }
 
 /**
+ * A SCAN THE OCR READ BUT NO READER UNDERSTOOD IS KEPT WITH ITS TEXT, AND READ
+ * AGAIN. It used to be kept as read, its row the link's number alone, and was
+ * never looked at again: a reader mended later changed nothing for it. On
+ * 2026-11-17 that held 95 acts on 14 boards (Rouvroy 29, Ayherre 23, Étupes
+ * 11) — Ayherre's left 11 of its dossiers with no site, off the map. The
+ * OCR's positioned document now stays in the edition, its numbers rounded to a
+ * tenth of a point (66 KB for a four-page order, against 121 KB), and every
+ * read gives it to the readers of the day: no download, no OCR, milliseconds.
+ */
+function unreadScan(document) {
+  const tenth = (value) => (typeof value === 'number' ? Math.round(value * 10) / 10 : value);
+  return {
+    pages: (document?.pages ?? []).map((page) => ({
+      ...page,
+      runs: (page.runs ?? []).map((run) => Object.fromEntries(Object.entries(run)
+        .filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => [key, tenth(value)]))),
+    })),
+  };
+}
+
+/** The edition a kept scan gives today's reader, kept in its place; null while it still says nothing. */
+async function rereadUnread(dir, kept, read) {
+  if (!kept?.unread) return null;
+  let rows = null;
+  try { rows = read(kept.unread); } catch { rows = null; }
+  if (!rows?.length) return null;
+  const { unread: _read, ...edition } = kept;
+  const next = { ...edition, rows };
+  await writeEdition(dir, next);
+  return next;
+}
+
+const DOSSIER_CELL = PERMIT_LIST_FIELDS.indexOf('dossier');
+const POSTCODE_CELL = PERMIT_LIST_FIELDS.indexOf('postcode');
+
+/**
+ * An act OCR'd before its text was kept (above) and read as nothing: rows
+ * that hold the link's number and the postcode alone, and no mark that an OCR
+ * ran. The sweep OCRs it once more, within its budget; what it writes then
+ * says so (`ocrRead`), so that this happens once.
+ */
+function readAsNothing(kept, file) {
+  return Boolean(kept && (file.ocr || file.scan) && !kept.pendingOcr && !kept.ocrRead && !kept.unread && kept.rows.length
+    && kept.rows.every((row) => (row.cells ?? []).every((cell, i) => cell === null || cell === undefined || cell === ''
+      || i === DOSSIER_CELL || i === POSTCODE_CELL)));
+}
+
+/**
  * One list's rows, from the edition already read or from the file, or null
  * when the file could not be had or read.
  *
@@ -658,7 +706,9 @@ async function readDigilorCity(city, http, { dir, allows, months, day, maxFiles,
   for (const doc of documents) {
     const list = { ...doc, layout: doc.layout ?? 'grid' };
     let answer = null;
-    const kept = await readEdition(dir, doc.url);
+    const listReader = PERMIT_LIST_READERS[list.layout] ?? BOARD_READERS[list.layout];
+    let kept = await readEdition(dir, doc.url);
+    if (kept?.unread && listReader) kept = (await rereadUnread(dir, kept, (document) => keptRows(listReader(document, { city, file: list }), list.board))) ?? kept;
     if (kept && !(kept.pendingOcr && ocr)) {
       answer = { ...kept, reused: true };
       reused += 1;
@@ -679,6 +729,7 @@ async function readDigilorCity(city, http, { dir, allows, months, day, maxFiles,
         const context = { city, file: list };
         let rows = rowsOfPdf(bytes, list.layout, list.board, context);
         let awaitsOcr = false;
+        let unread = null;
         // A town that lists its shelves may post scans on any layout.
         const needsOcr = (list.layout === 'extended-notice' && (!rows?.length
           || rows.some((row) => row.cells[8] === municipalMessages.definition.signed.fr)))
@@ -686,15 +737,16 @@ async function readDigilorCity(city, http, { dir, allows, months, day, maxFiles,
         if (needsOcr) {
           // No visitor runs OCR. The daily sweep retries the cached scans.
           const scanned = ocr ? await ocr(bytes, { positioned: true }) : null;
-          const scannedRows = scanned?.document ? keptRows((PERMIT_LIST_READERS[list.layout] ?? BOARD_READERS[list.layout])(scanned.document, context), list.board) : [];
+          const scannedRows = scanned?.document ? keptRows(listReader(scanned.document, context), list.board) : [];
           if (scannedRows.length) rows = scannedRows;
+          else if (scanned?.document) unread = unreadScan(scanned.document);
           if (!rows?.length) {
             const fallback = digilorTitleRow(city, list);
             rows = fallback ? keptRows([fallback], list.board) : [];
           }
           awaitsOcr = !scanned?.document;
         }
-        answer = { url: doc.url, fields: PERMIT_LIST_FIELDS, rows: rows ?? [], pendingOcr: awaitsOcr };
+        answer = { url: doc.url, fields: PERMIT_LIST_FIELDS, rows: rows ?? [], pendingOcr: awaitsOcr, ...(unread ? { unread } : {}) };
         await writeEdition(dir, answer);
       } else answer = bytes ? await keepFile(dir, list, bytes) : null;
     }
@@ -755,7 +807,8 @@ async function readDematdocCity(city, http, { dir, allows, months, day, maxFiles
   let pendingOcr = 0;
   for (const doc of documents) {
     let answer = null;
-    const kept = await readEdition(dir, doc.url);
+    let kept = await readEdition(dir, doc.url);
+    if (kept?.unread) kept = (await rereadUnread(dir, kept, (document) => keptRows(PERMIT_LIST_READERS[doc.layout](document, { city, file: doc }), doc.board))) ?? kept;
     if (kept && !(kept.pendingOcr && ocr)) {
       answer = kept;
       reused += 1;
@@ -771,17 +824,19 @@ async function readDematdocCity(city, http, { dir, allows, months, day, maxFiles
       const context = { city, file: doc };
       let rows = rowsOfPdf(bytes, doc.layout, doc.board, context);
       let awaitsOcr = false;
+      let unread = null;
       if (!rows?.length) {
         // No visitor runs OCR. The daily sweep retries the cached scans.
         const scanned = ocr ? await ocr(bytes, { positioned: true }) : null;
         rows = scanned?.document ? keptRows(PERMIT_LIST_READERS[doc.layout](scanned.document, context), doc.board) : [];
+        if (!rows.length && scanned?.document) unread = unreadScan(scanned.document);
         if (!rows.length) {
           const fallback = dematdocTitleRow(city, doc);
           rows = fallback ? keptRows([fallback], fallback.board) : [];
         }
         awaitsOcr = !scanned?.document;
       }
-      answer = { url: doc.url, fields: PERMIT_LIST_FIELDS, rows, pendingOcr: awaitsOcr };
+      answer = { url: doc.url, fields: PERMIT_LIST_FIELDS, rows, pendingOcr: awaitsOcr, ...(unread ? { unread } : {}) };
       await writeEdition(dir, answer);
     }
     if (answer.pendingOcr) pendingOcr += 1;
@@ -1051,13 +1106,19 @@ async function readBoardCity(city, http, { dir, allows, months, day, maxFiles, o
   let failed = 0;
   let skipped = 0;
   let pendingOcr = 0;
+  let reread = 0;
   let ocrRuns = 0;
   const canOcr = () => Boolean(ocr && background && ocrRuns < BOARD_SWEEP_OCR_FILES);
   const fallback = (file) => (file.row ? keptRows([file.row], file.board) : []);
   for (const file of selected) {
-    const kept = await readEdition(dir, file.url);
+    const reader = PERMIT_LIST_READERS[file.layout] ?? BOARD_READERS[file.layout];
+    let kept = await readEdition(dir, file.url);
+    if (kept?.unread && reader) {
+      const again = await rereadUnread(dir, kept, (document) => keptRows(reader(document, { city, file }), file.board));
+      if (again) { kept = again; reread += 1; }
+    }
     let answer = null;
-    const retry = kept?.pendingOcr && canOcr();
+    const retry = (kept?.pendingOcr || readAsNothing(kept, file)) && canOcr();
     if (kept && !file.rolling && !retry) {
       answer = kept;
       reused += 1;
@@ -1104,6 +1165,7 @@ async function readBoardCity(city, http, { dir, allows, months, day, maxFiles, o
             continue;
           }
           let awaitsOcr = false;
+          let scannedDocument = null;
           if (!rows && (file.ocr || file.scan)) {
             let scanned = null;
             if (canOcr()) {
@@ -1113,12 +1175,14 @@ async function readBoardCity(city, http, { dir, allows, months, day, maxFiles, o
                 ...(file.ocrRotate ? { rotate: file.ocrRotate } : {}),
                 ...(file.ocrTypeColumn ? { typeColumn: file.ocrTypeColumn } : {}) });
             }
-            const reader = PERMIT_LIST_READERS[file.layout] ?? BOARD_READERS[file.layout];
             rows = scanned?.document && reader ? keptRows(reader(scanned.document, context), file.board) : null;
             if (!rows?.length) { rows = null; awaitsOcr = !scanned?.document; }
+            scannedDocument = scanned?.document ?? null;
           }
           answer = {
             url: file.url, fields: PERMIT_LIST_FIELDS, rows: rows ?? fallback(file), pendingOcr: awaitsOcr,
+            ...(scannedDocument ? { ocrRead: day ?? true } : {}),
+            ...(scannedDocument && !rows ? { unread: unreadScan(scannedDocument) } : {}),
             etag: response.headers?.get?.('etag') || null, modified: response.headers?.get?.('last-modified') || null,
           };
           await writeEdition(dir, answer);
@@ -1131,7 +1195,7 @@ async function readBoardCity(city, http, { dir, allows, months, day, maxFiles, o
     lists.push({ url: file.url, board: file.board, rows: answer.rows.length, reused: answer === kept });
   }
   return {
-    boards, lists, fetched, reused, failed, skipped, pendingOcr,
+    boards, lists, fetched, reused, failed, skipped, pendingOcr, reread,
     incomplete: incomplete || failed > 0 || skipped > 0 || pendingOcr > 0,
   };
 }
