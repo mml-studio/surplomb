@@ -6,6 +6,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **The first portal sweep killed the server twice on Brest: it now reads
+  in a third of the memory, at 11:00 Paris.** Each of Brest's 32 179 records
+  built its own date formatter three times; the read alone peaked at 478 MB
+  RSS in a bare process and the 1 GB container was killed mid-sweep twice on
+  2026-11-17. One shared formatter brings the read to 141 MB and the whole
+  Brest sweep from 743 to 385 MB on a second night. The portals also move out
+  of the night, when the boards, the city lists and their OCR already run, to
+  a daily pass from 11:00 Paris; the archive check allows their stamp a day.
 - **Scanned orders that OCR read but no reader understood were never read
   again: they now keep their text and are reread by each day's readers.**
   On 2026-11-17 the production cache held 95 such acts on 14 boards

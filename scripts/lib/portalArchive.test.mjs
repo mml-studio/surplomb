@@ -13,6 +13,7 @@ import { PORTAL_ROWS, archivedPortalRecords } from '../../src/data/portalArchive
 import { createCartdsArchiveStore } from './cartdsArchive.mjs';
 import {
   monthsBefore,
+  portalSweepDue,
   portalArcgisUrl,
   portalExportUrl,
   readPortalRecords,
@@ -122,4 +123,13 @@ test('a whole file is split by municipality', async () => {
   assert.equal(summary.read, portal('brest').communes.length + 1, 'every file written, Guipavas too');
   const guipavas = await store.load({ key: 'brest' }, '29075');
   assert.equal(guipavas.archive.rows.length, 1);
+});
+
+test('the portals are swept once a day, from 11:00 Paris', () => {
+  const morning = new Date('2026-11-17T09:30:00Z'); // 10:30 Paris
+  const noon = new Date('2026-11-17T10:30:00Z'); // 11:30 Paris
+  assert.equal(portalSweepDue(null, morning), false);
+  assert.equal(portalSweepDue(null, noon), true);
+  assert.equal(portalSweepDue({ day: '2026-11-16' }, noon), true);
+  assert.equal(portalSweepDue({ day: '2026-11-17' }, noon), false);
 });

@@ -4775,8 +4775,11 @@ still come from Sitadel alone.
 never kept: the six open-data portals (`LOCAL_ADS_PORTALS`: Paris, Bordeaux,
 Nantes, Tours, Brest, dODu) and publication-actes.fr (Ustaritz, Ciboure,
 Monts). Paris's file only ever holds six months, so every dossier older than
-that was gone for good. The portals are now read whole once a night, beside
-the boards, and every record each serves is kept as one canonical JSON cell
+that was gone for good. The portals are now read whole once a day, from
+11:00 Paris (`PORTAL_SWEEP_FROM_HOUR`: away from the night's sweeps, because
+Brest and Bordeaux each lift the process by ~300 MB in a container capped at
+1 GB; the archive check allows the stamp a day's lag), and every record each
+serves is kept as one canonical JSON cell
 with its first and last day — `.gev-cache/archive/portals/<insee>.json`,
 `src/data/portalArchive.js` and `scripts/lib/portalArchive.mjs`, by the same
 store and the same scrub rules as the boards (applicant through
