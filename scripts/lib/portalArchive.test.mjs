@@ -19,6 +19,7 @@ import {
   readPortalRecords,
   sweepPortalArchive,
   ARCGIS_PAGE,
+  ARCGIS_PAGE_TRIES,
 } from './portalArchive.mjs';
 
 const portal = (key) => LOCAL_ADS_PORTALS.find((p) => p.key === key);
@@ -75,10 +76,21 @@ test('an ArcGIS layer is read page after page, its dates as Paris days', async (
   assert.match(portalArcgisUrl(portal('brest'), { offset: 4000 }), /resultOffset=4000/);
 });
 
-test('an ArcGIS reading that breaks off is no reading', async () => {
+test('an ArcGIS page that fails is asked again; one that keeps failing breaks the reading', async () => {
   const full = Array.from({ length: ARCGIS_PAGE }, () => ({ properties: {}, geometry: null }));
-  const http = cannedHttp((url) => (new URL(url).searchParams.get('resultOffset') === '0' ? { type: 'FeatureCollection', features: full } : { error: { code: 500 } }));
-  assert.equal(await readPortalRecords(portal('brest'), http), null);
+  let second = 0;
+  const flaky = cannedHttp((url) => {
+    if (new URL(url).searchParams.get('resultOffset') === '0') return { type: 'FeatureCollection', features: full };
+    second += 1;
+    return second < ARCGIS_PAGE_TRIES ? null : { type: 'FeatureCollection', features: [] };
+  });
+  const slept = [];
+  const records = await readPortalRecords(portal('brest'), flaky, { sleep: async (ms) => { slept.push(ms); }, retryPauseMs: 7 });
+  assert.equal(records.length, ARCGIS_PAGE, 'the fourth try of page two answered');
+  assert.deepEqual(slept, [7, 7, 7]);
+  const dead = cannedHttp((url) => (new URL(url).searchParams.get('resultOffset') === '0' ? { type: 'FeatureCollection', features: full } : { error: { code: 500 } }));
+  assert.equal(await readPortalRecords(portal('brest'), dead), null);
+  assert.equal(dead.asked.length, 1 + ARCGIS_PAGE_TRIES);
 });
 
 test('the sweep writes one file per municipality, retries once, and names what failed', async () => {

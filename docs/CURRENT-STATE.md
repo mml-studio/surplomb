@@ -4793,7 +4793,12 @@ whole. Bordeaux is read over the layer's own 36 months without certificats
 (its file starts in 2003); the others whole. Brest's file also holds Guipavas
 (29075), which the layer reads from its own lists: the archive keeps it under
 its own code. A reading that fails is asked once more 30 s later; a partial
-ArcGIS reading is not recorded. Measured on the first sweep from the Mac
+ArcGIS reading is not recorded. Brest's server answers the same page in
+0.4 s or holds it 60 s and answers 503, at random (measured from the
+production container on 2026-11-17, where the first sweep lost all 17 pages
+to one such page): each page gets four tries 5 s apart before the reading
+fails. Read that way from the container the same day: 32 179 records in
+720 s, 10 pages asked again, none four times. Measured on the first sweep from the Mac
 (2026-11-17): 66 files, 117 184 records (Paris 8 107, Bordeaux 39 939, Nantes
 3 935, Tours 11 999, Brest 32 179, dODu 21 025), 88 MB, 111 s; the second
 sweep added 0 rows. publication-actes.fr's acts and the rows of its deposit
