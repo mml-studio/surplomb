@@ -949,7 +949,7 @@ export function readFrameAct(document, context) {
   if (file?.board === 'decisions' && found.some((row) => row.board === 'filings')) found = read(withoutFilingMarks(document));
   // dematdoc's reader takes a site that ends on « rue » for a street cut at the end of its line (« 71 Grand Rue »,
   // « 28 Grand'rue »): the Amnéville scan reading, which knows the label's value, gives the row.
-  // A lieu-dit alone (« Sur un terrain sis à : ANOZEL ») is no site there either, as in dematdoc's reader.
+  // A lieu-dit alone (« Sur un terrain sis à : ANOZEL ») is no site there; dematdoc's reader keeps one only with its parcels.
   if (!found.length) found = readScannedNotice(document, { city, file: { ...file, title: `${typed ?? ''} ${title}` } }).filter((row) => FRAME_SITE_WORDS_RE.test(row.address ?? ''));
   return found.flatMap((row) => {
     if (!/^(?:PC|DP|PA|PD) /.test(row.dossier)) return [];

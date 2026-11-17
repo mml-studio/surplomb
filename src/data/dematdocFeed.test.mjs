@@ -489,3 +489,27 @@ test('a file of several notices of filing gives one row each, the number closed 
   ]);
   assert.doesNotMatch(JSON.stringify(rows), /PRIVATE/i);
 });
+
+test('Ayherre’s orders name Basque ways and localities, and their parcels place a site that names no way', () => {
+  const ayherre = permitListFor('64086');
+  const file = { board: 'decisions', title: '', row: { dossier: 'PC 064086 26 00014' } };
+  const order = (site, parcels, number = 'N° PC 64 086 2600014') => readDematdocNotice(page(
+    [313, 782, 'PERMIS DE CONSTRUIRE'],
+    [27, 720, 'Arrêté municipal n° 2026- 1'],
+    [27, 675, 'Demande déposée le 29/06/2026'],
+    [449, 666, number],
+    [116, 637, 'Par : | PRIVATE PERSON'],
+    [110, 510, 'Pour : | Une plateforme : les vaches passent par cette parcelle plus de 250 jours'],
+    [57, 472, `Sur un terrain sis : | ${site}`],
+    [32, 446, `Références cadastrales : | ${parcels}`],
+    [27, 300, 'ARTICLE 1 : Le permis de construire est ACCORDE'],
+  ), { city: ayherre, file });
+  const [way] = order('Xelaiako Bidea', 'A 0255, À 0721, A 1037');
+  assert.deepEqual([way.dossier, way.address, way.parcels], ['PC 064086 26 00014', 'Xelaiako Bidea', 'A 255, A 721, A 1037'],
+    'a Basque « bidea » is a way, an OCR « À » a section A, and the works’ « parcelle … 250 » no parcel');
+  const [lieu] = order('Gainekoplaza', 'A 1473');
+  assert.deepEqual([lieu.address, lieu.parcels], ['Gainekoplaza', 'A 1473'], 'a locality stands with its parcels');
+  assert.deepEqual(order('Gainekoplaza', '// //{/'), [], 'without parcels, a name that is no way is no site');
+  const [garbled] = order('Xelaiako Bidea', 'A 0255', 'N°D 2');
+  assert.equal(garbled.dossier, 'PC 064086 26 00014', 'the link’s number when OCR garbles the order’s');
+});
