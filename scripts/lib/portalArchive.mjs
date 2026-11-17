@@ -50,6 +50,18 @@ export const ARCGIS_PAGE = 2000;
 /** Brest's file is 32 179 records (2026-11-17): 17 pages. The ceiling is three times that. */
 export const ARCGIS_MAX_PAGES = 50;
 
+/**
+ * Tries per page. Brest's server answers the same query in 0.4 s or holds it
+ * 60 s and answers 503, at random: from the production container on
+ * 2026-11-17, `resultOffset=2000` did both within ten minutes, and the first
+ * production sweep lost all 17 pages to one such page, twice. A page is
+ * asked again; the reading only fails when one page fails four times.
+ */
+export const ARCGIS_PAGE_TRIES = 4;
+
+/** Between two tries of one page. */
+export const ARCGIS_RETRY_PAUSE_MS = 5000;
+
 /** Between two requests to one host. Two seconds: a nightly read, not a crawl. */
 export const PORTAL_PAUSE_MS = 2000;
 
@@ -184,17 +196,23 @@ async function readJson(url, http) {
  * @returns {Promise<?Array<object>>}
  */
 export async function readPortalRecords(portal, http, {
-  insee = null, since = null, sleep = null, pauseMs = 0,
+  insee = null, since = null, sleep = null, pauseMs = 0, retryPauseMs = ARCGIS_RETRY_PAUSE_MS,
 } = {}) {
   if (portal.api !== 'arcgis') {
     const answer = await readJson(portalExportUrl(portal, { insee, since }), http);
     return Array.isArray(answer) ? answer : null;
   }
+  const isPage = (answer) => answer?.type === 'FeatureCollection' && Array.isArray(answer.features);
   const records = [];
   for (let page = 0; page < ARCGIS_MAX_PAGES; page += 1) {
     if (page && sleep && pauseMs > 0) await sleep(pauseMs);
-    const answer = await readJson(portalArcgisUrl(portal, { since, offset: page * ARCGIS_PAGE }), http);
-    if (!answer || answer.type !== 'FeatureCollection' || !Array.isArray(answer.features)) return null;
+    const url = portalArcgisUrl(portal, { since, offset: page * ARCGIS_PAGE });
+    let answer = null;
+    for (let attempt = 0; attempt < ARCGIS_PAGE_TRIES && !isPage(answer); attempt += 1) {
+      if (attempt && sleep && retryPauseMs > 0) await sleep(retryPauseMs);
+      answer = await readJson(url, http);
+    }
+    if (!isPage(answer)) return null;
     for (const feature of answer.features) records.push(arcgisRecord(feature));
     const more = answer.properties?.exceededTransferLimit === true || answer.exceededTransferLimit === true
       || answer.features.length === ARCGIS_PAGE;

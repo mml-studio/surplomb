@@ -6,6 +6,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Fixed
+- **Brest's portal was never archived: one slow page broke the whole
+  reading.** From the production server, Brest's ArcGIS answers a page in
+  0.4 s or holds it 60 s and answers 503, at random, so the first sweep lost
+  all 32 179 records to one page. Each page is now asked up to four times,
+  5 s apart.
 - **The first portal sweep killed the server twice on Brest: it now reads
   in a third of the memory, at 11:00 Paris.** Each of Brest's 32 179 records
   built its own date formatter three times; the read alone peaked at 478 MB
