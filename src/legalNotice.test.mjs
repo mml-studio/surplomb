@@ -195,6 +195,7 @@ test('the audience measurement is disclosed only where the token is set', () => 
     assert.doesNotMatch(off, /PostHog/);
     assert.match(off, noMeasure);
     assert.equal(buttons(off), 0, 'nothing measured, nothing to refuse');
+    assert.doesNotMatch(off, /data-analytics-consent/, 'no banner, no consent to withdraw');
   }
   for (const ab of [{}, { GEV_FIRST_RUN_AB: 'A,B,C' }]) {
     const env = { ...FULL_ENV, ...ab, POSTHOG_PROJECT_TOKEN: 'phc_exemple' };
@@ -207,6 +208,12 @@ test('the audience measurement is disclosed only where the token is set', () => 
     assert.match(on, /Cloudflare, PostHog/, 'named among the American companies');
     assert.doesNotMatch(on, noMeasure, 'a measured page must not say it measures nothing');
     assert.equal(buttons(on), 1, 'one refusal covers every measurement');
+    // The detailed analysis, on consent only, and the button to withdraw it.
+    assert.match(on, /Analyse détaillée de la visite \(PostHog, avec votre accord\)/);
+    assert.match(on, /pas de cookie de suivi sans votre accord/);
+    assert.match(on, /Sans votre accord : aucun\s+clic/);
+    assert.match(on, /trente jours/);
+    assert.equal(on.split('data-analytics-consent>').length - 1, 1, 'one button to withdraw consent');
     assert.equal(/test A\/B/.test(on), Boolean(ab.GEV_FIRST_RUN_AB));
     assert.equal(/le tirage est\s+effacé/.test(on), Boolean(ab.GEV_FIRST_RUN_AB));
     assert.doesNotMatch(on, /<!--\/?gev:/);

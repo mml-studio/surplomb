@@ -39,8 +39,9 @@ html[data-vitrine] body {
 /* `:where()` keeps this at element specificity: a bare `:not(#vitrine)`
    counts as an id, and would beat the hand-off rule below, which must show
    the canvas (it did, once: the globe booted into a 0×0 container and the
-   frozen frame waited out its whole deadline). */
-html[data-vitrine] body > :where(:not(#vitrine):not(script)) {
+   frozen frame waited out its whole deadline). The measurement banner
+   (src/consentBanner.js) is the one surface that stays: it asks on every page. */
+html[data-vitrine] body > :where(:not(#vitrine):not(script):not(.gev-consent)) {
   display: none !important;
 }
 

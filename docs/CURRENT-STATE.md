@@ -1417,6 +1417,61 @@ Updated: September 24, 2026
 > refusal; `--off`, against a server without the variable, checks that nothing
 > is measured.
 
+> **2026-11-18 — consent banner and detailed analysis** (`src/consentBanner.js`,
+> `src/analyticsConsent.js`, `src/analyticsEvents.js`, `src/audienceMeasure.js`).
+> Supersedes the « what is sent » and « exempt from consent » paragraphs of the
+> 2026-10-12 entry below for consenting visitors; for the others they still hold.
+>
+> **Two levels.** On a build with `POSTHOG_PROJECT_TOKEN`, a browser that has
+> not refused all measurement (`firstRunMeasureRefused`) and has no fresh
+> answer sees a strip along the bottom edge in the site's own grammar (ivory
+> and a green hairline; on the globe, the cockpit's dark glass): « Surplomb
+> utilise des cookies. », « Détails » to `/confidentialite` (where the purposes
+> are), « Refuser » and « Accepter » of the same size and weight, no close
+> button. `landing.css` exempts `.gev-consent` from the rule that hides every
+> body child but the showcase.
+> The answer is kept in `localStorage['gev:analytics-consent:v1']`
+> (`{"choice","at"}`) for 182 days, then asked again. The SDK runs with
+> `cookieless_mode: 'on_reject'`:
+> - no answer or « Refuser » → `opt_out_capturing_by_default`, so PostHog
+>   counts cookieless exactly as before (memory persistence, `$posthog_cookieless`,
+>   nothing stored); `makeBeforeSend` drops every event but `$pageview` and
+>   `$pageleave` and runs `cleanMeasuredEvent` on those;
+> - « Accepter » → `DETAILED_SETTINGS` (`localStorage+cookie`, autocapture,
+>   rage and dead clicks, heatmaps, session recording with `maskAllInputs`,
+>   URL hashes kept) applied in place with `set_config`, then
+>   `opt_in_capturing` with the event `analytics_consent_granted` and
+>   `startSessionRecording`; `before_send` lets everything through, URLs whole.
+>   On later visits the same settings are passed to `init`, without the event.
+>
+> **The bundle.** `module.no-external.js` replaces the slim build (autocapture
+> and heatmaps are not in the slim one); the replay recorder
+> (`posthog-js/dist/posthog-recorder.js`) and `dead-clicks-autocapture.js` are
+> imported only for a consenting visitor and register themselves on
+> `window.__PosthogExtensions__`, so `disable_external_dependency_loading`
+> stays on. `advanced_disable_flags` became `advanced_disable_feature_flags`:
+> the remote configuration must load, or the replay never starts.
+>
+> **Named actions.** `track(event, props)` (`src/analyticsEvents.js`) costs no
+> SDK byte and queues until PostHog starts: `search` (`src/ui.js`,
+> `_submitLocationSearch`: query and outcome), `fiche_lookup` (`src/fiche.js`:
+> query, found), `waitlist_submitted` (`src/waitlistCard.js`: the reason, never
+> the address). Dropped by `before_send` without consent.
+>
+> **The previews beside the site.** `/apercu/<token>/` and `/permis/` are
+> served by other processes on the same origin (not in this repository); their
+> own script reads the same consent key, so one answer covers the whole domain,
+> and identifies a consenting visitor as `apercu:<6 chars>` or `invite:<id>`.
+>
+> **The privacy page** gains a row for the detailed analysis (what, the `ph_…`
+> id, thirty days of replays, a year of events, six months for the answer), a
+> row for the previews' server-side events, the consent basis, and
+> `[data-analytics-consent]`, wired by `src/analyticsConsentPage.js`: it
+> withdraws (stores `denied`, erases `ph_*` keys and cookies) or grants.
+>
+> Gates: `src/audienceMeasure.test.mjs`, `src/analyticsConsent.test.mjs`,
+> `src/consentBanner.test.mjs`, `src/legalNotice.test.mjs`.
+
 > **2026-10-12 — audience measurement** (`src/audienceMeasure.js`). PostHog EU
 > Cloud counts visits, without a cookie, on a deployment whose build carries
 > `POSTHOG_PROJECT_TOKEN` (`define` in `vite.config.js`, a build arg in the

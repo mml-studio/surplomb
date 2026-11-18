@@ -9,7 +9,11 @@
  * host, the cleaned URLs, the cookieless id, that nothing is stored, the
  * showcase's hand-off to `/globe`, the page leave, that nothing else is
  * requested, that a refused browser never downloads the SDK, and the address
- * sheet.
+ * sheet — all for a visitor who has not answered the banner — then the banner
+ * itself: « Accepter » turns on clicks, heatmaps and the replay without a
+ * script from PostHog, the answer survives a reload, « Refuser » changes
+ * nothing. The remote configuration is answered with replay on, as the
+ * project's own settings do.
  *
  *   POSTHOG_PROJECT_TOKEN=phc_probe npx vite build --outDir .context/dist-ph
  *   npx vite preview --outDir .context/dist-ph --port 4199 --strictPort
@@ -23,6 +27,7 @@ import zlib from 'node:zlib';
 import puppeteer from 'puppeteer';
 import { newQaPage } from './lib/qa-first-run.mjs';
 import { FIRST_RUN_OPTOUT_KEY } from '../src/firstRunOptOut.js';
+import { ANALYTICS_CONSENT_KEY } from '../src/analyticsConsent.js';
 
 const args = process.argv.slice(2);
 const urlFlag = args.indexOf('--url');
@@ -59,14 +64,44 @@ async function capturePage(browser, { vitrine = false, refuse = false } = {}) {
   await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*posthog.com*', requestStage: 'Request' }] });
   cdp.on('Fetch.requestPaused', async (event) => {
     hits.push({ url: event.request.url, method: event.request.method, body: event.request.method === 'POST' ? decode(event.request) : null });
+    const config = /\/(flags|decide)\/|\/array\/[^/]+\/config/.test(new URL(event.request.url).pathname);
     await cdp.send('Fetch.fulfillRequest', {
       requestId: event.requestId,
       responseCode: 200,
-      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
-      body: Buffer.from('{"status":1}').toString('base64'),
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Access-Control-Allow-Origin', value: APP },
+        { name: 'Access-Control-Allow-Credentials', value: 'true' }],
+      body: Buffer.from(config ? REMOTE_CONFIG : '{"status":1}').toString('base64'),
     }).catch(() => {});
   });
   return { page, hits };
+}
+
+/** What the project answers: replay on (the PostHog project has it on), no flags. */
+const REMOTE_CONFIG = JSON.stringify({
+  sessionRecording: { endpoint: '/s/' }, supportedCompression: ['gzip', 'gzip-js'], autocapture_opt_out: false,
+  heatmaps: true, capturePerformance: false, featureFlags: {}, featureFlagPayloads: {}, errorsWhileComputingFlags: false,
+});
+const isCapture = (h) => /^\/(e|i\/v0\/e|batch|capture|s)\/?$/.test(new URL(h.url).pathname);
+const isConfig = (h) => /\/(flags|decide)\/|\/array\/[^/]+\/config/.test(new URL(h.url).pathname);
+const storageOf = (page) => page.evaluate(() => ({ cookie: document.cookie, local: Object.keys(localStorage), session: Object.keys(sessionStorage) }));
+const hasPosthogKeys = (st) => /ph_|posthog/i.test(st.cookie) || [...st.local, ...st.session].some((k) => /ph_|posthog/i.test(k));
+/** The banner, only if a visitor can actually see it (a stylesheet once hid it at 0×0). */
+const banner = async (page) => {
+  const el = await page.$('.gev-consent');
+  return el && (await el.boundingBox()) ? el : null;
+};
+/** A real click on a visible button of the page (not the banner's): autocapture records buttons, not the globe's canvas. */
+async function clickAButton(page) {
+  for (const handle of await page.$$('button, a[href], [role="button"]')) {
+    const ok = await handle.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return !el.closest('.gev-consent') && r.width > 8 && r.height > 8 && r.top >= 0 && r.bottom <= innerHeight
+        && getComputedStyle(el).visibility !== 'hidden' && !el.disabled && !(el.tagName === 'A' && /^https?:/.test(el.getAttribute('href')));
+    });
+    if (!ok) continue;
+    try { await handle.click(); return await handle.evaluate((el) => el.textContent.trim().slice(0, 40) || el.getAttribute('aria-label') || el.tagName); } catch { /* covered: next */ }
+  }
+  return null;
 }
 
 const events = (hits) => hits.flatMap((h) => {
@@ -94,8 +129,11 @@ try {
     const { page, hits } = await capturePage(browser, { vitrine: true });
     await page.goto(`${APP}/?utm_source=probe&utm_campaign=x&gclid=secret#v=2&lat=48.1`, { waitUntil: 'load' });
     await sleep(4000);
+    check('the banner asks', Boolean(await banner(page)));
     const before = events(hits).filter((e) => e.event === '$pageview');
-    check('a page view reaches eu.i.posthog.com', before.length === 1 && hits.every((h) => h.url.startsWith('https://eu.i.posthog.com/')),
+    check('a page view reaches eu.i.posthog.com; the configuration comes from PostHog EU too', before.length === 1
+      && hits.filter(isCapture).every((h) => h.url.startsWith('https://eu.i.posthog.com/'))
+      && hits.every((h) => /^https:\/\/eu(-assets)?\.i\.posthog\.com\//.test(h.url)),
       `${before.length} pageview(s); hosts ${[...new Set(hits.map((h) => new URL(h.url).host))].join(',')}`);
     const pv = before[0]?.properties || {};
     check('URL keeps utm_*, loses gclid and the hash', pv.$current_url === `${APP}/?utm_source=probe&utm_campaign=x`, pv.$current_url);
@@ -129,8 +167,9 @@ try {
     check('leaving sends a page leave', Boolean(leave), leave ? Object.keys(leave.properties).filter((k) => k.startsWith('$prev_pageview')).join(',') : 'none');
     const kinds = [...new Set(events(hits).map((e) => e.event))];
     check('only $pageview and $pageleave are sent', kinds.every((k) => k === '$pageview' || k === '$pageleave'), kinds.join(','));
-    const nonCapture = hits.filter((h) => !/\/(e|i\/v0\/e|batch|capture)\/?/.test(new URL(h.url).pathname));
-    check('no flags, config or script requests', nonCapture.length === 0, nonCapture.map((h) => `${h.method} ${new URL(h.url).pathname}`).join(' '));
+    const other = hits.filter((h) => !isCapture(h) && !isConfig(h));
+    check('besides events, only the remote configuration: no script, no flags', other.length === 0 && hits.filter(isConfig).every((h) => !/\.js$/.test(new URL(h.url).pathname)),
+      other.map((h) => `${h.method} ${new URL(h.url).pathname}`).join(' '));
     await page.close();
   }
 
@@ -139,11 +178,12 @@ try {
   {
     const { page, hits } = await capturePage(browser, { vitrine: true, refuse: true });
     const chunks = [];
-    page.on('request', (r) => { if (/audienceMeasure|module\.slim/.test(r.url())) chunks.push(r.url()); });
+    page.on('request', (r) => { if (/audienceMeasure|module\.(slim|no-external)|posthog-recorder/.test(r.url())) chunks.push(r.url()); });
     await page.goto(`${APP}/`, { waitUntil: 'load' });
     await sleep(4000);
     check('a refused browser sends nothing', hits.length === 0, `${hits.length} request(s)`);
-    check('and never downloads the SDK', !chunks.some((u) => /module\.slim/.test(u)), chunks.map((u) => u.split('/').pop()).join(','));
+    check('and never downloads the SDK', !chunks.some((u) => /module\.(slim|no-external)|posthog-recorder/.test(u)), chunks.map((u) => u.split('/').pop()).join(','));
+    check('nor sees the banner', !(await banner(page)));
     await page.close();
   }
 
@@ -160,6 +200,77 @@ try {
       `${pv?.properties?.$current_url} (${hits.length} request(s))`);
     await page.close();
   }
+
+  // D. « Accepter » on the globe: clicks, heatmaps, the replay, a stored id — no script from PostHog.
+  console.log('D. accept');
+  const context = await browser.createBrowserContext();
+  {
+    const { page, hits } = await capturePage(context);
+    const chunks = [];
+    page.on('request', (r) => { if (/posthog-recorder|dead-clicks/.test(r.url())) chunks.push(r.url()); });
+    await page.goto(`${APP}/globe?welcome=0&photoreal=0&q=Lyon`, { waitUntil: 'load' });
+    await sleep(5000);
+    check('no recorder before the answer', chunks.length === 0, chunks.join(','));
+    await page.click('.gev-consent [data-consent="accept"]');
+    await sleep(2000);
+    const clicked = await clickAButton(page);
+    await sleep(400);
+    await page.mouse.click(720, 450);
+    await sleep(7000);
+    console.log(`    (clicked « ${clicked} »)`);
+    const kinds = [...new Set(events(hits).map((e) => e.event))];
+    check('the banner closes', !(await banner(page)));
+    check('the answer itself is recorded', kinds.includes('analytics_consent_granted'), kinds.join(','));
+    check('clicks are recorded ($autocapture)', kinds.includes('$autocapture'), kinds.join(','));
+    check('the replay is recorded', kinds.includes('$snapshot') || hits.some((h) => new URL(h.url).pathname.startsWith('/s')), kinds.join(','));
+    check('the recorder came from this site', chunks.length > 0 && chunks.every((u) => u.startsWith(APP)), chunks.map((u) => u.split('/').pop()).join(','));
+    check('no script from PostHog', !hits.some((h) => /\.js($|\?)/.test(new URL(h.url).pathname)));
+    const st = await storageOf(page);
+    check('the answer and a PostHog id are kept', st.local.includes(ANALYTICS_CONSENT_KEY) && hasPosthogKeys(st), st.local.join(','));
+    const granted = events(hits).find((e) => e.event === 'analytics_consent_granted');
+    check('with consent the URL keeps its query', /[?&]welcome=0/.test(granted?.properties?.$current_url ?? ''), granted?.properties?.$current_url);
+    await page.close();
+  }
+  // E. The next visit: no banner, detailed from the first page view, no second consent event.
+  console.log('E. reload with consent');
+  {
+    const { page, hits } = await capturePage(context);
+    await page.goto(`${APP}/globe?welcome=0&photoreal=0`, { waitUntil: 'load' });
+    await sleep(5000);
+    await clickAButton(page);
+    await sleep(5000);
+    const kinds = [...new Set(events(hits).map((e) => e.event))];
+    check('no banner', !(await banner(page)));
+    check('clicks recorded from the start', kinds.includes('$autocapture'), kinds.join(','));
+    check('no second consent event', !kinds.includes('analytics_consent_granted'));
+    const ids = new Set(events(hits).map((e) => e.properties?.distinct_id ?? e.distinct_id).filter(Boolean));
+    check('a stored id, not the cookieless one', ids.size >= 1 && !ids.has('$posthog_cookieless'), [...ids].join(','));
+    await page.close();
+  }
+  await context.close();
+
+  // F. « Refuser »: nothing changes, and the question is not asked again.
+  console.log('F. refuse');
+  const refusing = await browser.createBrowserContext();
+  {
+    const { page, hits } = await capturePage(refusing);
+    await page.goto(`${APP}/globe?welcome=0&photoreal=0`, { waitUntil: 'load' });
+    await sleep(4000);
+    await page.click('.gev-consent [data-consent="refuse"]');
+    await clickAButton(page);
+    await sleep(4000);
+    const kinds = [...new Set(events(hits).map((e) => e.event))];
+    check('page views only', kinds.every((k) => k === '$pageview' || k === '$pageleave'), kinds.join(','));
+    const st = await storageOf(page);
+    check('only the answer is kept', st.local.includes(ANALYTICS_CONSENT_KEY) && !hasPosthogKeys(st), JSON.stringify(st));
+    await page.close();
+    const again = await capturePage(refusing);
+    await again.page.goto(`${APP}/globe?welcome=0&photoreal=0`, { waitUntil: 'load' });
+    await sleep(3000);
+    check('not asked again', !(await banner(again.page)));
+    await again.page.close();
+  }
+  await refusing.close();
 } finally {
   await browser.close();
 }

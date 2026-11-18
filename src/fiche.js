@@ -31,6 +31,7 @@ import {
 } from './data/adresseRadiographie.js';
 import messages, { markupMessages } from './fiche.i18n.js';
 import { formatDateTime } from './i18n/format.js';
+import { track } from './analyticsEvents.js';
 import { DEFAULT_LOCALE, I18N_READY_ATTRIBUTE, getLocale } from './i18n/locale.js';
 
 const el = (id) => document.getElementById(id);
@@ -215,6 +216,8 @@ async function boot() {
     if (!query) return;
     el('status').textContent = messages().geocoding;
     const found = await geocode(query);
+    // Sent only for a visitor who accepted the measurement banner (src/audienceMeasure.js).
+    track('fiche_lookup', { query, found: Boolean(found) });
     if (!found) {
       el('status').textContent = messages().notFound;
       return;

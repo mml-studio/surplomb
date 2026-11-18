@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { retroShader } from './styles/retro.js';
+import { track } from './analyticsEvents.js';
 import { animeShader } from './styles/anime.js';
 import { noirShader } from './styles/noir.js';
 import { duskShader } from './styles/dusk.js';
@@ -10523,6 +10524,8 @@ export class StyleManager {
     const query = this._locationSearch.value.trim();
     if (!query) return;
     const outcome = await this.flyToAddress(query, { searchField: this._locationSearch });
+    // Sent only for a visitor who accepted the measurement banner (src/audienceMeasure.js).
+    track('search', { query, outcome: outcome.status });
     if (outcome.status === 'not-found') this._showToast(messages().toast.locationNotFound);
     else if (outcome.status === 'failed') this._showToast(messages().toast.searchFailed);
     else if (outcome.status === 'flying') {

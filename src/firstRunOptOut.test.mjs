@@ -98,7 +98,13 @@ test('the privacy page loads the opt-out, and only a measured page offers it', (
   assert.ok(open > 0 && button < close, 'the button lives inside a measure section');
   // The page entry imports nothing of the globe.
   const entry = fs.readFileSync(new URL('./firstRunOptOutPage.js', import.meta.url), 'utf8');
-  assert.deepEqual([...entry.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./firstRunOptOut.js']);
+  assert.deepEqual([...entry.matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./firstRunOptOut.js', './analyticsConsentPage.js']);
+  // The consent button beside it (src/analyticsConsentPage.js) stays as light.
+  const consentPage = fs.readFileSync(new URL('./analyticsConsentPage.js', import.meta.url), 'utf8');
+  assert.deepEqual([...consentPage.matchAll(/from '([^']+)'/g)].map((m) => m[1]),
+    ['./analyticsConsentPage.i18n.js', './analyticsConsent.js', './firstRunOptOut.js']);
+  const consent = fs.readFileSync(new URL('./analyticsConsent.js', import.meta.url), 'utf8');
+  assert.deepEqual([...consent.matchAll(/from '([^']+)'/g)], [], 'the consent store imports nothing');
   const module = fs.readFileSync(new URL('./firstRunOptOut.js', import.meta.url), 'utf8');
   // The module may reach for its own catalog and nothing else: the privacy
   // page must never pull a byte of the globe, and a catalog costs the two

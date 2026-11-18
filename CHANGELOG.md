@@ -5,7 +5,25 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-09-15
 
-### Fixed
+### Added
+- **A visitor who accepts the measurement banner is now recorded in detail:
+  clicks, scrolling, heatmaps and a replay of the visit.** Until now PostHog
+  counted page views only, without a cookie, and the owner could not see what
+  a prospect sent to a preview did there. A strip along the bottom edge
+  (« Surplomb utilise des cookies. », « Détails », then « Refuser » and
+  « Accepter » of the same weight, `src/consentBanner.js`) now asks once
+  every six months (`src/analyticsConsent.js`). Without an answer or after
+  « Refuser », nothing changes: page views and page leaves, no cookie, URLs
+  cleaned. After « Accepter »: autocapture, rage and dead clicks, heatmaps, a
+  replay with every input masked, whole URLs, a first-party id (`ph_…`), and
+  three named actions (`search`, `fiche_lookup`, `waitlist_submitted`,
+  `src/analyticsEvents.js`). The SDK moves from the slim build (53 KB gzipped)
+  to `module.no-external.js` (111 KB), still loaded at idle and still never
+  fetching a script from PostHog; the recorder (67 KB) and the dead-click
+  extension come as their own chunks, for consenting visitors only.
+  `/confidentialite` describes both levels and the private previews, and
+  carries a button to withdraw consent, which also erases PostHog's keys.
+
 - **Each Sitadel edition was gone the day the next one landed: every
   edition is now kept.** The SDES republishes its four national permit lists
   monthly and DiDo keeps no earlier millésime, so a corrected or withdrawn

@@ -300,10 +300,13 @@ Consequences in runtime:
   TTL) stays: the draw must stay client-side so that `/` remains a static,
   cacheable page.
 - Condition for keeping the consent exemption (article 82 of the French data
-  protection act, LIL, audience measurement), already met by the visit
-  count: PostHog EU Cloud (Frankfurt), `cookieless_mode: 'always'`, no
-  autocapture, no session replay, no cross-referencing with the `gev_trial`
-  cookie, and the refusal in `src/firstRunOptOut.js` wired to it. The
+  protection act, LIL, audience measurement), met by the visit count of a
+  visitor who has not accepted the banner (since 2026-11-18,
+  `src/consentBanner.js`): PostHog EU Cloud (Frankfurt), cookieless and
+  opted out by default, page views only, no cross-referencing with the
+  `gev_trial` cookie, and the refusal in `src/firstRunOptOut.js` wired to
+  it. A visitor who accepts is no longer under the exemption: autocapture
+  and replay run on their consent. The
   test's events would add the variant and the card's gestures to what
   `/confidentialite` lists for PostHog, in the same pull request. One
   catch: PostHog's cookieless id lasts one day, so « came back after

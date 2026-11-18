@@ -24,6 +24,7 @@
 
 import messages from './waitlistCard.i18n.js';
 import { PREMIUM_CROWN_SVG } from './voicePremium.js';
+import { track } from './analyticsEvents.js';
 
 /** Written on submit, so a returning visitor is not asked twice. */
 export const WAITLIST_JOINED_KEY = 'gev:waitlist-joined:v1';
@@ -251,6 +252,8 @@ export function initWaitlistCard({
       // Not prevented: the POST goes to Buttondown in a new tab, which is
       // where a CAPTCHA or a typo gets handled. This only updates the card.
       writeFlag(localStore, WAITLIST_JOINED_KEY, true);
+      // The reason only, never the address typed (src/analyticsEvents.js).
+      track('waitlist_submitted', { reason });
       windowRef?.setTimeout?.(() => {
         form.hidden = true;
         if (joinedText) {
