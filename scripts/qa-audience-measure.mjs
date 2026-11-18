@@ -90,13 +90,17 @@ const banner = async (page) => {
   const el = await page.$('.gev-consent');
   return el && (await el.boundingBox()) ? el : null;
 };
-/** A real click on a visible button of the page (not the banner's): autocapture records buttons, not the globe's canvas. */
+/**
+ * A real click on a visible button of the page (not the banner's): autocapture
+ * records buttons, not the globe's canvas. Buttons only: a link (the logo) would
+ * leave the page and take the queued events with it.
+ */
 async function clickAButton(page) {
-  for (const handle of await page.$$('button, a[href], [role="button"]')) {
+  for (const handle of await page.$$('button, [role="button"]')) {
     const ok = await handle.evaluate((el) => {
       const r = el.getBoundingClientRect();
       return !el.closest('.gev-consent') && r.width > 8 && r.height > 8 && r.top >= 0 && r.bottom <= innerHeight
-        && getComputedStyle(el).visibility !== 'hidden' && !el.disabled && !(el.tagName === 'A' && /^https?:/.test(el.getAttribute('href')));
+        && getComputedStyle(el).visibility !== 'hidden' && !el.disabled && !el.closest('a[href], form');
     });
     if (!ok) continue;
     try { await handle.click(); return await handle.evaluate((el) => el.textContent.trim().slice(0, 40) || el.getAttribute('aria-label') || el.tagName); } catch { /* covered: next */ }
@@ -216,7 +220,8 @@ try {
     const clicked = await clickAButton(page);
     await sleep(400);
     await page.mouse.click(720, 450);
-    await sleep(7000);
+    // The replay flushes its first batch a few seconds after it starts: 8 s on surplomb.app.
+    await sleep(12000);
     console.log(`    (clicked « ${clicked} »)`);
     const kinds = [...new Set(events(hits).map((e) => e.event))];
     check('the banner closes', !(await banner(page)));
