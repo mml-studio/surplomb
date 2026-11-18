@@ -14,7 +14,8 @@
     pose d'abord : est-ce qu'elle montre des gens ?
 
     CHAQUE PHRASE EST UN CONSTAT SUR LE CODE, relevé le 17/09/2026 (mesure
-    d'audience : le 12/10/2026, `src/audienceMeasure.js`). Qui change
+    d'audience : le 12/10/2026, `src/audienceMeasure.js` ; analyse détaillée
+    avec accord : le 18/11/2026, `src/consentBanner.js`). Qui change
     un flux (un cookie, un journal, un fournisseur appelé depuis le
     navigateur) change cette page dans la même PR. Les régions balisées
     `gev:if:*` n'apparaissent que si l'instance a allumé la fonction, et
@@ -26,7 +27,7 @@
     <header class="masthead">
       <p class="eyebrow"><a href="/">Surplomb</a> · Confidentialité</p>
       <h1>Ce que Surplomb montre, et ce qu’il ne montre pas</h1>
-      <p class="subline">Mise à jour le 12 octobre 2026.</p>
+      <p class="subline">Mise à jour le 18 novembre 2026.</p>
     </header>
 
     <section>
@@ -36,12 +37,15 @@
         <li>Pas de compte, pas de publicité, pas de mesure d’audience, pas de cookie de suivi.</li>
         <!--/gev:if:nomeasure-->
         <!--gev:if:measure-->
-        <li>Pas de compte, pas de publicité, pas de cookie de suivi.</li>
+        <li>Pas de compte, pas de publicité, pas de cookie de suivi<!--gev:if:audience--> sans votre accord<!--/gev:if:audience-->.</li>
         <!--/gev:if:measure-->
         <!--gev:if:audience-->
         <li>Une mesure d’audience sans cookie : combien de visites, sur quelles
           pages, venues de quel site. Lue en totaux, sans garder votre adresse IP,
           sans ce que vous avez tapé.</li>
+        <li>Si vous l’acceptez dans le bandeau, et seulement alors : un
+          enregistrement de votre visite (clics, défilement, écrans) pour
+          améliorer l’outil.</li>
         <!--/gev:if:audience-->
         <!--gev:if:abtest-->
         <li>Une mesure de la carte de bienvenue : laquelle vous a été montrée, et
@@ -231,9 +235,43 @@
               adresse IP, de votre navigateur et du site, mêlés à une valeur secrète
               qu’il change chaque jour : le lendemain, la même personne ne peut plus
               être reconnue. Il ne garde ensuite ni votre adresse IP ni la
-              signature de votre navigateur. Aucun clic, aucune saisie, aucun
-              enregistrement de l’écran. Nous n’en lisons que des totaux.</td>
+              signature de votre navigateur. Votre navigateur lit aussi chez
+              PostHog la configuration de la mesure. Sans votre accord : aucun
+              clic, aucune saisie, aucun enregistrement de l’écran, et nous n’en
+              lisons que des totaux.</td>
             <td>Les visites : un an chez PostHog. L’identifiant : un jour.</td>
+          </tr>
+          <tr>
+            <td>Analyse détaillée de la visite (PostHog, avec votre accord)</td>
+            <td>Seulement si vous cliquez « Accepter » dans le bandeau. En plus de
+              la mesure d’audience : vos clics et l’élément cliqué, le défilement,
+              les clics répétés ou sans effet, leur emplacement sur la page, un
+              enregistrement de l’écran pendant la visite (ce que vous tapez dans
+              un champ y est masqué), l’adresse complète des pages, position de
+              la carte et adresse cherchée comprises, et quelques actions
+              nommées : une recherche (le texte cherché), une fiche demandée, une
+              inscription à la liste d’attente (son motif, jamais le courriel).
+              Un identifiant aléatoire, gardé dans un cookie et le stockage local
+              de ce navigateur (<code>ph_…</code>), relie vos visites. Sur un
+              aperçu ou un accès personnel que nous vous avons envoyé
+              (<code>/apercu/…</code>, <code>/permis/…</code>), elles sont
+              rattachées à votre société ou à votre compte invité, et les noms de
+              particuliers affichés y sont masqués.</td>
+            <td>Les enregistrements de l’écran : trente jours. Les clics et les
+              actions : un an. L’identifiant : un an au plus. Votre réponse au
+              bandeau : six mois, puis la question revient.</td>
+          </tr>
+          <tr>
+            <td>Aperçus et accès personnels</td>
+            <td>Quand vous ouvrez un aperçu ou un accès personnel que nous vous
+              avons envoyé, notre serveur note chez PostHog, avec ou sans votre
+              accord : l’ouverture de la page ou du lien, chaque fiche débloquée
+              (son numéro interne et sa commune), chaque recherche de numéro
+              (trouvé ou non, jamais le numéro), chaque lettre relue ou envoyée
+              (son prix), rattachés au nom de votre société ou de votre compte.
+              Jamais votre adresse IP, ni le nom des demandeurs des fiches. Une
+              demande d’invitation est comptée sans vos coordonnées.</td>
+            <td>Un an chez PostHog.</td>
           </tr>
           <!--/gev:if:audience-->
           <!--gev:if:waitlist-->
@@ -269,6 +307,13 @@
           Libertés, lignes directrices de la CNIL) : pour ce seul site, lue en
           totaux, sans recoupement avec d’autres données<!--gev:if:trial-->, pas même
           le cookie d’essai<!--/gev:if:trial-->.</li>
+        <li>L’analyse détaillée de la visite : votre consentement, donné dans le
+          bandeau et retirable ici à tout moment :
+          <button type="button" class="optout" data-analytics-consent>Retirer mon accord</button>
+          <span data-analytics-consent-status role="status"></span>
+          Retirer votre accord efface l’identifiant de ce navigateur.</li>
+        <li>Les aperçus et accès personnels : l’intérêt légitime de savoir
+          comment est utilisé ce que nous vous avons envoyé.</li>
         <!--/gev:if:audience-->
         <!--gev:if:abtest-->
         <li>Le test A/B de la carte de bienvenue : l’intérêt légitime de savoir

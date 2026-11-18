@@ -1053,16 +1053,19 @@ carries, is in `docs/CURRENT-STATE.md` (2026-09-17 — first-run A/B test).
 ### Audience measurement (PostHog)
 
 Off unless `POSTHOG_PROJECT_TOKEN` is set. With it, every page sends PostHog
-EU Cloud a page view and a page leave, without a cookie
-(`src/audienceMeasure.js` lists what is sent and what is not), and
-`/confidentialite` describes it. The token is read **twice**: inlined at build
+EU Cloud a page view and a page leave, without a cookie, and shows a banner
+asking whether the visit may be recorded in detail; a visitor who accepts is
+recorded with clicks, heatmaps and a replay (`src/audienceMeasure.js` lists
+what is sent at each level), and `/confidentialite` describes both. The token is read **twice**: inlined at build
 time into the bundle, and read at request time by the privacy page and
 `/healthz`. Both come from `/opt/gev/.env`, so one line covers both — provided
 the image is rebuilt after the edit.
 
 1. **In PostHog**, on an EU Cloud project: Settings > Web analytics, turn on
    « Cookieless server hash mode ». Without it PostHog discards every event the
-   site sends, and says so only under ingestion warnings.
+   site sends, and says so only under ingestion warnings. For the replay of
+   consenting visitors, Settings > Session replay must be on (« Record user
+   sessions »); leave « Authorized domains » empty or add your host.
 2. **The compose file** must carry the build arg (`POSTHOG_PROJECT_TOKEN:` under
    `build.args`); copy it over if the box's copy predates it — see « The compose
    file does not update itself » above.

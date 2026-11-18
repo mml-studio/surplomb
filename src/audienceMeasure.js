@@ -1,6 +1,7 @@
 /**
- * Audience measurement: how many visits the site gets, and which pages they
- * read. PostHog, EU Cloud, without a cookie.
+ * Audience measurement: how many visits the site gets and which pages they
+ * read — and, for a visitor who accepts the banner, what they do there.
+ * PostHog, EU Cloud.
  *
  * OFF UNLESS THE BUILD CARRIES A PROJECT TOKEN. `POSTHOG_PROJECT_TOKEN` is
  * inlined at build time (the `define` block in vite.config.js), like the
@@ -9,42 +10,62 @@
  * `/confidentialite` describe this measurement (`audience` in
  * src/legalNotice.js), so a deployment that sets it in one `.env` gets both.
  *
- * WHAT KEEPS IT EXEMPT FROM CONSENT (article 82 of the French data protection
- * act, CNIL audience-measurement guidelines), and must not be loosened without
- * a consent banner:
+ * TWO LEVELS, chosen by the visitor (src/consentBanner.js asks,
+ * src/analyticsConsent.js keeps the answer six months):
  *
- *   - `cookieless_mode: 'always'`: nothing is written in the browser — no
- *     cookie, no localStorage, no sessionStorage. PostHog counts a visitor
- *     from a hash of the day, the IP address, the user agent and the host,
- *     salted with a secret it renews every day, then drops the IP and the
- *     user agent. The project's « Cookieless server hash mode » must be on,
- *     or PostHog discards every event;
- *   - page views and page leaves only: no autocapture, no heatmaps, no dead
- *     clicks, no web vitals, no session replay, no surveys, no feature flags,
- *     no script loaded from PostHog (the `no-external` build cannot);
- *   - the URL loses its `#` (the camera, src/shareLink.js) and every query
- *     parameter but `utm_*` (`?q=` is the address the visitor typed), and the
- *     page title goes (`fiche.html` writes the address into it);
- *   - the refusal already offered for the first-run test covers this too:
- *     the « Ne pas être mesuré » button on /confidentialite and the Global
- *     Privacy Control signal (src/firstRunOptOut.js). A refused browser never
- *     downloads the SDK.
+ *   - NO ANSWER YET, OR « REFUSER »: the measurement exempt from consent
+ *     (article 82 of the French data protection act, CNIL audience-measurement
+ *     guidelines). Nothing is written in the browser (`cookieless_mode:
+ *     'on_reject'`, opted out by default: PostHog counts a visitor from a hash
+ *     of the day, the IP address, the user agent and the host, salted with a
+ *     secret it renews every day — the project's « Cookieless server hash
+ *     mode » must be on, or PostHog discards every event). Page views and page
+ *     leaves only: `before_send` drops everything else, and cleans the URL —
+ *     no `#` (the camera, src/shareLink.js), no query parameter but `utm_*`
+ *     (`?q=` is the address the visitor typed), no page title (`fiche.html`
+ *     writes the address into it).
+ *   - « ACCEPTER »: clicks (autocapture, rage and dead clicks), heatmaps, a
+ *     replay of the visit with every input masked, the named actions of
+ *     src/analyticsEvents.js, whole URLs; a random id kept in a first-party
+ *     cookie and localStorage (`ph_…`). The recorder and the dead-click
+ *     extension are bundled chunks fetched only then: the `no-external` build
+ *     never loads a script from PostHog.
  *
- * WHY THE SLIM BUILD. `dist/module.slim.no-external.js` is 53 KB gzipped
- * against 111 KB for the default one: it leaves out every extension, the
- * history watcher included. That watcher is the one we need — the showcase
- * hands over to the globe by rewriting `/` into `/globe` in place
- * (src/vitrine/vitrine.js, `rewriteAddress`) — so `watchPathname()` below does
- * its job in twenty lines. The version is pinned in package.json: what this
- * SDK sends is described word for word on a legal page.
+ * The refusal of ALL measurement (the « Ne pas être mesuré » button on
+ * /confidentialite, the Global Privacy Control signal, src/firstRunOptOut.js)
+ * still wins: such a browser never sees the banner nor downloads the SDK.
+ *
+ * The previews and the invite-only map served beside the site (`/apercu/…`,
+ * `/permis/…`, not in this repository) run the same two levels from their own
+ * script and read the same consent key.
+ *
+ * WHY THE `no-external` BUILD, NOT THE SLIM ONE. The slim build (53 KB
+ * gzipped) has no autocapture and no heatmaps; `module.no-external.js` (111 KB)
+ * has both and still loads nothing from PostHog's CDN. It leaves out the
+ * history watcher we need — the showcase hands over to the globe by rewriting
+ * `/` into `/globe` in place (src/vitrine/vitrine.js, `rewriteAddress`) — so
+ * `watchPathname()` below does that job. The version is pinned in
+ * package.json: what this SDK sends is described word for word on a legal page.
  *
  * @module audienceMeasure
  */
 
 import { firstRunMeasureRefused } from './firstRunOptOut.js';
+import { readAnalyticsConsent, writeAnalyticsConsent } from './analyticsConsent.js';
+import { setTrackSink } from './analyticsEvents.js';
+import { showConsentBanner } from './consentBanner.js';
 
 /** PostHog EU Cloud (Frankfurt). Not configurable: /confidentialite names it. */
 export const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+
+/** Where PostHog's own links point (the toolbar, a replay). */
+export const POSTHOG_UI_HOST = 'https://eu.posthog.com';
+
+/** What a visitor counted without a cookie may send. */
+export const ANONYMOUS_EVENTS = Object.freeze(['$pageview', '$pageleave']);
+
+/** The event that records the « Accepter » click itself. */
+export const CONSENT_EVENT = 'analytics_consent_granted';
 
 /** Query parameters that survive into the URL PostHog receives. */
 const KEPT_PARAMS = /^utm_(source|medium|campaign|content|term)$/;
@@ -115,37 +136,77 @@ export function cleanMeasuredEvent(event) {
 }
 
 /**
+ * PostHog's `before_send` for this visit. Until the visitor accepts: page
+ * views and page leaves only, cleaned by `cleanMeasuredEvent`. Once they
+ * accept: everything, untouched — the typed address and the camera are what
+ * the replay is for.
+ * @param {() => boolean} isGranted read on every event, so « Accepter » takes effect at once
+ * @returns {(event: object|null) => object|null}
+ */
+export function makeBeforeSend(isGranted) {
+  return (event) => {
+    if (!event) return event;
+    if (isGranted()) return event;
+    if (!ANONYMOUS_EVENTS.includes(event.event)) return null;
+    return cleanMeasuredEvent(event);
+  };
+}
+
+/** Switches the detailed measurement turns on; also applied in place on « Accepter ». */
+export const DETAILED_SETTINGS = Object.freeze({
+  persistence: 'localStorage+cookie',
+  autocapture: true,
+  rageclick: true,
+  capture_dead_clicks: true,
+  capture_heatmaps: true,
+  enable_heatmaps: true,
+  disable_session_recording: false,
+  disable_capture_url_hashes: false,
+});
+
+/** The same switches for a visitor counted without a cookie. */
+export const ANONYMOUS_SETTINGS = Object.freeze({
+  persistence: 'memory',
+  autocapture: false,
+  rageclick: false,
+  capture_dead_clicks: false,
+  capture_heatmaps: false,
+  enable_heatmaps: false,
+  disable_session_recording: true,
+  disable_capture_url_hashes: true,
+});
+
+/**
  * The SDK configuration. Every switch is spelled out rather than left to a
  * default, because the project's own settings turn some of them on remotely
  * (session replay, heatmaps and web vitals are on in the PostHog project), and
  * a default that moves in a later SDK must not move what the page promises.
+ * @param {{granted?: boolean, beforeSend?: Function}} [options]
  * @returns {object}
  */
-export function posthogConfig() {
+export function posthogConfig({ granted = false, beforeSend = makeBeforeSend(() => granted) } = {}) {
   return {
     api_host: POSTHOG_API_HOST,
-    cookieless_mode: 'always',
-    persistence: 'memory',
+    ui_host: POSTHOG_UI_HOST,
+    cookieless_mode: 'on_reject',
+    opt_out_capturing_by_default: !granted,
     person_profiles: 'identified_only',
     capture_pageview: true,
     capture_pageleave: true,
-    autocapture: false,
-    rageclick: false,
-    capture_dead_clicks: false,
-    capture_heatmaps: false,
-    enable_heatmaps: false,
+    ...(granted ? DETAILED_SETTINGS : ANONYMOUS_SETTINGS),
+    session_recording: { maskAllInputs: true },
     capture_performance: false,
     capture_exceptions: false,
-    disable_session_recording: true,
     disable_surveys: true,
     disable_product_tours: true,
     disable_conversations: true,
     disable_web_experiments: true,
-    advanced_disable_flags: true,
+    // Flags stay off, but the remote configuration still loads: the replay
+    // starts only once it says recording is on for the project.
+    advanced_disable_feature_flags: true,
     disable_external_dependency_loading: true,
-    disable_capture_url_hashes: true,
     mask_personal_data_properties: true,
-    before_send: cleanMeasuredEvent,
+    before_send: beforeSend,
   };
 }
 
@@ -183,9 +244,19 @@ export function watchPathname(onChange, win = globalThis.window) {
   return true;
 }
 
-/** The slim SDK, fetched on its own chunk only when a visit is measured. */
-const loadPosthog = () => import('posthog-js/dist/module.slim.no-external.js')
+/** The SDK, fetched on its own chunk only when a visit is measured. */
+const loadPosthog = () => import('posthog-js/dist/module.no-external.js')
   .then((module) => module.default ?? module.posthog);
+
+/**
+ * The replay recorder and the dead-click detector, bundled (the `no-external`
+ * SDK will not fetch them from PostHog) and downloaded only for a visitor who
+ * accepted. Each registers itself on `window.__PosthogExtensions__`.
+ */
+const loadDetailedExtensions = () => Promise.all([
+  import('posthog-js/dist/posthog-recorder.js'),
+  import('posthog-js/dist/dead-clicks-autocapture.js'),
+]);
 
 /** Run `fn` once the page has painted and the main thread is free. */
 function whenIdle(fn, win = globalThis.window) {
@@ -195,12 +266,16 @@ function whenIdle(fn, win = globalThis.window) {
 
 /**
  * Start measuring this visit, unless the build has no token or the browser
- * refused.
+ * refused all measurement; ask the banner's question if it has no answer yet.
  * @param {{
  *   token?: string,
  *   refused?: boolean,
- *   load?: () => Promise<{init: Function, capture: Function}>,
+ *   consent?: 'granted'|'denied'|null,
+ *   load?: () => Promise<object>,
+ *   loadExtensions?: () => Promise<unknown>,
  *   schedule?: (fn: Function) => void,
+ *   askConsent?: (handlers: {onAccept: Function, onRefuse: Function}) => unknown,
+ *   storeConsent?: (choice: 'granted'|'denied') => boolean,
  *   win?: Window,
  * }} [options]
  * @returns {Promise<boolean>} Whether PostHog was started.
@@ -208,17 +283,56 @@ function whenIdle(fn, win = globalThis.window) {
 export function startAudienceMeasure({
   token = audienceTokenFromBuild(),
   refused = firstRunMeasureRefused(),
+  consent = readAnalyticsConsent(),
   load = loadPosthog,
+  loadExtensions = loadDetailedExtensions,
   schedule = whenIdle,
+  askConsent = showConsentBanner,
+  storeConsent = writeAnalyticsConsent,
   win = globalThis.window,
 } = {}) {
   if (!token || refused) return Promise.resolve(false);
+  let granted = consent === 'granted';
+  let acceptedNow = false;
+  let posthog = null;
+
+  const goDetailed = (ph, fresh) => {
+    if (fresh) ph.set_config?.({ ...DETAILED_SETTINGS });
+    ph.opt_in_capturing?.({ captureEventName: fresh ? CONSENT_EVENT : false });
+    ph.startSessionRecording?.();
+  };
+
+  if (consent === null) {
+    try {
+      askConsent({
+        onAccept: () => {
+          storeConsent('granted');
+          granted = true;
+          acceptedNow = true;
+          // Before the SDK arrives, the start below picks the answer up.
+          if (posthog) loadExtensions().catch(() => {}).then(() => goDetailed(posthog, true));
+        },
+        onRefuse: () => {
+          storeConsent('denied');
+        },
+      });
+    } catch {
+      // No banner, no detailed measurement: the anonymous count goes on.
+    }
+  }
+
   return new Promise((resolve) => {
     schedule(() => {
-      load()
-        .then((posthog) => {
-          posthog.init(token, posthogConfig());
-          watchPathname(() => posthog.capture('$pageview'), win);
+      const ready = granted
+        ? Promise.all([load(), loadExtensions().catch(() => null)]).then(([ph]) => ph)
+        : load();
+      ready
+        .then((ph) => {
+          ph.init(token, posthogConfig({ granted, beforeSend: makeBeforeSend(() => granted) }));
+          posthog = ph;
+          if (granted) goDetailed(ph, acceptedNow);
+          setTrackSink((event, properties) => ph.capture(event, properties));
+          watchPathname(() => ph.capture('$pageview'), win);
           resolve(true);
         })
         .catch((error) => {
