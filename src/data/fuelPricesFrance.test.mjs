@@ -41,11 +41,12 @@ const station = Object.freeze({
 
 const tally = (entries) => new Map(Object.entries(entries).map(([key, total]) => [key, { total, visible: total }]));
 
-test('the row offers the drop and one price reading per fuel, the drop first and on by default', () => {
+test('the row opens on the diesel price, offers every fuel, and keeps the drop last', () => {
   const chips = fuelViewChips(FUEL_FR_DEFAULT_PARAMS);
-  assert.deepEqual(chips.map((chip) => chip.label), ['Baisse', 'Gazole', 'SP95', 'SP98', 'E10', 'E85', 'GPL']);
-  assert.deepEqual(chips.map((chip) => chip.params.vue), ['baisse', 'gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc']);
-  assert.equal(chips.find((chip) => chip.active).params.vue, 'baisse');
+  assert.deepEqual(chips.map((chip) => chip.label), ['Gazole', 'SP95', 'SP98', 'E10', 'E85', 'GPL', 'Baisse']);
+  assert.deepEqual(chips.map((chip) => chip.params.vue), ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc', 'baisse']);
+  assert.equal(chips.find((chip) => chip.active).params.vue, 'gazole');
+  assert.equal(fuelViewChips({}).find((chip) => chip.active).params.vue, 'gazole', 'no params is the default too');
   assert.equal(fuelViewChips({ vue: 'sp95' }).find((chip) => chip.active).label, 'SP95');
 });
 
@@ -88,14 +89,14 @@ test('the hidden set ignores what is not a band', () => {
 });
 
 test('the drop reading keeps its five bands and adds the shortage', () => {
-  const legend = fuelBandLegend(tally({ forte: 7151, aucune: 147, rupture: 172, inconnue: 671 }), FUEL_FR_DEFAULT_PARAMS);
+  const legend = fuelBandLegend(tally({ forte: 7151, aucune: 147, rupture: 172, inconnue: 671 }), { vue: 'baisse' });
   assert.equal(legend[0].label, 'Baisse du gazole');
   assert.deepEqual(legend.slice(1).map((line) => line.label), ['Baisse ≥ 18 c', 'Pas encore de baisse', 'En rupture', 'Non mesurable']);
 });
 
 test('the label leads with what the colour answers', () => {
-  assert.match(fuelCardCopy(station).title, /^\D22 c · E\.Leclerc$/, 'the change, signed');
-  assert.equal(fuelCardCopy(station, { params: { vue: 'baisse' } }).title, fuelCardCopy(station).title);
+  assert.match(fuelCardCopy(station, { params: { vue: 'baisse' } }).title, /^\D22 c · E\.Leclerc$/, 'the change, signed');
+  assert.equal(fuelCardCopy(station).title, '2,109 €/L · E.Leclerc', 'by default, the diesel price');
   assert.equal(fuelCardCopy(station, { params: { vue: 'sp95' } }).title, '1,989 €/L · E.Leclerc');
   assert.equal(fuelCardCopy(station, { params: { vue: 'e85' } }).title, 'E.Leclerc', 'no price, no number');
 });
@@ -106,6 +107,7 @@ test('under a price reading the cheapest station wins its cell; under the drop n
   assert.ok(cheap > dear);
   assert.equal(fuelLabelPriority({ sp95: null }, { vue: 'sp95' }), 0);
   assert.equal(fuelLabelPriority({ gazole: 1.9 }, { vue: 'baisse' }), 0);
+  assert.ok(fuelLabelPriority({ gazole: 1.9 }, {}) > 0, 'the default reading is a price reading');
 });
 
 test('the card under a price reading lists every fuel sold, the one read first, and the shortage', () => {
@@ -123,11 +125,12 @@ test('the card under a price reading lists every fuel sold, the one read first, 
   assert.equal(none.metric, null);
   assert.equal(none.lines[0], 'Pas de prix du E85 récent.');
 
-  const drop = fuelSelectionPanel(station, { id: '56580001' });
+  const drop = fuelSelectionPanel(station, { id: '56580001', params: { vue: 'baisse' } });
   assert.match(drop.metric.value, /^\D22 c$/);
+  assert.equal(fuelSelectionPanel(station, { id: '56580001' }).metric.value, '2,109 €/L');
 });
 
 test('the layer re-classifies on the reading and filters on the key lines', () => {
   assert.equal(typeof fuelPricesFrance.setParams, 'function');
-  assert.deepEqual(fuelPricesFrance.getParams(), { vue: 'baisse', masquees: '' });
+  assert.deepEqual(fuelPricesFrance.getParams(), { vue: 'gazole', masquees: '' });
 });

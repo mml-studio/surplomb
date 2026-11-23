@@ -446,7 +446,7 @@ export const LAYER_MANIFEST = Object.freeze([
     icon: '⛽',
     source: 'prix-carburants.gouv.fr · OpenStreetMap',
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
-    defaultParams: Object.freeze({ vue: 'baisse', masquees: '' }),
+    defaultParams: Object.freeze({ vue: 'gazole', masquees: '' }),
     load: () => import('./fuelPricesFrance.js').then((module) => module.default),
   }),
   Object.freeze({
