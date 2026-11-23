@@ -1,7 +1,7 @@
 /**
  * Fuel prices (FR) — every French filling station that declares its prices,
- * coloured by how far its diesel price has come down since the week of 24 to
- * 30 October 2026.
+ * coloured by its diesel price by default, or by how far that price has come
+ * down since the week of 24 to 30 October 2026.
  *
  * WHY THIS LAYER EXISTS. On 1 November 2026 the State began selling part of
  * its strategic diesel stocks at their historical cost, and announced a drop
@@ -19,10 +19,11 @@
  * not a sample of it. And not the effect of the measure alone: the drop includes what the wholesale
  * market did over the same weeks, which the card says in one line.
  *
- * TWO READINGS. The drop above is the layer's reason to exist; the key also
- * offers the PRICE of each of the six fuels the feed carries (chips « Gazole »
- * to « GPL »), coloured by national quintile, so the same dots answer « where
- * is it cheapest? ». Every line of the key is its own switch, as on the
+ * TWO READINGS. The drop above is why the layer was built; the layer OPENS on
+ * the PRICE, though, because that is what every visitor can act on: one chip
+ * per fuel the feed carries (« Gazole » to « GPL »), coloured by national
+ * quintile, so the dots answer « where is it cheapest? », and « Baisse » last
+ * in the row for the drop. Every line of the key is its own switch, as on the
  * amenities layer: unticking « En rupture » hides the stations that are out
  * of the fuel being read.
  *
@@ -35,6 +36,7 @@
 import { createLocalGeoJsonLayer } from './localGeojson.js';
 import {
   FUEL_FR_ALL_BAND_KEYS,
+  FUEL_FR_DEFAULT_VIEW,
   FUEL_FR_DROP_VIEW,
   FUEL_FR_FUELS,
   FUEL_FR_LAYER_ID,
@@ -106,7 +108,7 @@ const CUT_FORMAT = Object.freeze({ minimumFractionDigits: 2, maximumFractionDigi
 let _priceCuts = {};
 
 /** Params of the row: the reading, and the bands unticked in the key. */
-export const FUEL_FR_DEFAULT_PARAMS = Object.freeze({ vue: FUEL_FR_DROP_VIEW, masquees: '' });
+export const FUEL_FR_DEFAULT_PARAMS = Object.freeze({ vue: FUEL_FR_DEFAULT_VIEW, masquees: '' });
 
 /**
  * The bands unticked in the key. `masquees` ASSIGNS the whole set — the key

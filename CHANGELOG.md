@@ -1455,6 +1455,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   image.
 
 ### Changed
+- **The fuel layer now opens on the diesel price, not the drop.** The price is
+  what every visitor can act on; the drop since late October answers a question
+  about one measure. « Gazole » is the first chip and the one lit when the layer
+  is switched on; « Baisse » moves to the end of the row.
+
 - **Search engines may now list surplomb.app.** The landing page (`index.html`)
   lost the `noindex` it carried while the site was open but not yet announced.
   The address sheet keeps its own for good (DVF sales are published on the

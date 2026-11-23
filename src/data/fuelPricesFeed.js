@@ -425,12 +425,19 @@ export function fuelStationProps(row, payload) {
 // The layer was built to answer one question (did the drop arrive?) and is
 // read for a second one as well: where is it cheapest? The second is a
 // PRICE, per fuel, so the key offers one reading per fuel next to the drop.
+//
+// The diesel PRICE opens the layer, not the drop (owner's call, 2026-11-23):
+// the price is what every visitor can act on, the drop is a question about one
+// measure and one month. The drop stays one chip away, last in the row.
 
 /** The drop reading (diesel only: the measure and its before-window are diesel's). */
 export const FUEL_FR_DROP_VIEW = 'baisse';
 
-/** Every reading, in key order: the drop, then one price reading per fuel. */
-export const FUEL_FR_VIEWS = Object.freeze([FUEL_FR_DROP_VIEW, ...FUEL_FR_FUEL_KEYS]);
+/** The reading the layer opens on: the diesel price. */
+export const FUEL_FR_DEFAULT_VIEW = 'gazole';
+
+/** Every reading, in key order: one price reading per fuel, then the drop. */
+export const FUEL_FR_VIEWS = Object.freeze([...FUEL_FR_FUEL_KEYS, FUEL_FR_DROP_VIEW]);
 
 /**
  * The band of a station in shortage of the fuel the reading is about. Its
@@ -465,13 +472,13 @@ export function fuelViewBandKeys(view) {
 }
 
 /**
- * A reading the key offers, or the drop when `value` is not one.
+ * A reading the key offers, or the default one when `value` is not one.
  * @param {unknown} value
  * @returns {string}
  */
 export function normalizeFuelView(value) {
   const view = String(value ?? '').trim().toLowerCase();
-  return FUEL_FR_VIEWS.includes(view) ? view : FUEL_FR_DROP_VIEW;
+  return FUEL_FR_VIEWS.includes(view) ? view : FUEL_FR_DEFAULT_VIEW;
 }
 
 /**

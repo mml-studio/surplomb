@@ -297,7 +297,8 @@ test('a reading puts a station in a band: drop, price, shortage or no price', ()
   // Out of diesel: the drop reading says so too, rather than « not measurable ».
   const dry = { gazole: null, band: 'inconnue', shortage: fuelShortageMask('Gazole') };
   assert.equal(fuelViewBand(dry, 'baisse', cuts), 'rupture');
-  assert.equal(fuelViewBand(station, 'nonsense', cuts), 'forte', 'an unknown reading is the drop');
+  assert.equal(fuelViewBand(station, 'nonsense', cuts), 'p1', 'an unknown reading is the default, the diesel price');
+  assert.equal(normalizeFuelView(undefined), 'gazole');
   assert.equal(normalizeFuelView('SP95'), 'sp95');
   assert.deepEqual(fuelViewBandKeys('e10'), ['p1', 'p2', 'p3', 'p4', 'p5', 'rupture', 'inconnue']);
   assert.deepEqual(fuelViewBandKeys('baisse'), ['forte', 'annoncee', 'partielle', 'aucune', 'rupture', 'inconnue']);
