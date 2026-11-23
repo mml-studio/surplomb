@@ -1205,6 +1205,31 @@ export function createLocalGeoJsonLayer({
   /** @type {(params:object, tally:Map<string,{total:number,visible:number}>)=>object} Row chips + legend. */
   rowControls = null,
   /*
+   * ── OPTIONAL: PARAMS THAT RE-CLASSIFY ──────────────────────────────────
+   *
+   * A group key is resolved once, at load, because for every pack before the
+   * fuel prices the class of a feature WAS a fact about it: an airport's tier,
+   * a dam's span. A pack that offers several READINGS of the same features —
+   * the fuel layer colours one station by its drop since October, or by its
+   * price of the diesel, SP95 or E85 the reader picked — has a class that is
+   * a function of the reader's choice as much as of the feature.
+   *
+   * The params named here therefore re-run `groupOf(props, params)`,
+   * `cardCopy(props, {areaM2, params})` and `labelPriority(props, params)`
+   * over the loaded records when they change, and repaint the marks, the
+   * stems and the labels in place: ten thousand point colours are a uniform
+   * write each, where reloading the source is a refetch and a re-parse.
+   * Packs that name none keep the load-time classification they always had.
+   */
+  /** @type {?Array<string>} Param keys whose change re-classifies every feature. */
+  regroupParams = null,
+  /**
+   * Added to the built-in label priority: a higher score wins its screen cell,
+   * for the label and — above the globe-LOD height — for the mark itself.
+   * @type {?((props:object, params:object) => number)}
+   */
+  labelPriority = null,
+  /*
    * ── OPTIONAL: MEASURED PACKS ───────────────────────────────────────────
    *
    * A pack that holds a MEASUREMENT — not a class — spends the size channel
@@ -1696,7 +1721,9 @@ export function createLocalGeoJsonLayer({
     const record = _keySelected;
     if (!record || typeof keySelection?.panel !== 'function') return null;
     const { props, copy } = keySelectionCopy(record);
-    return keySelection.panel(props, { areaM2: record.areaM2, title: copy.title, id: record.id }) || null;
+    return keySelection.panel(props, {
+      areaM2: record.areaM2, title: copy.title, id: record.id, params: { ..._params },
+    }) || null;
   }
 
   /**
@@ -1882,6 +1909,86 @@ export function createLocalGeoJsonLayer({
   }
 
   /**
+   * The label priority of one feature: the built-in ladder, plus the pack's
+   * own score under the current params.
+   * @param {object} props
+   * @param {number} areaM2
+   * @returns {number}
+   */
+  function recordPriority(props, areaM2) {
+    const base = labelPriorityFromProperties(props, id, { areaM2 });
+    const extra = typeof labelPriority === 'function' ? Number(labelPriority(props, _params)) : 0;
+    return Number.isFinite(extra) ? base + extra : base;
+  }
+
+  /**
+   * Re-classify every loaded feature under the current params — see
+   * `regroupParams`. Writes what the load wrote from the group: the mark's
+   * colour and size, the stem's colour and its batching key, the label's
+   * copy, accent and priority, and the per-group totals. A per-feature render
+   * spec still wins over the group, exactly as it does at load.
+   * @returns {void}
+   */
+  function regroupRecords() {
+    if (typeof groupOf !== 'function' || _stemRecords.length === 0) return;
+    const baseColor = Cesium.Color.fromCssColorString(color);
+    /** One `Color` per CSS string, so ten thousand marks share a handful. */
+    const colors = new Map();
+    const colorOf = (css) => {
+      if (!css) return baseColor;
+      let resolved = colors.get(css);
+      if (!resolved) {
+        resolved = Cesium.Color.fromCssColorString(css);
+        colors.set(css, resolved);
+      }
+      return resolved;
+    };
+    _groupTally.clear();
+    for (const record of _stemRecords) {
+      const props = record.entity?.__localProperties || {};
+      const groupKey = groupOf(props, _params) || null;
+      const groupStyle = (groupKey && groupStyles?.[groupKey]) || null;
+      record.groupKey = groupKey;
+      if (groupKey) {
+        const bucket = _groupTally.get(groupKey);
+        if (bucket) bucket.total += 1;
+        else _groupTally.set(groupKey, { total: 1, visible: 0 });
+      }
+      const markerCss = record.featureCss || groupStyle?.color || null;
+      const markerColor = colorOf(markerCss);
+      if (record.mark && !record.glyphMark) {
+        record.mark.color = record.hollow ? Cesium.Color.TRANSPARENT : markerColor;
+        record.mark.outlineColor = record.hollow ? markerColor : Cesium.Color.BLACK;
+        record.mark.pixelSize = record.featurePixelSize ?? groupStyle?.pixelSize ?? 10;
+      }
+      record.stemColor = record.featureStemCss ? colorOf(record.featureStemCss) : markerColor;
+      record.stemColorKey = record.featureStemCss || markerCss || color;
+      record.stemWidth = record.featureStemWidth ?? groupStyle?.stemWidth ?? 3.5;
+      const markerRange = Number(record.featureMarkerRange ?? groupStyle?.markerMaxDistance);
+      record.markerMaxDistance = markerRange > 0 ? markerRange : 0;
+      record.priority = recordPriority(props, record.areaM2);
+      if (record.entry) {
+        const copy = typeof cardCopy === 'function'
+          ? (cardCopy(props, { areaM2: record.areaM2, params: { ..._params } }) || null)
+          : null;
+        record.entry = createLocalInfrastructureOverlayEntry({
+          id: record.id,
+          layerId: id,
+          position: record.tip,
+          properties: props,
+          priority: record.priority,
+          accent: markerCss || color,
+          areaM2: record.areaM2,
+          maxDistance: record.featureCardRange ?? groupStyle?.cardMaxDistance,
+          copy,
+          variant: record.overlayVariant,
+        });
+      }
+    }
+    if (_keySelected) publishKeySelection();
+  }
+
+  /**
    * Re-decide which groups are drawn under the current params, and refresh the
    * per-group tally the legend reads.
    *
@@ -2053,7 +2160,10 @@ export function createLocalGeoJsonLayer({
         const next = { ..._params, ...(params || {}) };
         const changed = Object.keys(next).some((key) => next[key] !== _params[key]);
         if (!changed) return false;
+        const regroup = Array.isArray(regroupParams)
+          && regroupParams.some((key) => next[key] !== _params[key]);
         _params = next;
+        if (regroup) regroupRecords();
         applyGroupFilter();
         // A chip that re-reveals a group has to re-place its drawn segments as
         // well as re-show its markers, and only the geometry pass does that —
@@ -2285,7 +2395,9 @@ export function createLocalGeoJsonLayer({
             const recordId = String(feature.id ?? i);
             // A plugged dataset writes its own card; a bundled pack keeps the
             // id-branched copy in `localInfrastructureOverlayCopy`.
-            const copy = typeof cardCopy === 'function' ? (cardCopy(properties, { areaM2 }) || null) : null;
+            const copy = typeof cardCopy === 'function'
+              ? (cardCopy(properties, { areaM2, params: { ..._params } }) || null)
+              : null;
 
             // Store references for bounded stem scaling and native picking.
             feature.__localBaseCarto = carto;
@@ -2334,7 +2446,7 @@ export function createLocalGeoJsonLayer({
             feature.position = tip;
             // A graded pack styles per group; a flat one falls through to the
             // single layer colour and the historical 10 px / 3.5 px geometry.
-            const groupKey = typeof groupOf === 'function' ? (groupOf(properties) || null) : null;
+            const groupKey = typeof groupOf === 'function' ? (groupOf(properties, _params) || null) : null;
             const groupStyle = (groupKey && groupStyles?.[groupKey]) || null;
             // Per-feature marks, resolved once. A pack that declares none gets
             // FLAT_RENDER_SPEC and the historical 10 px / 3.5 px geometry.
@@ -2460,7 +2572,7 @@ export function createLocalGeoJsonLayer({
               else _renderTally.set(renderSpec.key, { total: 1, visible: 0 });
             }
 
-            const priority = labelPriorityFromProperties(properties, id, { areaM2 });
+            const priority = recordPriority(properties, areaM2);
             _stemRecords.push({
               id: recordId,
               entity: feature,
@@ -2502,6 +2614,19 @@ export function createLocalGeoJsonLayer({
               groundFinal: false,
               priority,
               groupKey,
+              // What the render spec decided for THIS feature, kept apart from
+              // what the group decided, so `regroupRecords` can re-apply a new
+              // group without overriding a per-feature choice.
+              featureCss: renderSpec.color || null,
+              featurePixelSize: renderSpec.pixelSize ?? null,
+              featureStemCss: stemCss,
+              featureStemWidth: renderSpec.stemWidth ?? null,
+              featureMarkerRange: renderSpec.markerMaxDistance ?? null,
+              featureCardRange: renderSpec.cardMaxDistance ?? null,
+              hollow: Boolean(renderSpec.hollow),
+              /** A billboard glyph, whose colour is its image's: never recoloured. */
+              glyphMark: Boolean(glyphs),
+              overlayVariant: resolvedOverlayVariant,
               /** Size-legend bucket, '' for a pack that spends no size channel. */
               renderKey: renderSpec.key || '',
               /** Hidden by a row-chip display floor — NOT by the horizon occluder. */

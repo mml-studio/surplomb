@@ -243,8 +243,9 @@ async function createRealLocalLayerHarness({
  * a filter that hides a group can be told apart from one that hides a feature.
  * @param {object} [options]
  * @param {string} [options.floor] Initial display floor.
+ * @param {object} [options.layerOptions] Overrides of the layer's own options.
  */
-async function createGradedLayerHarness({ floor = 'all' } = {}) {
+async function createGradedLayerHarness({ floor = 'all', layerOptions = {} } = {}) {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const preRender = new MockLayerEvent();
@@ -281,9 +282,10 @@ async function createGradedLayerHarness({ floor = 'all' } = {}) {
     })).join('\n'),
   });
   globalThis.window = { dispatchEvent() {} };
+  const dataSources = [];
   const viewer = {
     selectedEntity: undefined,
-    dataSources: { add(dataSource) { return dataSource; }, remove() { return true; } },
+    dataSources: { add(dataSource) { dataSources.push(dataSource); return dataSource; }, remove() { return true; } },
     camera: {
       positionWC: Cesium.Cartesian3.fromDegrees(-97.695, 30.205, 100_000),
       frustum: { fov: Math.PI / 3 },
@@ -335,6 +337,7 @@ async function createGradedLayerHarness({ floor = 'all' } = {}) {
         label: key, color: '#fff', count: bucket.visible, total: bucket.total,
       })),
     }),
+    ...layerOptions,
   });
   try {
     await layer.enable(viewer);
@@ -346,6 +349,9 @@ async function createGradedLayerHarness({ floor = 'all' } = {}) {
     viewer,
     preRender,
     hostCalls,
+    /** The loaded features, by name. */
+    entityNamed: (name) => (dataSources[0]?.entities.values || [])
+      .find((entity) => entity.__localProperties?.name === name),
     cleanup() {
       if (originalWindow === undefined) delete globalThis.window;
       else globalThis.window = originalWindow;
@@ -389,6 +395,95 @@ test('a graded local pack styles, tallies and filters by group', async () => {
   } finally {
     // destroy() reaches the context store, which reads `window` — so the layer
     // has to come down BEFORE the harness removes the global.
+    await harness.layer.destroy?.(harness.viewer);
+    harness.cleanup();
+  }
+});
+
+test('a regroup param re-classifies the loaded features, and only it does', async () => {
+  const harness = await createGradedLayerHarness({
+    layerOptions: {
+      // Under `by=rank` the class is the feature's rank; under `by=name` the
+      // two « Minor … » features become `minor-name` — a reading, not a fact.
+      groupOf: (props, params) => (params.by === 'name'
+        ? (String(props.name).startsWith('Minor') ? 'minor-name' : 'major')
+        : props.rank),
+      groupStyles: {
+        major: { color: '#ff0000', pixelSize: 14 },
+        minor: { color: '#00ff00', pixelSize: 6 },
+        'minor-name': { color: '#0000ff', pixelSize: 9 },
+      },
+      groupVisible: (key, params) => params.hide !== key,
+      defaultParams: { by: 'rank', hide: '' },
+      regroupParams: ['by'],
+      rowControls: (_params, tally) => ({
+        chips: [],
+        legend: [...tally.entries()].map(([key, bucket]) => ({ label: key, count: bucket.visible })),
+      }),
+    },
+  });
+  try {
+    const { layer } = harness;
+    const legend = () => Object.fromEntries(layer.getRowControls().legend.map((row) => [row.label, row.count]));
+    assert.deepEqual(legend(), { major: 1, minor: 2 });
+
+    assert.equal(layer.setParams({ by: 'name' }), true);
+    assert.deepEqual(legend(), { major: 1, 'minor-name': 2 }, 'the tally follows the new classes');
+
+    // A param that is not named still only filters.
+    assert.equal(layer.setParams({ hide: 'minor-name' }), true);
+    assert.deepEqual(legend(), { major: 1, 'minor-name': 0 });
+    assert.equal(layer.setParams({ hide: '' }), true);
+
+    // Back to the first reading: the load-time classes, not a third state.
+    assert.equal(layer.setParams({ by: 'rank' }), true);
+    assert.deepEqual(legend(), { major: 1, minor: 2 });
+  } finally {
+    await harness.layer.destroy?.(harness.viewer);
+    harness.cleanup();
+  }
+});
+
+test('a regroup repaints the marks and rewrites the labels it publishes', async () => {
+  const harness = await createGradedLayerHarness({
+    layerOptions: {
+      groupOf: (props, params) => (params.by === 'flip'
+        ? (props.rank === 'major' ? 'minor' : 'major')
+        : props.rank),
+      groupStyles: {
+        major: { color: '#ff0000', pixelSize: 14 },
+        minor: { color: '#00ff00', pixelSize: 6 },
+      },
+      defaultParams: { by: 'rank' },
+      regroupParams: ['by'],
+      labels: true,
+      cardCopy: (props, { params }) => ({ title: `${params.by}:${props.name}`, details: [] }),
+      labelPriority: (props, params) => (params.by === 'flip' && props.name === 'Minor Two' ? 5000 : 0),
+    },
+  });
+  try {
+    const { layer, preRender, hostCalls, entityNamed } = harness;
+    const red = Cesium.Color.fromCssColorString('#ff0000');
+    const green = Cesium.Color.fromCssColorString('#00ff00');
+    const published = () => {
+      const call = [...hostCalls].reverse().find((entry) => entry[0] === 'entries' && entry[2].length > 0);
+      return call ? call[2] : [];
+    };
+    preRender.raise();
+    assert.ok(published().length > 0, 'labels are published');
+    assert.ok(published().every((entry) => entry.title.startsWith('rank:')));
+    assert.ok(entityNamed('Major One').__localMark.color.equals(red));
+    assert.equal(entityNamed('Major One').__localMark.pixelSize, 14);
+
+    assert.equal(layer.setParams({ by: 'flip' }), true);
+    preRender.raise();
+    assert.ok(entityNamed('Major One').__localMark.color.equals(green), 'the mark takes its new class colour');
+    assert.equal(entityNamed('Major One').__localMark.pixelSize, 6, '…and its size');
+    assert.ok(entityNamed('Minor Two').__localMark.color.equals(red));
+    assert.ok(published().every((entry) => entry.title.startsWith('flip:')), 'the labels are rewritten');
+    const minorTwo = published().find((entry) => entry.title === 'flip:Minor Two');
+    assert.ok(minorTwo && minorTwo.priority >= 5000, 'the pack priority reaches the label');
+  } finally {
     await harness.layer.destroy?.(harness.viewer);
     harness.cleanup();
   }

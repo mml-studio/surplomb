@@ -222,6 +222,9 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | Prix des carburants | Fuel prices | Layer name. |
 | gazole | diesel | |
 | SP95-E10, E10 | E10 | The pump name is kept. |
+| SP95, SP98, E85 | SP95, SP98, E85 | Pump names, kept. |
+| GPL, GPLc | LPG | |
+| en rupture (de carburant) | out of stock | A temporary shortage declared by the station. |
 | station-service | filling station | |
 | filière | generation type | |
 | palier (nucléaire) | reactor series | |
