@@ -551,6 +551,18 @@ const LAYER_TAXONOMY_TABLE = Object.freeze([
     auth: 'none',
     cadence: 'periodic',
   }),
+  // Beside the charging points, its liquid-fuel twin: what a litre costs at
+  // each declaring station, against its own price in the week before the
+  // State's stock release. `periodic`: the feed moves every ten minutes
+  // upstream, the route holds it ten minutes, the layer reads it on enable.
+  Object.freeze({
+    id: 'fuel-prices-fr',
+    category: 'energy',
+    kind: 'dataset',
+    coverage: 'fr',
+    auth: 'none',
+    cadence: 'periodic',
+  }),
   // `fr` and no longer `us` — which was never true of a pack whose 704 features
   // were spread over six continents and only 44 of them in France. The pack is
   // now a complete OSM extraction of the French dam structures (métropole and

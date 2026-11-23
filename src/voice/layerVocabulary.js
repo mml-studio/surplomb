@@ -237,6 +237,7 @@ const SPOKEN_ALIASES = Object.freeze({
   'cadastre-fr': ['cadastre', 'parcelles', 'parcelle', 'parcelles cadastrales', 'parcels', 'land parcels', 'cadastral parcels'],
   'bdtopo-buildings': ['bâti', 'bati', 'bâti 3d', 'bati 3d', 'bâtiments', 'batiments', 'bâtiments 3d', 'batiments 3d', 'buildings', '3d buildings'],
   'gas-fr': ['réseau gaz', 'reseau gaz', 'gaz', 'gazoducs', 'gas network', 'gas pipelines'],
+  'fuel-prices-fr': ['prix des carburants', 'prix carburant', 'carburants', 'carburant', 'gazole', 'diesel', 'essence', 'stations-service', 'station-service', 'prix à la pompe', 'prix a la pompe', 'fuel prices', 'petrol prices', 'gas stations', 'filling stations'],
   'rte-generation': ['groupes de production', 'production', 'réacteurs', 'reacteurs', 'centrales', 'generating units', 'power stations', 'reactors'],
   // The BARE word belongs to the row, not to the companion. Since the fusion
   // (`layerFusions.js`) `meteofrance-vigilance` is LABELLED « Météo » and

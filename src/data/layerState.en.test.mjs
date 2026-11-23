@@ -64,7 +64,7 @@ test('every share token is exactly what it was, in either language', () => {
     'bdtopo-buildings 5', 'bikeshare b', 'bruit-fr bz', 'cadastre-fr cd', 'cctv c',
     'comparables-fr cp', 'comptages-fr cr', 'delinquance-fr dl', 'dpe-fr dp', 'dvf-sales dv',
     'earthquakes e', 'edf-power-plants l', 'filosofi-fr fi', 'flights f', 'fr-hydro-plants 4',
-    'fraicheur-fr fh', 'france-energy j', 'gas-fr 1', 'georisques gr',
+    'fraicheur-fr fh', 'france-energy j', 'fuel-prices-fr pc', 'gas-fr 1', 'georisques gr',
     'gironde-megafire-2026 gi', 'hubeau-hydro h', 'idfm-network if', 'implantation-fr im',
     'irve-fr 9', 'isochrone-fr is', 'local-airports 6', 'local-dams q', 'local-datacenters d',
     'local-firms w', 'local-ports o', 'marine-buoys y', 'medecins-fr md',

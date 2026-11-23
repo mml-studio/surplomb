@@ -219,6 +219,10 @@ text. `src/i18n/glossary.test.mjs` fails when the two lists drift apart.
 | méthanisation, méthaniseur | anaerobic digestion, biogas plant | |
 | Bornes de recharge, point de charge | EV charging, charge point | *Bornes de recharge* → *EV charging stations*. |
 | Réseau gaz | Gas network | |
+| Prix des carburants | Fuel prices | Layer name. |
+| gazole | diesel | |
+| SP95-E10, E10 | E10 | The pump name is kept. |
+| station-service | filling station | |
 | filière | generation type | |
 | palier (nucléaire) | reactor series | |
 | fil de l’eau, éclusée, lac | run-of-river, pondage, reservoir | Hydro plant types. |

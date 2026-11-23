@@ -165,6 +165,7 @@
     "permits:priorities": "node scripts/permit-source-priorities.mjs",
     "territoires:pack": "node scripts/build-fr-territoires.mjs",
     "energy-markets:pack": "node scripts/build-energy-market-areas.mjs",
+    "fuel:reference": "node scripts/build-fuel-fr-reference.mjs",
     "qa:filosofi": "node scripts/qa-filosofi.mjs",
     "qa:isochrone": "node scripts/qa-isochrone.mjs",
     "qa:fiche": "node scripts/qa-fiche.mjs",
