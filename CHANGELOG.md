@@ -6,6 +6,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **Has the diesel price come down at your station since the State released its
+  stocks? A new layer answers it for every declaring station in France.** On
+  1 November 2026 the State began selling part of its strategic diesel stocks
+  at their historical cost and announced 12 to 18 cents less a litre at the
+  pump. *Prix des carburants* (ÉNERGIE) draws the 9 826 stations that declare
+  their prices, each coloured by the change of its diesel price against its own
+  mean over 24 → 30 October: ≥ 18 c, 12–18 c, 1–12 c, no drop yet, or not
+  measurable. A click gives the current price and its time, the before price,
+  E10, and the reminder that the gap includes the market. The live prices come
+  through `/api/fuel-fr/stations` (10 min cache, 7 days serve-stale, a copy
+  archived every day); the before prices and the brands (OpenStreetMap,
+  `ref:FR:prix-carburants`) are frozen by `npm run fuel:reference`. Share token
+  `pc`.
+
 - **A visitor who accepts the measurement banner is now recorded in detail:
   clicks, scrolling, heatmaps and a replay of the visit.** Until now PostHog
   counted page views only, without a cookie, and the owner could not see what

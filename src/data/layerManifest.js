@@ -8,7 +8,7 @@
 // panel draws before anything is switched on, the subset of the optional layer
 // API the module implements, its default parameters, and a `load()` that
 // imports the module. `main.js` registers stubs built from these entries
-// (`createLazyLayer`), so the 60 layer modules and their 4.7 MB of
+// (`createLazyLayer`), so the 61 layer modules and their 4.7 MB of
 // pre-minification JavaScript leave the entry chunk and arrive per layer, on
 // the first toggle that needs one.
 //
@@ -439,6 +439,15 @@ export const LAYER_MANIFEST = Object.freeze([
     capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
     defaultParams: Object.freeze({ familles: '' }),
     load: () => import('./amenitiesFrance.js').then((module) => module.default),
+  }),
+  Object.freeze({
+    id: 'fuel-prices-fr',
+    name: 'Prix des carburants',
+    icon: '⛽',
+    source: 'prix-carburants.gouv.fr · OpenStreetMap',
+    capabilities: Object.freeze(['destroy', 'getStats', 'setParams', 'getParams']),
+    defaultParams: Object.freeze({  }),
+    load: () => import('./fuelPricesFrance.js').then((module) => module.default),
   }),
   Object.freeze({
     id: 'petite-enfance-fr',

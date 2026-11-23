@@ -143,6 +143,7 @@ import {
   worseRoadStatus,
 } from './src/data/datexRoadStatus.js';
 import { filterTrailing24h, parseFirmsCsv } from './src/data/firmsCsv.js';
+import { createFuelPricesService, installFuelPricesRoutes } from './src/data/fuelPricesServer.js';
 import { parseEnv as parseDotenvText } from 'node:util';
 import { readEnvironmentSource as readPinokioEnvironmentSource } from './scripts/pinokio-environment.mjs';
 import {
@@ -11687,6 +11688,33 @@ function bruitFranceProxy() {
 }
 
 // ---------------------------------------------------------------------------
+// Fuel prices (FR) — prix-carburants instant feed + frozen before-prices pack
+// ---------------------------------------------------------------------------
+// The route, its cache, its stale branch and its daily archive live in
+// `src/data/fuelPricesServer.js`; the join and the bands in
+// `src/data/fuelPricesFeed.js`. One service per process, shared by dev and
+// preview, so the two servers never hold two copies of the feed.
+const _fuelPricesService = createFuelPricesService();
+const _fuelPricesRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 300 });
+
+/**
+ * Vite plugin: keyless national fuel-price route.
+ * @returns {import('vite').Plugin}
+ */
+function fuelFranceProxy() {
+  const install = (middlewares) => installFuelPricesRoutes(middlewares, {
+    service: _fuelPricesService,
+    allow: _fuelPricesRateLimiter,
+    clientKey,
+  });
+  return {
+    name: 'fuel-fr-proxy',
+    configureServer(server) { install(server.middlewares); },
+    configurePreviewServer(server) { install(server.middlewares); },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Everyday amenities (FR) — INSEE BPE 2025 + FINESS
 // ---------------------------------------------------------------------------
 /**
@@ -20238,7 +20266,7 @@ const GEV_REALTIME_TOOLS = [
         layerId: {
           type: 'string',
           description:
-            'EVERY registered layer is in this enum — if a subject is not here, this build does not have it, and list_layers will say what it does have. Common-name mapping for the non-obvious ids: space mission(s) → rocket-launches; fires/wildfires/active fires → local-firms (NASA FIRMS); ships/vessels/boats → ais-live-vessels; undersea/submarine cables → telegeography-submarine-cables; datacenters → local-datacenters; dams → local-dams; ports/harbors/seaports → local-ports; airports/aerodromes/airfields/aéroports → local-airports; buoys/sea state/wave height → marine-buoys; bikes/bike share/vélos/Vélib/TBM → bikeshare; scooters/trottinettes/free-floating → shared-mobility-fr; street traffic/congestion → traffic; traffic cameras → cctv; internet radio/stations → radio. FRENCH subjects: médecins/docteurs/généralistes → medecins-fr; bornes de recharge/IRVE → irve-fr; crues/inondations → vigicrues; vigilance météo/alerte → meteofrance-vigilance; écoles/collèges/lycées → schools-fr; universités → sup-fr; crèches → petite-enfance-fr; bâti/bâtiments 3D → bdtopo-buildings; cadastre/parcelles → cadastre-fr; ventes/DVF/prix au m² → dvf-sales; DPE → dpe-fr; permis de construire → ads-fr (Sitadel statistics → sitadel-fr); PLU/zonage/urbanisme → urbanisme-gpu; risques → georisques; mégafeu de Gironde/incendie d’Arcachon/Cap-Ferret (juillet 2026, un ÉVÉNEMENT CLOS, à ne pas confondre avec local-firms qui est le direct) → gironde-megafire-2026; bruit → bruit-fr; antennes/5G → anfr-fr; délinquance → delinquance-fr; îlots de fraîcheur → fraicheur-fr; commerces/pharmacies → amenities-fr; bus/tram/transports → transit-fr; réseau/fréquence/desserte IDFM (Paris) → idfm-network; réseau électrique → power-grid; centrales EDF → edf-power-plants; gaz → gas-fr; stations météo → meteo-stations-fr; comptages routiers → comptages-fr; événements routiers → road-events-fr; revenus/population → filosofi-fr.',
+            'EVERY registered layer is in this enum — if a subject is not here, this build does not have it, and list_layers will say what it does have. Common-name mapping for the non-obvious ids: space mission(s) → rocket-launches; fires/wildfires/active fires → local-firms (NASA FIRMS); ships/vessels/boats → ais-live-vessels; undersea/submarine cables → telegeography-submarine-cables; datacenters → local-datacenters; dams → local-dams; ports/harbors/seaports → local-ports; airports/aerodromes/airfields/aéroports → local-airports; buoys/sea state/wave height → marine-buoys; bikes/bike share/vélos/Vélib/TBM → bikeshare; scooters/trottinettes/free-floating → shared-mobility-fr; street traffic/congestion → traffic; traffic cameras → cctv; internet radio/stations → radio. FRENCH subjects: médecins/docteurs/généralistes → medecins-fr; bornes de recharge/IRVE → irve-fr; crues/inondations → vigicrues; vigilance météo/alerte → meteofrance-vigilance; écoles/collèges/lycées → schools-fr; universités → sup-fr; crèches → petite-enfance-fr; bâti/bâtiments 3D → bdtopo-buildings; cadastre/parcelles → cadastre-fr; ventes/DVF/prix au m² → dvf-sales; DPE → dpe-fr; permis de construire → ads-fr (Sitadel statistics → sitadel-fr); PLU/zonage/urbanisme → urbanisme-gpu; risques → georisques; mégafeu de Gironde/incendie d’Arcachon/Cap-Ferret (juillet 2026, un ÉVÉNEMENT CLOS, à ne pas confondre avec local-firms qui est le direct) → gironde-megafire-2026; bruit → bruit-fr; antennes/5G → anfr-fr; délinquance → delinquance-fr; îlots de fraîcheur → fraicheur-fr; commerces/pharmacies → amenities-fr; prix des carburants/gazole/stations-service → fuel-prices-fr; bus/tram/transports → transit-fr; réseau/fréquence/desserte IDFM (Paris) → idfm-network; réseau électrique → power-grid; centrales EDF → edf-power-plants; gaz → gas-fr; stations météo → meteo-stations-fr; comptages routiers → comptages-fr; événements routiers → road-events-fr; revenus/population → filosofi-fr.',
           enum: [
             'flights',
             'satellites',
@@ -20258,6 +20286,7 @@ const GEV_REALTIME_TOOLS = [
             'road-events-fr',
             'comptages-fr',
             'france-energy',
+            'fuel-prices-fr',
             'rte-generation',
             'edf-power-plants',
             'fr-hydro-plants',
@@ -20334,6 +20363,7 @@ const GEV_REALTIME_TOOLS = [
             'road-events-fr',
             'comptages-fr',
             'france-energy',
+            'fuel-prices-fr',
             'rte-generation',
             'edf-power-plants',
             'fr-hydro-plants',
@@ -32167,6 +32197,7 @@ export default defineConfig(({ mode, command }) => {
       anfrFranceProxy(),
       fraicheurParisProxy(),
       amenitiesFranceProxy(),
+      fuelFranceProxy(),
       bruitFranceProxy(),
       idfmFrequencyProxy(),
       sitadelFranceProxy(),

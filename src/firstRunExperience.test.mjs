@@ -763,10 +763,16 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // owner's request (2026-09-23), and `fly_to_location`'s preset enum follows
   // CITY_POIS (src/locations.test.mjs), so « va à Biarritz » lands on its
   // hand-tuned framing. +24 bytes, one cache bust.
-  assert.equal(block.length, 38327, 'tool schema byte length drifted from the frozen baseline');
+  //
+  // Re-frozen a FOURTEENTH time: `fuel-prices-fr` (Prix des carburants) joined
+  // the two layer enums, plus one clause of common-name mapping so « montre le
+  // prix du gazole » does not land on `amenities-fr`, whose filling stations
+  // carry no price. Not in `analyst_query` or `get_entity_context`: the layer
+  // publishes no queryable records. +122 bytes, one cache bust (2026-11-23).
+  assert.equal(block.length, 38449, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '995801b0057fc4ae94d62d772b68d5e31050a25e2aeac857f8f6a65cf0d69288',
+    '68b58bbad8ca176ef95b1bab0e39dea700499f596589e17f3833369e50cd2c72',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 

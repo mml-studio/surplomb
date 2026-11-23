@@ -1,6 +1,6 @@
 // The attribution popover in English.
 //
-// Seven of the eighty-four credits were written in French; they answer in the
+// Eight of the eighty-five credits were written in French; they answer in the
 // reader's language now, and the rest — quotations of dataset titles,
 // publishers and licence names — read the same in both, because that is what
 // an attribution is.
@@ -14,8 +14,8 @@ import { withLocale } from '../i18n/testing.js';
 const credit = (key) => DATA_CREDITS.find((entry) => entry.key === key);
 const TRANSLATED = Object.keys(creditMessages.definition);
 
-test('the seven French credits have an English body, and keep their French one', () => {
-  assert.equal(TRANSLATED.length, 7);
+test('the eight French credits have an English body, and keep their French one', () => {
+  assert.equal(TRANSLATED.length, 8);
   for (const key of TRANSLATED) {
     const entry = credit(key);
     assert.ok(entry, `${key} is not in DATA_CREDITS`);

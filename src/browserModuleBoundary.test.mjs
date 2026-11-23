@@ -33,6 +33,7 @@ const SERVER_ONLY = new Map([
   ['data/amenitiesPack.js', 'node:fs/zlib, for the BPE fold and the sharded pack the /api/amenities-fr proxy reads'],
   ['data/cctvFrameChecks.js', 'node:crypto, for the placeholder-frame digest the /api/cctv proxy and the timelapse recorder check'],
   ['data/cctvTimelapse.js', 'node:fs, for the recorded camera frames the /api/cctv/timelapse routes serve'],
+  ['data/fuelPricesServer.js', 'node:fs/zlib, for the disk copy and the daily archive the /api/fuel-fr route keeps'],
   ['trialQuota.js', 'node:crypto, for the HMAC that signs the hosted trial cookie'],
   ['vrsStandingData.js', 'node:fs/zlib, for the daily VRS standing-data tarball the /api/flight-info proxy answers from'],
 ]);

@@ -131,6 +131,7 @@ export default defineMessages({
     // The row's name: the grid is its primary (`layerFusions.js`, entry 9).
     'power-grid': { fr: 'Réseau électrique et centrales', en: 'Power grid and plants' },
     'gas-fr': { fr: 'Réseau gaz', en: 'Gas network' },
+    'fuel-prices-fr': { fr: 'Prix des carburants', en: 'Fuel prices' },
     'irve-fr': { fr: 'Bornes de recharge', en: 'EV charging stations' },
     'local-dams': { fr: 'Barrages & digues', en: 'Dams & levees' },
 

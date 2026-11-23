@@ -686,6 +686,10 @@ export const DATA_CREDITS = [
     html: frenchCredit('amenities-fr'),
   },
   {
+    key: 'fuel-prices-fr',
+    html: frenchCredit('fuel-prices-fr'),
+  },
+  {
     key: 'ips-fr',
     html:
       'French school social-position index (IPS): <em>Indice de position sociale</em>, published by the ' +

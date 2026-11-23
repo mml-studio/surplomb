@@ -651,6 +651,8 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   // token must never look like.
   Object.freeze({ id: 'fraicheur-fr', token: 'fh', disposition: 'enabled-only' }),
   Object.freeze({ id: 'france-energy', token: 'j', disposition: 'enabled-only' }),
+  // `pc` for *prix des carburants*; `c` is taken and `cp` is one key away.
+  Object.freeze({ id: 'fuel-prices-fr', token: 'pc', disposition: 'enabled-only' }),
   // A DIGIT, not a letter: every letter of "gas" is taken (g by
   // military-awareness, a by AIS, s by satellites), and `z` is the token two
   // existing tests use as their canonical UNKNOWN token — claiming it would
