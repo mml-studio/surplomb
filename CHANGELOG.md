@@ -6,6 +6,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased] — 2026-09-15
 
 ### Added
+- **The fuel layer now shows where each fuel is cheapest, and every line of
+  its key can be switched off.** *Prix des carburants* gains a row of chips:
+  « Baisse » keeps the diesel drop, and « Gazole », « SP95 », « SP98 », « E10 »,
+  « E85 » and « GPL » colour every station by its price of that fuel, in five
+  national quintiles (diesel on 2026-11-23: under 2.04, 2.04–2.09, 2.09–2.15,
+  2.15–2.21, 2.21 € and over). Under a price reading the cheapest station wins
+  its label, so the prices seen without zooming are the lowest around. A
+  station out of the fuel read has its own « En rupture » line (3 276 temporary
+  shortages on 2026-11-23, 288 of them diesel), and every key line is a switch,
+  so « Pas de prix » or « En rupture » can be hidden; « Tout afficher » brings
+  them back. Switching readings repaints the loaded stations in place (14 ms,
+  no reload). E85 and LPG now keep their sub-euro prices: the 1.00 €/L floor
+  the drop reading uses would have refused 94 % of E85 prices (median 0.869).
+
 - **Has the diesel price come down at your station since the State released its
   stocks? A new layer answers it for every declaring station in France.** On
   1 November 2026 the State began selling part of its strategic diesel stocks
